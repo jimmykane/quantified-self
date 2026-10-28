@@ -35,6 +35,34 @@ export interface WahooActiveAccountGuard {
   credential: TokenCredentialSnapshot | null;
 }
 
+function isSameWahooAccount(left: WahooActiveAccountGuard, right: WahooActiveAccountGuard): boolean {
+  return left.providerUserId === right.providerUserId
+    && left.connectionStateGeneration === right.connectionStateGeneration;
+}
+
+/** Account-only captures have null credentials; credential captures compare the complete snapshot. */
+export function areWahooActiveAccountGuardsEqual(
+  left: WahooActiveAccountGuard,
+  right: WahooActiveAccountGuard,
+): boolean {
+  return isSameWahooAccount(left, right)
+    && left.activeCredentialGeneration === right.activeCredentialGeneration
+    && (left.credential === null || right.credential === null
+      ? left.credential === right.credential
+      : areTokenCredentialSnapshotsEqual(left.credential, right.credential));
+}
+
+function assertWahooActiveAccountGuardMatches(
+  current: WahooActiveAccountGuard,
+  expected: WahooActiveAccountGuard,
+): void {
+  if (areWahooActiveAccountGuardsEqual(current, expected)) return;
+  if (!isSameWahooAccount(current, expected)) {
+    throw new HttpsError('unauthenticated', 'The selected Wahoo account changed before data could be sent.');
+  }
+  throw new WahooCredentialSupersededError();
+}
+
 export function normalizeWahooUserID(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const normalized = value.trim();
@@ -195,16 +223,7 @@ export async function assertWahooActiveAccountGuardCurrent(
     expected.providerUserId,
     expected.credential?.accessToken,
   );
-  if (current.connectionStateGeneration !== expected.connectionStateGeneration
-  ) {
-    throw new HttpsError('unauthenticated', 'The selected Wahoo account changed before data could be sent.');
-  }
-  if (current.activeCredentialGeneration !== expected.activeCredentialGeneration
-    || (expected.credential !== null
-      && (current.credential === null
-        || !areTokenCredentialSnapshotsEqual(current.credential, expected.credential)))) {
-    throw new WahooCredentialSupersededError();
-  }
+  assertWahooActiveAccountGuardMatches(current, expected);
 }
 
 /** Enforces the account fence inside the transaction that performs a durable write. */
@@ -219,16 +238,7 @@ export async function assertWahooActiveAccountGuardCurrentInTransaction(
     expected.providerUserId,
     expected.credential?.accessToken,
   );
-  if (current.connectionStateGeneration !== expected.connectionStateGeneration
-  ) {
-    throw new HttpsError('unauthenticated', 'The selected Wahoo account changed before data could be sent.');
-  }
-  if (current.activeCredentialGeneration !== expected.activeCredentialGeneration
-    || (expected.credential !== null
-      && (current.credential === null
-        || !areTokenCredentialSnapshotsEqual(current.credential, expected.credential)))) {
-    throw new WahooCredentialSupersededError();
-  }
+  assertWahooActiveAccountGuardMatches(current, expected);
 }
 
 export class WahooOAuthAccountMismatchError extends Error {

@@ -27,6 +27,7 @@ describe('buildDashboardEChartsStyleTokens', () => {
     });
     expect(tokens.textColor).toBe('#3c3c41');
     expect(tokens.axisColor).toBe('#54555a');
+    expect(tokens.errorColor).toBe('#ba1a1a');
   });
 
   it('should return dark values for dark app themes', () => {
@@ -44,6 +45,7 @@ describe('buildDashboardEChartsStyleTokens', () => {
     expect(tokens.textColor).toBe('rgba(223,223,225,1)');
     expect(tokens.tooltipBackgroundColor).toBe('rgba(58,62,68,1)');
     expect(tokens.tooltipBorderColor).toBe('rgba(91,94,100,1)');
+    expect(tokens.errorColor).toBe('#ffb4ab');
   });
 
   it('should build the shared tooltip text style from tooltip typography tokens', () => {
@@ -90,6 +92,24 @@ describe('buildDashboardEChartsStyleTokens', () => {
     expect(html).not.toContain('<strong>');
   });
 
+  it('separates and escapes wrapping row details while keeping the complete accessible label', () => {
+    const html = renderDashboardEChartsTooltipCard(buildDashboardEChartsStyleTokens(false, 320), {
+      rows: [{ label: 'Pro <monthly>', value: '50%', detail: '1 of 2 eligible Pro accounts <script>', markerColor: '#42a5f5' }],
+    });
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    expect(html).toContain('width:min(240px, calc(100vw - 32px))');
+    const row = container.querySelector('[aria-label]')!;
+    expect(row.getAttribute('aria-label')).toBe('Pro <monthly>: 50% · 1 of 2 eligible Pro accounts <script>');
+    expect(row.children).toHaveLength(2);
+    expect(row.children[0].textContent).toBe('Pro <monthly>:50%');
+    const detail = row.children[1] as HTMLElement;
+    expect(detail.textContent).toBe('1 of 2 eligible Pro accounts <script>');
+    expect(detail.style.whiteSpace).toBe('normal');
+    expect(detail.style.overflowWrap).toBe('anywhere');
+    expect(container.querySelector('script')).toBeNull();
+  });
+
   it('should render an explicitly bounded two-column metric layout', () => {
     const tokens = buildDashboardEChartsStyleTokens(false, 390);
 
@@ -114,5 +134,27 @@ describe('buildDashboardEChartsStyleTokens', () => {
     expect(html).toContain('1h 30m');
     expect(html).toContain('HRV');
     expect(html).toContain('62 ms');
+  });
+
+  it('allows long labels and values to wrap within a bounded card without hiding their content', () => {
+    const label = 'Mountain Biking with a long activity label';
+    const value = '12d 23h 59m 59s (100.0%), 100 activities';
+    const container = document.createElement('div');
+    container.innerHTML = renderDashboardEChartsTooltipCard(buildDashboardEChartsStyleTokens(false, 320), {
+      rows: [{ label, value, markerColor: '#42a5f5' }],
+    });
+    const row = container.querySelector('[aria-label]')!;
+    const line = row.firstElementChild as HTMLElement;
+    const labelElement = line.firstElementChild!.lastElementChild as HTMLElement;
+    const valueElement = line.lastElementChild as HTMLElement;
+
+    expect(row.getAttribute('aria-label')).toBe(`${label}: ${value}`);
+    expect(line.style.flexWrap).toBe('wrap');
+    for (const element of [labelElement, valueElement]) {
+      expect(element.style.whiteSpace).toBe('normal');
+      expect(element.style.overflowWrap).toBe('anywhere');
+    }
+    expect(valueElement.style.maxWidth).toBe('100%');
+    expect(valueElement.style.marginInlineStart).toBe('auto');
   });
 });

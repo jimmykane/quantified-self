@@ -1,3 +1,4 @@
+import { CONNECTION_HISTORY_COLLECTION } from './connection-history/model';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { type Auth2ServiceTokenInterface, ServiceNames } from '@sports-alliance/sports-lib';
@@ -20,7 +21,7 @@ import { WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME } from './wahoo/constants';
 
 type ProviderIdentifierField = 'userName' | 'openId' | 'userID' | 'wahooUserID';
 
-interface ProviderOperationalCleanupConfig {
+export interface ProviderOperationalCleanupConfig {
   serviceName: ServiceNames;
   providerUserIdField: ProviderIdentifierField;
   providerUserId: string;
@@ -28,7 +29,7 @@ interface ProviderOperationalCleanupConfig {
   sleepProvider: string;
 }
 
-interface OperationalCleanupQuery {
+export interface OperationalCleanupQuery {
   collectionName: string;
   fieldName: string;
   sourceCollectionName: string | ((data: Record<string, unknown>) => string | null);
@@ -36,6 +37,7 @@ interface OperationalCleanupQuery {
 }
 
 const CLOUD_TASK_SOURCE_QUEUE_COLLECTIONS = new Set([
+  CONNECTION_HISTORY_COLLECTION,
   ACTIVITY_SYNC_QUEUE_COLLECTION_NAME,
   ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME,
   ROUTE_SYNC_QUEUE_COLLECTION_NAME,
@@ -75,7 +77,7 @@ function providerUserIdFromTokenData(
   }
 }
 
-function getProviderOperationalCleanupConfig(
+export function getProviderOperationalCleanupConfig(
   serviceName: ServiceNames,
   tokenData: Record<string, unknown>,
 ): ProviderOperationalCleanupConfig | null {
@@ -151,7 +153,7 @@ function looksLikeLegacyGarminWorkoutQueueData(data: Record<string, unknown>): b
   );
 }
 
-function getExplicitFirebaseUidAssociation(
+export function getExplicitFirebaseUidAssociation(
   collectionName: string,
   data: Record<string, unknown>,
 ): string | null {
@@ -166,6 +168,7 @@ function getExplicitFirebaseUidAssociation(
   }
 
   if (
+    collectionName === CONNECTION_HISTORY_COLLECTION ||
     collectionName === ACTIVITY_SYNC_QUEUE_COLLECTION_NAME ||
     collectionName === ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME ||
     collectionName === SLEEP_SYNC_QUEUE_COLLECTION_NAME ||
@@ -180,6 +183,7 @@ function getExplicitFirebaseUidAssociation(
 
   const originalCollection = asNonEmptyString(data.originalCollection);
   if (
+    originalCollection === CONNECTION_HISTORY_COLLECTION ||
     originalCollection === ACTIVITY_SYNC_QUEUE_COLLECTION_NAME ||
     originalCollection === ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME ||
     originalCollection === SLEEP_SYNC_QUEUE_COLLECTION_NAME
@@ -241,7 +245,7 @@ function shouldDeleteOperationalDoc(
   return !hasActiveConnection;
 }
 
-function buildOperationalCleanupQueries(config: ProviderOperationalCleanupConfig): OperationalCleanupQuery[] {
+export function buildOperationalCleanupQueries(config: ProviderOperationalCleanupConfig): OperationalCleanupQuery[] {
   const isSleepDocForProvider = (data: Record<string, unknown>) =>
     serviceNameFromSleepProvider(data.provider) === config.serviceName;
   const isWorkoutDocForProvider = (data: Record<string, unknown>) =>
@@ -257,6 +261,8 @@ function buildOperationalCleanupQueries(config: ProviderOperationalCleanupConfig
     && asNonEmptyString(data.providerUserId) === config.providerUserId;
 
   return [
+    { collectionName: CONNECTION_HISTORY_COLLECTION, fieldName: 'providerUserId', sourceCollectionName: CONNECTION_HISTORY_COLLECTION,
+      matches: data => data.serviceName === config.serviceName && data.providerUserId === config.providerUserId },
     {
       collectionName: config.workoutQueueCollection,
       fieldName: config.providerUserIdField,

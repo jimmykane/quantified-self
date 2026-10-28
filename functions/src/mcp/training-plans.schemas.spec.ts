@@ -1,0 +1,637 @@
+import { analyzeWorkoutStructureV1 } from '../../../shared/planned-workout-analysis';
+import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
+import Ajv2020 from 'ajv/dist/2020';
+import addFormats from 'ajv-formats';
+import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
+import { RefinedTrainingActivityTypes, RefinedRecordedActivityTypes } from '../../../shared/activity-type-compatibility';
+import {
+  WORKOUT_ENDING_KINDS,
+  WORKOUT_STEP_PURPOSES,
+  WORKOUT_TARGET_KINDS,
+  type WorkoutEndingV1,
+  type WorkoutStructureV1,
+  type WorkoutTargetV1,
+} from '../../../shared/planned-workout';
+import {
+  MCP_WORKOUT_RECIPE_VARIANT_COVERAGE,
+  TRAINING_CHANGE_SCHEMA,
+  TRAINING_READ_OUTPUTS,
+  TRAINING_READ_INPUTS,
+  TRAINING_RECIPE_SCHEMA,
+  TRAINING_RECIPE_WITH_POOL_SCHEMA,
+  TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA,
+  TRAINING_WRITE_INPUTS,
+  TRAINING_WRITE_OUTPUTS,
+  TRAINING_ASSISTANT_PREVIEW_OUTPUT,
+} from './training-plans.schemas';
+
+// Exercise canonical names and unknown-placeholder rejection with the real
+// installed catalog, rather than the global suite's abbreviated enum mock.
+vi.unmock('@sports-alliance/sports-lib');
+
+const recipe = (ending: WorkoutEndingV1, targets: WorkoutTargetV1[] = []): WorkoutStructureV1 => ({ version: 1, sport: ActivityTypes.Running,
+  nodes: [{ kind: 'step', id: 'step-1', purpose: 'work', ending, targets, note: '夜の練習 🏃\nPrivate context' }] });
+
+const endingFixtures = {
+  time: { kind: 'time', seconds: 60 },
+  distance: { kind: 'distance', meters: 1000 },
+  kilojoules: { kind: 'kilojoules', kilojoules: 50 },
+  repetitions: { kind: 'repetitions', repetitions: 10 },
+  manual: { kind: 'manual' },
+} satisfies Record<keyof typeof MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.endings, WorkoutEndingV1>;
+
+const targetVariantFixtures = {
+  'heart-rate:absolute': { kind: 'heart-rate', mode: 'absolute', minimumBpm: 120, maximumBpm: 140 },
+  'heart-rate:relative': { kind: 'heart-rate', mode: 'relative', minimumPercent: 60, maximumPercent: 80,
+    reference: { kind: 'max-heart-rate', bpm: 180 } },
+  'power:absolute': { kind: 'power', mode: 'absolute', minimumWatts: 0, maximumWatts: 150 },
+  'power:relative': { kind: 'power', mode: 'relative', minimumPercent: 0, maximumPercent: 80,
+    reference: { kind: 'critical-power', watts: 250 } },
+  'speed:absolute': { kind: 'speed', mode: 'absolute', minimumMetersPerSecond: 3, maximumMetersPerSecond: 4,
+    presentation: 'pace' },
+  'speed:relative': { kind: 'speed', mode: 'relative', minimumPercent: 80, maximumPercent: 90,
+    reference: { kind: 'threshold-speed', metersPerSecond: 4 }, presentation: 'speed' },
+  'cadence:absolute': { kind: 'cadence', mode: 'absolute', minimumRpm: 70, maximumRpm: 90 },
+  'cadence:relative': { kind: 'cadence', mode: 'relative', minimumPercent: 80, maximumPercent: 90,
+    reference: { kind: 'preferred-cadence', rpm: 90 } },
+} satisfies Record<keyof typeof MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.targetVariants, WorkoutTargetV1>;
+
+const targetReferenceFixtures = {
+  'heart-rate:max-heart-rate': { kind: 'heart-rate', mode: 'relative', minimumPercent: 60, maximumPercent: 80,
+    reference: { kind: 'max-heart-rate', bpm: 180 } },
+  'heart-rate:threshold-heart-rate': { kind: 'heart-rate', mode: 'relative', minimumPercent: 80, maximumPercent: 90,
+    reference: { kind: 'threshold-heart-rate', bpm: 165 } },
+  'power:functional-threshold-power': { kind: 'power', mode: 'relative', minimumPercent: 80, maximumPercent: 90,
+    reference: { kind: 'functional-threshold-power', watts: 260 } },
+  'power:critical-power': { kind: 'power', mode: 'relative', minimumPercent: 80, maximumPercent: 90,
+    reference: { kind: 'critical-power', watts: 250 } },
+  'speed:threshold-speed': { kind: 'speed', mode: 'relative', minimumPercent: 80, maximumPercent: 90,
+    presentation: 'pace', reference: { kind: 'threshold-speed', metersPerSecond: 4 } },
+  'cadence:preferred-cadence': { kind: 'cadence', mode: 'relative', minimumPercent: 80, maximumPercent: 90,
+    reference: { kind: 'preferred-cadence', rpm: 90 } },
+} satisfies Record<keyof typeof MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.targetReferences, WorkoutTargetV1>;
+
+const speedPresentationFixtures = {
+  pace: { kind: 'speed', mode: 'absolute', minimumMetersPerSecond: 3, maximumMetersPerSecond: 4, presentation: 'pace' },
+  speed: { kind: 'speed', mode: 'absolute', minimumMetersPerSecond: 3, maximumMetersPerSecond: 4, presentation: 'speed' },
+} satisfies Record<keyof typeof MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.speedPresentations, WorkoutTargetV1>;
+
+function expectPublicReadWriteRoundTrip(input: WorkoutStructureV1): void {
+  const serialized = JSON.parse(JSON.stringify(input));
+  const read = TRAINING_READ_OUTPUTS.get_planned_workout.parse({
+    scheduleRevision: 3,
+    workout: {
+      workoutRef: 'opaque-workout',
+      planRef: null,
+      title: 'Workout',
+      localDate: '2026-09-18',
+      lifecycle: 'planned',
+      revision: 2,
+      createdAtMs: 1,
+      updatedAtMs: 2,
+      structure: serialized,
+      displaySteps: [],
+    },
+  });
+  expect(read.workout.structure).toEqual(input);
+
+  const write = TRAINING_CHANGE_SCHEMA.parse({
+    kind: 'create-workout',
+    localKey: 'workout',
+    plan: null,
+    localDate: '2026-09-18',
+    title: 'Workout',
+    structure: serialized,
+  });
+  expect(write).toMatchObject({ structure: input });
+  const bulk = TRAINING_WRITE_INPUTS.preview_planned_workout_v3_changes.parse({ expectedScheduleRevision: 3,
+    changes: [write] });
+  expect(bulk.changes[0]).toMatchObject({ structure: input });
+}
+
+describe('additive Garmin replacement boundary', () => {
+  const input = { workoutRef: 'owner-bound-ref', expectedScheduleRevision: 2, expectedWorkoutRevision: 1 };
+  const preview = { proposalRef: 'opaque-proposal', expiresAtMs: 1000, permissionMode: 'delivery', scheduleRevision: 2,
+    requiresConfirmation: true, summary: 'The original may reappear and leave a duplicate.',
+    changes: [{ index: 0, kind: 'garmin-workout-replacement', summary: 'Easy run on 2026-10-06.' }],
+    providerPreviews: [{ index: 0, provider: 'garmin', targetType: 'workout', action: 'replace', availability: 'ready',
+      timeZone: 'Europe/Helsinki', eligibleCount: 1, warningCount: 1, summary: 'Approval queues recovery, not receipt.' }] };
+  it('accepts only exact references/revisions and a single dedicated ready Garmin replacement review', () => {
+    expect(TRAINING_WRITE_INPUTS.preview_garmin_workout_replacement.parse(input)).toEqual(input);
+    expect(TRAINING_WRITE_OUTPUTS.preview_garmin_workout_replacement.parse(preview)).toEqual(preview);
+    expect(TRAINING_WRITE_OUTPUTS.preview_training_changes.safeParse(preview).success).toBe(false);
+    expect(TRAINING_ASSISTANT_PREVIEW_OUTPUT.safeParse({ ...preview, providerPreviews: [] }).success).toBe(false);
+    for (const extra of [{ uid: 'other' }, { provider: 'garmin' }, { approvalDigest: 'private' },
+      { timeZone: 'Europe/Helsinki' }, { workoutId: 'raw' }, { expectedWorkoutRevision: 0 },
+      { expectedScheduleRevision: -1 }, { expectedScheduleRevision: Number.MAX_SAFE_INTEGER + 1 }]) {
+      expect(TRAINING_WRITE_INPUTS.preview_garmin_workout_replacement.safeParse({ ...input, ...extra }).success).toBe(false);
+    }
+    for (const extra of [{ provider: 'wahoo' }, { action: 'retry' }, { targetType: 'plan' },
+      { availability: 'unavailable' }, { index: 1 }, { approvalDigest: 'private' }]) {
+      expect(TRAINING_WRITE_OUTPUTS.preview_garmin_workout_replacement.safeParse({ ...preview,
+        providerPreviews: [{ ...preview.providerPreviews[0], ...extra }] }).success).toBe(false);
+    }
+  });
+  it('does not silently widen the registered v1 provider delivery action enum', () => {
+    const change = { kind: 'provider-delivery', targetType: 'workout', target: { ref: 'owner-bound-ref' }, providers: ['garmin'] };
+    expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...change, action: 'retry' }).success).toBe(true);
+    expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...change, action: 'replace' }).success).toBe(false);
+    expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...change, providers: ['suunto'], action: 'fresh-guide' }).success).toBe(false);
+    expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...change, action: 'retry', manualReplacement: true }).success).toBe(false);
+  });
+});
+
+describe('ordered and duplicated interval recipes', () => {
+  it('round-trips ordered blocks and fresh child IDs through existing reads and complete-recipe proposals', () => {
+    const recovery = { kind: 'step' as const, id: 'recovery', purpose: 'recovery' as const,
+      ending: { kind: 'time' as const, seconds: 75.1234567890123 }, targets: [], note: 'Easy recovery' };
+    const work = { kind: 'step' as const, id: 'work', purpose: 'work' as const,
+      ending: { kind: 'distance' as const, meters: 1609.344123 }, targets: [{ kind: 'speed' as const, mode: 'absolute' as const,
+        presentation: 'pace' as const, minimumMetersPerSecond: 3.14159265, maximumMetersPerSecond: 4.123456789 }], note: 'Hold form' };
+    const input: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Running, nodes: [
+      { kind: 'repeat', id: 'block', count: 4, steps: [recovery, work] },
+      { ...recovery, id: 'cooldown', purpose: 'cooldown' },
+      { kind: 'repeat', id: 'block-copy', count: 4, steps: [{ ...recovery, id: 'recovery-copy' }, { ...work, id: 'work-copy' }] },
+    ] };
+    expectPublicReadWriteRoundTrip(input);
+    const update = { kind: 'update-workout', workout: { ref: 'opaque-workout' }, plan: null,
+      localDate: '2026-10-05', title: 'Ordered intervals', structure: input };
+    expect(TRAINING_CHANGE_SCHEMA.parse(update)).toMatchObject({ structure: input });
+    expect(TRAINING_READ_OUTPUTS.get_saved_workout.parse({ libraryRevision: 3, savedWorkout: {
+      savedWorkoutRef: 'opaque-saved', title: 'Ordered intervals', status: 'active', revision: 2,
+      createdAtMs: 1, updatedAtMs: 2, structure: input,
+    } }).savedWorkout.structure).toEqual(input);
+    for (const field of ['sourceDuration', 'sourceDistance', 'sourcePace', 'providerWorkoutId', 'swolf', 'guideFields', 'richText', 'suuntoUnitSettings']) {
+      const leaked = { ...input, nodes: [{ ...input.nodes[0], [field]: { private: true } }, ...input.nodes.slice(1)] };
+      expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...update, structure: leaked }).success).toBe(false);
+      expect(TRAINING_READ_OUTPUTS.get_saved_workout.safeParse({ libraryRevision: 3, savedWorkout: {
+        savedWorkoutRef: 'opaque-saved', title: 'Ordered intervals', status: 'active', revision: 2,
+        createdAtMs: 1, updatedAtMs: 2, structure: leaked,
+      } }).success).toBe(false);
+      expect(TRAINING_READ_OUTPUTS.get_planned_workout.safeParse({ scheduleRevision: 3, workout: {
+        workoutRef: 'opaque-workout', planRef: null, title: 'Workout', localDate: '2026-10-05',
+        lifecycle: 'planned', revision: 2, createdAtMs: 1, updatedAtMs: 2, structure: leaked, displaySteps: [],
+      } }).success).toBe(false);
+    }
+    const duplicateIds = { ...input, nodes: [input.nodes[0], input.nodes[0]] };
+    expect(TRAINING_CHANGE_SCHEMA.safeParse({ ...update, structure: duplicateIds }).success).toBe(false);
+  });
+});
+
+describe('Strict public Training recipe v1', () => {
+  function expectTargetAcceptance(target: unknown, accepted: boolean): void {
+    const structure = { version: 1, sport: ActivityTypes.Swimming,
+      nodes: [{ kind: 'step', id: 'swim', purpose: 'work', ending: { kind: 'time', seconds: 90 }, targets: [target] }] };
+    for (const schema of [TRAINING_RECIPE_SCHEMA, TRAINING_RECIPE_WITH_POOL_SCHEMA, TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA])
+      expect(schema.safeParse(structure).success).toBe(accepted);
+    const workout = { workoutRef: 'opaque-workout', planRef: null, title: 'Swim', localDate: '2026-10-07',
+      lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1, structure, displaySteps: [] };
+    for (const schema of [TRAINING_READ_OUTPUTS.get_planned_workout, TRAINING_READ_OUTPUTS.get_planned_workout_v2,
+      TRAINING_READ_OUTPUTS.get_planned_workout_v3])
+      expect(schema.safeParse({ scheduleRevision: 1, workout }).success).toBe(accepted);
+    const change = { kind: 'create-workout', localKey: 'swim', plan: null, localDate: '2026-10-07', title: 'Swim', structure };
+    expect(TRAINING_CHANGE_SCHEMA.safeParse(change).success).toBe(accepted);
+    expect(TRAINING_WRITE_INPUTS.preview_create_planned_workout.safeParse({
+      expectedScheduleRevision: 1, localDate: '2026-10-07', title: 'Swim', structure }).success).toBe(accepted);
+    for (const schema of [TRAINING_WRITE_INPUTS.preview_planned_workout_v2_change,
+      TRAINING_WRITE_INPUTS.preview_planned_workout_v3_change])
+      expect(schema.safeParse({ expectedScheduleRevision: 1, change }).success).toBe(accepted);
+    const savedWorkout = { savedWorkoutRef: 'opaque-saved', title: 'Swim', status: 'active', revision: 1,
+      createdAtMs: 1, updatedAtMs: 1, structure };
+    for (const schema of [TRAINING_READ_OUTPUTS.get_saved_workout, TRAINING_READ_OUTPUTS.get_saved_workout_v2])
+      expect(schema.safeParse({ libraryRevision: 1, savedWorkout }).success).toBe(accepted);
+    for (const schema of [TRAINING_WRITE_INPUTS.preview_saved_workout_change, TRAINING_WRITE_INPUTS.preview_saved_workout_v2_change])
+      expect(schema.safeParse({ expectedScheduleRevision: 1, expectedLibraryRevision: 1,
+        change: { kind: 'create', title: 'Swim', structure } }).success).toBe(accepted);
+  }
+
+  it.each([
+    { kind: 'stroke-rate', mode: 'absolute', minimum: 30, maximum: 40 },
+    { kind: 'swolf', mode: 'absolute', minimum: 30, maximum: 40 },
+    { kind: 'zone-sense', mode: 'absolute', minimum: 1, maximum: 2 },
+    { kind: 'heart-rate-percentage', mode: 'absolute', minimum: 60, maximum: 80 },
+    { ...targetVariantFixtures['heart-rate:absolute'], resource: '/Activity/ManualLap/0/StrokeRate/Average' },
+    { ...targetVariantFixtures['heart-rate:absolute'], resource: '/Activity/Zones/ZoneSense/Zone1/Duration' },
+  ])('keeps uncontracted Guide targets/resources out of every recipe generation: $kind', target => {
+    // Negative fixtures do not define a new native Guide or canonical target format.
+    // The valid counterpart proves rejection is not caused by an unrelated envelope field.
+    expectTargetAcceptance(targetVariantFixtures['heart-rate:absolute'], true);
+    expectTargetAcceptance(target, false);
+  });
+
+  it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])(
+    'preserves %s canonical recipes through public read/write validation without watch fields', sport => {
+      for (const ending of [endingFixtures.time, endingFixtures.distance, endingFixtures.manual]) {
+        for (const targets of [[], ...Object.values(targetVariantFixtures).map(target => [target]),
+          [targetVariantFixtures['heart-rate:absolute'], targetVariantFixtures['power:absolute']]]) {
+          const input = { ...recipe(ending, targets), sport };
+          expectPublicReadWriteRoundTrip(input);
+          for (const fields of [{ createManualLap: true }, { window: 'manualLap', aggregate: 'average' },
+            { fields: [{ type: 'strokeRate', title: 'Avg strk' }] }, { mappingVersion: 'suunto-guides-v5' },
+            { alerts: [{ type: 'default', condition: { type: 'stepDuration', value: 15 }, countdown: { type: 'standard' } }] },
+            { countdown: { type: 'standard' } }]) {
+            const bad = { ...input, nodes: [{ ...input.nodes[0], ...fields }] };
+            expect(TRAINING_RECIPE_SCHEMA.safeParse(bad).success).toBe(false);
+            expect(TRAINING_WRITE_INPUTS.preview_create_planned_workout.safeParse({
+              expectedScheduleRevision: 1, localDate: '2026-09-18', title: 'Workout', structure: bad,
+            }).success).toBe(false);
+          }
+        }
+      }
+    });
+  it.each([ActivityTypes.Walking, ActivityTypes.Hiking, ActivityTypes.Rowing, ActivityTypes.IndoorRowing])('round-trips %s through the frozen read and approval-gated proposal schema', sport => {
+    expectPublicReadWriteRoundTrip({ ...recipe({ kind: 'distance', meters: 500 }), sport });
+  });
+  it('keeps every explicit shared recipe catalog exhaustive', () => {
+    expect(MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.version).toBe(1);
+    expect(Object.keys(MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.stepPurposes)).toEqual([...WORKOUT_STEP_PURPOSES]);
+    expect(Object.keys(endingFixtures)).toEqual([...WORKOUT_ENDING_KINDS]);
+    expect(Object.keys(MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.targetModes)).toEqual(['absolute', 'relative']);
+    expect([...new Set(Object.values(targetVariantFixtures).map(target => target.kind))]).toEqual([...WORKOUT_TARGET_KINDS]);
+    expect(MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.additiveStructureFields).toEqual({ poolLength: true });
+  });
+
+  it.each(Object.entries(endingFixtures))('round-trips shared ending %s through public reads and writes', (_kind, ending) => {
+    expectPublicReadWriteRoundTrip(recipe(ending));
+  });
+
+  it.each(Object.entries(targetVariantFixtures))('round-trips shared target variant %s through public reads and writes', (_variant, target) => {
+    const input = recipe({ kind:'manual' }, [target]);
+    expectPublicReadWriteRoundTrip(input);
+    expect(TRAINING_RECIPE_SCHEMA.safeParse(recipe({kind:'manual'},[{...target,remoteId:'PRIVATE'}])).success).toBe(false);
+  });
+
+  it.each(Object.entries(targetReferenceFixtures))('round-trips shared relative reference %s', (_reference, target) => {
+    expectPublicReadWriteRoundTrip(recipe({ kind: 'manual' }, [target]));
+  });
+
+  it.each(Object.entries(speedPresentationFixtures))('round-trips speed presentation %s', (_presentation, target) => {
+    expectPublicReadWriteRoundTrip(recipe({ kind: 'manual' }, [target]));
+  });
+
+  it.each(WORKOUT_STEP_PURPOSES)('round-trips step purpose %s', purpose => {
+    const input = recipe({ kind: 'manual' });
+    input.nodes[0].purpose = purpose;
+    expectPublicReadWriteRoundTrip(input);
+  });
+
+  it('round-trips both shared node discriminants', () => {
+    expect(Object.keys(MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.nodes)).toEqual(['step', 'repeat']);
+    const input: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Running, nodes: [{
+      kind: 'repeat', id: 'repeat-1', count: 4,
+      steps: [{ kind: 'step', id: 'repeat-work', purpose: 'work', ending: { kind: 'time', seconds: 60 }, targets: [] }],
+    }] };
+    expectPublicReadWriteRoundTrip(input);
+  });
+
+  it('rejects malformed versions, discriminants, repeats, IDs, ranges and leaked neighbors', () => {
+    const input = recipe({kind:'time',seconds:60}), step = input.nodes[0];
+    for (const bad of [ {...input,version:2}, {...input,sport:'unknown'}, {...input,provider:'PRIVATE'},
+      {...input,nodes:[step,step]}, {...input,nodes:[{...step,id:'a/b'}]},
+      recipe({kind:'time',seconds:Infinity}), recipe({kind:'time',seconds:-1}), recipe({kind:'other'}),
+      recipe({kind:'manual'},[{kind:'power',mode:'absolute',minimumWatts:200,maximumWatts:100}]),
+      {...input,nodes:[{...step,note:'x'.repeat(501)}]},
+      {...input,nodes:[{kind:'repeat',id:'repeat',count:101,steps:[step]}]},
+      {...input,nodes:[{kind:'repeat',id:'repeat',count:2,steps:[{kind:'repeat',id:'nested',count:2,steps:[step]}]}]},
+      {...input,nodes:Array.from({length:101},(_,i)=>({...step,id:`s${i}`}))},
+    ]) expect(TRAINING_RECIPE_SCHEMA.safeParse(bad).success).toBe(false);
+  });
+});
+
+describe('Strict Training write proposal contract', () => {
+  it('round-trips metre and yard pool lengths only through the additive v2 contract', () => {
+    for (const poolLength of [{ meters: 25, presentation: 'meters' as const },
+      { meters: 22.86, presentation: 'yards' as const }]) {
+      const structure: WorkoutStructureV1 = { ...recipe({ kind: 'distance', meters: 100 }),
+        sport: ActivityTypes.Swimming, poolLength };
+      const serialized = JSON.parse(JSON.stringify(structure));
+      expect(TRAINING_RECIPE_WITH_POOL_SCHEMA.parse(serialized)).toEqual(structure);
+      expect(TRAINING_READ_OUTPUTS.get_planned_workout_v2.parse({ scheduleRevision: 1,
+        workout: { workoutRef: 'opaque', planRef: null, title: 'Pool swim', localDate: '2026-09-30',
+          lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1,
+          structure: serialized, displaySteps: [] } }).workout.structure).toEqual(structure);
+      expect(TRAINING_WRITE_INPUTS.preview_planned_workout_v2_change.safeParse({ expectedScheduleRevision: 1,
+        change: { kind: 'create-workout', localKey: 'swim', plan: null, localDate: '2026-09-30',
+          title: 'Pool swim', structure: serialized } }).success).toBe(true);
+      expect(TRAINING_RECIPE_SCHEMA.safeParse(serialized).success).toBe(false);
+    }
+  });
+
+  it('rejects non-pool, malformed and private pool-length fields', () => {
+    const structure = { ...recipe({ kind: 'distance', meters: 100 }), sport: ActivityTypes.Swimming,
+      poolLength: { meters: 25, presentation: 'meters' } };
+    for (const bad of [
+      { ...structure, sport: ActivityTypes.OpenWaterSwimming },
+      { ...structure, sport: ActivityTypes.Running },
+      { ...structure, poolLength: { meters: 0, presentation: 'meters' } },
+      { ...structure, poolLength: { meters: Infinity, presentation: 'meters' } },
+      { ...structure, poolLength: { meters: 1001, presentation: 'meters' } },
+      { ...structure, poolLength: { meters: 25, presentation: 'feet' } },
+      { ...structure, poolLength: { meters: 25, presentation: 'meters', remoteId: 'PRIVATE' } },
+      { ...structure, remoteId: 'PRIVATE' },
+    ]) expect(TRAINING_RECIPE_WITH_POOL_SCHEMA.safeParse(bad).success).toBe(false);
+    const legacy = { ...recipe({ kind: 'distance', meters: 100 }), sport: ActivityTypes.Swimming };
+    expect(TRAINING_RECIPE_WITH_POOL_SCHEMA.parse(legacy)).toEqual(legacy);
+  });
+  it('offers a focused single-workout input without operation or local-key fields', () => {
+    const input = {
+      expectedScheduleRevision: 1,
+      localDate: '2026-09-18',
+      title: 'Easy run',
+      structure: recipe({ kind: 'time', seconds: 1800 }),
+    };
+    expect(TRAINING_WRITE_INPUTS.preview_create_planned_workout.parse(input)).toMatchObject({
+      ...input,
+      planRef: null,
+    });
+    expect(TRAINING_WRITE_INPUTS.preview_create_planned_workout.safeParse({
+      ...input,
+      kind: 'create-workout',
+      localKey: 'client-owned-key',
+    }).success).toBe(false);
+  });
+
+  it('adds optional focused delivery without client-owned linking fields', () => {
+    const input = {
+      expectedScheduleRevision: 1,
+      localDate: '2026-09-18',
+      title: 'Easy run',
+      structure: recipe({ kind: 'time', seconds: 1800 }),
+      delivery: { providers: ['garmin'], timeZone: 'Europe/Helsinki' },
+    };
+    expect(TRAINING_WRITE_INPUTS.preview_create_planned_workout.parse(input)).toMatchObject({
+      ...input,
+      planRef: null,
+    });
+    expect(TRAINING_WRITE_INPUTS.preview_create_planned_workout.safeParse({
+      ...input,
+      kind: 'create-workout',
+      localKey: 'client-owned-key',
+      target: { localKey: 'client-owned-key' },
+    }).success).toBe(false);
+    expect(TRAINING_WRITE_INPUTS.preview_create_planned_workout.safeParse({
+      ...input,
+      delivery: { providers: ['garmin'], timeZone: '' },
+    }).success).toBe(false);
+  });
+
+  it('accepts only the bounded safe lifecycle and explicit provider actions', () => {
+    expect(TRAINING_CHANGE_SCHEMA.safeParse({ kind: 'create-workout', localKey: 'run', plan: null,
+      localDate: '2026-09-18', title: 'Easy run', structure: recipe({ kind: 'time', seconds: 1800 }) }).success).toBe(true);
+    expect(TRAINING_CHANGE_SCHEMA.safeParse({ kind: 'provider-delivery', targetType: 'workout',
+      target: { localKey: 'run' }, providers: 'all_connected', action: 'send', timeZone: 'Europe/Helsinki' }).success).toBe(true);
+    expect(TRAINING_CHANGE_SCHEMA.safeParse({ kind: 'provider-delivery', targetType: 'workout',
+      target: { ref: 'opaque' }, providers: ['wahoo'], action: 'send', timeZone: 'Europe/Helsinki' }).success).toBe(true);
+    expect(TRAINING_CHANGE_SCHEMA.safeParse({ kind: 'delete-plan', plan: { ref: 'opaque' },
+      workoutDisposition: 'convert-to-standalone' }).success).toBe(true);
+    expect(TRAINING_CHANGE_SCHEMA.safeParse({ kind: 'delete-workout', workout: { ref: 'opaque' } }).success).toBe(true);
+    for (const forbidden of [
+      { kind: 'permanently-delete-workout', workout: { ref: 'opaque' } },
+      { kind: 'delete-plan', plan: { ref: 'opaque' } },
+      { kind: 'delete-plan', plan: { ref: 'opaque' }, workoutDisposition: 'delete-workouts', removePastProviderCopies: true },
+      { kind: 'delete-workout', workout: { ref: 'opaque' }, removePastProviderCopies: true },
+      { kind: 'restore-training-revision', revision: 1 },
+      { kind: 'provider-delivery', targetType: 'workout', target: { ref: 'opaque' }, providers: ['garmin'], action: 'send', remoteId: 'PRIVATE' },
+    ]) expect(TRAINING_CHANGE_SCHEMA.safeParse(forbidden).success).toBe(false);
+  });
+
+  it('caps one ordered proposal at 25 changes', () => {
+    const change = { kind: 'set-workout-lifecycle', workout: { ref: 'opaque' }, lifecycle: 'skipped' };
+    expect(TRAINING_WRITE_INPUTS.preview_training_changes.safeParse({ expectedScheduleRevision: 1,
+      changes: Array.from({ length: 25 }, () => change) }).success).toBe(true);
+    expect(TRAINING_WRITE_INPUTS.preview_training_changes.safeParse({ expectedScheduleRevision: 1,
+      changes: Array.from({ length: 26 }, () => change) }).success).toBe(false);
+  });
+
+  it('requires an explicit service-copy choice in the additive deletion preview, without widening legacy deletion', () => {
+    for (const removePastProviderCopies of [true, false]) {
+      for (const change of [
+        { kind: 'delete-workout', workout: { ref: 'opaque' }, removePastProviderCopies },
+        { kind: 'delete-plan', plan: { ref: 'opaque' }, workoutDisposition: 'convert-to-standalone', removePastProviderCopies },
+      ]) {
+        expect(TRAINING_WRITE_INPUTS.preview_training_deletion.safeParse({ expectedScheduleRevision: 1, change }).success).toBe(true);
+        expect(TRAINING_WRITE_INPUTS.preview_training_changes.safeParse({ expectedScheduleRevision: 1, changes: [change] }).success).toBe(false);
+        const withoutChoice: Record<string, unknown> = { ...change };
+        delete withoutChoice.removePastProviderCopies;
+        expect(TRAINING_WRITE_INPUTS.preview_training_deletion.safeParse({ expectedScheduleRevision: 1, change: withoutChoice }).success).toBe(false);
+        expect(TRAINING_WRITE_INPUTS.preview_training_deletion.safeParse({ expectedScheduleRevision: 1,
+          change: { ...change, remoteId: 'private' } }).success).toBe(false);
+      }
+    }
+    expect(TRAINING_WRITE_INPUTS.preview_training_deletion.safeParse({ expectedScheduleRevision: 1,
+      change: { kind: 'delete-plan', plan: { ref: 'opaque' }, removePastProviderCopies: true } }).success).toBe(false);
+    expect(TRAINING_WRITE_INPUTS.preview_training_deletion.safeParse({ expectedScheduleRevision: 1,
+      change: { kind: 'delete-workout', workout: { localKey: 'uncreated' }, removePastProviderCopies: true } }).success).toBe(false);
+  });
+
+  it('requires a complete strength draft in the additive preview and keeps v1 recipes frozen', () => {
+    const draft = { version: 1, exercises: [{ id: 'squat', name: 'Squat', sets: [{ id: 'set-one',
+      ending: { kind: 'repetitions', repetitions: 5 }, externalLoadKg: 80, restAfterSeconds: 120 }] }] };
+    const input = { expectedScheduleRevision: 1, change: { kind: 'create-workout', localKey: 'lift', plan: null,
+      localDate: '2026-09-30', title: 'Strength', strength: draft } };
+    expect(TRAINING_WRITE_INPUTS.preview_strength_workout_change.safeParse(input).success).toBe(true);
+    expect(TRAINING_WRITE_INPUTS.preview_strength_workout_change.safeParse({ ...input,
+      change: { ...input.change, structure: recipe({ kind: 'manual' }) } }).success).toBe(false);
+    expect(TRAINING_WRITE_INPUTS.preview_strength_workout_change.safeParse({ ...input,
+      change: { ...input.change, strength: { ...draft, exercises: [{ ...draft.exercises[0], sets: [
+        draft.exercises[0].sets[0], draft.exercises[0].sets[0] ] }] } } }).success).toBe(false);
+    expect(TRAINING_WRITE_INPUTS.preview_training_changes.safeParse({ expectedScheduleRevision: 1,
+      changes: [{ ...input.change, structure: recipe({ kind: 'manual' }) }] }).success).toBe(false);
+  });
+});
+
+
+describe('additive early Lap recipe contract', () => {
+  it.each(WORKOUT_STEP_PURPOSES)('round-trips exact time/distance settings for %s, including repeat children and pool length', purpose => {
+    for (const allowEarlyLap of [undefined, false, true]) for (const numeric of [
+      { kind: 'time' as const, seconds: 90.123 }, { kind: 'distance' as const, meters: 1609.344 },
+    ]) {
+      const ending = { ...numeric, ...(allowEarlyLap === undefined ? {} : { allowEarlyLap }) };
+      const step = { kind: 'step' as const, id: 'top', purpose, ending, targets: [] };
+      const input = { version: 1, sport: ActivityTypes.Swimming, poolLength: { meters: 22.86, presentation: 'yards' },
+        nodes: [step, { kind: 'repeat', id: 'repeat', count: 3, steps: [{ ...step, id: 'child' }] }] };
+      const wire = JSON.parse(JSON.stringify(input));
+      expect(TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA.parse(wire)).toEqual(input);
+      const scheduled = TRAINING_READ_OUTPUTS.get_planned_workout_v3.parse({ scheduleRevision: 1, workout: {
+        workoutRef: 'opaque', planRef: null, title: 'Swim', localDate: '2026-10-05', lifecycle: 'planned',
+        revision: 1, createdAtMs: 1, updatedAtMs: 1, structure: wire, displaySteps: [] } });
+      expect(scheduled.workout.structure).toEqual(input);
+      const saved = TRAINING_READ_OUTPUTS.get_saved_workout_v2.parse({ libraryRevision: 1, savedWorkout: {
+        savedWorkoutRef: 'opaque', title: 'Swim', status: 'active', revision: 1, createdAtMs: 1, updatedAtMs: 1, structure: wire } });
+      expect(saved.savedWorkout.structure).toEqual(input);
+      const planned = TRAINING_WRITE_INPUTS.preview_planned_workout_v3_change.parse({ expectedScheduleRevision: 1,
+        change: { kind: 'create-workout', localKey: 'swim', title: 'Swim', plan: null, localDate: '2026-10-05', structure: wire } });
+      expect(planned.change).toMatchObject({ structure: input });
+      const bulk = TRAINING_WRITE_INPUTS.preview_planned_workout_v3_changes.parse({ expectedScheduleRevision: 1,
+        changes: [planned.change] });
+      expect(bulk.changes[0]).toMatchObject({ structure: input });
+      const library = TRAINING_WRITE_INPUTS.preview_saved_workout_v2_change.parse({ expectedScheduleRevision: 1,
+        expectedLibraryRevision: 1, change: { kind: 'create', title: 'Swim', structure: wire } });
+      expect(library.change).toMatchObject({ structure: input });
+      expect(TRAINING_RECIPE_WITH_POOL_SCHEMA.safeParse(wire).success).toBe(allowEarlyLap === undefined);
+    }
+  });
+  it('keeps the ending-field coverage gate exhaustive', () => {
+    expect(MCP_WORKOUT_RECIPE_VARIANT_COVERAGE.endingFields).toEqual({
+      time: { kind: true, seconds: true, allowEarlyLap: true },
+      distance: { kind: true, meters: true, allowEarlyLap: true },
+      kilojoules: { kind: true, kilojoules: true }, repetitions: { kind: true, repetitions: true }, manual: { kind: true },
+    });
+  });
+  it('bounds the full-recipe batch and rejects other actions and private fields', () => {
+    const change = { kind: 'update-workout', workout: { ref: 'opaque' }, plan: null,
+      localDate: '2026-10-12', title: 'Quality run', structure: recipe({ kind: 'time', seconds: 1200, allowEarlyLap: true }) };
+    const schema = TRAINING_WRITE_INPUTS.preview_planned_workout_v3_changes;
+    expect(schema.safeParse({ expectedScheduleRevision: 1, changes: Array.from({ length: 25 }, () => change) }).success).toBe(true);
+    for (const changes of [[], Array.from({ length: 26 }, () => change), [{ ...change, remoteId: 'private' }],
+      [{ kind: 'delete-workout', workout: { ref: 'opaque' } }],
+      [{ kind: 'provider-delivery', targetType: 'workout', target: { ref: 'opaque' }, providers: ['suunto'], action: 'send' }]]) {
+      expect(schema.safeParse({ expectedScheduleRevision: 1, changes }).success).toBe(false);
+    }
+    expect(TRAINING_WRITE_INPUTS.preview_training_changes.safeParse({ expectedScheduleRevision: 1, changes: [change] }).success).toBe(false);
+  });
+  it.each([null, 1, 'true', {}, undefined])('rejects an explicitly invalid numeric flag %s', allowEarlyLap => {
+    expect(TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA.safeParse(recipe({ kind: 'time', seconds: 60, allowEarlyLap } as never)).success).toBe(false);
+  });
+  it.each(['manual', 'kilojoules', 'repetitions'])('rejects early Lap on %s, including false', kind => {
+    expect(TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA.safeParse(recipe({ ...endingFixtures[kind as keyof typeof endingFixtures], allowEarlyLap: false } as never)).success).toBe(false);
+  });
+});
+
+describe('complete manual target editor coverage', () => {
+  it.each(Object.entries(targetVariantFixtures))('round-trips precise ordered pairs containing %s through scheduled/library reads and proposals', (_, fixture) => {
+    const target = JSON.parse(JSON.stringify(fixture), (key, value) => typeof value === 'number' ? value + 0.1234567890123 : value);
+    const companion = fixture.kind === 'power' ? targetReferenceFixtures['heart-rate:threshold-heart-rate'] : targetReferenceFixtures['power:functional-threshold-power'];
+    const input = recipe({ kind: 'time', seconds: 61.1234567890123 }, [target, { ...companion, minimumPercent: 0, maximumPercent: 130.123456789 }]);
+    input.nodes = [{ kind: 'repeat', id: 'repeat', count: 3, steps: [input.nodes[0] as Extract<WorkoutStructureV1['nodes'][number], { kind: 'step' }>] }];
+    expectPublicReadWriteRoundTrip(input);
+    expect(TRAINING_READ_OUTPUTS.get_saved_workout.parse({ libraryRevision: 1, savedWorkout: {
+      savedWorkoutRef: 'opaque-library', title: 'Mixed targets', status: 'active', revision: 1, createdAtMs: 1, updatedAtMs: 1, structure: input,
+    } }).savedWorkout.structure).toEqual(input);
+    expect(TRAINING_WRITE_INPUTS.preview_saved_workout_change.parse({ expectedScheduleRevision: 1, expectedLibraryRevision: 1,
+      change: { kind: 'create', title: 'Mixed targets', structure: input } }).change).toMatchObject({ structure: input });
+    const step = input.nodes[0].kind === 'repeat' ? input.nodes[0].steps[0] : input.nodes[0];
+    for (const field of ['source', 'speedSource', 'referenceSaved', 'rangeMode', 'referenceValue', 'editorMinimum', 'providerWorkoutId']) {
+      const leaked = recipe(step.ending, [{ ...target, [field]: 'private' }, companion] as WorkoutTargetV1[]);
+      expect(TRAINING_RECIPE_SCHEMA.safeParse(leaked).success).toBe(false);
+    }
+    expect(TRAINING_RECIPE_SCHEMA.safeParse(recipe(step.ending, [target, target])).success).toBe(false);
+  });
+});
+
+describe('strict additive workout prescription analysis', () => {
+  it('requires a bounded reference and explicit source without accepting extra fields', () => {
+    const schema = TRAINING_READ_INPUTS.get_workout_prescription_analysis;
+    expect(schema.safeParse({ source: 'saved', reference: 'opaque' }).success).toBe(true);
+    for (const input of [{ reference: 'opaque' }, { source: 'scheduled', reference: '' },
+      { source: 'scheduled', reference: 'opaque', uid: 'foreign' }, { source: 'activity', reference: 'opaque' }])
+      expect(schema.safeParse(input).success).toBe(false);
+  });
+  it.each(Object.values(endingFixtures))('validates every ending analysis and recursively rejects private neighboring fields for %j', ending => {
+    const schema = TRAINING_READ_OUTPUTS.get_workout_prescription_analysis;
+    const value = { source: 'scheduled', reference: 'opaque', revision: 1, scheduleRevision: 1, libraryRevision: null,
+      sport: ActivityTypes.Running, analysis: analyzeWorkoutStructureV1(recipe(ending)), displaySummary: 'Summary' };
+    expect(schema.parse(value)).toEqual(value);
+    const canaries = [ { ...value, providerId: 'secret' },
+      { ...value, analysis: { ...value.analysis, sourceFile: 'secret' } },
+      { ...value, analysis: { ...value.analysis, summary: { ...value.analysis.summary, privateId: 'secret' } } },
+      { ...value, analysis: { ...value.analysis, steps: [{ ...value.analysis.steps[0], note: 'private' }] } },
+    ];
+    canaries.forEach(canary => expect(schema.safeParse(canary).success).toBe(false));
+  });
+  it.each([targetVariantFixtures['speed:absolute'], targetVariantFixtures['speed:relative']])('validates speed estimate basis %j', target => {
+    const analysis = analyzeWorkoutStructureV1(recipe({ kind: 'distance', meters: 1000 }, [target]));
+    expect(TRAINING_READ_OUTPUTS.get_workout_prescription_analysis.parse({ source: 'saved', reference: 'opaque', revision: 1,
+      scheduleRevision: null, libraryRevision: 1, sport: ActivityTypes.Running, analysis, displaySummary: 'Estimated' }).analysis).toEqual(analysis);
+  });
+});
+
+
+describe('canonical sport compatibility for pending Training recipes', () => {
+  it.each(Object.values(RefinedRecordedActivityTypes))(
+    'keeps recorded-only %s outside future recipe enums until catalog adoption', sport => {
+      const installed = ActivityTypesHelper.getActivityTypesAsUniqueArray().includes(sport);
+      const structure = { ...recipe({ kind: 'time', seconds: 60 }), sport };
+      for (const schema of [TRAINING_RECIPE_SCHEMA, TRAINING_RECIPE_WITH_POOL_SCHEMA, TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA]) {
+        expect(schema.safeParse(structure).success).toBe(installed);
+        const advertised = z.toJSONSchema(schema, { target: 'draft-2020-12', io: 'input' });
+        expect(advertised.properties?.sport?.enum?.includes(sport)).toBe(installed);
+      }
+    });
+
+  const canonicalSports = [...new Set([
+    ...ActivityTypesHelper.getActivityTypesAsUniqueArray(),
+    ...Object.values(RefinedTrainingActivityTypes),
+  ])].filter(sport => sport !== 'Unknown Sport');
+
+  it('advertises a reused exact finite sport enum accepted by JSON Schema clients', () => {
+    const schema = z.toJSONSchema(TRAINING_WRITE_INPUTS.preview_training_changes, {
+      target: 'draft-2020-12', io: 'input',
+    });
+    const vocabularies = Object.values(schema.$defs ?? {}).filter(definition =>
+      typeof definition === 'object' && definition !== null && 'enum' in definition
+      && Array.isArray(definition.enum) && definition.enum.includes(ActivityTypes.Running));
+    expect(vocabularies).toHaveLength(1);
+    const vocabulary = vocabularies[0];
+    expect(vocabulary).toMatchObject({ type: 'string', enum: expect.arrayContaining(canonicalSports) });
+    expect(vocabulary).toMatchObject({ enum: expect.not.arrayContaining(['Unknown Sport']) });
+    const ajv = new Ajv2020({ strict: false });
+    addFormats(ajv);
+    const validate = ajv.compile(schema);
+    for (const sport of canonicalSports) {
+      const structure = { ...recipe({ kind: 'time', seconds: 60 }), sport };
+      const request = { expectedScheduleRevision: 1, changes: [{ kind: 'create-workout', localKey: 'workout',
+        title: 'Workout', plan: null, localDate: '2026-09-18', structure }] };
+      expect(validate(JSON.parse(JSON.stringify(request))), `${sport}: ${JSON.stringify(validate.errors)}`).toBe(true);
+      expect(validate({ ...request, changes: [{ ...request.changes[0], structure: { ...structure,
+        sport: `${sport} Unknown provider alias` } }] })).toBe(false);
+      expect(validate({ ...request, changes: [{ ...request.changes[0], structure: { ...structure,
+        sport: 'Unknown Sport' } }] })).toBe(false);
+      expect(validate({ ...request, changes: [{ ...request.changes[0], structure: { ...structure,
+        providerProfile: 'PRIVATE' } }] })).toBe(false);
+    }
+  });
+
+  it.each(canonicalSports)('keeps %s unchanged through scheduled/saved public JSON reads and approved write schemas', sport => {
+    const structure: WorkoutStructureV1 = { ...recipe({ kind: 'time', seconds: 60 }), sport };
+    const serialized = JSON.parse(JSON.stringify(structure));
+    expectPublicReadWriteRoundTrip(structure);
+    const scheduled = { scheduleRevision: 3, workout: {
+      workoutRef: 'opaque-workout', planRef: null, title: 'Workout', localDate: '2026-09-18',
+      lifecycle: 'planned', revision: 2, createdAtMs: 1, updatedAtMs: 2,
+      structure: serialized, displaySteps: [],
+    } };
+    for (const schema of [TRAINING_READ_OUTPUTS.get_planned_workout_v2, TRAINING_READ_OUTPUTS.get_planned_workout_v3]) {
+      expect(schema.parse(scheduled).workout.structure).toEqual(structure);
+      expect(schema.safeParse({ ...scheduled, workout: { ...scheduled.workout, providerWorkoutId: 'PRIVATE' } }).success).toBe(false);
+    }
+    const saved = { libraryRevision: 3, savedWorkout: {
+      savedWorkoutRef: 'opaque-saved', title: 'Workout', status: 'active', revision: 2,
+      createdAtMs: 1, updatedAtMs: 2, structure: serialized,
+    } };
+    for (const schema of [TRAINING_READ_OUTPUTS.get_saved_workout, TRAINING_READ_OUTPUTS.get_saved_workout_v2]) {
+      expect(schema.parse(saved).savedWorkout.structure).toEqual(structure);
+      expect(schema.safeParse({ ...saved, savedWorkout: { ...saved.savedWorkout, sourceActivityKey: 'PRIVATE' } }).success).toBe(false);
+    }
+    const change = { kind: 'create-workout', localKey: 'workout', plan: null,
+      localDate: '2026-09-18', title: 'Workout', structure: serialized };
+    expect(TRAINING_WRITE_INPUTS.preview_planned_workout_v3_change.parse({ expectedScheduleRevision: 3, change }).change)
+      .toMatchObject({ structure });
+    const libraryChange = { kind: 'create', title: 'Workout', structure: serialized };
+    expect(TRAINING_WRITE_INPUTS.preview_saved_workout_v2_change.parse({ expectedScheduleRevision: 3,
+      expectedLibraryRevision: 3, change: libraryChange }).change).toMatchObject({ structure });
+    const analysis = { source: 'saved', reference: 'opaque-saved', revision: 2, scheduleRevision: null,
+      libraryRevision: 3, sport, analysis: analyzeWorkoutStructureV1(structure), displaySummary: '60 seconds' };
+    expect(TRAINING_READ_OUTPUTS.get_workout_prescription_analysis.parse(JSON.parse(JSON.stringify(analysis)))).toEqual(analysis);
+    expect(TRAINING_READ_OUTPUTS.get_workout_prescription_analysis.safeParse({ ...analysis, providerId: 'PRIVATE' }).success).toBe(false);
+  });
+
+  it.each(['Unknown Sport', 'Unknown provider sport', 'road running', '', 42, null])('rejects unapproved or noncanonical public sport %j', sport => {
+    const structure = { ...recipe({ kind: 'time', seconds: 60 }), sport };
+    for (const schema of [TRAINING_RECIPE_SCHEMA, TRAINING_RECIPE_WITH_POOL_SCHEMA, TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA]) {
+      expect(schema.safeParse(structure).success).toBe(false);
+      expect(schema.safeParse({ ...structure, sport: ActivityTypes.Running, providerProfile: 'PRIVATE' }).success).toBe(false);
+    }
+  });
+});

@@ -7,7 +7,7 @@ import { ActivatedRoute } from '@angular/router';
 import { AppFileService } from '../../../services/app.file.service';
 import { AppEventService } from '../../../services/app.event.service';
 import { AppAuthService } from '../../../authentication/app.auth.service';
-import { ActivitySyncBackfillSummary, AppUserService } from '../../../services/app.user.service';
+import { AppUserService } from '../../../services/app.user.service';
 import { AppWindowService } from '../../../services/app.window.service';
 import { ServicesAbstractComponentDirective } from '../services-abstract-component.directive';
 import { COROS_HISTORY_IMPORT_LIMIT_MONTHS } from '../../../constants/coros';
@@ -46,10 +46,6 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
   public minDate = dayjs().subtract(COROS_HISTORY_IMPORT_LIMIT_MONTHS, 'month').toDate();
   public readonly corosToSuuntoRouteID = ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp;
   public isSavingSyncRoute = false;
-  public isBackfillingSync = false;
-  public backfillStartDate: Date = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000));
-  public backfillEndDate: Date = new Date();
-  public backfillSummary: ActivitySyncBackfillSummary | null = null;
   public activeActivitySyncDestination: 'suunto' | 'wahoo' | 'coros' = 'suunto';
   public isCheckingCOROSBindingState = false;
   public corosBindingStateCheckError = false;
@@ -58,6 +54,8 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
 
   private suuntoConnectionSubscription: Subscription | null = null;
   private lastCOROSBindingStateCheckKey: string | null = null;
+  private corosBindingStateCheckRevision = 0;
+  private disconnectedCOROSConnectionKey: string | null = null;
   private corosBindingStateRetryTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   private corosBindingStateAutomaticStaleRetryKey: string | null = null;
   private corosBindingStateAutomaticStaleRetryTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
@@ -78,12 +76,9 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     super(http, fileService, eventService, authService, userService, route, windowService, snackBar);
   }
 
-  async requestAndSetToken() {
-    const state = this.route.snapshot.queryParamMap.get('state');
-    const code = this.route.snapshot.queryParamMap.get('code');
-    if (state && code) {
-      await this.userService.requestAndSetCurrentUserCOROSAPIAccessToken(state, code);
-    }
+  async requestAndSetToken(params = this.route.snapshot.queryParamMap) {
+    const { state, code } = this.getOAuthCallbackParameters(params);
+    return this.userService.requestAndSetCurrentUserCOROSAPIAccessToken(state, code);
   }
 
   get corosServiceMeta(): UserServiceMetaInterface & {
@@ -98,6 +93,7 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
       this.activeActivitySyncDestination = this.initialActivitySyncDestination;
     }
     await super.ngOnChanges();
+    if (this.connectionViewDestroyed) return;
     this.watchSuuntoConnectionState();
   }
 
@@ -116,14 +112,40 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     void this.checkCOROSBindingStateIfEligible();
   }
 
+  override async deauthorizeService(event: Event | null): Promise<boolean> {
+    const connectionKey = this.getCOROSConnectionKey();
+    const disconnect = super.deauthorizeService(event);
+    // The base method locks synchronously before awaiting confirmation.
+    if (this.isDisconnecting) void this.checkCOROSBindingStateIfEligible();
+    const didDisconnect = await disconnect;
+    if (this.isDestroyed) return didDisconnect;
+    if (didDisconnect) {
+      this.disconnectedCOROSConnectionKey = connectionKey;
+      this.connectionStateChanged.emit(this.isConnectedToService());
+    }
+    // Cancellation or a newer connection can outlive a discarded check without
+    // another metadata update. The disconnected generation remains ineligible.
+    void this.checkCOROSBindingStateIfEligible();
+    return didDisconnect;
+  }
+
   public retryCOROSBindingStateCheck(): void {
-    if (this.isCOROSBindingStateRetryDisabled || this.isCheckingCOROSBindingState) return;
+    if (this.isCOROSBindingStateRetryDisabled || this.isCheckingCOROSBindingState
+      || this.getCOROSBindingStateCheckKey() === null) return;
+    this.hapticsService.selection();
     this.corosBindingStateCheckError = false;
     void this.checkCOROSBindingStateIfEligible(true);
   }
 
   get hasStoredCOROSConnection(): boolean {
-    return !this.isDisconnectPending && (!!this.activeCorosServiceToken || this.forceConnected);
+    // Disconnect clears the lifecycle state before the token projection trigger
+    // removes the account summaries. Those older summaries cannot revive it.
+    const connectionWasCleared = !!this.serviceMeta?.connectionStateGeneration
+      && !this.serviceMeta.connectionState;
+    const disconnectedLocally = this.disconnectedCOROSConnectionKey !== null
+      && this.disconnectedCOROSConnectionKey === this.getCOROSConnectionKey();
+    return !this.isDisconnectPending && !connectionWasCleared && !disconnectedLocally
+      && (!!this.activeCorosServiceToken || this.forceConnected);
   }
 
   isConnectedToService = () => !this.isReconnectRequired && this.hasStoredCOROSConnection;
@@ -145,12 +167,12 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
   }
 
   get shouldShowConnectAction(): boolean {
-    return (!this.isConnectedToService() || this.isReconnectRequired || this.isDisconnectManualReviewRequired)
+    return (this.reconnectRequested || !this.isConnectedToService() || this.isReconnectRequired || this.isDisconnectManualReviewRequired)
       && (!this.isDisconnectPending || this.isDisconnectManualReviewRequired);
   }
 
   get connectButtonLabel(): string {
-    return this.isReconnectRequired || this.isDisconnectManualReviewRequired ? 'Reconnect' : 'Connect';
+    return this.reconnectRequested || this.isConnectedToService() || this.isReconnectRequired || this.isDisconnectManualReviewRequired ? 'Reconnect' : 'Connect';
   }
 
   get connectionDescription(): string {
@@ -208,24 +230,44 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     return providerUserId || undefined;
   }
 
-  private async checkCOROSBindingStateIfEligible(force = false): Promise<void> {
-    if (this.isDestroyed) return;
+  private getCOROSConnectionKey(): string | null {
     const userID = `${this.user?.uid || ''}`.trim();
     const providerUserId = `${this.getCOROSProviderUserId(this.activeCorosServiceToken) || ''}`.trim();
+    return userID && providerUserId
+      ? JSON.stringify([userID, providerUserId, this.serviceMeta?.connectionStateGeneration || null])
+      : null;
+  }
+
+  private getCOROSBindingStateCheckKey(): string | null {
+    const connectionKey = this.getCOROSConnectionKey();
+    const params = this.route.snapshot.queryParamMap;
+    // Metadata emits before the base subscription locks the OAuth callback.
+    const hasPendingAuthorization = params.get('serviceName') === this.serviceName
+      && (!!params.get('connect') || (!!params.get('code') && !!params.get('state')));
     const isEligible = this.showConnectionSummary
-      && !!userID
-      && !!providerUserId
+      && connectionKey !== null
+      && this.hasStoredCOROSConnection
+      && !hasPendingAuthorization
+      && !this.isConnecting
+      && !this.isDisconnecting
       && !this.isReconnectRequired
       && !this.isDisconnectPending;
-    if (!isEligible) {
+    return isEligible ? connectionKey : null;
+  }
+
+  private async checkCOROSBindingStateIfEligible(force = false): Promise<void> {
+    if (this.isDestroyed) return;
+    const checkKey = this.getCOROSBindingStateCheckKey();
+    if (checkKey === null) {
+      this.corosBindingStateCheckRevision++;
       this.lastCOROSBindingStateCheckKey = null;
       this.isCheckingCOROSBindingState = false;
+      this.corosBindingStateCheckError = false;
       this.clearCOROSBindingStateRetryCooldown();
       this.clearCOROSBindingStateAutomaticStaleRetry();
       return;
     }
 
-    const checkKey = `${userID}:${providerUserId}`;
     if (this.corosBindingStateAutomaticStaleRetryKey !== null
       && this.corosBindingStateAutomaticStaleRetryKey !== checkKey) {
       this.clearCOROSBindingStateAutomaticStaleRetry();
@@ -234,13 +276,21 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
       this.lastCOROSBindingStateCheckKey === checkKey
       || this.corosBindingStateAutomaticStaleRetryKey === checkKey
     )) return;
+    const checkRevision = ++this.corosBindingStateCheckRevision;
+    const isCurrentCheck = () => !this.isDestroyed
+      && this.corosBindingStateCheckRevision === checkRevision
+      && this.getCOROSBindingStateCheckKey() === checkKey;
     this.lastCOROSBindingStateCheckKey = checkKey;
     this.isCheckingCOROSBindingState = true;
     this.corosBindingStateCheckError = false;
     this.changeDetectorRef.markForCheck();
     try {
-      const result = await this.userService.checkCurrentUserCOROSBindingState(userID, providerUserId);
-      if (this.isDestroyed) return;
+      const result = await this.userService.checkCurrentUserCOROSBindingState(
+        `${this.user?.uid || ''}`.trim(),
+        `${this.getCOROSProviderUserId(this.activeCorosServiceToken) || ''}`.trim(),
+        this.serviceMeta?.connectionStateGeneration,
+      );
+      if (!isCurrentCheck()) return;
       if (this.lastCOROSBindingStateCheckKey === checkKey) {
         this.clearCOROSBindingStateRetryCooldown();
       }
@@ -251,7 +301,7 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
         this.clearCOROSBindingStateAutomaticStaleRetry(checkKey);
       }
     } catch (error) {
-      if (this.isDestroyed) return;
+      if (!isCurrentCheck()) return;
       if (this.lastCOROSBindingStateCheckKey === checkKey) {
         this.corosBindingStateCheckError = true;
         this.setCOROSBindingStateRetryCooldown(this.getCOROSBindingStateRetryAt(error));
@@ -259,8 +309,10 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
       }
       this.logger.error(error);
     } finally {
-      if (!this.isDestroyed
-        && (this.lastCOROSBindingStateCheckKey === checkKey || this.lastCOROSBindingStateCheckKey === null)) {
+      if (!this.isDestroyed && this.corosBindingStateCheckRevision === checkRevision) {
+        if (!isCurrentCheck() && this.lastCOROSBindingStateCheckKey === checkKey) {
+          this.lastCOROSBindingStateCheckKey = null;
+        }
         this.isCheckingCOROSBindingState = false;
         this.changeDetectorRef.markForCheck();
       }
@@ -280,9 +332,7 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
       this.corosBindingStateAutomaticStaleRetryTimer = null;
       if (this.isDestroyed || this.corosBindingStateAutomaticStaleRetryKey !== checkKey) return;
 
-      const currentUserID = `${this.user?.uid || ''}`.trim();
-      const currentProviderUserId = `${this.getCOROSProviderUserId(this.activeCorosServiceToken) || ''}`.trim();
-      if (`${currentUserID}:${currentProviderUserId}` !== checkKey) {
+      if (this.getCOROSBindingStateCheckKey() !== checkKey) {
         this.corosBindingStateAutomaticStaleRetryKey = null;
         return;
       }
@@ -372,10 +422,6 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     return isCOROSRouteUploadUIDAllowlisted(`${this.user?.uid || ''}`);
   }
 
-  get isBackfillDateRangeInvalid(): boolean {
-    return this.backfillStartDate > this.backfillEndDate;
-  }
-
   async onCorosToSuuntoRouteToggle(enabled: boolean): Promise<void> {
     if (!this.user || this.isSavingSyncRoute) {
       return;
@@ -417,60 +463,4 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     }
   }
 
-  async runCorosToSuuntoBackfill(event: Event): Promise<void> {
-    event.preventDefault();
-
-    if (!this.user || this.isBackfillingSync) {
-      return;
-    }
-
-    if (!this.isCorosToSuuntoRouteAvailableForUser) {
-      this.snackBar.open('Activity sync is not available for this account.', undefined, { duration: 4000 });
-      return;
-    }
-
-    if (this.isSuuntoReconnectRequired) {
-      this.snackBar.open('Reconnect Suunto before syncing past COROS activities.', undefined, { duration: 4000 });
-      return;
-    }
-
-    if (this.isReconnectRequired) {
-      this.snackBar.open('Reconnect COROS before syncing past activities.', undefined, { duration: 4000 });
-      return;
-    }
-
-    if (!this.isConnectedToService() || !this.isSuuntoConnected) {
-      this.snackBar.open('Connect COROS and Suunto before syncing past activities.', undefined, { duration: 4000 });
-      return;
-    }
-
-    if (this.isBackfillDateRangeInvalid) {
-      this.snackBar.open('The start date must be before the end date.', undefined, { duration: 3500 });
-      return;
-    }
-
-    this.isBackfillingSync = true;
-    try {
-      const summary = await this.userService.backfillActivitySyncRouteForCurrentUser(
-        ServiceNames.COROSAPI,
-        ServiceNames.SuuntoApp,
-        this.backfillStartDate,
-        this.backfillEndDate,
-      );
-
-      this.backfillSummary = summary;
-      this.analyticsService.logActivitySyncRouteBackfill(this.corosToSuuntoRouteID, {
-        scanned: summary.scanned,
-        queued: summary.queued,
-        failedCount: summary.failedCount,
-      });
-      const failureSuffix = summary.failedCount > 0 ? ` Could not schedule: ${summary.failedCount}.` : '';
-      this.snackBar.open(`Activity sync started for ${summary.queued} ${summary.queued === 1 ? 'activity' : 'activities'}.${failureSuffix}`, undefined, { duration: 4000 });
-    } catch (error: any) {
-      this.logger.error(error);
-      this.snackBar.open(`Could not start activity sync: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
-    } finally {
-      this.isBackfillingSync = false;
-    }
-  }
 }

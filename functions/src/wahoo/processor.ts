@@ -1,4 +1,6 @@
 import * as crypto from 'crypto';
+import { isActivityIdentityConflict } from '../shared/activity-identity-conflict';
+import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import {
   EventImporterFIT,
@@ -30,6 +32,8 @@ import {
   getActiveWahooTokenSnapshot,
 } from './account';
 import { isWahooReconnectRequiredError } from './refresh-recovery';
+import { fitActivityReferencesFromEvent } from '../suunto/guide-completion';
+import { retainWahooTrainingCompletion } from './training-completion';
 import {
   claimWahooWorkoutQueueRevision,
   completeWahooWorkoutQueueRevision,
@@ -208,6 +212,19 @@ export async function processWahooWorkoutQueueItem(
         },
       },
     );
+    await retainWahooTrainingCompletion(
+      admin.firestore(),
+      userID,
+      eventID,
+      accountGuard,
+      queueItem.workoutID,
+      queueItem.planID,
+      queueItem.workoutToken,
+      queueItem.workoutSummaryID,
+      fitActivityReferencesFromEvent(event),
+      undefined,
+      fitFile,
+    );
     const skippedAfterDeletionStarted = await enqueueActivitySyncAfterEventPersistence({
       userID,
       eventID,
@@ -222,8 +239,11 @@ export async function processWahooWorkoutQueueItem(
         skippedReason: 'user_deleted_or_deleting',
       });
     }
-    return completeWahooWorkoutQueueRevision(queueItem, processingOwner);
+    return completeWahooWorkoutQueueRevision(queueItem, processingOwner, {}, true);
   } catch (error) {
+    if (isActivityIdentityConflict(error)) {
+      return failWahooWorkoutQueueRevision(queueItem, processingOwner, error);
+    }
     if (isWahooReconnectRequiredError(error)) {
       return deferClaimedWahooQueueItemForReconnect(queueItem, userID, processingOwner);
     }

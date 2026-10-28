@@ -1,0 +1,507 @@
+import { describe, expect, it, vi } from 'vitest';
+import { ActivityTypes, DistanceUnits, WeightUnits } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '../../../../shared/unit-aware-display';
+import { defaultSuuntoSwimmingGuideSettings } from '../../../../shared/suunto-swimming-guide-settings';
+import { projectStrengthWorkoutToV1, type StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
+import { resolveDeliveryIntent, deliveryIdentity, deliveryContentDigest } from './intent';
+import { hashTrainingScheduleRequestPayload } from '../persistence';
+import type { DeliveryContext, DeliveryLedgerV1 } from './contracts';
+import { FakeTrainingTransport } from './test-support/fake-transport';
+import { GarminTrainingTransport } from './garmin/transport';
+import { SuuntoGuideTransport } from './suunto/transport';
+import { WahooTrainingTransport } from './wahoo/transport';
+import { assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery,
+  assessSuuntoGuideV6ForRecovery, assessSuuntoGuideV7ForRecovery, assessSuuntoGuideV9ForRecovery,
+  assessSuuntoGuideV10ForRecovery, assessSuuntoGuideV11ForRecovery, assessSuuntoGuideV12ForRecovery, assessSuuntoGuideV14ForRecovery,
+  assessSuuntoGuideV15ForRecovery } from './suunto/mapping';
+
+const base: DeliveryContext = {
+  workout: { schemaVersion: 1, id: 'workout', planId: null, revision: 1, localDate: '2026-09-10', lifecycle: 'planned',
+    title: 'Easy', createdAtMs: 1, updatedAtMs: 1, structure: { version: 1, sport: ActivityTypes.Running,
+      nodes: [{ kind: 'step', id: 'a', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] }] } },
+  setting: { schemaVersion: 1, scope: 'workout', scopeId: 'workout', provider: 'garmin', revision: 1, enabled: true,
+    suppressed: false, timeZone: 'Europe/Helsinki', destinationKey: 'account-a', connectionEpoch: 0,
+    scopeGeneration: 0, associationPlanId: null, approvedDigest: null, updatedAtMs: 1 },
+  override: null, scopeGeneration: 0, planActive: true, hasPro: true, nowMs: Date.parse('2026-09-10T10:00:00Z'), pastCleanup: null,
+  connection: { state: 'connected', destinationKey: 'account-a', epoch: 0, generation: 'g1' }, transport: new FakeTrainingTransport(),
+};
+describe('delivery intent', () => {
+  it.each([
+    [ActivityTypes.WeightTraining, 'Strength Training'], [ActivityTypes.CoreTraining, 'Strength Training'],
+    [ActivityTypes.LesMillsCore, 'Strength Training'], [ActivityTypes.LesMillsGritStrength, 'Strength Training'],
+    [ActivityTypes['LES MILLS BODYPUMP'], 'Strength Training'], [ActivityTypes.VirtualRowing, 'Indoor Rowing'],
+    [ActivityTypes.Kettlebell, null], [ActivityTypes.Calisthenics, null],
+    [ActivityTypes.Yoga, null], [ActivityTypes.Pilates, null], [ActivityTypes.Stretching, null],
+    [ActivityTypes.FlexibilityTraining, 'Stretching'], [ActivityTypes.Crossfit, null],
+    [ActivityTypes['Circuit Training'], null], [ActivityTypes.Aerobics, null], [ActivityTypes.Crosstrainer, null],
+    [ActivityTypes.EllipticalTrainer, 'Crosstrainer'], [ActivityTypes.Meditation, null], [ActivityTypes.Breathwork, 'Meditation'],
+  ] as const)('reassesses unsupported %s with the approved profile and existing consent', (sport, fallback) => {
+    const request = vi.fn(async () => { throw Error('No HTTP during assessment'); });
+    const context: DeliveryContext = { ...base,
+      transport: new SuuntoGuideTransport(request, 'Quantified Self'),
+      setting: { ...base.setting!, provider: 'suunto' },
+      workout: { ...base.workout!, structure: { ...base.workout!.structure, sport } },
+    };
+    // The previous mapper hashed the complete workout when it rejected this sport.
+    const previousDigest = hashTrainingScheduleRequestPayload({ mappingVersion: 'suunto-guides-v13',
+      destination: 'account-a', zone: 'Europe/Helsinki', owner: 'Quantified Self', workout: context.workout });
+    const previous = { connectionEpoch: 0, destinationKey: 'account-a', status: 'unsupported',
+      desired: 'preserve', desiredDigest: previousDigest, acceptedDigest: null } as DeliveryLedgerV1;
+    const before = structuredClone(context.setting);
+    const reviewed = resolveDeliveryIntent(context, previous);
+    expect(reviewed.digest).not.toBe(previous.desiredDigest);
+    if (fallback) {
+      expect(reviewed).toMatchObject({ desired: 'preserve', status: 'approval_required', approvalDigest: reviewed.digest });
+      expect(reviewed.issues).toContainEqual(expect.stringContaining(`${sport} using its ${fallback} profile`));
+    } else {
+      expect(reviewed).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null, issues: [] });
+    }
+    expect(resolveDeliveryIntent({ ...context, setting: { ...context.setting!, approvedDigest: reviewed.digest } }, previous))
+      .toMatchObject({ desired: 'present', status: 'pending', digest: reviewed.digest, approvalDigest: null });
+    expect(resolveDeliveryIntent({ ...context, setting: null }, previous).desired).toBe('absent');
+    expect(resolveDeliveryIntent({ ...context, hasPro: false }, previous).status).toBe('paused_pro');
+    expect(context.setting).toEqual(before);
+    expect(context.workout!.structure.sport).toBe(sport);
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it.each(['garmin', 'wahoo'] as const)('requires mapping review for previously unsupported Virtual Rowing on %s', provider => {
+    const request = vi.fn(async () => { throw Error('No HTTP during assessment'); });
+    const context: DeliveryContext = { ...base,
+      transport: provider === 'garmin' ? new GarminTrainingTransport(request) : new WahooTrainingTransport(request),
+      setting: { ...base.setting!, provider },
+      workout: { ...base.workout!, structure: { ...base.workout!.structure, sport: ActivityTypes.VirtualRowing } },
+    };
+    const digest = context.transport!.assess(context.workout!, 'account-a', 'Europe/Helsinki').digest;
+    // Generic mappers hash the prescription even while unsupported; a status change must still be reassessed.
+    const previous = { connectionEpoch: 0, destinationKey: 'account-a', status: 'unsupported',
+      desired: 'preserve', desiredDigest: digest, acceptedDigest: null } as DeliveryLedgerV1;
+    expect(resolveDeliveryIntent(context, previous)).toMatchObject({ desired: 'preserve', status: 'approval_required',
+      digest, approvalDigest: digest });
+    expect(resolveDeliveryIntent({ ...context, setting: { ...context.setting!, approvedDigest: digest } }, previous))
+      .toMatchObject({ desired: 'present', status: 'pending', digest });
+    expect(resolveDeliveryIntent({ ...context, setting: null }, previous).desired).toBe('absent');
+    if (provider === 'wahoo') {
+      const targeted = structuredClone(context.workout!);
+      const step = targeted.structure.nodes[0];
+      if (step.kind === 'step') step.targets = [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 100, maximumBpm: 130 }];
+      expect(resolveDeliveryIntent({ ...context, workout: targeted,
+        setting: { ...context.setting!, approvedDigest: digest } }, previous).status).toBe('unsupported');
+    }
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['year boundary', '2026-12-31T22:30:00Z', 'Europe/Helsinki', '2027-01-01', '2028-01-01', '2028-01-02', '2026-12-31'],
+    ['leap year', '2027-12-31T22:30:00Z', 'Europe/Helsinki', '2028-01-01', '2028-12-31', '2029-01-01', '2027-12-31'],
+    ['DST start', '2026-03-28T22:30:00Z', 'Europe/Helsinki', '2026-03-29', '2027-03-29', '2027-03-30', '2026-03-28'],
+    ['DST end', '2026-10-24T21:30:00Z', 'Europe/Helsinki', '2026-10-25', '2027-10-25', '2027-10-26', '2026-10-24'],
+    ['western saved zone', '2026-12-31T22:30:00Z', 'America/Los_Angeles', '2026-12-31', '2027-12-31', '2028-01-01', '2026-12-30'],
+  ])('enforces QS\'s inclusive 365-calendar-day Garmin horizon at %s', (_label, instant, timeZone, today, last, outside, past) => {
+    const nowMs = Date.parse(instant);
+    const request = vi.fn(async () => { throw new Error('No HTTP during intent assessment'); });
+    const transport = new GarminTrainingTransport(request, () => nowMs);
+    expect(transport.horizonDays).toBe(365);
+    const context: DeliveryContext = { ...base, nowMs, transport, setting: { ...base.setting!, timeZone } };
+    for (const localDate of [today, last]) {
+      expect(resolveDeliveryIntent({ ...context, workout: { ...base.workout!, localDate } }))
+        .toMatchObject({ desired: 'present', status: 'pending' });
+    }
+    expect(resolveDeliveryIntent({ ...context, workout: { ...base.workout!, localDate: outside } }))
+      .toMatchObject({ desired: 'preserve', status: 'outside_horizon' });
+    expect(resolveDeliveryIntent({ ...context, workout: { ...base.workout!, localDate: past } }))
+      .toMatchObject({ desired: 'preserve', status: 'past' });
+    expect(request).not.toHaveBeenCalled();
+  });
+  it('withdraws a moved upcoming Suunto copy, retains consent and delivers when the date enters its window', () => {
+    const transport = new FakeTrainingTransport(); transport.horizonDays = 6;
+    const policy = Object.assign(transport, { withdrawOutsideHorizon: true });
+    const context = { ...base, transport: policy, workout: { ...base.workout!, localDate: '2026-09-17' } };
+    expect(resolveDeliveryIntent(context)).toMatchObject({ desired: 'absent', status: 'outside_horizon' });
+    expect(resolveDeliveryIntent({ ...context, nowMs: Date.parse('2026-09-11T10:00:00Z') })).toMatchObject({ desired: 'present' });
+    expect(resolveDeliveryIntent({ ...context, hasPro: false })).toMatchObject({ desired: 'preserve', status: 'paused_pro' });
+  });
+  it('isolates identities by owner, account and provider, not revision', () => {
+    expect(new Set([deliveryIdentity('u', 'garmin', 'a', 'w'), deliveryIdentity('v', 'garmin', 'a', 'w'),
+      deliveryIdentity('u', 'garmin', 'b', 'w'), deliveryIdentity('u', 'coros', 'a', 'w')]).size).toBe(4);
+  });
+  it.each([
+    ['send', {}, 'present', 'pending'],
+    ['expiry', { hasPro: false }, 'preserve', 'paused_pro'],
+    ['unavailable', { transport: null }, 'preserve', 'provider_unavailable'],
+    ['auth', { connection: { ...base.connection, state: 'reconnect_required' } }, 'preserve', 'reconnect_required'],
+    ['disconnect', { connection: { ...base.connection, epoch: 1 } }, 'preserve', 'fresh_consent_required'],
+    ['other account', { connection: { ...base.connection, destinationKey: 'b' } }, 'preserve', 'fresh_consent_required'],
+    ['stop after expiry', { hasPro: false, setting: { ...base.setting!, enabled: false } }, 'absent', 'stopped'],
+    ['copy', { setting: null }, 'absent', 'stopped'],
+    ['transferred standalone', { scopeGeneration: 1 }, 'absent', 'stopped'],
+    ['deleted plan converted to standalone', { setting: { ...base.setting!, associationPlanId: 'deleted-plan' } }, 'absent', 'stopped'],
+    ['past', { nowMs: Date.parse('2026-09-12') }, 'preserve', 'past'],
+  ])('%s', (_name, patch, desired, status) => {
+    expect(resolveDeliveryIntent({ ...base, ...patch } as DeliveryContext)).toMatchObject({ desired, status });
+  });
+  it('withdraws inactive plans and respects workout-level suppression', () => {
+    const context = { ...base, workout: { ...base.workout!, planId: 'p' }, setting: { ...base.setting!, scope: 'plan' as const, scopeId: 'p' } };
+    expect(resolveDeliveryIntent({ ...context, planActive: false })).toMatchObject({ desired: 'absent', status: 'paused_plan' });
+    expect(resolveDeliveryIntent({ ...context, override: { ...base.setting!, associationPlanId: 'p', suppressed: true } })).toMatchObject({ desired: 'absent' });
+    expect(resolveDeliveryIntent({ ...context, override: { ...base.setting!, associationPlanId: 'other', suppressed: true } })).toMatchObject({ desired: 'present' });
+  });
+  it('binds degradation consent to current content/destination/mapping', () => {
+    const transport = new FakeTrainingTransport(); transport.level = 'degraded';
+    const context = { ...base, transport };
+    const initial = resolveDeliveryIntent(context);
+    expect(initial.status).toBe('approval_required');
+    context.setting = { ...base.setting!, approvedDigest: initial.approvalDigest };
+    expect(resolveDeliveryIntent(context).desired).toBe('present');
+    context.workout = { ...base.workout!, title: 'Changed' };
+    expect(resolveDeliveryIntent(context).status).toBe('approval_required');
+    transport.level = 'unsupported';
+    expect(resolveDeliveryIntent(context).status).toBe('unsupported');
+  });
+  it('allows disclosed non-blocking limitations only with existing sync consent', () => {
+    const transport = new FakeTrainingTransport();
+    transport.level = 'degraded';
+    const assess = transport.assess.bind(transport);
+    vi.spyOn(transport, 'assess').mockImplementation((...args) => ({ ...assess(...args), requiresApproval: false }));
+    const context = { ...base, transport };
+    expect(resolveDeliveryIntent(context)).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });
+    expect(resolveDeliveryIntent({ ...context, workout: { ...base.workout!, title: 'Edited' } })).toMatchObject({ desired: 'present' });
+    expect(resolveDeliveryIntent({ ...context, setting: null })).toMatchObject({ desired: 'absent', status: 'stopped' });
+    expect(resolveDeliveryIntent({ ...context, hasPro: false })).toMatchObject({ desired: 'preserve', status: 'paused_pro' });
+    expect(resolveDeliveryIntent({ ...context, connection: { ...base.connection, epoch: 1 } }))
+      .toMatchObject({ desired: 'preserve', status: 'fresh_consent_required' });
+    transport.level = 'unsupported';
+    expect(resolveDeliveryIntent(context)).toMatchObject({ desired: 'preserve', status: 'unsupported' });
+  });
+  it.each(['current', 'legacy-v7'].flatMap(version => [WeightUnits.Kilograms, WeightUnits.Pounds]
+    .map(units => ({ version, units }))))('retains the same approved strength losses after $version / $units unit changes', ({ version, units }) => {
+    const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
+    const strength: StrengthWorkoutDetailsV1 = { version: 1, workoutId: base.workout!.id, revision: 1,
+      exercises: [{ id: 'exercise', name: 'A'.repeat(60), sets: [{ id: 'set',
+        ending: { kind: 'repetitions', repetitions: 5 }, externalLoadKg: 80 }] }] };
+    const workout = { ...base.workout!, structure: projectStrengthWorkoutToV1(strength) };
+    const assess = (weightUnits: WeightUnits) => transport.assess(workout, 'account-a', 'Europe/Helsinki', strength, weightUnits);
+    const prior = version === 'current' ? assess(units)
+      : assessSuuntoGuideV7ForRecovery(workout, 'account-a', 'Europe/Helsinki', 'Quantified Self', strength);
+    expect(prior.requiresApproval).toBe(true);
+    const context: DeliveryContext = { ...base, workout, strength, transport, suuntoWeightUnits: units,
+      setting: { ...base.setting!, provider: 'suunto', approvedDigest: prior.digest } };
+    const ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: prior.digest,
+      acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki', strength) } as DeliveryLedgerV1;
+    const first = resolveDeliveryIntent(context, ledger);
+    expect(first.desired).toBe('present');
+    // Model the accepted presentation upgrade before the owner changes units again.
+    ledger.acceptedDigest = first.digest;
+    ledger.mappingApprovalProof = first.mappingApprovalProof;
+    const changedUnits = units === WeightUnits.Kilograms ? WeightUnits.Pounds : WeightUnits.Kilograms;
+    const changed = resolveDeliveryIntent({ ...context, suuntoWeightUnits: changedUnits }, ledger);
+    expect(changed).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });
+    expect(changed.issues).toEqual(first.issues);
+    ledger.acceptedDigest = changed.digest;
+    ledger.mappingApprovalProof = changed.mappingApprovalProof;
+    expect(resolveDeliveryIntent(context, ledger).desired).toBe('present');
+    expect(resolveDeliveryIntent({ ...context, suuntoWeightUnits: changedUnits }, {
+      ...ledger, acceptedContentDigest: 'mismatch', mappingApprovalProof: undefined,
+    }).status).toBe('approval_required');
+    expect(resolveDeliveryIntent({ ...context, suuntoWeightUnits: changedUnits, hasPro: false }, ledger).status).toBe('paused_pro');
+    expect(resolveDeliveryIntent({ ...context, suuntoWeightUnits: changedUnits, setting: null }, ledger).desired).toBe('absent');
+    expect(resolveDeliveryIntent({ ...context, suuntoWeightUnits: changedUnits,
+      connection: { ...context.connection, epoch: 1 } }, ledger).status).toBe('fresh_consent_required');
+    const edited = structuredClone(strength);
+    edited.exercises[0].name = 'A'.repeat(59) + 'B'; // An edit hidden beyond the watch's truncated text.
+    expect(resolveDeliveryIntent({ ...context, suuntoWeightUnits: changedUnits, strength: edited,
+      workout: { ...workout, structure: projectStrengthWorkoutToV1(edited) } }, ledger).status).toBe('approval_required');
+  });
+  it.each([ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.StrengthTraining])(
+    'does not retain unrelated swimming preferences in %s timed-Rest approval evidence', sport => {
+    const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
+    const strength: StrengthWorkoutDetailsV1 | undefined = sport === ActivityTypes.StrengthTraining
+      ? { version: 1, workoutId: base.workout!.id, revision: 1, exercises: [{ id: 'exercise', name: 'A'.repeat(60), sets: [
+        { id: 'set', ending: { kind: 'repetitions', repetitions: 5 }, externalLoadKg: 80, restAfterSeconds: 15 },
+      ] }] } : undefined;
+    const workout = { ...base.workout!, structure: strength ? projectStrengthWorkoutToV1(strength) : {
+      version: 1 as const, sport, nodes: [
+        { kind: 'step' as const, id: 'work', purpose: 'work' as const, ending: { kind: 'time' as const, seconds: 90 },
+          targets: [], note: 'A'.repeat(45) },
+        { kind: 'step' as const, id: 'rest', purpose: 'rest' as const, ending: { kind: 'time' as const, seconds: 15 }, targets: [] },
+      ],
+    } };
+    const units = normalizeUserUnitSettings({ weightUnits: WeightUnits.Pounds });
+    const preferences = defaultSuuntoSwimmingGuideSettings();
+    const assessment = transport.assess(workout, 'account-a', 'Europe/Helsinki', strength, units.weightUnits, units,
+      undefined, preferences);
+    expect(assessment).toMatchObject({ level: 'degraded', mappingVersion: 'suunto-guides-v16' });
+    expect(assessment.requiresApproval).not.toBe(false);
+    const context: DeliveryContext = { ...base, workout, strength, transport, suuntoUnitSettings: units,
+      suuntoWeightUnits: units.weightUnits, suuntoSwimmingSettings: preferences,
+      setting: { ...base.setting!, provider: 'suunto', approvedDigest: assessment.digest } };
+    const original = resolveDeliveryIntent(context);
+    expect(original).toMatchObject({ desired: 'present', status: 'pending', mappingApprovalProof: {
+      approvedDigest: assessment.digest, suuntoMappingUnitSettings: units,
+    } });
+    expect(original.mappingApprovalProof).not.toHaveProperty('suuntoApprovedSwimmingSettings');
+    expect(original.mappingApprovalProof).not.toHaveProperty('suuntoMappingSwimmingSettings');
+    const changed = resolveDeliveryIntent({ ...context, suuntoSwimmingSettings: { ...preferences, restFields: ['heartRate'] } });
+    expect(changed).toEqual(original);
+  });
+
+  it('retains proved app-preview approval across repeated distance-unit changes, never across prescription or authority changes', () => {
+    const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
+    const workout = { ...base.workout!, structure: { ...base.workout!.structure, nodes: [{ kind: 'step' as const,
+      id: 'step', purpose: 'work' as const, ending: { kind: 'distance' as const, meters: 1609.344 }, targets: [], note: 'A'.repeat(45) }] } };
+    const units = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    const approval = transport.assess(workout, 'account-a', 'Europe/Helsinki', null, undefined, units).digest;
+    const context: DeliveryContext = { ...base, workout, transport, suuntoUnitSettings: units,
+      setting: { ...base.setting!, provider: 'suunto', approvedDigest: approval } };
+    let current = resolveDeliveryIntent(context);
+    expect(current.desired).toBe('present');
+    let ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: current.digest,
+      acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki'), mappingApprovalProof: current.mappingApprovalProof } as DeliveryLedgerV1;
+    for (const distanceUnits of [DistanceUnits.Kilometers, DistanceUnits.Miles, DistanceUnits.Kilometers]) {
+      const changed = { ...context, suuntoUnitSettings: normalizeUserUnitSettings({ distanceUnits }) };
+      current = resolveDeliveryIntent(changed, ledger);
+      expect(current.desired).toBe('present'); expect(current.approvalDigest).toBeNull();
+      expect(current.mappingApprovalProof!.suuntoApprovedUnitSettings).toEqual(units);
+      expect(resolveDeliveryIntent({ ...changed, workout: { ...workout, title: 'Edited' } }, ledger).status).toBe('approval_required');
+      expect(resolveDeliveryIntent({ ...changed, connection: { ...context.connection, epoch: 1 } }, ledger).status).toBe('fresh_consent_required');
+      if (current.digest !== approval) expect(resolveDeliveryIntent(changed, { ...ledger,
+        mappingApprovalProof: { ...ledger.mappingApprovalProof!, contentDigest: 'mismatch' },
+        acceptedContentDigest: 'mismatch' }).status).toBe('approval_required');
+      ledger = { ...ledger, acceptedDigest: current.digest, mappingApprovalProof: current.mappingApprovalProof };
+    }
+  });
+  it.each([false, true])('carries only proved unchanged losses across swimming display choices (initial previous lap=%s)', previousLap => {
+    const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
+    const workout = { ...base.workout!, structure: { ...base.workout!.structure, sport: ActivityTypes.Swimming, nodes: [
+      { kind: 'step' as const, id: 'work', purpose: 'work' as const, ending: { kind: 'time' as const, seconds: 90 }, targets: [], note: 'A'.repeat(45) }] } };
+    const initial = defaultSuuntoSwimmingGuideSettings();
+    if (previousLap) initial.restFields = ['previousLapPace', 'previousLapDuration', 'previousLapStrokes'];
+    const approval = transport.assess(workout, 'account-a', 'Europe/Helsinki', undefined, undefined, undefined, undefined, initial).digest;
+    const context: DeliveryContext = { ...base, workout, transport, suuntoSwimmingSettings: initial,
+      setting: { ...base.setting!, provider: 'suunto', approvedDigest: approval } };
+    let current = resolveDeliveryIntent(context);
+    let ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: current.digest,
+      acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki'), mappingApprovalProof: current.mappingApprovalProof } as DeliveryLedgerV1;
+    for (const preferences of [
+      { ...initial, workFields: ['strokes'] as const }, { ...initial, workFields: ['duration'] as const },
+      { ...initial, workFields: ['distance', 'pace'] as const },
+      { ...initial, restFields: ['previousLapPace', 'previousLapDuration', 'previousLapStrokes'] as const },
+      { ...initial, restFields: ['previousLapDuration'] as const }, initial,
+    ]) {
+      const settings = { ...preferences, workFields: [...preferences.workFields], restFields: [...preferences.restFields] };
+      const changed = { ...context, suuntoSwimmingSettings: settings };
+      current = resolveDeliveryIntent(changed, ledger);
+      expect(current).toMatchObject({ desired: 'present',
+        status: current.digest === ledger.acceptedDigest ? 'delivered' : 'pending', approvalDigest: null });
+      expect(current.mappingApprovalProof!.suuntoApprovedSwimmingSettings).toEqual(initial);
+      expect(current.mappingApprovalProof!.suuntoMappingSwimmingSettings).toEqual(settings);
+      expect(resolveDeliveryIntent({ ...changed, workout: { ...workout, title: 'Changed' } }, ledger).status).toBe('approval_required');
+      expect(resolveDeliveryIntent({ ...changed, connection: { ...context.connection, epoch: 1 } }, ledger).status).toBe('fresh_consent_required');
+      expect(resolveDeliveryIntent({ ...changed, hasPro: false }, ledger).status).toBe('paused_pro');
+      expect(resolveDeliveryIntent({ ...changed, setting: null }, ledger).desired).toBe('absent');
+      ledger = { ...ledger, acceptedDigest: current.digest, mappingApprovalProof: current.mappingApprovalProof };
+    }
+  });
+  it.each([
+    { assess: assessSuuntoGuideV14ForRecovery, version: 'v14', rest: false },
+    { assess: assessSuuntoGuideV14ForRecovery, version: 'v14', rest: true },
+    { assess: assessSuuntoGuideV15ForRecovery, version: 'v15', rest: true },
+  ])('carries a proved $version approval into the current presentation (timed Rest=$rest), never an unproved or edited copy', ({ assess, rest }) => {
+    const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
+    const preferences = defaultSuuntoSwimmingGuideSettings();
+    const units = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    const workout = { ...base.workout!, structure: { ...base.workout!.structure, sport: ActivityTypes.Swimming, nodes: [
+      { kind: 'step' as const, id: 'work', purpose: 'work' as const, ending: { kind: 'time' as const, seconds: 90 }, targets: [], note: 'A'.repeat(45) },
+      ...(rest ? [{ kind: 'step' as const, id: 'rest', purpose: 'rest' as const, ending: { kind: 'time' as const, seconds: 15 }, targets: [] }] : []),
+    ] } };
+    const approved = assess(workout, 'account-a', 'Europe/Helsinki', 'Quantified Self', units, preferences);
+    const context = { ...base, workout, transport, suuntoUnitSettings: units, suuntoSwimmingSettings: preferences,
+      setting: { ...base.setting!, provider: 'suunto' as const, approvedDigest: approved.digest } };
+    const ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: approved.digest,
+      acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki') } as DeliveryLedgerV1;
+    expect(resolveDeliveryIntent(context, ledger)).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });
+    expect(resolveDeliveryIntent(context).status).toBe('approval_required');
+    expect(resolveDeliveryIntent({ ...context, workout: { ...workout, title: 'Edited' } }, ledger).status).toBe('approval_required');
+  });
+  it.each([assessSuuntoGuideV7ForRecovery, assessSuuntoGuideV12ForRecovery])(
+    'retains legacy approval after the app-preview upgrade and subsequent unit changes (%#)', assessLegacy => {
+      const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
+      const workout = { ...base.workout!, structure: { ...base.workout!.structure, nodes: [
+        { kind: 'step' as const, id: 'work', purpose: 'work' as const,
+          ending: { kind: 'distance' as const, meters: 1609.344 }, targets: [], note: 'A'.repeat(45) },
+        { kind: 'step' as const, id: 'rest', purpose: 'rest' as const,
+          ending: { kind: 'time' as const, seconds: 15 }, targets: [] },
+      ] } };
+      const units = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+      const legacy = assessLegacy(workout, 'account-a', 'Europe/Helsinki', 'Quantified Self');
+      const context: DeliveryContext = { ...base, workout, transport, suuntoUnitSettings: units,
+        setting: { ...base.setting!, provider: 'suunto', approvedDigest: legacy.digest } };
+      let ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: legacy.digest,
+        acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki') } as DeliveryLedgerV1;
+      const upgraded = resolveDeliveryIntent(context, ledger);
+      expect(upgraded).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });
+      expect(upgraded.mappingApprovalProof!.suuntoMappingUnitSettings).toEqual(units);
+      expect(upgraded.mappingApprovalProof).not.toHaveProperty('suuntoApprovedUnitSettings');
+      ledger = { ...ledger, acceptedDigest: upgraded.digest, mappingApprovalProof: upgraded.mappingApprovalProof };
+      for (const distanceUnits of [DistanceUnits.Kilometers, DistanceUnits.Miles, DistanceUnits.Kilometers]) {
+        const changed = { ...context, suuntoUnitSettings: normalizeUserUnitSettings({ distanceUnits }) };
+        const current = resolveDeliveryIntent(changed, ledger);
+        expect(current).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });
+        expect(current.mappingApprovalProof!.suuntoMappingUnitSettings).toEqual(changed.suuntoUnitSettings);
+        expect(resolveDeliveryIntent({ ...changed, workout: { ...workout, title: 'Edited' } }, ledger).status).toBe('approval_required');
+        expect(resolveDeliveryIntent({ ...changed, connection: { ...context.connection, epoch: 1 } }, ledger).status).toBe('fresh_consent_required');
+        expect(resolveDeliveryIntent(changed, { ...ledger, acceptedContentDigest: 'mismatch',
+          mappingApprovalProof: { ...ledger.mappingApprovalProof!, contentDigest: 'mismatch' } }).status).toBe('approval_required');
+        ledger = { ...ledger, acceptedDigest: current.digest, mappingApprovalProof: current.mappingApprovalProof };
+      }
+    });
+  it('does not inherit strength approval when pounds adds a loss beyond the bounded public warning list', () => {
+    const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
+    const strength: StrengthWorkoutDetailsV1 = { version: 1, workoutId: base.workout!.id, revision: 1, exercises: [
+      { id: 'long', name: 'A'.repeat(60), sets: Array.from({ length: 20 }, (_, index) => ({ id: `long-set-${index}`,
+        ending: { kind: 'repetitions' as const, repetitions: 5 }, externalLoadKg: 80 })) },
+      // The complete label fits 54 characters in kg, but needs 55 in lb.
+      { id: 'boundary', name: 'B'.repeat(27), sets: [{ id: 'last',
+        ending: { kind: 'repetitions', repetitions: 5 }, externalLoadKg: 80 }] },
+    ] };
+    const workout = { ...base.workout!, structure: projectStrengthWorkoutToV1(strength) };
+    const kg = transport.assess(workout, 'account-a', 'Europe/Helsinki', strength, WeightUnits.Kilograms);
+    const lb = transport.assess(workout, 'account-a', 'Europe/Helsinki', strength, WeightUnits.Pounds);
+    const legacy = assessSuuntoGuideV7ForRecovery(workout, 'account-a', 'Europe/Helsinki', 'Quantified Self', strength);
+    expect(lb.issues).toHaveLength(20);
+    expect(lb.issues).toEqual(kg.issues);
+    expect(lb).not.toHaveProperty('lossSignature');
+    expect(lb.compatibleApprovalDigests ?? []).not.toContain(legacy.digest);
+    expect(lb.compatibleApprovalDigests ?? []).not.toContain(kg.digest);
+    for (const prior of [kg, legacy]) {
+      const context: DeliveryContext = { ...base, workout, strength, transport, suuntoWeightUnits: WeightUnits.Pounds,
+        setting: { ...base.setting!, provider: 'suunto', approvedDigest: prior.digest } };
+      const ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: prior.digest,
+        acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki', strength) } as DeliveryLedgerV1;
+      expect(resolveDeliveryIntent(context, ledger).status).toBe('approval_required');
+    }
+  });
+  it.each([
+    ...[assessSuuntoGuideV2ForRecovery, assessSuuntoGuideV3ForRecovery, assessSuuntoGuideV4ForRecovery, assessSuuntoGuideV5ForRecovery, assessSuuntoGuideV6ForRecovery]
+      .flatMap(assessLegacy => [ActivityTypes.Running, ActivityTypes.Swimming].map(sport => ({ assessLegacy, sport, manual: false }))),
+    { assessLegacy: assessSuuntoGuideV7ForRecovery, sport: ActivityTypes.Swimming, manual: false },
+    { assessLegacy: assessSuuntoGuideV7ForRecovery, sport: ActivityTypes.OpenWaterSwimming, manual: false },
+    { assessLegacy: assessSuuntoGuideV9ForRecovery, sport: ActivityTypes.Swimming, manual: false },
+    ...[ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Walking]
+      .map(sport => ({ assessLegacy: assessSuuntoGuideV7ForRecovery, sport, manual: true })),
+    ...[ActivityTypes.Running, ActivityTypes.Cycling, ActivityTypes.Walking]
+      .map(sport => ({ assessLegacy: assessSuuntoGuideV11ForRecovery, sport, manual: true })),
+    ...[ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming]
+      .map(sport => ({ assessLegacy: assessSuuntoGuideV10ForRecovery, sport, manual: true })),
+  ])(
+    'keeps exact legacy loss approval for $sport across Suunto display upgrades, never across edits or authority changes (manual=$manual)', ({ assessLegacy, sport, manual }) => {
+    const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
+    const restPresentation = assessLegacy === assessSuuntoGuideV10ForRecovery || assessLegacy === assessSuuntoGuideV11ForRecovery;
+    const workout = { ...base.workout!, structure: { ...base.workout!.structure, sport, nodes: [
+      ...(manual ? [{ kind: 'step' as const, id: 'manual', purpose: 'warmup' as const, ending: { kind: 'manual' as const }, targets: [] }] : []),
+      { ...base.workout!.structure.nodes[0],
+      note: 'A'.repeat(45) }, ...(restPresentation ? [{ kind: 'step' as const, id: 'rest', purpose: 'rest' as const,
+        ending: { kind: 'time' as const, seconds: 15 }, targets: [] }] : [])] } };
+    const destination = base.connection.destinationKey;
+    const prior = assessLegacy(workout, destination, 'Europe/Helsinki', 'Quantified Self');
+    const context: DeliveryContext = { ...base, workout, transport,
+      setting: { ...base.setting!, provider: 'suunto', approvedDigest: prior.digest } };
+    const ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: prior.digest,
+      acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki') } as DeliveryLedgerV1;
+    expect(transport.assess(workout, 'account-a', 'Europe/Helsinki')).toMatchObject({
+      mappingVersion: restPresentation ? 'suunto-guides-v16'
+        : [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(sport) ? 'suunto-guides-v15' : 'suunto-guides-v13',
+      compatibleApprovalDigests: expect.arrayContaining([prior.digest]),
+    });
+    expect(resolveDeliveryIntent(context, ledger)).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });
+    const currentDigest = transport.assess(workout, 'account-a', 'Europe/Helsinki').digest;
+    expect(resolveDeliveryIntent(context, { ...ledger, acceptedDigest: currentDigest }))
+      .toMatchObject({ desired: 'present', status: 'delivered', approvalDigest: null });
+    const proof = resolveDeliveryIntent(context, ledger).mappingApprovalProof!;
+    const retired = { ...ledger, acceptedDigest: null, acceptedContentDigest: null, attempt: null, mappingApprovalProof: proof };
+    expect(resolveDeliveryIntent(context, retired)).toMatchObject({ desired: 'present', status: 'pending', mappingApprovalProof: proof });
+    // Approval evidence never asserts provider acceptance, even with a retained copy.
+    expect(resolveDeliveryIntent(context, retired).status).not.toBe('delivered');
+    for (const key of ['approvedDigest', 'mappingDigest', 'contentDigest'] as const) {
+      expect(resolveDeliveryIntent(context, { ...retired, mappingApprovalProof: { ...proof, [key]: 'mismatch' } }).status)
+        .toBe('approval_required');
+    }
+    const editNote = (note: string) => ({ ...workout, structure: { ...workout.structure,
+      nodes: workout.structure.nodes.map(node => 'note' in node ? { ...node, note } : node) } });
+    for (const edited of [{ ...workout, title: 'Changed' }, { ...workout, localDate: '2026-09-11' },
+      editNote('B'.repeat(45)), editNote('A'.repeat(40) + 'BBBBB')]) {
+      expect(resolveDeliveryIntent({ ...context, workout: edited }, ledger).status).toBe('approval_required');
+      expect(resolveDeliveryIntent({ ...context, workout: edited }, retired).status).toBe('approval_required');
+    }
+    expect(resolveDeliveryIntent(context).status).toBe('approval_required');
+    const attempt = { digest: prior.digest, contentDigest: ledger.acceptedContentDigest } as NonNullable<DeliveryLedgerV1['attempt']>;
+    expect(resolveDeliveryIntent(context, { ...ledger, acceptedDigest: null, attempt }).desired).toBe('present');
+    expect(resolveDeliveryIntent(context, { ...ledger, acceptedDigest: null, acceptedContentDigest: null,
+      attempt: { ...attempt, digest: currentDigest, progress: { version: 1, step: 'update', state: 'started' } } }).desired).toBe('present');
+    expect(resolveDeliveryIntent({ ...context, setting: { ...context.setting!, approvedDigest: 'unknown' } }).status).toBe('approval_required');
+    expect(resolveDeliveryIntent({ ...context, setting: null }).desired).toBe('absent');
+    expect(resolveDeliveryIntent({ ...context, hasPro: false }).status).toBe('paused_pro');
+    expect(resolveDeliveryIntent({ ...context, connection: { ...context.connection, epoch: 1 } }).status).toBe('fresh_consent_required');
+    expect(resolveDeliveryIntent({ ...context, hasPro: false }, retired).status).toBe('paused_pro');
+    expect(resolveDeliveryIntent({ ...context, setting: null }, retired).desired).toBe('absent');
+    expect(resolveDeliveryIntent({ ...context, connection: { ...context.connection, epoch: 1 } }, retired).status)
+      .toBe('fresh_consent_required');
+    expect(transport.assess(workout, 'other-account', 'Europe/Helsinki').compatibleApprovalDigests).not.toContain(prior.digest);
+    expect(transport.assess(workout, 'account-a', 'UTC').compatibleApprovalDigests).not.toContain(prior.digest);
+    const v3Digest = assessSuuntoGuideV3ForRecovery(workout, destination, 'Europe/Helsinki', 'Quantified Self').digest;
+    expect(resolveDeliveryIntent(context, { ...retired, mappingApprovalProof: { ...proof, mappingDigest: v3Digest } }).desired)
+      .toBe('present');
+  });
+  it('keeps an earlier provider copy when the current workout becomes unsupported', () => {
+    const transport = new FakeTrainingTransport();
+    transport.level = 'unsupported';
+    const ledger = { connectionEpoch: 0, destinationKey: 'account-a',
+      actual: { ids: { workout: 'earlier-copy' }, localDate: '2026-09-10', completed: false } } as DeliveryLedgerV1;
+    expect(resolveDeliveryIntent({ ...base, transport, workout: { ...base.workout!, title: 'Unsupported edit' } }, ledger))
+      .toMatchObject({ desired: 'preserve', status: 'unsupported' });
+    expect(ledger.actual?.ids.workout).toBe('earlier-copy');
+  });
+  it('does not rewrite completed or old remote copies, even if QS is moved forward', () => {
+    const ledger = { actual: { ids: { workout: 'id' }, localDate: '2026-09-09', completed: false } } as DeliveryLedgerV1;
+    expect(resolveDeliveryIntent(base, ledger).status).toBe('past');
+    ledger.actual!.completed = true;
+    expect(resolveDeliveryIntent(base, ledger).status).toBe('completed');
+  });
+  it('protects the retained copy using its original zone after a settings edit', () => {
+    const context = { ...base, setting: { ...base.setting!, timeZone: 'Pacific/Pago_Pago' },
+      nowMs: Date.parse('2026-09-10T10:30:00Z') };
+    const ledger = { actual: { ids: { workout: 'id' }, localDate: '2026-09-10', completed: false,
+      timeZone: 'Pacific/Kiritimati' } } as DeliveryLedgerV1;
+    // The old copy is already September 11's past, even though new settings say September 9.
+    expect(resolveDeliveryIntent(context, ledger).status).toBe('past');
+  });
+  it('protects original artifacts retained during a repair even when no replacement was accepted', () => {
+    const ledger = { actual: null, repair: { original: { ids: { workout: 'old', schedule: 'original' },
+      localDate: '2026-09-09', completed: false } } } as DeliveryLedgerV1;
+    const stopped = { ...base, setting: { ...base.setting!, enabled: false } };
+    expect(resolveDeliveryIntent(stopped, ledger).status).toBe('past');
+    ledger.repair!.original.completed = true;
+    expect(resolveDeliveryIntent(stopped, ledger).status).toBe('completed');
+  });
+  it('only withdraws an old uncompleted copy after explicit deletion opt-in', () => {
+    const ledger = { provider: 'garmin', connectionEpoch: 0, destinationKey: 'account-a',
+      actual: { ids: { workout: 'id' }, localDate: '2026-09-09', completed: false } } as DeliveryLedgerV1;
+    const stopped = { ...base, workout: { ...base.workout!, lifecycle: 'deleted' as const, deletedAtMs: 7 } };
+    expect(resolveDeliveryIntent(stopped, ledger)).toMatchObject({ desired: 'preserve', status: 'past' });
+    const authorized = { ...stopped, pastCleanup: { scope: 'workout' as const, scopeId: 'workout', mutationId: 'delete-1',
+      requestedAtMs: 7, deletedAtMs: 7 } };
+    expect(resolveDeliveryIntent(authorized, ledger)).toMatchObject({ desired: 'absent', status: 'stopped' });
+    ledger.actual!.completed = true;
+    expect(resolveDeliveryIntent(authorized, ledger)).toMatchObject({ desired: 'preserve', status: 'completed' });
+  });
+  it('reports COROS past deletion as unavailable even after opt-in', () => {
+    const transport = new FakeTrainingTransport();
+    transport.canRemove = (artifact, today) => !artifact.completed && artifact.localDate >= today;
+    const ledger = { provider: 'coros', actual: { ids: { workout: 'id' }, localDate: '2026-09-09', completed: false } } as DeliveryLedgerV1;
+    const intent = resolveDeliveryIntent({ ...base, workout: null, transport, pastCleanup: {
+      scope: 'plan', scopeId: 'plan', mutationId: 'delete-plan', requestedAtMs: 7,
+    } }, ledger);
+    expect(intent).toMatchObject({ desired: 'preserve', status: 'past' });
+    expect(intent.issues).toContain('COROS permits removal only for unexecuted workouts dated today or later.');
+  });
+});

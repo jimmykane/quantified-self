@@ -5,13 +5,17 @@ import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { DeleteAccountDialogComponent } from './delete-account-dialog.component';
+import { signal } from '@angular/core';
+import { AppUserService } from '../../services/app.user.service';
 
 describe('DeleteAccountDialogComponent', () => {
   let component: DeleteAccountDialogComponent;
   let close: ReturnType<typeof vi.fn>;
   let hapticsService: any;
+  const viewer = signal<{ uid: string } | null>(null);
 
   beforeEach(() => {
+    viewer.set({ uid: 'planning-user' });
     close = vi.fn();
     hapticsService = {
       selection: vi.fn(),
@@ -22,6 +26,7 @@ describe('DeleteAccountDialogComponent', () => {
     TestBed.configureTestingModule({
       imports: [DeleteAccountDialogComponent],
       providers: [
+        { provide: AppUserService, useValue: { user: viewer } },
         { provide: MAT_DIALOG_DATA, useValue: { displayName: 'Runner' } },
         { provide: MatDialogRef, useValue: { close } },
         { provide: AppHapticsService, useValue: hapticsService },
@@ -30,11 +35,43 @@ describe('DeleteAccountDialogComponent', () => {
     component = TestBed.createComponent(DeleteAccountDialogComponent).componentInstance;
   });
 
+  it('keeps unconfirmed deletion and unchanged consent silent', () => {
+    component.onConfirm(); component.onConfirmationChange(false);
+    expect(close).not.toHaveBeenCalled();
+    expect(hapticsService.selection).not.toHaveBeenCalled();
+    expect(hapticsService.warning).not.toHaveBeenCalled();
+    component.onConfirmationChange(true); component.onConfirmationChange(true);
+    expect(hapticsService.selection).toHaveBeenCalledOnce();
+  });
+
+  it('gives selection feedback when cancelling', () => {
+    component.onCancel();
+    expect(close).toHaveBeenCalledExactlyOnceWith(false);
+    expect(hapticsService.selection).toHaveBeenCalledOnce();
+    expect(hapticsService.warning).not.toHaveBeenCalled();
+  });
+
   it('uses a warning haptic for account deletion confirmation', () => {
+    component.confirmChecked = true;
     component.onConfirm();
 
     expect(hapticsService.warning).toHaveBeenCalledOnce();
     expect(close).toHaveBeenCalledWith(true);
+  });
+  it('explains local delivery cleanup separately from provider-held copies', () => {
+    const fixture = TestBed.createComponent(DeleteAccountDialogComponent); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('local delivery records are removed');
+    expect(fixture.nativeElement.textContent).toContain('Use Stop sync before deleting your account');
+  });
+
+  it('keeps planning instructions visible for a signed-in user outside the former rollout', () => {
+    const fixture = TestBed.createComponent(DeleteAccountDialogComponent); fixture.detectChanges();
+    viewer.set({ uid: 'another-user' }); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Training plans');
+    expect(fixture.nativeElement.textContent).toContain('Stop sync');
+    expect(fixture.nativeElement.textContent).toContain('may remain there after access is revoked');
+    expect(fixture.nativeElement.textContent).toContain('This action is irreversible.');
+    expect(hapticsService.warning).not.toHaveBeenCalled();
   });
 
   it('keeps the dialog within narrow viewports and lets destructive actions wrap', () => {

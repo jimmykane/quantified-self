@@ -8,13 +8,17 @@ const hoisted = vi.hoisted(() => ({
   captureGuards: vi.fn(),
   guardsContinuous: vi.fn(),
   tokenMatchesGuard: vi.fn(),
+  loggerWarn: vi.fn(),
 }));
+
+vi.mock('firebase-functions/logger', () => ({ warn: hoisted.loggerWarn }));
 
 vi.mock('../tokens', () => ({
   getTokenData: hoisted.getTokenData,
 }));
 
-vi.mock('../request-helper', () => ({
+vi.mock('../request-helper', async importOriginal => ({
+  ...(await importOriginal<typeof import('../request-helper')>()),
   get: hoisted.requestGet,
 }));
 
@@ -37,9 +41,13 @@ import {
   GARMIN_HEALTH_MAX_RESPONSE_BYTES,
   GARMIN_HEALTH_REQUEST_TIMEOUT_MS,
   GarminHealthPermissionError,
+  GarminHealthRequestError,
+  getGarminHealthFailureTelemetry,
   processGarminHealthQueueItem,
 } from './health-sync';
+import { ResponseBodyTooLargeError } from '../request-helper';
 import { GarminHealthAccountValidationError } from './health-lifecycle';
+import { validateHealthSourceRecordInput } from '../health/validation';
 
 function lifecycleGuards(providerIdentityPinned = true) {
   return {
@@ -91,6 +99,30 @@ function queueItem() {
 }
 
 describe('Garmin Health callback synchronization', () => {
+  it('distinguishes HTTP, transport, response-limit and internal errors without raw details', () => {
+    expect(getGarminHealthFailureTelemetry(new GarminHealthRequestError(503), 'callback_request', 12))
+      .toMatchObject({ errorCode: 'garmin_health_request_failed', providerStatusCode: 503,
+        failureCategory: 'provider_http_error', failureStage: 'callback_request', processingElapsedMs: 12 });
+    expect(getGarminHealthFailureTelemetry(new GarminHealthRequestError(null, 'ETIMEDOUT'), 'identity_request', 12))
+      .toMatchObject({ transportCode: 'ETIMEDOUT', failureCategory: 'transport_error' });
+    expect(getGarminHealthFailureTelemetry(new GarminHealthRequestError(null, undefined, true), 'callback_request', 12))
+      .toMatchObject({ failureCategory: 'response_byte_limit' });
+    const error = Object.assign(new Error('private-token/private-health'), { code: 10, details: 'private-path' });
+    expect(getGarminHealthFailureTelemetry(error, 'health_write', 12)).toMatchObject({
+      errorCode: 'garmin_health_processing_failed', failureCategory: 'rpc_error', rpcStatusCode: 10,
+    });
+    expect(JSON.stringify(getGarminHealthFailureTelemetry(error, 'health_write', 12))).not.toContain('private');
+    expect(getGarminHealthFailureTelemetry(new GarminHealthRequestError(700, 'private-token'), 'callback_request', 12))
+      .not.toHaveProperty('providerStatusCode');
+    expect(JSON.stringify(getGarminHealthFailureTelemetry(new GarminHealthRequestError(700, 'private-token'), 'callback_request', 12)))
+      .not.toContain('private');
+    const hostile = Object.defineProperty(new GarminHealthRequestError(), 'statusCode', {
+      get() { throw new Error('private-getter'); },
+    });
+    expect(getGarminHealthFailureTelemetry(hostile, 'callback_request', 12))
+      .toMatchObject({ failureCategory: 'unclassified' });
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     hoisted.getTokenData.mockResolvedValue({
@@ -139,6 +171,7 @@ describe('Garmin Health callback synchronization', () => {
         'garmin-user-1',
         1_777_424_460_000,
         Date.now(),
+        expect.any(Function),
       );
       expect(result.lifecycleGuards).toMatchObject({
         connectionStateGeneration: 'connection-generation-1',
@@ -207,6 +240,7 @@ describe('Garmin Health callback synchronization', () => {
       'garmin-user-1',
       1_777_424_460_000,
       receivedAtMs,
+      expect.any(Function),
     );
     expect(resumed.continuation).toEqual({
       payloadDigest: first.continuation.payloadDigest,
@@ -243,6 +277,58 @@ describe('Garmin Health callback synchronization', () => {
     }));
   });
 
+  it.each([false, true])('imports valid Daily content with private bounds diagnostics (logger fails: %s)', async loggerFails => {
+    const actual = await vi.importActual<typeof import('./health')>('./health');
+    hoisted.mapGarminHealthSummaries.mockImplementation(actual.mapGarminHealthSummaries);
+    hoisted.requestGet.mockResolvedValue([{
+      summaryId: 'private-provider-summary', userId: 'garmin-user-1', calendarDate: '2025-10-09',
+      startTimeInSeconds: 1_760_000_000, durationInSeconds: 60, steps: 123,
+      timeOffsetHeartRateSamples: { 15: 70, 60: 72, 72: 80 },
+    }]);
+    if (loggerFails) hoisted.loggerWarn.mockImplementationOnce(() => { throw new Error('synthetic logging outage'); });
+
+    const result = await processGarminHealthQueueItem(queueItem(), tokenSnapshot(), 'test-user', lifecycleGuards());
+
+    expect(result.healthResults).toHaveLength(1);
+    expect(result.healthResults[0].input.sampleSeries[0].offsetMs).toEqual([15_000, 60_000]);
+    validateHealthSourceRecordInput(result.healthResults[0].input);
+    expect(result.lifecycleGuards).toEqual(lifecycleGuards());
+    expect(hoisted.captureGuards).toHaveBeenCalledTimes(2);
+    expect(hoisted.loggerWarn).toHaveBeenCalledExactlyOnceWith(
+      '[HealthSync][Garmin] Discarded out-of-interval Daily heart-rate samples.',
+      { summaryType: 'dailies', field: 'timeOffsetHeartRateSamples', reason: 'samples_outside_summary_interval',
+        affectedSummaryCount: 1, discardedSampleCount: 1 },
+    );
+    const logs = JSON.stringify(hoisted.loggerWarn.mock.calls);
+    for (const privateValue of ['private-provider-summary', 'garmin-user-1', 'test-user', 'garmin-access-token',
+      'garmin-pull-token', '2025-10-09', '1760000000']) expect(logs).not.toContain(privateValue);
+  });
+
+  it('resumes unchanged normalized content and restarts when the monitoring interval grows', async () => {
+    const actual = await vi.importActual<typeof import('./health')>('./health');
+    hoisted.mapGarminHealthSummaries.mockImplementation(actual.mapGarminHealthSummaries);
+    const summary = { summaryId: 'synthetic-summary', calendarDate: '2025-10-09',
+      startTimeInSeconds: 1_760_000_000, durationInSeconds: 60, steps: 123,
+      timeOffsetHeartRateSamples: { 15: 70, 61: 80 } };
+    hoisted.requestGet.mockResolvedValueOnce([summary]);
+    const first = await processGarminHealthQueueItem(queueItem(), tokenSnapshot(), 'test-user', lifecycleGuards());
+    const resumedItem = { ...queueItem(), garminHealthWriteCursor: 1,
+      garminHealthPayloadDigest: first.continuation.payloadDigest,
+      garminHealthReceivedAtMs: first.continuation.receivedAtMs, garminHealthRecordsWritten: 1 };
+    const changedTail = { ...summary, timeOffsetHeartRateSamples: { 15: 70, 90: 90 } };
+    hoisted.requestGet.mockResolvedValueOnce([changedTail]);
+
+    const resumed = await processGarminHealthQueueItem(resumedItem, tokenSnapshot(), 'test-user', lifecycleGuards());
+    expect(resumed.continuation).toMatchObject({ payloadDigest: first.continuation.payloadDigest,
+      startIndex: 1, recordsWritten: 1 });
+
+    hoisted.requestGet.mockResolvedValueOnce([{ ...changedTail, durationInSeconds: 90 }]);
+    const expanded = await processGarminHealthQueueItem(resumedItem, tokenSnapshot(), 'test-user', lifecycleGuards());
+    expect(expanded.continuation.payloadDigest).not.toBe(first.continuation.payloadDigest);
+    expect(expanded.continuation).toMatchObject({ startIndex: 0, recordsWritten: 0 });
+    expect(expanded.healthResults[0].input.sampleSeries[0].offsetMs).toEqual([15_000, 90_000]);
+  });
+
   it('rejects a legacy identity mismatch before requesting callback data', async () => {
     hoisted.captureGuards.mockResolvedValue(lifecycleGuards(false));
     hoisted.requestGet.mockResolvedValueOnce({ userId: 'replacement-account' });
@@ -272,6 +358,37 @@ describe('Garmin Health callback synchronization', () => {
       message: 'Garmin Health callback request failed.',
       statusCode: 503,
     });
+  });
+
+  it.each([true, false])('retains safe request diagnostics and stages (identity pinned: %s)', async pinned => {
+    hoisted.captureGuards.mockResolvedValue(lifecycleGuards(pinned));
+    for (const error of [Object.assign(new Error('private-response'), { statusCode: 503 }),
+      Object.assign(new Error('private-token'), { code: 'ETIMEDOUT' }), new ResponseBodyTooLargeError(10, 11),
+      new DOMException('private-deadline', 'AbortError')]) {
+      hoisted.requestGet.mockRejectedValueOnce(error);
+      const onStage = vi.fn();
+      const failure = await processGarminHealthQueueItem(
+        queueItem(), tokenSnapshot(), 'test-user', lifecycleGuards(pinned), undefined, onStage,
+      ).catch(caught => caught);
+      expect(failure).toBeInstanceOf(GarminHealthRequestError);
+      expect(onStage.mock.calls.map(([stage]) => stage)).toEqual(['token_refresh', pinned ? 'callback_request' : 'identity_request']);
+      const telemetry = getGarminHealthFailureTelemetry(failure, onStage.mock.lastCall![0], 10);
+      expect(telemetry.failureCategory).toBe(error instanceof ResponseBodyTooLargeError ? 'response_byte_limit'
+        : 'statusCode' in error ? 'provider_http_error' : 'transport_error');
+      expect(JSON.stringify(failure)).not.toContain('private');
+      expect(JSON.stringify(telemetry)).not.toContain('private');
+    }
+  });
+
+  it('keeps successful processing unchanged when a diagnostic observer throws', async () => {
+    const onStage = vi.fn((stage: string) => { throw new Error('diagnostic failure at ' + stage); });
+    await expect(processGarminHealthQueueItem(
+      queueItem(), tokenSnapshot(), 'test-user', lifecycleGuards(), undefined, onStage,
+    )).resolves.toMatchObject({ healthResults: [] });
+    expect(onStage.mock.calls.map(([stage]) => stage)).toEqual([
+      'token_refresh', 'callback_request', 'callback_mapping', 'result_assembly',
+    ]);
+    expect(hoisted.requestGet).toHaveBeenCalledOnce();
   });
 
   it('maps Garmin 412 callback responses to a non-retryable permission state', async () => {

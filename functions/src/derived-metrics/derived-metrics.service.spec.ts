@@ -1,15 +1,21 @@
+import { APPROVED_REMAINING_SPORT_CASES, APPROVED_OTHER_TRAINING_NAMES } from '../../../shared/testing/training-remaining-sport-cases';
+import { APPROVED_WATER_TEAM_SPORT_CASES } from '../../../shared/testing/training-water-team-cases';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+    DERIVED_FORM_PAYLOAD_VERSION,
     DERIVED_METRIC_KINDS,
     DERIVED_METRIC_SCHEMA_VERSION,
     DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS,
     DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
+    DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION,
+    DERIVED_TRAINING_POWER_SYSTEMS_MAX_SNAPSHOT_BYTES,
     DERIVED_TRAINING_POWER_SYSTEMS_HISTORY_DAYS,
     DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS,
 } from '../../../shared/derived-metrics';
 import {
     ActivityTypeGroups,
     ActivityTypes,
+    ActivityTypesHelper,
     DataAscent,
     DataActivityTypes,
     DataAvgStrokeDistance,
@@ -49,7 +55,71 @@ import {
 } from '@sports-alliance/sports-lib';
 import { getActivityTypesForGroup } from '../../../shared/activity-type-group.metadata';
 import { POWER_CURVE_STAT_TYPE } from '../../../shared/power-curve';
-import { resolveTrainingDisciplineFromActivityType } from '../../../shared/training-disciplines';
+import { resolveTrainingDisciplineFromActivityType, TRAINING_SPORT_DEFINITIONS } from '../../../shared/training-disciplines';
+import { CompatibleTrainingActivityTypes as RefinedTypes } from '../../../shared/activity-type-compatibility';
+import {
+    HEALTH_COVERAGE_STATUSES,
+    HEALTH_METRIC_IDS,
+    HEALTH_NORMALIZATION_STATUSES,
+    HEALTH_PROVIDERS,
+    HEALTH_QUALITY_STATUSES,
+    HEALTH_RECORDING_METHODS,
+    HEALTH_SOURCE_RECORD_KINDS,
+    HEALTH_UNITS,
+    HEALTH_VALUE_ORIGINS,
+    HEALTH_VALUE_TYPES,
+    type HealthMetricId,
+} from '../../../shared/health';
+import { encodeHealthMetricSportsLibData } from '../../../shared/sports-lib-health-data';
+import { MANUAL_HEALTH_SOURCE_RECORD_TYPE } from '../../../shared/manual-health';
+import { attachEffectiveTrainingLoad, resolveEffectiveTrainingLoad } from '../../../shared/training-load-policy';
+
+function healthMeasurementDoc(options: {
+    id: string;
+    metricId: HealthMetricId;
+    value: number;
+    observedAtMs: number;
+    provider?: typeof HEALTH_PROVIDERS[keyof typeof HEALTH_PROVIDERS];
+    accountKey?: string;
+    semanticVariant?: string;
+    qualifiers?: Record<string, string>;
+}) {
+    const isWeight = options.metricId === HEALTH_METRIC_IDS.BodyWeight;
+    const unit = isWeight ? HEALTH_UNITS.Kilogram : HEALTH_UNITS.MillilitersPerKilogramPerMinute;
+    return {
+        id: options.id,
+        data: () => ({
+            kind: HEALTH_SOURCE_RECORD_KINDS.PointMeasurement,
+            source: {
+                provider: options.provider || HEALTH_PROVIDERS.QuantifiedSelf,
+                accountKey: options.accountKey || 'opaque-account',
+                sourceRecordType: MANUAL_HEALTH_SOURCE_RECORD_TYPE,
+            },
+            endTimeMs: options.observedAtMs,
+            metrics: [encodeHealthMetricSportsLibData({
+                kind: 'value',
+                metricId: options.metricId,
+                valueType: HEALTH_VALUE_TYPES.Number,
+                aggregation: 'measurement',
+                semanticVariant: options.semanticVariant || 'point',
+                origin: HEALTH_VALUE_ORIGINS.Recorded,
+                recordingMethod: options.provider
+                    ? HEALTH_RECORDING_METHODS.Device
+                    : HEALTH_RECORDING_METHODS.Manual,
+                quality: { status: HEALTH_QUALITY_STATUSES.Valid },
+                coverage: { status: HEALTH_COVERAGE_STATUSES.Complete },
+                normalizationStatus: HEALTH_NORMALIZATION_STATUSES.Canonical,
+                native: {
+                    metric: isWeight ? DataWeight.type : DataVO2Max.type,
+                    value: options.value,
+                    unit,
+                    qualifiers: options.qualifiers,
+                },
+                canonical: { value: options.value, unit },
+            })],
+        }),
+    };
+}
 
 function buildTrainingActivitySources(docs: readonly any[]): any[] {
     return docs.flatMap((doc, index) => {
@@ -85,6 +155,8 @@ const hoisted = vi.hoisted(() => {
     const select = vi.fn();
     const where = vi.fn();
     const transactionGet = vi.fn();
+    const transactionGetAll = vi.fn(async (...refs: unknown[]) => refs.slice(0, -1)
+        .map(ref => ({ ref, exists: false, data: () => undefined })));
     const transactionSet = vi.fn();
     const userRootGet = vi.fn();
     const tombstoneGet = vi.fn();
@@ -110,6 +182,7 @@ const hoisted = vi.hoisted(() => {
     const coordinatorRef = {
         id: 'coordinator-ref',
         set: vi.fn(),
+        get: vi.fn(),
     };
     const batchSet = vi.fn();
     const batchCommit = vi.fn();
@@ -131,6 +204,7 @@ const hoisted = vi.hoisted(() => {
     });
     const runTransaction = vi.fn(async (updateFunction: (transaction: unknown) => Promise<void>) => {
         await updateFunction({
+            getAll: transactionGetAll,
             get: transactionGet,
             set: transactionSet,
         });
@@ -168,6 +242,7 @@ const hoisted = vi.hoisted(() => {
         select,
         where,
         transactionGet,
+        transactionGetAll,
         transactionSet,
         userRootGet,
         tombstoneGet,
@@ -191,6 +266,10 @@ const hoisted = vi.hoisted(() => {
         enqueueDerivedMetricsTask,
     };
 });
+
+vi.mock('../training-load/training-load-cache', async importOriginal => ({ ...await importOriginal<any>(),
+    readTrainingLoadSummaries: vi.fn(async () => new Map()),
+}));
 
 vi.mock('firebase-admin', () => ({
     firestore: vi.fn(() => hoisted.firestoreInstance),
@@ -217,6 +296,59 @@ function mockTransactionDeletionGuardDefaults(): void {
         return { exists: false, data: () => undefined };
     });
 }
+
+describe('fetchDerivedFormSnapshotSeed', () => {
+    const dayMs = Date.UTC(2026, 8, 14);
+    const valid = () => ({ entryType: 'snapshot', metricKind: DERIVED_METRIC_KINDS.Form,
+        status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, builtFromEventMutationVersion: 7,
+        sourceEventCount: 1, sourceDocCount: 2, payload: { payloadVersion: DERIVED_FORM_PAYLOAD_VERSION,
+            dayBoundary: 'UTC', excludesMergedEvents: true,
+            rangeStartDayMs: dayMs, rangeEndDayMs: dayMs,
+            dailyLoads: [{ dayMs, load: 50, activityCount: 1 }] } });
+    beforeEach(() => vi.clearAllMocks());
+    async function read(data: unknown) {
+        const { fetchDerivedFormSnapshotSeed } = await import('./derived-metrics.service');
+        hoisted.coordinatorRef.get.mockResolvedValue({ data: () => data });
+        return fetchDerivedFormSnapshotSeed('user-1');
+    }
+    it('accepts canonical loads and genuine zero-load histories', async () => {
+        expect(await read(valid())).toMatchObject({
+            dailyLoads: [{ dayMs, load: 50, activityCount: 1 }],
+            sourceEventCount: 1,
+        });
+        const zero = valid(); zero.payload.dailyLoads[0].load = 0;
+        expect(await read(zero)).toMatchObject({
+            dailyLoads: [{ dayMs, load: 0, activityCount: 1 }],
+            sourceEventCount: 1,
+        });
+        const empty = valid(); empty.sourceEventCount = 0;
+        Object.assign(empty.payload, { dailyLoads: [], rangeStartDayMs: null, rangeEndDayMs: null });
+        expect(await read(empty)).toMatchObject({ dailyLoads: [], sourceEventCount: 0, sourceDocCount: 2 });
+    });
+    it.each([
+        { payload: null }, { payload: { ...valid().payload, dailyLoads: undefined } },
+        { payload: { ...valid().payload, payloadVersion: 1 } },
+        { payload: { ...valid().payload, dailyLoads: [{ dayMs, load: Number.NaN, activityCount: 1 }] } },
+        { payload: { ...valid().payload, dailyLoads: [{ dayMs, load: -1, activityCount: 1 }] } },
+        { payload: { ...valid().payload, dailyLoads: [{ dayMs, load: 50 }] } },
+        { payload: { ...valid().payload, dailyLoads: [{ dayMs, load: 50, activityCount: 2 }] } },
+        { payload: { ...valid().payload, rangeStartDayMs: dayMs + 1, rangeEndDayMs: dayMs + 1,
+            dailyLoads: [{ dayMs: dayMs + 1, load: 50, activityCount: 1 }] } },
+        { payload: { ...valid().payload, rangeStartDayMs: -86_400_000, rangeEndDayMs: -86_400_000,
+            dailyLoads: [{ dayMs: -86_400_000, load: 50, activityCount: 1 }] } },
+        { sourceEventCount: 2, payload: { ...valid().payload,
+            dailyLoads: [{ dayMs, load: 20, activityCount: 1 }, { dayMs, load: 30, activityCount: 1 }] } },
+        { sourceEventCount: 2, payload: { ...valid().payload, rangeStartDayMs: dayMs + 86_400_000,
+            dailyLoads: [{ dayMs: dayMs + 86_400_000, load: 20, activityCount: 1 },
+                { dayMs, load: 30, activityCount: 1 }] } },
+        { payload: { ...valid().payload, rangeEndDayMs: dayMs - 86_400_000 } },
+        { payload: { ...valid().payload, dailyLoads: [], rangeStartDayMs: null, rangeEndDayMs: null } },
+        { sourceDocCount: 0 }, { sourceEventCount: undefined },
+        { schemaVersion: DERIVED_METRIC_SCHEMA_VERSION + 1 },
+    ])('rejects incomplete/incompatible Form inputs rather than silently normalizing them: %j', async patch => {
+        expect(await read({ ...valid(), ...patch })).toBeNull();
+    });
+});
 
 describe('fetchRecoveryLookbackEventDocs', () => {
     beforeEach(() => {
@@ -324,8 +456,26 @@ describe('fetchTrainingBuildSleepDocs', () => {
         hoisted.where.mockReturnValue(query);
         hoisted.select.mockReturnValue({ get: hoisted.get });
         hoisted.get
-            .mockResolvedValueOnce({ docs: [{ id: 'historical-sleep' }] })
-            .mockResolvedValueOnce({ docs: [{ id: 'recent-sleep' }] });
+            .mockResolvedValueOnce({ docs: [{ id: 'historical-sleep', data: () => ({}) }] })
+            .mockResolvedValueOnce({ docs: [{ id: 'recent-sleep', data: () => ({}) }] });
+    });
+
+    it.each(['period', 'event'] as const)('reused %s benchmark windows issue exactly the full-build sleep queries', async mode => {
+        const { fetchTrainingBuildSleepDocs, buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 5, 30, 12);
+        const activities = buildTrainingActivitySources([{ id: 'anchor', data: () => ({ startDate: Date.UTC(2026, 0, 1, 8),
+            stats: { [DataActivityTypes.type]: [ActivityTypes.Running] } }) }]);
+        const settings = { trainingSettings: { buildBenchmarks: { running: mode === 'period'
+            ? { mode, durationWeeks: 8, endDayMs: Date.UTC(2026, 2, 1) }
+            : { mode, durationWeeks: 8, eventId: 'anchor' } } } };
+        await fetchTrainingBuildSleepDocs('user-1', activities, settings, nowMs);
+        const queries = [...hoisted.where.mock.calls];
+        expect(queries).toHaveLength(4);
+        hoisted.where.mockClear();
+        hoisted.get.mockResolvedValue({ docs: [] });
+        const result = buildTrainingBuildComparisonMetricPayload(activities, settings, nowMs);
+        await fetchTrainingBuildSleepDocs('user-1', [], settings, nowMs, { ...result, metadata: {} } as any);
+        expect(hoisted.where.mock.calls).toEqual(queries);
     });
 
     it('queries only the merged recent and configured benchmark sleep-date ranges', async () => {
@@ -352,6 +502,7 @@ describe('fetchTrainingBuildSleepDocs', () => {
         expect(hoisted.select).toHaveBeenCalledTimes(2);
         expect(hoisted.select).toHaveBeenCalledWith(
             'source.provider',
+            'source.providerUserId',
             'sleepDate',
             'startTimeMs',
             'endTimeMs',
@@ -361,8 +512,10 @@ describe('fetchTrainingBuildSleepDocs', () => {
             'sportsLibData.metrics.duration',
             'sportsLibData.metrics.overnightHrv',
             'sportsLibData.metrics.averageHrv',
+            'sportsLibData.metrics.hrvSampleCount',
             'isNap',
             'providerFields.suunto.timestamp',
+            'providerFields.suunto.SleepOnsetLatencyDuration',
             'vitals.overnightHrvMs',
             'vitals.averageHrvMs',
         );
@@ -415,7 +568,7 @@ describe('fetchTrainingReadinessSleepDocs', () => {
         const query = { where: hoisted.where, select: hoisted.select };
         hoisted.where.mockReturnValue(query);
         hoisted.select.mockReturnValue({ get: hoisted.get });
-        hoisted.get.mockResolvedValue({ docs: [{ id: 'readiness-sleep' }] });
+        hoisted.get.mockResolvedValue({ docs: [{ id: 'readiness-sleep', data: () => ({}) }] });
     });
 
     it('queries the bounded sleep envelope required by every historical cutoff without loading events or activities', async () => {
@@ -425,11 +578,12 @@ describe('fetchTrainingReadinessSleepDocs', () => {
         const docs = await fetchTrainingReadinessSleepDocs('user-1', nowMs);
 
         expect(hoisted.where.mock.calls).toEqual([
-            ['endTimeMs', '>=', firstHistoryCutoffMs - (30 * 24 * 60 * 60 * 1000)],
+            ['endTimeMs', '>=', firstHistoryCutoffMs - (60 * 24 * 60 * 60 * 1000)],
             ['endTimeMs', '<=', nowMs],
         ]);
         expect(hoisted.select).toHaveBeenCalledWith(
             'source.provider',
+            'source.providerUserId',
             'sleepDate',
             'startTimeMs',
             'endTimeMs',
@@ -440,11 +594,13 @@ describe('fetchTrainingReadinessSleepDocs', () => {
             'sportsLibData.metrics.score',
             'sportsLibData.metrics.overnightHrv',
             'sportsLibData.metrics.averageHrv',
+            'sportsLibData.metrics.hrvSampleCount',
             'sportsLibData.metrics.averageHeartRate',
             'sportsLibData.metrics.minimumHeartRate',
             'isNap',
             'score.value',
             'providerFields.suunto.timestamp',
+            'providerFields.suunto.SleepOnsetLatencyDuration',
             'vitals.overnightHrvMs',
             'vitals.averageHrvMs',
             'vitals.averageHeartRateBpm',
@@ -466,11 +622,13 @@ describe('resolveDerivedMetricSourceRequirements', () => {
         ).toEqual({
             needsFormDocs: true,
             needsRecoveryNowDocs: false,
-            needsTrainingActivityDocs: false,
+            needsTrainingActivityDocs: true,
             needsTrainingSwimLengths: false,
             needsTrainingBuildBenchmarkSettings: false,
             needsTrainingBuildSleepDocs: false,
             needsTrainingReadinessSleepDocs: false,
+            needsBodyWeightHealthDocs: false,
+            needsVo2HealthDocs: false,
         });
     });
 
@@ -490,6 +648,8 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingBuildBenchmarkSettings: false,
             needsTrainingBuildSleepDocs: false,
             needsTrainingReadinessSleepDocs: false,
+            needsBodyWeightHealthDocs: false,
+            needsVo2HealthDocs: false,
         });
     });
 
@@ -504,6 +664,8 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingBuildBenchmarkSettings: false,
             needsTrainingBuildSleepDocs: false,
             needsTrainingReadinessSleepDocs: false,
+            needsBodyWeightHealthDocs: false,
+            needsVo2HealthDocs: false,
         });
     });
 
@@ -518,6 +680,8 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingBuildBenchmarkSettings: false,
             needsTrainingBuildSleepDocs: false,
             needsTrainingReadinessSleepDocs: false,
+            needsBodyWeightHealthDocs: false,
+            needsVo2HealthDocs: true,
         });
     });
 
@@ -532,6 +696,8 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingBuildBenchmarkSettings: false,
             needsTrainingBuildSleepDocs: false,
             needsTrainingReadinessSleepDocs: false,
+            needsBodyWeightHealthDocs: false,
+            needsVo2HealthDocs: false,
         });
     });
 
@@ -546,6 +712,8 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingBuildBenchmarkSettings: false,
             needsTrainingBuildSleepDocs: false,
             needsTrainingReadinessSleepDocs: false,
+            needsBodyWeightHealthDocs: false,
+            needsVo2HealthDocs: false,
         });
     });
 
@@ -564,6 +732,8 @@ describe('resolveDerivedMetricSourceRequirements', () => {
                 needsTrainingBuildBenchmarkSettings: false,
                 needsTrainingBuildSleepDocs: false,
                 needsTrainingReadinessSleepDocs: false,
+                needsBodyWeightHealthDocs: false,
+                needsVo2HealthDocs: false,
             });
         }
     });
@@ -579,6 +749,8 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingBuildBenchmarkSettings: true,
             needsTrainingBuildSleepDocs: true,
             needsTrainingReadinessSleepDocs: false,
+            needsBodyWeightHealthDocs: false,
+            needsVo2HealthDocs: false,
         });
     });
 
@@ -593,6 +765,8 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingBuildBenchmarkSettings: false,
             needsTrainingBuildSleepDocs: false,
             needsTrainingReadinessSleepDocs: false,
+            needsBodyWeightHealthDocs: false,
+            needsVo2HealthDocs: false,
         });
     });
 
@@ -607,10 +781,12 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingBuildBenchmarkSettings: false,
             needsTrainingBuildSleepDocs: false,
             needsTrainingReadinessSleepDocs: true,
+            needsBodyWeightHealthDocs: false,
+            needsVo2HealthDocs: false,
         });
     });
 
-    it('uses persisted event stats for the body-weight trend', async () => {
+    it('uses Health Weight plus workout fallback inputs for the body-weight trend', async () => {
         const { resolveDerivedMetricSourceRequirements } = await import('./derived-metrics.service');
 
         expect(resolveDerivedMetricSourceRequirements([DERIVED_METRIC_KINDS.BodyWeightTrend])).toEqual({
@@ -621,11 +797,75 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingBuildBenchmarkSettings: false,
             needsTrainingBuildSleepDocs: false,
             needsTrainingReadinessSleepDocs: false,
+            needsBodyWeightHealthDocs: true,
+            needsVo2HealthDocs: false,
         });
     });
 });
 
 describe('buildBodyWeightTrendMetricPayload', () => {
+    it('prefers true Health measurements globally and keeps their sources separate', async () => {
+        const { buildBodyWeightTrendMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 6, 16, 12);
+        const workoutDocs = [{
+            id: 'workout',
+            data: () => ({
+                startDate: nowMs,
+                serviceName: 'Garmin',
+                stats: { [DataWeight.type]: 99 },
+            }),
+        }];
+        const healthDocs = [
+            healthMeasurementDoc({
+                id: 'manual', metricId: HEALTH_METRIC_IDS.BodyWeight, value: 70,
+                observedAtMs: nowMs, accountKey: 'manual-account',
+            }),
+            healthMeasurementDoc({
+                id: 'garmin', metricId: HEALTH_METRIC_IDS.BodyWeight, value: 71,
+                observedAtMs: nowMs - 86_400_000, provider: HEALTH_PROVIDERS.GarminAPI,
+                accountKey: 'garmin-account',
+            }),
+        ];
+
+        const result = buildBodyWeightTrendMetricPayload(workoutDocs as any, nowMs, healthDocs as any);
+
+        expect(result.sourceEventCount).toBe(2);
+        expect(result.payload.series).toHaveLength(2);
+        expect(result.payload.series.map(series => series.sourceKind)).toEqual([
+            'health-measurement',
+            'health-measurement',
+        ]);
+        expect(result.payload.series.map(series => series.provider)).toEqual([
+            HEALTH_PROVIDERS.GarminAPI,
+            HEALTH_PROVIDERS.QuantifiedSelf,
+        ]);
+        expect(result.payload.series.flatMap(series => [
+            series.latestWeightKg,
+            ...series.points.map(point => point.weightKg),
+        ])).not.toContain(99);
+        expect(result.payload.latestWeightKg).toBeNull();
+        expect(result.payload.points.every(point => point.weightKg === null)).toBe(true);
+    });
+
+    it('suppresses recent workout Weight when an older Health measurement exists', async () => {
+        const { buildBodyWeightTrendMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 6, 16, 12);
+        const workoutDocs = [{
+            id: 'workout',
+            data: () => ({
+                startDate: nowMs,
+                serviceName: 'Garmin',
+                stats: { [DataWeight.type]: 99 },
+            }),
+        }];
+
+        const result = buildBodyWeightTrendMetricPayload(workoutDocs as any, nowMs, [], true);
+
+        expect(result.sourceEventCount).toBe(0);
+        expect(result.payload.series).toEqual([]);
+        expect(result.payload.latestWeightKg).toBeNull();
+    });
+
     it('builds daily medians, leaves gaps explicit, and withholds sparse comparison claims', async () => {
         const { buildBodyWeightTrendMetricPayload } = await import('./derived-metrics.service');
         const nowMs = Date.UTC(2026, 6, 16, 12);
@@ -770,7 +1010,8 @@ describe('buildTrainingReadinessMetricPayload', () => {
         const staleDay = result.payload.points.find(point => point.dayMs === Date.UTC(2026, 6, 13));
 
         expect(result.payload).toMatchObject({
-            formulaVersion: 3,
+            formulaVersion: 4,
+            evidenceVersion: 4,
             dayBoundary: 'UTC',
             asOfDayMs: Date.UTC(2026, 6, 16),
             generatedAtMs: nowMs,
@@ -779,18 +1020,125 @@ describe('buildTrainingReadinessMetricPayload', () => {
         expect(result.payload.points).toHaveLength(14);
         expect(staleDay).toMatchObject({ score: null, availableSignalCount: 0 });
         expect(today).toMatchObject({
-            score: 72,
-            label: 'Mixed',
-            confidence: 'medium',
-            availableSignalCount: 3,
+            score: 78,
+            label: 'Ready',
+            confidence: 'low',
+            availableSignalCount: 2,
             baselineEvidenceCount: 5,
             latestSleepAtMs: Date.UTC(2026, 6, 16, 6),
             sleepScore: 90,
-            hrvRatio: 1.1,
+            hrvRatio: null,
             averageHeartRateRatio: 0.9,
             minimumHeartRateRatio: 0.96,
         });
         expect(today?.overnightHeartRateRatio).toBeCloseTo(0.918);
+    });
+
+    it('reconciles adjacent Suunto fragments into one sample-weighted current night', async () => {
+        const { buildTrainingReadinessMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 8, 28, 12);
+        const dayMs = 24 * 60 * 60 * 1000;
+        const buildDoc = (id: string, sleepDate: string, startTimeMs: number, endTimeMs: number,
+            hrv: number, hrvSampleCount = 35) => ({
+            id,
+            data: () => ({
+                source: { provider: 'SuuntoApp', providerUserId: 'suunto-user', sourceSessionKey: id },
+                sleepDate,
+                startTimeMs,
+                endTimeMs,
+                durationSeconds: Math.round((endTimeMs - startTimeMs) / 1000),
+                timezoneOffsetSeconds: 3 * 60 * 60,
+                isNap: false,
+                score: { value: 80 },
+                vitals: { averageHrvMs: hrv, hrvSampleCount },
+            }),
+        });
+        const baseline = Array.from({ length: 15 }, (_, index) => {
+            const endTimeMs = nowMs - (15 - index) * dayMs - (4 * 60 * 60 * 1000);
+            return buildDoc(`baseline-${index}`, new Date(endTimeMs).toISOString().slice(0, 10),
+                endTimeMs - (8 * 60 * 60 * 1000), endTimeMs, 34);
+        });
+        const sleepDate = '2026-09-28';
+        const fragments = [
+            buildDoc('part-1', sleepDate, Date.UTC(2026, 8, 27, 18, 57), Date.UTC(2026, 8, 27, 23, 54), 29, 46),
+            buildDoc('part-2', sleepDate, Date.UTC(2026, 8, 28, 0, 1), Date.UTC(2026, 8, 28, 4), 40),
+        ];
+
+        const today = buildTrainingReadinessMetricPayload([], 0, [...baseline, ...fragments] as any, nowMs)
+            .payload.points.at(-1);
+
+        expect(today).toMatchObject({ sleepScore: 80, availableSignalCount: 2 });
+        expect(today?.hrvPersonalRange?.latestMs).toBeCloseTo(((29 * 46) + (40 * 35)) / 81);
+        expect(today?.hrvRatio).toBeCloseTo(1);
+    });
+
+    it('uses Suunto sleep onset when enforcing the fragment gap boundary', async () => {
+        const { buildTrainingReadinessMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 8, 28, 12);
+        const source = { provider: 'SuuntoApp', providerUserId: 'suunto-user' };
+        const baseline = Array.from({ length: 5 }, (_, index) => {
+            const endTimeMs = nowMs - ((index + 2) * 24 * 60 * 60 * 1000);
+            return { id: `baseline-${index}`, data: () => ({
+                source: { ...source, sourceSessionKey: `baseline-${index}` },
+                sleepDate: new Date(endTimeMs).toISOString().slice(0, 10),
+                startTimeMs: endTimeMs - (8 * 60 * 60 * 1000),
+                endTimeMs,
+                durationSeconds: 8 * 60 * 60,
+                timezoneOffsetSeconds: 0,
+                isNap: false,
+                score: { value: 80 },
+                vitals: { averageHeartRateBpm: 60 },
+            }) };
+        });
+        const firstEndTimeMs = Date.UTC(2026, 8, 28, 0);
+        const docs = [
+            ...baseline,
+            { id: 'part-1', data: () => ({
+                source: { ...source, sourceSessionKey: 'part-1' },
+                sleepDate: '2026-09-28',
+                startTimeMs: firstEndTimeMs - (4 * 60 * 60 * 1000),
+                endTimeMs: firstEndTimeMs,
+                durationSeconds: 4 * 60 * 60,
+                timezoneOffsetSeconds: 0,
+                isNap: false,
+                score: { value: 70 },
+                vitals: { averageHeartRateBpm: 50 },
+            }) },
+            { id: 'part-2', data: () => ({
+                source: { ...source, sourceSessionKey: 'part-2' },
+                sleepDate: '2026-09-28',
+                startTimeMs: firstEndTimeMs + (25 * 60 * 1000),
+                endTimeMs: firstEndTimeMs + (4 * 60 * 60 * 1000),
+                durationSeconds: 3 * 60 * 60,
+                timezoneOffsetSeconds: 0,
+                isNap: false,
+                score: { value: 82 },
+                providerFields: { suunto: { SleepOnsetLatencyDuration: 10 * 60 } },
+                vitals: { averageHeartRateBpm: 70 },
+            }) },
+        ];
+
+        const today = buildTrainingReadinessMetricPayload([], 0, docs as any, nowMs).payload.points.at(-1);
+
+        expect(today).toMatchObject({ sleepScore: 82, latestSleepAtMs: firstEndTimeMs + (4 * 60 * 60 * 1000) });
+        expect(today?.averageHeartRateRatio).toBeCloseTo(70 / 60);
+    });
+
+    it('withholds current HRV when the latest sleep has expired', async () => {
+        const { buildTrainingReadinessMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 8, 13, 12);
+        const docs = Array.from({ length: 60 }, (_, index) => {
+            const endTimeMs = nowMs - (index + 3) * 86400000;
+            return { id: `night-${index}`, data: () => ({ source: { provider: 'SuuntoApp' },
+                sleepDate: new Date(endTimeMs).toISOString().slice(0, 10), endTimeMs,
+                startTimeMs: endTimeMs - 28800000, durationSeconds: 28800, isNap: false,
+                vitals: { averageHrvMs: 40 } }) };
+        });
+        const { payload } = buildTrainingReadinessMetricPayload([], 0, docs as any, nowMs);
+        expect(payload.points[payload.points.length - 1]).toMatchObject({ score: null, availableSignalCount: 0,
+            latestSleepAtMs: null, hrvPersonalRange: null, hrvRatio: null });
+        expect(payload.legacyPoints![payload.legacyPoints!.length - 1]).toMatchObject({ score: null,
+            label: null, confidence: null, availableSignalCount: 0, hrvRatio: null });
     });
 
     it('produces the same readiness evidence from legacy and new-only Sports Lib sleep aggregates', async () => {
@@ -891,6 +1239,7 @@ describe('buildTrainingReadinessMetricPayload', () => {
             sleepScore: 82,
             availableSignalCount: 1,
             confidence: 'low',
+            hrvPersonalRange: null,
             hrvRatio: null,
             averageHeartRateRatio: null,
             minimumHeartRateRatio: null,
@@ -926,7 +1275,7 @@ describe('buildTrainingReadinessMetricPayload', () => {
         expect(reverse.payload.points.at(-1)?.sleepScore).toBe(90);
     });
 
-    it('matches the live missing-date fallback without accepting an invalid stored date', async () => {
+    it('matches the live missing-date fallback without accepting malformed sessions', async () => {
         const { buildTrainingReadinessMetricPayload } = await import('./derived-metrics.service');
         const nowMs = Date.UTC(2026, 6, 16, 12);
         const buildDoc = (id: string, sleepDate: string | undefined, score: number, endHour: number) => ({
@@ -946,6 +1295,19 @@ describe('buildTrainingReadinessMetricPayload', () => {
         const result = buildTrainingReadinessMetricPayload([], 0, [
             buildDoc('missing-date', undefined, 84, 6),
             buildDoc('invalid-date', '2026-02-31', 99, 7),
+            {
+                id: 'invalid-time',
+                data: () => ({
+                    source: { provider: 'GarminAPI' },
+                    sleepDate: '2026-07-16',
+                    startTimeMs: Number.MAX_SAFE_INTEGER - 1,
+                    endTimeMs: Number.MAX_SAFE_INTEGER,
+                    durationSeconds: 1,
+                    isNap: false,
+                    score: { value: 100 },
+                    vitals: {},
+                }),
+            },
         ] as any, nowMs);
 
         expect(result.payload.points.at(-1)).toMatchObject({
@@ -999,6 +1361,33 @@ describe('buildTrainingReadinessMetricPayload', () => {
 });
 
 describe('buildTrainingBuildComparisonMetricPayload', () => {
+    it.each(['period', 'event'] as const)('recovery-only refresh equals a full %s rebuild after sleep edits and deletes', async mode => {
+        const { buildTrainingBuildComparisonMetricPayload, refreshTrainingBuildComparisonRecovery } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 5, 30, 12);
+        const activities = buildTrainingActivitySources([
+            { id: 'anchor', data: () => ({ startDate: Date.UTC(2026, 0, 1, 8), name: 'Winter race', tags: ['Race'],
+                stats: { [DataActivityTypes.type]: [ActivityTypes.Running], [DataDuration.type]: 3600 } }) },
+            { id: 'recent', data: () => ({ startDate: nowMs - 86_400_000,
+                stats: { [DataActivityTypes.type]: [ActivityTypes.Running], [DataDuration.type]: 1800 } }) },
+        ]);
+        const settings = { trainingSettings: { buildBenchmarks: { running: mode === 'period'
+            ? { mode, durationWeeks: 8, endDayMs: Date.UTC(2026, 2, 10) }
+            : { mode, durationWeeks: 8, eventId: 'anchor' } } } };
+        const sleep = (durationSeconds: number) => Array.from({ length: 7 }, (_, i) => ({ id: `night-${i}`, data: () => ({
+            source: { provider: 'GarminAPI' }, sleepDate: `2026-06-${23 + i}`, durationSeconds, isNap: false,
+            startTimeMs: Date.UTC(2026, 5, 23 + i), endTimeMs: Date.UTC(2026, 5, 23 + i, 8),
+            timezoneOffsetSeconds: 0, vitals: { overnightHrvMs: 50 + i },
+        }) }));
+        const original = buildTrainingBuildComparisonMetricPayload(activities, settings, nowMs, sleep(25_200) as any);
+        expect(original.payload.disciplines.find(d => d.discipline === 'running')?.status).toBe('ready');
+        for (const docs of [sleep(28_800), sleep(28_800).slice(1), []]) {
+            const refreshed = refreshTrainingBuildComparisonRecovery(original.payload, docs as any);
+            expect(refreshed).toEqual(buildTrainingBuildComparisonMetricPayload(activities, settings, nowMs + 1000, docs as any).payload);
+            expect(refreshed.recovery).not.toEqual(original.payload.recovery);
+            expect(refreshed.disciplines[0].current).toEqual(original.payload.disciplines[0].current);
+        }
+    });
+
     it('compares trustworthy overnight recovery context without treating naps or missing nights as zero', async () => {
         const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
         const nowMs = Date.UTC(2026, 5, 30, 12);
@@ -1080,6 +1469,91 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
             reference: { periodDays: 56, averageSleepSeconds: 6.5 * 3600 },
         });
         expect(result.payload.disciplines.find(item => item.discipline === 'cycling')?.recovery).toBeNull();
+    });
+
+    it('uses one canonical Suunto night for recovery duration, timing, and sample-weighted HRV', async () => {
+        const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 5, 30, 12);
+        const dayMs = 24 * 60 * 60 * 1000;
+        const docs = Array.from({ length: 5 }, (_, index) => {
+            const sleepDayMs = Date.UTC(2026, 5, 26) + (index * dayMs);
+            const source = { provider: 'SuuntoApp', providerUserId: 'suunto-user' };
+            return [
+                { id: `part-1-${index}`, data: () => ({
+                    source: { ...source, sourceSessionKey: `part-1-${index}` },
+                    sleepDate: new Date(sleepDayMs).toISOString().slice(0, 10),
+                    startTimeMs: sleepDayMs - (5 * 60 * 60 * 1000) - (3 * 60 * 1000),
+                    endTimeMs: sleepDayMs - (6 * 60 * 1000),
+                    timezoneOffsetSeconds: 3 * 60 * 60,
+                    durationSeconds: 15_840,
+                    isNap: false,
+                    providerFields: { suunto: { SleepOnsetLatencyDuration: 360 } },
+                    vitals: { averageHrvMs: 29, hrvSampleCount: 46 },
+                }) },
+                { id: `part-2-${index}`, data: () => ({
+                    source: { ...source, sourceSessionKey: `part-2-${index}` },
+                    sleepDate: new Date(sleepDayMs).toISOString().slice(0, 10),
+                    startTimeMs: sleepDayMs + (1 * 60 * 1000),
+                    endTimeMs: sleepDayMs + (4 * 60 * 60 * 1000),
+                    timezoneOffsetSeconds: 3 * 60 * 60,
+                    durationSeconds: 13_320,
+                    isNap: false,
+                    providerFields: { suunto: { SleepOnsetLatencyDuration: 480 } },
+                    vitals: { averageHrvMs: 40, hrvSampleCount: 35 },
+                }) },
+            ];
+        }).flat();
+
+        const result = buildTrainingBuildComparisonMetricPayload([], {}, nowMs, docs as any);
+
+        expect(result.payload.recovery.current).toMatchObject({
+            provider: 'SuuntoApp',
+            recordedNightCount: 5,
+            averageSleepSeconds: 29_160,
+            typicalLocalStartMinutes: (22 * 60) + 3,
+            typicalLocalEndMinutes: 7 * 60,
+            medianOvernightHrvMs: 33.8,
+            overnightHrvNightCount: 5,
+        });
+    });
+
+    it('retains a short Suunto fragment when its canonical night is long enough', async () => {
+        const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 5, 30, 12);
+        const dayMs = 24 * 60 * 60 * 1000;
+        const docs = Array.from({ length: 5 }, (_, index) => {
+            const sleepDayMs = Date.UTC(2026, 5, 26) + (index * dayMs);
+            const source = { provider: 'SuuntoApp', providerUserId: 'suunto-user' };
+            return [
+                { id: `main-${index}`, data: () => ({
+                    source: { ...source, sourceSessionKey: `main-${index}` },
+                    sleepDate: new Date(sleepDayMs).toISOString().slice(0, 10),
+                    startTimeMs: sleepDayMs - (7.5 * 60 * 60 * 1000),
+                    endTimeMs: sleepDayMs,
+                    timezoneOffsetSeconds: 0,
+                    durationSeconds: 7.5 * 60 * 60,
+                    isNap: false,
+                    vitals: {},
+                }) },
+                { id: `short-${index}`, data: () => ({
+                    source: { ...source, sourceSessionKey: `short-${index}` },
+                    sleepDate: new Date(sleepDayMs).toISOString().slice(0, 10),
+                    startTimeMs: sleepDayMs + (5 * 60 * 1000),
+                    endTimeMs: sleepDayMs + (35 * 60 * 1000),
+                    timezoneOffsetSeconds: 0,
+                    durationSeconds: 30 * 60,
+                    isNap: false,
+                    vitals: {},
+                }) },
+            ];
+        }).flat();
+
+        const result = buildTrainingBuildComparisonMetricPayload([], {}, nowMs, docs as any);
+
+        expect(result.payload.recovery.current).toMatchObject({
+            recordedNightCount: 5,
+            averageSleepSeconds: 8 * 60 * 60,
+        });
     });
 
     it('withholds recovery comparability across providers and keeps absent HRV null', async () => {
@@ -1650,7 +2124,39 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
         expect(running?.current?.activeWeekCount).toBe(12);
     });
 
-    it('supports every benchmark-capable sport and keeps volume-only families out of benchmark claims', async () => {
+    it('keeps zero TSS in new-context build totals and event suggestions while intensity follows its own policy', async () => {
+        const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 6, 14, 12);
+        const types = [RefinedTypes.BMX, RefinedTypes.Kickbiking, RefinedTypes.ObstacleRacing,
+            RefinedTypes.EEnduroMTB, ActivityTypes.StrengthTraining];
+        const docs = types.flatMap((type, index) => [Date.UTC(2026, 6, 1), Date.UTC(2026, 3, 1)].map((startDate, window) => ({
+            id: `zero-${index}-${window}`,
+            data: () => ({ startDate, stats: {
+                [DataActivityTypes.type]: [type], [DataDuration.type]: 3600,
+                'Training Stress Score': 0, [DataHeartRateZoneOneDuration.type]: 1800,
+            } }),
+        })));
+        const result = buildTrainingBuildComparisonMetricPayload(buildTrainingActivitySources(docs), {
+            trainingSettings: { buildBenchmarks: Object.fromEntries(['cycling', 'running', 'strength'].map(sport =>
+                [sport, { mode: 'period', durationWeeks: 8, endDayMs: Date.UTC(2026, 3, 30) }])) },
+        }, nowMs);
+        const cycling = result.payload.disciplines.find(sport => sport.discipline === 'cycling')!;
+        const running = result.payload.disciplines.find(sport => sport.discipline === 'running')!;
+        const strength = result.payload.disciplines.find(sport => sport.discipline === 'strength')!;
+        [cycling, running, strength].forEach(sport => {
+            expect(sport.status).toBe('ready');
+            expect(sport.current?.trainingStressScore).toBe(0);
+            expect(sport.current?.trainingStressScoreEventCount).toBe(sport.current?.activityCount);
+            expect(sport.benchmark?.trainingStressScore).toBe(0);
+            expect(sport.suggestedEvents.length).toBeGreaterThan(0);
+            sport.suggestedEvents.forEach(event => expect(event.trainingStressScore).toBe(0));
+        });
+        expect(cycling.current).toMatchObject({ activityCount: 3, easySeconds: 1800, intensitySourceEventCount: 1 });
+        expect(running.current).toMatchObject({ activityCount: 1, easySeconds: 1800, intensitySourceEventCount: 1 });
+        expect(strength.current).toMatchObject({ activityCount: 1, easySeconds: null, intensitySourceEventCount: 0 });
+    });
+
+    it('counts saved TSS for benchmark-capable sports while retaining specialist intensity exclusions', async () => {
         const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
         const nowMs = Date.UTC(2026, 6, 10, 12);
         const benchmarkEndDayMs = Date.UTC(2026, 3, 30);
@@ -1708,15 +2214,15 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
 
         expect(result.payload.disciplines.map(item => item.discipline)).toEqual([
             'running', 'cycling', 'swimming', 'rowing', 'walking-hiking', 'nordic-skiing', 'strength',
-            'fitness-gym', 'paddling', 'other-training',
+            'fitness-gym', 'paddling', 'wheelchair', 'climbing-mountaineering', 'mountain-snow', 'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports', 'precision-sports', 'water-sports', 'diving', 'performance-sports', 'outdoor-adventures', 'aerial-sports', 'motorized-activities', 'other-training',
         ]);
         [cycling, strength].forEach((discipline) => {
             expect(discipline?.status).toBe('ready');
             expect(discipline?.current).toMatchObject({
                 activityCount: 1,
                 durationSeconds: 3_600,
-                trainingStressScore: null,
-                trainingStressScoreEventCount: 0,
+                trainingStressScore: 90,
+                trainingStressScoreEventCount: 1,
                 easySeconds: null,
                 moderateSeconds: null,
                 hardSeconds: null,
@@ -1919,6 +2425,56 @@ describe('buildTrainingCapacityMetricPayload', () => {
                 ...overrides,
             },
         }),
+    });
+
+    it('keeps a dated manual lab reference separate and compares only nearby workout evidence', async () => {
+        const { buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
+        const workoutAtMs = Date.UTC(2026, 6, 8, 8);
+        const manualAtMs = Date.UTC(2026, 6, 9, 8);
+        const docs = [createDoc('running-vo2', workoutAtMs, {
+            [DataActivityTypes.type]: [ActivityTypes.Running],
+            [DataVO2Max.type]: 55,
+        })];
+        const healthDocs = [healthMeasurementDoc({
+            id: 'manual-running-lab',
+            metricId: HEALTH_METRIC_IDS.Vo2Max,
+            value: 57,
+            observedAtMs: manualAtMs,
+            semanticVariant: 'manual_running_lab_test',
+            qualifiers: { context: 'running', method: 'lab_test' },
+        }), healthMeasurementDoc({
+            id: 'provider-running-lab-lookalike',
+            metricId: HEALTH_METRIC_IDS.Vo2Max,
+            value: 63,
+            observedAtMs: manualAtMs + 1_000,
+            provider: HEALTH_PROVIDERS.GarminAPI,
+            semanticVariant: 'manual_running_lab_test',
+            qualifiers: { context: 'running', method: 'lab_test' },
+        })];
+
+        const result = buildTrainingCapacityMetricPayload(
+            buildTrainingActivitySources(docs),
+            nowMs,
+            healthDocs as any,
+        );
+        const running = result.payload.disciplines.find(item => item.discipline === 'running');
+
+        expect(running?.importedVo2Max).toMatchObject({ value: 55, provenance: 'imported-activity-stat' });
+        expect(running?.referenceVo2Max).toEqual({
+            kind: 'vo2-max',
+            value: 57,
+            context: 'running',
+            method: 'lab-test',
+            observedAtMs: manualAtMs,
+            provenance: 'manual-health-measurement',
+            comparison: {
+                value: 55,
+                observedAtMs: workoutAtMs,
+                delta: 2,
+                gapDays: 1,
+            },
+        });
+        expect(result.sourceEventCount).toBe(2);
     });
 
     it('deduplicates carried imported settings without adding a modeled capacity value', async () => {
@@ -2156,6 +2712,75 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
         powerCurve,
     });
 
+    it('keeps six wheelchair power histories independent across recorded indoor and outdoor types', async () => {
+        const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const types = ['Wheel Chair', 'Wheelchair Push Walk', 'Wheelchair Push Run',
+            'Indoor Wheelchair Push Walk', 'Indoor Wheelchair Push Run', 'Wheelchair Racing'];
+        const activities = types.flatMap((type, index) => [
+            source(`wheelchair-${index}-1`, type as ActivityTypes, asOfDayMs - (20 * DAY_MS)),
+            source(`wheelchair-${index}-2`, type as ActivityTypes, asOfDayMs - DAY_MS),
+        ]);
+        const fitSpy = vi.fn(fitThreeDimensionalCapacityModel);
+        const result = buildTrainingPowerSystemsMetricPayload(activities, nowMs, fitSpy);
+        expect(result.payload.activityTypes.map(item => item.activityType)).toEqual([...types].sort((left, right) => left.localeCompare(right)));
+        const currentFits = fitSpy.mock.calls.filter(([, options]) => options?.effectiveDate === '2026-07-20');
+        expect(currentFits).toHaveLength(6);
+        for (const [curves] of currentFits) {
+            expect(curves).toHaveLength(2);
+            expect(new Set(curves.map(curve => curve.activityType)).size).toBe(1);
+        }
+        for (const entry of result.payload.activityTypes) {
+            // New exact names become fitter inputs when the expanded catalog is adopted.
+            const available = ActivityTypesHelper.resolveActivityType(entry.activityType) !== null;
+            expect(entry.current.diagnostics.sourceCount).toBe(available ? 2 : 0);
+            expect(entry.current.activityType).toBe(entry.activityType);
+            expect(entry.evidenceCounts.usableCurveActivityCount).toBe(available ? 2 : 0);
+        }
+        const availableEntries = result.payload.activityTypes.filter(item => ActivityTypesHelper.resolveActivityType(item.activityType));
+        expect(new Set(availableEntries.map(item => item.current.sourceFingerprint)).size).toBe(availableEntries.length);
+    });
+
+    it('keeps both approved 50-sport power-history batches independent after JSON reload', async () => {
+        const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const types = [
+            'Snowshoeing', 'Bouldering', 'Climbing', 'Rock Climbing', 'Indoor Climbing',
+            'Via Ferrata', 'Mountaineering', 'Ski Touring', 'Ski Mountaineering', 'Backcountry Skiing',
+            'Backcountry Snowboarding', 'Splitboarding', 'Alpine Skiing', 'Snowboarding', 'Telemark Skiing',
+            'Inline Skating', 'Skating', 'Ice Skating', 'Skateboarding', 'Boxing',
+            'Combat', 'Judo', 'Kickboxing', 'Mixed Martial Arts', 'Taekwondo',
+            'Ballet Dancing', 'Ballroom Dancing', 'Dancing', 'Jazz Dancing', 'Latin Dancing',
+            'Modern Dancing', 'Show Dancing', 'Street Dancing', 'Basketball', 'Wheelchair Basketball',
+            'Football', 'Soccer', 'Volleyball', 'Beach Volleyball', 'Badminton',
+            'Beach Tennis', 'Padel', 'Pickleball', 'Platform Tennis', 'Racket Sport',
+            'Racquet Ball', 'Squash', 'Table Tennis', 'Tennis', 'Wheelchair Tennis',
+            ...APPROVED_WATER_TEAM_SPORT_CASES.map(item => item.name),
+            ...APPROVED_REMAINING_SPORT_CASES.map(item => item.name),
+            ...APPROVED_OTHER_TRAINING_NAMES,
+
+        ];
+        const activities = JSON.parse(JSON.stringify(types.flatMap((type, index) => [
+            source(`approved-${index}-1`, type as ActivityTypes, asOfDayMs - 20 * DAY_MS),
+            source(`approved-${index}-2`, type as ActivityTypes, asOfDayMs - DAY_MS),
+        ])));
+        const fitSpy = vi.fn(fitThreeDimensionalCapacityModel);
+        const result = buildTrainingPowerSystemsMetricPayload(activities, nowMs, fitSpy);
+        expect(result.payload.activityTypes.map(item => item.activityType)).toEqual([...types].sort((left, right) => left.localeCompare(right)));
+        const currentFits = fitSpy.mock.calls.filter(([, options]) => options?.effectiveDate === '2026-07-20');
+        expect(currentFits).toHaveLength(146);
+        currentFits.forEach(([curves]) => {
+            expect(curves).toHaveLength(2);
+            expect(new Set(curves.map(curve => curve.activityType)).size).toBe(1);
+        });
+        result.payload.activityTypes.forEach(entry => {
+            const available = ActivityTypesHelper.resolveActivityType(entry.activityType) !== null;
+            expect(entry.current.activityType).toBe(entry.activityType);
+            expect(entry.current.diagnostics.sourceCount).toBe(available ? 2 : 0);
+            expect(entry.evidenceCounts.usableCurveActivityCount).toBe(available ? 2 : 0);
+        });
+        const availableEntries = result.payload.activityTypes.filter(item => ActivityTypesHelper.resolveActivityType(item.activityType));
+        expect(new Set(availableEntries.map(item => item.current.sourceFingerprint)).size).toBe(availableEntries.length);
+    });
+
     it('uses the exact closed-open 42-day window and matches the Sports-lib public fitter', async () => {
         const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
         const activities = [
@@ -2351,6 +2976,129 @@ describe('buildTrainingPowerSystemsMetricPayload', () => {
             '2026-07-05',
             '2026-07-19',
         ]);
+    });
+
+    it.each([
+        [ActivityTypes.Cycling, RefinedTypes.RoadCycling, ActivityTypes.IndoorCycling],
+        [ActivityTypes.Running, RefinedTypes.RoadRunning, ActivityTypes.TrailRunning],
+    ])('pools only %s with %s, retaining actual labels and one fit per model/date', async (generic, road, separate) => {
+        const { buildTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const dates = [asOfDayMs - (40 * DAY_MS), asOfDayMs - (20 * DAY_MS), asOfDayMs - DAY_MS];
+        const activities = [
+            source('generic-old', generic, dates[0]),
+            source('road-middle', road, dates[1]),
+            source('generic-new', generic, dates[2]),
+            source('road-no-curve', road, dates[2], []),
+            source('separate', separate, dates[1]),
+            source('road-effective-day', road, asOfDayMs),
+            source('road-future', road, asOfDayMs + DAY_MS),
+            source('road-outside', road, asOfDayMs - (43 * DAY_MS)),
+        ];
+        const fitSpy = vi.fn(fitThreeDimensionalCapacityModel);
+        const result = buildTrainingPowerSystemsMetricPayload(activities, nowMs, fitSpy);
+        const genericEntry = result.payload.activityTypes.find(item => item.activityType === generic)!;
+        const roadEntry = result.payload.activityTypes.find(item => item.activityType === road)!;
+        const separateEntry = result.payload.activityTypes.find(item => item.activityType === separate)!;
+        const expected = fitThreeDimensionalCapacityModel([
+            datedCurve('generic-old', generic, dates[0]),
+            datedCurve('road-middle', generic, dates[1]),
+            datedCurve('generic-new', generic, dates[2]),
+        ], { effectiveDate: '2026-07-20' });
+        expect(genericEntry.current.sourceFingerprint).toBe(expected.sourceFingerprint);
+        expect(roadEntry.current.sourceFingerprint).toBe(expected.sourceFingerprint);
+        expect(genericEntry.current.activityType).toBe(generic);
+        expect(roadEntry.current.activityType).toBe(road);
+        expect(genericEntry.current.criticalPower).toEqual(expected.criticalPower);
+        expect(roadEntry.current.criticalPower).toEqual(expected.criticalPower);
+        expect(genericEntry.history).toEqual(roadEntry.history);
+        expect(genericEntry.history.map(point => point.effectiveDayMs)).toEqual([
+            asOfDayMs - (43 * DAY_MS), ...dates, asOfDayMs,
+        ]);
+        expect(genericEntry.evidenceCounts).toEqual({
+            candidateActivityCount: 4, usableCurveActivityCount: 3, excludedActivityCount: 1,
+        });
+        expect(roadEntry.evidenceCounts).toEqual(genericEntry.evidenceCounts);
+        expect(separateEntry.current.diagnostics.sourceCount).toBe(1);
+        expect(separateEntry.current.sourceFingerprint).not.toBe(expected.sourceFingerprint);
+        expect(fitSpy).toHaveBeenCalledTimes(7);
+        expect(buildTrainingPowerSystemsMetricPayload([...activities].reverse(), nowMs)).toEqual(result);
+    });
+
+    it.each([
+        [ActivityTypes.Cycling, RefinedTypes.RoadCycling, ActivityTypes.IndoorCycling],
+        [ActivityTypes.Running, RefinedTypes.RoadRunning, ActivityTypes.TrailRunning],
+    ])('counts older %s events that supply the discovered %s model history', async (generic, road, separate) => {
+        const { buildTrainingPowerSystemsMetricPayload, buildLegacyTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const olderDayMs = asOfDayMs - (90 * DAY_MS);
+        const recentDayMs = asOfDayMs - (70 * DAY_MS);
+        const activities = [
+            source('generic-before-history', generic, olderDayMs),
+            source('road-in-history', road, recentDayMs),
+            source('separate-before-history', separate, olderDayMs),
+        ];
+        const fitSpy = vi.fn(fitThreeDimensionalCapacityModel);
+        const result = buildTrainingPowerSystemsMetricPayload(activities, nowMs, fitSpy);
+
+        expect(result.payload.activityTypes.map(entry => entry.activityType)).toEqual([road]);
+        const historicalFit = fitSpy.mock.calls.find(([, options]) => (
+            options.effectiveDate === new Date(recentDayMs).toISOString().slice(0, 10)
+        ));
+        expect(historicalFit?.[0]).toEqual([datedCurve('generic-before-history', generic, olderDayMs)]);
+        expect(result.sourceEventCount).toBe(2);
+
+        const legacy = buildLegacyTrainingPowerSystemsMetricPayload(activities, nowMs);
+        expect(legacy.payload.activityTypes.map(entry => entry.activityType)).toEqual([road]);
+        expect(legacy.sourceEventCount).toBe(1);
+    });
+
+    it('stores independently fitted policy-1 inputs only for the four affected canonical labels', async () => {
+        const { buildTrainingPowerSystemsMetricPayload, buildLegacyTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const dates = [asOfDayMs - (40 * DAY_MS), asOfDayMs - (20 * DAY_MS), asOfDayMs - DAY_MS];
+        const activities = [
+            source('cycling-old', ActivityTypes.Cycling, dates[0]),
+            source('cycling-new', ActivityTypes.Cycling, dates[2]),
+            source('road-cycling', RefinedTypes.RoadCycling, dates[1]),
+            source('running-old', ActivityTypes.Running, dates[0]),
+            source('running-new', ActivityTypes.Running, dates[2]),
+            source('road-running', RefinedTypes.RoadRunning, dates[1]),
+            source('indoor', ActivityTypes.IndoorCycling, dates[1]),
+        ];
+        const legacy = buildLegacyTrainingPowerSystemsMetricPayload(activities, nowMs);
+        const current = buildTrainingPowerSystemsMetricPayload(activities, nowMs);
+        expect(legacy.payload.policyVersion).toBe(1);
+        expect(current.payload.policyVersion).toBe(2);
+        expect(legacy.payload.activityTypes.map(entry => entry.activityType)).toEqual([
+            'Cycling', 'Road Cycling', 'Road Running', 'Running',
+        ]);
+        legacy.payload.activityTypes.forEach(entry => {
+            const actualSources = activities.filter(activity => activity.activityData.type === entry.activityType);
+            const expected = fitThreeDimensionalCapacityModel(actualSources.map(activity =>
+                datedCurve(activity.activityId, activity.activityData.type, activity.startDayMs)), { effectiveDate: '2026-07-20' });
+            expect(entry.current.sourceFingerprint).toBe(expected.sourceFingerprint);
+            expect(entry.current.diagnostics.sourceCount).toBe(expected.diagnostics.sourceCount);
+            expect(entry.current.activityType).toBe(entry.activityType);
+            expect(entry.history.map(point => point.effectiveDayMs)).toEqual([
+                ...actualSources.map(activity => activity.startDayMs).sort((left, right) => left - right), asOfDayMs,
+            ]);
+        });
+        expect(legacy.payload.activityTypes.find(entry => entry.activityType === 'Cycling')?.current.diagnostics.sourceCount).toBe(2);
+        expect(current.payload.activityTypes.find(entry => entry.activityType === 'Cycling')?.current.diagnostics.sourceCount).toBe(3);
+        expect(buildLegacyTrainingPowerSystemsMetricPayload([...activities].reverse(), nowMs)).toEqual(legacy);
+    });
+
+    it('bounds the private legacy sidecar to four current snapshots and 340 observed history points', async () => {
+        const { buildLegacyTrainingPowerSystemsMetricPayload } = await import('./derived-metrics.service');
+        const activities = [ActivityTypes.Cycling, RefinedTypes.RoadCycling, ActivityTypes.Running, RefinedTypes.RoadRunning]
+            .flatMap(type => Array.from({ length: 85 }, (_, index) => source(`${type}-${index}`, type, asOfDayMs - (index * DAY_MS))));
+        const result = buildLegacyTrainingPowerSystemsMetricPayload(activities, nowMs);
+        expect(result.payload.activityTypes).toHaveLength(4);
+        expect(result.payload.activityTypes.reduce((sum, entry) => sum + entry.history.length, 0)).toBe(340);
+        expect(Buffer.byteLength(JSON.stringify(result.payload), 'utf8')).toBeLessThan(128 * 1024);
+        const oversizedFit = vi.fn((...args: Parameters<typeof fitThreeDimensionalCapacityModel>) => ({
+            ...fitThreeDimensionalCapacityModel(...args), sourceFingerprint: 'x'.repeat(128 * 1024),
+        }));
+        expect(() => buildLegacyTrainingPowerSystemsMetricPayload(activities.slice(0, 3), nowMs, oversizedFit))
+            .toThrow('Legacy power-system sidecar exceeds its fixed storage bounds');
     });
 
     it('keeps related cycling types and a non-Training power sport completely separate', async () => {
@@ -2890,6 +3638,26 @@ describe('buildTrainingSummaryMetricPayload', () => {
         expect(cycling).not.toHaveProperty('criticalPower');
     });
 
+    it('combines generic provider cycling and refined names in the same Training context', async () => {
+        const { buildTrainingSummaryMetricPayload } = await import('./derived-metrics.service');
+        const currentDay = Date.UTC(2026, 6, 8);
+        const activities = buildTrainingActivitySources([
+            createEvent(currentDay, 'Cycling', 'Suunto', { [DataDistance.type]: 20_000 }),
+            createEvent(currentDay, 'Road Cycling', 'Garmin', { [DataDistance.type]: 30_000 }),
+        ]);
+        const result = buildTrainingSummaryMetricPayload(activities, nowMs);
+        const cycling = result.payload.disciplines.find(summary => summary.discipline === 'cycling');
+        const other = result.payload.disciplines.find(summary => summary.discipline === 'other-training');
+        expect(cycling?.current28d).toMatchObject({ activityCount: 2, durationSeconds: 7_200 });
+        expect(cycling?.current28d.contexts).toEqual([expect.objectContaining({
+            context: 'cycling',
+            activityCount: 2,
+            metrics: expect.arrayContaining([{ metric: 'distance', value: 50_000, sourceActivityCount: 2 }]),
+        })]);
+        expect(other?.current28d.activityCount).toBe(0);
+        expect(activities.map(activity => activity.activityData.type)).toEqual(['Cycling', 'Road Cycling']);
+    });
+
     it('builds all registered sport families while keeping gravity and strength volume-only', async () => {
         const { buildTrainingSummaryMetricPayload } = await import('./derived-metrics.service');
         const currentDay = Date.UTC(2026, 6, 8);
@@ -2972,12 +3740,396 @@ describe('buildTrainingSummaryMetricPayload', () => {
         ]));
     });
 
+    it.each([
+        ['Classic Roller Skiing', ActivityTypes.RollerSki, 'nordic-skiing', 'roller-skiing'],
+        ['Skate Roller Skiing', ActivityTypes.RollerSki, 'nordic-skiing', 'roller-skiing'],
+        ['Virtual Rowing', ActivityTypes.IndoorRowing, 'rowing', 'indoor-rowing'],
+        ['Whitewater Kayaking', ActivityTypes.Kayaking, 'paddling', 'kayaking'],
+    ])('combines %s with %s while counting saved TSS and recorded zones', async (sport, baseSport, discipline, context) => {
+        const { buildTrainingSummaryMetricPayload, buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const currentDay = Date.UTC(2026, 6, 8);
+        const activities = buildTrainingActivitySources([currentDay, Date.UTC(2026, 3, 1)].flatMap(day => [
+            createEvent(day, sport, 'Garmin', {
+                [DataDistance.type]: 2_000, 'Training Stress Score': 71.25, [DataStrokeRateAvg.type]: 42,
+            }),
+            createEvent(day, baseSport, 'Polar', {
+                [DataDistance.type]: 3_000, 'Training Stress Score': 0, [DataStrokeRateAvg.type]: 38,
+            }),
+        ]));
+        const result = buildTrainingSummaryMetricPayload(activities, nowMs);
+        const current = result.payload.disciplines.find(item => item.discipline === discipline)?.current28d;
+        expect(result.sourceEventCount).toBe(4);
+        expect(current).toMatchObject({
+            activityCount: 2, durationSeconds: 7_200,
+            easySeconds: 2_400, moderateSeconds: 2_400, hardSeconds: 1_200,
+        });
+        expect(current?.contexts).toEqual([expect.objectContaining({
+            context, activityCount: 2,
+            metrics: expect.arrayContaining([{ metric: 'distance', value: 5_000, sourceActivityCount: 2 }]),
+        })]);
+        if (discipline !== 'nordic-skiing') {
+            expect(current?.contexts[0].metrics).toContainEqual({ metric: 'stroke-rate', value: 40, sourceActivityCount: 2 });
+        }
+        expect(result.payload.disciplines.find(item => item.discipline === 'other-training')?.current28d.activityCount).toBe(0);
+        expect(activities.map(activity => activity.activityData.type)).toEqual([sport, baseSport, sport, baseSport]);
+        const build = buildTrainingBuildComparisonMetricPayload(activities, {
+            trainingSettings: { buildBenchmarks: {
+                [discipline]: { mode: 'period', durationWeeks: 8, endDayMs: Date.UTC(2026, 3, 30) },
+            } },
+        }, nowMs).payload.disciplines.find(item => item.discipline === discipline);
+        expect(build?.status).toBe('ready');
+        for (const window of [build?.current, build?.benchmark]) {
+            expect(window).toMatchObject({ activityCount: 2, trainingStressScore: 71.25, trainingStressScoreEventCount: 2 });
+        }
+    });
+
+    it('counts all approved fitness and mobility recordings with saved TSS and strength-only Best Build', async () => {
+        const { buildTrainingSummaryMetricPayload, buildTrainingBuildComparisonMetricPayload, buildTrainingExplanationMetricPayload } = await import('./derived-metrics.service');
+        const groups = [
+            { sport: 'strength', context: 'strength', names: ['Calisthenics', 'Core Training', 'LES MILLS CORE', 'LES MILLS GRIT Strength'] },
+            { sport: 'fitness-gym', context: 'conditioning', names: [
+                'Bootcamp', 'Functional Training', 'Fitness Boxing', 'Fitness Dancing', 'Fitness Martial Arts',
+                'Jump Rope', 'Step Training', 'LES MILLS BODYATTACK', 'LES MILLS BODYCOMBAT', 'LES MILLS BODYJAM',
+                'LES MILLS BODYSTEP', 'LES MILLS GRIT Athletic', 'LES MILLS GRIT Cardio', "LES MILLS SH'BAM", 'LES MILLS TONE',
+            ] },
+            { sport: 'fitness-gym', context: 'mobility-fitness', names: [
+                'Barre', 'Mobility', 'Dynamic Mobility', 'Static Mobility', 'Mind-Body Training', 'Physical Therapy',
+                'LES MILLS BARRE', 'LES MILLS BODYBALANCE',
+            ] },
+            { sport: 'fitness-gym', context: 'general-fitness', names: ['Indoor Skiing', 'Indoor Grinding', 'Trucker Workout'] },
+        ];
+        const names = groups.flatMap(group => group.names);
+        const docs = [Date.UTC(2026, 6, 8), Date.UTC(2026, 3, 1)].flatMap(day => names.flatMap(name => [
+            createEvent(day, name, 'Polar', { [DataDistance.type]: 2_000, 'Training Stress Score': 71.25 }),
+            createEvent(day, name, 'Garmin', { [DataDistance.type]: 3_000, 'Training Stress Score': 0 }),
+        ]));
+        const activities = buildTrainingActivitySources(docs);
+        const result = buildTrainingSummaryMetricPayload(activities, nowMs);
+        expect(result.sourceEventCount).toBe(120);
+        for (const { sport, context, names: contextNames } of groups) {
+            const current = result.payload.disciplines.find(item => item.discipline === sport)?.current28d;
+            expect(current?.contexts).toContainEqual(expect.objectContaining({
+                context, activityCount: contextNames.length * 2,
+                metrics: [{ metric: 'elapsed-time', value: contextNames.length * 7_200, sourceActivityCount: contextNames.length * 2 }],
+            }));
+            expect(current).toMatchObject({ easySeconds: 0, moderateSeconds: 0, hardSeconds: 0 });
+        }
+        expect(result.payload.disciplines.find(item => item.discipline === 'strength')?.current28d.activityCount).toBe(8);
+        expect(result.payload.disciplines.find(item => item.discipline === 'fitness-gym')?.current28d.activityCount).toBe(52);
+        expect(result.payload.disciplines.find(item => item.discipline === 'other-training')?.current28d.activityCount).toBe(0);
+        expect(activities.map(activity => activity.activityData.type)).toEqual([names, names].flatMap(windowNames => windowNames.flatMap(name => [name, name])));
+        const build = buildTrainingBuildComparisonMetricPayload(activities, {
+            trainingSettings: { buildBenchmarks: {
+                strength: { mode: 'period', durationWeeks: 8, endDayMs: Date.UTC(2026, 3, 30) },
+            } },
+        }, nowMs).payload;
+        const strength = build.disciplines.find(item => item.discipline === 'strength');
+        expect(strength?.status).toBe('ready');
+        for (const window of [strength?.current, strength?.benchmark]) {
+            expect(window).toMatchObject({ activityCount: 8, trainingStressScore: 285, trainingStressScoreEventCount: 8 });
+        }
+        expect(build.disciplines.find(item => item.discipline === 'fitness-gym')).toMatchObject({
+            status: 'not-configured', current: null, benchmark: null, suggestedEvents: [],
+        });
+        const explanation = buildTrainingExplanationMetricPayload(docs as never, activities, nowMs).payload.current;
+        expect(explanation).toMatchObject({
+            parentTrainingStressScore: 2_137.5, childTrainingStressScore: 2_137.5,
+            childActivityCount: 60, childLoadActivityCount: 60,
+            childLoadCoverage: { loadedCount: 60, totalCount: 60, ratio: 1 },
+        });
+        expect(explanation.sportLoads).toEqual(expect.arrayContaining([
+            expect.objectContaining({ sport: 'strength', activityCount: 8, loadActivityCount: 8, trainingStressScore: 285 }),
+            expect.objectContaining({ sport: 'fitness-gym', activityCount: 52, loadActivityCount: 52, trainingStressScore: 1_852.5 }),
+        ]));
+    });
+
+    it.each([
+        ['Rucking', 'walking-hiking', 'rucking', true, true],
+        ['Orienteering', 'running', 'orienteering', true, true],
+        ['Ski Orienteering', 'nordic-skiing', 'ski-orienteering', true, true],
+        ['Biathlon', 'nordic-skiing', 'biathlon', true, true],
+        ['Fitness Racing', 'fitness-gym', 'conditioning', false, false],
+        ['Aqua Fitness', 'fitness-gym', 'conditioning', false, false],
+        ['Water Running', 'fitness-gym', 'water-running', true, false],
+        ['Wheel Chair', 'wheelchair', 'wheelchair-general', true, true],
+        ['Wheelchair Push Walk', 'wheelchair', 'wheelchair-push-walk', true, true],
+        ['Wheelchair Push Run', 'wheelchair', 'wheelchair-push-run', true, true],
+        ['Indoor Wheelchair Push Walk', 'wheelchair', 'indoor-wheelchair-push-walk', true, true],
+        ['Indoor Wheelchair Push Run', 'wheelchair', 'indoor-wheelchair-push-run', true, true],
+        ['Wheelchair Racing', 'wheelchair', 'wheelchair-racing', true, true],
+    ])('builds %s summaries with saved TSS, recorded zones and distinct comparisons', async (name, sport, context, zones, distance) => {
+        const { buildTrainingSummaryMetricPayload, buildTrainingBuildComparisonMetricPayload, buildTrainingExplanationMetricPayload } = await import('./derived-metrics.service');
+        const docs = [Date.UTC(2026, 6, 8), Date.UTC(2026, 3, 1)].flatMap(day => [
+            createEvent(day, name, 'Garmin', {
+                [DataDistance.type]: 2_000, 'Training Stress Score': 71.25,
+                [DataPowerZoneOneDuration.type]: 300,
+                [DataPowerZoneThreeDuration.type]: 400,
+                [DataPowerZoneFiveDuration.type]: 500,
+            }),
+            createEvent(day, name, 'Polar', { [DataDistance.type]: 3_000, 'Training Stress Score': 0 }),
+        ]);
+        const activities = buildTrainingActivitySources(docs);
+        const summary = buildTrainingSummaryMetricPayload(activities, nowMs);
+        expect(summary.sourceEventCount).toBe(4);
+        const current = summary.payload.disciplines.find(item => item.discipline === sport)?.current28d;
+        expect(current).toMatchObject({
+            activityCount: 2, durationSeconds: 7_200,
+            easySeconds: zones ? 1_500 : 0,
+            moderateSeconds: zones ? 1_600 : 0,
+            hardSeconds: zones ? 1_100 : 0,
+        });
+        expect(current?.contexts).toEqual([expect.objectContaining({ context, activityCount: 2 })]);
+        const metrics = current?.contexts[0].metrics;
+        expect(metrics).toContainEqual({ metric: 'elapsed-time', value: 7_200, sourceActivityCount: 2 });
+        if (distance) {
+            expect(metrics).toContainEqual({ metric: 'distance', value: 5_000, sourceActivityCount: 2 });
+        } else {
+            expect(metrics).toHaveLength(1);
+        }
+        const build = buildTrainingBuildComparisonMetricPayload(activities, {
+            trainingSettings: { buildBenchmarks: {
+                [sport]: { mode: 'period', durationWeeks: 8, endDayMs: Date.UTC(2026, 3, 30) },
+            } },
+        }, nowMs).payload.disciplines.find(item => item.discipline === sport);
+        if (sport === 'fitness-gym') {
+            expect(build).toMatchObject({ status: 'not-configured', current: null, benchmark: null });
+        } else {
+            expect(build?.status).toBe('ready');
+            for (const window of [build?.current, build?.benchmark]) {
+                expect(window).toMatchObject({ activityCount: 2, trainingStressScore: 71.25, trainingStressScoreEventCount: 2 });
+                expect(window?.contexts).toEqual([expect.objectContaining({ context, activityCount: 2 })]);
+            }
+        }
+        const explanation = buildTrainingExplanationMetricPayload(docs as never, activities, nowMs).payload.current;
+        expect(explanation).toMatchObject({ parentTrainingStressScore: 71.25, childTrainingStressScore: 71.25 });
+        expect(explanation.sportLoads).toContainEqual(expect.objectContaining({
+            sport, activityCount: 2, loadActivityCount: 2, trainingStressScore: 71.25,
+        }));
+        expect(activities.map(activity => activity.activityData.type)).toEqual([name, name, name, name]);
+    });
+
+    it.each([
+        ['Snowshoeing', 'walking-hiking', 'snowshoeing', true, ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent']],
+        ['Bouldering', 'climbing-mountaineering', 'bouldering', false, ['elapsed-time', 'ascent']],
+        ['Climbing', 'climbing-mountaineering', 'climbing', false, ['elapsed-time', 'ascent']],
+        ['Rock Climbing', 'climbing-mountaineering', 'rock-climbing', false, ['elapsed-time', 'ascent']],
+        ['Indoor Climbing', 'climbing-mountaineering', 'indoor-climbing', false, ['elapsed-time', 'ascent']],
+        ['Via Ferrata', 'climbing-mountaineering', 'via-ferrata', false, ['elapsed-time', 'ascent']],
+        ['Mountaineering', 'climbing-mountaineering', 'mountaineering', true, ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent']],
+        ['Ski Touring', 'mountain-snow', 'ski-touring', true, ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time']],
+        ['Ski Mountaineering', 'mountain-snow', 'ski-mountaineering', true, ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time']],
+        ['Backcountry Skiing', 'mountain-snow', 'backcountry-skiing', true, ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time']],
+        ['Backcountry Snowboarding', 'mountain-snow', 'backcountry-snowboarding', true, ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time']],
+        ['Splitboarding', 'mountain-snow', 'splitboarding', true, ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time']],
+        ['Alpine Skiing', 'mountain-snow', 'alpine-skiing', false, ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time']],
+        ['Snowboarding', 'mountain-snow', 'snowboarding', false, ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time']],
+        ['Telemark Skiing', 'mountain-snow', 'telemark-skiing', false, ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time']],
+        ['Inline Skating', 'skating', 'inline-skating', true, ['distance', 'moving-time', 'elapsed-time']],
+        ['Skating', 'skating', 'skating', false, ['distance', 'moving-time', 'elapsed-time']],
+        ['Ice Skating', 'skating', 'ice-skating', false, ['distance', 'moving-time', 'elapsed-time']],
+        ['Skateboarding', 'skating', 'skateboarding', false, ['distance', 'moving-time', 'elapsed-time']],
+        ['Boxing', 'combat-martial-arts', 'boxing', false, ['elapsed-time']],
+        ['Combat', 'combat-martial-arts', 'combat', false, ['elapsed-time']],
+        ['Judo', 'combat-martial-arts', 'judo', false, ['elapsed-time']],
+        ['Kickboxing', 'combat-martial-arts', 'kickboxing', false, ['elapsed-time']],
+        ['Mixed Martial Arts', 'combat-martial-arts', 'mixed-martial-arts', false, ['elapsed-time']],
+        ['Taekwondo', 'combat-martial-arts', 'taekwondo', false, ['elapsed-time']],
+        ['Ballet Dancing', 'dance', 'ballet-dancing', false, ['elapsed-time']],
+        ['Ballroom Dancing', 'dance', 'ballroom-dancing', false, ['elapsed-time']],
+        ['Dancing', 'dance', 'dancing', false, ['elapsed-time']],
+        ['Jazz Dancing', 'dance', 'jazz-dancing', false, ['elapsed-time']],
+        ['Latin Dancing', 'dance', 'latin-dancing', false, ['elapsed-time']],
+        ['Modern Dancing', 'dance', 'modern-dancing', false, ['elapsed-time']],
+        ['Show Dancing', 'dance', 'show-dancing', false, ['elapsed-time']],
+        ['Street Dancing', 'dance', 'street-dancing', false, ['elapsed-time']],
+        ['Basketball', 'team-sports', 'basketball', false, ['elapsed-time']],
+        ['Wheelchair Basketball', 'team-sports', 'wheelchair-basketball', false, ['elapsed-time']],
+        ['Football', 'team-sports', 'football', false, ['elapsed-time']],
+        ['Soccer', 'team-sports', 'soccer', false, ['elapsed-time']],
+        ['Volleyball', 'team-sports', 'volleyball', false, ['elapsed-time']],
+        ['Beach Volleyball', 'team-sports', 'beach-volleyball', false, ['elapsed-time']],
+        ['Badminton', 'racket-sports', 'badminton', false, ['elapsed-time']],
+        ['Beach Tennis', 'racket-sports', 'beach-tennis', false, ['elapsed-time']],
+        ['Padel', 'racket-sports', 'padel', false, ['elapsed-time']],
+        ['Pickleball', 'racket-sports', 'pickleball', false, ['elapsed-time']],
+        ['Platform Tennis', 'racket-sports', 'platform-tennis', false, ['elapsed-time']],
+        ['Racket Sport', 'racket-sports', 'racket-sport', false, ['elapsed-time']],
+        ['Racquet Ball', 'racket-sports', 'racquet-ball', false, ['elapsed-time']],
+        ['Squash', 'racket-sports', 'squash', false, ['elapsed-time']],
+        ['Table Tennis', 'racket-sports', 'table-tennis', false, ['elapsed-time']],
+        ['Tennis', 'racket-sports', 'tennis', false, ['elapsed-time']],
+        ['Wheelchair Tennis', 'racket-sports', 'wheelchair-tennis', false, ['elapsed-time']],
+        ...APPROVED_WATER_TEAM_SPORT_CASES.map(item => [item.name, item.sport, item.context, item.zones, item.metrics] as const),
+        ...APPROVED_REMAINING_SPORT_CASES.filter(item => item.sport !== 'fitness-gym')
+            .map(item => [item.name, item.sport, item.context, item.zones, item.metrics] as const),
+    ] as const)('builds %s with its own comparison, recorded metrics and preserved positive/zero/missing TSS', async (name, sport, context, zones, expectedMetricIds) => {
+        const { buildTrainingSummaryMetricPayload, buildTrainingBuildComparisonMetricPayload, buildTrainingExplanationMetricPayload } = await import('./derived-metrics.service');
+        const docs = [Date.UTC(2026, 6, 8), Date.UTC(2026, 3, 1)].flatMap(day => [
+            createEvent(day, name, 'Garmin', {
+                [DataStrokeRateAvg.type]: 60, [DataAvgStrokeDistance.type]: 3,
+                [DataDistance.type]: 2_000, [DataAscent.type]: 120, [DataDescent.type]: 80, [DataDescentTime.type]: 240,
+                'Training Stress Score': 71.25,
+                [DataPowerZoneOneDuration.type]: 300, [DataPowerZoneThreeDuration.type]: 400, [DataPowerZoneFiveDuration.type]: 500,
+            }),
+            createEvent(day, name, 'Polar', {
+                [DataStrokeRateAvg.type]: 0, [DataAvgStrokeDistance.type]: 0,
+                [DataDistance.type]: 3_000, [DataAscent.type]: 0, [DataDescent.type]: 0, [DataDescentTime.type]: 0,
+                'Training Stress Score': 0,
+            }),
+            createEvent(day, name, 'Suunto', {
+                [DataStrokeRateAvg.type]: -1, [DataAvgStrokeDistance.type]: -1,
+                [DataDistance.type]: -1, [DataAscent.type]: -1, [DataDescent.type]: -1, [DataDescentTime.type]: -1,
+                [DataHeartRateZoneOneDuration.type]: 0, [DataHeartRateZoneThreeDuration.type]: 0, [DataHeartRateZoneFiveDuration.type]: 0,
+            }),
+        ]);
+        const activities = buildTrainingActivitySources(docs);
+        const summary = buildTrainingSummaryMetricPayload(activities, nowMs);
+        expect(summary.sourceEventCount).toBe(6);
+        const current = summary.payload.disciplines.find(item => item.discipline === sport)?.current28d;
+        expect(current).toMatchObject({ activityCount: 3, durationSeconds: 10_800,
+            easySeconds: zones ? 1_500 : 0, moderateSeconds: zones ? 1_600 : 0, hardSeconds: zones ? 1_100 : 0,
+        });
+        expect(current?.contexts).toHaveLength(1);
+        expect(current?.contexts[0]).toMatchObject({ context, activityCount: 3 });
+        const metricValues = {
+            distance: [5_000, 2], 'moving-time': [10_800, 3], 'elapsed-time': [10_800, 3],
+            ascent: [120, 2], descent: [80, 2], 'descent-time': [240, 2], 'stroke-rate': [30, 2], 'stroke-distance': [1.5, 2],
+        };
+        expect(current?.contexts[0].metrics).toEqual(expectedMetricIds.map(metric => ({
+            metric, value: metricValues[metric][0], sourceActivityCount: metricValues[metric][1],
+        })));
+        expect(summary.payload.disciplines.find(item => item.discipline === 'other-training')?.current28d.activityCount).toBe(0);
+        const build = buildTrainingBuildComparisonMetricPayload(activities, {
+            trainingSettings: { buildBenchmarks: { [sport]: { mode: 'period', durationWeeks: 8, endDayMs: Date.UTC(2026, 3, 30) } } },
+        }, nowMs).payload.disciplines.find(item => item.discipline === sport);
+        expect(build?.status).toBe('ready');
+        for (const window of [build?.current, build?.benchmark]) {
+            expect(window).toMatchObject({ activityCount: 3, durationSeconds: 10_800,
+                trainingStressScore: 71.25, trainingStressScoreEventCount: 2, durability: null,
+                easySeconds: zones ? 1_500 : null, moderateSeconds: zones ? 1_600 : null, hardSeconds: zones ? 1_100 : null,
+                intensitySourceEventCount: zones ? 2 : 0,
+                distanceMeters: expectedMetricIds.some(metric => metric === 'distance') ? 5_000 : null,
+                distanceEventCount: expectedMetricIds.some(metric => metric === 'distance') ? 2 : 0,
+            });
+            expect(window?.contexts).toEqual(current?.contexts);
+        }
+        const explanation = buildTrainingExplanationMetricPayload(docs as never, activities, nowMs).payload.current;
+        expect(explanation).toMatchObject({ parentTrainingStressScore: 71.25, childTrainingStressScore: 71.25,
+            childActivityCount: 3, childLoadActivityCount: 2,
+        });
+        expect(explanation.sportLoads).toContainEqual(expect.objectContaining({ sport, activityCount: 3,
+            loadActivityCount: 2, trainingStressScore: 71.25,
+        }));
+        expect(activities.map(activity => activity.activityData.type)).toEqual(Array(6).fill(name));
+    });
+
+    it.each([
+        ...APPROVED_REMAINING_SPORT_CASES.filter(item => item.sport === 'fitness-gym'),
+        ...APPROVED_OTHER_TRAINING_NAMES.map(name => ({ name, sport: 'other-training', context: 'other-training' })),
+    ])('keeps $name saved load and elapsed time in its mix-only context', async ({ name, sport, context }) => {
+        const { buildTrainingSummaryMetricPayload, buildTrainingBuildComparisonMetricPayload, buildTrainingExplanationMetricPayload } = await import('./derived-metrics.service');
+        const docs = [71.25, 0, undefined].map(score => createEvent(Date.UTC(2026, 6, 8), name, 'Garmin', {
+            ...(score === undefined ? {} : { 'Training Stress Score': score }),
+            [DataDistance.type]: 2_000, [DataAscent.type]: 120,
+            [DataPowerZoneOneDuration.type]: 300, [DataPowerZoneFiveDuration.type]: 500,
+        }));
+        const activities = buildTrainingActivitySources(docs);
+        const current = buildTrainingSummaryMetricPayload(activities, nowMs).payload.disciplines
+            .find(item => item.discipline === sport)?.current28d;
+        expect(current).toMatchObject({ activityCount: 3, durationSeconds: 10_800,
+            easySeconds: 0, moderateSeconds: 0, hardSeconds: 0,
+            contexts: [{ context, profile: 'general', activityCount: 3, metrics: [
+                { metric: 'elapsed-time', value: 10_800, sourceActivityCount: 3 },
+            ] }],
+        });
+        const explanation = buildTrainingExplanationMetricPayload(docs as never, activities, nowMs).payload.current;
+        expect(explanation.sportLoads).toContainEqual(expect.objectContaining({ sport, activityCount: 3,
+            loadActivityCount: 2, trainingStressScore: 71.25 }));
+        expect(buildTrainingBuildComparisonMetricPayload(activities, {}, nowMs).payload.disciplines
+            .find(item => item.discipline === sport)).toMatchObject({ status: 'not-configured', current: null, benchmark: null });
+        expect(activities.map(activity => activity.activityData.type)).toEqual(Array(3).fill(name));
+    });
+
+    it('summarizes floor climbing with recorded ascent, saved load and power-first intensity', async () => {
+        const { buildTrainingSummaryMetricPayload, buildTrainingBuildComparisonMetricPayload, buildTrainingExplanationMetricPayload } = await import('./derived-metrics.service');
+        const docs = [Date.UTC(2026, 6, 8), Date.UTC(2026, 3, 1)].flatMap(day => [
+            createEvent(day, 'Floor Climbing', 'Garmin', {
+                [DataDistance.type]: 2_000, [DataDescent.type]: 120, [DataAscent.type]: 120,
+                'Training Stress Score': 71.25,
+                [DataPowerZoneOneDuration.type]: 300,
+                [DataPowerZoneThreeDuration.type]: 400,
+                [DataPowerZoneFiveDuration.type]: 500,
+            }),
+            createEvent(day, 'Floor Climbing', 'Polar', {
+                [DataDistance.type]: 3_000, [DataAscent.type]: 0, 'Training Stress Score': 0,
+            }),
+            createEvent(day, 'Floor Climbing', 'Suunto', {
+                [DataDistance.type]: 4_000, [DataAscent.type]: -30,
+                [DataHeartRateZoneOneDuration.type]: 0,
+                [DataHeartRateZoneThreeDuration.type]: 0,
+                [DataHeartRateZoneFiveDuration.type]: 0,
+            }),
+        ]);
+        const activities = buildTrainingActivitySources(docs);
+        const summary = buildTrainingSummaryMetricPayload(activities, nowMs);
+        expect(summary.sourceEventCount).toBe(6);
+        const fitness = summary.payload.disciplines.find(item => item.discipline === 'fitness-gym');
+        expect(fitness?.current28d).toMatchObject({
+            activityCount: 3, durationSeconds: 10_800, easySeconds: 1_500, moderateSeconds: 1_600, hardSeconds: 1_100,
+            contexts: [{ context: 'stair-climbing', profile: 'general', activityCount: 3, metrics: [
+                { metric: 'elapsed-time', value: 10_800, sourceActivityCount: 3 },
+                { metric: 'ascent', value: 120, sourceActivityCount: 2 },
+            ] }],
+        });
+        expect(fitness?.baseline28d.contexts).toEqual([{ context: 'stair-climbing', profile: 'general', activityCount: 1, metrics: [
+            { metric: 'elapsed-time', value: 3_600, sourceActivityCount: 1 },
+            { metric: 'ascent', value: 40, sourceActivityCount: 0.67 },
+        ] }]);
+        expect(fitness?.current28d.contexts[0].metrics).toHaveLength(2);
+        expect(summary.payload.disciplines.find(item => item.discipline === 'other-training')?.current28d.activityCount).toBe(0);
+        const explanation = buildTrainingExplanationMetricPayload(docs as never, activities, nowMs).payload.current;
+        expect(explanation).toMatchObject({
+            parentTrainingStressScore: 71.25, childTrainingStressScore: 71.25,
+            childActivityCount: 3, childLoadActivityCount: 2,
+        });
+        expect(explanation.sportLoads).toContainEqual(expect.objectContaining({
+            sport: 'fitness-gym', activityCount: 3, loadActivityCount: 2, trainingStressScore: 71.25,
+        }));
+        expect(buildTrainingBuildComparisonMetricPayload(activities, {}, nowMs).payload.disciplines
+            .find(item => item.discipline === 'fitness-gym')).toMatchObject({
+                status: 'not-configured', current: null, benchmark: null,
+            });
+        expect(activities.map(activity => activity.activityData.type)).toEqual(Array(6).fill('Floor Climbing'));
+    });
+
+    it('keeps missing wheelchair load and intensity unavailable while counting recorded volume', async () => {
+        const { buildTrainingSummaryMetricPayload, buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const activities = buildTrainingActivitySources([createEvent(Date.UTC(2026, 6, 8), 'Wheelchair Racing', 'Polar', {
+            [DataHeartRateZoneOneDuration.type]: 0,
+            [DataHeartRateZoneThreeDuration.type]: 0,
+            [DataHeartRateZoneFiveDuration.type]: 0,
+        })]);
+        const current = buildTrainingSummaryMetricPayload(activities, nowMs).payload.disciplines
+            .find(item => item.discipline === 'wheelchair')?.current28d;
+        expect(current).toMatchObject({ activityCount: 1, durationSeconds: 3_600, easySeconds: 0, moderateSeconds: 0, hardSeconds: 0 });
+        expect(current?.contexts[0].metrics).toEqual([
+            { metric: 'moving-time', value: 3_600, sourceActivityCount: 1 },
+            { metric: 'elapsed-time', value: 3_600, sourceActivityCount: 1 },
+        ]);
+        const build = buildTrainingBuildComparisonMetricPayload(activities, {
+            trainingSettings: { buildBenchmarks: { wheelchair: {
+                mode: 'period', durationWeeks: 8, endDayMs: Date.UTC(2026, 3, 30),
+            } } },
+        }, nowMs).payload.disciplines.find(item => item.discipline === 'wheelchair');
+        expect(build?.current).toMatchObject({ activityCount: 1, trainingStressScore: null, trainingStressScoreEventCount: 0, intensitySourceEventCount: 0 });
+    });
+
     it('keeps generic fitness and known unmodeled sports visible as volume-only training', async () => {
         const { buildTrainingSummaryMetricPayload } = await import('./derived-metrics.service');
         const currentDay = Date.UTC(2026, 6, 8);
         const result = buildTrainingSummaryMetricPayload(buildTrainingActivitySources([
             createEvent(currentDay, ActivityTypes.Training, 'Suunto'),
-            createEvent(currentDay, ActivityTypes.Surfing, 'Garmin'),
+            createEvent(currentDay, 'Chores' as ActivityTypes, 'Garmin'),
             createEvent(currentDay, ActivityTypes.Triathlon, 'Garmin'),
         ]), nowMs);
         const fitness = result.payload.disciplines.find(item => item.discipline === 'fitness-gym');
@@ -3174,7 +4326,32 @@ describe('training explanation and durability metrics', () => {
         });
     });
 
-    it('uses the registry for sport loads and rhythms without surfacing gravity or strength TSS', async () => {
+    it('counts finite zero TSS across every registered Training activity type', async () => {
+        const { buildTrainingExplanationMetricPayload, joinTrainingActivitySources } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 6, 14, 12);
+        const startDate = Date.UTC(2026, 6, 12, 8);
+        const types = [...new Set(TRAINING_SPORT_DEFINITIONS.flatMap(sport =>
+            sport.contexts.flatMap(context => [...context.activityTypes])))];
+        const events = [eventDoc('zero-training', { startDate, stats: { 'Training Stress Score': 0 } })];
+        const activities = types.map((type, index) => activityDoc(`zero-${index}`, 'zero-training', {
+            startDate, type, stats: { 'Training Stress Score': 0 },
+        }));
+        const result = buildTrainingExplanationMetricPayload(
+            events as never, joinTrainingActivitySources(activities as never, events as never), nowMs,
+        );
+        expect(result.payload.current).toMatchObject({
+            parentTrainingStressScore: 0,
+            childTrainingStressScore: 0,
+            childLoadActivityCount: types.length,
+            childLoadCoverage: { loadedCount: types.length, totalCount: types.length, ratio: 1 },
+        });
+        result.payload.current.sportLoads.filter(sport => sport.activityCount > 0).forEach(sport => {
+            expect(sport.trainingStressScore).toBe(0);
+            expect(sport.loadActivityCount).toBe(sport.activityCount);
+        });
+    });
+
+    it('counts saved TSS for gravity, strength and gym sport loads independently of analysis', async () => {
         const { buildTrainingExplanationMetricPayload, joinTrainingActivitySources } = await import('./derived-metrics.service');
         const nowMs = Date.UTC(2026, 6, 14, 12);
         const startDate = Date.UTC(2026, 6, 12, 8);
@@ -3206,6 +4383,22 @@ describe('training explanation and durability metrics', () => {
             { sport: 'strength', label: 'Strength' },
             { sport: 'fitness-gym', label: 'Fitness & Gym' },
             { sport: 'paddling', label: 'Paddling' },
+            { sport: 'wheelchair', label: 'Wheelchair Training' },
+            { sport: 'climbing-mountaineering', label: 'Climbing & Mountaineering' },
+            { sport: 'mountain-snow', label: 'Mountain Snow Sports' },
+            { sport: 'skating', label: 'Skating' },
+            { sport: 'combat-martial-arts', label: 'Combat & Martial Arts' },
+            { sport: 'dance', label: 'Dance' },
+            { sport: 'team-sports', label: 'Team Sports' },
+            { sport: 'racket-sports', label: 'Racket Sports' },
+            { sport: 'precision-sports', label: 'Precision Sports' },
+            { sport: 'water-sports', label: 'Water Sports' },
+            { sport: 'diving', label: 'Diving' },
+
+            { sport: 'performance-sports', label: 'Performance Sports' },
+            { sport: 'outdoor-adventures', label: 'Outdoor Adventures' },
+            { sport: 'aerial-sports', label: 'Aerial Sports' },
+            { sport: 'motorized-activities', label: 'Motorized Activities' },
             { sport: 'other-training', label: 'Other training' },
             { sport: 'other', label: 'Other' },
             { sport: 'unclassified', label: 'Unclassified' },
@@ -3217,29 +4410,30 @@ describe('training explanation and durability metrics', () => {
         });
         expect(sportLoads.find(item => item.sport === 'strength')).toMatchObject({
             activityCount: 1,
-            loadActivityCount: 0,
-            trainingStressScore: null,
+            loadActivityCount: 1,
+            trainingStressScore: 70,
         });
         expect(sportLoads.find(item => item.sport === 'cycling')).toMatchObject({
             activityCount: 1,
-            loadActivityCount: 0,
-            trainingStressScore: null,
+            loadActivityCount: 1,
+            trainingStressScore: 60,
         });
         expect(sportLoads.find(item => item.sport === 'fitness-gym')).toMatchObject({
             activityCount: 1,
-            loadActivityCount: 0,
-            trainingStressScore: null,
+            loadActivityCount: 1,
+            trainingStressScore: 40,
         });
         expect(result.payload.current).toMatchObject({
             childActivityCount: 4,
-            childLoadActivityCount: 1,
-            childTrainingStressScore: 50,
+            parentTrainingStressScore: 180,
+            childLoadActivityCount: 4,
+            childTrainingStressScore: 220,
             childLoadCoverage: {
                 totalCount: 4,
-                loadedCount: 1,
+                loadedCount: 4,
                 classifiedCount: 4,
                 unclassifiedCount: 0,
-                ratio: 0.25,
+                ratio: 1,
             },
         });
         expect(result.payload.current.rhythms.find(item => item.discipline === 'rowing')?.sessionCount).toBe(1);
@@ -3380,7 +4574,7 @@ describe('training explanation and durability metrics', () => {
         });
     });
 
-    it('rejects legacy eligible gravity evidence but retains explicit unsupported-context evidence', async () => {
+    it.each([ActivityTypes.DownhillCycling, ActivityTypes['Enduro MTB'], RefinedTypes.EEnduroMTB])('rejects legacy eligible %s evidence but retains explicit unsupported-context evidence', async (activityType) => {
         const { aggregatePersistedTrainingDurability } = await import('./derived-metrics.service');
         const startDate = Date.UTC(2026, 6, 10);
         const legacyEligible = aerobicEvidence(4, {
@@ -3410,7 +4604,7 @@ describe('training explanation and durability metrics', () => {
             data: () => ({
                 startDate,
                 stats: {
-                    [DataActivityTypes.type]: [ActivityTypes.DownhillCycling],
+                    [DataActivityTypes.type]: [activityType],
                     [DataDurabilityEvidence.type]: durability,
                 },
             }),
@@ -3430,6 +4624,34 @@ describe('training explanation and durability metrics', () => {
             missingEvidenceActivityCount: 0,
             excludedActivityCount: 1,
             exclusions: [{ reason: 'unsupported-context', activityCount: 1 }],
+        });
+    });
+
+    it.each([RefinedTypes.BMX, RefinedTypes.Kickbiking, RefinedTypes.ObstacleRacing])('omits persisted specialist durability for %s', async (activityType) => {
+        const { aggregatePersistedTrainingDurability } = await import('./derived-metrics.service');
+        const activity = buildTrainingActivitySources([eventDoc('unsupported-specialist', {
+            startDate: Date.UTC(2026, 6, 12),
+            stats: {
+                [DataActivityTypes.type]: [activityType],
+                [DataDurabilityEvidence.type]: aerobicEvidence(4, {
+                    discipline: activityType === RefinedTypes.ObstacleRacing ? 'running' : 'cycling',
+                    outputSource: 'power', outputUnit: 'W',
+                }),
+            },
+        })]);
+        expect(aggregatePersistedTrainingDurability(activity).coverage).toMatchObject({
+            candidateActivityCount: 0, evidenceActivityCount: 0, eligibleActivityCount: 0,
+        });
+    });
+
+    it.each([RefinedTypes.TrackRunning, RefinedTypes.UltraRunning, RefinedTypes.CrosscountryRunning])('accepts existing protocol-qualified durability for %s', async (activityType) => {
+        const { aggregatePersistedTrainingDurability } = await import('./derived-metrics.service');
+        const activity = buildTrainingActivitySources([eventDoc('supported-running', {
+            startDate: Date.UTC(2026, 6, 12),
+            stats: { [DataActivityTypes.type]: [activityType], [DataDurabilityEvidence.type]: aerobicEvidence(4) },
+        })]);
+        expect(aggregatePersistedTrainingDurability(activity).coverage).toMatchObject({
+            candidateActivityCount: 1, evidenceActivityCount: 1, eligibleActivityCount: 1,
         });
     });
 
@@ -3464,14 +4686,19 @@ describe('training explanation and durability metrics', () => {
             ActivityTypes.IndoorCycling,
             ActivityTypes.VirtualCycling,
             ActivityTypes.MountainBiking,
+            RefinedTypes.RecumbentCycling,
+            RefinedTypes.IndoorHandCycle,
+            RefinedTypes.EMountainBiking,
+            RefinedTypes.MountainBikeOrienteering,
             ActivityTypes['Enduro MTB'],
+            RefinedTypes.EEnduroMTB,
             ActivityTypes.DownhillCycling,
         ];
         const docs = activityTypes.map((activityType, index) => eventDoc(`cycling-context-${index}`, {
-            startDate: Date.UTC(2026, 6, 8 + index),
+            startDate: Date.UTC(2026, 6, 12),
             stats: {
                 [DataActivityTypes.type]: [activityType],
-                [DataDurabilityEvidence.type]: index < 4
+                [DataDurabilityEvidence.type]: index < 8
                     ? eligibleCyclingEvidence
                     : unsupportedGravityEvidence,
             },
@@ -3481,13 +4708,13 @@ describe('training explanation and durability metrics', () => {
             .payload.scopes.find(scope => scope.scope === 'cycling')!;
 
         expect(cycling.current.coverage).toEqual({
-            candidateActivityCount: 6,
-            evidenceActivityCount: 6,
-            eligibleActivityCount: 4,
+            candidateActivityCount: 11,
+            evidenceActivityCount: 11,
+            eligibleActivityCount: 8,
             missingEvidenceActivityCount: 0,
-            excludedActivityCount: 2,
-            eligibilityRatio: 0.6667,
-            exclusions: [{ reason: 'unsupported-context', activityCount: 2 }],
+            excludedActivityCount: 3,
+            eligibilityRatio: 0.7273,
+            exclusions: [{ reason: 'unsupported-context', activityCount: 3 }],
         });
         expect(cycling.current.summaries).toEqual([
             expect.objectContaining({
@@ -3496,7 +4723,7 @@ describe('training explanation and durability metrics', () => {
                     scope: 'cycling',
                     outputSource: 'power',
                 }),
-                sampleCount: 4,
+                sampleCount: 8,
             }),
         ]);
     });
@@ -3575,7 +4802,26 @@ describe('activity-level Training sources and swimming performance', () => {
     });
     const eventDoc = (id: string, data: Record<string, unknown>) => ({ id, data: () => data });
 
-    it('splits multisport activity legs, includes MTB in Cycling, and excludes missing or merged parents', async () => {
+    it.each(['Brick Training', 'Pool Triathlon', 'Offroad Triathlon', 'Offroad Duathlon'])(
+        'retains unsplit %s saved load while excluding standalone Training workout counts', async (sport) => {
+            const { joinTrainingActivitySources, buildTrainingSummaryMetricPayload, buildTrainingExplanationMetricPayload } = await import('./derived-metrics.service');
+            const startDate = Date.UTC(2026, 6, 8);
+            const nowMs = Date.UTC(2026, 6, 10, 12);
+            const events = [eventDoc('combined', { startDate, stats: { 'Training Stress Score': 90 } })];
+            const docs = [activityDoc('whole-recording', 'combined', {
+                startDate, type: sport, stats: { [DataDuration.type]: 6_000, 'Training Stress Score': 90 },
+            })];
+            const activities = joinTrainingActivitySources(docs as never, events as never);
+            const summary = buildTrainingSummaryMetricPayload(activities, nowMs);
+            expect(summary.sourceEventCount).toBe(0);
+            expect(summary.payload.disciplines.every(item => item.current28d.activityCount === 0)).toBe(true);
+            expect(buildTrainingExplanationMetricPayload(events as never, activities, nowMs).payload.current)
+                .toMatchObject({ parentTrainingStressScore: 90, childTrainingStressScore: 90 });
+            expect(activities[0].activityData).toMatchObject({ type: sport, stats: { 'Training Stress Score': 90 } });
+        });
+
+    it.each(['Triathlon', 'Brick Training', 'Pool Triathlon', 'Offroad Triathlon', 'Offroad Duathlon'])(
+        'counts %s individual legs while excluding its aggregate, missing and merged parents', async (aggregateType) => {
         const {
             aggregatePersistedTrainingDurability,
             buildTrainingBuildComparisonMetricPayload,
@@ -3592,7 +4838,7 @@ describe('activity-level Training sources and swimming performance', () => {
             activityDoc('swim-leg', 'triathlon', { startDate, type: ActivityTypes.Swimming, stats: { [DataDuration.type]: 1_000 } }),
             activityDoc('bike-leg', 'triathlon', { startDate, type: ActivityTypes.MountainBiking, stats: { [DataDuration.type]: 2_000 } }),
             activityDoc('run-leg', 'triathlon', { startDate, type: ActivityTypes.TrailRunning, stats: { [DataDuration.type]: 3_000 } }),
-            activityDoc('aggregate', 'triathlon', { startDate, type: ActivityTypes.Triathlon, stats: { [DataDuration.type]: 6_000 } }),
+            activityDoc('aggregate', 'triathlon', { startDate, type: aggregateType, stats: { [DataDuration.type]: 6_000 } }),
             activityDoc('missing-parent', 'missing', { startDate, type: ActivityTypes.Running, stats: {} }),
             activityDoc('merged-child', 'merged', { startDate, type: ActivityTypes.Cycling, stats: {} }),
         ];
@@ -3631,6 +4877,22 @@ describe('activity-level Training sources and swimming performance', () => {
             ['strength', 0],
             ['fitness-gym', 0],
             ['paddling', 0],
+            ['wheelchair', 0],
+            ['climbing-mountaineering', 0],
+            ['mountain-snow', 0],
+            ['skating', 0],
+            ['combat-martial-arts', 0],
+            ['dance', 0],
+            ['team-sports', 0],
+            ['racket-sports', 0],
+            ['precision-sports', 0],
+            ['water-sports', 0],
+            ['diving', 0],
+
+            ['performance-sports', 0],
+            ['outdoor-adventures', 0],
+            ['aerial-sports', 0],
+            ['motorized-activities', 0],
             ['other-training', 0],
         ]);
     });
@@ -3841,9 +5103,10 @@ describe('startDerivedMetricsProcessing', () => {
         hoisted.userRootGet.mockResolvedValue({ exists: true });
         hoisted.tombstoneGet.mockResolvedValue({ exists: false, data: () => undefined });
         mockTransactionDeletionGuardDefaults();
+        hoisted.enqueueDerivedMetricsTask.mockResolvedValue(true);
         hoisted.runTransaction.mockImplementation(async (updateFunction: (transaction: unknown) => Promise<void>) => {
             await updateFunction({
-                get: hoisted.transactionGet,
+                getAll: hoisted.transactionGetAll, get: hoisted.transactionGet,
                 set: hoisted.transactionSet,
             });
         });
@@ -3851,6 +5114,106 @@ describe('startDerivedMetricsProcessing', () => {
 
     afterEach(() => {
         vi.useRealTimers();
+    });
+
+    it.each(['queued', 'failed'])('retries only its own unclaimed follow-up enqueue (%s)', async status => {
+        const { startDerivedMetricsProcessing } = await import('./derived-metrics.service');
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 9, 17, 10));
+        hoisted.transactionGet.mockResolvedValueOnce({ exists: true, data: () => ({
+            status, generation: 43, retryFromGeneration: 42, buildNotBeforeMs: Date.now() + 90_000,
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+        }) });
+        expect(await startDerivedMetricsProcessing('user-1', 42)).toBeNull();
+        expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('user-1', 43, 90);
+        expect(hoisted.transactionSet).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        { status: 'processing', generation: 43, retryFromGeneration: 42 },
+        { status: 'idle', generation: 43, retryFromGeneration: 42 },
+        { status: 'failed', generation: 43, retryFromGeneration: 41 },
+        { status: 'queued', generation: 44, retryFromGeneration: 42 },
+        { status: 'failed', generation: 43 },
+    ])('does not let stale tasks repair unrelated or already claimed work: %j', async coordinator => {
+        const { startDerivedMetricsProcessing } = await import('./derived-metrics.service');
+        hoisted.transactionGet.mockResolvedValueOnce({ exists: true, data: () => coordinator });
+        expect(await startDerivedMetricsProcessing('user-1', 42)).toBeNull();
+        expect(hoisted.enqueueDerivedMetricsTask).not.toHaveBeenCalled();
+        expect(hoisted.transactionSet).not.toHaveBeenCalled();
+    });
+
+    it('discards the follow-up enqueue decision from an aborted transaction', async () => {
+        const { startDerivedMetricsProcessing } = await import('./derived-metrics.service');
+        hoisted.transactionGet
+            .mockResolvedValueOnce({ exists: true, data: () => ({ status: 'queued', generation: 43, retryFromGeneration: 42 }) })
+            .mockResolvedValueOnce({ exists: true, data: () => ({}) })
+            .mockResolvedValueOnce({ exists: false, data: () => undefined })
+            .mockResolvedValueOnce({ exists: true, data: () => ({ status: 'processing', generation: 43 }) });
+        hoisted.runTransaction.mockImplementation(async (callback: (transaction: unknown) => Promise<void>) => {
+            const transaction = { getAll: hoisted.transactionGetAll, get: hoisted.transactionGet, set: hoisted.transactionSet };
+            await callback(transaction);
+            await callback(transaction);
+        });
+        expect(await startDerivedMetricsProcessing('user-1', 42)).toBeNull();
+        expect(hoisted.enqueueDerivedMetricsTask).not.toHaveBeenCalled();
+    });
+
+    it('anchors the build start to the successful claim after transaction contention', async () => {
+        const { startDerivedMetricsProcessing } = await import('./derived-metrics.service');
+        vi.useFakeTimers();
+        const requestAtMs = Date.UTC(2026, 9, 17, 10);
+        vi.setSystemTime(requestAtMs);
+        const coordinatorSnapshot = { exists: true, data: () => ({
+            status: 'queued', generation: 42, eventMutationVersion: 7,
+            startedAtMs: requestAtMs - 120_000, dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+        }) };
+        const defaultGet = hoisted.transactionGet.getMockImplementation()!;
+        hoisted.transactionGet.mockImplementation(async (ref: unknown) => {
+            if (ref === hoisted.coordinatorRef) {
+                return coordinatorSnapshot;
+            }
+            // Reading the owner guard can also wait behind concurrent writes.
+            if (ref === hoisted.userRootRef) {
+                vi.setSystemTime(Date.now() + 10_000);
+            }
+            return defaultGet(ref);
+        });
+        hoisted.runTransaction.mockImplementation(async (callback: (transaction: unknown) => Promise<void>) => {
+            const transaction = { getAll: hoisted.transactionGetAll, get: hoisted.transactionGet, set: hoisted.transactionSet };
+            await callback(transaction); // Aborted attempt; a concurrent write forces a retry.
+            vi.setSystemTime(requestAtMs + 30_000);
+            await callback(transaction);
+        });
+
+        const result = await startDerivedMetricsProcessing('user-1', 42);
+
+        expect(result).toEqual({
+            startedAtMs: requestAtMs + 40_000, eventMutationVersion: 7, workoutInputsVersion: 0,
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+        });
+        expect(hoisted.transactionSet).toHaveBeenLastCalledWith(hoisted.coordinatorRef, expect.objectContaining({
+            status: 'processing', startedAtMs: requestAtMs + 40_000, updatedAtMs: requestAtMs + 40_000,
+        }), { merge: true });
+    });
+
+    it('reclaims failed work with a distinct claim even when the retry starts in the same millisecond', async () => {
+        const { startDerivedMetricsProcessing } = await import('./derived-metrics.service');
+        vi.useFakeTimers();
+        const nowMs = Date.UTC(2026, 8, 14, 10);
+        vi.setSystemTime(nowMs);
+        hoisted.transactionGet.mockResolvedValueOnce({ exists: true, data: () => ({
+            status: 'failed', generation: 42, eventMutationVersion: 7, workoutInputsVersion: 3,
+            startedAtMs: nowMs, dirtyMetricKinds: [DERIVED_METRIC_KINDS.TrainingReadiness], processingMetricKinds: [],
+        }) });
+        expect(await startDerivedMetricsProcessing('user-1', 42)).toEqual({
+            startedAtMs: nowMs + 1, eventMutationVersion: 7, workoutInputsVersion: 3,
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.TrainingReadiness],
+        });
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(hoisted.coordinatorRef, expect.objectContaining({
+            status: 'processing', startedAtMs: nowMs + 1, dirtyMetricKinds: [],
+            processingMetricKinds: [DERIVED_METRIC_KINDS.TrainingReadiness],
+        }), { merge: true });
     });
 
     it('claims queued generation and persists processing metric kinds for retries', async () => {
@@ -3872,6 +5235,7 @@ describe('startDerivedMetricsProcessing', () => {
             dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
             startedAtMs: expect.any(Number),
             eventMutationVersion: 101,
+            workoutInputsVersion: 0,
         });
         expect(hoisted.transactionSet).toHaveBeenCalledWith(
             hoisted.coordinatorRef,
@@ -3928,6 +5292,7 @@ describe('startDerivedMetricsProcessing', () => {
             dirtyMetricKinds: [DERIVED_METRIC_KINDS.RecoveryNow],
             startedAtMs: expect.any(Number),
             eventMutationVersion: 77,
+            workoutInputsVersion: 0,
         });
         expect(hoisted.transactionSet).toHaveBeenCalledWith(
             hoisted.coordinatorRef,
@@ -3970,18 +5335,42 @@ describe('startDerivedMetricsProcessing', () => {
 
 describe('abandonDerivedMetricsProcessingAfterWriteBlock', () => {
     beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 9, 17));
         vi.clearAllMocks();
         hoisted.userRootGet.mockResolvedValue({ exists: true });
         hoisted.tombstoneGet.mockResolvedValue({ exists: false, data: () => undefined });
         mockTransactionDeletionGuardDefaults();
         hoisted.runTransaction.mockImplementation(async (updateFunction: (transaction: unknown) => Promise<void>) => {
             await updateFunction({
-                get: hoisted.transactionGet,
+                getAll: hoisted.transactionGetAll, get: hoisted.transactionGet,
                 set: hoisted.transactionSet,
             });
         });
         hoisted.enqueueDerivedMetricsTask.mockResolvedValue(true);
         hoisted.recursiveDelete.mockResolvedValue(undefined);
+    });
+
+    afterEach(() => vi.useRealTimers());
+
+    it('discards a delayed enqueue decision when the transaction retries after another completion', async () => {
+        const { abandonDerivedMetricsProcessingAfterWriteBlock } = await import('./derived-metrics.service');
+        hoisted.transactionGet
+            .mockResolvedValueOnce({ exists: true, data: () => ({ status: 'processing', generation: 42,
+                startedAtMs: Date.now() - 30_000, dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form] }) })
+            .mockResolvedValueOnce({ exists: true, data: () => ({}) })
+            .mockResolvedValueOnce({ exists: false, data: () => undefined })
+            .mockResolvedValueOnce({ exists: true, data: () => ({ status: 'queued', generation: 43,
+                buildNotBeforeMs: Date.now(), dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form] }) });
+        hoisted.runTransaction.mockImplementation(async (callback: (transaction: unknown) => Promise<void>) => {
+            const transaction = { getAll: hoisted.transactionGetAll, get: hoisted.transactionGet, set: hoisted.transactionSet };
+            await callback(transaction); // Aborted optimistic attempt, not a committed write.
+            await callback(transaction);
+        });
+        const result = await abandonDerivedMetricsProcessingAfterWriteBlock('user-1', 42,
+            [DERIVED_METRIC_KINDS.Form], 'synthetic write block');
+        expect(result.requeued).toBe(false);
+        expect(hoisted.enqueueDerivedMetricsTask).not.toHaveBeenCalled();
     });
 
     it('recursively deletes derived metric state when the deletion guard is still active after claiming work', async () => {
@@ -4048,7 +5437,7 @@ describe('abandonDerivedMetricsProcessingAfterWriteBlock', () => {
             }),
             { merge: true },
         );
-        expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('user-1', 43);
+        expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('user-1', 43, 120);
         expect(hoisted.recursiveDelete).not.toHaveBeenCalled();
     });
 
@@ -4131,7 +5520,7 @@ describe('abandonDerivedMetricsProcessingAfterWriteBlock', () => {
             }),
             { merge: true },
         );
-        expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('user-1', 43);
+        expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('user-1', 43, 120);
         expect(hoisted.recursiveDelete).not.toHaveBeenCalled();
     });
 
@@ -4190,7 +5579,7 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
         mockTransactionDeletionGuardDefaults();
         hoisted.runTransaction.mockImplementation(async (updateFunction: (transaction: unknown) => Promise<void>) => {
             await updateFunction({
-                get: hoisted.transactionGet,
+                getAll: hoisted.transactionGetAll, get: hoisted.transactionGet,
                 set: hoisted.transactionSet,
             });
         });
@@ -4201,7 +5590,95 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
         vi.useRealTimers();
     });
 
-    it('coalesces when coordinator is queued recently and dirty set is unchanged', async () => {
+    it.each([
+        ['idle', null, 0, 0], ['idle', -30_000, 90, 1], ['idle', -120_000, 0, 1],
+        ['idle', -299_999, 0, 1], ['idle', -300_000, 0, 0], ['idle', -300_001, 0, 0],
+        ['idle', 30_000, 0, 0], ['failed', -30_000, 0, 0],
+        ['queued', -30_000, 0, 0], ['processing', -1_200_000, 0, 0],
+    ] as const)('batches background work from %s with previous start offset %s', async (status, offset, delay, metadataReads) => {
+        const { markDerivedMetricsDirtyAndMaybeQueue } = await import('./derived-metrics.service');
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 9, 17));
+        const now = Date.now();
+        hoisted.transactionGet.mockResolvedValueOnce({ exists: true, data: () => ({
+            status, generation: 12, eventMutationVersion: 9, workoutInputsVersion: 5,
+            startedAtMs: offset === null ? null : now + offset,
+            requestedAtMs: now - 1_200_000, dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+        }) });
+        const response = await markDerivedMetricsDirtyAndMaybeQueue('user-1', [DERIVED_METRIC_KINDS.Acwr],
+            { background: true, incrementEventMutationVersion: true });
+        expect(response).toMatchObject({ queued: true, generation: 13 });
+        expect(hoisted.transactionGetAll).toHaveBeenCalledTimes(metadataReads);
+        expect(hoisted.enqueueDerivedMetricsTask.mock.calls).toEqual([
+            delay ? ['user-1', 13, delay] : ['user-1', 13],
+        ]);
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(hoisted.coordinatorRef, expect.objectContaining({
+            buildNotBeforeMs: now + delay * 1000, pendingImmediate: false,
+            eventMutationVersion: 10, workoutInputsVersion: 6,
+            dirtyMetricKinds: expect.arrayContaining([DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.Acwr]),
+        }), { merge: true });
+    });
+
+    it('uses the transaction time when an earlier request observes a newly completed build', async () => {
+        const { markDerivedMetricsDirtyAndMaybeQueue } = await import('./derived-metrics.service');
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 9, 17));
+        const enteredAt = Date.now();
+        hoisted.transactionGet.mockResolvedValueOnce({ exists: true, data: () => ({
+            status: 'idle', generation: 12, startedAtMs: enteredAt + 10_000, dirtyMetricKinds: [],
+        }) });
+        hoisted.runTransaction.mockImplementation(async (callback: (transaction: unknown) => Promise<void>) => {
+            vi.setSystemTime(enteredAt + 30_000);
+            await callback({ getAll: hoisted.transactionGetAll, get: hoisted.transactionGet, set: hoisted.transactionSet });
+        });
+        await markDerivedMetricsDirtyAndMaybeQueue('user-1', [DERIVED_METRIC_KINDS.Form], { background: true });
+        expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('user-1', 13, 100);
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(hoisted.coordinatorRef,
+            expect.objectContaining({ buildNotBeforeMs: enteredAt + 130_000 }), { merge: true });
+    });
+
+    it.each([true, false])('preserves a fixed queued deadline or promotes it for an explicit edit (background=%s)', async background => {
+        const { markDerivedMetricsDirtyAndMaybeQueue } = await import('./derived-metrics.service');
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 9, 17));
+        const now = Date.now();
+        hoisted.transactionGet.mockResolvedValueOnce({ exists: true, data: () => ({
+            status: 'queued', generation: 12, buildNotBeforeMs: now + 70_000,
+            requestedAtMs: now - 20_000, dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+        }) });
+        const response = await markDerivedMetricsDirtyAndMaybeQueue('user-1', [DERIVED_METRIC_KINDS.Acwr], { background });
+        expect(response).toMatchObject({ queued: !background, generation: background ? 12 : 13 });
+        const update = hoisted.transactionSet.mock.calls[0][1];
+        expect(update.dirtyMetricKinds).toEqual(expect.arrayContaining([DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.Acwr]));
+        if (background) {
+            expect(update).not.toHaveProperty('buildNotBeforeMs');
+            expect(update).not.toHaveProperty('requestedAtMs');
+            expect(hoisted.enqueueDerivedMetricsTask).not.toHaveBeenCalled();
+        } else {
+            expect(update.buildNotBeforeMs).toBe(now);
+            expect(hoisted.enqueueDerivedMetricsTask).toHaveBeenCalledWith('user-1', 13);
+        }
+    });
+
+    it.each([true, false])('retains explicit priority during processing (later background=%s)', async background => {
+        const { markDerivedMetricsDirtyAndMaybeQueue } = await import('./derived-metrics.service');
+        hoisted.transactionGet.mockResolvedValueOnce({ exists: true, data: () => ({
+            status: 'processing', generation: 12, startedAtMs: Date.now(),
+            pendingImmediate: background, dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
+        }) });
+        await markDerivedMetricsDirtyAndMaybeQueue('user-1', [DERIVED_METRIC_KINDS.Form],
+            { background, preserveWorkoutInputs: true });
+        if (!background) {
+            expect(hoisted.transactionSet).toHaveBeenCalledWith(hoisted.coordinatorRef,
+                expect.objectContaining({ pendingImmediate: true }), { merge: true });
+        } else {
+            // An identical recovery-only invalidation need not write; priority stays true.
+            expect(hoisted.transactionSet).not.toHaveBeenCalled();
+        }
+        expect(hoisted.enqueueDerivedMetricsTask).not.toHaveBeenCalled();
+    });
+
+    it('invalidates workout reuse on an explicit repair even when its dirty set is unchanged', async () => {
         const { markDerivedMetricsDirtyAndMaybeQueue } = await import('./derived-metrics.service');
         vi.useFakeTimers();
         vi.setSystemTime(Date.UTC(2026, 3, 11, 9, 0, 0));
@@ -4228,7 +5705,8 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
             generation: 12,
             metricKinds: [DERIVED_METRIC_KINDS.Form],
         });
-        expect(hoisted.transactionSet).not.toHaveBeenCalled();
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(hoisted.coordinatorRef,
+            expect.objectContaining({ workoutInputsVersion: 1 }), { merge: true });
         expect(hoisted.enqueueDerivedMetricsTask).not.toHaveBeenCalled();
     });
 
@@ -4322,6 +5800,23 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
                 generation: 21,
             }),
         );
+    });
+
+    it('retains in-flight kinds when a sleep-only ingress replaces a stuck workout build', async () => {
+        const { markDerivedMetricsDirtyAndMaybeQueue } = await import('./derived-metrics.service');
+        const nowMs = Date.now();
+        hoisted.transactionGet.mockResolvedValueOnce({ exists: true, data: () => ({
+            status: 'processing', generation: 30, dirtyMetricKinds: [],
+            startedAtMs: nowMs - 20 * 60_000,
+            processingMetricKinds: [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.TrainingDurability],
+        }) });
+        await markDerivedMetricsDirtyAndMaybeQueue('test-user-uid', [DERIVED_METRIC_KINDS.TrainingReadiness],
+            { preserveWorkoutInputs: true });
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(hoisted.coordinatorRef, expect.objectContaining({
+            status: 'queued', generation: 31, processingMetricKinds: [],
+            dirtyMetricKinds: expect.arrayContaining([DERIVED_METRIC_KINDS.Form,
+                DERIVED_METRIC_KINDS.TrainingDurability, DERIVED_METRIC_KINDS.TrainingReadiness]),
+        }), { merge: true });
     });
 
     it('forces requeue when coordinator is processing for too long', async () => {
@@ -4513,7 +6008,7 @@ describe('writeDerivedMetricSnapshotsReady', () => {
         vi.clearAllMocks();
         hoisted.userRootGet.mockResolvedValue({ exists: true });
         hoisted.tombstoneGet.mockResolvedValue({ exists: false, data: () => undefined });
-        hoisted.batchCommit.mockResolvedValue(undefined);
+        mockTransactionDeletionGuardDefaults();
     });
 
     afterEach(() => {
@@ -4527,9 +6022,82 @@ describe('writeDerivedMetricSnapshotsReady', () => {
     }
 
     function findPersistedPayload(metricKind: string): Record<string, unknown> {
-        const call = hoisted.batchSet.mock.calls.find((setCall) => setCall?.[1]?.metricKind === metricKind);
+        const call = hoisted.transactionSet.mock.calls.find((setCall) => setCall?.[1]?.metricKind === metricKind);
         return (call?.[1] || {}) as Record<string, unknown>;
     }
+
+    it('uses modeled load for Form, ACWR and weekly load while retaining excluded workout volume', async () => {
+        const { writeDerivedMetricSnapshotsReady } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 0, 3, 12);
+        const sources = [
+            { id: 'corrected', load: 7.6, excluded: false },
+            { id: 'zero', load: 0, excluded: false },
+            { id: 'excluded', load: 999, excluded: true },
+        ].map(({ id, load, excluded }) => {
+            const data = { startDate: Date.UTC(2026, 0, 3, 8), stats: {
+                'Training Stress Score': 87.3, [DataActivityTypes.type]: [ActivityTypes.Walking], [DataDuration.type]: 3600,
+            } };
+            attachEffectiveTrainingLoad(data, resolveEffectiveTrainingLoad(data,
+                { version: 1, revision: 1, excluded, controls: { leg: { override: load } } },
+                [{ id: 'leg', type: ActivityTypes.Walking, stats: data.stats }]));
+            return { id, data: () => data };
+        });
+        await writeDerivedMetricSnapshotsReady('user-1', [DERIVED_METRIC_KINDS.Form,
+            DERIVED_METRIC_KINDS.Acwr, DERIVED_METRIC_KINDS.MonotonyStrain, DERIVED_METRIC_KINDS.TrainingSummary],
+        { formDocs: sources as never, trainingActivities: buildTrainingActivitySources(sources), recoveryNowDocs: [] },
+        { buildAtMs: nowMs });
+        expect(findPersistedPayload(DERIVED_METRIC_KINDS.Form).payload).toMatchObject({ dailyLoads: [
+            { dayMs: Date.UTC(2026, 0, 3), load: 7.6, activityCount: 2 },
+        ] });
+        expect(findPersistedPayload(DERIVED_METRIC_KINDS.Acwr).payload).toMatchObject({ acuteLoad7: 7.6 });
+        expect(findPersistedPayload(DERIVED_METRIC_KINDS.MonotonyStrain).payload).toMatchObject({ weeklyLoad7: 7.6 });
+        expect(findPersistedPayload(DERIVED_METRIC_KINDS.TrainingSummary).payload).toMatchObject({ disciplines:
+            expect.arrayContaining([expect.objectContaining({ discipline: 'walking-hiking', current28d:
+                expect.objectContaining({ activityCount: 3, durationSeconds: 10800 }) })]),
+        });
+        expect(sources.map(source => source.data().stats['Training Stress Score'])).toEqual([87.3, 87.3, 87.3]);
+    });
+
+    it('rejects a reused Form context when exact daily counts do not match sourceEventCount', async () => {
+        const { writeDerivedMetricSnapshotsReady } = await import('./derived-metrics.service');
+        await expect(writeDerivedMetricSnapshotsReady(
+            'user-1',
+            [DERIVED_METRIC_KINDS.FormNow],
+            { formDocs: [], recoveryNowDocs: [] },
+            {
+                formDailyLoads: [{
+                    dayMs: Date.UTC(2026, 8, 14),
+                    load: 50,
+                    activityCount: 1,
+                }],
+                formSourceEventCount: 2,
+                formSourceDocCount: 2,
+            },
+        )).rejects.toThrow('daily activity counts must match sourceEventCount');
+        expect(hoisted.transactionSet).not.toHaveBeenCalled();
+    });
+
+    it('warms internal reuse metadata and retains original source counts and expiry on recovery-only writes', async () => {
+        const { writeDerivedMetricSnapshotsReady } = await import('./derived-metrics.service');
+        const { resolveTrainingBuildWorkoutSeed, trainingBuildSettingsKey } = await import('./training-build-workout-seed');
+        const nowMs = Date.UTC(2026, 8, 14, 10);
+        const kind = DERIVED_METRIC_KINDS.TrainingBuildComparison;
+        await writeDerivedMetricSnapshotsReady('user-1', [kind], {
+            formDocs: [buildEventDoc({})], trainingActivityDocs: [buildEventDoc({})], trainingActivities: [],
+        }, { buildAtMs: nowMs, builtFromEventMutationVersion: 7, workoutInputsVersion: 3 });
+        const full = findPersistedPayload(kind);
+        const seed = resolveTrainingBuildWorkoutSeed(full, { nowMs: nowMs + 1000, eventMutationVersion: 7,
+            sourceVersion: 3, settingsKey: trainingBuildSettingsKey({}) });
+        expect(seed).not.toBeNull();
+        hoisted.transactionSet.mockClear();
+        await writeDerivedMetricSnapshotsReady('user-1', [kind], { trainingBuildWorkoutSeed: seed },
+            { buildAtMs: nowMs + 1000, builtFromEventMutationVersion: 7, workoutInputsVersion: 3 });
+        const reused = findPersistedPayload(kind);
+        expect(reused.payload).toEqual(full.payload);
+        expect(reused.sourceDocCount).toBe(3);
+        expect(reused.sourceEventCount).toBe(full.sourceEventCount);
+        expect(reused.workoutInputsReuse).toEqual(full.workoutInputsReuse);
+    });
 
     it('reuses prejoined Training activities supplied by the worker', async () => {
         const { writeDerivedMetricSnapshotsReady } = await import('./derived-metrics.service');
@@ -4571,9 +6139,52 @@ describe('writeDerivedMetricSnapshotsReady', () => {
                 { discipline: 'strength', current28d: { activityCount: 0 } },
                 { discipline: 'fitness-gym', current28d: { activityCount: 0 } },
                 { discipline: 'paddling', current28d: { activityCount: 0 } },
+                { discipline: 'wheelchair', current28d: { activityCount: 0 } },
+                { discipline: 'climbing-mountaineering', current28d: { activityCount: 0 } },
+                { discipline: 'mountain-snow', current28d: { activityCount: 0 } },
+                { discipline: 'skating', current28d: { activityCount: 0 } },
+                { discipline: 'combat-martial-arts', current28d: { activityCount: 0 } },
+                { discipline: 'dance', current28d: { activityCount: 0 } },
+                { discipline: 'team-sports', current28d: { activityCount: 0 } },
+                { discipline: 'racket-sports', current28d: { activityCount: 0 } },
+                { discipline: 'precision-sports', current28d: { activityCount: 0 } },
+                { discipline: 'water-sports', current28d: { activityCount: 0 } },
+                { discipline: 'diving', current28d: { activityCount: 0 } },
+
+                { discipline: 'performance-sports', current28d: { activityCount: 0 } },
+                { discipline: 'outdoor-adventures', current28d: { activityCount: 0 } },
+                { discipline: 'aerial-sports', current28d: { activityCount: 0 } },
+                { discipline: 'motorized-activities', current28d: { activityCount: 0 } },
                 { discipline: 'other-training', current28d: { activityCount: 0 } },
             ],
         });
+    });
+
+    it('rejects an oversized complete power snapshot before persisting any queued metric', async () => {
+        const { writeDerivedMetricSnapshotsReady } = await import('./derived-metrics.service');
+        const sportsLib = await import('@sports-alliance/sports-lib');
+        const originalFit = sportsLib.fitThreeDimensionalCapacityModel;
+        const fitSpy = vi.spyOn(sportsLib, 'fitThreeDimensionalCapacityModel').mockImplementation((...args) => ({
+            ...originalFit(...args), sourceFingerprint: 'x'.repeat(DERIVED_TRAINING_POWER_SYSTEMS_MAX_SNAPSHOT_BYTES),
+        }));
+        const nowMs = Date.UTC(2026, 6, 20, 12);
+        const activities = buildTrainingActivitySources([{
+            id: 'rowing-event',
+            data: () => ({ startDate: Date.UTC(2026, 6, 19), stats: {
+                [DataActivityTypes.type]: [ActivityTypes.Rowing], [DataDuration.type]: 3600,
+                [POWER_CURVE_STAT_TYPE]: [{ duration: 180, power: 350 }],
+            } }),
+        }]);
+        try {
+            await expect(writeDerivedMetricSnapshotsReady('user-1', [
+                DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.TrainingPowerSystems,
+            ], { trainingActivities: activities }, { buildAtMs: nowMs }))
+                .rejects.toThrow('Power-system snapshot exceeds its fixed storage bound');
+            expect(hoisted.transactionSet).not.toHaveBeenCalled();
+            expect(hoisted.runTransaction).not.toHaveBeenCalled();
+        } finally {
+            fitSpy.mockRestore();
+        }
     });
 
     it('writes a schema-compatible rolling power-systems snapshot through the targeted lifecycle', async () => {
@@ -4623,9 +6234,21 @@ describe('writeDerivedMetricSnapshotsReady', () => {
             sourceEventCount: 1,
             lastError: null,
         });
+        expect(persisted.legacyPowerSystemsPolicy1).toMatchObject({
+            policyVersion: 1,
+            asOfDayMs: Date.UTC(2026, 6, 20),
+            activityTypes: [{ activityType: ActivityTypes.Cycling }],
+        });
+        expect(persisted.payload).not.toHaveProperty('legacyPowerSystemsPolicy1');
+        expect(Buffer.byteLength(JSON.stringify(persisted), 'utf8')).toBeLessThan(DERIVED_TRAINING_POWER_SYSTEMS_MAX_SNAPSHOT_BYTES);
+        const { isDerivedMetricSnapshotReadableByMcp } = await import('./ensure-derived-metrics');
+        expect(isDerivedMetricSnapshotReadableByMcp(DERIVED_METRIC_KINDS.TrainingPowerSystems, persisted.payload,
+            persisted.sourceEventCount, persisted.legacyPowerSystemsPolicy1)).toBe(true);
+        expect(isDerivedMetricSnapshotReadableByMcp(DERIVED_METRIC_KINDS.TrainingPowerSystems, persisted.payload,
+            persisted.sourceEventCount)).toBe(false);
         expect(persisted.payload).toMatchObject({
             asOfDayMs: Date.UTC(2026, 6, 20),
-            policyVersion: 1,
+            policyVersion: DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION,
             windowDays: 42,
             historyDays: 84,
             activityTypes: [{
@@ -4708,6 +6331,10 @@ describe('writeDerivedMetricSnapshotsReady', () => {
             ],
             {
                 formDocs: formDocs as any,
+                trainingActivities: buildTrainingActivitySources(formDocs.map((doc, index) => ({
+                    id: `source-${index}`,
+                    data: () => ({ ...doc.data(), stats: { ...doc.data().stats, [DataActivityTypes.type]: [ActivityTypes.Running] } }),
+                }))),
                 recoveryNowDocs: [] as any,
             },
             {
@@ -4719,10 +6346,11 @@ describe('writeDerivedMetricSnapshotsReady', () => {
         expect(formPersistedSnapshot.builtFromEventMutationVersion).toBe(42);
         expect(formPersistedSnapshot.sourceDocCount).toBe(formDocs.length);
         const formPayload = formPersistedSnapshot.payload as Record<string, unknown>;
+        expect(formPayload.payloadVersion).toBe(DERIVED_FORM_PAYLOAD_VERSION);
         expect(formPayload.dailyLoads).toEqual([
-            { dayMs: Date.UTC(2026, 0, 1), load: 10 },
-            { dayMs: Date.UTC(2026, 0, 2), load: 20 },
-            { dayMs: Date.UTC(2026, 0, 3), load: 30 },
+            { dayMs: Date.UTC(2026, 0, 1), load: 10, activityCount: 1 },
+            { dayMs: Date.UTC(2026, 0, 2), load: 20, activityCount: 1 },
+            { dayMs: Date.UTC(2026, 0, 3), load: 30, activityCount: 1 },
         ]);
 
         const acwrPayload = findPersistedPayload(DERIVED_METRIC_KINDS.Acwr).payload as Record<string, unknown>;
@@ -4738,8 +6366,8 @@ describe('writeDerivedMetricSnapshotsReady', () => {
 
         const monotonyPayload = findPersistedPayload(DERIVED_METRIC_KINDS.MonotonyStrain).payload as Record<string, unknown>;
         expect(monotonyPayload.weeklyLoad7).toBe(60);
-        expect(monotonyPayload.monotony).toBeTypeOf('number');
-        expect(monotonyPayload.strain).toBeTypeOf('number');
+        expect(monotonyPayload.monotony).toBe(2.4495);
+        expect(monotonyPayload.strain).toBe(146.97);
 
         const formNowPayload = findPersistedPayload(DERIVED_METRIC_KINDS.FormNow).payload as Record<string, unknown>;
         expect(formNowPayload.asOfDayMs).toBe(Date.UTC(2026, 0, 3));
@@ -4927,6 +6555,31 @@ describe('writeDerivedMetricSnapshotsReady', () => {
         expect((findPersistedPayload(DERIVED_METRIC_KINDS.EfficiencyDelta4w).payload as Record<string, unknown>).deltaAbs).toBeNull();
     });
 
+    it('writes the five corrected intensity snapshots as current and publicly readable', async () => {
+        const { writeDerivedMetricSnapshotsReady } = await import('./derived-metrics.service');
+        const { isMcpTrainingMetricPayloadReadable } = await import('../mcp/data.service');
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 5, 30, 12));
+        const formDocs = [buildEventDoc({ startDate: Date.UTC(2026, 5, 29, 8), stats: {
+            [DataDuration.type]: 1500, [DataActivityTypes.type]: [ActivityTypes.Running],
+            [DataHeartRateZoneOneDuration.type]: 100, [DataHeartRateZoneTwoDuration.type]: 200,
+            [DataHeartRateZoneThreeDuration.type]: 300, [DataHeartRateZoneFourDuration.type]: 400,
+            [DataHeartRateZoneFiveDuration.type]: 500,
+        } })];
+        const kinds = [DERIVED_METRIC_KINDS.IntensityDistribution, DERIVED_METRIC_KINDS.EasyPercent,
+            DERIVED_METRIC_KINDS.HardPercent, DERIVED_METRIC_KINDS.TrainingSummary, DERIVED_METRIC_KINDS.TrainingBuildComparison];
+        await writeDerivedMetricSnapshotsReady('user-1', kinds, {
+            formDocs, trainingActivities: buildTrainingActivitySources(formDocs),
+        }, { builtFromEventMutationVersion: 42 });
+        for (const kind of kinds) {
+            const snapshot = findPersistedPayload(kind);
+            expect(snapshot.payload).toMatchObject({ intensityPolicyVersion: 1 });
+            expect(isMcpTrainingMetricPayloadReadable(kind, snapshot.payload)).toBe(true);
+        }
+        expect(findPersistedPayload(DERIVED_METRIC_KINDS.EasyPercent).payload).toMatchObject({ value: 20 });
+        expect(findPersistedPayload(DERIVED_METRIC_KINDS.HardPercent).payload).toMatchObject({ value: 60 });
+    });
+
     it('excludes benchmark merges but includes multi merges in derived calculations', async () => {
         const { writeDerivedMetricSnapshotsReady } = await import('./derived-metrics.service');
         vi.useFakeTimers();
@@ -4956,6 +6609,24 @@ describe('writeDerivedMetricSnapshotsReady', () => {
                 },
             }),
             buildEventDoc({
+                startDate: Date.UTC(2026, 0, 2, 23, 59, 0),
+                stats: {
+                    'Power Training Stress Score': 5,
+                },
+            }),
+            buildEventDoc({
+                startDate: Date.UTC(2026, 0, 3, 0, 1, 0),
+                stats: {
+                    'Training Stress Score': 0,
+                },
+            }),
+            buildEventDoc({
+                startDate: Date.UTC(2026, 0, 3, 7, 0, 0),
+                stats: {
+                    [DataDuration.type]: 1_800,
+                },
+            }),
+            buildEventDoc({
                 startDate: Date.UTC(2026, 0, 3, 8, 0, 0),
                 endDate: Date.UTC(2026, 0, 3, 9, 0, 0),
                 stats: {
@@ -4978,16 +6649,79 @@ describe('writeDerivedMetricSnapshotsReady', () => {
         );
 
         const formPersistedSnapshot = findPersistedPayload(DERIVED_METRIC_KINDS.Form);
-        expect(formPersistedSnapshot.sourceEventCount).toBe(2);
+        expect(formPersistedSnapshot.sourceEventCount).toBe(4);
         const formPayload = formPersistedSnapshot.payload as Record<string, unknown>;
         expect(formPayload.dailyLoads).toEqual([
-            { dayMs: Date.UTC(2026, 0, 2), load: 40 },
-            { dayMs: Date.UTC(2026, 0, 3), load: 10 },
+            { dayMs: Date.UTC(2026, 0, 2), load: 45, activityCount: 2 },
+            { dayMs: Date.UTC(2026, 0, 3), load: 10, activityCount: 2 },
         ]);
 
         const recoveryPayload = findPersistedPayload(DERIVED_METRIC_KINDS.RecoveryNow).payload as Record<string, unknown>;
         expect(recoveryPayload.totalSeconds).toBe(5_000);
         expect(recoveryPayload.latestWorkoutSeconds).toBe(1_000);
         expect((recoveryPayload.segments as unknown[]).length).toBe(2);
+    });
+});
+
+
+describe('source-specific intensity grouping', () => {
+    const startDate = Date.UTC(2026, 5, 29, 8);
+    const hrStats = {
+        [DataHeartRateZoneOneDuration.type]: 100, [DataHeartRateZoneTwoDuration.type]: 200,
+        [DataHeartRateZoneThreeDuration.type]: 300, [DataHeartRateZoneFourDuration.type]: 400,
+        [DataHeartRateZoneFiveDuration.type]: 500,
+    };
+    it('retains both sources in a multisport event and counts its parent once', async () => {
+        const { joinTrainingActivitySources, buildIntensityDistributionMetricPayload } = await import('./derived-metrics.service');
+        const events = [
+            { id: 'multi', data: () => ({ startDate, isMerge: true, mergeType: 'multi' }) },
+            { id: 'benchmark', data: () => ({ startDate, isMerge: true, mergeType: 'benchmark' }) },
+        ];
+        const activity = (id: string, stats: Record<string, unknown>, eventID = 'multi', start = startDate) => ({
+            id, data: () => ({ startDate: start, type: ActivityTypes.Running, eventID, stats }),
+        });
+        const activities = joinTrainingActivitySources([
+            activity('power', { ...hrStats, [DataPowerZoneOneDuration.type]: 10,
+                [DataPowerZoneFourDuration.type]: 40, [DataPowerZoneFiveDuration.type]: 50 }),
+            activity('hr', hrStats), activity('missing', { [DataPowerZoneOneDuration.type]: -1 }),
+            activity('excluded-only-week', {}, 'multi', startDate + 7 * 86400000),
+            activity('benchmark-child', hrStats, 'benchmark'), activity('orphan', hrStats, 'missing-parent'),
+        ], events);
+        const result = buildIntensityDistributionMetricPayload(activities);
+        expect(result.sourceEventCount).toBe(1);
+        expect(result.payload.intensityPolicyVersion).toBe(1);
+        expect(result.payload.weeks).toEqual([{
+            weekStartMs: Date.UTC(2026, 5, 29), easySeconds: 310, moderateSeconds: 340,
+            hardSeconds: 950, source: 'power',
+        }]);
+        expect(result.payload.coverageWeeks).toEqual([
+            { weekStartMs: Date.UTC(2026, 5, 29), powerActivityCount: 1, heartRateActivityCount: 1,
+                excludedActivityCount: 1, powerZoneSeconds: 100, heartRateZoneSeconds: 1500 },
+            { weekStartMs: Date.UTC(2026, 6, 6), powerActivityCount: 0, heartRateActivityCount: 0,
+                excludedActivityCount: 1, powerZoneSeconds: 0, heartRateZoneSeconds: 0 },
+        ]);
+        expect(result.payload.latestEasyPercent).toBe(19.38);
+        expect(result.payload.latestModeratePercent).toBe(21.25);
+        expect(result.payload.latestHardPercent).toBe(59.38);
+        expect(buildIntensityDistributionMetricPayload([]).payload.latestHardPercent).toBeNull();
+    });
+    it('uses the same HR grouping for weekly distribution, Training Mix and both build windows', async () => {
+        const { buildIntensityDistributionMetricPayload, buildTrainingSummaryMetricPayload,
+            buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const activities = buildTrainingActivitySources([startDate, Date.UTC(2026, 0, 30)].map((start, index) => ({
+            id: `event-${index}`, data: () => ({ startDate: start,
+                stats: { ...hrStats, [DataActivityTypes.type]: [ActivityTypes.Running], [DataDuration.type]: 1500 } }),
+        })));
+        const nowMs = Date.UTC(2026, 5, 30, 12);
+        const weekly = buildIntensityDistributionMetricPayload(activities).payload.weeks.at(-1);
+        const mix = buildTrainingSummaryMetricPayload(activities, nowMs).payload.disciplines.find(d => d.discipline === 'running');
+        const build = buildTrainingBuildComparisonMetricPayload(activities, { trainingSettings: { buildBenchmarks: {
+            running: { mode: 'period', durationWeeks: 8, endDayMs: Date.UTC(2026, 2, 10) },
+        } } }, nowMs).payload.disciplines.find(d => d.discipline === 'running');
+        const expected = { easySeconds: 300, moderateSeconds: 300, hardSeconds: 900 };
+        expect(weekly).toMatchObject(expected);
+        expect(mix?.current28d).toMatchObject(expected);
+        expect(build?.current).toMatchObject(expected);
+        expect(build?.benchmark).toMatchObject(expected);
     });
 });

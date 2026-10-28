@@ -20,6 +20,9 @@
       @if (metric.detailText) {
         <small>{{ metric.detailText }}</small>
       }
+      @if (metric.history) {
+        <app-metric-history-chart [history]="metric.history" [label]="metric.label" [darkTheme]="darkTheme()"></app-metric-history-chart>
+      }
     </div>
   }
 </dl>

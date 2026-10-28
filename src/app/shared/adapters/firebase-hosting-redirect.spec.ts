@@ -41,16 +41,17 @@ describe('firebase-hosting-redirect', () => {
     expect(redirectUrl).toBe('https://beta.quantified-self.io/dashboard?a=1#section');
   });
 
-  it('returns null for auth handler paths', () => {
+  it.each(['/__/auth/action', '/__/auth/handler', '/__/auth/iframe'])('leaves the auth path %s untouched', pathname => {
+    const locationRef = buildLocationRef({ pathname });
     const redirectUrl = getFirebaseHostingAliasRedirectUrl({
       localhost: false,
       appUrl: 'https://beta.quantified-self.io',
-      locationRef: buildLocationRef({
-        pathname: '/__/auth/action'
-      })
+      locationRef
     });
 
     expect(redirectUrl).toBeNull();
+    expect(redirectFromFirebaseHostingAlias(false, 'https://beta.quantified-self.io', locationRef)).toBe(false);
+    expect(locationRef.replace).not.toHaveBeenCalled();
   });
 
   it('returns null for non-firebase aliases', () => {
@@ -68,14 +69,34 @@ describe('firebase-hosting-redirect', () => {
 
   it('redirect helper calls replace only when needed', () => {
     const locationRef = buildLocationRef();
-    redirectFromFirebaseHostingAlias(false, 'https://beta.quantified-self.io', locationRef);
+    expect(redirectFromFirebaseHostingAlias(false, 'https://beta.quantified-self.io', locationRef)).toBe(true);
     expect(locationRef.replace).toHaveBeenCalledWith('https://beta.quantified-self.io/dashboard?a=1#section');
 
     const canonicalLocationRef = buildLocationRef({
       hostname: 'beta.quantified-self.io',
       origin: 'https://beta.quantified-self.io'
     });
-    redirectFromFirebaseHostingAlias(false, 'https://beta.quantified-self.io', canonicalLocationRef);
+    expect(redirectFromFirebaseHostingAlias(false, 'https://beta.quantified-self.io', canonicalLocationRef)).toBe(false);
     expect(canonicalLocationRef.replace).not.toHaveBeenCalled();
+  });
+
+  it('preserves email sign-in parameters and the fragment when redirecting an app page', () => {
+    const locationRef = buildLocationRef({
+      pathname: '/login',
+      search: '?mode=signIn&oobCode=synthetic-code&continueUrl=https%3A%2F%2Fquantified-self.io%2Flogin',
+      hash: '#sign-in'
+    });
+
+    expect(redirectFromFirebaseHostingAlias(false, 'https://quantified-self.io', locationRef)).toBe(true);
+    expect(locationRef.replace).toHaveBeenCalledExactlyOnceWith(
+      `https://quantified-self.io/login${locationRef.search}${locationRef.hash}`
+    );
+  });
+
+  it('does not redirect localhost builds', () => {
+    const locationRef = buildLocationRef();
+
+    expect(redirectFromFirebaseHostingAlias(true, 'http://localhost:4200', locationRef)).toBe(false);
+    expect(locationRef.replace).not.toHaveBeenCalled();
   });
 });

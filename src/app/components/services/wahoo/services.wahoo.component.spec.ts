@@ -1,3 +1,4 @@
+import { of } from 'rxjs';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpClient } from '@angular/common/http';
@@ -37,7 +38,7 @@ describe('ServicesWahooComponent', () => {
         { provide: AppUserService, useValue: userService },
         {
           provide: ActivatedRoute,
-          useValue: { snapshot: { queryParamMap: convertToParamMap({ state: 'state-1', code: 'code-1' }) } },
+          useValue: { snapshot: { queryParamMap: convertToParamMap({ state: 'state-1', code: 'code-1' }) }, queryParamMap: of(convertToParamMap({})) },
         },
         { provide: AppWindowService, useValue: { windowRef: { location: { href: '' } } } },
         { provide: MatSnackBar, useValue: { open: vi.fn() } },
@@ -75,11 +76,12 @@ describe('ServicesWahooComponent', () => {
     expect(component.isConnectedToService()).toBe(false);
     expect(component.connectButtonLabel).toBe('Reconnect');
     expect(component.connectionDescription).toContain('Reconnect Wahoo');
+    expect(component.connectionDescription).toContain('planned-workout delivery');
     expect(fixture.nativeElement.textContent).toContain('Wahoo rejected repeated token refreshes');
     expect(fixture.nativeElement.textContent).toContain('Reconnect');
     expect(Array.from(fixture.nativeElement.querySelectorAll('button'))
       .some((button: HTMLButtonElement) => button.textContent?.includes('Disconnect'))).toBe(true);
-    expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeNull();
+    expect(fixture.nativeElement.querySelector('a[routerlink="/send-activities/wahoo"]')).toBeNull();
   });
 
   it('keeps the safe account ID visible while reconnect is required', () => {
@@ -108,6 +110,7 @@ describe('ServicesWahooComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('OAuth credentials are stored securely on the server.');
     expect(fixture.nativeElement.textContent).not.toContain('Wahoo account connected');
     expect(functionsService.call).not.toHaveBeenCalled();
+    expect(component.connectionDescription).toContain('send compatible planned workouts');
   });
 
   it('hydrates an existing connection account ID from the server-only token record once', async () => {
@@ -178,7 +181,7 @@ describe('ServicesWahooComponent', () => {
 
     expect(fixture.nativeElement.textContent).toContain('Send FIT Activity to Wahoo');
     expect(fixture.nativeElement.textContent).toContain('does not create or retain an activity in Quantified Self');
-    expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('a[routerlink="/send-activities/wahoo"]')).toBeTruthy();
     expect(fixture.nativeElement.textContent).toContain('Send Route to Wahoo');
     expect(fixture.nativeElement.textContent).toContain('does not create or retain a route in Quantified Self');
     expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeTruthy();
@@ -196,7 +199,7 @@ describe('ServicesWahooComponent', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('.provider-tool-panel')).toBeTruthy();
-    expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('a[routerlink="/send-activities/wahoo"]')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeTruthy();
     expect(fixture.nativeElement.textContent).toContain('GPX routes to FIT before sending');
   });

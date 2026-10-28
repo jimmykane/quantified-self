@@ -1,27 +1,43 @@
-import { ChangeDetectionStrategy, Component, HostListener, LOCALE_ID, computed, effect, inject, signal } from '@angular/core';
-import { toObservable, toSignal } from '@angular/core/rxjs-interop';
-import { MatBottomSheet } from '@angular/material/bottom-sheet';
-import { ActivatedRoute, ParamMap, Router } from '@angular/router';
-import { DataAscent, DataDistance, type EventInterface } from '@sports-alliance/sports-lib';
-import { formatUnitAwareDataValue } from '@shared/unit-aware-display';
-import { catchError, combineLatest, distinctUntilChanged, filter, map, of, shareReplay, startWith, switchMap } from 'rxjs';
+import type { EventRead } from '@shared/event-read';
+import { buildCalendarPlanPhases } from '../../../helpers/training-plan-phases.helper';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, LOCALE_ID, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { ViewportScroller } from '@angular/common';
+import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, ParamMap, Router, Scroll } from '@angular/router';
+
+import { catchError, combineLatest, distinctUntilChanged, filter, map, of, shareReplay, startWith, switchMap, take, type Subscription } from 'rxjs';
 import type { AppUserInterface } from '../../../models/app-user.interface';
 import { SharedModule } from '../../../modules/shared.module';
 import { AppUserService } from '../../../services/app.user.service';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
+import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
+import { revealCalendarDayContext } from '../../../helpers/reveal-calendar-day-context.helper';
+import {
+  TrainingPlansService,
+  selectCalendarVisibleScheduledWorkouts,
+  type CurrentTrainingScheduleV1,
+} from '../../../services/training-plans.service';
 import {
   type ActivityCalendarDayViewModel,
+  type ActivityCalendarSummaryMetric,
   type ActivityCalendarRouteState,
   type ActivityCalendarView,
   buildActivityCalendarViewModel,
+  buildActivityCalendarSelectedDay,
   formatActivityCalendarDateParam,
-  formatActivityCalendarDuration,
-  navigateActivityCalendarDate,
+  formatActivityCalendarSummaryMetrics,
+  navigateActivityCalendarDay,
+  navigateActivityCalendarPeriod,
   normalizeActivityCalendarView,
   parseActivityCalendarDate,
   resolveActivityCalendarPrimaryRange,
   resolveActivityCalendarQueryWindow,
+  resolveActivityCalendarVisibleWindow,
+  resolveActivityCalendarDayRange,
+  resolveActivityCalendarRouteState,
+  resolveActivityCalendarViewAnchor,
+  isActivityCalendarGridView,
 } from '../../../helpers/activity-calendar.helper';
 import {
   ACTIVITY_CALENDAR_VOLUME_TOOLTIP,
@@ -29,16 +45,37 @@ import {
 } from '../../../helpers/activity-calendar-volume.helper';
 import { ActivityCalendarGridComponent } from '../activity-calendar-grid/activity-calendar-grid.component';
 import { ActivityCalendarVolumeListComponent } from '../activity-calendar-volume-list/activity-calendar-volume-list.component';
-import {
-  CalendarDayDetailsComponent,
-  type CalendarDayDetailsData,
-} from '../calendar-day-details/calendar-day-details.component';
+import type { CalendarDayDetailsData } from '../calendar-day-details/calendar-day-details.component';
+import { CalendarDayContextComponent } from '../calendar-day-context/calendar-day-context.component';
 import { ActivityRangeTableSectionComponent } from '../../event-table/activity-range-table-section.component';
+import { TimelineNotesWorkspaceComponent } from '../../timeline-notes/timeline-notes-workspace.component';
+import { calendarTimelineNoteRange, calendarTimelineNotesByDate, calendarTimelineNoteRangesEqual } from '../../../helpers/calendar-timeline-notes.helper';
+import {
+  buildPlannedWorkoutCalendarOverlay,
+  type PlannedWorkoutCalendarOverlay,
+} from '../../../helpers/planned-workout-calendar.helper';
+import { CalendarPeriodSummaryComponent } from '../calendar-period-summary/calendar-period-summary.component';
+import { CalendarMonthTotalsComponent } from '../calendar-month-totals/calendar-month-totals.component';
+import { buildCalendarPeriodSummary, resolveCalendarCompletionCoverage, type CalendarPeriodSource } from '../../../helpers/calendar-period-summary.helper';
+import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
+import { AppHapticsService } from '../../../services/app.haptics.service';
+import { LoggerService } from '../../../services/logger.service';
+import { calendarReadErrorDetails } from '../../../helpers/calendar-read-error.helper';
+import { TrainingImpactService, type TrainingImpactSnapshotState } from '../../../services/training-impact.service';
 
 interface CalendarEventsState {
   status: 'loading' | 'ready' | 'error';
-  events: EventInterface[];
+  events: EventRead[];
+  complete?: boolean;
 }
+
+interface CalendarPlansState {
+  status: 'loading' | 'ready' | 'error';
+  schedule: CurrentTrainingScheduleV1 | null;
+  restoreInProgress?: boolean;
+}
+
+interface CalendarCompletionState extends CalendarPeriodSource<TrainingWorkoutCompletionV1[]> { context: string }
 
 interface CalendarViewOption {
   value: ActivityCalendarView;
@@ -46,20 +83,18 @@ interface CalendarViewOption {
   icon: string;
 }
 
-interface CalendarSummaryMetric {
-  label: string;
-  icon: string;
-  value: string;
-}
-
 @Component({
   selector: 'app-calendar-page',
   standalone: true,
   imports: [
     SharedModule,
+    CalendarPeriodSummaryComponent,
+    CalendarMonthTotalsComponent,
     ActivityCalendarGridComponent,
+    CalendarDayContextComponent,
     ActivityCalendarVolumeListComponent,
     ActivityRangeTableSectionComponent,
+    TimelineNotesWorkspaceComponent,
   ],
   templateUrl: './calendar-page.component.html',
   styleUrls: ['./calendar-page.component.scss'],
@@ -68,19 +103,38 @@ interface CalendarSummaryMetric {
 export class CalendarPageComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly viewportScroller = inject(ViewportScroller);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly elementRef = inject<ElementRef<HTMLElement>>(ElementRef);
+  private pendingScrollRestore: Subscription | null = null;
   private readonly userService = inject(AppUserService);
   private readonly calendarService = inject(ActivityCalendarService);
-  private readonly bottomSheet = inject(MatBottomSheet);
+  private readonly plansService = inject(TrainingPlansService);
   private readonly dayDetailsNavigation = inject(CalendarDayDetailsNavigationService);
+  private readonly trainingImpact = inject(TrainingImpactService);
   private readonly locale = inject(LOCALE_ID);
+  private readonly haptics = inject(AppHapticsService);
+  private readonly logger = inject(LoggerService);
+  private readonly notesWorkspace = viewChild(TimelineNotesWorkspaceComponent);
   private readonly reloadSequence = signal(0);
   private readonly today = signal(new Date());
-  private readonly initialRouteState = resolveRouteState(this.route.snapshot.queryParamMap);
-  private readonly routeState$ = this.route.queryParamMap.pipe(
-    map(params => resolveRouteState(params)),
+  readonly isDayRoute = this.route.snapshot.data?.['calendarMode'] === 'day';
+  private readonly initialRouteState = resolveRouteState(
+    this.route.snapshot.queryParamMap,
+    this.isDayRoute ? this.route.snapshot.paramMap.get('date') : null,
+    this.userService.user()?.settings?.unitSettings?.startOfTheWeek,
+  );
+  private readonly routeState$ = combineLatest([this.route.queryParamMap, this.route.paramMap,
+    this.userService.user$.pipe(map(user => user?.settings?.unitSettings?.startOfTheWeek), distinctUntilChanged()),
+  ]).pipe(
+    map(([queryParams, routeParams, weekStart]) => resolveRouteState(
+      queryParams, this.isDayRoute ? routeParams.get('date') : null,
+      weekStart,
+    )),
     distinctUntilChanged((previous, current) => (
       previous.view === current.view
       && formatActivityCalendarDateParam(previous.anchorDate) === formatActivityCalendarDateParam(current.anchorDate)
+      && formatActivityCalendarDateParam(previous.selectedDate) === formatActivityCalendarDateParam(current.selectedDate)
     )),
     shareReplay({ bufferSize: 1, refCount: true }),
   );
@@ -88,28 +142,137 @@ export class CalendarPageComponent {
   readonly viewOptions: ReadonlyArray<CalendarViewOption> = [
     { value: 'week', label: 'Week', icon: 'view_week' },
     { value: 'month', label: 'Month', icon: 'calendar_view_month' },
+    { value: '30d', label: '30 days', icon: 'date_range' },
     { value: 'year', label: 'Year', icon: 'calendar_month' },
   ];
+  readonly isPrescriptionSummaryView = computed(() => !this.isDayRoute && ['week', 'month'].includes(this.routeState().view));
+  readonly isGridView = computed(() => isActivityCalendarGridView(this.routeState().view));
+  readonly periodUnitLabel = computed(() => this.routeState().view === '30d' ? '30-day period' : this.routeState().view);
   readonly familyVolumeTooltip = ACTIVITY_CALENDAR_VOLUME_TOOLTIP;
   readonly routeState = toSignal(this.routeState$, { initialValue: this.initialRouteState });
+  readonly openedFromDashboard = toSignal(this.route.queryParamMap.pipe(map(params => params.get('from') === 'dashboard')), {
+    initialValue: this.route.snapshot.queryParamMap.get('from') === 'dashboard',
+  });
+  private readonly explicitDateParam = toSignal(this.route.queryParamMap.pipe(map(params => params.get('date'))), {
+    initialValue: this.route.snapshot.queryParamMap.get('date'),
+  });
+  private readonly dayRouteDateParam = toSignal(this.route.paramMap.pipe(map(params => params.get('date'))), {
+    initialValue: this.route.snapshot.paramMap.get('date'),
+  });
   readonly currentUser = computed(() => this.userService.user() as AppUserInterface | null);
+  readonly hasTrainingPlanningUIAccess = computed(() => !!this.currentUser()?.uid);
   readonly eventState = toSignal(combineLatest([
-    this.userService.user$.pipe(
-      filter((user): user is AppUserInterface => !!user?.uid),
-    ),
+    this.userService.user$,
     this.routeState$,
     toObservable(this.reloadSequence),
   ]).pipe(
-    switchMap(([user, state]) => {
-      const startOfWeek = user.settings?.unitSettings?.startOfTheWeek;
-      const queryWindow = resolveActivityCalendarQueryWindow(state.view, state.anchorDate, startOfWeek);
-      return this.calendarService.watchEvents(user, queryWindow).pipe(
-        map(events => ({ status: 'ready', events }) as CalendarEventsState),
+    map(([user, state, reload]) => ({ user, reload, bounded: !this.isDayRoute && ['week', 'month'].includes(state.view), window: this.isDayRoute
+      ? resolveActivityCalendarDayRange(state.anchorDate)
+      : resolveActivityCalendarQueryWindow(state.view, state.anchorDate, user?.settings?.unitSettings?.startOfTheWeek) })),
+    distinctUntilChanged((a, b) => a.user?.uid === b.user?.uid && a.reload === b.reload
+      && a.bounded === b.bounded && a.window.startMs === b.window.startMs && a.window.endExclusiveMs === b.window.endExclusiveMs),
+    switchMap(({ user, bounded, window: queryWindow }) => {
+      if (!user?.uid) return of({ status: 'ready', events: [] } as CalendarEventsState);
+      const startedAt = Date.now();
+      const events$ = bounded ? this.calendarService.watchSummaryEvents(user, queryWindow)
+        : this.calendarService.watchEvents(user, queryWindow).pipe(map(events => ({ events, complete: true })));
+      return events$.pipe(
+        map(result => ({ status: 'ready', ...result }) as CalendarEventsState),
         startWith({ status: 'loading', events: [] } as CalendarEventsState),
-        catchError(() => of({ status: 'error', events: [] } as CalendarEventsState)),
+        catchError((error: unknown) => {
+          this.logReadFailure('activities', error, startedAt, bounded);
+          return of({ status: 'error', events: [] } as CalendarEventsState);
+        }),
       );
     }),
   ), { initialValue: { status: 'loading', events: [] } as CalendarEventsState });
+  readonly plansState = toSignal(combineLatest([this.userService.user$, this.routeState$, toObservable(this.reloadSequence)]).pipe(
+    map(([user, state, reload]) => ({ uid: user?.uid, reload, bounded: !this.isDayRoute && ['week', 'month'].includes(state.view),
+      window: resolveActivityCalendarQueryWindow(state.view, state.anchorDate, user?.settings?.unitSettings?.startOfTheWeek) })),
+    distinctUntilChanged((a, b) => a.uid === b.uid && a.reload === b.reload && a.bounded === b.bounded
+      && (!a.bounded || (a.window.startMs === b.window.startMs && a.window.endExclusiveMs === b.window.endExclusiveMs))),
+    switchMap(({ uid, bounded, window }) => {
+      if (!uid) return of({ status: 'ready', schedule: null } as CalendarPlansState);
+      const startedAt = Date.now();
+      const schedule$ = bounded ? this.plansService.watchCalendarSchedule(uid, formatActivityCalendarDateParam(new Date(window.startMs)),
+        formatActivityCalendarDateParam(new Date(window.endExclusiveMs - 1))) : this.plansService.watchSchedule(uid);
+      return schedule$.pipe(
+        map(schedule => schedule.restoreUnavailable
+          ? ({ status: 'error', schedule: null, restoreInProgress: true } as CalendarPlansState)
+          : ({ status: 'ready', schedule } as CalendarPlansState)),
+        startWith({ status: 'loading', schedule: null } as CalendarPlansState),
+        catchError((error: unknown) => {
+          this.logReadFailure('planned-workouts', error, startedAt, bounded);
+          return of({ status: 'error', schedule: null } as CalendarPlansState);
+        }),
+      );
+    }),
+  ), { initialValue: { status: 'loading', schedule: null } as CalendarPlansState });
+  private readonly completionContext = computed(() => JSON.stringify([this.currentUser()?.uid, this.isPrescriptionSummaryView(), this.reloadSequence(),
+    this.plansState().schedule ? selectCalendarVisibleScheduledWorkouts(this.plansState().schedule!).map(workout => workout.id).sort() : []]));
+  readonly completionState = toSignal(combineLatest([this.userService.user$, toObservable(this.plansState),
+    toObservable(this.isPrescriptionSummaryView), toObservable(this.reloadSequence)]).pipe(
+    map(([user, plans, bounded, reload]) => ({ uid: user?.uid, bounded, reload, status: plans.status,
+      ids: plans.schedule ? selectCalendarVisibleScheduledWorkouts(plans.schedule).map(workout => workout.id).sort() : [] })),
+    distinctUntilChanged((a, b) => a.uid === b.uid && a.bounded === b.bounded && a.reload === b.reload
+      && a.status === b.status && JSON.stringify(a.ids) === JSON.stringify(b.ids)),
+    switchMap(({ uid, bounded, reload, status, ids }) => {
+      const context = JSON.stringify([uid, bounded, reload, ids]);
+      if (!uid) return of({ status: 'ready', data: [], complete: true, context } as CalendarCompletionState);
+      if (bounded && status !== 'ready') return of({ status, data: [], complete: false, context } as CalendarCompletionState);
+      const startedAt = Date.now();
+      const links$ = bounded ? this.plansService.watchWorkoutCompletionsForWorkouts(uid, ids) : this.plansService.watchWorkoutCompletions(uid);
+      return links$.pipe(
+        map(data => ({ status: 'ready', data, complete: true, context } as CalendarCompletionState)),
+        startWith({ status: 'loading', data: [], complete: false, context } as CalendarCompletionState),
+        catchError((error: unknown) => {
+          this.logReadFailure('workout-completions', error, startedAt, bounded);
+          return of({ status: 'error', data: [], complete: false, context } as CalendarCompletionState);
+        }),
+      );
+    }),
+  ), { initialValue: { status: 'loading', data: [], complete: false, context: '' } as CalendarCompletionState });
+  private readonly currentCompletions = computed<CalendarPeriodSource<TrainingWorkoutCompletionV1[]>>(() =>
+    this.completionState().context === this.completionContext() ? this.completionState() : { status: 'loading', data: [], complete: false });
+  readonly workoutCompletions = computed(() => this.currentCompletions().data);
+  readonly prescriptionSummary = computed(() => {
+    const period = this.routeState().view === 'month' ? 'month' : 'week';
+    const window = resolveActivityCalendarPrimaryRange(period, this.routeState().anchorDate,
+      this.currentUser()?.settings?.unitSettings?.startOfTheWeek);
+    return buildCalendarPeriodSummary({ period, window, startLocalDate: formatActivityCalendarDateParam(new Date(window.startMs)),
+      endLocalDate: formatActivityCalendarDateParam(new Date(window.endExclusiveMs - 1)),
+      events: { status: this.eventState().status, data: this.eventState().events, complete: this.eventState().complete !== false },
+      schedule: { status: this.plansState().status, data: this.plansState().schedule, complete: this.plansState().schedule?.workoutsComplete !== false },
+      completions: this.currentCompletions(), unitSettings: this.currentUser()?.settings?.unitSettings, locale: this.locale,
+      summariesSettings: this.currentUser()?.settings?.summariesSettings });
+  });
+  readonly canRetrySummary = computed(() => this.eventState().status === 'error' || this.plansState().status === 'error'
+    || this.completionState().status === 'error');
+  readonly showMonthWorkoutRetry = computed(() => !this.isDayRoute && this.routeState().view === 'month'
+    && this.hasTrainingPlanningUIAccess() && (
+      (this.plansState().status === 'error' && !this.plansState().restoreInProgress)
+      || (this.prescriptionSummary().completionStatus === 'error' && (this.prescriptionSummary().scheduledCount ?? 0) > 0)
+    ));
+  readonly activitiesComplete = computed(() => this.eventState().status === 'ready' && this.eventState().complete !== false);
+  readonly plannedWorkoutsComplete = computed(() => this.plansState().status === 'ready' && this.plansState().schedule?.workoutsComplete !== false);
+  readonly planPhasesByDate = computed(() => {
+    const schedule = this.plansState().schedule;
+    return this.hasTrainingPlanningUIAccess() && this.plansState().status === 'ready' && schedule
+      ? buildCalendarPlanPhases(schedule.plans, schedule.state.activePlanId) : {};
+  });
+  readonly plannedWorkoutsByDate = computed<PlannedWorkoutCalendarOverlay>(() => {
+    const schedule = this.plansState().schedule;
+    if (!this.hasTrainingPlanningUIAccess() || !schedule) return {};
+    const workouts = selectCalendarVisibleScheduledWorkouts(schedule);
+    const coverage = resolveCalendarCompletionCoverage(workouts, this.currentCompletions());
+    return buildPlannedWorkoutCalendarOverlay(
+      workouts,
+      schedule.plans,
+      schedule.state.activePlanId,
+      coverage.linkedWorkoutIds,
+      coverage.complete,
+    );
+  });
   readonly calendarModel = computed(() => {
     const state = this.routeState();
     return buildActivityCalendarViewModel(this.eventState().events, {
@@ -119,50 +282,31 @@ export class CalendarPageComponent {
       summariesSettings: this.currentUser()?.settings?.summariesSettings,
       locale: this.locale,
       now: this.today(),
+      activitiesComplete: this.activitiesComplete(),
     });
   });
-  readonly primaryActivityRange = computed(() => resolveActivityCalendarPrimaryRange(
-    this.routeState().view,
-    this.routeState().anchorDate,
-    this.currentUser()?.settings?.unitSettings?.startOfTheWeek,
-  ));
-  readonly periodSummaryMetrics = computed<CalendarSummaryMetric[]>(() => {
-    if (this.eventState().status !== 'ready') {
-      return [
-        { label: 'Distance', icon: 'route', value: '--' },
-        { label: 'Duration', icon: 'schedule', value: '--' },
-        { label: 'Ascent', icon: 'landscape', value: '--' },
-      ];
-    }
-
-    const summary = this.calendarModel().summary;
-    const unitSettings = this.currentUser()?.settings?.unitSettings ?? null;
-    return [
-      {
-        label: 'Distance',
-        icon: 'route',
-        value: formatUnitAwareDataValue(DataDistance.type, summary.totalDistanceMeters, unitSettings, {
-          stripRepeatedUnit: true,
-          locale: this.locale,
-        }) || '0',
-      },
-      {
-        label: 'Duration',
-        icon: 'schedule',
-        value: formatActivityCalendarDuration(summary.totalDurationSeconds),
-      },
-      {
-        label: 'Ascent',
-        icon: 'landscape',
-        value: formatUnitAwareDataValue(DataAscent.type, summary.totalAscentMeters, unitSettings, {
-          stripRepeatedUnit: true,
-          locale: this.locale,
-        }) || '0',
-      },
-    ];
+  readonly primaryActivityRange = computed(() => this.isDayRoute
+    ? resolveActivityCalendarDayRange(this.routeState().anchorDate)
+    : resolveActivityCalendarPrimaryRange(
+      this.routeState().view,
+      this.routeState().anchorDate,
+      this.currentUser()?.settings?.unitSettings?.startOfTheWeek,
+    ));
+  readonly timelineNoteRange = computed(() => this.isDayRoute
+    ? { startDate: formatActivityCalendarDateParam(this.routeState().anchorDate),
+      endDate: formatActivityCalendarDateParam(this.routeState().anchorDate) }
+    : calendarTimelineNoteRange(this.calendarModel(), this.selectedDay()), { equal: calendarTimelineNoteRangesEqual });
+  readonly notesByDate = computed(() => {
+    const workspace = this.notesWorkspace();
+    const notes = this.currentUser()?.uid === workspace?.service.uid() ? workspace?.context().notes ?? [] : [];
+    return calendarTimelineNotesByDate(this.calendarModel(), notes, this.today().getTime(), this.selectedDay());
   });
+  readonly periodSummaryMetrics = computed<ActivityCalendarSummaryMetric[]>(() => formatActivityCalendarSummaryMetrics(
+    this.eventState().status === 'ready' ? this.calendarModel().summary : null,
+    this.currentUser()?.settings?.unitSettings, this.locale,
+  ));
   readonly familyVolumeRows = computed(() => {
-    if (this.eventState().status !== 'ready') {
+    if (!this.activitiesComplete()) {
       return [];
     }
 
@@ -177,7 +321,80 @@ export class CalendarPageComponent {
   readonly hasEvents = computed(() => this.calendarModel().months.some(month => (
     month.days.some(day => day.inPrimaryPeriod && day.eventCount > 0)
   )));
-  readonly emptyStateLabel = computed(() => `No activities in ${this.calendarModel().periodLabel}`);
+  readonly emptyStateLabel = computed(() => this.isDayRoute
+    ? 'No completed activities for this day'
+    : `No completed activities in ${this.calendarModel().periodLabel}`);
+  readonly dayTitle = computed(() => getDateTimeFormatter(this.locale, {
+    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+  }).format(this.routeState().anchorDate));
+  readonly dayShortTitle = computed(() => getDateTimeFormatter(this.locale, {
+    day: 'numeric', month: 'short', year: '2-digit',
+  }).format(this.routeState().anchorDate));
+  private readonly calendarReturnParams = toSignal(this.route.queryParamMap.pipe(map(params => ({
+    view: params.get('calendarView'), anchor: params.get('calendarAnchor'), surface: params.get('calendarSurface'),
+  }))), { initialValue: { view: this.route.snapshot.queryParamMap.get('calendarView'), anchor: this.route.snapshot.queryParamMap.get('calendarAnchor'),
+    surface: this.route.snapshot.queryParamMap.get('calendarSurface') } });
+  readonly calendarBackQuery = computed(() => {
+    const view = normalizeActivityCalendarView(this.calendarReturnParams().view);
+    const date = this.routeState().selectedDate;
+    const savedAnchor = this.calendarReturnParams().anchor;
+    if (!savedAnchor) return { view, date: formatActivityCalendarDateParam(date) };
+    const anchor = parseActivityCalendarDate(savedAnchor, date);
+    const window = resolveActivityCalendarVisibleWindow(view, anchor, this.currentUser()?.settings?.unitSettings?.startOfTheWeek);
+    // Adjacent-day navigation may leave the original grid; keep the returned day visible.
+    const visibleAnchor = date.getTime() >= window.startMs && date.getTime() < window.endExclusiveMs
+      ? anchor : resolveActivityCalendarViewAnchor(view, date, this.today());
+    return { view, date: formatActivityCalendarDateParam(date), anchor: formatActivityCalendarDateParam(visibleAnchor) };
+  });
+  readonly dayBackNavigation = computed(() => this.openedFromDashboard()
+    ? { route: ['/dashboard'], query: null, label: 'Dashboard', ariaLabel: 'Back to dashboard' }
+    : { route: ['/calendar'], query: this.calendarBackQuery(), label: 'Calendar', ariaLabel: 'Back to calendar for this day' });
+  readonly selectedDay = computed(() => {
+    const dateKey = formatActivityCalendarDateParam(this.routeState().selectedDate);
+    return this.calendarModel().months.flatMap(month => month.days)
+      .find(day => day.dateKey === dateKey)
+      ?? buildActivityCalendarSelectedDay(this.eventState().events, this.routeState().selectedDate, this.locale, this.today(), this.activitiesComplete());
+  });
+  readonly selectedDayActivities = computed(() => ({
+    day: this.selectedDay()!, status: this.eventState().status,
+    complete: this.activitiesComplete(),
+  }));
+  private readonly trainingImpactSource = computed(() => {
+    const uid = this.currentUser()?.uid;
+    return uid
+      ? this.trainingImpact.watch(uid, this.selectedDay()?.events ?? [])
+      : of({ status: 'private', formPoints: null } as TrainingImpactSnapshotState);
+  });
+  readonly trainingImpactState = toSignal(
+    toObservable(this.trainingImpactSource).pipe(switchMap(source => source)),
+    { initialValue: { status: 'private', formPoints: null } as TrainingImpactSnapshotState },
+  );
+  readonly selectedDayNotes = computed(() => this.notesByDate().get(this.selectedDay()?.dateKey || '')?.notes ?? []);
+  readonly selectedDayPlanned = computed(() => this.plannedWorkoutsByDate()[this.selectedDay()?.dateKey || '']?.entries ?? []);
+  readonly selectedDayData = computed<CalendarDayDetailsData | null>(() => {
+    const day = this.selectedDay();
+    const user = this.currentUser();
+    if (!day || !user?.uid) return null;
+    return {
+      day, userId: user.uid, locale: this.locale,
+      calendarReturn: { view: this.routeState().view, anchor: formatActivityCalendarDateParam(this.routeState().anchorDate) },
+      planningEnabled: this.hasTrainingPlanningUIAccess(),
+      unitSettings: user.settings?.unitSettings ?? null,
+      summariesSettings: user.settings?.summariesSettings ?? null,
+      timelineNotes: this.selectedDayNotes,
+      timelineNotesStatusSource: () => {
+        const workspace = this.notesWorkspace();
+        if (!workspace || workspace.service.uid() !== user.uid || workspace.loading()) return 'loading';
+        return workspace.error() ? 'error' : 'ready';
+      },
+      activities: this.selectedDayActivities,
+      plannedWorkoutsSource: this.selectedDayPlanned,
+      plannedWorkoutsStatusSource: () => this.plansState().status,
+      plannedWorkoutsCompleteSource: this.plannedWorkoutsComplete,
+      scheduleSource: () => this.currentUser()?.uid === user.uid ? this.plansState().schedule : null,
+      trainingImpact: this.trainingImpactState,
+    };
+  });
   private readonly restoreDayDetailsEffect = effect(() => {
     const restoration = this.dayDetailsNavigation.restorationFor(this.router.url);
     if (!restoration || this.eventState().status !== 'ready') {
@@ -193,8 +410,24 @@ export class CalendarPageComponent {
     if (!this.dayDetailsNavigation.consumeRestoration(restoration)) {
       return;
     }
-    if (day?.eventCount) {
-      this.openDay(day);
+    if (day && this.selectedDay()?.dateKey !== day.dateKey) this.openDay(day, false);
+  });
+  private readonly openDuplicatedDayEffect = effect(() => {
+    const uid = this.currentUser()?.uid;
+    if (!uid) return;
+    const dateKey = this.dayDetailsNavigation.workoutDestinationFor(uid);
+    if (!dateKey || formatActivityCalendarDateParam(this.routeState().selectedDate) !== dateKey
+      || this.eventState().status === 'loading') return;
+    const day = this.calendarModel().months.flatMap(month => month.days)
+      .find(candidate => candidate.dateKey === dateKey);
+    if (day) this.dayDetailsNavigation.consumeWorkoutDestination(uid, dateKey);
+  });
+  private readonly canonicalDayRouteEffect = effect(() => {
+    if (!this.isDayRoute) return;
+    const routeDate = this.dayRouteDateParam();
+    const canonicalDate = formatActivityCalendarDateParam(parseActivityCalendarDate(routeDate));
+    if (routeDate !== canonicalDate) {
+      this.navigateToDay(canonicalDate, true);
     }
   });
 
@@ -203,61 +436,176 @@ export class CalendarPageComponent {
     this.today.set(new Date());
   }
 
+  @HostListener('document:visibilitychange')
+  refreshVisibleToday(): void {
+    // Mobile tab/app resumes need not emit window focus. Keep ongoing note cutoffs current too.
+    if (document.visibilityState === 'visible') this.refreshToday();
+  }
+
   selectView(value: unknown): void {
     const view = normalizeActivityCalendarView(value, this.routeState().view);
     if (view === this.routeState().view) {
       return;
     }
-    this.navigateToState({ ...this.routeState(), view });
+    this.haptics.selection();
+    this.navigateToState({ ...this.routeState(), view,
+      anchorDate: resolveActivityCalendarViewAnchor(view, this.routeState().selectedDate, this.today()) });
   }
 
   navigatePeriod(direction: -1 | 1): void {
     const state = this.routeState();
-    this.navigateToState({
-      ...state,
-      anchorDate: navigateActivityCalendarDate(state.anchorDate, state.view, direction),
-    });
+    if (this.isDayRoute) {
+      this.navigateToState({ ...state, anchorDate: navigateActivityCalendarDay(state.anchorDate, direction) });
+      return;
+    }
+    this.navigateToState(navigateActivityCalendarPeriod(state, direction));
   }
 
   goToToday(): void {
-    this.navigateToState({ ...this.routeState(), anchorDate: new Date() });
+    this.navigateToState({ ...this.routeState(), anchorDate: new Date(), selectedDate: new Date() });
   }
 
   retry(): void {
     this.reloadSequence.update(value => value + 1);
   }
 
-  openDay(day: ActivityCalendarDayViewModel): void {
-    const userId = `${this.currentUser()?.uid || ''}`.trim();
-    if (!day.eventCount || !userId) {
-      return;
-    }
-    this.bottomSheet.open<CalendarDayDetailsComponent, CalendarDayDetailsData>(CalendarDayDetailsComponent, {
-      data: {
-        day,
-        userId,
-        locale: this.locale,
-        unitSettings: this.currentUser()?.settings?.unitSettings ?? null,
-        summariesSettings: this.currentUser()?.settings?.summariesSettings ?? null,
-      },
-    });
+  openDay(day: ActivityCalendarDayViewModel, revealDay = true): void {
+    const state = this.routeState();
+    const isNarrowYear = revealDay && state.view === 'year'
+      && this.elementRef.nativeElement.ownerDocument.defaultView?.matchMedia?.('(max-width: 900px)')?.matches;
+    if (!this.currentUser()?.uid || (!isNarrowYear
+      && this.selectedDay()?.dateKey === day.dateKey && this.explicitDateParam() === day.dateKey)) return;
+    this.navigateToState({ ...state, view: isNarrowYear ? 'month' : state.view,
+      anchorDate: isNarrowYear ? day.date : state.anchorDate, selectedDate: day.date }, revealDay);
   }
 
-  private navigateToState(state: ActivityCalendarRouteState): void {
+  selectDayNote(noteId: string): void {
+    const note = this.selectedDayNotes().find(candidate => candidate.id === noteId);
+    if (note && this.currentUser()?.uid === this.notesWorkspace()?.service.uid()) {
+      this.notesWorkspace()?.context().select([note]);
+    }
+  }
+
+  prepareDayBackNavigation(): void {
+    if (!this.isDayRoute || !this.openedFromDashboard() || !this.currentUser()?.uid) return;
+    const context = this.calendarBackQuery();
+    // The activity/workout visit may have replaced the transient return record;
+    // reconstruct it from the full-day URL, including after a page reload.
+    this.dayDetailsNavigation.prepareReturn('/dashboard', context.date,
+      this.calendarReturnParams().surface === 'today-sheet' ? 'today-sheet' : undefined,
+      { view: context.view === '30d' ? '30d' : 'month', anchor: context.anchor ?? context.date });
+  }
+
+  private navigateToState(state: ActivityCalendarRouteState, revealDay = false): void {
+    if (this.isDayRoute) {
+      this.navigateToDay(formatActivityCalendarDateParam(state.anchorDate));
+      return;
+    }
+    const viewChanged = state.view !== this.routeState().view;
+    const scrollPosition = this.viewportScroller.getScrollPosition();
+    const targetDate = formatActivityCalendarDateParam(state.selectedDate);
+    this.pendingScrollRestore?.unsubscribe();
+    // The app router scrolls to the top after query-only navigation. Restore the
+    // current position after its Scroll event so selecting a day stays in context.
+    const scrollRestore = this.router.events.pipe(
+      filter((event): event is Scroll => {
+        if (!(event instanceof Scroll)) return false;
+        const url = 'urlAfterRedirects' in event.routerEvent
+          ? event.routerEvent.urlAfterRedirects : event.routerEvent.url;
+        const params = this.router.parseUrl(url).queryParamMap;
+        return params.get('view') === state.view && params.get('date') === targetDate
+          && params.get('anchor') === formatActivityCalendarDateParam(state.anchorDate);
+      }),
+      take(1),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(event => {
+      if (this.pendingScrollRestore === scrollRestore) this.pendingScrollRestore = null;
+      if (event.position) return; // Browser Back already restores its saved position.
+      Promise.resolve().then(() => {
+        if (this.destroyRef.destroyed) return;
+        if (!viewChanged) this.viewportScroller.scrollToPosition(scrollPosition);
+        if (revealDay) requestAnimationFrame(() => {
+          if (!this.destroyRef.destroyed) revealCalendarDayContext(this.elementRef.nativeElement);
+        });
+      });
+    });
+    this.pendingScrollRestore = scrollRestore;
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: {
         view: state.view,
-        date: formatActivityCalendarDateParam(state.anchorDate),
+        date: targetDate,
+        anchor: formatActivityCalendarDateParam(state.anchorDate),
       },
       queryParamsHandling: 'merge',
+    }).then(navigated => {
+      if (!navigated && this.pendingScrollRestore === scrollRestore) {
+        scrollRestore.unsubscribe();
+        this.pendingScrollRestore = null;
+      }
+    }).catch(() => {
+      if (this.pendingScrollRestore === scrollRestore) {
+        scrollRestore.unsubscribe();
+        this.pendingScrollRestore = null;
+      }
     });
+  }
+
+  private logReadFailure(
+    source: 'activities' | 'planned-workouts' | 'workout-completions',
+    error: unknown,
+    startedAt: number,
+    bounded: boolean,
+  ): void {
+    const details = {
+      ...calendarReadErrorDetails(error),
+      source,
+      view: this.routeState().view,
+      routeMode: this.isDayRoute ? 'day' : 'calendar',
+      bounded,
+      elapsedMs: Math.max(0, Date.now() - startedAt),
+      online: typeof navigator === 'undefined' ? null : navigator.onLine,
+    };
+    // Pass only fixed labels and operational state, never the original error or calendar query/records.
+    this.logger.error('[CalendarPage] Data read failed.', details);
+    this.logger.captureMessage('Calendar data read failed', {
+      level: 'error',
+      tags: {
+        calendarReadSource: source,
+        calendarView: details.view,
+        calendarRouteMode: details.routeMode,
+        calendarErrorName: details.errorName,
+        calendarErrorCode: details.errorCode,
+      },
+      extra: details,
+      fingerprint: ['calendar-read-failure', source, details.errorName, details.errorCode],
+    });
+  }
+
+  private navigateToDay(dateKey: string, replaceUrl = false): void {
+    const route = ['/calendar/day', dateKey];
+    const returnParams = this.calendarReturnParams();
+    const origin = this.openedFromDashboard() || returnParams.view || returnParams.anchor ? {
+      ...(this.openedFromDashboard() ? { from: 'dashboard' } : {}),
+      ...(this.openedFromDashboard() && returnParams.surface === 'today-sheet' ? { calendarSurface: 'today-sheet' } : {}),
+      ...(returnParams.view ? { calendarView: normalizeActivityCalendarView(returnParams.view) } : {}),
+      ...(returnParams.anchor ? { calendarAnchor: formatActivityCalendarDateParam(parseActivityCalendarDate(returnParams.anchor)) } : {}),
+    } : null;
+    if (origin || replaceUrl) {
+      void this.router.navigate(route, {
+        ...(origin ? { queryParams: origin } : {}),
+        ...(replaceUrl ? { replaceUrl: true } : {}),
+      });
+      return;
+    }
+    void this.router.navigate(route);
   }
 }
 
-function resolveRouteState(params: ParamMap): ActivityCalendarRouteState {
-  return {
-    view: normalizeActivityCalendarView(params.get('view')),
-    anchorDate: parseActivityCalendarDate(params.get('date')),
-  };
+function resolveRouteState(params: ParamMap, pathDate: string | null = null, startOfWeek?: number | null): ActivityCalendarRouteState {
+  return resolveActivityCalendarRouteState({
+    view: pathDate === null ? params.get('view') : 'month',
+    date: pathDate ?? params.get('date'),
+    anchor: pathDate ?? params.get('anchor'),
+  }, new Date(), startOfWeek);
 }

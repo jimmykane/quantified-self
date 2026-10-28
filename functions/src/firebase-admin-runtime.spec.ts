@@ -4,6 +4,7 @@ import { resolveFirebaseAdminRuntime } from './firebase-admin-runtime';
 function emulatorEnvironment(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   return {
     FUNCTIONS_EMULATOR: 'true',
+    QS_ISOLATED_LOCAL_RUNTIME: 'true',
     GCLOUD_PROJECT: 'demo-quantified-self-local',
     FIREBASE_CONFIG: JSON.stringify({ projectId: 'demo-quantified-self-local' }),
     FIREBASE_AUTH_EMULATOR_HOST: '127.0.0.1:9099',
@@ -25,6 +26,7 @@ describe('resolveFirebaseAdminRuntime', () => {
   });
 
   it('rejects real projects, missing emulators, and non-loopback hosts', () => {
+    expect(() => resolveFirebaseAdminRuntime(emulatorEnvironment({ FUNCTIONS_EMULATOR: undefined }))).toThrow(/Functions emulator/u);
     expect(() => resolveFirebaseAdminRuntime(emulatorEnvironment({ GCLOUD_PROJECT: 'quantified-self-io' }))).toThrow(/demo-/u);
     expect(() => resolveFirebaseAdminRuntime(emulatorEnvironment({ FIRESTORE_EMULATOR_HOST: undefined }))).toThrow(/FIRESTORE/u);
     expect(() => resolveFirebaseAdminRuntime(emulatorEnvironment({ FIREBASE_STORAGE_EMULATOR_HOST: '10.0.0.2:9199' }))).toThrow(/STORAGE/u);
@@ -34,6 +36,10 @@ describe('resolveFirebaseAdminRuntime', () => {
     expect(() => resolveFirebaseAdminRuntime(emulatorEnvironment({
       FIREBASE_CONFIG: JSON.stringify({ projectId: 'another-demo' }),
     }))).toThrow(/does not match/u);
+  });
+
+  it('preserves the existing Functions-only emulator profile outside isolated local mode', () => {
+    expect(resolveFirebaseAdminRuntime({ FUNCTIONS_EMULATOR: 'true', GCLOUD_PROJECT: 'test-project' }).storageBucket).toBe('quantified-self-io');
   });
 
   it('preserves the production project and bucket outside the emulator', () => {

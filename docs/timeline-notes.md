@@ -1,0 +1,294 @@
+# Timeline notes
+
+Timeline notes are private, user-created calendar context, independent of Health metrics, Sleep sessions, and workouts.
+Every authenticated account can use the compact **Timeline notes** header action in Dashboard, Health, and Calendar, without a
+subscription or connected provider. Existing workspace entry-point rollout and provider import checks are unchanged.
+Training charts retain their shared note annotations, but the Training route has no note-manager header action.
+The signed-in sidenav also includes **Timeline notes** as a full-level row after **Health** in **Training & health**,
+with the `edit_note` (lines and pencil) icon, distinct from Plans’ `event_note` calendar icon. This native Material link
+closes the drawer and opens the lazy `/health/compare` landing page. Its primary saved-note rows open the existing
+comparison charts, not an editor. **Manage notes** explicitly
+opens the existing manager; no second editor or write path is introduced. The landing page uses the existing bounded
+`list()` query/cursors, includes future and hidden notes, formats fixed calendar dates through the comparison formatter,
+and discards stale reads on owner changes, invalidation or teardown. It shows loading, empty and retry states without
+automatically opening a creation dialog. The row remains selected on the landing and `/health/compare/:noteId`, while
+the direct Health link matches only `/health`. Both comparison routes are owner-guarded, CSR-only and noindexed.
+
+## Contract and lifecycle
+
+`shared/timeline-notes.ts` owns the contract. `users/{uid}/timelineNotes/{noteId}` contains category (sickness, injury,
+vacation, travel, stress, other), a title of at most 120 characters, optional plain-text details of at most 2,000
+characters, ISO calendar `startDate`, nullable inclusive `endDate`, captured IANA `timeZone`, revision, and
+server-generated `createdAtMs`/`updatedAtMs`. Equal dates mean one day; null end means ongoing. Past and planned bounded
+dates are allowed; ongoing periods must already have started. Editing preserves the captured zone and calendar labels.
+“End today” uses that zone. Ongoing overlays stop today and never extend into a forecast.
+Optional `showOnCharts` controls each note's chart and Calendar visibility; missing means true for existing notes.
+New editor saves include the boolean. The existing save transaction validates it and includes it in revision/retry
+comparisons; older-client updates that omit it preserve the stored choice. Omitted and explicit true are equivalent for
+legacy create retries. No migration, new endpoint, index, or Security Rules change is needed.
+Optional `color` is an allowlisted presentation key (`default`, `blue`, `purple`, `pink`, `orange`, `red`, `green`),
+not arbitrary CSS. Missing and `default` use the shared neutral gray (`AppColors.DarkGray`) in charts, Calendar, and the
+note editor/list. Mixed-color group markers use that same neutral; labels retain theme-aware text contrast. The same save transaction checks color in retries,
+preserves it when older clients omit it, and accepts explicit `default` to reset it. No category/icon is inferred from color.
+
+`saveTimelineNote` and `deleteTimelineNote` require Authentication, App Check, and an originating UID matching the
+authenticated account. They use the shared transactional account-deletion guard, explicit input allowlists and strict
+validation. Creates hash an owner-scoped browser-safe UUID; identical retries are idempotent. Changed create retries
+and stale revisions conflict rather than overwrite. Identical update retries are accepted only at the immediately
+following revision. Deletion writes a content-free `{deleted: true}` receipt at
+`users/{uid}/timelineNoteDeletions/{noteId}`; receipts have no TTL so delayed creates cannot resurrect deleted notes.
+
+Browser reads are owner-only and bounded to 65 documents (64 plus lookahead). Browser writes, note descendants and
+receipt reads/writes are denied. Notes are permanent leaves. The native `cleanupUserAccounts` function's recursive
+`users/{uid}` cleanup removes notes and receipts. Provider disconnection retains them. No note text enters logs,
+analytics events, public projections, or provider syncing. Details use Angular text interpolation;
+chart tooltips HTML-escape titles. This version does not change a measurement or Training/readiness calculation.
+
+## Explicit MCP and Assistant access
+
+The existing MCP endpoint exposes full titles/details, category, fixed dates and captured timezone through
+`query_timeline_notes` only with the independent `timeline-notes:read` grant. The external consent checkbox is selected
+by default when requested; the owner can uncheck it before approving. Existing connections must reauthorize.
+Chart-hidden notes are included; color/visibility, IDs, revisions, audit timestamps and
+deletion receipts are not returned. External clients receive full private text and may retain received copies after
+revocation. The [MCP guide](mcp-server.md#timeline-notes) defines overlap, frozen ongoing cutoffs, ordering, bounds and
+encrypted continuation. No additional notes storage, index, migration or Cloud Function is needed.
+
+External MCP clients can separately request the dependent `timeline-notes:write` grant. When both scopes are requested,
+both consent checkboxes start selected; removing the read parent removes and disables the write child. Approval is still
+the grant boundary. Existing connections and legacy consent fallbacks never gain write access through refresh.
+`query_editable_timeline_notes` returns complete current authored fields, visibility/color, revision and an encrypted
+owner-and-connection-bound `noteRef` over the same bounded 366-day overlap queries. Its cursor also binds the current
+connection grant generation. `create_timeline_note` uses a client-supplied stable UUID so a lost successful response can
+be retried without duplicating content. `update_timeline_note` and `delete_timeline_note` require the latest reference and
+revision; stale writes conflict instead of overwriting. Update retries are accepted only when they reproduce the
+immediately following stored revision. Delete is permanent and leaves the existing content-free receipt, so a delayed
+create cannot restore the note. Every write rechecks account deletion and current stored connection authority inside
+the Firestore transaction, uses the existing note mutation path, and is advertised as a write for the MCP host's native
+approval UI. No new callable, collection, index or persistence model is introduced.
+
+The built-in [Assistant](assistant.md#optional-tags-and-timeline-notes) uses the read tool through a separate default-off,
+server-owned per-chat choice. A second default-off **Timeline note changes** choice requires note reads and exposes only
+current-note lookup plus local prepare-only tools to Gemini—not the public MCP write tools. A prepared create, edit, or
+permanent delete is stored briefly with the conversation and must be reviewed and applied in Quantified Self. Final
+execution reuses the existing sanitized mutation path and rechecks the active generation, permission, exact proposal,
+expiry, owner, deletion fence, and current note revision. Changing access starts a fresh chat; New chat turns optional
+access off. Relevant answers may quote notes under the existing conversation retention policy. Text is context, not
+instructions, a verified diagnosis, causal proof, or authorization for writes. Notes do not alter calculations or add
+Assistant chart overlays. Provider disconnect retains them and account cleanup still removes notes and receipts.
+
+## Loading and UI
+
+`AppTimelineNotesService` scopes requests/cache to the active account. Closed periods query `endDate >= windowStart`
+and `startDate <= windowEnd`; ongoing notes query `endDate == null` and the same upper start bound. The collection index
+is `endDate ASC, startDate ASC, __name__ ASC`. Title and details have no automatic indexes. Each workspace load accepts
+at most 512 records / 2 MiB, across 64-record pages; it reports explicit incomplete results. The two first pages load
+concurrently, then processing prioritizes ongoing notes within the shared caps. This removes a serial network wait
+without changing the indexed queries. If ongoing notes alone exhaust the budget, the closed first page (at most 65
+records including lookahead) has been prefetched but is not processed. The manager separately
+pages all notes, including future notes, newest start date first. The manager has no query parameters. Its saved-note
+Compare action opens the authenticated comparison destination described below.
+
+## Before/after comparisons
+
+Saved notes offer **Compare** in the list and the pristine editor. Unsaved drafts cannot start a comparison. The existing
+manager closes before navigating to `/health/compare/:noteId`; the route re-reads that note from the signed-in owner's
+existing collection. It is auth/onboarding guarded, client-rendered and noindexed, with exact CSR/Hosting and offline
+navigation registration. Its title metadata is static, never private note text. A transient owner-scoped return context
+retains the originating URL and list-page cursors only in memory, bound to that comparison destination. A completed
+navigation away (including browser Back) clears it, so a later direct visit cannot reuse an unrelated return location.
+The in-app Back action returns there and reopens that manager page. A direct visit or a comparison selected on the landing
+page returns to `/health/compare` without opening a manager. Cancelled returns retain their context for retry. Failed comparison navigation restores the manager without
+writing the note.
+
+The MVP compares the **start** of one note, not its end or the end of an intervention. The change day and today's
+incomplete calendar day are excluded. Equal 7/14/28-day windows default to 14. Main-night duration, eligible nightly HRV
+and daily resting HR retain separate provider/account/aggregation/semantic/origin/recording/unit identities. Naps,
+daytime HRV and sleep resting/average/minimum HR never substitute for these metrics. Initial selection prefers a single
+series with evidence on both sides; subsequent source choices stay pinned locally across window changes and do not
+rewrite Health or Dashboard preferences. Missing selections stay unavailable rather than switching one side's source.
+
+The landing page and detail method explicitly allow ongoing notes without requiring an end date. Detail period labels
+name the days before the start and the **first** days after it, not recent days of an ongoing period. Ending a note
+never moves these windows. If all three reads complete successfully but no eligible day is present, the detail page
+adds **No eligible readings for these dates** with the earliest stored Sleep session and Health record across all sources.
+`RecordedHistoryStartService` uses at most one server-read document per collection, ordered by recorded date and ID;
+it never loads historical samples or changes comparison inputs. These broad first dates do not assert per-metric
+eligibility, account continuity, gap-free coverage or import completion. Failed metadata reads remain unavailable
+independently of the comparison gates, and late results are fenced by owner and view cancellation. Refresh readings
+rechecks them; the Connections link only navigates to existing import status, never starts provider work.
+
+Each recorded date contributes one median value; the comparison uses the median of those daily values, before any chart
+downsampling. Existing normalized Sleep grouping and Health reference/HRV identity projections remain authoritative.
+At least 5/7, 10/14 or 20/28 recorded days/nights are required **on each side**. A failed/limited read, source conflict,
+multiple reported devices, known recorded-versus-note timezone calendar mismatch, incomplete requested window or
+insufficient coverage withholds the difference. Values and coverage remain visible. These are product coverage gates,
+not statistical significance, causal evidence, medical interpretation or a training instruction.
+
+Dates retain their provider calendar labels or normalized Sleep wake date; upload time and browser timezone never
+rebucket a reading. The captured note timezone determines the current-day cutoff. Known recorded timezone offsets are
+checked conservatively against that calendar convention; a mismatch withholds the difference rather than shifting data.
+Missing device/timezone metadata is not guessed. Daily chart points use UTC-noon **calendar carriers**, not claimed
+observation instants. The shared Health renderer opts into date-only tooltips, before/after series, a start marker and
+explicit nulls for every missing/change day. Existing Health/Dashboard charts retain their ordinary rendering. An
+ungated two-reading difference is also suppressed in the comparison chart's accessible description, so sparse history
+cannot bypass the comparison's coverage gates. An explicitly selected hidden note can be analyzed; this anchor never
+changes global/per-note chart visibility or exposes
+other notes. Public/profile previews receive no private comparison evidence.
+
+The public homepage and Health feature page highlight comparisons beside the existing HRV example. Their deferred
+`HealthNoteComparisonPreviewComponent` reuses the same comparison helper, canonical formatters and
+`HealthMetricSeriesChartComponent`, with the existing fictional trip and Health example readings. Both public and
+saved-note views render `NoteComparisonSummaryComponent`: compact observed differences with source pickers and
+before/after day counts stay visible; **Show details** reveals the full median/coverage table independently of the
+history chart. `SummaryDisclosureComponent` owns only the shared flat/rail heading, Material disclosure, haptic and
+scope reset behavior also used by Health's **Your recovery** and Dashboard's **At a glance**. Recovery/Glance builders
+and note calculations remain independent; numerical note differences always use a neutral rail, never a good/bad,
+within-range or Readiness classification. Disclosure state resets on owner/note changes without feedback or persistence.
+The public adapter's fixed, completed seven-day windows exclude the change day; its local metric selector changes
+only recorded history, not the three summary rows. It has no
+auth, note, Health-query or Sleep-service dependency, reads no account data, saves nothing and makes no causal claim.
+
+`TimelineNoteComparisonService` reuses `HealthMetricQueryService` for one combined summary-only window per Health metric
+and one native Sleep envelope. No workout/sample query, extra 60-day personal-range baseline, enrichment read or provider
+request is added. `AppSleepService.loadSummaryRange` uses its existing start-time query with 32-record pages plus lookahead,
+512 records and 8 MiB cumulative UTF-8 budget, at most a 64-day envelope, explicit completeness, and account/cancellation
+checks between pages. The existing three-job queue and bounded 60-second cache also cover this path. One closing consumer
+cannot cancel another consumer's active shared read; when the last consumer closes, paging stops after the in-flight
+page and a later view starts a fresh read. Health keeps its existing limits and completeness metadata.
+
+The page fences note/data requests across owner, note, window, mutation and teardown changes; selected-note reads also
+check the service generation after completion. Focus/visibility revalidate, and a visible-tab minute clock notices a
+captured-zone date change without repeatedly aborting a pending read. Same-owner/note completed readings stay mounted
+through refresh and failure, with differences withheld; changed/deleted notes or account switches clear stale evidence.
+Controls reuse Material, app haptics, canonical Sports Lib display/unit settings, the shared header and workspace shell.
+
+No comparison, summary or preference is persisted. There is no new callable, collection, index, Rule, migration, provider
+integration, score, Training calculation, or MCP/Assistant tool/schema/scope/consent change. Frontend/Hosting release is
+separately approved work; no backend deployment is required for this feature.
+The optional Connections stored-date view shares the read-only first-date service and adds one provider/date Sleep
+index (see [connection history](connection-history-import.md#requested-range-versus-stored-history)); the all-source
+note diagnostic uses existing single-field indexes and does not require that provider-specific index.
+
+## Workspace annotation loading
+
+`TimelineNotesWorkspaceComponent` coalesces chart range registrations into a union and supplies explicit chart inputs.
+Health Highlights register their own fixed trend windows alongside the metric explorer's selected window, so navigating
+the explorer into older history does not drop recent Highlight notes. All use the same bounded, account-scoped load.
+Charts register lazily as they approach the viewport. Range expansion/contraction retains the current owner's notes
+until the next result replaces them atomically; equivalent decoded snapshots retain their signal identity so already
+mounted charts do not redraw. A failed expansion retains known annotations and exposes Retry notes. Account/profile
+changes, disabling notes, an empty range union, destruction, and explicit service invalidation still clear stale notes;
+late responses cannot restore them. Mutation invalidation increments the request version immediately.
+The service keeps a bounded completed snapshot separately from pending requests. Covered results are fresh for 60 seconds;
+returning workspaces can display the last completed snapshot immediately while older data revalidates. Covered pending
+requests are shared, including refreshes; a late older window cannot overwrite the newest snapshot. Incomplete broad
+results must be requeried for a narrower window. Successful note mutations and account changes clear the snapshot and
+fence outstanding reads immediately.
+Window focus and visible-tab events perform passive revalidation, preserving annotations and avoiding duplicate pending
+loads. They do not invalidate the service. Unchanged notes retain the same chart context; ongoing periods reproject only
+when their captured-zone date changes. An explicit Retry notes bypasses freshness without clearing known annotations.
+Failed refreshes keep the last completed snapshot and expose retry. Notes failing to load never block metric rendering. Provider/sport filters do not filter
+notes. The global preference is `settings.appSettings.timelineNotes.showOnCharts`, default true. The Material manager
+supports create/edit, confirmed delete, End today, retries and explicit conflict reload while preserving unsaved drafts.
+Failed history-page requests retry that same page; failed visibility saves restore the persisted checkbox state.
+The global toggle remains the master switch. A note appears only when it and the global setting are enabled; switching
+the global toggle off/on never rewrites individual choices. The editor's **Show this note on charts and calendar**
+checkbox is a draft saved with **Save**, not an immediate write. Failed saves retain it and conflict reload restores the
+latest stored choice. The manager lists hidden notes with a **Hidden** label, even while global visibility is off.
+Category options and note lists use Material category icons. The editor's named color selector uses the existing app
+palette, with text labels so color is never the only identifier. Both are draft changes until Save. Material datepicker
+inputs reuse the app's Dayjs adapter and localized formats; the note-scoped adapter strictly rejects invalid typed dates
+instead of silently rolling them forward. Date-only values use a UTC calendar carrier so even a date skipped by the
+browser's zone remains editable; persistence still uses fixed date labels, not converted timestamps. The calendar's
+today indicator, ongoing-date limit, and End today all follow the note's captured zone. End dates are inclusive and
+cannot precede the start; ongoing starts cannot be in the future. An unfinished range end is retained as draft input
+but disabled outside range mode so its validation cannot block saving a single-day or ongoing note.
+Range paging still loads/counts hidden records within the existing caps; filtering happens before workspace projection,
+with the chart/Calendar helpers also excluding hidden notes from groups, tooltips, counts, and day details. A queued
+marker selection is checked against current visibility before opening. Hidden is a display choice, not deletion or a
+new access-control boundary; all notes remain private owner-readable records.
+
+## Chart boundary
+
+`TimelineNotesChartBinding` and `addTimelineNotesToChart` append empty ECharts marker series with markLine/markArea;
+they do not alter measurement series, axis bounds, legends, metric tooltips, gaps, reference bands or forecasts.
+Markers and period bands use the selected color; text retains its theme contrast. Mixed-color overlaps group into neutral
+markers instead of blending colors; same-color groups keep that color. Each note retains its category and actual dates
+in the escaped tooltip and manager. Date ranges have inward-facing native ECharts arrows at the start and inclusive end,
+joined by the existing subtle period band, with the title shown only at the start. Both boundaries show the same note/group tooltip.
+Period fills are non-interactive (`markArea.silent`) with tooltips and emphasis disabled, so hovering/tapping anywhere
+inside the band retains the chart's metric tooltip. Note tooltips live on the title and boundary markers;
+the binding registers no click-to-edit handler. Keep this boundary covered by real-renderer pointer tests, not only option assertions.
+Ongoing periods use an open end marker at today in the note's zone; boundaries clipped by the visible window also use open
+markers, avoiding a false start/end. Single-day notes and periods collapsed into one weekly bucket retain one dot marker.
+Single markers display the note title as plain, single-line text, with native ECharts
+ellipsis for long titles (100px in compact charts, 160px otherwise). Compact charts stagger adjacent labels onto two rows
+without adding chart padding. A formatter callback prevents title text from being
+interpreted as ECharts template placeholders. The full title remains in the escaped tooltip and editor. Grouped markers
+keep their note count instead of labeling several notes as one. Chart markers only show tooltips and never open an editor or list. The header
+manager provides keyboard-accessible browsing and editing, without requiring hover.
+Distinct dates projected onto the same weekly bucket or clipped endpoint share one tooltip marker, preserving access
+to every note and its actual dates. Grouping single-day notes does not create a period band between them.
+Note tooltips reuse the shared ECharts tooltip card and chrome with the active chart theme and responsive typography.
+Titles wrap above their actual dates, grouped notes remain separate, and the chart's existing tooltip positioning is retained.
+
+Opt-in surfaces: Health Highlights and detailed metrics (recorded timezone), normalized Sleep (sleepDate), Training readiness,
+load/Form, freshness forecast (existing viewer-calendar convention), body weight, power-system history, weekly swimming
+and weekly durability. Weekly overlays identify overlapping buckets but retain actual note dates in tooltips. All shared
+inputs default null. Dashboard HRV, Sleep, Form, and Freshness Forecast opt in through the same adapters. Workout details, public previews and non-calendar charts remain unchanged.
+The authenticated full Calendar integration is described below.
+
+## Calendar boundary
+
+The full `/calendar` page registers its visible date labels through the workspace component's `visibleRange` input.
+Month includes adjacent grid dates; Year excludes hidden outside-month cells. It reuses the same owner-scoped loader,
+limits, stale-response fences, refreshes, and `showOnCharts` preference (labelled **Show on charts and calendar**).
+`calendar-timeline-notes.helper.ts` maps inclusive note periods onto those fixed dates, resolving ongoing end dates once
+per note in its captured zone. No activity or metric document, totals, or duration-circle semantics change.
+Calendar refreshes its current-day clock on window focus and tab visibility, so returning after midnight updates ongoing
+note cutoffs alongside the notes reload without extending them into future dates.
+
+A category icon in the selected color marks a single-note day, even without activities. Multiple notes share an
+`event_note` indicator (neutral for mixed colors) and accessible count. The day sheet shows each note's own icon/color.
+A slim leading edge makes note days visible in Week, Month, and Year. It contains a separate segment for each distinct
+note color, preserving mixed-color overlaps without blending them or replacing activity-circle colors. The default
+color is the shared neutral gray used by chart note markers, not theme-primary blue. The edge is decorative and never intercepts day selection,
+changes cell sizing, or reveals note titles in the grid; hidden notes contribute no segment.
+Selecting a day opens its
+existing Material sheet, with a plain-text notes list above activities. Selecting a note dismisses the sheet and opens
+the shared note editor. Sheet notes stay reactive to loading/edits, visibility, and account changes; delayed selections
+are checked against the current owner and notes before opening. Note and activity failures remain independent.
+The dashboard Activity Calendar tile and Today month popup reuse the same grid and date helpers. The shared grid's notes input defaults empty; public calendars remain unannotated.
+
+## Dashboard ownership and reuse
+
+`SummariesComponent` mounts one `TimelineNotesWorkspaceComponent` only for the owner's dashboard controls, with an
+explicit `ownerUid` that must match the authenticated notes account. The workspace's reactive context includes that owner
+and is empty immediately on a profile/account mismatch. `TileChartComponent.timelineNotes` accepts the shared context
+signal, forwarding its current value to supported chart adapters. This keeps all date ranges in one bounded union,
+without adding per-tile fetches. New date-based tiles should reuse this input and the existing ECharts notes binding;
+non-date charts, library previews, and other users' profiles must keep the null default.
+
+The Today popup receives the same signal rather than a snapshot or a second notes loader. Calendar tiles register their
+visible month and unregister on removal. Opening a day retains that day's range until its sheet closes, including when
+Material destroys the replaced month popup. The day list keeps reading the live workspace signal, filters its owner and
+visibility, and resolves selections against the latest notes before opening the manager. Release the retained range after
+selection/dismissal, not when the replaced calendar component is destroyed. Destroyed workspaces clear their reactive
+context and reject delayed actions, range registrations, and load results.
+
+Calendar day sheets retain the calendar's existing activity and schedule streams until dismissal, without issuing duplicate
+queries. Loading and failures stay explicit rather than becoming zero activities; pending updates survive replacement of
+the Today month popup. Each sheet keeps the selected day's query even if its source calendar moves to another month.
+Subscriptions and the notes range are released on dismissal or if the sheet cannot open.
+
+## Verification and release
+
+Run the Timeline notes Functions, service, dialog, workspace, chart-helper/adapter and index tests, the affected chart
+and workspace suites, full frontend/Functions suites, `npm run test:rules`, Functions build, and production Angular build.
+Use only emulator-backed fixture accounts for browser mutations; verify desktop/mobile, keyboard navigation, themes,
+range navigation, visibility, marker taps and create/edit/delete/End today. Deploying rules/indexes and the two callables
+requires separate approval. No migration, backfill or scheduler is required.
+For per-note visibility and color, release the updated existing `saveTimelineNote` callable before the frontend; the old
+callable rejects the new fields. `deleteTimelineNote`, Rules, and indexes do not need a deployment for these additions.
+Already-open older frontends need a refresh to display the choices, but their edits preserve them on the server.

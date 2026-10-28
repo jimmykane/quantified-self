@@ -11,6 +11,7 @@ The daily snapshot reuses the same server-side collector as the live User KPIs. 
 | Users | Total, Free, Basic, Pro | Current user-document total and one latest canonical active-plan classification per Stripe customer |
 | Users | Onboarding complete | User documents whose onboarding flag is complete |
 | Authentication activity | Eligible accounts | Enabled Firebase Auth accounts without the admin custom claim |
+| Authentication activity | Eligible Free / Basic / Pro accounts | Enabled, non-admin Auth accounts joined to the same canonical plan map as activity, including inactive accounts and accounts without an authentication timestamp |
 | Authentication activity | Active 24h / 7d / 30d | Eligible accounts whose latest available Firebase Auth `lastRefreshTime` or `lastSignInTime` falls in the rolling window |
 | Authentication activity | Active Free / Basic / Pro by window | The active accounts in each rolling window joined to their latest canonical active paid plan; accounts without a qualifying Basic or Pro plan are Free |
 | Subscription cadence | Pro monthly / yearly / unknown | Active Pro users classified from their selected Stripe subscription's current price recurrence |
@@ -30,7 +31,7 @@ Only active Basic or Pro documents whose full reference matches `customers/{uid}
 
 Snapshots are written to the top-level `adminDashboardSnapshots` collection with:
 
-- schema and metric-definition version `2`;
+- schema and metric-definition version `3`;
 - the UTC snapshot date, scheduled time, actual computation time, and TTL expiry;
 - the aggregate user, authentication-window, and subscription-cadence counts listed above.
 
@@ -41,9 +42,10 @@ The document is rejected before writing unless all counts are non-negative safe 
 - active 24h ≤ active 7d ≤ active 30d ≤ eligible accounts;
 - for every rolling window, active Free + Basic + Pro equals that window's active total;
 - each plan's active 24h ≤ active 7d ≤ active 30d, and active paid counts do not exceed their current paid-plan totals;
+- eligible Free + Basic + Pro equals eligible accounts, each plan's active 30-day count does not exceed its eligible count, and eligible paid accounts do not exceed that paid-plan total;
 - each tier's monthly + yearly + unknown cadence equals that tier's active total.
 
-Snapshots do not contain UIDs, email addresses, provider lists, raw authentication timestamps, activity events, screen views, analytics identifiers, or heartbeat records. Version 2 begins accumulating active-plan history after its scheduler is released; there is no synthetic backfill for version 1 snapshots.
+Snapshots do not contain UIDs, email addresses, provider lists, raw authentication timestamps, activity events, screen views, analytics identifiers, or heartbeat records. Version 2 introduced active-plan history. Version 3 adds `authActivity.eligibleByPlan` so activity rates use matching enabled, non-admin populations rather than all user-document plan totals. There is no synthetic backfill for older snapshots.
 
 ## Retention and access
 
@@ -55,18 +57,23 @@ TTL configuration is infrastructure state. Local emulator startup and Functions 
 
 ## History API and dashboard behavior
 
-`getAdminDashboardHistory` accepts only `30`, `90`, or `365` days and defaults to `90` when the caller omits the range. It queries date-keyed documents inside the requested inclusive UTC interval, discards malformed or incompatible-version documents, and returns valid points oldest first. The reader accepts both version 1 and version 2 snapshots. Version 1 points return a `null` active-plan breakdown so their existing totals remain available without reinterpreting old data.
+`getAdminDashboardHistory` accepts only `30`, `90`, or `365` days and defaults to `90` when the caller omits the range. It queries date-keyed documents inside the requested inclusive UTC interval, discards malformed or incompatible-version documents, and returns valid points oldest first. The reader accepts matching schema/metric-definition versions 1, 2, and 3. Version 1 points return a `null` active-plan breakdown. Versions 1 and 2 return `null` eligible-plan totals. Their existing counts remain available without reinterpreting old data; malformed version 3 denominators are rejected on read and write.
 
-The Admin Dashboard requests 365 days once per refresh and switches among 30-, 90-, and 365-day views locally. It renders four focused charts:
+The Admin Dashboard requests 365 days once per refresh and switches among 30-, 90-, and 365-day views locally. A **Count / Percentage** selector applies to five independent, unstacked line charts, with Count as the initial view:
 
-1. authentication activity for the rolling 24-hour, 7-day, and 30-day windows, with eligible-account percentages in tooltips;
-2. stacked active Free, Basic, and Pro users, with a local selector for the rolling 24-hour, 7-day, or 30-day window;
-3. stacked Free, Basic, and Pro user totals plus onboarding completion;
-4. stacked Pro and Basic monthly/yearly cadence, adding unknown-cadence series only when unknown values exist.
+1. **Authentication activity:** rolling 24-hour, 7-day, and 30-day counts divided by that day's eligible accounts. These windows overlap and are never stacked.
+2. **Active users by plan:** Free, Basic, and Pro in the selected rolling window. In Percentage mode, **Within each plan** divides each plan's active count by its eligible accounts; **Share of active users** divides by all active accounts in that same window. The basis selector is hidden in Count mode because it cannot change the plotted counts. The last chosen basis is retained for count-mode tooltip percentages and when returning to Percentage mode.
+3. **User and plan mix:** Free, Basic, and Pro counts divided by total user documents.
+4. **Onboarding completion:** completed onboarding divided by total users, shown separately because it overlaps the plan categories.
+5. **Paid subscription cadence:** monthly, yearly, and unknown counts divided by the corresponding Basic or Pro total, including unknown cadence. Unknown series appear only when present in the selected range. The chart retains daily trajectories so changes can be compared over time.
+
+Every tooltip includes the count, percentage (up to one decimal), and explicit population. The selected value is emphasized, with the population and complementary value on a separate wrapping line. Missing or zero denominators produce unavailable percentages, never invented zero rates. Chart values retain calculation precision. Hiding a series changes the visible scale and tooltip rows only; it never changes denominators. **Auto** fits the visible series with percentage bounds inside 0–100; **From zero** uses a zero count baseline, and becomes **0–100%** in percentage mode.
+
+Admin-only help lives beside the display controls and in each chart description. The public help page covers member features.
 
 Missing capture days between the first and last observed point remain `null` chart gaps. The UI does not invent zeroes or interpolate them. Leading or trailing absent days are not plotted. A separate status reports the number of internal gaps and marks history stale when the newest snapshot computation is more than 36 hours old.
 
-The charts need eight snapshots in the selected range before rendering. The active-plan chart specifically needs eight version 2 snapshots with a valid plan breakdown; version 1 snapshots continue to render in the other charts and do not count toward this threshold. Before then, the dashboard shows plan-history collection progress. This is expected immediately after release and is not an error.
+The charts need eight snapshots in the selected range before rendering. The active-plan count and active-share views need eight version 2 or 3 snapshots with a valid plan breakdown. The within-plan percentage view needs eight version 3 snapshots with eligible-plan totals. Older snapshots remain visible in supported views and become gaps where denominators are unavailable; the collection message offers Count or Share of active users as alternatives. Before then, the dashboard shows plan-history collection progress. This is expected immediately after release and is not an error.
 
 Historical loading and failures are isolated from the live User KPI request. A callable or validation failure shows “Daily user history is unavailable” without removing the current cards; similarly, a live KPI failure does not erase already available historical results.
 
@@ -79,3 +86,13 @@ Historical loading and failures are isolated from the live User KPI request. A c
 - Verify changes with the focused Functions specs, frontend service/helper/component specs, the Functions build, the frontend build, and `npm run test:rules`.
 
 Production rollout is separate from implementation. The reviewed release order is Firestore indexes/TTL and Rules, then Functions, then Hosting; use the repository's normal approved deployment process.
+
+For the percentage-view change, deploy only the updated existing `scheduleAdminDashboardSnapshot` and `getAdminDashboardHistory` functions before Hosting. No new endpoint, Firestore index, TTL policy, or Rules change is required. The eligible-plan totals reuse the existing privileged Auth pagination and subscription-owner join; no extra reads or user identifiers are stored. Within-plan rate history starts accumulating after that release and requires eight daily captures before its chart is shown.
+
+Manual production rollout commands, requiring separate deployment approval:
+
+```bash
+firebase deploy --project quantified-self-io --only functions:scheduleAdminDashboardSnapshot,functions:getAdminDashboardHistory
+npm run build-production
+firebase deploy --project quantified-self-io --only hosting:production
+```

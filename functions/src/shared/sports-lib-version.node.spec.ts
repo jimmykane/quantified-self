@@ -28,6 +28,28 @@ describe('SPORTS_LIB_VERSION (node)', () => {
 
         expect(browserPackageJson.dependencies?.['@sports-alliance/sports-lib']).toBe(SPORTS_LIB_VERSION);
     });
+
+    it('locks the browser and Functions to the same published artifact', () => {
+        const browserRoot = path.dirname(browserPackageJsonPath);
+        const readLock = (directory: string) => JSON.parse(
+            readFileSync(path.join(directory, 'package-lock.json'), 'utf8'),
+        ) as { packages: Record<string, { version?: string; resolved?: string; integrity?: string }> };
+        const browserLock = readLock(browserRoot);
+        const functionsLock = readLock(path.join(browserRoot, 'functions'));
+        const browserEntry = browserLock.packages['node_modules/@sports-alliance/sports-lib'];
+        const functionsEntry = functionsLock.packages['node_modules/@sports-alliance/sports-lib'];
+
+        expect(browserEntry).toMatchObject({ version: SPORTS_LIB_VERSION });
+        expect(functionsEntry).toMatchObject({
+            version: SPORTS_LIB_VERSION,
+            resolved: browserEntry.resolved,
+            integrity: browserEntry.integrity,
+        });
+        expect(browserEntry.resolved).toBe(
+            `https://registry.npmjs.org/@sports-alliance/sports-lib/-/sports-lib-${SPORTS_LIB_VERSION}.tgz`,
+        );
+        expect(browserEntry.integrity).toMatch(/^sha512-/);
+    });
 });
 
 function resolveBrowserPackageJsonPath(startDirectory: string): string {

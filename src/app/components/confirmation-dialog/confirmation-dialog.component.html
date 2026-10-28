@@ -4,8 +4,16 @@
     <ng-template #plainMessage>
         <p>{{ message }}</p>
     </ng-template>
+    <div *ngIf="pastProviderCleanupOption" class="past-provider-cleanup-option">
+        <mat-checkbox [checked]="removePastProviderCopies" (change)="onPastProviderCleanupChange($event.checked)">
+            Also try to remove past provider copies
+        </mat-checkbox>
+        <p>Only uncompleted provider workouts are eligible. COROS cannot remove past workouts. Provider apps and devices may retain copies; completed activities are never deleted.</p>
+    </div>
 </mat-dialog-content>
 <mat-dialog-actions align="end">
-    <button mat-button (click)="onCancel()" *ngIf="showCancel">{{ cancelButtonText }}</button>
-    <button mat-flat-button [color]="confirmColor" (click)="onConfirm()">{{ confirmButtonText }}</button>
+    <button mat-button type="button" (click)="onCancel()" *ngIf="showCancel">{{ cancelButtonText }}</button>
+    <button mat-flat-button type="button" [color]="confirmColor" [class.qs-mat-primary]="confirmColor === 'primary'"
+        [class.qs-mat-accent]="confirmColor === 'accent'" [class.qs-mat-warn]="confirmColor === 'warn'"
+        (click)="onConfirm()">{{ confirmButtonText }}</button>
 </mat-dialog-actions>

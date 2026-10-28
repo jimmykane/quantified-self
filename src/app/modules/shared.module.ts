@@ -1,3 +1,5 @@
+import { ActivityFilterPickerComponent } from '../components/shared/activity-filter-picker/activity-filter-picker.component';
+import { MergedActivitiesToggleComponent } from '../components/shared/merged-activities-toggle/merged-activities-toggle.component';
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MaterialModule } from './material.module';
@@ -42,6 +44,8 @@ import { MyTracksTripsPanelComponent } from '../components/shared/my-tracks-trip
 @NgModule({
     imports: [
         CommonModule,
+        ActivityFilterPickerComponent,
+        MergedActivitiesToggleComponent,
         MaterialModule,
         RouterModule,
         ReactiveFormsModule,

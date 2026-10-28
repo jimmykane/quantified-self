@@ -17,6 +17,10 @@
             <mat-icon>published_with_changes</mat-icon>
             Activity Sync Queue
         </button>
+        <button mat-stroked-button class="qs-mat-primary" appHapticTap routerLink="/admin/queues/training-delivery" [disabled]="queueView === 'training-delivery'">
+            <mat-icon>event_repeat</mat-icon>
+            Training Delivery Queue
+        </button>
         <button mat-stroked-button class="qs-mat-primary" routerLink="/admin/queues/route-delivery-sync" [disabled]="queueView === 'route-delivery-sync'">
             <mat-icon>directions</mat-icon>
             Route Delivery Sync Queue

@@ -1,10 +1,9 @@
+import { getUserChartDataTypesToUse } from '../../../helpers/app-chart-data-types.helper';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CUSTOM_ELEMENTS_SCHEMA, signal } from '@angular/core';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { of } from 'rxjs';
+import { BehaviorSubject, of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ActivityTypes,
@@ -13,6 +12,9 @@ import {
   DataCadence,
   DataDepth,
   DataDistance,
+  DataDistanceMiles,
+  DataGNSSDistance,
+  DataGNSSDistanceMiles,
   DataHeartRate,
   DataPace,
   DataPower,
@@ -24,20 +26,32 @@ import {
   DataSwimPace,
   DataTemperature,
   XAxisTypes,
+  User,
 } from '@sports-alliance/sports-lib';
 import { EventCardChartComponent } from './event.card.chart.component';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
+import { AppDeviceColorPreferenceService } from '../../../services/color/app-device-color-preference.service';
+import { EventChartPanelWorkerService } from '../../../services/event-chart-panel-worker.service';
+import { resolveDeviceChartColor } from '../../../helpers/device-chart-appearance.helper';
 import { LoggerService } from '../../../services/logger.service';
 import { AppChartSettingsLocalStorageService } from '../../../services/storage/app.chart.settings.local.storage.service';
 import * as eventDataHelper from '../../../helpers/event-echarts-data.helper';
 import { MaterialModule } from '../../../modules/material.module';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { AppAuthService } from '../../../authentication/app.auth.service';
+import { AppHapticsService } from '../../../services/app.haptics.service';
+
+vi.mock('../../../helpers/app-chart-data-types.helper', importOriginal => importOriginal<typeof import('../../../helpers/app-chart-data-types.helper')>().then(actual => Object.assign({}, actual, { getUserChartDataTypesToUse: vi.fn() })));
 
 describe('EventCardChartComponent', () => {
   let fixture: ComponentFixture<EventCardChartComponent>;
   let component: EventCardChartComponent;
+  let authUserSubject: BehaviorSubject<User | null>;
+  const mockHaptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
+  const mockSnackBar = { open: vi.fn() };
 
   const defaultChartSettings = {
     showAllData: false,
@@ -74,6 +88,7 @@ describe('EventCardChartComponent', () => {
   const mockEventColorService = {
     getActivityColor: vi.fn().mockReturnValue('#ff0000'),
   };
+  const deviceColors = signal<Record<string, string>>({});
 
   const mockChartSettingsStorage = {
     getEventChartVisibilityPreference: vi.fn().mockReturnValue({
@@ -96,10 +111,18 @@ describe('EventCardChartComponent', () => {
   };
 
   beforeEach(async () => {
+    vi.mocked(getUserChartDataTypesToUse).mockImplementation(user => mockUserService.getUserChartDataTypesToUse(user));
+    authUserSubject = new BehaviorSubject<User | null>({ uid: 'u1' } as User);
+    Object.values(mockHaptics).forEach(mock => mock.mockClear());
+    mockSnackBar.open.mockClear();
+    deviceColors.set({});
+    mockEventColorService.getActivityColor.mockReset();
+    mockEventColorService.getActivityColor.mockReturnValue('#ff0000');
     chartSettingsSignal.set({
       ...defaultChartSettings,
     });
-    mockUserSettingsQuery.updateChartSettings.mockResolvedValue(undefined);
+    mockUserSettingsQuery.unitSettings.set({});
+    mockUserSettingsQuery.updateChartSettings.mockReset().mockResolvedValue(undefined);
     mockUserService.getUserChartDataTypesToUse.mockReset();
     mockUserService.getUserChartDataTypesToUse.mockReturnValue([DataPower.type]);
     mockActivityCursorService.setCursor.mockReset();
@@ -125,11 +148,15 @@ describe('EventCardChartComponent', () => {
       imports: [MaterialModule, NoopAnimationsModule],
       declarations: [EventCardChartComponent],
       providers: [
+        { provide: AppAuthService, useValue: { user$: authUserSubject.asObservable() } },
+        { provide: AppHapticsService, useValue: mockHaptics },
+        { provide: MatSnackBar, useValue: mockSnackBar },
         { provide: BreakpointObserver, useValue: mockBreakpointObserver },
         { provide: AppUserSettingsQueryService, useValue: mockUserSettingsQuery },
         { provide: AppUserService, useValue: mockUserService },
         { provide: AppActivityCursorService, useValue: mockActivityCursorService },
         { provide: AppEventColorService, useValue: mockEventColorService },
+        { provide: AppDeviceColorPreferenceService, useValue: { deviceColorByName: deviceColors } },
         { provide: AppChartSettingsLocalStorageService, useValue: mockChartSettingsStorage },
         { provide: LoggerService, useValue: mockLogger },
       ],
@@ -173,6 +200,390 @@ describe('EventCardChartComponent', () => {
     }
   }
 
+  function setZoneActivity(): void {
+    const activity = {
+      getID: () => 'zone-activity',
+      type: ActivityTypes.Cycling,
+      intensityZones: [DataHeartRate.type, DataPower.type].map(type => ({
+        type, zone2LowerLimit: 120, zone3LowerLimit: 140,
+      })),
+      getAllStreams: () => [DataHeartRate.type, DataPower.type].map(type => ({ type, getData: () => [100, 130, 150] })),
+    } as unknown as typeof component.selectedActivities[number];
+    component.selectedActivities = [activity];
+    component.event = { ...component.event, getActivities: () => [activity] };
+  }
+
+  it('defaults to Continuous, follows saved continuity silently and rebuilds for a mode change', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.lineContinuity()).toEqual({ mode: 'continuous', maxGapSeconds: 10 });
+    vi.mocked(eventDataHelper.buildEventChartPanels).mockClear();
+    chartSettingsSignal.set({ ...defaultChartSettings, eventLineContinuity: { mode: 'detect', maxGapSeconds: 10 } });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.lineContinuity().mode).toBe('detect');
+    expect(eventDataHelper.buildEventChartPanels).toHaveBeenCalledWith(expect.objectContaining({
+      lineContinuity: { mode: 'detect', maxGapSeconds: 10 },
+    }));
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+  });
+
+  it('saves continuity for the signed-in viewer once and blocks overlapping/no-op writes', async () => {
+    component.targetUserID = 'event-owner';
+    let finish!: () => void;
+    mockUserSettingsQuery.updateChartSettings.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+    const pending = component.onLineContinuityChange({ mode: 'custom', maxGapSeconds: 20 });
+    expect(component.lineContinuity()).toEqual({ mode: 'custom', maxGapSeconds: 20 });
+    expect(component.isSavingLineContinuity()).toBe(true);
+    await component.onLineContinuityChange({ mode: 'detect', maxGapSeconds: 20 });
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledExactlyOnceWith(
+      { eventLineContinuity: { mode: 'custom', maxGapSeconds: 20 } }, { force: true, expectedUserID: 'u1' },
+    );
+    expect(mockHaptics.selection).toHaveBeenCalledOnce();
+    expect(mockHaptics.success).not.toHaveBeenCalled();
+    finish(); await pending;
+    await component.onLineContinuityChange({ mode: 'custom', maxGapSeconds: 20 });
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledOnce();
+    expect(mockHaptics.success).toHaveBeenCalledOnce();
+  });
+
+  it('rolls continuity back after a failed save and allows retry', async () => {
+    mockUserSettingsQuery.updateChartSettings.mockRejectedValueOnce(new Error('Offline'));
+    await component.onLineContinuityChange({ mode: 'detect', maxGapSeconds: 10 });
+    expect(component.lineContinuity().mode).toBe('continuous');
+    expect(component.isSavingLineContinuity()).toBe(false);
+    expect(mockHaptics.error).toHaveBeenCalledOnce();
+    expect(mockSnackBar.open).toHaveBeenCalledOnce();
+    await component.onLineContinuityChange({ mode: 'detect', maxGapSeconds: 10 });
+    expect(component.lineContinuity().mode).toBe('detect');
+    expect(mockHaptics.success).toHaveBeenCalledOnce();
+  });
+
+  it('restores the latest saved continuity after a failed concurrent edit', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    let reject!: (error: Error) => void;
+    mockUserSettingsQuery.updateChartSettings.mockImplementationOnce(
+      () => new Promise<void>((_, fail) => { reject = fail; }),
+    );
+    const pending = component.onLineContinuityChange({ mode: 'detect', maxGapSeconds: 10 });
+    // Another settings surface changes the saved preference while this write is pending.
+    chartSettingsSignal.set({ ...defaultChartSettings, eventLineContinuity: { mode: 'custom', maxGapSeconds: 30 } });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    reject(new Error('Save rejected'));
+    await pending;
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.lineContinuity()).toEqual({ mode: 'custom', maxGapSeconds: 30 });
+    expect(eventDataHelper.buildEventChartPanels).toHaveBeenLastCalledWith(expect.objectContaining({
+      lineContinuity: { mode: 'custom', maxGapSeconds: 30 },
+    }));
+    chartSettingsSignal.set({ ...defaultChartSettings, eventLineContinuity: { mode: 'custom', maxGapSeconds: 60 } });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.lineContinuity().maxGapSeconds).toBe(60);
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledOnce();
+    expect(mockHaptics.error).toHaveBeenCalledOnce();
+    expect(mockHaptics.success).not.toHaveBeenCalled();
+  });
+
+  it.each(['sign-out', 'switch', 'destroy'] as const)('ignores a late continuity save after %s', async action => {
+    let reject!: (error: Error) => void;
+    mockUserSettingsQuery.updateChartSettings.mockImplementationOnce(() => new Promise<void>((_, fail) => { reject = fail; }));
+    const pending = component.onLineContinuityChange({ mode: 'detect', maxGapSeconds: 10 });
+    if (action === 'destroy') fixture.destroy();
+    else authUserSubject.next(action === 'sign-out' ? null : { uid: 'u2' } as User);
+    reject(new Error('Offline')); await pending;
+    expect(mockHaptics.error).not.toHaveBeenCalled();
+    expect(mockHaptics.success).not.toHaveBeenCalled();
+    expect(mockSnackBar.open).not.toHaveBeenCalled();
+    if (action !== 'destroy') expect(component.lineContinuity().mode).toBe('continuous');
+  });
+
+  it('ignores continuity edits without authentication', async () => {
+    authUserSubject.next(null);
+    await component.onLineContinuityChange({ mode: 'custom', maxGapSeconds: 60 });
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('defaults zone colors on and silently follows saved preferences', async () => {
+    setZoneActivity();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.colorIntensityZoneLines()).toBe(true);
+    expect(component.showIntensityZoneColorsToggle).toBe(true);
+    chartSettingsSignal.set({ ...chartSettingsSignal(), colorIntensityZoneLines: false });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.colorIntensityZoneLines()).toBe(false);
+    expect(component.showIntensityZoneColorsToggle).toBe(true);
+    expect(eventDataHelper.buildEventChartPanels).toHaveBeenLastCalledWith(expect.objectContaining({ colorIntensityZoneLines: false }));
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('updates chart colors immediately, saves once, and permits turning them back on before snapshot refresh', async () => {
+    setZoneActivity();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    let finishSave!: () => void;
+    mockUserSettingsQuery.updateChartSettings.mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
+    const save = component.onColorIntensityZoneLinesChange(false);
+    expect(component.colorIntensityZoneLines()).toBe(false);
+    expect(component.isSavingZoneColors()).toBe(true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(eventDataHelper.buildEventChartPanels).toHaveBeenLastCalledWith(expect.objectContaining({ colorIntensityZoneLines: false }));
+    expect(component.showIntensityZoneColorsToggle).toBe(true);
+    await component.onColorIntensityZoneLinesChange(true);
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledOnce();
+    expect(mockHaptics.selection).toHaveBeenCalledOnce();
+    expect(mockHaptics.success).not.toHaveBeenCalled();
+    finishSave();
+    await save;
+    expect(component.isSavingZoneColors()).toBe(false);
+    expect(mockHaptics.success).toHaveBeenCalledOnce();
+    await component.onColorIntensityZoneLinesChange(true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(mockUserSettingsQuery.updateChartSettings.mock.calls).toEqual([
+      [{ colorIntensityZoneLines: false }, { force: true, expectedUserID: 'u1' }],
+      [{ colorIntensityZoneLines: true }, { force: true, expectedUserID: 'u1' }],
+    ]);
+    expect(eventDataHelper.buildEventChartPanels).toHaveBeenLastCalledWith(expect.objectContaining({ colorIntensityZoneLines: true }));
+  });
+
+  it('sends the saved zone-color preference through worker snapshots', async () => {
+    setZoneActivity();
+    const worker = TestBed.inject(EventChartPanelWorkerService);
+    vi.spyOn(worker, 'shouldUseWorker').mockReturnValue(true);
+    const build = vi.spyOn(worker, 'buildPanels').mockResolvedValue([]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(build).toHaveBeenLastCalledWith(expect.objectContaining({ colorIntensityZoneLines: true }), expect.any(Function));
+    await component.onColorIntensityZoneLinesChange(false);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(build).toHaveBeenLastCalledWith(expect.objectContaining({ colorIntensityZoneLines: false }), expect.any(Function));
+  });
+
+  it('restores the chart and switch and reports a failed zone-color save', async () => {
+    setZoneActivity();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    mockUserSettingsQuery.updateChartSettings.mockRejectedValueOnce(new Error('offline'));
+    await component.onColorIntensityZoneLinesChange(false);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.colorIntensityZoneLines()).toBe(true);
+    expect(component.isSavingZoneColors()).toBe(false);
+    expect(eventDataHelper.buildEventChartPanels).toHaveBeenLastCalledWith(expect.objectContaining({ colorIntensityZoneLines: true }));
+    expect(mockHaptics.error).toHaveBeenCalledOnce();
+    expect(mockHaptics.success).not.toHaveBeenCalled();
+    expect(mockSnackBar.open).toHaveBeenCalledWith('Could not save zone colors. Please try again.', 'OK', expect.any(Object));
+  });
+
+  it.each(['save failure', 'turning colors back on'])('ignores a delayed uncolored worker result after %s', async reason => {
+    setZoneActivity();
+    const coloredPanels: eventDataHelper.EventChartPanelModel[] = [{
+      dataType: DataPower.type, displayName: 'Power', unit: 'W', colorGroupKey: 'Power',
+      minX: 0, maxX: 10,
+      series: [{
+        id: 'zone-activity::Power', activityID: 'zone-activity', activityName: 'Cycling',
+        color: '#ff0000', streamType: DataPower.type, displayName: 'Power', unit: 'W',
+        points: [{ x: 0, y: 100, time: 0 }, { x: 10, y: 150, time: 10 }],
+        zoneColorPieces: [
+          { zone: 'Zone 1', color: '#0099ff', lt: 120 },
+          { zone: 'Zone 2', color: '#00aa00', gte: 120 },
+        ],
+      }],
+    }];
+    const uncoloredPanels = coloredPanels.map(panel => ({
+      ...panel,
+      series: panel.series.map(({ zoneColorPieces: _zoneColorPieces, ...series }) => series),
+    }));
+    const worker = TestBed.inject(EventChartPanelWorkerService);
+    vi.spyOn(worker, 'shouldUseWorker').mockReturnValue(true);
+    const build = vi.spyOn(worker, 'buildPanels').mockResolvedValue(coloredPanels);
+    const rebuild = (source: string) => (component as unknown as {
+      rebuildPanels(source: string): Promise<void>;
+    }).rebuildPanels(source);
+    await rebuild('initial-zone-colors');
+    expect(mockLogger.error).not.toHaveBeenCalled();
+    expect(component.allChartPanels).toBe(coloredPanels);
+
+    let finishBuild!: (panels: eventDataHelper.EventChartPanelModel[]) => void;
+    build.mockImplementationOnce(() => new Promise(resolve => { finishBuild = resolve; }));
+    let failSave!: (error: Error) => void;
+    if (reason === 'save failure') {
+      mockUserSettingsQuery.updateChartSettings.mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { failSave = reject; }));
+    }
+    const save = component.onColorIntensityZoneLinesChange(false);
+    const delayedRebuild = rebuild('disable-zone-colors');
+    expect(build).toHaveBeenLastCalledWith(expect.objectContaining({ colorIntensityZoneLines: false }), expect.any(Function));
+
+    if (reason === 'save failure') {
+      failSave(new Error('offline'));
+      await save;
+    } else {
+      await save;
+      await component.onColorIntensityZoneLinesChange(true);
+    }
+    await rebuild('restore-zone-colors');
+    expect(component.isLoading).toBe(false);
+    finishBuild(uncoloredPanels);
+    await delayedRebuild;
+    expect(component.colorIntensityZoneLines()).toBe(true);
+    expect(component.allChartPanels).toBe(coloredPanels);
+    expect(component.isLoading).toBe(false);
+  });
+
+  it.each([{ isMerge: true }, { benchmarkResults: { test: {} } }])('hides and ignores zone colors for comparisons: %j', async comparison => {
+    setZoneActivity();
+    component.event = { ...component.event, ...comparison };
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(component.showIntensityZoneColorsToggle).toBe(false);
+    expect(eventDataHelper.buildEventChartPanels).toHaveBeenLastCalledWith(expect.objectContaining({ colorIntensityZoneLines: false }));
+    await component.onColorIntensityZoneLinesChange(false);
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('silently ignores unchanged, unavailable and signed-out zone-color choices', async () => {
+    await component.onColorIntensityZoneLinesChange(false);
+    expect(component.showIntensityZoneColorsToggle).toBe(false);
+    setZoneActivity();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await component.onColorIntensityZoneLinesChange(true);
+    authUserSubject.next(null);
+    await component.onColorIntensityZoneLinesChange(false);
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('discards a pending zone-color override and late feedback after an account switch', async () => {
+    setZoneActivity();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    let finishSave!: () => void;
+    mockUserSettingsQuery.updateChartSettings.mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
+    const save = component.onColorIntensityZoneLinesChange(false);
+    authUserSubject.next({ uid: 'u2' } as User);
+    finishSave();
+    await save;
+    expect(component.colorIntensityZoneLines()).toBe(true);
+    expect(component.isSavingZoneColors()).toBe(false);
+    expect(mockHaptics.success).not.toHaveBeenCalled();
+    expect(mockHaptics.error).not.toHaveBeenCalled();
+    expect(mockSnackBar.open).not.toHaveBeenCalled();
+  });
+
+  it('defaults patterns off, silently follows Settings, and ignores unchanged choices', async () => {
+    component.event = { ...component.event, isMerge: true } as any;
+    expect(component.useDistinctLinePatterns()).toBe(false);
+    chartSettingsSignal.set({ ...chartSettingsSignal(), useDistinctComparisonLinePatterns: true });
+    expect(component.useDistinctLinePatterns()).toBe(true);
+    await component.onDistinctLinePatternsChange(true);
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('saves patterns once, blocks pending changes, and permits turning off before the settings snapshot catches up', async () => {
+    component.event = { ...component.event, isMerge: true } as any;
+    let finishSave!: () => void;
+    mockUserSettingsQuery.updateChartSettings.mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
+    const save = component.onDistinctLinePatternsChange(true);
+    expect(component.useDistinctLinePatterns()).toBe(true);
+    expect(component.isSavingDistinctLinePatterns()).toBe(true);
+    await component.onDistinctLinePatternsChange(false);
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledOnce();
+    expect(mockHaptics.selection).toHaveBeenCalledOnce();
+    expect(mockHaptics.success).not.toHaveBeenCalled();
+    finishSave();
+    await save;
+    expect(component.isSavingDistinctLinePatterns()).toBe(false);
+    expect(mockHaptics.success).toHaveBeenCalledOnce();
+    await component.onDistinctLinePatternsChange(false);
+    expect(mockUserSettingsQuery.updateChartSettings.mock.calls).toEqual([
+      [{ useDistinctComparisonLinePatterns: true }, { force: true, expectedUserID: 'u1' }],
+      [{ useDistinctComparisonLinePatterns: false }, { force: true, expectedUserID: 'u1' }],
+    ]);
+    expect(component.useDistinctLinePatterns()).toBe(false);
+  });
+
+  it('rolls back a failed pattern save and reports the failure once', async () => {
+    component.event = { ...component.event, isMerge: true } as any;
+    mockUserSettingsQuery.updateChartSettings.mockRejectedValueOnce(new Error('Save failed'));
+    await component.onDistinctLinePatternsChange(true);
+    expect(component.useDistinctLinePatterns()).toBe(false);
+    expect(component.isSavingDistinctLinePatterns()).toBe(false);
+    expect(mockHaptics.error).toHaveBeenCalledOnce();
+    expect(mockHaptics.success).not.toHaveBeenCalled();
+    expect(mockSnackBar.open).toHaveBeenCalledOnce();
+  });
+
+  it('does not change patterns on ordinary events or for a public viewer without a signed-in account', async () => {
+    await component.onDistinctLinePatternsChange(true);
+    component.event = { ...component.event, isMerge: true } as any;
+    authUserSubject.next(null);
+    expect(component.user.uid).toBe('u1');
+    expect(component.canChangeDistinctLinePatterns()).toBe(false);
+    await component.onDistinctLinePatternsChange(true);
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('ignores old save completion after switching accounts', async () => {
+    component.event = { ...component.event, isMerge: true } as any;
+    let finishSave!: () => void;
+    mockUserSettingsQuery.updateChartSettings.mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
+    const save = component.onDistinctLinePatternsChange(true);
+    authUserSubject.next({ uid: 'u2' } as User);
+    expect(component.isSavingDistinctLinePatterns()).toBe(false);
+    expect(component.useDistinctLinePatterns()).toBe(false);
+    finishSave();
+    await save;
+    expect(mockHaptics.success).not.toHaveBeenCalled();
+  });
+
+  it('ignores a previous session failure while the same account has a new pattern save pending', async () => {
+    component.event = { ...component.event, isMerge: true } as any;
+    let failOldSave!: (error: Error) => void;
+    let finishNewSave!: () => void;
+    mockUserSettingsQuery.updateChartSettings
+      .mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { failOldSave = reject; }))
+      .mockImplementationOnce(() => new Promise<void>(resolve => { finishNewSave = resolve; }));
+    const oldSave = component.onDistinctLinePatternsChange(true);
+    authUserSubject.next(null);
+    authUserSubject.next({ uid: 'u1' } as User);
+    const newSave = component.onDistinctLinePatternsChange(true);
+    failOldSave(new Error('Previous session failed'));
+    await oldSave;
+    expect(component.isSavingDistinctLinePatterns()).toBe(true);
+    expect(component.useDistinctLinePatterns()).toBe(true);
+    expect(mockHaptics.error).not.toHaveBeenCalled();
+    expect(mockSnackBar.open).not.toHaveBeenCalled();
+    finishNewSave();
+    await newSave;
+    expect(mockHaptics.success).toHaveBeenCalledOnce();
+  });
+
+  it('does not send pattern save feedback after event details are destroyed', async () => {
+    component.event = { ...component.event, isMerge: true } as any;
+    let finishSave!: () => void;
+    mockUserSettingsQuery.updateChartSettings.mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
+    const save = component.onDistinctLinePatternsChange(true);
+    fixture.destroy();
+    finishSave();
+    await save;
+    expect(mockHaptics.success).not.toHaveBeenCalled();
+  });
+
   it('should create and rebuild chart panels', async () => {
     const buildPanelsSpy = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
       {
@@ -213,6 +624,78 @@ describe('EventCardChartComponent', () => {
     expect(buildPanelsSpy).toHaveBeenCalledWith(expect.objectContaining({
       colorIntensityZoneLines: true,
     }));
+  });
+
+  it('applies device appearance to worker results and refreshes saved colors and dark-theme presentation', async () => {
+    chartSettingsSignal.set({ ...chartSettingsSignal(), useDistinctComparisonLinePatterns: true });
+    const activities = ['a', 'b', 'c', 'd'].map(id => ({ getID: () => id, type: ActivityTypes.Cycling }));
+    component.event = { getID: () => 'comparison', isMerge: true, getActivities: () => activities } as any;
+    component.selectedActivities = activities as any;
+    const colors = ['#D55E00', '#0072B2', '#000000', '#CC79A7'];
+    mockEventColorService.getActivityColor.mockImplementation((_all, activity) => deviceColors()[activity.getID()] || colors[activities.indexOf(activity)]);
+    const panels = [{ dataType: DataPower.type, displayName: 'Power', colorGroupKey: 'Power', minX: 0, maxX: 1,
+      series: activities.map(activity => ({ activityID: activity.getID(), color: '#FF0000' })) }] as any;
+    const worker = TestBed.inject(EventChartPanelWorkerService);
+    vi.spyOn(worker, 'shouldUseWorker').mockReturnValue(true);
+    vi.spyOn(worker, 'buildPanels').mockResolvedValue(panels);
+    await (component as any).rebuildPanels('comparison-test');
+    expect(component.allChartPanels[0].series.map(series => series.lineStyle)).toEqual(['solid', 'dashed', 'dotted', 'dash-dot']);
+    expect(component.allChartPanels[0].series[2].color).toBe('#000000');
+    component.darkTheme = true;
+    await (component as any).rebuildPanels('theme-test');
+    expect(component.allChartPanels[0].series[2].color).not.toBe('#000000');
+    deviceColors.set({ b: '#A68A5B' });
+    fixture.detectChanges();
+    await (component as any).rebuildPanels('preference-test');
+    expect(component.allChartPanels[0].series[1].color).toBe(resolveDeviceChartColor('#A68A5B', true));
+    expect(component.allChartPanels[0].series[1].lineStyle).toBe('dashed');
+    expect(panels[0].series[2].color).toBe('#FF0000');
+  });
+
+  it('defaults to solid lines and enables or clears patterns on cached comparison panels', async () => {
+    const activities = ['a', 'b'].map(id => ({ getID: () => id, type: ActivityTypes.Cycling }));
+    component.event = { getID: () => 'comparison', isMerge: true, getActivities: () => activities } as any;
+    component.selectedActivities = activities as any;
+    vi.spyOn(TestBed.inject(EventChartPanelWorkerService), 'shouldUseWorker').mockReturnValue(false);
+    const buildPanels = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([{
+      dataType: DataPower.type, displayName: 'Power', colorGroupKey: 'Power', minX: 0, maxX: 1,
+      series: activities.map(activity => ({ activityID: activity.getID(), color: '#FF0000' })),
+    }] as any);
+
+    await (component as any).rebuildPanels('initial');
+    expect(component.allChartPanels[0].series.map(series => series.lineStyle)).toEqual([undefined, undefined]);
+    chartSettingsSignal.set({ ...chartSettingsSignal(), useDistinctComparisonLinePatterns: true });
+    await (component as any).rebuildPanels('enabled');
+    expect(component.allChartPanels[0].series.map(series => series.lineStyle)).toEqual(['solid', 'dashed']);
+    chartSettingsSignal.set({ ...chartSettingsSignal(), useDistinctComparisonLinePatterns: false });
+    await (component as any).rebuildPanels('disabled');
+    expect(component.allChartPanels[0].series.map(series => series.lineStyle)).toEqual([undefined, undefined]);
+    expect(buildPanels).toHaveBeenCalledOnce();
+  });
+
+  it.each(['showLaps', 'showSwimLengths'])('refreshes cached device colors when the theme and %s change together', async (setting) => {
+    const activity = {
+      getID: () => 'swim-1', type: ActivityTypes.Cycling,
+      getSwimLengths: () => [{ index: 1, type: 'active', startDate: new Date(0), endDate: new Date(25000) }],
+    } as any;
+    component.event = { getID: () => 'comparison', isMerge: true, getActivities: () => [activity] } as any;
+    component.selectedActivities = [activity];
+    mockEventColorService.getActivityColor.mockReturnValue('#000000');
+    vi.spyOn(TestBed.inject(EventChartPanelWorkerService), 'shouldUseWorker').mockReturnValue(false);
+    const buildPanels = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([{
+      dataType: DataPower.type, displayName: 'Power', colorGroupKey: 'Power', minX: 0, maxX: 1,
+      series: [{ activityID: activity.getID(), color: '#FF0000' }],
+    }] as any);
+
+    await (component as any).rebuildPanels('initial');
+    expect(component.allChartPanels[0].series[0].color).toBe('#000000');
+    component.darkTheme = true;
+    chartSettingsSignal.set({ ...chartSettingsSignal(), [setting]: false });
+    await (component as any).rebuildPanels('theme-and-markers');
+
+    expect(buildPanels).toHaveBeenCalledOnce();
+    expect(component.allChartPanels[0].series[0].color).toBe(resolveDeviceChartColor('#000000', true));
+    expect(component.chartPanelViews[0].panel).toBe(component.allChartPanels[0]);
   });
 
   it('does not build swim length markers when selected activities have none', async () => {
@@ -474,6 +957,79 @@ describe('EventCardChartComponent', () => {
     component.xAxisType = XAxisTypes.Distance;
 
     expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ xAxisType: XAxisTypes.Distance });
+  });
+
+  it('persists an accepted axis change with one haptic and ignores an immediate repeat', () => {
+    component.onXAxisTypeChange(XAxisTypes.Time);
+    component.onXAxisTypeChange(XAxisTypes.Time);
+
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledExactlyOnceWith({ xAxisType: XAxisTypes.Time });
+    expect(mockHaptics.selection).toHaveBeenCalledOnce();
+  });
+
+  it.each(['signed out', 'multisport'])('ignores stale axis actions when controls are disabled: %s', (reason) => {
+    if (reason === 'signed out') component.user = null;
+    else component.event = { isMultiSport: () => true } as any;
+
+    component.onXAxisTypeChange(XAxisTypes.Duration);
+    component.onXAxisTypeChange(XAxisTypes.Time);
+
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [undefined, XAxisTypes.Duration],
+    [XAxisTypes.Distance, XAxisTypes.Duration],
+    [XAxisTypes.Duration, XAxisTypes.Duration],
+    [XAxisTypes.Time, XAxisTypes.Time],
+  ])('renders pool swimming with saved axis %s as %s without changing preferences or haptics', async (savedAxis, expectedAxis) => {
+    chartSettingsSignal.set({ ...defaultChartSettings, xAxisType: savedAxis });
+    const streams = [
+      { type: DataHeartRate.type, getData: () => [100, 110, 105] },
+      { type: DataDistance.type, getData: () => [0, 25, 50] },
+      { type: XAxisTypes.Time, getData: () => [0, 30, 60] },
+    ];
+    const activity = {
+      type: ActivityTypes.Swimming,
+      startDate: new Date('2024-01-01T00:00:00.000Z'),
+      getID: () => 'pool-swim',
+      getAllStreams: () => streams,
+      getStream: (type: string) => streams.find(stream => stream.type === type),
+    } as any;
+    fixture.componentRef.setInput('event', {
+      isMultiSport: () => false,
+      getActivities: () => [activity],
+      getID: () => 'swim-event',
+    });
+    fixture.componentRef.setInput('selectedActivities', [activity]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.renderedXAxisType).toBe(expectedAxis);
+    expect(component.displayedXAxisType).toBe(expectedAxis);
+    expect(component.canSelectDistanceXAxis).toBe(false);
+    expect(eventDataHelper.buildEventChartPanels).toHaveBeenLastCalledWith(expect.objectContaining({ xAxisType: expectedAxis }));
+    expect(eventDataHelper.buildEventLapMarkers).toHaveBeenLastCalledWith(expect.objectContaining({ xAxisType: expectedAxis }));
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+
+    // Selecting the displayed fallback is a no-op, and a stale Distance action is still blocked.
+    component.onXAxisTypeChange(expectedAxis);
+    component.onXAxisTypeChange(XAxisTypes.Distance);
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(component.xAxisType).toBe(savedAxis ?? XAxisTypes.Duration);
+
+    // Browsing another sport restores the original preference, not the swim fallback.
+    if (savedAxis === XAxisTypes.Distance) {
+      const openWaterSwim = { ...activity, type: ActivityTypes.OpenWaterSwimming, getID: () => 'open-water-swim' };
+      fixture.componentRef.setInput('selectedActivities', [openWaterSwim]);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(component.renderedXAxisType).toBe(XAxisTypes.Distance);
+      expect(component.canSelectDistanceXAxis).toBe(true);
+      expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    }
   });
 
   it('falls back to duration axis when a selected diving activity has heart rate but no distance stream', async () => {
@@ -777,20 +1333,32 @@ describe('EventCardChartComponent', () => {
     expect(component.fillOpacity).toBe(0);
   });
 
-  it('pushes cursor updates to map service for distance mode', async () => {
+  it.each([
+    { label: 'dense distance', stryd: undefined, distance: [0, 100, 200], time: [0, 10, 20], target: 120, seconds: 10 },
+    { label: 'leading distance gaps', stryd: undefined, distance: [null, null, 0, 10], time: [0, 1, 2, 3], target: 0, seconds: 2 },
+    { label: 'missing paired time', stryd: undefined, distance: [0, 100, 200], time: [0, null, 20], target: 110, seconds: 20 },
+    { label: 'no valid distance-time pair', stryd: undefined, distance: [null, 100], time: [0, null], target: 100, seconds: null },
+    { label: 'empty primary with Stryd', distance: [], stryd: [0, 100, 200], time: [0, 10, 20], target: 120, seconds: 10 },
+    { label: 'missing primary with Stryd', distance: [null, null, null], stryd: [0, 100, 200], time: [0, 10, 20], target: 120, seconds: 10 },
+    { label: 'sparse primary with Stryd', distance: [0, null, 200], stryd: [0, 110, 220], time: [0, 10, 20], target: 110, seconds: 20 },
+    { label: 'zero primary with Stryd', distance: [0, null, null], stryd: [0, 100, 200], time: [0, 10, 20], target: 120, seconds: 0 },
+  ])('syncs $label to the map using only recorded pairs', async ({ distance, stryd, time, target, seconds }) => {
     chartSettingsSignal.set({
       ...chartSettingsSignal(),
       xAxisType: XAxisTypes.Distance,
     });
 
-    const distanceStream = { getData: () => [0, 100, 200] };
-    const timeStream = { getData: () => [0, 10, 20] };
+    const distanceStream = { getData: () => distance };
+    const timeStream = { getData: () => time };
     const activity = {
       startDate: new Date('2024-01-01T00:00:00.000Z'),
       getID: () => 'a1',
       getStream: (type: string) => {
-        if (type === DataDistance.type || type === DataStrydDistance.type) {
+        if (type === DataDistance.type) {
           return distanceStream;
+        }
+        if (type === DataStrydDistance.type) {
+          return { getData: () => stryd ?? distance };
         }
         if (type === XAxisTypes.Time) {
           return timeStream;
@@ -808,14 +1376,21 @@ describe('EventCardChartComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    component.onPanelCursorPositionChange(120);
+    component.onPanelCursorPositionChange(target);
     await new Promise((resolve) => setTimeout(resolve, 300));
 
-    expect(mockActivityCursorService.setCursor).toHaveBeenCalledWith({
-      activityID: 'a1',
-      time: activity.startDate.getTime() + 10 * 1000,
-      byChart: true,
-    });
+    if (seconds === null) {
+      expect(mockActivityCursorService.setCursor).not.toHaveBeenCalled();
+    } else {
+      expect(mockActivityCursorService.setCursor).toHaveBeenCalledExactlyOnceWith({
+        activityID: 'a1',
+        time: activity.startDate.getTime() + seconds * 1000,
+        byChart: true,
+      });
+    }
+    expect(mockHaptics.selection).not.toHaveBeenCalled();
+    expect(mockHaptics.success).not.toHaveBeenCalled();
+    expect(mockHaptics.error).not.toHaveBeenCalled();
   });
 
   it('falls back to Stryd distance when Distance lookup throws while syncing cursor to map', async () => {
@@ -1378,6 +1953,156 @@ describe('EventCardChartComponent', () => {
     }));
   });
 
+  it.each([
+    { saved: DataDistance.type, rendered: DataDistanceMiles.type },
+    { saved: DataDistanceMiles.type, rendered: DataDistance.type },
+    { saved: DataGNSSDistance.type, rendered: DataGNSSDistanceMiles.type },
+    { saved: DataGNSSDistanceMiles.type, rendered: DataGNSSDistance.type },
+    { saved: 'Speed in kilometers per hour', rendered: 'Speed in miles per hour' },
+    { saved: 'Pace', rendered: 'Pace in minutes per mile' },
+    { saved: 'Depth', rendered: 'Depth in feet' },
+    { saved: 'Estimated Sustainable Distance', rendered: 'Estimated Sustainable Distance in miles' },
+  ])('restores saved $saved visibility and overlays on $rendered without writing settings', async ({ saved, rendered }) => {
+    const overlays = { [saved]: DataHeartRate.type, [DataPower.type]: saved };
+    chartSettingsSignal.set({ ...chartSettingsSignal(), eventChartOverlayDataTypeByPrimary: overlays });
+    mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({
+      mode: 'custom', selectionKeys: [saved, DataPower.type],
+    });
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      chartPanel(rendered), chartPanel(DataPower.type), chartPanel(DataHeartRate.type),
+    ] as any);
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(component.chartPanels.map(panel => panel.dataType)).toEqual([rendered, DataPower.type]);
+    expect(component.chartPanelViews.map(view => [view.panel.dataType, view.selectedOverlayDataType]))
+      .toEqual([[rendered, DataHeartRate.type], [DataPower.type, rendered]]);
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(chartSettingsSignal().eventChartOverlayDataTypeByPrimary).toEqual(overlays);
+  });
+
+  it.each([
+    { canonical: DataDistance.type, miles: DataDistanceMiles.type, other: DataGNSSDistance.type },
+    { canonical: DataGNSSDistance.type, miles: DataGNSSDistanceMiles.type, other: DataDistance.type },
+  ])('clears obsolete $canonical overlay aliases when No overlay is selected', async ({ canonical, miles, other }) => {
+    mockUserSettingsQuery.unitSettings.set({ distanceUnits: DataDistanceMiles.type });
+    chartSettingsSignal.set({ ...chartSettingsSignal(), eventChartOverlayDataTypeByPrimary: {
+      [canonical]: DataHeartRate.type, [miles]: DataPower.type,
+      [other]: DataHeartRate.type,
+      [DataTemperature.type]: DataHeartRate.type,
+    } });
+    mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({
+      mode: 'custom', selectionKeys: [canonical],
+    });
+    const build = vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      chartPanel(miles), chartPanel(DataPower.type), chartPanel(DataHeartRate.type),
+    ] as any);
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(component.chartPanelViews[0].selectedOverlayDataType).toBe(DataPower.type);
+    component.onPanelOverlayDataTypeChange(miles, null);
+    await flushOverlayPersistQueue();
+    const retained = { [other]: DataHeartRate.type, [DataTemperature.type]: DataHeartRate.type };
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledExactlyOnceWith({
+      eventChartOverlayDataTypeByPrimary: retained,
+    }, { force: true });
+    expect(component.chartPanelViews[0].selectedOverlayDataType).toBeNull();
+    build.mockReturnValue([chartPanel(canonical), chartPanel(DataHeartRate.type)] as any);
+    mockUserSettingsQuery.unitSettings.set({ distanceUnits: DataDistance.type } as any);
+    fixture.detectChanges(); await fixture.whenStable(); await flushMicrotasks();
+    expect(component.chartPanelViews[0].panel.dataType).toBe(canonical);
+    expect(component.chartPanelViews[0].selectedOverlayDataType).toBeNull();
+  });
+
+  it.each([
+    { primary: DataDistance.type, overlay: DataGNSSDistance.type,
+      renderedPrimary: DataDistanceMiles.type, renderedOverlay: DataGNSSDistanceMiles.type },
+    { primary: DataGNSSDistance.type, overlay: DataDistance.type,
+      renderedPrimary: DataGNSSDistanceMiles.type, renderedOverlay: DataDistanceMiles.type },
+  ])('keeps $primary and $overlay distinct when restoring overlays in miles', async ({
+    primary, overlay, renderedPrimary, renderedOverlay,
+  }) => {
+    const overlays = { [primary]: overlay };
+    chartSettingsSignal.set({ ...chartSettingsSignal(), eventChartOverlayDataTypeByPrimary: overlays });
+    mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({
+      mode: 'custom', selectionKeys: [primary],
+    });
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      chartPanel(renderedPrimary), chartPanel(renderedOverlay),
+    ] as any);
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(component.chartPanelViews).toHaveLength(1);
+    expect(component.chartPanelViews[0].panel.dataType).toBe(renderedPrimary);
+    expect(component.chartPanelViews[0].overlayPanel?.dataType).toBe(renderedOverlay);
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(chartSettingsSignal().eventChartOverlayDataTypeByPrimary).toEqual(overlays);
+  });
+
+  it('preserves independent overlays for multiple displayed speed units', async () => {
+    const metric = 'Speed';
+    const imperial = 'Speed in miles per hour';
+    chartSettingsSignal.set({ ...chartSettingsSignal(), eventChartOverlayDataTypeByPrimary: {
+      [metric]: DataHeartRate.type, [imperial]: DataPower.type,
+    } });
+    mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({ mode: 'custom', selectionKeys: [metric] });
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      chartPanel(metric), chartPanel(imperial), chartPanel(DataHeartRate.type), chartPanel(DataPower.type),
+    ] as any);
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(component.chartPanelViews.map(view => view.selectedOverlayDataType)).toEqual([DataHeartRate.type, DataPower.type]);
+    component.onPanelOverlayDataTypeChange(metric, null);
+    await flushOverlayPersistQueue();
+    expect(component.chartPanelViews.map(view => view.selectedOverlayDataType)).toEqual([null, DataPower.type]);
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenLastCalledWith({
+      eventChartOverlayDataTypeByPrimary: { [imperial]: DataPower.type },
+    }, { force: true });
+    // Two deliberately displayed units are distinct panels, so they can overlay one another.
+    component.onPanelOverlayDataTypeChange(metric, imperial);
+    await flushOverlayPersistQueue();
+    expect(component.chartPanelViews.map(view => view.selectedOverlayDataType)).toEqual([imperial, DataPower.type]);
+  });
+
+  it('does not guess between multiple current unit variants for an obsolete saved overlay', async () => {
+    const old = 'Speed in kilometers per hour';
+    const overlays = { [old]: DataHeartRate.type, [DataPower.type]: old };
+    chartSettingsSignal.set({ ...chartSettingsSignal(), eventChartOverlayDataTypeByPrimary: overlays });
+    mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({ mode: 'custom', selectionKeys: ['Speed', DataPower.type] });
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      chartPanel('Speed'), chartPanel('Speed in miles per hour'), chartPanel(DataHeartRate.type), chartPanel(DataPower.type),
+    ] as any);
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(component.chartPanelViews).toHaveLength(3);
+    expect(component.chartPanelViews.every(view => view.overlayPanel === null)).toBe(true);
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(chartSettingsSignal().eventChartOverlayDataTypeByPrimary).toEqual(overlays);
+  });
+
+  it.each([false, true])('does not pick between conflicting obsolete overlay preferences (reversed=%s)', async reverse => {
+    const entries = [['Speed', DataHeartRate.type], ['Speed in kilometers per hour', DataPower.type]];
+    const overlays = Object.fromEntries(reverse ? entries.reverse() : entries);
+    chartSettingsSignal.set({ ...chartSettingsSignal(), eventChartOverlayDataTypeByPrimary: overlays });
+    mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({ mode: 'custom', selectionKeys: ['Speed'] });
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([
+      chartPanel('Speed in miles per hour'), chartPanel(DataHeartRate.type), chartPanel(DataPower.type),
+    ] as any);
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(component.chartPanelViews).toHaveLength(1);
+    expect(component.chartPanelViews[0].overlayPanel).toBeNull();
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(chartSettingsSignal().eventChartOverlayDataTypeByPrimary).toEqual(overlays);
+  });
+
+  it('does not overlay Distance onto itself when an obsolete unit alias resolves to the same panel', async () => {
+    const overlays = { [DataDistance.type]: DataDistanceMiles.type };
+    chartSettingsSignal.set({ ...chartSettingsSignal(), eventChartOverlayDataTypeByPrimary: overlays });
+    mockChartSettingsStorage.getEventChartVisibilityPreference.mockReturnValue({
+      mode: 'custom', selectionKeys: [DataDistance.type],
+    });
+    vi.spyOn(eventDataHelper, 'buildEventChartPanels').mockReturnValue([chartPanel(DataDistanceMiles.type)] as any);
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(component.chartPanelViews[0].overlayPanel).toBeNull();
+    expect(component.chartPanelViews[0].selectedOverlayDataType).toBeNull();
+    expect(mockUserSettingsQuery.updateChartSettings).not.toHaveBeenCalled();
+    expect(chartSettingsSignal().eventChartOverlayDataTypeByPrimary).toEqual(overlays);
+  });
+
   it('persists directional overlay choices and preserves other primary mappings', async () => {
     chartSettingsSignal.set({
       ...chartSettingsSignal(),
@@ -1618,16 +2343,6 @@ describe('EventCardChartComponent', () => {
     expect(component.zoomRange).toBeNull();
     expect(component.previewSelectedRange).toBeNull();
     expect(component.selectedRange).toBeNull();
-  });
-
-  it('passes contextual reset state to each data chart panel', () => {
-    const template = readFileSync(
-      resolve(process.cwd(), 'src/app/components/event/chart/event.card.chart.component.html'),
-      'utf8'
-    );
-
-    expect(template).toContain('[showResetChartState]="hasResettableChartState"');
-    expect(template).toContain('(resetChartState)="onResetChartStateRequested()"');
   });
 
   it('exposes branded watermark text when provided', () => {

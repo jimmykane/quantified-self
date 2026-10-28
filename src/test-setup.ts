@@ -7,6 +7,15 @@ import {
     platformBrowserDynamicTesting,
 } from '@angular/platform-browser-dynamic/testing';
 
+// Rendering specs have no layout viewport. Test visible charts immediately;
+// ChartViewportQueue's own tests drive its real observer and frame scheduling.
+vi.mock('./app/helpers/chart-viewport-queue', async importOriginal => {
+    const actual = await importOriginal<typeof import('./app/helpers/chart-viewport-queue')>();
+    return { ...actual, chartViewportQueue: {
+        wait: vi.fn(() => ({ ready: Promise.resolve(true), cancel: vi.fn() })),
+    } };
+});
+
 
 getTestBed().initTestEnvironment(
     BrowserDynamicTestingModule,

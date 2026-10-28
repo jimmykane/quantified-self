@@ -4,7 +4,9 @@
 }
 
 .health-metric-series-chart {
-  height: 190px;
+  // Size the plot from its host, not the canvas's previous resize dimensions.
+  contain: size;
+  height: var(--health-metric-series-chart-height, 190px);
   width: 100%;
 }
 
@@ -12,4 +14,16 @@
   .health-metric-series-chart {
     height: 210px;
   }
+}
+
+// Highlights show one source at a time. Keep the plot readable without
+// expanding its surrounding card or reverting to stacked tiny sparklines.
+// After the mobile rule so both highlight layouts share the same height.
+.health-metric-series-chart-compact {
+  height: 112px;
+}
+
+// Dashboard tiles own the available height, including at mobile widths.
+.health-metric-series-chart-fill-height {
+  height: 100%;
 }

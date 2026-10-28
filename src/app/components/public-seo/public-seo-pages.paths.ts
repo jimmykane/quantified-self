@@ -1,7 +1,9 @@
 export type PublicSeoPageKey =
   | 'featuresHub'
+  | 'health'
   | 'activityCalendar'
   | 'trainingAnalysis'
+  | 'trainingPlans'
   | 'trainingDashboard'
   | 'activityMap'
   | 'mcpServer'
@@ -10,6 +12,7 @@ export type PublicSeoPageKey =
   | 'routeFiles'
   | 'guidesHub'
   | 'syncGarminToSuunto'
+  | 'syncGarminToWahoo'
   | 'syncCorosToSuunto'
   | 'syncWahooToSuunto'
   | 'importActivitiesToSuunto'
@@ -19,8 +22,10 @@ export type PublicSeoPageKey =
 
 export const PUBLIC_FEATURE_PATHS = {
   hub: 'features',
+  health: 'features/health',
   activityCalendar: 'features/activity-calendar',
   trainingAnalysis: 'features/training-analysis',
+  trainingPlans: 'features/training-plans',
   trainingDashboard: 'features/training-dashboard',
   activityMap: 'features/activity-map',
   mcpServer: 'features/mcp-server',
@@ -32,6 +37,7 @@ export const PUBLIC_FEATURE_PATHS = {
 export const PUBLIC_GUIDE_PATHS = {
   hub: 'guides',
   syncGarminToSuunto: 'guides/sync-garmin-to-suunto',
+  syncGarminToWahoo: 'guides/sync-garmin-to-wahoo',
   syncCorosToSuunto: 'guides/sync-coros-to-suunto',
   syncWahooToSuunto: 'guides/sync-wahoo-to-suunto',
   importActivitiesToSuunto: 'guides/import-activities-to-suunto',

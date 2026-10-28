@@ -1,10 +1,35 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.jump-activity-label {
+  margin: 0 0 8px;
+  color: var(--mat-sys-on-surface-variant);
+  overflow-wrap: anywhere;
+}
+
 .table-container {
   overflow: auto;
   width: 100%;
   max-width: 100%;
 }
 
-.table-container mat-cell,
-.table-container .mat-mdc-cell {
+.jump-table {
+  table-layout: auto;
+}
+
+.jump-table .jump-table-cell {
+  padding-inline: 8px;
+  white-space: nowrap;
+}
+
+.jump-table .jump-index-cell,
+.jump-table .jump-time-cell {
+  width: 1%;
+}
+
+.jump-table td {
   font-family: 'Barlow Condensed', 'Inter', sans-serif;
+  font-variant-numeric: tabular-nums;
 }

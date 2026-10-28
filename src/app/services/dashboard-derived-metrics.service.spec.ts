@@ -1,11 +1,14 @@
 import { TestBed } from '@angular/core/testing';
-import { firstValueFrom, of, Subject } from 'rxjs';
+import { firstValueFrom, of, Subject, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Firestore, doc, docData } from 'app/firebase/firestore';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { READINESS_EVIDENCE_VERSION, READINESS_FORMULA_VERSION } from '@shared/readiness';
 import {
+  DERIVED_FORM_PAYLOAD_VERSION,
   DERIVED_METRIC_KINDS,
   DERIVED_METRIC_SCHEMA_VERSION,
+  DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION,
   DERIVED_METRICS_COLLECTION_ID,
   getDerivedMetricDocId,
   type EnsureDerivedMetricsRequest,
@@ -21,6 +24,23 @@ const hoisted = vi.hoisted(() => ({
   docMock: vi.fn(),
   docDataMock: vi.fn(),
 }));
+
+function buildFormPayload(
+  dailyLoads: Array<{ dayMs: number; load: number; activityCount?: number }>,
+) {
+  const countedLoads = dailyLoads.map(entry => ({
+    ...entry,
+    activityCount: entry.activityCount ?? 1,
+  }));
+  return {
+    payloadVersion: DERIVED_FORM_PAYLOAD_VERSION,
+    dayBoundary: 'UTC',
+    rangeStartDayMs: countedLoads[0]?.dayMs ?? null,
+    rangeEndDayMs: countedLoads[countedLoads.length - 1]?.dayMs ?? null,
+    dailyLoads: countedLoads,
+    excludesMergedEvents: true,
+  };
+}
 
 vi.mock('app/firebase/firestore', async (importOriginal) => {
   const actual = await importOriginal<typeof import('app/firebase/firestore')>();
@@ -112,12 +132,55 @@ describe('DashboardDerivedMetricsService', () => {
     service = TestBed.inject(DashboardDerivedMetricsService);
   });
 
+  it('marks old intensity snapshots stale without invalidating unrelated kinds', () => {
+    for (const kind of [DERIVED_METRIC_KINDS.IntensityDistribution, DERIVED_METRIC_KINDS.EasyPercent,
+      DERIVED_METRIC_KINDS.HardPercent, DERIVED_METRIC_KINDS.TrainingSummary, DERIVED_METRIC_KINDS.TrainingBuildComparison]) {
+      expect(service['resolveSnapshotStatus'](kind, {
+        status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, payload: {},
+      })).toBe('stale');
+    }
+    for (const kind of [DERIVED_METRIC_KINDS.IntensityDistribution, DERIVED_METRIC_KINDS.EasyPercent,
+      DERIVED_METRIC_KINDS.HardPercent, DERIVED_METRIC_KINDS.TrainingSummary, DERIVED_METRIC_KINDS.Acwr]) {
+      expect(service['resolveSnapshotStatus'](kind, {
+        status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+        payload: { intensityPolicyVersion: 1, asOfDayMs: Date.now() },
+      })).toBe('ready');
+    }
+  });
+
   it('returns missing snapshot state when uid is not available', async () => {
     const state = await firstValueFrom(service.watch(null));
 
     expect(state).toEqual<DashboardDerivedMetricsState>(createMissingState());
     expect(doc).not.toHaveBeenCalled();
     expect(docData).not.toHaveBeenCalled();
+  });
+
+  it('reports preview read failures per metric and retains the last successful payload', () => {
+    const source$ = new Subject<Record<string, unknown>>();
+    hoisted.docDataMock.mockReturnValueOnce(source$).mockReturnValueOnce(of(undefined));
+    const states: DashboardDerivedMetricsState[] = [];
+    service.watch({ uid: 'preview-owner' }, {
+      metricKinds: [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.Acwr], reportReadErrors: true,
+    }).subscribe(state => states.push(state));
+    source$.next({ status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      sourceEventCount: 1,
+      payload: buildFormPayload([{
+        dayMs: Math.floor(Date.now() / 86400000) * 86400000 - 86400000,
+        load: 30,
+      }]) });
+    const points = states.at(-1)!.formPoints;
+    expect(points?.length).toBeGreaterThan(0);
+    source$.error(new Error('permission-denied'));
+    expect(states.at(-1)).toMatchObject({ formStatus: 'failed', acwrStatus: 'missing', formPoints: points });
+    expect(mockFunctionsService.call).not.toHaveBeenCalled();
+  });
+
+  it('opts into explicit read errors without changing existing refresh callers', async () => {
+    hoisted.docDataMock.mockReturnValue(throwError(() => new Error('offline')));
+    const metricKinds = [DERIVED_METRIC_KINDS.Acwr];
+    expect((await firstValueFrom(service.watch({ uid: 'owner' }, { metricKinds }))).acwrStatus).toBe('missing');
+    expect((await firstValueFrom(service.watch({ uid: 'owner' }, { metricKinds, reportReadErrors: true }))).acwrStatus).toBe('failed');
   });
 
   it('maps derived snapshots to form points and recovery-now context', async () => {
@@ -132,12 +195,11 @@ describe('DashboardDerivedMetricsService', () => {
       .mockReturnValueOnce(of({
         status: 'ready',
         schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
-        payload: {
-          dailyLoads: [
-            { dayMs: Date.UTC(2026, 0, 1), load: 30 },
-            { dayMs: Date.UTC(2026, 0, 3), load: 10 },
-          ],
-        },
+        sourceEventCount: 3,
+        payload: buildFormPayload([
+          { dayMs: Date.UTC(2026, 0, 1), load: 30, activityCount: 2 },
+          { dayMs: Date.UTC(2026, 0, 3), load: 10 },
+        ]),
       }))
       .mockReturnValueOnce(of({
         status: 'ready',
@@ -181,6 +243,7 @@ describe('DashboardDerivedMetricsService', () => {
       Date.UTC(2026, 0, 3),
     ]);
     expect(state.formPoints?.map(point => point.trainingStressScore)).toEqual([30, 0, 10]);
+    expect(state.formPoints?.map(point => point.activityCount)).toEqual([2, 0, 1]);
     expect(state.recoveryNow).toEqual({
       totalSeconds: 5400,
       endTimeMs: Date.UTC(2026, 0, 3, 12, 0, 0),
@@ -209,12 +272,11 @@ describe('DashboardDerivedMetricsService', () => {
           return of({
             status: 'ready',
             schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
-            payload: {
-              dailyLoads: [
-                { dayMs: Date.UTC(2026, 3, 24), load: 60 },
-                { dayMs: Date.UTC(2026, 3, 26), load: 275.4 },
-              ],
-            },
+            sourceEventCount: 2,
+            payload: buildFormPayload([
+              { dayMs: Date.UTC(2026, 3, 24), load: 60 },
+              { dayMs: Date.UTC(2026, 3, 26), load: 275.4 },
+            ]),
           });
         }
         if (path.endsWith('/form_now')) {
@@ -283,7 +345,7 @@ describe('DashboardDerivedMetricsService', () => {
     }
   });
 
-  it('supports legacy tuple daily-load payloads for backward compatibility', async () => {
+  it('marks legacy count-less Form payloads stale and withholds guessed activity counts', async () => {
     const uid = 'user-1';
     const formDocRef = { path: `users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${getDerivedMetricDocId(DERIVED_METRIC_KINDS.Form)}` };
     const recoveryDocRef = { path: `users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${getDerivedMetricDocId(DERIVED_METRIC_KINDS.RecoveryNow)}` };
@@ -306,8 +368,26 @@ describe('DashboardDerivedMetricsService', () => {
 
     const state = await firstValueFrom(service.watch({ uid }));
 
-    expect(state.formPoints?.map(point => point.trainingStressScore)).toEqual([20, 0, 5]);
+    expect(state.formStatus).toBe('stale');
+    expect(state.formPoints).toBeNull();
     expect(state.recoveryNow).toBeNull();
+  });
+
+  it('marks Form stale when exact daily activity counts do not match sourceEventCount', async () => {
+    const uid = 'user-1';
+    hoisted.docDataMock.mockReturnValueOnce(of({
+      status: 'ready',
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      sourceEventCount: 2,
+      payload: buildFormPayload([
+        { dayMs: Date.UTC(2026, 0, 1), load: 30, activityCount: 1 },
+      ]),
+    })).mockReturnValue(of(undefined));
+
+    const state = await firstValueFrom(service.watch({ uid }));
+
+    expect(state.formStatus).toBe('stale');
+    expect(state.formPoints).toBeNull();
   });
 
   it('marks ready snapshots with older schema versions as stale for self-heal', async () => {
@@ -400,8 +480,8 @@ describe('DashboardDerivedMetricsService', () => {
       asOfDayMs,
       excludesMergedEvents: true,
       disciplines: [
-        { discipline: 'running', ftpSetting: null, importedVo2Max: null },
-        { discipline: 'cycling', ftpSetting: null, importedVo2Max: null },
+        { discipline: 'running', ftpSetting: null, importedVo2Max: null, referenceVo2Max: null },
+        { discipline: 'cycling', ftpSetting: null, importedVo2Max: null, referenceVo2Max: null },
       ],
     };
     hoisted.docMock.mockImplementation((_firestore, ...segments: string[]) => ({ path: segments.join('/') }));
@@ -474,7 +554,7 @@ describe('DashboardDerivedMetricsService', () => {
     const validPayload = {
       dayBoundary: 'UTC',
       asOfDayMs,
-      policyVersion: 1,
+      policyVersion: DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION,
       windowDays: 42,
       historyDays: 84,
       cadence: 'workout-date',
@@ -734,7 +814,10 @@ describe('DashboardDerivedMetricsService', () => {
 
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingBuildComparison))).toBe(true);
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingReadiness))).toBe(true);
-    expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.BodyWeightTrend))).toBe(true);
+    expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.BodyWeightTrend))).toBe(false);
+    expect(TRAINING_WORKSPACE_DERIVED_METRIC_KINDS).toEqual(
+      Object.values(DERIVED_METRIC_KINDS).filter(kind => kind !== DERIVED_METRIC_KINDS.BodyWeightTrend),
+    );
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingExplanation))).toBe(true);
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingDurability))).toBe(true);
     expect(hoisted.docMock.mock.calls.some((call) => call.at(-1) === getDerivedMetricDocId(DERIVED_METRIC_KINDS.TrainingPowerSystems))).toBe(true);
@@ -746,7 +829,7 @@ describe('DashboardDerivedMetricsService', () => {
     });
   });
 
-  it('maps a formula-consistent readiness snapshot and marks a mismatched score stale', async () => {
+  it('maps current readiness evidence and marks mismatched scores or outdated evidence stale', async () => {
     const uid = 'user-1';
     const nowMs = Date.now();
     const now = new Date(nowMs);
@@ -764,12 +847,14 @@ describe('DashboardDerivedMetricsService', () => {
       sleepScore: null,
       latestSleepAtMs: null,
       hrvRatio: null,
+      hrvPersonalRange: null,
       averageHeartRateRatio: null,
       minimumHeartRateRatio: null,
       overnightHeartRateRatio: null,
     }));
     const payload = {
-      formulaVersion: 3,
+      formulaVersion: READINESS_FORMULA_VERSION,
+      evidenceVersion: READINESS_EVIDENCE_VERSION,
       dayBoundary: 'UTC',
       asOfDayMs,
       generatedAtMs: nowMs,
@@ -790,6 +875,11 @@ describe('DashboardDerivedMetricsService', () => {
           ...payload,
           points: points.map((point, index) => index === 13 ? { ...point, score: 66 } : point),
         },
+      }))
+      .mockReturnValueOnce(of({
+        status: 'ready',
+        schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+        payload: { ...payload, evidenceVersion: undefined },
       }));
 
     const validState = await firstValueFrom(service.watch({ uid }, {
@@ -798,17 +888,26 @@ describe('DashboardDerivedMetricsService', () => {
     const invalidState = await firstValueFrom(service.watch({ uid }, {
       metricKinds: [DERIVED_METRIC_KINDS.TrainingReadiness],
     }));
+    const outdatedState = await firstValueFrom(service.watch({ uid }, {
+      metricKinds: [DERIVED_METRIC_KINDS.TrainingReadiness],
+    }));
 
     expect(validState.trainingReadiness).toEqual(payload);
     expect(validState.trainingReadinessStatus).toBe('ready');
     expect(invalidState.trainingReadiness).toBeNull();
     expect(invalidState.trainingReadinessStatus).toBe('stale');
+    expect(outdatedState.trainingReadiness).toBeNull();
+    expect(outdatedState.trainingReadinessStatus).toBe('stale');
   });
 
   it('maps a valid body-weight trend and self-heals a malformed ready snapshot', async () => {
     const uid = 'user-1';
     const now = new Date();
     const asOfDayMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const points = Array.from({ length: 28 }, (_, index) => ({
+      dayMs: asOfDayMs - ((27 - index) * 24 * 60 * 60 * 1000),
+      weightKg: index === 27 ? 70.2 : null,
+    }));
     const payload = {
       dayBoundary: 'UTC',
       asOfDayMs,
@@ -825,10 +924,15 @@ describe('DashboardDerivedMetricsService', () => {
       change28dPercent: -1.68,
       recordedDayCount7d: 4,
       recordedDayCount28d: 8,
-      points: Array.from({ length: 28 }, (_, index) => ({
-        dayMs: asOfDayMs - ((27 - index) * 24 * 60 * 60 * 1000),
-        weightKg: index === 27 ? 70.2 : null,
-      })),
+      points,
+      series: [{
+        sourceKind: 'health-measurement', provider: 'QuantifiedSelf', sourceKey: 'opaque',
+        latestWeightKg: 70.2, latestWeightDayMs: asOfDayMs,
+        median7dKg: 70.3, median28dKg: 70.7,
+        change7dKg: -0.4, change7dPercent: -0.57,
+        change28dKg: -1.2, change28dPercent: -1.68,
+        recordedDayCount7d: 4, recordedDayCount28d: 8, points,
+      }],
     };
     hoisted.docMock.mockImplementation((_firestore, ...segments: string[]) => ({ path: segments.join('/') }));
     hoisted.docDataMock
@@ -884,7 +988,6 @@ describe('DashboardDerivedMetricsService', () => {
         DERIVED_METRIC_KINDS.TrainingDurability,
         DERIVED_METRIC_KINDS.TrainingBuildComparison,
         DERIVED_METRIC_KINDS.TrainingReadiness,
-        DERIVED_METRIC_KINDS.BodyWeightTrend,
         DERIVED_METRIC_KINDS.TrainingSwimPerformance,
       ],
     });

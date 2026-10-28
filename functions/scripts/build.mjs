@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import console from 'node:console';
-import { rm } from 'node:fs/promises';
+import { cp, mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -31,6 +31,8 @@ async function runTypeScriptCompiler() {
 try {
   await rm(buildOutputDirectory, { recursive: true, force: true });
   await runTypeScriptCompiler();
+  await mkdir(path.join(buildOutputDirectory, 'functions'), { recursive: true });
+  await cp(path.join(functionsDirectory, 'templates'), path.join(buildOutputDirectory, 'functions', 'templates'), { recursive: true });
 } catch (error) {
   console.error(`[functions-build] ${error instanceof Error ? error.message : error}`);
   process.exitCode = 1;

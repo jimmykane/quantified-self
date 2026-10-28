@@ -1,0 +1,393 @@
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { parseStrengthWorkoutDetailsV1, projectStrengthWorkoutToV1, type StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
+import { garminStrengthExercise } from '../../../../shared/garmin-strength-workout';
+import {
+    parseWorkoutStructureV1,
+    type WorkoutEndingV1,
+    type WorkoutStepPurposeV1,
+    type WorkoutStepV1 as CanonicalWorkoutStepV1,
+    type WorkoutStructureV1,
+    type WorkoutTargetV1,
+} from '../../../../shared/planned-workout';
+import { normalizeTrainingLocalDate } from '../../../../shared/training-plans';
+import {
+    garminWorkoutSportFamilyV1,
+    type GarminWorkoutSportFamilyV1,
+} from '../../../../shared/planned-workout-providers';
+import {
+    resolveProviderSerializationIssuesV1,
+    type ProviderSerializationIssueV1,
+    type ProviderSerializationResultV1,
+} from './provider-mapping';
+
+export type GarminWorkoutSportV1 = GarminWorkoutSportFamilyV1;
+export type GarminWorkoutIntensityV1 = 'REST' | 'WARMUP' | 'COOLDOWN' | 'RECOVERY' | 'ACTIVE';
+export type GarminWorkoutDurationTypeV1 = 'TIME' | 'DISTANCE' | 'OPEN' | 'FIXED_REST' | 'REPS';
+export type GarminWorkoutTargetTypeV1 = 'SPEED' | 'PACE' | 'HEART_RATE' | 'CADENCE' | 'POWER' | 'OPEN';
+
+interface GarminTargetFieldsV1 {
+    targetType: GarminWorkoutTargetTypeV1 | null;
+    targetValue: null;
+    targetValueLow: number | null;
+    targetValueHigh: number | null;
+    targetValueType: null;
+}
+
+interface GarminSecondaryTargetFieldsV1 {
+    secondaryTargetType: Exclude<GarminWorkoutTargetTypeV1, 'OPEN'> | null;
+    secondaryTargetValue: null;
+    secondaryTargetValueLow: number | null;
+    secondaryTargetValueHigh: number | null;
+    secondaryTargetValueType: null;
+}
+
+export interface GarminWorkoutStepV1 extends GarminTargetFieldsV1, GarminSecondaryTargetFieldsV1 {
+    type: 'WorkoutStep';
+    stepOrder: number;
+    intensity: GarminWorkoutIntensityV1;
+    description: string;
+    durationType: GarminWorkoutDurationTypeV1;
+    durationValue: number | null;
+    durationValueType: 'METER' | null;
+    exerciseCategory?: string | null;
+    exerciseName?: string | null;
+    weightValue?: number | null;
+    weightDisplayUnit?: 'KILOGRAM' | null;
+}
+
+export interface GarminWorkoutRepeatStepV1 {
+    type: 'WorkoutRepeatStep';
+    stepOrder: number;
+    repeatType: 'REPEAT_UNTIL_STEPS_CMPLT';
+    repeatValue: number;
+    skipLastRestStep: boolean;
+    steps: GarminWorkoutStepV1[];
+}
+
+export type GarminWorkoutNodeV1 = GarminWorkoutStepV1 | GarminWorkoutRepeatStepV1;
+
+export interface GarminWorkoutPayloadV1 {
+    ownerId?: number;
+    workoutName: string;
+    description: string;
+    sport: GarminWorkoutSportV1;
+    poolLength?: number | null;
+    poolLengthUnit?: 'METER' | 'YARD' | null;
+    workoutProvider: 'Quantified Self';
+    workoutSourceId: 'Quantified Self';
+    isSessionTransitionEnabled: false;
+    segments: [{
+        segmentOrder: 1;
+        sport: GarminWorkoutSportV1;
+        poolLength: null;
+        poolLengthUnit: null;
+        steps: GarminWorkoutNodeV1[];
+    }];
+}
+
+export interface GarminWorkoutSchedulePayloadV1 {
+    workoutId: number;
+    date: string;
+}
+
+export interface SerializeGarminWorkoutOptionsV1 {
+    name: string;
+    description?: string;
+    ownerId?: number;
+    allowDegraded: boolean;
+}
+
+function codePointLength(value: string): number {
+    return Array.from(value).length;
+}
+
+function truncateCodePoints(value: string, maximum: number): string {
+    return Array.from(value).slice(0, maximum).join('');
+}
+
+function requiredText(value: string, label: string): string {
+    const normalized = value.trim();
+    if (normalized.length === 0) throw new Error(`${label} must not be empty.`);
+    return normalized;
+}
+
+function optionalPositiveSafeInteger(value: number | undefined, label: string): number | undefined {
+    if (value === undefined) return undefined;
+    if (!Number.isSafeInteger(value) || value <= 0) {
+        throw new Error(`${label} must be a positive safe integer.`);
+    }
+    return value;
+}
+
+function sportToGarmin(sport: ActivityTypes): GarminWorkoutSportV1 {
+    const family = garminWorkoutSportFamilyV1(sport);
+    if (family) return family;
+    throw new Error(`Unsupported Garmin sport reached after compatibility validation: ${sport}.`);
+}
+
+function purposeToGarmin(purpose: WorkoutStepPurposeV1): GarminWorkoutIntensityV1 {
+    switch (purpose) {
+        case 'warmup': return 'WARMUP';
+        case 'recovery': return 'RECOVERY';
+        case 'cooldown': return 'COOLDOWN';
+        case 'rest': return 'REST';
+        case 'work':
+        case 'other':
+            return 'ACTIVE';
+    }
+}
+
+function endingToGarmin(
+    ending: WorkoutEndingV1,
+    purpose: WorkoutStepPurposeV1,
+): Pick<GarminWorkoutStepV1, 'durationType' | 'durationValue' | 'durationValueType'> {
+    switch (ending.kind) {
+        case 'time':
+            return {
+                durationType: purpose === 'rest' ? 'FIXED_REST' : 'TIME',
+                durationValue: ending.seconds,
+                durationValueType: null,
+            };
+        case 'distance':
+            return {
+                durationType: 'DISTANCE',
+                durationValue: ending.meters,
+                durationValueType: 'METER',
+            };
+        case 'manual':
+            return { durationType: 'OPEN', durationValue: null, durationValueType: null };
+        case 'kilojoules':
+        case 'repetitions':
+            throw new Error(`Unsupported Garmin ending reached after compatibility validation: ${ending.kind}.`);
+    }
+}
+
+function absoluteTargetRange(target: WorkoutTargetV1): {
+    type: Exclude<GarminWorkoutTargetTypeV1, 'OPEN'>;
+    low: number;
+    high: number;
+} {
+    const scale = (value: number, percent: number): number => value * percent / 100;
+    if (target.mode === 'absolute') {
+        switch (target.kind) {
+            case 'heart-rate':
+                return { type: 'HEART_RATE', low: target.minimumBpm, high: target.maximumBpm };
+            case 'power':
+                return { type: 'POWER', low: target.minimumWatts, high: target.maximumWatts };
+            case 'speed':
+                return {
+                    type: target.presentation === 'pace' ? 'PACE' : 'SPEED',
+                    low: target.minimumMetersPerSecond,
+                    high: target.maximumMetersPerSecond,
+                };
+            case 'cadence':
+                return { type: 'CADENCE', low: target.minimumRpm, high: target.maximumRpm };
+        }
+    }
+
+    switch (target.kind) {
+        case 'heart-rate':
+            return {
+                type: 'HEART_RATE',
+                low: scale(target.reference.bpm, target.minimumPercent),
+                high: scale(target.reference.bpm, target.maximumPercent),
+            };
+        case 'power':
+            return {
+                type: 'POWER',
+                low: scale(target.reference.watts, target.minimumPercent),
+                high: scale(target.reference.watts, target.maximumPercent),
+            };
+        case 'speed':
+            return {
+                type: target.presentation === 'pace' ? 'PACE' : 'SPEED',
+                low: scale(target.reference.metersPerSecond, target.minimumPercent),
+                high: scale(target.reference.metersPerSecond, target.maximumPercent),
+            };
+        case 'cadence':
+            return {
+                type: 'CADENCE',
+                low: scale(target.reference.rpm, target.minimumPercent),
+                high: scale(target.reference.rpm, target.maximumPercent),
+            };
+    }
+}
+
+function primaryTargetFields(target: WorkoutTargetV1 | undefined, swimming: boolean): GarminTargetFieldsV1 {
+    if (!target) {
+        return {
+            targetType: swimming ? null : 'OPEN',
+            targetValue: null,
+            targetValueLow: null,
+            targetValueHigh: null,
+            targetValueType: null,
+        };
+    }
+    const range = absoluteTargetRange(target);
+    return {
+        targetType: range.type,
+        targetValue: null,
+        targetValueLow: range.low,
+        targetValueHigh: range.high,
+        targetValueType: null,
+    };
+}
+
+function secondaryTargetFields(target: WorkoutTargetV1 | undefined): GarminSecondaryTargetFieldsV1 {
+    if (!target) {
+        return {
+            secondaryTargetType: null,
+            secondaryTargetValue: null,
+            secondaryTargetValueLow: null,
+            secondaryTargetValueHigh: null,
+            secondaryTargetValueType: null,
+        };
+    }
+    const range = absoluteTargetRange(target);
+    return {
+        secondaryTargetType: range.type,
+        secondaryTargetValue: null,
+        secondaryTargetValueLow: range.low,
+        secondaryTargetValueHigh: range.high,
+        secondaryTargetValueType: null,
+    };
+}
+
+function stepToGarmin(step: CanonicalWorkoutStepV1, stepOrder: number, swimming: boolean): GarminWorkoutStepV1 {
+    return {
+        type: 'WorkoutStep',
+        stepOrder,
+        intensity: purposeToGarmin(step.purpose),
+        description: step.note ?? '',
+        ...endingToGarmin(step.ending, step.purpose),
+        ...primaryTargetFields(step.targets[0], swimming),
+        ...secondaryTargetFields(step.targets[1]),
+    };
+}
+
+function structureToGarminNodes(structure: WorkoutStructureV1): GarminWorkoutNodeV1[] {
+    let stepOrder = 0;
+    const swimming = structure.sport === ActivityTypes.Swimming;
+    return structure.nodes.map(node => {
+        stepOrder += 1;
+        if (node.kind === 'step') return stepToGarmin(node, stepOrder, swimming);
+        const repeatOrder = stepOrder;
+        const steps = node.steps.map(step => {
+            stepOrder += 1;
+            return stepToGarmin(step, stepOrder, swimming);
+        });
+        return {
+            type: 'WorkoutRepeatStep',
+            stepOrder: repeatOrder,
+            repeatType: 'REPEAT_UNTIL_STEPS_CMPLT',
+            repeatValue: node.count,
+            skipLastRestStep: swimming,
+            steps,
+        };
+    });
+}
+
+export function serializeGarminWorkoutV1(
+    structureValue: unknown,
+    options: SerializeGarminWorkoutOptionsV1,
+): ProviderSerializationResultV1<GarminWorkoutPayloadV1> {
+    return serializeWorkout(structureValue, options);
+}
+
+export function serializeGarminStrengthWorkoutV1(
+    detailsValue: unknown,
+    options: SerializeGarminWorkoutOptionsV1 & { sport?: ActivityTypes },
+): ProviderSerializationResultV1<GarminWorkoutPayloadV1> {
+    const details = parseStrengthWorkoutDetailsV1(detailsValue);
+    return serializeWorkout(projectStrengthWorkoutToV1(details, options.sport), options, details);
+}
+
+function strengthNodes(details: StrengthWorkoutDetailsV1): GarminWorkoutStepV1[] {
+    const nodes: GarminWorkoutStepV1[] = [];
+    details.exercises.forEach(exercise => exercise.sets.forEach((set, index) => {
+        const ending = set.ending;
+        nodes.push({ type: 'WorkoutStep', stepOrder: nodes.length + 1, intensity: 'ACTIVE',
+            description: `${exercise.name} · set ${index + 1}`,
+            durationType: ending.kind === 'repetitions' ? 'REPS' : 'TIME',
+            durationValue: ending.kind === 'repetitions' ? ending.repetitions : ending.seconds,
+            durationValueType: null, ...primaryTargetFields(undefined, false), ...secondaryTargetFields(undefined),
+            ...garminStrengthExercise(exercise.name)!,
+            weightValue: set.externalLoadKg ?? null,
+            weightDisplayUnit: set.externalLoadKg === undefined ? null : 'KILOGRAM' });
+        if (set.restAfterSeconds !== undefined) nodes.push({ type: 'WorkoutStep', stepOrder: nodes.length + 1,
+            intensity: 'REST', description: `Rest after ${exercise.name}`, durationType: 'FIXED_REST',
+            durationValue: set.restAfterSeconds, durationValueType: null,
+            ...primaryTargetFields(undefined, false), ...secondaryTargetFields(undefined),
+            exerciseCategory: null, exerciseName: null, weightValue: null, weightDisplayUnit: null });
+    }));
+    return nodes;
+}
+
+function serializeWorkout(structureValue: unknown, options: SerializeGarminWorkoutOptionsV1,
+    strength?: StrengthWorkoutDetailsV1): ProviderSerializationResultV1<GarminWorkoutPayloadV1> {
+    const structure = parseWorkoutStructureV1(structureValue);
+    const workoutName = requiredText(options.name, 'Garmin workout name');
+    const authoredDescription = options.description?.trim() ?? '';
+    // Keep the authored sport visible even though Garmin cannot receive its native profile.
+    // Include this prefix in the provider's description limit and degradation review.
+    const rawDescription = garminWorkoutSportFamilyV1(structure.sport) === 'GENERIC'
+        ? [`Quantified Self sport: ${structure.sport}. Delivered as Garmin Generic; device support varies.`, authoredDescription]
+            .filter(Boolean).join('\n\n')
+        : authoredDescription;
+    const ownerId = optionalPositiveSafeInteger(options.ownerId, 'Garmin owner ID');
+    const additionalIssues: ProviderSerializationIssueV1[] = [];
+    if (codePointLength(rawDescription) > 1024) {
+        additionalIssues.push({
+            severity: 'degraded',
+            code: 'description_truncated',
+            path: '$.description',
+            message: 'Garmin workout descriptions are limited to 1024 characters.',
+        });
+    }
+
+    const resolved = resolveProviderSerializationIssuesV1({
+        provider: 'garmin',
+        structure,
+        additionalIssues,
+        allowDegraded: options.allowDegraded,
+        strength,
+    });
+    const sport = sportToGarmin(structure.sport);
+    const swimming = sport === 'LAP_SWIMMING';
+    const poolLength = structure.poolLength;
+    const artifact: GarminWorkoutPayloadV1 = {
+        ...(ownerId === undefined ? {} : { ownerId }),
+        workoutName,
+        description: truncateCodePoints(rawDescription, 1024),
+        sport,
+        ...(swimming ? {
+            poolLength: poolLength
+                ? poolLength.presentation === 'yards'
+                    ? Math.round(poolLength.meters / 0.9144 * 1_000_000) / 1_000_000
+                    : poolLength.meters
+                : null,
+            poolLengthUnit: poolLength ? poolLength.presentation === 'yards' ? 'YARD' : 'METER' : null,
+        } as const : {}),
+        workoutProvider: 'Quantified Self',
+        workoutSourceId: 'Quantified Self',
+        isSessionTransitionEnabled: false,
+        segments: [{
+            segmentOrder: 1,
+            sport,
+            poolLength: null,
+            poolLengthUnit: null,
+            steps: strength ? strengthNodes(strength) : structureToGarminNodes(structure),
+        }],
+    };
+    return { ...resolved, artifact };
+}
+
+export function serializeGarminWorkoutScheduleV1(
+    workoutId: number,
+    localDate: string,
+): GarminWorkoutSchedulePayloadV1 {
+    if (!Number.isSafeInteger(workoutId) || workoutId <= 0) {
+        throw new Error('Garmin workout ID must be a positive safe integer.');
+    }
+    return { workoutId, date: normalizeTrainingLocalDate(localDate) };
+}

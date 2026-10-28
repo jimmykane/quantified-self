@@ -1,0 +1,166 @@
+import { Component } from '@angular/core';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { MatIconTestingModule } from '@angular/material/icon/testing';
+import { By } from '@angular/platform-browser';
+import { describe, expect, it, beforeEach } from 'vitest';
+import { CompactRowComponent } from './compact-row.component';
+import { readFileSync } from 'node:fs';
+
+@Component({
+  standalone: true,
+  imports: [CompactRowComponent],
+  template: `
+    <app-compact-row
+      title="Shared row"
+      summary="Shared summary"
+      icon="query_stats"
+      iconTone="secondary"
+      [showDivider]="false"
+      [headingLevel]="headingLevel"
+    >
+      <span compactRowTitlePrefix aria-hidden="true" class="projected-title-prefix"></span>
+      <div class="projected-content">Projected content</div>
+      <a compactRowAction href="/details">View details</a>
+    </app-compact-row>
+  `,
+})
+class TestHostComponent { headingLevel: 2 | 3 | 4 = 3; }
+
+describe('CompactRowComponent', () => {
+  let fixture: ComponentFixture<TestHostComponent>;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [TestHostComponent, MatIconTestingModule],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(TestHostComponent);
+    fixture.detectChanges();
+  });
+
+  it('renders a semantic row with shared copy and icon treatment', () => {
+    const row = fixture.nativeElement.querySelector(
+      'article.compact-row',
+    );
+
+    expect(row).toBeTruthy();
+    expect(row.classList.contains('compact-row--secondary')).toBe(true);
+    expect(
+      row.querySelector('.compact-row__title').textContent.trim(),
+    ).toBe('Shared row');
+    expect(
+      row.querySelector('.compact-row__summary').textContent.trim(),
+    ).toBe('Shared summary');
+    expect(
+      row.querySelector('.compact-row__icon[data-nosnippet]'),
+    ).toBeTruthy();
+    expect(
+      fixture.nativeElement.querySelector('app-compact-row').classList,
+    ).toContain('compact-row-host--without-divider');
+  });
+
+  it('projects rich content and an optional action into separate regions', () => {
+    const body = fixture.nativeElement.querySelector(
+      '.compact-row__body',
+    );
+    const action = fixture.nativeElement.querySelector(
+      '.compact-row__action',
+    );
+
+    expect(body.querySelector('.projected-content').textContent.trim()).toBe(
+      'Projected content',
+    );
+    expect(body.querySelector('[compactRowAction]')).toBeNull();
+    expect(
+      action.querySelector('[compactRowAction]').textContent.trim(),
+    ).toBe('View details');
+  });
+
+  it.each([2, 3, 4] as const)('keeps an optional title prefix inside the level-%s heading, outside body and actions', level => {
+    fixture.componentInstance.headingLevel = level;
+    fixture.detectChanges();
+    const prefix = fixture.nativeElement.querySelector('[compactRowTitlePrefix]');
+    expect(prefix.closest(`h${level}`)).not.toBeNull();
+    expect(prefix.closest('.compact-row__body, .compact-row__action')).toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('[compactRowTitlePrefix]')).toHaveLength(1);
+    expect(prefix.parentElement.textContent.trim()).toBe('Shared row');
+  });
+
+  it('defaults to the existing public column layout and comfortable density', () => {
+    const row = fixture.debugElement.query(By.directive(CompactRowComponent)).componentInstance as CompactRowComponent;
+    expect(row.layout()).toBe('columns');
+    expect(row.density()).toBe('comfortable');
+    expect(row.fillHeight()).toBe(false);
+    expect(fixture.nativeElement.querySelector('app-compact-row').classList).not.toContain('compact-row-host--fill-height');
+    expect(fixture.nativeElement.querySelector('article').classList).toContain('compact-row--columns');
+    expect(fixture.nativeElement.querySelector('h3')?.textContent).toBe('Shared row');
+    expect(fixture.nativeElement.querySelector('h3')?.hasAttribute('id')).toBe(false);
+  });
+
+  it('supports a compact stacked workspace row with a labelled heading and optional icon', () => {
+    const compactFixture = TestBed.createComponent(CompactRowComponent);
+    compactFixture.componentRef.setInput('title', 'Shared row');
+    compactFixture.componentRef.setInput('layout', 'stacked');
+    compactFixture.componentRef.setInput('density', 'compact');
+    compactFixture.componentRef.setInput('headingLevel', 2);
+    compactFixture.componentRef.setInput('titleId', 'workspace-section');
+    compactFixture.detectChanges();
+
+    const article = compactFixture.nativeElement.querySelector('article');
+    expect(article.classList).toContain('compact-row--stacked');
+    expect(article.classList).toContain('compact-row--compact');
+    expect(article.classList).toContain('compact-row--without-icon');
+    expect(article.getAttribute('aria-labelledby')).toBe('workspace-section');
+    expect(article.querySelector('h2#workspace-section')?.textContent).toBe('Shared row');
+    expect(article.querySelector('.compact-row__icon')).toBeNull();
+    expect(article.querySelector('.compact-row__summary')).toBeNull();
+    expect(article.querySelector('.compact-row__body [compactRowAction]')).toBeNull();
+  });
+
+  it('fills available height only when a stacked row explicitly opts in', () => {
+    const compactFixture = TestBed.createComponent(CompactRowComponent);
+    compactFixture.componentRef.setInput('title', 'Chart');
+    compactFixture.componentRef.setInput('fillHeight', true);
+    compactFixture.detectChanges();
+    expect(compactFixture.nativeElement.classList).not.toContain('compact-row-host--fill-height');
+    compactFixture.componentRef.setInput('layout', 'stacked');
+    compactFixture.detectChanges();
+    expect(compactFixture.nativeElement.classList).toContain('compact-row-host--fill-height');
+    compactFixture.componentRef.setInput('fillHeight', false);
+    compactFixture.detectChanges();
+    expect(compactFixture.nativeElement.classList).not.toContain('compact-row-host--fill-height');
+  });
+
+  it('opts dense rows into a full-width mobile action without changing the default', () => {
+    const row = fixture.debugElement.query(By.directive(CompactRowComponent)).componentInstance as CompactRowComponent;
+    expect(row.mobileActionFullWidth()).toBe(false);
+    expect(fixture.nativeElement.querySelector('app-compact-row').classList)
+      .not.toContain('compact-row-host--mobile-action-full');
+
+    const compactFixture = TestBed.createComponent(CompactRowComponent);
+    compactFixture.componentRef.setInput('title', 'Provider');
+    compactFixture.componentRef.setInput('layout', 'columns');
+    compactFixture.componentRef.setInput('density', 'compact');
+    compactFixture.componentRef.setInput('mobileActionFullWidth', true);
+    compactFixture.detectChanges();
+
+    expect(compactFixture.nativeElement.classList).toContain('compact-row-host--mobile-action-full');
+    const styles = readFileSync('src/app/components/shared/compact-row/compact-row.component.scss', 'utf8');
+    const mobileAction = styles.slice(styles.indexOf(':host(.compact-row-host--mobile-action-full)'));
+    expect(mobileAction).toContain('grid-column: 1 / -1');
+    expect(mobileAction).toContain('grid-row: 3');
+    expect(mobileAction).toContain('width: 100%');
+  });
+
+  it('keeps dense column alignment and responsive actions scoped away from stacked rows', () => {
+    const styles = readFileSync('src/app/components/shared/compact-row/compact-row.component.scss', 'utf8');
+    const denseColumns = styles.slice(styles.indexOf('.compact-row--compact.compact-row--columns {'));
+    expect(denseColumns).toContain('grid-template-columns: 24px minmax(140px, 180px) minmax(0, 1fr) auto');
+    expect(denseColumns).toContain('align-items: center');
+    expect(denseColumns).toContain('align-self: center');
+    expect(denseColumns).toContain('@media (max-width: 900px)');
+    expect(denseColumns).toContain('grid-column: 3;\n      grid-row: 1;');
+    expect(denseColumns).toContain('.compact-row__body { grid-column: 2 / -1; grid-row: 2; }');
+    expect(denseColumns).toContain('&.compact-row--without-icon');
+  });
+});

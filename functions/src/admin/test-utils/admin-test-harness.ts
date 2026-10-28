@@ -31,7 +31,8 @@ const {
     const mockCreateCustomToken = vi.fn();
     const mockGetUser = vi.fn();
     const mockAuth = { listUsers: mockListUsers, createCustomToken: mockCreateCustomToken, getUser: mockGetUser };
-    const mockOnCall = vi.fn((_options: unknown, handler: unknown) => handler);
+    type MockCallableHandler = ((...args: unknown[]) => unknown) & { __options?: unknown };
+    const mockOnCall = vi.fn((options: unknown, handler: unknown) => Object.assign(handler as MockCallableHandler, { __options: options }));
 
     const mockCollection = vi.fn() as any;
     const mockDoc = vi.fn();
@@ -220,6 +221,7 @@ vi.mock('firebase-admin/firestore', () => ({
 
 vi.mock('firebase-functions/v2/https', () => ({
     onCall: mockOnCall,
+    onRequest: vi.fn((_options: unknown, handler: unknown) => handler),
     HttpsError: class extends Error {
         code: string;
         constructor(code: string, message: string) {
@@ -249,11 +251,13 @@ vi.mock('../../config', () => ({
     config: {
         cloudtasks: {
             workoutQueue: 'processWorkoutTask',
+            trainingDeliveryQueue: 'processTrainingDeliveryTask',
             activitySyncQueue: 'processActivitySyncTask',
             routeDeliverySyncQueue: 'processRouteDeliverySyncTask',
             routeSyncQueue: 'processRouteSyncTask',
             sleepSyncQueue: 'processSleepSyncTask',
             garminHealthBackfillQueue: 'processGarminHealthBackfillTask',
+            connectionHistoryQueue: 'processConnectionHistoryTask',
             sportsLibReparseQueue: 'processSportsLibReparseTask',
             sportsLibReparseHeavyQueue: 'processSportsLibReparseHeavyTask',
             sportsLibRouteReparseQueue: 'processSportsLibRouteReparseTask',

@@ -1,0 +1,680 @@
+import { projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type {
+    DeleteTrainingPlanRequestV1,
+    DeleteTrainingPlanResponseV1,
+    MutateTrainingScheduleRequestV1,
+    ScheduledWorkoutV1,
+    TrainingPlanV1,
+} from '../../../shared/training-plans';
+
+const guard = vi.hoisted(() => ({ getUserDeletionGuardStateInTransaction: vi.fn() }));
+vi.mock('../shared/user-deletion-guard', () => ({
+    getUserDeletionGuardStateInTransaction: guard.getUserDeletionGuardStateInTransaction,
+}));
+
+import { cleanupDeletedPlanData, deleteTrainingPlanForUser, TrainingPlanDeletionResumeRequiredError } from './delete-training-plan';
+import {
+    hashTrainingScheduleRequestPayload,
+    mutateTrainingScheduleForUser,
+    trainingScheduleDeletionTombstoneDocumentId,
+} from './persistence';
+import { trainingCleanupJob, trainingCleanupJobRef } from './cleanup-job-contract';
+import { processTrainingCleanupJob } from './cleanup-worker';
+
+const NOW_MS = Date.UTC(2026, 8, 2, 14);
+const STRUCTURE = {
+    version: 1 as const,
+    sport: ActivityTypes.Running,
+    nodes: [{
+        kind: 'step' as const,
+        id: 'steady',
+        purpose: 'work' as const,
+        ending: { kind: 'time' as const, seconds: 1800 },
+        targets: [],
+    }],
+};
+
+type Stored = Record<string, unknown>;
+
+function clone<T>(value: T): T {
+    return JSON.parse(JSON.stringify(value)) as T;
+}
+
+class FakeSnapshot {
+    constructor(readonly ref: FakeDocumentReference, private readonly stored: Stored | undefined) {}
+    get id(): string { return this.ref.id; }
+    get exists(): boolean { return this.stored !== undefined; }
+    data(): Stored | undefined { return this.stored === undefined ? undefined : clone(this.stored); }
+}
+
+interface Filter {
+    field: string;
+    operator: string;
+    value: unknown;
+}
+
+class FakeQuery {
+    constructor(
+        readonly db: FakeFirestore,
+        readonly path: string,
+        readonly filters: Filter[] = [],
+        readonly limitCount: number | null = null,
+    ) {}
+    where(field: string, operator: string, value: unknown): FakeQuery {
+        return new FakeQuery(this.db, this.path, [...this.filters, { field, operator, value }], this.limitCount);
+    }
+    limit(count: number): FakeQuery { return new FakeQuery(this.db, this.path, this.filters, count); }
+    async get(): Promise<{ docs: FakeSnapshot[]; empty: boolean }> {
+        const docs = this.db.query(this);
+        return { docs, empty: docs.length === 0 };
+    }
+}
+
+class FakeCollectionReference extends FakeQuery {
+    doc(id: string): FakeDocumentReference { return new FakeDocumentReference(this.db, `${this.path}/${id}`); }
+}
+
+class FakeDocumentReference {
+    constructor(readonly db: FakeFirestore, readonly path: string) {}
+    get id(): string { return this.path.split('/').at(-1) ?? ''; }
+    collection(id: string): FakeCollectionReference { return new FakeCollectionReference(this.db, `${this.path}/${id}`); }
+}
+
+class FakeTransaction {
+    constructor(private readonly db: FakeFirestore) {}
+    writeCount = 0;
+    writeBytes = 0;
+    async get(ref: FakeDocumentReference | FakeQuery): Promise<FakeSnapshot | { docs: FakeSnapshot[]; empty: boolean }> {
+        if (ref instanceof FakeDocumentReference) return this.db.snapshot(ref);
+        const docs = this.db.query(ref);
+        return { docs, empty: docs.length === 0 };
+    }
+    set(ref: FakeDocumentReference, value: unknown): void {
+        this.writeCount += 1;
+        this.writeBytes += Buffer.byteLength(JSON.stringify(value), 'utf8') + Buffer.byteLength(ref.path, 'utf8') + 1024;
+        this.db.docs.set(ref.path, clone(value as Stored));
+    }
+    update(ref: FakeDocumentReference, value: Stored): void {
+        const current = this.db.docs.get(ref.path);
+        if (!current) throw new Error(`Document missing: ${ref.path}`);
+        this.writeCount += 1;
+        this.writeBytes += Buffer.byteLength(JSON.stringify(value), 'utf8') + Buffer.byteLength(ref.path, 'utf8') + 1024;
+        this.db.docs.set(ref.path, { ...current, ...clone(value) });
+    }
+    create(ref: FakeDocumentReference, value: unknown): void {
+        if (this.db.docs.has(ref.path)) throw new Error(`Document exists: ${ref.path}`);
+        this.set(ref, value);
+    }
+    delete(ref: FakeDocumentReference): void {
+        this.writeCount += 1;
+        this.writeBytes += Buffer.byteLength(ref.path, 'utf8') + 1024;
+        this.db.docs.delete(ref.path);
+    }
+}
+
+class FakeBatch {
+    private readonly creates: Array<{ ref: FakeDocumentReference; value: unknown }> = [];
+    constructor(private readonly db: FakeFirestore) {}
+    create(ref: FakeDocumentReference, value: unknown): FakeBatch {
+        this.creates.push({ ref, value });
+        return this;
+    }
+    async commit(): Promise<void> {
+        this.creates.forEach(({ ref }) => {
+            if (this.db.docs.has(ref.path)) throw new Error(`Document exists: ${ref.path}`);
+        });
+        this.creates.forEach(({ ref, value }) => this.db.docs.set(ref.path, clone(value as Stored)));
+    }
+}
+
+class FakeFirestore {
+    readonly docs = new Map<string, Stored>();
+    readonly queries: FakeQuery[] = [];
+    readonly transactionWriteCounts: number[] = [];
+    readonly transactionWriteBytes: number[] = [];
+    readonly recursiveDelete = vi.fn(async (ref: FakeDocumentReference) => {
+        [...this.docs.keys()].forEach((path) => {
+            if (path === ref.path || path.startsWith(`${ref.path}/`)) this.docs.delete(path);
+        });
+    });
+    collection(id: string): FakeCollectionReference { return new FakeCollectionReference(this, id); }
+    batch(): FakeBatch { return new FakeBatch(this); }
+    async runTransaction<T>(handler: (transaction: FakeTransaction) => Promise<T>): Promise<T> {
+        const transaction = new FakeTransaction(this);
+        const result = await handler(transaction);
+        this.transactionWriteCounts.push(transaction.writeCount);
+        this.transactionWriteBytes.push(transaction.writeBytes);
+        return result;
+    }
+    async getAll(...refs: FakeDocumentReference[]): Promise<FakeSnapshot[]> {
+        return refs.map(ref => this.snapshot(ref));
+    }
+    snapshot(ref: FakeDocumentReference): FakeSnapshot { return new FakeSnapshot(ref, this.docs.get(ref.path)); }
+    query(query: FakeQuery): FakeSnapshot[] {
+        this.queries.push(query);
+        const prefix = `${query.path}/`;
+        const matching = [...this.docs.entries()]
+            .filter(([path]) => path.startsWith(prefix) && !path.slice(prefix.length).includes('/'))
+            .filter(([, value]) => query.filters.every((filter) => {
+                if (filter.operator === '==') return value[filter.field] === filter.value;
+                if (filter.operator === 'in' && Array.isArray(filter.value)) {
+                    return filter.value.includes(value[filter.field]);
+                }
+                throw new Error(`Unsupported operator ${filter.operator}`);
+            }))
+            .map(([path, value]) => new FakeSnapshot(new FakeDocumentReference(this, path), value));
+        return query.limitCount === null ? matching : matching.slice(0, query.limitCount);
+    }
+    seed(path: string, value: unknown): void { this.docs.set(path, clone(value as Stored)); }
+    read(path: string): Stored | undefined { return this.docs.get(path); }
+}
+
+function plan(workoutCount: number): TrainingPlanV1 {
+    return {
+        schemaVersion: 1,
+        id: 'plan-1',
+        name: 'Plan one',
+        lifecycle: 'active',
+        startLocalDate: '2026-09-01',
+        endLocalDate: '2026-09-30',
+        revision: 4,
+        lastCheckpointRevision: 1,
+        workoutCount,
+        createdAtMs: 1,
+        updatedAtMs: 4,
+    };
+}
+
+function workout(id: string): ScheduledWorkoutV1 {
+    return {
+        schemaVersion: 1,
+        id,
+        planId: 'plan-1',
+        localDate: '2026-09-03',
+        lifecycle: 'planned',
+        title: id,
+        structure: STRUCTURE,
+        revision: 2,
+        createdAtMs: 1,
+        updatedAtMs: 2,
+    };
+}
+
+function request(workoutDisposition: DeleteTrainingPlanRequestV1['workoutDisposition']): DeleteTrainingPlanRequestV1 {
+    return {
+        mutationId: `delete-${workoutDisposition}`,
+        planId: 'plan-1',
+        expectedRevisions: [
+            { scope: 'state', id: 'current', revision: 8 },
+            { scope: 'plan', id: 'plan-1', revision: 4 },
+        ],
+        workoutDisposition,
+        confirmPlanDeletion: true,
+    };
+}
+
+function completedDeletionResponse(): DeleteTrainingPlanResponseV1 {
+    return {
+        mutationId: 'delete-plan',
+        state: { schemaVersion: 1, activePlanId: null, revision: 9,
+            currentWorkoutCount: 0, updatedAtMs: NOW_MS },
+        removedPlanId: 'plan-1',
+        workoutDisposition: 'delete-workouts',
+        convertedWorkoutIds: [],
+        permanentlyDeletedWorkoutIds: [],
+    };
+}
+
+function seed(db: FakeFirestore, workouts: ScheduledWorkoutV1[]): void {
+    const currentWorkoutCount = workouts.filter(item => item.lifecycle !== 'deleted').length;
+    db.seed('users/user-1/trainingPlanState/current', {
+        schemaVersion: 1,
+        activePlanId: 'plan-1',
+        revision: 8,
+        currentWorkoutCount,
+        updatedAtMs: 8,
+    });
+    db.seed('users/user-1/trainingPlans/plan-1', plan(currentWorkoutCount));
+    db.seed('users/user-1/trainingPlans/plan-1/revisions/0000000001', { privateHistory: true });
+    workouts.forEach(item => db.seed(`users/user-1/scheduledWorkouts/${item.id}`, item));
+}
+
+describe('deleteTrainingPlanForUser persistence', () => {
+    let db: FakeFirestore;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        guard.getUserDeletionGuardStateInTransaction.mockResolvedValue({ shouldSkip: false });
+        db = new FakeFirestore();
+    });
+
+    it('prepares standalone history, atomically converts workouts, and cleans plan history', async () => {
+        seed(db, [workout('workout-1'), workout('workout-2')]);
+        const deletion = request('convert-to-standalone');
+
+        const response = await deleteTrainingPlanForUser('user-1', deletion, { db: db as never, nowMs: NOW_MS });
+
+        expect(response.convertedWorkoutIds).toEqual(['workout-1', 'workout-2']);
+        expect(db.read('users/user-1/trainingPlans/plan-1')).toBeUndefined();
+        expect(db.read('users/user-1/trainingPlans/plan-1/revisions/0000000001')).toBeUndefined();
+        expect(db.read('users/user-1/scheduledWorkouts/workout-1')).toMatchObject({ planId: null, revision: 3 });
+        expect(db.read('users/user-1/scheduledWorkouts/workout-1/revisions/0000000003')).toMatchObject({
+            mutationId: deletion.mutationId,
+            operationKind: 'delete-plan-convert-workouts',
+            snapshot: expect.objectContaining({ planId: null, revision: 3 }),
+        });
+        expect(db.read('users/user-1/trainingPlanState/current')).toMatchObject({
+            activePlanId: null, revision: 9, currentWorkoutCount: 2,
+        });
+        expect(db.read('users/user-1/trainingPlanState/current/planDeletionLocks/plan-1')).toBeUndefined();
+        const planTombstoneId = trainingScheduleDeletionTombstoneDocumentId('plan', 'plan-1');
+        expect(db.read(`users/user-1/trainingPlanState/current/deletionTombstones/${planTombstoneId}`)).toMatchObject({
+            entityKind: 'plan',
+            entityIdHash: planTombstoneId,
+            mutationId: deletion.mutationId,
+        });
+
+        await expect(deleteTrainingPlanForUser('user-1', deletion, { db: db as never, nowMs: NOW_MS + 100 }))
+            .resolves.toEqual(response);
+
+        const recreate: MutateTrainingScheduleRequestV1 = {
+            mutationId: 'recreate-retired-plan',
+            expectedRevisions: [{ scope: 'state', id: 'current', revision: 9 }],
+            operation: {
+                kind: 'create-plan',
+                planId: 'plan-1',
+                name: 'Reused plan ID',
+                startLocalDate: '2026-10-01',
+                endLocalDate: '2026-10-31',
+                activate: false,
+            },
+        };
+        await expect(mutateTrainingScheduleForUser('user-1', recreate, {
+            db: db as never,
+            nowMs: NOW_MS + 101,
+        })).rejects.toMatchObject({ code: 'already-exists' });
+    });
+
+    it('permanently deletes workouts and their nested history', async () => {
+        const current = workout('workout-1');
+        seed(db, [current]);
+        db.seed('users/user-1/scheduledWorkouts/workout-1/revisions/0000000002', { privateHistory: true });
+        db.seed('users/user-1/trainingWorkoutCompletions/workout-1', { schemaVersion: 1, workoutId: 'workout-1' });
+
+        const response = await deleteTrainingPlanForUser(
+            'user-1', request('delete-workouts'), { db: db as never, nowMs: NOW_MS },
+        );
+
+        expect(response.permanentlyDeletedWorkoutIds).toEqual(['workout-1']);
+        expect(db.read('users/user-1/scheduledWorkouts/workout-1')).toBeUndefined();
+        expect(db.read('users/user-1/scheduledWorkouts/workout-1/revisions/0000000002')).toBeUndefined();
+        expect(db.read('users/user-1/trainingWorkoutCompletions/workout-1')).toBeUndefined();
+        expect(db.read('users/user-1/trainingPlanState/current')).toMatchObject({ currentWorkoutCount: 0 });
+        const workoutTombstoneId = trainingScheduleDeletionTombstoneDocumentId('workout', 'workout-1');
+        expect(db.read(`users/user-1/trainingPlanState/current/deletionTombstones/${workoutTombstoneId}`)).toMatchObject({
+            entityKind: 'workout',
+            entityIdHash: workoutTombstoneId,
+        });
+    });
+
+    it('retires soft-deleted plan workout IDs before removing their residual roots', async () => {
+        const current = workout('workout-1');
+        const previouslyDeleted = {
+            ...workout('workout-deleted'),
+            lifecycle: 'deleted' as const,
+            revision: 3,
+            deletedAtMs: NOW_MS - 100,
+        };
+        seed(db, [current, previouslyDeleted]);
+        db.seed('users/user-1/scheduledWorkouts/workout-deleted/revisions/0000000003', { privateHistory: true });
+        db.seed('users/user-1/trainingWorkoutCompletions/workout-deleted', {
+            schemaVersion: 1,
+            workoutId: 'workout-deleted',
+        });
+
+        await deleteTrainingPlanForUser(
+            'user-1', request('convert-to-standalone'), { db: db as never, nowMs: NOW_MS },
+        );
+
+        expect(db.read('users/user-1/scheduledWorkouts/workout-deleted')).toBeUndefined();
+        expect(db.read('users/user-1/scheduledWorkouts/workout-deleted/revisions/0000000003')).toBeUndefined();
+        expect(db.read('users/user-1/trainingWorkoutCompletions/workout-deleted')).toBeUndefined();
+        const tombstoneId = trainingScheduleDeletionTombstoneDocumentId('workout', 'workout-deleted');
+        expect(db.read(`users/user-1/trainingPlanState/current/deletionTombstones/${tombstoneId}`)).toMatchObject({
+            entityKind: 'workout',
+            mutationId: request('convert-to-standalone').mutationId,
+        });
+
+        const recreate: MutateTrainingScheduleRequestV1 = {
+            mutationId: 'recreate-retired-workout',
+            expectedRevisions: [{ scope: 'state', id: 'current', revision: 9 }],
+            operation: {
+                kind: 'create-workout',
+                workoutId: 'workout-deleted',
+                planId: null,
+                localDate: '2026-09-04',
+                title: 'Must stay retired',
+                structure: STRUCTURE,
+                confirmPlanRangeExtension: false,
+            },
+        };
+        await expect(mutateTrainingScheduleForUser('user-1', recreate, {
+            db: db as never,
+            nowMs: NOW_MS + 1,
+        })).rejects.toMatchObject({ code: 'already-exists' });
+    });
+
+    it('rejects a foreign strength-alias companion reread while staging a chunked plan conversion', async () => {
+        const large = { ...STRUCTURE, nodes: Array.from({ length: 100 }, (_, i) => ({ ...STRUCTURE.nodes[0],
+            id: `step-${i}`, note: 'High entropy conversion segment. '.repeat(15).slice(0, 490) })) };
+        const details = { version: 1 as const, workoutId: 'workout-000', revision: 1, exercises: [{ id: 'hold', name: 'Plank',
+            sets: [{ id: 'one', ending: { kind: 'time' as const, seconds: 60 } }] }] };
+        const workouts = Array.from({ length: 400 }, (_, i) => ({ ...workout(`workout-${`${i}`.padStart(3, '0')}`), structure: large }));
+        workouts[0].structure = projectStrengthWorkoutToV1(details, ActivityTypes.WeightTraining) as typeof large;
+        seed(db, workouts);
+        const path = 'users/user-1/scheduledWorkouts/workout-000/strengthDetails/current';
+        db.seed(path, details);
+        const getAll = db.getAll.bind(db);
+        vi.spyOn(db, 'getAll').mockImplementation(async (...refs) => {
+            if (refs.some(ref => ref.path === path)) db.seed(path, { ...details, workoutId: 'foreign-workout' });
+            return getAll(...refs);
+        });
+        await expect(deleteTrainingPlanForUser('user-1', request('convert-to-standalone'),
+            { db: db as never, nowMs: NOW_MS })).rejects.toThrow('Strength details are mismatched');
+        expect(db.read('users/user-1/scheduledWorkouts/workout-000')?.planId).toBe('plan-1');
+    });
+
+    it('stages 400 high-complexity conversion snapshots in bounded chunks and patches current roots atomically', async () => {
+        const largeStructure = { ...STRUCTURE, nodes: Array.from({ length: 100 }, (_, index) => ({
+            kind: 'step' as const,
+            id: `step-${index}`,
+            purpose: 'work' as const,
+            ending: { kind: 'time' as const, seconds: 30 },
+            targets: [{ kind: 'heart-rate' as const, mode: 'absolute' as const, minimumBpm: 130, maximumBpm: 145 }],
+            note: 'High-complexity workout segment. '.repeat(14).slice(0, 490),
+        })) };
+        const workouts = Array.from({ length: 400 }, (_, index) => ({
+            ...workout(`workout-${`${index}`.padStart(3, '0')}`), structure: largeStructure,
+        }));
+        seed(db, workouts);
+
+        const response = await deleteTrainingPlanForUser(
+            'user-1', request('convert-to-standalone'), { db: db as never, nowMs: NOW_MS },
+        );
+
+        expect(response.convertedWorkoutIds).toHaveLength(400);
+        expect(db.read('users/user-1/scheduledWorkouts/workout-399')).toMatchObject({ planId: null, revision: 3 });
+        expect(db.transactionWriteCounts.length).toBeGreaterThan(5);
+        expect(Math.max(...db.transactionWriteCounts)).toBeLessThan(500);
+        expect(Math.max(...db.transactionWriteBytes)).toBeLessThan(3 * 1024 * 1024);
+    });
+
+    it('permanently deletes 400 workouts without exceeding the Firestore transaction write limit', async () => {
+        const workouts = Array.from({ length: 400 }, (_, index) => workout(`workout-${`${index}`.padStart(3, '0')}`));
+        seed(db, workouts);
+        workouts.forEach(item => db.seed(`users/user-1/trainingWorkoutCompletions/${item.id}`, {
+            schemaVersion: 1,
+            workoutId: item.id,
+        }));
+
+        const response = await deleteTrainingPlanForUser(
+            'user-1', request('delete-workouts'), { db: db as never, nowMs: NOW_MS },
+        );
+
+        expect(response.permanentlyDeletedWorkoutIds).toHaveLength(400);
+        expect(Math.max(...db.transactionWriteCounts)).toBeLessThanOrEqual(500);
+        expect(db.read('users/user-1/scheduledWorkouts/workout-399')).toBeUndefined();
+        expect(db.read('users/user-1/trainingWorkoutCompletions/workout-399')).toBeUndefined();
+    });
+
+    it('pages unbounded recoverably deleted plan history before retiring each subtree', async () => {
+        const deleted = Array.from({ length: 520 }, (_, index) => ({
+            ...workout(`deleted-${`${index}`.padStart(3, '0')}`),
+            lifecycle: 'deleted' as const,
+            deletedAtMs: NOW_MS - 1,
+        }));
+        seed(db, deleted);
+        deleted.forEach(item => db.seed(
+            `users/user-1/scheduledWorkouts/${item.id}/revisions/0000000002`,
+            { privateHistory: true },
+        ));
+
+        const response = await deleteTrainingPlanForUser('user-1', request('delete-workouts'), {
+            db: db as never, nowMs: NOW_MS,
+        });
+
+        expect(response.permanentlyDeletedWorkoutIds).toEqual([]);
+        const residualQueries = db.queries.filter(item => item.path === 'users/user-1/scheduledWorkouts'
+            && item.filters.length === 1 && item.filters[0].field === 'planId');
+        expect(residualQueries.length).toBeGreaterThan(5);
+        expect(residualQueries.every(item => item.limitCount === 100)).toBe(true);
+        for (const item of deleted) {
+            expect(db.read(`users/user-1/scheduledWorkouts/${item.id}`)).toBeUndefined();
+            expect(db.read(`users/user-1/scheduledWorkouts/${item.id}/revisions/0000000002`)).toBeUndefined();
+            expect(db.read(trainingCleanupJobRef(db as never, 'user-1', 'workout', item.id).path))
+                .toMatchObject({ mutationId: response.mutationId });
+        }
+    });
+
+    it('does not remove residual workout history without an owning plan cleanup job', async () => {
+        const deleted = { ...workout('deleted-1'), lifecycle: 'deleted' as const,
+            deletedAtMs: NOW_MS - 1 };
+        seed(db, [deleted]);
+        db.seed('users/user-1/scheduledWorkouts/deleted-1/revisions/0000000002', { privateHistory: true });
+        const response = completedDeletionResponse();
+
+        await cleanupDeletedPlanData(db as never, 'user-1', response, NOW_MS);
+
+        expect(db.recursiveDelete).not.toHaveBeenCalled();
+        expect(db.read('users/user-1/scheduledWorkouts/deleted-1')).toBeDefined();
+        expect(db.read('users/user-1/scheduledWorkouts/deleted-1/revisions/0000000002')).toBeDefined();
+    });
+
+    it('stops a residual page if its plan cleanup job disappears after the initial check', async () => {
+        const deleted = { ...workout('deleted-1'), lifecycle: 'deleted' as const,
+            deletedAtMs: NOW_MS - 1 };
+        seed(db, [deleted]);
+        db.seed('users/user-1/scheduledWorkouts/deleted-1/revisions/0000000002', { privateHistory: true });
+        const response = completedDeletionResponse();
+        const jobRef = trainingCleanupJobRef(db as never, 'user-1', 'plan', 'plan-1');
+        db.seed(jobRef.path, trainingCleanupJob('plan', 'plan-1', response.mutationId, NOW_MS, response));
+        const recursiveDelete = db.recursiveDelete.getMockImplementation()!;
+        db.recursiveDelete.mockImplementation(async ref => {
+            if (ref.path === 'users/user-1/trainingPlans/plan-1') db.docs.delete(jobRef.path);
+            await recursiveDelete(ref);
+        });
+
+        await cleanupDeletedPlanData(db as never, 'user-1', response, NOW_MS);
+
+        expect(db.recursiveDelete).toHaveBeenCalledTimes(1);
+        expect(db.read('users/user-1/scheduledWorkouts/deleted-1')).toBeDefined();
+        expect(db.read('users/user-1/scheduledWorkouts/deleted-1/revisions/0000000002')).toBeDefined();
+    });
+
+    it('refuses a residual cleanup job owned by another mutation', async () => {
+        seed(db, [{ ...workout('deleted-1'), lifecycle: 'deleted', deletedAtMs: NOW_MS - 1 }]);
+        const response = completedDeletionResponse();
+        const jobRef = trainingCleanupJobRef(db as never, 'user-1', 'plan', 'plan-1');
+        db.seed(jobRef.path, trainingCleanupJob('plan', 'plan-1', 'different-mutation', NOW_MS, response));
+
+        await expect(cleanupDeletedPlanData(db as never, 'user-1', response, NOW_MS))
+            .rejects.toMatchObject({ code: 'failed-precondition' });
+
+        expect(db.recursiveDelete).not.toHaveBeenCalled();
+        expect(db.read('users/user-1/scheduledWorkouts/deleted-1')).toBeDefined();
+    });
+
+    it('rechecks account deletion before acquiring or finalizing a lock', async () => {
+        seed(db, [workout('workout-1')]);
+        guard.getUserDeletionGuardStateInTransaction.mockResolvedValue({ shouldSkip: true });
+
+        await expect(deleteTrainingPlanForUser(
+            'user-1', request('delete-workouts'), { db: db as never, nowMs: NOW_MS },
+        )).rejects.toThrow('account is being deleted');
+        expect(db.read('users/user-1/trainingPlanState/current/planDeletionLocks/plan-1')).toBeUndefined();
+    });
+
+    it('rechecks caller authority during a resumable deletion before destructive writes', async () => {
+        seed(db, [workout('workout-1')]);
+        let checks = 0;
+        const transactionPrecondition = vi.fn(async () => {
+            checks += 1;
+            if (checks > 1) throw new Error('grant revoked');
+        });
+
+        await expect(deleteTrainingPlanForUser(
+            'user-1', request('delete-workouts'), {
+                db: db as never,
+                nowMs: NOW_MS,
+                transactionPrecondition,
+            },
+        )).rejects.toMatchObject({
+            name: 'TrainingPlanDeletionResumeRequiredError',
+            message: 'grant revoked',
+            originalError: expect.any(Error),
+        } satisfies Partial<TrainingPlanDeletionResumeRequiredError>);
+
+        expect(transactionPrecondition).toHaveBeenCalledTimes(2);
+        expect(db.read('users/user-1/trainingPlans/plan-1')).toBeDefined();
+        expect(db.read('users/user-1/scheduledWorkouts/workout-1')).toBeDefined();
+        expect(db.read('users/user-1/trainingPlanState/current/planDeletionLocks/plan-1')).toBeDefined();
+        expect(db.read(trainingCleanupJobRef(db as never, 'user-1', 'plan', 'plan-1').path)).toBeUndefined();
+        expect([...db.docs.keys()].some(path => path.includes('/deletionTombstones/'))).toBe(false);
+    });
+
+    it('resumes an interrupted deletion after a reload supplies a new mutation ID', async () => {
+        const current = workout('workout-1');
+        seed(db, [current]);
+        const original = request('convert-to-standalone');
+        db.seed('users/user-1/trainingPlanState/current/planDeletionLocks/plan-1', {
+            schemaVersion: 1,
+            mutationId: original.mutationId,
+            requestHash: hashTrainingScheduleRequestPayload(original),
+            planId: 'plan-1',
+            stateRevision: 8,
+            planRevision: 4,
+            workoutDisposition: 'convert-to-standalone',
+            workouts: [{ id: current.id, revision: current.revision }],
+            createdAtMs: NOW_MS - 1,
+        });
+        const retry = { ...original, mutationId: 'delete-after-reload' };
+
+        const response = await deleteTrainingPlanForUser(
+            'user-1', retry, { db: db as never, nowMs: NOW_MS },
+        );
+
+        expect(response.mutationId).toBe(original.mutationId);
+        expect(db.read(trainingCleanupJobRef(db as never, 'user-1', 'plan', 'plan-1').path)).toBeUndefined();
+        expect(db.read('users/user-1/trainingPlans/plan-1')).toBeUndefined();
+        expect(db.read('users/user-1/scheduledWorkouts/workout-1')).toMatchObject({ planId: null, revision: 3 });
+        expect(db.read('users/user-1/scheduledWorkouts/workout-1/revisions/0000000003')).toMatchObject({
+            mutationId: original.mutationId,
+        });
+        expect(db.read('users/user-1/trainingPlanState/current/mutationReceipts/delete-after-reload'))
+            .toMatchObject({
+                requestHash: hashTrainingScheduleRequestPayload(retry),
+                response: { mutationId: original.mutationId },
+            });
+
+        await expect(deleteTrainingPlanForUser(
+            'user-1', retry, { db: db as never, nowMs: NOW_MS + 1 },
+        )).resolves.toEqual(response);
+    });
+
+    it('resumes cleanup with a new mutation ID after the deletion commit already succeeded', async () => {
+        seed(db, [workout('workout-1')]);
+        const original = request('convert-to-standalone');
+        db.recursiveDelete.mockRejectedValueOnce(new Error('cleanup interrupted'));
+
+        await expect(deleteTrainingPlanForUser(
+            'user-1', original, { db: db as never, nowMs: NOW_MS },
+        )).rejects.toThrow('cleanup interrupted');
+        expect(db.read('users/user-1/trainingPlans/plan-1')).toBeUndefined();
+        expect(db.read('users/user-1/scheduledWorkouts/workout-1')).toMatchObject({ planId: null, revision: 3 });
+        expect(db.read(`users/user-1/trainingPlanState/current/mutationReceipts/${original.mutationId}`))
+            .toMatchObject({ response: { mutationId: original.mutationId } });
+        expect(db.read('users/user-1/trainingPlanState/current/planDeletionLocks/plan-1')).toBeDefined();
+        expect(db.read(trainingCleanupJobRef(db as never, 'user-1', 'plan', 'plan-1').path))
+            .toMatchObject({ mutationId: original.mutationId, kind: 'plan' });
+
+        const retry = { ...original, mutationId: 'delete-after-committed-reload' };
+        const response = await deleteTrainingPlanForUser(
+            'user-1', retry, { db: db as never, nowMs: NOW_MS + 1 },
+        );
+
+        expect(response.mutationId).toBe(original.mutationId);
+        expect(db.read('users/user-1/trainingPlanState/current/planDeletionLocks/plan-1')).toBeUndefined();
+        expect(db.read(trainingCleanupJobRef(db as never, 'user-1', 'plan', 'plan-1').path)).toBeUndefined();
+        expect(db.read('users/user-1/trainingPlanState/current/mutationReceipts/delete-after-committed-reload'))
+            .toMatchObject({ response: { mutationId: original.mutationId } });
+    });
+
+    it('retains residual workout IDs when recursive deletion removes a root before its children', async () => {
+        const retired = { ...workout('old-deleted'), lifecycle: 'deleted' as const, deletedAtMs: NOW_MS - 100 };
+        seed(db, [workout('current'), retired]);
+        const revisionPath = 'users/user-1/scheduledWorkouts/old-deleted/revisions/0000000002';
+        db.seed(revisionPath, { privateHistory: true });
+        const partialPath = 'users/user-1/scheduledWorkouts/old-deleted';
+        let interrupted = false;
+        db.recursiveDelete.mockImplementation(async ref => {
+            if (ref.path === partialPath && !interrupted) {
+                interrupted = true;
+                db.docs.delete(ref.path);
+                throw new Error('partial recursive cleanup');
+            }
+            for (const path of [...db.docs.keys()]) {
+                if (path === ref.path || path.startsWith(`${ref.path}/`)) db.docs.delete(path);
+            }
+        });
+        const deletion = request('convert-to-standalone');
+        await expect(deleteTrainingPlanForUser('user-1', deletion, { db: db as never, nowMs: NOW_MS }))
+            .rejects.toThrow('partial recursive cleanup');
+        expect(db.read(partialPath)).toBeUndefined();
+        expect(db.read(revisionPath)).toBeDefined();
+        const orphanJob = trainingCleanupJobRef(db as never, 'user-1', 'workout', 'old-deleted');
+        expect(db.read(orphanJob.path)).toMatchObject({ kind: 'workout', entityId: 'old-deleted' });
+
+        await processTrainingCleanupJob(db as never, orphanJob, NOW_MS + 1);
+        expect(db.read(revisionPath)).toBeUndefined();
+
+        await deleteTrainingPlanForUser('user-1', deletion, { db: db as never, nowMs: NOW_MS + 1 });
+        expect(db.read(trainingCleanupJobRef(db as never, 'user-1', 'plan', 'plan-1').path)).toBeUndefined();
+    });
+
+    it('does not stage deletion records after account deletion starts', async () => {
+        seed(db, [workout('workout-1')]);
+        guard.getUserDeletionGuardStateInTransaction
+            .mockResolvedValueOnce({ shouldSkip: false })
+            .mockResolvedValueOnce({ shouldSkip: true });
+
+        await expect(deleteTrainingPlanForUser(
+            'user-1', request('convert-to-standalone'), { db: db as never, nowMs: NOW_MS },
+        )).rejects.toThrow('account is being deleted');
+
+        expect(db.read('users/user-1/trainingPlans/plan-1')).toBeDefined();
+        expect(db.read('users/user-1/scheduledWorkouts/workout-1')).toMatchObject({ planId: 'plan-1' });
+        expect(db.read('users/user-1/scheduledWorkouts/workout-1/revisions/0000000003')).toBeUndefined();
+    });
+
+    it('serializes plan deletions for a user', async () => {
+        seed(db, [workout('workout-1')]);
+        db.seed('users/user-1/trainingPlanState/current/planDeletionLocks/plan-2', {
+            schemaVersion: 1,
+            mutationId: 'delete-plan-2',
+            requestHash: 'different-request',
+            planId: 'plan-2',
+            stateRevision: 8,
+            planRevision: 1,
+            workoutDisposition: 'delete-workouts',
+            workouts: [],
+            createdAtMs: NOW_MS - 1,
+        });
+
+        await expect(deleteTrainingPlanForUser(
+            'user-1', request('delete-workouts'), { db: db as never, nowMs: NOW_MS },
+        )).rejects.toThrow('Another training plan deletion is in progress');
+        expect(db.read('users/user-1/trainingPlanState/current/planDeletionLocks/plan-1')).toBeUndefined();
+    });
+});

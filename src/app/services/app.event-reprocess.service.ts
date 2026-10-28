@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { EventUtilities, User } from '@sports-alliance/sports-lib';
 import { AppEventInterface } from '@shared/app-event.interface';
+import { isCompleteEvent, type EventRead } from '@shared/event-read';
 import { AppEventService } from './app.event.service';
 import { AppFunctionsService } from './app.functions.service';
 
@@ -23,6 +24,8 @@ export interface ReprocessProgress {
 export interface ReprocessOptions {
   onProgress?: (progress: ReprocessProgress) => void;
   skipEnrichment?: boolean;
+  /** Local dispatch/retry cancellation; never serialized or used as server authorization. */
+  canExecute?: () => boolean;
 }
 
 export interface ReprocessResult {
@@ -34,9 +37,11 @@ export interface ReprocessResult {
 
 export type ReprocessErrorCode =
   | 'NO_ORIGINAL_FILES'
+  | 'NON_ACTIVITY_SOURCE'
   | 'PARSE_FAILED'
   | 'MULTI_FILE_INCOMPLETE'
-  | 'PERSIST_FAILED';
+  | 'PERSIST_FAILED'
+  | 'CANCELLED';
 
 export class ReprocessError extends Error {
   constructor(
@@ -70,7 +75,7 @@ export class AppEventReprocessService {
 
   public async regenerateEventStatistics(
     user: User,
-    event: AppEventInterface,
+    event: EventRead,
     options?: ReprocessOptions,
   ): Promise<ReprocessResult> {
     return this.executeReprocess(user, event, 'regenerate', options);
@@ -78,7 +83,7 @@ export class AppEventReprocessService {
 
   public async reimportEventFromOriginalFiles(
     user: User,
-    event: AppEventInterface,
+    event: EventRead,
     options?: ReprocessOptions,
   ): Promise<ReprocessResult> {
     return this.executeReprocess(user, event, 'reimport', options);
@@ -86,7 +91,7 @@ export class AppEventReprocessService {
 
   private async executeReprocess(
     user: User,
-    event: AppEventInterface,
+    event: EventRead,
     mode: ReprocessMode,
     options?: ReprocessOptions,
   ): Promise<ReprocessResult> {
@@ -103,9 +108,10 @@ export class AppEventReprocessService {
       const response = await this.functionsService.call<
         { eventId: string; mode: ReprocessMode },
         ReprocessEventFunctionResponse
-      >('reprocessEvent', { eventId: eventID, mode });
+      >('reprocessEvent', { eventId: eventID, mode }, options?.canExecute ? { canExecute: options.canExecute } : undefined);
       functionResult = response.data;
     } catch (error) {
+      if (options?.canExecute?.() === false) throw new ReprocessError('CANCELLED', 'Activity operation was cancelled.', error);
       throw this.mapFunctionError(mode, error);
     }
 
@@ -113,16 +119,36 @@ export class AppEventReprocessService {
       throw new ReprocessError('NO_ORIGINAL_FILES', 'No original source file metadata found for this event.');
     }
 
-    const refreshedEvent = await firstValueFrom(this.eventService.getEventAndActivities(user, eventID));
-    if (!refreshedEvent) {
-      throw new ReprocessError('PERSIST_FAILED', 'Could not load updated event after reprocessing.');
+    if (functionResult.status === 'skipped') {
+      const messages: Record<string, string> = {
+        MONITORING_SOURCE: 'Reprocessing skipped: the original contains daily monitoring data. The saved activity has been kept.',
+        ROUTE_SOURCE: 'Reprocessing skipped: the original is a route or course. Download it and upload it from Routes. The saved activity has been kept.',
+        NON_ACTIVITY_SOURCE: 'Reprocessing skipped: the original is not a recorded activity. The saved activity has been kept.',
+        MIXED_SOURCES_REQUIRING_REVIEW: 'Reprocessing skipped: the source files include different kinds of data and need review. All saved activities and originals have been kept.',
+      };
+      const message = messages[functionResult.reason || ''];
+      throw new ReprocessError(message ? 'NON_ACTIVITY_SOURCE' : 'PARSE_FAILED',
+        message || 'Reprocessing was skipped. The saved activity has been kept.');
     }
 
-    this.syncEventReference(event, refreshedEvent);
+    let refreshedEvent: AppEventInterface;
+    try {
+      const refreshed = await firstValueFrom(this.eventService.getEventAndActivitiesOnce(user, eventID));
+      if (!refreshed) throw new Error('Updated activity was not found.');
+      refreshedEvent = refreshed;
+    } catch (error) {
+      // Retain the existing error code, but distinguish a failed refresh from a failed server mutation.
+      throw new ReprocessError('PERSIST_FAILED', 'Activity was reprocessed, but its updated data could not be loaded. Refresh the page.', error);
+    }
+
+    // The callable needs only identity. Do not require an already broken source to hydrate before repair.
+    // Complete detail views retain their mutable model; list summaries are replaced by their live reader.
+    const resultEvent = isCompleteEvent(event) ? event : refreshedEvent;
+    if (isCompleteEvent(event)) this.syncEventReference(event, refreshedEvent);
     this.notifyProgress(options, { phase: 'done', progress: 100, details: 'Done' });
 
     return {
-      event,
+      event: resultEvent,
       sourceFilesCount: functionResult.sourceFilesCount,
       wasMultiFileSource: functionResult.sourceFilesCount > 1,
       preservedIsMerge: !!(event as any).isMerge,

@@ -53,7 +53,7 @@ describe('TrainingPowerSystemsTrendChartComponent', () => {
       subscribeToViewportResize: vi.fn(() => () => undefined),
     };
     await TestBed.configureTestingModule({
-      declarations: [TrainingPowerSystemsTrendChartComponent],
+      imports: [TrainingPowerSystemsTrendChartComponent],
       providers: [
         { provide: EChartsLoaderService, useValue: eChartsLoader },
         { provide: LoggerService, useValue: { error: vi.fn() } },
@@ -70,6 +70,10 @@ describe('TrainingPowerSystemsTrendChartComponent', () => {
     await vi.waitFor(() => expect(eChartsLoader.setOption).toHaveBeenCalledTimes(1));
     expect(eChartsLoader.subscribeToViewportResize).toHaveBeenCalled();
     expect(fixture.nativeElement.querySelector('.training-power-systems-trend-empty')).toBeNull();
+    const range = fixture.nativeElement.querySelector('.training-power-systems-trend-range');
+    expect(range.textContent).toContain('May 2, 2026');
+    expect(range.textContent).toContain('Jul 25, 2026');
+    expect(range.textContent).not.toContain('Today');
 
     fixture.componentRef.setInput('trend', trend([null, null]));
     fixture.detectChanges();
@@ -116,7 +120,7 @@ describe('TrainingPowerSystemsTrendChartComponent', () => {
     expect(option.series[0].symbolSize(null, { dataIndex: 2 })).toBe(9);
     expect(component.hasReadyValues).toBe(true);
     expect(component.chartAriaLabel)
-      .toBe('Critical power over the latest 12 weeks; 2 ready values; current value 224 W');
+      .toBe('Critical power from May 2, 2026 to Jul 25, 2026; 2 ready values; current value 224 W');
   });
 
   it('renders app-standard tooltips for ready and unavailable observations', async () => {
@@ -149,7 +153,18 @@ describe('TrainingPowerSystemsTrendChartComponent', () => {
 
     expect(component.hasReadyValues).toBe(false);
     expect(component.chartAriaLabel)
-      .toBe('Critical power over the latest 12 weeks; 0 ready values; current value unavailable');
+      .toBe('Critical power from May 2, 2026 to Jul 25, 2026; 0 ready values; current value unavailable');
     expect(option.series[0].data.every((point: [number, number | null]) => point[1] === null)).toBe(true);
+  });
+
+  it('keeps UTC dates accurate across years and clears them when the trend is removed', () => {
+    const component = createComponent();
+    component.trend = { ...trend(), rangeStartDayMs: Date.UTC(2025, 11, 31), rangeEndDayMs: Date.UTC(2026, 0, 1) };
+    expect(component.rangeStartLabel).toBe('Dec 31, 2025');
+    expect(component.rangeEndLabel).toBe('Jan 1, 2026');
+    component.trend = null;
+    expect(component.rangeStartLabel).toBe('');
+    expect(component.rangeEndLabel).toBe('');
+    expect(component.chartAriaLabel).toBe('Twelve-week power-system capacity history');
   });
 });

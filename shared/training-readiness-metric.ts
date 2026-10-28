@@ -1,3 +1,4 @@
+import { isReadinessHrvRangeValidAt, normalizeReadinessHrvPersonalRange } from './readiness-hrv-validation';
 import type {
   DerivedTrainingReadinessHistoryPoint,
   DerivedTrainingReadinessMetricPayload,
@@ -6,6 +7,7 @@ import {
   calculateReadinessScore,
   combineReadinessOvernightHeartRateRatios,
   READINESS_FORMULA_VERSION,
+  READINESS_EVIDENCE_VERSION,
   READINESS_SLEEP_MAX_AGE_MS,
   resolveReadinessConfidence,
 } from './readiness';
@@ -35,6 +37,7 @@ export function normalizeDerivedTrainingReadinessMetricPayload(
   if (
     !source
     || source.formulaVersion !== READINESS_FORMULA_VERSION
+    || source.evidenceVersion !== READINESS_EVIDENCE_VERSION
     || source.dayBoundary !== 'UTC'
     || source.historyDays !== 14
     || asOfDayMs === null
@@ -65,6 +68,7 @@ export function normalizeDerivedTrainingReadinessMetricPayload(
   }
   return {
     formulaVersion: READINESS_FORMULA_VERSION,
+    evidenceVersion: READINESS_EVIDENCE_VERSION,
     dayBoundary: 'UTC',
     asOfDayMs,
     generatedAtMs,
@@ -94,6 +98,7 @@ function normalizeTrainingReadinessHistoryPoint(value: unknown): DerivedTraining
   const sleepScore = nullablePercentage(source?.sleepScore);
   const latestSleepAtMs = nullableNonNegativeNumber(source?.latestSleepAtMs);
   const hrvRatio = nullableNonNegativeNumber(source?.hrvRatio);
+  const hrvPersonalRange = source?.hrvPersonalRange === null ? null : normalizeReadinessHrvPersonalRange(source?.hrvPersonalRange);
   const averageHeartRateRatio = nullableNonNegativeNumber(source?.averageHeartRateRatio);
   const minimumHeartRateRatio = nullableNonNegativeNumber(source?.minimumHeartRateRatio);
   const overnightHeartRateRatio = nullableNonNegativeNumber(source?.overnightHeartRateRatio);
@@ -113,6 +118,7 @@ function normalizeTrainingReadinessHistoryPoint(value: unknown): DerivedTraining
     || sleepScore === undefined
     || latestSleepAtMs === undefined
     || hrvRatio === undefined
+    || (source.hrvPersonalRange !== null && hrvPersonalRange === null)
     || averageHeartRateRatio === undefined
     || minimumHeartRateRatio === undefined
     || overnightHeartRateRatio === undefined
@@ -146,6 +152,7 @@ function normalizeTrainingReadinessHistoryPoint(value: unknown): DerivedTraining
     sleepScore,
     latestSleepAtMs,
     hrvRatio,
+    hrvPersonalRange,
     averageHeartRateRatio,
     minimumHeartRateRatio,
     overnightHeartRateRatio,
@@ -157,12 +164,16 @@ function isValidTrainingReadinessHistoryPoint(
   evaluatedAtMs: number,
 ): boolean {
   const scoreContext = calculateReadinessScore(point);
+  const range = point.hrvPersonalRange;
+  const expectedHrvRatio = range?.currentAverage !== null && range?.baselineAverage
+    ? range.currentAverage / range.baselineAverage : null;
+  if (!nullableNumbersMatch(point.hrvRatio, expectedHrvRatio)
+    || (range !== null && !isReadinessHrvRangeValidAt(range, evaluatedAtMs))) return false;
   const expectedOvernightHeartRateRatio = combineReadinessOvernightHeartRateRatios(
     point.averageHeartRateRatio,
     point.minimumHeartRateRatio,
   );
   const hasSleepSignal = point.sleepScore !== null
-    || point.hrvRatio !== null
     || point.overnightHeartRateRatio !== null;
   if (point.score === null) {
     return scoreContext === null

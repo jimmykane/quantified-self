@@ -1,9 +1,11 @@
+import { getEventChartUnitTypes, retainEventChartSourceValues, createMissingEventChartUnitStreams, getEventChartUnitSource } from './event-chart-units.helper';
+import { getRejectedSwimTiming, resolveSwimTiming, SWIM_TIMING_UNAVAILABLE_REASON } from '@shared/swim-timing';
+import { buildEventLineSegments, resolveEventLineContinuity, type EventLineContinuitySettings } from './event-chart-line-continuity.helper';
 import {
   ActivityInterface,
   ActivityTypeGroups,
   ActivityTypesHelper,
   ActivityUtilities,
-  convertSpeedToSwimPace,
   DataAltitude,
   DataAscent,
   DataCadenceAvg,
@@ -25,34 +27,35 @@ import {
   DataPowerAvg,
   DataSpeedAvg,
   DataDescent,
-  DataDepth,
-  DataDiveAscentRate,
-  DataNextStopDepth,
   DataSpeed,
   DataStrokeRateAvg,
   DataStrydDistance,
   DataStrydAltitude,
   DataSwimPace,
-  DataSwimDistance,
   DynamicDataLoader,
   LapTypes,
   LapInterface,
   StreamInterface,
   UserUnitSettingsInterface,
   XAxisTypes
-} from '@sports-alliance/sports-lib';
+} from '@sports-alliance/sports-lib/metrics';
 import type { AppEventColorService } from '../services/color/app.event.color.service';
-import { isEventLapTypeAllowed, normalizeEventLapType } from './event-lap-type.helper';
+import { isEventLapTypeAllowed, normalizeEventLapType, isEventLapEndpointInActivity, getEventLapContextLabel } from './event-lap-type.helper';
 import { applyEventChartCanonicalOrderOverride } from './event-chart-order.helper';
 import {
+  hasEventChartValueDependentUnit,
   isEventPaceStreamType,
   resolveEventColorGroupKey,
   resolveEventSeriesColor
 } from './event-echarts-style.helper';
 import { EventChartRange, normalizeEventRange } from './event-chart-range.helper';
 import { normalizeUnitDerivedTypeLabel } from './stat-label.helper';
-import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
+import { getEnduranceMetricLabel } from '@shared/endurance-metrics';
+import { createSwimDistanceDisplayStat, resolveUnitAwareDisplayStat, resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
+import { isSwimmingActivityType, resolveSummaryDisplayStat } from './summary-display.helper';
 import { AppSwimLength, getActivitySwimLengths } from './event-swim-length.helper';
+import { getSwimLapAnalytics, getSwimLengthDistance, getSwimLengthPace, type SwimLapAnalytics } from './event-swim-analytics.helper';
+import { getNominalSwimDistanceDisplayContext, getNominalSwimLengthsDisplayMeters } from './event-swim-distance-display.helper';
 import { getAppCanonicalChartDataTypes } from './app-chart-data-types.helper';
 import type {
   TrackChartPanelModel,
@@ -100,6 +103,8 @@ export interface EventChartLapMarker extends EventChartMarkerBase {
 
 export interface EventChartSwimLengthMarker extends EventChartMarkerBase {
   markerType: 'swimLength';
+  /** Recorded span on time axes only; unavailable timing must not create a timeline block. */
+  timelineStartXValue?: number;
   swimLengthIndex: number;
   swimLengthType: string;
   isIdle: boolean;
@@ -108,6 +113,7 @@ export interface EventChartSwimLengthMarker extends EventChartMarkerBase {
 export type EventChartTimelineMarker = EventChartLapMarker | EventChartSwimLengthMarker;
 
 export interface BuildEventChartPanelsInput {
+  lineContinuity?: EventLineContinuitySettings;
   selectedActivities: ActivityInterface[];
   allActivities: ActivityInterface[];
   xAxisType: XAxisTypes;
@@ -131,6 +137,7 @@ export interface EventChartIntensityZoneSnapshot {
 export interface EventChartActivitySnapshot {
   id: string;
   activityName: string;
+  metricManufacturer?: string;
   activityType: unknown;
   startTimeMs: number;
   intensityZones: EventChartIntensityZoneSnapshot[];
@@ -138,6 +145,7 @@ export interface EventChartActivitySnapshot {
 }
 
 export interface EventChartPanelBuildSnapshotInput {
+  lineContinuity?: EventLineContinuitySettings;
   selectedActivities: EventChartActivitySnapshot[];
   xAxisType: XAxisTypes;
   showAllData: boolean;
@@ -222,6 +230,7 @@ interface LapDistanceLookup {
 }
 
 interface EventChartSeriesPointResult {
+  lineSegmentIds?: Uint32Array;
   lineValues: Float64Array;
   timeValues: Float64Array;
   pointCount: number;
@@ -230,6 +239,7 @@ interface EventChartSeriesPointResult {
 }
 
 interface BuildEventChartPanelsCoreInput {
+  lineContinuity?: EventLineContinuitySettings;
   selectedActivities: ActivityInterface[];
   xAxisType: XAxisTypes;
   showAllData: boolean;
@@ -241,6 +251,7 @@ interface BuildEventChartPanelsCoreInput {
 
 export function buildEventChartPanels(input: BuildEventChartPanelsInput): EventChartPanelModel[] {
   return buildEventChartPanelsFromActivities({
+    lineContinuity: resolveEventLineContinuity(input.lineContinuity),
     selectedActivities: Array.isArray(input.selectedActivities) ? input.selectedActivities : [],
     xAxisType: input.xAxisType,
     showAllData: input.showAllData,
@@ -256,6 +267,7 @@ export function buildEventChartPanels(input: BuildEventChartPanelsInput): EventC
 export function createEventChartPanelBuildSnapshot(input: BuildEventChartPanelsInput): EventChartPanelBuildSnapshotInput {
   const selectedActivities = Array.isArray(input.selectedActivities) ? input.selectedActivities : [];
   return {
+    lineContinuity: resolveEventLineContinuity(input.lineContinuity),
     selectedActivities: selectedActivities.map((activity) => snapshotEventChartActivity(activity, input)),
     xAxisType: input.xAxisType,
     showAllData: input.showAllData,
@@ -270,6 +282,7 @@ export function createEventChartPanelBuildSnapshot(input: BuildEventChartPanelsI
 
 export function buildEventChartPanelsFromSnapshot(input: EventChartPanelBuildSnapshotInput): EventChartPanelModel[] {
   return buildEventChartPanelsFromActivities({
+    lineContinuity: resolveEventLineContinuity(input.lineContinuity),
     selectedActivities: Array.isArray(input.selectedActivities)
       ? input.selectedActivities.map((activitySnapshot) => createSnapshotActivity(activitySnapshot))
       : [],
@@ -296,7 +309,7 @@ function buildEventChartPanelsFromActivities(input: BuildEventChartPanelsCoreInp
   );
 
   selectedActivities.forEach((activity) => {
-    const streams = activity.getAllStreams() || [];
+    const streams = dedupeByType(activity.getAllStreams() || []);
     const activityCache = createActivityNumericCache(activity, streams);
     if (!streams.length) {
       return;
@@ -311,7 +324,7 @@ function buildEventChartPanelsFromActivities(input: BuildEventChartPanelsCoreInp
     });
 
     allowedStreams.forEach((stream) => {
-      const pointResult = toSeriesPoints(activity, stream, input.xAxisType, activityCache);
+      const pointResult = toSeriesPoints(activity, stream, input.xAxisType, activityCache, input.lineContinuity);
       if (!pointResult.pointCount) {
         return;
       }
@@ -319,9 +332,14 @@ function buildEventChartPanelsFromActivities(input: BuildEventChartPanelsCoreInp
       const streamDataClass = DynamicDataLoader.getDataClassFromDataType(stream.type);
       const displayName = normalizeUnitDerivedTypeLabel(
         stream.type,
-        streamDataClass.displayType || streamDataClass.type
+        streamDataClass.displayType || streamDataClass.type,
+        { manufacturer: activity.creator?.manufacturer, surface: 'stream' }
       );
-      const unit = streamDataClass.unit || '';
+      // Metric distance uses Sports Lib's value-dependent m/Km display. Its axis
+      // includes the unit on each tick, so a fixed '(m)' heading would be misleading.
+      const unit = hasEventChartValueDependentUnit(stream.type) ? ''
+        : resolveUnitAwareDisplayFromValue(stream.type, 0, input.userUnitSettings, { preferredType: stream.type })?.unit
+          ?? streamDataClass.unit ?? '';
 
       if (!panelsMap.has(stream.type)) {
         panelsMap.set(stream.type, {
@@ -336,6 +354,9 @@ function buildEventChartPanelsFromActivities(input: BuildEventChartPanelsCoreInp
       }
 
       const panel = panelsMap.get(stream.type) as EventChartPanelModel;
+      if (panel.displayName !== displayName) {
+        panel.displayName = getEnduranceMetricLabel(stream.type, { surface: 'picker' }) ?? panel.displayName;
+      }
       panel.minX = Math.min(panel.minX, pointResult.minX);
       panel.maxX = Math.max(panel.maxX, pointResult.maxX);
       const activityID = activity.getID() || '';
@@ -353,6 +374,8 @@ function buildEventChartPanelsFromActivities(input: BuildEventChartPanelsCoreInp
         unit,
         lineValues: pointResult.lineValues,
         timeValues: pointResult.timeValues,
+        lineContinuity: input.lineContinuity,
+        lineSegmentIds: pointResult.lineSegmentIds,
         pointCount: pointResult.pointCount,
         ...(gradeColorData ? {
           gradeColorValues: gradeColorData.values,
@@ -431,6 +454,7 @@ function snapshotEventChartActivity(
   return {
     id: activity.getID?.() || '',
     activityName: activity.creator?.name || 'Activity',
+    metricManufacturer: typeof activity.creator?.manufacturer === 'string' ? activity.creator.manufacturer : undefined,
     activityType: activity.type,
     startTimeMs: activity.startDate?.getTime?.() ?? Number.NaN,
     intensityZones: (activity.intensityZones || []).map((zone) => ({ ...(zone as unknown as Record<string, unknown>) })),
@@ -476,13 +500,7 @@ function buildEventChartSnapshotStreamTypeSet(
 }
 
 function getUnitBaseDataTypes(dataType: string): string[] {
-  const unitGroups = (DynamicDataLoader as unknown as {
-    dataTypeUnitGroups?: Record<string, Record<string, unknown>>;
-  }).dataTypeUnitGroups || {};
-  const baseTypes = Object.entries(unitGroups)
-    .filter(([baseType, unitGroup]) => baseType === dataType || Object.prototype.hasOwnProperty.call(unitGroup, dataType))
-    .map(([baseType]) => baseType);
-  return baseTypes.length > 0 ? baseTypes : [dataType];
+  return [getEventChartUnitSource(dataType)];
 }
 
 function getDerivedStreamDependencyTypes(dataType: string): string[] {
@@ -507,7 +525,7 @@ function createSnapshotActivity(snapshot: EventChartActivitySnapshot): ActivityI
   return {
     type: snapshot.activityType,
     startDate: new Date(snapshot.startTimeMs),
-    creator: { name: snapshot.activityName },
+    creator: { name: snapshot.activityName, manufacturer: snapshot.metricManufacturer },
     intensityZones: snapshot.intensityZones || [],
     getID: () => snapshot.id,
     getAllStreams: () => streams,
@@ -521,6 +539,16 @@ function createSnapshotStream(snapshot: EventChartStreamSnapshot): StreamInterfa
     type: snapshot.type,
     getData: () => values,
   } as unknown as StreamInterface;
+}
+
+export function hasEventChartIntensityZoneData(activities: ActivityInterface[]): boolean {
+  return (activities || []).some(activity => {
+    const streamTypes = new Set((activity.getAllStreams?.() || []).map(stream => stream.type));
+    return EVENT_CHART_INTENSITY_ZONE_LINE_DATA_TYPES.some(type => {
+      const zones = activity.intensityZones?.find(zone => zone?.type === type);
+      return streamTypes.has(type) && !!zones && readIntensityZoneLowerLimits(zones).length > 0;
+    });
+  });
 }
 
 function buildIntensityZoneColorPieces(
@@ -695,6 +723,7 @@ export function collectEventChartPanelTransferables(panels: EventChartPanelModel
       appendFloat64ArrayTransferable(transferables, series.lineValues);
       appendFloat64ArrayTransferable(transferables, series.timeValues);
       appendFloat64ArrayTransferable(transferables, series.gradeColorValues);
+      if (series.lineSegmentIds?.buffer instanceof ArrayBuffer) transferables.push(series.lineSegmentIds.buffer);
     });
   });
 
@@ -783,6 +812,78 @@ export function getEventChartSeriesY(series: EventChartPanelSeries, index: numbe
 
   const value = series.lineValues[(Math.trunc(index) * 2) + 1];
   return Number.isFinite(value) ? value : null;
+}
+
+/** Display-only activity line: use the saved continuity policy without manufacturing measurements. */
+export function buildEventRecordedLineValues(series: EventChartPanelSeries): Float64Array {
+  const count = getEventChartSeriesPointCount(series);
+  // Each recorded point can need a preceding null separator for a timestamp gap.
+  const values = new Float64Array(count * 4);
+  let offset = 0;
+  let previousIndex = -1;
+  for (let index = 0; index < count; index++) {
+    const x = getEventChartSeriesX(series, index);
+    if (!Number.isFinite(x)) {
+      previousIndex = -1;
+      continue;
+    }
+    const y = getEventChartSeriesY(series, index);
+    if (y === null) continue;
+
+    if (offset && (previousIndex < 0 || !canConnectEventChartPoints(series, previousIndex, index))) {
+      values[offset++] = x;
+      values[offset++] = Number.NaN;
+    }
+    values[offset++] = x;
+    values[offset++] = y;
+    previousIndex = index;
+  }
+  return values.slice(0, offset);
+}
+
+/** Untimed routes and calculated windows can declare their own connection policy. */
+export function getEventChartLineGapPolicy(series: EventChartPanelSeries): 'recorded-time' | 'adjacent' | 'connect' | 'none' {
+  if (series.lineGapPolicy) return series.lineGapPolicy;
+  // Retain Battery's sparse display in Continuous; explicit gap choices apply to it too.
+  return `${series.streamType || ''}`.toLowerCase().includes('battery')
+    && resolveEventLineContinuity(series.lineContinuity).mode === 'continuous' ? 'connect' : 'recorded-time';
+}
+
+export function canConnectEventChartPoints(series: EventChartPanelSeries, left: number, right: number): boolean {
+  const policy = getEventChartLineGapPolicy(series);
+  if (policy === 'none') return false;
+  if (policy === 'adjacent') return right === left + 1;
+  if (policy === 'connect') return true;
+  const segments = getEventChartLineSegments(series);
+  return left >= 0 && right > left && segments[left] > 0 && segments[left] === segments[right];
+}
+
+// Legacy callers receive the same policy. Worker-built series already carry the IDs;
+// immutable legacy buffers are cached by reference, so viewport scaling never relearns cadence.
+const legacyLineSegments = new WeakMap<EventChartPanelSeries, {
+  lineValues: Float64Array | undefined; timeValues: Float64Array | undefined;
+  points: EventChartPanelSeries['points']; count: number; key: string; segments: Uint32Array;
+}>();
+
+function getEventChartLineSegments(series: EventChartPanelSeries): Uint32Array {
+  const count = getEventChartSeriesPointCount(series);
+  if (series.lineSegmentIds?.length === count) return series.lineSegmentIds;
+  const settings = resolveEventLineContinuity(series.lineContinuity);
+  const key = `${settings.mode}:${settings.maxGapSeconds}`;
+  const cached = legacyLineSegments.get(series);
+  if (cached?.lineValues === series.lineValues && cached?.timeValues === series.timeValues
+    && cached?.points === series.points && cached?.count === count && cached?.key === key) return cached.segments;
+  const times = new Float64Array(count);
+  const values = new Float64Array(count);
+  for (let index = 0; index < count; index++) {
+    const validX = Number.isFinite(getEventChartSeriesX(series, index));
+    times[index] = validX ? getEventChartSeriesTime(series, index) : Number.NaN;
+    // A bad coordinate is a hard barrier, even if it also has no metric value.
+    values[index] = validX ? getEventChartSeriesY(series, index) ?? Number.NaN : 0;
+  }
+  const segments = buildEventLineSegments(times, values, settings);
+  legacyLineSegments.set(series, { lineValues: series.lineValues, timeValues: series.timeValues, points: series.points, count, key, segments });
+  return segments;
 }
 
 export function getEventChartSeriesTime(series: EventChartPanelSeries, index: number): number {
@@ -1014,6 +1115,7 @@ export function buildEventLapMarkers(input: {
   const markers: EventChartLapMarker[] = [];
 
   input.selectedActivities.forEach((activity) => {
+    const nominalDistanceDisplay = getNominalSwimDistanceDisplayContext(activity);
     const activityCache = createActivityNumericCache(activity);
     const lapDistanceLookup = input.xAxisType === XAxisTypes.Distance
       ? createLapDistanceLookup(activity, activityCache)
@@ -1022,9 +1124,11 @@ export function buildEventLapMarkers(input: {
     if (!laps.length) {
       return;
     }
+    const swimAnalytics = isSwimmingActivityType(activity.type) ? getSwimLapAnalytics(activity, input.userUnitSettings) : null;
 
     laps.forEach((lap, index) => {
-      if (index === laps.length - 1) {
+      const contextLabel = getEventLapContextLabel(activity, lap, input.allActivities);
+      if (!isEventLapEndpointInActivity(activity, lap) || (index === laps.length - 1 && !contextLabel)) {
         return;
       }
 
@@ -1047,8 +1151,9 @@ export function buildEventLapMarkers(input: {
         lapNumber: index + 1,
         activityID: activity.getID() || '',
         activityName: activity.creator?.name || 'Activity',
-        tooltipTitle: `Lap ${index + 1}`,
-        tooltipDetails: buildLapTooltipDetails(lap, input.userUnitSettings),
+        tooltipTitle: `${contextLabel || 'Lap'} ${index + 1}`,
+        tooltipDetails: buildLapTooltipDetails(lap, input.userUnitSettings, contextLabel ? 'Other' : activity.type,
+          contextLabel ? undefined : nominalDistanceDisplay?.lapMeters.get(lap), contextLabel ? undefined : swimAnalytics?.get(lap)),
       });
     });
   });
@@ -1067,6 +1172,7 @@ export function buildEventSwimLengthMarkers(input: {
 
   input.selectedActivities.forEach((activity) => {
     const swimLengths = getActivitySwimLengths(activity);
+    const nominalDistanceDisplay = getNominalSwimDistanceDisplayContext(activity);
     if (!swimLengths.length) {
       return;
     }
@@ -1087,6 +1193,7 @@ export function buildEventSwimLengthMarkers(input: {
       const label = `Length ${swimLength.index}`;
       markers.push({
         markerType: 'swimLength',
+        ...getSwimLengthTimelineStart(activity, swimLength, input.xAxisType),
         xValue,
         label,
         color: activityColor,
@@ -1096,12 +1203,26 @@ export function buildEventSwimLengthMarkers(input: {
         activityID: activity.getID() || '',
         activityName: activity.creator?.name || 'Activity',
         tooltipTitle: typeLabel ? `${label} (${typeLabel})` : label,
-        tooltipDetails: buildSwimLengthTooltipDetails(swimLength, input.userUnitSettings),
+        tooltipDetails: buildSwimLengthTooltipDetails(swimLength, input.userUnitSettings,
+          getNominalSwimLengthsDisplayMeters(nominalDistanceDisplay, [swimLength])),
       });
     });
   });
 
   return markers.sort((left, right) => left.xValue - right.xValue);
+}
+
+function getSwimLengthTimelineStart(
+  activity: ActivityInterface, length: AppSwimLength, axis: XAxisTypes,
+): Pick<EventChartSwimLengthMarker, 'timelineStartXValue'> {
+  if (axis === XAxisTypes.Distance || getRejectedSwimTiming(length)) return {};
+  const start = length.startDate.getTime();
+  const end = length.endDate.getTime();
+  const activityStart = activity.startDate?.getTime();
+  const activityEnd = activity.endDate?.getTime();
+  if (![start, end, activityStart, activityEnd].every(Number.isFinite)
+    || end <= start || start < activityStart || end > activityEnd) return {};
+  return { timelineStartXValue: axis === XAxisTypes.Time ? start : (start - activityStart) / 1000 };
 }
 
 function getFilteredStreams(input: {
@@ -1111,34 +1232,15 @@ function getFilteredStreams(input: {
   userUnitSettings: UserUnitSettingsInterface;
   activityType: any;
 }): StreamInterface[] {
+  // Empty placeholders must not block derivation or conversion from actual recorded values.
+  const recordedStreams = input.streams.filter(hasFiniteStreamData);
   const allowedDataTypes = input.showAllData
     ? null
     : resolveEventChartConfiguredDataTypes(input.dataTypesToUse, input.userUnitSettings, [input.activityType]);
   const allowedDataTypeSet = allowedDataTypes ? new Set(allowedDataTypes) : null;
 
-  const shouldRemoveSpeed = DynamicDataLoader
-    .getUnitBasedDataTypesFromDataType(DataSpeed.type, input.userUnitSettings)
-    .indexOf(DataSpeed.type) === -1;
-  const shouldRemoveGradeAdjustedSpeed = DynamicDataLoader
-    .getUnitBasedDataTypesFromDataType(DataGradeAdjustedSpeed.type, input.userUnitSettings)
-    .indexOf(DataGradeAdjustedSpeed.type) === -1;
-  const shouldRemoveDistance = DynamicDataLoader
-    .getNonUnitBasedDataTypes(input.showAllData, input.dataTypesToUse)
-    .indexOf(DataDistance.type) === -1;
-  const shouldRemoveDepth = DynamicDataLoader
-    .getUnitBasedDataTypesFromDataType(DataDepth.type, input.userUnitSettings)
-    .indexOf(DataDepth.type) === -1;
-  const shouldRemoveNextStopDepth = DynamicDataLoader
-    .getUnitBasedDataTypesFromDataType(DataNextStopDepth.type, input.userUnitSettings)
-    .indexOf(DataNextStopDepth.type) === -1;
-  const shouldRemoveDiveAscentRate = DynamicDataLoader
-    .getUnitBasedDataTypesFromDataType(DataDiveAscentRate.type, input.userUnitSettings)
-    .indexOf(DataDiveAscentRate.type) === -1;
-
-  const recordedUnitTypes = DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(
-    input.streams.map((stream) => stream.type),
-    input.userUnitSettings,
-    { includeDerivedTypes: !input.showAllData }
+  const recordedUnitTypes = getEventChartUnitTypes(
+    recordedStreams.map(stream => stream.type), input.userUnitSettings, !input.showAllData,
   );
   const configuredTypes = input.showAllData
     ? resolveEventChartConfiguredDataTypes(input.dataTypesToUse, input.userUnitSettings, [input.activityType])
@@ -1146,18 +1248,19 @@ function getFilteredStreams(input: {
   const whitelistedUnitTypes = [...new Set([...recordedUnitTypes, ...configuredTypes])];
   const whitelistedUnitTypeSet = new Set(whitelistedUnitTypes);
 
-  const mergedStreams = ActivityUtilities
+  // Convert recorded metrics first. Derived pace must not replace a recorded pace's values or gaps.
+  const convertedStreams = createMissingEventChartUnitStreams(recordedStreams, whitelistedUnitTypes);
+  const generatedStreams = ActivityUtilities
     .createUnitStreamsFromStreams(
-      input.streams,
+      recordedStreams.filter(stream => !retainEventChartSourceValues(stream.type)).concat(convertedStreams),
       input.activityType,
       whitelistedUnitTypes,
       {
         includeDerivedTypes: !input.showAllData || configuredTypes.length > 0,
         includeUnitVariants: true,
       }
-    )
-    .concat(input.streams);
-
+    );
+  const mergedStreams = generatedStreams.concat(convertedStreams, recordedStreams);
   const deduplicated = dedupeByType(mergedStreams);
 
   return deduplicated
@@ -1174,30 +1277,23 @@ function getFilteredStreams(input: {
         return false;
       }
 
-      switch (stream.type) {
-        case DataDistance.type:
-          return !shouldRemoveDistance;
-        case DataDepth.type:
-          return !shouldRemoveDepth;
-        case DataNextStopDepth.type:
-          return !shouldRemoveNextStopDepth;
-        case DataDiveAscentRate.type:
-          return !shouldRemoveDiveAscentRate;
-        case DataSpeed.type:
-          return !shouldRemoveSpeed;
-        case DataGradeAdjustedSpeed.type:
-          return !shouldRemoveGradeAdjustedSpeed;
-        case DataLatitudeDegrees.type:
-        case DataLongitudeDegrees.type:
-          return false;
-        default:
-          return true;
-      }
+      if (stream.type === DataLatitudeDegrees.type || stream.type === DataLongitudeDegrees.type) return false;
+      return retainEventChartSourceValues(stream.type)
+        || (DynamicDataLoader.getUnitBasedDataTypesFromDataType(stream.type, input.userUnitSettings) ?? [stream.type])
+          .includes(stream.type);
     })
     .sort((left, right) => left.type.localeCompare(right.type));
 }
 
 function dedupeByType(streams: StreamInterface[]): StreamInterface[] {
+  // Normal activities have one stream per type. Avoid scanning their samples just to confirm that.
+  const seenTypes = new Set<string>();
+  if (streams.every(stream => {
+    if (!stream?.type || seenTypes.has(stream.type)) return false;
+    seenTypes.add(stream.type);
+    return true;
+  })) return streams;
+
   // TODO(quantified-self): remove this fallback once sports-lib guarantees canonical stream emission per type
   // (notably FIT vendor aliases for speed/distance fields) so the app never receives duplicate-type candidates.
   const streamsByType = new Map<string, {
@@ -1276,17 +1372,25 @@ function canActivityRenderEventChart(activity: ActivityInterface, xAxisType: XAx
     return false;
   }
 
-  if (
-    xAxisType === XAxisTypes.Distance
-    && !hasFiniteStreamData(
-      getActivityStreamByType(activity, DataDistance.type, streams)
-      || getActivityStreamByType(activity, DataStrydDistance.type, streams)
-    )
-  ) {
+  if (xAxisType === XAxisTypes.Distance && !getEventChartDistanceStream(activity, streams)) {
     return false;
   }
 
   return streams.some((stream) => isEventChartableRawStream(stream) && hasFiniteStreamData(stream));
+}
+
+/** Prefer recorded Distance, falling back as a whole stream only when it has no finite readings. */
+export function getEventChartDistanceStream(
+  activity: ActivityInterface | null | undefined,
+  knownStreams: Map<string, StreamInterface> | StreamInterface[] | null = null,
+): StreamInterface | null {
+  const streams = knownStreams ?? activity?.getAllStreams?.() ?? [];
+  const distance = getActivityStreamByType(activity, DataDistance.type, streams);
+  if (hasFiniteStreamData(distance)) {
+    return distance;
+  }
+  const stryd = getActivityStreamByType(activity, DataStrydDistance.type, streams);
+  return hasFiniteStreamData(stryd) ? stryd : null;
 }
 
 function getActivityStreamByType(
@@ -1345,13 +1449,14 @@ function isEventChartableRawStream(stream: StreamInterface | undefined | null): 
 }
 
 function hasFiniteStreamData(stream: StreamInterface | undefined | null): boolean {
-  if (!stream?.getData) {
+  const values = stream?.getData?.();
+  if (!isNumericValueArrayLike(values)) {
     return false;
   }
 
-  const values = toNumericArray(stream.getData());
+  // Source selection also runs on hover; do not copy a whole stream just to inspect it.
   for (let index = 0; index < values.length; index += 1) {
-    if (Number.isFinite(values[index])) {
+    if (Number.isFinite(toNumericValueOrNaN(values[index]))) {
       return true;
     }
   }
@@ -1385,9 +1490,7 @@ export function resolveEventChartConfiguredDataTypes(
     const logicalDataTypes = dataType === DataPace.type && usesSwimPace
       ? [DataPace.type, DataSwimPace.type]
       : [dataType];
-    const resolvedTypes = DynamicDataLoader
-      .getUnitBasedDataTypesFromDataTypes(logicalDataTypes, userUnitSettings, { includeDerivedTypes: true })
-      .concat(logicalDataTypes);
+    const resolvedTypes = getEventChartUnitTypes(logicalDataTypes, userUnitSettings, true).concat(logicalDataTypes);
 
     resolvedTypes.forEach((resolvedType) => {
       if (!resolvedType || resolvedDataTypes.includes(resolvedType)) {
@@ -1439,7 +1542,8 @@ function toSeriesPoints(
   activity: ActivityInterface,
   stream: StreamInterface,
   xAxisType: XAxisTypes,
-  activityCache: ActivityNumericCache
+  activityCache: ActivityNumericCache,
+  lineContinuity?: EventLineContinuitySettings,
 ): EventChartSeriesPointResult {
   const streamValues = getStreamNumericValues(stream, activityCache);
   if (!streamValues.length) {
@@ -1450,14 +1554,31 @@ function toSeriesPoints(
   const speedValues = shouldTreatAsPace
     ? getActivityStreamNumericValues(activity, DataSpeed.type, activityCache)
     : null;
+  const metricValues = shouldTreatAsPace
+    ? Float64Array.from(streamValues, (value, index) => getRenderablePaceValue(value, speedValues, index) ?? Number.NaN)
+    : streamValues;
+  // Learn sampling from the whole metric, before the Distance axis omits coordinates.
+  const sourceSegments = buildEventLineSegments(
+    getActivityAbsoluteTimes(activity, activityCache), metricValues, resolveEventLineContinuity(lineContinuity),
+  );
 
   if (xAxisType === XAxisTypes.Distance) {
     const distanceValues = getActivityDistanceValues(activity, activityCache);
     const absoluteTimes = getActivityAbsoluteTimes(activity, activityCache);
     const length = Math.min(streamValues.length, distanceValues.length, absoluteTimes.length);
+    // Distance can be recorded less often than the metric. Learn its cadence
+    // independently so ordinary missing coordinates do not force a line break,
+    // while Detect/Custom still respect gaps in either source stream.
+    const distanceSegments = buildEventLineSegments(
+      absoluteTimes, distanceValues, resolveEventLineContinuity(lineContinuity),
+    );
 
     const lineValues = new Float64Array(length * 2);
     const pointTimes = new Float64Array(length);
+    const pointSegments = new Uint32Array(length);
+    let segment = 0;
+    let previousSourceSegment = 0;
+    let previousDistanceSegment = 0;
     let pointCount = 0;
     let minX = Number.POSITIVE_INFINITY;
     let maxX = Number.NEGATIVE_INFINITY;
@@ -1474,6 +1595,12 @@ function toSeriesPoints(
       lineValues[writeOffset] = x;
       lineValues[writeOffset + 1] = typeof y === 'number' && Number.isFinite(y) ? y : Number.NaN;
       pointTimes[pointCount] = time;
+      if (sourceSegments[index]) {
+        if (previousDistanceSegment !== distanceSegments[index] || previousSourceSegment !== sourceSegments[index]) segment++;
+        pointSegments[pointCount] = segment;
+        previousSourceSegment = sourceSegments[index];
+        previousDistanceSegment = distanceSegments[index];
+      }
       pointCount += 1;
       if (x < minX) {
         minX = x;
@@ -1482,14 +1609,18 @@ function toSeriesPoints(
         maxX = x;
       }
     }
-    return normalizeSeriesPointResult(lineValues, pointTimes, pointCount, minX, maxX);
+    return { ...normalizeSeriesPointResult(lineValues, pointTimes, pointCount, minX, maxX),
+      lineSegmentIds: pointSegments.slice(0, pointCount) };
   }
 
+  const preserveEnduranceGaps = ['Stamina', 'Potential Stamina', 'Estimated Sustainable Distance',
+    'Estimated Sustainable Distance in miles'].includes(stream.type);
   const timeValues = getActivityTimeValues(activity, activityCache);
   const absoluteTimes = getActivityAbsoluteTimes(activity, activityCache);
   const length = Math.min(streamValues.length, timeValues.length, absoluteTimes.length);
   const lineValues = new Float64Array(length * 2);
   const pointTimes = new Float64Array(length);
+  const pointSegments = new Uint32Array(length);
   let pointCount = 0;
   let minX = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
@@ -1498,8 +1629,12 @@ function toSeriesPoints(
     const y = shouldTreatAsPace
       ? getRenderablePaceValue(streamValues[index], speedValues, index)
       : streamValues[index];
-    const seconds = timeValues[index];
-    const time = absoluteTimes[index];
+    // Canonical streams use a one-second grid. Preserve an empty position even when
+    // every sensor was absent there, so the chart cannot connect across an endurance gap.
+    // This supplies a null marker only; it never invents a reading or moves an observation.
+    const gap = preserveEnduranceGaps && !Number.isFinite(y) && !Number.isFinite(timeValues[index]);
+    const seconds = gap ? index : timeValues[index];
+    const time = gap ? activity.startDate.getTime() + index * 1000 : absoluteTimes[index];
     if (!Number.isFinite(seconds)) {
       continue;
     }
@@ -1515,6 +1650,7 @@ function toSeriesPoints(
     lineValues[writeOffset] = x;
     lineValues[writeOffset + 1] = typeof y === 'number' && Number.isFinite(y) ? y : Number.NaN;
     pointTimes[pointCount] = time;
+    pointSegments[pointCount] = sourceSegments[index];
     pointCount += 1;
     if (x < minX) {
       minX = x;
@@ -1524,7 +1660,8 @@ function toSeriesPoints(
     }
   }
 
-  return normalizeSeriesPointResult(lineValues, pointTimes, pointCount, minX, maxX);
+  return { ...normalizeSeriesPointResult(lineValues, pointTimes, pointCount, minX, maxX),
+    lineSegmentIds: pointSegments.slice(0, pointCount) };
 }
 
 function createEmptySeriesPointResult(): EventChartSeriesPointResult {
@@ -1797,23 +1934,33 @@ function createActivityNumericCache(
 
 function buildLapTooltipDetails(
   lap: LapInterface,
-  unitSettings?: UserUnitSettingsInterface | null
+  unitSettings?: UserUnitSettingsInterface | null,
+  activityType?: unknown,
+  nominalDistanceDisplayMeters?: number,
+  swimAnalytics?: SwimLapAnalytics,
 ): EventChartMarkerTooltipDetail[] {
   const details: EventChartMarkerTooltipDetail[] = [];
 
-  const duration = lap.getDuration?.();
+  const rejected = getRejectedSwimTiming(lap);
+  const duration = rejected?.timerTime !== undefined ? null : lap.getDuration?.();
+  if (rejected) appendTextDetail(details, 'Timing', SWIM_TIMING_UNAVAILABLE_REASON);
   const durationValue = formatLapDataValue(duration, { compactDuration: true });
   if (durationValue) {
     details.push({ label: 'Duration', value: durationValue });
   }
 
-  const distanceValue = formatLapDataValue(lap.getDistance?.(), undefined, unitSettings);
+  const rawDistance = lap.getDistance?.();
+  const distanceStat = nominalDistanceDisplayMeters !== undefined && rawDistance
+    ? createSwimDistanceDisplayStat(Number(rawDistance.getValue()), unitSettings, nominalDistanceDisplayMeters)
+    : resolveSummaryDisplayStat(rawDistance, DataDistance.type, [activityType], unitSettings);
+  const distanceValue = formatLapDataValue(distanceStat, undefined, unitSettings);
   if (distanceValue) {
     details.push({ label: 'Distance', value: distanceValue });
   }
 
-  const averagePaceOrSpeed = lap.getStat(DataPaceAvg.type) || lap.getStat(DataSpeedAvg.type);
-  const averagePaceOrSpeedLabel = averagePaceOrSpeed && averagePaceOrSpeed.getType() === DataPaceAvg.type
+  const swimming = isSwimmingActivityType(activityType);
+  const averagePaceOrSpeed = swimming ? swimAnalytics?.pace : lap.getStat(DataPaceAvg.type) || lap.getStat(DataSpeedAvg.type);
+  const averagePaceOrSpeedLabel = swimming ? 'Avg Swim Pace' : averagePaceOrSpeed && averagePaceOrSpeed.getType() === DataPaceAvg.type
     ? 'Avg Pace'
     : 'Avg Speed';
   const averagePaceOrSpeedValue = formatLapDataValue(averagePaceOrSpeed, undefined, unitSettings);
@@ -1837,13 +1984,18 @@ function buildLapTooltipDetails(
 
 function buildSwimLengthTooltipDetails(
   swimLength: AppSwimLength,
-  unitSettings?: UserUnitSettingsInterface | null
+  unitSettings?: UserUnitSettingsInterface | null,
+  nominalDistanceDisplayMeters?: number,
 ): EventChartMarkerTooltipDetail[] {
   const details: EventChartMarkerTooltipDetail[] = [];
 
   appendTextDetail(details, 'Lap', formatNullableInteger(swimLength.lapIndex));
-  appendLapDetail(details, 'Duration', swimLength.timerTime ?? swimLength.elapsedTime, unitSettings, { compactDuration: true });
-  appendLapDetail(details, 'Distance', getSwimLengthDistance(swimLength), unitSettings);
+  const seconds = resolveSwimTiming(swimLength).duration;
+  if (getRejectedSwimTiming(swimLength)) appendTextDetail(details, 'Timing', SWIM_TIMING_UNAVAILABLE_REASON);
+  appendLapDetail(details, 'Duration', seconds === null ? null : new DataDuration(seconds), unitSettings, { compactDuration: true });
+  const distance = getSwimLengthDistance(swimLength);
+  appendLapDetail(details, 'Distance', distance === null ? null
+    : createSwimDistanceDisplayStat(distance, unitSettings, nominalDistanceDisplayMeters), unitSettings);
   appendTextDetail(details, 'Type', formatSwimLengthLabel(swimLength.type));
   appendTextDetail(details, 'Stroke', formatSwimLengthLabel(swimLength.stroke));
   appendTextDetail(details, 'Strokes', formatNullableInteger(swimLength.strokes));
@@ -1932,24 +2084,6 @@ function normalizeDisplayUnitText(value: string): string {
     .replace(/\byrds?\b/gi, 'yd');
 }
 
-function getSwimLengthPace(swimLength: AppSwimLength): DataSwimPace | null {
-  const speedValue = swimLength.avgSpeed?.getValue?.();
-  if (typeof speedValue !== 'number' || !Number.isFinite(speedValue) || speedValue <= 0) {
-    return null;
-  }
-
-  return new DataSwimPace(convertSpeedToSwimPace(speedValue));
-}
-
-function getSwimLengthDistance(swimLength: AppSwimLength): DataSwimDistance | null {
-  const distanceValue = swimLength.distance?.getValue?.();
-  if (typeof distanceValue !== 'number' || !Number.isFinite(distanceValue)) {
-    return null;
-  }
-
-  return new DataSwimDistance(distanceValue);
-}
-
 function formatNullableInteger(value: number | null | undefined): string {
   return typeof value === 'number' && Number.isFinite(value) ? `${Math.round(value)}` : '';
 }
@@ -2020,10 +2154,8 @@ function getActivityDistanceValues(activity: ActivityInterface, cache: ActivityN
     return cache.distanceValues;
   }
 
-  const primaryDistance = getActivityStreamNumericValues(activity, DataDistance.type, cache);
-  cache.distanceValues = primaryDistance.length > 0
-    ? primaryDistance
-    : getActivityStreamNumericValues(activity, DataStrydDistance.type, cache);
+  const distanceStream = getEventChartDistanceStream(activity, cache.streamByType);
+  cache.distanceValues = distanceStream ? getStreamNumericValues(distanceStream, cache) : [];
   return cache.distanceValues;
 }
 

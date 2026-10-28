@@ -51,6 +51,13 @@ function buildPanel(streamType: string, values: number[], unit = '') {
 }
 
 describe('event-echarts-yaxis.helper', () => {
+  it('does not share percentage and sustainable-distance axes', () => {
+    expect(canShareEventPanelYAxis(buildPanel(DataStamina.type, [0, 80], '%'),
+      buildPanel('Estimated Sustainable Distance', [0, 10000], 'm'))).toBe(false);
+    expect(canShareEventPanelYAxis(buildPanel(DataStamina.type, [0, 80], '%'),
+      buildPanel('Estimated Sustainable Distance in miles', [0, 6], 'mi'))).toBe(false);
+  });
+
   it('shares y-axis families for stamina and potential stamina panels', () => {
     const staminaPanel = buildPanel(DataStamina.type, [65, 78], '%');
     const potentialStaminaPanel = buildPanel(DataPotentialStamina.type, [80, 95], '%');
@@ -160,6 +167,84 @@ describe('event-echarts-yaxis.helper', () => {
     });
 
     expect((config.max as number)).toBeLessThan(200);
+  });
+
+  it.each([
+    ['legacy', 1, 0], ['packed', 1, 0], // Duration
+    ['legacy', 1000, 1700000000000], ['packed', 1000, 1700000000000], // Time
+    ['legacy', 0.1, 500], ['packed', 0.1, 500], // Distance
+  ] as const)('includes only connected HR boundary endpoints without changing samples (%s, scale=%s, offset=%s)', (format, scale, offset) => {
+    const panel = buildPanel(DataHeartRate.type, [100, NaN, 120, NaN, NaN, NaN, 80, NaN, 100]);
+    panel.series[0].lineContinuity = { mode: 'custom', maxGapSeconds: 2 };
+    const x = (value: number) => offset + value * scale;
+    panel.series[0].points.forEach(point => {
+      point.time = point.x * 1000;
+      point.x = x(point.x);
+    });
+    if (format === 'packed') {
+      const series = panel.series[0];
+      series.lineValues = Float64Array.from(series.points.flatMap(point => [point.x, point.y]));
+      series.timeValues = Float64Array.from(series.points.map(point => point.time));
+      series.pointCount = series.points.length;
+      delete series.points;
+    }
+    const before = structuredClone(panel);
+    for (const range of [{ start: x(0), end: x(1.5) }, { start: x(0.5), end: x(1.5) }]) {
+      const config = buildEventPanelYAxisConfig({ panel, visibleRange: range });
+      expect(config.min).toBeLessThanOrEqual(100);
+      expect(config.max).toBeGreaterThanOrEqual(120);
+      expect(config.min).toBeGreaterThan(80); // Other side of the real gap stays excluded.
+    }
+    const right = buildEventPanelYAxisConfig({ panel, visibleRange: { start: x(6.5), end: x(8) } });
+    expect(right.min).toBeLessThanOrEqual(80);
+    expect(right.max).toBeGreaterThanOrEqual(100);
+    expect(right.max).toBeLessThan(120);
+    expect(buildEventPanelYAxisConfig({ panel, visibleRange: { start: x(2.5), end: x(5.5) } }))
+      .toEqual({ inverse: false });
+    expect(panel).toEqual(before);
+  });
+
+  it.each([2001, 0, -1000, NaN, Infinity])('excludes boundary readings across an invalid HR interval (%s)', time => {
+    const panel = buildPanel(DataHeartRate.type, [100, 999]);
+    panel.series[0].lineContinuity = { mode: 'custom', maxGapSeconds: 2 };
+    panel.series[0].points[1].time = time;
+    const config = buildEventPanelYAxisConfig({ panel, visibleRange: { start: 0, end: 0.5 } });
+    expect(config.min).toBeLessThanOrEqual(100);
+    expect(config.max).toBeLessThan(999);
+  });
+
+  it('includes connected boundary context for other metric scales', () => {
+    const panel = buildPanel(DataPower.type, [100, 999]);
+    panel.series[0].points[1].time = 2000;
+    const config = buildEventPanelYAxisConfig({ panel, visibleRange: { start: 0, end: 0.5 } });
+    expect(config.max).toBeGreaterThanOrEqual(999);
+  });
+
+  it.each(['Altitude', 'Power'])('retains adjacent-only gaps for routes and derived windows (%s)', type => {
+    const panel = buildPanel(type, [100, NaN, 120]);
+    panel.series[0].lineGapPolicy = 'adjacent';
+    panel.series[0].points.forEach(point => { point.time = point.x * 1000; });
+    expect(buildEventPanelYAxisConfig({ panel, visibleRange: { start: 0.5, end: 1.5 } }))
+      .toEqual({ inverse: false });
+    panel.series[0].points[1].y = 110;
+    const scale = buildEventPanelYAxisConfig({ panel, visibleRange: { start: 0.5, end: 1.5 } });
+    expect(scale.min).toBeLessThanOrEqual(100);
+    expect(scale.max).toBeGreaterThanOrEqual(120);
+  });
+
+  it('includes connected battery endpoints in a narrow zoom despite sparse timestamps', () => {
+    const panel = buildPanel('Battery Charge', [100, NaN, 90]);
+    panel.series[0].points.forEach(point => { point.time = point.x * 10000; });
+    const scale = buildEventPanelYAxisConfig({ panel, visibleRange: { start: 0.5, end: 1.5 } });
+    expect(scale.min).toBeLessThanOrEqual(90);
+    expect(scale.max).toBeGreaterThanOrEqual(100);
+  });
+
+  it('does not use offscreen raw whisker readings as line context', () => {
+    const panel = buildPanel(DataPower.type, [100, 999]);
+    panel.series[0].lineGapPolicy = 'none';
+    const scale = buildEventPanelYAxisConfig({ panel, visibleRange: { start: 0, end: 0.5 } });
+    expect(scale.max).toBeLessThan(999);
   });
 
   it('handles very large series without spreading values into Math.min/Math.max', () => {

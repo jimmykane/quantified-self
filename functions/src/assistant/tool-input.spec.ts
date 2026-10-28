@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import {
   assistantToolUsesDefaultTimeZone,
   normalizeAssistantToolInput,
@@ -130,7 +131,7 @@ describe('Assistant tool input boundary', () => {
     });
   });
 
-  it('canonicalizes a user-friendly Enduro context for aggregate metric queries', () => {
+  it('canonicalizes Enduro only while the installed context has one sport', () => {
     expect(normalizeAssistantToolInput('query_metric', {
       metric: 'distance',
       activityTypes: ['Enduro'],
@@ -141,13 +142,67 @@ describe('Assistant tool input boundary', () => {
       interval: 'weekly',
     }, 'Europe/Helsinki')).toMatchObject({
       metric: 'Distance',
-      activityTypes: ['Enduro MTB'],
+      activityTypes: ActivityTypesHelper.resolveActivityType('E-Enduro MTB') ? ['Enduro'] : ['Enduro MTB'],
       aggregation: 'total',
       groupBy: 'date',
       interval: 'weekly',
       timeZone: 'Europe/Helsinki',
     });
   });
+
+  it('keeps a context alias ambiguous when the installed catalog contains both Enduro MTB types', () => {
+    const resolve = ActivityTypesHelper.resolveActivityType.bind(ActivityTypesHelper);
+    const resolver = vi.spyOn(ActivityTypesHelper, 'resolveActivityType').mockImplementation(value => (
+      value === 'E-Enduro MTB'
+        ? 'E-Enduro MTB' as ReturnType<typeof resolve>
+        : resolve(value)
+    ));
+    try {
+      expect(normalizeAssistantToolInput('query_activities', { activityTypes: ['Enduro'] }, 'UTC'))
+        .toEqual({ activityTypes: ['Enduro'] });
+      expect(normalizeAssistantToolInput('query_activities', {
+        activityTypes: ['Enduro MTB', 'E-Enduro MTB', 'Motorcycle Enduro'],
+      }, 'UTC')).toEqual({ activityTypes: ['Enduro MTB', 'E-Enduro MTB', 'Motorcycle Enduro'] });
+    } finally {
+      resolver.mockRestore();
+    }
+  });
+
+  it('canonicalizes model-friendly sport casing across Training preview shapes', () => {
+    const structure = {
+      version: 1,
+      sport: 'cycling',
+      nodes: [{ kind: 'step', id: 'easy', purpose: 'recovery',
+        ending: { kind: 'time', seconds: 1800 }, targets: [] }],
+    };
+    expect(normalizeAssistantToolInput('preview_create_planned_workout', {
+      expectedScheduleRevision: 3,
+      localDate: '2026-09-29',
+      title: 'Recovery ride',
+      structure,
+    }, 'Europe/Helsinki')).toMatchObject({ structure: { sport: 'Cycling' } });
+    expect(normalizeAssistantToolInput('preview_planned_workout_v2_change', {
+      expectedScheduleRevision: 3,
+      change: { kind: 'create-workout', localKey: 'swim', localDate: '2026-09-29',
+        title: 'Easy swim', structure: { ...structure, sport: 'swimming' } },
+    }, 'Europe/Helsinki')).toMatchObject({
+      change: { structure: { sport: 'Swimming' } },
+    });
+    expect(normalizeAssistantToolInput('preview_training_changes', {
+      expectedScheduleRevision: 3,
+      changes: [{ kind: 'create-workout', localKey: 'run', localDate: '2026-09-29',
+        title: 'Easy run', structure: { ...structure, sport: 'running' } }],
+    }, 'Europe/Helsinki')).toMatchObject({
+      changes: [{ structure: { sport: 'Running' } }],
+    });
+  });
+
+  it.each(['Road Cycling', 'E-Enduro MTB', 'Obstacle Racing', 'Indoor Walking'])('canonicalizes approved %s recipe names without changing recorded-activity query filters', sport => {
+      const input = { structure: { version: 1, sport: ` ${sport.toLowerCase()} `, nodes: [] } };
+      expect(normalizeAssistantToolInput('preview_create_planned_workout', input, 'UTC'))
+        .toMatchObject({ structure: { sport } });
+      expect(input.structure.sport).toBe(` ${sport.toLowerCase()} `);
+    });
 
   it('normalizes local date-only ranges without adding a timezone to activity tools', () => {
     expect(normalizeAssistantToolInput('query_activities', {
@@ -163,4 +218,28 @@ describe('Assistant tool input boundary', () => {
       limit: 1,
     }, 'Europe/Helsinki')).toEqual({ limit: 1 });
   });
+  it.each(['preview_planned_workout_v3_change', 'preview_saved_workout_v2_change'] as const)('preserves athlete intent when normalizing %s', name => {
+    for (const allowEarlyLap of [undefined, false, true]) {
+      const structure = { version: 1, sport: 'running', nodes: [{ kind: 'repeat', id: 'repeat', count: 2, steps: [
+        { kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'distance', meters: 1609.344,
+          ...(allowEarlyLap === undefined ? {} : { allowEarlyLap }) }, targets: [] },
+      ] }] };
+      const input = { expectedScheduleRevision: 1, change: { kind: 'create', structure } };
+      expect(normalizeAssistantToolInput(name, input, 'Europe/Helsinki')).toEqual({ ...input,
+        change: { ...input.change, structure: { ...structure, sport: 'Running' } } });
+    }
+  });
+  it('normalizes only sport aliases in complete-workout bulk input without dropping Lap or HR fields', () => {
+    const input = { expectedScheduleRevision: 1, changes: [{ kind: 'update-workout', workout: { ref: 'opaque' },
+      plan: null, localDate: '2026-10-12', title: 'Quality run', structure: { version: 1, sport: 'running', nodes: [
+        { kind: 'step', id: 'warmup', purpose: 'warmup', ending: { kind: 'time', seconds: 1200, allowEarlyLap: true }, targets: [] },
+        { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 180 }, note: 'Keep — exact',
+          targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 142, maximumBpm: 150 }] },
+      ] } }] };
+    const copy = structuredClone(input);
+    expect(normalizeAssistantToolInput('preview_planned_workout_v3_changes', input, 'Europe/Helsinki')).toEqual({ ...input,
+      changes: [{ ...input.changes[0], structure: { ...input.changes[0].structure, sport: 'Running' } }] });
+    expect(input).toEqual(copy);
+  });
+
 });

@@ -1,0 +1,140 @@
+{
+  "type": "sequence",
+  "name": "Sport fixture",
+  "description": "Sport fixture",
+  "shortDescription": "Sport fixture",
+  "owner": "Quantified Self",
+  "url": "https://quantified-self.io/training/plans",
+  "activities": [
+    2
+  ],
+  "usage": "workout",
+  "localDate": "2026-09-24",
+  "externalId": "qs-suunto-d2h7oVyKAzpV4PGCs5fRXX6PqJlKG-2EoKwYQ5thAlw",
+  "steps": [
+    {
+      "id": "qs-suunto-Wwd4-55rgq5haBzZEQg02b_tyv7_YA-8ejjONM6owkU",
+      "type": "fields",
+      "title": "Warm up",
+      "fields": [
+        {
+          "type": "power",
+          "title": "Power"
+        },
+        {
+          "type": "stepDurationCountdown",
+          "value": 90,
+          "title": "Remain"
+        },
+        {
+          "type": "heartRate",
+          "title": "HR"
+        },
+        {
+          "type": "speed",
+          "title": "Speed"
+        }
+      ],
+      "transitions": [
+        {
+          "condition": {
+            "type": "stepDuration",
+            "value": 90
+          }
+        }
+      ],
+      "notification": {
+        "title": "Warm up",
+        "text": "For 01m 30s"
+      }
+    },
+    {
+      "type": "repeat",
+      "times": 3,
+      "steps": [
+        {
+          "type": "fields",
+          "title": "Work",
+          "fields": [
+            {
+              "type": "power",
+              "title": "Power"
+            },
+            {
+              "type": "stepDistanceCountdown",
+              "value": 100,
+              "title": "Remain"
+            },
+            {
+              "type": "heartRate",
+              "title": "HR"
+            },
+            {
+              "type": "speed",
+              "title": "Speed"
+            }
+          ],
+          "transitions": [
+            {
+              "condition": {
+                "type": "stepDistance",
+                "value": 100
+              }
+            }
+          ],
+          "notification": {
+            "title": "Work",
+            "text": "Follow distance countdown"
+          }
+        },
+        {
+          "type": "fields",
+          "title": "Recovery",
+          "fields": [
+            {
+              "type": "power",
+              "title": "Power"
+            },
+            {
+              "type": "text",
+              "value": "Stay relaxed"
+            },
+            {
+              "type": "heartRate",
+              "title": "HR"
+            },
+            {
+              "type": "speed",
+              "title": "Speed"
+            }
+          ],
+          "transitions": [
+            {
+              "condition": {
+                "type": "manualLap"
+              }
+            }
+          ],
+          "notification": {
+            "title": "Recovery",
+            "text": "Stay relaxed"
+          }
+        }
+      ]
+    },
+    {
+      "type": "fields",
+      "title": "Complete",
+      "fields": [
+        {
+          "type": "text",
+          "value": "Guide complete"
+        }
+      ],
+      "notification": {
+        "title": "Complete",
+        "text": "Guide complete"
+      }
+    }
+  ]
+}

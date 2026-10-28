@@ -8,11 +8,19 @@ export interface EChartsHorizontalTouchGesture {
   current: EChartsHorizontalTouchPoint;
 }
 
+export interface EChartsPinchGesture {
+  first: EChartsHorizontalTouchPoint;
+  second: EChartsHorizontalTouchPoint;
+}
+
 export interface EChartsHorizontalTouchGestureCallbacks {
   onHorizontalStart?: (gesture: EChartsHorizontalTouchGesture) => void;
   onHorizontalMove: (gesture: EChartsHorizontalTouchGesture) => void;
   onHorizontalEnd: (gesture: EChartsHorizontalTouchGesture) => void;
   onHorizontalCancel?: () => void;
+  onPinchStart?: (gesture: EChartsPinchGesture) => void;
+  onPinchMove?: (gesture: EChartsPinchGesture) => void;
+  onPinchEnd?: () => void;
 }
 
 type TouchGestureIntent = 'pending' | 'horizontal' | 'vertical';
@@ -36,12 +44,13 @@ const PASSIVE_CAPTURE_LISTENER_OPTIONS: AddEventListenerOptions = {
 
 /**
  * Keeps ECharts' synthetic mouse handlers out of touch gestures until their
- * direction is known. Vertical and pinch gestures remain browser-owned while
- * horizontal gestures are delivered through the callbacks.
+ * direction is known. Vertical gestures remain browser-owned; horizontal and
+ * two-finger gestures are delivered through the callbacks.
  */
 export class EChartsHorizontalTouchGestureController {
   private element: HTMLElement | null = null;
   private activeGesture: ActiveTouchGesture | null = null;
+  private pinchIdentifiers: [number, number] | null = null;
   private suppressCompatibilityMouseUntil = 0;
   private suppressCompatibilityContextMenuUntil = 0;
 
@@ -77,6 +86,7 @@ export class EChartsHorizontalTouchGestureController {
 
   dispose(): void {
     this.cancelActiveGesture();
+    this.endPinchGesture();
     if (!this.element) {
       this.suppressCompatibilityMouseUntil = 0;
       this.suppressCompatibilityContextMenuUntil = 0;
@@ -94,12 +104,29 @@ export class EChartsHorizontalTouchGestureController {
     this.element.removeEventListener('contextmenu', this.compatibilityMouseHandler, true);
     this.element = null;
     this.activeGesture = null;
+    this.pinchIdentifiers = null;
     this.suppressCompatibilityMouseUntil = 0;
     this.suppressCompatibilityContextMenuUntil = 0;
   }
 
   private onTouchStart(event: TouchEvent): void {
     this.keepGestureAwayFromECharts(event);
+
+    if (event.touches.length === 2) {
+      this.cancelActiveGesture(true);
+      const first = event.touches.item(0);
+      const second = event.touches.item(1);
+      if (first && second) {
+        this.pinchIdentifiers = [first.identifier, second.identifier];
+        this.suppressCompatibilityMouseEvents();
+        this.callbacks.onPinchStart?.({ first: this.toPoint(first), second: this.toPoint(second) });
+      }
+      return;
+    }
+
+    if (this.pinchIdentifiers) {
+      return;
+    }
 
     if (event.touches.length !== 1) {
       this.cancelActiveGesture(true);
@@ -124,6 +151,16 @@ export class EChartsHorizontalTouchGestureController {
 
   private onTouchMove(event: TouchEvent): void {
     this.keepGestureAwayFromECharts(event);
+
+    if (this.pinchIdentifiers) {
+      const gesture = this.getPinchGesture(event.touches);
+      if (gesture) {
+        this.callbacks.onPinchMove?.(gesture);
+      } else {
+        this.endPinchGesture();
+      }
+      return;
+    }
 
     const activeGesture = this.activeGesture;
     if (!activeGesture || event.touches.length !== 1) {
@@ -161,6 +198,19 @@ export class EChartsHorizontalTouchGestureController {
     this.keepGestureAwayFromECharts(event);
     this.suppressCompatibilityContextMenu();
 
+    if (this.pinchIdentifiers) {
+      const [firstIdentifier, secondIdentifier] = this.pinchIdentifiers;
+      const first = this.findTouch(event.touches, firstIdentifier)
+        ?? this.findTouch(event.changedTouches, firstIdentifier);
+      const second = this.findTouch(event.touches, secondIdentifier)
+        ?? this.findTouch(event.changedTouches, secondIdentifier);
+      if (first && second) {
+        this.callbacks.onPinchMove?.({ first: this.toPoint(first), second: this.toPoint(second) });
+      }
+      this.endPinchGesture();
+      return;
+    }
+
     const activeGesture = this.activeGesture;
     if (!activeGesture) {
       return;
@@ -184,6 +234,7 @@ export class EChartsHorizontalTouchGestureController {
   private onTouchCancel(event: TouchEvent): void {
     this.keepGestureAwayFromECharts(event);
     this.suppressCompatibilityContextMenu();
+    this.endPinchGesture();
     this.cancelActiveGesture(true);
   }
 
@@ -225,6 +276,28 @@ export class EChartsHorizontalTouchGestureController {
     this.activeGesture = null;
   }
 
+  private endPinchGesture(): void {
+    if (!this.pinchIdentifiers) {
+      return;
+    }
+
+    this.pinchIdentifiers = null;
+    this.suppressCompatibilityMouseEvents();
+    this.callbacks.onPinchEnd?.();
+  }
+
+  private getPinchGesture(touches: TouchList): EChartsPinchGesture | null {
+    if (!this.pinchIdentifiers || touches.length !== 2) {
+      return null;
+    }
+
+    const first = this.findTouch(touches, this.pinchIdentifiers[0]);
+    const second = this.findTouch(touches, this.pinchIdentifiers[1]);
+    return first && second
+      ? { first: this.toPoint(first), second: this.toPoint(second) }
+      : null;
+  }
+
   private resolveIntent(deltaX: number, deltaY: number): TouchGestureIntent {
     const absoluteX = Math.abs(deltaX);
     const absoluteY = Math.abs(deltaY);
@@ -238,8 +311,8 @@ export class EChartsHorizontalTouchGestureController {
   }
 
   private keepGestureAwayFromECharts(event: TouchEvent): void {
-    // Deliberately do not call preventDefault: native vertical scrolling and
-    // pinch zoom must remain compositor-owned and responsive.
+    // Keep listeners passive so vertical page scrolling stays browser-owned.
+    // The chart handles pinch only when Zoom mode enables it.
     event.stopPropagation();
     event.stopImmediatePropagation();
   }

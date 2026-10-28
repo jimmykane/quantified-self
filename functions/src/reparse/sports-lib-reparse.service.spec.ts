@@ -1,4 +1,19 @@
+import { ACTIVITY_IDENTITY_CONFLICT_MESSAGE } from '../shared/activity-identity-conflict';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+// EventWriter is stubbed in this orchestration suite. The real reservation guard is covered by
+// training-load-source-write.spec.ts and the real-writer Firestore lifecycle regressions.
+const sourceWriteGuard = vi.hoisted(() => ({ assertCurrent: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('../training-load/training-load-source-write', async importOriginal => ({
+    ...await importOriginal<typeof import('../training-load/training-load-source-write')>(),
+    TrainingLoadSourceWrite: class {
+        assertCurrent = sourceWriteGuard.assertCurrent;
+        constructor(_uid: string, readonly prepareTrainingLoad: (event: import('@sports-alliance/sports-lib').EventInterface) => Promise<unknown>) {}
+    },
+}));
+import { createHash } from 'node:crypto';
+import { FitEncoder, FitBaseType } from 'fit-file-parser/encoder';
+import { DataDistance, DataDuration } from '@sports-alliance/sports-lib';
+import { sourceReferenceFingerprint } from './non-activity-sources';
 import { gzipSync } from 'node:zlib';
 import {
     SPORTS_LIB_REPARSE_AUTO_TOO_HEAVY_DURATION_MS,
@@ -32,7 +47,8 @@ const hoisted = vi.hoisted(() => {
     const mockRunTransaction = vi.fn(async (callback: any) => callback({
         set: mockTransactionSet,
         delete: mockTransactionDelete,
-        get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
+        get: vi.fn(async (ref: any) => ref.get()),
+        getAll: vi.fn(async (...refs: any[]) => Promise.all(refs.map(ref => ref.get()))),
     }));
     const mockGetUserDeletionGuardStateInTransaction = vi.fn().mockResolvedValue({
         userExists: true,
@@ -41,7 +57,8 @@ const hoisted = vi.hoisted(() => {
     });
 
     const mockDownload = vi.fn();
-    const mockFile = vi.fn(() => ({ download: mockDownload }));
+    const mockGetMetadata = vi.fn();
+    const mockFile = vi.fn(() => ({ download: mockDownload, getMetadata: mockGetMetadata }));
     const mockBucket = vi.fn((bucketName?: string) => ({
         name: bucketName || 'quantified-self-io',
         file: mockFile,
@@ -61,6 +78,7 @@ const hoisted = vi.hoisted(() => {
     const mergeEvents = vi.fn((events: any[]) => events[0]);
     const reGenerateStatsForEvent = vi.fn();
     const generateMissingStreamsAndStatsForActivity = vi.fn();
+    const evaluateTrainingStressScore = vi.fn();
     const mockGenerateActivityIDFromSourceKey = vi.fn();
     const mockLoggerInfo = vi.fn();
     const mockLoggerWarn = vi.fn();
@@ -82,6 +100,7 @@ const hoisted = vi.hoisted(() => {
         mockRunTransaction,
         mockGetUserDeletionGuardStateInTransaction,
         mockDownload,
+        mockGetMetadata,
         mockFile,
         mockBucket,
         mockWriteAllEventData,
@@ -94,6 +113,7 @@ const hoisted = vi.hoisted(() => {
         mergeEvents,
         reGenerateStatsForEvent,
         generateMissingStreamsAndStatsForActivity,
+        evaluateTrainingStressScore,
         mockGenerateActivityIDFromSourceKey,
         mockLoggerInfo,
         mockLoggerWarn,
@@ -147,31 +167,54 @@ vi.mock('firebase-admin', () => {
 });
 
 vi.mock('firebase-admin/firestore', () => ({
+    FieldPath: { documentId: () => '__name__' },
     FieldValue: {
         serverTimestamp: hoisted.serverTimestamp,
         delete: hoisted.deleteField,
     },
 }));
 
-vi.mock('@sports-alliance/sports-lib', () => ({
-    ActivityParsingOptions: class ActivityParsingOptions {
-        constructor(public opts: unknown) { }
-    },
-    DataDistance: { type: 'distance' },
-    DataDuration: { type: 'duration' },
-    EventImporterFIT: hoisted.fitImporter,
-    EventImporterGPX: hoisted.gpxImporter,
-    EventImporterTCX: hoisted.tcxImporter,
-    EventImporterSuuntoJSON: hoisted.suuntoJSONImporter,
-    EventImporterSuuntoSML: hoisted.suuntoSMLImporter,
-    ActivityUtilities: {
-        generateMissingStreamsAndStatsForActivity: hoisted.generateMissingStreamsAndStatsForActivity,
-    },
-    EventUtilities: {
-        mergeEvents: hoisted.mergeEvents,
-        reGenerateStatsForEvent: hoisted.reGenerateStatsForEvent,
-    },
-}));
+vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@sports-alliance/sports-lib')>();
+    return {
+        // Shared policy helpers can resolve the same module as Functions when
+        // validating a locally packed library. Keep its metric catalog intact.
+        ...actual,
+        ActivityTypes: actual.ActivityTypes,
+        ActivityParsingOptions: class ActivityParsingOptions {
+            constructor(public opts: unknown) { }
+        },
+        DataDistance: actual.DataDistance,
+        DataLatitudeDegrees: actual.DataLatitudeDegrees,
+        DataLongitudeDegrees: actual.DataLongitudeDegrees,
+        GeoLibAdapter: actual.GeoLibAdapter,
+        DataDuration: actual.DataDuration,
+        DataElapsedTime: actual.DataElapsedTime,
+        DataEnergy: actual.DataEnergy,
+        DataFTP: actual.DataFTP,
+        DataGender: actual.DataGender,
+        DataMaxHRSetting: actual.DataMaxHRSetting,
+        DataMovingTime: actual.DataMovingTime,
+        DataPause: actual.DataPause,
+        DataTimerTime: actual.DataTimerTime,
+        DataWeight: actual.DataWeight,
+        DataTrainingStressScore: actual.DataTrainingStressScore,
+        DataTrainingStressScoreMethod: actual.DataTrainingStressScoreMethod,
+        EventImporterFIT: hoisted.fitImporter,
+        EventImporterGPX: hoisted.gpxImporter,
+        EventImporterTCX: hoisted.tcxImporter,
+        EventImporterSuuntoJSON: hoisted.suuntoJSONImporter,
+        EventImporterSuuntoSML: hoisted.suuntoSMLImporter,
+        ActivityUtilities: {
+            generateMissingStreamsAndStatsForActivity: hoisted.generateMissingStreamsAndStatsForActivity,
+            evaluateTrainingStressScore: hoisted.evaluateTrainingStressScore,
+        },
+        EventUtilities: {
+            mergeEvents: hoisted.mergeEvents,
+            reGenerateStatsForEvent: hoisted.reGenerateStatsForEvent,
+        },
+    };
+});
 
 vi.mock('../shared/event-writer', () => ({
     EventWriter: vi.fn((adapter: any, _storageAdapter: any, _bucketName: any, logger: any) => {
@@ -236,6 +279,7 @@ function makeCollectionQuery(docs: any[] = []) {
         where: vi.fn().mockReturnThis(),
         orderBy: vi.fn().mockReturnThis(),
         limit: vi.fn().mockReturnThis(),
+        startAfter: vi.fn().mockReturnThis(),
         get: vi.fn().mockResolvedValue({
             empty: docs.length === 0,
             docs,
@@ -273,7 +317,8 @@ describe('sports-lib-reparse.service', () => {
         hoisted.mockRunTransaction.mockImplementation(async (callback: any) => callback({
             set: hoisted.mockTransactionSet,
             delete: hoisted.mockTransactionDelete,
-            get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
+            get: vi.fn(async (ref: any) => ref.get()),
+            getAll: vi.fn(async (...refs: any[]) => Promise.all(refs.map(ref => ref.get()))),
         }));
         hoisted.mockTransactionSet.mockImplementation(async (ref: any, payload: Record<string, unknown>, options?: Record<string, unknown>) => {
             if (typeof ref?.set === 'function') {
@@ -281,7 +326,8 @@ describe('sports-lib-reparse.service', () => {
             }
         });
 
-        hoisted.mockDoc.mockImplementation(() => ({
+        hoisted.mockDoc.mockImplementation((path: string) => ({
+            path, id: path.split('/').at(-1),
             get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
             set: vi.fn().mockResolvedValue(undefined),
         }));
@@ -307,6 +353,7 @@ describe('sports-lib-reparse.service', () => {
         hoisted.suuntoSMLImporter.getFromXML.mockResolvedValue(makeEvent());
         hoisted.suuntoSMLImporter.getFromJSONString.mockResolvedValue(makeEvent());
         hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(() => { });
+        hoisted.evaluateTrainingStressScore.mockReturnValue({ automatic: { score: null, method: null } });
         hoisted.mockGenerateActivityIDFromSourceKey.mockImplementation(
             async (eventID: string, sourceActivityKey: string) => `new-${eventID}-${sourceActivityKey}`,
         );
@@ -361,6 +408,12 @@ describe('sports-lib-reparse.service', () => {
             .toThrow('Invalid target sports-lib version');
         expect(() => assertSportsLibRuntimeVersionMatchesTarget('11.0.2', 'not-semver'))
             .toThrow('Invalid runtime sports-lib version');
+    });
+
+    it('classifies source identity review failures as terminal, without treating retryable source changes as terminal', () => {
+        expect(isSportsLibReparseTerminalFailureMessage(ACTIVITY_IDENTITY_CONFLICT_MESSAGE)).toBe(true);
+        expect(getSportsLibReparseFailureReason(ACTIVITY_IDENTITY_CONFLICT_MESSAGE)).toBe('ACTIVITY_IDENTITY_CONFLICT');
+        expect(isSportsLibReparseTerminalFailureMessage('Recording source changed while reparsing; retry from the current original files.')).toBe(false);
     });
 
     it('isSportsLibReparseTerminalFailureMessage should treat size and runtime budget failures as terminal', () => {
@@ -473,12 +526,12 @@ describe('sports-lib-reparse.service', () => {
         await expect(hasPaidOrGraceAccess('u1')).resolves.toBe(false);
     });
 
-    it('parseFromOriginalFilesStrict should parse gzip FIT files', async () => {
+    it.each(['original.fit.gz', `sources/${'a'.repeat(64)}/original.fit.gz`])('parseFromOriginalFilesStrict parses gzip FIT at %s', async filename => {
         const gz = gzipSync(Buffer.from('fit-file-content'));
         hoisted.mockDownload.mockResolvedValue([gz]);
 
         const result = await parseFromOriginalFilesStrict([
-            { path: 'users/u1/events/e1/original.fit.gz' }
+            { path: `users/u1/events/e1/${filename}` }
         ]);
 
         expect(result.sourceFilesCount).toBe(1);
@@ -743,7 +796,7 @@ describe('sports-lib-reparse.service', () => {
                 if (statType === 'duration') {
                     return { getValue: () => input.duration };
                 }
-                if (statType === 'distance') {
+                if (statType === 'Distance') {
                     return { getValue: () => input.distance };
                 }
                 return null;
@@ -797,6 +850,58 @@ describe('sports-lib-reparse.service', () => {
         expect(firstKeys.get('Ride|2026-01-01T12:00:00.000Z')).toMatch(/^[a-f0-9]{64}:/);
     });
 
+    it('disambiguates equal summaries from distinct files without depending on upload order', async () => {
+        const makeActivity = (values: number[]) => ({
+            getID: () => null, setID: vi.fn(), creator: { name: 'same-device' }, type: 'Cycling',
+            startDate: new Date('2026-10-01T10:00:00Z'), endDate: new Date('2026-10-01T10:30:00Z'),
+            getStat: (type: string) => type === DataDuration.type ? { getValue: () => 1800 }
+                : type === DataDistance.type ? { getValue: () => 10000 } : null,
+            getAllStreams: () => [{ type: 'HeartRate' }], getStreamData: () => values,
+        });
+        const parse = async (reverse: boolean) => {
+            const a = makeActivity([100, 110, 120]);
+            const b = makeActivity([110, 100, 120]);
+            const activities = reverse ? [b, a] : [a, b];
+            const bytes = reverse ? ['source-B', 'source-A'] : ['source-A', 'source-B'];
+            for (let index = 0; index < activities.length; index++) {
+                hoisted.mockDownload.mockResolvedValueOnce([Buffer.from(bytes[index])]);
+                hoisted.fitImporter.getFromArrayBuffer.mockResolvedValueOnce(makeEvent({ getActivities: () => [activities[index]] }));
+            }
+            hoisted.mergeEvents.mockReturnValueOnce(makeEvent({ getActivities: () => activities }));
+            const parsed = await parseFromOriginalFilesStrict([{ path: 'one.fit' }, { path: 'two.fit' }]);
+            await assignReimportActivityIds(parsed.finalEvent, 'comparison', { combinedSourceContentHash: parsed.combinedSourceContentHash });
+            return [a, b].map(activity => (activity as any).sourceActivityKey);
+        };
+        const forward = await parse(false);
+        expect(forward).toEqual(await parse(true));
+        expect(forward[0]).not.toBe(forward[1]);
+        expect(forward[0].split(':')[0]).toBe(createHash('sha256').update('source-A').digest('hex'));
+        expect(forward[1].split(':')[0]).toBe(createHash('sha256').update('source-B').digest('hex'));
+    });
+
+    it('preserves live comparison reports through the transactional event rewrite', async () => {
+        const old = { startDate: new Date('2026-10-01T10:00:00Z'), endDate: new Date('2026-10-01T10:30:00Z'),
+            type: 'Running', stats: { [DataDuration.type]: { _value: 1800 }, [DataDistance.type]: { _value: 5000 } } };
+        const parsedActivity = { ...old, getID: () => 'new-ref',
+            getStat: (type: string) => type === DataDuration.type ? { getValue: () => 1800 } : type === DataDistance.type ? { getValue: () => 5000 } : null };
+        const parsed = makeEvent({ getActivities: () => [parsedActivity] });
+        const liveReport = { referenceId: 'old-ref', testId: 'unknown-test', timestamp: new Date(0), metrics: { gnss: null, streamMetrics: {} } };
+        const set = vi.fn().mockResolvedValue(undefined);
+        const live = { comparisonTitle: 'Latest title', benchmarkResults: { original: liveReport }, hasBenchmark: true,
+            benchmarkStatus: 'draft', toolSource: 'tools/compare', sourceFilesCount: 2, tags: ['review'] };
+        hoisted.mockDoc.mockImplementation((path: string) => ({ path, id: path.split('/').at(-1),
+            get: vi.fn().mockResolvedValue({ exists: true, data: () => live }), set }));
+        await persistReparsedEvent('u1', 'e1', parsed, { comparisonTitle: 'Outdated title' }, [{ id: 'old-ref', data: () => old }] as any, TARGET_SPORTS_LIB_VERSION);
+        const adapter = hoisted.eventWriterCtorArgs[0].adapter;
+        await adapter.setDoc(['users', 'u1', 'events', 'e1'], { name: 'Parsed event', activities: [], nested: { streams: [] } });
+        const payload = set.mock.calls.at(-1)![0];
+        expect(payload.comparisonTitle).toBe('Latest title');
+        expect(payload.tags).toEqual(['review']);
+        expect(payload.benchmarkResults.original).toEqual({ ...liveReport, requiresRegeneration: true, activityLinksResolved: false });
+        expect(payload).not.toHaveProperty('activities');
+        expect(payload.nested).not.toHaveProperty('streams');
+    });
+
     it('parseFromOriginalFilesStrict should leave keys unset for unresolved indistinguishable duplicates', async () => {
         const buildDuplicateActivity = () => ({
             setID: vi.fn(),
@@ -809,7 +914,7 @@ describe('sports-lib-reparse.service', () => {
                 if (statType === 'duration') {
                     return { getValue: () => 1800 };
                 }
-                if (statType === 'distance') {
+                if (statType === 'Distance') {
                     return { getValue: () => 5000 };
                 }
                 return null;
@@ -946,6 +1051,7 @@ describe('sports-lib-reparse.service', () => {
     it('resolveActivityEditCarryover should preserve creator names using deterministic matching when order changes', () => {
         const activityOne = {
             creator: { name: 'new1' },
+            setID: vi.fn(),
             startDate: new Date('2026-01-01T10:00:00.000Z'),
             endDate: new Date('2026-01-01T10:30:00.000Z'),
             type: 'Run',
@@ -985,7 +1091,48 @@ describe('sports-lib-reparse.service', () => {
 
         expect(result.assignments.size).toBe(2);
         expect(activityOne.creator.name).toBe('old1');
+        expect(activityOne.setID).not.toHaveBeenCalled(); // Edit carryover cannot claim a saved ID outside the reservation.
         expect(activityTwo.creator.name).toBe('old2');
+    });
+
+    it.each([true, false])('carries edits across renamed multisport legs only with matching source hashes (%s)', async (sameSource) => {
+        const makeActivity = (type: string, startMs: number, name: string) => ({
+            sourceActivityKey: undefined as string | undefined,
+            creator: { name },
+            startDate: new Date(startMs),
+            endDate: new Date(startMs + 1_800_000),
+            type,
+            getStat: (statType: string) => statType === DataDuration.type
+                ? { getValue: () => 1800 }
+                : statType === DataDistance.type ? { getValue: () => 5000 } : null,
+        });
+        const startMs = Date.parse('2026-07-01T08:00:00.000Z');
+        const oldActivities = [
+            makeActivity('Hiking', startMs, 'saved-first'),
+            makeActivity('Backcountry Skiing', startMs + 3_600_000, 'saved-second'),
+        ];
+        const parsedActivities = [
+            makeActivity('Ski Touring', startMs + 3_600_000, 'parsed-second'),
+            makeActivity('Trekking', startMs, 'parsed-first'),
+        ];
+        const parsedEvent = { getActivities: () => parsedActivities } as any;
+        await assignReimportActivityIds({ getActivities: () => oldActivities } as any, 'event', {
+            combinedSourceContentHash: 'a'.repeat(64),
+        });
+        await assignReimportActivityIds(parsedEvent, 'event', {
+            combinedSourceContentHash: (sameSource ? 'a' : 'd').repeat(64),
+        });
+        expect(oldActivities[0].sourceActivityKey).not.toBe(parsedActivities[1].sourceActivityKey);
+        expect(oldActivities[1].sourceActivityKey).not.toBe(parsedActivities[0].sourceActivityKey);
+        const parsedKeys = parsedActivities.map(activity => activity.sourceActivityKey);
+        const result = resolveActivityEditCarryover(parsedEvent, oldActivities.map((activity, index) => ({
+            id: `old-${index}`,
+            data: () => ({ ...activity, stats: { [DataDuration.type]: 1800, [DataDistance.type]: 5000 } }),
+        })) as any);
+        expect([...result.assignments].sort()).toEqual(sameSource ? [[0, 1], [1, 0]] : []);
+        expect(parsedActivities.map(activity => activity.creator.name)).toEqual(sameSource
+            ? ['saved-second', 'saved-first'] : ['parsed-second', 'parsed-first']);
+        expect(parsedActivities.map(activity => activity.sourceActivityKey)).toEqual(parsedKeys);
     });
 
     it.each(['Unknown', 'Unknown Device', ' UNKNOWN   DEVICE '])(
@@ -1078,7 +1225,7 @@ describe('sports-lib-reparse.service', () => {
                 if (type === 'duration') {
                     return { getValue: () => 100 };
                 }
-                if (type === 'distance') {
+                if (type === 'Distance') {
                     return { getValue: () => 1000 };
                 }
                 return null;
@@ -1093,7 +1240,7 @@ describe('sports-lib-reparse.service', () => {
                 if (type === 'duration') {
                     return { getValue: () => 200 };
                 }
-                if (type === 'distance') {
+                if (type === 'Distance') {
                     return { getValue: () => 2000 };
                 }
                 return null;
@@ -1114,7 +1261,7 @@ describe('sports-lib-reparse.service', () => {
                     type: 'Run',
                     stats: {
                         duration: { _value: 100 },
-                        distance: { _value: 1000 },
+                        Distance: { _value: 1000 },
                     },
                 }),
             } as any,
@@ -1127,7 +1274,7 @@ describe('sports-lib-reparse.service', () => {
                     type: 'Run',
                     stats: {
                         duration: { _value: 200 },
-                        distance: { _value: 2000 },
+                        Distance: { _value: 2000 },
                     },
                 }),
             } as any,
@@ -1164,6 +1311,17 @@ describe('sports-lib-reparse.service', () => {
         expect(hoisted.mockGenerateActivityIDFromSourceKey).toHaveBeenNthCalledWith(2, 'event-1', sourceKeyTwo);
         expect(activityOne.setID).toHaveBeenCalledWith(`new-event-1-${sourceKeyOne}`);
         expect(activityTwo.setID).toHaveBeenCalledWith(`new-event-1-${sourceKeyTwo}`);
+    });
+
+    it('leaves saved-ID reuse to guarded preparation instead of claiming it during source-key generation', async () => {
+        const parsed = { startDate: new Date(1000), endDate: new Date(61000), type: 'Running',
+            getStat: () => ({ getValue: () => 60 }), setID: vi.fn(), getID: () => 'provisional' };
+        hoisted.mockGenerateActivityIDFromSourceKey.mockResolvedValueOnce('derived-id');
+        await assignReimportActivityIds({ getActivities: () => [parsed] } as any, 'event', {
+            combinedSourceContentHash: 'a'.repeat(64),
+            existingActivities: [{ ...parsed, getID: () => 'saved-id' }],
+        });
+        expect(parsed.setID).toHaveBeenCalledExactlyOnceWith('derived-id');
     });
 
     it('assignReimportActivityIds should keep key-based ids stable even when parsed order changes', async () => {
@@ -1278,7 +1436,7 @@ describe('sports-lib-reparse.service', () => {
             .toThrow('Missing or invalid combinedSourceContentHash');
     });
 
-    it('assignReimportActivityIds should fail on strict ambiguity after restamp', async () => {
+    it.each([false, true])('terminalizes ambiguous source-key assignment before assigning IDs (duplicate keys: %s)', async duplicateKeys => {
         const combinedHash = 'f'.repeat(64);
         const ambiguousActivities = [
             {
@@ -1298,17 +1456,26 @@ describe('sports-lib-reparse.service', () => {
                 getStat: vi.fn(() => null),
             },
         ];
+        if (duplicateKeys) for (const activity of ambiguousActivities)
+            Object.assign(activity, { sourceActivityKey: `${combinedHash}:${'a'.repeat(64)}:0` });
 
-        await expect(assignReimportActivityIds({
+        const error = await assignReimportActivityIds({
             getActivities: () => ambiguousActivities,
         } as any, 'event-3', {
             combinedSourceContentHash: combinedHash,
-        }))
-            .rejects
-            .toThrow('Ambiguous sourceActivityKey stamping');
+        }).then(() => null, (error: unknown) => error);
+        expect(error).toMatchObject({ code: 'ACTIVITY_IDENTITY_CONFLICT', message: ACTIVITY_IDENTITY_CONFLICT_MESSAGE });
+        expect(isSportsLibReparseTerminalFailureMessage((error as Error).message)).toBe(true);
+        expect(getSportsLibReparseFailureReason((error as Error).message)).toBe('ACTIVITY_IDENTITY_CONFLICT');
+        expect(hoisted.mockGenerateActivityIDFromSourceKey).not.toHaveBeenCalled();
+        for (const activity of ambiguousActivities) expect(activity.setID).not.toHaveBeenCalled();
     });
 
     it('persistReparsedEvent should delete stale activities and write processing metadata', async () => {
+        hoisted.mockCollection.mockReturnValue(makeCollectionQuery([
+            { id: 'a1', ref: { path: 'users/u1/activities/a1' } },
+            { id: 'a2', ref: { path: 'users/u1/activities/a2' } },
+        ]));
         const setCalls: Array<{ path: string; payload?: Record<string, unknown>; options?: Record<string, unknown> }> = [];
         hoisted.mockDoc.mockImplementation((path: string) => ({
             path,
@@ -1357,7 +1524,45 @@ describe('sports-lib-reparse.service', () => {
         expect(hoisted.mockWriteAllEventData).toHaveBeenCalled();
     });
 
+    it('refreshes cleanup membership in bounded pages even when the initial snapshot had no children', async () => {
+        const firstPage = Array.from({ length: 400 }, (_, index) => {
+            const id = `leg-${index.toString().padStart(3, '0')}`;
+            return { id, ref: { path: `users/u1/activities/${id}` } };
+        });
+        const query = makeCollectionQuery([]);
+        query.get.mockResolvedValueOnce({ empty: false, docs: firstPage }).mockResolvedValueOnce({ empty: false, docs: [
+            { id: 'late-partial', ref: { path: 'users/u1/activities/late-partial' } },
+            { id: 'last-current', ref: { path: 'users/u1/activities/last-current' } },
+        ] });
+        hoisted.mockCollection.mockReturnValue(query);
+        const result = await persistReparsedEvent('u1', 'e1', {
+            setID: vi.fn(), getActivities: () => [{ getID: () => 'leg-000' }, { getID: () => 'last-current' }],
+        } as any, {}, [], TARGET_SPORTS_LIB_VERSION);
+        expect(result.staleActivitiesDeleted).toBe(400);
+        expect(query.where).toHaveBeenCalledWith('eventID', '==', 'e1');
+        expect(query.limit).toHaveBeenCalledWith(400);
+        expect(query.startAfter).toHaveBeenCalledWith('leg-399');
+        expect(hoisted.mockTransactionDelete).toHaveBeenCalledTimes(400);
+        expect(hoisted.mockTransactionDelete).not.toHaveBeenCalledWith(firstPage[0].ref);
+        expect(hoisted.mockTransactionDelete).not.toHaveBeenCalledWith({ path: 'users/u1/activities/last-current' });
+        expect(sourceWriteGuard.assertCurrent).toHaveBeenCalledTimes(3); // Both cleanup pages and atomic source completion.
+    });
+
+    it('does not delete a former child that no longer belongs to this event', async () => {
+        const query = makeCollectionQuery([]); hoisted.mockCollection.mockReturnValue(query);
+        const result = await persistReparsedEvent('u1', 'e1', {
+            setID: vi.fn(), getActivities: () => [{ getID: () => 'current' }],
+        } as any, {}, [{ id: 'moved', data: () => ({ eventID: 'e1' }) }], TARGET_SPORTS_LIB_VERSION);
+        expect(result.staleActivitiesDeleted).toBe(0);
+        expect(query.where).toHaveBeenCalledWith('eventID', '==', 'e1');
+        expect(hoisted.mockTransactionDelete).not.toHaveBeenCalled();
+    });
+
     it('persistReparsedEvent should log persistence phase checkpoints', async () => {
+        hoisted.mockCollection.mockReturnValue(makeCollectionQuery([
+            { id: 'a1', ref: { path: 'users/u1/activities/a1' } },
+            { id: 'a2', ref: { path: 'users/u1/activities/a2' } },
+        ]));
         const parsedEvent = {
             setID: vi.fn(),
             getActivities: vi.fn(() => [{ getID: () => 'a1' }]),
@@ -1398,6 +1603,10 @@ describe('sports-lib-reparse.service', () => {
     });
 
     it('persistReparsedEvent should retry retryable stale activity delete transaction failures', async () => {
+        hoisted.mockCollection.mockReturnValue(makeCollectionQuery([
+            { id: 'a1', ref: { path: 'users/u1/activities/a1' } },
+            { id: 'a2', ref: { path: 'users/u1/activities/a2' } },
+        ]));
         const invalidTransactionError = Object.assign(new Error('3 INVALID_ARGUMENT: Invalid transaction.'), {
             code: 3,
             details: 'Invalid transaction.',
@@ -1409,7 +1618,7 @@ describe('sports-lib-reparse.service', () => {
             .mockImplementation(async (callback: any) => callback({
                 set: hoisted.mockTransactionSet,
                 delete: hoisted.mockTransactionDelete,
-                get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
+                get: vi.fn(async (ref: any) => ref.get()),
             }));
         hoisted.mockDoc.mockImplementation((path: string) => ({
             path,
@@ -1563,7 +1772,7 @@ describe('sports-lib-reparse.service', () => {
         expect(hoisted.mockGetUserDeletionGuardStateInTransaction).toHaveBeenCalled();
         expect(hoisted.mockTransactionSet).toHaveBeenCalledWith(
             expect.objectContaining({ path: 'users/u1/events/e1' }),
-            { probe: true },
+            { probe: true, benchmarkSourceRevision: 0, benchmarkSourceWritePending: true },
             undefined,
         );
     });
@@ -1572,7 +1781,7 @@ describe('sports-lib-reparse.service', () => {
         hoisted.mockRunTransaction.mockImplementation(async (callback: any) => callback({
             set: hoisted.mockTransactionSet,
             delete: hoisted.mockTransactionDelete,
-            get: vi.fn().mockResolvedValue({
+            get: vi.fn(async (ref: any) => ref.path ? {
                 exists: true,
                 data: () => ({
                     name: 'Latest name',
@@ -1583,7 +1792,7 @@ describe('sports-lib-reparse.service', () => {
                     feeling: 3,
                     tags: ['Latest'],
                 }),
-            }),
+            } : ref.get()),
         }));
         hoisted.mockDoc.mockImplementation((path: string) => ({
             path,
@@ -1627,6 +1836,8 @@ describe('sports-lib-reparse.service', () => {
                 tags: ['Latest'],
                 stats: { 'Recovery Time': 46_140 },
                 diagnostics: { keep: true },
+                benchmarkSourceRevision: 0,
+                benchmarkSourceWritePending: true,
             },
             undefined,
         );
@@ -1819,7 +2030,7 @@ describe('sports-lib-reparse.service', () => {
             .mockImplementationOnce(async (callback: any) => callback({
                 set: hoisted.mockTransactionSet,
                 delete: hoisted.mockTransactionDelete,
-                get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
+                get: vi.fn(async (ref: any) => ref.get()),
             }));
 
         await writeReparseStatus('u1', 'e1', {
@@ -1923,6 +2134,112 @@ describe('sports-lib-reparse.service', () => {
             'Strict original-file reparse failed. users/u1/events/e1/original.gpx.gz: No activities found in GPX; use importRoutesFromGPX for routes',
         )).toBe(true);
         expect(isSportsLibReparseTerminalFailureMessage('parse failed')).toBe(false);
+    });
+
+    it.each([
+        'Strict original-file reparse failed. users/u1/events/e1/original.fit: FIT file is not an activity file',
+        'Strict original-file reparse failed. monitoring.fit: FIT file is not an activity file; other.fit: download failed',
+        'Strict original-file reparse failed. other.fit: download failed; monitoring.fit: FIT file is not an activity file',
+    ])('terminalizes an explicitly non-activity source without repeated automatic retries: %s', message => {
+        expect(isSportsLibReparseTerminalFailureMessage(message)).toBe(true);
+    });
+
+    it('does not classify other FIT parsing failures as non-activity files', () => {
+        expect(isSportsLibReparseTerminalFailureMessage(
+            'Strict original-file reparse failed. original.fit: FIT file is not an activity file candidate',
+        )).toBe(false);
+    });
+
+    it('leaves existing workout data intact when a monitoring original is rejected', async () => {
+        hoisted.fitImporter.getFromArrayBuffer.mockRejectedValue(new Error('FIT file is not an activity file'));
+        await expect(reparseEventFromOriginalFiles('u1', 'e1', {
+            eventData: { originalFile: { path: 'users/u1/events/e1/original.fit' } },
+            activityDocs: [{ id: 'existing-activity', data: () => ({ type: 'Unknown Sport' }) } as any],
+            targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
+        })).rejects.toThrow('FIT file is not an activity file');
+        expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+        expect(hoisted.reGenerateStatsForEvent).not.toHaveBeenCalled();
+        expect(hoisted.mockBatchDelete).not.toHaveBeenCalled();
+        expect(hoisted.mockTransactionDelete).not.toHaveBeenCalled();
+    });
+
+    it.each([false, true])('skips validated monitoring sources without persistence or error logs (gzip=%s)', async compressed => {
+        const bytes = Buffer.from(new FitEncoder({ protocolVersion: 0x20 }).writeMessage(0,
+            [{ number: 0, size: 1, baseType: FitBaseType.Enum, value: 32 }]).close());
+        const raw = compressed ? gzipSync(bytes) : bytes;
+        hoisted.mockDownload.mockResolvedValue([raw]);
+        hoisted.mockGetMetadata.mockResolvedValue([{ generation: '1', md5Hash: createHash('md5').update(raw).digest('base64') }]);
+        hoisted.fitImporter.getFromArrayBuffer.mockRejectedValue(new Error('FIT file is not an activity file'));
+        const result = await reparseEventFromOriginalFiles('u1', 'e1', {
+            eventData: { originalFile: { path: compressed ? 'original.fit.gz' : 'original.fit' } }, activityDocs: [],
+        });
+        expect(result).toMatchObject({ status: 'skipped', reason: 'MONITORING_SOURCE', staleActivitiesDeleted: 0,
+            nonActivitySources: { sources: [{ kind: 'monitoring', generation: '1', sha256: createHash('sha256').update(raw).digest('hex') }] } });
+        expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+        expect(hoisted.mockTransactionDelete).not.toHaveBeenCalled();
+        expect(hoisted.mockLoggerError).not.toHaveBeenCalled();
+    });
+
+    it('retains the entire mixed event and reports review without partially writing activities', async () => {
+        const raw = Buffer.from(new FitEncoder({ protocolVersion: 0x20 }).writeMessage(0,
+            [{ number: 0, size: 1, baseType: FitBaseType.Enum, value: 32 }]).close());
+        hoisted.mockDownload.mockResolvedValue([raw]);
+        hoisted.mockGetMetadata.mockResolvedValue([{ generation: '1', md5Hash: createHash('md5').update(raw).digest('base64') }]);
+        hoisted.fitImporter.getFromArrayBuffer.mockResolvedValueOnce(makeEvent())
+            .mockRejectedValueOnce(new Error('FIT file is not an activity file'));
+        const result = await reparseEventFromOriginalFiles('u1', 'e1', { eventData: {
+            originalFiles: [{ path: 'activity.fit' }, { path: 'monitoring.fit' }],
+        }, activityDocs: [] });
+        expect(result).toMatchObject({ status: 'skipped', reason: 'MIXED_SOURCES_REQUIRING_REVIEW', sourceFilesCount: 2 });
+        expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+        expect(hoisted.mockBatchDelete).not.toHaveBeenCalled();
+        expect(hoisted.mockLoggerError).not.toHaveBeenCalled();
+    });
+
+    it('does not turn a mixed-source download failure into a permanent skip', async () => {
+        const raw = Buffer.from(new FitEncoder({ protocolVersion: 0x20 }).writeMessage(0,
+            [{ number: 0, size: 1, baseType: FitBaseType.Enum, value: 32 }]).close());
+        hoisted.mockDownload.mockResolvedValueOnce([raw]).mockRejectedValueOnce(new Error('download interrupted'));
+        hoisted.fitImporter.getFromArrayBuffer.mockRejectedValue(new Error('FIT file is not an activity file'));
+        await expect(reparseEventFromOriginalFiles('u1', 'e1', { eventData: {
+            originalFiles: [{ path: 'monitoring.fit' }, { path: 'unavailable.fit' }],
+        }, activityDocs: [] })).rejects.toThrow('download interrupted');
+        expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+        expect(hoisted.mockGetMetadata).not.toHaveBeenCalled();
+    });
+
+    it('retries classification if source bytes change during the metadata check', async () => {
+        const raw = Buffer.from(new FitEncoder({ protocolVersion: 0x20 }).writeMessage(0,
+            [{ number: 0, size: 1, baseType: FitBaseType.Enum, value: 32 }]).close());
+        hoisted.mockDownload.mockResolvedValue([raw]);
+        hoisted.mockGetMetadata.mockResolvedValue([{ generation: '2', md5Hash: 'different' }]);
+        hoisted.fitImporter.getFromArrayBuffer.mockRejectedValue(new Error('FIT file is not an activity file'));
+        await expect(reparseEventFromOriginalFiles('u1', 'e1', { eventData: {
+            originalFiles: [{ path: 'monitoring.fit' }],
+        }, activityDocs: [] })).rejects.toThrow('Original source changed');
+        expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+    });
+
+    it.each(['changed', 'deleted', 'user-deleted', 'unchanged'])('guards classification status against %s source lifecycle', async lifecycle => {
+        const set = vi.fn();
+        const sources = [{ path: 'original.fit' }];
+        hoisted.mockDoc.mockImplementation((path: string) => ({ path, id: path.split('/').at(-1), set, get: vi.fn().mockResolvedValue({
+            exists: lifecycle !== 'deleted', data: () => ({ originalFiles: lifecycle === 'changed' ? [{ path: 'new.fit' }] : sources }),
+        }) }));
+        if (lifecycle === 'user-deleted') hoisted.mockGetUserDeletionGuardStateInTransaction.mockResolvedValue({
+            userExists: false, deletionInProgress: true, shouldSkip: true,
+        });
+        const write = writeReparseStatus('u1', 'e1', { status: 'skipped', reason: 'MONITORING_SOURCE',
+            checkedAt: 'ts', targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
+            nonActivitySources: { schemaVersion: 1, sourceFingerprint: sourceReferenceFingerprint(sources), sources: [] },
+        });
+        if (lifecycle === 'unchanged') {
+            await write;
+            expect(set).toHaveBeenCalledTimes(1);
+        } else {
+            await expect(write).rejects.toThrow();
+            expect(set).not.toHaveBeenCalled();
+        }
     });
 
     it('applyAutoHealedSourceBucketMetadata should skip invalid resolved entries and only rewrite mapped paths', () => {
@@ -2203,7 +2520,7 @@ describe('sports-lib-reparse.service', () => {
                 if (statType === 'duration') {
                     return { getValue: () => 1800 };
                 }
-                if (statType === 'distance') {
+                if (statType === 'Distance') {
                     return { getValue: () => 5000 };
                 }
                 return null;
@@ -2231,7 +2548,7 @@ describe('sports-lib-reparse.service', () => {
                             type: 'Run',
                             stats: {
                                 duration: { _value: 1800 },
-                                distance: { _value: 5000 },
+                                Distance: { _value: 5000 },
                             },
                         }),
                     } as any,
@@ -2245,14 +2562,16 @@ describe('sports-lib-reparse.service', () => {
                             type: 'Run',
                             stats: {
                                 duration: { _value: 1800 },
-                                distance: { _value: 5000 },
+                                Distance: { _value: 5000 },
                             },
                         }),
                     } as any,
                 ],
                 targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
             }),
-        ).rejects.toThrow('Ambiguous sourceActivityKey stamping');
+        ).rejects.toMatchObject({ code: 'ACTIVITY_IDENTITY_CONFLICT', message: ACTIVITY_IDENTITY_CONFLICT_MESSAGE });
+        expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+        expect(hoisted.mockTransactionSet).not.toHaveBeenCalled();
     });
 
     it('reparseEventFromOriginalFiles should run activity-level sports-lib regeneration in regenerate mode', async () => {
@@ -2264,6 +2583,7 @@ describe('sports-lib-reparse.service', () => {
             setID: vi.fn(),
             creator: { name: 'A' },
             getStats: vi.fn(() => activityStats),
+            removeStat: vi.fn((type: string) => activityStats.delete(type)),
             clearStats: vi.fn(() => {
                 activityStats = new Map<string, unknown>();
             }),
@@ -2301,6 +2621,673 @@ describe('sports-lib-reparse.service', () => {
         expect(activityStats.get('preserved')).toBe(preservedStat);
         expect(activityStats.get('generated')).toBe(generatedStat);
     });
+
+    it.each([
+        { label: 'calorie MET', score: undefined, method: undefined, expected: 9, expectedMethod: 'MET', calories: true },
+        { label: 'imported score', score: 42, method: 'IMPORTED', expected: 42, expectedMethod: 'IMPORTED', calories: true },
+        { label: 'imported zero', score: 0, method: 'IMPORTED', expected: 0, expectedMethod: 'IMPORTED', calories: true },
+        { label: 'methodless imported score', score: 42, method: undefined, expected: 42, expectedMethod: 'IMPORTED', calories: true },
+        { label: 'methodless imported zero', score: 0, method: undefined, expected: 0, expectedMethod: 'IMPORTED', calories: true },
+        { label: 'imported score over generated power', score: 42, method: 'IMPORTED', expected: 42, expectedMethod: 'IMPORTED', calories: true, power: true },
+        { label: 'explicit recalculation of imported score', score: 42, method: 'IMPORTED', expected: 9, expectedMethod: 'MET', calories: true, preserveImportedTss: false },
+        { label: 'explicit recalculation of methodless zero', score: 0, method: undefined, expected: 9, expectedMethod: 'MET', calories: true, preserveImportedTss: false },
+        { label: 'walking rejects power and uses MET', score: 42, method: 'IMPORTED', expected: 9, expectedMethod: 'MET', calories: true, power: true, walking: true, preserveImportedTss: false },
+        { label: 'walking power alone is unavailable', score: 42, method: 'IMPORTED', expected: null, expectedMethod: null, calories: false, power: true, walking: true, preserveImportedTss: false },
+        { label: 'explicit recalculation without inputs', score: 42, method: 'IMPORTED', expected: null, expectedMethod: null, calories: false, preserveImportedTss: false },
+        { label: 'explicit recalculation of unsupported sport', score: 42, method: 'IMPORTED', expected: null, expectedMethod: null, calories: true, preserveImportedTss: false, unsupported: true },
+        { label: 'stale calculated score', score: 87.3, method: 'HR', expected: null, expectedMethod: null, calories: false },
+    ])('regenerate keeps recorded and cached TSS consistent for $label', async ({ score, method, expected, expectedMethod, calories, power = false, walking = false, preserveImportedTss, unsupported = false }) => {
+        const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+        const parsedEvent = sports.EventImporterJSON.getEventFromJSON({
+            name: 'Synthetic walk', startDate: 0, endDate: 3600000,
+            activities: [{ startDate: 0, endDate: 3600000, type: unsupported ? sports.ActivityTypes.Driving : power && !walking ? sports.ActivityTypes.Cycling : sports.ActivityTypes.Walking,
+                creator: { name: 'Test' }, laps: [], intensityZones: [], streams: [],
+                stats: { ...(calories ? { Energy: 210, Weight: 70 } : {}),
+                    ...(score === undefined ? {} : { 'Training Stress Score': score }),
+                    ...(method === undefined ? {} : { 'Training Stress Score Method': method }) } }],
+        } as any);
+        const activity = parsedEvent.getFirstActivity();
+        activity.parseOptions = new sports.ActivityParsingOptions({ tss: { preserveImportedTss } });
+        if (power) {
+            const stream = activity.createStream(sports.DataPower.type);
+            stream.setData(Array.from({ length: 3601 }, () => 200));
+            activity.addStream(stream);
+        }
+        if (expected !== null) sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(activity);
+        if (score !== undefined && method === undefined) activity.removeStat(sports.DataTrainingStressScoreMethod.type);
+        hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
+        hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(
+            item => sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(item));
+        hoisted.evaluateTrainingStressScore.mockImplementation(
+            item => sports.ActivityUtilities.evaluateTrainingStressScore(item));
+
+        await reparseEventFromOriginalFiles('u1', 'e1', { mode: 'regenerate',
+            eventData: { originalFile: { path: 'users/u1/events/e1/original.fit' } },
+            activityDocs: [], targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
+
+        expect(hoisted.mockWriteAllEventData.mock.calls[0][1]).toBe(parsedEvent);
+        const evaluations = sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity);
+        for (const preference of ['automatic', 'hr', 'met'] as const) {
+            expect(evaluations[preference]).toMatchObject({ score: expected, method: expectedMethod });
+        }
+        expect(activity.getStat(sports.DataTrainingStressScore.type)?.getValue() ?? null).toBe(expected);
+        expect(activity.getStat(sports.DataTrainingStressScoreMethod.type)?.getValue() ?? null).toBe(expectedMethod);
+    });
+
+    it.each(['reimport', 'regenerate'] as const)('preserves fresh parent-only totals in %s, not stale stored stats', async mode => {
+        const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+        const makeSource = () => sports.EventImporterJSON.getEventFromJSON({
+            name: 'Synthetic parent observation', startDate: 0, endDate: 10000,
+            stats: { Distance: 54900, Energy: 200 },
+            activities: [{ startDate: 0, endDate: 10000, type: sports.ActivityTypes.Running,
+                creator: { name: 'Test' }, stats: { Distance: 0, Duration: 10 },
+                laps: [], streams: [], intensityZones: [] }],
+        } as any);
+        hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(
+            activity => sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(activity));
+        hoisted.evaluateTrainingStressScore.mockImplementation(activity => sports.ActivityUtilities.evaluateTrainingStressScore(activity));
+        for (let pass = 0; pass < 2; pass++) {
+            hoisted.reGenerateStatsForEvent.mockImplementationOnce(event => sports.EventUtilities.reGenerateStatsForEvent(event));
+            const parsedEvent = makeSource();
+            hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
+            await reparseEventFromOriginalFiles('u1', 'e1', { mode,
+                eventData: { originalFile: { path: 'users/u1/events/e1/synthetic.fit' }, stats: { Distance: 1, Energy: 1 } },
+                activityDocs: [], targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
+            expect(hoisted.mockWriteAllEventData.mock.calls.at(-1)?.[1]).toBe(parsedEvent);
+            expect(parsedEvent.getDistance()?.getValue()).toBe(54900);
+            expect(parsedEvent.getStat(sports.DataEnergy.type)?.getValue()).toBe(200);
+            expect(parsedEvent.getFirstActivity().getDistance()?.getValue()).toBe(0);
+            expect(parsedEvent.getFirstActivity().getStat(sports.DataEnergy.type)).toBeUndefined();
+        }
+    });
+
+    it.each([
+        { preserveImportedTss: undefined, ftp: 250 },
+        { preserveImportedTss: true, ftp: 250 },
+        { preserveImportedTss: false, ftp: 250 },
+        { preserveImportedTss: false, ftp: undefined },
+        { preserveImportedTss: false, ftp: undefined, ftpOverride: 250 },
+        { preserveImportedTss: true, ftp: undefined, ftpOverride: 250 },
+    ])('regenerate preserves parsed inputs and library-owned load evaluation with %j', async ({ preserveImportedTss, ftp, ftpOverride }) => {
+        const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+        const inputs = {
+            ...(ftp === undefined ? {} : { [sports.DataFTP.type]: ftp }),
+            [sports.DataDuration.type]: 3300,
+            [sports.DataTimerTime.type]: 3300,
+            [sports.DataElapsedTime.type]: 3600,
+            [sports.DataMovingTime.type]: 3150,
+            [sports.DataPause.type]: 300,
+            [sports.DataEnergy.type]: 210,
+            [sports.DataWeight.type]: 70,
+            [sports.DataGender.type]: 'female',
+            [sports.DataMaxHRSetting.type]: 190,
+        };
+        const source = {
+            name: 'Synthetic paused ride', startDate: 0, endDate: 3600000,
+            activities: [{ startDate: 0, endDate: 3600000, type: sports.ActivityTypes.Cycling,
+                creator: { name: 'Test' }, laps: [], intensityZones: [], streams: [],
+                stats: { ...inputs,
+                    [sports.DataPowerNormalized.type]: 180,
+                    [sports.DataPowerIntensityFactor.type]: 0.72,
+                    [sports.DataTrainingStressScore.type]: 42,
+                    [sports.DataTrainingStressScoreMethod.type]: 'IMPORTED',
+                } }],
+        } as any;
+        const makeParsedEvent = () => {
+            const event = sports.EventImporterJSON.getEventFromJSON(source);
+            const item = event.getFirstActivity();
+            item.parseOptions = new sports.ActivityParsingOptions({ tss: { preserveImportedTss,
+                overrides: ftpOverride === undefined ? undefined : { functionalThresholdPower: ftpOverride } } });
+            const power = item.createStream(sports.DataPower.type);
+            power.setData(Array.from({ length: 3601 }, () => 200));
+            item.addStream(power);
+            return event;
+        };
+        // The library owns FTP eligibility and the power formula. Compare QS regeneration
+        // with a fresh library calculation, independently of the reparse implementation.
+        // Bare JSON FTP deliberately has no source-file provenance; explicit overrides do.
+        const reference = makeParsedEvent().getFirstActivity();
+        reference.removeStat(sports.DataPowerNormalized.type);
+        reference.removeStat(sports.DataPowerIntensityFactor.type);
+        if (preserveImportedTss === false) {
+            reference.removeStat(sports.DataTrainingStressScore.type);
+            reference.removeStat(sports.DataTrainingStressScoreMethod.type);
+        }
+        sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(reference);
+        const expectedEvaluations = sports.ActivityUtilities.getTrainingStressScoreEvaluations(reference);
+        const parsedEvent = makeParsedEvent();
+        const activity = parsedEvent.getFirstActivity();
+        hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
+        hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(
+            item => sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(item));
+        hoisted.evaluateTrainingStressScore.mockImplementation(
+            item => sports.ActivityUtilities.evaluateTrainingStressScore(item));
+
+        // A repeated regeneration must neither drift the inputs nor turn calculated TSS into an import.
+        for (let pass = 0; pass < 2; pass++) {
+            await reparseEventFromOriginalFiles('u1', 'e1', { mode: 'regenerate',
+                eventData: { originalFile: { path: 'users/u1/events/e1/original.fit' } },
+                activityDocs: [], targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
+
+            for (const [type, value] of Object.entries(inputs)) {
+                expect(activity.getStat(type)?.getValue(), type).toBe(value);
+            }
+            expect(activity.getStat(sports.DataPowerNormalized.type)?.getValue()).toBeCloseTo(200);
+            expect(activity.getStat(sports.DataFTP.type)?.getValue()).toBe(ftp ?? ftpOverride ?? 190);
+            expect(activity.getStat(sports.DataPowerIntensityFactor.type)?.getValue()).toBe(
+                reference.getStat(sports.DataPowerIntensityFactor.type)?.getValue()
+                ?? source.activities[0].stats[sports.DataPowerIntensityFactor.type]);
+            const evaluations = sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity);
+            expect(evaluations).toEqual(expectedEvaluations);
+            const expected = expectedEvaluations.automatic;
+            if (preserveImportedTss !== false) {
+                expect(expected).toMatchObject({ score: 42, method: 'IMPORTED', provenance: 'imported' });
+            } else if (ftpOverride !== undefined) {
+                expect(expected).toMatchObject({ method: 'POWER', provenance: 'calculated', estimated: false });
+            }
+            expect(evaluations.met).toMatchObject(preserveImportedTss === false
+                ? { score: 9.8, method: 'MET', provenance: 'calculated', estimated: true }
+                : { score: 42, method: 'IMPORTED', provenance: 'imported' });
+            expect(activity.getStat(sports.DataTrainingStressScore.type)?.getValue()).toBe(expected.score);
+            expect(activity.getStat(sports.DataTrainingStressScoreMethod.type)?.getValue()).toBe(expected.method);
+        }
+    });
+
+    it('retains independent FIT FTP calibration through repeated regeneration', async () => {
+        const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+        const { FitEncoder, FitBaseType } = await import('fit-file-parser/encoder');
+        const field = (number: number, value: number, baseType = FitBaseType.Uint8) => ({
+            number, value, baseType,
+            size: baseType === FitBaseType.Uint32 ? 4 : baseType === FitBaseType.Uint16 ? 2 : 1,
+        });
+        const encoder = new FitEncoder();
+        const start = FitEncoder.toFitTimestamp(new Date('2026-01-01T10:00:00Z'));
+        encoder.writeMessage(0, [field(0, 4, FitBaseType.Enum), field(1, 1, FitBaseType.Uint16)]);
+        for (let second = 0; second < 60; second++) {
+            encoder.writeMessage(20, [field(253, start + second, FitBaseType.Uint32),
+                field(7, 100, FitBaseType.Uint16)], 1);
+        }
+        encoder.writeMessage(18, [field(253, start + 60, FitBaseType.Uint32), field(2, start, FitBaseType.Uint32),
+            field(5, 2, FitBaseType.Enum), field(7, 60000, FitBaseType.Uint32), field(8, 60000, FitBaseType.Uint32),
+            field(45, 250, FitBaseType.Uint16)], 2);
+        const bytes = encoder.close();
+        const parsedEvent = await sports.EventImporterFIT.getFromArrayBuffer(
+            bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+            new sports.ActivityParsingOptions({ generateUnitStreams: false }));
+        const activity = parsedEvent.getFirstActivity();
+        const expected = sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity);
+        expect(expected.automatic).toMatchObject({ method: 'POWER', provenance: 'calculated', estimated: false });
+        expect(expected.automatic.score).toBeGreaterThan(0);
+        hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
+        hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(
+            item => sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(item));
+        hoisted.evaluateTrainingStressScore.mockImplementation(
+            item => sports.ActivityUtilities.evaluateTrainingStressScore(item));
+
+        for (let pass = 0; pass < 2; pass++) {
+            await reparseEventFromOriginalFiles('u1', 'e1', { mode: 'regenerate',
+                eventData: { originalFile: { path: 'users/u1/events/e1/original.fit' } },
+                activityDocs: [], targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
+            expect(activity.getStat(sports.DataFTP.type)?.getValue()).toBe(250);
+            expect(activity.getStat(sports.DataPowerNormalized.type)?.getValue()).toBe(100);
+            expect(activity.getStat(sports.DataPowerIntensityFactor.type)?.getValue()).toBe(0.4);
+            expect(sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity)).toEqual(expected);
+            expect(activity.getStat(sports.DataTrainingStressScore.type)?.getValue()).toBe(expected.automatic.score);
+            expect(activity.getStat(sports.DataTrainingStressScoreMethod.type)?.getValue()).toBe('POWER');
+        }
+    });
+
+    it.each([
+        { recordDuringPause: true, imported: undefined },
+        { recordDuringPause: false, imported: undefined },
+        { recordDuringPause: true, imported: 0 },
+    ])('keeps timer-aware HR TSS through repeated regeneration: %j', async ({ recordDuringPause, imported }) => {
+        const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+        const { FitEncoder, FitBaseType } = await import('fit-file-parser/encoder');
+        const field = (number: number, value: number, baseType = FitBaseType.Uint8) => ({ number, value, baseType,
+            size: baseType === FitBaseType.Uint32 ? 4 : baseType === FitBaseType.Uint16 ? 2 : 1 });
+        const encoder = new FitEncoder();
+        const start = FitEncoder.toFitTimestamp(new Date('2026-01-01T10:00:00Z'));
+        encoder.writeMessage(0, [field(0, 4, FitBaseType.Enum), field(1, 1, FitBaseType.Uint16)]);
+        // Synthetic hour: forty active minutes at threshold, twenty paused minutes.
+        for (let second = 0; second <= 3600; second++) {
+            const paused = second > 1200 && second < 2400;
+            if (paused && !recordDuringPause) continue;
+            encoder.writeMessage(20, [field(253, start + second, FitBaseType.Uint32), field(3, paused ? 190 : 165)], 1);
+        }
+        for (const [second, type] of [[0, 0], [1200, 4], [2400, 0], [3600, 4]]) {
+            encoder.writeMessage(21, [field(253, start + second, FitBaseType.Uint32),
+                field(0, 0, FitBaseType.Enum), field(1, type, FitBaseType.Enum)], 2);
+        }
+        encoder.writeMessage(18, [field(254, 0, FitBaseType.Uint16), field(253, start + 3600, FitBaseType.Uint32),
+            field(2, start, FitBaseType.Uint32), field(5, 2, FitBaseType.Enum),
+            field(7, 3600000, FitBaseType.Uint32), field(8, 2400000, FitBaseType.Uint32),
+            ...(imported === undefined ? [] : [field(35, imported * 10, FitBaseType.Uint16)])], 3);
+        encoder.writeMessage(216, [field(0, 18, FitBaseType.Uint16), field(1, 0, FitBaseType.Uint16),
+            field(11, 190), field(12, 55), field(13, 165)], 4);
+        const bytes = encoder.close();
+        const parsedEvent = await sports.EventImporterFIT.getFromArrayBuffer(
+            bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+            new sports.ActivityParsingOptions({ generateUnitStreams: false }));
+        const activity = parsedEvent.getFirstActivity();
+        const expected = sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity);
+        const score = imported ?? 66.7;
+        const method = imported === undefined ? 'HR' : 'IMPORTED';
+        expect(expected.automatic).toMatchObject({ method, score });
+        hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
+        hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(
+            item => sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(item));
+        hoisted.evaluateTrainingStressScore.mockImplementation(
+            item => sports.ActivityUtilities.evaluateTrainingStressScore(item));
+        for (let pass = 0; pass < 2; pass++) {
+            await reparseEventFromOriginalFiles('u1', 'e1', { mode: 'regenerate',
+                eventData: { originalFile: { path: 'users/u1/events/e1/original.fit' } },
+                activityDocs: [], targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
+            expect(activity.getStat(sports.DataTimerTime.type)?.getValue()).toBe(2400);
+            expect(activity.getStat(sports.DataTrainingStressScore.type)?.getValue()).toBe(score);
+            expect(activity.getStat(sports.DataTrainingStressScoreMethod.type)?.getValue()).toBe(method);
+            expect(sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity)).toEqual(expected);
+        }
+    });
+
+    it.each(['missing-power', 'missing-timer', 'stopped-zero-timer', 'missing-hr'] as const)(
+        'retains file evidence for %s through repeated regeneration', async kind => {
+            const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+            const { FitEncoder, FitBaseType } = await import('fit-file-parser/encoder');
+            const field = (number: number, value: number, baseType = FitBaseType.Uint8) => ({ number, value, baseType,
+                size: baseType === FitBaseType.Uint32 ? 4 : baseType === FitBaseType.Uint16 ? 2 : 1 });
+            const encoder = new FitEncoder();
+            const start = FitEncoder.toFitTimestamp(new Date('2026-01-01T10:00:00Z'));
+            encoder.writeMessage(0, [field(0, 4, FitBaseType.Enum), field(1, 1, FitBaseType.Uint16)]);
+            if (kind === 'missing-hr') encoder.writeMessage(3, [field(4, 700, FitBaseType.Uint16)], 5);
+            for (let second = 0; second <= 3600; second++) {
+                encoder.writeMessage(20, [field(253, start + second, FitBaseType.Uint32), field(3, kind === 'missing-hr' && second !== 1800 ? 0 : 165),
+                    ...(kind !== 'missing-hr' && (kind !== 'missing-power' || second === 0) ? [field(7, 250, FitBaseType.Uint16)] : [])], 1);
+            }
+            const timerEvents = kind === 'missing-timer' ? [[0, 0], [1200, 4], [2400, 0], [3600, 4]]
+                : kind === 'stopped-zero-timer' ? [[0, 4]] : [[0, 0], [3600, 4]];
+            for (const [second, type] of timerEvents) {
+                encoder.writeMessage(21, [field(253, start + second, FitBaseType.Uint32),
+                    field(0, 0, FitBaseType.Enum), field(1, type, FitBaseType.Enum)], 2);
+            }
+            encoder.writeMessage(18, [field(254, 0, FitBaseType.Uint16), field(253, start + 3600, FitBaseType.Uint32),
+                field(2, start, FitBaseType.Uint32), field(5, 2, FitBaseType.Enum), field(7, 3600000, FitBaseType.Uint32),
+                ...(kind === 'missing-timer' ? [] : [field(8, kind === 'stopped-zero-timer' ? 0 : 3600000, FitBaseType.Uint32)]),
+                field(11, 210, FitBaseType.Uint16), field(45, 250, FitBaseType.Uint16)], 3);
+            encoder.writeMessage(216, [field(0, 18, FitBaseType.Uint16), field(1, 0, FitBaseType.Uint16),
+                field(11, 190), field(12, 55), field(13, 165)], 4);
+            const bytes = encoder.close();
+            const parsedEvent = await sports.EventImporterFIT.getFromArrayBuffer(
+                bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+                new sports.ActivityParsingOptions({ generateUnitStreams: false }));
+            const activity = parsedEvent.getFirstActivity();
+            const expected = sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity);
+            const duration = kind === 'missing-timer' ? 2400 : kind === 'stopped-zero-timer' ? 0 : 3600;
+            if (kind === 'missing-power') {
+                // Dense HR records cannot turn the sole power reading into a complete power window.
+                expect(expected.automatic).toMatchObject({ method: 'HR', score: 100, provenance: 'calculated' });
+                expect(activity.getStat(sports.DataPowerNormalized.type)).toBeUndefined();
+            } else if (kind === 'missing-hr') {
+                // A lone HR reading cannot establish load; explicit invalid readings remain boundaries.
+                expect(expected.automatic).toMatchObject({ method: 'MET', score: 9, provenance: 'calculated' });
+            } else if (kind === 'missing-timer') {
+                expect(expected.automatic).toMatchObject({ method: 'POWER', score: 66.7, provenance: 'calculated' });
+            } else {
+                // All-paused zero is evidence, not a missing duration that may fall back to elapsed time.
+                expect(expected.automatic).toMatchObject({ score: null, method: null });
+            }
+            hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
+            hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(
+                item => sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(item));
+            hoisted.evaluateTrainingStressScore.mockImplementation(item => sports.ActivityUtilities.evaluateTrainingStressScore(item));
+            for (let pass = 0; pass < 2; pass++) {
+                await reparseEventFromOriginalFiles('u1', 'e1', { mode: 'regenerate',
+                    eventData: { originalFile: { path: 'users/u1/events/e1/synthetic.fit' } },
+                    activityDocs: [], targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
+                expect(activity.getStat(sports.DataDuration.type)?.getValue()).toBe(duration);
+                expect(activity.getStat(sports.DataTimerTime.type)?.getValue()).toBe(duration);
+                expect(activity.getStat(sports.DataElapsedTime.type)?.getValue()).toBe(3600);
+                expect(sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity)).toEqual(expected);
+                expect(activity.getStat(sports.DataTrainingStressScore.type)?.getValue() ?? null).toBe(expected.automatic.score);
+                if (kind === 'missing-power') expect(activity.getStat(sports.DataPowerNormalized.type)).toBeUndefined();
+            }
+        });
+
+    it.each([0, 60])('preserves fresh EnergySense endings and minima through repeat regeneration (%s)', async ending => {
+        const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+        const origin = Date.parse('2026-01-01T10:00:00Z');
+        const iso = (second: number) => new Date(origin + second * 1000).toISOString();
+        const source = JSON.stringify({ DeviceLog: {
+            Device: { Name: 'Synthetic', Info: { HW: '1', SW: '1' } },
+            Header: { DateTime: iso(0), Duration: 10, EnduranceValid: 0 },
+            Windows: [{ Window: { Type: 'Activity', Duration: 10, Endurance: { Cur: ending, Min: 0 },
+                EnduranceDistance: { Cur: ending * 100, Min: 0 } } }],
+            Samples: [ { TimeISO8601: iso(0), Events: [{ Activity: { ActivityType: 3 } }], Endurance: 90, EnduranceDistance: 9000 },
+                { TimeISO8601: iso(5), Endurance: 70, EnduranceDistance: 7000 },
+                { TimeISO8601: iso(10), Events: [{ Lap: { Type: 'Stop' } }], Endurance: 80, EnduranceDistance: 8000 } ],
+        } });
+        hoisted.mockDownload.mockResolvedValue([Buffer.from(source)]);
+        hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(
+            item => sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(item));
+        const ids: string[] = [];
+        for (let pass = 0; pass < 2; pass++) {
+            const parsedEvent = await sports.EventImporterSuuntoJSON.getFromJSONString(source,
+                new sports.ActivityParsingOptions({ generateUnitStreams: false }));
+            const activity = parsedEvent.getFirstActivity();
+            hoisted.suuntoJSONImporter.getFromJSONString.mockResolvedValue(parsedEvent);
+            await reparseEventFromOriginalFiles('u1', 'e1', { mode: 'regenerate',
+                eventData: { originalFile: { path: 'users/u1/events/e1/synthetic.json' } },
+                activityDocs: [], targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
+            expect(activity.getStat('Stamina')?.getValue()).toBe(ending);
+            expect(activity.getStat('Minimum Stamina')?.getValue()).toBe(0);
+            // The new distance is activated only after the coordinated Sports Lib release.
+            if (activity.hasStreamData('Estimated Sustainable Distance')) {
+                expect(activity.getStat('Estimated Sustainable Distance')?.getValue()).toBe(ending * 100);
+                expect(activity.getStat('Minimum Estimated Sustainable Distance')?.getValue()).toBe(0);
+                expect(activity.getStatsAsArray().filter(stat => stat.getType() === 'Estimated Sustainable Distance')).toHaveLength(1);
+            }
+            ids.push(activity.getID());
+        }
+        expect(ids[0]).toBe(ids[1]);
+    });
+
+    it.each(['recorded-pauses', 'nonfirst-activity', 'all-paused'] as const)(
+        'retains Suunto %s evidence through repeated original-file regeneration', async kind => {
+        const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+        const origin = Date.parse('2026-01-01T10:00:00Z');
+        const iso = (second: number) => new Date(origin + second * 1000).toISOString();
+        const allPaused = kind === 'all-paused';
+        const duration = allPaused ? 0 : 2400;
+        const expectedScore = allPaused ? null : 66.7;
+        const source = JSON.stringify({ DeviceLog: {
+            Device: { Name: 'Synthetic', Info: { HW: '1', SW: '1' } },
+            Samples: [{ TimeISO8601: iso(0), Events: [...(kind === 'nonfirst-activity' ? [{ Pause: { State: false } }] : []), { Activity: { ActivityType: 3 } }] },
+                ...Array.from({ length: 3601 }, (_, second) => ({ TimeISO8601: iso(second),
+                    Speed: !allPaused && second >= 1200 && second < 2400 ? 10 : 3,
+                    ...(!allPaused && (second === 1200 || second === 2400) ? { Events: [{ Pause: { State: second === 1200 } }] } : {}) })),
+                { TimeISO8601: iso(3600), Events: [{ Lap: { Type: 'Stop' } }] }],
+            Windows: [{ Window: { Type: 'Activity', Duration: 3600, PauseDuration: allPaused ? 3600 : 1200 } }],
+            Header: { DateTime: iso(0), Duration: 3600, PauseDuration: allPaused ? 3600 : 1200, SpeedZones: { Zone1Duration: 0, Zone2Duration: 0, Zone3Duration: 0, Zone4Duration: 0,
+                Zone5Duration: duration, Zone1LowerLimit: 1, Zone2LowerLimit: 1.5, Zone3LowerLimit: 2,
+                Zone4LowerLimit: 2.5, Zone5LowerLimit: 3 } },
+        } });
+        const parsedEvent = await sports.EventImporterSuuntoJSON.getFromJSONString(source,
+            new sports.ActivityParsingOptions({ generateUnitStreams: false }));
+        const activity = parsedEvent.getFirstActivity();
+        const expected = sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity);
+        expect(expected.automatic).toMatchObject({ method: allPaused ? null : 'PACE', score: expectedScore });
+        hoisted.suuntoJSONImporter.getFromJSONString.mockResolvedValue(parsedEvent);
+        hoisted.mockDownload.mockResolvedValue([Buffer.from(source)]);
+        hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(
+            item => sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(item));
+        hoisted.evaluateTrainingStressScore.mockImplementation(item => sports.ActivityUtilities.evaluateTrainingStressScore(item));
+        for (let pass = 0; pass < 2; pass++) {
+            await reparseEventFromOriginalFiles('u1', 'e1', { mode: 'regenerate',
+                eventData: { originalFile: { path: 'users/u1/events/e1/synthetic.json' } },
+                activityDocs: [], targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
+            expect(activity.getStat(sports.DataDuration.type)?.getValue()).toBe(duration);
+            expect(activity.getStat(sports.DataTrainingStressScore.type)?.getValue() ?? null).toBe(expectedScore);
+            expect(sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity)).toEqual(expected);
+            if (allPaused) expect(activity.getAllEvents()).toEqual([]);
+            else expect(activity.getAllEvents()).toEqual(expect.arrayContaining([
+                expect.objectContaining({ timestamp: 1200 }), expect.objectContaining({ timestamp: 2400 }),
+            ]));
+        }
+    });
+
+    it.each(['pool', 'multisport', 'pace-uphill', 'pace-gap', 'pace-zero'] as const)(
+        'preserves corrected %s file inputs through QS regeneration', async kind => {
+            const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+            const origin = new Date('2026-01-01T10:00:00Z');
+            let parsedEvent: Awaited<ReturnType<typeof sports.EventImporterFIT.getFromArrayBuffer>>;
+            if (kind.startsWith('pace-')) {
+                const iso = (second: number) => new Date(+origin + second * 1000).toISOString();
+                const seconds = kind === 'pace-gap' ? [0, 3600] : Array.from({ length: 3601 }, (_, second) => second);
+                parsedEvent = await sports.EventImporterSuuntoJSON.getFromJSONString(JSON.stringify({ DeviceLog: {
+                    Device: { Name: 'Synthetic', Info: { HW: '1', SW: '1' } },
+                    Samples: [{ TimeISO8601: iso(0), Events: [{ Activity: { ActivityType: 3 } }] },
+                        ...seconds.map(second => ({ TimeISO8601: iso(second), Speed: kind === 'pace-zero' ? 0 : 3,
+                            VerticalSpeed: kind === 'pace-uphill' ? 0.3 : 0 })),
+                        { TimeISO8601: iso(3600), Events: [{ Lap: { Type: 'Stop' } }] }],
+                    Windows: [{ Window: { Type: 'Activity', Duration: 3600 } }],
+                    Header: { DateTime: iso(0), Duration: 3600, SpeedZones: { Zone1Duration: 0, Zone2Duration: 0,
+                        Zone3Duration: 0, Zone4Duration: 0, Zone5Duration: 3600, Zone2LowerLimit: 1,
+                        Zone3LowerLimit: 2, Zone4LowerLimit: 2.5, Zone5LowerLimit: 3 } },
+                } }), new sports.ActivityParsingOptions({ generateUnitStreams: false }));
+            } else {
+                const { FitEncoder, FitBaseType } = await import('fit-file-parser/encoder');
+                const field = (number: number, value: number, baseType = FitBaseType.Uint8) => ({ number, value, baseType,
+                    size: baseType === FitBaseType.Uint32 ? 4 : baseType === FitBaseType.Uint16 ? 2 : 1 });
+                const encoder = new FitEncoder(), start = FitEncoder.toFitTimestamp(origin);
+                encoder.writeMessage(0, [field(0, 4, FitBaseType.Enum), field(1, 1, FitBaseType.Uint16)]);
+                const seconds = kind === 'pool' ? [600, 1800, 3000] : Array.from({ length: 3601 }, (_, second) => second);
+                for (const second of seconds) encoder.writeMessage(20, [field(253, start + second, FitBaseType.Uint32),
+                    field(3, 165)], 1);
+                if (kind === 'multisport') {
+                    for (const [second, type] of [[0, 0], [1200, 4], [2400, 0], [3600, 4]]) {
+                        encoder.writeMessage(21, [field(253, start + second, FitBaseType.Uint32),
+                            field(0, 0, FitBaseType.Enum), field(1, type, FitBaseType.Enum)], 2);
+                    }
+                } else {
+                    for (let lap = 0; lap < 2; lap++) {
+                        const time = start + lap * 1800;
+                        encoder.writeMessage(101, [field(254, lap, FitBaseType.Uint16), field(253, time + 1799, FitBaseType.Uint32),
+                            field(2, time, FitBaseType.Uint32), field(3, 1800000, FitBaseType.Uint32),
+                            field(4, 1800000, FitBaseType.Uint32), field(6, 1000, FitBaseType.Uint16), field(12, 1, FitBaseType.Enum)], 6);
+                        encoder.writeMessage(19, [field(254, lap, FitBaseType.Uint16), field(253, time + 1800, FitBaseType.Uint32),
+                            field(2, time, FitBaseType.Uint32), field(7, 1800000, FitBaseType.Uint32),
+                            field(8, 1800000, FitBaseType.Uint32), field(9, 180000, FitBaseType.Uint32),
+                            field(32, 1, FitBaseType.Uint16), field(35, lap, FitBaseType.Uint16), field(15, 100)], 3);
+                    }
+                }
+                for (let leg = 0; leg < (kind === 'pool' ? 1 : 2); leg++) {
+                    encoder.writeMessage(18, [field(254, leg, FitBaseType.Uint16),
+                        field(253, start + (kind === 'pool' ? 3600 : (leg + 1) * 1800), FitBaseType.Uint32),
+                        field(2, start + leg * 1800, FitBaseType.Uint32), field(5, kind === 'pool' ? 5 : 11, FitBaseType.Enum),
+                        field(7, kind === 'pool' ? 3600000 : 1800000, FitBaseType.Uint32),
+                        field(8, kind === 'pool' ? 3600000 : 1200000, FitBaseType.Uint32),
+                        ...(kind === 'pool' ? [field(6, 17, FitBaseType.Enum), field(26, 2, FitBaseType.Uint16)] : [])], 4);
+                    encoder.writeMessage(216, [field(0, 18, FitBaseType.Uint16), field(1, leg, FitBaseType.Uint16),
+                        field(11, 190), field(12, 55), field(13, 165)], 5);
+                }
+                const bytes = encoder.close();
+                parsedEvent = await sports.EventImporterFIT.getFromArrayBuffer(
+                    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+                    new sports.ActivityParsingOptions({ generateUnitStreams: false }));
+            }
+            const activities = parsedEvent.getActivities();
+            const expected = activities.map(item => sports.ActivityUtilities.getTrainingStressScoreEvaluations(item));
+            // Pool HR covers 600..3000 seconds; do not extrapolate before its first observation.
+            const score = kind === 'pool' ? 66.7 : kind === 'multisport' ? 33.3
+                : kind === 'pace-uphill' ? 274.8 : kind === 'pace-zero' ? 0 : null;
+            expect(expected.every(item => item.automatic.score === score)).toBe(true);
+            hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
+            hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(
+                item => sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(item));
+            hoisted.evaluateTrainingStressScore.mockImplementation(item => sports.ActivityUtilities.evaluateTrainingStressScore(item));
+            for (let pass = 0; pass < 2; pass++) {
+                await reparseEventFromOriginalFiles('u1', 'e1', { mode: 'regenerate',
+                    eventData: { originalFile: { path: 'users/u1/events/e1/synthetic.fit' } },
+                    activityDocs: [], targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
+                expect(activities.map(item => sports.ActivityUtilities.getTrainingStressScoreEvaluations(item))).toEqual(expected);
+                for (const item of activities) expect(item.getStat(sports.DataTrainingStressScore.type)?.getValue() ?? null).toBe(score);
+                if (kind === 'pool') {
+                    expect(activities[0].getStream(sports.DataHeartRate.type).getData(true, true)).toEqual([165, 165, 165]);
+                    expect(activities[0].getStreamData(sports.DataHeartRate.type)[1200]).toBeNull();
+                }
+                if (kind === 'multisport') expect(activities[1].getAllEvents()).toEqual(expect.arrayContaining([
+                    expect.objectContaining({ timestamp: 0 }),
+                ]));
+            }
+        });
+
+    it.each(['summary-only', 'single-zero', 'sparse-counter', 'constant-counter', 'reset-counter', 'interior-reset', 'nonzero-resets', 'moving-counter', 'stalled-counter', 'larger-counter', 'moving-gps', 'recorded-zero', 'missing-summary', 'missing-summary-moving-counter', 'zero-summary-moving-counter', 'tcx-single-zero'] as const)(
+        'regenerate preserves the freshly parsed total independently of stream coverage: %s', async kind => {
+            const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+            let parsedEvent: Awaited<ReturnType<typeof sports.EventImporterFIT.getFromArrayBuffer>>;
+            let payload: Buffer;
+            const extension = kind === 'tcx-single-zero' ? 'tcx' : 'fit';
+            const origin = new Date('2026-01-01T10:00:00Z');
+            if (kind === 'tcx-single-zero') {
+                const { DOMParser } = await import('xmldom');
+                // Only the first recorded point has distance. Later HR timestamps
+                // must retain missing distance rather than suggest no travel.
+                const xml = `<TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2">
+                    <Activities><Activity Sport="Other"><Id>${origin.toISOString()}</Id><Lap StartTime="${origin.toISOString()}">
+                    <TotalTimeSeconds>60</TotalTimeSeconds><DistanceMeters>1000</DistanceMeters><Calories>7</Calories>
+                    <Intensity>Active</Intensity><TriggerMethod>Manual</TriggerMethod><Track>${[0, 30, 60].map(second =>
+                        `<Trackpoint><Time>${new Date(+origin + second * 1000).toISOString()}</Time>${second === 0 ? '<DistanceMeters>0</DistanceMeters>' : ''}
+                        <HeartRateBpm><Value>90</Value></HeartRateBpm></Trackpoint>`).join('')}</Track></Lap></Activity></Activities>
+                    </TrainingCenterDatabase>`;
+                payload = Buffer.from(xml);
+                parsedEvent = await sports.EventImporterTCX.getFromXML(new DOMParser().parseFromString(xml, 'application/xml'),
+                    new sports.ActivityParsingOptions({ generateUnitStreams: false }));
+                hoisted.tcxImporter.getFromXML.mockResolvedValue(parsedEvent);
+            } else {
+                const { FitEncoder, FitBaseType } = await import('fit-file-parser/encoder');
+                const encoder = new FitEncoder();
+                const start = FitEncoder.toFitTimestamp(origin);
+                const field = (number: number, value: number, baseType = FitBaseType.Uint8) => ({
+                    number, value, baseType,
+                    size: baseType === FitBaseType.Uint32 || baseType === FitBaseType.Sint32 ? 4 : baseType === FitBaseType.Uint16 ? 2 : 1,
+                });
+                encoder.writeMessage(0, [field(0, 4, FitBaseType.Enum), field(1, 1, FitBaseType.Uint16)]);
+                encoder.writeMessage(3, [field(4, 700, FitBaseType.Uint16)], 1);
+                const counters = kind === 'interior-reset' ? [0, 400, 0, 600]
+                    : kind === 'nonzero-resets' ? [10, 400, 50, 600, 100, 700] : undefined;
+                const seconds = counters ? counters.map((_, index) => index * 60 / (counters.length - 1)) : [0, 30, 60];
+                for (const [index, second] of seconds.entries()) {
+                    const counter = counters ? counters[index] : kind === 'single-zero' ? second === 0 ? 0 : undefined
+                        : kind === 'sparse-counter' ? [0, undefined, 1000][index]
+                            : kind === 'constant-counter' ? 12 : kind === 'reset-counter' ? [0, 100, 0][index]
+                            : kind === 'moving-counter' ? [10, 60, 110][index]
+                                : kind === 'stalled-counter' ? [0, 90, 90][index]
+                                    : kind === 'larger-counter' ? [0, 1000, 2000][index]
+                                        : kind.endsWith('-moving-counter') ? [0, 50, 100][index] : undefined;
+                    encoder.writeMessage(20, [field(253, start + second, FitBaseType.Uint32), field(3, 90),
+                        ...(counter === undefined ? [] : [field(5, counter * 100, FitBaseType.Uint32)]),
+                        ...(kind === 'moving-gps' ? [field(0, Math.round((60 + index * 0.001) * 2 ** 31 / 180), FitBaseType.Sint32),
+                            field(1, Math.round(24 * 2 ** 31 / 180), FitBaseType.Sint32)] : [])], 2);
+                }
+                encoder.writeMessage(18, [field(254, 0, FitBaseType.Uint16), field(253, start + 60, FitBaseType.Uint32),
+                    field(2, start, FitBaseType.Uint32), field(5, 11, FitBaseType.Enum),
+                    field(7, 60000, FitBaseType.Uint32), field(8, 60000, FitBaseType.Uint32),
+                    ...(kind === 'missing-summary' ? [] : [field(9, kind === 'recorded-zero' ? 0 : 100000, FitBaseType.Uint32)]),
+                    field(11, 7, FitBaseType.Uint16), field(35, 0, FitBaseType.Uint16)], 3);
+                const bytes = encoder.close();
+                payload = Buffer.from(bytes);
+                parsedEvent = await sports.EventImporterFIT.getFromArrayBuffer(
+                    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+                    new sports.ActivityParsingOptions({ generateUnitStreams: false }));
+                hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
+            }
+            hoisted.mockDownload.mockResolvedValue([payload]);
+            const activity = parsedEvent.getFirstActivity();
+            const expectedEvaluations = sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity);
+            const recordedCounter = activity.hasStreamData(sports.DataDistance.type)
+                ? [...activity.getStreamData(sports.DataDistance.type)] : undefined;
+            if (kind === 'sparse-counter' || kind === 'single-zero' || kind === 'tcx-single-zero') {
+                expect(recordedCounter?.[0]).toBe(0);
+                expect(recordedCounter?.[30]).toBeNull();
+                expect(activity.getStreamData(sports.DataHeartRate.type)[30]).toBe(90);
+                if (kind === 'sparse-counter') expect(recordedCounter?.[60]).toBe(1000);
+            }
+            const derivesDistance = kind.endsWith('-moving-counter');
+            const expectedDistance = derivesDistance ? 100 : kind === 'recorded-zero' || kind === 'missing-summary' ? 0 : 1000;
+            expect(activity.getStat(sports.DataDistance.type)?.getValue()).toBe(
+                kind === 'recorded-zero' || kind === 'missing-summary' ? 0 : 1000);
+            // Exercise the regeneration boundary even when a parser has no usable summary.
+            if (kind === 'missing-summary-moving-counter') activity.removeStat(sports.DataDistance.type);
+            if (kind === 'zero-summary-moving-counter') activity.addStat(new sports.DataDistance(0));
+            hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(
+                item => {
+                    if (kind === 'interior-reset' || kind === 'nonzero-resets') {
+                        expect(item.getStat(sports.DataDistance.type)?.getValue()).toBe(expectedDistance);
+                    }
+                    sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(item);
+                });
+            hoisted.evaluateTrainingStressScore.mockImplementation(item => sports.ActivityUtilities.evaluateTrainingStressScore(item));
+            for (let pass = 0; pass < 2; pass++) {
+                hoisted.reGenerateStatsForEvent.mockImplementationOnce(event => sports.EventUtilities.reGenerateStatsForEvent(event));
+                const result = await reparseEventFromOriginalFiles('u1', 'e1', { mode: 'regenerate',
+                    eventData: { originalFile: { path: `users/u1/events/e1/synthetic.${extension}` } },
+                    activityDocs: [], targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
+                expect(result.status).toBe('completed');
+                expect(activity.getStat(sports.DataDistance.type)?.getValue()).toBeCloseTo(expectedDistance, 1);
+                // The source parent still reports 1000 in the synthetic child-missing cases.
+                // Regeneration can fill the leg's distance without replacing that independent observation.
+                expect(parsedEvent.getStat(sports.DataDistance.type)?.getValue()).toBeCloseTo(derivesDistance ? 1000 : expectedDistance, 1);
+                if (recordedCounter) expect(activity.getStreamData(sports.DataDistance.type)).toEqual(recordedCounter);
+                expect(sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity)).toEqual(expectedEvaluations);
+                expect(activity.getStat(sports.DataDuration.type)?.getValue()).toBe(60);
+                if (extension === 'fit') {
+                    expect(activity.getStat(sports.DataTrainingStressScore.type)?.getValue()).toBe(0);
+                    expect(activity.getStat(sports.DataTrainingStressScoreMethod.type)?.getValue()).toBe('IMPORTED');
+                }
+            }
+        });
+
+    it.each(['truncated', 'late-first-length', 'complete', 'incomplete-lengths', 'contradictory-lap', 'overlapping-lengths'] as const)(
+        'regenerate preserves parser-selected pool distance without reinterpreting source evidence: %s', async kind => {
+            const sports = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+            const { FitEncoder, FitBaseType } = await import('fit-file-parser/encoder');
+            const encoder = new FitEncoder();
+            const start = FitEncoder.toFitTimestamp(new Date('2026-01-01T10:00:00Z'));
+            const field = (number: number, value: number, baseType = FitBaseType.Uint8) => ({ number, value, baseType,
+                size: baseType === FitBaseType.Uint32 ? 4 : baseType === FitBaseType.Uint16 ? 2 : 1 });
+            const lengthCount = kind === 'incomplete-lengths' ? 9 : 10;
+            const corroborated = kind !== 'incomplete-lengths' && kind !== 'contradictory-lap' && kind !== 'overlapping-lengths';
+            const counterEnd = kind === 'truncated' || !corroborated ? 120 : 300;
+            encoder.writeMessage(0, [field(0, 4, FitBaseType.Enum), field(1, 23, FitBaseType.Uint16)]);
+            for (let index = 0; index < lengthCount; index++) encoder.writeMessage(101, [field(254, index, FitBaseType.Uint16),
+                field(253, start + (kind === 'overlapping-lengths' && index === 1 ? 45 : (index + 1) * 30), FitBaseType.Uint32),
+                field(2, start + (kind === 'overlapping-lengths' && index === 1 ? 15 : index * 30), FitBaseType.Uint32),
+                field(3, 30000, FitBaseType.Uint32), field(4, 30000, FitBaseType.Uint32), field(12, 1, FitBaseType.Enum)], 1);
+            for (let second = kind === 'late-first-length' ? 30 : 0; second <= counterEnd; second += 30)
+                encoder.writeMessage(20, [field(253, start + second, FitBaseType.Uint32),
+                    field(5, Math.round(second * 25000 / 300), FitBaseType.Uint32)], 2);
+            encoder.writeMessage(19, [field(254, 0, FitBaseType.Uint16), field(253, start + 300, FitBaseType.Uint32),
+                field(2, start, FitBaseType.Uint32), field(7, 300000, FitBaseType.Uint32), field(8, 300000, FitBaseType.Uint32),
+                field(9, kind === 'contradictory-lap' ? 22500 : 25000, FitBaseType.Uint32),
+                field(32, lengthCount, FitBaseType.Uint16), field(35, 0, FitBaseType.Uint16)], 3);
+            const tss = kind === 'late-first-length' ? 0 : 18.7;
+            encoder.writeMessage(18, [field(254, 0, FitBaseType.Uint16), field(253, start + 300, FitBaseType.Uint32),
+                field(2, start, FitBaseType.Uint32), field(5, 5, FitBaseType.Enum), field(6, 17, FitBaseType.Enum),
+                field(7, 300000, FitBaseType.Uint32), field(8, 300000, FitBaseType.Uint32), field(9, 25000, FitBaseType.Uint32),
+                field(25, 0, FitBaseType.Uint16), field(26, 1, FitBaseType.Uint16), field(44, 2500, FitBaseType.Uint16),
+                field(35, tss * 10, FitBaseType.Uint16)], 4);
+            const bytes = encoder.close();
+            const parsed = await sports.EventImporterFIT.getFromArrayBuffer(
+                bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+                new sports.ActivityParsingOptions({ generateUnitStreams: false }));
+            const activity = parsed.getFirstActivity();
+            const counter = [...activity.getStreamData(sports.DataDistance.type)];
+            const expectedEvaluations = sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity);
+            expect(activity.getStat(sports.DataDistance.type)?.getValue()).toBe(250);
+            expect(activity.getSwimLengths()).toHaveLength(lengthCount);
+            expect(activity.getSwimLengths().reduce((total, length) => total + length.distance!.getValue(), 0)).toBe(lengthCount * 25);
+            const recorded = counter.filter((value): value is number => typeof value === 'number');
+            expect(recorded.at(-1)! - recorded[0])
+                .toBe(counterEnd === 120 ? 100 : kind === 'late-first-length' ? 225 : 250);
+            hoisted.mockDownload.mockResolvedValue([Buffer.from(bytes)]);
+            hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsed);
+            hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(
+                item => sports.ActivityUtilities.generateMissingStreamsAndStatsForActivity(item));
+            hoisted.evaluateTrainingStressScore.mockImplementation(item => sports.ActivityUtilities.evaluateTrainingStressScore(item));
+            for (let pass = 0; pass < 2; pass++) {
+                hoisted.reGenerateStatsForEvent.mockImplementationOnce(event => sports.EventUtilities.reGenerateStatsForEvent(event));
+                const result = await reparseEventFromOriginalFiles('u1', 'e1', { mode: 'regenerate',
+                    eventData: { originalFile: { path: 'users/u1/events/e1/synthetic-pool.fit' } },
+                    activityDocs: [], targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
+                expect(result.status).toBe('completed');
+                expect(activity.getStat(sports.DataDistance.type)?.getValue()).toBe(250);
+                expect(parsed.getStat(sports.DataDistance.type)?.getValue()).toBe(250);
+                expect(activity.getStreamData(sports.DataDistance.type)).toEqual(counter);
+                expect(activity.getStat(sports.DataDuration.type)?.getValue()).toBe(300);
+                expect(activity.getStat(sports.DataTrainingStressScore.type)?.getValue()).toBe(tss);
+                expect(sports.ActivityUtilities.getTrainingStressScoreEvaluations(activity)).toEqual(expectedEvaluations);
+            }
+        });
 
     it('reparseEventFromOriginalFiles should skip activity-level regeneration in reimport mode', async () => {
         const parsedEvent = makeEvent();
@@ -2438,16 +3425,10 @@ describe('sports-lib-reparse.service', () => {
         }));
         hoisted.mockCollection.mockImplementation((path: string) => {
             if (path === 'users/u1/activities') {
-                return {
-                    where: vi.fn().mockReturnValue({
-                        get: vi.fn().mockResolvedValue({
-                            docs: [
-                                { id: 'a-old-2', data: () => ({ creator: { name: 'creator-2' }, startDate: new Date('2020-01-02T00:00:00Z') }) },
-                                { id: 'a-old-1', data: () => ({ creator: { name: 'creator-1' }, startDate: new Date('2020-01-01T00:00:00Z') }) },
-                            ],
-                        }),
-                    }),
-                };
+                return makeCollectionQuery([
+                    { id: 'a-old-2', ref: { path: 'users/u1/activities/a-old-2' }, data: () => ({ creator: { name: 'creator-2' }, startDate: new Date('2020-01-02T00:00:00Z') }) },
+                    { id: 'a-old-1', ref: { path: 'users/u1/activities/a-old-1' }, data: () => ({ creator: { name: 'creator-1' }, startDate: new Date('2020-01-01T00:00:00Z') }) },
+                ]);
             }
             return makeCollectionQuery([]);
         });

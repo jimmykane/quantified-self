@@ -1,6 +1,8 @@
-<div class="pricing-container">
-  <h1>Choose Your Plan</h1>
-  <p class="pricing-intro">Start free, then upgrade whenever you need more history, automation, or sync.</p>
+<main class="pricing-container public-pricing">
+  <header class="pricing-heading">
+    <h1>Choose your plan</h1>
+    <p>Start free. Choose Pro for automatic imports and connected services.</p>
+  </header>
 
   @if (catalog$ | async; as catalog) {
     @if (catalog.paidPlansUnavailable) {
@@ -9,100 +11,100 @@
         Paid plans are temporarily unavailable. You can still start with Starter.
       </p>
     }
+    @if (catalog.showBillingSelector) {
+      <div class="billing-control">
+        <mat-button-toggle-group [value]="billing()" hideSingleSelectionIndicator aria-label="Billing period" (change)="changeBilling($event.value)">
+          <mat-button-toggle value="month">Monthly</mat-button-toggle>
+          <mat-button-toggle value="year">Yearly</mat-button-toggle>
+        </mat-button-toggle-group>
+      </div>
+    }
 
     <div class="products-grid">
       @for (plan of catalog.plans; track plan.id) {
-        <div class="product-card-shell">
-          @if (plan.role === 'pro') {
-            <span class="plan-badge">Recommended</span>
-          }
-          <mat-card
-            class="product-card"
-            [class.single-price-card]="plan.prices.length === 1"
-            [class.pro-card]="plan.role === 'pro'"
-            [class.basic-card]="plan.role === 'basic'"
-            [class.free-card]="plan.role === 'free'">
+        <mat-card appearance="outlined" class="product-card qs-card-plain" [class.pro-card]="plan.role === 'pro'" [attr.data-plan]="plan.role">
           <mat-card-header>
-            <mat-card-title>
-              <h2 class="plan-title">{{ plan.title }}</h2>
-            </mat-card-title>
-            <mat-card-subtitle>{{ plan.subtitle }}</mat-card-subtitle>
+            <mat-card-title><h2 class="plan-title">{{ plan.title }}</h2></mat-card-title>
+            @if (plan.role === 'pro') { <span class="plan-badge">Recommended</span> }
           </mat-card-header>
-
           <mat-card-content>
-            <div class="features-list">
-              <ul>
-                @for (feature of plan.features; track feature.label) {
-                  <li>
-                    <mat-icon [class]="feature.iconClass" aria-hidden="true">{{ feature.icon }}</mat-icon>
-                    {{ feature.label }}
-                  </li>
-                }
-              </ul>
-            </div>
-
-            <div class="card-spacer"></div>
-
-            @for (price of plan.prices; track price.id) {
-              <div class="price-section plan-price-section">
-                <h3 class="price">
-                  @if (price.amount === 0) {
-                    $0
-                  } @else {
-                    {{ price.amount | currency: price.currency : 'symbol' : price.digitsInfo }}
-                  }
-                  @if (price.intervalLabel) {
-                    <span class="interval">/ {{ price.intervalLabel }}</span>
-                  }
-                </h3>
-
-                @if (price.yearlySavingsLabel) {
-                  <p class="yearly-savings-label">{{ price.yearlySavingsLabel }}</p>
-                }
-
-                @if (price.trialDays !== null) {
-                  <p class="trial-offer-copy">
-                    {{ price.trialDays }}-day free trial for eligible new members. No card needed.
+            <p class="plan-subtitle">{{ plan.subtitle }}</p>
+            <div class="plan-billing" role="group" [attr.aria-label]="plan.title + ' billing choices'">
+              @let choice = plan.billingChoices[billing()];
+              @if (catalog.showBillingSelector && choice.notice) {
+                <p class="billing-note">{{ choice.notice }}</p>
+              }
+              @for (price of choice.prices; track price.id) {
+                <div class="plan-price-section">
+                  <p class="price">
+                    <span class="price-amount">@if (price.amount === 0) { $0 } @else { {{ price.amount | currency: price.currency : 'symbol' : price.digitsInfo }} }</span>
+                    <span class="interval">{{ price.intervalLabel ? '/ ' + price.intervalLabel : 'Free forever' }}</span>
                   </p>
-                }
-
-                @if (plan.role === 'free') {
-                  <button
-                    mat-stroked-button
-                    type="button"
-                    [attr.data-plan-role]="plan.role"
-                    [attr.data-price-id]="price.id"
-                    [attr.aria-label]="plan.title + ': ' + price.ctaLabel"
-                    (click)="continueToMembership()">
-                    {{ price.ctaLabel }}
-                  </button>
-                } @else {
-                  <button
-                    mat-flat-button
-                    type="button"
-                    class="subscribe-btn qs-mat-primary"
-                    [attr.data-plan-role]="plan.role"
-                    [attr.data-price-id]="price.id"
-                    [attr.aria-label]="plan.title + ': ' + price.ctaLabel"
-                    (click)="continueToMembership()">
-                    {{ price.ctaLabel }}
-                  </button>
-                }
-
-                @if (price.showYearlySwitchHint) {
-                  <p class="trial-cta-note">Switch to yearly anytime.</p>
-                }
-              </div>
-            }
+                  @if (price.yearlySavingsLabel) {
+                    <p class="yearly-savings-label">{{ price.yearlySavingsLabel }}</p>
+                  }
+                  @if (price.trialDays !== null) {
+                    <p class="trial-offer-copy">{{ price.trialDays }}-day free trial for eligible new members.
+                      @if (plan.role === 'pro') {
+                        Payment method required. Then renews at the price above until canceled. Cancel before your trial ends to avoid payment.
+                      } @else { No card needed. }
+                    </p>
+                  } @else if (plan.role === 'free') {
+                    <p class="trial-offer-copy">No card needed.</p>
+                  }
+                  @if (plan.role === 'pro') {
+                    <button mat-flat-button type="button" class="plan-cta qs-mat-primary" [attr.data-plan-role]="plan.role" [attr.data-price-id]="price.id" [attr.aria-label]="plan.title + ': Get Started, ' + price.ctaLabel" (click)="continueToMembership(price.id)">Get Started</button>
+                  } @else {
+                    <button mat-stroked-button type="button" class="plan-cta" [attr.data-plan-role]="plan.role" [attr.data-price-id]="price.id" [attr.aria-label]="plan.title + ': ' + (plan.role === 'free' ? price.ctaLabel : 'Choose Basic, ' + price.ctaLabel)" (click)="continueToMembership(plan.role === 'free' ? undefined : price.id)">{{ plan.role === 'free' ? 'Start Free' : 'Choose Basic' }}</button>
+                  }
+                </div>
+              }
+            </div>
+            <ul class="highlights">
+              @for (feature of plan.highlights; track feature.label) {
+                <li><mat-icon aria-hidden="true">check</mat-icon><span>{{ feature.label }}</span></li>
+              }
+            </ul>
           </mat-card-content>
-          </mat-card>
-        </div>
+        </mat-card>
       }
     </div>
+    <p class="included-note">Every plan includes manual uploads, activity analysis, training plans, and MCP data access.</p>
+    <button mat-button type="button" class="feature-disclosure" [attr.aria-expanded]="expanded()" aria-controls="all-plan-features" (click)="toggleDetails()">{{ expanded() ? 'Hide full features' : 'Compare all features' }}<mat-icon iconPositionEnd>{{ expanded() ? 'expand_less' : 'expand_more' }}</mat-icon></button>
+    <div id="all-plan-features" [hidden]="!expanded()" class="all-features">
+      @for (plan of catalog.plans; track plan.id) {
+        <section><h2>{{ plan.title }}</h2><ul>@for (feature of plan.features; track feature.label) { <li>{{ feature.label }}</li> }</ul></section>
+      }
+    </div>
+    <p class="provider-note">Health and Training views use your available data. Provider imports and delivery require Pro. Provider permissions and device compatibility apply. Paid plans renew until cancelled.</p>
   } @else {
     <div class="loading-state" role="status" aria-live="polite">
       <mat-spinner diameter="40"></mat-spinner>
       <p>Loading plans...</p>
     </div>
   }
-</div>
+  <section class="plan-details" aria-labelledby="included-heading">
+    <h2 id="included-heading">Included on every plan</h2>
+    <p class="section-intro">Starter includes the tools below. Basic adds more history and customization; Pro adds connected services.</p>
+    <div class="plan-capabilities">@for (feature of sharedFeatures; track feature.title) {
+      <article><mat-icon aria-hidden="true">{{ feature.icon }}</mat-icon><div><h3>{{ feature.title }}</h3><p>{{ feature.copy }}</p><a mat-button [routerLink]="feature.path" [attr.aria-label]="'Learn more about ' + feature.title">Learn more<mat-icon iconPositionEnd>arrow_forward</mat-icon></a></div></article>
+    }</div>
+  </section>
+  <section class="plan-details" aria-label="What paid plans add">
+    <h2>What paid plans add</h2>
+    <div class="plan-capabilities plan-capabilities--paid">
+      <article><mat-icon aria-hidden="true">layers</mat-icon><div><h3>Basic: more history and customization</h3><p>Everything in Starter, plus My Tracks (Beta) and custom chart watermark text.</p></div></article>
+      <article><mat-icon aria-hidden="true">sync</mat-icon><div><h3>Pro: connected services</h3><p>Everything in Basic, plus Garmin, Suunto, COROS, and Wahoo workflows, supported history imports, and compatible activity, route, and workout delivery.</p></div></article>
+    </div>
+  </section>
+  <section class="plan-faq" aria-labelledby="faq-heading">
+    <h2 id="faq-heading">Plans and billing, explained</h2>
+    @for (faq of faqs; track faq.question; let index = $index) {
+      <article><h3><button mat-button type="button" [attr.aria-expanded]="openFaq() === index" [attr.aria-controls]="'plan-answer-' + index" (click)="toggleFaq(index)"><span class="faq-action-content"><span>{{ faq.question }}</span><mat-icon>{{ openFaq() === index ? 'expand_less' : 'expand_more' }}</mat-icon></span></button></h3>
+        <div [id]="'plan-answer-' + index" [hidden]="openFaq() !== index"><p>{{ faq.answer }}</p></div>
+      </article>
+    }
+    <p class="membership-help">Your data stays yours. Original activity files can be exported, and existing activities and routes are retained when you downgrade.</p>
+    <a mat-button routerLink="/help" fragment="plans-and-billing">Read the membership guide<mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
+  </section>
+</main>

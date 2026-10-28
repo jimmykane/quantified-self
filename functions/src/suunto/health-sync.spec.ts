@@ -7,17 +7,14 @@ import { getTokenCredentialSnapshot } from '../token-refresh-coordinator';
 const hoisted = vi.hoisted(() => ({
   requestGet: vi.fn(),
   getTokenData: vi.fn(),
-  shouldSkipQueueWorkForDeletedUser: vi.fn(),
-  tokenGet: vi.fn(),
-  tokenRootGet: vi.fn(),
+  validateCurrentSuuntoWebhookWriteLifecycle: vi.fn(),
+  userDeleting: false,
   tokenData: {} as Record<string, unknown>,
   tokenRootData: {} as Record<string, unknown>,
   connectionStateGeneration: 'connection-generation-1',
-  captureCurrentSuuntoWebhookWriteLifecycleGuards: vi.fn(),
   metaRef: { path: 'users/staged-user/meta/suuntoApp' },
   tokenRootRef: {
     path: 'suuntoAppAccessTokens/staged-user',
-    get: (...args: unknown[]) => hoisted.tokenRootGet(...args),
   },
 }));
 
@@ -37,16 +34,9 @@ vi.mock('../config', () => ({
   config: { suuntoapp: { subscription_key: 'test-subscription-key' } },
 }));
 
-vi.mock('../request-helper', () => ({
+vi.mock('../request-helper', async importOriginal => ({
+  ...await importOriginal<typeof import('../request-helper')>(),
   get: hoisted.requestGet,
-}));
-
-vi.mock('../service-token-store', () => ({
-  getServiceTokenRootDocumentRef: vi.fn(() => hoisted.tokenRootRef),
-}));
-
-vi.mock('../queue/user-deletion-skip', () => ({
-  shouldSkipQueueWorkForDeletedUser: hoisted.shouldSkipQueueWorkForDeletedUser,
 }));
 
 vi.mock('../tokens', () => ({
@@ -67,21 +57,41 @@ vi.mock('../tokens', () => ({
 
 vi.mock('./health-webhook-binding-lifecycle', async importOriginal => ({
   ...await importOriginal<typeof import('./health-webhook-binding-lifecycle')>(),
-  captureCurrentSuuntoWebhookWriteLifecycleGuards:
-    (...args: unknown[]) => hoisted.captureCurrentSuuntoWebhookWriteLifecycleGuards(...args),
+  validateCurrentSuuntoWebhookWriteLifecycle:
+    (...args: unknown[]) => hoisted.validateCurrentSuuntoWebhookWriteLifecycle(...args),
 }));
 
 import {
+  getSuuntoHealthRequestTelemetry,
+  getSuuntoHealthFailureTelemetry,
   processSuuntoHealthQueueItem,
   sanitizeSuuntoHealthErrorForTelemetry,
   suuntoHealthSyncTestInternals,
   SuuntoHealthRequestError,
 } from './health-sync';
-import { SuuntoHealthValidationError } from './health';
+import { SuuntoHealthValidationError, SuuntoHealthResponseLimitError, SUUNTO_HEALTH_MAX_RAW_SAMPLE_ROWS } from './health';
+import { ResponseBodyTooLargeError } from '../request-helper';
 import type { SuuntoWebhookWriteLifecycleGuards } from './health-webhook-binding-lifecycle';
 
 const START_MS = Date.parse('2026-08-26T00:00:00.000Z');
 const END_MS = Date.parse('2026-08-27T00:00:00.000Z');
+
+async function drainWindows(item: SleepSyncQueueItemInterface) {
+  const snapshot = tokenSnapshot();
+  const records = new Map<string, Awaited<ReturnType<typeof processSuuntoHealthQueueItem>>['healthResults'][number]>();
+  const attemptCounts: number[] = [];
+  for (let attempts = 0; attempts < 57; attempts++) {
+    const before = hoisted.requestGet.mock.calls.length;
+    const result = await processSuuntoHealthQueueItem(item, snapshot, 'staged-user', currentAuthorityGuards(snapshot));
+    attemptCounts.push(hoisted.requestGet.mock.calls.length - before);
+    for (const record of result.healthResults) records.set(record.input.sourceRecordKey, record);
+    if (!result.continuation) return { healthResults: [...records.values()], attemptCounts };
+    expect(result.continuation.nextStartMs).toBeGreaterThan(item.suuntoHealthProgress?.nextStartMs ?? item.rangeStartMs!);
+    item = { ...item, suuntoHealthProgress: { ...result.continuation,
+      recordsWritten: 0, recordsUnchanged: 0, recordsStale: 0, lastObservedAtMs: 0 } };
+  }
+  throw Error('Continuation did not finish');
+}
 
 function tokenProjection(accessToken: string): Record<string, unknown> {
   return {
@@ -95,6 +105,12 @@ function tokenProjection(accessToken: string): Record<string, unknown> {
   };
 }
 
+function tokenReturnProjection(): Record<string, unknown> {
+  const projection = { ...hoisted.tokenData };
+  delete projection.tokenCredentialGeneration;
+  return projection;
+}
+
 function tokenSnapshot(): admin.firestore.DocumentSnapshot {
   return {
     id: 'suunto-account-1',
@@ -104,7 +120,6 @@ function tokenSnapshot(): admin.firestore.DocumentSnapshot {
       id: 'suunto-account-1',
       path: 'suuntoAppAccessTokens/staged-user/tokens/suunto-account-1',
       parent: { parent: { id: 'staged-user' } },
-      get: hoisted.tokenGet,
     },
   } as unknown as admin.firestore.DocumentSnapshot;
 }
@@ -167,6 +182,60 @@ function queueItem(): SleepSyncQueueItemInterface {
 }
 
 describe('Suunto Health provider sync', () => {
+  it.each([10, 14, 4])('retains RPC code %s without error messages, account paths or credentials', code => {
+    const error = Object.assign(new Error('private-account/private-token/private-health'), {
+      code, details: 'private-details', cause: new Error('private-cause'),
+    });
+    expect(getSuuntoHealthFailureTelemetry(error, 'health_write', 42)).toEqual({
+      errorCode: 'suunto_health_processing_failed', errorName: 'Error', failureCategory: 'rpc_error',
+      failureStage: 'health_write', processingElapsedMs: 42, rpcStatusCode: code,
+    });
+    expect(sanitizeSuuntoHealthErrorForTelemetry(error).message).toBe('Suunto Health processing failed.');
+  });
+
+  it('distinguishes provider HTTP, response limits, transport and validation failures', () => {
+    expect(getSuuntoHealthFailureTelemetry(new SuuntoHealthRequestError(500), 'activity_request', 17))
+      .toMatchObject({ errorCode: 'suunto_health_request_failed', providerStatusCode: 500, failureCategory: 'provider_http_error' });
+    expect(getSuuntoHealthFailureTelemetry(new SuuntoHealthRequestError(undefined, true), 'activity_request', 17))
+      .toMatchObject({ failureCategory: 'response_byte_limit' });
+    expect(getSuuntoHealthFailureTelemetry(new SuuntoHealthRequestError(undefined, false, 'ETIMEDOUT'), 'statistics_request', 17))
+      .toMatchObject({ transportCode: 'ETIMEDOUT', failureCategory: 'transport_error' });
+    expect(getSuuntoHealthFailureTelemetry(new SuuntoHealthValidationError('private-field must be a string.'), 'activity_mapping', 17))
+      .toMatchObject({ failureCategory: 'validation_error', validationCode: 'expected_string' });
+  });
+
+  it('bounds diagnostic fields and does not trust arbitrary names, codes, causes or throwing accessors', () => {
+    for (const error of [Object.assign(new Error('private-message'), { name: 'private-name', code: 'private-code' }),
+      { get name() { throw new Error('private-getter'); } }, null]) {
+      const output = getSuuntoHealthFailureTelemetry(error, 'unknown', Infinity);
+      expect(output).toMatchObject({ errorName: 'UnknownError', processingElapsedMs: 0 });
+      expect(JSON.stringify(output)).not.toContain('private');
+    }
+    expect(getSuuntoHealthFailureTelemetry(new TypeError('private'), 'health_write', -1))
+      .toMatchObject({ errorName: 'TypeError', processingElapsedMs: 0 });
+    expect(getSuuntoHealthFailureTelemetry(new Error(), 'unknown', 9_999_999).processingElapsedMs).toBe(1_800_000);
+    expect(getSuuntoHealthFailureTelemetry(new SuuntoHealthRequestError(700, false, 'private-token'), 'unknown', 1))
+      .not.toHaveProperty('providerStatusCode');
+    expect(JSON.stringify(getSuuntoHealthFailureTelemetry(new SuuntoHealthRequestError(700, false, 'private-token'), 'unknown', 1)))
+      .not.toContain('private');
+  });
+
+  it.each([0, 1, 2])('reports the failing feed %s and preserves an allowlisted transport code', async index => {
+    const stages: string[] = [];
+    hoisted.requestGet.mockReset();
+    for (let i = 0; i < index; i++) hoisted.requestGet.mockResolvedValueOnce([]);
+    hoisted.requestGet.mockRejectedValueOnce(Object.assign(new Error('private-url-and-body'), { code: 'ECONNRESET' }));
+    const snapshot = tokenSnapshot();
+    let caught: unknown;
+    try {
+      await processSuuntoHealthQueueItem(queueItem(), snapshot, 'staged-user', currentAuthorityGuards(snapshot), undefined,
+        stage => stages.push(stage));
+    } catch (error) { caught = error; }
+    expect(stages.at(-1)).toBe(['activity_request', 'statistics_request', 'recovery_request'][index]);
+    expect(getSuuntoHealthRequestTelemetry(caught)).toMatchObject({ transportCode: 'ECONNRESET' });
+    expect(JSON.stringify(caught)).not.toContain('private');
+  });
+
   it('reports only an allowlisted validation code without provider field detail', () => {
     const telemetryError = sanitizeSuuntoHealthErrorForTelemetry(
       new SuuntoHealthValidationError('activity[42].entryData.HR is outside the supported numeric range.'),
@@ -181,6 +250,19 @@ describe('Suunto Health provider sync', () => {
     ).message).toBe('Suunto Health response validation failed [unclassified_validation].');
   });
 
+  it('exposes only a validated HTTP status for a Suunto provider request error', () => {
+    expect(getSuuntoHealthRequestTelemetry(new SuuntoHealthRequestError(429))).toEqual({
+      errorName: 'SuuntoHealthRequestError',
+      errorCode: 'suunto_health_request_failed',
+      providerStatusCode: 429,
+    });
+    expect(getSuuntoHealthRequestTelemetry(new SuuntoHealthRequestError(700))).toEqual({
+      errorName: 'SuuntoHealthRequestError',
+      errorCode: 'suunto_health_request_failed',
+    });
+    expect(getSuuntoHealthRequestTelemetry(new Error('provider body must not be logged'))).toBeNull();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     hoisted.tokenData = tokenProjection('initial-access-token');
@@ -190,18 +272,13 @@ describe('Suunto Health provider sync', () => {
       activeOAuthCredentialGeneration: 'credential-generation-2',
     };
     hoisted.connectionStateGeneration = 'connection-generation-1';
-    hoisted.captureCurrentSuuntoWebhookWriteLifecycleGuards
-      .mockImplementation(async () => currentAuthorityGuards());
-    hoisted.tokenGet.mockImplementation(async () => ({
-      exists: true,
-      data: () => hoisted.tokenData,
-    }));
-    hoisted.tokenRootGet.mockImplementation(async () => ({
-      exists: true,
-      data: () => hoisted.tokenRootData,
-    }));
-    hoisted.getTokenData.mockImplementation(async () => ({ ...hoisted.tokenData }));
-    hoisted.shouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
+    hoisted.userDeleting = false;
+    hoisted.validateCurrentSuuntoWebhookWriteLifecycle.mockImplementation(async () => (
+      hoisted.userDeleting
+        ? { status: 'user_deleted_or_deleting' }
+        : { status: 'current', guards: currentAuthorityGuards() }
+    ));
+    hoisted.getTokenData.mockImplementation(async () => tokenReturnProjection());
     hoisted.requestGet
       .mockResolvedValueOnce([{
         timestamp: '2026-08-26T12:00:00.000Z',
@@ -224,12 +301,16 @@ describe('Suunto Health provider sync', () => {
   it('fetches all three bounded feeds and returns separate source records', async () => {
     const snapshot = tokenSnapshot();
     const initialGuards = currentAuthorityGuards(snapshot);
+    const onRequest = vi.fn();
 
     const result = await processSuuntoHealthQueueItem(
       queueItem(),
       snapshot,
       'staged-user',
       initialGuards,
+      undefined,
+      undefined,
+      onRequest,
     );
 
     expect(result.healthResults.map(item => item.input.sourceRecordType)).toEqual([
@@ -238,6 +319,16 @@ describe('Suunto Health provider sync', () => {
       'suunto_247_recovery',
     ]);
     expect(hoisted.requestGet).toHaveBeenCalledTimes(3);
+    expect(onRequest.mock.calls.map(([observation]) => ({
+      feed: observation.feed, outcome: observation.outcome,
+    }))).toEqual([
+      { feed: 'activity', outcome: 'success' },
+      { feed: 'statistics', outcome: 'success' },
+      { feed: 'recovery', outcome: 'success' },
+    ]);
+    expect(onRequest.mock.calls.every(([observation]) => Number.isSafeInteger(observation.durationMs)
+      && observation.durationMs >= 0)).toBe(true);
+    expect(hoisted.validateCurrentSuuntoWebhookWriteLifecycle).toHaveBeenCalledTimes(4);
     expect(result.lifecycleGuards.requiredExistingTokenCredential.credentialGeneration)
       .toBe('credential-generation-1');
     expect(result.lifecycleGuards.additionalRequiredDocumentFieldValues[1]?.expectedFields)
@@ -258,6 +349,59 @@ describe('Suunto Health provider sync', () => {
       }));
       expect(options.headers.Authorization).toBe('Bearer initial-access-token');
     }
+  });
+
+  it('does not fail a valid pull when telemetry collection throws', async () => {
+    const snapshot = tokenSnapshot();
+    const result = await processSuuntoHealthQueueItem(
+      queueItem(), snapshot, 'staged-user', currentAuthorityGuards(snapshot),
+      undefined, undefined, () => { throw new Error('telemetry unavailable'); },
+    );
+    expect(result.healthResults).toHaveLength(3);
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(3);
+  });
+
+  it('rejects a stale token resolution at the first request boundary', async () => {
+    hoisted.getTokenData.mockResolvedValueOnce({
+      ...tokenReturnProjection(),
+      accessToken: 'stale-access-token',
+    });
+    const snapshot = tokenSnapshot();
+
+    await expect(processSuuntoHealthQueueItem(
+      queueItem(),
+      snapshot,
+      'staged-user',
+      currentAuthorityGuards(snapshot),
+    )).rejects.toMatchObject({ name: 'SuuntoHealthAccountValidationError' });
+    expect(hoisted.validateCurrentSuuntoWebhookWriteLifecycle).toHaveBeenCalledTimes(1);
+    expect(hoisted.requestGet).not.toHaveBeenCalled();
+  });
+
+  it('checks the complete lifecycle before an expired-token refresh request', async () => {
+    let refreshRequestStarted = false;
+    hoisted.getTokenData.mockImplementationOnce(async (
+      _snapshot: admin.firestore.DocumentSnapshot,
+      _serviceName: ServiceNames,
+      _forceRefresh: boolean,
+      options: { beforeRefreshRequest?: () => Promise<void> },
+    ) => {
+      hoisted.connectionStateGeneration = 'connection-generation-2';
+      await options.beforeRefreshRequest?.();
+      refreshRequestStarted = true;
+      return tokenReturnProjection();
+    });
+    const snapshot = tokenSnapshot();
+
+    await expect(processSuuntoHealthQueueItem(
+      queueItem(),
+      snapshot,
+      'staged-user',
+      currentAuthorityGuards(snapshot),
+    )).rejects.toMatchObject({ name: 'SuuntoHealthAccountValidationError' });
+    expect(refreshRequestStarted).toBe(false);
+    expect(hoisted.requestGet).not.toHaveBeenCalled();
+    expect(hoisted.validateCurrentSuuntoWebhookWriteLifecycle).toHaveBeenCalledTimes(1);
   });
 
   it('pads split requests without exceeding the provider 28-day limit', () => {
@@ -297,6 +441,168 @@ describe('Suunto Health provider sync', () => {
 
     expect(result.healthResults).toHaveLength(1);
     expect(result.healthResults[0].input.sampleSeries[0].nativeValues).toEqual([50, 60]);
+  });
+
+  it.each([
+    ['activity', 0, 'samples'], ['recovery', 0, 'samples'],
+    ['activity', 2, 'samples'], ['recovery', -5, 'samples'],
+    ['activity', 0, 'bytes'], ['recovery', 0, 'bytes'],
+    ['activity', 2, 'bytes'], ['recovery', -5, 'bytes'],
+  ] as const)('refetches dense %s ranges at offset %s limited by %s without losing full-day samples', async (feed, offset, limit) => {
+    const dayMs = 86_400_000;
+    hoisted.requestGet.mockReset().mockImplementation(async ({ url }: { url: string }) => {
+      const request = new URL(url);
+      if (!request.pathname.endsWith(`/${feed}`)) return [];
+      const from = Number(request.searchParams.get('from'));
+      const to = Number(request.searchParams.get('to'));
+      if (limit === 'bytes' && to - from + 1 > 6 * dayMs) {
+        throw new ResponseBodyTooLargeError(4 * 1024 * 1024, 4 * 1024 * 1024 + 1);
+      }
+      return Array.from({ length: Math.floor((to - from + 1) / 60_000) }, (_, index) => ({
+        timestamp: new Date(from + index * 60_000 + offset * 3_600_000).toISOString()
+          .replace('Z', `${offset < 0 ? '-' : '+'}${String(Math.abs(offset)).padStart(2, '0')}:00`),
+        entryData: feed === 'activity' ? { HR: 60 } : { Balance: 0.5, StressState: 2 },
+      }));
+    });
+    const result = await drainWindows({ ...queueItem(), rangeEndMs: START_MS + 7 * dayMs });
+    expect(result.healthResults).toHaveLength(offset === 0 ? 7 : 8);
+    for (const record of result.healthResults) {
+      expect(record.input.sampleSeries[0].nativeValues).toHaveLength(1440);
+      expect(record.input.endTimeMs - record.input.startTimeMs).toBe(dayMs);
+    }
+    const feedCalls = hoisted.requestGet.mock.calls.filter(([options]) =>
+      new URL(options.url).pathname.endsWith(`/${feed}`));
+    expect(feedCalls).toHaveLength(3); // rejected parent, then two bounded children
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(feed === 'activity' ? 7 : 9);
+    for (const [options] of hoisted.requestGet.mock.calls) {
+      expect(options.maxResponseBytes).toBe(4 * 1024 * 1024);
+    }
+  });
+
+  it.each(['samples', 'bytes'])('narrows daily-statistic %s failures and retains both sides', async limit => {
+    const dayMs = 86_400_000;
+    hoisted.requestGet.mockReset().mockImplementation(async ({ url }: { url: string }) => {
+      const request = new URL(url);
+      if (!request.pathname.endsWith('/daily-activity-statistics')) return [];
+      const start = Date.parse(request.searchParams.get('startdate')!);
+      const end = Date.parse(request.searchParams.get('enddate')!);
+      if (limit === 'bytes' && end - start > 6 * dayMs) {
+        throw new ResponseBodyTooLargeError(4 * 1024 * 1024, 4 * 1024 * 1024 + 1);
+      }
+      const samples = end - start > 6 * dayMs ? Array(65).fill(null)
+        : Array.from({ length: 9 }, (_, i) => ({
+          TimeISO8601: new Date(START_MS + (i - 1) * dayMs).toISOString(), Value: i,
+        }));
+      return [{ Name: 'stepcount', Aggregation: 'sum', Sources: [{ Name: 'watch', Samples: samples }] }];
+    });
+    const result = await drainWindows({ ...queueItem(), rangeEndMs: START_MS + 7 * dayMs });
+    expect(result.healthResults).toHaveLength(7);
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(8);
+  });
+
+  it.each(['samples', 'bytes'])('fails closed at the minimum target instead of truncating an oversized %s response', async limit => {
+    hoisted.requestGet.mockReset();
+    if (limit === 'bytes') {
+      hoisted.requestGet.mockRejectedValue(new ResponseBodyTooLargeError(4 * 1024 * 1024, 4 * 1024 * 1024 + 1));
+    } else {
+      hoisted.requestGet.mockResolvedValue(Array(SUUNTO_HEALTH_MAX_RAW_SAMPLE_ROWS + 1).fill(null));
+    }
+    const snapshot = tokenSnapshot();
+    await expect(processSuuntoHealthQueueItem(
+      { ...queueItem(), rangeEndMs: START_MS + 4 * 86_400_000 }, snapshot, 'staged-user',
+      currentAuthorityGuards(snapshot),
+    )).rejects.toBeInstanceOf(limit === 'bytes' ? SuuntoHealthRequestError : SuuntoHealthResponseLimitError);
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(3); // 4d -> 2d -> 1d
+  });
+
+  it('does not split malformed values', async () => {
+    hoisted.requestGet.mockReset().mockResolvedValue([{ timestamp: 'invalid', entryData: { HR: 60 } }]);
+    const snapshot = tokenSnapshot();
+    await expect(processSuuntoHealthQueueItem(
+      { ...queueItem(), rangeEndMs: START_MS + 7 * 86_400_000 }, snapshot, 'staged-user',
+      currentAuthorityGuards(snapshot),
+    )).rejects.toBeInstanceOf(SuuntoHealthValidationError);
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['deletion', 'samples'], ['reconnect', 'samples'],
+    ['deletion', 'bytes'], ['reconnect', 'bytes'],
+  ])('rechecks %s before an adaptive child request after a %s limit', async (change, limit) => {
+    hoisted.requestGet.mockReset().mockImplementationOnce(async () => {
+      if (change === 'deletion') hoisted.userDeleting = true;
+      else hoisted.connectionStateGeneration = 'connection-generation-2';
+      if (limit === 'bytes') throw new ResponseBodyTooLargeError(4 * 1024 * 1024, 4 * 1024 * 1024 + 1);
+      return Array(SUUNTO_HEALTH_MAX_RAW_SAMPLE_ROWS + 1).fill(null);
+    });
+    const snapshot = tokenSnapshot();
+    await expect(processSuuntoHealthQueueItem(
+      { ...queueItem(), rangeEndMs: START_MS + 7 * 86_400_000 }, snapshot, 'staged-user',
+      currentAuthorityGuards(snapshot),
+    )).rejects.toMatchObject({ name: change === 'deletion'
+      ? 'TokenRefreshSkippedForDeletedUserError' : 'SuuntoHealthAccountValidationError' });
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['samples', 'bytes'])('bounds adaptive pull time after %s limits before making further requests', async limit => {
+    const now = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+    hoisted.requestGet.mockReset().mockImplementationOnce(async () => {
+      clock.mockReturnValue(now + 4 * 60_000);
+      if (limit === 'bytes') throw new ResponseBodyTooLargeError(4 * 1024 * 1024, 4 * 1024 * 1024 + 1);
+      return Array(SUUNTO_HEALTH_MAX_RAW_SAMPLE_ROWS + 1).fill(null);
+    });
+    try {
+      const snapshot = tokenSnapshot();
+      await expect(processSuuntoHealthQueueItem(
+        { ...queueItem(), rangeEndMs: START_MS + 7 * 86_400_000 }, snapshot, 'staged-user',
+        currentAuthorityGuards(snapshot),
+      )).rejects.toThrow('Suunto Health pull budget exceeded.');
+      expect(hoisted.requestGet).toHaveBeenCalledTimes(1);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it.each(['samples', 'bytes'])('completes a dense 28-day range exceeding 64 total pulls using bounded %s continuations', async limit => {
+    hoisted.requestGet.mockReset().mockImplementation(async ({ url }: { url: string }) => {
+      const request = new URL(url);
+      if (!request.pathname.endsWith('/recovery')) return [];
+      const span = Number(request.searchParams.get('to')) + 1 - Number(request.searchParams.get('from'));
+      if (limit === 'bytes' && span > 4 * 86_400_000) {
+        throw new ResponseBodyTooLargeError(4 * 1024 * 1024, 4 * 1024 * 1024 + 1);
+      }
+      return span > 4 * 86_400_000 ? Array(SUUNTO_HEALTH_MAX_RAW_SAMPLE_ROWS + 1).fill(null) : [];
+    });
+    const result = await drainWindows({ ...queueItem(), rangeEndMs: START_MS + 28 * 86_400_000 });
+    expect(hoisted.requestGet.mock.calls.length).toBeGreaterThan(64);
+    expect(Math.max(...result.attemptCounts)).toBeLessThanOrEqual(18);
+    expect(result.attemptCounts.slice(1).every(count => count === 3)).toBe(true);
+  });
+
+  it('rejects malformed or reconnected continuation authority before provider I/O', async () => {
+    const snapshot = tokenSnapshot();
+    const item = { ...queueItem(), rangeEndMs: START_MS + 7 * 86_400_000,
+      suuntoHealthProgress: { nextStartMs: END_MS, targetWindowMs: 86_400_000, authorityDigest: 'f'.repeat(64),
+        recordsWritten: 1, recordsUnchanged: 0, recordsStale: 0, lastObservedAtMs: 0 } };
+    await expect(processSuuntoHealthQueueItem(item, snapshot, 'staged-user', currentAuthorityGuards(snapshot)))
+      .rejects.toMatchObject({ name: 'SuuntoHealthAccountValidationError' });
+    await expect(processSuuntoHealthQueueItem({ ...item,
+      suuntoHealthProgress: { ...item.suuntoHealthProgress, nextStartMs: START_MS },
+    }, snapshot, 'staged-user', currentAuthorityGuards(snapshot))).rejects.toThrow('Invalid Suunto Health progress');
+    expect(hoisted.requestGet).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when accumulated result bytes exceed the memory budget', async () => {
+    const byteLength = vi.spyOn(Buffer, 'byteLength').mockReturnValue(17 * 1024 * 1024);
+    try {
+      const snapshot = tokenSnapshot();
+      await expect(processSuuntoHealthQueueItem(
+        queueItem(), snapshot, 'staged-user', currentAuthorityGuards(snapshot),
+      )).rejects.toThrow('Suunto Health result budget exceeded.');
+    } finally {
+      byteLength.mockRestore();
+    }
   });
 
   it('ignores a current-day statistic returned beyond an older requested range', async () => {
@@ -353,9 +659,10 @@ describe('Suunto Health provider sync', () => {
     expect(hoisted.requestGet).toHaveBeenCalledTimes(2);
   });
 
-  it('force-refreshes once after a provider 401 and advances the write fence', async () => {
+  it.each([401, 403])('force-refreshes once after provider HTTP %s and advances the write fence', async statusCode => {
+    const onRequest = vi.fn();
     hoisted.requestGet.mockReset()
-      .mockRejectedValueOnce({ response: { statusCode: 401 }, body: 'private response' })
+      .mockRejectedValueOnce({ response: { statusCode }, body: 'private response' })
       .mockResolvedValueOnce([{
         timestamp: '2026-08-26T12:00:00.000Z',
         entryData: { HR: 60 },
@@ -366,9 +673,13 @@ describe('Suunto Health provider sync', () => {
       _snapshot: admin.firestore.DocumentSnapshot,
       _serviceName: ServiceNames,
       forceRefresh = false,
+      options?: { beforeRefreshRequest?: () => Promise<void> },
     ) => {
-      if (forceRefresh) hoisted.tokenData = tokenProjection('refreshed-access-token');
-      return { ...hoisted.tokenData };
+      if (forceRefresh) {
+        await options?.beforeRefreshRequest?.();
+        hoisted.tokenData = tokenProjection('refreshed-access-token');
+      }
+      return tokenReturnProjection();
     });
     const snapshot = tokenSnapshot();
     const initialGuards = currentAuthorityGuards(snapshot);
@@ -378,12 +689,20 @@ describe('Suunto Health provider sync', () => {
       snapshot,
       'staged-user',
       initialGuards,
+      undefined,
+      undefined,
+      onRequest,
     );
 
     expect(result.healthResults).toHaveLength(1);
+    expect(onRequest.mock.calls.map(([observation]) => [observation.feed, observation.outcome])).toEqual([
+      ['activity', statusCode === 401 ? 'unauthorized' : 'failed'], ['activity', 'success'],
+      ['statistics', 'success'], ['recovery', 'success'],
+    ]);
     expect(hoisted.getTokenData).toHaveBeenCalledWith(snapshot, ServiceNames.SuuntoApp, true, {
       opaqueTelemetry: true,
       expectedActiveOAuthCredentialGeneration: 'credential-generation-2',
+      beforeRefreshRequest: expect.any(Function),
     });
     expect(hoisted.requestGet.mock.calls[1]?.[0]?.headers.Authorization)
       .toBe('Bearer refreshed-access-token');
@@ -391,7 +710,8 @@ describe('Suunto Health provider sync', () => {
       .toBe('refreshed-access-token');
   });
 
-  it('replaces provider transport details with an opaque retry error', async () => {
+  it('replaces provider transport details with an opaque retry error and retains its HTTP status', async () => {
+    const onRequest = vi.fn();
     hoisted.requestGet.mockReset().mockRejectedValueOnce(Object.assign(
       new Error('private-provider-response private-access-token'),
       { statusCode: 503 },
@@ -401,20 +721,130 @@ describe('Suunto Health provider sync', () => {
 
     let caught: unknown;
     try {
-      await processSuuntoHealthQueueItem(queueItem(), snapshot, 'staged-user', initialGuards);
+      await processSuuntoHealthQueueItem(queueItem(), snapshot, 'staged-user', initialGuards,
+        undefined, undefined, onRequest);
     } catch (error) {
       caught = error;
     }
     expect(caught).toBeInstanceOf(SuuntoHealthRequestError);
-    expect(caught).toEqual(expect.objectContaining({ message: 'Suunto Health request failed.' }));
+    expect(onRequest).toHaveBeenCalledWith(expect.objectContaining({
+      feed: 'activity', outcome: 'failed', durationMs: expect.any(Number),
+    }));
+    expect(JSON.stringify(onRequest.mock.calls)).not.toContain('private-provider-response');
+    expect(caught).toEqual(expect.objectContaining({
+      message: 'Suunto Health request failed.',
+      providerStatusCode: 503,
+    }));
+    expect(JSON.stringify(caught)).toContain('"providerStatusCode":503');
     expect(JSON.stringify(caught)).not.toContain('private-provider-response');
     expect(JSON.stringify(caught)).not.toContain('private-access-token');
+  });
+
+  it('stops after one refresh when Health still returns 403 and retains only safe telemetry', async () => {
+    hoisted.requestGet.mockReset().mockRejectedValue(Object.assign(new Error('private-body-and-token'), { statusCode: 403 }));
+    const snapshot = tokenSnapshot();
+    await expect(processSuuntoHealthQueueItem(queueItem(), snapshot, 'staged-user', currentAuthorityGuards(snapshot)))
+      .rejects.toMatchObject({ message: 'Suunto Health request failed.', providerStatusCode: 403 });
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(2);
+    expect(hoisted.getTokenData).toHaveBeenCalledTimes(2);
+    expect(hoisted.getTokenData.mock.calls.filter(call => call[2] === true)).toHaveLength(1);
+  });
+
+  it('shares one authorization refresh across Health feeds', async () => {
+    hoisted.requestGet.mockReset()
+      .mockRejectedValueOnce({ statusCode: 403 })
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce({ statusCode: 401 });
+    const snapshot = tokenSnapshot();
+    await expect(processSuuntoHealthQueueItem(queueItem(), snapshot, 'staged-user', currentAuthorityGuards(snapshot)))
+      .rejects.toMatchObject({ providerStatusCode: 401 });
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(3);
+    expect(hoisted.getTokenData.mock.calls.filter(call => call[2] === true)).toHaveLength(1);
+  });
+
+  it('refuses a different Suunto account returned during Health 403 refresh', async () => {
+    hoisted.requestGet.mockReset().mockRejectedValueOnce({ statusCode: 403 });
+    hoisted.getTokenData.mockResolvedValueOnce(tokenReturnProjection())
+      .mockResolvedValueOnce({ ...tokenReturnProjection(), userName: 'different-account' });
+    const snapshot = tokenSnapshot();
+    await expect(processSuuntoHealthQueueItem(queueItem(), snapshot, 'staged-user', currentAuthorityGuards(snapshot)))
+      .rejects.toMatchObject({ name: 'SuuntoHealthAccountValidationError' });
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['disconnect', 'reconnect', 'deletion'])('blocks Health 403 recovery when %s starts', async change => {
+    hoisted.requestGet.mockReset().mockImplementationOnce(async () => {
+      if (change === 'deletion') hoisted.userDeleting = true;
+      if (change === 'reconnect') hoisted.connectionStateGeneration = 'replacement-connection';
+      if (change === 'disconnect') hoisted.tokenRootData = {
+        ...hoisted.tokenRootData, disconnectState: 'pending', serviceDisconnectOperationGeneration: 'disconnect-1',
+      };
+      throw { statusCode: 403 };
+    });
+    hoisted.getTokenData.mockImplementation(async (_snapshot, _serviceName, forceRefresh, options) => {
+      if (forceRefresh) await options.beforeRefreshRequest();
+      return tokenReturnProjection();
+    });
+    const snapshot = tokenSnapshot();
+    await expect(processSuuntoHealthQueueItem(queueItem(), snapshot, 'staged-user', currentAuthorityGuards(snapshot)))
+      .rejects.toMatchObject({ name: change === 'deletion'
+        ? 'TokenRefreshSkippedForDeletedUserError' : 'SuuntoHealthAccountValidationError' });
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(1);
+    expect(hoisted.tokenData.accessToken).toBe('initial-access-token');
+  });
+
+  it('does not expose an invalid provider status in retry telemetry', async () => {
+    hoisted.requestGet.mockReset().mockRejectedValueOnce(Object.assign(
+      new Error('private-provider-response'),
+      { statusCode: 700 },
+    ));
+    const snapshot = tokenSnapshot();
+    const initialGuards = currentAuthorityGuards(snapshot);
+
+    await expect(processSuuntoHealthQueueItem(
+      queueItem(),
+      snapshot,
+      'staged-user',
+      initialGuards,
+    )).rejects.toEqual(expect.objectContaining({
+      message: 'Suunto Health request failed.',
+      providerStatusCode: undefined,
+    }));
+  });
+
+  it.each([false, true])('logs the response byte limit without leaking payloads after refresh=%s', async refresh => {
+    const providerError = Object.assign(new ResponseBodyTooLargeError(4 * 1024 * 1024, 5 * 1024 * 1024), {
+      body: 'private-health-data',
+      url: 'https://example.invalid?token=private-token',
+      headers: { Authorization: 'private-credential' },
+    });
+    hoisted.requestGet.mockReset();
+    if (refresh) {
+      hoisted.requestGet.mockRejectedValueOnce({ statusCode: 401 });
+    }
+    hoisted.requestGet.mockRejectedValueOnce(providerError);
+    const snapshot = tokenSnapshot();
+    let caught: unknown;
+    try {
+      await processSuuntoHealthQueueItem(queueItem(), snapshot, 'staged-user', currentAuthorityGuards(snapshot));
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(SuuntoHealthRequestError);
+    expect(getSuuntoHealthRequestTelemetry(sanitizeSuuntoHealthErrorForTelemetry(caught))).toEqual({
+      errorName: 'SuuntoHealthRequestError',
+      errorCode: 'suunto_health_request_failed',
+      failureCategory: 'response_byte_limit',
+    });
+    expect(JSON.stringify(caught)).not.toContain('private-');
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(refresh ? 2 : 1);
   });
 
   it('checks the deletion guard before every provider request', async () => {
     const snapshot = tokenSnapshot();
     const initialGuards = currentAuthorityGuards(snapshot);
-    hoisted.shouldSkipQueueWorkForDeletedUser.mockResolvedValueOnce(true);
+    hoisted.userDeleting = true;
 
     await expect(processSuuntoHealthQueueItem(
       queueItem(),
@@ -423,16 +853,17 @@ describe('Suunto Health provider sync', () => {
       initialGuards,
     )).rejects.toMatchObject({ name: 'TokenRefreshSkippedForDeletedUserError' });
     expect(hoisted.requestGet).not.toHaveBeenCalled();
+    expect(hoisted.validateCurrentSuuntoWebhookWriteLifecycle).toHaveBeenCalledTimes(1);
   });
 
   it('stops before the next feed when deletion starts between provider requests', async () => {
-    hoisted.requestGet.mockReset().mockResolvedValueOnce([{
-      timestamp: '2026-08-26T12:00:00.000Z',
-      entryData: { HR: 60 },
-    }]);
-    hoisted.shouldSkipQueueWorkForDeletedUser.mockReset()
-      .mockResolvedValueOnce(false)
-      .mockResolvedValueOnce(true);
+    hoisted.requestGet.mockReset().mockImplementationOnce(async () => {
+      hoisted.userDeleting = true;
+      return [{
+        timestamp: '2026-08-26T12:00:00.000Z',
+        entryData: { HR: 60 },
+      }];
+    });
     const snapshot = tokenSnapshot();
     const initialGuards = currentAuthorityGuards(snapshot);
 
@@ -509,5 +940,25 @@ describe('Suunto Health provider sync', () => {
       initialGuards,
     )).rejects.toMatchObject({ name: 'SuuntoHealthAccountValidationError' });
     expect(hoisted.requestGet).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects results when the lifecycle changes during the final provider request', async () => {
+    hoisted.requestGet.mockReset()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockImplementationOnce(async () => {
+        hoisted.connectionStateGeneration = 'connection-generation-2';
+        return [];
+      });
+    const snapshot = tokenSnapshot();
+
+    await expect(processSuuntoHealthQueueItem(
+      queueItem(),
+      snapshot,
+      'staged-user',
+      currentAuthorityGuards(snapshot),
+    )).rejects.toMatchObject({ name: 'SuuntoHealthAccountValidationError' });
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(3);
+    expect(hoisted.validateCurrentSuuntoWebhookWriteLifecycle).toHaveBeenCalledTimes(4);
   });
 });

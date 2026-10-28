@@ -47,7 +47,8 @@ export function resolveFirebaseAdminRuntime(
   environment: NodeJS.ProcessEnv = process.env,
 ): FirebaseAdminRuntime {
   const projectId = environment.GCLOUD_PROJECT || environment.GOOGLE_CLOUD_PROJECT;
-  if (environment.FUNCTIONS_EMULATOR !== 'true') {
+  const isolated = environment.QS_ISOLATED_LOCAL_RUNTIME === 'true' || projectId === 'demo-quantified-self-local';
+  if (!isolated) {
     return {
       isEmulator: false,
       projectId,
@@ -56,6 +57,9 @@ export function resolveFirebaseAdminRuntime(
     };
   }
 
+  if (environment.FUNCTIONS_EMULATOR !== 'true') {
+    throw new Error('[firebase-admin] Isolated local runtime requires the Functions emulator.');
+  }
   if (!projectId?.startsWith('demo-')) {
     throw new Error('[firebase-admin] Functions emulator requires a demo-* project ID.');
   }

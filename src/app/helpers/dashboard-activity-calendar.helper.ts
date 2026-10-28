@@ -15,7 +15,7 @@ export function buildDashboardActivityCalendarTile(
   size = getDefaultDashboardChartTileSizeForChartType(DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE),
 ): AppDashboardChartTileSettingsInterface {
   return {
-    name: 'Activity calendar',
+    name: 'Calendar',
     type: TileTypes.Chart,
     order,
     size,

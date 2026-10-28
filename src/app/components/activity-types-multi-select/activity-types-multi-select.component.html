@@ -1,23 +1,4 @@
-<mat-form-field class="qs-subscript-hidden">
-  <mat-label>{{ label }}</mat-label>
-  <input type="text" [placeholder]="placeholder" [attr.aria-label]="label" matInput
-    [matAutocomplete]="auto" [formControl]="activityTypesControl">
-  @if (selectedActivityTypes.length) {
-  <button matSuffix mat-icon-button aria-label="Clear" (click)="clearSelection()">
-    <mat-icon>close</mat-icon>
-  </button>
-  }
-</mat-form-field>
-
-<mat-autocomplete #auto="matAutocomplete" [displayWith]="displayFn">
-  @for (activityType of filteredActivityTypes | async; track activityType) {
-  <mat-option [value]="selectedActivityTypesSelectionModel">
-    <div (click)="optionClicked($event, activityType)">
-      <mat-checkbox [checked]="activityType.selected" (change)="toggleSelection(activityType)"
-        (click)="$event.stopPropagation()">
-        {{ activityType.activityType }}
-      </mat-checkbox>
-    </div>
-  </mat-option>
-  }
-</mat-autocomplete>
+<app-activity-filter-picker [label]="label" [allLabel]="emptyLabel" searchLabel="Search sports"
+  [options]="options" [selectedValues]="selectedActivityTypes" [shortcuts]="shortcuts" [disabled]="disabled"
+  [compact]="compact" [triggerLabel]="ariaLabel" [hint]="hint"
+  (selectionChange)="selectSports($event)"></app-activity-filter-picker>

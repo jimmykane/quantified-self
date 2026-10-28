@@ -47,7 +47,7 @@ describe('dashboardResolver', () => {
                 startOfTheWeek: DaysOfTheWeek.Monday
             }
         } as any;
-        eventServiceSpy = { getEventsBy: vi.fn(), getEventsOnceByWithMeta: vi.fn() };
+        eventServiceSpy = { getEventSummariesBy: vi.fn(), getEventSummariesOnceByWithMeta: vi.fn() };
         userServiceSpy = { getUserByID: vi.fn() };
         authServiceSpy = { user$: of(mockUser) };
         routerSpy = { navigate: vi.fn() };
@@ -87,7 +87,7 @@ describe('dashboardResolver', () => {
             expect(result.eventsPrefetchSkipped).toBe(true);
             expect(result.eventsSource).toBeUndefined();
             expect(result.targetUser).toBeUndefined(); // or null depending on impl
-            expect(eventServiceSpy.getEventsOnceByWithMeta).not.toHaveBeenCalled();
+            expect(eventServiceSpy.getEventSummariesOnceByWithMeta).not.toHaveBeenCalled();
             done();
         });
     }));
@@ -99,7 +99,7 @@ describe('dashboardResolver', () => {
         mockUser.settings.dashboardSettings.activityTypes = [];
         const mockTargetUser = new User('targetUser');
         userServiceSpy.getUserByID.mockReturnValue(of(mockTargetUser));
-        eventServiceSpy.getEventsOnceByWithMeta.mockReturnValue(of({ events: [], source: 'server' }));
+        eventServiceSpy.getEventSummariesOnceByWithMeta.mockReturnValue(of({ events: [], source: 'server' }));
 
         const route = new ActivatedRouteSnapshot();
         vi.spyOn(route.paramMap, 'get').mockImplementation((key) => {
@@ -126,7 +126,7 @@ describe('dashboardResolver', () => {
         mockUser.settings.dashboardSettings.activityTypes = [];
         const mergedEvent = { isMerge: true, getActivityTypesAsArray: () => [] } as any;
         const normalEvent = { isMerge: false, getActivityTypesAsArray: () => [] } as any;
-        eventServiceSpy.getEventsOnceByWithMeta.mockReturnValue(of({
+        eventServiceSpy.getEventSummariesOnceByWithMeta.mockReturnValue(of({
             events: [mergedEvent, normalEvent],
             source: 'cache'
         }));
@@ -149,7 +149,7 @@ describe('dashboardResolver', () => {
         mockUser.settings.dashboardSettings.dateRange = DateRanges.thisWeek;
         mockUser.settings.dashboardSettings.activityTypes = [];
         mockUser.settings.unitSettings = {} as any;
-        eventServiceSpy.getEventsOnceByWithMeta.mockReturnValue(of({ events: [], source: 'cache' }));
+        eventServiceSpy.getEventSummariesOnceByWithMeta.mockReturnValue(of({ events: [], source: 'cache' }));
 
         const route = new ActivatedRouteSnapshot();
         vi.spyOn(route.paramMap, 'get').mockReturnValue(null);
@@ -158,7 +158,7 @@ describe('dashboardResolver', () => {
 
         (executeResolver(route, state) as any).subscribe((result: DashboardResolverData) => {
             expect(result.events).toEqual([]);
-            expect(eventServiceSpy.getEventsOnceByWithMeta).toHaveBeenCalledWith(
+            expect(eventServiceSpy.getEventSummariesOnceByWithMeta).toHaveBeenCalledWith(
                 mockUser,
                 [
                     { fieldPath: 'startDate', opStr: '>=', value: new Date('2026-04-27T00:00:00.000').getTime() },
@@ -179,7 +179,7 @@ describe('dashboardResolver', () => {
 
     it('should handle error when fetching targetUser and navigate', () => new Promise<void>(done => {
         userServiceSpy.getUserByID.mockReturnValue(throwError(() => new Error('User not found')));
-        eventServiceSpy.getEventsOnceByWithMeta.mockReturnValue(of({ events: [], source: 'cache' }));
+        eventServiceSpy.getEventSummariesOnceByWithMeta.mockReturnValue(of({ events: [], source: 'cache' }));
 
         const route = new ActivatedRouteSnapshot();
         vi.spyOn(route.paramMap, 'get').mockReturnValue('targetUser');

@@ -24,7 +24,8 @@ import { AppWindowService } from '../../../services/app.window.service';
 import { LoggerService } from '../../../services/logger.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
-import { of } from 'rxjs';
+import { of, BehaviorSubject } from 'rxjs';
+import { ActivatedRoute, convertToParamMap, ParamMap } from '@angular/router';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
@@ -38,9 +39,12 @@ describe('ServicesSuuntoComponent', () => {
     let mockSnackBar: any;
     let mockDialog: any;
     let mockAnalyticsService: any;
+    let routeParams: BehaviorSubject<ParamMap>;
 
     beforeEach(async () => {
+        routeParams = new BehaviorSubject(convertToParamMap({}));
         mockUserService = {
+            user: vi.fn(() => ({ uid: 'user-1' })),
             isAdmin: vi.fn(),
             requestAndSetCurrentUserSuuntoAppAccessToken: vi.fn(),
             getServiceToken: vi.fn().mockReturnValue(of([])),
@@ -107,6 +111,7 @@ describe('ServicesSuuntoComponent', () => {
                 RouterTestingModule
             ],
             providers: [
+                { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap({}) }, queryParamMap: routeParams } },
                 { provide: Analytics, useValue: {} },
                 { provide: AppEventService, useValue: mockEventService },
                 { provide: AppAuthService, useValue: { user$: { pipe: () => ({ subscribe: () => { } }) } } },
@@ -131,6 +136,43 @@ describe('ServicesSuuntoComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('does not restart secondary listeners after teardown during initialization', async () => {
+        component.user = { uid: 'user-1', settings: {} } as typeof component.user;
+        const pending = component.ngOnChanges();
+        fixture.destroy();
+        await pending;
+        expect(mockUserService.watchGarminRouteSendContext).not.toHaveBeenCalled();
+        expect(mockUserService.watchActivityServiceConnectionState).not.toHaveBeenCalled();
+    });
+
+    it('reveals reconnect options for route changes on the existing Connections page', () => {
+        component.importRecentHistory = false;
+        routeParams.next(convertToParamMap({ serviceName: ServiceNames.WahooAPI, reconnect: '1' }));
+        expect(component.reconnectRequested).toBe(false);
+        routeParams.next(convertToParamMap({ serviceName: ServiceNames.SuuntoApp, reconnect: '1' }));
+        expect(component.reconnectRequested).toBe(true);
+        expect(component.importRecentHistory).toBe(false);
+        expect(mockUserService.getCurrentUserServiceTokenAndRedirectURI).not.toHaveBeenCalled();
+        routeParams.next(convertToParamMap({ serviceName: ServiceNames.SuuntoApp }));
+        expect(component.reconnectRequested).toBe(false);
+        fixture.destroy();
+        routeParams.next(convertToParamMap({ serviceName: ServiceNames.SuuntoApp, reconnect: '1' }));
+        expect(component.reconnectRequested).toBe(false);
+    });
+
+    it('restores default history consent when the signed-in user changes', async () => {
+        component.user = { uid: 'user-1', settings: {} } as typeof component.user;
+        await component.ngOnChanges();
+        component.importRecentHistory = false;
+        component.importHistoryRange = 'maximum';
+
+        component.user = { uid: 'user-2', settings: {} } as typeof component.user;
+        await component.ngOnChanges();
+
+        expect(component.importRecentHistory).toBe(true);
+        expect(component.importHistoryRange).toBe('30_days');
+    });
+
     it('exchanges a returned OAuth code and state', async () => {
         vi.spyOn(component['route'].snapshot.queryParamMap, 'get').mockImplementation((key: string) => ({
             state: 'state-token',
@@ -147,11 +189,15 @@ describe('ServicesSuuntoComponent', () => {
         vi.spyOn(component['route'].snapshot.queryParamMap, 'get').mockReturnValue(null);
 
         await expect(component.requestAndSetToken())
-            .rejects.toThrow('Suunto authorization callback is missing state or code.');
+            .rejects.toThrow('Suunto App authorization callback is missing state or code.');
     });
 
     it('completes a Suunto callback with code and state when connect is absent', async () => {
         component.user = { uid: 'user-1' } as any;
+        mockUserService.requestAndSetCurrentUserSuuntoAppAccessToken.mockResolvedValueOnce({
+            connected: true,
+            outcome: 'connected',
+        });
         vi.spyOn(component['router'], 'navigate').mockResolvedValue(true);
         vi.spyOn(component['route'].snapshot.queryParamMap, 'get').mockImplementation((key: string) => ({
             serviceName: component.serviceName,
@@ -166,6 +212,18 @@ describe('ServicesSuuntoComponent', () => {
         expect(mockUserService.requestAndSetCurrentUserSuuntoAppAccessToken)
             .toHaveBeenCalledWith('state-token', 'auth-code');
         expect(component.forceConnected).toBe(true);
+    });
+
+    it.each(Object.values(ServiceNames).flatMap(service => [true, false].map(checked => [service, checked] as const)))('sends explicit history consent for %s checked=%s through the shared connection flow', async (service, checked) => {
+        component.serviceName = service; component.hasProAccess = true; component.importRecentHistory = checked;
+        mockUserService.getCurrentUserServiceTokenAndRedirectURI.mockResolvedValue({ redirect_uri: 'https://provider.example/authorize' });
+        await component.connectWithService(new MouseEvent('click'));
+        expect(mockUserService.getCurrentUserServiceTokenAndRedirectURI).toHaveBeenCalledWith(
+            service,
+            checked,
+            '30_days',
+            expect.any(Function),
+        );
     });
 
     it('starts only one OAuth flow while the authorization URL request is pending', async () => {
@@ -303,7 +361,7 @@ describe('ServicesSuuntoComponent', () => {
         expect(component.activeProviderTool).toBe('uploads');
         expect(panels[1].hidden).toBe(true);
         expect(panels[2].hidden).toBe(false);
-        expect(panels[2].textContent).toContain('Upload FIT Activity');
+        expect(panels[2].textContent).toContain('Send activities');
     });
 
     it('renders disconnect beside the connected account details', () => {
@@ -456,7 +514,7 @@ describe('ServicesSuuntoComponent', () => {
 
             const content = fixture.nativeElement.textContent;
 
-            expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeFalsy();
+            expect(fixture.nativeElement.querySelector('a[href="/send-activities/suunto"]')).toBeFalsy();
             expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeFalsy();
             expect(content).toContain('before uploading activities');
             expect(content).toContain('before uploading routes');
@@ -467,7 +525,7 @@ describe('ServicesSuuntoComponent', () => {
             component.serviceTokens = [{ accessToken: 'token', userName: 'suunto-user' } as any];
             fixture.detectChanges();
 
-            expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeTruthy();
+            expect(fixture.nativeElement.querySelector('a[href="/send-activities/suunto"]')).toBeTruthy();
             expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeTruthy();
         });
 
@@ -482,7 +540,7 @@ describe('ServicesSuuntoComponent', () => {
 
             const content = fixture.nativeElement.textContent;
 
-            expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeFalsy();
+            expect(fixture.nativeElement.querySelector('a[href="/send-activities/suunto"]')).toBeFalsy();
             expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeFalsy();
             expect(content).toContain('before uploading activities');
             expect(content).toContain('before uploading routes');
@@ -816,7 +874,7 @@ describe('ServicesSuuntoComponent', () => {
         expect(component.isConnectedToService()).toBe(false);
         expect(component.connectedSuuntoServiceTokens).toEqual([]);
         expect(fixture.nativeElement.querySelector('app-history-import-form')).toBeFalsy();
-        expect(fixture.nativeElement.querySelector('app-upload-activity-to-service')).toBeFalsy();
+        expect(fixture.nativeElement.querySelector('a[href="/send-activities/suunto"]')).toBeFalsy();
         expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeFalsy();
         expect(fixture.nativeElement.textContent).toContain('before importing history');
         expect(fixture.nativeElement.textContent).toContain('before uploading activities');

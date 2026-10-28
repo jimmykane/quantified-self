@@ -1,5 +1,6 @@
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
+import { recordRouteQueueCommit, recordRouteQueueCompletion } from '../routes/monitoring';
 import { FieldValue } from 'firebase-admin/firestore';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { FirestoreRouteJSON } from '../../../shared/app-route.interface';
@@ -662,6 +663,7 @@ async function moveProviderAcceptancePersistenceFailureToDlq(
                 return QueueResult.Processed;
             }
             if (terminalResult === QueueItemUserGuardedUpdateResult.Updated) {
+                recordRouteQueueCommit(queueItem, 'manual_reconciliation');
                 logger.error('[RouteDeliverySync] Persisted a terminal manual-reconciliation marker after acceptance-state and DLQ persistence failed.', {
                     queueItemId: queueItem.id,
                     userID: queueItem.userID,
@@ -754,6 +756,7 @@ async function finalizeAcceptedRouteDelivery(
     if (updateResult === QueueItemUserGuardedUpdateResult.NotCurrent) {
         logger.info(`[RouteDeliverySync] Successful queue item ${queueItem.id} was already advanced or replaced; skipping stale finalization.`);
     }
+    if (updateResult === QueueItemUserGuardedUpdateResult.Updated) recordRouteQueueCommit(queueItem, 'success');
     return QueueResult.Processed;
 }
 
@@ -940,6 +943,7 @@ async function markRouteDeliverySyncQueueItemProcessedIfCurrent(
         if (updateResult === QueueItemUserGuardedUpdateResult.NotCurrent) {
             logger.info(`[RouteDeliverySync] Queue item ${queueItem.id} was already advanced or replaced; skipping stale ${actionDescription}.`);
         }
+        if (updateResult === QueueItemUserGuardedUpdateResult.Updated) recordRouteQueueCompletion(queueItem, additionalData);
         return QueueResult.Processed;
     } catch (error) {
         logger.error(`[RouteDeliverySync] Could not complete ${actionDescription} for queue item ${queueItem.id}.`, error);
@@ -1112,6 +1116,7 @@ export async function processRouteDeliverySyncQueueItem(
             } else if (routeDisabledResult.result === DisabledSyncRouteTransitionResult.NotCurrent) {
                 return QueueResult.Processed;
             } else {
+                if (routeDisabledResult.result === DisabledSyncRouteTransitionResult.ProcessedAsDisabled) recordRouteQueueCommit(queueItem, 'skipped');
                 await safelyWriteDeliveryMetadata(() => setSkippedDeliveryMetadata(queueItem, 'route_disabled', 'Route delivery sync route is disabled in user settings.'));
                 return QueueResult.Processed;
             }

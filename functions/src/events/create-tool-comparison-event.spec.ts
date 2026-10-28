@@ -486,9 +486,9 @@ describe('createToolComparisonEvent', () => {
     expect(hoisted.mockVerifyAppCheckToken).not.toHaveBeenCalled();
   });
 
-  it('rejects comparison writes while the user is missing or being deleted', async () => {
+  it.each([false, true])('rejects comparison writes with an active deletion marker (userExists=%s)', async (userExists) => {
     hoisted.mockGetUserDeletionGuardState.mockResolvedValueOnce({
-      userExists: false,
+      userExists,
       deletionInProgress: true,
       shouldSkip: true,
     });
@@ -498,6 +498,22 @@ describe('createToolComparisonEvent', () => {
 
     expect(response.status).toHaveBeenCalledWith(409);
     expect(response.json).toHaveBeenCalledWith({ error: 'Account deletion is in progress. Please sign in again.' });
+    expect(hoisted.mockFITImporter.getFromArrayBuffer).not.toHaveBeenCalled();
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+  });
+
+  it('asks a signed-in user with no saved profile to finish setup without treating it as account deletion', async () => {
+    hoisted.mockGetUserDeletionGuardState.mockResolvedValueOnce({
+      userExists: false,
+      deletionInProgress: false,
+      shouldSkip: true,
+    });
+    const response = makeResponse();
+
+    await invokeCreateToolComparisonEvent(makeRequest(), response);
+
+    expect(response.status).toHaveBeenCalledWith(409);
+    expect(response.json).toHaveBeenCalledWith({ error: 'Complete your account setup before creating a comparison.' });
     expect(hoisted.mockFITImporter.getFromArrayBuffer).not.toHaveBeenCalled();
     expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
   });
@@ -564,7 +580,10 @@ describe('createToolComparisonEvent', () => {
       'user-1',
       'tool_comparison_original_file_upload:users/user-1/events/event-1/original.fit',
     );
-    expect(hoisted.mockStorageSave).toHaveBeenCalledWith(Buffer.from([1]));
+    expect(hoisted.mockStorageSave).toHaveBeenCalledWith(Buffer.from([1]), {
+      validation: 'crc32c',
+      metadata: { crc32c: expect.any(String) },
+    });
   });
 
   it('returns a conflict when deletion starts inside EventWriter document persistence', async () => {

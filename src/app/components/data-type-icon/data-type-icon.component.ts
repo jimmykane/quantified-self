@@ -20,14 +20,10 @@ import { DataCadenceAvg } from '@sports-alliance/sports-lib';
 import { DataCadenceMax } from '@sports-alliance/sports-lib';
 import { DataCadenceMin } from '@sports-alliance/sports-lib';
 import { DataStrokeRateAvg, DataStrokeRateMax, DataStrokeRateMin } from '@sports-alliance/sports-lib';
-import {
-  DataSpeedAvg, DataSpeedAvgFeetPerMinute, DataSpeedAvgFeetPerSecond,
-  DataSpeedAvgKilometersPerHour, DataSpeedAvgKnots, DataSpeedAvgMetersPerMinute,
-  DataSpeedAvgMilesPerHour
-} from '@sports-alliance/sports-lib';
+import { DataSpeed, DataEffortPace, DataGNSSDistance, DataGNSSDistanceMiles } from '@sports-alliance/sports-lib';
 import { EVENT_SUMMARY_DIVING_STAT_TYPES } from '../../constants/event-summary-metric-groups';
-import { DataPaceAvg, DataPaceAvgMinutesPerMile } from '@sports-alliance/sports-lib';
-import { DataSwimPaceAvg, DataSwimPaceAvgMinutesPer100Yard } from '@sports-alliance/sports-lib';
+import { RR_METRICS, RR_STAT_TOOLTIPS } from '../../constants/rr-metrics';
+import { DataPace, DataSwimPace, DataSwimPaceAvg, DataSwimPaceMin, DataSwimPaceMax } from '@sports-alliance/sports-lib';
 import { DataTemperatureAvg } from '@sports-alliance/sports-lib';
 import { DataTemperatureMax } from '@sports-alliance/sports-lib';
 import { DataTemperatureMin } from '@sports-alliance/sports-lib';
@@ -38,31 +34,10 @@ import { DataEnergy, DataMetabolicCalories } from '@sports-alliance/sports-lib';
 import { DataAltitudeMax } from '@sports-alliance/sports-lib';
 import { DataAltitudeMin } from '@sports-alliance/sports-lib';
 import { DataAltitudeAvg } from '@sports-alliance/sports-lib';
-import {
-  DataVerticalSpeedAvg,
-  DataVerticalSpeedAvgFeetPerHour,
-  DataVerticalSpeedAvgFeetPerMinute,
-  DataVerticalSpeedAvgFeetPerSecond,
-  DataVerticalSpeedAvgKilometerPerHour,
-  DataVerticalSpeedAvgMetersPerHour,
-  DataVerticalSpeedAvgMetersPerMinute,
-  DataVerticalSpeedAvgMilesPerHour,
-  DataVerticalSpeedMax
-} from '@sports-alliance/sports-lib';
+import { DataVerticalSpeed } from '@sports-alliance/sports-lib';
 import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
 import { DataPeakEPOC } from '@sports-alliance/sports-lib';
-import {
-  DataGradeAdjustedPaceAvg,
-  DataGradeAdjustedPaceAvgMinutesPerMile
-} from '@sports-alliance/sports-lib';
-import {
-  DataGradeAdjustedSpeedAvg,
-  DataGradeAdjustedSpeedAvgFeetPerMinute,
-  DataGradeAdjustedSpeedAvgFeetPerSecond,
-  DataGradeAdjustedSpeedAvgKilometersPerHour, DataGradeAdjustedSpeedAvgKnots,
-  DataGradeAdjustedSpeedAvgMetersPerMinute,
-  DataGradeAdjustedSpeedAvgMilesPerHour
-} from '@sports-alliance/sports-lib';
+import { DataGradeAdjustedPace, DataGradeAdjustedSpeed } from '@sports-alliance/sports-lib';
 import { DataMovingTime } from '@sports-alliance/sports-lib';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { DataHeartRateMin } from '@sports-alliance/sports-lib';
@@ -141,6 +116,28 @@ import {
   DataStaminaMin,
 } from '@sports-alliance/sports-lib';
 
+// Unit variants declare their canonical displayType. Resolve only explicitly supported
+// families so shared conversion targets and unknown provider names cannot acquire an unrelated icon.
+const METRIC_FAMILY_ICONS = new Map<string, string>([
+  [DataVerticalSpeed.type, 'unfold_more_double'],
+  [DataSpeed.type, 'speed'],
+  [DataGradeAdjustedSpeed.type, 'speed'],
+  [DataPace.type, 'steps'],
+  [DataGradeAdjustedPace.type, 'steps'],
+  [DataEffortPace.type, 'steps'],
+  [DataSwimPace.type, 'pool'],
+  // These summary triplets and GNSS miles have no family/displayType metadata in sports-lib 23.5.
+  [DataSwimPaceAvg.type, 'pool'],
+  [DataSwimPaceMin.type, 'pool'],
+  [DataSwimPaceMax.type, 'pool'],
+  [DataGNSSDistance.type, 'satellite_alt'],
+  [DataGNSSDistanceMiles.type, 'satellite_alt'],
+].flatMap(([type, icon]) => [type, DynamicDataLoader.dataTypeAvgDataType[type],
+  DynamicDataLoader.dataTypeMinDataType[type], DynamicDataLoader.dataTypeMaxDataType[type]]
+  .filter((variant): variant is string => typeof variant === 'string')
+  .map(variant => [variant, icon] as const)));
+const RR_METRIC_ICONS = new Map<string, string>(RR_METRICS.map(metric => [metric.type, metric.icon]));
+
 @Component({
   selector: 'app-data-type-icon',
   templateUrl: './data-type-icon.component.html',
@@ -151,7 +148,10 @@ import {
 })
 
 export class DataTypeIconComponent {
+  readonly statTooltips = RR_STAT_TOOLTIPS;
   @Input() dataType: string;
+  @Input() tooltip?: string;
+  @Input() focusable = false;
   @Input() size: string;
   @Input() vAlign: string;
 
@@ -163,25 +163,33 @@ export class DataTypeIconComponent {
     return null;
   }
 
-  private isDivingSummaryStat(statName: string): boolean {
+  private getSummaryMetricIcon(statName: string): string | null {
+    const familyIcon = METRIC_FAMILY_ICONS.get(statName);
+    if (familyIcon) {
+      return familyIcon;
+    }
     if (EVENT_SUMMARY_DIVING_STAT_TYPES.includes(statName)) {
-      return true;
+      return 'scuba_diving';
     }
 
     try {
       const DataClass = DynamicDataLoader.getDataClassFromDataType(statName) as { displayType?: unknown };
-      return (
-        typeof DataClass.displayType === 'string'
-        && EVENT_SUMMARY_DIVING_STAT_TYPES.includes(DataClass.displayType)
-      );
+      if (typeof DataClass.displayType !== 'string') {
+        return null;
+      }
+      return METRIC_FAMILY_ICONS.get(DataClass.displayType)
+        ?? (EVENT_SUMMARY_DIVING_STAT_TYPES.includes(DataClass.displayType) ? 'scuba_diving' : null);
     } catch {
-      return false;
+      return null;
     }
   }
 
   getColumnHeaderIcon(statName): string {
-    if (this.isDivingSummaryStat(statName)) {
-      return 'scuba_diving';
+    const rrIcon = RR_METRIC_ICONS.get(statName);
+    if (rrIcon) return rrIcon;
+    const summaryIcon = this.getSummaryMetricIcon(statName);
+    if (summaryIcon) {
+      return summaryIcon;
     }
     switch (statName) {
       case DataDistance.type:
@@ -245,6 +253,10 @@ export class DataTypeIconComponent {
       case 'WPrime':
         return 'battery_charging_full';
       case DataStamina.type:
+      case 'Estimated Sustainable Distance':
+      case 'Minimum Estimated Sustainable Distance':
+      case 'Estimated Sustainable Distance in miles':
+      case 'Minimum Estimated Sustainable Distance in miles':
       case DataStaminaAvg.type:
       case DataStaminaMin.type:
       case DataStaminaMax.type:
@@ -273,28 +285,6 @@ export class DataTypeIconComponent {
         return 'landscape';
       case DataAltitudeAvg.type:
         return 'landscape';
-      case DataVerticalSpeedAvg.type:
-      case DataVerticalSpeedAvgFeetPerHour.type:
-      case DataVerticalSpeedAvgFeetPerMinute.type:
-      case DataVerticalSpeedAvgFeetPerSecond.type:
-      case DataVerticalSpeedAvgKilometerPerHour.type:
-      case DataVerticalSpeedAvgMilesPerHour.type:
-      case DataVerticalSpeedAvgMetersPerHour.type:
-      case DataVerticalSpeedAvgMetersPerMinute.type:
-      case DataVerticalSpeedMax.type:
-        return 'unfold_more_double';
-      case DataSpeedAvg.type:
-      case DataSpeedAvgKilometersPerHour.type:
-      case DataSpeedAvgMilesPerHour.type:
-      case DataSpeedAvgFeetPerSecond.type:
-      case DataSpeedAvgMetersPerMinute.type:
-      case DataSpeedAvgFeetPerMinute.type:
-      case DataSpeedAvgKnots.type:
-        return 'speed';
-      case DataPaceAvg.type:
-      case DataPaceAvgMinutesPerMile.type:
-      case 'Effort Pace':
-        return 'steps';
       case 'Average VAM':
       case 'Avg VAM':
         return 'trending_up';
@@ -389,15 +379,13 @@ export class DataTypeIconComponent {
       case DataEnergy.type:
       case DataMetabolicCalories.type:
         return 'metabolism';
-      case DataSwimPaceAvg.type:
-      case DataSwimPaceAvgMinutesPer100Yard.type:
-      case 'Swim Pace':
-        return 'pool';
       case 'Stroke':
         return 'pool';
       case 'Strokes':
+      case 'Total strokes':
         return 'front_hand';
       case 'SWOLF':
+      case 'Normalized SWOLF':
         return 'scoreboard';
       case DataAerobicTrainingEffect.type:
       case 'Anaerobic Training Effect':
@@ -488,8 +476,6 @@ export class DataTypeIconComponent {
         return 'military_tech';
       case 'Distance (Stryd)':
         return 'route';
-      case 'GNSS Distance':
-        return 'satellite_alt';
       case 'Average Ground Contact Time':
       case 'Minimum Ground Contact Time':
       case 'Maximum Ground Contact Time':
@@ -539,21 +525,6 @@ export class DataTypeIconComponent {
       case 'Minimum Number of Satellites':
       case 'Maximum Number of Satellites':
         return 'satellite_alt';
-      case DataGradeAdjustedPaceAvg.type:
-      case DataGradeAdjustedPaceAvgMinutesPerMile.type:
-      case 'Minimum Grade Adjusted Pace':
-      case 'Maximum Grade Adjusted Pace':
-        return 'steps';
-      case DataGradeAdjustedSpeedAvg.type:
-      case DataGradeAdjustedSpeedAvgFeetPerMinute.type:
-      case DataGradeAdjustedSpeedAvgFeetPerSecond.type:
-      case DataGradeAdjustedSpeedAvgKilometersPerHour.type:
-      case DataGradeAdjustedSpeedAvgMetersPerMinute.type:
-      case DataGradeAdjustedSpeedAvgMilesPerHour.type:
-      case DataGradeAdjustedSpeedAvgKnots.type:
-      case 'Minimum Grade Adjusted Speed':
-      case 'Maximum Grade Adjusted Speed':
-        return 'speed';
       default:
         return null;
     }
@@ -568,7 +539,8 @@ export class DataTypeIconComponent {
     }
   }
 
-  getColumnHeaderTextInitials(statName): string {
-    return statName.split(' ').map(i => i.charAt(0).toUpperCase()).join('')
+  getColumnHeaderTextInitials(statName: string | null | undefined): string {
+    return (statName ?? '').trim().split(/\s+/).slice(0, 2)
+      .map(word => word.charAt(0).toUpperCase()).join('').slice(0, 2);
   }
 }

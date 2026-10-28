@@ -1,13 +1,15 @@
 <div class="reviewer-preview" data-nosnippet>
   <ng-container [ngTemplateOutlet]="comparisonCharts"></ng-container>
 
-  <app-compact-feature-row
+  <app-compact-row
+    layout="stacked"
+    class="reviewer-preview__wide"
     icon="merge_type"
     iconTone="secondary"
     title="Benchmark Merge Workflow"
     summary="Combine same-session recordings, keep the benchmark out of normal training totals, then assign reference and test devices."
   >
-    <div class="analysis-row-content">
+    <div class="analysis-row-content analysis-row-content--workflow">
       <div class="benchmark-workflow" aria-label="Multiple recordings aligned into one benchmark">
         <span class="benchmark-workflow__step">Multiple recordings</span>
         <mat-icon aria-hidden="true">arrow_forward</mat-icon>
@@ -21,9 +23,10 @@
         <div class="stat-item"><span class="stat-label">Auto Align</span><span class="stat-value success">+/-15s</span></div>
       </div>
     </div>
-  </app-compact-feature-row>
+  </app-compact-row>
 
-  <app-compact-feature-row
+  <app-compact-row
+    layout="stacked"
     icon="route"
     iconTone="secondary"
     title="GNSS Trace Comparison"
@@ -50,13 +53,13 @@
         <div class="stat-item"><span class="stat-label">RMSE</span><span class="stat-value warning">1.1m</span></div>
       </div>
     </div>
-  </app-compact-feature-row>
+  </app-compact-row>
 
-  <app-compact-feature-row
+  <app-compact-row
+    layout="stacked"
     icon="sensors"
     iconTone="secondary"
     title="Sensor Quality Reports"
-    [showDivider]="false"
     summary="Grade shared streams with correlation, MAE, and RMSE, then surface dropouts, stuck values, and cadence-lock warnings."
   >
     <div class="analysis-row-content">
@@ -77,11 +80,48 @@
         <div class="stat-item"><span class="stat-label">Reports</span><span class="stat-value success">Save / Share</span></div>
       </div>
     </div>
-  </app-compact-feature-row>
+  </app-compact-row>
+
+  <app-compact-row
+    layout="stacked"
+    class="reviewer-preview__wide"
+    icon="ecg_heart"
+    iconTone="secondary"
+    title="R–R & HRV Comparison"
+    [showDivider]="false"
+    summary="Look beyond average heart rate. Inspect original beat-to-beat intervals, recording coverage and artifact flags, with heart rate variability statistics for each available recording."
+  >
+    <div class="rr-preview">
+      <div class="rr-preview__plot">
+        <div class="rr-preview__heading"><span>R–R intervals</span><span>Dots: artifact flags · Rings: suspected pairs</span></div>
+        <div class="rr-preview__chart-frame">
+          <div #rrChart class="rr-preview__chart" [class.rr-preview__chart--unavailable]="rrChartUnavailable()"
+            [attr.aria-hidden]="rrChartUnavailable() ? true : null" role="img" [attr.aria-label]="rrChartDescription"></div>
+          @if (rrChartUnavailable()) {
+            <p class="rr-preview__fallback" role="status">Chart preview unavailable. Recorded summary values remain available.</p>
+          }
+        </div>
+        <p class="rr-preview__note">Real recording · first 90 seconds · one R–R source</p>
+      </div>
+      <div>
+        <table class="rr-preview__statistics" aria-label="Full-recording R–R and HRV statistics for the anonymized sample">
+          <thead><tr><th scope="col">Metric</th><th scope="col">Recorded sample</th></tr></thead>
+          <tbody>
+            @for (metric of rrMetricRows; track metric.label) {
+              <tr><th scope="row">{{ metric.label }}</th><td>{{ metric.display }}</td></tr>
+            }
+          </tbody>
+        </table>
+        <p class="rr-preview__note">Statistics cover the full recording, beyond the excerpt. Separate from the agreement grade.</p>
+      </div>
+    </div>
+  </app-compact-row>
 </div>
 
 <ng-template #comparisonCharts>
-  <app-compact-feature-row
+  <app-compact-row
+    layout="stacked"
+    class="reviewer-preview__wide"
     icon="monitoring"
     iconTone="secondary"
     title="Multi-Device Chart Comparison"
@@ -124,5 +164,5 @@
         ></app-event-card-chart-panel>
       </div>
     </div>
-  </app-compact-feature-row>
+  </app-compact-row>
 </ng-template>

@@ -370,6 +370,16 @@ function buildUsageDocPayload(
   };
 }
 
+function setUsageDocFields(
+  transaction: FirebaseFirestore.Transaction,
+  docRef: FirebaseFirestore.DocumentReference,
+  payload: FirebaseFirestore.UpdateData<FirebaseFirestore.DocumentData>,
+): void {
+  // Replace the dynamic reservation map as one field. Nested merge semantics
+  // can retain released IDs and hold an allowance until the lease expires.
+  transaction.set(docRef, payload, { mergeFields: Object.keys(payload) });
+}
+
 async function resolveAssistantQuotaWindow(
   userID: string,
   dependencies: AssistantQuotaDependencies,
@@ -546,8 +556,8 @@ export async function reserveAssistantQuotaForRequest(
       }
 
       reservationMap[reservationID] = nowMs + ASSISTANT_RESERVATION_TTL_MS;
-      transaction.set(
-        docRef,
+      setUsageDocFields(
+        transaction, docRef,
         buildUsageDocPayload(
           resolvedWindow.status,
           usageDoc.successfulRequestCount,
@@ -555,7 +565,6 @@ export async function reserveAssistantQuotaForRequest(
           dependencies,
           usageDoc.lastSuccessfulRequestAt,
         ),
-        { merge: true },
       );
     },
   );
@@ -609,10 +618,9 @@ export async function finalizeAssistantQuotaReservation(
       delete reservationMap[reservation.reservationID];
       const successfulRequestCount = usageDoc.successfulRequestCount + 1;
 
-      transaction.set(
-        docRef,
+      setUsageDocFields(
+        transaction, docRef,
         buildUsageDocPayload(reservationStatus, successfulRequestCount, reservationMap, dependencies, nowIso),
-        { merge: true },
       );
 
       return buildQuotaStatus(reservationStatus, successfulRequestCount, Object.keys(reservationMap).length);
@@ -660,8 +668,8 @@ export async function releaseAssistantQuotaReservation(
       }
       delete reservationMap[reservation.reservationID];
 
-      transaction.set(
-        docRef,
+      setUsageDocFields(
+        transaction, docRef,
         buildUsageDocPayload(
           reservationStatus,
           usageDoc.successfulRequestCount,
@@ -669,7 +677,6 @@ export async function releaseAssistantQuotaReservation(
           dependencies,
           usageDoc.lastSuccessfulRequestAt,
         ),
-        { merge: true },
       );
 
       return {

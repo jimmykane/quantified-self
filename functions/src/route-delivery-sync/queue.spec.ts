@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '../../../shared/route-delivery-sync-routes';
+import * as logger from 'firebase-functions/logger';
+import { withHistoryExecution } from '../connection-history/context';
+import { HistoryLifecycleChangedError, type HistoryExecution } from '../connection-history/execution';
+vi.unmock('@sports-alliance/sports-lib');
 
 const {
   mockGet,
@@ -142,6 +146,19 @@ describe('route-delivery-sync/queue', () => {
     mockRecheckSourceLifecycleInTransaction.mockResolvedValue({ status: 'active' });
   });
 
+  it('does not enqueue or redispatch a delivery after its history authority changes in the transaction', async () => {
+    const guard = vi.fn().mockRejectedValue(new HistoryLifecycleChangedError());
+    const execution = { inTransaction: guard } as unknown as HistoryExecution;
+    await expect(withHistoryExecution(execution, () => enqueueRouteDeliverySyncQueueItem({
+      routeId: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI,
+      sourceServiceName: ServiceNames.SuuntoApp, destinationServiceName: ServiceNames.GarminAPI,
+      userID: 'user-1', savedRouteID: 'route-1', sourceRevisionKey: 'rev-1', manual: false,
+    }))).rejects.toThrow('earlier connection');
+    expect(guard).toHaveBeenCalledTimes(1);
+    expect(mockTransactionSet).not.toHaveBeenCalled();
+    expect(mockEnqueueRouteDeliverySyncTask).not.toHaveBeenCalled();
+  });
+
   it('builds deterministic queue item IDs with the source revision key', async () => {
     const id = await buildRouteDeliverySyncQueueItemId(
       ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_GarminAPI,
@@ -158,6 +175,20 @@ describe('route-delivery-sync/queue', () => {
       'route-1',
       'SuuntoApp:provider-route-1:1710000000000',
     ]);
+  });
+
+  it.each(['new', 'existing'])('observes %s enqueue failures without marking or replacing the original error', async kind => {
+    if (kind === 'new') mockTransactionGet.mockResolvedValueOnce({ exists: false });
+    const error = new Error('PRIVATE_TRANSPORT');
+    mockEnqueueRouteDeliverySyncTask.mockRejectedValueOnce(error);
+    await expect(enqueueRouteDeliverySyncQueueItem({ routeId: ROUTE_DELIVERY_SYNC_ROUTE_IDS.SuuntoApp_to_WahooAPI,
+      sourceServiceName: ServiceNames.SuuntoApp, destinationServiceName: ServiceNames.WahooAPI, userID: 'PRIVATE_UID',
+      savedRouteID: 'PRIVATE_ROUTE', sourceRevisionKey: 'PRIVATE_REVISION', manual: false })).rejects.toBe(error);
+    expect(mockUpdate).not.toHaveBeenCalled();
+    const events = vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[RouteQueue]');
+    expect(events).toHaveLength(1);
+    expect(events[0][1]).toMatchObject({ event: 'dispatch_failure', lane: 'delivery', destination: 'wahoo', phase: 'enqueue' });
+    expect(JSON.stringify(events)).not.toContain('PRIVATE');
   });
 
   it('enqueues a new route delivery sync queue item and dispatches Cloud Task', async () => {

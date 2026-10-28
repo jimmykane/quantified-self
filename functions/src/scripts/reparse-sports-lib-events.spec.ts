@@ -1,3 +1,4 @@
+import { sourceReferenceFingerprint } from '../reparse/non-activity-sources';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SPORTS_LIB_REPARSE_TARGET_VERSION } from '../reparse/sports-lib-reparse.config';
 
@@ -5,6 +6,7 @@ const TARGET_SPORTS_LIB_VERSION = SPORTS_LIB_REPARSE_TARGET_VERSION;
 const TARGET_SPORTS_LIB_VERSION_CODE = 13_000_000;
 
 const hoisted = vi.hoisted(() => {
+    const sourceMetadata = vi.fn();
     const shouldEventBeReparsed = vi.fn();
     const extractSourceFiles = vi.fn();
     const reparseEventFromOriginalFiles = vi.fn();
@@ -18,7 +20,7 @@ const hoisted = vi.hoisted(() => {
     });
     const writeReparseStatus = vi.fn();
     const isReparsePersistenceSkippedForUserDeletionError = vi.fn((error: unknown) =>
-        error instanceof Error && error.name === 'EventWriteSkippedForDeletedUserError');
+        error instanceof Error && ['EventWriteSkippedForDeletedUserError', 'EventWriteSkippedForDeletedEventError'].includes(error.name));
     const isSportsLibReparseTerminalFailureMessage = vi.fn((errorMessage: string) =>
         errorMessage.startsWith('[sports-lib-reparse] Reparse target sports-lib version ')
         || /^Event .* was not found for user .*$/.test(errorMessage));
@@ -189,6 +191,7 @@ const hoisted = vi.hoisted(() => {
     const deleteField = vi.fn(() => 'DELETE_FIELD');
 
     return {
+        sourceMetadata,
         shouldEventBeReparsed,
         extractSourceFiles,
         reparseEventFromOriginalFiles,
@@ -268,6 +271,7 @@ vi.mock('firebase-admin', () => {
     });
 
     return {
+        storage: () => ({ bucket: () => ({ file: () => ({ getMetadata: hoisted.sourceMetadata }) }) }),
         apps: hoisted.adminApps,
         initializeApp: hoisted.initializeApp,
         firestore: firestoreFn,
@@ -848,6 +852,38 @@ describe('reparse-sports-lib-events script', () => {
             terminalFailureAt: 'DELETE_FIELD',
         }));
     });
+
+    it('reuses a verified classification across releases without counting another parse or writing status', async () => {
+        const sources = [{ path: 'users/u1/events/e1/original.fit' }];
+        const eventRef = createEventRef('u1', 'e1', { originalFiles: sources });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, { sportsLibVersion: '9.0.0', sportsLibVersionCode: 9_000_000 }));
+        hoisted.processingDocDataByPath.set('users/u1/events/e1/metaData/reparseStatus', {
+            status: 'skipped', reason: 'ROUTE_SOURCE', targetSportsLibVersion: '0.0.1', nonActivitySources: {
+                schemaVersion: 1, sourceFingerprint: sourceReferenceFingerprint(sources), sources: [{
+                    path: sources[0].path, bucket: 'quantified-self-io', generation: '1', md5: 'checksum', sha256: 'hash', kind: 'route',
+                }],
+            },
+        });
+        hoisted.sourceMetadata.mockResolvedValue([{ generation: '1', md5Hash: 'checksum' }]);
+        const summary = await runSportsLibReparseScript(['--execute']);
+        expect(summary).toMatchObject({ skippedNonActivitySources: 1, parsedEvents: 0, completed: 0, failed: 0 });
+        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
+        expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
+    });
+
+    it.each(['MONITORING_SOURCE', 'ROUTE_SOURCE', 'MIXED_SOURCES_REQUIRING_REVIEW'])(
+        'counts %s as skipped rather than a successful or failed reparse', async reason => {
+            const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+            hoisted.processingDocs.push(createProcessingDoc(eventRef, { sportsLibVersion: '9.0.0', sportsLibVersionCode: 9_000_000 }));
+            const nonActivitySources = { schemaVersion: 1, sourceFingerprint: 'fingerprint', sources: [] };
+            hoisted.reparseEventFromOriginalFiles.mockResolvedValueOnce({ status: 'skipped', reason, nonActivitySources,
+                sourceFilesCount: 1, parsedActivitiesCount: 0, staleActivitiesDeleted: 0 });
+            const summary = await runSportsLibReparseScript(['--execute']);
+            expect(summary).toMatchObject({ skippedNonActivitySources: 1, completed: 0, failed: 0 });
+            expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
+                status: 'skipped', reason, nonActivitySources, lastError: 'DELETE_FIELD', terminalFailure: 'DELETE_FIELD',
+            }));
+        });
 
     it('should clear terminal marker when execute path completes successfully', async () => {
         const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });

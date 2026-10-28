@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatCheckboxChange, MatCheckboxModule } from '@angular/material/checkbox';
@@ -9,59 +9,11 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { AppFunctionsService } from '../../services/app.functions.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { LoggerService } from '../../services/logger.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
+import { AppAuthService } from '../../authentication/app.auth.service';
+import { AppUserService } from '../../services/app.user.service';
 
-type McpScope =
-  | 'metrics:read'
-  | 'measurements:read'
-  | 'sleep:read'
-  | 'activity-details:read'
-  | 'activity-location:read'
-  | 'routes:read'
-  | 'route-location:read';
-
-const MCP_SCOPE_PARENTS: Partial<Record<McpScope, McpScope>> = {
-  'activity-location:read': 'activity-details:read',
-  'route-location:read': 'routes:read',
-};
-
-const MCP_SCOPE_CHILDREN: Partial<Record<McpScope, McpScope>> = {
-  'activity-details:read': 'activity-location:read',
-  'routes:read': 'route-location:read',
-};
-
-const MCP_SCOPE_CONTENT: Record<McpScope, {
-  title: string;
-  description: string;
-}> = {
-  'metrics:read': {
-    title: 'Activity and Training metrics',
-    description: 'Read persisted numeric activity metrics and redacted Training-derived snapshots. When individual activity access is also granted, the client can request selected canonical numeric metrics for one activity.',
-  },
-  'measurements:read': {
-    title: 'Body measurements',
-    description: 'Read bounded identity-free body-measurement history such as weight. Values are grouped by day, week, or month; exact source timestamps, event or activity identity, provider, device, and source details are excluded.',
-  },
-  'sleep:read': {
-    title: 'Sleep summaries',
-    description: 'Read redacted sleep sessions and aggregated summaries, including bounded discovery of available aggregate HRV, heart-rate, blood-oxygen, and respiration values. Raw sensor samples and provider payloads are excluded.',
-  },
-  'activity-details:read': {
-    title: 'Individual activity details',
-    description: 'Read non-location activity summaries, laps, swim lengths, MTB jump measurements, selected activity metrics, and bounded on-demand chart series from existing original files. Exact locations and breadcrumb traces require the separate activity-location permission.',
-  },
-  'activity-location:read': {
-    title: 'Activity locations',
-    description: 'Read exact activity start, end, MTB jump, and bounded breadcrumb coordinates, and search activity starts or ends near a place. Place-name searches send the location text to Mapbox.',
-  },
-  'routes:read': {
-    title: 'Saved-route summaries',
-    description: 'Read route names, activity types, metric summaries, route, waypoint, and point counts, import/update times, and signed-in application links. Exact route locations require the separate saved-route location permission.',
-  },
-  'route-location:read': {
-    title: 'Saved-route locations and geometry',
-    description: 'Read exact route bounds, preview geometry and segment endpoints, waypoint coordinates, altitude and distance, and search routes near a place. Place-name searches send the location text to Mapbox.',
-  },
-};
+import { MCP_SCOPE_CONTENT, MCP_SCOPE_PARENTS, type McpScope } from '../../helpers/mcp-permissions.helper';
 
 interface McpAuthorizationRequest {
   requestId: string;
@@ -89,7 +41,11 @@ interface McpAuthorizationRequest {
   styleUrls: ['./mcp-authorization.component.scss'],
 })
 export class McpAuthorizationComponent implements OnInit {
+  private readonly haptics = inject(AppHapticsService);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly auth = inject(AppAuthService);
+  private readonly userService = inject(AppUserService);
   private readonly functions = inject(AppFunctionsService);
   private readonly windowService = inject(AppWindowService);
   private readonly logger = inject(LoggerService);
@@ -99,6 +55,18 @@ export class McpAuthorizationComponent implements OnInit {
   readonly deciding = signal<'approve' | 'deny' | null>(null);
   readonly error = signal<string | null>(null);
   readonly selectedScopes = signal<McpScope[]>([]);
+  readonly hasAccountProfile = computed(() => {
+    const profile = this.userService.profileReadState();
+    return profile.status === 'ready'
+      && profile.uid === this.auth.currentUser?.uid
+      && profile.profileExists;
+  });
+  readonly needsAccountSetup = computed(() => {
+    const profile = this.userService.profileReadState();
+    return profile.status === 'ready'
+      && profile.uid === this.auth.currentUser?.uid
+      && !profile.profileExists;
+  });
   readonly isAndroid = /android/i.test(
     this.windowService.windowRef.navigator?.userAgent || '',
   );
@@ -137,6 +105,7 @@ export class McpAuthorizationComponent implements OnInit {
   }
 
   toggleScope(scope: McpScope, event: MatCheckboxChange): void {
+    const previous = this.selectedScopes();
     this.selectedScopes.update((scopes) => {
       if (event.checked) {
         const parent = MCP_SCOPE_PARENTS[scope];
@@ -144,9 +113,21 @@ export class McpAuthorizationComponent implements OnInit {
           ? scopes
           : [...new Set([...scopes, scope])];
       }
-      const child = MCP_SCOPE_CHILDREN[scope];
-      return scopes.filter(current => current !== scope && current !== child);
+      const removed = new Set<McpScope>([scope]);
+      // Dependencies can form a chain (reflection write → reflection read → activity read).
+      for (let changed = true; changed;) {
+        changed = false;
+        for (const current of scopes) {
+          const parent = MCP_SCOPE_PARENTS[current];
+          if (parent && removed.has(parent) && !removed.has(current)) { removed.add(current); changed = true; }
+        }
+      }
+      return scopes.filter(current => !removed.has(current));
     });
+    const current = this.selectedScopes();
+    if (current.length !== previous.length || current.some(value => !previous.includes(value))) {
+      this.haptics.selection();
+    }
   }
 
   approve(): Promise<void> {
@@ -157,9 +138,23 @@ export class McpAuthorizationComponent implements OnInit {
     return this.decide(false);
   }
 
+  async completeAccountSetup(): Promise<void> {
+    const request = this.request();
+    if (!request || !this.needsAccountSetup() || this.deciding()) {
+      return;
+    }
+    this.haptics.selection();
+    await this.router.navigate(['/onboarding'], {
+      queryParams: { returnUrl: '/mcp/authorize', request_id: request.requestId },
+    });
+  }
+
   private async decide(approved: boolean): Promise<void> {
     const request = this.request();
     if (!request || this.deciding()) {
+      return;
+    }
+    if (approved && !this.hasAccountProfile()) {
       return;
     }
     if (approved && this.selectedScopes().length === 0) {

@@ -11,6 +11,7 @@ import {
   resolveAssistantSummaryMetricType,
 } from './metric-intent';
 import { TRAINING_SPORT_DEFINITIONS } from '../../../shared/training-disciplines';
+import { resolveCompatibleActivityType } from '../../../shared/activity-type-compatibility';
 import type { AssistantMcpToolName } from './mcp-session';
 
 const ASSISTANT_DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -21,6 +22,7 @@ const ASSISTANT_TIME_ZONE_DEFAULT_TOOL_NAMES = new Set<AssistantMcpToolName>([
   'query_metrics',
   'get_sleep_trend',
   'get_today_readiness',
+  'get_current_readiness',
   'get_daily_report',
 ]);
 const ASSISTANT_DATE_RANGE_TOOL_NAMES = new Set<AssistantMcpToolName>([
@@ -68,7 +70,13 @@ function normalizeAssistantActivityTypeValue(value: unknown): readonly unknown[]
   let matchedActivityTypes: readonly string[] | null = null;
   for (const sport of TRAINING_SPORT_DEFINITIONS) {
     for (const context of sport.contexts) {
-      if (context.activityTypes.length !== 1
+      // Query filters admit installed catalog members only. A future refined
+      // member must not prevent an existing single-profile context alias.
+      const supportedTypes = context.activityTypes.flatMap(type => {
+        const resolved = ActivityTypesHelper.resolveActivityType(type);
+        return resolved ? [resolved] : [];
+      });
+      if (supportedTypes.length !== 1
         || (
           normalizeAssistantCatalogTerm(context.id) !== normalized
           && normalizeAssistantCatalogTerm(context.label) !== normalized
@@ -78,7 +86,7 @@ function normalizeAssistantActivityTypeValue(value: unknown): readonly unknown[]
       if (matchedActivityTypes) {
         return [value];
       }
-      matchedActivityTypes = context.activityTypes;
+      matchedActivityTypes = supportedTypes;
     }
   }
   return matchedActivityTypes || [value];
@@ -94,6 +102,55 @@ function normalizeAssistantActivityTypes(
     ...input,
     activityTypes: input.activityTypes.flatMap(normalizeAssistantActivityTypeValue),
   };
+}
+
+function normalizeAssistantWorkoutStructure(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return value;
+  }
+  const structure = value as Record<string, unknown>;
+  const sport = typeof structure.sport === 'string'
+    ? resolveCompatibleActivityType(structure.sport)
+    : null;
+  return sport ? { ...structure, sport } : structure;
+}
+
+function normalizeAssistantTrainingPreviewInput(
+  toolName: AssistantMcpToolName,
+  input: Record<string, unknown>,
+): Record<string, unknown> {
+  if (toolName === 'preview_create_planned_workout') {
+    return {
+      ...input,
+      structure: normalizeAssistantWorkoutStructure(input.structure),
+    };
+  }
+  if (['preview_planned_workout_v2_change', 'preview_planned_workout_v3_change', 'preview_saved_workout_v2_change'].includes(toolName)
+    && input.change && typeof input.change === 'object' && !Array.isArray(input.change)) {
+    const change = input.change as Record<string, unknown>;
+    return {
+      ...input,
+      change: {
+        ...change,
+        structure: normalizeAssistantWorkoutStructure(change.structure),
+      },
+    };
+  }
+  if ((toolName === 'preview_training_changes' || toolName === 'preview_planned_workout_v3_changes') && Array.isArray(input.changes)) {
+    return {
+      ...input,
+      changes: input.changes.map((value) => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+          return value;
+        }
+        const change = value as Record<string, unknown>;
+        return 'structure' in change
+          ? { ...change, structure: normalizeAssistantWorkoutStructure(change.structure) }
+          : change;
+      }),
+    };
+  }
+  return input;
 }
 
 function normalizeAssistantSportsLibMetricInputs(
@@ -260,6 +317,7 @@ export function normalizeAssistantToolInput(
     defaultedInput,
   );
   normalizedInput = normalizeAssistantActivityTypes(normalizedInput);
+  normalizedInput = normalizeAssistantTrainingPreviewInput(toolName, normalizedInput);
   if (toolName === 'rank_activities_by_metric') {
     const activityGroup = typeof normalizedInput.activityGroup === 'string'
       ? resolveAssistantActivityGroup(normalizedInput.activityGroup)

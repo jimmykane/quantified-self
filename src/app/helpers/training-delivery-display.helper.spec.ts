@@ -1,0 +1,61 @@
+import { trainingDeliveryCommandError, trainingDeliveryCopyMessage, trainingDeliveryLatestEvent } from './training-delivery-display.helper';
+import type { TrainingDeliveryStatusV1 } from '@shared/training-provider-delivery';
+
+describe('Training delivery explanations', () => {
+  it.each([
+    [10, 20, 20, 'Last attempt'],
+    [20, 10, 20, 'Last accepted'],
+    [20, 20, 20, 'Last accepted'],
+    [null, 20, 20, 'Last attempt'],
+    [20, null, 20, 'Last accepted'],
+    [null, null, 30, 'Updated'],
+    [0, null, 0, 'Last accepted'],
+    [null, 0, 0, 'Last attempt'],
+  ] as const)('labels the latest delivery event (accepted %s, attempted %s)', (lastAcceptedAtMs, lastAttemptAtMs, timestamp, timestampLabel) => {
+    expect(trainingDeliveryLatestEvent({ lastAcceptedAtMs, lastAttemptAtMs, updatedAtMs: 30 })).toEqual({ timestamp, timestampLabel });
+  });
+  it('distinguishes unfinished first delivery from an unconfirmed edit without claiming corruption', () => {
+    const status = { status: 'retrying', differsFromQS: true, lastAcceptedAtMs: null } as TrainingDeliveryStatusV1;
+    expect(trainingDeliveryCopyMessage(status)).toContain('not fully confirmed');
+    expect(trainingDeliveryCopyMessage({ ...status, lastAcceptedAtMs: 1 })).toContain('latest changes');
+    expect(trainingDeliveryCopyMessage({ ...status, differsFromQS: false })).toBeNull();
+  });
+  it('describes Suunto acceptance without claiming connected-app visibility', () => {
+    const status = { provider: 'suunto', status: 'retrying', differsFromQS: true,
+      lastAcceptedAtMs: 1 } as TrainingDeliveryStatusV1;
+    expect(trainingDeliveryCopyMessage(status)).toBe('Suunto accepted an earlier Guide, but the latest changes were not accepted.');
+    expect(trainingDeliveryCopyMessage({ ...status, lastAcceptedAtMs: null })).toContain('acceptance of this delivery is not confirmed');
+  });
+  it('explains inactive-plan withdrawal instead of a changed workout', () => {
+    expect(trainingDeliveryCopyMessage({ status: 'paused_plan', differsFromQS: true } as TrainingDeliveryStatusV1)).toContain('awaiting removal');
+  });
+  it('explains blocked replacement without exposing private evidence or offering a blind retry', () => {
+    for (const code of ['failed-precondition', 'functions/failed-precondition']) {
+      for (const saving of [false, true]) {
+        const message = trainingDeliveryCommandError({ code, message: 'private evidence' }, saving, 'replace');
+        expect(message).toContain('check Garmin again'); expect(message).toContain('Cancel this review');
+        expect(message).not.toContain('private'); expect(message).not.toContain('time zone');
+      }
+    }
+    expect(trainingDeliveryCommandError({ code: 'functions/unavailable' }, true, 'replace')).toContain('same request');
+    expect(trainingDeliveryCommandError({ code: 'failed-precondition' }, true, 'retry')).toContain('same request');
+  });
+  it('uses actionable safe errors without exposing raw callable messages', () => {
+    expect(trainingDeliveryCommandError({ name: 'TimeoutError' }, false)).toContain('No sync settings were changed');
+    expect(trainingDeliveryCommandError({ code: 'functions/aborted' }, false)).toContain('latest version');
+    expect(trainingDeliveryCommandError({ code: 'functions/unavailable', message: 'private details' }, false)).not.toContain('private');
+    expect(trainingDeliveryCommandError({ name: 'TimeoutError' }, true)).toContain('same request');
+    expect(trainingDeliveryCommandError({ name: 'TimeoutError' }, true)).not.toContain('No sync settings');
+  });
+  it('explains fresh Guide blockers and keeps unknown confirmation results receipt-safe', () => {
+    for (const code of ['failed-precondition', 'functions/failed-precondition']) {
+      const message = trainingDeliveryCommandError({ code, message: 'private remote identity' }, true, 'fresh-guide');
+      expect(message).toContain('Resolve unfinished sends');
+      expect(message).toContain('use Duplicate to… for a completed workout');
+      expect(message).not.toContain('Repeat on another date');
+      expect(message).toContain('eight fresh copies');
+      expect(message).not.toContain('private');
+    }
+    expect(trainingDeliveryCommandError({ code: 'functions/unavailable' }, true, 'fresh-guide')).toContain('same request');
+  });
+});

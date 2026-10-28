@@ -14,6 +14,7 @@ const ENUM_LIKE_LABEL_PATTERN = /(?:^|\s)(?:type|group|status|state|kind|categor
 const ASSISTANT_DISCOVERY_EVIDENCE_TOOL_NAMES = new Set([
   'list_activity_types',
   'list_measurement_types',
+  'list_manual_measurement_types',
   'list_metrics',
   'list_training_metrics',
   'list_sleep_vitals',

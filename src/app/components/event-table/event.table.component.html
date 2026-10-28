@@ -2,10 +2,10 @@
 <div class="qs-glass-card-panel table-container">
   @if (showToolbar) {
   <div class="table-toolbar">
-    <div class="table-toolbar-main">
+    <div class="table-toolbar-main" [class.table-toolbar-main--compact]="isLibraryPresentation">
       <mat-form-field appearance="outline" class="qs-search-field" subscriptSizing="dynamic">
-        <input matInput [value]="searchTerm" (input)="onSearchInput($event)" placeholder="Search events"
-          aria-label="Search events"
+        <input matInput [value]="searchTerm" (input)="onSearchInput($event)" placeholder="Search activities"
+          aria-label="Search activities"
           autocomplete="off">
         <mat-icon matSuffix *ngIf="!searchTerm">search</mat-icon>
         <button mat-icon-button matSuffix *ngIf="searchTerm" (click)="clearSearch()" aria-label="Clear">
@@ -14,32 +14,39 @@
       </mat-form-field>
 
       <div class="table-toolbar-filters">
-        <mat-form-field appearance="outline" class="tag-filter-field" subscriptSizing="dynamic">
-          <mat-label>Tags</mat-label>
-          <mat-select [value]="tagFilter" [disabled]="tagFilterOptions.length === 0"
-            (selectionChange)="updateTagFilter($event.value)">
-            <mat-option value="">All tags</mat-option>
-            @for (tag of tagFilterOptions; track tag) {
-            <mat-option [value]="tag">{{ tag }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
+        @if (isLibraryPresentation) {
+          <app-event-table-actions [selectedDataTypes]="selectedColumns" [dataTypes]="libraryAvailableColumns" icon="tune"
+            (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
+        }
+        @if (showTagFilter) {
+        <app-activity-filter-picker class="tag-filter-field" label="Tags" allLabel="All tags" searchLabel="Search tags"
+          [options]="tagPickerOptions" [selectedValues]="tagPickerValues" [loading]="tagCatalogIsLoading"
+          (opened)="onTagFilterOpened(true)" (selectionChange)="updateTagFilters($event)"></app-activity-filter-picker>
+        }
         <ng-content select="[event-table-filters]"></ng-content>
       </div>
+      @if (canManageEvents && !isLibraryPresentation) {
+        <div class="table-toolbar-actions">
+          <app-event-table-actions [selectedDataTypes]="selectedColumns" icon="tune"
+            (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
+        </div>
+      }
     </div>
+
+    <ng-content select="[event-table-active-filters]"></ng-content>
 
     @if (canManageEvents && selection.selected.length > 0) {
       <div class="table-selection-toolbar" aria-live="polite">
         <div class="selection-summary">
           <mat-icon>check_circle</mat-icon>
-          <span>{{ selection.selected.length }} {{ selection.selected.length === 1 ? 'event' : 'events' }} selected</span>
+          <span>{{ selection.selected.length }} {{ selection.selected.length === 1 ? 'activity' : 'activities' }} selected</span>
         </div>
 
         <div class="selection-actions">
           <button mat-button
             class="bulk-action-button"
             [disabled]="isBulkTagSaving"
-            [attr.aria-label]="'Update tags on ' + selection.selected.length + ' selected events'"
+            [attr.aria-label]="'Update tags on ' + selection.selected.length + ' selected activities'"
             (click)="openBulkEventTagsDialog($event)">
             <span class="bulk-action-button-content">
               <mat-icon>sell</mat-icon>
@@ -50,7 +57,7 @@
           <button mat-button
             class="bulk-action-button"
             [disabled]="selection.selected.length < 2"
-            [attr.aria-label]="'Merge ' + selection.selected.length + ' ' + (selection.selected.length === 1 ? 'event' : 'events')"
+            [attr.aria-label]="'Merge ' + selection.selected.length + ' ' + (selection.selected.length === 1 ? 'activity' : 'activities')"
             (click)="$event.preventDefault(); $event.stopPropagation();mergeSelection($event)">
             <span class="bulk-action-button-content">
               <mat-icon>compare_arrows</mat-icon>
@@ -60,7 +67,7 @@
 
           <button mat-button
             class="bulk-action-button"
-            [attr.aria-label]="'Download CSV for ' + selection.selected.length + ' ' + (selection.selected.length === 1 ? 'event' : 'events')"
+            [attr.aria-label]="'Download CSV for ' + selection.selected.length + ' ' + (selection.selected.length === 1 ? 'activity' : 'activities')"
             (click)="$event.preventDefault(); $event.stopPropagation(); downloadAsCSV($event)">
             <span class="bulk-action-button-content">
               <mat-icon>csv</mat-icon>
@@ -70,7 +77,7 @@
 
           <button mat-button
             class="bulk-action-button"
-            [attr.aria-label]="'Download GPX for ' + selection.selected.length + ' ' + (selection.selected.length === 1 ? 'event' : 'events')"
+            [attr.aria-label]="'Download GPX for ' + selection.selected.length + ' ' + (selection.selected.length === 1 ? 'activity' : 'activities')"
             (click)="$event.preventDefault(); $event.stopPropagation(); downloadGPXSelection()">
             <span class="bulk-action-button-content">
               <mat-icon>file_download</mat-icon>
@@ -88,9 +95,11 @@
             </span>
           </button>
 
+          @if (canSendOwnedActivities) { <button mat-button class="bulk-action-button" [attr.aria-label]="'Send to service: review ' + selection.selected.length + ' selected ' + (selection.selected.length === 1 ? 'activity' : 'activities')" (click)="$event.preventDefault(); $event.stopPropagation(); sendToService()"><mat-icon>send</mat-icon><span>Send to service</span></button> }
+
           <button mat-button color="warn"
             class="bulk-action-button"
-            [attr.aria-label]="'Delete ' + selection.selected.length + ' ' + (selection.selected.length === 1 ? 'event' : 'events')"
+            [attr.aria-label]="'Delete ' + selection.selected.length + ' ' + (selection.selected.length === 1 ? 'activity' : 'activities')"
             (click)="$event.preventDefault(); $event.stopPropagation();deleteSelection()">
             <span class="bulk-action-button-content">
               <mat-icon>delete</mat-icon>
@@ -113,10 +122,9 @@
   </div>
   }
 
-  <app-loading-overlay [isLoading]="isLoading" [hasError]="this.events && this.events.length === 0"
-    [errorMessage]="'No events yet'" [errorHint]="'Import activities or adjust filters to see rows'"
-    [errorIcon]="'table_rows'" [showSkeleton]="false" height="auto" borderRadius="12px">
-    <div class="table-wrapper qs-scrollbar">
+  <app-loading-overlay class="activity-table-overlay" [isLoading]="isLoading"
+    [showSkeleton]="false" height="auto" [minHeight]="showEmptyNotice ? '0px' : '224px'" borderRadius="12px">
+    <div class="table-wrapper qs-scrollbar" tabindex="0" role="region" aria-label="Activity table">
       <table mat-table [dataSource]="data" [trackBy]="trackByEventId" matSort [matSortActive]="tableSortActive"
         [matSortDirection]="tableSortDirection" matSortDisableClear>
         @for (column of displayedColumns; track column; let isFirst = $first; let isLast = $last) {
@@ -124,35 +132,52 @@
           @if (isFirst && canManageEvents) {
           <th mat-header-cell *matHeaderCellDef>
             <mat-checkbox (change)="$event ? masterToggle() : null" [checked]="selection.hasValue() && isAllSelected()"
-              [indeterminate]="selection.hasValue() && !isAllSelected()">
+              [indeterminate]="isLibraryPresentation ? isSelectionIndeterminate : selection.hasValue() && !isAllSelected()"
+              [aria-label]="isLibraryPresentation ? 'Select activities on this page' : 'Select all matching activities'">
             </mat-checkbox>
           </th>
           }
           @if (isLast && showRowActions) {
-          <th mat-header-cell *matHeaderCellDef [attr.aria-label]="canManageEvents ? null : 'Event actions'">
-            @if (canManageEvents) {
-            <app-event-table-actions [selectedDataTypes]="selectedColumns"
-              (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
-            }
-          </th>
+          <th mat-header-cell *matHeaderCellDef aria-label="Activity actions"></th>
           }
           @if ((!(isFirst && canManageEvents) && !(isLast && showRowActions))) {
           <th mat-header-cell *matHeaderCellDef mat-sort-header [disabled]="!isColumnHeaderSortable(column)">
-            <app-data-type-icon [dataType]="column"></app-data-type-icon>
+            <app-data-type-icon [dataType]="column" aria-hidden="true"></app-data-type-icon>
+            <span class="cdk-visually-hidden">{{ isLibraryPresentation && column === 'Name' ? 'Activity' : column }}</span>
           </th>
           }
-          <td mat-cell *matCellDef="let row" (click)="onCellClick($event, row, column)">
+          <td mat-cell *matCellDef="let row" (click)="onCellClick($event, row, column)"
+            [class.event-activity-cell]="isLibraryPresentation && column === 'Name'">
+            @if (isLibraryPresentation && column === 'Name') {
+              <a class="event-activity-name" [class.activity-type-cell]="!row['Library Activity Name']"
+                [class.description-text]="!!row['Library Activity Name']"
+                [matTooltip]="row['Library Activity Name']" [matTooltipDisabled]="!row['Library Activity Name']"
+                [routerLink]="['/user', (targetUser && targetUser.uid) || user.uid, 'event', row.Event.getID()]"
+                [attr.aria-label]="row['Library Activity Label']" (click)="$event.stopPropagation()" appHapticTap>
+                @if (row['Library Activity Name']) { {{ row['Library Activity Name'] }} }
+                @else {
+                  <app-activity-type-icon [activityType]="row['Activity Types']" [event]="row.Event" size="18px" vAlign="middle"></app-activity-type-icon>
+                  <span class="activity-type-text">{{ row['Activity Types'] || 'Untitled activity' }}</span>
+                }
+              </a>
+              @if (row['Library Activity Name']) {
+              <span class="event-activity-type activity-type-cell" [matTooltip]="row['Activity Types']">
+                <app-activity-type-icon [activityType]="row['Activity Types']" [event]="row.Event" size="18px" vAlign="middle"></app-activity-type-icon>
+                <span class="activity-type-text">{{ row['Activity Types'] }}</span>
+              </span>
+              }
+            }
             @if (column === 'Checkbox') {
             <mat-checkbox (click)="$event.stopPropagation()" (change)="$event ? checkBoxClick(row) : null"
-              [checked]="selection.isSelected(row)">
+              [checked]="selection.isSelected(row)" [aria-label]="'Select activity ' + (row['Library Activity Label'] || row.Name || row.Description || 'Untitled activity')">
             </mat-checkbox>
             }
             @if (column === 'Actions') {
             <span>
               @if (user) {
-              <app-event-actions [user]="user" [event]="$any(row.Event)"
+              <app-event-actions [user]="user" [event]="row.Event"
                 [showDownloadOriginal]="true" [navigateAfterDelete]="false"
-                (eventDeleted)="removeDeletedEvent($event)"></app-event-actions>
+                (eventDeleted)="removeDeletedEvent($event)" (ascentChanged)="refreshSavedAscent($event)"></app-event-actions>
               }
             </span>
             }
@@ -166,10 +191,13 @@
                 </span>
               }
               @if (!row['Merged Event'] && row[column]) {
-              <app-activity-type-icon [activityType]="row[column]" [event]="$any(row.Event)" size="18px" vAlign="middle"></app-activity-type-icon>
+              <app-activity-type-icon [activityType]="row[column]" [event]="row.Event" size="18px" vAlign="middle"></app-activity-type-icon>
               }
               <span class="activity-type-text">{{ row[column] }}</span>
             </span>
+            @if (hideGeneratedNames && row.Name) {
+              <span class="activity-custom-name description-text" [matTooltip]="row.Name">{{ row.Name }}</span>
+            }
             }
             @if (column === 'Shared') {
             <span class="shared-state-cell" [class.shared-state-cell--empty]="!row[column]"
@@ -194,7 +222,7 @@
                 <span>{{ row['Tag Values'].length }}</span>
               </span>
               <mat-chip-set class="event-tags-chip-set" aria-hidden="true">
-                @for (tag of row['Tag Values'].slice(0, 2); track tag) { <mat-chip>{{ tag }}</mat-chip> }
+                @for (tag of row['Tag Values'].slice(0, 2); track tag) { <mat-chip [highlighted]="isLibraryPresentation && tag.toLowerCase() === filterContext">{{ tag }}</mat-chip> }
                 @if (row['Tag Values'].length > 2) { <mat-chip>+{{ row['Tag Values'].length - 2 }}</mat-chip> }
               </mat-chip-set>
               } @else {
@@ -214,7 +242,7 @@
             </mat-chip-set>
             } @else { <span aria-label="No tags">-</span> }
             }
-            @if (column !== 'Checkbox' && column !== 'Actions' && column !== 'Activity Types' && column !== 'Shared' && column !== 'Tags' && column!=='Privacy') {
+            @if (column !== 'Checkbox' && column !== 'Actions' && column !== 'Activity Types' && column !== 'Shared' && column !== 'Tags' && column!=='Privacy' && !(isLibraryPresentation && column === 'Name')) {
             <span class="data-cell" [class.description-cell]="column === 'Description'" [class.device-names-cell]="column === 'Device Names'">
               @if (column === 'Description') {
               <span class="description-text">{{ row[column] }}</span>
@@ -248,24 +276,39 @@
         }
 
 
-        <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
+        <tr mat-header-row class="event-table-header" *matHeaderRowDef="displayedColumns; sticky: true"></tr>
         <tr mat-row *matRowDef="let row; columns: displayedColumns;"
           [routerLink]="['/user', (targetUser && targetUser.uid) || user.uid, 'event', row.Event.getID()]"
           [class.merged]="row['Merged Event']" [style.--row-gradient]="row['Gradient']" class="normal-row activity-row">
         </tr>
 
         <!-- Row shown when there is no matching data. -->
-        <tr class="mat-row" *matNoDataRow>
+        <tr class="mat-row activity-table-no-data-row" *matNoDataRow
+          [class.activity-table-no-data-row--hidden]="!isLoading">
           <td class="mat-cell" [attr.colspan]="displayedColumns.length">
-            <span *ngIf="searchTerm">No events found matching "{{searchTerm}}"</span>
-            <span *ngIf="!searchTerm && !isLoading">No events found</span>
+            @if (isLoading) { <span>Loading activities…</span> }
           </td>
         </tr>
       </table>
     </div>
-
-    <mat-paginator (page)="pageChanges($event)" [length]="data ? data.data.length : 0"
-      [pageSize]="tablePageSize" [hidePageSize]="isBrowsePresentation" [showFirstLastButtons]="true"
-      [pageSizeOptions]="[10, 25, 50, 100, 250]"></mat-paginator>
+    @if (showEmptyNotice) {
+      <div class="activity-table-empty">
+        <div class="activity-table-empty-main">
+          <mat-icon aria-hidden="true">event_busy</mat-icon>
+          <div class="activity-table-empty-copy" role="status">
+            <h3>{{ emptyNoticeMessage }}</h3>
+            @if (emptyNoticeHint) { <p>{{ emptyNoticeHint }}</p> }
+          </div>
+        </div>
+        <div class="activity-table-empty-actions">
+          <ng-content select="[event-table-empty-action]"></ng-content>
+        </div>
+      </div>
+    }
   </app-loading-overlay>
+
+  <mat-paginator (page)="pageChanges($event)" [length]="data.data.length"
+    [hidden]="showEmptyNotice"
+    [pageSize]="tablePageSize" [hidePageSize]="isBrowsePresentation" [showFirstLastButtons]="true"
+    [pageSizeOptions]="isLibraryPresentation ? [5, 10, 25, 50, 100, 250] : [10, 25, 50, 100, 250]"></mat-paginator>
 </div>

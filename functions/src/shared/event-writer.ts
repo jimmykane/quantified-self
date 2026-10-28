@@ -1,6 +1,10 @@
 import { AppEventInterface, FirestoreActivityJSON, FirestoreEventJSON, OriginalFileMetaData } from '../../../shared/app-event.interface';
 import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
 import { preserveEventTagsOnRewrite } from '../../../shared/event-tags';
+import { readActivitySourceIdentity } from '../../../shared/activity-source-identity';
+import { isActivityIdentityConflict } from './activity-identity-conflict';
+import { ProviderImportDuplicateError } from './provider-import-duplicate';
+import { ACTIVITY_ELEVATION_METRICS, activityElevationMetric, readAscentCorrection, type AscentCorrectedActivity } from '../../../shared/activity-ascent';
 
 /**
  * Logger adapter interface for cross-environment compatibility.
@@ -24,11 +28,14 @@ export const consoleLogAdapter: LogAdapter = {
 
 export interface FirestoreAdapter {
     setDoc(path: string[], data: unknown): Promise<void>;
+    prepareTrainingLoad?(event: AppEventInterface): Promise<() => Promise<void>>;
     createBlob(data: Uint8Array): unknown;
     generateID(): string;
 }
 
 export interface UploadedStorageFileMetadata {
+    /** Actual retained location when the backend isolates source revisions. */
+    path?: string;
     generation?: string | number;
 }
 
@@ -99,8 +106,11 @@ function isFirestoreUndefinedValueError(error: Error): boolean {
 }
 
 function isControlFlowWriteAbort(error: Error): boolean {
-    return error.name === 'EventWriteSkippedForDeletedUserError'
-        || error.name === 'UserDeletionGuardReadError';
+    return isActivityIdentityConflict(error) || error instanceof ProviderImportDuplicateError
+        || error.name === 'EventWriteSkippedForDeletedUserError'
+        || error.name === 'EventWriteSkippedForDeletedEventError'
+        || error.name === 'UserDeletionGuardReadError'
+        || error.name === 'HistoryLifecycleChangedError';
 }
 
 function normalizeStorageGeneration(value: unknown): string | undefined {
@@ -156,7 +166,7 @@ export class EventWriter {
     public async writeAllEventData(userID: string, event: AppEventInterface, originalFiles?: OriginalFile[] | OriginalFile): Promise<OriginalFileMetaData[]> {
         const startTotal = Date.now();
         this.logger.info('writeAllEventData called', { userID, eventID: event.getID(), adapterPresent: !!this.storageAdapter });
-        const writePromises: Promise<void>[] = [];
+        const writes: Array<() => Promise<void>> = [];
         let persistedOriginalFiles: OriginalFileMetaData[] = [];
 
         // Ensure Event ID
@@ -165,6 +175,7 @@ export class EventWriter {
         }
 
         try {
+            const persistTrainingLoad = await this.adapter.prepareTrainingLoad?.(event);
             const startActivities = Date.now();
             const activities = event.getActivities();
             for (const activity of activities) {
@@ -181,14 +192,22 @@ export class EventWriter {
                     eventID: event.getID() as string,
                     ...(event.startDate ? { eventStartDate: event.startDate } : {}),
                 };
+                delete activityJSON.sourceIdentity; // Accept only the validated server-owned instance snapshot below.
                 const sourceActivityKey = `${(activity as any)?.sourceActivityKey || ''}`.trim();
+                const sourceIdentity = readActivitySourceIdentity((activity as any)?.sourceIdentity, activity.getID());
+                if (sourceIdentity) activityJSON.sourceIdentity = sourceIdentity;
                 if (sourceActivityKey) {
                     activityJSON.sourceActivityKey = sourceActivityKey;
+                }
+                for (const metric of ACTIVITY_ELEVATION_METRICS) {
+                    const { field } = activityElevationMetric(metric);
+                    const correction = readAscentCorrection((activity as AscentCorrectedActivity)[field]);
+                    if (correction) activityJSON[field] = correction;
                 }
 
 
                 const activityPath = ['users', userID, 'activities', <string>activity.getID()];
-                writePromises.push(this.writeDocWithContext(activityPath, activityJSON));
+                writes.push(() => this.writeDocWithContext(activityPath, activityJSON));
             }
             this.logger.info(`Prepared ${activities.length} activity writes in ${Date.now() - startActivities}ms`);
 
@@ -240,7 +259,7 @@ export class EventWriter {
                     const generation = normalizeStorageGeneration(uploadResult?.generation);
 
                     uploadedFilesMetadata.push({
-                        path: filePath,
+                        path: uploadResult?.path || filePath,
                         bucket: this.storageAdapter.getBucketName?.() || this.bucketName,
                         ...(generation ? { generation } : {}),
                         startDate: file.startDate,
@@ -261,7 +280,7 @@ export class EventWriter {
                 }
 
             } else {
-                this.logger.warn('Skipping file upload.', 'storageAdapter:', !!this.storageAdapter);
+                this.logger.info('Skipping file upload.', 'storageAdapter:', !!this.storageAdapter);
                 // Preserve existing file metadata if no new files are being uploaded
                 if (event.originalFiles) {
                     eventJSON.originalFiles = event.originalFiles;
@@ -276,14 +295,15 @@ export class EventWriter {
             }
 
             const eventPath = ['users', userID, 'events', <string>event.getID()];
-            writePromises.push(this.writeDocWithContext(eventPath, eventJSON));
+            writes.push(() => this.writeDocWithContext(eventPath, eventJSON));
 
-            this.logger.info(`Starting write batch for ${writePromises.length} writes...`);
+            this.logger.info(`Starting write batch for ${writes.length} writes...`);
             const startWrites = Date.now();
             // A deletion-guarded write can reject while sibling writes are
             // still settling. Wait for all writes so no background write can
             // continue after the caller starts deletion handling.
-            const writeResults = await Promise.allSettled(writePromises);
+            // Upload failure must not leave source writes running after this attempt returns.
+            const writeResults = await Promise.allSettled(writes.map(write => write()));
             const rejectedWrite = writeResults.find(
                 (result): result is PromiseRejectedResult => result.status === 'rejected',
             );
@@ -292,6 +312,7 @@ export class EventWriter {
             }
             this.logger.info(`Write batch complete in ${Date.now() - startWrites}ms`);
             this.logger.info(`Total writeAllEventData execution time: ${Date.now() - startTotal}ms`);
+            await persistTrainingLoad?.();
             return persistedOriginalFiles;
         } catch (e) {
             const error = e as Error;

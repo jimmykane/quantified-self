@@ -14,7 +14,7 @@ type StorageRulesTestEnvironment = RulesTestEnvironment & {
 
 let testEnv: StorageRulesTestEnvironment;
 
-describe('Storage Security Rules', () => {
+describe.each(['original.fit', `sources/${'a'.repeat(64)}/original.fit`])('Storage Security Rules (%s)', originalPath => {
     beforeAll(async () => {
         testEnv = await initializeTestEnvironment({
             projectId: 'demo-test',
@@ -45,7 +45,7 @@ describe('Storage Security Rules', () => {
     const userId = 'user_123';
     const otherUserId = 'other_123';
     const eventId = 'event_123';
-    const filePath = `users/${userId}/events/${eventId}/original.fit`;
+    const filePath = `users/${userId}/events/${eventId}/${originalPath}`;
     const otherFilePath = `users/${userId}/imports/original.fit`;
     const testBucketUrl = 'gs://demo-test.appspot.com';
     const testBucketName = 'demo-test.appspot.com';

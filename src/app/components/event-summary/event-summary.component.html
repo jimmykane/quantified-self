@@ -16,15 +16,15 @@
       <mat-icon aria-hidden="true">{{ feelingIcon }}</mat-icon>
     </span>
     }
-    @if (rpe) {
-    <span summary-chips class="chip rpe-chip" [matTooltip]="'RPE: ' + rpeLabel">RPE {{ rpe }}</span>
+    @if (rpe !== null) {
+    <span summary-chips class="chip rpe-chip" [matTooltip]="'RPE: ' + rpeLabel">RPE {{ rpeLabel }}</span>
     }
 
     <div summary-actions class="event-summary-actions">
       @if (isOwner) {
       <div class="event-summary-actions-primary">
-        <button mat-icon-button (click)="openEditDetails()" matTooltip="Edit details">
-          <mat-icon>edit</mat-icon>
+        <button mat-icon-button (click)="openEditDetails()" matTooltip="Edit details" aria-label="Edit details">
+          <mat-icon>edit_note</mat-icon>
         </button>
         @if (event.isMerge && eventActivitiesCount >= 2) {
         <button mat-icon-button (click)="openBenchmark()" matTooltip="Benchmark Analysis"
@@ -33,6 +33,11 @@
           <mat-icon [class.has-result]="benchmarkCount > 0">
             analytics
           </mat-icon>
+        </button>
+        }
+        @if (canEditTrainingLoad) {
+        <button mat-icon-button type="button" (click)="openTrainingLoad()" matTooltip="Training load" aria-label="Edit Training load">
+          <mat-icon>monitor_heart</mat-icon>
         </button>
         }
         <app-event-actions [user]="user" [event]="event" [showDownloadOriginal]="true" align="end"></app-event-actions>
@@ -53,32 +58,40 @@
       </div>
     </div>
   </app-summary-primary-info>
-  @if (eventTags.length > 0 || isOwner) {
-  <div class="event-tags-banner">
+  <div class="summary-primary-extension"><ng-content select="[after-summary]"></ng-content></div>
+  @if (showDeviceChip || eventTags.length > 0 || isOwner) {
+  <div class="event-metadata-row">
+    @if (showDeviceChip) {
+    <div class="device-info-banner" [matTooltip]="deviceChipTooltip" [matTooltipDisabled]="!deviceChipTooltip">
+      <div class="device-info-banner-primary">
+        <mat-icon class="device-info-banner-icon" aria-hidden="true">watch</mat-icon>
+        <span class="device-info-banner-label">{{ deviceChipLabel }}</span>
+      </div>
+      <app-service-source-icon class="device-info-banner-source" [event]="event" [user]="ownerMetadataLookupUser" [showIcon]="false"
+        [showText]="true" [suppressedTextLabels]="deviceSourceSuppressedLabels"></app-service-source-icon>
+    </div>
+    }
+    @if (eventTags.length > 0 || isOwner) {
+    <div class="event-tags-banner" [class.event-tags-banner--populated]="eventTags.length > 0">
     @if (isOwner) {
     <button mat-button type="button" class="event-tags-button" (click)="openTags()"
-      [attr.aria-label]="eventTags.length ? 'Edit event tags' : 'Add event tags'">
-      <mat-icon>sell</mat-icon>
+      [attr.aria-label]="eventTags.length ? 'Edit activity tags' : 'Add activity tags'">
+      <span class="event-tags-button-content">
+      <mat-icon aria-hidden="true">sell</mat-icon>
       @if (eventTags.length) {
       <mat-chip-set aria-hidden="true">
-        @for (tag of eventTags; track tag) { <mat-chip>{{ tag }}</mat-chip> }
+        @for (tag of eventTags; track tag) { <mat-chip><span class="event-tag-label" [matTooltip]="tag">{{ tag }}</span></mat-chip> }
       </mat-chip-set>
       } @else { <span>Add tags</span> }
+      </span>
     </button>
     } @else {
-    <mat-chip-set aria-label="Event tags">
-      @for (tag of eventTags; track tag) { <mat-chip>{{ tag }}</mat-chip> }
+    <mat-chip-set aria-label="Activity tags">
+      @for (tag of eventTags; track tag) { <mat-chip><span class="event-tag-label" [matTooltip]="tag">{{ tag }}</span></mat-chip> }
     </mat-chip-set>
     }
-  </div>
-  }
-  @if (showDeviceChip) {
-  <div class="device-info-banner" [matTooltip]="deviceChipTooltip" [matTooltipDisabled]="!deviceChipTooltip">
-    <div class="device-info-banner-primary">
-      <span class="device-info-banner-label">{{ deviceChipLabel }}</span>
     </div>
-    <app-service-source-icon class="device-info-banner-source" [event]="event" [user]="ownerMetadataLookupUser" [showIcon]="false"
-      [showText]="true" [suppressedTextLabels]="deviceSourceSuppressedLabels"></app-service-source-icon>
+    }
   </div>
   }
 

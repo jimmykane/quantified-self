@@ -7,7 +7,7 @@ import { AppRoutingModule } from './app.routing.module';
 import { provideAnimations } from '@angular/platform-browser/animations';
 import { SideNavComponent } from './components/sidenav/sidenav.component';
 import { environment } from '../environments/environment';
-import { isPlatformBrowser } from '@angular/common';
+import { DOCUMENT, isPlatformBrowser } from '@angular/common';
 import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { provideFirebaseApp, initializeApp } from 'app/firebase/app';
 import { provideAuth, getAuth } from 'app/firebase/auth';
@@ -31,6 +31,7 @@ import { maybeConnectFirestoreEmulator, maybeConnectStorageEmulator } from './fi
 import { assertEnvironmentSafety } from '../environments/environment-safety';
 
 import { AppUpdateService } from './services/app.update.service';
+import { AppCheckDiagnosticsService } from './services/app-check-diagnostics.service';
 import { MaintenanceComponent } from './components/maintenance/maintenance.component';
 import { GracePeriodBannerComponent } from './components/grace-period-banner/grace-period-banner.component';
 import { RouteLoaderComponent } from './components/route-loader/route-loader.component';
@@ -43,10 +44,11 @@ import { PublicLayoutComponent } from './components/public-layout/public-layout.
 import { AppRemoteConfigService } from './services/app.remote-config.service';
 import { FirebaseAnalyticsTrackingService } from './services/firebase-analytics-tracking.service';
 
-import { MAT_DATE_LOCALE_PROVIDER, getBrowserLocale } from './shared/adapters/date-locale.config';
+import { MAT_DATE_LOCALE_PROVIDER, getAppLocale } from './shared/adapters/date-locale.config';
 import { APP_STORAGE } from './services/storage/app.storage.token';
 import { MemoryStorage } from './services/storage/memory.storage';
 import { shouldProvideClientHydrationForRuntime } from './shared/public-startup-route';
+import { initializeProductionAnalytics } from './helpers/analytics-runtime.helper';
 
 export const QS_MENU_DEFAULT_OPTIONS: MatMenuDefaultOptions = {
   overlayPanelClass: 'qs-menu-panel',
@@ -60,6 +62,7 @@ export const QS_MENU_DEFAULT_OPTIONS: MatMenuDefaultOptions = {
 assertEnvironmentSafety(environment);
 
 const enableAppCheck = environment.appCheckEnabled;
+const billingTest = environment.firebase.projectId === 'demo-stripe-billing';
 // `useFetchStreams` is an internal/unsupported Firestore Web SDK option.
 // We scope it behind this local type instead of `@ts-ignore` so usage is explicit and searchable.
 // If Firebase drops or changes this flag in a future release, remove it and re-validate Firestore-heavy flows.
@@ -103,14 +106,28 @@ const hydrationProviders = shouldProvideClientHydrationForRuntime(appDocument, t
     },
     provideHttpClient(withInterceptorsFromDi()),
     provideFirebaseApp(() => initializeApp(environment.firebase)),
+    provideAppInitializer(() => {
+      if (environment.backendMode !== 'emulator' || !environment.emulatorConfig) return;
+      const { host, ports } = environment.emulatorConfig;
+      const app = getApp();
+      // Profile verification and payment recovery share a separate Lite client.
+      // Connect it before authenticated services start reading during bootstrap.
+      return import('firebase/firestore/lite').then(({ getFirestore, connectFirestoreEmulator }) => {
+        connectFirestoreEmulator(getFirestore(app), host, ports.firestore);
+      });
+    }),
     ...(enableAppCheck ? [provideAppCheck(() => {
-      if (!isPlatformBrowser(inject(PLATFORM_ID))) {
+      if (billingTest || !isPlatformBrowser(inject(PLATFORM_ID))) {
         return null as unknown as ReturnType<typeof initializeAppCheck>;
       }
 
       const provider = new ReCaptchaV3Provider(environment.firebase.recaptchaSiteKey);
       (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = !environment.production && !environment.beta;
-      return initializeAppCheck(getApp(), { provider, isTokenAutoRefreshEnabled: true });
+      const diagnostics = inject(AppCheckDiagnosticsService);
+      diagnostics.observeInitialRejections();
+      const appCheck = initializeAppCheck(getApp(), { provider, isTokenAutoRefreshEnabled: true });
+      diagnostics.monitor(appCheck);
+      return appCheck;
     })] : []),
     provideAuth(() => {
       const auth = getAuth();
@@ -144,20 +161,16 @@ const hydrationProviders = shouldProvideClientHydrationForRuntime(appDocument, t
       return getPerformance();
     })] : []),
     ...(environment.analyticsEnabled ? [provideAnalytics(() => {
-      if (!isPlatformBrowser(inject(PLATFORM_ID))) {
-        return null as unknown as ReturnType<typeof initializeAnalytics>;
-      }
-
-      return initializeAnalytics(getApp(), {
-        config: {
-          app_name: environment.firebase.projectId,
-          app_version: environment.appVersion,
-          debug_mode: environment.localhost
-        }
-      });
+      const browser = isPlatformBrowser(inject(PLATFORM_ID));
+      const document = inject(DOCUMENT);
+      return initializeProductionAnalytics(environment, {
+        isBrowser: browser && !billingTest,
+        href: browser ? document.location?.href ?? '' : '',
+        referrer: browser ? document.referrer : '',
+      }, settings => initializeAnalytics(getApp(), settings)) as ReturnType<typeof initializeAnalytics>;
     })] : []),
     ...(environment.remoteConfigEnabled ? [provideRemoteConfig(() => {
-      if (!isPlatformBrowser(inject(PLATFORM_ID))) {
+      if (billingTest || !isPlatformBrowser(inject(PLATFORM_ID))) {
         return null as unknown as ReturnType<typeof getRemoteConfig>;
       }
 
@@ -169,7 +182,7 @@ const hydrationProviders = shouldProvideClientHydrationForRuntime(appDocument, t
     { provide: MAT_MENU_DEFAULT_OPTIONS, useValue: QS_MENU_DEFAULT_OPTIONS },
     { provide: MAT_BOTTOM_SHEET_DEFAULT_OPTIONS, useValue: { autoFocus: 'dialog', panelClass: 'qs-bottom-sheet-container' } },
     MAT_DATE_LOCALE_PROVIDER,
-    { provide: LOCALE_ID, useFactory: getBrowserLocale },
+    { provide: LOCALE_ID, useFactory: getAppLocale },
     {
       provide: APP_STORAGE,
       useFactory: () => {
@@ -181,7 +194,7 @@ const hydrationProviders = shouldProvideClientHydrationForRuntime(appDocument, t
       }
     },
     provideAppInitializer(() => {
-      if (!isPlatformBrowser(inject(PLATFORM_ID))) {
+      if (billingTest || !isPlatformBrowser(inject(PLATFORM_ID))) {
         return;
       }
 

@@ -1,7 +1,12 @@
+import { HttpsError } from 'firebase-functions/v2/https';
+import { ALLOWED_CORS_ORIGINS } from './shared/callable-policy';
+import { assertHistoryWrite, currentHistoryExecution } from './connection-history/context';
+import { TrainingLoadSourceWrite } from './training-load/training-load-source-write';
 import * as functions from 'firebase-functions/v1';
 type Request = functions.https.Request;
 type Response = functions.Response;
 import * as admin from 'firebase-admin';
+import { createFirebaseCustomToken } from './bootstrap';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as crypto from 'crypto';
 import * as logger from 'firebase-functions/logger';
@@ -9,12 +14,18 @@ import { EventInterface } from '@sports-alliance/sports-lib';
 
 import * as base58 from 'bs58';
 import { EventWriter, FirestoreAdapter, StorageAdapter, LogAdapter, OriginalFile } from './shared/event-writer';
+import { getContentAddressedOriginalPath, saveChecksummedStorageFile } from './shared/storage-file-save';
 import { generateIDFromParts as sharedGenerateIDFromParts, generateEventID as sharedGenerateEventID } from './shared/id-generator';
 import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
 import { EVENT_PROCESSING_ENTITY, ProcessingMetaData } from './shared/processing-metadata.interface';
 import { sportsLibVersionToCode } from './reparse/sports-lib-reparse.service';
 import { OriginalFileMetaData } from '../../shared/app-event.interface';
-import { preserveEventTagsOnRewrite } from '../../shared/event-tags';
+import { prepareImportedEventWrite, preserveImportedActivityEdits, preserveImportedEventEdits } from './shared/import-preservation';
+import {
+  createMissingEventTagCatalogEntriesInTransaction,
+  newlyAssignedEventTags,
+  storedEventTagNames,
+} from './events/event-tag-catalog';
 import {
   getUserDeletionGuardState,
   getUserDeletionGuardStateInTransaction,
@@ -105,48 +116,8 @@ export function setAccessControlHeadersOnResponse(req: Request, res: Response) {
   return res;
 }
 
-export const ALLOWED_CORS_ORIGINS: (string | RegExp)[] = [
-  'https://quantified-self.io',
-  'https://beta.quantified-self.io',
-  /^https?:\/\/(?:localhost|127\.0\.0\.1):\d+$/
-];
-
-/**
- * Global toggle for App Check enforcement.
- * Set to `false` to disable App Check verification for all functions.
- * This is useful for local development or testing.
- * 
- * WARNING: Always keep this `true` in production!
- */
-export const ENFORCE_APP_CHECK = true;
-
-import { HttpsError } from 'firebase-functions/v2/https';
-
-/**
- * The Firebase Functions emulator sets this flag inside the local worker
- * process. It is not derived from a request value, so it cannot be supplied
- * by a remote caller to weaken production verification.
- */
-export function isFunctionsEmulator(): boolean {
-  return process.env.FUNCTIONS_EMULATOR === 'true';
-}
-
-export function shouldEnforceAppCheck(): boolean {
-  return ENFORCE_APP_CHECK && !isFunctionsEmulator();
-}
-
-/**
- * Enforces App Check verification if ENFORCE_APP_CHECK is enabled.
- * Throws an HttpsError if verification fails.
- * 
- * @param request - The callable request object containing app verification
- * @throws HttpsError with 'failed-precondition' code if App Check fails
- */
-export function enforceAppCheck(request: { app?: unknown }): void {
-  if (shouldEnforceAppCheck() && !request.app) {
-    throw new HttpsError('failed-precondition', 'App Check verification failed.');
-  }
-}
+// Preserve existing imports while isolated callables use the lightweight owner.
+export { ALLOWED_CORS_ORIGINS, ENFORCE_APP_CHECK, isFunctionsEmulator, shouldEnforceAppCheck, enforceAppCheck } from './shared/callable-policy';
 
 export function isCorsAllowed(req: Request) {
   const origin = <string>req.get('origin') || '';
@@ -234,6 +205,7 @@ async function assertEventWriteAuthorizationCurrent(
 ): Promise<void> {
   const db = admin.firestore();
   await db.runTransaction(async (transaction) => {
+    await assertHistoryWrite(transaction);
     await assertEventWriteAuthorizationInTransaction(db, transaction, userID, phase);
     if (assertAdditionalAuthorization) {
       await assertAdditionalAuthorization(db, transaction);
@@ -255,6 +227,7 @@ export async function setEventDocumentIfUserActive(
 ): Promise<void> {
   const db = admin.firestore();
   await db.runTransaction(async (transaction) => {
+    await assertHistoryWrite(transaction);
     await assertEventWriteAuthorizationInTransaction(db, transaction, userID, phase);
     if (assertAdditionalAuthorization) {
       await assertAdditionalAuthorization(db, transaction);
@@ -262,12 +235,19 @@ export async function setEventDocumentIfUserActive(
 
     const incomingData = data as admin.firestore.DocumentData;
     let resolvedData = incomingData;
-    if (transformExistingData) {
+    const isEventDocument = docRef.path.startsWith(`users/${userID}/events/`)
+      && docRef.path.split('/').length === 4;
+    const needsExistingTags = isEventDocument && storedEventTagNames(incomingData).length > 0;
+    let existingData: admin.firestore.DocumentData | null = null;
+    if (transformExistingData || needsExistingTags) {
       const existingSnapshot = await transaction.get(docRef);
-      resolvedData = transformExistingData(
-        incomingData,
-        existingSnapshot.exists ? existingSnapshot.data() || null : null,
-      );
+      existingData = existingSnapshot.exists ? existingSnapshot.data() || null : null;
+      if (transformExistingData) resolvedData = transformExistingData(incomingData, existingData);
+    }
+
+    if (isEventDocument) {
+      await createMissingEventTagCatalogEntriesInTransaction(db, transaction, userID,
+        newlyAssignedEventTags(existingData, resolvedData));
     }
 
     if (options) {
@@ -290,7 +270,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
     'event_write_start',
     writeOptions.assertWriteAuthorizationInTransaction,
   );
-  const stageOriginalFilesUntilEventWrite = writeOptions.stageOriginalFilesUntilEventWrite === true;
+  const stageOriginalFilesUntilEventWrite = writeOptions.stageOriginalFilesUntilEventWrite === true || !!currentHistoryExecution();
   const stagedOriginalFiles: { stagingPath: string; targetPath: string }[] = [];
   const stagingBucket = stageOriginalFilesUntilEventWrite ? admin.storage().bucket() : undefined;
 
@@ -340,7 +320,16 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
   }
 
 
+  const sourceWrite = new TrainingLoadSourceWrite(userID, event => prepareImportedEventWrite(userID, event, async (db, transaction) => {
+    await assertHistoryWrite(transaction);
+    await writeOptions.assertWriteAuthorizationInTransaction?.(db, transaction);
+  }, metaData.toJSON() as Record<string, unknown>));
+  const assertSourceWrite: NonNullable<SetEventWriteOptions['assertWriteAuthorizationInTransaction']> = async (db, transaction) => {
+    await writeOptions.assertWriteAuthorizationInTransaction?.(db, transaction);
+    await sourceWrite.assertCurrent(db, transaction);
+  };
   const adapter: FirestoreAdapter = {
+    prepareTrainingLoad: sourceWrite.prepareTrainingLoad,
     setDoc: async (path: string[], data: any) => {
       // path is ['users', userID, 'events', eventID, ...]
       let ref: any = admin.firestore();
@@ -365,14 +354,15 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
         docRef = docRef.collection(path[i]).doc(path[i + 1]);
       }
       const isEventDocument = path.length === 4 && path[0] === 'users' && path[2] === 'events';
+      const isActivityDocument = path.length === 4 && path[0] === 'users' && path[2] === 'activities';
       await setEventDocumentIfUserActive(
         userID,
         `event_writer:${path.join('/')}`,
         docRef,
         data,
         undefined,
-        isEventDocument ? preserveEventTagsOnRewrite : undefined,
-        writeOptions.assertWriteAuthorizationInTransaction,
+        isEventDocument ? preserveImportedEventEdits : isActivityDocument ? preserveImportedActivityEdits : undefined,
+        assertSourceWrite,
       );
     },
     createBlob: (data: Uint8Array) => {
@@ -390,19 +380,20 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
         `event_original_file_upload:${path}`,
         writeOptions.assertWriteAuthorizationInTransaction,
       );
+      const targetPath = getContentAddressedOriginalPath(path, data);
       if (stagingBucket) {
         // These objects are backend-only: no user ID appears in the path, so
         // they cannot match the Storage rules' user-readable `/users/**` paths.
         const stagingPath = `event-write-staging/${crypto.randomUUID()}`;
-        stagedOriginalFiles.push({ stagingPath, targetPath: path });
-        await stagingBucket.file(stagingPath).save(data);
-        return {};
+        stagedOriginalFiles.push({ stagingPath, targetPath });
+        await saveChecksummedStorageFile(stagingBucket.file(stagingPath), data);
+        return { path: targetPath };
       }
       const bucket = admin.storage().bucket();
-      const file = bucket.file(path);
-      await file.save(data);
+      const file = bucket.file(targetPath);
+      await saveChecksummedStorageFile(file, data);
       const [metadata] = await file.getMetadata();
-      return { generation: metadata.generation };
+      return { path: targetPath, generation: metadata.generation };
     },
     getBucketName: () => {
       return admin.storage().bucket().name;
@@ -442,7 +433,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
       processingMetaData,
       undefined,
       undefined,
-      writeOptions.assertWriteAuthorizationInTransaction,
+      assertSourceWrite,
     );
 
     // Write Metadata (not handled by EventWriter)
@@ -461,7 +452,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
       metaData.toJSON(),
       undefined,
       undefined,
-      writeOptions.assertWriteAuthorizationInTransaction,
+      assertSourceWrite,
     );
 
     // Storage cannot join the Firestore transaction. Recheck immediately
@@ -512,7 +503,7 @@ export async function createFirebaseAccount(serviceUserID: string) {
     }
   }
   // Create a Firebase custom auth token.
-  const token = await admin.auth().createCustomToken(uid);
+  const token = await createFirebaseCustomToken(uid);
   logger.info('Created Custom token for UID "', uid, '" Token:', token);
   return token;
 }
@@ -531,7 +522,9 @@ export async function getUserRoleAndGracePeriod(userID: string): Promise<{ role:
       errorName: e instanceof Error ? e.name : 'unknown',
       errorCode: typeof e?.code === 'string' ? e.code : 'unknown',
     });
-    return { role: 'free' }; // Safe default for other errors
+    // An unreadable role is not a free account: let workers retry instead of
+    // turning an Auth outage into a terminal usage-limit rejection.
+    throw new HttpsError('unavailable', 'Could not verify subscription access. Please try again.');
   }
 }
 

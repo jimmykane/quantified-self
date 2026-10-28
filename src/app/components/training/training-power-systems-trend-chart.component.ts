@@ -1,3 +1,4 @@
+import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -31,6 +32,8 @@ import type {
 } from '../../helpers/training-power-systems.helper';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
+import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
+import { getNumberFormatter } from '../../helpers/number-format.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
@@ -43,7 +46,7 @@ interface TrendTooltipParam {
   templateUrl: './training-power-systems-trend-chart.component.html',
   styleUrls: ['./training-power-systems-trend-chart.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: false,
+  standalone: true,
 })
 export class TrainingPowerSystemsTrendChartComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input()
@@ -53,14 +56,18 @@ export class TrainingPowerSystemsTrendChartComponent implements AfterViewInit, O
     this.hasReadyValues = readyPoints.length > 0;
     if (!value) {
       this.chartAriaLabel = 'Twelve-week power-system capacity history';
+      this.rangeStartLabel = '';
+      this.rangeEndLabel = '';
       return;
     }
+    this.rangeStartLabel = formatTrendDate(value.rangeStartDayMs);
+    this.rangeEndLabel = formatTrendDate(value.rangeEndDayMs);
     const currentPoint = value.points.find(point => point.isCurrent) || null;
     const readyPointText = `${readyPoints.length} ready ${readyPoints.length === 1 ? 'value' : 'values'}`;
     const currentText = currentPoint?.value === null || !currentPoint
       ? 'current value unavailable'
       : `current value ${formatTrendValue(currentPoint.value, value.unit)} ${value.unit}`;
-    this.chartAriaLabel = `${value.label} over the latest 12 weeks; ${
+    this.chartAriaLabel = `${value.label} from ${this.rangeStartLabel} to ${this.rangeEndLabel}; ${
       this.hasReadyValues ? readyPointText : '0 ready values'
     }; ${currentText}`;
   }
@@ -68,10 +75,13 @@ export class TrainingPowerSystemsTrendChartComponent implements AfterViewInit, O
     return this.trendValue;
   }
   @Input() darkTheme = false;
+  @Input() timelineNotes: TimelineNoteChartContext | null = null;
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
   public hasReadyValues = false;
   public chartAriaLabel = 'Twelve-week power-system capacity history';
+  public rangeStartLabel = '';
+  public rangeEndLabel = '';
 
   private readonly chartHost: EChartsHostController;
   private trendValue: TrainingPowerSystemsTrendViewModel | null = null;
@@ -79,6 +89,7 @@ export class TrainingPowerSystemsTrendChartComponent implements AfterViewInit, O
 
   constructor(eChartsLoader: EChartsLoaderService, logger: LoggerService) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader,
       logger,
       logPrefix: '[TrainingPowerSystemsTrendChartComponent]',
@@ -91,7 +102,11 @@ export class TrainingPowerSystemsTrendChartComponent implements AfterViewInit, O
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (this.viewInitialized && (changes.trend || changes.darkTheme)) {
+    if (changes.timelineNotes && Object.keys(changes).length === 1) {
+      this.chartHost.updateTimelineNotes(this.timelineNotes);
+      return;
+    }
+    if (this.viewInitialized && (changes.trend || changes.darkTheme || changes.timelineNotes)) {
       void this.refresh();
     }
   }
@@ -113,6 +128,7 @@ export class TrainingPowerSystemsTrendChartComponent implements AfterViewInit, O
       return;
     }
     this.chartHost.hideTooltip();
+    this.chartHost.setTimelineNotes(this.timelineNotes);
     this.chartHost.setOption(this.buildOption(), ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
   }
@@ -128,9 +144,10 @@ export class TrainingPowerSystemsTrendChartComponent implements AfterViewInit, O
     );
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
     const pointsByTime = new Map(trend.points.map(point => [point.dayMs, point]));
-    const dateFormatter = new Intl.DateTimeFormat(undefined, {
+    const dateFormatter = getDateTimeFormatter(undefined, {
       month: 'short',
       day: 'numeric',
+      year: 'numeric',
       timeZone: 'UTC',
     });
     return {
@@ -220,7 +237,13 @@ function resolvePointAtIndex(
 }
 
 function formatTrendValue(value: number, unit: TrainingPowerSystemsTrendViewModel['unit']): string {
-  return new Intl.NumberFormat(undefined, {
+  return getNumberFormatter(undefined, {
     maximumFractionDigits: unit === 'kJ' ? 1 : 0,
   }).format(value);
+}
+
+function formatTrendDate(dayMs: number): string {
+  return getDateTimeFormatter(undefined, {
+    month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC',
+  }).format(new Date(dayMs));
 }

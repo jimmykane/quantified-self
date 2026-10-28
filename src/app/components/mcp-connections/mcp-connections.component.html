@@ -7,9 +7,9 @@
       <mat-icon mat-card-avatar class="mcp-connections__card-icon" aria-hidden="true">devices</mat-icon>
       <mat-card-title id="mcp-connections-title">MCP connections</mat-card-title>
       <mat-card-subtitle>
-        These apps can only view the data you approved. Disconnect an app here to stop sharing—even if you already
-        removed it from ChatGPT or another service. Reconnecting the same app keeps the current connection active until
-        the new setup finishes.
+        These apps can access only the data and changes you approve. Disconnect an app here to stop sharing—even
+        if you already removed it from ChatGPT or another service. Authorizing the same app again keeps its current
+        connection active until the new setup finishes.
       </mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
@@ -31,17 +31,41 @@
         </div>
       } @else {
         <div class="mcp-connections__list">
-          @for (connection of connections(); track connection.connectionId) {
+          @for (connection of connectionDetails(); track connection.connectionId) {
             <article class="mcp-connections__item">
               <div class="mcp-connections__details">
                 <h3>{{ connection.clientName }}</h3>
                 <p>{{ connection.redirectHost }}</p>
-                <p class="mcp-connections__permissions-label">Read-only access</p>
-                <div class="mcp-connections__permissions" role="group" aria-label="Granted read-only permissions">
-                  @for (scope of connection.scopes; track scope) {
-                    <mat-checkbox checked disabled>{{ scopeLabels[scope] }}</mat-checkbox>
+                <p class="mcp-connections__permissions-label">Permission status</p>
+                <div class="mcp-connections__permission-groups">
+                  @for (group of connection.permissionGroups; track group.id) {
+                    <section class="mcp-connections__permission-group" [attr.aria-labelledby]="connection.connectionId + '-' + group.id + '-title'">
+                      <h4 [id]="connection.connectionId + '-' + group.id + '-title'">{{ group.title }}</h4>
+                      <p>{{ group.summary }}</p>
+                      @for (permission of group.permissions; track permission.scope; let last = $last) {
+                        <app-compact-row
+                          [title]="permission.title"
+                          [headingLevel]="4"
+                          [icon]="permission.granted ? 'check_circle' : 'remove_circle_outline'"
+                          [iconTone]="permission.granted ? 'primary' : 'neutral'"
+                          [summary]="permission.summary"
+                          density="compact"
+                          [showDivider]="!last">
+                          <span compactRowAction class="mcp-connections__permission-state"
+                            [class.mcp-connections__permission-state--granted]="permission.granted">
+                            {{ permission.granted ? 'Granted' : 'Not granted' }}
+                          </span>
+                        </app-compact-row>
+                      }
+                    </section>
                   }
                 </div>
+                <p class="mcp-connections__authorization-help">
+                  To add a missing permission, start authorization again in {{ connection.clientName }}, select the
+                  access you want on the Quantified Self approval screen, then finish setup. Refresh its tools or start
+                  a new chat after it succeeds. If the permission is not offered, refresh or rescan its Quantified Self
+                  connection first.
+                </p>
                 <p class="mcp-connections__dates">
                   Connected {{ connection.createdAtMs | date:'mediumDate' }}
                   @if (connection.lastUsedAtMs) {
@@ -71,7 +95,6 @@
       }
     </mat-card-content>
   </mat-card>
-
   <header class="mcp-connections__section-header">
     <h2>Let’s help you set up your MCP plugin</h2>
     <p>Use the connection details below, then finish authorization in ChatGPT.</p>
@@ -85,7 +108,7 @@
       <mat-icon mat-card-avatar class="mcp-connections__card-icon" aria-hidden="true">add_link</mat-icon>
       <mat-card-title id="mcp-chatgpt-setup-title">ChatGPT setup</mat-card-title>
       <mat-card-subtitle>
-        Add the Quantified Self endpoint and icon before starting the read-only authorization flow.
+        Add the Quantified Self endpoint and icon before authorizing the data access and changes you want.
       </mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
@@ -134,7 +157,7 @@
         <ol class="mcp-connections__setup-steps">
           <li>Let ChatGPT scan the available tools.</li>
           <li>Sign in to Quantified Self when prompted.</li>
-          <li>Choose the read-only metrics, body measurements, activity details, sleep, or saved-route permissions you want to grant.</li>
+          <li>Choose the data access and optional change permissions you want to grant.</li>
         </ol>
       </section>
 
@@ -162,32 +185,35 @@
     <mat-card-header>
       <mat-icon mat-card-avatar class="mcp-connections__card-icon" aria-hidden="true">verified_user</mat-icon>
       <mat-card-title id="mcp-authorization-title">Authorization and data access</mat-card-title>
-      <mat-card-subtitle>Choose the separate read-only permissions you are comfortable granting.</mat-card-subtitle>
+      <mat-card-subtitle>Choose the separate data access and change permissions you are comfortable granting.</mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
-      <p class="mcp-connections__authorization-intro">
-        During authorization, you can approve any combination of these access categories:
-      </p>
       <ul class="mcp-connections__authorization-list" aria-label="Available MCP permissions">
-        <li><mat-icon aria-hidden="true">query_stats</mat-icon>{{ scopeLabels['metrics:read'] }}</li>
-        <li><mat-icon aria-hidden="true">monitor_weight</mat-icon>{{ scopeLabels['measurements:read'] }}</li>
-        <li><mat-icon aria-hidden="true">directions_run</mat-icon>{{ scopeLabels['activity-details:read'] }}</li>
-        <li><mat-icon aria-hidden="true">location_on</mat-icon>{{ scopeLabels['activity-location:read'] }}</li>
-        <li><mat-icon aria-hidden="true">bedtime</mat-icon>{{ scopeLabels['sleep:read'] }}</li>
-        <li><mat-icon aria-hidden="true">route</mat-icon>{{ scopeLabels['routes:read'] }}</li>
-        <li><mat-icon aria-hidden="true">map</mat-icon>{{ scopeLabels['route-location:read'] }}</li>
+        @for (permission of permissionInfo; track permission.scope) {
+          <li>
+            <span>{{ permission.title }}</span>
+            <button mat-icon-button type="button"
+              [attr.aria-label]="'About ' + permission.title"
+              (click)="showPermissionInfo(permission, permissionDialog)">
+              <mat-icon aria-hidden="true">info_outline</mat-icon>
+            </button>
+          </li>
+        }
       </ul>
-
-      <mat-divider></mat-divider>
-
-      <p>
-        Activity details include non-location summaries, laps, jumps, swim lengths, and bounded on-demand chart
-        series. Exact starts, ends, jump positions, and breadcrumb traces require Activity locations. Saved-route
-        summaries exclude bounds and geometry; those require Saved-route locations and geometry. The two location
-        permissions are independent. Place-name searches send the location text to Mapbox; direct-coordinate searches
-        do not. You can review or disconnect a client at any time. Existing clients must reconnect to gain either new
-        location permission.
-      </p>
+      <p>Start authorization again in an app to grant additional permissions. You can disconnect it at any time.</p>
+      <ng-template #permissionDialog let-permission>
+        <h2 mat-dialog-title>{{ permission.title }}</h2>
+        <mat-dialog-content>
+          <p>{{ permission.description }}</p>
+          @if (permission.parentTitle) {
+            <p>Requires {{ permission.parentTitle }} permission.</p>
+          }
+          <p>Start authorization again in the app and approve this permission to grant access. Change tools use your MCP client's native approval UI; Training changes also use a bounded preview and separate apply tool.</p>
+        </mat-dialog-content>
+        <mat-dialog-actions align="end">
+          <button mat-button mat-dialog-close type="button" (click)="haptics.selection()">Close</button>
+        </mat-dialog-actions>
+      </ng-template>
     </mat-card-content>
   </mat-card>
 </section>

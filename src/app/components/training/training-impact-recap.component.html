@@ -1,0 +1,93 @@
+<article class="training-impact-recap qs-glass-card-panel" aria-labelledby="training-impact-recap-title">
+  <header class="training-impact-recap-header">
+    <div>
+      <p class="training-impact-recap-eyebrow">Completed UTC Training days</p>
+      <h3 id="training-impact-recap-title">Training impact recap</h3>
+      @if (viewModel) {
+        <span>{{ viewModel.periodLabel }}</span>
+      }
+    </div>
+    <mat-button-toggle-group
+      class="training-impact-recap-period"
+      hideSingleSelectionIndicator
+      [value]="periodDays()"
+      (change)="selectPeriod($event.value)"
+      aria-label="Training impact recap period"
+    >
+      <mat-button-toggle [value]="7">7 days</mat-button-toggle>
+      <mat-button-toggle [value]="28">28 days</mat-button-toggle>
+    </mat-button-toggle-group>
+  </header>
+
+  @if (viewModel && recap) {
+    @if (isUpdating || hasFailedRefresh) {
+      <div class="training-impact-recap-notice" role="status">
+        <mat-icon aria-hidden="true">{{ hasFailedRefresh ? 'error_outline' : 'sync' }}</mat-icon>
+        <span>{{ hasFailedRefresh ? 'Showing the last complete recap; the latest refresh failed.' : 'Updating from the latest Form snapshot.' }}</span>
+      </div>
+    }
+
+    <div class="training-impact-recap-result" aria-live="polite">
+      <div>
+        <span>Actual result after decay</span>
+        <strong>{{ viewModel.headline }}</strong>
+      </div>
+      <strong class="training-impact-recap-result-value">{{ viewModel.actualCtlChange }} <small>CTL</small></strong>
+    </div>
+
+    <div class="training-impact-recap-equation" aria-label="Fitness load change calculation">
+      <div>
+        <span>Training contributed</span>
+        <strong>{{ viewModel.trainingCtlContribution }} CTL</strong>
+      </div>
+      <span class="training-impact-recap-operator" aria-hidden="true">+</span>
+      <div>
+        <span>Normal decay</span>
+        <strong>{{ viewModel.normalCtlDecay }} CTL</strong>
+      </div>
+      <span class="training-impact-recap-operator" aria-hidden="true">=</span>
+      <div>
+        <span>Actual change</span>
+        <strong>{{ viewModel.actualCtlChange }} CTL</strong>
+      </div>
+    </div>
+
+    <dl class="training-impact-recap-facts">
+      <div><dt>Total TSS</dt><dd>{{ viewModel.totalTrainingStressScore }}</dd></div>
+      <div><dt>Completed activities</dt><dd>{{ viewModel.completedActivityCount }}</dd></div>
+      <div><dt>UTC days rose</dt><dd>{{ viewModel.raisedDays }}</dd></div>
+      <div><dt>UTC days held</dt><dd>{{ viewModel.heldDays }}</dd></div>
+      <div><dt>UTC days declined</dt><dd>{{ viewModel.declinedDays }}</dd></div>
+    </dl>
+
+    <div class="training-impact-recap-chart-heading">
+      <strong>Actual CTL change</strong>
+      <span>{{ recap.periodDays === 7 ? 'Daily' : 'Four consecutive 7-day blocks' }}</span>
+    </div>
+    <div
+      #chartDiv
+      class="training-impact-recap-chart"
+      role="img"
+      [attr.aria-label]="viewModel.chartAriaLabel"
+    ></div>
+
+    <p class="training-impact-recap-disclaimer">
+      TSS-based model; CTL reflects sustained training load, not measured physiological adaptation.
+    </p>
+  } @else if (emptyState === 'history') {
+    <div class="training-impact-recap-state" role="status">
+      <mat-icon aria-hidden="true">insights</mat-icon>
+      <div><strong>No Training impact history yet</strong><p>Complete an activity with TSS to begin this recap.</p></div>
+    </div>
+  } @else if (emptyState === 'unavailable') {
+    <div class="training-impact-recap-state" role="status">
+      <mat-icon aria-hidden="true">error_outline</mat-icon>
+      <div><strong>Training impact recap unavailable</strong><p>Refresh Training to request the Form snapshot again.</p></div>
+    </div>
+  } @else {
+    <div class="training-impact-recap-state" role="status">
+      <mat-spinner diameter="24"></mat-spinner>
+      <div><strong>Preparing Training impact recap</strong><p>Calculating exact activity counts and load changes.</p></div>
+    </div>
+  }
+</article>

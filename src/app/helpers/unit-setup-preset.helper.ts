@@ -10,6 +10,7 @@ import {
   SwimPaceUnits,
   UserUnitSettingsInterface,
   VerticalSpeedUnits,
+  WeightUnits,
 } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../models/app-user.interface';
 
@@ -80,8 +81,25 @@ export function buildUnitSettingsForUnitSetupPreset(
     distanceUnits: preset === 'miles'
       ? DistanceUnits.Miles
       : DistanceUnits.Kilometers,
+    weightUnits: WeightUnits.Kilograms,
     startOfTheWeek: resolveStartOfTheWeekForUnitSetup(locale),
   };
+}
+
+/** Weight and week start are independent of the distance-based presets. */
+export function resolveUnitSetupPreset(
+  settings: Partial<UserUnitSettingsInterface> | null | undefined,
+): UnitSetupPreset | null {
+  if (!settings) return null;
+  const arrayFields = ['speedUnits', 'paceUnits', 'swimPaceUnits', 'verticalSpeedUnits'] as const;
+  return UNIT_SETUP_PRESET_OPTIONS.find(({ value }) => {
+    const preset = buildUnitSettingsForUnitSetupPreset(value, null);
+    return settings.distanceUnits === preset.distanceUnits && arrayFields.every(field => {
+      const units = settings[field];
+      return Array.isArray(units) && units.length === preset[field].length
+        && units.every((unit, index) => unit === preset[field][index]);
+    });
+  })?.value ?? null;
 }
 
 export function shouldShowUnitSetupPrompt(

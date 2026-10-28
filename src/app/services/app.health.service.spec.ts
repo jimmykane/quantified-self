@@ -10,6 +10,7 @@ import {
     HEALTH_QUALITY_STATUSES,
     HEALTH_RECORDING_METHODS,
     HEALTH_SOURCE_RECORD_KINDS,
+    HEALTH_SOURCE_RECORDS_COLLECTION_ID,
     HEALTH_SCHEMA_VERSION,
     HEALTH_UNITS,
     HEALTH_VALUE_ORIGINS,
@@ -24,6 +25,7 @@ import {
     documentId,
     getCountFromServer,
     getDocs,
+    getDocsFromServer,
     limit,
     orderBy,
     query,
@@ -42,6 +44,7 @@ vi.mock('app/firebase/firestore', () => {
         documentId: vi.fn(() => '__name__'),
         getCountFromServer: vi.fn(),
         getDocs: vi.fn(),
+        getDocsFromServer: vi.fn(),
         limit: vi.fn((value: number) => ({ type: 'limit', value })),
         orderBy: vi.fn((field: string, direction: string) => ({ type: 'orderBy', field, direction })),
         query: vi.fn((collectionRef: unknown, ...constraints: unknown[]) => ({ collectionRef, constraints })),
@@ -132,11 +135,14 @@ function mockPagedReads(
     vi.mocked(getDocs).mockImplementation(async (target: unknown) => {
         const queryTarget = target as {
             collectionRef?: { path?: string[] };
-            constraints?: Array<{ type?: string; value?: number; values?: unknown[] }>;
+            constraints?: Array<{ type?: string; value?: unknown; values?: unknown[]; field?: string; operator?: string }>;
         };
         const collectionID = queryTarget.collectionRef?.path?.at(-1);
-        const values = collectionID === 'healthSampleChunks' ? chunks : sourceRecords;
-        const limitValue = queryTarget.constraints?.find(constraint => constraint.type === 'limit')?.value || values.length;
+        const startDate = queryTarget.constraints?.find(c => c.type === 'where' && c.field === 'calendarDate' && c.operator === '>=')?.value;
+        const endDate = queryTarget.constraints?.find(c => c.type === 'where' && c.field === 'calendarDate' && c.operator === '<=')?.value;
+        const values = (collectionID === 'healthSampleChunks' ? chunks : sourceRecords)
+            .filter(value => (!startDate || value.calendarDate >= String(startDate)) && (!endDate || value.calendarDate <= String(endDate)));
+        const limitValue = Number(queryTarget.constraints?.find(constraint => constraint.type === 'limit')?.value || values.length);
         const cursor = queryTarget.constraints?.find(constraint => constraint.type === 'startAfter')?.values;
         const cursorDate = `${cursor?.[0] || ''}`;
         const cursorID = `${cursor?.[1] || ''}`;
@@ -185,6 +191,34 @@ describe('AppHealthService', () => {
         expect(collection).not.toHaveBeenCalled();
     });
 
+    it('routes manual Health mutations through typed callable boundaries', async () => {
+        functions.call
+            .mockResolvedValueOnce({ data: { sourceRecordId: 'a'.repeat(64), revisionOrder: 1 } })
+            .mockResolvedValueOnce({ data: { deleted: true } });
+        const createRequest = {
+            mode: 'create' as const,
+            clientMutationId: '123e4567-e89b-42d3-a456-426614174000',
+            metricId: HEALTH_METRIC_IDS.BodyWeight,
+            canonicalValue: 72.4,
+            observedAtMs: Date.UTC(2026, 0, 2, 8),
+            timezoneOffsetSeconds: 7_200,
+        };
+
+        await expect(service.saveManualMeasurement(createRequest, 'owner')).resolves.toEqual({
+            sourceRecordId: 'a'.repeat(64), revisionOrder: 1,
+        });
+        await expect(service.deleteManualMeasurement({
+            sourceRecordId: 'a'.repeat(64), expectedRevisionOrder: 1,
+        }, 'owner')).resolves.toEqual({ deleted: true });
+        expect(functions.call).toHaveBeenNthCalledWith(1, 'saveManualHealthMeasurement', {
+            ...createRequest, expectedUserID: 'owner',
+        });
+        expect(functions.call).toHaveBeenNthCalledWith(2, 'deleteManualHealthMeasurement', {
+            sourceRecordId: 'a'.repeat(64), expectedRevisionOrder: 1,
+            expectedUserID: 'owner',
+        });
+    });
+
     it('uses the shared provider-first plan for the default direct Firestore read', async () => {
         vi.mocked(collectionData).mockImplementation((target: unknown) => {
             const path = (target as { collectionRef?: { path?: string[] } }).collectionRef?.path || [];
@@ -212,6 +246,39 @@ describe('AppHealthService', () => {
         expect(startAfter).toHaveBeenCalledWith('2025-12-31', 'previous-record');
         expect(limit).toHaveBeenCalledWith(11);
         expect(limit).toHaveBeenCalledWith(9);
+    });
+
+    it('reads all paired values from one owner-scoped server document under the displayed revision', async () => {
+        const record = healthSourceRecord();
+        record.id = 'a'.repeat(64);
+        record.kind = HEALTH_SOURCE_RECORD_KINDS.PointMeasurement;
+        record.source.provider = HEALTH_PROVIDERS.QuantifiedSelf;
+        record.source.sourceRecordType = 'manual_measurement';
+        record.metrics = [HEALTH_METRIC_IDS.BloodPressureSystolic, HEALTH_METRIC_IDS.BloodPressureDiastolic, HEALTH_METRIC_IDS.PulseRate].map((metricId, i) => ({
+            ...record.metrics[0], metricId, aggregation: 'measurement', origin: 'recorded', recordingMethod: 'manual',
+            canonical: { value: [120, 80, 65][i], unit: HEALTH_METRIC_CATALOG[metricId].canonicalUnit },
+        }));
+        record.metricIds = record.metrics.map(metric => metric.metricId);
+        vi.mocked(getDocsFromServer).mockResolvedValue({ docs: [{ data: () => record }] } as never);
+        await expect(service.loadManualBloodPressure('user-1', record.id, 1)).resolves.toMatchObject({
+            metricId: HEALTH_METRIC_IDS.BloodPressureSystolic, canonicalValue: 120, diastolicValue: 80, pulseValue: 65,
+        });
+        expect(getDocsFromServer).toHaveBeenCalledWith({
+            collectionRef: { path: ['users', 'user-1', HEALTH_SOURCE_RECORDS_COLLECTION_ID] },
+            constraints: [{ type: 'where', field: '__name__', operator: '==', value: record.id }, { type: 'limit', value: 1 }],
+        });
+        await expect(service.loadManualBloodPressure('user-1', record.id, 2)).rejects.toThrow('changed');
+        await expect(service.loadManualBloodPressure('other-owner', record.id, 1)).rejects.toThrow('changed');
+        record.metrics = record.metrics.slice(0, 1);
+        await expect(service.loadManualBloodPressure('user-1', record.id, 1)).rejects.toThrow('paired');
+    });
+
+    it('rejects missing or malformed grouped edit identities without a broad query', async () => {
+        await expect(service.loadManualBloodPressure('', 'a'.repeat(64), 1)).rejects.toThrow();
+        await expect(service.loadManualBloodPressure('user-1', '../other', 1)).rejects.toThrow();
+        expect(getDocsFromServer).not.toHaveBeenCalled();
+        vi.mocked(getDocsFromServer).mockResolvedValue({ docs: [] } as never);
+        await expect(service.loadManualBloodPressure('user-1', 'a'.repeat(64), 1)).rejects.toThrow('no longer available');
     });
 
     it('uses the metric index when no provider is requested', async () => {
@@ -380,6 +447,136 @@ describe('AppHealthService', () => {
             sourceRecordsTruncated: true,
             sourceRecordAggregateComplete: false,
         });
+    });
+
+    it('summarizes existing long-range HR samples without returning an intraday trace or writing data', async () => {
+        const record = healthSourceRecord();
+        record.metrics = [];
+        record.metricIds = [HEALTH_METRIC_IDS.HeartRate];
+        record.sampleChunkIds = ['chunk-0'];
+        const chunk = { ...healthSampleChunk('chunk-0', 3), aggregation: 'average',
+            semanticVariant: 'activity_interval_average', canonicalValues: [60, 90, 120] };
+        mockPagedReads([record], [chunk]);
+        const loaded = await service.loadMetricRange('user-1', {
+            startDate: '2026-01-01', endDate: '2026-12-31', metricId: HEALTH_METRIC_IDS.HeartRate, includeSamples: false,
+        });
+        expect(loaded.result.observations.map(o => o.entry.kind === 'value' && o.entry.canonical?.value)).toEqual([90, 60, 120]);
+        expect(loaded.result.observations.every(o => o.entry.origin === 'quantified_self_derived')).toBe(true);
+        expect(loaded.result.sampleChunks).toEqual([]);
+        expect(loaded.result.query.includeSamples).toBe(false);
+        expect(loaded.samplePointCount).toBe(3);
+        expect(loaded.limitReached).toBeNull();
+        expect(functions.call).not.toHaveBeenCalled();
+        expect(record.metrics).toEqual([]);
+    });
+
+    it('does not derive long-range HR from stale sample revisions', async () => {
+        const record = healthSourceRecord();
+        record.metrics = [];
+        record.metricIds = [HEALTH_METRIC_IDS.HeartRate];
+        record.sampleChunkIds = ['chunk-0'];
+        const chunk = { ...healthSampleChunk('chunk-0', 3), aggregation: 'average',
+            semanticVariant: 'activity_interval_average', revision: { order: 0, token: 'old', digest: 'old' } };
+        mockPagedReads([record], [chunk]);
+        const loaded = await service.loadMetricRange('user-1', {
+            startDate: '2026-01-01', endDate: '2026-12-31', metricId: HEALTH_METRIC_IDS.HeartRate, includeSamples: false,
+        });
+        expect(loaded.result.observations).toEqual([]);
+        expect(loaded.result.pageInfo.sampleRevisionMismatchCount).toBe(1);
+        expect(loaded.result.pageInfo.sampleAggregateComplete).toBe(false);
+    });
+
+    it.each([40, 257])('keeps one cumulative chunk budget across %i days and only summarizes complete days', async days => {
+        const chunks = Array.from({ length: days }, (_, i) => {
+            const start = Date.UTC(2026, 0, 1 + i);
+            const id = `day-${String(i).padStart(3, '0')}`;
+            return { ...healthSampleChunk(id, 1), parentSourceRecordId: id, chunkIndex: 0,
+                aggregation: 'average', semanticVariant: 'activity_interval_average',
+                calendarDate: new Date(start).toISOString().slice(0, 10), startTimeMs: start, endTimeMs: start };
+        });
+        const records = chunks.map(chunk => ({ ...healthSourceRecord(), id: chunk.id, metrics: [],
+            metricIds: [HEALTH_METRIC_IDS.HeartRate], sampleChunkIds: [chunk.id],
+            calendarDate: chunk.calendarDate, startTimeMs: chunk.startTimeMs, endTimeMs: chunk.startTimeMs + 86_399_999 }));
+        mockPagedReads(records, chunks);
+        const loaded = await service.loadMetricRange('user-1', {
+            startDate: '2026-01-01', endDate: '2026-12-31', metricId: HEALTH_METRIC_IDS.HeartRate, includeSamples: false,
+        });
+        expect(loaded.sampleChunkCount).toBe(Math.min(days, 256));
+        expect(loaded.limitReached).toBe(days > 256 ? 'sample_chunks' : null);
+        expect(new Set(loaded.result.observations.map(o => o.calendarDate)).size).toBe(days > 256 ? 255 : days);
+        expect(loaded.result.observations).toHaveLength((days > 256 ? 255 : days) * 3);
+        const calls = vi.mocked(getDocs).mock.calls.map(([target]) => target as unknown as {
+            collectionRef: { path: string[] }; constraints: Array<{ type: string; field?: string; operator?: string; value: unknown }>;
+        }).filter(target => target.collectionRef.path.at(-1) === 'healthSampleChunks');
+        for (const call of calls) {
+            const start = call.constraints.find(c => c.field === 'calendarDate' && c.operator === '>=')!.value;
+            const end = call.constraints.find(c => c.field === 'calendarDate' && c.operator === '<=')!.value;
+            expect(Date.parse(String(end)) - Date.parse(String(start))).toBeLessThanOrEqual(30 * 86_400_000);
+            expect(call.constraints.find(c => c.type === 'limit')!.value).toBe(9);
+        }
+    });
+
+    it('omits the whole unfinished day when long-range samples reach the point budget', async () => {
+        const chunks = Array.from({ length: 70 }, (_, index) => ({
+            ...healthSampleChunk(`chunk-${index.toString().padStart(3, '0')}`, 1440),
+            aggregation: 'average', semanticVariant: 'activity_interval_average',
+        }));
+        const record = { ...healthSourceRecord(), metrics: [], metricIds: [HEALTH_METRIC_IDS.HeartRate],
+            sampleChunkIds: chunks.map(chunk => chunk.id) };
+        mockPagedReads([record], chunks);
+        const loaded = await service.loadMetricRange('user-1', {
+            startDate: '2026-01-01', endDate: '2026-12-31', metricId: HEALTH_METRIC_IDS.HeartRate, includeSamples: false,
+        });
+        expect(loaded.limitReached).toBe('sample_points');
+        expect(loaded.result.pageInfo.sampleAggregateComplete).toBe(false);
+        expect(loaded.result.observations).toEqual([]);
+    });
+
+    it('does not change short-range summary-only requests used outside the explorer', async () => {
+        const record = { ...healthSourceRecord(), metrics: [], metricIds: [HEALTH_METRIC_IDS.HeartRate] };
+        mockPagedReads([record], [healthSampleChunk('chunk-0', 3)]);
+        const loaded = await service.loadMetricRange('user-1', {
+            startDate: '2026-01-01', endDate: '2026-01-14', metricId: HEALTH_METRIC_IDS.HeartRate, includeSamples: false,
+        });
+        expect(loaded.sampleChunkCount).toBe(0);
+        expect(getDocs).toHaveBeenCalledTimes(1);
+    });
+
+    it('loads a 90-day app sample window through shared 31-day Firestore pages', async () => {
+        const record = healthSourceRecord();
+        record.metrics = [];
+        record.metricIds = [HEALTH_METRIC_IDS.StressState];
+        record.sampleChunkIds = ['chunk-0'];
+        const chunk = {
+            ...healthSampleChunk('chunk-0', 3),
+            metricId: HEALTH_METRIC_IDS.StressState,
+            valueType: HEALTH_VALUE_TYPES.Category,
+            canonicalUnit: HEALTH_UNITS.Category,
+            nativeUnit: HEALTH_UNITS.Category,
+            nativeValues: ['relaxing', 'active', 'stressful'],
+            canonicalValues: ['relaxing', 'active', 'stressful'],
+        } as HealthSampleChunk;
+        mockPagedReads([record], [chunk]);
+
+        const loaded = await service.loadMetricRange('user-1', {
+            startDate: '2026-01-01', endDate: '2026-03-31',
+            metricId: HEALTH_METRIC_IDS.StressState, includeSamples: true,
+        });
+
+        expect(loaded.result.query).toMatchObject({
+            startDate: '2026-01-01', endDate: '2026-03-31', includeSamples: true,
+        });
+        expect(loaded.result.sampleChunks).toHaveLength(1);
+        const chunkCalls = vi.mocked(getDocs).mock.calls.map(([target]) => target as unknown as {
+            collectionRef: { path: string[] };
+            constraints: Array<{ field?: string; operator?: string; value: unknown }>;
+        }).filter(target => target.collectionRef.path.at(-1) === 'healthSampleChunks');
+        expect(chunkCalls).toHaveLength(3);
+        for (const call of chunkCalls) {
+            const start = call.constraints.find(c => c.field === 'calendarDate' && c.operator === '>=')!.value;
+            const end = call.constraints.find(c => c.field === 'calendarDate' && c.operator === '<=')!.value;
+            expect(Date.parse(String(end)) - Date.parse(String(start))).toBeLessThanOrEqual(30 * 86_400_000);
+        }
     });
 
     it('keeps sample chunks whole at the aggregate point cap', async () => {

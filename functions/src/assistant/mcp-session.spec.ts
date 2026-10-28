@@ -1,7 +1,9 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { TRAINING_PREVIEW_TOOLS, TRAINING_READ_TOOLS } from '../mcp/training-plans.schemas';
+import { McpServer, type CallToolResult } from '@modelcontextprotocol/server';
+import { Client } from '@modelcontextprotocol/client';
 import { TimeIntervals } from '@sports-alliance/sports-lib';
 import { z } from 'zod';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   ASSISTANT_ANALYTICAL_PROMPT_WORKFLOWS,
   ASSISTANT_PROMPT_EXAMPLES,
@@ -9,15 +11,21 @@ import {
 import {
   ASSISTANT_BASE_MCP_TOOL_NAMES,
   ASSISTANT_MCP_TOOL_NAMES,
+  AssistantMcpToolFailure,
   AssistantRecoverableMcpToolError,
+  AssistantTrainingMetricsPreparingError,
+  ASSISTANT_GARMIN_REPLACEMENT_BLOCKED_GUIDANCE,
   createAssistantMcpSession,
 } from './mcp-session';
 import { MCP_OAUTH_SCOPES } from '../mcp/oauth.service';
 import type { AuthenticatedMcpRequest } from '../mcp/server';
+import { createMcpServer } from '../mcp/server';
+import { PUBLIC_MCP_TOOL_NAMES } from '../mcp/tool-output-schemas';
+import * as contentProposal from './content-proposal';
 
 function createTestServer(options: {
   errorTool?: typeof ASSISTANT_MCP_TOOL_NAMES[number];
-  errorCode?: 'query_too_large' | 'temporarily_unavailable';
+  errorCode?: 'query_too_large' | 'temporarily_unavailable' | 'invalid_request' | 'detail_not_available';
   metricQueryResponse?: (input: Record<string, unknown>) => Record<string, unknown>;
 } = {}): McpServer {
   const server = new McpServer({
@@ -33,11 +41,11 @@ function createTestServer(options: {
       description: `Description ${name}`,
       inputSchema: usesMetricHistoryResponse
         ? z.object({}).passthrough()
-        : { query: z.string().optional() },
+        : z.object({ query: z.string().optional() }),
       outputSchema: usesMetricHistoryResponse
         ? z.object({}).passthrough()
-        : { source: z.literal(name) },
-    }, async (input) => options.errorTool === name
+        : z.object({ source: z.literal(name) }),
+    }, async (input: Record<string, unknown>): Promise<CallToolResult> => options.errorTool === name
       ? {
         isError: true,
         content: [{
@@ -60,12 +68,327 @@ function createTestServer(options: {
   }
   server.registerTool('get_route_geometry', {
     description: 'Must never be available internally.',
-    inputSchema: {},
+    inputSchema: z.object({}),
   }, async () => ({ content: [{ type: 'text', text: 'unexpected' }] }));
   return server;
 }
 
 describe('Assistant MCP session', () => {
+  it('retains only a sanitized snapshot of an SDK client failure', async () => {
+    const session = await createAssistantMcpSession('user-1', 'https://quantified-self.io', {
+      createServer: () => createTestServer(),
+    });
+    const cause = Object.assign(new TypeError('private-prompt private-token'), {
+      code: 'ETIMEDOUT', name: 'private-user-id', stack: 'private-url',
+    });
+    const callTool = vi.spyOn(Client.prototype, 'callTool').mockRejectedValueOnce(cause);
+    try {
+      let failure: unknown;
+      try { await session.callTool('get_daily_report', {}); }
+      catch (error) { failure = error; }
+      expect(failure).toBeInstanceOf(AssistantMcpToolFailure);
+      expect(failure).toMatchObject({ code: 'client_call_failed', stage: 'client_call', diagnostic: {
+        causeErrorType: 'TypeError', causeErrorCode: 'ETIMEDOUT',
+      } });
+      expect(failure).not.toHaveProperty('cause');
+      cause.code = 'private-code';
+      expect(JSON.stringify(failure)).not.toContain('private');
+      expect((failure as AssistantMcpToolFailure).diagnostic?.causeErrorCode).toBe('ETIMEDOUT');
+    } finally { callTool.mockRestore(); await session.close(); }
+  });
+
+  it('offers only reads and local reflection preparation after independent consent, never direct model writes', async () => {
+    const session = await createAssistantMcpSession('owner', 'https://quantified-self.io',
+      undefined, 'coordinate_free', false, false, false, false, 'reflection-chat', false, false, false, true);
+    try {
+      const names = session.tools.map(tool => tool.name);
+      expect(names).toEqual(expect.arrayContaining(['get_workout_reflection', 'prepare_workout_reflection_save', 'prepare_workout_reflection_delete']));
+      expect(names).not.toContain('save_workout_reflection'); expect(names).not.toContain('delete_workout_reflection');
+      await expect(session.callTool('save_workout_reflection' as never, {})).rejects.toThrow('not available');
+      await expect(session.callTool('delete_workout_reflection' as never, {})).rejects.toThrow('not available');
+    } finally { await session.close(); }
+  });
+
+  it('projects every enabled MCP input into a Gemini-compatible typed schema without weakening MCP validation', async () => {
+    const session = await createAssistantMcpSession('schema-owner', 'https://quantified-self.io',
+      undefined, 'precise_activity', true, true, true, true, 'schema-conversation', true, true, true, true);
+    try {
+      const visit = (value: unknown, path: string): void => {
+        expect(value, path).toMatchObject({ type: expect.any(String) });
+        const schema = value as { type: string; properties?: Record<string, unknown>; required?: string[];
+          items?: unknown; enum?: unknown[] };
+        for (const enumValue of schema.enum ?? []) expect(typeof enumValue, path).toBe('string');
+        if (schema.type === 'object') {
+          expect(schema.properties, path).toBeDefined();
+          for (const name of schema.required ?? []) {
+            expect(schema.properties, `${path}.required.${name}`).toHaveProperty(name);
+          }
+          for (const [name, child] of Object.entries(schema.properties ?? {})) visit(child, `${path}.${name}`);
+        } else if (schema.type === 'array') {
+          expect(schema.items, `${path}.items`).toBeDefined();
+          visit(schema.items, `${path}[]`);
+        }
+      };
+      for (const tool of session.tools) visit(tool.inputSchema, tool.name);
+      const tags = session.tools.find(tool => tool.name === 'prepare_activity_tag_change')!;
+      expect((tags.inputSchema.properties as Record<string, { type?: string }>).tags.type).toBe('array');
+      const create = session.tools.find(tool => tool.name === 'preview_create_planned_workout')!;
+      const structure = (create.inputSchema.properties as Record<string, Record<string, unknown>>).structure;
+      const nodes = (structure.properties as Record<string, { items: Record<string, unknown> }>).nodes;
+      expect((structure.properties as Record<string, unknown>).sport).toMatchObject({ type: 'string',
+        description: expect.stringContaining('exact supported catalog value') });
+      expect((structure.properties as Record<string, { enum?: string[] }>).sport.enum).toBeUndefined();
+      expect((structure.properties as Record<string, unknown>).version).toMatchObject({ type: 'number',
+        description: 'Allowed value: 1.' });
+      expect((structure.properties as Record<string, { enum?: unknown[] }>).version.enum).toBeUndefined();
+      expect(((nodes.items.properties as Record<string, { enum?: string[] }>).kind.enum)).toEqual(['step', 'repeat']);
+      expect(nodes.items.description).toContain('step: required keys kind, id, purpose, ending, targets;');
+      expect(nodes.items.description).toContain('repeat: required keys kind, id, count, steps;');
+      expect(nodes.items.description).toContain('Do not mix shapes or fill unrelated fields with null');
+      expect((nodes.items.properties as Record<string, { description: string }>).count.description)
+        .toContain('Allowed only for repeat; omit for other shapes.');
+      const ending = (nodes.items.properties as Record<string, { properties: Record<string, { description?: string }> }>).ending;
+      expect(ending.properties.seconds.description).toContain('Required for time');
+      expect((ending as { description?: string }).description).toContain('time: required keys kind, seconds;');
+      const batch = session.tools.find(tool => tool.name === 'preview_training_changes')!;
+      expect((batch.inputSchema.properties as Record<string, { items: { type: string } }>).changes.items.type).toBe('object');
+      expect((batch.inputSchema.properties as Record<string, { items: { description: string } }>).changes.items.description)
+        .toContain('create-plan: required keys kind, localKey, name, startDate, endDate;');
+      const changes = (batch.inputSchema.properties as Record<string, { items: { properties: Record<string, unknown> } }>).changes.items;
+      const batchStructure = changes.properties.structure as typeof structure;
+      const batchNodes = (batchStructure.properties as Record<string, { items: Record<string, unknown> }>).nodes;
+      expect(batchNodes.items.description).toEqual(nodes.items.description);
+      expect(batchNodes.items.required).toEqual(nodes.items.required);
+      const batchEnding = (batchNodes.items.properties as Record<string, { description: string }>).ending;
+      expect(batchEnding.description).toEqual((ending as { description: string }).description);
+      expect(batchNodes.items.description).not.toContain('shape 1: required keys kind, id;');
+    } finally { await session.close(); }
+  });
+
+  it('turns pending metric preparation into a retry state and blocks premature reads', async () => {
+    const session = await createAssistantMcpSession('user-1', 'https://quantified-self.io', {
+      createServer: auth => createMcpServer(auth, 'https://quantified-self.io', undefined,
+        async (_uid, metricKinds) => ({
+          status: 'preparing', metricKinds, readyMetricKinds: [], retryAfterSeconds: 5,
+        })),
+    });
+    try {
+      await expect(session.callTool('get_training_metric', { metricKind: 'form' }))
+        .rejects.toBeInstanceOf(AssistantRecoverableMcpToolError);
+      await expect(session.callTool('prepare_training_metrics', { metricKinds: ['form'] }))
+        .rejects.toBeInstanceOf(AssistantTrainingMetricsPreparingError);
+    } finally {
+      await session.close();
+    }
+  });
+  it('exposes independent manual lookup and preparation but never public writes to the model', async () => {
+    const session = await createAssistantMcpSession('owner', 'https://quantified-self.io', undefined,
+      'coordinate_free', false, false, false, false, 'manual-conversation', false, false, true);
+    try {
+      const names = session.tools.map(tool => tool.name);
+      expect(names).toEqual(expect.arrayContaining(['list_manual_measurement_types', 'query_manual_measurements', 'get_manual_measurement',
+        'prepare_manual_measurement_create', 'prepare_manual_measurement_update', 'prepare_manual_measurement_delete']));
+      expect(names).not.toEqual(expect.arrayContaining(['create_manual_measurement', 'update_manual_measurement', 'delete_manual_measurement']));
+      expect(names).not.toContain('query_timeline_notes');
+    } finally { await session.close(); }
+  });
+  it('adds only Training plan reads after independent consent, without notes, Health or location grants', async () => {
+    let capturedAuth: AuthenticatedMcpRequest | null = null;
+    const session = await createAssistantMcpSession('ordinary-owner', 'https://quantified-self.io', {
+      createServer: auth => { capturedAuth = auth; return createTestServer(); },
+    }, 'coordinate_free', false, true);
+    try {
+      expect(session.tools.map(tool => tool.name)).toEqual([...ASSISTANT_BASE_MCP_TOOL_NAMES, ...TRAINING_READ_TOOLS]);
+      expect(session.tools.map(tool => tool.name)).toContain('get_planned_workout_v2');
+      expect(session.tools.map(tool => tool.name)).toContain('get_workout_prescription_analysis');
+      expect(capturedAuth!.scopes).toContain(MCP_OAUTH_SCOPES.TrainingPlansRead);
+      for (const scope of [MCP_OAUTH_SCOPES.TimelineNotesRead, MCP_OAUTH_SCOPES.TimelineNotesWrite,
+        MCP_OAUTH_SCOPES.EventsWrite, MCP_OAUTH_SCOPES.HealthRead,
+        MCP_OAUTH_SCOPES.ActivityLocationRead, MCP_OAUTH_SCOPES.RouteLocationRead]) {
+        expect(capturedAuth!.scopes).not.toContain(scope);
+      }
+      await expect(session.callTool('list_training_plans', {})).resolves.toMatchObject({
+        structuredContent: { source: 'list_training_plans' },
+      });
+      await expect(session.callTool('query_timeline_notes', {})).rejects.toThrow('not available');
+    } finally { await session.close(); }
+  });
+
+  it('adds focused and batch previews only for Training changes and binds them to the current conversation generation', async () => {
+    let capturedAuth: AuthenticatedMcpRequest | null = null;
+    const session = await createAssistantMcpSession('ordinary-owner', 'https://quantified-self.io', {
+      createServer: auth => { capturedAuth = auth; return createTestServer(); },
+    }, 'coordinate_free', false, true, true, true, 'conversation-123');
+    try {
+      expect(session.tools.map(tool => tool.name)).toContain('preview_training_changes');
+      expect(session.tools.map(tool => tool.name)).toContain('preview_create_planned_workout');
+      expect(session.tools.map(tool => tool.name)).toContain('preview_planned_workout_v2_change');
+      expect(session.tools.map(tool => tool.name)).toContain('preview_training_deletion');
+      expect(session.tools.map(tool => tool.name)).toContain('preview_garmin_workout_replacement');
+      expect(session.tools.map(tool => tool.name)).not.toContain('apply_training_changes' as never);
+      expect(capturedAuth).toMatchObject({ connectionId: 'first-party-assistant-v1:conversation-123',
+        scopes: expect.arrayContaining([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite,
+          MCP_OAUTH_SCOPES.TrainingDeliveryWrite]) });
+    } finally { await session.close(); }
+  });
+
+  it('does not expose older service-copy cleanup without the independent delivery permission', async () => {
+    const session = await createAssistantMcpSession('owner', 'https://quantified-self.io', undefined,
+      'coordinate_free', false, true, true, false, 'schedule-only');
+    try {
+      expect(session.tools.map(tool => tool.name)).toContain('preview_training_changes');
+      expect(session.tools.map(tool => tool.name)).not.toContain('preview_training_deletion');
+      expect(session.tools.map(tool => tool.name)).not.toContain('preview_garmin_workout_replacement');
+      await expect(session.callTool('preview_garmin_workout_replacement', {})).rejects.toThrow('not available');
+      await expect(session.callTool('preview_training_deletion', {})).rejects.toThrow('not available');
+    } finally { await session.close(); }
+  });
+
+  it('combines Training and Timeline-note reads only under their independent conversation choices', async () => {
+    const withNotes = await createAssistantMcpSession('ordinary-owner', 'https://quantified-self.io',
+      undefined, 'coordinate_free', true, true, true, true, 'combined-conversation');
+    const withoutNotes = await createAssistantMcpSession('ordinary-owner', 'https://quantified-self.io',
+      undefined, 'coordinate_free', false, true, true, true, 'training-only-conversation');
+    try {
+      expect(withNotes.tools.map(tool => tool.name)).toEqual(expect.arrayContaining([
+        'get_daily_report', 'query_metric', 'query_activities', 'query_timeline_notes',
+        'query_planned_workouts_by_date', 'preview_create_planned_workout',
+      ]));
+      expect(withNotes.instructions).toContain('then query_activities');
+      expect(withNotes.instructions).not.toContain('then list_activities');
+      expect(withNotes.tools.map(tool => tool.name)).not.toContain('apply_training_changes' as never);
+      expect(withNotes.tools.map(tool => tool.name)).not.toContain('get_training_change_status' as never);
+      expect(withNotes.instructions).not.toContain('get_training_change_status');
+      expect(withNotes.tools.map(tool => tool.name)).not.toContain('update_timeline_note' as never);
+      expect(withoutNotes.tools.map(tool => tool.name)).not.toContain('query_timeline_notes');
+      await expect(withoutNotes.callTool('query_timeline_notes', {
+        startDate: '2026-09-01', endDate: '2026-09-24',
+      })).rejects.toThrow('not available');
+    } finally {
+      await Promise.all([withNotes.close(), withoutNotes.close()]);
+    }
+  });
+
+  it('exposes content reads and prepare-only tools after per-chat consent', async () => {
+    let capturedAuth: AuthenticatedMcpRequest | null = null;
+    const session = await createAssistantMcpSession('ordinary-owner', 'https://quantified-self.io', {
+      createServer: auth => { capturedAuth = auth; return createTestServer(); },
+    }, 'coordinate_free', true, false, false, false, 'conversation-content', true, true);
+    try {
+      expect(session.tools.map(tool => tool.name)).toEqual(expect.arrayContaining([
+        'query_activities_with_tags', 'query_editable_timeline_notes', 'prepare_activity_tag_change',
+        'prepare_timeline_note_create', 'prepare_timeline_note_update', 'prepare_timeline_note_delete',
+      ]));
+      expect(session.tools.map(tool => tool.name)).not.toContain('update_event_tags' as never);
+      expect(session.tools.map(tool => tool.name)).not.toContain('create_timeline_note' as never);
+      expect(capturedAuth).toMatchObject({
+        connectionId: 'first-party-assistant-v1:conversation-content',
+        assistantConversationId: 'conversation-content',
+        scopes: expect.arrayContaining([MCP_OAUTH_SCOPES.EventsWrite, MCP_OAUTH_SCOPES.TimelineNotesWrite]),
+      });
+      const prepared = await session.callTool('prepare_activity_tag_change', {
+        activityRef: 'activity-ref', expectedTags: ['Easy'], tags: ['Quality'],
+      });
+      expect(prepared.structuredContent).toMatchObject({
+        kind: 'update_event_tags', requiresConfirmation: true,
+      });
+      await expect(session.callTool('prepare_timeline_note_delete', {
+        noteRef: 'note-ref', expectedRevision: 1,
+      })).rejects.toThrow('only one content change');
+    } finally { await session.close(); }
+  });
+
+  describe('Timeline-note input correction', () => {
+    const createNoteSession = () => createAssistantMcpSession('note-owner', 'https://quantified-self.io', {
+      createServer: () => createTestServer(),
+    }, 'coordinate_free', true, false, false, false, 'note-conversation', false, true);
+
+    it.each([
+      ['prepare_timeline_note_create', { startDate: '2026-10-11T12:00:00Z' }],
+      ['prepare_timeline_note_create', { endDate: '2026-10-12T12:00:00Z' }],
+      ['prepare_timeline_note_create', { endDate: 'null' }],
+      ['prepare_timeline_note_update', { startDate: '2026-02-30' }],
+      ['prepare_timeline_note_update', { endDate: 'private-rejected-value' }],
+      ['prepare_timeline_note_update', { unexpected: 'private-rejected-value' }],
+    ] as const)('corrects invalid %s input without consuming the proposal slot: %j', async (name, invalid) => {
+      const session = await createNoteSession();
+      const callTool = vi.spyOn(Client.prototype, 'callTool');
+      const valid = {
+        category: 'travel', title: 'Private synthetic title', details: 'Private synthetic details',
+        startDate: '2026-10-11', endDate: null, timeZone: 'Europe/Helsinki', showOnCharts: true, color: 'default',
+        ...(name === 'prepare_timeline_note_create'
+          ? { mutationId: '11111111-1111-4111-8111-111111111111' }
+          : { noteRef: 'private-note-ref', expectedRevision: 1 }),
+      };
+      try {
+        expect(session.tools.find(tool => tool.name === name)?.description).toContain('YYYY-MM-DD');
+        let failure: unknown;
+        try { await session.callTool(name, { ...valid, ...invalid }); }
+        catch (error) { failure = error; }
+        expect(failure).toBeInstanceOf(AssistantRecoverableMcpToolError);
+        expect(failure).toMatchObject({ code: 'invalid_tool_input', guidance: expect.stringContaining('endDate: null') });
+        expect(failure).not.toHaveProperty('cause');
+        expect(JSON.stringify(failure)).not.toMatch(/Private synthetic|private-note-ref|private-rejected-value|2026-02-30/);
+        const corrected = await session.callTool(name, valid);
+        expect(corrected.structuredContent).toMatchObject({ requiresConfirmation: true, arguments: valid });
+        await expect(session.callTool(name, valid)).rejects.toThrow('only one content change');
+        expect(callTool).not.toHaveBeenCalled();
+      } finally { callTool.mockRestore(); await session.close(); }
+    });
+
+    it('does not reinterpret unexpected proposal failures as correctable input', async () => {
+      const session = await createNoteSession();
+      const failure = new Error('Unexpected proposal failure');
+      const createProposal = vi.spyOn(contentProposal, 'createAssistantContentProposal').mockImplementationOnce(() => { throw failure; });
+      try {
+        await expect(session.callTool('prepare_timeline_note_create', {})).rejects.toBe(failure);
+      } finally { createProposal.mockRestore(); await session.close(); }
+    });
+
+    it('does not expose note preparation without the note-change permission', async () => {
+      const session = await createAssistantMcpSession('note-owner', 'https://quantified-self.io', {
+        createServer: () => createTestServer(),
+      }, 'coordinate_free', true, false, false, false, 'read-only-notes');
+      try {
+        await expect(session.callTool('prepare_timeline_note_create', {})).rejects.toThrow('not available');
+      } finally { await session.close(); }
+    });
+  });
+
+  it.each([
+    { mode: 'base' }, { mode: 'precise', precise: true }, { mode: 'tags', tags: true },
+    { mode: 'notes', notes: true }, { mode: 'note changes', notes: true, noteChanges: true },
+    { mode: 'manual', manual: true }, { mode: 'reflections', reflections: true },
+    { mode: 'Training read', plans: true }, { mode: 'Training edits', plans: true, edits: true },
+    { mode: 'Training delivery', plans: true, delivery: true },
+    { mode: 'all Training', plans: true, edits: true, delivery: true },
+  ] satisfies Array<{ mode: string; precise?: boolean; tags?: boolean; notes?: boolean; noteChanges?: boolean;
+    manual?: boolean; reflections?: boolean; plans?: boolean; edits?: boolean; delivery?: boolean }>)(
+    'does not recommend hidden public tools in $mode instructions or descriptions', async (mode) => {
+      const enabled = (key: string) => (mode as Record<string, unknown>)[key] === true;
+      const session = await createAssistantMcpSession('synthetic-owner', 'https://quantified-self.io', undefined,
+        enabled('precise') ? 'precise_activity' : 'coordinate_free', enabled('notes'), enabled('plans'),
+        enabled('edits'), enabled('delivery'), 'synthetic-conversation', enabled('tags'), enabled('noteChanges'),
+        enabled('manual'), enabled('reflections'));
+      try {
+        const names = new Set<string>(session.tools.map(tool => tool.name));
+        const guidance = [session.instructions, ...session.tools.map(tool => tool.description)].join(' ');
+        const referenced = new Set(guidance.match(/\b[a-z]+(?:_[a-z0-9]+)+\b/g));
+        const hidden = [...PUBLIC_MCP_TOOL_NAMES, ...ASSISTANT_MCP_TOOL_NAMES]
+          .filter(name => referenced.has(name) && !names.has(name));
+        expect(hidden).toEqual([]);
+        expect(session.instructions).toContain('model cannot apply changes');
+        expect(session.instructions).toContain('Examples & data access');
+        expect(session.instructions).not.toContain('native approval UI');
+        if (enabled('tags')) expect(session.instructions).toContain('prepare_activity_tag_change');
+        if (enabled('edits') || enabled('delivery')) {
+          expect(session.tools.find(tool => tool.name.startsWith('preview_'))?.description)
+            .toContain('app-owned Apply confirmation');
+        }
+      } finally { await session.close(); }
+    },
+  );
+
   it('resolves the complete curated boundary from the production MCP server', async () => {
     const session = await createAssistantMcpSession(
       'user-1',
@@ -74,7 +397,13 @@ describe('Assistant MCP session', () => {
 
     try {
       expect(session.tools.map(tool => tool.name)).toEqual(ASSISTANT_BASE_MCP_TOOL_NAMES);
+      expect(session.instructions).toContain('then query_activities');
+      expect(session.instructions).not.toContain('then list_activities');
       const productionToolNames = new Set(session.tools.map(tool => tool.name));
+      // Stored history can include Health evidence; the Assistant has no Health grant.
+      expect(productionToolNames.has('get_readiness_history' as never)).toBe(false);
+      await expect(session.callTool('get_readiness_history' as never, {}))
+        .rejects.toThrow('not available to the Assistant');
       for (const example of ASSISTANT_PROMPT_EXAMPLES) {
         expect(
           example.toolWorkflow.filter(toolName => !productionToolNames.has(
@@ -95,12 +424,20 @@ describe('Assistant MCP session', () => {
       expect(session.tools.map(tool => tool.name)).toContain('list_routes');
       expect(session.tools.map(tool => tool.name)).toContain('get_activity_chart_data');
       expect(session.tools.map(tool => tool.name)).toContain('list_activity_chart_metrics');
+      expect(session.tools.map(tool => tool.name)).toContain('list_activity_chart_metrics_v2');
+      expect(session.tools.map(tool => tool.name)).toContain('get_activity_chart_data_v2');
+      expect(session.tools.map(tool => tool.name)).not.toContain('get_activity_samples_v2');
+      const enduranceSchema = session.tools.find(tool => tool.name === 'get_activity_chart_data_v2')?.inputSchema;
+      expect(enduranceSchema?.properties).not.toHaveProperty('includeLocation');
+      expect(enduranceSchema?.properties).not.toHaveProperty('maxLocationPoints');
       expect(session.tools.map(tool => tool.name)).not.toContain(
         'search_activities_near_location',
       );
       expect(session.tools.find(tool => tool.name === 'list_activity_jumps')?.description)
         .toContain('coordinates redacted');
       expect(session.instructions).toContain('server expands the group to every canonical type');
+      expect(session.instructions).not.toContain('get_activity_samples');
+      expect(session.tools.map(tool => tool.name)).not.toContain('get_activity_samples');
       expect(session.instructions).toContain('Maximum Jump Distance');
       expect(session.instructions).toContain('Treat the ranked metric value as authoritative');
       expect(session.instructions).toContain('only when jump-level details are requested');
@@ -145,8 +482,8 @@ describe('Assistant MCP session', () => {
           MCP_OAUTH_SCOPES.RoutesRead,
         ],
       });
-      expect(capturedAuth?.scopes).not.toContain(MCP_OAUTH_SCOPES.ActivityLocationRead);
-      expect(capturedAuth?.scopes).not.toContain(MCP_OAUTH_SCOPES.RouteLocationRead);
+      expect(capturedAuth).not.toMatchObject({ scopes: expect.arrayContaining([MCP_OAUTH_SCOPES.ActivityLocationRead]) });
+      expect(capturedAuth).not.toMatchObject({ scopes: expect.arrayContaining([MCP_OAUTH_SCOPES.RouteLocationRead]) });
       expect(capturedPublicBaseUrl).toBe('https://beta.quantified-self.io');
       await expect(session.callTool('get_daily_report', {})).resolves.toEqual({
         structuredContent: { source: 'get_daily_report' },
@@ -171,12 +508,18 @@ describe('Assistant MCP session', () => {
     );
 
     try {
-      expect(session.tools.map(tool => tool.name)).toEqual(ASSISTANT_MCP_TOOL_NAMES);
+      expect(session.tools.map(tool => tool.name)).toEqual(ASSISTANT_MCP_TOOL_NAMES.filter(name => name !== 'get_workout_reflection' && name !== 'query_timeline_notes'
+        && name !== 'query_activities_with_tags'
+        && name !== 'query_editable_timeline_notes'
+        && !['list_manual_measurement_types', 'query_manual_measurements', 'get_manual_measurement'].includes(name)
+        && (!name.startsWith('prepare_') || name === 'prepare_training_metrics')
+        && !(TRAINING_PREVIEW_TOOLS as readonly string[]).includes(name)
+        && !(TRAINING_READ_TOOLS as readonly string[]).includes(name)));
       expect(session.tools.map(tool => tool.name)).toContain(
         'search_activities_near_location',
       );
-      expect(capturedAuth?.scopes).toContain(MCP_OAUTH_SCOPES.ActivityLocationRead);
-      expect(capturedAuth?.scopes).not.toContain(MCP_OAUTH_SCOPES.RouteLocationRead);
+      expect(capturedAuth).toMatchObject({ scopes: expect.arrayContaining([MCP_OAUTH_SCOPES.ActivityLocationRead]) });
+      expect(capturedAuth).not.toMatchObject({ scopes: expect.arrayContaining([MCP_OAUTH_SCOPES.RouteLocationRead]) });
       expect(session.tools.map(tool => tool.name)).not.toContain('get_route_geometry');
     } finally {
       await session.close();
@@ -226,12 +569,32 @@ describe('Assistant MCP session', () => {
     }
   });
 
+  it.each(['coordinate_free', 'precise_activity'] as const)('adds notes independently in a %s chat, without granting Health or route locations', async locationAccess => {
+    let capturedAuth: AuthenticatedMcpRequest | null = null;
+    const session = await createAssistantMcpSession('owner', 'https://quantified-self.io', {
+      createServer: auth => { capturedAuth = auth; return createTestServer(); },
+    }, locationAccess, true);
+    try {
+      expect(session.tools.map(tool => tool.name)).toContain('query_timeline_notes');
+      expect(capturedAuth!.scopes).toContain(MCP_OAUTH_SCOPES.TimelineNotesRead);
+      expect(capturedAuth!.scopes).not.toContain(MCP_OAUTH_SCOPES.TimelineNotesWrite);
+      expect(capturedAuth!.scopes).not.toContain(MCP_OAUTH_SCOPES.EventsWrite);
+      expect(capturedAuth!.scopes).not.toContain(MCP_OAUTH_SCOPES.HealthRead);
+      expect(capturedAuth!.scopes).not.toContain(MCP_OAUTH_SCOPES.RouteLocationRead);
+      expect(capturedAuth!.scopes.includes(MCP_OAUTH_SCOPES.ActivityLocationRead)).toBe(locationAccess === 'precise_activity');
+      await expect(session.callTool('query_timeline_notes', {})).resolves.toMatchObject({ structuredContent: { source: 'query_timeline_notes' } });
+    } finally { await session.close(); }
+    const disabled = await createAssistantMcpSession('owner', 'https://quantified-self.io', { createServer: createTestServer }, locationAccess);
+    try { await expect(disabled.callTool('query_timeline_notes', {})).rejects.toThrow('not available'); }
+    finally { await disabled.close(); }
+  });
+
   it('fails closed when a required internal tool is missing', async () => {
     const createPartialServer = () => {
       const server = new McpServer({ name: 'partial', version: '1.0.0' });
       server.registerTool('list_activity_types', {
         description: 'Only one tool.',
-        inputSchema: {},
+        inputSchema: z.object({}),
       }, async () => ({ content: [{ type: 'text', text: '{}' }] }));
       return server;
     };
@@ -254,6 +617,74 @@ describe('Assistant MCP session', () => {
           guidance: 'Use a valid, narrower date range. Long activity-metric histories are paged automatically by the Assistant.',
         }) satisfies Partial<AssistantRecoverableMcpToolError>,
       );
+    } finally {
+      await session.close();
+    }
+  });
+
+  it('classifies nonrecoverable MCP results without retaining their text', async () => {
+    const session = await createAssistantMcpSession('user-1', 'https://quantified-self.io', {
+      createServer: () => createTestServer({ errorTool: 'query_activities', errorCode: 'temporarily_unavailable' }),
+    });
+    try {
+      await expect(session.callTool('query_activities', {})).rejects.toMatchObject({
+        name: 'AssistantMcpToolFailure',
+        code: 'temporarily_unavailable',
+        stage: 'tool_response',
+        message: 'The Assistant MCP tool could not complete the request.',
+      } satisfies Partial<AssistantMcpToolFailure>);
+    } finally {
+      await session.close();
+    }
+  });
+
+  it.each(['invalid_request', 'detail_not_available'] as const)(
+    'closes a Garmin replacement review on %s without retaining server text', async errorCode => {
+      const session = await createAssistantMcpSession('user-1', 'https://quantified-self.io', {
+        createServer: () => createTestServer({ errorTool: 'preview_garmin_workout_replacement', errorCode }),
+      }, 'coordinate_free', false, true, false, true, 'conversation');
+      try {
+        await expect(session.callTool('preview_garmin_workout_replacement', {})).rejects.toMatchObject({
+          code: errorCode, retryable: false, guidance: ASSISTANT_GARMIN_REPLACEMENT_BLOCKED_GUIDANCE,
+        });
+      } finally { await session.close(); }
+    },
+  );
+
+  it('keeps ordinary preview rejections and strict replacement input failures correctable', async () => {
+    const session = await createAssistantMcpSession('user-1', 'https://quantified-self.io', {
+      createServer: () => createTestServer({ errorTool: 'preview_training_changes', errorCode: 'invalid_request' }),
+    }, 'coordinate_free', false, true, false, true, 'conversation');
+    try {
+      await expect(session.callTool('preview_training_changes', {})).rejects.toMatchObject({
+        code: 'invalid_request', retryable: true,
+      });
+      await expect(session.callTool('preview_garmin_workout_replacement', { query: 123 }))
+        .rejects.toMatchObject({ code: 'invalid_tool_input', retryable: true });
+    } finally { await session.close(); }
+  });
+
+  it('does not classify an unexpected replacement backend failure as an eligibility refusal', async () => {
+    const session = await createAssistantMcpSession('user-1', 'https://quantified-self.io', {
+      createServer: () => createTestServer({ errorTool: 'preview_garmin_workout_replacement',
+        errorCode: 'temporarily_unavailable' }),
+    }, 'coordinate_free', false, true, false, true, 'conversation');
+    try {
+      await expect(session.callTool('preview_garmin_workout_replacement', {})).rejects.toMatchObject({
+        name: 'AssistantMcpToolFailure', code: 'temporarily_unavailable', stage: 'tool_response',
+      });
+    } finally { await session.close(); }
+  });
+
+  it('returns fixed corrective guidance for strict input rejection without retaining rejected arguments', async () => {
+    const session = await createAssistantMcpSession('user-1', 'https://quantified-self.io');
+    try {
+      await expect(session.callTool('query_activities', { relativePeriod: 'today' })).rejects.toMatchObject({
+        name: 'AssistantRecoverableMcpToolError',
+        code: 'invalid_tool_input',
+        guidance: expect.stringContaining('advertised input schema exactly'),
+        message: 'The Assistant MCP tool needs corrected input.',
+      } satisfies Partial<AssistantRecoverableMcpToolError>);
     } finally {
       await session.close();
     }

@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { withHistoryExecution } from '../connection-history/context';
+import type { HistoryExecution } from '../connection-history/execution';
 
 const hoisted = vi.hoisted(() => {
   const mockHasProAccess = vi.fn();
@@ -23,7 +25,7 @@ const hoisted = vi.hoisted(() => {
   const mockStorageDelete = vi.fn();
   const mockStorageFile = vi.fn((path: string) => ({
     path,
-    save: (data: Buffer) => mockStorageSave(path, data),
+    save: (data: Buffer, options: unknown) => mockStorageSave(path, data, options),
     delete: (options: unknown) => mockStorageDelete(path, options),
   }));
   const mockStorageBucket = vi.fn((name?: string) => ({
@@ -203,6 +205,20 @@ describe('upsertSyncedRoute', () => {
     });
   });
 
+  it.each(['original', 'route'])('blocks the %s history write after connection authority changes', async phase => {
+    const guard = vi.fn();
+    if (phase === 'route') guard.mockResolvedValueOnce(undefined);
+    guard.mockRejectedValue(new Error('history connection changed'));
+    const execution = { inTransaction: guard } as unknown as HistoryExecution;
+    await expect(withHistoryExecution(execution, () => upsertSyncedRoute({
+      userID: 'user-1', routeID: 'route-1', routeFile: { name: 'Updated Route' } as never,
+      sourceMetadata: { sourceType: 'service_sync', sourceServiceName: 'suuntoApp' } as never,
+      originalFile: { data: Buffer.from('<gpx />'), extension: 'gpx', originalFilename: 'Updated Route.gpx' },
+    }))).rejects.toThrow('history connection changed');
+    expect(transactionSetPayloadForPath('users/user-1/routes/route-1')).toBeUndefined();
+    if (phase === 'original') expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
+    else expect(hoisted.mockStorageSave).toHaveBeenCalledTimes(1);
+  });
   it('writes synced originals to a new path and deletes the replaced original after a successful update', async () => {
     const result = await upsertSyncedRoute({
       userID: 'user-1',
@@ -226,6 +242,7 @@ describe('upsertSyncedRoute', () => {
     expect(hoisted.mockStorageSave).toHaveBeenCalledWith(
       'users/user-1/routes/route-1/uploads/provider-sync/original-new-file-id.gpx',
       Buffer.from('<gpx />'),
+      { validation: 'crc32c', metadata: { crc32c: expect.any(String) } },
     );
     expect(transactionSetPayloadForPath('users/user-1/routes/route-1')).toEqual(expect.objectContaining({
       originalFiles: [expect.objectContaining({

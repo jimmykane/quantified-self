@@ -1,6 +1,8 @@
 @use '../../../styles/breakpoints' as bp;
 
 .settings-container {
+    --services-surface-border: color-mix(in srgb, var(--mat-sys-outline-variant) 55%, transparent);
+
     display: block;
     position: relative;
 }
@@ -34,9 +36,10 @@
 
 .service-data-flow {
     --mat-expansion-container-background-color: var(--mat-sys-surface-container-lowest);
+    --mat-expansion-container-elevation-shadow: none;
 
     margin-bottom: 20px;
-    border: 1px solid var(--mat-sys-outline-variant);
+    border: 1px solid var(--services-surface-border);
     border-radius: 12px;
     box-shadow: none;
 }
@@ -127,91 +130,41 @@
 }
 
 .provider-selector {
+    display: flex;
     width: 100%;
     max-width: 760px;
     margin-bottom: 20px;
 }
 
-.provider-selector--desktop {
-    display: flex;
-}
-
-.provider-selector--desktop mat-button-toggle {
-    flex: 1 1 0;
+.provider-selector a {
+    padding-inline: 16px;
 }
 
 .provider-selector__option {
     display: flex;
-    min-height: 64px;
+    min-height: 48px;
     align-items: center;
     justify-content: center;
-    flex-direction: column;
     gap: 8px;
     font-weight: 600;
 }
-
-.provider-selector__mcp-brand {
-    display: inline-flex;
-    height: 24px;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    color: var(--mat-sys-on-surface);
-    font-size: 0.88rem;
-    font-weight: 700;
-    line-height: 1;
-}
-
-.provider-selector__mcp-brand mat-icon {
-    width: 22px;
-    height: 22px;
-    margin: 0;
-    font-size: 22px;
-    line-height: 22px;
-}
-
-.provider-selector__name {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    margin: -1px;
-    padding: 0;
-    clip-path: inset(50%);
-    white-space: nowrap;
-}
-
-.provider-selector__connection-state {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    color: var(--qs-theme-success);
-    font-size: 0.72rem;
-    font-weight: 650;
-    line-height: 1;
-}
-
 .provider-selector__entitlement {
     --mat-chip-container-height: 20px;
     --mat-chip-label-text-size: 0.66rem;
     --mat-chip-label-text-weight: 700;
 }
-
+.provider-selector__connection-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.72rem;
+    color: var(--qs-theme-success);
+}
 .provider-selector__connection-dot {
     width: 8px;
     height: 8px;
     border-radius: 50%;
     background: currentColor;
-}
-
-.provider-selector--mobile {
-    display: none;
-}
-
-.provider-selector__mobile-option {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
 }
 
 .services-workspace-main {
@@ -273,6 +226,7 @@
 .service-sync-summary {
     --mat-card-outlined-container-color: var(--mat-sys-surface-container-lowest);
     --mat-card-outlined-container-elevation: none;
+    --mat-card-outlined-outline-color: var(--services-surface-border);
 
     margin-top: 12px;
 }
@@ -340,7 +294,7 @@
     align-items: center;
     gap: 16px;
     padding: 16px 18px;
-    border: 1px solid var(--mat-sys-outline-variant);
+    border: 1px solid var(--services-surface-border);
     border-radius: 12px;
     background: var(--mat-sys-surface-container-lowest);
 }
@@ -373,22 +327,6 @@
     width: 18px;
     height: 18px;
     font-size: 18px;
-}
-
-.service-overview-card__detail {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 8px;
-    color: var(--mat-sys-tertiary);
-    font-size: 0.8rem;
-    font-weight: 600;
-}
-
-.service-overview-card__detail mat-icon {
-    width: 17px;
-    height: 17px;
-    font-size: 17px;
 }
 
 .service-overview-status {
@@ -427,36 +365,11 @@
         font-size: 1.75rem;
     }
 
-    .provider-selector--desktop {
-        display: none;
-    }
-
-    .provider-selector--mobile {
-        display: flex;
+    .provider-selector {
         margin-bottom: 16px;
     }
-
-    .provider-selector--mobile mat-button-toggle {
-        flex: 1 1 0;
-        min-width: 0;
-    }
-
-    :host ::ng-deep .provider-selector--mobile .mat-button-toggle-button,
-    :host ::ng-deep .provider-selector--mobile .mat-button-toggle-label-content {
-        width: 100%;
-        min-width: 0;
-    }
-
-    :host ::ng-deep .provider-selector--mobile .mat-button-toggle-label-content {
-        box-sizing: border-box;
-        padding-inline: 4px;
-    }
-
-    .provider-selector__mobile-option {
-        flex-direction: column;
-        gap: 4px;
-        font-size: clamp(0.7rem, 2.6vw, 0.82rem);
-        line-height: 1.1;
+    .provider-selector__option {
+        min-height: 48px;
     }
 
     .service-tools-dialog__content {

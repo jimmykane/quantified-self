@@ -1,6 +1,173 @@
 {
   "indexes": [
     {
+      "collectionGroup": "stripeBillingJobs", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "state", "order": "ASCENDING" }, { "fieldPath": "recoverAt", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "derivedMetrics", "queryScope": "COLLECTION_GROUP",
+      "fields": [{ "fieldPath": "entryType", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "updatedAtMs", "order": "ASCENDING" }, { "fieldPath": "generation", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "sleepSessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "source.provider", "order": "ASCENDING" },
+        { "fieldPath": "sleepDate", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "healthSourceRecords", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "source.sourceRecordType", "order": "ASCENDING" }, { "fieldPath": "startTimeMs", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }]
+    },
+    {
+      "collectionGroup": "healthSourceRecords", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "source.sourceRecordType", "order": "ASCENDING" }, { "fieldPath": "metricIds", "arrayConfig": "CONTAINS" }, { "fieldPath": "startTimeMs", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }]
+    },
+    {
+      "collectionGroup": "activitySyncQueue", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "deliveryMode", "order": "ASCENDING" }, { "fieldPath": "processed", "order": "ASCENDING" }, { "fieldPath": "retryCount", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "activitySyncQueue", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "sourceServiceName", "order": "ASCENDING" }, { "fieldPath": "processed", "order": "ASCENDING" }, { "fieldPath": "retryCount", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "activitySyncQueue", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "deliveryMode", "order": "ASCENDING" }, { "fieldPath": "resultStatus", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "activitySyncQueue", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "sourceServiceName", "order": "ASCENDING" }, { "fieldPath": "resultStatus", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "failed_jobs", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "originalCollection", "order": "ASCENDING" }, { "fieldPath": "deliveryMode", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "failed_jobs", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "originalCollection", "order": "ASCENDING" }, { "fieldPath": "sourceServiceName", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "marketingCampaigns", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "trainingDeliveryQueue", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "kind", "order": "ASCENDING" }, { "fieldPath": "dueAtMs", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "trainingDeliveryQueue", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "kind", "order": "ASCENDING" }, { "fieldPath": "priority", "order": "ASCENDING" }, { "fieldPath": "dueAtMs", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "trainingDeliveryQueue", "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "kind", "order": "ASCENDING" },
+        { "fieldPath": "uid", "order": "ASCENDING" },
+        { "fieldPath": "provider", "order": "ASCENDING" },
+        { "fieldPath": "destinationKey", "order": "ASCENDING" },
+        { "fieldPath": "operationKind", "order": "ASCENDING" },
+        { "fieldPath": "dueAtMs", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "trainingDeliveryStatuses", "queryScope": "COLLECTION_GROUP",
+      "fields": [{ "fieldPath": "provider", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "trainingDeliveryStatuses", "queryScope": "COLLECTION_GROUP",
+      "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "hasRemoteCopy", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "trainingDeliveryStatuses", "queryScope": "COLLECTION_GROUP",
+      "fields": [{ "fieldPath": "provider", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "hasRemoteCopy", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "trainingDeliverySettings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "scope", "order": "ASCENDING" },
+        { "fieldPath": "scopeId", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "timelineNotes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "endDate", "order": "ASCENDING" },
+        { "fieldPath": "startDate", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "scheduledWorkouts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "planId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "localDate",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "lifecycle",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "scheduledWorkouts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "planId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "lifecycle",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "scheduledWorkouts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "planId", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "deletedAtMs", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "scheduledWorkouts",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "deletedAtMs", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
       "collectionGroup": "activitySyncQueue",
       "queryScope": "COLLECTION",
       "fields": [
@@ -1040,6 +1207,41 @@
       "density": "SPARSE_ALL"
     },
     {
+      "collectionGroup": "sportsLibReparseJobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "targetSportsLibVersion", "order": "ASCENDING" },
+        { "fieldPath": "processingTier", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sportsLibRouteReparseJobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "targetSportsLibVersion", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sportsLibReparseJobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sportsLibRouteReparseJobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "subscriptions",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
@@ -1497,6 +1699,29 @@
       "density": "SPARSE_ALL"
     },
     {
+      "collectionGroup": "healthSourceRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "source.sourceRecordType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "metricIds",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "calendarDate",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
       "collectionGroup": "healthSampleChunks",
       "queryScope": "COLLECTION",
       "fields": [
@@ -1533,9 +1758,109 @@
         }
       ],
       "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "connectionHistoryImports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "processed",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nextAttemptAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "connectionHistoryImports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "processed",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dateCreated",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": [
+    { "collectionGroup": "stripeBillingJobs", "fieldPath": "expireAt", "ttl": true, "indexes": [] },
+    {"collectionGroup": "events", "fieldPath": "stats", "indexes": []},
+    {"collectionGroup": "activities", "fieldPath": "stats", "indexes": []},
+    {"collectionGroup": "events", "fieldPath": "stats.`Activity Types`", "indexes": [{"order": "ASCENDING", "queryScope": "COLLECTION"}, {"order": "DESCENDING", "queryScope": "COLLECTION"}, {"arrayConfig": "CONTAINS", "queryScope": "COLLECTION"}]},
+    {"collectionGroup": "events", "fieldPath": "stats.`Average Heart Rate`", "indexes": [{"order": "ASCENDING", "queryScope": "COLLECTION"}, {"order": "DESCENDING", "queryScope": "COLLECTION"}]},
+    {"collectionGroup": "events", "fieldPath": "stats.`Device Names`", "indexes": [{"order": "ASCENDING", "queryScope": "COLLECTION"}, {"order": "DESCENDING", "queryScope": "COLLECTION"}, {"arrayConfig": "CONTAINS", "queryScope": "COLLECTION"}]},
+    {"collectionGroup": "events", "fieldPath": "stats.Ascent", "indexes": [{"order": "ASCENDING", "queryScope": "COLLECTION"}, {"order": "DESCENDING", "queryScope": "COLLECTION"}]},
+    {"collectionGroup": "events", "fieldPath": "stats.Descent", "indexes": [{"order": "ASCENDING", "queryScope": "COLLECTION"}, {"order": "DESCENDING", "queryScope": "COLLECTION"}]},
+    {"collectionGroup": "events", "fieldPath": "stats.Distance", "indexes": [{"order": "ASCENDING", "queryScope": "COLLECTION"}, {"order": "DESCENDING", "queryScope": "COLLECTION"}]},
+    {"collectionGroup": "events", "fieldPath": "stats.Duration", "indexes": [{"order": "ASCENDING", "queryScope": "COLLECTION"}, {"order": "DESCENDING", "queryScope": "COLLECTION"}]},
+    {"collectionGroup": "events", "fieldPath": "stats.Energy", "indexes": [{"order": "ASCENDING", "queryScope": "COLLECTION"}, {"order": "DESCENDING", "queryScope": "COLLECTION"}]},
+    {"collectionGroup": "events", "fieldPath": "stats.PowerCurve", "indexes": [{"order": "ASCENDING", "queryScope": "COLLECTION"}, {"order": "DESCENDING", "queryScope": "COLLECTION"}, {"arrayConfig": "CONTAINS", "queryScope": "COLLECTION"}]},
+    {"collectionGroup": "events", "fieldPath": "stats.Weight", "indexes": [{"order": "ASCENDING", "queryScope": "COLLECTION"}, {"order": "DESCENDING", "queryScope": "COLLECTION"}]},
+    {"collectionGroup": "activities", "fieldPath": "stats.`VO2 Max`", "indexes": [{"order": "ASCENDING", "queryScope": "COLLECTION"}, {"order": "DESCENDING", "queryScope": "COLLECTION"}]},
+    { "collectionGroup": "trainingLoadCache", "fieldPath": "entries", "indexes": [] },
+    { "collectionGroup": "metaData", "fieldPath": "controls", "indexes": [] },
+    { "collectionGroup": "metaData", "fieldPath": "legs", "indexes": [] },
+    { "collectionGroup": "metaData", "fieldPath": "legacyLegs", "indexes": [] },
+    { "collectionGroup": "metaData", "fieldPath": "sourceWriteTimes", "indexes": [] },
+    {
+      "collectionGroup": "trainingCleanupJobs", "fieldPath": "nextAttemptAtMs", "ttl": false,
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "planDeletionLocks", "fieldPath": "nextAttemptAtMs", "ttl": false,
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "trainingDeliveryStatuses", "fieldPath": "status", "ttl": false,
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "recipients", "fieldPath": "uid", "ttl": false,
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "serviceDisconnectCleanup",
+      "fieldPath": "*",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "serviceDisconnectCleanup",
+      "fieldPath": "nextAttemptAt",
+      "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION" }]
+    },
+    {
+      "collectionGroup": "serviceDisconnectCleanup",
+      "fieldPath": "userID",
+      "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION" }]
+    },
+    { "collectionGroup": "timelineNotes", "fieldPath": "title", "indexes": [] },
+    { "collectionGroup": "timelineNotes", "fieldPath": "details", "indexes": [] },
     {
       "collectionGroup": "legal",
       "fieldPath": "acceptedMarketingPolicy",
@@ -1934,6 +2259,60 @@
       "indexes": []
     },
     {
+      "collectionGroup": "trainingMcpProposals",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "trainingMcpProposals",
+      "fieldPath": "preview",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "trainingMcpProposals",
+      "fieldPath": "scheduleRequests",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "trainingMcpProposals",
+      "fieldPath": "providerOperations",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "trainingMcpProposals",
+      "fieldPath": "result",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "trainingMcpLibraryProposals",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "trainingMcpLibraryProposals",
+      "fieldPath": "request",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "trainingMcpLibraryProposals",
+      "fieldPath": "preview",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "trainingMcpLibraryProposals",
+      "fieldPath": "result",
+      "ttl": false,
+      "indexes": []
+    },
+    {
       "collectionGroup": "COROSAPIWorkoutQueue",
       "fieldPath": "expireAt",
       "ttl": true,
@@ -2312,6 +2691,75 @@
       "fieldPath": "*",
       "ttl": false,
       "indexes": []
+    },
+    {
+      "collectionGroup": "mutationReceipts",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "workoutLibraryMutationReceipts",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "workoutLibraryPlacementReceipts",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "scheduledWorkouts",
+      "fieldPath": "structure",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "revisions",
+      "fieldPath": "snapshot",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "chunks",
+      "fieldPath": "payloadBase64",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "trainingCleanupJobs",
+      "fieldPath": "response",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "planDeletionLocks",
+      "fieldPath": "request",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "planDeletionLocks",
+      "fieldPath": "mcpAuthority",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "connectionHistoryImports",
+      "fieldPath": "lastOperation",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "connectionHistoryImports",
+      "fieldPath": "steps",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "activitySendOperations",
+      "fieldPath": "cleanupAfter",
+      "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }]
     }
   ]
 }

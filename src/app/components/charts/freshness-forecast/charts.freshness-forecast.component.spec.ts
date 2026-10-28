@@ -95,6 +95,87 @@ describe('ChartsFreshnessForecastComponent', () => {
     expect(component.forecastFormText).toBe('7');
   });
 
+  it('renders a labelled shared y-axis and zero guide when Form crosses zero', async () => {
+    component.forecast = {
+      generatedAtMs: Date.now(),
+      points: [
+        {
+          dayMs: Date.UTC(2026, 0, 8),
+          trainingStressScore: 20,
+          ctl: 50,
+          atl: 55,
+          formSameDay: -5,
+          formPriorDay: -4,
+          isForecast: false,
+        },
+        {
+          dayMs: Date.UTC(2026, 0, 15),
+          trainingStressScore: 0,
+          ctl: 47,
+          atl: 40,
+          formSameDay: 7,
+          formPriorDay: 6,
+          isForecast: true,
+        },
+      ],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => {
+      expect(mockLoader.setOption).toHaveBeenCalled();
+    });
+
+    const setOptionCall = mockLoader.setOption.mock.calls.at(-1) || [];
+    const optionCandidate = setOptionCall[1] || setOptionCall[0];
+    const option = optionCandidate as Record<string, any>;
+
+    expect(option.grid).toMatchObject({
+      left: 6,
+      bottom: 24,
+      outerBoundsMode: 'auto',
+      outerBoundsContain: 'axisLabel',
+    });
+    expect(option.yAxis.axisLabel).toMatchObject({ show: true, fontSize: 12 });
+    expect(option.yAxis.axisLabel.formatter(12.5)).toBe('12.5');
+    expect(option.series[2].markLine).toMatchObject({ data: [{ yAxis: 0 }] });
+  });
+
+  it('keeps the plot bounds compact on narrow chart tiles', async () => {
+    Object.defineProperty(component.chartDiv.nativeElement, 'clientWidth', {
+      configurable: true,
+      value: 320,
+    });
+    component.forecast = {
+      generatedAtMs: Date.now(),
+      points: [
+        {
+          dayMs: Date.UTC(2026, 0, 8),
+          trainingStressScore: 20,
+          ctl: 50,
+          atl: 55,
+          formSameDay: -5,
+          formPriorDay: -4,
+          isForecast: false,
+        },
+      ],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => {
+      expect(mockLoader.setOption).toHaveBeenCalled();
+    });
+
+    const setOptionCall = mockLoader.setOption.mock.calls.at(-1) || [];
+    const optionCandidate = setOptionCall[1] || setOptionCall[0];
+    const option = optionCandidate as Record<string, any>;
+
+    expect(option.grid).toMatchObject({ left: 6, right: 6, bottom: 24 });
+    expect(option.xAxis.axisLabel.margin).toBe(3);
+    expect(option.yAxis.axisLabel).toMatchObject({ show: true, fontSize: 11 });
+  });
+
   it('shows pending message when no points exist and status is stale', async () => {
     component.forecast = { generatedAtMs: Date.now(), points: [] };
     component.status = 'stale';

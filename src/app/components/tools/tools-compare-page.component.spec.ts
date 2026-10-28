@@ -1,18 +1,23 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { signal, WritableSignal } from '@angular/core';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { OverlayContainer } from '@angular/cdk/overlay';
 import { By } from '@angular/platform-browser';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { MatDialog } from '@angular/material/dialog';
 import { MatTooltip } from '@angular/material/tooltip';
 import { readFileSync } from 'node:fs';
 import { ActivatedRoute, Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ActivityTypes, DataActivityTypes, DataAltitude, DataAscent, DataDescent, DataDistance, DataHeartRate, User } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataActivityTypes, DataAltitude, DataAscent, DataDescent, DataDistance, DataHeartRate, DataRRRMSSD, DataRRSDNN, DataRRCoverage, DataRRArtifactPercentage, DataRRArtifactCount, DataRRLongestGap, DistanceUnits, DynamicDataLoader, User } from '@sports-alliance/sports-lib';
+import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
+import { RR_METRICS } from '../../constants/rr-metrics';
 import { AppEventInterface, BenchmarkResult } from '@shared/app-event.interface';
 
 import { AppAuthService } from '../../authentication/app.auth.service';
+import { AppUserService, AppUserProfileReadState } from '../../services/app.user.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import { AppEventService } from '../../services/app.event.service';
@@ -75,6 +80,7 @@ function makeActivity(id: string, options: {
   distance?: number;
   ascent?: number;
   descent?: number;
+  rrStats?: ReturnType<typeof makeStat>[];
 }) {
   const stats = new Map<string, ReturnType<typeof makeStat>>();
   if (typeof options.distance === 'number') {
@@ -86,6 +92,8 @@ function makeActivity(id: string, options: {
   if (typeof options.descent === 'number') {
     stats.set(DataDescent.type, makeStat(DataDescent.type, options.descent, `${Math.round(options.descent)}`, 'm'));
   }
+
+  options.rrStats?.forEach(stat => stats.set(stat.getType(), stat));
 
   return {
     getID: () => id,
@@ -132,6 +140,7 @@ describe('ToolsComparePageComponent', () => {
   let fixture: ComponentFixture<ToolsComparePageComponent>;
   let component: ToolsComparePageComponent;
   let userSubject: BehaviorSubject<User | null>;
+  let profileReadState: WritableSignal<AppUserProfileReadState>;
   let routerNavigateSpy: ReturnType<typeof vi.spyOn>;
   let eventServiceMock: {
     deleteAllEventData: ReturnType<typeof vi.fn>;
@@ -203,6 +212,7 @@ describe('ToolsComparePageComponent', () => {
 
   beforeEach(async () => {
     userSubject = new BehaviorSubject<User | null>(null);
+    profileReadState = signal<AppUserProfileReadState>({ status: 'ready', uid: 'user-1', profileExists: true });
     authServiceMock = {
       user$: userSubject.asObservable(),
       redirectUrl: null,
@@ -342,6 +352,7 @@ describe('ToolsComparePageComponent', () => {
           provide: AppAuthService,
           useValue: authServiceMock,
         },
+        { provide: AppUserService, useValue: { profileReadState } },
         { provide: AppToolsComparisonService, useValue: comparisonServiceMock },
         { provide: AppAnalyticsService, useValue: analyticsServiceMock },
         { provide: AppBenchmarkFlowService, useValue: benchmarkFlowServiceMock },
@@ -364,6 +375,14 @@ describe('ToolsComparePageComponent', () => {
     component = fixture.componentInstance;
     overlayContainer = TestBed.inject(OverlayContainer);
     fixture.detectChanges();
+  });
+
+  it('keeps chart preferences out of the Compare header', () => {
+    userSubject.next(new User('user-1'));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('Distinct line patterns');
+    expect(fixture.nativeElement.querySelector('[aria-label="Comparison chart options"]')).toBeNull();
+    expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
   });
 
   it('tracks the initial comparison route view', () => {
@@ -681,6 +700,63 @@ describe('ToolsComparePageComponent', () => {
     expect(component.canCreateComparison()).toBe(false);
     expect(analyticsServiceMock.logToolCompareFileSelection).not.toHaveBeenCalled();
     expect(hapticsServiceMock.warning).toHaveBeenCalled();
+  });
+
+  it('directs a newly signed-in user with no saved profile to account setup before accepting files', async () => {
+    profileReadState.set({ status: 'ready', uid: 'user-1', profileExists: false });
+    userSubject.next(new User('user-1'));
+    fixture.detectChanges();
+
+    expect(component.needsAccountSetup()).toBe(true);
+    const input = fixture.nativeElement.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(input.disabled).toBe(true);
+    const setupButton = (Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[])
+      .find(button => button.textContent?.includes('Complete account setup'));
+    expect(setupButton).toBeTruthy();
+    setupButton.click();
+    await fixture.whenStable();
+
+    expect(routerNavigateSpy).toHaveBeenCalledWith(['/onboarding'], {
+      queryParams: { returnUrl: '/tools/compare' },
+    });
+    expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(1);
+    expect(hapticsServiceMock.success).not.toHaveBeenCalled();
+    expect(comparisonServiceMock.createComparison).not.toHaveBeenCalled();
+  });
+
+  it('does not upload or stage files for a missing profile even if the disabled controls are bypassed', async () => {
+    profileReadState.set({ status: 'ready', uid: 'user-1', profileExists: false });
+    userSubject.next(new User('user-1'));
+    const files = [new File(['a'], 'a.fit'), new File(['b'], 'b.fit')];
+    component.onFilesSelected({ target: { files, value: 'selected' } } as unknown as Event);
+    expect(component.selectedFiles()).toEqual([]);
+
+    component.selectedFiles.set(files);
+    expect(component.canCreateComparison()).toBe(false);
+    await component.createComparison();
+
+    expect(comparisonServiceMock.validateFiles).not.toHaveBeenCalled();
+    expect(comparisonServiceMock.createComparison).not.toHaveBeenCalled();
+    expect(routerNavigateSpy).toHaveBeenCalledWith(['/onboarding'], {
+      queryParams: { returnUrl: '/tools/compare' },
+    });
+  });
+
+  it('allows comparison creation after account setup provides a saved profile', async () => {
+    profileReadState.set({ status: 'ready', uid: 'user-1', profileExists: false });
+    userSubject.next(new User('user-1'));
+    expect(component.uploadControlsDisabled()).toBe(true);
+
+    profileReadState.set({ status: 'ready', uid: 'user-1', profileExists: true });
+    const files = [new File(['a'], 'a.fit'), new File(['b'], 'b.fit')];
+    component.onFilesSelected({ target: { files, value: 'selected' } } as unknown as Event);
+    await component.createComparison();
+
+    expect(component.needsAccountSetup()).toBe(false);
+    expect(comparisonServiceMock.createComparison).toHaveBeenCalledWith(files, '');
+    expect(routerNavigateSpy).toHaveBeenCalledWith(['/user', 'user-1', 'event', 'event-1'], {
+      queryParams: { benchmark: '1' },
+    });
   });
 
   it('logs comparison file selection summaries without filenames', () => {
@@ -1382,7 +1458,7 @@ describe('ToolsComparePageComponent', () => {
     const sharedTableControls = readFileSync('src/styles/_table-controls.scss', 'utf8');
 
     expect(styles).toContain("@use '../../../styles/table-controls' as tableControls;");
-    expect(styles).toContain('@include tableControls.comparisonTableControlsLayout($includeDeviceColorsButton: true);');
+    expect(styles).toContain('@include tableControls.comparisonTableControlsLayout();');
     expect(styles).toContain('@include bp.max-768 {');
     expect(sharedTableControls).toContain('.comparison-table-controls');
     expect(sharedTableControls).toContain('.comparison-table-actions');
@@ -2033,7 +2109,34 @@ describe('ToolsComparePageComponent', () => {
     ]));
   });
 
+  it('keeps the saved reference/test selection when reparsed comparison activities are reordered', () => {
+    const activities = ['third', 'test', 'ref'].map(id => ({ getID: () => id }));
+    const event = { getActivities: () => activities, benchmarkResults: { pair: {
+      referenceId: 'ref', testId: 'test', timestamp: new Date(), requiresRegeneration: true,
+    } } } as any;
+    expect((component as any).resolveBenchmarkInitialSelection(event)).toEqual([activities[2], activities[1]]);
+  });
+
+  it('shows retained reports as requiring regeneration and offers rerun for every metric', () => {
+    const result = {
+      referenceId: 'old-a', testId: 'old-b', timestamp: new Date(), requiresRegeneration: true,
+      metrics: { gnss: null, streamMetrics: {} },
+    };
+    const event = {
+      getID: () => 'retained-report', getActivities: () => [], startDate: new Date(),
+      benchmarkResults: { 'old-a_old-b': result },
+    } as any;
+    const row = (component as any).toComparisonListItem(event);
+    expect(row.hasReport).toBe(true);
+    expect(row.statusLabel).toBe('Regeneration required');
+    for (const metric of [row.gnssBenchmark, row.heartRateBenchmark, row.altitudeBenchmark]) {
+      expect(metric.isPlaceholder).toBe(true);
+      expect(metric.canRerunReport).toBe(true);
+    }
+  });
+
   it('resolves per-device sport types from activity stats and raw activity type aliases', () => {
+    const roadRunning = (ActivityTypes as Record<string, string>).RoadRunning ?? ActivityTypes.Running;
     const user = new User('user-1');
     userSubject.next(user);
     const cyclingActivityTypes = new DataActivityTypes([ActivityTypes.Cycling]);
@@ -2063,21 +2166,179 @@ describe('ToolsComparePageComponent', () => {
     fixture.detectChanges();
 
     const item = component.comparisonItems()[0];
-    expect(item.activityTypesLabel).toBe('Cycling, Running');
+    expect(item.activityTypesLabel).toBe(`Cycling, ${roadRunning}`);
     expect(item.activitySummaries.map(summary => ({
       deviceLabel: summary.deviceLabel,
       activityTypeLabel: summary.activityTypeLabel,
     }))).toEqual([
       { deviceLabel: 'Garmin Edge', activityTypeLabel: 'Cycling' },
-      { deviceLabel: 'Suunto Race', activityTypeLabel: 'Running' },
+      { deviceLabel: 'Suunto Race', activityTypeLabel: roadRunning },
     ]);
 
     const sportTypeLines = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.summary-type-line'))
       .map(line => line.querySelector('.summary-type-value')?.textContent?.trim());
     expect((fixture.nativeElement as HTMLElement).querySelector('.summary-type-device')).toBeNull();
     expect(sportTypeLines).toContain('Cycling');
-    expect(sportTypeLines).toContain('Running');
-    expect(item.activityTypesTitle).toBe('Cycling\nRunning');
+    expect(sportTypeLines).toContain(roadRunning);
+    expect(item.activityTypesTitle).toBe(`Cycling\n${roadRunning}`);
+  });
+
+  it.each(['default', 'imperial'])('shows per-recording RMSSD without extra reads for %s unit preferences', async preference => {
+    const user = new User('user-1');
+    user.settings = { ...user.settings, unitSettings: {
+      ...getDefaultUserUnitSettings(),
+      ...(preference === 'imperial' ? { distanceUnits: DistanceUnits.Miles } : {}),
+    } };
+    userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
+    const getAllStreams = vi.fn(() => { throw new Error('Table must not inspect streams'); });
+    component.comparisons.set([makeComparisonEvent('saved-rr', {
+      activities: [
+        { ...makeActivity('activity-1', { deviceName: 'Watch without RR', activityType: 'Running' }), getAllStreams },
+        { ...makeActivity('activity-2', { deviceName: 'RR recording', activityType: 'Running',
+          rrStats: [new DataRRRMSSD(8.14), new DataRRSDNN(37.2), new DataRRCoverage(100)],
+        }), getAllStreams },
+      ],
+    })]);
+    fixture.detectChanges();
+
+    const row = component.comparisonItems()[0];
+    expect(row.activitySummaries.map(summary => summary.rrLabel)).toEqual(['—', '8.1 ms']);
+    expect(row.rrTitle).toContain('RR recording: RMSSD 8.1 ms');
+    expect(row.hasRRStats).toBe(true);
+    const lines = fixture.nativeElement.querySelectorAll('td.mat-column-rr .summary-line') as NodeListOf<HTMLElement>;
+    expect(Array.from(lines, line => line.textContent?.trim())).toEqual(['—', '8.1 ms']);
+    expect(lines[0].getAttribute('aria-label')).toContain('Watch without RR: No saved');
+    expect(lines[1].getAttribute('aria-label')).toContain('RR recording: RMSSD');
+    const headers = Array.from(fixture.nativeElement.querySelectorAll('th')) as HTMLElement[];
+    expect(headers.findIndex(header => header.classList.contains('mat-column-rr')))
+      .toBe(headers.findIndex(header => header.classList.contains('mat-column-heartRate')) + 1);
+    expect(getAllStreams).not.toHaveBeenCalled();
+    expect(processingServiceMock.addJob).not.toHaveBeenCalled();
+    expect(eventServiceMock.getActivitiesOnceByEventsWithOptions).not.toHaveBeenCalled();
+    expect(eventServiceMock.getActivitiesOnceByEventWithOptions).not.toHaveBeenCalled();
+    expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+  });
+
+  it('preserves zero, rejects invalid saved HRV values and keeps a fallback for stats without RMSSD', () => {
+    userSubject.next(new User('user-1'));
+    component.comparisons.set([makeComparisonEvent('rr-states', { activities: [
+      makeActivity('zero', { deviceName: 'Zero', activityType: 'Running', rrStats: [new DataRRRMSSD(0)] }),
+      makeActivity('fallback', { deviceName: 'Artifact only', activityType: 'Running', rrStats: [new DataRRArtifactCount(0)] }),
+      ...[NaN, Infinity, -1].map((value, index) => makeActivity(`invalid-${index}`, {
+        deviceName: `Invalid ${index}`, activityType: 'Running',
+        rrStats: [makeStat(DataRRRMSSD.type, value, 'incorrect display', 'incorrect unit'), makeStat(DataRRCoverage.type, 101, '101', '%')],
+      })),
+    ] })]);
+    fixture.detectChanges();
+    const summaries = component.comparisonItems()[0].activitySummaries;
+    expect(summaries.map(summary => summary.rrLabel)).toEqual(['0.0 ms', 'Stats available', '—', '—', '—']);
+    expect(summaries[1].rrTitle).toContain('RMSSD unavailable');
+    expect(summaries.slice(2).every(summary => summary.rrStats.length === 0)).toBe(true);
+  });
+
+  it.each(['default', 'imperial'])('renders all saved RR metrics in a neutral dialog for %s preferences, excluding unavailable devices', async preference => {
+    const user = new User('user-1');
+    user.settings = { ...user.settings, unitSettings: {
+      ...getDefaultUserUnitSettings(),
+      ...(preference === 'imperial' ? { distanceUnits: DistanceUnits.Miles } : {}),
+    } };
+    userSubject.next(user);
+    await Promise.resolve();
+    await Promise.resolve();
+    const stats = RR_METRICS.map(metric => DynamicDataLoader.getDataInstanceFromDataType(metric.type, 1));
+    component.comparisons.set([makeComparisonEvent('rr-details', { title: 'Synthetic comparison', activities: [
+      makeActivity('no-rr', { deviceName: 'No RR device', activityType: 'Cycling' }),
+      makeActivity('activity-2', { deviceName: 'Recorded RR device', activityType: 'Cycling', rrStats: [
+        ...stats.filter(stat => ![DataRRRMSSD.type, DataRRSDNN.type, DataRRArtifactPercentage.type, DataRRLongestGap.type].includes(stat.getType())),
+        new DataRRRMSSD(8.14), new DataRRSDNN(37.2), new DataRRArtifactPercentage(0), new DataRRLongestGap(2.5),
+      ] }),
+    ] })]);
+    fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('.rr-summary-button') as HTMLButtonElement;
+    // Native keyboard activation belongs to the button, never to the row's open-details handler.
+    button.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(routerNavigateSpy).not.toHaveBeenCalled();
+    button.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const overlay = overlayContainer.getContainerElement();
+    try {
+      expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(1);
+      expect(overlay.querySelectorAll('.rr-dialog-source')).toHaveLength(1);
+      expect(overlay.querySelector('.rr-dialog-device')?.textContent).toBe('Recorded RR device');
+      expect(overlay.querySelectorAll('.rr-dialog-metric')).toHaveLength(20);
+      const displayedMetrics = Array.from(overlay.querySelectorAll('.rr-dialog-metric'), metric => [
+        metric.querySelector('dt')?.textContent?.trim(), metric.querySelector('dd')?.textContent?.trim(),
+      ]);
+      expect(displayedMetrics).toEqual(expect.arrayContaining([
+        ['RMSSD', '8.1 ms'], ['SDNN', '37.2 ms'], ['Strap artifacts', '0.0 %'], ['Longest gap', '2.5 s'],
+      ]));
+      expect(overlay.textContent).toContain('HRV values do not measure device accuracy');
+      expect(overlay.textContent).not.toContain('No RR device');
+      expect((overlay.querySelector('.rr-dialog-device') as HTMLElement).style.borderColor).toBe('rgb(171, 205, 239)');
+      expect(routerNavigateSpy).not.toHaveBeenCalled();
+      expect(benchmarkFlowServiceMock.openBenchmarkReport).not.toHaveBeenCalled();
+      expect(eventServiceMock.getActivitiesOnceByEventsWithOptions).not.toHaveBeenCalled();
+      expect(processingServiceMock.addJob).not.toHaveBeenCalled();
+      const close = Array.from(overlay.querySelectorAll('button')).find(candidate => candidate.textContent?.trim() === 'Close')!;
+      close.click();
+      fixture.detectChanges();
+      expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(2);
+    } finally {
+      TestBed.inject(MatDialog).closeAll();
+      await fixture.whenStable();
+    }
+  });
+
+  it('opens event details from the HRV dialog with one haptic and no benchmark generation', async () => {
+    userSubject.next(new User('user-1'));
+    await Promise.resolve();
+    await Promise.resolve();
+    component.comparisons.set([makeComparisonEvent('rr-event', { activities: [
+      makeActivity('rr', { deviceName: 'RR device', activityType: 'Running', rrStats: [new DataRRRMSSD(12)] }),
+    ] })]);
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.rr-summary-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    try {
+      const openDetails = Array.from(overlayContainer.getContainerElement().querySelectorAll('button'))
+        .find(candidate => candidate.textContent?.trim() === 'Open event details')!;
+      openDetails.click();
+      fixture.detectChanges();
+      await Promise.resolve();
+      expect(routerNavigateSpy).toHaveBeenCalledExactlyOnceWith(['/user', 'user-1', 'event', 'rr-event'], { queryParams: undefined });
+      expect(hapticsServiceMock.selection).toHaveBeenCalledTimes(2);
+      expect(benchmarkFlowServiceMock.openBenchmarkSelectionDialog).not.toHaveBeenCalled();
+      expect(benchmarkFlowServiceMock.openBenchmarkReport).not.toHaveBeenCalled();
+    } finally {
+      TestBed.inject(MatDialog).closeAll();
+      await fixture.whenStable();
+    }
+  });
+
+  it('keeps unavailable stats noninteractive and disabled/no-op HRV actions silent', () => {
+    userSubject.next(new User('user-1'));
+    component.comparisons.set([makeComparisonEvent('no-rr', { activities: [
+      makeActivity('none', { deviceName: 'No RR', activityType: 'Cycling' }),
+    ] })]);
+    fixture.detectChanges();
+    const dialog = vi.spyOn(TestBed.inject(MatDialog), 'open');
+    expect(fixture.nativeElement.querySelector('td.mat-column-rr button')).toBeNull();
+    component.openRRStats(component.comparisonItems()[0], null!);
+    component.comparisons.set([makeComparisonEvent('with-rr', { activities: [
+      makeActivity('rr', { deviceName: 'RR', activityType: 'Cycling', rrStats: [new DataRRRMSSD(12)] }),
+    ] })]);
+    component.bulkActionInProgress.set(true);
+    fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('.rr-summary-button') as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    button.click();
+    component.openRRStats(component.comparisonItems()[0], null!);
+    expect(dialog).not.toHaveBeenCalled();
+    expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
   });
 
   it('hydrates previous comparison report rows cache-first when activity summaries are missing', async () => {
@@ -2088,6 +2349,7 @@ describe('ToolsComparePageComponent', () => {
         name: 'Garmin Edge Mtb',
         swInfo: '3130',
       },
+      getStat: (type: string) => type === DataRRRMSSD.type ? new DataRRRMSSD(8.14) : null,
     };
     eventServiceMock.getActivitiesOnceByEventsWithOptions.mockReturnValueOnce(of(new Map([
       ['comparison-1', [activity]],
@@ -2121,6 +2383,8 @@ describe('ToolsComparePageComponent', () => {
     expect(eventServiceMock.getActivitiesOnceByEventWithOptions).not.toHaveBeenCalled();
     expect(component.comparisonItems()[0].devicesLabel).toContain('Garmin Edge Mtb 3130');
     expect(component.comparisonItems()[0].activitySummaries[0].deviceLabel).toBe('Garmin Edge Mtb 3130');
+    expect(component.comparisonItems()[0].activitySummaries[0].rrLabel).toBe('8.1 ms');
+    expect(eventServiceMock.getActivitiesOnceByEventsWithOptions).toHaveBeenCalledTimes(1);
   });
 
   it('does not hydrate draft rows that already have event-level device metadata', async () => {
@@ -2142,6 +2406,8 @@ describe('ToolsComparePageComponent', () => {
 
     expect(eventServiceMock.getActivitiesOnceByEventsWithOptions).not.toHaveBeenCalled();
     expect(component.comparisonItems()[0].devicesLabel).toBe('Garmin Edge Mtb');
+    expect(fixture.nativeElement.querySelector('td.mat-column-rr')?.textContent?.trim()).toBe('Not loaded');
+    expect(component.comparisonItems()[0].rrTitle).toContain('have not been loaded');
   });
 
   it('does not repeatedly retry previous comparison activity summary hydration after a failed activity read', async () => {

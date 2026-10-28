@@ -1,5 +1,9 @@
+import { assertHistoryWrite } from '../connection-history/context';
+import { getGarminHistorySummaryTypes } from './health-backfill-range';
+import { withHistoryQueueExecution } from '../connection-history/execution';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
+import { recordHealthSleepCommit } from '../sleep/monitoring';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { HEALTH_PROVIDERS, HEALTH_SYNC_STATUSES } from '../../../shared/health';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
@@ -49,7 +53,6 @@ import {
   isCompleteGarminHealthBackfillCursor,
   type GarminHealthBackfillCursor,
 } from './health-backfill-range';
-import { GARMIN_HEALTH_SUMMARY_TYPES } from './health-summary-types';
 import {
   extractGarminBackfillMinimumStartMs,
   getGarminBackfillStatusCode,
@@ -59,6 +62,7 @@ import {
 const GARMIN_HEALTH_BACKFILL_BASE_URI = 'https://apis.garmin.com/wellness-api/rest/backfill';
 const GARMIN_HEALTH_BACKFILL_RESPONSE_BYTES = 16 * 1024;
 const GARMIN_HEALTH_BACKFILL_REQUEST_TIMEOUT_MS = 30_000;
+const GARMIN_HEALTH_BACKFILL_MAX_MINIMUM_START_ATTEMPTS = 3;
 export const GARMIN_HEALTH_BACKFILL_REQUEST_PACING_MS = 1_500;
 
 type TokenSnapshot = admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot;
@@ -72,8 +76,8 @@ class GarminHealthBackfillValidationError extends Error {
 
 class GarminHealthBackfillRequestError extends Error {
   readonly name = 'GarminHealthBackfillRequestError';
-  constructor(readonly statusCode: number | null) {
-    super('Garmin Health backfill request failed.');
+  constructor(readonly statusCode: number | null, message = 'Garmin Health backfill request failed.') {
+    super(message);
   }
 }
 
@@ -231,11 +235,13 @@ async function advanceCursorTransaction(
   nextCursor: GarminHealthBackfillCursor,
   total: number,
   guards: GarminHealthWriteLifecycleGuards,
+  resetRetryCount: boolean,
 ): Promise<'advanced' | 'superseded' | 'deleted' | 'lifecycle_changed'> {
   const db = admin.firestore();
   const stateRef = db.collection('users').doc(queueItem.userID!)
     .collection('sleepSyncState').doc(SLEEP_PROVIDERS.GarminAPI);
   return db.runTransaction(async transaction => {
+    await assertHistoryWrite(transaction);
     let deletionGuard;
     try {
       deletionGuard = await getUserDeletionGuardStateInTransaction(
@@ -273,7 +279,8 @@ async function advanceCursorTransaction(
       garminHealthBackfillSummaryIndex: nextCursor.summaryIndex,
       garminHealthBackfillNextStartMs: nextCursor.nextStartMs,
       garminHealthBackfillWindowsCompleted: complete ? total : nextCursor.windowsCompleted,
-      retryCount: 0,
+      // Merely chasing a cutoff must not erase the cross-delivery retry budget.
+      ...(resetRetryCount ? { retryCount: 0 } : {}),
       ...(complete ? {
         processed: true,
         processedAt: Date.now(),
@@ -289,7 +296,7 @@ async function advanceCursorTransaction(
       healthBackfillWindowsTotal: total,
       healthBackfillSummaryType: complete
         ? null
-        : GARMIN_HEALTH_SUMMARY_TYPES[nextCursor.summaryIndex],
+        : getGarminHistorySummaryTypes()[nextCursor.summaryIndex],
       updatedAtMs: Date.now(),
     }, { merge: true });
     return 'advanced';
@@ -328,6 +335,7 @@ async function markBackfillSkipped(
   const nowMs = Date.now();
   try {
     const transition = await db.runTransaction(async transaction => {
+      await assertHistoryWrite(transaction);
       let deletionGuard;
       try {
         deletionGuard = await getUserDeletionGuardStateInTransaction(
@@ -387,6 +395,7 @@ async function markBackfillSkipped(
         { skippedContext: 'USER_DELETION_GUARD' },
       );
     }
+    if (transition === 'skipped') recordHealthSleepCommit(queueItem, 'skipped');
     return QueueResult.Processed;
   } catch (error) {
     logger.error('[GarminHealthBackfill] Could not persist skipped backfill progress.', {
@@ -403,6 +412,7 @@ async function updateMatchingBackfillStateInTransaction(
   update: Record<string, unknown>,
   expectedTotal?: number,
 ): Promise<void> {
+  await assertHistoryWrite(transaction);
   const total = Number(currentQueueItem.garminHealthBackfillWindowsTotal);
   const rangeEndMs = Number(currentQueueItem.rangeEndMs);
   if (currentQueueItem.type !== 'garmin_health_backfill'
@@ -584,6 +594,11 @@ async function sleepForPacing(): Promise<void> {
 export async function processGarminHealthBackfillQueueItem(
   queueItem: SleepSyncQueueItemInterface,
 ): Promise<QueueResult> {
+  return withHistoryQueueExecution(queueItem, () => processHistoryGuardedGarminHealthBackfillQueueItem(queueItem));
+}
+async function processHistoryGuardedGarminHealthBackfillQueueItem(
+  queueItem: SleepSyncQueueItemInterface,
+): Promise<QueueResult> {
   let parsed;
   try {
     parsed = parseCursor(queueItem);
@@ -657,6 +672,7 @@ export async function processGarminHealthBackfillQueueItem(
 
   let cursor = parsed.cursor;
   let requestCount = 0;
+  let minimumStartAttempts = 0;
   while (!isCompleteGarminHealthBackfillCursor(cursor)) {
     if (requestCount > 0) await sleepForPacing();
 
@@ -713,6 +729,7 @@ export async function processGarminHealthBackfillQueueItem(
     const window = getGarminHealthBackfillWindow(cursor, parsed.rangeEndMs);
     if (!window) return QueueResult.Processed;
     let nextCursor: GarminHealthBackfillCursor;
+    let minimumStartMs: number | null = null;
     try {
       await requestPromise.get({
         headers: { Authorization: `Bearer ${refreshed.tokenData.accessToken}` },
@@ -736,7 +753,7 @@ export async function processGarminHealthBackfillQueueItem(
           parsed.rangeEndMs,
         );
       } else if (isGarminBackfillMinimumStartError(error)) {
-        const minimumStartMs = extractGarminBackfillMinimumStartMs(error);
+        minimumStartMs = extractGarminBackfillMinimumStartMs(error);
         if (minimumStartMs === null) {
           return moveToDlq(
             queueItem,
@@ -783,12 +800,14 @@ export async function processGarminHealthBackfillQueueItem(
     }
     requestCount += 1;
 
+    const familyAdvanced = nextCursor.summaryIndex !== cursor.summaryIndex;
     const transition = await advanceCursorTransaction(
       queueItem,
       cursor,
       nextCursor,
       parsed.total,
       currentGuards,
+      minimumStartMs === null || familyAdvanced,
     );
     if (transition === 'deleted') {
       return markQueueItemSkipped(
@@ -800,8 +819,43 @@ export async function processGarminHealthBackfillQueueItem(
     }
     if (transition === 'lifecycle_changed') return markBackfillSkipped(queueItem, parsed.total);
     if (transition === 'superseded') return QueueResult.Processed;
+    if (isCompleteGarminHealthBackfillCursor(nextCursor)) recordHealthSleepCommit(queueItem, 'completed');
     cursor = nextCursor;
+
+    if (minimumStartMs !== null) {
+      minimumStartAttempts += 1;
+      const telemetry = {
+        queueItemId: queueItem.id,
+        summaryType: window.summaryType,
+        statusCode: 400,
+        recoveryAttempt: minimumStartAttempts,
+        requestedStartMs: window.startMs,
+        providerMinimumStartMs: minimumStartMs,
+        nextStartMs: familyAdvanced ? null : nextCursor.nextStartMs,
+        windowsCompleted: nextCursor.windowsCompleted,
+        windowsTotal: parsed.total,
+      };
+      if (!familyAdvanced && minimumStartAttempts >= GARMIN_HEALTH_BACKFILL_MAX_MINIMUM_START_ATTEMPTS) {
+        const result = await retryGarminHealthBackfill(queueItem, parsed.total, new GarminHealthBackfillRequestError(
+          400,
+          'Garmin Health backfill minimum-start recovery exhausted.',
+        ));
+        logger.warn('[GarminHealthBackfill] Minimum-start recovery limit reached.', { ...telemetry, result });
+        return result;
+      }
+      logger.info('[GarminHealthBackfill] Provider minimum adjusted.', {
+        ...telemetry,
+        outcome: familyAdvanced ? 'family_skipped' : 'retry_inline',
+      });
+    }
+    if (minimumStartMs === null || familyAdvanced) minimumStartAttempts = 0;
   }
 
+  logger.info('[GarminHealthBackfill] Backfill requests completed.', {
+    queueItemId: queueItem.id,
+    requestCount,
+    windowsCompleted: parsed.total,
+    windowsTotal: parsed.total,
+  });
   return QueueResult.Processed;
 }

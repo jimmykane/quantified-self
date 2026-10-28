@@ -1,5 +1,6 @@
 import * as admin from 'firebase-admin';
 import { QueueResult } from '../queue-utils';
+import { recordImportCompletion } from '../queue/import-monitoring';
 import { COROSAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface';
 import {
   clearRevisionProcessingLeaseUpdate,
@@ -121,7 +122,7 @@ export async function completeCOROSEventWriteRevision(
   const queueRef = requireQueueReference(queueItem);
   const processingRevision = requireQueueRevisionIdentity(queueItem);
   const db = admin.firestore();
-  await db.runTransaction(async transaction => {
+  const completed = await db.runTransaction(async transaction => {
     const nowMs = Date.now();
     let deletionGuard;
     try {
@@ -134,15 +135,15 @@ export async function completeCOROSEventWriteRevision(
     } catch (error) {
       throw new UserDeletionGuardReadError(userID, 'coros_event_write_completion', error);
     }
-    if (deletionGuard.shouldSkip) return;
+    if (deletionGuard.shouldSkip) return false;
 
     const snapshot = await transaction.get(queueRef);
-    if (!snapshot.exists) return;
+    if (!snapshot.exists) return false;
     const current = snapshot.data() as Partial<COROSAPIWorkoutQueueItemInterface>;
     if (!isQueueOwnedByUser(current, userID)
       || current.processingOwner !== processingOwner
       || current.processingRevision !== processingRevision) {
-      return;
+      return false;
     }
 
     if (isSameCOROSQueueRevision(current, queueItem)) {
@@ -154,7 +155,7 @@ export async function completeCOROSEventWriteRevision(
         ),
         ...clearRevisionProcessingLeaseUpdate(),
       });
-      return;
+      return true;
     }
 
     // History installed a newer payload while this worker held the lease.
@@ -165,7 +166,9 @@ export async function completeCOROSEventWriteRevision(
       dispatchedToCloudTask: null,
       ...clearRevisionProcessingLeaseUpdate(),
     });
+    return false;
   });
+  if (completed === true) recordImportCompletion(queueRef.parent?.id, additionalData);
   return QueueResult.Processed;
 }
 

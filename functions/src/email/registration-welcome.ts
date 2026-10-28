@@ -7,6 +7,7 @@ import {
     getUserDeletionGuardStateInTransaction,
 } from '../shared/user-deletion-guard';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
+import { newEmailDeliveryFields } from './queue-metadata';
 import {
     EMAIL_LINKS,
     FOUNDER_EMAIL_FROM,
@@ -88,7 +89,10 @@ export async function queueRegistrationWelcomeEmail(
         }
 
         transaction.create(mailRef, {
+            ...newEmailDeliveryFields(),
             to: userRecord.email,
+            // Inert ownership metadata keeps cleanup independent of email changes.
+            uid,
             from: FOUNDER_EMAIL_FROM,
             replyTo: FOUNDER_EMAIL_REPLY_TO,
             template: {
@@ -121,6 +125,7 @@ export async function queueRegistrationWelcomeEmail(
 export const sendRegistrationWelcomeEmail = onDocumentWritten({
     document: 'users/{uid}',
     region: 'europe-west3',
+    memory: '512MiB',
     retry: true,
 }, async (event) => {
     await queueRegistrationWelcomeEmail(

@@ -6,7 +6,7 @@ dependencies:
   tools:
     - type: "mcp"
       value: "quantified-self"
-      description: "Read-only Quantified Self recorded body measurements"
+      description: "Quantified Self body measurement history and separately authorized manual Health entry management"
       transport: "streamable_http"
       url: "https://quantified-self.io/mcp"
 policy:

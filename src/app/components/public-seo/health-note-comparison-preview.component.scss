@@ -1,0 +1,10 @@
+:host { display: block; min-width: 0; --health-metric-series-chart-height: 230px; }
+.comparison-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+.comparison-heading h4 { margin: 4px 0; font: var(--mat-sys-title-medium); }
+.comparison-heading p { margin: 4px 0; }
+.comparison-heading mat-form-field { width: 240px; max-width: 100%; }
+.sample-caption, .comparison-meta { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+.comparison-periods { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 16px; }
+@media (max-width: 600px) {
+  .comparison-heading mat-form-field { width: 100%; }
+}

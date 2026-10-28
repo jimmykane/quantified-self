@@ -38,7 +38,7 @@ describe('downloadSuuntoFITFile', () => {
     vi.clearAllMocks();
   });
 
-  it('uses provider-compliant authorization, a 60-second timeout, and no body limit', async () => {
+  it('uses provider-compliant authorization and bounds the download without following redirects', async () => {
     const fit = createSyntheticFitPayload(Buffer.from([0x01, 0x02, 0x03]));
     mockGetBinaryResponse.mockResolvedValue({
       body: fit,
@@ -51,14 +51,17 @@ describe('downloadSuuntoFITFile', () => {
 
     expect(mockGetBinaryResponse).toHaveBeenCalledWith(expect.objectContaining({
       headers: expect.objectContaining({
-        Accept: 'application/octet-stream',
+        Accept: '*/*',
         Authorization: 'Bearer raw-access-token',
         'Ocp-Apim-Subscription-Key': 'test-subscription-key',
       }),
       url: 'https://cloudapi.suunto.com/v3/workouts/workout%2Fwith%20space/fit',
     }));
-    expect(mockGetBinaryResponse.mock.calls[0][0]).toMatchObject({ timeout: 60_000 });
-    expect(mockGetBinaryResponse.mock.calls[0][0]).not.toHaveProperty('maxResponseBytes');
+    expect(mockGetBinaryResponse.mock.calls[0][0]).toMatchObject({
+      timeout: 60_000,
+      maxResponseBytes: 128 * 1024 * 1024,
+      redirect: 'error',
+    });
   });
 
   it('does not double-prefix an existing Bearer token', async () => {
@@ -106,13 +109,17 @@ describe('downloadSuuntoFITFile', () => {
     });
   });
 
-  it('unwraps a multipart response before validating it', async () => {
+  it.each([
+    ['application/octet-stream', 'multipart/form-data'],
+    ['application/vnd.ant.fit', 'multipart/form-data'],
+    ['application/vnd.ant.fit', 'application/octet-stream;charset=UTF-8'],
+  ])('unwraps a %s part inside a %s response before validating it', async (partContentType, contentType) => {
     const fit = createSyntheticFitPayload(Buffer.from([0x0a, 0x0b]));
     const boundary = '------SuuntoFitBoundary';
     const multipart = Buffer.concat([
       Buffer.from(
         `${boundary}\r\nContent-Disposition: form-data; name="file"; filename="activity.fit"\r\n`
-          + 'Content-Type: application/octet-stream\r\n\r\n',
+          + `Content-Type: ${partContentType}\r\n\r\n`,
         'latin1',
       ),
       fit,
@@ -121,21 +128,23 @@ describe('downloadSuuntoFITFile', () => {
     mockGetBinaryResponse.mockResolvedValue({
       body: multipart,
       statusCode: 200,
-      contentType: 'multipart/form-data',
+      contentType,
       contentLength: multipart.length,
     });
 
     await expect(downloadSuuntoFITFile('token', 'workout-1')).resolves.toEqual(fit);
   });
 
-  it('retries a multipart FIT whose missing CRC was followed by boundary bytes', async () => {
+  it.each([
+    'application/octet-stream', 'application/vnd.ant.fit',
+  ])('retries a multipart %s FIT whose missing CRC was followed by boundary bytes', async (partContentType) => {
     const fit = createSyntheticFitPayload(Buffer.from([0x0a, 0x0b]));
     const truncatedFit = fit.subarray(0, fit.length - 2);
     const boundary = '------SuuntoFitBoundary';
     const multipart = Buffer.concat([
       Buffer.from(
         `${boundary}\r\nContent-Disposition: form-data; name="file"; filename="activity.fit"\r\n`
-          + 'Content-Type: application/octet-stream\r\n\r\n',
+          + `Content-Type: ${partContentType}\r\n\r\n`,
         'latin1',
       ),
       truncatedFit,

@@ -1,3 +1,5 @@
+import { AppUserAccess } from '../helpers/user-access.helper';
+import { dashboardHealthMetric, dashboardHealthSettings, isPrivateDashboardHealthTile } from '../helpers/dashboard-health-tile.helper';
 import {
     ActivityTypes,
     AppThemes,
@@ -30,6 +32,7 @@ import {
     UserSummariesSettingsInterface,
     UserExportToCsvSettingsInterface,
     VerticalSpeedUnits,
+    WeightUnits,
     XAxisTypes,
     MapThemes,
     MapTypes,
@@ -68,7 +71,6 @@ import {
     AppDashboardTileEventFiltersInterface,
     AppMapSettingsInterface,
     AppMyTracksSettings,
-    AppUserInterface,
     AppUserSettingsInterface
 } from '../models/app-user.interface';
 import {
@@ -91,6 +93,7 @@ import {
 } from '../helpers/dashboard-auto-tile.helper';
 import {
     getDashboardPowerCurveEventFiltersForScope,
+    expandHistoricalDashboardPowerCurveDefaultTypes,
     getDashboardPowerCurveScopeDefinition,
     isLegacyDefaultDashboardPowerCurveTile,
     resolveDashboardPowerCurveTileScope,
@@ -113,8 +116,9 @@ import { buildDashboardActivityCalendarTile } from '../helpers/dashboard-activit
  * Utility class for AppUser related static methods and default settings.
  * This class handles non-reactive logic such as subscription status checks
  * and providing default application/user settings.
+ * Public access checks should import AppUserAccess directly; this class loads settings and chart catalogs.
  */
-export class AppUserUtilities {
+export class AppUserUtilities extends AppUserAccess {
 
     /**
      * Returns the default application theme.
@@ -184,7 +188,17 @@ export class AppUserUtilities {
     }
 
     static getDefaultUserDashboardTiles(): TileSettingsInterface[] {
-        return [buildDashboardActivityCalendarTile(0)];
+        return [
+            {
+                ...AppUserUtilities.getDefaultUserDashboardChartTile(),
+                name: 'Weekly Training Time',
+                chartType: ChartTypes.ColumnsVertical,
+                dataType: DataDuration.type,
+                dataCategoryType: ChartDataCategoryTypes.DateType,
+                dataTimeInterval: TimeIntervals.Weekly,
+            },
+            buildDashboardActivityCalendarTile(1),
+        ];
     }
 
     private static getDefaultUserDashboardRecoveryTile(order: number): TileChartSettingsInterface {
@@ -327,6 +341,7 @@ export class AppUserUtilities {
         unitSettings.swimPaceUnits = AppUserUtilities.getDefaultSwimPaceUnits();
         unitSettings.verticalSpeedUnits = AppUserUtilities.getDefaultVerticalSpeedUnits();
         unitSettings.distanceUnits = AppUserUtilities.getDefaultDistanceUnits();
+        unitSettings.weightUnits = WeightUnits.Kilograms;
         unitSettings.startOfTheWeek = AppUserUtilities.getDefaultStartOfTheWeek();
         return unitSettings;
     }
@@ -496,6 +511,7 @@ export class AppUserUtilities {
         settings.chartSettings.showLaps = settings.chartSettings.showLaps !== false;
         appChartSettings.showSwimLengths = appChartSettings.showSwimLengths !== false;
         appChartSettings.syncChartHoverToMap = appChartSettings.syncChartHoverToMap === true;
+        appChartSettings.useDistinctComparisonLinePatterns = appChartSettings.useDistinctComparisonLinePatterns === true;
         appChartSettings.eventChartOverlayDataTypeByPrimary = normalizeEventChartOverlayDataTypeByPrimary(
             appChartSettings.eventChartOverlayDataTypeByPrimary,
         );
@@ -525,6 +541,9 @@ export class AppUserUtilities {
             settings.unitSettings.distanceUnits,
             AppUserUtilities.getDefaultDistanceUnits(),
         );
+        settings.unitSettings.weightUnits = settings.unitSettings.weightUnits === WeightUnits.Pounds
+            ? WeightUnits.Pounds
+            : WeightUnits.Kilograms;
         settings.unitSettings.startOfTheWeek = isNumber(settings.unitSettings.startOfTheWeek) ? settings.unitSettings.startOfTheWeek : AppUserUtilities.getDefaultStartOfTheWeek();
 
         // Dashboard
@@ -556,6 +575,7 @@ export class AppUserUtilities {
         settings.dashboardSettings.autoTiles = AppUserUtilities.normalizeDashboardAutoTiles(settings.dashboardSettings.autoTiles);
         settings.dashboardSettings.tiles = settings.dashboardSettings.tiles || AppUserUtilities.getDefaultUserDashboardTiles();
         let hasNormalizedRecoveryDashboardTile = false;
+        const normalizedHealthMetrics = new Set<string>();
         const normalizedMapDashboardSources = new Set<AppDashboardMapTileSource>();
         const legacyTileEventFilterRange = resolveLegacyDashboardTileEventFilterRange(
             settings.dashboardSettings.dateRange,
@@ -569,6 +589,15 @@ export class AppUserUtilities {
             .map((tile: TileSettingsInterface) => {
             if (tile.type === TileTypes.Chart) {
                 const chartTile = tile as AppDashboardChartTileSettingsInterface;
+                const healthMetric = dashboardHealthMetric(chartTile);
+                if (isPrivateDashboardHealthTile(chartTile) && !healthMetric) return null;
+                if (!healthMetric) { delete chartTile.healthMetric; delete chartTile.healthSection; }
+                if (healthMetric) {
+                    if (normalizedHealthMetrics.has(healthMetric)) return null;
+                    normalizedHealthMetrics.add(healthMetric);
+                    chartTile.healthMetric = dashboardHealthSettings(chartTile, settings.dashboardSettings);
+                    if (chartTile.healthSection !== 'health' && chartTile.healthSection !== 'trainingState') delete chartTile.healthSection;
+                }
                 if (chartTile.chartType === ChartTypes.Spiral) {
                     chartTile.chartType = ChartTypes.LinesVertical;
                 }
@@ -588,6 +617,9 @@ export class AppUserUtilities {
                         chartTile.eventFilters,
                         '1y',
                         [],
+                    );
+                    normalizedPowerCurveFilters.activityTypes = expandHistoricalDashboardPowerCurveDefaultTypes(
+                        normalizedPowerCurveFilters.activityTypes,
                     );
                     const resolvedPowerCurveScope = resolveDashboardPowerCurveTileScope({
                         ...chartTile,
@@ -734,65 +766,6 @@ export class AppUserUtilities {
 
         // @warning !!!!!! Enums with 0 as start value default to the override
         return settings;
-    }
-
-    /**
-     * Returns true if the user's grace period is currently active.
-     * Supports Firestore Timestamp, Date object, or Unix milliseconds.
-     */
-    public static isGracePeriodActive(user: AppUserInterface | User | null): boolean {
-        if (!user) return false;
-        const gracePeriodUntil = (user as any).gracePeriodUntil;
-        if (!gracePeriodUntil) return false;
-
-        // Handle Firestore Timestamp, Date, or Unix number from Claims
-        const expiryMillis = typeof gracePeriodUntil.toMillis === 'function'
-            ? gracePeriodUntil.toMillis()
-            : typeof gracePeriodUntil.getTime === 'function'
-                ? gracePeriodUntil.getTime()
-                : typeof gracePeriodUntil === 'object' && gracePeriodUntil.seconds
-                    ? gracePeriodUntil.seconds * 1000
-                    : gracePeriodUntil;
-
-        return expiryMillis > Date.now();
-    }
-
-    /**
-     * Returns true if the user has Pro access. 
-     * Pro access is granted if they are a Pro user OR have an active grace period.
-     */
-    public static hasProAccess(user: AppUserInterface | User | null, isAdmin: boolean = false): boolean {
-        return AppUserUtilities.isProUser(user, isAdmin) || AppUserUtilities.isGracePeriodActive(user);
-    }
-
-    /**
-     * Returns true if the user is a Pro user based on Stripe role, admin status, or legacy isPro flag.
-     */
-    public static isProUser(user: AppUserInterface | User | null, isAdmin: boolean = false): boolean {
-        if (!user) return false;
-        const stripeRole = (user as any).stripeRole;
-        return stripeRole === 'pro' || isAdmin || (user as any).isPro === true;
-    }
-
-    /**
-     * Returns true if the user is a Basic subscriber.
-     */
-    public static isBasicUser(user: User | null): boolean {
-        if (!user) return false;
-        const stripeRole = (user as any).stripeRole;
-        return stripeRole === 'basic';
-    }
-
-    /**
-     * Returns true if the user has any kind of paid access (Basic or Pro) or is in a Grace Period.
-     * Also returns true for admins.
-     */
-    public static hasPaidAccessUser(user: AppUserInterface | User | null, isAdmin: boolean = false): boolean {
-        if (!user) return false;
-        if (isAdmin) return true;
-        const stripeRole = (user as any).stripeRole;
-        const isProFlag = (user as any).isPro === true;
-        return stripeRole === 'basic' || stripeRole === 'pro' || isProFlag || AppUserUtilities.isGracePeriodActive(user);
     }
 
     private static normalizeDashboardAutoTiles(value: unknown): AppDashboardAutoTiles {

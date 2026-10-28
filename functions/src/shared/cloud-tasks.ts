@@ -29,7 +29,7 @@ let _cloudTasksClient: v2beta3.CloudTasksClient | null = null;
 const SPORTS_LIB_REPARSE_TASK_DISPATCH_DEADLINE_SECONDS = REPARSE_PROCESSING_TASK_RUNTIME_OPTIONS.timeoutSeconds;
 const SPORTS_LIB_REPARSE_HEAVY_TASK_DISPATCH_DEADLINE_SECONDS = REPARSE_PROCESSING_HEAVY_TASK_RUNTIME_OPTIONS.timeoutSeconds;
 
-interface EnqueueSportsLibReparseHeavyTaskOptions {
+interface EnqueueSportsLibReparseTaskOptions {
     scheduleDelaySeconds?: number;
     taskNameSuffix?: string;
 }
@@ -37,6 +37,8 @@ interface EnqueueSportsLibReparseHeavyTaskOptions {
 interface EnqueueWorkoutTaskOptions {
     recoveryTaskKey?: number | string;
     queueRevision?: string;
+    dispatchRecoveryGeneration?: number;
+    recoveryTaskOnly?: boolean;
 }
 
 export interface WorkoutTaskDispatchItem {
@@ -289,35 +291,40 @@ export async function enqueueWorkoutTask(
     const payload = {
         queueItemId,
         serviceName,
+        dispatchRecoveryGeneration: typeof options.dispatchRecoveryGeneration === 'number'
+            ? options.dispatchRecoveryGeneration
+            : 0,
         ...(queueRevision ? { queueRevision } : {}),
-        ...(serviceName === ServiceNames.COROSAPI && !queueRevision
+        ...((serviceName === ServiceNames.COROSAPI || options.recoveryTaskOnly) && !queueRevision
             ? { queueDateCreated: safeDateCreated }
             : {}),
     };
 
-    const taskCreated = await enqueueTaskWithRetry({
-        projectId,
-        location,
-        functionName: workoutQueue,
-        taskId,
-        payload,
-        scheduleDelaySeconds,
-        alreadyExistsLogMessage: `[Dispatcher] Task already exists for ${serviceName}:${queueItemId}, skipping`,
-        failedLogPrefix: `[Dispatcher] Failed to enqueue task for ${serviceName}:${queueItemId}:`,
-    });
-    if (taskCreated) {
-        return true;
-    }
+    if (!options.recoveryTaskOnly) {
+        const taskCreated = await enqueueTaskWithRetry({
+            projectId,
+            location,
+            functionName: workoutQueue,
+            taskId,
+            payload,
+            scheduleDelaySeconds,
+            alreadyExistsLogMessage: `[Dispatcher] Task already exists for ${serviceName}:${queueItemId}, skipping`,
+            failedLogPrefix: `[Dispatcher] Failed to enqueue task for ${serviceName}:${queueItemId}:`,
+        });
+        if (taskCreated) return true;
 
-    if (await cloudTaskExists(taskName)) {
-        logger.info(`[Dispatcher] Existing task is still live for ${serviceName}:${queueItemId}; treating workout queue item as dispatched.`);
-        return true;
+        if (await cloudTaskExists(taskName)) {
+            logger.info(`[Dispatcher] Existing task is still live for ${serviceName}:${queueItemId}; treating workout queue item as dispatched.`);
+            return true;
+        }
     }
 
     const recoveryTaskKey = sanitizeTaskNamePart(`${options.recoveryTaskKey ?? 0}`);
     const recoveryTaskId = `${taskId}-dedupe-recovery-${recoveryTaskKey}`;
     const recoveryTaskName = getCloudTaskName(projectId, location, workoutQueue, recoveryTaskId);
-    logger.warn(`[Dispatcher] Task name for ${serviceName}:${queueItemId} is reserved but no live task was found; enqueueing recovery task.`);
+    if (!options.recoveryTaskOnly) {
+        logger.warn(`[Dispatcher] Task name for ${serviceName}:${queueItemId} is reserved but no live task was found; enqueueing recovery task.`);
+    }
     const recoveryTaskCreated = await enqueueTaskWithRetry({
         projectId,
         location,
@@ -365,8 +372,10 @@ function workoutTaskRecoveryKey(queueItem: WorkoutTaskDispatchItem): number | st
 
 function workoutTaskEnqueueOptions(queueItem: WorkoutTaskDispatchItem): EnqueueWorkoutTaskOptions {
     const queueRevision = normalizeQueueRevision(queueItem.queueRevision) || '';
+    const dispatchRecoveryGeneration = workoutTaskDispatchRecoveryGeneration(queueItem);
     return {
         recoveryTaskKey: workoutTaskRecoveryKey(queueItem),
+        ...(dispatchRecoveryGeneration > 0 ? { dispatchRecoveryGeneration } : {}),
         ...(queueRevision ? { queueRevision } : {}),
     };
 }
@@ -503,7 +512,12 @@ export async function enqueueRouteSyncTask(
     queueItemId: string,
     dateCreated: number,
     scheduleDelaySeconds?: number,
+    identity?: RevisionBoundQueueTaskIdentity,
 ): Promise<boolean> {
+    if (normalizeQueueRevision(identity?.queueRevision)) {
+        return enqueueRevisionBoundQueueTask(queueItemId, dateCreated, config.cloudtasks.routeSyncQueue,
+            'route-sync', 'RouteSyncDispatcher', scheduleDelaySeconds, identity);
+    }
     const { projectId, location, routeSyncQueue } = config.cloudtasks;
 
     if (!projectId) {
@@ -559,6 +573,20 @@ export async function enqueueRouteDeliverySyncTask(
     });
 }
 
+/** A fresh dispatch reservation can recover a lost acknowledgement or an expired task name.
+ * The durable ledger/lease, not the task name, enforces operation idempotency. */
+export async function enqueueTrainingDeliveryTask(queueItemId: string, reservation: string): Promise<boolean> {
+    const { projectId, location, trainingDeliveryQueue } = config.cloudtasks;
+    if (!projectId) throw new Error('Project ID is not defined in config');
+    return enqueueTaskWithRetry({
+        projectId, location, functionName: trainingDeliveryQueue,
+        taskId: `training-${sanitizeTaskNamePart(queueItemId)}-${sanitizeTaskNamePart(reservation)}`,
+        payload: { queueItemId },
+        alreadyExistsLogMessage: '[TrainingDelivery] Dispatch reservation already exists.',
+        failedLogPrefix: '[TrainingDelivery] Dispatch failed:',
+    });
+}
+
 /**
  * Enqueue a sleep sync processing task to Cloud Tasks.
  * Uses deterministic task names for deduplication.
@@ -567,6 +595,7 @@ interface RevisionBoundQueueTaskIdentity {
     queueRevision?: string;
     queueDateCreated?: number;
     recoveryTaskKey?: string | number;
+    recoveryScheduleDelaySeconds?: number;
 }
 
 async function enqueueRevisionBoundQueueTask(
@@ -628,7 +657,7 @@ async function enqueueRevisionBoundQueueTask(
         functionName,
         taskId: recoveryTaskId,
         payload,
-        scheduleDelaySeconds,
+        scheduleDelaySeconds: identity?.recoveryScheduleDelaySeconds ?? scheduleDelaySeconds,
         dispatchDeadlineSeconds,
         alreadyExistsLogMessage: `[${logPrefix}] Recovery task already exists for queue item ${queueItemId}, skipping`,
         failedLogPrefix: `[${logPrefix}] Failed to enqueue recovery task for ${queueItemId}:`,
@@ -682,14 +711,21 @@ export async function enqueueGarminHealthBackfillTask(
 /**
  * Enqueue a single sports-lib reparse job task.
  */
-export async function enqueueSportsLibReparseTask(jobId: string, scheduleDelaySeconds?: number): Promise<boolean> {
+export async function enqueueSportsLibReparseTask(
+    jobId: string,
+    optionsOrScheduleDelaySeconds?: EnqueueSportsLibReparseTaskOptions | number,
+): Promise<boolean> {
     const { projectId, location, sportsLibReparseQueue } = config.cloudtasks;
     if (!projectId) {
         throw new Error('Project ID is not defined in config');
     }
 
+    const options = typeof optionsOrScheduleDelaySeconds === 'number'
+        ? { scheduleDelaySeconds: optionsOrScheduleDelaySeconds }
+        : (optionsOrScheduleDelaySeconds || {});
     const safeJobId = jobId.replace(/[^a-zA-Z0-9-_]/g, '-');
-    const taskId = `reparse-${safeJobId}`;
+    const safeTaskNameSuffix = options.taskNameSuffix ? `-${sanitizeTaskNamePart(options.taskNameSuffix)}` : '';
+    const taskId = `reparse-${safeJobId}${safeTaskNameSuffix}`;
     const payload = { jobId };
 
     return enqueueTaskWithRetry({
@@ -698,7 +734,7 @@ export async function enqueueSportsLibReparseTask(jobId: string, scheduleDelaySe
         functionName: sportsLibReparseQueue,
         taskId,
         payload,
-        scheduleDelaySeconds,
+        scheduleDelaySeconds: options.scheduleDelaySeconds,
         dispatchDeadlineSeconds: SPORTS_LIB_REPARSE_TASK_DISPATCH_DEADLINE_SECONDS,
         alreadyExistsLogMessage: `[ReparseDispatcher] Task already exists for job ${jobId}, skipping`,
         failedLogPrefix: `[ReparseDispatcher] Failed to enqueue task for job ${jobId}:`,
@@ -710,7 +746,7 @@ export async function enqueueSportsLibReparseTask(jobId: string, scheduleDelaySe
  */
 export async function enqueueSportsLibReparseHeavyTask(
     jobId: string,
-    optionsOrScheduleDelaySeconds?: EnqueueSportsLibReparseHeavyTaskOptions | number,
+    optionsOrScheduleDelaySeconds?: EnqueueSportsLibReparseTaskOptions | number,
 ): Promise<boolean> {
     const { projectId, location, sportsLibReparseHeavyQueue } = config.cloudtasks;
     if (!projectId) {
@@ -787,6 +823,11 @@ export async function enqueueDerivedMetricsTask(
     const safeGeneration = Number.isFinite(generation) ? Math.max(0, Math.floor(generation)) : 0;
     const taskId = `derived-metrics-${safeUid}-${safeGeneration}`;
     const payload = { uid, generation: safeGeneration };
+    // The Admin SDK resolves relative delays on each enqueue attempt. Anchor a
+    // batched build once so transient failures cannot restart its waiting period.
+    const scheduleAtEpochSeconds = Number.isFinite(scheduleDelaySeconds)
+        ? Math.ceil((Date.now() + Math.max(1, scheduleDelaySeconds as number) * 1000) / 1000)
+        : undefined;
 
     return enqueueTaskWithRetry({
         projectId,
@@ -795,6 +836,7 @@ export async function enqueueDerivedMetricsTask(
         taskId,
         payload,
         scheduleDelaySeconds,
+        scheduleAtEpochSeconds,
         alreadyExistsLogMessage: `[DerivedMetricsDispatcher] Task already exists for ${uid} generation ${safeGeneration}, skipping`,
         failedLogPrefix: `[DerivedMetricsDispatcher] Failed to enqueue derived metrics task for ${uid} generation ${safeGeneration}:`,
     });
@@ -812,6 +854,7 @@ export async function enqueueDerivedMetricsIngressTask(
         taskScope?: string;
         metricKinds?: readonly DerivedMetricKind[];
         incrementEventMutationVersion?: boolean;
+        immediate?: boolean;
     },
 ): Promise<boolean> {
     const {
@@ -852,12 +895,15 @@ export async function enqueueDerivedMetricsIngressTask(
     const effectiveScheduleEpochSeconds = overrideScheduleDelaySeconds === null
         ? computedScheduleEpochSec
         : (currentEpochSeconds + effectiveScheduleDelaySeconds);
-    const taskId = `derived-metrics-ingress-${safeUid}-${bucketStartEpochSec}${taskScope ? `-${taskScope}` : ''}`;
+    // Priority cannot share a task name with background ingress: an earlier task
+    // would otherwise discard the later priority payload as an already-existing ID.
+    const taskId = `derived-metrics-ingress-${safeUid}-${bucketStartEpochSec}${taskScope ? `-${taskScope}` : ''}${options?.immediate === true ? '-immediate' : ''}`;
     const payload = {
         uid,
         bucketStartEpochSec,
         ...(hasTargetedMetricKinds ? { metricKinds } : {}),
         ...(options?.incrementEventMutationVersion === false ? { incrementEventMutationVersion: false } : {}),
+        ...(options?.immediate === true ? { immediate: true } : {}),
     };
 
     return enqueueTaskWithRetry({
@@ -953,4 +999,9 @@ async function enqueueTaskWithRetry(params: EnqueueTaskParams): Promise<boolean>
     }
 
     throw new Error('[Dispatcher] Failed to enqueue task after retry loop exhausted.');
+}
+
+export async function enqueueConnectionHistoryTask(queueItemId: string, dateCreated: number, scheduleDelaySeconds?: number, identity?: RevisionBoundQueueTaskIdentity): Promise<boolean> {
+    return enqueueRevisionBoundQueueTask(queueItemId, dateCreated, config.cloudtasks.connectionHistoryQueue,
+        'connection-history', 'ConnectionHistory', scheduleDelaySeconds, identity, 300);
 }

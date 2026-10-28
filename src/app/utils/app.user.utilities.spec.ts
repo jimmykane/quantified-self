@@ -16,6 +16,7 @@ import {
     DataStamina,
     DataStrokeRate,
     DistanceUnits,
+    WeightUnits,
     TileTypes,
     TimeIntervals
 } from '@sports-alliance/sports-lib';
@@ -41,9 +42,40 @@ describe('AppUserUtilities', () => {
         expect(AppUserUtilities.getDefaultChartFillOpacity()).toBe(0);
     });
 
+    it('defaults and preserves weight units independently of distance units', () => {
+        expect(AppUserUtilities.getDefaultUserUnitSettings().weightUnits).toBe(WeightUnits.Kilograms);
+        const legacy = AppUserUtilities.fillMissingAppSettings({ settings: { unitSettings: { distanceUnits: DistanceUnits.Miles } } } as any);
+        expect(legacy.unitSettings.weightUnits).toBe(WeightUnits.Kilograms);
+        const pounds = AppUserUtilities.fillMissingAppSettings({ settings: { unitSettings: { distanceUnits: DistanceUnits.Kilometers, weightUnits: WeightUnits.Pounds } } } as any);
+        expect(pounds.unitSettings.weightUnits).toBe(WeightUnits.Pounds);
+        const invalid = AppUserUtilities.fillMissingAppSettings({ settings: { unitSettings: { weightUnits: 'stones' } } } as any);
+        expect(invalid.unitSettings.weightUnits).toBe(WeightUnits.Kilograms);
+    });
+
     it('should ignore legacy chart fill opacity until the new version marker is set', () => {
         expect(AppUserUtilities.getResolvedChartFillOpacity({ fillOpacity: 0.6 })).toBe(0);
         expect(AppUserUtilities.getResolvedChartFillOpacity({ fillOpacity: 0.6, fillOpacityVersion: 1 })).toBe(0.6);
+    });
+
+    describe('getGracePeriodExpiryMs', () => {
+        const expiryMs = Date.parse('2026-10-09T12:00:00.000Z');
+        it.each([
+            ['Timestamp', { toMillis: () => expiryMs }],
+            ['Date', new Date(expiryMs)],
+            ['seconds', { seconds: expiryMs / 1000 }],
+            ['milliseconds', expiryMs],
+        ])('normalizes %s to the same grace deadline', (_type, gracePeriodUntil) => {
+            expect(AppUserUtilities.getGracePeriodExpiryMs({ ...mockUser, gracePeriodUntil })).toBe(expiryMs);
+        });
+
+        it('ignores missing, malformed and non-finite grace deadlines', () => {
+            expect(AppUserUtilities.getGracePeriodExpiryMs(null)).toBeNull();
+            for (const gracePeriodUntil of [undefined, null, {}, new Date(Number.NaN), Number.NaN,
+                Number.POSITIVE_INFINITY, { seconds: Number.POSITIVE_INFINITY }, { toMillis: () => 'bad date' }]) {
+                expect(AppUserUtilities.getGracePeriodExpiryMs({ ...mockUser, gracePeriodUntil })).toBeNull();
+                expect(AppUserUtilities.isGracePeriodActive({ ...mockUser, gracePeriodUntil })).toBe(false);
+            }
+        });
     });
 
     describe('isGracePeriodActive', () => {
@@ -189,11 +221,14 @@ describe('AppUserUtilities', () => {
     });
 
     describe('fillMissingAppSettings', () => {
-        it('should start new dashboard settings with only the activity calendar tile', () => {
+        it('starts new dashboards with weekly training time followed by the calendar', () => {
             expect(AppUserUtilities.getDefaultUserDashboardTiles()).toEqual([
+                expect.objectContaining({ name: 'Weekly Training Time', order: 0,
+                    chartType: ChartTypes.ColumnsVertical, dataCategoryType: ChartDataCategoryTypes.DateType,
+                    dataTimeInterval: TimeIntervals.Weekly, eventFilters: { range: '90d', activityTypes: [] } }),
                 expect.objectContaining({
                     chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
-                    size: { columns: 1, rows: 1 },
+                    size: { columns: 4, rows: 1 },
                 }),
             ]);
         });
@@ -222,6 +257,7 @@ describe('AppUserUtilities', () => {
             expect(settings.chartSettings?.stackYAxes).toBe(false);
             expect(settings.chartSettings?.showSwimLengths).toBe(true);
             expect(settings.chartSettings?.syncChartHoverToMap).toBe(false);
+            expect(settings.chartSettings?.useDistinctComparisonLinePatterns).toBe(false);
             expect(settings.chartSettings?.eventChartOverlayDataTypeByPrimary).toEqual({});
             expect(settings.deviceDisplaySettings?.deviceColorByName).toEqual({});
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.all);
@@ -249,6 +285,11 @@ describe('AppUserUtilities', () => {
             expect((settings.myTracksSettings as any)?.tripSortDirection).toBe('desc');
             expect(settings.serviceSyncSettings?.activitySyncRoutes?.[ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]?.enabled).toBe(false);
             expect(settings.serviceSyncSettings?.activitySyncRoutes?.[ACTIVITY_SYNC_ROUTE_IDS.COROSAPI_to_SuuntoApp]?.enabled).toBe(false);
+        });
+
+        it.each([false, true])('preserves an explicit comparison line pattern preference of %s', (enabled) => {
+            const user = { settings: { chartSettings: { useDistinctComparisonLinePatterns: enabled } } } as unknown as User;
+            expect(AppUserUtilities.fillMissingAppSettings(user).chartSettings.useDistinctComparisonLinePatterns).toBe(enabled);
         });
 
         it('should preserve valid dashboard action prompt dismissal state', () => {
@@ -424,9 +465,31 @@ describe('AppUserUtilities', () => {
 
             expect(defaultChart.eventFilters).toEqual({ range: '90d', activityTypes: [] });
             expect(defaultMap.eventFilters).toEqual({ range: '90d', activityTypes: [] });
-            expect(dashboardTiles.some(tile => tile.type === TileTypes.Map || !isDashboardSpecialChartType(tile.chartType))).toBe(false);
+            expect(dashboardTiles.filter(tile => !isDashboardSpecialChartType(tile.chartType))).toHaveLength(1);
+            expect(dashboardTiles[0].eventFilters).toEqual({ range: '90d', activityTypes: [] });
             const powerCurveTile = dashboardTiles.find(tile => tile.chartType === DASHBOARD_POWER_CURVE_CHART_TYPE) as any;
             expect(powerCurveTile).toBeUndefined();
+        });
+
+        it.each(['7d', 'lastMonth'] as const)('preserves saved %s ranges when hydrating chart and activity map settings', range => {
+            const eventFilters = { range, activityTypes: [ActivityTypes.Running] };
+            const user = {
+                settings: {
+                    dashboardSettings: {
+                        tiles: [
+                            { ...AppUserUtilities.getDefaultUserDashboardChartTile(), order: 0, eventFilters },
+                            { ...AppUserUtilities.getDefaultUserDashboardMapTile(), order: 1, eventFilters },
+                        ],
+                    },
+                },
+            } as unknown as User;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+
+            expect(settings.dashboardSettings?.tiles).toEqual([
+                expect.objectContaining({ eventFilters }),
+                expect.objectContaining({ eventFilters }),
+            ]);
         });
 
         it('should add event filters to existing custom chart and map tiles from legacy dashboard filters', () => {
@@ -652,6 +715,22 @@ describe('AppUserUtilities', () => {
             const settings = AppUserUtilities.fillMissingAppSettings(user);
 
             expect((settings.dashboardSettings?.tiles?.[0] as any).eventFilters).toBeUndefined();
+        });
+
+        it('expands complete old family power-curve filters while preserving range and custom subsets', () => {
+            const legacyTypes = [ActivityTypes.IndoorRunning, ActivityTypes.Running, ActivityTypes.TrailRunning,
+                ActivityTypes.Treadmill, ActivityTypes.VirtualRunning];
+            const tile = {
+                name: 'Running Power Curve', type: TileTypes.Chart, order: 0,
+                size: { columns: 2, rows: 1 }, chartType: DASHBOARD_POWER_CURVE_CHART_TYPE,
+                eventFilters: { range: '90d', activityTypes: legacyTypes },
+            };
+            const settings = AppUserUtilities.fillMissingAppSettings({ settings: { dashboardSettings: {
+                tiles: [tile, { ...tile, order: 1, eventFilters: { range: '30d', activityTypes: [ActivityTypes.Running] } }],
+            } } } as unknown as User);
+            const tiles = settings.dashboardSettings!.tiles as any[];
+            expect(tiles[0].eventFilters).toEqual({ range: '90d', activityTypes: getDashboardPowerCurveActivityTypes('running') });
+            expect(tiles[1].eventFilters).toEqual({ range: '30d', activityTypes: [ActivityTypes.Running] });
         });
 
         it('should normalize event filters on existing Power Curve tiles independently from legacy dashboard filters', () => {

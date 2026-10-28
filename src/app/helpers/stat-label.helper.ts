@@ -1,4 +1,5 @@
-import { DataInterface, DynamicDataLoader } from '@sports-alliance/sports-lib';
+import { DataInterface, DynamicDataLoader } from '@sports-alliance/sports-lib/metrics';
+import { EnduranceLabelContext, getEnduranceMetricLabel } from '@shared/endurance-metrics';
 
 type StatQualifierKey = 'average' | 'minimum' | 'maximum';
 
@@ -94,7 +95,9 @@ addCandidatesFromFamilyMaps(DynamicDataLoader.dataTypeAvgDataType || {});
 addCandidatesFromFamilyMaps(DynamicDataLoader.dataTypeMinDataType || {});
 addCandidatesFromFamilyMaps(DynamicDataLoader.dataTypeMaxDataType || {});
 
-export const normalizeUnitDerivedTypeLabel = (type: string, fallbackLabel?: string): string => {
+export const normalizeUnitDerivedTypeLabel = (type: string, fallbackLabel?: string, context?: EnduranceLabelContext): string => {
+  const enduranceLabel = getEnduranceMetricLabel(type || '', context);
+  if (enduranceLabel) return enduranceLabel;
   if (!type) {
     return fallbackLabel ?? '';
   }
@@ -119,12 +122,12 @@ export const normalizeUnitDerivedTypeLabel = (type: string, fallbackLabel?: stri
   return `${qualifierLabel} ${parentType}`;
 };
 
-export const normalizeUnitDerivedStatLabel = (stat: DataInterface): string => {
+export const normalizeUnitDerivedStatLabel = (stat: DataInterface, context?: EnduranceLabelContext): string => {
   if (!stat || typeof stat.getType !== 'function') {
     return '';
   }
 
   const type = stat.getType();
   const fallbackLabel = typeof stat.getDisplayType === 'function' ? stat.getDisplayType() : type;
-  return normalizeUnitDerivedTypeLabel(type, fallbackLabel);
+  return normalizeUnitDerivedTypeLabel(type, fallbackLabel, { ...context, surface: 'stat' });
 };

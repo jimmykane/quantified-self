@@ -1,6 +1,43 @@
-@if (isHistoryImportPending()) {
+@if (isSubmitting) {
+<div class="status-container" role="status" aria-live="polite">
+  <app-status-info type="pending" title="Starting history import">
+    Your request is in progress. Closing this dialog does not cancel it.
+  </app-status-info>
+</div>
+} @else if (backgroundActivityImport(); as history) {
+@let garminRequests = serviceName === serviceNames.GarminAPI;
+<div class="status-container" role="status" aria-live="polite">
+  <app-status-info [type]="history.active ? 'pending' : backgroundImportNeedsAttention ? 'warning' : 'success'"
+    [title]="history.active ? (garminRequests ? 'Requesting Garmin history' : 'History import in progress') : backgroundImportNeedsAttention ? 'History import needs attention' : garminRequests ? 'History requested' : 'History import finished'">
+    @if (history.active) {
+      @if (garminRequests) {
+    We’re requesting your selected history from Garmin in the background. You can close this dialog or leave the app.
+      } @else {
+    Your selected history is importing in the background. You can close this dialog or leave the app.
+      }
+    } @else if (backgroundImportNeedsAttention) {
+    Some history could not be imported. Check History import in Connections for details and retry options.
+    } @else if (garminRequests) {
+    History requests have been sent to Garmin. Delivery may take hours or days; this status does not confirm all activities have arrived.
+    } @else {
+    Your selected history has been processed.
+    }
+    <p>Check progress and retry failed imports under History import in Connections.</p>
+    @if (!history.active && !isAllowedToDoHistoryImport && nextImportAvailableDate) {
+    <p>New import available on {{ nextImportAvailableDate | date: 'medium' }}.</p>
+    }
+  </app-status-info>
+</div>
+} @else if (isActivityHistoryImportRunning()) {
+<div class="status-container" role="status">
+  <app-status-info type="pending" title="Import already running">
+    {{ historyImportRunningMessage }}
+    Closing this dialog does not cancel the import.
+  </app-status-info>
+</div>
+} @else if (hasAcceptedActivityImport() && (isHistoryImportPending() || pendingImportResult()?.successCount === 0)) {
 <!-- Optimistic UI: Show queued status immediately using Shared Callout Component -->
-<div class="status-container">
+<div class="status-container" role="status" aria-live="polite">
   @if (serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI || serviceName === serviceNames.WahooAPI) {
   @if (pendingImportResult()) {
   <app-status-info type="success" title="Import started">
@@ -8,10 +45,10 @@
     {{ estimatedCompletionVerbal }}
     <div style="font-size: 0.9em; opacity: 0.8; margin-top: 4px;">(~{{ processingCapacityPerDay | number }} / day
       capacity)</div>
-    @if (formGroup.get('startDate')?.value && formGroup.get('endDate')?.value) {
+    @if (activityRequestRange) {
     <div style="margin-top: 8px; opacity: 0.8; font-size: 0.9em;">
-      Last import range: {{ formGroup.get('startDate')?.value | date: 'mediumDate' }} - {{
-      formGroup.get('endDate')?.value | date: 'mediumDate' }}
+      Last import range: {{ activityRequestRange.startDate | date: 'mediumDate' }} - {{
+      activityRequestRange.endDate | date: 'mediumDate' }}
     </div>
     }
   </app-status-info>
@@ -22,57 +59,56 @@
   }
   } @else if (serviceName === serviceNames.GarminAPI) {
   <app-status-info type="success" title="Import Requested">
-    Garmin will push activities to your account over the coming hours/days.
-    @if (formGroup.get('startDate')?.value && formGroup.get('endDate')?.value) {
+    Garmin accepted this history request. Activities may arrive gradually.
+    @if (activityRequestRange) {
     <div style="margin-top: 8px; opacity: 0.8; font-size: 0.9em;">
-      Requested range: {{ formGroup.get('startDate')?.value | date: 'mediumDate' }} - {{
-      formGroup.get('endDate')?.value | date: 'mediumDate' }}
+      Requested range: {{ activityRequestRange.startDate | date: 'mediumDate' }} - {{
+      activityRequestRange.endDate | date: 'mediumDate' }}
     </div>
     }
   </app-status-info>
 
-  <app-status-info type="pending" [title]="garminCooldownDays + '-Day Cooldown'">
-    Next import available in {{ garminCooldownDays }} days.
+  }
+  @if (!isAllowedToDoHistoryImport && nextImportAvailableDate) {
+  <app-status-info type="pending" title="Next Available Import">
+    Next import available on {{ nextImportAvailableDate | date: 'medium' }}.
   </app-status-info>
   }
 </div>
-} @else if (userMetaForService && userMetaForService.didLastHistoryImport && !isAllowedToDoHistoryImport) {
+} @else if (!isAllowedToDoHistoryImport && nextImportAvailableDate) {
 <div class="status-container">
-  @if (serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI || serviceName === serviceNames.WahooAPI) {
-  <app-status-info type="success" title="Import In Progress">
-    {{ userMetaForService.processedActivitiesFromLastHistoryImportCount }} activities scheduled from the last import.
-    Cooldown active for {{ cooldownDays }} {{ cooldownDays === 1 ? 'day' : 'days' }}.
-  </app-status-info>
-
-  <app-status-info title="Next Available Import">
+  @if (isActivityCooldownResponse() || !userMetaForService?.didLastHistoryImport) {
+  <app-status-info title="Next Available Import" role="status">
     {{ nextImportAvailableDate | date: 'medium' }}
+  </app-status-info>
+  }
+  @if (!isActivityCooldownResponse() && userMetaForService && userMetaForService.didLastHistoryImport) {
+  <div class="history-import-timing" role="status" aria-label="Activity history import timing">
+    <p>Last requested: {{ userMetaForService.didLastHistoryImport | date:'medium' }}</p>
+    <p>Next available: {{ nextImportAvailableDate | date:'medium' }}</p>
+  @if (serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI || serviceName === serviceNames.WahooAPI) {
+    <p>{{ userMetaForService.processedActivitiesFromLastHistoryImportCount }} activities scheduled from the last import.</p>
+  }
     @if (userMeta.lastHistoryImportStartDate && userMeta.lastHistoryImportEndDate) {
-    <div style="margin-top: 8px; opacity: 0.8; font-size: 0.9em;">
+    <p>
       Last import range: {{ userMeta.lastHistoryImportStartDate | date: 'mediumDate' }} - {{
       userMeta.lastHistoryImportEndDate | date: 'mediumDate' }}
-    </div>
+    </p>
     }
-  </app-status-info>
-
-  } @else if (serviceName === serviceNames.GarminAPI) {
-  <app-status-info type="success" title="Import Active">
-    Activities are arriving via Garmin push.
-  </app-status-info>
-
-  <app-status-info title="Cooldown Active">
-    New import available on {{ nextImportAvailableDate | date: 'medium' }}.
-    @if (userMeta.lastHistoryImportStartDate && userMeta.lastHistoryImportEndDate) {
-    <div style="margin-top: 8px; opacity: 0.8; font-size: 0.9em;">
-      Last import range: {{ userMeta.lastHistoryImportStartDate | date: 'mediumDate' }} - {{
-      userMeta.lastHistoryImportEndDate | date: 'mediumDate' }}
-    </div>
-    }
-  </app-status-info>
+  </div>
   }
 </div>
 }
 
-@if (formGroup && isAllowedToDoHistoryImport && !isHistoryImportPending()) {
+@if (activityImportFailed()) {
+<div class="status-container" role="status">
+  <app-status-info type="warning" title="History import request failed">
+    The request did not complete successfully. You can try again.
+  </app-status-info>
+</div>
+}
+
+@if (formGroup && isAllowedToDoHistoryImport && !isHistoryImportPending() && !isActivityHistoryImportRunning()) {
 @if (isPro) {
 <form [formGroup]="formGroup" class="qs-form history-import-form">
   @if (isMissingGarminPermissions) {
@@ -87,14 +123,16 @@
   </div>
   }
   @if (serviceName === serviceNames.GarminAPI) {
-  <app-status-info [title]="garminCooldownDays + '-Day Cooldown • ' + garminHistoryLimitYears + '-Year History'">
+  <app-status-info title="Available Garmin history">
     Garmin's API limits history imports to once per month. Dates before {{ minDate | date:'mediumDate' }} are disabled
-    because Garmin only makes the latest {{ garminHistoryLimitYears }} years available.
+    because Garmin only makes the latest {{ garminHistoryLimitYears }} years available. The picker starts with the latest
+    {{ historyImportDefaultRangeYears }} years selected; you can expand it to any allowed range before importing.
   </app-status-info>
   }
   @if (minDate && serviceName === serviceNames.COROSAPI) {
   <app-status-info [title]="corosHistoryLimitMonths + '-Month Import Limit'">
-    Dates before {{ minDate | date:'mediumDate' }} are disabled in the picker due to API restrictions.
+    Dates before {{ minDate | date:'mediumDate' }} are disabled in the picker due to API restrictions. The latest
+    {{ corosHistoryLimitMonths }} months are selected by default, which is the full available range.
   </app-status-info>
   }
   <div class="date-fields">
@@ -105,6 +143,10 @@
       <mat-datepicker-toggle matSuffix [for]="startDate"></mat-datepicker-toggle>
       <mat-datepicker #startDate></mat-datepicker>
       <mat-error *ngIf="formGroup.get('startDate')?.hasError('required')">Start date is required</mat-error>
+      <mat-error *ngIf="formGroup.get('startDate')?.hasError('historyDateMin') || formGroup.get('startDate')?.hasError('matDatepickerMin')">
+        Start date must be on or after {{ minDate | date: 'mediumDate' }}
+      </mat-error>
+      <mat-error *ngIf="formGroup.get('startDate')?.hasError('historyDateMax')">Start date cannot be after today</mat-error>
     </mat-form-field>
     <mat-form-field appearance="outline">
       <mat-label>End Date</mat-label>
@@ -113,6 +155,12 @@
       <mat-datepicker-toggle matSuffix [for]="endDate"></mat-datepicker-toggle>
       <mat-datepicker #endDate></mat-datepicker>
       <mat-error *ngIf="formGroup.get('endDate')?.hasError('required')">End date is required</mat-error>
+      <mat-error *ngIf="formGroup.get('endDate')?.hasError('historyDateMin')">
+        End date must be on or after {{ minDate | date: 'mediumDate' }}
+      </mat-error>
+      <mat-error *ngIf="formGroup.get('endDate')?.hasError('historyDateMax') || formGroup.get('endDate')?.hasError('matDatepickerMax')">
+        End date cannot be after today
+      </mat-error>
       <mat-error *ngIf="formGroup.get('endDate')?.hasError('dateRangeInvalid')">End date cannot be before start
         date</mat-error>
     </mat-form-field>
@@ -153,19 +201,9 @@
 
 @if (isSleepBackfillVisible) {
 <section class="sleep-backfill-section"
-  [attr.aria-label]="checksHealthBackfillAvailability && healthAvailabilityState() === 'loading'
-    ? sleepBackfillProviderLabel + ' import scope check'
-    : (checksHealthBackfillAvailability && healthAvailabilityState() === 'error'
-      ? sleepBackfillProviderLabel + ' import scope unavailable'
-      : sleepBackfillProviderLabel + (isSleepAndHealthBackfill ? ' sleep and health history import' : ' sleep history import'))">
+  [attr.aria-label]="historyBackfillAriaLabel">
   <div class="sleep-backfill-copy">
-    <div class="sleep-backfill-title">
-      {{ checksHealthBackfillAvailability && healthAvailabilityState() === 'loading'
-        ? 'Checking ' + sleepBackfillProviderLabel + ' import scope'
-        : (checksHealthBackfillAvailability && healthAvailabilityState() === 'error'
-          ? sleepBackfillProviderLabel + ' import scope unavailable'
-          : (isSleepAndHealthBackfill ? 'Sleep & Health history' : 'Sleep history')) }}
-    </div>
+    <div class="sleep-backfill-title">{{ historyBackfillScopeTitle }}</div>
     @if (checksHealthBackfillAvailability && healthAvailabilityState() === 'loading') {
     <p>
       Checking whether this import includes Health metrics.
@@ -181,40 +219,59 @@
     } @else if (serviceName === serviceNames.GarminAPI) {
     <p>
       Imports Garmin sleep{{ isSleepAndHealthBackfill ? ' and available Health metrics' : '' }} from
-      {{ sleepBackfillStartDate | date:'mediumDate' }} to today. Records may appear gradually over the next few hours.
+      {{ sleepBackfillStartDate | date:'mediumDate':'UTC' }} to today (up to five years). Garmin may allow a shorter
+      range. Records may appear gradually over the next few hours.
     </p>
     } @else if (serviceName === serviceNames.COROSAPI) {
     <p>
-      Imports available COROS sleep and daily Health metrics from {{ sleepBackfillStartDate | date:'mediumDate' }} to
+      Imports available COROS sleep and daily Health metrics from {{ sleepBackfillStartDate | date:'mediumDate':'UTC' }} to
       today. COROS retains daily data for up to three months.
     </p>
     } @else if (isSleepAndHealthBackfill) {
     <p>
-      Imports Suunto sleep and available 24/7 Health metrics from {{ sleepBackfillStartDate | date:'mediumDate' }} to
-      today. Existing records are updated instead of duplicated.
+      Requests Suunto sleep and available 24/7 Health metrics from {{ sleepBackfillStartDate | date:'mediumDate':'UTC' }} to
+      today. Only history available from Suunto can be imported. Existing records are updated instead of duplicated.
     </p>
     } @else {
     <p>
-      Imports Suunto sleep from {{ sleepBackfillStartDate | date:'mediumDate' }} to today. Existing records are
-      updated instead of duplicated.
+      Requests Suunto sleep from {{ sleepBackfillStartDate | date:'mediumDate':'UTC' }} to today. Only history available
+      from Suunto can be imported. Existing records are updated instead of duplicated.
     </p>
     }
-    <p class="sleep-backfill-note">
-      This can run once every {{ sleepBackfillCooldownDays }} days.
+    @if (sleepSyncStatus() === 'loading') {
+    <p class="sleep-backfill-note" role="status">Checking when the next import is available...</p>
+    } @else if (sleepSyncStatus() === 'error') {
+    <p class="sleep-backfill-note" role="status">Could not check import status. Retry the status check before importing.</p>
+    <button mat-button type="button" class="qs-mat-primary" (click)="retrySleepSyncState()">Retry status check</button>
+    }
+    @if (isSleepBackfillSubmitting()) {
+    <p class="sleep-backfill-note" role="status" aria-live="polite">
+      Your import request is in progress. Closing this dialog does not cancel it.
     </p>
+    }
+    @if (sleepImportFailed()) {
+    <p class="sleep-backfill-note" role="status">The import request did not complete successfully. You can try again.</p>
+    }
     @if (isMissingGarminSleepBackfillPermissions) {
     <p class="sleep-backfill-note">
       Reconnect Garmin and allow Historical Data Export and Health Export before importing sleep history.
     </p>
     }
-    @if (isSleepBackfillCooldownActive && sleepBackfillNextAllowedAtMs) {
-    <p class="sleep-backfill-note">
-      Next available {{ sleepBackfillNextAllowedAtMs | date:'medium' }}.
-    </p>
+    @if (sleepSyncStatus() === 'ready' || isSleepBackfillCooldownActive) {
+    <div class="history-import-timing" role="status" aria-label="Sleep history import timing">
+      @if (sleepBackfillSyncState()?.lastBackfillQueuedAtMs; as lastRequestedAt) {
+      <p>Last requested: {{ lastRequestedAt | date:'medium' }}</p>
+      }
+      @if (isSleepBackfillCooldownActive && sleepBackfillNextAllowedAtMs) {
+      <p>Next available: {{ sleepBackfillNextAllowedAtMs | date:'medium' }}</p>
+      } @else if (canSubmitSleepBackfill) {
+      <p>Available now</p>
+      }
+    </div>
     }
     @if (pendingSleepBackfillResult()) {
-    <p class="sleep-backfill-note">
-      Import started for {{ pendingSleepBackfillResult()?.queued ?? 0 }} date ranges from
+    <p class="sleep-backfill-note" role="status" aria-live="polite">
+      {{ historyBackfillResultText }} from
       {{ pendingSleepBackfillResult()?.startDate | date:'mediumDate' }} to
       {{ pendingSleepBackfillResult()?.endDate | date:'mediumDate' }}.
     </p>
@@ -229,15 +286,9 @@
       } @else if (checksHealthBackfillAvailability && healthAvailabilityState() === 'loading') {
       <mat-spinner diameter="18" class="sleep-backfill-progress" aria-hidden="true"></mat-spinner>
       } @else {
-      <mat-icon aria-hidden="true">bedtime</mat-icon>
+      <mat-icon aria-hidden="true">{{ historyBackfillIcon }}</mat-icon>
       }
-      <span>{{ isSleepBackfillSubmitting()
-        ? 'Starting import...'
-        : (checksHealthBackfillAvailability && healthAvailabilityState() === 'loading'
-          ? 'Checking Health availability...'
-          : (checksHealthBackfillAvailability && healthAvailabilityState() === 'error'
-            ? 'Health availability unavailable'
-            : (isSleepAndHealthBackfill ? 'Import Sleep & Health History' : 'Import Sleep History'))) }}</span>
+      <span>{{ historyBackfillActionLabel }}</span>
     </span>
   </button>
 </section>

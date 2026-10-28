@@ -1,7 +1,29 @@
-import { LOCALE_ID, NO_ERRORS_SCHEMA } from '@angular/core';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { provideRouter, Router, RouterModule } from '@angular/router';
+import { TimelineNotesWorkspaceComponent } from '../timeline-notes/timeline-notes-workspace.component';
+import { ActiveSicknessNoteComponent } from '../timeline-notes/active-sickness-note.component';
+import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
+import { By } from '@angular/platform-browser';
+import { dashboardHrvWindows, type DashboardHrvContext } from '../../helpers/dashboard-hrv-context.helper';
+import { DashboardHrvService } from '../../services/dashboard-hrv.service';
+import { buildDashboardExamplePreview } from '../../helpers/dashboard-chart-preview.helper';
+import { getDashboardChartCatalog } from '../../helpers/dashboard-chart-catalog.helper';
+import { buildDashboardGlanceSignals } from '../../helpers/dashboard-glance.helper';
+import type { DashboardChartTileViewModel } from '../../helpers/dashboard-tile-view-model.helper';
+import { EMPTY } from 'rxjs';
+import { MatMenuModule } from '@angular/material/menu';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { DashboardConfigurationService } from '../../services/dashboard-configuration.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
+import { CalendarDayDetailsNavigationService } from '../../services/calendar-day-details-navigation.service';
+import { LOCALE_ID, NO_ERRORS_SCHEMA, signal, type WritableSignal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
-import { of, Subject, Subscription } from 'rxjs';
+import { Observable, of, Subject, Subscription } from 'rxjs';
+import type { EventInterface } from '@sports-alliance/sports-lib';
+import type { AppDashboardChartTileSettingsInterface } from '../../models/app-user.interface';
 import { MatDialog } from '@angular/material/dialog';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { readFileSync } from 'node:fs';
@@ -21,11 +43,11 @@ import {
 import { AppThemeService } from '../../services/app.theme.service';
 import { LoggerService } from '../../services/logger.service';
 import { AppUserService } from '../../services/app.user.service';
-import { DashboardDerivedMetricsService } from '../../services/dashboard-derived-metrics.service';
+import { createDashboardDerivedMetricsMissingState, DashboardDerivedMetricsService, type DashboardDerivedMetricsState } from '../../services/dashboard-derived-metrics.service';
+import type { SleepSession } from '@shared/sleep';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppEventService } from '../../services/app.event.service';
 import { AppRouteService } from '../../services/app.route.service';
-import { DashboardAutoTileService } from '../../services/dashboard-auto-tile.service';
 import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 import * as dashboardTileViewModelHelper from '../../helpers/dashboard-tile-view-model.helper';
 import {
@@ -41,34 +63,37 @@ import {
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
 } from '../../helpers/dashboard-special-chart-types';
 import { getDashboardPowerCurveActivityTypes } from '../../helpers/dashboard-power-curve-scope.helper';
-import { DASHBOARD_READINESS_SLEEP_MAX_AGE_MS } from '../../helpers/dashboard-training-insights.helper';
 import { SummariesComponent } from './summaries.component';
 import { DashboardTileBoardComponent } from './dashboard-tile-board/dashboard-tile-board.component';
 import { DashboardTileCellComponent } from './dashboard-tile-cell/dashboard-tile-cell.component';
 import { CalendarMonthPickerBottomSheetComponent } from '../calendar/calendar-month-picker-bottom-sheet/calendar-month-picker-bottom-sheet.component';
 import { MetricIndicatorComponent } from '../shared/metric-indicator/metric-indicator.component';
-import { HEALTH_WORKSPACE_NAVIGATION_ALLOWED_UIDS } from '@shared/health-workspace-rollout';
-
-const HEALTH_WORKSPACE_NAVIGATION_ALLOWED_UID = HEALTH_WORKSPACE_NAVIGATION_ALLOWED_UIDS[0];
+import { DashboardDailyBriefingComponent } from './dashboard-daily-briefing/dashboard-daily-briefing.component';
+import { ActivityCalendarService } from '../../services/activity-calendar.service';
+import { TrainingPlansService } from '../../services/training-plans.service';
 
 describe('SummariesComponent', () => {
   let component: SummariesComponent;
   let fixture: ComponentFixture<SummariesComponent>;
   let mockThemeService: { getAppTheme: ReturnType<typeof vi.fn> };
-  let mockUserService: { updateUserProperties: ReturnType<typeof vi.fn> };
+  let mockUserService: { user: WritableSignal<any>; updateUserProperties: ReturnType<typeof vi.fn> };
   let mockDashboardDerivedMetricsService: {
     watch: ReturnType<typeof vi.fn>;
     ensureForDashboard: ReturnType<typeof vi.fn>;
   };
   let mockSleepService: { watchForDashboard: ReturnType<typeof vi.fn> };
-  let mockEventService: { getEventsBy: ReturnType<typeof vi.fn> };
+  let mockEventService: { getEventSummariesBy: ReturnType<typeof vi.fn> };
   let mockRouteService: { watchRecentRoutePreviews: ReturnType<typeof vi.fn> };
-  let mockDashboardAutoTileService: { watchForDashboard: ReturnType<typeof vi.fn> };
   let mockLogger: { error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>; log: ReturnType<typeof vi.fn> };
   let mockDialog: { open: ReturnType<typeof vi.fn> };
   let mockBottomSheet: { open: ReturnType<typeof vi.fn> };
   let buildDashboardTileViewModelsSpy: ReturnType<typeof vi.spyOn>;
   let originalMatchMedia: typeof window.matchMedia | undefined;
+
+  const flushDashboardFrame = async () => {
+    if (vi.isFakeTimers()) vi.advanceTimersToNextFrame();
+    else await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+  };
 
   const expectDashboardSettingsWrite = (user: any, dashboardSettingsPatch: Record<string, unknown>): void => {
     expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(user, {
@@ -91,6 +116,7 @@ describe('SummariesComponent', () => {
       getAppTheme: vi.fn().mockReturnValue(of('light')),
     };
     mockUserService = {
+      user: signal(null),
       updateUserProperties: vi.fn().mockResolvedValue(true),
     };
     mockDashboardDerivedMetricsService = {
@@ -132,13 +158,10 @@ describe('SummariesComponent', () => {
       watchForDashboard: vi.fn().mockReturnValue(of([])),
     };
     mockEventService = {
-      getEventsBy: vi.fn().mockReturnValue(of([])),
+      getEventSummariesBy: vi.fn().mockReturnValue(of([])),
     };
     mockRouteService = {
       watchRecentRoutePreviews: vi.fn().mockReturnValue(of([])),
-    };
-    mockDashboardAutoTileService = {
-      watchForDashboard: vi.fn().mockImplementation(() => new Subscription()),
     };
     mockLogger = { error: vi.fn(), warn: vi.fn(), log: vi.fn() };
     mockDialog = {
@@ -166,16 +189,28 @@ describe('SummariesComponent', () => {
 
     await TestBed.configureTestingModule({
       declarations: [SummariesComponent, DashboardTileBoardComponent, DashboardTileCellComponent],
-      imports: [PageHeaderComponent, MetricIndicatorComponent],
+      imports: [AppChartSharedModule, TimelineNotesWorkspaceComponent, ActiveSicknessNoteComponent, PageHeaderComponent, MetricIndicatorComponent, DashboardDailyBriefingComponent, MatMenuModule, MatProgressSpinnerModule, NoopAnimationsModule, RouterModule],
       schemas: [NO_ERRORS_SCHEMA],
-      providers: [
+      providers: [provideRouter([]),
+        { provide: ActivityCalendarService, useValue: { watchSummaryEvents: vi.fn(() => of({ events: [], complete: true })) } },
+        { provide: TrainingPlansService, useValue: {
+          watchCalendarSchedule: vi.fn(() => of({ state: { activePlanId: null }, workouts: [], plans: [], workoutsComplete: true })),
+          watchWorkoutCompletionsForWorkouts: vi.fn(() => of([])),
+        } },
+        { provide: AppTimelineNotesService, useValue: {
+          uid: signal('owner-user'), showOnCharts: signal(true), changes$: new Subject<void>(),
+          loadRange: vi.fn().mockResolvedValue({ notes: [], incomplete: null }), cachedRange: vi.fn(() => null), invalidate: vi.fn(), isOwner: (uid: string) => uid === 'owner-user',
+        } },
+        { provide: DashboardConfigurationService, useValue: { save: (_uid, _expected, patch) => mockUserService.updateUserProperties(component.user, { settings: { dashboardSettings: patch } }) } },
+        { provide: AppHapticsService, useValue: { selection: vi.fn(), success: vi.fn(), error: vi.fn() } },
         { provide: AppThemeService, useValue: mockThemeService },
         { provide: AppUserService, useValue: mockUserService },
         { provide: DashboardDerivedMetricsService, useValue: mockDashboardDerivedMetricsService },
         { provide: AppSleepService, useValue: mockSleepService },
+        { provide: DashboardHrvService, useValue: { watch: vi.fn(() => EMPTY) } },
         { provide: AppEventService, useValue: mockEventService },
         { provide: AppRouteService, useValue: mockRouteService },
-        { provide: DashboardAutoTileService, useValue: mockDashboardAutoTileService },
+
         { provide: LoggerService, useValue: mockLogger },
         { provide: MatDialog, useValue: mockDialog },
         { provide: MatBottomSheet, useValue: mockBottomSheet },
@@ -185,6 +220,7 @@ describe('SummariesComponent', () => {
 
     fixture = TestBed.createComponent(SummariesComponent);
     component = fixture.componentInstance;
+    component.showActions = true;
   });
 
   afterEach(() => {
@@ -196,11 +232,318 @@ describe('SummariesComponent', () => {
     });
   });
 
+  it('batches mixed metric, Sleep, activity and route updates, and cancels obsolete renders', async () => {
+    vi.useFakeTimers();
+    const metrics = new Subject<DashboardDerivedMetricsState>();
+    const sleep = new Subject<SleepSession[]>();
+    const events = new Subject<never[]>();
+    const routes = new Subject<never[]>();
+    mockDashboardDerivedMetricsService.watch.mockReturnValue(metrics);
+    mockSleepService.watchForDashboard.mockReturnValue(sleep);
+    mockEventService.getEventSummariesBy.mockReturnValue(events);
+    mockRouteService.watchRecentRoutePreviews.mockReturnValue(routes);
+    buildDashboardTileViewModelsSpy.mockReturnValue([]);
+    component.user = { uid: 'batch-owner', settings: { dashboardSettings: { tiles: [
+      { type: TileTypes.Chart, order: 0, chartType: ChartTypes.ColumnsVertical,
+        dataType: DataDuration.type, dataCategoryType: ChartDataCategoryTypes.ActivityType,
+        dataValueType: ChartDataValueTypes.Total, timeInterval: TimeIntervals.Weekly, size: { columns: 1, rows: 1 } },
+      { type: TileTypes.Map, order: 1, mapSource: 'routes', size: { columns: 1, rows: 1 } },
+    ] } } } as SummariesComponent['user'];
+    await component['unsubscribeAndCreateCharts']();
+    expect(metrics.observed && sleep.observed && events.observed && routes.observed).toBe(true);
+    buildDashboardTileViewModelsSpy.mockClear();
+    const refreshToday = vi.spyOn(component as any, 'refreshDashboardTodaySignals');
+
+    metrics.next({ ...createDashboardDerivedMetricsMissingState(), formPoints: [], formStatus: 'ready' });
+    sleep.next([]); events.next([]); routes.next([]);
+    expect(refreshToday).not.toHaveBeenCalled();
+    expect(buildDashboardTileViewModelsSpy).not.toHaveBeenCalled();
+    vi.advanceTimersToNextFrame();
+    expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledOnce();
+    expect(refreshToday).toHaveBeenCalledOnce();
+    expect(buildDashboardTileViewModelsSpy).toHaveBeenLastCalledWith(expect.objectContaining({
+      previewMetricStatuses: expect.objectContaining({ form: 'ready' }),
+      sleepSessions: [], tileEventsByOrder: { 0: [] }, routePreviews: [],
+    }));
+
+    // An immediate settings/layout update absorbs the queued background work.
+    buildDashboardTileViewModelsSpy.mockClear();
+    events.next([]);
+    await component['rebuildTilesFromCurrentState']();
+    vi.advanceTimersToNextFrame();
+    expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledOnce();
+
+    // Nothing can render after leaving the dashboard.
+    buildDashboardTileViewModelsSpy.mockClear();
+    events.next([]); routes.error(new Error('offline'));
+    fixture.destroy(); vi.advanceTimersToNextFrame();
+    expect(buildDashboardTileViewModelsSpy).not.toHaveBeenCalled();
+    expect(metrics.observed || sleep.observed || events.observed || routes.observed).toBe(false);
+  });
+
+  it('shows an Undo conflict after moving or adding a chart without hiding the saved layout', async () => {
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [] } } } as SummariesComponent['user'];
+    component.eventUser = component.user;
+    const message = 'Your dashboard changed. Close the editor and try again with the current layout.';
+    vi.spyOn(component.library, 'undo').mockImplementation(async () => { component.library.error.set(message); });
+    const notice = vi.spyOn(TestBed.inject(MatSnackBar), 'open');
+    await component.undoDashboardChange();
+    expect(notice).toHaveBeenCalledWith(message, 'Dismiss', { duration: 6000 });
+    expect(component.user.settings.dashboardSettings.tiles).toEqual([]);
+  });
+
+  it('restores Health selectors after a failed save and keeps other tiles unchanged', async () => {
+    const tile = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile);
+    tile.order = 0;
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [tile] } } } as SummariesComponent['user'];
+    component.eventUser = component.user;
+    const previous = { ...tile } as never;
+    component.tiles = [previous];
+    const save = vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save');
+    let reject!: (error: Error) => void;
+    save.mockReturnValueOnce(new Promise((_resolve, fail) => { reject = fail; }));
+    const change = { settings: { metric: 'steps' as const, range: '14d' as const, sourceKey: 'reading' }, initial: false };
+    const pending = component.onHealthMetricChange(0, change);
+    expect(component.tiles[0]['healthMetric']).toEqual(change.settings);
+    expect(component.mainGridSections.find(section => section.id === 'health')?.cells[0].tile['healthMetric']).toEqual(change.settings);
+    expect(component.healthSavingOrders.has(0)).toBe(true);
+    await component.onHealthMetricChange(0, change);
+    expect(save).toHaveBeenCalledTimes(1);
+    reject(new Error('offline')); await pending;
+    expect(component.tiles[0]).toBe(previous);
+    expect(component.user.settings.dashboardSettings.tiles).toEqual([tile]);
+    expect(component.healthSavingOrders.size).toBe(0);
+    expect(TestBed.inject(AppHapticsService).error).toHaveBeenCalledTimes(1);
+    expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
+  });
+
+  it('ignores initial Health source hydration and saves explicit settings only to that tile', async () => {
+    const tile = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile);
+    tile.order = 0;
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [tile] } } } as SummariesComponent['user'];
+    component.eventUser = component.user;
+    const save = vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save').mockResolvedValue(undefined);
+    vi.spyOn(component, 'rebuildTilesFromCurrentState' as never).mockResolvedValue(undefined as never);
+    const settings = { metric: 'steps' as const, range: '14d' as const, sourceKey: 'reading' };
+    await component.onHealthMetricChange(0, { settings, initial: true });
+    expect(save).not.toHaveBeenCalled();
+    await component.onHealthMetricChange(0, { settings, initial: false });
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(component.user.settings.dashboardSettings.tiles[0]['healthMetric']).toEqual(settings);
+    expect(TestBed.inject(AppHapticsService).success).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels obsolete HRV windows and clears prior account data before loading another owner', async () => {
+    const first = new Subject<DashboardHrvContext>();
+    const second = new Subject<DashboardHrvContext>();
+    const service = TestBed.inject(DashboardHrvService);
+    vi.mocked(service.watch).mockReturnValueOnce(first).mockReturnValueOnce(second);
+    const rebuild = vi.spyOn(component, 'rebuildTilesFromCurrentState' as never).mockResolvedValue(undefined as never);
+    const endMs = new Date(2026, 8, 10, 12).getTime();
+    const context = { charts: [], window: dashboardHrvWindows('14d', endMs).visible, loading: false, error: false };
+    component.user = { uid: 'first-owner' } as any;
+    component['syncHrvSubscription']();
+    first.next(context);
+    expect(component['hrvTrend']).toBe(context);
+    component.user = { uid: 'second-owner' } as any;
+    component['syncHrvSubscription']();
+    expect(first.observed).toBe(false);
+    expect(component['hrvTrend']).toMatchObject({ charts: [], loading: true });
+    first.next(context);
+    expect(component['hrvTrend']?.loading).toBe(true);
+    second.error(new Error('offline'));
+    expect(component['hrvTrend']).toMatchObject({ charts: [], loading: false, error: true });
+    component['unsubscribeHrv']();
+    expect(component['hrvTrend']).toBeNull();
+    await flushDashboardFrame();
+    expect(rebuild).toHaveBeenCalled();
+  });
+
+  it('shares one private notes workspace with tiles and the calendar, and removes it on another profile', async () => {
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-hrv')!.tile] } } } as SummariesComponent['user'];
+    component.eventUser = component.user;
+    fixture.detectChanges(); await Promise.resolve(); fixture.detectChanges();
+    const workspace = fixture.debugElement.query(By.directive(TimelineNotesWorkspaceComponent)).componentInstance as TimelineNotesWorkspaceComponent;
+    const source = component.timelineNotes;
+    expect(source()).toBe(workspace.context());
+    expect(source()?.ownerUid).toBe('owner-user');
+    const charts = fixture.debugElement.queryAll(By.css('app-tile-chart'));
+    expect(charts.length).toBeGreaterThan(0);
+    expect(charts.every(chart => chart.properties.timelineNotes === source)).toBe(true);
+    component.openDashboardCalendar();
+    expect(mockBottomSheet.open.mock.calls.at(-1)?.[1].data.timelineNotes).toBe(source);
+    fixture.componentRef.setInput('eventUser', { uid: 'other-profile' });
+    fixture.componentRef.setInput('showActions', false);
+    fixture.detectChanges(); await Promise.resolve(); fixture.detectChanges();
+    expect(fixture.debugElement.query(By.directive(TimelineNotesWorkspaceComponent))).toBeNull();
+    expect(source()).toBeNull();
+    workspace.open();
+    expect(mockDialog.open).not.toHaveBeenCalled();
+  });
+
+  it('reopens the selected Today-sheet day after returning from its full-day page', () => {
+    const restoration = { sourceUrl: '/', dateKey: '2026-08-03', surface: 'today-sheet' as const,
+      calendarReturn: { view: 'month' as const, anchor: '2026-08-01' } };
+    const navigation = TestBed.inject(CalendarDayDetailsNavigationService);
+    const restorationFor = vi.spyOn(navigation, 'restorationFor').mockReturnValue(restoration);
+    const consume = vi.spyOn(navigation, 'consumeRestoration').mockImplementation(() => {
+      restorationFor.mockReturnValue(null);
+      return true;
+    });
+    const owner = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [] } } } as SummariesComponent['user'];
+    fixture.componentRef.setInput('user', owner);
+    fixture.componentRef.setInput('eventUser', owner);
+    fixture.detectChanges();
+
+    expect(consume).toHaveBeenCalledWith(restoration);
+    expect(mockBottomSheet.open).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
+      data: expect.objectContaining({ initialDateKey: '2026-08-03', privateHealthEnabled: true,
+        initialPeriodContext: restoration.calendarReturn }),
+    }));
+    expect(mockBottomSheet.open).toHaveBeenCalledOnce();
+  });
+
+  it('does not restore a private Today sheet on another profile', () => {
+    const restoration = { sourceUrl: '/', dateKey: '2026-08-03', surface: 'today-sheet' as const };
+    const navigation = TestBed.inject(CalendarDayDetailsNavigationService);
+    vi.spyOn(navigation, 'restorationFor').mockReturnValue(restoration);
+    const consume = vi.spyOn(navigation, 'consumeRestoration');
+    const owner = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [] } } } as SummariesComponent['user'];
+    fixture.componentRef.setInput('user', owner);
+    fixture.componentRef.setInput('eventUser', { uid: 'different-user' });
+    fixture.detectChanges();
+
+    expect(consume).not.toHaveBeenCalled();
+    expect(mockBottomSheet.open).not.toHaveBeenCalled();
+  });
+
+  it('restores the Today sheet when browser navigation finishes after the dashboard is mounted', async () => {
+    const router = TestBed.inject(Router);
+    router.resetConfig([{ path: 'dashboard', children: [] }]);
+    const restoration = { sourceUrl: '/dashboard', dateKey: '2026-08-03', surface: 'today-sheet' as const };
+    const navigation = TestBed.inject(CalendarDayDetailsNavigationService);
+    vi.spyOn(navigation, 'restorationFor').mockImplementation(url => url === '/dashboard' ? restoration : null);
+    vi.spyOn(navigation, 'consumeRestoration').mockReturnValue(true);
+    const owner = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [] } } } as SummariesComponent['user'];
+    fixture.componentRef.setInput('user', owner);
+    fixture.componentRef.setInput('eventUser', owner);
+    fixture.detectChanges();
+    expect(mockBottomSheet.open).not.toHaveBeenCalled();
+
+    await router.navigateByUrl('/dashboard');
+    expect(mockBottomSheet.open).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
+      data: expect.objectContaining({ initialDateKey: '2026-08-03' }),
+    }));
+  });
+
+  it('keeps the dashboard layout stable during address-bar height changes but updates column breakpoints', () => {
+    const columns = vi.spyOn(component, 'getNumberOfColumns' as never).mockReturnValue(1 as never);
+    vi.spyOn(component, 'getRowHeight' as never).mockReturnValue('40vh' as never);
+    const layout = vi.spyOn(component, 'refreshMainGridSectionLayout' as never);
+    component.numberOfCols = 1; component.rowHeight = '40vh';
+    component.resizeOROrientationChange(); component.resizeOROrientationChange();
+    expect(layout).not.toHaveBeenCalled();
+    columns.mockReturnValue(2 as never);
+    component.resizeOROrientationChange();
+    expect(layout).toHaveBeenCalledOnce();
+    expect(component.numberOfCols).toBe(2);
+  });
+
+  it('retains the last complete HRV window through rapid paging and failed refreshes', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 8, 10, 12));
+    const first$ = new Subject<DashboardHrvContext>();
+    const second$ = new Subject<DashboardHrvContext>();
+    const third$ = new Subject<DashboardHrvContext>();
+    const service = TestBed.inject(DashboardHrvService);
+    vi.mocked(service.watch).mockReturnValueOnce(first$).mockReturnValueOnce(second$).mockReturnValueOnce(third$);
+    vi.spyOn(component, 'rebuildTilesFromCurrentState' as never).mockResolvedValue(undefined as never);
+    const tile = getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-hrv')!.tile;
+    const context = (buildDashboardExamplePreview(tile).tile as DashboardChartTileViewModel).hrvTrend!;
+    component.user = { uid: 'owner' } as SummariesComponent['user'];
+    component['syncHrvSubscription'](); first$.next(context);
+    component.onHrvTrendNavigate('older');
+    expect(first$.observed).toBe(false);
+    expect(component['hrvTrend']).toMatchObject({ charts: context.charts, window: context.window, loading: true });
+    expect(component['hrvTrend']?.requestedWindow).not.toEqual(context.window);
+    const pendingWindow = component['hrvTrend']?.requestedWindow;
+    component.onHrvTrendNavigate('older');
+    expect(second$.observed).toBe(false);
+    expect(component['hrvTrend']?.requestedWindow).not.toEqual(pendingWindow);
+    third$.next({ ...context, window: component['hrvTrend']!.requestedWindow! });
+    const latest = component['hrvTrend'];
+    third$.error(new Error('refresh failed'));
+    expect(component['hrvTrend']).toMatchObject({ charts: latest!.charts, window: latest!.window, loading: false, error: true });
+    expect(component['hrvTrend']?.requestedWindow).toEqual(latest!.window);
+  });
+
+  it('keeps HRV range, navigation and persistence independent of Sleep in both directions', async () => {
+    vi.useFakeTimers();
+    const nowMs = new Date(2026, 8, 10, 12).getTime();
+    vi.setSystemTime(nowMs);
+    buildDashboardTileViewModelsSpy.mockReturnValue([]);
+    component.user = { uid: 'user-1', settings: { dashboardSettings: {
+      tiles: [], sleepTrend: { range: '14d' }, hrvTrend: { range: '30d' },
+    } } } as any;
+    component['syncSleepSubscription'](); component['syncHrvSubscription']();
+    const hrv = TestBed.inject(DashboardHrvService);
+    mockSleepService.watchForDashboard.mockClear(); vi.mocked(hrv.watch).mockClear();
+    await component.onHrvTrendRangeChange('90d');
+    expect(component.hrvTrendRange).toBe('90d');
+    expect(component.sleepTrendRange).toBe('14d');
+    expectDashboardSettingsWrite(component.user, { hrvTrend: { range: '90d' } });
+    expect(hrv.watch).toHaveBeenLastCalledWith('user-1', '90d', nowMs, undefined);
+    component.onHrvTrendNavigate('older');
+    expect(component.hrvTrendCanNavigateNewer).toBe(true);
+    expect(component.sleepTrendCanNavigateNewer).toBe(false);
+    expect(mockSleepService.watchForDashboard).not.toHaveBeenCalled();
+    const hrvWindow = component['hrvTrend']!.window;
+    vi.mocked(hrv.watch).mockClear();
+    await component.onSleepTrendRangeChange('1y'); component.onSleepTrendNavigate('older');
+    expect(hrv.watch).not.toHaveBeenCalled();
+    expect(component.hrvTrendRange).toBe('90d');
+    expect(component['hrvTrend']!.window).toBe(hrvWindow);
+    expect(component.user.settings.dashboardSettings.hrvTrend.range).toBe('90d');
+    vi.setSystemTime(nowMs + 30_000);
+    component.onHrvTrendNavigate('newer');
+    expect(component.hrvTrendCanNavigateNewer).toBe(false);
+    expect(component.sleepTrendCanNavigateNewer).toBe(true);
+  });
+
+  it('restores only HRV settings when saving its range fails', async () => {
+    component.user = { uid: 'user-1', settings: { dashboardSettings: {
+      tiles: [], sleepTrend: { range: '1y' }, hrvTrend: { range: '30d' },
+    } } } as any;
+    component['syncSleepSubscription'](); component['syncHrvSubscription']();
+    vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save').mockRejectedValueOnce(new Error('offline'));
+    await component.onHrvTrendRangeChange('90d');
+    expect(component.hrvTrendRange).toBe('30d');
+    expect(component.user.settings.dashboardSettings.hrvTrend.range).toBe('30d');
+    expect(component.sleepTrendRange).toBe('1y');
+  });
+
+  it('reveals a saved chart only after the picker closes and the dashboard refresh completes', async () => {
+    let refresh!: () => void;
+    vi.spyOn(component as any, 'unsubscribeAndCreateCharts').mockReturnValue(new Promise<void>(resolve => refresh = resolve));
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => { callback(0); return 0; });
+    const tile = document.createElement('button');
+    tile.dataset.dashboardTileOrder = '4'; tile.scrollIntoView = vi.fn(); document.body.append(tile);
+    try {
+      component.ngOnInit(); component.library.changed$.next(4);
+      expect(document.activeElement).not.toBe(tile);
+      const closing = component.onChartPickerClosed();
+      expect(tile.scrollIntoView).not.toHaveBeenCalled();
+      refresh(); await closing;
+      expect(document.activeElement).toBe(tile);
+      expect(tile.scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+    } finally { tile.remove(); }
+  });
+
   it('should create', () => {
     expect(component).toBeTruthy();
   });
 
-  it('marks only the Activity Calendar board for the mobile calendar row height', () => {
+  it('marks only the dedicated Calendar board for the mobile calendar row height', () => {
     const activityCalendarTile = {
       type: TileTypes.Chart,
       order: 0,
@@ -228,20 +571,107 @@ describe('SummariesComponent', () => {
 
     fixture.detectChanges();
 
-    const activitySection = component.mainGridSections.find(section => section.id === 'activityOverview');
+    const calendarSection = component.mainGridSections.find(section => section.id === 'calendar');
     const routesSection = component.mainGridSections.find(section => section.id === 'routesMaps');
     const nativeElement = fixture.nativeElement as HTMLElement;
-    const activityBoard = nativeElement.querySelector(
-      '[aria-labelledby="dashboard-section-activityOverview"] app-dashboard-tile-board',
+    const calendarBoard = nativeElement.querySelector(
+      '[aria-labelledby="dashboard-section-calendar"] app-dashboard-tile-board',
     );
     const routesBoard = nativeElement.querySelector(
       '[aria-labelledby="dashboard-section-routesMaps"] app-dashboard-tile-board',
     );
 
-    expect(activitySection?.hasActivityCalendar).toBe(true);
+    expect(calendarSection?.hasActivityCalendar).toBe(true);
     expect(routesSection?.hasActivityCalendar).toBe(false);
-    expect(activityBoard?.classList.contains('dashboard-tile-board--activity-calendar')).toBe(true);
+    expect(calendarBoard?.classList.contains('dashboard-tile-board--activity-calendar')).toBe(true);
     expect(routesBoard?.classList.contains('dashboard-tile-board--activity-calendar')).toBe(false);
+  });
+
+  it('places Calendar after Today and before KPIs, with a route action instead of Add chart', () => {
+    const calendar = {
+      type: TileTypes.Chart, order: 2, chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
+      size: { columns: 4, rows: 1 }, data: [],
+    } as any;
+    const kpi = {
+      type: TileTypes.Chart, order: 0, chartType: DASHBOARD_ACWR_KPI_CHART_TYPE,
+      size: { columns: 1, rows: 1 }, data: [],
+    } as any;
+    const activity = {
+      type: TileTypes.Chart, order: 1, chartType: ChartTypes.ColumnsVertical,
+      dataType: DataDuration.type, size: { columns: 1, rows: 1 }, data: [],
+    } as any;
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [kpi, activity, calendar] } } } as any;
+    component.showActions = true;
+    component.tiles = [kpi, activity, calendar];
+    (component as any).refreshTileLanes();
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const children = Array.from(root.querySelector('.pie')!.children);
+    const todayIndex = children.findIndex(child => child.classList.contains('dashboard-current-state-row'));
+    const calendarIndex = children.findIndex(child => child.classList.contains('dashboard-calendar-section'));
+    const kpiIndex = children.findIndex(child => child.classList.contains('dashboard-kpi-section'));
+    expect(todayIndex).toBeLessThan(calendarIndex);
+    expect(calendarIndex).toBeLessThan(kpiIndex);
+    const calendarSection = root.querySelector('[aria-labelledby="dashboard-section-calendar"]');
+    expect(calendarSection?.querySelector('h2')?.textContent?.trim()).toBe('Calendar');
+    expect(calendarSection?.querySelector('a[routerLink="/calendar"]')?.textContent).toContain('Open calendar');
+    expect(calendarSection?.querySelector('app-dashboard-chart-library')).toBeNull();
+
+    fixture.debugElement.query(By.css('.dashboard-calendar-section app-tile-chart'))
+      .triggerEventHandler('calendarDateChange', '2026-09-09');
+    fixture.detectChanges();
+    expect(calendarSection?.querySelector('a[routerLink="/calendar"]')?.getAttribute('href'))
+      .toBe('/calendar?view=month&date=2026-09-09');
+
+    fixture.debugElement.query(By.css('.dashboard-calendar-section app-tile-chart'))
+      .triggerEventHandler('calendarStateChange', { view: '30d', date: '2026-09-09', anchor: '2026-10-01' });
+    fixture.detectChanges();
+    expect(calendarSection?.querySelector('a[routerLink="/calendar"]')?.getAttribute('href'))
+      .toBe('/calendar?view=30d&date=2026-09-09&anchor=2026-10-01');
+
+    component.user.settings.dashboardSettings.tiles = [kpi, activity];
+    component.tiles = [kpi, activity];
+    (component as any).refreshTileLanes();
+    fixture.detectChanges();
+    expect(root.querySelector('.dashboard-calendar-section')).toBeNull();
+  });
+
+  it('migrates an owner calendar once and preserves a later manual resize', async () => {
+    const calendar = { type: TileTypes.Chart, order: 1, chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
+      size: { columns: 1, rows: 1 } } as any;
+    const other = { type: TileTypes.Map, order: 0, size: { columns: 2, rows: 2 } } as any;
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [other, calendar] } } } as any;
+    component.eventUser = { uid: 'owner-user' } as any;
+    const save = vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save').mockResolvedValue(undefined);
+    await component.ngOnChanges({ user: { currentValue: component.user, previousValue: null,
+      firstChange: true, isFirstChange: () => true } as any });
+    expect(component.user.settings.dashboardSettings.tiles).toEqual([other, { ...calendar, size: { columns: 4, rows: 1 } }]);
+    expect(component.user.settings.dashboardSettings.calendarDayContextLayoutVersion).toBe(1);
+    expect(save).toHaveBeenCalledWith('owner-user', expect.any(Object), {
+      tiles: [other, { ...calendar, size: { columns: 4, rows: 1 } }], calendarDayContextLayoutVersion: 1,
+    });
+    component.user.settings.dashboardSettings.tiles[1].size = { columns: 2, rows: 1 };
+    await component.ngOnChanges({ user: { currentValue: component.user, previousValue: component.user,
+      firstChange: false, isFirstChange: () => false } as any });
+    expect(component.user.settings.dashboardSettings.tiles[1].size).toEqual({ columns: 2, rows: 1 });
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores an unsaved calendar width without changing other settings', async () => {
+    const calendar = { type: TileTypes.Chart, order: 0, chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
+      size: { columns: 1, rows: 1 } } as any;
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [calendar], showTodaySummary: true } } } as any;
+    component.eventUser = { uid: 'owner-user' } as any;
+    vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save').mockRejectedValueOnce(new Error('offline'));
+    const notice = vi.spyOn(TestBed.inject(MatSnackBar), 'open');
+    await component.ngOnChanges({ user: { currentValue: component.user, previousValue: null,
+      firstChange: true, isFirstChange: () => true } as any });
+    await Promise.resolve();
+    expect(component.user.settings.dashboardSettings.tiles[0].size).toEqual({ columns: 1, rows: 1 });
+    expect(component.user.settings.dashboardSettings.calendarDayContextLayoutVersion).toBeUndefined();
+    expect(component.user.settings.dashboardSettings.showTodaySummary).toBe(true);
+    expect(notice).toHaveBeenCalledWith('offline', 'Dismiss', { duration: 6000 });
   });
 
   it('renders the owner greeting from the first display-name part', () => {
@@ -258,6 +688,8 @@ describe('SummariesComponent', () => {
     fixture.detectChanges();
 
     expect(component.isOwnerDashboard).toBe(true);
+    expect((fixture.nativeElement as HTMLElement).querySelector('.pie')?.getAttribute('data-chart-preload'))
+      .toBe('background');
     expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-today-greeting')?.textContent?.trim())
       .toBe('Good morning, Dimitrios');
   });
@@ -291,7 +723,7 @@ describe('SummariesComponent', () => {
     component.showActions = true;
     component.derivedMetricsBanner = {
       type: 'pending',
-      title: 'Building derived metrics',
+      title: 'Preparing your dashboard…',
       description: 'Some dashboard insights are still being prepared.',
       showRetry: false,
     };
@@ -310,6 +742,54 @@ describe('SummariesComponent', () => {
     fixture.detectChanges();
     expect(component.isOwnerDashboard).toBe(false);
     expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-today-greeting')).toBeNull();
+  });
+
+  it.each([true, false])('retains the header and status line through updates with Today enabled=%s', showToday => {
+    const updates$ = new Subject<DashboardDerivedMetricsState>();
+    mockDashboardDerivedMetricsService.watch.mockReturnValue(updates$);
+    const formTile = getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-form')!.tile;
+    component.user = {
+      uid: 'owner-user', displayName: 'Morgan Lee',
+      settings: { dashboardSettings: { tiles: [formTile], showTodaySummary: showToday } },
+    } as unknown as SummariesComponent['user'];
+    component.eventUser = { uid: 'owner-user' } as SummariesComponent['eventUser'];
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const header = host.querySelector('.dashboard-summary-header');
+    const status = host.querySelector('.dashboard-summary-status');
+    const calendar = host.querySelector(`[aria-label="Open this month's activity calendar"]`);
+    const date = host.querySelector('.qs-page-header__subtitle')?.textContent;
+    const calendarOpen = vi.spyOn(component, 'openDashboardCalendar').mockImplementation(() => undefined);
+    const retry = vi.spyOn(component, 'retryDerivedMetricsRebuild').mockImplementation(() => undefined);
+
+    for (const [formStatus, banner] of [
+      ['missing', { type: 'pending', title: 'Preparing your dashboard…', showRetry: false }],
+      ['stale', { type: 'pending', title: 'Updating your dashboard…', showRetry: false }],
+      ['failed', { type: 'warning', title: 'Couldn’t update your dashboard', showRetry: true }],
+      ['ready', null],
+    ] as const) {
+      updates$.next({ ...createDashboardDerivedMetricsMissingState(), formStatus, formNowStatus: 'ready', rampRateStatus: 'ready' });
+      fixture.detectChanges();
+      const effectiveBanner = banner?.type === 'pending' && showToday && !component.dashboardTodayReadiness.loading
+        ? null
+        : banner;
+      expect(host.querySelector('.dashboard-summary-header')).toBe(header);
+      expect(host.querySelector('.dashboard-summary-status')).toBe(status);
+      expect(host.querySelector('.qs-page-header__subtitle')?.textContent).toBe(date);
+      expect(status?.getAttribute('role')).toBe(effectiveBanner?.type === 'warning' ? 'alert' : 'status');
+      expect(!!status?.querySelector('mat-spinner')).toBe(effectiveBanner?.type === 'pending');
+      if (showToday) {
+        expect(host.querySelector('#dashboard-today-title')?.textContent).toBe('Today');
+        expect(host.querySelector(`[aria-label="Open this month's activity calendar"]`)).toBe(calendar);
+      }
+      if (effectiveBanner) expect(status?.textContent).toContain(effectiveBanner.title);
+      if (banner?.type === 'pending' && showToday) (calendar as HTMLButtonElement).click();
+      if (banner?.showRetry) host.querySelector<HTMLButtonElement>('[aria-label="Retry dashboard update"]')!.click();
+    }
+    expect(calendarOpen).toHaveBeenCalledTimes(showToday ? 2 : 0);
+    expect(retry).toHaveBeenCalledOnce();
+    expect(TestBed.inject(AppHapticsService).selection).toHaveBeenCalledTimes(showToday ? 3 : 1);
+    expect(!!host.querySelector('.dashboard-today-greeting')).toBe(showToday);
   });
 
   it('refreshes the greeting when the signed-in user input changes with the same uid', () => {
@@ -408,7 +888,7 @@ describe('SummariesComponent', () => {
       fixture.detectChanges();
 
       expect(component.todayGreeting).toBe('Good evening, Morgan');
-      expect(vi.getTimerCount()).toBe(1);
+      expect(vi.getTimerCount()).toBe(2); // Greeting boundary and visible sickness-context clock.
     } finally {
       if (visibilityDescriptor) {
         Object.defineProperty(document, 'visibilityState', visibilityDescriptor);
@@ -452,50 +932,64 @@ describe('SummariesComponent', () => {
     } as any;
     component.showActions = true;
     fixture.detectChanges();
-    expect(vi.getTimerCount()).toBe(1);
+    expect(vi.getTimerCount()).toBe(2); // Both Today clocks are disposed below.
 
     fixture.destroy();
 
     expect(removeEventListenerSpy).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
+    // Clearing the shared notes context notifies Angular's one-shot render scheduler. Let that
+    // cleanup settle; a leaked greeting boundary would run and schedule another timer here.
+    vi.runOnlyPendingTimers();
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('exposes compact Training and Health actions without a duplicate Calendar action', () => {
+  it.each(['free', 'basic', 'pro'])('keeps dashboard options but removes workspace shortcuts for a %s user', stripeRole => {
     component.user = {
-      uid: HEALTH_WORKSPACE_NAVIGATION_ALLOWED_UID,
+      uid: 'user-1',
+      stripeRole,
       settings: { dashboardSettings: { tiles: [] } },
     } as any;
     component.showActions = true;
 
     fixture.detectChanges();
-    const trainingLink = (fixture.nativeElement as HTMLElement).querySelector('.dashboard-training-link') as HTMLAnchorElement;
-    expect(trainingLink).not.toBeNull();
-    expect(trainingLink.getAttribute('aria-label')).toBe('Open Training workspace');
-    expect(trainingLink.textContent).toContain('Open Training');
-    expect(trainingLink.querySelector('mat-icon')?.textContent?.trim()).toBe('monitoring');
-    const healthLink = (fixture.nativeElement as HTMLElement).querySelector('.dashboard-health-link') as HTMLAnchorElement;
-    expect(healthLink).not.toBeNull();
-    expect(healthLink.getAttribute('aria-label')).toBe('Open Health workspace');
-    expect(healthLink.textContent).toContain('Open Health');
-    expect(healthLink.querySelector('mat-icon')?.textContent?.trim()).toBe('cardiology');
-    const template = readFileSync(resolve(process.cwd(), 'src/app/components/summaries/summaries.component.html'), 'utf8');
-    expect(template).toContain('<a mat-button class="dashboard-training-link"');
-    expect(template).toContain('<a mat-button class="dashboard-health-link"');
-    expect(template).not.toContain('<a mat-stroked-button class="dashboard-training-link"');
-    expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-calendar-link')).toBeNull();
+    const header = (fixture.nativeElement as HTMLElement).querySelector('.dashboard-summary-header')!;
+    expect(header.querySelector('[routerLink="/training"]')).toBeNull();
+    expect(header.querySelector('[routerLink="/health"]')).toBeNull();
+    expect(header.querySelector('.dashboard-calendar-link')).toBeNull();
+    expect(header.querySelector('[aria-label="Dashboard options"]')).not.toBeNull();
+    expect(header.textContent).not.toContain('Dashboard manager');
   });
 
-  it('hides the Health action from dashboard users outside the staged rollout', () => {
+  it('keeps inline chart discovery and options hidden on a shared dashboard', () => {
     component.user = {
-      uid: 'another-user',
+      uid: 'user-1',
       settings: { dashboardSettings: { tiles: [] } },
     } as any;
-    component.showActions = true;
-
+    component.eventUser = { uid: 'shared-user' } as any;
+    component.showActions = false;
     fixture.detectChanges();
 
-    expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-training-link')).not.toBeNull();
-    expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-health-link')).toBeNull();
+    expect(component.isOwnerDashboard).toBe(false);
+    expect((fixture.nativeElement as HTMLElement).querySelector('.pie')?.hasAttribute('data-chart-preload')).toBe(false);
+    expect((fixture.nativeElement as HTMLElement).querySelector('app-dashboard-chart-library')).toBeNull();
+    expect((fixture.nativeElement as HTMLElement).querySelector('[aria-label="Dashboard options"]')).toBeNull();
+  });
+
+  it('groups existing custom charts together on read-only shared dashboards', () => {
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.showActions = false;
+    component.tiles = [DataDistance.type, 'Power', 'DeviceName'].map((dataType, order) => ({
+      type: TileTypes.Chart, chartType: ChartTypes.ColumnsVertical, dataType, order,
+      dataCategoryType: ChartDataCategoryTypes.DateType, dataValueType: ChartDataValueTypes.Total,
+      data: [], timeInterval: TimeIntervals.Daily, size: { columns: 1, rows: 1 },
+    } as any));
+    (component as any).refreshTileLanes();
+    fixture.detectChanges();
+    expect(component.mainGridSections.map(section => section.id)).toEqual(['activityOverview']);
+    expect(component.mainGridSections[0].tiles.map(tile => tile.order)).toEqual([0, 1, 2]);
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    expect(nativeElement.querySelectorAll('app-dashboard-tile-cell.dashboard-grid-tile')).toHaveLength(3);
+    expect(nativeElement.querySelector('app-dashboard-chart-library')).toBeNull();
   });
 
   it('renders the Today dashboard header separately from KPI and main-grid tiles', () => {
@@ -546,14 +1040,17 @@ describe('SummariesComponent', () => {
     expect(todayCalendarButton?.querySelector('.dashboard-today-calendar-cue')?.getAttribute('aria-hidden')).toBe('true');
     todayCalendarButton?.click();
     expect(mockBottomSheet.open).toHaveBeenCalledWith(CalendarMonthPickerBottomSheetComponent, {
-      data: { user: component.user },
+      data: { user: component.user, timelineNotes: component.timelineNotes, privateHealthEnabled: component.showActions && component.isOwnerDashboard },
       panelClass: ['qs-bottom-sheet-container', 'qs-calendar-month-picker-sheet'],
     });
     expect(dashboardHeader?.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
     expect(dashboardHeader?.querySelector('.qs-page-header__subtitle')?.textContent?.trim()).toBe(component.todayDateSubtitle);
+    // Actions share the heading row, leaving the date the full content width on phones.
+    expect(dashboardHeader?.querySelector('.qs-page-header__title-row .dashboard-section-actions')).not.toBeNull();
+    expect(dashboardHeader?.querySelector('.qs-page-header__actions')?.textContent?.trim()).toBe('');
     expect(dashboardHeader?.querySelector('.dashboard-section-actions')).not.toBeNull();
-    expect(dashboardHeader?.querySelector('.dashboard-manager-button-desktop span')?.textContent?.trim()).toBe('Dashboard manager');
-    expect(dashboardHeader?.querySelector('.dashboard-manager-button-mobile')).not.toBeNull();
+    expect(dashboardHeader?.querySelector('[aria-label="Dashboard options"]')).not.toBeNull();
+    expect(dashboardHeader?.textContent).not.toContain('Dashboard manager');
     expect(dashboardHeader?.querySelector('.dashboard-kpi-lane')).toBeNull();
     const kpiSection = nativeElement.querySelector('.dashboard-kpi-section');
     expect(kpiSection).not.toBeNull();
@@ -568,6 +1065,15 @@ describe('SummariesComponent', () => {
     const sectionHeadings = Array.from(nativeElement.querySelectorAll('.dashboard-main-section h2'))
       .map(heading => heading.textContent?.trim());
     expect(sectionHeadings).toEqual(['Activity Overview', 'Routes & Maps']);
+    const sectionTitleBlocks = nativeElement.querySelectorAll('.dashboard-section-title-block');
+    expect(sectionTitleBlocks).toHaveLength(2);
+    expect(dashboardHeader?.querySelector('app-dashboard-chart-library')).not.toBeNull();
+    expect(nativeElement.querySelectorAll('app-dashboard-chart-library')).toHaveLength(1);
+    expect(nativeElement.querySelectorAll('.dashboard-main-section > app-dashboard-chart-library')).toHaveLength(0);
+    sectionTitleBlocks.forEach(block => {
+      expect(block.querySelector(':scope > mat-icon')?.getAttribute('aria-hidden')).toBe('true');
+      expect(block.querySelector(':scope > .dashboard-section-title-copy > h2')).not.toBeNull();
+    });
     const boards = nativeElement.querySelectorAll('app-dashboard-tile-board');
     expect(boards).toHaveLength(2);
     const board = boards[0] as HTMLElement | null;
@@ -577,7 +1083,7 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelectorAll('app-dashboard-tile-cell.dashboard-grid-placeholder')).toHaveLength(0);
     expect(component.mainGridSections.every(section => section.trailingPlaceholders.length === 0)).toBe(true);
     expect(component.mainGridSections.every(section => section.columns === 1)).toBe(true);
-    expect(component.mainGridSections.every(section => section.cells[0]?.columns === 1)).toBe(true);
+    expect(component.mainGridSections.filter(section => section.tiles.length).every(section => section.cells[0]?.columns === 1)).toBe(true);
     const singletonCells = nativeElement.querySelectorAll('app-dashboard-tile-cell.dashboard-grid-tile:not(.dashboard-grid-placeholder)');
     singletonCells.forEach((cell) => {
       expect((cell as HTMLElement).style.gridColumn).toBe('span 1');
@@ -640,24 +1146,39 @@ describe('SummariesComponent', () => {
     expect(styles).toContain('font-size: 1rem;');
   });
 
-  it('keeps narrow derived-status and Training actions compact and accessibly named', () => {
+  it('keeps section icons beside their titles at every breakpoint without shrinking the icons', () => {
+    const styles = readFileSync(resolve(process.cwd(), 'src/app/components/summaries/summaries.component.css'), 'utf8');
+    const titleRowRules = [...styles.matchAll(/\.dashboard-section-title-block\s*\{([^}]+)\}/g)];
+
+    expect(titleRowRules).toHaveLength(1);
+    expect(titleRowRules[0][1]).toContain('display: flex;');
+    expect(titleRowRules[0][1]).toContain('align-items: center;');
+    expect(titleRowRules[0][1]).toContain('flex-direction: row;');
+    expect(titleRowRules[0][1]).toContain('flex-wrap: nowrap;');
+    expect(titleRowRules[0][1]).toContain('gap: 0.5rem;');
+    expect(titleRowRules[0][1]).toContain('min-width: 0;');
+    expect(styles.match(/\.dashboard-section-title-block > mat-icon\s*\{([^}]+)\}/)?.[1])
+      .toContain('flex: 0 0 auto;');
+  });
+
+  it('keeps narrow derived-status actions compact and accessibly named', () => {
     const templatePath = resolve(process.cwd(), 'src/app/components/summaries/summaries.component.html');
     const stylePath = resolve(process.cwd(), 'src/app/components/summaries/summaries.component.css');
     const template = readFileSync(templatePath, 'utf8');
     const styles = readFileSync(stylePath, 'utf8');
 
-    expect(template).toContain('aria-label="Retry derived metrics update"');
+    expect(template).toContain('aria-label="Retry dashboard update"');
     expect(template).toContain('class="dashboard-derived-metrics-retry-label"');
-    expect(template).toContain('class="dashboard-training-link-label"');
-    expect(template).toContain('class="dashboard-health-link-label"');
+    expect(template).not.toContain('dashboard-training-link');
+    expect(template).not.toContain('dashboard-health-link');
     expect(template).toContain('class="dashboard-today-calendar-button"');
     expect(template).toContain('class="dashboard-summary-heading"');
     expect(template).toContain('class="dashboard-today-greeting"');
     expect(template).not.toContain('class="dashboard-calendar-link"');
     expect(styles).toContain('@media (max-width: 600px)');
-    expect(styles).toContain('.dashboard-derived-metrics-retry-label,');
-    expect(styles).toContain('.dashboard-training-link-label');
-    expect(styles).toContain('.dashboard-health-link-label');
+    expect(styles).toContain('.dashboard-derived-metrics-retry-label');
+    expect(styles).not.toContain('.dashboard-training-link');
+    expect(styles).not.toContain('.dashboard-health-link');
     expect(styles).toContain('.dashboard-today-calendar-button');
     expect(styles).toContain('font: var(--mat-sys-body-medium);');
     expect(styles).toContain('color: var(--mat-sys-on-surface-variant);');
@@ -900,7 +1421,7 @@ describe('SummariesComponent', () => {
     expect(component.mainGridSections[0]?.trailingPlaceholders).toEqual([]);
   });
 
-  it('renders the dashboard header and manager action when there are no KPI tiles', () => {
+  it('renders the dashboard header and dashboard options when there are no KPI tiles', () => {
     const mainGridTile = {
       type: TileTypes.Chart,
       order: 0,
@@ -912,7 +1433,8 @@ describe('SummariesComponent', () => {
       size: { columns: 1, rows: 1 },
     } as any;
 
-    component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.user = {
+      uid: 'test-owner', settings: { dashboardSettings: { tiles: [] } } } as any;
     component.showActions = true;
     component.tiles = [mainGridTile];
     component.kpiLaneTiles = [];
@@ -922,18 +1444,21 @@ describe('SummariesComponent', () => {
 
     const nativeElement = fixture.nativeElement as HTMLElement;
     expect(nativeElement.querySelector('.dashboard-kpi-section')).toBeNull();
+    expect(nativeElement.querySelector('.dashboard-kpi-tile')).toBeNull();
     expect(nativeElement.querySelector('.dashboard-summary-header')).not.toBeNull();
     expect(nativeElement.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
-    expect(nativeElement.querySelector('.dashboard-manager-button-desktop span')?.textContent?.trim()).toBe('Dashboard manager');
+    expect(nativeElement.querySelector('[aria-label="Dashboard options"]')).not.toBeNull();
   });
 
-  it('renders the dashboard header and manager action for an editable empty dashboard', () => {
-    component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
+  it('keeps one global picker and hides all empty sections on an editable dashboard', () => {
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [] } } } as any;
     component.showActions = true;
     component.tiles = [];
     component.kpiLaneTiles = [];
     component.mainGridTiles = [];
 
+    component.isOwnerDashboard = true;
+    (component as any).refreshMainGridSections();
     fixture.detectChanges();
 
     const nativeElement = fixture.nativeElement as HTMLElement;
@@ -941,16 +1466,15 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('app-dashboard-tile-board')).toBeNull();
     expect(nativeElement.querySelector('.dashboard-summary-header')).not.toBeNull();
     expect(nativeElement.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
-    expect(nativeElement.querySelector('.dashboard-manager-button-desktop span')?.textContent?.trim()).toBe('Dashboard manager');
-    const emptyGuidance = nativeElement.querySelector('.dashboard-empty-section-guidance');
-    expect(emptyGuidance).not.toBeNull();
-    expect(emptyGuidance?.textContent).toContain('Build your dashboard by intent');
-    expect(emptyGuidance?.textContent).not.toContain('Training State');
-    expect(emptyGuidance?.textContent).not.toContain('Performance & Power');
+    expect(nativeElement.querySelector('[aria-label="Dashboard options"]')).not.toBeNull();
+    expect(nativeElement.querySelectorAll('app-dashboard-chart-library')).toHaveLength(1);
+    expect(component.mainGridSections).toEqual([]);
+    expect(nativeElement.querySelector('.dashboard-main-section')).toBeNull();
   });
 
-  it('hides the Today summary while preserving manager access on an editable dashboard', () => {
+  it('hides the Today summary while preserving dashboard options on an editable dashboard', () => {
     component.user = {
+      uid: 'test-owner',
       settings: {
         dashboardSettings: {
           tiles: [],
@@ -970,11 +1494,81 @@ describe('SummariesComponent', () => {
     expect(component.showTodaySummary).toBe(false);
     expect(dashboardHeader).not.toBeNull();
     const sharedHeader = dashboardHeader?.querySelector('.qs-page-header');
-    expect(sharedHeader?.classList.contains('qs-page-header--actions-only')).toBe(true);
-    expect(sharedHeader?.getAttribute('aria-label')).toBe('Dashboard controls');
+    expect(sharedHeader?.classList.contains('qs-page-header--actions-only')).toBe(false);
+    expect(sharedHeader?.querySelector('h2')?.textContent).toContain('Dashboard');
+    expect(nativeElement.querySelector('#dashboard-empty-title')?.textContent).toContain('Make this dashboard yours');
+    expect(nativeElement.textContent).toContain('Use starter dashboard');
+    const reset = vi.spyOn(component.library, 'bulk').mockResolvedValue(undefined);
+    const starter = Array.from(nativeElement.querySelectorAll('button')).find(button => button.textContent?.includes('Use starter dashboard'))!;
+    starter.click();
+    expect(reset).toHaveBeenCalledWith(component.user, 'reset');
+    component.library.busy.set(true); fixture.detectChanges();
+    expect(starter.disabled).toBe(true);
     expect(nativeElement.querySelector('#dashboard-today-title')).toBeNull();
     expect(nativeElement.querySelector('.dashboard-current-state-row')).toBeNull();
-    expect(nativeElement.querySelector('.dashboard-manager-button-desktop span')?.textContent?.trim()).toBe('Dashboard manager');
+    expect(nativeElement.querySelector('[aria-label="Dashboard options"]')).not.toBeNull();
+  });
+
+  it.each([true, false])('offers the saved Calendar visibility in Dashboard options before tile rendering (visible: %s)', visible => {
+    const tile = getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-activity-calendar')!.tile;
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: visible ? [tile] : [], showTodaySummary: false } } } as any;
+    component.showActions = true; component.isOwnerDashboard = true;
+    component.tiles = []; component.mainGridTiles = []; component.calendarGridSection = null;
+    fixture.detectChanges();
+    const bulk = vi.spyOn(component.library, 'bulk').mockResolvedValue(undefined);
+    fixture.nativeElement.querySelector('[aria-label="Dashboard options"]').click();
+    fixture.detectChanges();
+    const menu = document.body.querySelector('[role="menu"]')!;
+    expect(menu.textContent).toContain('Show Today summary');
+    const calendarAction = Array.from(menu.querySelectorAll<HTMLButtonElement>('button'))
+      .find(button => button.textContent?.includes(visible ? 'Hide Calendar' : 'Show Calendar'))!;
+    expect(calendarAction).toBeDefined();
+    calendarAction.click(); fixture.detectChanges();
+    expect(bulk).toHaveBeenCalledWith(component.user, 'calendar');
+  });
+
+  it('does not call a saved dashboard empty while its tiles are still being prepared', () => {
+    const tile = getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile;
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [tile], showTodaySummary: false } } } as any;
+    component.showActions = true; component.isOwnerDashboard = true; component.tiles = [];
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.dashboard-empty')).toBeNull();
+    expect(fixture.nativeElement.querySelector('app-dashboard-chart-library')).not.toBeNull();
+  });
+
+  it('reveals a section for its first tile, hides it after removal, and restores it with the tile', () => {
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.showActions = true; component.isOwnerDashboard = true;
+    const tile = getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile as DashboardChartTileViewModel;
+    component.tiles = [tile]; component.mainGridTiles = [tile]; component.kpiLaneTiles = [];
+    component['refreshMainGridSections'](); component['changeDetector'].markForCheck(); fixture.detectChanges();
+    expect(component.mainGridSections.map(section => section.id)).toEqual(['health']);
+    expect(component.mainGridSections[0].hasHealthCharts).toBe(true);
+    expect(fixture.nativeElement.querySelector('app-dashboard-tile-board.dashboard-tile-board--health')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('app-dashboard-tile-cell.dashboard-health-cell app-tile-chart.dashboard-health-chart')).not.toBeNull();
+    const picker = fixture.nativeElement.querySelector('app-dashboard-chart-library');
+    component.tiles = []; component.mainGridTiles = [];
+    component['refreshMainGridSections'](); component['changeDetector'].markForCheck(); fixture.detectChanges();
+    expect(component.mainGridSections).toEqual([]);
+    expect(fixture.nativeElement.querySelector('.dashboard-main-section')).toBeNull();
+    expect(fixture.nativeElement.querySelector('app-dashboard-chart-library')).toBe(picker);
+    component.tiles = [tile]; component.mainGridTiles = [tile];
+    component['refreshMainGridSections'](); component['changeDetector'].markForCheck(); fixture.detectChanges();
+    expect(component.mainGridSections.map(section => section.id)).toEqual(['health']);
+    expect(fixture.nativeElement.querySelector('app-dashboard-chart-library')).toBe(picker);
+  });
+
+  it('keeps public boards on their existing sizing when Health charts are absent', () => {
+    const tile = getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-hrv')!.tile as DashboardChartTileViewModel;
+    component.user = { uid: 'public-owner', settings: { dashboardSettings: { tiles: [tile] } } } as any;
+    component.eventUser = { uid: 'shared-owner' } as any;
+    component.showActions = false;
+    component.tiles = [tile]; component.mainGridTiles = [tile];
+    component['refreshMainGridSections'](); component['changeDetector'].markForCheck(); fixture.detectChanges();
+    expect(component.isOwnerDashboard).toBe(false);
+    expect(component.mainGridSections.some(section => section.hasHealthCharts)).toBe(true);
+    expect(fixture.nativeElement.querySelector('app-dashboard-tile-board.dashboard-tile-board--health')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.dashboard-health-chart')).toBeNull();
   });
 
   it('renders the fixed Today summary on an otherwise empty read-only dashboard', () => {
@@ -991,6 +1585,127 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('.dashboard-summary-header')).not.toBeNull();
     expect(nativeElement.querySelector('.dashboard-current-state-row')).not.toBeNull();
     expect(nativeElement.querySelector('.dashboard-empty-section-guidance')).toBeNull();
+    expect(nativeElement.querySelector('.dashboard-empty')).toBeNull();
+    expect(nativeElement.querySelector('app-dashboard-chart-library')).toBeNull();
+    expect(nativeElement.querySelector('app-dashboard-daily-briefing')).toBeNull();
+  });
+
+  it('hides At a glance without starting its readers or hiding Today and saved charts', () => {
+    const savedTiles = [getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile];
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: savedTiles } } } as SummariesComponent['user'];
+    mockUserService.user.set(component.user);
+    component.isOwnerDashboard = true;
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('app-dashboard-daily-briefing')).toBeNull();
+    expect(host.querySelector('.dashboard-current-state-row')).not.toBeNull();
+    expect(TestBed.inject(ActivityCalendarService).watchSummaryEvents).not.toHaveBeenCalled();
+    expect(TestBed.inject(TrainingPlansService).watchCalendarSchedule).not.toHaveBeenCalled();
+    expect(component.user.settings.dashboardSettings.tiles).toBe(savedTiles);
+    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+  });
+
+  it('adds owner-only change evidence without rewriting or hiding saved Dashboard charts when re-enabled', () => {
+    component.showDailyBriefing = true;
+    const savedTiles = [getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile];
+    const dashboardSettings = { tiles: savedTiles, showTodaySummary: true };
+    component.user = { uid: 'owner', settings: { dashboardSettings } } as any;
+    mockUserService.user.set(component.user);
+    component.showActions = true; component.isOwnerDashboard = true;
+    component.dashboardGlanceSignals = [{ id: 'hrv', label: 'HRV',
+      sourceLabel: 'Suunto · Overnight average', state: 'outside-range',
+      statusText: 'Below your usual range', detailText: '7-day average compared with 60 days' }];
+    const host = fixture.nativeElement as HTMLElement;
+    fixture.detectChanges();
+    const summary = host.querySelector('app-dashboard-daily-briefing')!;
+    expect(summary.textContent).toContain('At a glance');
+    expect(summary.querySelector('.health-change-coverage')).toBeNull();
+    expect(host.querySelector('.dashboard-summary-heading')?.classList.contains('dashboard-summary-heading--with-recovery')).toBe(true);
+    expect(summary.querySelector('button')).toBeNull();
+    expect(summary.querySelector('dl')).toBeNull();
+    expect(component.user.settings.dashboardSettings.tiles).toBe(savedTiles);
+    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+    dashboardSettings.showTodaySummary = false;
+    component.showTodaySummary = false;
+    component['changeDetector'].markForCheck(); fixture.detectChanges();
+    expect(host.querySelector('app-dashboard-daily-briefing')).toBeNull();
+    expect(component.user.settings.dashboardSettings.tiles).toBe(savedTiles);
+  });
+
+  it('binds current load, recovery and source-labelled sleep into the owner sentence', () => {
+    component.showDailyBriefing = true;
+    vi.useFakeTimers(); vi.setSystemTime(new Date(2026, 9, 16, 12));
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [] } } } as any;
+    mockUserService.user.set(component.user); component.isOwnerDashboard = true;
+    component.dashboardGlanceSignals = [];
+    const now = new Date();
+    component.dashboardBriefingLoadComparison = { direction: 'higher', utcDayMs: Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) };
+    component.dashboardBriefingSleepText = 'last night’s Suunto sleep was 7h';
+    component.dashboardTodayReadiness = { ...component.dashboardTodayReadiness, recoveryText: '2h', recoveryFinishText: 'Today',
+      recoveryFinishTimeMs: now.getTime() + 7200000 };
+    fixture.detectChanges();
+    const summary = (fixture.nativeElement as HTMLElement).querySelector('app-dashboard-daily-briefing')!;
+    expect(summary.textContent).toContain('above your four-week weekly average');
+    expect(summary.textContent).toContain('imported recovery remaining is 02h 00m');
+    expect(summary.textContent).toContain('last night’s Suunto sleep was 7h');
+    expect(summary.querySelector('button, dl')).toBeNull();
+  });
+
+  it('keeps all five ordinary Today assessments to one sentence without extra rows or a new score', () => {
+    component.showDailyBriefing = true;
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [], showTodaySummary: true } } } as any;
+    mockUserService.user.set(component.user);
+    component.showActions = true; component.isOwnerDashboard = true;
+    const healthSignals: typeof component.dashboardGlanceSignals = [
+      { id: 'hrv', label: 'HRV', sourceLabel: 'Suunto · Overnight average', state: 'within-range',
+        statusText: 'Within your usual range', detailText: '7-day average compared with 60 days' },
+      { id: 'sleep', label: 'Sleep', sourceLabel: 'Suunto', state: 'recorded',
+        statusText: 'Latest night', detailText: 'Recorded sleep' },
+    ];
+    component.dashboardGlanceSignals = buildDashboardGlanceSignals({ ...component.dashboardTodayReadiness,
+      loading: false, awaitingSleep: false, warningText: '', label: 'Ready', scoreText: '82/100', sleepText: '87/100',
+      sleepContextText: 'Today', overnightHeartRateText: '-4%', overnightHeartRateTone: 'positive', changeSignals: healthSignals,
+    }, { label: 'Balanced', caption: 'Stable load', scalePosition: 2, scaleTone: 'positive' }, 'available');
+    fixture.detectChanges();
+    const summary = (fixture.nativeElement as HTMLElement).querySelector('app-dashboard-daily-briefing')!;
+    expect(summary.querySelector('h2')?.textContent).toBe('At a glance');
+    expect(summary.querySelector('[role="status"]')?.textContent).toBe('Readiness is Ready, training state is Balanced, and today’s sleep is recorded.');
+    expect(summary.querySelector('[role="status"]')?.textContent).not.toContain('/100');
+    expect(summary.querySelector('button')).toBeNull();
+    expect(summary.querySelector('.health-change-scope')).toBeNull();
+    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+  });
+
+  it.each(['Mixed', 'Recover'])('keeps %s readiness to a sentence without duplicating Today’s metric evidence', label => {
+    component.showDailyBriefing = true;
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [], showTodaySummary: true } } } as SummariesComponent['user'];
+    mockUserService.user.set(component.user);
+    component.isOwnerDashboard = true;
+    const healthSignals: typeof component.dashboardGlanceSignals = [
+      { id: 'hrv', label: 'HRV', sourceLabel: 'Garmin · Overnight HRV', state: 'within-range', statusText: 'Within range', detailText: '7-day average · 60-day range' },
+      { id: 'sleep', label: 'Sleep', sourceLabel: 'Suunto', state: 'recorded', statusText: 'Recorded', detailText: 'Night ended 15 Oct, 08:00' },
+    ];
+    component.dashboardGlanceSignals = buildDashboardGlanceSignals({ ...component.dashboardTodayReadiness,
+      loading: false, awaitingSleep: false, warningText: '', label, scoreText: '64/100', sleepText: '62/100',
+      confidenceText: 'High confidence', evidenceText: '4/4 signals', sleepContextText: 'Today', overnightHeartRateText: '-4%',
+      overnightHeartRateTone: 'positive', changeSignals: healthSignals,
+    }, { label: 'Balanced', caption: 'Stable load', scalePosition: 2, scaleTone: 'positive' }, 'available');
+    fixture.detectChanges();
+    const summary = (fixture.nativeElement as HTMLElement).querySelector('app-dashboard-daily-briefing')!;
+    expect(summary.querySelector('[role="status"]')?.textContent).toBe(`Readiness is ${label}.`);
+    expect(summary.querySelector('button')).toBeNull();
+    expect(summary.querySelector('#dashboard-today-changes-details')).toBeNull();
+    expect(summary.querySelector('dl')).toBeNull();
+    expect(summary.querySelectorAll('p')).toHaveLength(1);
+    expect(summary.textContent).not.toMatch(/64\/100|62\/100|Garmin|Suunto/);
+    expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-current-state-row')).not.toBeNull();
+    expect(summary.querySelector('.health-change-glance-icon')).toBeNull();
+    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+    component['resetDerivedMetricsState'](); component['changeDetector'].markForCheck(); fixture.detectChanges();
+    expect(summary.querySelector('[role="status"]')?.textContent).toBe('Readiness is still loading.');
+    expect(summary.querySelector('button')).toBeNull();
+    expect(summary.querySelector('dl')).toBeNull();
+    expect(component.dashboardGlanceSignals.every(signal => signal.state === 'loading')).toBe(true);
   });
 
   it('shows shared readiness drivers in Today and treats lower overnight heart rate as supportive', () => {
@@ -1000,8 +1715,11 @@ describe('SummariesComponent', () => {
     (component as any).derivedFormNowContext = { value: 12, latestDayMs: nowMs };
     (component as any).derivedRampRateContext = { rampRate: 1, latestDayMs: nowMs };
     (component as any).derivedRecoveryNowContext = { totalSeconds: 7_200, endTimeMs: nowMs };
+    (component as any).derivedFormNowStatus = 'ready';
+    (component as any).derivedRampRateStatus = 'ready';
+    (component as any).derivedRecoveryNowStatus = 'ready';
     (component as any).readinessSleepSessions = [
-      ...Array.from({ length: 5 }, (_, index) => ({
+      ...Array.from({ length: 15 }, (_, index) => ({
         id: `baseline-${index}`,
         sleepDate: new Date(nowMs - ((index + 2) * 86_400_000)).toISOString().slice(0, 10),
         startTimeMs: nowMs - ((index + 2) * 86_400_000) - (9 * 3_600_000),
@@ -1021,7 +1739,9 @@ describe('SummariesComponent', () => {
         vitals: { averageHrvMs: 55, averageHeartRateBpm: 48, minimumHeartRateBpm: 40 },
         source: { provider: 'GarminAPI', sourceSessionKey: 'latest' },
       },
-    ];
+    ].map(session => ({
+      ...session, qsCalculatedHeartRate: { average: true, minimum: true },
+    }));
     component.dashboardTodayReadiness = (component as any).buildDashboardTodayReadiness();
 
     fixture.detectChanges();
@@ -1030,20 +1750,53 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('.dashboard-readiness-primary-value')?.textContent).toContain('/100');
     expect(nativeElement.querySelector('.dashboard-readiness-method')?.textContent).toContain('Freshness stays TSS-only');
     expect(nativeElement.querySelector('.dashboard-readiness-imported-recovery')?.textContent)
-      .toContain('Recovery left · 2h 00m remaining · until');
+      .toContain(`Recovery left · 02h 00m · expected by ${component.dashboardTodayReadiness.recoveryFinishText}`);
+    expect(component.dashboardTodayReadiness.recoveryFinishText).toMatch(/.+ at .+/);
+    expect(nativeElement.querySelector('.dashboard-readiness-recovery-indicator .metric-indicator-track')
+      ?.getAttribute('aria-label')).toBe('Recovery remaining: 100 of 100');
     expect(component.dashboardTodayReadiness.recoveryFinishTimeMs).toBe(nowMs + (2 * 3_600_000));
     expect(nativeElement.querySelector('.dashboard-readiness-imported-recovery')?.textContent)
       .not.toContain('Imported recovery estimate');
     expect([...nativeElement.querySelectorAll('.dashboard-current-state-primary small')]
       .some(element => element.textContent?.includes('High confidence · 4/4 signals'))).toBe(true);
-    expect(nativeElement.querySelector('dd[data-tone="positive"]')?.textContent).toContain('+10%');
+    expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('7-day average');
+    expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('Within range · rising');
+    expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('60-day range');
+    expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('Latest HRV 55 ms · Today');
+    const hrvRange = nativeElement.querySelector('.dashboard-readiness-hrv .metric-indicator-range');
+    expect(hrvRange?.getAttribute('aria-label')).toBe('HRV: 50.8 ms; 60-day range 49.1–51.5 ms');
+    const hrvChange = component.dashboardTodayReadiness.changeSignals.find(signal => signal.id === 'hrv')!;
+    expect(hrvChange.state).toBe('within-range');
+    expect(hrvChange.detailText).toContain('7-day average 50.8 ms');
+    expect(hrvChange.detailText).toContain('Latest HRV 55 ms');
+    expect(hrvRange?.querySelector('.metric-indicator-range-band')).not.toBeNull();
+    expect(hrvRange?.querySelector('.metric-indicator-range-marker')?.getAttribute('data-tone')).toBe('positive');
     const overnightHeartRate = [...nativeElement.querySelectorAll('.dashboard-current-state-row dl > div')]
       .find(element => element.querySelector('dt')?.textContent?.trim() === 'Overnight HR');
     expect(overnightHeartRate?.querySelector('dd')?.getAttribute('data-tone')).toBe('positive');
     expect(overnightHeartRate?.querySelector('dd')?.textContent).toContain('-8');
+    expect(overnightHeartRate?.textContent).toContain('Calculated by QS from Garmin samples');
+    expect(overnightHeartRate?.querySelector('.dashboard-today-history-bars')?.getAttribute('aria-label'))
+      .toBe('Overnight heart rate for the latest 7 eligible nights');
+    expect(overnightHeartRate?.querySelectorAll('.dashboard-today-history-bars > span')).toHaveLength(7);
+    expect(overnightHeartRate?.querySelector('.dashboard-today-history-bars > span.current')?.getAttribute('data-tone'))
+      .toBe('positive');
     const sleep = [...nativeElement.querySelectorAll('.dashboard-current-state-row dl > div')]
       .find(element => element.querySelector('dt')?.textContent?.trim() === 'Sleep');
     expect(sleep?.querySelector('small')?.textContent?.trim()).toBe('Today');
+
+    (component as any).derivedRecoveryNowContext = {
+      totalSeconds: 7_200,
+      endTimeMs: nowMs - 3_600_000,
+    };
+    component.dashboardTodayReadiness = (component as any).buildDashboardTodayReadiness();
+
+    (component as any).changeDetector.markForCheck();
+    fixture.detectChanges();
+
+    expect(component.dashboardTodayReadiness.recoveryText).toBe('01h 00m');
+    expect(nativeElement.querySelector('.dashboard-readiness-recovery-indicator .metric-indicator-track')
+      ?.getAttribute('aria-label')).toBe('Recovery remaining: 50 of 100');
 
     (component as any).derivedRecoveryNowContext = {
       totalSeconds: 3_600,
@@ -1051,8 +1804,326 @@ describe('SummariesComponent', () => {
     };
     component.dashboardTodayReadiness = (component as any).buildDashboardTodayReadiness();
 
+    (component as any).changeDetector.markForCheck();
+    fixture.detectChanges();
+
     expect(component.dashboardTodayReadiness.recoveryFinishTimeMs).toBeNull();
     expect(component.dashboardTodayReadiness.recoveryText).toBe('--');
+    expect(nativeElement.querySelector('.dashboard-readiness-recovery-indicator')).toBeNull();
+  });
+
+  describe('Today readiness initial loading', () => {
+    const nowMs = Date.UTC(2026, 8, 11, 12);
+    let load$: Subject<DashboardDerivedMetricsState>;
+    let sleep$: Subject<SleepSession[]>;
+    let loadState: DashboardDerivedMetricsState;
+    let nights: SleepSession[];
+
+    const render = () => {
+      component['changeDetector'].markForCheck();
+      fixture.detectChanges();
+      return fixture.nativeElement as HTMLElement;
+    };
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(nowMs);
+      load$ = new Subject();
+      sleep$ = new Subject();
+      mockDashboardDerivedMetricsService.watch.mockReturnValue(load$);
+      mockSleepService.watchForDashboard.mockReturnValue(sleep$);
+      buildDashboardTileViewModelsSpy.mockReturnValue([]);
+      component.user = { uid: 'readiness-owner', settings: { dashboardSettings: { tiles: [] } } } as SummariesComponent['user'];
+      loadState = {
+        ...createDashboardDerivedMetricsMissingState(),
+        formNow: { value: 24.9, latestDayMs: nowMs, trend8Weeks: [] },
+        rampRate: { rampRate: -1.3, latestDayMs: nowMs, ctlToday: 90, ctl7DaysAgo: 91.3, trend8Weeks: [] },
+        formNowStatus: 'ready',
+        rampRateStatus: 'ready',
+      };
+      // Synthetic readings reproduce the reported 75 (load only) -> 67 (three signals; HRV range still building) transition.
+      nights = Array.from({ length: 6 }, (_, index): SleepSession => ({
+        id: `night-${index}`,
+        userID: 'readiness-owner',
+        sleepDate: new Date(nowMs - index * 86_400_000).toISOString().slice(0, 10),
+        startTimeMs: nowMs - index * 86_400_000 - 9 * 3_600_000,
+        endTimeMs: nowMs - index * 86_400_000 - 3_600_000,
+        durationSeconds: 8 * 3_600,
+        isNap: false,
+        stages: [],
+        stageDurationsSeconds: {},
+        score: { value: index === 0 ? 68 : 80 },
+        vitals: { averageHrvMs: index === 0 ? 44.95 : 50, averageHeartRateBpm: index === 0 ? 52.15 : 50 },
+        source: { provider: 'SuuntoApp', sourceSessionKey: `night-${index}`, providerUserId: 'synthetic-source' },
+        createdAtMs: nowMs,
+        updatedAtMs: nowMs,
+      }));
+      component['syncDerivedMetricsSubscription']();
+      component['syncReadinessSleepSubscription']();
+    });
+
+    it.each(['load', 'sleep'])('waits for both reads when %s arrives first', (first) => {
+      if (first === 'load') load$.next(loadState);
+      else sleep$.next(nights);
+      vi.advanceTimersToNextFrame();
+
+      expect(component.dashboardTodayReadiness.loading).toBe(true);
+      expect(component.dashboardTodayReadiness.changeSignals.every(signal => signal.state === 'loading')).toBe(true);
+      expect(component.dashboardTodayReadiness.score).toBeNull();
+      const element = render();
+      expect(element.querySelector('.dashboard-readiness-primary-value')?.textContent).toContain('Loading readiness…');
+      expect(element.querySelector('[aria-label="Loading readiness"]')).not.toBeNull();
+      expect(element.querySelector('.dashboard-current-state-row')?.textContent).not.toContain('No eligible night');
+      expect(element.querySelector('.dashboard-current-state-row')?.textContent).not.toContain('1/4 signals');
+
+      if (first === 'load') sleep$.next(nights);
+      else load$.next(loadState);
+      vi.advanceTimersToNextFrame();
+
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 67, availableSignalCount: 3 });
+      expect(component.dashboardGlanceSignals.map(signal => signal.id)).toEqual(['readiness', 'training-load', 'sleep', 'hrv', 'overnight-hr']);
+      expect(component.dashboardGlanceSignals.find(signal => signal.id === 'readiness')).toMatchObject({ state: 'attention', statusText: 'Mixed · 67/100' });
+      expect(component.dashboardGlanceSignals.find(signal => signal.id === 'training-load')).toMatchObject({ state: 'available', statusText: component.dashboardTodayTrainingState.label });
+      expect(component.dashboardGlanceSignals.find(signal => signal.id === 'overnight-hr')).toMatchObject({ state: 'attention', statusText: 'Above baseline' });
+      expect(component.dashboardTodayReadiness.changeSignals.find(signal => signal.id === 'hrv')).toMatchObject({
+        state: 'insufficient', sourceLabel: 'Suunto · Sleep HRV',
+      });
+      expect(render().querySelector('.dashboard-readiness-primary-value')?.textContent).toContain('67/100');
+      expect(element.querySelector('[aria-label="Loading readiness"]')).toBeNull();
+      expect(element.querySelector('.dashboard-current-state-primary[aria-busy="false"]')).not.toBeNull();
+      expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
+    });
+
+    it('does not direct ambiguous evidence to a separately paged Sleep chart', () => {
+      load$.next(loadState);
+      sleep$.next([...nights, { ...nights[0], id: 'another-provider-night', source: {
+        provider: 'GarminAPI', sourceSessionKey: 'another-provider-night', providerUserId: 'another-account',
+      } }]);
+      vi.advanceTimersToNextFrame();
+      const changes = component.dashboardTodayReadiness.changeSignals;
+      expect(changes.find(signal => signal.id === 'hrv')?.sourceLabel).toBe('Multiple recorded sources · Sleep HRV');
+      expect(changes.find(signal => signal.id === 'sleep')?.sourceLabel).toBe('Multiple recorded sources');
+      expect(changes.some(signal => signal.sourceLabel.includes('Sleep chart'))).toBe(false);
+    });
+
+    it('attributes HRV to its own reading when multiple Sleep sources end at the same time', () => {
+      load$.next(loadState);
+      sleep$.next([...nights, { ...nights[0], id: 'garmin-without-hrv', vitals: { averageHeartRateBpm: 52 }, source: {
+        provider: 'GarminAPI', sourceSessionKey: 'garmin-without-hrv', providerUserId: 'another-account',
+      } }]);
+      vi.advanceTimersToNextFrame();
+      const changes = component.dashboardTodayReadiness.changeSignals;
+      expect(changes.find(signal => signal.id === 'hrv')?.sourceLabel).toBe('Suunto · Sleep HRV');
+      expect(changes.find(signal => signal.id === 'sleep')?.sourceLabel).toBe('Multiple recorded sources');
+    });
+
+    it('awaits today’s sleep after an empty first result and shows readiness when it arrives', () => {
+      load$.next(loadState);
+      vi.advanceTimersToNextFrame();
+      sleep$.next([]);
+      vi.advanceTimersToNextFrame();
+      expect(component.dashboardTodayReadiness.changeSignals.every(signal => signal.state === 'insufficient')).toBe(true);
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, awaitingSleep: true, score: null, warningText: '' });
+      expect(component.dashboardGlanceSignals.find(signal => signal.id === 'sleep')?.state).toBe('insufficient');
+      expect(component.dashboardGlanceSignals.find(signal => signal.id === 'training-load')?.state).toBe('available');
+      expect(render().querySelector('.dashboard-readiness-primary-value')?.textContent).toContain('Awaiting today’s sleep');
+      expect(render().querySelector('[label="Available readiness signals"]')).toBeNull();
+      // Newly imported sleep continues updating the open dashboard.
+      sleep$.next(nights);
+      vi.advanceTimersToNextFrame();
+      expect(component.dashboardTodayReadiness.score).toBe(67);
+      expect(component.dashboardTodayReadiness.changeSignals.find(signal => signal.id === 'sleep')?.state).toBe('recorded');
+    });
+
+    it('keeps yesterday’s readings dated without presenting their score or confidence as today’s', () => {
+      load$.next(loadState);
+      sleep$.next(nights.map(night => ({
+        ...night,
+        startTimeMs: night.startTimeMs! - 86_400_000,
+        endTimeMs: night.endTimeMs! - 86_400_000,
+      })));
+      vi.advanceTimersToNextFrame();
+      const host = render();
+      expect(component.dashboardTodayReadiness).toMatchObject({
+        loading: false, awaitingSleep: true, label: 'Awaiting today’s sleep', score: null, scoreText: '',
+        sleepText: '68/100', sleepContextText: 'Last available · Sep 10',
+        overnightHeartRateContextText: 'Last available · Sep 10',
+      });
+      const primary = host.querySelector('.dashboard-readiness-primary')!;
+      expect(primary.textContent).toContain('Today’s readiness will appear after sleep syncs.');
+      expect(primary.textContent).not.toContain('confidence');
+      expect(primary.textContent).not.toContain('/100');
+      expect(primary.querySelector('app-metric-indicator')).toBeNull();
+      expect(host.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('Latest HRV');
+      expect(component.dashboardTodayReadiness.changeSignals.find(signal => signal.id === 'sleep')).toMatchObject({
+        state: 'recorded', detailText: expect.stringContaining('Sep 10, 2026'),
+      });
+      expect(component.dashboardTodayReadiness.loadText).toBe('+24.9 / -1.3');
+      expect(component.dashboardGlanceSignals.find(signal => signal.id === 'readiness')?.state).toBe('insufficient');
+      expect(component.dashboardGlanceSignals.find(signal => signal.id === 'overnight-hr')?.state).toBe('insufficient');
+      expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
+      sleep$.next(nights);
+      vi.advanceTimersToNextFrame();
+      expect(component.dashboardTodayReadiness).toMatchObject({ awaitingSleep: false, score: 67, sleepContextText: 'Today' });
+      expect(render().querySelector('[label="Available readiness signals"]')).not.toBeNull();
+      expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
+    });
+
+    it('changes to awaiting sleep at local midnight without another source emission', async () => {
+      vi.setSystemTime(new Date(2026, 8, 11, 23, 59, 59));
+      load$.next(loadState);
+      sleep$.next(nights);
+      vi.advanceTimersToNextFrame();
+      expect(component.dashboardTodayReadiness.score).not.toBeNull();
+      await vi.advanceTimersByTimeAsync(1_050);
+      expect(component.dashboardTodayReadiness).toMatchObject({ awaitingSleep: true, score: null });
+      expect(render().textContent).toContain('Last available · Sep 11');
+      expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
+    });
+
+    it('keeps the Today layout reservations and score slot through hydration, recovery expiry and errors', () => {
+      const host = render();
+      // The unit runner does not attach external component CSS. Check its stable
+      // sizing contract here; real viewport geometry is verified in the browser.
+      const stylesheet = document.createElement('style');
+      stylesheet.textContent = readFileSync(resolve(process.cwd(), 'src/app/components/summaries/summaries.component.css'), 'utf8');
+      host.appendChild(stylesheet);
+      const readiness = host.querySelector<HTMLElement>('.dashboard-readiness-primary')!;
+      const scoreSlot = readiness.querySelector('.dashboard-readiness-score')!;
+      const training = host.querySelector<HTMLElement>('.dashboard-training-state-primary')!;
+      const drivers = [...host.querySelectorAll<HTMLElement>('.dashboard-current-state-row dl > div')];
+      const reservedTopAndRecoveryHeight = () => {
+        const top = host.querySelector<HTMLElement>('.dashboard-current-state-top')!;
+        const recovery = host.querySelector<HTMLElement>('.dashboard-readiness-recovery-band');
+        return parseFloat(getComputedStyle(top).minBlockSize)
+          + (recovery ? parseFloat(getComputedStyle(recovery).minBlockSize) : 0);
+      };
+      const reservations = () => [training, readiness, ...drivers].map(element => ({
+        minimum: getComputedStyle(element).minBlockSize,
+        sizing: getComputedStyle(element).boxSizing,
+      }));
+      const pendingLayout = reservations();
+      const pendingTopAndRecoveryHeight = reservedTopAndRecoveryHeight();
+      expect(pendingLayout.every(({ minimum, sizing }) => parseFloat(minimum) > 0 && sizing === 'border-box')).toBe(true);
+      expect(host.querySelector('.dashboard-readiness-recovery-placeholder')).not.toBeNull();
+      expect(getComputedStyle(host.querySelector<HTMLElement>('.dashboard-readiness-recovery-band')!).boxSizing).toBe('border-box');
+      expect(getComputedStyle(readiness).alignContent).toBe('start');
+      expect(scoreSlot.querySelector('[aria-label="Loading readiness"]')).not.toBeNull();
+
+      load$.next({ ...loadState, recoveryNow: { totalSeconds: 7_200, endTimeMs: nowMs }, recoveryNowStatus: 'ready' });
+      sleep$.next(nights);
+      vi.advanceTimersToNextFrame();
+      render();
+      expect(readiness.getAttribute('aria-busy')).toBe('false');
+      expect(readiness.querySelector('.dashboard-readiness-score')).toBe(scoreSlot);
+      expect(scoreSlot.querySelector('[label="Readiness"]')).not.toBeNull();
+      expect(host.querySelector('.dashboard-readiness-recovery-indicator')).not.toBeNull();
+      expect(host.querySelector('.dashboard-readiness-recovery-placeholder')).toBeNull();
+      expect(host.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('Latest HRV');
+      expect(reservations()).toEqual(pendingLayout);
+      expect(reservedTopAndRecoveryHeight()).toBe(pendingTopAndRecoveryHeight);
+
+      sleep$.error(new Error('refresh failed'));
+      vi.advanceTimersToNextFrame();
+      render();
+      expect(component.dashboardTodayReadiness.changeSignals.every(signal => signal.state === 'unavailable')).toBe(true);
+      expect(component.dashboardGlanceSignals.find(signal => signal.id === 'readiness')?.state).toBe('unavailable');
+      expect(component.dashboardGlanceSignals.find(signal => signal.id === 'training-load')?.state).toBe('available');
+      expect(readiness.querySelector('.dashboard-readiness-method[role="status"]')?.textContent).toContain('Sleep could not be loaded');
+      expect(host.querySelector('.dashboard-readiness-recovery-indicator')).not.toBeNull();
+      expect(reservations()).toEqual(pendingLayout);
+
+      load$.next(loadState);
+      vi.advanceTimersToNextFrame();
+      render();
+      expect(host.querySelector('.dashboard-readiness-recovery-indicator')).toBeNull();
+      expect(reservations()).toEqual(pendingLayout);
+      expect(readiness.querySelector('.dashboard-readiness-score')).toBe(scoreSlot);
+      expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
+    });
+
+    it('settles an unchanged missing load result instead of remaining on loading', () => {
+      sleep$.next([]);
+      vi.advanceTimersToNextFrame();
+      load$.next(createDashboardDerivedMetricsMissingState());
+      vi.advanceTimersToNextFrame();
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: null, label: 'Awaiting today’s sleep' });
+      expect(render().querySelector('[aria-label="Loading readiness"]')).toBeNull();
+    });
+
+    it('settles a failed first sleep read with explicit unavailable copy and available load', () => {
+      load$.next(loadState);
+      vi.advanceTimersToNextFrame();
+      sleep$.error(new Error('read failed'));
+      vi.advanceTimersToNextFrame();
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: null, label: 'Readiness unavailable', sleepContextText: 'Sleep unavailable' });
+      expect(render().querySelector('.dashboard-current-state-primary [role="status"]')?.textContent).toContain('Sleep could not be loaded');
+      expect(fixture.nativeElement.textContent).not.toContain('No eligible night');
+    });
+
+    it('keeps failed evidence unavailable when no load context exists either', () => {
+      load$.next(createDashboardDerivedMetricsMissingState());
+      sleep$.error(new Error('read failed'));
+      vi.advanceTimersToNextFrame();
+      expect(component.dashboardTodayReadiness).toMatchObject({
+        loading: false, awaitingSleep: false, score: null, label: 'Readiness unavailable',
+      });
+      expect(component.dashboardTodayReadiness.changeSignals.every(signal => signal.state === 'unavailable')).toBe(true);
+      expect(render().querySelector('.dashboard-readiness-primary-value')?.textContent).toContain('Readiness unavailable');
+    });
+
+    it('drops previously loaded sleep immediately after a refresh failure', () => {
+      load$.next(loadState);
+      vi.advanceTimersToNextFrame();
+      sleep$.next(nights);
+      vi.advanceTimersToNextFrame();
+      sleep$.error(new Error('refresh failed'));
+      vi.advanceTimersToNextFrame();
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: null, label: 'Readiness unavailable', availableSignalCount: 1, sleepContextText: 'Sleep unavailable' });
+      expect(render().querySelector('.dashboard-current-state-primary [role="status"]')?.textContent).toContain('Sleep could not be loaded');
+    });
+
+    it('clears prior evidence when Today is reopened and ignores the old listener', () => {
+      load$.next(loadState);
+      vi.advanceTimersToNextFrame();
+      sleep$.next(nights);
+      vi.advanceTimersToNextFrame();
+      component.showTodaySummary = false;
+      component['syncReadinessSleepSubscription']();
+      expect(sleep$.observed).toBe(false);
+      const reopened$ = new Subject<SleepSession[]>();
+      mockSleepService.watchForDashboard.mockReturnValue(reopened$);
+      component.showTodaySummary = true;
+      component['syncReadinessSleepSubscription']();
+      component['refreshDashboardTodaySignals']();
+      sleep$.next(nights);
+      vi.advanceTimersToNextFrame();
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: true, score: null });
+      reopened$.next([]);
+      vi.advanceTimersToNextFrame();
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: null, awaitingSleep: true });
+    });
+
+    it('does not combine a new owner’s load with the previous owner’s sleep', () => {
+      load$.next(loadState);
+      vi.advanceTimersToNextFrame();
+      sleep$.next(nights);
+      vi.advanceTimersToNextFrame();
+      const nextLoad$ = new Subject<DashboardDerivedMetricsState>();
+      const nextSleep$ = new Subject<SleepSession[]>();
+      mockDashboardDerivedMetricsService.watch.mockReturnValue(nextLoad$);
+      mockSleepService.watchForDashboard.mockReturnValue(nextSleep$);
+      component.user = { ...component.user, uid: 'next-owner' };
+      component['syncDerivedMetricsSubscription']();
+      nextLoad$.next(loadState);
+      vi.advanceTimersToNextFrame();
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: true, score: null });
+      component['syncReadinessSleepSubscription']();
+      expect(sleep$.observed).toBe(false);
+      nextSleep$.next([]);
+      vi.advanceTimersToNextFrame();
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: null, awaitingSleep: true, availableSignalCount: 1 });
+    });
   });
 
   it('shows the same TSS-only training state as Training above Today readiness', () => {
@@ -1067,6 +2138,7 @@ describe('SummariesComponent', () => {
       formSameDay: -12,
       formPriorDay: -10,
     }];
+    (component as any).derivedFormStatus = 'ready';
     (component as any).derivedRampRateContext = {
       latestDayMs: nowMs,
       ctlToday: 102,
@@ -1085,6 +2157,36 @@ describe('SummariesComponent', () => {
     expect(state.textContent).toContain('TSS only');
     expect(state.querySelector('strong')?.textContent?.trim()).toBe('Fatigued');
     expect(state.querySelector('app-metric-indicator')).toBeNull();
+    expect(state.querySelector('.dashboard-training-state-scale')?.getAttribute('aria-label'))
+      .toBe('Training state: Fatigued');
+    expect(state.querySelectorAll('.dashboard-training-state-scale > span')).toHaveLength(6);
+    expect(state.querySelector('.dashboard-training-state-scale > span.active')?.getAttribute('data-tone'))
+      .toBe('negative');
+  });
+
+  it('keeps active sickness discreet and owner-only, without changing the state or readiness score', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 9, 24, 12));
+    component.user = { uid: 'owner-user' } as SummariesComponent['user'];
+    component.dashboardTodayTrainingState = { label: 'Fresh', caption: 'Ready to train', scalePosition: 1, scaleTone: 'positive', contextText: '' };
+    const readiness = component.dashboardTodayReadiness.scoreText;
+    const service = TestBed.inject(AppTimelineNotesService);
+    vi.mocked(service.loadRange).mockResolvedValue({ notes: [{ id: 'a', category: 'sickness', title: 'Sore throat',
+      startDate: '2026-10-21', endDate: null, timeZone: 'Europe/Helsinki', revision: 1, createdAtMs: 1, updatedAtMs: 1 }], incomplete: null });
+    fixture.detectChanges(); TestBed.flushEffects();
+    await Promise.resolve(); await Promise.resolve(); fixture.detectChanges();
+    const state = fixture.nativeElement.querySelector('.dashboard-training-state-primary') as HTMLElement;
+    expect(state.textContent).toContain('Sickness noted');
+    expect(state.textContent).toContain('Low training load');
+    expect(state.textContent).not.toContain('Ready to train');
+    expect(component.dashboardTodayTrainingState.label).toBe('Fresh');
+    expect(component.dashboardTodayReadiness.scoreText).toBe(readiness);
+    const haptics = TestBed.inject(AppHapticsService);
+    vi.mocked(haptics.selection).mockClear();
+    state.querySelector<HTMLButtonElement>('app-active-sickness-note button')!.click();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(mockDialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: expect.objectContaining({ uid: 'owner-user' }) }));
+    component.user = { uid: 'other-user' } as SummariesComponent['user']; fixture.detectChanges();
+    expect(state.querySelector('app-active-sickness-note button')).toBeNull();
   });
 
   it('uses the same current-day Form series as dashboard load KPIs for Today readiness', () => {
@@ -1099,12 +2201,18 @@ describe('SummariesComponent', () => {
       formSameDay: -8,
       formPriorDay: -4,
     }];
+    (component as any).derivedFormStatus = 'ready';
     (component as any).derivedFormNowContext = { value: -99, latestDayMs: Date.UTC(2026, 6, 11) };
     (component as any).derivedRampRateContext = { rampRate: 99, latestDayMs: Date.UTC(2026, 6, 11) };
 
     const readiness = (component as any).buildDashboardTodayReadiness();
 
     expect(readiness.loadText).toBe('+18.5 / -6.5');
+
+    (component as any).derivedFormStatus = 'stale';
+    (component as any).derivedFormNowStatus = 'stale';
+    (component as any).derivedRampRateStatus = 'stale';
+    expect((component as any).buildDashboardTodayReadiness().loadText).toBe('-- / --');
   });
 
   it('should delegate tile building with dashboard tiles, events, preferences, and logger on input changes', async () => {
@@ -1150,6 +2258,10 @@ describe('SummariesComponent', () => {
     });
 
     expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledWith({
+      previewMetricStatuses: expect.objectContaining({ form: 'missing', acwr: 'missing' }),
+      tileEventAnchorsByOrder: {},
+      hrvTrend: null,
+      hrvPreferredSource: null,
       tiles: component.user.settings.dashboardSettings.tiles,
       events: [],
       tileEventsByOrder: {},
@@ -1188,136 +2300,13 @@ describe('SummariesComponent', () => {
     expect(component.tiles).toBe(builtTiles);
   });
 
-  it('subscribes to dashboard auto tiles for editable owner dashboards', async () => {
-    const autoTileSubscription = new Subscription();
-    const unsubscribeSpy = vi.spyOn(autoTileSubscription, 'unsubscribe');
-    mockDashboardAutoTileService.watchForDashboard.mockReturnValueOnce(autoTileSubscription);
-    component.user = {
-      uid: 'owner-user',
-      settings: { dashboardSettings: { tiles: [] } },
-    } as any;
+  it('does not populate an intentionally empty dashboard during owner hydration', async () => {
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [] } } } as never;
     component.showActions = true;
-
-    await component.ngOnChanges({
-      user: {
-        currentValue: component.user,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-      showActions: {
-        currentValue: true,
-        previousValue: false,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-    });
-
-    expect(mockDashboardAutoTileService.watchForDashboard).toHaveBeenCalledWith(component.user);
-
+    await component.ngOnChanges({ user: { currentValue: component.user, firstChange: true, isFirstChange: () => true } } as never);
+    expect(component.user.settings.dashboardSettings.tiles).toEqual([]);
+    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
     component.ngOnDestroy();
-    expect(unsubscribeSpy).toHaveBeenCalledTimes(1);
-  });
-
-  it('resubscribes dashboard auto tiles when the owner user object refreshes with the same uid', async () => {
-    const firstSubscription = new Subscription();
-    const secondSubscription = new Subscription();
-    const firstUnsubscribeSpy = vi.spyOn(firstSubscription, 'unsubscribe');
-    mockDashboardAutoTileService.watchForDashboard
-      .mockReturnValueOnce(firstSubscription)
-      .mockReturnValueOnce(secondSubscription);
-    const originalUser = {
-      uid: 'owner-user',
-      settings: { dashboardSettings: { tiles: [], testSettingsVersion: 'stale' } },
-    } as any;
-    const refreshedUser = {
-      uid: 'owner-user',
-      settings: { dashboardSettings: { tiles: [], testSettingsVersion: 'fresh' } },
-    } as any;
-    component.user = originalUser;
-    component.showActions = true;
-
-    await component.ngOnChanges({
-      user: {
-        currentValue: originalUser,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-    });
-
-    component.user = refreshedUser;
-    await component.ngOnChanges({
-      user: {
-        currentValue: refreshedUser,
-        previousValue: originalUser,
-        firstChange: false,
-        isFirstChange: () => false,
-      } as any,
-    });
-
-    expect(firstUnsubscribeSpy).toHaveBeenCalledTimes(1);
-    expect(mockDashboardAutoTileService.watchForDashboard).toHaveBeenCalledTimes(2);
-    expect(mockDashboardAutoTileService.watchForDashboard).toHaveBeenNthCalledWith(1, originalUser);
-    expect(mockDashboardAutoTileService.watchForDashboard).toHaveBeenNthCalledWith(2, refreshedUser);
-  });
-
-  it('does not subscribe to dashboard auto tiles for shared target dashboards', async () => {
-    component.user = {
-      uid: 'viewer-user',
-      settings: { dashboardSettings: { tiles: [] } },
-    } as any;
-    component.eventUser = { uid: 'target-user' } as any;
-    component.showActions = true;
-
-    await component.ngOnChanges({
-      user: {
-        currentValue: component.user,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-      eventUser: {
-        currentValue: component.eventUser,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-    });
-
-    expect(mockDashboardAutoTileService.watchForDashboard).not.toHaveBeenCalled();
-  });
-
-  it('unsubscribes dashboard auto tiles when dashboard actions become read-only', async () => {
-    const autoTileSubscription = new Subscription();
-    const unsubscribeSpy = vi.spyOn(autoTileSubscription, 'unsubscribe');
-    mockDashboardAutoTileService.watchForDashboard.mockReturnValueOnce(autoTileSubscription);
-    component.user = {
-      uid: 'owner-user',
-      settings: { dashboardSettings: { tiles: [] } },
-    } as any;
-    component.showActions = true;
-
-    await component.ngOnChanges({
-      user: {
-        currentValue: component.user,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-    });
-
-    component.showActions = false;
-    await component.ngOnChanges({
-      showActions: {
-        currentValue: false,
-        previousValue: true,
-        firstChange: false,
-        isFirstChange: () => false,
-      } as any,
-    });
-
-    expect(unsubscribeSpy).toHaveBeenCalledTimes(1);
   });
 
   it('should keep table date-range state out of tile view-model building', async () => {
@@ -1462,16 +2451,263 @@ describe('SummariesComponent', () => {
       } as any,
     });
 
-    expect(mockEventService.getEventsBy).toHaveBeenCalledTimes(2);
-    expect(mockEventService.getEventsBy.mock.calls.map(call => call[0].uid)).toEqual(['event-owner', 'event-owner']);
-    expect(mockEventService.getEventsBy.mock.calls[0][1]).toEqual([
+    expect(mockEventService.getEventSummariesBy).toHaveBeenCalledTimes(2);
+    expect(mockEventService.getEventSummariesBy.mock.calls.map(call => call[0].uid)).toEqual(['event-owner', 'event-owner']);
+    expect(mockEventService.getEventSummariesBy.mock.calls[0][1]).toEqual([
       { fieldPath: 'startDate', opStr: '>=', value: nowMs - (90 * 24 * 60 * 60 * 1000) },
       { fieldPath: 'startDate', opStr: '<=', value: nowMs },
     ]);
-    expect(mockEventService.getEventsBy.mock.calls[1][1]).toEqual([
+    expect(mockEventService.getEventSummariesBy.mock.calls[1][1]).toEqual([
       { fieldPath: 'startDate', opStr: '>=', value: nowMs - (30 * 24 * 60 * 60 * 1000) },
       { fieldPath: 'startDate', opStr: '<=', value: nowMs },
     ]);
+  });
+
+  describe('shared tile event queries', () => {
+    beforeEach(() => {
+      buildDashboardTileViewModelsSpy.mockReturnValue([]);
+      component.user = {
+        uid: 'query-owner', settings: { dashboardSettings: { tiles: [
+          { type: TileTypes.Chart, order: 0, chartType: ChartTypes.ColumnsVertical,
+            eventFilters: { range: '1y', activityTypes: [ActivityTypes.Running] } },
+          { type: TileTypes.Map, order: 1,
+            eventFilters: { range: '1y', activityTypes: [ActivityTypes.Cycling] } },
+        ] } },
+      } as SummariesComponent['user'];
+      component.eventUser = component.user;
+    });
+
+    it('shares one live subscription and one filtered event array across matching chart and map tiles', () => {
+      const incoming$ = new Subject<EventInterface[]>();
+      let subscriptions = 0;
+      mockEventService.getEventSummariesBy.mockReturnValue(new Observable<EventInterface[]>(subscriber => {
+        subscriptions++;
+        return incoming$.subscribe(subscriber);
+      }));
+      const nowMs = 1800000000000;
+      const now = vi.spyOn(Date, 'now').mockImplementation(() => nowMs + now.mock.calls.length);
+      component['syncTileEventSubscriptions']();
+
+      expect(mockEventService.getEventSummariesBy).toHaveBeenCalledOnce();
+      expect(subscriptions).toBe(1);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: true, 1: true });
+      const event = { isMerge: false } as EventInterface;
+      incoming$.next([event, { isMerge: true } as EventInterface]);
+      expect(component['tileEventsByOrder'][0]).toEqual([event]);
+      expect(component['tileEventsByOrder'][1]).toBe(component['tileEventsByOrder'][0]);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: false, 1: false });
+      expect(component.user.settings.dashboardSettings.tiles.map(tile => (tile as AppDashboardChartTileSettingsInterface).eventFilters.activityTypes))
+        .toEqual([[ActivityTypes.Running], [ActivityTypes.Cycling]]);
+    });
+
+    it('replays loaded events to a later matching tile without changing the original window', () => {
+      const incoming$ = new Subject<EventInterface[]>();
+      mockEventService.getEventSummariesBy.mockReturnValue(incoming$);
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1800000000000);
+      component['syncTileEventSubscriptions']();
+      const event = { isMerge: false } as EventInterface;
+      incoming$.next([event]);
+      now.mockReturnValue(1800000060000);
+      component.user.settings.dashboardSettings.tiles.push({
+        type: TileTypes.Map, order: 2, eventFilters: { range: '1y', activityTypes: [] },
+      } as typeof component.user.settings.dashboardSettings.tiles[number]);
+      component['syncTileEventSubscriptions']();
+
+      expect(mockEventService.getEventSummariesBy).toHaveBeenCalledOnce();
+      expect(component['tileEventsByOrder'][2]).toBe(component['tileEventsByOrder'][0]);
+      expect(component.tileEventLoadingByOrder[2]).toBe(false);
+    });
+
+    it.each([
+      { change: 'replaced', newOrder: 0 },
+      { change: 'replaced', newOrder: 3 },
+      { change: 'changed range', newOrder: 0 },
+      { change: 'changed range', newOrder: 3 },
+    ] as const)(
+      'refreshes the latest window when its final consumers are $change and the replacement has order $newOrder', ({ change, newOrder }) => {
+        mockEventService.getEventSummariesBy.mockImplementation(() => new Subject<EventInterface[]>());
+        component.user.settings.dashboardSettings.tiles.forEach((tile, index) => { tile.order = index + 1; });
+        const now = vi.spyOn(Date, 'now').mockReturnValue(1800000000000);
+        component['syncTileEventSubscriptions']();
+        now.mockReturnValue(1800000060000);
+        if (change === 'replaced') {
+          component.user.settings.dashboardSettings.tiles = [
+            { type: TileTypes.Chart, order: 1, chartType: DASHBOARD_FORM_CHART_TYPE },
+            { type: TileTypes.Chart, order: 2, chartType: DASHBOARD_RECOVERY_NOW_CHART_TYPE },
+          ] as typeof component.user.settings.dashboardSettings.tiles;
+        } else {
+          component.user.settings.dashboardSettings.tiles.forEach(tile => {
+            (tile as AppDashboardChartTileSettingsInterface).eventFilters.range = '30d';
+          });
+        }
+        component.user.settings.dashboardSettings.tiles.push({
+          type: TileTypes.Map, order: newOrder, eventFilters: { range: '1y', activityTypes: [] },
+        } as typeof component.user.settings.dashboardSettings.tiles[number]);
+        component['syncTileEventSubscriptions']();
+
+        const latestCall = mockEventService.getEventSummariesBy.mock.calls.filter(call => {
+          const clauses = call[1] as Array<{ value: number }>;
+          return clauses[1].value - clauses[0].value === 365 * 24 * 60 * 60 * 1000;
+        }).at(-1);
+        expect(latestCall?.[1]).toEqual([
+          { fieldPath: 'startDate', opStr: '>=', value: 1800000060000 - 365 * 24 * 60 * 60 * 1000 },
+          { fieldPath: 'startDate', opStr: '<=', value: 1800000060000 },
+        ]);
+      },
+    );
+
+    it('shares a synchronous startup failure across tiles and retries only on the next synchronization', () => {
+      mockEventService.getEventSummariesBy.mockImplementation(() => { throw new Error('query startup failed'); });
+      component['syncTileEventSubscriptions']();
+      expect(mockEventService.getEventSummariesBy).toHaveBeenCalledOnce();
+      expect(component['tileEventsByOrder']).toEqual({ 0: [], 1: [] });
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: false, 1: false });
+
+      const retry$ = new Subject<EventInterface[]>();
+      mockEventService.getEventSummariesBy.mockReturnValue(retry$);
+      component['syncTileEventSubscriptions']();
+      expect(mockEventService.getEventSummariesBy).toHaveBeenCalledTimes(2);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: true, 1: true });
+      retry$.next([]);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: false, 1: false });
+    });
+
+    it('keeps a shared source alive until its final tile is removed and releases its replayed data', () => {
+      const incoming$ = new Subject<EventInterface[]>();
+      const teardown = vi.fn();
+      mockEventService.getEventSummariesBy.mockReturnValue(new Observable<EventInterface[]>(subscriber => {
+        const subscription = incoming$.subscribe(subscriber);
+        return () => { subscription.unsubscribe(); teardown(); };
+      }));
+      component['syncTileEventSubscriptions']();
+      incoming$.next([{ isMerge: false } as EventInterface]);
+      const savedTiles = component.user.settings.dashboardSettings.tiles;
+      component.user.settings.dashboardSettings.tiles = savedTiles.slice(1);
+      component['syncTileEventSubscriptions']();
+      expect(teardown).not.toHaveBeenCalled();
+      expect(component['tileEventsByOrder'][0]).toBeUndefined();
+      component.user.settings.dashboardSettings.tiles = [];
+      component['syncTileEventSubscriptions']();
+      expect(teardown).toHaveBeenCalledOnce();
+      expect(component['tileEventQueries'].size).toBe(0);
+
+      component.user.settings.dashboardSettings.tiles = savedTiles;
+      component['syncTileEventSubscriptions']();
+      expect(mockEventService.getEventSummariesBy).toHaveBeenCalledTimes(2);
+      expect(component['tileEventsByOrder']).toEqual({});
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: true, 1: true });
+      fixture.destroy();
+      expect(teardown).toHaveBeenCalledTimes(2);
+      expect(component['tileEventQueries'].size).toBe(0);
+    });
+
+    it('keeps changed date windows independent without restarting their unchanged peers', () => {
+      const latest$ = new Subject<EventInterface[]>();
+      const shorter$ = new Subject<EventInterface[]>();
+      mockEventService.getEventSummariesBy.mockReturnValueOnce(latest$).mockReturnValueOnce(shorter$);
+      component['syncTileEventSubscriptions']();
+      const event = { isMerge: false } as EventInterface;
+      latest$.next([event]);
+      (component.user.settings.dashboardSettings.tiles[0] as AppDashboardChartTileSettingsInterface).eventFilters.range = '30d';
+      component['syncTileEventSubscriptions']();
+
+      expect(mockEventService.getEventSummariesBy).toHaveBeenCalledTimes(2);
+      expect(latest$.observed).toBe(true);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: true, 1: false });
+      expect(component['tileEventsByOrder'][0]).toBeUndefined();
+      expect(component['tileEventsByOrder'][1]).toEqual([event]);
+      shorter$.next([]);
+      expect(component['tileEventsByOrder']).toEqual({ 0: [], 1: [event] });
+    });
+
+    it('refreshes a shared calendar query after a date boundary and reorder before adding a matching tile', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(2026, 9, 31, 12));
+      component.user.settings.dashboardSettings.tiles.forEach(tile => {
+        (tile as AppDashboardChartTileSettingsInterface).eventFilters.range = 'thisMonth';
+      });
+      const previous$ = new Subject<EventInterface[]>();
+      const current$ = new Subject<EventInterface[]>();
+      mockEventService.getEventSummariesBy.mockReturnValueOnce(previous$).mockReturnValueOnce(current$);
+      component['syncTileEventSubscriptions']();
+      previous$.next([{ isMerge: false } as EventInterface]);
+
+      vi.setSystemTime(new Date(2026, 10, 1, 12));
+      component.user.settings.dashboardSettings.tiles.forEach(tile => { tile.order = 1 - tile.order; });
+      component['remapTileEventStateForOrderChange'](new Map([[0, 1], [1, 0]]));
+      expect(mockEventService.getEventSummariesBy).toHaveBeenCalledOnce();
+      component.user.settings.dashboardSettings.tiles.push({
+        type: TileTypes.Map, order: 2, eventFilters: { range: 'thisMonth', activityTypes: [] },
+      } as typeof component.user.settings.dashboardSettings.tiles[number]);
+      component['syncTileEventSubscriptions']();
+
+      expect(mockEventService.getEventSummariesBy).toHaveBeenCalledTimes(2);
+      expect(previous$.observed).toBe(false);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: true, 1: true, 2: true });
+      expect(mockEventService.getEventSummariesBy.mock.calls[1][1]).toEqual([
+        { fieldPath: 'startDate', opStr: '>=', value: new Date(2026, 10, 1).getTime() },
+        { fieldPath: 'startDate', opStr: '<=', value: new Date(2026, 10, 2).getTime() },
+      ]);
+      current$.next([]);
+      expect(component['tileEventsByOrder'][0]).toBe(component['tileEventsByOrder'][2]);
+      expect(component['tileEventsByOrder'][1]).toBe(component['tileEventsByOrder'][2]);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: false, 1: false, 2: false });
+      expect(component['tileEventQueries'].size).toBe(1);
+    });
+
+    it('tears down the previous account and clears its values before loading the next account', () => {
+      const previous$ = new Subject<EventInterface[]>();
+      const next$ = new Subject<EventInterface[]>();
+      mockEventService.getEventSummariesBy.mockReturnValueOnce(previous$).mockReturnValueOnce(next$);
+      component['syncTileEventSubscriptions']();
+      previous$.next([{ isMerge: false } as EventInterface]);
+      component['tileEventAnchorEndMsByOrder'].set(0, 1700000000000);
+      component.eventUser = { uid: 'next-account' } as SummariesComponent['eventUser'];
+      component['syncTileEventSubscriptions']();
+
+      expect(previous$.observed).toBe(false);
+      expect(component['tileEventAnchorEndMsByOrder'].size).toBe(0);
+      expect(mockEventService.getEventSummariesBy.mock.calls.map(call => call[0].uid)).toEqual(['query-owner', 'next-account']);
+      expect(component['tileEventsByOrder']).toEqual({});
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: true, 1: true });
+      previous$.next([{ isMerge: false } as EventInterface]);
+      expect(component['tileEventsByOrder']).toEqual({});
+      next$.next([]);
+      expect(component['tileEventsByOrder']).toEqual({ 0: [], 1: [] });
+    });
+
+    it('shares matching historical windows while keeping the latest window independent', () => {
+      const latest$ = new Subject<EventInterface[]>();
+      const historical$ = new Subject<EventInterface[]>();
+      mockEventService.getEventSummariesBy.mockReturnValueOnce(latest$).mockReturnValueOnce(historical$);
+      component['syncTileEventSubscriptions']();
+      component['tileEventAnchorEndMsByOrder'].set(0, 1700000000000);
+      component['syncTileEventSubscriptions']();
+      expect(latest$.observed).toBe(true);
+      expect(historical$.observed).toBe(true);
+      component['tileEventAnchorEndMsByOrder'].set(1, 1700000000000);
+      component['syncTileEventSubscriptions']();
+      expect(mockEventService.getEventSummariesBy).toHaveBeenCalledTimes(2);
+      expect(latest$.observed).toBe(false);
+      historical$.next([]);
+      expect(component['tileEventsByOrder'][1]).toBe(component['tileEventsByOrder'][0]);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: false, 1: false });
+    });
+
+    it('reports errors to all consumers and reconnects once when subscriptions are synchronized again', () => {
+      const failed$ = new Subject<EventInterface[]>();
+      const retry$ = new Subject<EventInterface[]>();
+      mockEventService.getEventSummariesBy.mockReturnValueOnce(failed$).mockReturnValueOnce(retry$);
+      component['syncTileEventSubscriptions']();
+      failed$.error(new Error('offline'));
+      expect(component['tileEventsByOrder']).toEqual({ 0: [], 1: [] });
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: false, 1: false });
+      component['syncTileEventSubscriptions']();
+      expect(mockEventService.getEventSummariesBy).toHaveBeenCalledTimes(2);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: true, 1: true });
+      retry$.next([]);
+      expect(component.tileEventLoadingByOrder).toEqual({ 0: false, 1: false });
+    });
   });
 
   it('should maintain independent tile event loading states and pass per-tile events into the builder', async () => {
@@ -1480,7 +2716,7 @@ describe('SummariesComponent', () => {
     const customEvent = { id: 'custom-1', isMerge: false };
     const mergedEvent = { id: 'merged-1', isMerge: true };
     const mapEvent = { id: 'map-1', isMerge: false };
-    mockEventService.getEventsBy
+    mockEventService.getEventSummariesBy
       .mockReturnValueOnce(customEventsSubject.asObservable())
       .mockReturnValueOnce(mapEventsSubject.asObservable());
     buildDashboardTileViewModelsSpy.mockReturnValue([]);
@@ -1526,7 +2762,7 @@ describe('SummariesComponent', () => {
     expect(component.tileEventLoadingByOrder[1]).toBe(true);
 
     customEventsSubject.next([customEvent, mergedEvent]);
-    await Promise.resolve();
+    await flushDashboardFrame();
 
     expect(component.tileEventLoadingByOrder[0]).toBe(false);
     expect(component.tileEventLoadingByOrder[1]).toBe(true);
@@ -1537,7 +2773,7 @@ describe('SummariesComponent', () => {
     }));
 
     mapEventsSubject.next([mapEvent]);
-    await Promise.resolve();
+    await flushDashboardFrame();
 
     expect(component.tileEventLoadingByOrder[1]).toBe(false);
     expect(buildDashboardTileViewModelsSpy).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -1602,7 +2838,7 @@ describe('SummariesComponent', () => {
       } as any,
     });
 
-    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+    expect(mockEventService.getEventSummariesBy).not.toHaveBeenCalled();
     expect(mockRouteService.watchRecentRoutePreviews).toHaveBeenCalledWith(component.eventUser, 50);
     expect(component.routePreviewLoading).toBe(true);
     expect(component.isTileLoading({
@@ -1612,7 +2848,7 @@ describe('SummariesComponent', () => {
     } as any)).toBe(true);
 
     routePreviewsSubject.next([previewRoute]);
-    await Promise.resolve();
+    await flushDashboardFrame();
 
     expect(component.routePreviewLoading).toBe(false);
     expect(buildDashboardTileViewModelsSpy).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -1690,7 +2926,7 @@ describe('SummariesComponent', () => {
         isFirstChange: () => true,
       } as any,
     });
-    mockEventService.getEventsBy.mockClear();
+    mockEventService.getEventSummariesBy.mockClear();
 
     expect(component.canNavigateTileEventsNewer({ type: TileTypes.Chart, order: 0 } as any)).toBe(false);
 
@@ -1699,7 +2935,7 @@ describe('SummariesComponent', () => {
     expect(component.canNavigateTileEventsNewer({ type: TileTypes.Chart, order: 0 } as any)).toBe(true);
     expect(component.user.settings.dashboardSettings.tiles[0].eventFilters).toEqual({ range: '14d', activityTypes: [] });
     expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
-    expect(mockEventService.getEventsBy).toHaveBeenLastCalledWith(
+    expect(mockEventService.getEventSummariesBy).toHaveBeenLastCalledWith(
       component.user,
       [
         { fieldPath: 'startDate', opStr: '>=', value: nowMs - (2 * fourteenDaysMs) },
@@ -1710,13 +2946,13 @@ describe('SummariesComponent', () => {
       0,
     );
 
-    mockEventService.getEventsBy.mockClear();
+    mockEventService.getEventSummariesBy.mockClear();
     component.onTileEventFilterNavigate(0, 'newer');
 
     expect(component.canNavigateTileEventsNewer({ type: TileTypes.Chart, order: 0 } as any)).toBe(false);
     expect(component.user.settings.dashboardSettings.tiles[0].eventFilters).toEqual({ range: '14d', activityTypes: [] });
     expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
-    expect(mockEventService.getEventsBy).toHaveBeenLastCalledWith(
+    expect(mockEventService.getEventSummariesBy).toHaveBeenLastCalledWith(
       component.user,
       [
         { fieldPath: 'startDate', opStr: '>=', value: nowMs - fourteenDaysMs },
@@ -1732,6 +2968,8 @@ describe('SummariesComponent', () => {
     const nowMs = Date.UTC(2026, 3, 30, 12, 0, 0);
     vi.useFakeTimers();
     vi.setSystemTime(new Date(nowMs));
+    const incoming$ = new Subject<EventInterface[]>();
+    mockEventService.getEventSummariesBy.mockReturnValue(incoming$);
     buildDashboardTileViewModelsSpy.mockReturnValue([]);
     component.user = {
       uid: 'user-1',
@@ -1760,14 +2998,14 @@ describe('SummariesComponent', () => {
         isFirstChange: () => true,
       } as any,
     });
-    expect(mockEventService.getEventsBy).toHaveBeenCalledTimes(1);
+    expect(mockEventService.getEventSummariesBy).toHaveBeenCalledTimes(1);
 
-    mockEventService.getEventsBy.mockClear();
+    mockEventService.getEventSummariesBy.mockClear();
     vi.setSystemTime(new Date(nowMs + 1000));
     (component as any).syncTileEventSubscriptions();
 
     expect(component.canNavigateTileEventsNewer({ type: TileTypes.Chart, order: 0 } as any)).toBe(false);
-    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+    expect(mockEventService.getEventSummariesBy).not.toHaveBeenCalled();
   });
 
   it('should require confirmation before switching a tile event range to all', async () => {
@@ -1799,7 +3037,7 @@ describe('SummariesComponent', () => {
         isFirstChange: () => true,
       } as any,
     });
-    mockEventService.getEventsBy.mockClear();
+    mockEventService.getEventSummariesBy.mockClear();
     mockDialog.open.mockReturnValueOnce({ afterClosed: () => of(false) });
 
     await component.onTileEventFilterRangeChange(0, 'all');
@@ -1807,7 +3045,7 @@ describe('SummariesComponent', () => {
     expect(mockDialog.open).toHaveBeenCalledTimes(1);
     expect(component.user.settings.dashboardSettings.tiles[0].eventFilters.range).toBe('90d');
     expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
-    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+    expect(mockEventService.getEventSummariesBy).not.toHaveBeenCalled();
 
     mockDialog.open.mockReturnValueOnce({ afterClosed: () => of(true) });
 
@@ -1817,7 +3055,7 @@ describe('SummariesComponent', () => {
     expectDashboardSettingsWrite(component.user, {
       tiles: component.user.settings.dashboardSettings.tiles,
     });
-    expect(mockEventService.getEventsBy).toHaveBeenLastCalledWith(component.user, [], 'startDate', false, 0);
+    expect(mockEventService.getEventSummariesBy).toHaveBeenLastCalledWith(component.user, [], 'startDate', false, 0);
   });
 
   it('should switch Power Curve ranges without a query or all-range confirmation', async () => {
@@ -1844,11 +3082,67 @@ describe('SummariesComponent', () => {
     await component.onTileEventFilterRangeChange(0, 'all');
 
     expect(mockDialog.open).not.toHaveBeenCalled();
-    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+    expect(mockEventService.getEventSummariesBy).not.toHaveBeenCalled();
     expect(component.user.settings.dashboardSettings.tiles[0].eventFilters).toEqual({
       range: 'all',
       activityTypes: getDashboardPowerCurveActivityTypes('running'),
     });
+  });
+
+  it.each([false, true])('saves only the Calendar mode, restoring the previous setting on failure (%s)', fails => {
+    component.user = { uid: 'user-1', settings: { dashboardSettings: { tiles: [{ type: TileTypes.Chart,
+      order: 0, chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE, size: { columns: 4, rows: 2 },
+      displaySettings: { calendarView: 'month' } }] } } } as any;
+    component.showActions = true;
+    component.tiles = [{ ...component.user.settings.dashboardSettings.tiles[0], kind: 'chart' }] as any;
+    let settle!: () => void;
+    const save = vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save').mockImplementation(() => new Promise((resolve, reject) => {
+      settle = () => fails ? reject(new Error('Conflict')) : resolve();
+    }));
+    const changing = component.onCalendarViewChange(0, '30d');
+    expect(component.tiles[0].displaySettings.calendarView).toBe('30d');
+    expect(component.calendarSavingOrders.has(0)).toBe(true);
+    void component.onCalendarViewChange(0, 'month');
+    expect(save).toHaveBeenCalledOnce();
+    expect(save.mock.calls[0][2]).toEqual({ tiles: [{ ...component.user.settings.dashboardSettings.tiles[0], displaySettings: { calendarView: '30d' } }] });
+    if (fails) component.tiles[0] = { ...component.tiles[0], name: 'Updated while saving' };
+    settle();
+    return changing.then(() => {
+      expect(component.tiles[0].displaySettings.calendarView).toBe(fails ? 'month' : '30d');
+      if (fails) expect(component.tiles[0].name).toBe('Updated while saving');
+      expect(component.user.settings.dashboardSettings.tiles[0].displaySettings.calendarView).toBe(fails ? 'month' : '30d');
+      expect(component.calendarSavingOrders.size).toBe(0);
+    });
+  });
+
+  it('fences pending Calendar saves across account changes without unlocking the new owner save', async () => {
+    const owner = (uid: string) => ({ uid, settings: { dashboardSettings: { calendarDayContextLayoutVersion: 1,
+      tiles: [{ type: TileTypes.Chart, order: 0, chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
+        size: { columns: 4, rows: 1 }, displaySettings: { calendarView: 'month' } }] } } }) as any;
+    component.user = owner('user-1');
+    component.showActions = true;
+    component.tiles = [{ ...component.user.settings.dashboardSettings.tiles[0], kind: 'chart' }] as any;
+    const completions: (() => void)[] = [];
+    vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save')
+      .mockImplementation(() => new Promise(resolve => completions.push(resolve)));
+    vi.spyOn(component, 'unsubscribeAndCreateCharts').mockResolvedValue(undefined);
+    const first = component.onCalendarViewChange(0, '30d');
+    const previous = component.user;
+    component.user = owner('user-2');
+    await component.ngOnChanges({ user: { previousValue: previous, currentValue: component.user,
+      firstChange: false, isFirstChange: () => false } as any });
+    component.tiles = [{ ...component.user.settings.dashboardSettings.tiles[0], kind: 'chart' }] as any;
+    const second = component.onCalendarViewChange(0, '30d');
+    completions[0]();
+    await first;
+    expect(component.calendarSavingOrders.has(0)).toBe(true);
+    expect(component.user.settings.dashboardSettings.tiles[0].displaySettings.calendarView).toBe('month');
+    expect(TestBed.inject(AppHapticsService).success).not.toHaveBeenCalled();
+    completions[1]();
+    await second;
+    expect(component.calendarSavingOrders.size).toBe(0);
+    expect(component.user.settings.dashboardSettings.tiles[0].displaySettings.calendarView).toBe('30d');
+    expect(TestBed.inject(AppHapticsService).success).toHaveBeenCalledOnce();
   });
 
   it('should persist derived chart range changes on the owning tile', async () => {
@@ -2190,7 +3484,7 @@ describe('SummariesComponent', () => {
 
     component.onSleepTrendNavigate('older');
     sleepStreams[2].next([]);
-    await Promise.resolve();
+    await flushDashboardFrame();
 
     expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledTimes(1);
     expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledWith(expect.objectContaining({
@@ -2244,7 +3538,7 @@ describe('SummariesComponent', () => {
 
     const readinessStream = sleepStreams.find(({ startMs, endMs }) => (
       endMs === Number.MAX_SAFE_INTEGER
-      && startMs === nowMs - (30 * dayMs)
+      && startMs === nowMs - (60 * dayMs)
     ));
     expect(readinessStream).toBeTruthy();
     readinessStream?.stream.next([{ id: 'current-sleep' }]);
@@ -2253,7 +3547,7 @@ describe('SummariesComponent', () => {
     component.onSleepTrendNavigate('older');
     const historicalStream = sleepStreams.at(-1);
     historicalStream?.stream.next([{ id: 'historical-sleep' }]);
-    await Promise.resolve();
+    await flushDashboardFrame();
 
     expect(mockSleepService.watchForDashboard).toHaveBeenCalledTimes(3);
     expect(buildDashboardTileViewModelsSpy).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -2277,9 +3571,9 @@ describe('SummariesComponent', () => {
       },
       {
         id: 'future-sleep',
-        sleepDate: '2026-05-01',
-        startTimeMs: nowMs + (16 * 60 * 60 * 1000),
-        endTimeMs: nowMs + (24 * 60 * 60 * 1000),
+        sleepDate: '2026-04-30',
+        startTimeMs: nowMs - (8 * 60 * 60 * 1000) + 1_000,
+        endTimeMs: nowMs + 1_000,
         durationSeconds: 8 * 60 * 60,
         isNap: false,
         source: { provider: 'GarminAPI', sourceSessionKey: 'future-sleep' },
@@ -2290,7 +3584,7 @@ describe('SummariesComponent', () => {
     (component as any).updateReadinessSleepRefreshTimer();
     expect((component as any).readinessSleepRefreshTimeoutHandle).not.toBeNull();
 
-    await vi.advanceTimersByTimeAsync(DASHBOARD_READINESS_SLEEP_MAX_AGE_MS + 1);
+    await vi.advanceTimersByTimeAsync(1_050);
 
     expect(rebuildSpy).toHaveBeenCalledTimes(1);
     expect((component as any).readinessSleepRefreshTimeoutHandle).not.toBeNull();
@@ -2528,15 +3822,14 @@ describe('SummariesComponent', () => {
     (component as any).refreshDerivedMetricsBannerState();
 
     expect(component.derivedMetricsBanner?.type).toBe('pending');
-    expect(component.derivedMetricsBanner?.title).toBe('Refreshing derived metrics');
-    expect(component.derivedMetricsBanner?.description).toContain('Available last completed values');
+    expect(component.derivedMetricsBanner?.title).toBe('Updating your dashboard…');
+    expect(component.derivedMetricsBanner?.description).toContain('You can keep browsing');
     expect(component.derivedMetricsBanner?.showRetry).toBe(false);
 
     fixture.detectChanges();
     const nativeElement = fixture.nativeElement as HTMLElement;
-    const status = nativeElement.querySelector('.qs-page-header--status');
-    const statusHeader = status?.closest('.dashboard-summary-header');
-    const summaryHeading = statusHeader?.closest('.dashboard-summary-heading');
+    const status = nativeElement.querySelector('.dashboard-summary-status');
+    const summaryHeading = status?.closest('.dashboard-summary-heading');
     const today = nativeElement.querySelector('.dashboard-current-state-row');
     expect(status).not.toBeNull();
     expect(summaryHeading?.nextElementSibling).toBe(today);
@@ -2564,7 +3857,40 @@ describe('SummariesComponent', () => {
     (component as any).refreshDerivedMetricsBannerState();
 
     expect(component.derivedMetricsBanner?.type).toBe('pending');
-    expect(component.derivedMetricsBanner?.title).toBe('Building derived metrics');
+    expect(component.derivedMetricsBanner?.title).toBe('Preparing your dashboard…');
+  });
+
+  it('leaves unfinished chart loading on the tile once Today is ready', () => {
+    component.user = {
+      settings: {
+        dashboardSettings: {
+          tiles: [{
+            type: TileTypes.Chart,
+            order: 0,
+            chartType: 'Form',
+            dataType: 'Training Stress Score',
+            dataValueType: ChartDataValueTypes.Total,
+            dataCategoryType: ChartDataCategoryTypes.DateType,
+            size: { columns: 1, rows: 1 },
+          }],
+          showTodaySummary: true,
+        },
+      },
+    } as any;
+    component.showTodaySummary = true;
+    component.dashboardTodayReadiness = {
+      ...component.dashboardTodayReadiness,
+      loading: false,
+      label: 'Ready',
+      scoreText: '75/100',
+    };
+    (component as any).derivedFormStatus = 'stale';
+    (component as any).derivedFormNowStatus = 'ready';
+    (component as any).derivedRampRateStatus = 'ready';
+
+    (component as any).refreshDerivedMetricsBannerState();
+
+    expect(component.derivedMetricsBanner).toBeNull();
   });
 
   it('ignores the optional recovery status unless Today is showing an active estimate', () => {
@@ -2742,227 +4068,6 @@ describe('SummariesComponent', () => {
     expect(component.desktopTileDragEnabled).toBe(false);
   });
 
-  it('should resynchronize dashboard subscriptions when the manager saves changes', async () => {
-    component.user = {
-      settings: {
-        dashboardSettings: {
-          tiles: [{
-            type: TileTypes.Chart,
-            order: 0,
-            chartType: ChartTypes.ColumnsVertical,
-            dataType: DataAscent.type,
-            dataValueType: ChartDataValueTypes.Total,
-            dataCategoryType: ChartDataCategoryTypes.ActivityType,
-            size: { columns: 1, rows: 1 },
-          }],
-        },
-      },
-    } as any;
-    component.showActions = true;
-    mockDialog.open.mockReturnValue({
-      afterClosed: () => of({ saved: true }),
-    });
-    const refreshSpy = vi.spyOn(component as any, 'unsubscribeAndCreateCharts').mockResolvedValue(undefined);
-
-    await component.openDashboardManagerDialog();
-
-    expect(mockDialog.open).toHaveBeenCalledTimes(1);
-    expect(mockDialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      data: expect.objectContaining({
-        user: component.user,
-        initialMode: undefined,
-        initialEditTileOrder: null,
-        previewTodaySummaryVisibility: expect.any(Function),
-      }),
-    }));
-    expect(refreshSpy).toHaveBeenCalledTimes(1);
-    expect(component.isDashboardManagerOpen).toBe(false);
-  });
-
-  it('previews Today summary visibility while the manager remains open', async () => {
-    component.user = {
-      settings: {
-        dashboardSettings: {
-          tiles: [],
-          showTodaySummary: true,
-        },
-      },
-    } as any;
-    component.showActions = true;
-    (component as any).refreshDerivedMetricsBannerState();
-    expect(component.derivedMetricsBanner?.title).toBe('Building derived metrics');
-    const afterClosedSubject = new Subject<{ saved: boolean } | undefined>();
-    mockDialog.open.mockReturnValueOnce({
-      afterClosed: () => afterClosedSubject.asObservable(),
-    });
-
-    const openPromise = component.openDashboardManagerDialog();
-    const dialogConfig = mockDialog.open.mock.calls[0]?.[1];
-    const previewTodaySummaryVisibility = dialogConfig?.data?.previewTodaySummaryVisibility;
-
-    expect(previewTodaySummaryVisibility).toEqual(expect.any(Function));
-
-    (component.user as any).settings.dashboardSettings.showTodaySummary = false;
-    previewTodaySummaryVisibility(false);
-    fixture.detectChanges();
-
-    expect(component.showTodaySummary).toBe(false);
-    expect((component.user as any).settings.dashboardSettings.showTodaySummary).toBe(false);
-    expect(component.derivedMetricsBanner).toBeNull();
-    expect(fixture.nativeElement.querySelector('#dashboard-today-title')).toBeNull();
-
-    (component as any).derivedFormStatus = 'ready';
-    (component as any).derivedRecoveryNowStatus = 'ready';
-    (component as any).derivedFormNowStatus = 'ready';
-    (component as any).derivedRampRateStatus = 'ready';
-    (component.user as any).settings.dashboardSettings.showTodaySummary = true;
-    previewTodaySummaryVisibility(true);
-    fixture.detectChanges();
-
-    expect(component.showTodaySummary).toBe(true);
-    expect((component.user as any).settings.dashboardSettings.showTodaySummary).toBe(true);
-    expect(fixture.nativeElement.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
-
-    afterClosedSubject.next(undefined);
-    afterClosedSubject.complete();
-    await openPromise;
-  });
-
-  it('starts and stops the bounded readiness listener with the Today preview', () => {
-    const nowMs = Date.UTC(2026, 6, 18, 12);
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date(nowMs));
-    component.user = {
-      uid: 'user-1',
-      settings: { dashboardSettings: { tiles: [], showTodaySummary: false } },
-    } as any;
-    component.showTodaySummary = false;
-
-    (component as any).previewTodaySummaryVisibility(true);
-
-    expect(mockSleepService.watchForDashboard).toHaveBeenCalledWith(
-      'user-1',
-      nowMs - (30 * 24 * 60 * 60 * 1000),
-      Number.MAX_SAFE_INTEGER,
-    );
-    expect((component as any).readinessSleepListenerKey).toBe('user-1:current-readiness');
-
-    (component as any).previewTodaySummaryVisibility(false);
-
-    expect((component as any).readinessSleepListenerKey).toBeNull();
-  });
-
-  it('should re-enable dashboard manager button as soon as the dialog starts closing', async () => {
-    component.user = {
-      settings: {
-        dashboardSettings: {
-          tiles: [{
-            type: TileTypes.Chart,
-            order: 0,
-            chartType: ChartTypes.ColumnsVertical,
-            dataType: DataAscent.type,
-            dataValueType: ChartDataValueTypes.Total,
-            dataCategoryType: ChartDataCategoryTypes.ActivityType,
-            size: { columns: 1, rows: 1 },
-          }],
-        },
-      },
-    } as any;
-    component.showActions = true;
-    const beforeClosedSubject = new Subject<void>();
-    const afterClosedSubject = new Subject<{ saved: boolean } | undefined>();
-    mockDialog.open.mockReturnValueOnce({
-      beforeClosed: () => beforeClosedSubject.asObservable(),
-      afterClosed: () => afterClosedSubject.asObservable(),
-    });
-
-    const openPromise = component.openDashboardManagerDialog();
-
-    expect(component.isDashboardManagerOpen).toBe(true);
-
-    beforeClosedSubject.next();
-    beforeClosedSubject.complete();
-
-    expect(component.isDashboardManagerOpen).toBe(false);
-
-    afterClosedSubject.next(undefined);
-    afterClosedSubject.complete();
-    await openPromise;
-
-    expect(component.isDashboardManagerOpen).toBe(false);
-  });
-
-  it('should open dashboard manager dialog in edit mode for a specific chart tile order', async () => {
-    component.user = {
-      settings: {
-        dashboardSettings: {
-          tiles: [{
-            type: TileTypes.Chart,
-            order: 3,
-            chartType: ChartTypes.ColumnsVertical,
-            dataType: DataAscent.type,
-            dataValueType: ChartDataValueTypes.Total,
-            dataCategoryType: ChartDataCategoryTypes.ActivityType,
-            size: { columns: 1, rows: 1 },
-          }],
-        },
-      },
-    } as any;
-    component.showActions = true;
-    mockDialog.open.mockReturnValue({
-      afterClosed: () => of({ saved: false }),
-    });
-
-    await component.openDashboardManagerForTileOrder(3);
-
-    expect(mockDialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      data: expect.objectContaining({
-        user: component.user,
-        initialMode: 'edit',
-        initialEditTileOrder: 3,
-      }),
-    }));
-  });
-
-  it('should open dashboard manager dialog in edit mode for a map tile order', async () => {
-    component.user = {
-      settings: {
-        dashboardSettings: {
-          tiles: [{
-            type: TileTypes.Map,
-            order: 4,
-            mapStyle: 'default',
-            clusterMarkers: true,
-            size: { columns: 1, rows: 1 },
-          }],
-        },
-      },
-    } as any;
-    component.showActions = true;
-    mockDialog.open.mockReturnValue({
-      afterClosed: () => of({ saved: false }),
-    });
-
-    await component.openDashboardManagerForTileOrder(4);
-
-    expect(mockDialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      data: expect.objectContaining({
-        user: component.user,
-        initialMode: 'edit',
-        initialEditTileOrder: 4,
-      }),
-    }));
-  });
-
-  it('should ignore dashboard manager open requests when actions are hidden', async () => {
-    component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
-    component.showActions = false;
-
-    await component.openDashboardManagerDialog();
-
-    expect(mockDialog.open).not.toHaveBeenCalled();
-  });
-
   it('should reorder and persist dashboard tiles on valid drop', async () => {
     component.showActions = true;
     component.desktopTileDragEnabled = true;
@@ -2982,7 +4087,7 @@ describe('SummariesComponent', () => {
       { type: TileTypes.Chart, order: 1, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical, dataType: DataDuration.type } as any,
     ];
 
-    mockEventService.getEventsBy.mockClear();
+    mockEventService.getEventSummariesBy.mockClear();
     buildDashboardTileViewModelsSpy.mockClear();
     await component.onTilesDrop({ previousIndex: 0, currentIndex: 1 } as any, 'activityOverview');
 
@@ -2995,13 +4100,13 @@ describe('SummariesComponent', () => {
     expectDashboardSettingsWrite(component.user, {
       tiles: component.user.settings.dashboardSettings.tiles,
     });
-    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+    expect(mockEventService.getEventSummariesBy).not.toHaveBeenCalled();
     expect(buildDashboardTileViewModelsSpy).not.toHaveBeenCalled();
 
     const previousUser = component.user;
     const echoedUser = JSON.parse(JSON.stringify(previousUser));
     component.user = echoedUser as any;
-    mockEventService.getEventsBy.mockClear();
+    mockEventService.getEventSummariesBy.mockClear();
     buildDashboardTileViewModelsSpy.mockClear();
 
     await component.ngOnChanges({
@@ -3013,7 +4118,7 @@ describe('SummariesComponent', () => {
       } as any,
     });
 
-    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+    expect(mockEventService.getEventSummariesBy).not.toHaveBeenCalled();
     expect(buildDashboardTileViewModelsSpy).not.toHaveBeenCalled();
   });
 
@@ -3036,7 +4141,7 @@ describe('SummariesComponent', () => {
       { type: TileTypes.Chart, order: 1, size: { columns: 1, rows: 1 }, chartType: DASHBOARD_RAMP_RATE_KPI_CHART_TYPE } as any,
     ];
 
-    mockEventService.getEventsBy.mockClear();
+    mockEventService.getEventSummariesBy.mockClear();
     buildDashboardTileViewModelsSpy.mockClear();
     await component.onKpiTilesDrop({ previousIndex: 0, currentIndex: 1 } as any);
 
@@ -3049,7 +4154,7 @@ describe('SummariesComponent', () => {
     expectDashboardSettingsWrite(component.user, {
       tiles: component.user.settings.dashboardSettings.tiles,
     });
-    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+    expect(mockEventService.getEventSummariesBy).not.toHaveBeenCalled();
     expect(buildDashboardTileViewModelsSpy).not.toHaveBeenCalled();
   });
 
@@ -3107,7 +4212,7 @@ describe('SummariesComponent', () => {
       [1, secondSubscription],
     ]);
 
-    mockEventService.getEventsBy.mockClear();
+    mockEventService.getEventSummariesBy.mockClear();
     await component.onTilesDrop({ previousIndex: 0, currentIndex: 1 } as any, 'activityOverview');
 
     expect((component as any).tileEventsByOrder).toEqual({
@@ -3122,13 +4227,13 @@ describe('SummariesComponent', () => {
     expect((component as any).tileEventSubscriptions.get(1)).toBe(firstSubscription);
     expect(firstUnsubscribeSpy).not.toHaveBeenCalled();
     expect(secondUnsubscribeSpy).not.toHaveBeenCalled();
-    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+    expect(mockEventService.getEventSummariesBy).not.toHaveBeenCalled();
   });
 
   it('should keep late tile event emissions aligned with remapped orders after dashboard tile reorder', async () => {
     const firstTileEvents = new Subject<any[]>();
     const secondTileEvents = new Subject<any[]>();
-    mockEventService.getEventsBy
+    mockEventService.getEventSummariesBy
       .mockReturnValueOnce(firstTileEvents.asObservable())
       .mockReturnValueOnce(secondTileEvents.asObservable());
     buildDashboardTileViewModelsSpy.mockReturnValue([]);
@@ -3169,9 +4274,9 @@ describe('SummariesComponent', () => {
       { type: TileTypes.Chart, order: 1, size: { columns: 1, rows: 1 }, chartType: ChartTypes.ColumnsVertical, dataType: DataDuration.type } as any,
     ];
     (component as any).syncTileEventSubscriptions();
-    expect(mockEventService.getEventsBy).toHaveBeenCalledTimes(2);
+    expect(mockEventService.getEventSummariesBy).toHaveBeenCalledTimes(2);
 
-    mockEventService.getEventsBy.mockClear();
+    mockEventService.getEventSummariesBy.mockClear();
     await component.onTilesDrop({ previousIndex: 0, currentIndex: 1 } as any, 'activityOverview');
 
     const lateFirstTileEvent = { id: 'late-first-tile-event', isMerge: false };
@@ -3184,7 +4289,7 @@ describe('SummariesComponent', () => {
       0: [lateSecondTileEvent],
       1: [lateFirstTileEvent],
     });
-    expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+    expect(mockEventService.getEventSummariesBy).not.toHaveBeenCalled();
   });
 
   it('should not persist when dropped at the same index', async () => {
@@ -3242,6 +4347,7 @@ describe('SummariesComponent', () => {
     component.desktopTileDragEnabled = true;
     mockUserService.updateUserProperties.mockRejectedValueOnce(new Error('persist failed'));
     component.user = {
+      uid: 'owner',
       settings: {
         dashboardSettings: {
           tiles: [

@@ -3,7 +3,9 @@ import { EventSummaryComponent } from './event-summary.component';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
-import { ChangeDetectorRef, NO_ERRORS_SCHEMA } from '@angular/core';
+import { MatButtonModule } from '@angular/material/button';
+import { MatChipsModule } from '@angular/material/chips';
+import { ChangeDetectorRef, Component, NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import {
@@ -11,6 +13,7 @@ import {
     DataDistance,
     DataDuration,
     DataFeeling,
+    DataRPE,
     DataPaceAvg,
     DataSpeedAvg,
     DataSwimDistance,
@@ -19,14 +22,30 @@ import {
     EventInterface,
     Feelings,
     Privacy,
+    SwimPaceUnits,
     User
 } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import { EventTagService } from '../../services/event-tag.service';
+import { EventDetailsSummaryBottomSheetComponent } from './event-details-summary-bottom-sheet/event-details-summary-bottom-sheet.component';
 import { EventTagsDialogComponent } from '../event-tags/event-tags-dialog.component';
+import { TrainingLoadDialogComponent } from '../training-load/training-load-dialog.component';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { from, of, Subject } from 'rxjs';
+import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 
+@Component({
+    standalone: false,
+    template: `<app-event-summary [event]="event" [user]="user" [unitSettings]="{}" [isOwner]="true">
+        <div after-summary data-testid="impact">Training impact strip</div>
+        <div after-stats data-testid="analysis">Activity analysis</div>
+    </app-event-summary>`,
+})
+class SummaryProjectionHost {
+    event!: EventInterface;
+    user!: User;
+}
 
 describe('EventSummaryComponent', () => {
     let component: EventSummaryComponent;
@@ -35,6 +54,7 @@ describe('EventSummaryComponent', () => {
     let mockBenchmarkFlowService: any;
     let mockDialog: any;
     let mockEventTagService: any;
+    let mockHaptics: { selection: ReturnType<typeof vi.fn> };
 
     const mockUser: User = {
         uid: 'test-user-id',
@@ -50,7 +70,7 @@ describe('EventSummaryComponent', () => {
 
     beforeEach(async () => {
         mockBottomSheet = {
-            open: vi.fn(),
+            open: vi.fn().mockReturnValue({ afterDismissed: () => of(false) }),
         };
 
         mockBenchmarkFlowService = {
@@ -60,6 +80,7 @@ describe('EventSummaryComponent', () => {
             openBenchmarkReport: vi.fn(),
         };
         mockDialog = { open: vi.fn().mockReturnValue({ afterClosed: () => of(null) }) };
+        mockHaptics = { selection: vi.fn() };
         mockEventTagService = {
             getTags: vi.fn((event: any) => event.tags || event.benchmarkReviewTags || []),
             saveTags: vi.fn(async (_user: unknown, event: any, tags: string[]) => {
@@ -69,8 +90,10 @@ describe('EventSummaryComponent', () => {
         };
 
         await TestBed.configureTestingModule({
+            imports: [MatButtonModule, MatChipsModule],
             declarations: [
                 EventSummaryComponent,
+                SummaryProjectionHost,
             ],
             providers: [
                 { provide: MatBottomSheet, useValue: mockBottomSheet },
@@ -79,6 +102,7 @@ describe('EventSummaryComponent', () => {
                 { provide: AppBenchmarkFlowService, useValue: mockBenchmarkFlowService },
                 { provide: MatDialog, useValue: mockDialog },
                 { provide: EventTagService, useValue: mockEventTagService },
+                { provide: AppHapticsService, useValue: mockHaptics },
             ],
             schemas: [NO_ERRORS_SCHEMA]
         }).compileComponents();
@@ -93,6 +117,66 @@ describe('EventSummaryComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+    it.each([
+        { value: 0, settings: {} },
+        { value: 0.5, settings: { distanceUnits: [DistanceUnits.Miles] } },
+        { value: 2.5, settings: {} },
+    ])('shows saved RPE $value with canonical display after feedback editing', ({ value, settings }) => {
+        const next = TestBed.createComponent(EventSummaryComponent);
+        next.componentInstance.event = { ...mockEvent, getStat: (type: string) => type === DataRPE.type ? new DataRPE(value) : null } as never;
+        next.componentInstance.user = mockUser; next.componentInstance.unitSettings = settings as never;
+        next.detectChanges();
+        expect(next.nativeElement.querySelector('.rpe-chip')?.textContent)
+            .toContain(resolveUnitAwareDisplayFromValue(DataRPE.type, value, settings as never)?.text);
+    });
+
+    it.each([
+        { isMerge: true },
+        { mergeType: 'benchmark' },
+        { mergeType: ' Benchmark ', isMerge: false },
+    ])('hides and guards Training load for comparison records %j', classification => {
+        fixture.componentRef.setInput('event', { ...mockEvent, ...classification });
+        fixture.componentRef.setInput('isOwner', true);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('[aria-label="Edit Training load"]')).toBeNull();
+        component.openTrainingLoad();
+        expect(mockDialog.open).not.toHaveBeenCalled();
+        expect(mockHaptics.selection).not.toHaveBeenCalled();
+    });
+
+    it.each([{}, { isMerge: true, mergeType: 'multi' }])('opens Training load for an owned eligible workout %j', classification => {
+        fixture.componentRef.setInput('event', { ...mockEvent, ...classification });
+        fixture.componentRef.setInput('isOwner', true);
+        fixture.detectChanges();
+        const button = fixture.nativeElement.querySelector('[aria-label="Edit Training load"]') as HTMLButtonElement;
+        expect(button).toBeTruthy();
+        button.click();
+        expect(mockDialog.open).toHaveBeenCalledWith(TrainingLoadDialogComponent, expect.objectContaining({
+            data: { event: component.event, user: mockUser, unitSettings: component.unitSettings },
+        }));
+        expect(mockHaptics.selection).toHaveBeenCalledOnce();
+    });
+
+    it('does not show or open Training load for another viewer', () => {
+        expect(fixture.nativeElement.querySelector('[aria-label="Edit Training load"]')).toBeNull();
+        component.openTrainingLoad();
+        expect(mockDialog.open).not.toHaveBeenCalled();
+        expect(mockHaptics.selection).not.toHaveBeenCalled();
+    });
+
+    it('places the impact below the primary summary and before tags, devices, and further statistics', () => {
+        const host = TestBed.createComponent(SummaryProjectionHost);
+        host.componentInstance.event = mockEvent;
+        host.componentInstance.user = mockUser;
+        host.detectChanges();
+        const element = host.nativeElement as HTMLElement;
+        const extension = element.querySelector('.summary-primary-extension')!;
+        expect(extension.previousElementSibling?.tagName).toBe('APP-SUMMARY-PRIMARY-INFO');
+        expect(extension.querySelector('[data-testid="impact"]')?.textContent).toContain('Training impact strip');
+        expect(extension.nextElementSibling?.className).toBe('event-metadata-row');
+        expect(element.querySelector('.summary-stats-area [data-testid="analysis"]')).toBeTruthy();
+        expect(element.querySelector('.summary-stats-area [data-testid="impact"]')).toBeNull();
     });
 
     it('does not show a supported activity types shortcut in event details', () => {
@@ -131,7 +215,7 @@ describe('EventSummaryComponent', () => {
         expect(banner?.textContent).toContain('Race');
         expect(banner?.textContent).toContain('2026');
         expect(banner?.querySelector('button')).toBeNull();
-        expect(chipSet?.getAttribute('aria-label')).toBe('Event tags');
+        expect(chipSet?.getAttribute('aria-label')).toBe('Activity tags');
         expect(chipSet?.hasAttribute('aria-hidden')).toBe(false);
     });
 
@@ -142,14 +226,71 @@ describe('EventSummaryComponent', () => {
 
         const button = fixture.nativeElement.querySelector('.event-tags-button') as HTMLButtonElement;
         const chipSet = button?.querySelector('mat-chip-set');
-        expect(button?.getAttribute('aria-label')).toBe('Edit event tags');
+        expect(button?.getAttribute('aria-label')).toBe('Edit activity tags');
         expect(chipSet?.getAttribute('aria-hidden')).toBe('true');
+    });
+
+    it('places Add tags alongside the device and uses the shared editor once', () => {
+        fixture.componentRef.setInput('event', { ...mockEvent, getDeviceNamesAsString: () => 'Suunto' } as any);
+        fixture.componentRef.setInput('isOwner', true);
+        fixture.detectChanges();
+
+        const row = fixture.nativeElement.querySelector('.event-metadata-row') as HTMLElement;
+        const button = row.querySelector('.event-tags-button') as HTMLButtonElement;
+        expect(row.querySelector('.device-info-banner')?.textContent).toContain('Suunto');
+        expect(button.getAttribute('aria-label')).toBe('Add activity tags');
+        expect(button.textContent).toContain('Add tags');
+        expect(row.querySelector('mat-chip-set')).toBeNull();
+        expect(mockHaptics.selection).not.toHaveBeenCalled();
+
+        button.click();
+
+        expect(mockDialog.open).toHaveBeenCalledTimes(1);
+        expect(mockHaptics.selection).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps Add tags available without device metadata and removes the action when tags exist', () => {
+        fixture.componentRef.setInput('event', { ...mockEvent, tags: [] } as any);
+        fixture.componentRef.setInput('isOwner', true);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.device-info-banner')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.event-tags-button')?.textContent).toContain('Add tags');
+
+        fixture.componentRef.setInput('event', { ...mockEvent, tags: ['Race'] } as any);
+        fixture.detectChanges();
+        const row = fixture.nativeElement.querySelector('.event-metadata-row') as HTMLElement;
+        expect(row.textContent).toContain('Race');
+        expect(row.textContent).not.toContain('Add tags');
+        expect(row.querySelectorAll('.event-tags-button')).toHaveLength(1);
+    });
+
+    it('hides the empty metadata row from public viewers', () => {
+        fixture.componentRef.setInput('event', { ...mockEvent, tags: [] } as any);
+        fixture.componentRef.setInput('isOwner', false);
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.querySelector('.event-metadata-row')).toBeNull();
+        expect(mockHaptics.selection).not.toHaveBeenCalled();
     });
 
     describe('open... methods', () => {
         it('openEditDetails should open bottom sheet', () => {
+            component.isOwner = true;
             component.openEditDetails();
             expect(mockBottomSheet.open).toHaveBeenCalled();
+        });
+        it('refreshes workout RPE after the combined form commits and ignores dismissal after teardown', () => {
+            const dismissed = new Subject<boolean>();
+            let stat = new DataRPE(5);
+            mockBottomSheet.open.mockReturnValue({ afterDismissed: () => dismissed });
+            component.event = { ...mockEvent, getStat: (type: string) => type === DataRPE.type ? stat : null } as never;
+            component.isOwner = true; component.openEditDetails();
+            expect(component.rpe).toBe(5);
+            stat = new DataRPE(0); dismissed.next(true);
+            expect(component.rpe).toBe(0);
+            component.openEditDetails(); fixture.destroy();
+            stat = new DataRPE(7); dismissed.next(true);
+            expect(component.rpe).toBe(0);
         });
 
         it('openDetailedStats should open bottom sheet', () => {
@@ -188,7 +329,15 @@ describe('EventSummaryComponent', () => {
             expect(mockBenchmarkFlowService.openBenchmarkEntry).toHaveBeenCalledWith(expect.objectContaining({
                 event: component.event,
                 user: component.user,
+                hydrateStreamsForGeneration: true,
                 initialSelection: component.selectedActivities,
+            }));
+        });
+
+        it('loads all recorded streams when starting a benchmark from the summary dialog', () => {
+            component.openBenchmarkDialog();
+            expect(mockBenchmarkFlowService.openBenchmarkSelectionDialog).toHaveBeenCalledWith(expect.objectContaining({
+                event: component.event, hydrateStreamsForGeneration: true,
             }));
         });
 
@@ -214,7 +363,7 @@ describe('EventSummaryComponent', () => {
             await component.openTags();
 
             expect(mockDialog.open).toHaveBeenCalledWith(EventTagsDialogComponent, expect.objectContaining({
-                data: expect.objectContaining({ title: 'Event tags' }),
+                data: expect.objectContaining({ title: 'Activity tags' }),
             }));
             expect((component.event as any).tags).toEqual(['Race', '2026']);
         });
@@ -290,7 +439,38 @@ describe('EventSummaryComponent', () => {
             await component.openTags();
 
             expect(mockDialog.open).not.toHaveBeenCalled();
+            expect(mockHaptics.selection).not.toHaveBeenCalled();
         });
+
+        it('does not give tag feedback for a missing user or unsaved activity', async () => {
+            component.isOwner = true;
+            component.user = null as unknown as User;
+            await component.openTags();
+            component.user = mockUser;
+            component.event = { ...mockEvent, getID: () => '' } as any;
+            await component.openTags();
+
+            expect(mockDialog.open).not.toHaveBeenCalled();
+            expect(mockHaptics.selection).not.toHaveBeenCalled();
+        });
+    });
+
+    it('offers one combined editor only for a saved owner recording with one accepted-action haptic', () => {
+        component.isOwner = false; component.openEditDetails();
+        expect(mockBottomSheet.open).not.toHaveBeenCalled(); expect(mockHaptics.selection).not.toHaveBeenCalled();
+        component.isOwner = true;
+        component.event = { ...mockEvent, getID: () => '' } as any;
+        component.openEditDetails(); expect(mockBottomSheet.open).not.toHaveBeenCalled();
+        component.event = mockEvent; component.openEditDetails();
+        expect(mockBottomSheet.open).toHaveBeenCalledWith(EventDetailsSummaryBottomSheetComponent, expect.objectContaining({
+            data: { event: mockEvent, user: mockUser },
+        }));
+        fixture.componentRef.setInput('isOwner', true);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelectorAll('[aria-label="Edit details"]')).toHaveLength(1);
+        expect(fixture.nativeElement.querySelector('[aria-label="Post-workout reflection"]')).toBeNull();
+        expect(mockDialog.open).not.toHaveBeenCalled();
+        expect(mockHaptics.selection).toHaveBeenCalledOnce();
     });
 
     describe('Getters', () => {
@@ -321,6 +501,12 @@ describe('EventSummaryComponent', () => {
 
             fixture.detectChanges();
             expect(component.getHeroStats()).toEqual([DataDuration.type, DataDistance.type, DataSpeedAvg.type]);
+        });
+
+        it('omits speed from the default climbing hero while leaving the raw stat available', () => {
+            component.event = { ...mockEvent, getActivities: () => [{ type: ActivityTypes.Climbing }] } as any;
+            fixture.detectChanges();
+            expect(component.getHeroStats()).toEqual([DataDuration.type, DataDistance.type]);
         });
 
         it('should resolve hero stat value from unit-aware DynamicDataLoader output', () => {
@@ -354,6 +540,57 @@ describe('EventSummaryComponent', () => {
             expect(component.getStatUnit(DataPaceAvg.type)).toBe('min/km');
             expect(dynamicSpy).toHaveBeenCalled();
             dynamicSpy.mockRestore();
+        });
+
+        it('shows swimming hero and summary distances in yards when selected', () => {
+            component.unitSettings = { swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] } as any;
+            component.event = {
+                ...mockEvent,
+                getActivities: () => [{ type: ActivityTypes.Swimming }],
+                getStat: (type: string) => type === DataDistance.type ? new DataDistance(91.44) : null,
+            } as any;
+            fixture.detectChanges();
+            expect(component.getStatValue(DataDistance.type)).toBe('100');
+            expect(component.getStatUnit(DataDistance.type)).toBe('yd');
+            expect(component.heroSummaryMetrics[1]).toEqual({ value: '100', label: 'yd' });
+        });
+
+        it('refreshes cached swim distance when only the unit preference changes', () => {
+            component.unitSettings = { swimPaceUnits: [SwimPaceUnits.MinutesPer100Meter] } as any;
+            component.event = {
+                ...mockEvent,
+                getActivities: () => [{ type: ActivityTypes.Swimming }],
+                getStat: (type: string) => type === DataDistance.type ? new DataDistance(91.44) : null,
+            } as any;
+            fixture.detectChanges();
+            expect(component.getStatUnit(DataDistance.type)).toBe('m');
+
+            const meters = component.unitSettings;
+            component.unitSettings = { swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] } as any;
+            component.ngOnChanges({ unitSettings: new SimpleChange(meters, component.unitSettings, false) });
+
+            expect(component.getStatValue(DataDistance.type)).toBe('100');
+            expect(component.getStatUnit(DataDistance.type)).toBe('yd');
+            expect(component.heroSummaryMetrics[1]).toEqual({ value: '100', label: 'yd' });
+        });
+
+        it('keeps mixed-sport event totals in general units even when the first or selected activity is swimming', () => {
+            const activities = [{ type: ActivityTypes.Swimming }, { type: ActivityTypes.Running }];
+            component.unitSettings = {
+                distanceUnits: DistanceUnits.Miles,
+                swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
+            } as any;
+            component.event = {
+                ...mockEvent,
+                getActivities: () => activities,
+                getStat: (type: string) => type === DataDistance.type ? new DataDistance(1609.344) : null,
+            } as any;
+            component.selectedActivities = [activities[0]] as any;
+            fixture.detectChanges();
+
+            expect(component.getStatValue(DataDistance.type)).toBe('1.00');
+            expect(component.getStatUnit(DataDistance.type)).toBe('mi');
+            expect(component.heroSummaryMetrics[1]).toEqual({ value: '1.00', label: 'mi' });
         });
 
         it('should keep swimming summary distance in meters with miles distance preference', () => {

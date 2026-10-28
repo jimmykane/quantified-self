@@ -1,0 +1,127 @@
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { MatDialog } from '@angular/material/dialog';
+import { catchError, combineLatest, distinctUntilChanged, from, map, of, startWith, switchMap } from 'rxjs';
+import { PLANNED_WORKOUT_PROVIDER_IDS, PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1 } from '@shared/planned-workout-providers';
+import { SharedModule } from '../../modules/shared.module';
+import { AppUserService } from '../../services/app.user.service';
+import { TrainingDeliveryService, TRAINING_DELIVERY_SUMMARY_LIMIT, type TrainingDeliveryView, type TrainingDeliveryViewScope } from '../../services/training-delivery.service';
+import { TrainingDeliveryDialogComponent, type TrainingDeliveryDialogData } from './training-delivery-dialog.component';
+import type { ScheduledWorkoutV1, TrainingPlanV1 } from '@shared/training-plans';
+import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
+import { trainingDeliveryLocalDate } from '@shared/training-provider-delivery';
+import { buildTrainingDeliverySummaries, withGarminWorkoutCheck, type TrainingDeliverySummary } from '../../helpers/training-delivery-summary.helper';
+import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
+
+interface DeliveryReadState { uid: string; hasRecords: boolean; view: TrainingDeliveryView | null; loaded: boolean; error: boolean; }
+const EMPTY_READ: DeliveryReadState = { uid: '', hasRecords: false, view: null, loaded: false, error: false };
+
+function compactPlanLabel(summary: TrainingDeliverySummary): string {
+  const focus = summary.planFocus;
+  if (!focus || focus.totalWorkouts === null || focus.syncedWorkouts === null) return '—';
+  if (focus.totalWorkouts > 0) return `${focus.syncedWorkouts}/${focus.totalWorkouts}`;
+  if (summary.projection.totalWorkouts === 0) return 'Empty';
+  return summary.projection.outcomes.some(outcome => outcome.status === 'outside_horizon') ? 'Later' : 'None due';
+}
+
+@Component({ selector: 'app-training-delivery-button', standalone: true, imports: [SharedModule, ServiceSourceIconComponent],
+  templateUrl: './training-delivery-button.component.html', styleUrl: './training-delivery-button.component.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush })
+export class TrainingDeliveryButtonComponent {
+  readonly scope = input.required<TrainingDeliveryViewScope>();
+  readonly entityId = input.required<string>();
+  readonly title = input.required<string>();
+  readonly standalone = input(false);
+  readonly historyLabel = input('Workout sync history');
+  readonly summaryWorkouts = input<readonly ScheduledWorkoutV1[] | null>(null);
+  readonly summaryPlan = input<TrainingPlanV1 | null>(null);
+  readonly summaryCompletions = input<readonly TrainingWorkoutCompletionV1[]>([]);
+  readonly summaryNowMs = input<number | null>(null);
+  readonly context = computed<TrainingDeliveryDialogData>(() => ({ scope: this.scope(), id: this.entityId(), title: this.title() }));
+  readonly disabled = input(false);
+  private readonly users = inject(AppUserService);
+  private readonly delivery = inject(TrainingDeliveryService);
+  private readonly dialog = inject(MatDialog);
+  private readonly readContext = computed(() => ({ scope: this.scope(), id: this.entityId(),
+    summaries: this.summaryWorkouts() !== null, parentPlanId: this.scope() === 'workout'
+      ? this.summaryWorkouts()?.find(workout => workout.id === this.entityId())?.planId ?? null : null }));
+  readonly readState = toSignal(combineLatest([
+    this.users.user$.pipe(map(user => user?.uid ?? ''), distinctUntilChanged()),
+    toObservable(this.readContext).pipe(distinctUntilChanged((a, b) => JSON.stringify(a) === JSON.stringify(b))),
+  ]).pipe(switchMap(([uid, context]) => {
+    if (!uid) return of(EMPTY_READ);
+    const source = context.summaries && context.scope !== 'history'
+      ? this.delivery.watchSummaryScope(uid, context.scope, context.id, context.parentPlanId).pipe(
+        map(view => ({ uid, hasRecords: [...view.settings, ...view.statuses].some(item => this.delivery.isVisible(item.provider)),
+          view, loaded: true, error: false })))
+      : this.delivery.watchPresence(uid, context.scope, context.id).pipe(
+        map(hasRecords => ({ uid, hasRecords, view: null, loaded: true, error: false })));
+    return source.pipe(startWith({ ...EMPTY_READ, uid }), catchError(() => of({ ...EMPTY_READ, uid, loaded: true, hasRecords: true, error: true })));
+  })), { initialValue: EMPTY_READ });
+  readonly hasRecords = computed(() => this.readState().uid === this.users.user()?.uid && this.readState().hasRecords);
+  private readonly summaryDayKey = computed(() => {
+    const nowMs = this.summaryNowMs();
+    const view = this.readState().view;
+    if (this.scope() !== 'plan' || nowMs === null || !view) return '';
+    return PLANNED_WORKOUT_PROVIDER_IDS.map(provider => {
+      const timeZone = view.settings.find(item => item.provider === provider)?.timeZone
+        ?? view.statuses.find(item => item.provider === provider)?.timeZone ?? 'UTC';
+      try { return `${provider}:${trainingDeliveryLocalDate(nowMs, timeZone)}`; }
+      catch { return `${provider}:${trainingDeliveryLocalDate(nowMs, 'UTC')}`; }
+    }).join('|');
+  });
+  readonly summaryState = toSignal(combineLatest([toObservable(this.readState), toObservable(this.summaryWorkouts),
+    toObservable(this.summaryPlan), toObservable(this.summaryCompletions), toObservable(this.context),
+    toObservable(this.summaryDayKey)]).pipe(switchMap(
+    ([read, workouts, plan, completions, context]) => {
+    const empty = { uid: read.uid, rows: [] as TrainingDeliverySummary[], error: read.error };
+    const view = read.view;
+    if (!view || workouts === null || context.scope === 'history') return of(empty);
+    const currentWorkout = context.scope === 'workout' ? workouts.find(workout => workout.id === context.id) : undefined;
+    return from(buildTrainingDeliverySummaries({ uid: read.uid, scope: context.scope, id: context.id, workouts, plan,
+      ...view, completions,
+      complete: view.summaryComplete !== false && view.statuses.length < TRAINING_DELIVERY_SUMMARY_LIMIT,
+      nowMs: this.summaryNowMs() ?? Date.now() }).then(async rows => context.scope === 'workout'
+        ? Promise.all(rows.map(row => withGarminWorkoutCheck(row, read.uid, currentWorkout, view))) : rows)).pipe(
+      map(rows => ({ ...empty, rows })), startWith(empty), catchError(() => of({ ...empty, error: true })));
+  })), { initialValue: { uid: '', rows: [] as TrainingDeliverySummary[], error: false } });
+  readonly summaries = computed(() => this.summaryState().uid === this.users.user()?.uid
+    ? this.summaryState().rows.filter(summary => this.delivery.isVisible(summary.provider)) : []);
+  readonly compactPlanSummaries = computed(() => this.summaries().map(summary => ({
+    ...summary, compactLabel: compactPlanLabel(summary),
+  })));
+  readonly planIdleMessage = computed(() => {
+    const summaries = this.compactPlanSummaries();
+    if (!summaries.length || summaries.some(summary => summary.planFocus?.totalWorkouts !== 0)) return null;
+    return summaries.every(summary => summary.projection.totalWorkouts === 0)
+      ? 'No workouts in this plan' : 'No workouts due for sync';
+  });
+  private readonly planDelivery = computed(() => this.scope() === 'plan' || (this.scope() === 'workout' && !this.standalone()));
+  readonly visible = computed(() => !!this.users.user()?.uid
+    && (this.summaryWorkouts() === null || this.readState().uid === this.users.user()?.uid)
+    && ((this.scope() !== 'history' && this.delivery.anyReady()) || this.hasRecords()));
+  readonly singleProvider = computed(() => {
+    const providers = PLANNED_WORKOUT_PROVIDER_IDS.filter(provider => this.delivery.isSetupAvailable(provider, this.planDelivery()));
+    return providers.length === 1 ? providers[0] : null;
+  });
+  readonly buttonLabel = computed(() => {
+    if (this.scope() === 'history') return this.historyLabel();
+    if (!this.readState().loaded || this.readState().error || this.hasRecords()) return this.scope() === 'plan' ? 'Plan sync' : 'Workout sync';
+    const provider = this.singleProvider();
+    const label = provider ? PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label : null;
+    return this.scope() === 'plan' ? label ? `Sync plan with ${label}` : 'Sync plan'
+      : this.standalone() ? label ? `Send to ${label}` : 'Send workout' : 'Workout sync';
+  });
+  readonly showSetupHint = computed(() => this.scope() === 'plan' && this.summaryPlan()?.lifecycle !== 'archived'
+    && this.readState().loaded && !this.readState().error && !this.summaryState().error && !this.hasRecords()
+    && this.readState().view?.summaryComplete !== false
+    && PLANNED_WORKOUT_PROVIDER_IDS.some(provider => this.delivery.isSetupAvailable(provider, true)));
+  open(): void {
+    if (!this.visible() || this.disabled()) return;
+    const provider = this.singleProvider();
+    const data: TrainingDeliveryDialogData = { ...this.context(),
+      ...(this.scope() === 'plan' ? { planSummaries: this.summaries } : {}),
+      ...(this.readState().loaded && !this.hasRecords() && provider && (this.scope() === 'plan' || this.standalone()) ? { initialProvider: provider } : {}) };
+    this.dialog.open(TrainingDeliveryDialogComponent, { data, width: '640px', maxWidth: '95vw' });
+  }
+}

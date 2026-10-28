@@ -1,13 +1,18 @@
+import { isCompleteEvent, type EventRead } from '@shared/event-read';
+import type { ActivityFilterPickerOption } from '../shared/activity-filter-picker/activity-filter-picker.component';
+import { Auth } from 'app/firebase/auth';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
+  EventEmitter,
   Injectable,
   Input,
   OnChanges,
   OnDestroy,
   OnInit,
+  Output,
   SimpleChanges,
   ViewChild,
   inject
@@ -21,26 +26,25 @@ import { MatCard } from '@angular/material/card';
 import { MatPaginator, MatPaginatorIntl, PageEvent } from '@angular/material/paginator';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatSort } from '@angular/material/sort';
-import { AppEventInterface, BenchmarkResult } from '@shared/app-event.interface';
+import { BenchmarkResult } from '@shared/app-event.interface';
 import { MatTableDataSource } from '@angular/material/table';
 import { SelectionModel } from '@angular/cdk/collections';
 import { DatePipe } from '@angular/common';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
-import { EventInterface } from '@sports-alliance/sports-lib';
+
 import { Privacy } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { debounceTime, map } from 'rxjs/operators';
 import { firstValueFrom, race, Subject, Subscription } from 'rxjs';
 import { rowsAnimation } from '../../animations/animations';
-import { DataActivityTypes } from '@sports-alliance/sports-lib';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { AppUserService } from '../../services/app.user.service';
 import { AppUserUtilities } from '../../utils/app.user.utilities';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
-import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import { DataDeviceNames } from '@sports-alliance/sports-lib';
-import { DataTableAbstractDirective, StatRowElement } from '../data-table/data-table-abstract.directive';
+import { DataTableAbstractDirective, StatRowElement, EVENT_TABLE_STAT_TYPES } from '../data-table/data-table-abstract.directive';
 import { EventsExportFormComponent } from '../events-export-form/events-export.form.component';
 import { MatDialog } from '@angular/material/dialog';
 import { OrderByDirection } from 'firebase/firestore';
@@ -53,13 +57,16 @@ import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.servi
 import { MergeOptionsDialogComponent } from './merge-options-dialog/merge-options-dialog.component';
 import { AppEventMergeService, MergeEventResponse, MergeType } from '../../services/app.event-merge.service';
 import { EventTagService } from '../../services/event-tag.service';
+import { EventTagCatalogService } from '../../services/event-tag-catalog.service';
 import { EVENT_TAG_BULK_LIMIT, getEventTags, normalizeEventTagSuggestions } from '@shared/event-tags';
 import { EventTagsDialogComponent } from '../event-tags/event-tags-dialog.component';
 import { EventTagsBulkDialogComponent } from '../event-tags/event-tags-bulk-dialog.component';
+import { resolveBenchmarkOverallGrade } from '../../helpers/benchmark-review.helper';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { getTagLibraryActivityName } from '../../helpers/event-tag-library.helper';
 
 interface EventTableRowCacheEntry {
-  event: EventInterface;
+  event: EventRead;
   eventRowContentKey: string;
   renderContextKey: string;
   row: StatRowElement;
@@ -71,7 +78,13 @@ interface DeviceNameDisplayItem {
   trackKey: string;
 }
 
-export type EventTablePresentation = 'dashboard' | 'browse';
+export type EventTablePresentation = 'dashboard' | 'browse' | 'tag-library';
+
+export interface EventTableEventsChange {
+  userID: string;
+  updatedTags: Record<string, string[]>;
+  deletedEventIDs: string[];
+}
 
 @Component({
   selector: 'app-event-table',
@@ -86,11 +99,29 @@ export type EventTablePresentation = 'dashboard' | 'browse';
 })
 
 export class EventTableComponent extends DataTableAbstractDirective implements OnChanges, OnInit, OnDestroy, AfterViewInit {
+  private readonly sendAuth = inject(Auth, { optional: true });
+  get canSendOwnedActivities(): boolean { return !!this.user && this.sendAuth?.currentUser?.uid === this.user.uid && (!this.targetUser || this.targetUser.uid === this.user.uid); }
+  async sendToService(): Promise<void> {
+    if (!this.canSendOwnedActivities) return;
+    const ids = this.selection.selected.map(row => row.Event.getID());
+    if (!ids.length || ids.length > 50) { this.snackBar.open('Select up to 50 activities to send.', undefined, { duration: 4000 }); return; }
+    const opened = await this.router.navigate(['/send-activities'], { queryParams: { source: 'saved' }, state: { activitySendSelection: ids, activitySendOwner: this.user.uid } });
+    if (opened) this.hapticsService.selection();
+  }
+
   @Input() user!: User;
-  @Input() events!: EventInterface[];
+  @Input() events!: EventRead[];
   @Input() targetUser!: User;
   @Input() showActions!: boolean;
   @Input() presentation: EventTablePresentation = 'dashboard';
+  @Input() showTagFilter = true;
+  @Input() filterContext = '';
+  @Input() preserveSearchOnFilterChange = false;
+  @Input() hideGeneratedNames = false;
+  @Input() emptyMessage = 'No activities to show';
+  @Input() emptyHint = '';
+  @Input() hasLoadError = false;
+  @Output() eventsChange = new EventEmitter<EventTableEventsChange>();
   @ViewChild(MatSort, { static: true }) sort!: MatSort;
   @ViewChild(MatPaginator, { static: true }) paginator!: MatPaginator;
   @ViewChild(MatCard, { static: true }) table!: MatCard;
@@ -99,7 +130,33 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   selection = new SelectionModel(true, []);
 
   selectedColumns = AppUserUtilities.getDefaultSelectedTableColumns();
+  private libraryColumns = ['Distance', 'Duration'];
+  private libraryPageSize = 5;
+  private libraryPageIndex = 0;
+  private suppressLibraryPageFeedback = false;
+  private librarySort = { active: 'Start Date', direction: 'desc' as 'asc' | 'desc' };
+  readonly libraryAvailableColumns = [
+    'Distance', 'Duration',
+    ...AppUserUtilities.getDefaultSelectedTableColumns()
+      .filter(column => !['Start Date', 'Activity Types', 'Name', 'Description', 'Distance', 'Duration'].includes(column)),
+  ];
   displayedColumns: string[] = [];
+
+  get showEmptyNotice(): boolean {
+    if (this.isLoading || this.hasLoadError || !this.events) return false;
+    const rows = this.data.filteredData ?? this.data.data;
+    return rows.length === 0 && (this.events.length === 0 || this.data.data.length > 0);
+  }
+
+  get emptyNoticeMessage(): string {
+    return this.searchTerm.trim() || this.tagFilters.length || this.untaggedFilter
+      ? 'No activities match your filters' : this.emptyMessage;
+  }
+
+  get emptyNoticeHint(): string {
+    return this.searchTerm.trim() || this.tagFilters.length || this.untaggedFilter
+      ? 'Change your dates or clear a filter.' : this.emptyHint;
+  }
 
   public show = true
 
@@ -119,17 +176,30 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     'Tags Title',
     'Tag Action Label',
     'Tags Accessible Label',
+    'Library Activity Name',
+    'Library Activity Label',
   ]);
-  private readonly duplicateSourceFilesMessage = 'Selected events include identical source files. Deselect duplicates and try again.';
-  readonly sharedEventTooltip = 'Public link enabled. Anyone with the link can view this event, comparison data, and original files.';
+  private readonly duplicateSourceFilesMessage = 'Selected activities include identical source files. Deselect duplicates and try again.';
+  readonly sharedEventTooltip = 'Public link enabled. Anyone with the link can view this activity, comparison data, and original files.';
   private rowCache = new Map<string, EventTableRowCacheEntry>();
+  private destroyed = false;
 
 
   private searchSubject: Subject<string> = new Subject();
   private analyticsService = inject(AppAnalyticsService);
   private hapticsService = inject(AppHapticsService);
   private eventTagService = inject(EventTagService);
-  public tagFilter = '';
+  private eventTagCatalogService = inject(EventTagCatalogService);
+  private allHistoryTags: string[] | null = null;
+  private tagCatalogUserID: string | null = null;
+  private tagCatalogRequestVersion = 0;
+  public tagCatalogIsLoading = false;
+  public tagCatalogLoadFailed = false;
+  public canLoadTagCatalog = false;
+  public tagFilters: string[] = [];
+  public untaggedFilter = false;
+  public tagPickerOptions: ActivityFilterPickerOption[] = [];
+  public tagPickerValues: string[] = [];
   public tagFilterOptions: string[] = [];
   public isBulkTagSaving = false;
 
@@ -154,6 +224,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return this.presentation === 'browse';
   }
 
+  get isLibraryPresentation(): boolean {
+    return this.presentation === 'tag-library';
+  }
+
   get showToolbar(): boolean {
     return !this.isBrowsePresentation;
   }
@@ -167,33 +241,41 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   get tableSortActive(): string {
+    if (this.isLibraryPresentation) return this.librarySort.active;
     return this.user?.settings?.dashboardSettings?.tableSettings?.active || 'Start Date';
   }
 
   get tableSortDirection(): 'asc' | 'desc' {
+    if (this.isLibraryPresentation) return this.librarySort.direction;
     return this.user?.settings?.dashboardSettings?.tableSettings?.direction === 'asc' ? 'asc' : 'desc';
   }
 
   get tablePageSize(): number {
+    if (this.isLibraryPresentation) return this.libraryPageSize;
     const pageSize = this.user?.settings?.dashboardSettings?.tableSettings?.eventsPerPage;
     return Number.isFinite(pageSize) && pageSize > 0 ? pageSize : 10;
   }
 
-
   ngOnChanges(simpleChanges: SimpleChanges): void {
+    const preferencesChanged = this.user && (simpleChanges.user || simpleChanges.presentation);
+    if (preferencesChanged) {
+      // The loading base renders synchronously. Initialize the picker first so
+      // Material does not retain options created with Dashboard defaults.
+      this.selectedColumns = this.isLibraryPresentation ? this.libraryColumns
+        : this.user.settings?.dashboardSettings?.tableSettings?.selectedColumns || AppUserUtilities.getDefaultSelectedTableColumns();
+    }
     this.isLoading ? this.loading() : this.loaded();
     if (!this.events) {
       this.rowCache.clear();
       this.loading();
       return;
     }
-    if (this.events && simpleChanges.events && this.data.paginator && this.data.sort) { // If there is no paginator and sort then the compoenent is not initialized on view
-      this.processChanges('on_changes_events', true);
+    if (this.events && (simpleChanges.events || preferencesChanged || simpleChanges.hideGeneratedNames) && this.paginator && this.sort) {
+      this.processChanges(simpleChanges.presentation ? 'on_changes_presentation' : 'on_changes_events', true);
     }
-    if (this.user && simpleChanges.user) {
-      this.selectedColumns = this.user.settings?.dashboardSettings?.tableSettings?.selectedColumns || AppUserUtilities.getDefaultSelectedTableColumns();
-      const nextPageSize = this.user.settings?.dashboardSettings?.tableSettings?.eventsPerPage || 10;
-      if (this.paginator && this.paginator.pageSize !== nextPageSize) {
+    if (preferencesChanged) {
+      const nextPageSize = this.tablePageSize;
+      if (!this.isLibraryPresentation && this.paginator && this.paginator.pageSize !== nextPageSize) {
         this.paginator._changePageSize(nextPageSize);
       }
       this.updateDisplayedColumns();
@@ -201,11 +283,34 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (simpleChanges.showActions || simpleChanges.presentation) {
       if (this.isBrowsePresentation) {
         this.searchTerm = '';
-        this.tagFilter = '';
+        this.tagFilters = [];
+        this.untaggedFilter = false;
         this.selection.clear();
         this.applyTableFilter();
       }
       this.updateDisplayedColumns();
+    }
+    if (simpleChanges.showTagFilter && !this.showTagFilter) {
+      this.tagFilters = [];
+      this.untaggedFilter = false;
+      this.applyTableFilter();
+    }
+    if (simpleChanges.filterContext) {
+      if (!this.preserveSearchOnFilterChange) {
+        this.searchTerm = '';
+        this.searchSubject.next('');
+      }
+      this.tagFilters = [];
+      this.untaggedFilter = false;
+      this.selection.clear();
+      this.suppressLibraryPageFeedback = true;
+      this.paginator?.firstPage();
+      this.suppressLibraryPageFeedback = false;
+      this.libraryPageIndex = 0;
+      this.applyTableFilter();
+    }
+    if (simpleChanges.user || simpleChanges.targetUser || simpleChanges.presentation) {
+      void this.loadAllHistoryTags();
     }
   }
 
@@ -213,6 +318,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (!this.user) {
       throw new Error(`Component needs user`)
     }
+    void this.loadAllHistoryTags();
     this.updateDisplayedColumns();
     this.searchSubscription = this.searchSubject.pipe(
       debounceTime(250)
@@ -229,7 +335,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         }
         this.isHandset = nextIsHandset;
         this.updateDisplayedColumns();
-        if (this.events && this.data.paginator && this.data.sort) {
+        if (this.events && this.paginator && this.sort) {
           this.processChanges('breakpoint_change', true);
         }
         this.changeDetector.markForCheck();
@@ -244,12 +350,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     };
     this.data.filterPredicate = (row: any, filter: string) => {
       const filterState = this.parseTableFilter(filter);
-      if (filterState.tag) {
-        const tagKey = filterState.tag.toLowerCase();
-        const rowTags = Array.isArray(row['Tag Values']) ? row['Tag Values'] : [];
-        if (!rowTags.some((tag: string) => tag.toLowerCase() === tagKey)) {
-          return false;
-        }
+      if (filterState.tags.length || filterState.untagged) {
+        const selected = new Set(filterState.tags.map(tag => tag.toLowerCase()));
+        const rowTags: string[] = Array.isArray(row['Tag Values']) ? row['Tag Values'] : [];
+        if (!rowTags.some(tag => selected.has(tag.toLowerCase())) && !(filterState.untagged && !rowTags.length)) return false;
       }
 
       const terms = filterState.text
@@ -270,6 +374,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     };
     this.sortSubscription = this.sort.sortChange.subscribe(async (sort) => {
       if (this.isBrowsePresentation) {
+        return;
+      }
+      if (this.isLibraryPresentation) {
+        const direction = sort.direction === 'asc' ? 'asc' : 'desc';
+        if (sort.active !== this.librarySort.active || direction !== this.librarySort.direction) this.hapticsService.selection();
+        this.librarySort = { active: sort.active, direction };
         return;
       }
       const tableSettings = this.user?.settings?.dashboardSettings?.tableSettings;
@@ -308,15 +418,21 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   public removeDeletedEvent(eventID: string): void {
-    if (!eventID || !this.events) {
+    if (!eventID || !this.events || !this.user) {
       return;
     }
     const nextEvents = this.events.filter(event => event?.getID() !== eventID);
-    if (nextEvents.length === this.events.length) {
-      return;
+    if (nextEvents.length !== this.events.length) {
+      this.events = nextEvents;
+      this.processChanges('after_delete_row');
     }
-    this.events = nextEvents;
-    this.processChanges('after_delete_row');
+    this.eventsChange.emit({ userID: this.user.uid, updatedTags: {}, deletedEventIDs: [eventID] });
+  }
+
+  public refreshSavedAscent(event: EventRead): void {
+    if (this.destroyed || !this.user || !this.events?.includes(event)) return;
+    this.invalidateRowCacheForEvent(event);
+    this.processChanges('ascent_saved', true);
   }
 
   private persistDashboardSettings(dashboardSettingsPatch: Record<string, unknown>): Promise<void> {
@@ -334,67 +450,61 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
    * Opens the benchmark report or selection dialog for a merged event directly from the table.
    * Stops propagation to prevent row navigation.
    */
-  openBenchmarkFlow(event: Event, appEvent: AppEventInterface): void {
+  async openBenchmarkFlow(event: Event, eventRead: EventRead): Promise<void> {
     event.stopPropagation();
     event.preventDefault();
 
+    const user = this.user;
+    const owner = this.targetUser || user;
+    const ownerID = owner?.uid;
+    const viewerID = this.sendAuth?.currentUser?.uid;
+    const isCurrent = () => !this.destroyed && this.user?.uid === user?.uid && (this.targetUser || this.user)?.uid === ownerID
+      && this.sendAuth?.currentUser?.uid === viewerID;
+    let appEvent;
+    try {
+      appEvent = await this.loadCompleteEvent(eventRead, owner);
+    } catch (error) {
+      if (!isCurrent()) return;
+      this.logger.error('Could not load activity for benchmark', error);
+      this.snackBar.open('Could not load activity', undefined, { duration: 3000 });
+      this.hapticsService.error();
+      return;
+    }
+    if (!isCurrent()) return;
     const initialSelection = appEvent.getActivities().slice(0, 2);
     const result = this.getFirstBenchmarkResult(appEvent);
 
     if (result) {
       this.benchmarkFlow.openBenchmarkReport({
         event: appEvent,
+        hydrateStreamsForGeneration: true,
         persistEvent: appEvent,
-        user: this.user,
+        user,
         result,
         initialSelection
       });
     } else {
       this.benchmarkFlow.openBenchmarkSelectionDialog({
         event: appEvent,
+        hydrateStreamsForGeneration: true,
         persistEvent: appEvent,
-        user: this.user,
+        user,
         initialSelection
       });
     }
   }
 
-  getBenchmarkColor(appEvent: AppEventInterface): string {
+  getBenchmarkColor(appEvent: EventRead): string {
     const result = this.getFirstBenchmarkResult(appEvent);
     if (!result) return '';
 
-    // Replicating grading logic from BenchmarkReportComponent
-
-    // 1. GNSS Grade
-    let gnssScore = 0; // poor
-    const cep50 = result.metrics.gnss.cep50;
-    if (cep50 <= 2) gnssScore = 3; // excellent
-    else if (cep50 <= 5) gnssScore = 2; // good
-    else if (cep50 <= 10) gnssScore = 1; // fair
-
-    // 2. Stream Grades
-    const streamScores: number[] = [];
-    Object.values(result.metrics.streamMetrics).forEach(m => {
-      const corr = m.pearsonCorrelation;
-      if (corr >= 0.98) streamScores.push(3);
-      else if (corr >= 0.95) streamScores.push(2);
-      else if (corr >= 0.90) streamScores.push(1);
-      else streamScores.push(0);
-    });
-
-    const allScores = [gnssScore, ...streamScores];
-    if (allScores.length === 0) return AppColors.Orange; // Fair default
-
-    const total = allScores.reduce((a, b) => a + b, 0);
-    const avg = total / allScores.length;
-
-    if (avg >= 2.5) return AppColors.Green; // Excellent
-    if (avg >= 1.5) return AppColors.Green; // Good (using same green for simplicity or could use a lighter one)
-    if (avg >= 0.5) return AppColors.Orange; // Fair
-    return AppColors.Red; // Poor
+    const grade = resolveBenchmarkOverallGrade(result);
+    if (grade === 'excellent' || grade === 'good') return AppColors.Green;
+    if (grade === 'poor') return AppColors.Red;
+    return AppColors.Orange;
   }
 
-  private getFirstBenchmarkResult(appEvent: AppEventInterface): BenchmarkResult | null {
+  private getFirstBenchmarkResult(appEvent: EventRead): BenchmarkResult | null {
     const results = appEvent.benchmarkResults;
     if (results) {
       const keys = Object.keys(results);
@@ -420,12 +530,23 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   trackByEventId = (index: number, row: StatRowElement): string | number => {
-    const event = row?.Event as EventInterface | undefined;
+    const event = row?.Event as EventRead | undefined;
     return event?.getID ? event.getID() : index;
   }
 
   private getSelectableRows(): any[] {
-    return Array.isArray(this.data.filteredData) ? this.data.filteredData : this.data.data;
+    const rows = Array.isArray(this.data.filteredData) ? this.data.filteredData : this.data.data;
+    if (!this.isLibraryPresentation) return rows;
+    const sortedRows = this.data.sort ? this.data.sortData([...rows], this.data.sort) : rows;
+    const pageSize = this.paginator?.pageSize || this.tablePageSize;
+    const pageIndex = this.paginator?.pageIndex || 0;
+    return sortedRows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize);
+  }
+
+  get isSelectionIndeterminate(): boolean {
+    const rows = this.getSelectableRows();
+    const selectedCount = rows.filter(row => this.selection.isSelected(row)).length;
+    return selectedCount > 0 && selectedCount < rows.length;
   }
 
   isAllSelected() {
@@ -451,7 +572,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.hapticsService.selection();
   }
 
-  private collectSourceFilePaths(event: EventInterface): string[] {
+  private collectSourceFilePaths(event: EventRead): string[] {
     const appEvent = event as {
       originalFiles?: Array<{ path?: unknown }>;
       originalFile?: { path?: unknown };
@@ -467,7 +588,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return legacyPath.length > 0 ? [legacyPath] : [];
   }
 
-  private hasDuplicateSourceFilePaths(events: EventInterface[]): boolean {
+  private hasDuplicateSourceFilePaths(events: EventRead[]): boolean {
     const seenPaths = new Set<string>();
 
     for (const appEvent of events) {
@@ -485,14 +606,14 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   async mergeSelection(event) {
     if (this.selection.selected.length < 2) {
-      this.snackBar.open('Select at least two events to merge', undefined, { duration: 2000 });
+      this.snackBar.open('Select at least two activities to merge', undefined, { duration: 2000 });
       return;
     }
 
     const selectedRows = [...this.selection.selected] as StatRowElement[];
     const selectedEvents = selectedRows
-      .map((selected) => selected?.Event as EventInterface | undefined)
-      .filter((selectedEvent): selectedEvent is EventInterface => !!selectedEvent);
+      .map((selected) => selected?.Event as EventRead | undefined)
+      .filter((selectedEvent): selectedEvent is EventRead => !!selectedEvent);
 
     if (this.hasDuplicateSourceFilePaths(selectedEvents)) {
       this.snackBar.open(this.duplicateSourceFilesMessage, undefined, { duration: 4000 });
@@ -523,7 +644,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (eventIDs.length < 2) {
       this.restoreEventSelection(selectedRows);
       this.loaded();
-      this.snackBar.open('Not enough events to merge', undefined, { duration: 3000 });
+      this.snackBar.open('Not enough activities to merge', undefined, { duration: 3000 });
       dialogRef.disableClose = false;
       dialogRef.componentInstance.isMerging = false;
       dialogRef.close(null);
@@ -566,7 +687,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     try {
       const navigated = await this.router.navigate(['/user', this.user.uid, 'event', result.eventId], {});
       if (navigated) {
-        this.snackBar.open('Events merged', undefined, {
+        this.snackBar.open('Activities merged', undefined, {
           duration: 2000,
         });
         return;
@@ -583,55 +704,64 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     }
 
     this.loaded();
-    this.snackBar.open('Events merged. Open the merged event from the table once it appears.', undefined, {
+    this.snackBar.open('Activities merged. Open the merged activity from the table once it appears.', undefined, {
       duration: 5000,
     });
   }
 
   async deleteSelection() {
+    const user = this.user;
+    const eventIDs = [...new Set(this.selection.selected
+      .map(selected => selected.Event?.getID())
+      .filter((eventID): eventID is string => !!eventID))];
+    if (!user || !eventIDs.length) return;
     this.loading();
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       data: {
-        title: 'Are you sure you want to delete?',
-        message: 'All data will be permanently deleted. This operation cannot be undone.',
-        confirmLabel: 'Delete',
+        title: eventIDs.length === 1 ? 'Delete activity?' : `Delete ${eventIDs.length} activities?`,
+        message: 'The selected activities, their recorded data and original files will be permanently deleted. You cannot undo this.',
+        confirmLabel: eventIDs.length === 1 ? 'Delete activity' : 'Delete activities',
         cancelLabel: 'Cancel',
         confirmColor: 'warn',
       }
     });
     this.deleteConfirmationSubscription = dialogRef.afterClosed().subscribe(async (result) => {
-      if (!result) {
-        this.loaded();
+      if (!result || !this.isCurrentMutationOwner(user)) {
+        if (this.isCurrentMutationOwner(user)) this.loaded();
         return;
       }
       try {
-        this.unsubscribeFromAll();
-        const deletePromises = [];
-        const eventsToDelete = this.selection.selected.map(selected => selected.Event);
-        eventsToDelete.forEach((event) => deletePromises.push(this.eventService.deleteAllEventData(this.user, event.getID())));
         this.selection.clear();
-        await Promise.all(deletePromises);
+        const outcomes = await Promise.allSettled(eventIDs.map(eventID =>
+          this.eventService.deleteAllEventData(user, eventID)));
+        if (!this.isCurrentMutationOwner(user)) return;
+        const deletedIds = new Set(eventIDs.filter((_eventID, index) => outcomes[index].status === 'fulfilled'));
 
-        // Update local view
-        if (this.events) {
-          const deletedIds = new Set(eventsToDelete.map(e => e.getID()));
-          this.events = this.events.filter(e => !deletedIds.has(e.getID()));
-          this.processChanges('after_delete_selection');
+        // Reconcile each confirmed result even when another deletion failed.
+        if (deletedIds.size > 0) {
+          if (this.events) {
+            this.events = this.events.filter(e => !deletedIds.has(e.getID()));
+            this.processChanges('after_delete_selection');
+          }
+          this.eventsChange.emit({ userID: user.uid, updatedTags: {}, deletedEventIDs: [...deletedIds] });
         }
+        const failure = outcomes.find(outcome => outcome.status === 'rejected');
+        if (failure?.status === 'rejected') throw failure.reason;
 
         this.analyticsService.logEvent('delete_events');
-        this.snackBar.open('Events deleted', undefined, {
+        this.snackBar.open('Activities deleted', undefined, {
           duration: 2000,
         });
         this.hapticsService.success();
       } catch (error) {
+        if (!this.isCurrentMutationOwner(user)) return;
         this.logger.error('[EventTableComponent] Failed to delete selected events', error);
-        this.snackBar.open('Could not delete selected events', undefined, {
+        this.snackBar.open('Could not delete selected activities', undefined, {
           duration: 3000,
         });
         this.hapticsService.error();
       } finally {
-        this.loaded();
+        if (this.isCurrentMutationOwner(user)) this.loaded();
       }
     });
   }
@@ -650,13 +780,27 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     });
   }
 
+  private async loadCompleteEvent(event: EventRead, owner: User) {
+    if (isCompleteEvent(event)) {
+      // Full readers can be passed through; summaries must be fetched explicitly.
+      return event;
+    }
+    const fullEvent = await firstValueFrom(this.eventService.getEventAndActivitiesOnce(owner, event.getID()));
+    if (!fullEvent) throw new Error('Activity no longer exists');
+    return fullEvent;
+  }
+
   public async downloadGPXSelection() {
+    const viewer = this.user, owner = this.targetUser || viewer;
+    const viewerID = this.sendAuth?.currentUser?.uid;
+    const isCurrent = () => !this.destroyed && this.user?.uid === viewer?.uid
+      && (this.targetUser || this.user)?.uid === owner?.uid && this.sendAuth?.currentUser?.uid === viewerID;
     const jobId = this.processingService.addJob('download', 'Preparing GPX export...');
 
     try {
-      const selectedEvents = this.selection.selected.map(selected => selected.Event) as EventInterface[];
+      const selectedEvents = this.selection.selected.map(selected => selected.Event) as EventRead[];
       if (selectedEvents.length === 0) {
-        this.snackBar.open('No events selected', undefined, { duration: 2000 });
+        this.snackBar.open('No activities selected', undefined, { duration: 2000 });
         this.processingService.removeJob(jobId);
         return;
       }
@@ -674,17 +818,34 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       let completed = 0;
 
       for (const event of selectedEvents) {
+        if (!isCurrent()) {
+          this.processingService.removeJob(jobId);
+          return;
+        }
         const eventDate = this.fileService.toDate(event.startDate);
         const eventId = event.getID ? event.getID() : null;
 
         try {
-          const data = await this.eventService.getEventAsGPXBloB(this.user, event as any);
+          const fullEvent = await this.loadCompleteEvent(event, owner);
+          if (!isCurrent()) {
+            this.processingService.removeJob(jobId);
+            return;
+          }
+          const data = await this.eventService.getEventAsGPXBloB(owner, fullEvent);
+          if (!isCurrent()) {
+            this.processingService.removeJob(jobId);
+            return;
+          }
           generatedFiles.push({ data, eventDate, eventId });
           if (eventDate) {
             if (!minDate || eventDate < minDate) minDate = eventDate;
             if (!maxDate || eventDate > maxDate) maxDate = eventDate;
           }
         } catch (error) {
+          if (!isCurrent()) {
+            this.processingService.removeJob(jobId);
+            return;
+          }
           failedCount++;
           this.logger.error('Failed to export GPX for selected event:', eventId, error);
         }
@@ -697,7 +858,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       }
 
       if (generatedFiles.length === 0) {
-        this.snackBar.open('Could not export GPX for selected events', undefined, { duration: 3000 });
+        this.snackBar.open('Could not export GPX for selected activities', undefined, { duration: 3000 });
         this.processingService.failJob(jobId, 'No GPX files exported');
         this.hapticsService.error();
         return;
@@ -740,7 +901,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
       if (failedCount > 0) {
         this.snackBar.open(
-          `Downloaded ${downloadedCount} GPX ${downloadedCount === 1 ? 'file' : 'files'}. Skipped ${failedCount} ${failedCount === 1 ? 'event' : 'events'}.`,
+          `Downloaded ${downloadedCount} GPX ${downloadedCount === 1 ? 'file' : 'files'}. Skipped ${failedCount} ${failedCount === 1 ? 'activity' : 'activities'}.`,
           undefined,
           { duration: 4000 },
         );
@@ -765,9 +926,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     const jobId = this.processingService.addJob('download', 'Preparing download...');
 
     try {
-      const selectedEvents = this.selection.selected.map(s => s.Event) as EventInterface[];
+      const selectedEvents = this.selection.selected.map(s => s.Event) as EventRead[];
       if (selectedEvents.length === 0) {
-        this.snackBar.open('No events selected', undefined, { duration: 2000 });
+        this.snackBar.open('No activities selected', undefined, { duration: 2000 });
         this.processingService.removeJob(jobId);
         return;
       }
@@ -786,7 +947,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       }
 
       if (filesToDownload.length === 0) {
-        this.snackBar.open('No original files available for selected events', undefined, { duration: 3000 });
+        this.snackBar.open('No original files available for selected activities', undefined, { duration: 3000 });
         this.processingService.removeJob(jobId);
         this.hapticsService.error();
         return;
@@ -848,10 +1009,18 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   override isColumnHeaderSortable(columnName: string): boolean {
+    if (columnName === 'Name' && this.isLibraryPresentation) return true;
     return columnName === 'Shared' || super.isColumnHeaderSortable(columnName);
   }
 
   private updateDisplayedColumns() {
+    if (this.isLibraryPresentation) {
+      this.displayedColumns = [
+        ...(this.canManageEvents ? ['Checkbox'] : []), 'Start Date', 'Name',
+        ...this.libraryColumns, 'Tags', ...(this.showRowActions ? ['Actions'] : []),
+      ];
+      return;
+    }
     const sortedSelectedColumns = (this.selectedColumns || [])
       .filter(column => column !== 'Description' && column !== 'Shared' && column !== 'Tags')
       .sort((a, b) => this.defaultSelectedColumns.indexOf(a) - this.defaultSelectedColumns.indexOf(b));
@@ -885,30 +1054,38 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     });
   }
 
-  async saveEventDescription(description: string, event: EventInterface) {
+  async saveEventDescription(description: string, event: EventRead) {
     event.description = description;
     this.invalidateRowCacheForEvent(event);
     await this.eventService.updateEventProperties(this.user, event.getID(), {
       description: event.description,
     });
-    this.snackBar.open('Event saved', undefined, {
+    this.snackBar.open('Activity saved', undefined, {
       duration: 2000,
     });
   }
 
-  async saveEventName(name: string, event: EventInterface) {
+  async saveEventName(name: string, event: EventRead) {
     event.name = name;
     this.invalidateRowCacheForEvent(event);
     await this.eventService.updateEventProperties(this.user, event.getID(), {
       name: event.name,
     });
-    this.snackBar.open('Event saved', undefined, {
+    this.snackBar.open('Activity saved', undefined, {
       duration: 2000,
     });
   }
 
   // Noop due to bugs
   async pageChanges(pageEvent: PageEvent) {
+    if (this.isLibraryPresentation) {
+      const pageIndex = pageEvent.pageIndex ?? this.paginator?.pageIndex ?? 0;
+      const previousPageIndex = pageEvent.previousPageIndex ?? this.libraryPageIndex;
+      if (!this.suppressLibraryPageFeedback && (pageIndex !== previousPageIndex || pageEvent.pageSize !== this.libraryPageSize)) this.hapticsService.selection();
+      this.libraryPageIndex = pageIndex;
+      this.libraryPageSize = pageEvent.pageSize;
+      return;
+    }
     if (this.isBrowsePresentation) {
       return;
     }
@@ -933,20 +1110,30 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.applyTableFilter();
   }
 
-  updateTagFilter(tag: string): void {
-    const requestedTag = `${tag || ''}`;
-    this.tagFilter = requestedTag
-      ? this.tagFilterOptions.find(option => option.toLowerCase() === requestedTag.toLowerCase()) || ''
-      : '';
+  updateTagFilters(values: readonly string[]): void {
+    const tags = this.tagFilterOptions.filter(tag => values.includes(`tag:${tag.toLowerCase()}`));
+    const untagged = values.includes('untagged');
+    if (tags.length === this.tagFilters.length && tags.every(tag => this.tagFilters.includes(tag)) && untagged === this.untaggedFilter) return;
+    this.tagFilters = tags;
+    this.untaggedFilter = untagged;
+    this.hapticsService.selection();
+    this.paginator?.firstPage();
     this.applyTableFilter();
   }
 
-  async openEventTagsDialog(domEvent: Event, event: AppEventInterface): Promise<void> {
+  onTagFilterOpened(opened: boolean): void {
+    if (opened) {
+      void this.loadAllHistoryTags(false, true);
+    }
+  }
+
+  async openEventTagsDialog(domEvent: Event, event: EventRead): Promise<void> {
     domEvent.preventDefault();
     domEvent.stopPropagation();
     if (!this.showActions || !this.user || !event?.getID?.()) {
       return;
     }
+    const user = this.user;
     this.hapticsService.selection();
     const originalTags = this.eventTagService.getTags(event);
 
@@ -954,22 +1141,26 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       width: 'min(34rem, calc(100vw - 32px))',
       maxWidth: 'calc(100vw - 32px)',
       data: {
-        title: 'Event tags',
+        title: 'Activity tags',
         tags: originalTags,
         suggestions: this.tagFilterOptions,
         save: async (tags: string[]) => {
-          const savedTags = await this.eventTagService.saveTags(this.user, event, tags, originalTags);
-          this.applySavedTagsToLoadedEvent(event.getID(), savedTags, event);
+          const savedTags = await this.eventTagService.saveTags(user, event, tags, originalTags);
+          if (this.isCurrentMutationOwner(user)) {
+            this.applySavedTagsToLoadedEvent(event.getID(), savedTags, event);
+            this.eventsChange.emit({ userID: user.uid, updatedTags: { [event.getID()]: savedTags }, deletedEventIDs: [] });
+          }
           return savedTags;
         },
       },
     });
     const savedTags = await firstValueFrom(dialogRef.afterClosed());
-    if (!Array.isArray(savedTags)) {
+    if (!Array.isArray(savedTags) || !this.isCurrentMutationOwner(user)) {
       return;
     }
 
     this.processChanges('event_tags_saved');
+    void this.loadAllHistoryTags(true);
     this.snackBar.open('Tags saved.', undefined, { duration: 2000 });
   }
 
@@ -979,9 +1170,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (this.isBulkTagSaving || !this.user || !this.selection.selected.length) {
       return;
     }
+    const user = this.user;
     if (this.selection.selected.length > EVENT_TAG_BULK_LIMIT) {
       this.snackBar.open(
-        `Select up to ${EVENT_TAG_BULK_LIMIT} events to update tags.`,
+        `Select up to ${EVENT_TAG_BULK_LIMIT} activities to update tags.`,
         undefined,
         { duration: 3000 },
       );
@@ -989,11 +1181,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     }
 
     const selectedEvents = this.selection.selected
-      .map(row => row?.Event as AppEventInterface | undefined)
-      .filter((event): event is AppEventInterface => !!event?.getID?.());
+      .map(row => row?.Event as EventRead | undefined)
+      .filter((event): event is EventRead => !!event?.getID?.());
     const selectedEventIDs = selectedEvents.map(event => event.getID());
     if (!selectedEventIDs.length) {
-      this.snackBar.open('Select at least one valid event to update tags.', undefined, { duration: 2500 });
+      this.snackBar.open('Select at least one valid activity to update tags.', undefined, { duration: 2500 });
       return;
     }
     this.hapticsService.selection();
@@ -1010,11 +1202,14 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         save: async (changes: { add: string[]; remove: string[] }) => {
           this.isBulkTagSaving = true;
           try {
-            savedResults = await this.eventTagService.applyBulkChanges(this.user, selectedEventIDs, changes);
-            selectedEvents.forEach((event) => {
-              const eventID = event.getID();
-              this.applySavedTagsToLoadedEvent(eventID, savedResults?.[eventID] || getEventTags(event), event);
-            });
+            savedResults = await this.eventTagService.applyBulkChanges(user, selectedEventIDs, changes);
+            if (this.isCurrentMutationOwner(user)) {
+              selectedEvents.forEach((event) => {
+                const eventID = event.getID();
+                this.applySavedTagsToLoadedEvent(eventID, savedResults?.[eventID] || getEventTags(event), event);
+              });
+              this.eventsChange.emit({ userID: user.uid, updatedTags: savedResults, deletedEventIDs: [] });
+            }
             return savedResults;
           } finally {
             this.isBulkTagSaving = false;
@@ -1024,25 +1219,30 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     });
 
     const didSave = await firstValueFrom(dialogRef.afterClosed());
-    if (!didSave || !savedResults) {
+    if (!didSave || !savedResults || !this.isCurrentMutationOwner(user)) {
       return;
     }
     this.processChanges('bulk_event_tags_saved');
+    void this.loadAllHistoryTags(true);
     this.snackBar.open(
-      `Tags updated on ${selectedEvents.length} ${selectedEvents.length === 1 ? 'event' : 'events'}.`,
+      `Tags updated on ${selectedEvents.length} ${selectedEvents.length === 1 ? 'activity' : 'activities'}.`,
       undefined,
       { duration: 2500 },
     );
   }
 
+  private isCurrentMutationOwner(user: User): boolean {
+    return !this.destroyed && this.user?.uid === user.uid;
+  }
+
   private applySavedTagsToLoadedEvent(
     eventID: string,
     tags: string[],
-    fallbackEvent: AppEventInterface,
+    fallbackEvent: EventRead,
   ): void {
     fallbackEvent.tags = tags;
     delete fallbackEvent.benchmarkReviewTags;
-    const loadedEvent = this.events.find(event => event.getID() === eventID) as AppEventInterface | undefined;
+    const loadedEvent = this.events.find(event => event.getID() === eventID) as EventRead | undefined;
     if (loadedEvent && loadedEvent !== fallbackEvent) {
       loadedEvent.tags = tags;
       delete loadedEvent.benchmarkReviewTags;
@@ -1079,26 +1279,30 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   clearSearch() {
+    if (!this.searchTerm) return;
     this.searchTerm = '';
+    this.searchSubject.next('');
     this.search('');
+    this.hapticsService.selection();
   }
 
   private applyTableFilter(): void {
+    this.tagPickerValues = [...this.tagFilters.map(tag => `tag:${tag.toLowerCase()}`), ...(this.untaggedFilter ? ['untagged'] : [])];
     this.data.filter = JSON.stringify({
-      text: this.searchTerm.trim().toLowerCase(),
-      tag: this.tagFilter,
+      text: this.searchTerm.trim().toLowerCase(), tags: this.tagFilters, untagged: this.untaggedFilter,
     });
   }
 
-  private parseTableFilter(filter: string): { text: string; tag: string } {
+  private parseTableFilter(filter: string): { text: string; tags: string[]; untagged: boolean } {
     try {
-      const parsed = JSON.parse(filter || '{}') as { text?: unknown; tag?: unknown };
+      const parsed = JSON.parse(filter || '{}') as { text?: unknown; tags?: unknown; untagged?: unknown };
       return {
         text: typeof parsed.text === 'string' ? parsed.text : '',
-        tag: typeof parsed.tag === 'string' ? parsed.tag : '',
+        tags: Array.isArray(parsed.tags) ? parsed.tags.filter((tag): tag is string => typeof tag === 'string') : [],
+        untagged: parsed.untagged === true,
       };
     } catch {
-      return { text: `${filter || ''}`, tag: '' };
+      return { text: `${filter || ''}`, tags: [], untagged: false };
     }
   }
 
@@ -1109,6 +1313,16 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   async selectedColumnsChange(event: string[]) {
     if (this.isBrowsePresentation) {
+      return;
+    }
+    if (event.length === this.selectedColumns.length && event.every((column, index) => column === this.selectedColumns[index])) {
+      return;
+    }
+    if (this.isLibraryPresentation) {
+      // Material's selected-options order can change as choices are toggled.
+      this.libraryColumns = this.libraryAvailableColumns.filter(column => event.includes(column));
+      this.selectedColumns = this.libraryColumns;
+      this.updateDisplayedColumns();
       return;
     }
     this.selectedColumns = event
@@ -1122,6 +1336,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   ngOnDestroy() {
+    this.destroyed = true;
+    this.tagCatalogRequestVersion += 1;
     this.unsubscribeFromAll();
     if (this.breakpointSubscription) {
       this.breakpointSubscription.unsubscribe();
@@ -1135,6 +1351,69 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   isStickyEnd(column: string) {
     return false
+  }
+
+  private async loadAllHistoryTags(force = false, checkCache = false): Promise<void> {
+    // Event collection listing is owner-only. Public/other-user views retain their loaded-row tags.
+    const userID = this.user?.uid;
+    if (!this.showToolbar || !userID || (this.targetUser && this.targetUser.uid !== userID)) {
+      this.canLoadTagCatalog = false;
+      this.tagCatalogRequestVersion += 1;
+      this.tagCatalogUserID = null;
+      this.allHistoryTags = null;
+      this.tagCatalogIsLoading = false;
+      this.tagCatalogLoadFailed = false;
+      this.updateTagFilterOptions();
+      return;
+    }
+    this.canLoadTagCatalog = true;
+    const sameUser = this.tagCatalogUserID === userID;
+    if (!force && sameUser && (this.tagCatalogIsLoading
+      || (!checkCache && this.allHistoryTags !== null && !this.tagCatalogLoadFailed))) {
+      return;
+    }
+
+    if (!sameUser) {
+      this.allHistoryTags = null;
+    }
+    this.tagCatalogUserID = userID;
+    this.tagCatalogIsLoading = true;
+    this.tagCatalogLoadFailed = false;
+    const requestVersion = ++this.tagCatalogRequestVersion;
+    try {
+      const tags = await this.eventTagCatalogService.listAllTags(userID, force);
+      if (requestVersion !== this.tagCatalogRequestVersion) {
+        return;
+      }
+      this.allHistoryTags = tags;
+      this.tagCatalogIsLoading = false;
+      this.updateTagFilterOptions();
+      this.changeDetector.markForCheck();
+    } catch (error) {
+      if (requestVersion === this.tagCatalogRequestVersion) {
+        this.tagCatalogIsLoading = false;
+        this.tagCatalogLoadFailed = true;
+        this.updateTagFilterOptions();
+        this.changeDetector.markForCheck();
+        this.logger.warn('[EventTableComponent] Could not load all activity tags.', error);
+      }
+    }
+  }
+
+  private updateTagFilterOptions(): void {
+    const rows = this.data.data as StatRowElement[];
+    this.tagFilterOptions = normalizeEventTagSuggestions([
+      ...(this.allHistoryTags || []),
+      ...rows.flatMap(row => row['Tag Values'] || []),
+      ...((this.tagCatalogIsLoading || this.tagCatalogLoadFailed) ? this.tagFilters : []),
+    ]).sort((first, second) => first.localeCompare(second));
+    this.tagPickerOptions = [
+      { value: 'untagged', label: 'Untagged', icon: 'label_off' },
+      ...this.tagFilterOptions.map(tag => ({ value: `tag:${tag.toLowerCase()}`, label: tag, icon: 'sell' })),
+    ];
+    const selected = new Set(this.tagFilters.map(tag => tag.toLowerCase()));
+    this.tagFilters = this.tagFilterOptions.filter(tag => selected.has(tag.toLowerCase()));
+    this.applyTableFilter();
   }
 
   private processChanges(trigger: string = 'unknown', preserveSelection: boolean = false) {
@@ -1228,17 +1507,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         }
       });
     }
-    this.tagFilterOptions = normalizeEventTagSuggestions(
-      rows.flatMap(row => row['Tag Values'] || []),
-    ).sort((first, second) => first.localeCompare(second));
-    if (this.tagFilter) {
-      const selectedTagKey = this.tagFilter.toLowerCase();
-      const matchingTagOption = this.tagFilterOptions.find(tag => tag.toLowerCase() === selectedTagKey) || '';
-      if (matchingTagOption !== this.tagFilter) {
-        this.tagFilter = matchingTagOption;
-        this.applyTableFilter();
-      }
-    }
+    this.updateTagFilterOptions();
     this.logger.info('[perf] event_table_process_changes', {
       durationMs: Number((performance.now() - processStart).toFixed(2)),
       trigger,
@@ -1255,24 +1524,24 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       isHandset: this.isHandset,
       pageSize: this.paginator?.pageSize || this.user.settings?.dashboardSettings?.tableSettings?.eventsPerPage || 0,
     });
-    this.loaded();
+    // Rebuilding display rows must not complete the parent's history request.
+    this.changeDetector.detectChanges();
 
   }
 
   private buildRowElement(
-    event: EventInterface,
+    event: EventRead,
     dateFormat: string,
     removedAscentTypes: Set<ActivityTypes>,
     removedDescentTypes: Set<ActivityTypes>,
   ): StatRowElement {
-    const activityTypesStat = <DataActivityTypes>event.getStat(DataActivityTypes.type);
-    const statRowElement = this.getStatsRowElement(
-      event.getStatsAsArray(),
-      activityTypesStat ? activityTypesStat.getValue() : [ActivityTypes.unknown],
+    const activityTypes = event.getActivityTypesAsArray();
+    const statRowElement = this.getStatsRowElementFromReader(
+      event,
+      activityTypes.length ? activityTypes : [ActivityTypes.unknown],
       this.user.settings.unitSettings,
       event.isMerge
     );
-    const activityTypes = event.getActivityTypesAsArray();
     const primaryActivityType = activityTypes.length > 1
       ? ActivityTypes.Multisport
       : (ActivityTypes[activityTypes[0] as keyof typeof ActivityTypes] || ActivityTypes.unknown);
@@ -1284,18 +1553,25 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     statRowElement['Privacy'] = event.privacy;
     statRowElement['Shared'] = isShared ? 'Shared' : '';
     statRowElement['Shared Title'] = isShared ? this.sharedEventTooltip : '';
-    statRowElement['Name'] = event.name;
+    const activityName = getTagLibraryActivityName(event);
+    statRowElement['Name'] = this.hideGeneratedNames && !activityName ? '' : event.name;
     statRowElement['Start Date'] = startDate ? this.datePipe.transform(startDate, dateFormat) : 'None?';
     statRowElement['Activity Types'] = event.getActivityTypesAsString();
+    if (this.isLibraryPresentation || this.hideGeneratedNames) {
+      const name = activityName;
+      const date = startDate ? this.datePipe.transform(startDate, 'd MMM y, HH:mm') : '';
+      statRowElement['Library Activity Name'] = name;
+      statRowElement['Library Activity Label'] = name || `${statRowElement['Activity Types'] || 'Activity'}${date ? ` on ${date}` : ''}`;
+    }
     statRowElement['Merged Event'] = event.isMerge;
     statRowElement['Description'] = event.description;
-    const tags = getEventTags(event as AppEventInterface);
+    const tags = getEventTags(event as EventRead);
     statRowElement['Tags'] = tags.join(' ');
     statRowElement['Tag Values'] = tags;
     statRowElement['Tags Title'] = tags.join('\n');
-    const eventLabel = event.name || 'event';
-    statRowElement['Tag Action Label'] = `${tags.length ? 'Edit' : 'Add'} event tags for ${eventLabel}`;
-    statRowElement['Tags Accessible Label'] = `Event tags for ${eventLabel}: ${tags.join(', ')}`;
+    const eventLabel = statRowElement['Library Activity Label'] || event.name || 'activity';
+    statRowElement['Tag Action Label'] = `${tags.length ? 'Edit' : 'Add'} activity tags for ${eventLabel}`;
+    statRowElement['Tags Accessible Label'] = `Activity tags for ${eventLabel}: ${tags.join(', ')}`;
     statRowElement['Device Names'] = event.getDeviceNamesAsString();
     statRowElement['Device Name Items'] = this.buildDeviceNameDisplayItems(event);
     statRowElement['Color'] = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(
@@ -1319,6 +1595,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     statRowElement['Has Benchmark'] = (event as any).benchmarkResult || ((event as any).benchmarkResults && Object.keys((event as any).benchmarkResults).length > 0);
 
     statRowElement['sort.Start Date'] = startDate ? startDate.getTime() : 0;
+    statRowElement['sort.Name'] = this.isLibraryPresentation || this.hideGeneratedNames
+      ? statRowElement['Library Activity Name'] || statRowElement['Activity Types'] || ''
+      : event.name || event.description || '';
     statRowElement['sort.Activity Types'] = statRowElement['Activity Types'];
     statRowElement['sort.Description'] = statRowElement['Description'];
     statRowElement['sort.Device Names'] = statRowElement['Device Names'];
@@ -1327,11 +1606,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return statRowElement;
   }
 
-  private isEventPubliclyShared(event: EventInterface): boolean {
+  private isEventPubliclyShared(event: EventRead): boolean {
     return event?.privacy === Privacy.Public;
   }
 
-  private buildDeviceNameDisplayItems(event: EventInterface): DeviceNameDisplayItem[] {
+  private buildDeviceNameDisplayItems(event: EventRead): DeviceNameDisplayItem[] {
     const activities = event.getActivities?.() ?? [];
     if (!activities.length) {
       return this.buildDeviceNameDisplayItemsFromNames(this.getDeviceNamesFromStat(event));
@@ -1370,7 +1649,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     }));
   }
 
-  private getDeviceNamesFromStat(event: EventInterface): string[] {
+  private getDeviceNamesFromStat(event: EventRead): string[] {
     const deviceNamesStat = this.safeCallForCacheKey(() => event.getStat(DataDeviceNames.type), null);
     if (!deviceNamesStat || typeof (deviceNamesStat as any).getValue !== 'function') {
       return [];
@@ -1414,14 +1693,17 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     } | undefined;
 
     return JSON.stringify({
+      owner: this.targetUser?.uid || this.user?.uid,
       dateFormat,
+      presentation: this.presentation,
+      hideGeneratedNames: this.hideGeneratedNames,
       unitSettings: this.user?.settings?.unitSettings ?? null,
       removeAscentForEventTypes: [...(summariesSettings?.removeAscentForEventTypes || [])].sort(),
       removeDescentForEventTypes: [...(summariesSettings?.removeDescentForEventTypes || [])].sort(),
     });
   }
 
-  private buildEventRowContentKey(event: EventInterface): string {
+  private buildEventRowContentKey(event: EventRead): string {
     const stats = this.readStatsForCacheKey(event);
     const benchmarkResults = (event as any).benchmarkResults;
     const startDate = event.startDate instanceof Date && !isNaN(+event.startDate)
@@ -1431,7 +1713,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return JSON.stringify({
       name: event.name ?? null,
       description: event.description ?? null,
-      tags: getEventTags(event as AppEventInterface),
+      tags: getEventTags(event as EventRead),
       privacy: event.privacy ?? null,
       isMerge: event.isMerge ?? false,
       startDate,
@@ -1449,7 +1731,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     });
   }
 
-  private readDeviceNameItemsForCacheKey(event: EventInterface): unknown[] {
+  private readDeviceNameItemsForCacheKey(event: EventRead): unknown[] {
     const activities = this.safeCallForCacheKey(() => event.getActivities?.() ?? [], []);
     if (!Array.isArray(activities)) {
       return [];
@@ -1464,18 +1746,14 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     }));
   }
 
-  private readStatsForCacheKey(event: EventInterface): unknown[] {
-    const stats = this.safeCallForCacheKey(() => event.getStatsAsArray(), []);
-    if (!Array.isArray(stats)) {
-      return [];
-    }
-
-    return stats.map((stat: any) => ({
-      type: this.safeCallForCacheKey(() => stat?.getType?.(), null),
-      value: this.normalizeCacheValue(this.safeCallForCacheKey(() => stat?.getValue?.(), null)),
-      displayValue: this.safeCallForCacheKey(() => stat?.getDisplayValue?.(), null),
-      displayUnit: this.safeCallForCacheKey(() => stat?.getDisplayUnit?.(), null),
-    }));
+  private readStatsForCacheKey(event: EventRead): unknown[] {
+    if (event.getReadRevision) return [event.getReadRevision()];
+    const types = [
+      ...EVENT_TABLE_STAT_TYPES,
+      ...event.getActivityTypesAsArray().flatMap(type => ActivityTypesHelper.averageSpeedDerivedDataTypesToUseForActivityType(
+        ActivityTypes[type as keyof typeof ActivityTypes])),
+    ];
+    return [...new Set(types)].map(type => [type, this.normalizeCacheValue((event.getStat(type) || undefined)?.getValue())]);
   }
 
   private safeCallForCacheKey<T>(read: () => T, fallback: T): T {
@@ -1515,12 +1793,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return String(value);
   }
 
-  private getEventID(event: EventInterface | undefined): string | null {
+  private getEventID(event: EventRead | undefined): string | null {
     if (!event) {
       return null;
     }
 
-    const eventWithID = event as EventInterface & { id?: string };
+    const eventWithID = event as EventRead & { id?: string };
     if (typeof eventWithID.getID === 'function') {
       return eventWithID.getID() || null;
     }
@@ -1528,7 +1806,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return eventWithID.id || null;
   }
 
-  private invalidateRowCacheForEvent(event: EventInterface | undefined): void {
+  private invalidateRowCacheForEvent(event: EventRead | undefined): void {
     const eventID = this.getEventID(event);
     if (!eventID) {
       return;

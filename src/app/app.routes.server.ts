@@ -5,6 +5,7 @@ import {
 } from './components/features/workout-data-comparison-page.paths';
 import { SUPPORTED_ACTIVITIES_PATH } from './components/features/supported-activities-page.paths';
 import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS } from './components/public-seo/public-seo-pages.paths';
+import { PUBLIC_ENTRY_REDIRECTS } from './shared/public-entry-redirects';
 
 export const PRERENDERED_INTEGRATION_ROUTES = [
   'integrations',
@@ -20,19 +21,25 @@ export const PRERENDERED_FEATURE_ROUTES = [
   SUPPORTED_ACTIVITIES_PATH,
   PUBLIC_FEATURE_PATHS.activityCalendar,
   PUBLIC_FEATURE_PATHS.trainingAnalysis,
+  PUBLIC_FEATURE_PATHS.trainingPlans,
   PUBLIC_FEATURE_PATHS.trainingDashboard,
   PUBLIC_FEATURE_PATHS.activityMap,
+  PUBLIC_FEATURE_PATHS.health,
   PUBLIC_FEATURE_PATHS.mcpServer,
   PUBLIC_FEATURE_PATHS.assistant,
   PUBLIC_FEATURE_PATHS.fitGpxTcxFileAnalyzer,
   PUBLIC_FEATURE_PATHS.routeFiles,
 ] as const;
 
-export const PUBLIC_REDIRECT_ROUTES = LEGACY_WORKOUT_DATA_COMPARISON_PATHS;
+export const PUBLIC_REDIRECT_ROUTES = [
+  ...LEGACY_WORKOUT_DATA_COMPARISON_PATHS,
+  ...PUBLIC_ENTRY_REDIRECTS.map(redirect => redirect.path),
+] as const;
 
 export const PRERENDERED_GUIDE_ROUTES = [
   PUBLIC_GUIDE_PATHS.hub,
   PUBLIC_GUIDE_PATHS.syncGarminToSuunto,
+  PUBLIC_GUIDE_PATHS.syncGarminToWahoo,
   PUBLIC_GUIDE_PATHS.syncCorosToSuunto,
   PUBLIC_GUIDE_PATHS.syncWahooToSuunto,
   PUBLIC_GUIDE_PATHS.importActivitiesToSuunto,
@@ -67,11 +74,13 @@ export const CLIENT_RENDERED_APP_ROUTES = [
   'login',
   'onboarding',
   'admin',
+  'admin/marketing',
   'admin/maintenance',
   'admin/users',
   'admin/changelog',
   'admin/queues/workout',
   'admin/queues/activity-sync',
+  'admin/queues/training-delivery',
   'admin/queues/route-delivery-sync',
   'admin/queues/route-sync',
   'admin/queues/sleep-sync',
@@ -85,9 +94,26 @@ export const CLIENT_RENDERED_APP_ROUTES = [
   'releases',
   'tools/compare/saved',
   'services',
+  'send-activities',
+  'send-activities/:provider',
   'dashboard',
   'health',
+  'health/compare',
+  'health/compare/:noteId',
+  'tags',
+  'activities',
   'calendar',
+  'calendar/day/:date',
+  'training/plans/workout/:workoutId',
+  'training/plans/library/new',
+  'training/plans/library/:itemId',
+  'training/plans/library',
+  'training/plans/standalone/new',
+  'training/plans/plan/:planId/new',
+  'training/plans/new',
+  'training/plans/standalone',
+  'training/plans/plan/:planId',
+  'training/plans',
   'training',
   'mytracks',
   'routes',

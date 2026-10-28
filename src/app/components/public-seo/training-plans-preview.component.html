@@ -1,0 +1,81 @@
+<section class="training-plans-preview" aria-label="Interactive training plan preview with sample data"
+  [style.--preview-plan-color]="appearance.color">
+  <header class="preview-header">
+    <div>
+      <p class="preview-eyebrow"><span class="plan-color" aria-hidden="true"></span> Active plan · Sample data</p>
+      <h3>{{ plan.name }}</h3>
+      <p>{{ dateRangeLabel }} · {{ plan.workoutCount }} workouts</p>
+    </div>
+    <mat-button-toggle-group hideSingleSelectionIndicator [value]="selectedView()" (change)="selectView($event.value)"
+      aria-label="Training Plans sample view">
+      <mat-button-toggle value="calendar">Calendar</mat-button-toggle>
+      <mat-button-toggle value="profile">Workout profile</mat-button-toggle>
+    </mat-button-toggle-group>
+  </header>
+
+  @if (selectedView() === 'calendar') {
+  <app-plan-schedule-calendar
+    [plan]="plan"
+    [workouts]="workouts"
+    [completedWorkoutIds]="completedWorkoutIds"
+    [selectedDate]="selectedDate()"
+    [today]="today"
+    [startOfWeek]="1"
+    workoutActionVerb="Preview"
+    calendarHint="Choose any sample date. Empty dates remain selectable, and nothing here is saved."
+    (dateSelected)="selectDate($event)"
+    (workoutSelected)="selectWorkout($event)"
+  ></app-plan-schedule-calendar>
+
+  <section class="selected-day" aria-live="polite" aria-labelledby="training-plan-preview-selected-date">
+    <div class="selected-day-heading">
+      <div>
+        <p class="preview-eyebrow">Selected day</p>
+        <h4 id="training-plan-preview-selected-date">{{ selectedDateLabel() }}</h4>
+      </div>
+      <span>{{ selectedWorkoutRows().length }} workout{{ selectedWorkoutRows().length === 1 ? '' : 's' }}</span>
+    </div>
+
+    @if (selectedWorkoutRows().length) {
+      <div class="selected-workouts">
+        @for (row of selectedWorkoutRows(); track row.workout.id) {
+          <article class="selected-workout" [class.selected-workout--active]="selectedWorkoutId() === row.workout.id">
+            <mat-icon aria-hidden="true">{{ row.icon }}</mat-icon>
+            <div>
+              <h5>{{ row.workout.title }}</h5>
+              <p>{{ row.sport }}{{ row.workout.lifecycle === 'skipped' ? ' · Skipped' : row.completed ? ' · Completed · activity linked' : ' · Planned' }}</p>
+              <ul [attr.aria-label]="row.workout.title + ' structure'">
+                @for (step of row.summary; track step) { <li>{{ step }}</li> }
+              </ul>
+            </div>
+          </article>
+        }
+      </div>
+    } @else {
+      <p class="empty-day"><mat-icon aria-hidden="true">add_circle</mat-icon>
+        This date is open. A standalone workout could be added here without creating another plan.</p>
+    }
+  </section>
+  } @else {
+    <section class="workout-profile-preview" aria-label="Sample workout profile">
+      <p class="profile-preview-hint">Inspect the same profile used by the workout editor. This sample is read-only; nothing is saved.</p>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="preview-workout-picker">
+        <mat-label>Sample workout</mat-label>
+        <mat-select [value]="selectedWorkoutId()" (selectionChange)="selectProfileWorkout($event.value)">
+          @for (row of workoutRows(); track row.workout.id) {
+            <mat-option [value]="row.workout.id">{{ row.workout.title }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      @if (profileWorkout(); as row) {
+        <h4>{{ row.workout.title }}</h4>
+        <p class="profile-preview-hint">{{ row.sport }} · {{ selectedDateLabel() }}{{ row.workout.lifecycle === 'skipped' ? ' · Skipped' : row.completed ? ' · Completed · activity linked' : ' · Planned' }}</p>
+        <p class="profile-preview-totals" aria-label="Workout prescription"><strong>Workout prescription</strong> · {{ row.totals }}</p>
+        <app-workout-profile [structure]="row.workout.structure" [unitSettings]="unitSettings()"
+          [contextKey]="'public-preview/' + row.workout.id"></app-workout-profile>
+      } @else {
+        <p class="profile-preview-hint" role="status">Choose a sample workout to inspect its steps and targets.</p>
+      }
+    </section>
+  }
+</section>

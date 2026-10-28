@@ -166,6 +166,7 @@ describe('ChartsXYComponent', () => {
     expect(option.series[0].type).toBe('line');
     expect(option.series[0].connectNulls).toBe(true);
     expect(option.xAxis.type).toBe('category');
+    expect(option.xAxis.axisPointer).toEqual(expect.any(Object));
     expect(option.yAxis.type).toBe('value');
     expect(mockChart.dispatchAction).toHaveBeenCalledWith({ type: 'hideTip' });
     expect(mockLoader.setOption.mock.calls.at(-1)?.[2]).toEqual({
@@ -215,9 +216,34 @@ describe('ChartsXYComponent', () => {
     const formatter = option.tooltip.formatter as (params: { dataIndex: number }) => string;
 
     expect(option.xAxis.data).toEqual(['W22', 'W23']);
+    expect(option.series[0].label.show).toBe(true);
     expect(formatter({ dataIndex: 0 })).toContain(
       formatDashboardDateByInterval(weekStart, TimeIntervals.Weekly),
     );
+  });
+
+  it('hides overlapping value labels while retaining the full data and tooltip values', async () => {
+    component.data = Array.from({ length: 20 }, (_, index) => ({
+      type: `Activity ${index}`, [ChartDataValueTypes.Total]: 10000 + index, count: 1,
+    }));
+    Object.defineProperty(component.chartDiv.nativeElement, 'clientWidth', { configurable: true, value: 248 });
+    fixture.detectChanges(); await waitForChartStabilization();
+    const option = getLastOption();
+    expect(option.series[0].data).toHaveLength(20);
+    expect(option.series[0].label.show).toBe(false);
+    expect(option.series[0].labelLayout.hideOverlap).toBe(true);
+    expect(option.tooltip.formatter({ dataIndex: 19 })).toContain('Activity 19');
+    expect(option.tooltip.formatter({ dataIndex: 19 })).toContain(formatDashboardNumericValue(DataDistance.type, 10019));
+  });
+
+  it('keeps point values visible when the same series has enough width', async () => {
+    component.data = Array.from({ length: 20 }, (_, index) => ({
+      type: `Activity ${index}`, [ChartDataValueTypes.Total]: 10000 + index, count: 1,
+    }));
+    Object.defineProperty(component.chartDiv.nativeElement, 'clientWidth', { configurable: true, value: 800 });
+    fixture.detectChanges(); await waitForChartStabilization();
+
+    expect(getLastOption().series[0].label.show).toBe(true);
   });
 
   it('should render summary meta as "per activity type" for activity categories', async () => {
@@ -312,6 +338,7 @@ describe('ChartsXYComponent', () => {
     const option = getLastOption();
     expect(option.xAxis.type).toBe('value');
     expect(option.yAxis.type).toBe('category');
+    expect(option.yAxis.axisPointer).toEqual(expect.any(Object));
     expect(option.yAxis.inverse).toBe(true);
     expect(option.yAxis.boundaryGap).toBe(false);
     expect(option.grid.left).toBe(0);

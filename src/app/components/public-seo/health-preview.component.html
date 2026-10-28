@@ -1,0 +1,47 @@
+<div class="health-preview" aria-label="Health preview with sample data">
+  <div class="preview-heading">
+    <strong>{{ series().semanticLabel }}</strong>
+    <span>{{ series().sourceLabel }} · Sample data</span>
+  </div>
+  @if (status(); as range) {
+    <p class="range-status">{{ range.label }}</p>
+  }
+  @if (kind() === 'sleep') {
+    <app-sleep-trend-chart class="sleep-trend" [sleepTrend]="sleepTrend" sleepRange="14d"
+      sleepWindowLabel="18–31 Aug · Sample data" [darkTheme]="darkTheme()" [unitSettings]="unitSettings()">
+    </app-sleep-trend-chart>
+    <app-health-sleep-stage-summary
+      [point]="sleepPoint" sourceLabel="Suunto · Sample night"
+      [darkTheme]="darkTheme()" [unitSettings]="unitSettings()">
+    </app-health-sleep-stage-summary>
+  } @else {
+    <app-health-metric-series-chart
+    [model]="model()" [startTimeMs]="start" [endTimeMs]="end"
+    [darkTheme]="darkTheme()" [unitSettings]="unitSettings()"
+    [statusOverlay]="overlay()" [statusDescription]="statusDescription()" [timelineNotes]="timelineNotes()">
+  </app-health-metric-series-chart>
+  }
+  @if (kind() === 'hrv') {
+    <button mat-button type="button" (click)="openNotes()">View sample notes</button>
+  }
+</div>
+
+<ng-template #sampleNotes let-notes>
+  <!-- Material portals this content outside the public preview's snippet exclusion. -->
+  <div data-nosnippet>
+  <h2 mat-dialog-title>Sample timeline notes</h2>
+  <mat-dialog-content>
+    <p>Fictional context alongside sample readings—not an explanation of changes in HRV.</p>
+    @for (note of notes; track note.id) {
+      <article>
+        <h3>{{ note.categoryLabel }}: {{ note.title }}</h3>
+        <p>{{ note.dates }}</p>
+        <p>{{ note.details }}</p>
+      </article>
+    }
+  </mat-dialog-content>
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" appHapticTap mat-dialog-close>Close</button>
+  </mat-dialog-actions>
+  </div>
+</ng-template>

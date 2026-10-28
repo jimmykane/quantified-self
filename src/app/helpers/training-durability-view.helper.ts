@@ -8,6 +8,7 @@ import type {
 import { TimeIntervals } from '@sports-alliance/sports-lib';
 import { formatDashboardDateByInterval } from './dashboard-chart-data.helper';
 import { formatSleepDuration } from './dashboard-sleep-chart.helper';
+import { getNumberFormatter } from './number-format.helper';
 
 const CYCLING_POWER_DURABILITY_CONTEXT: DerivedTrainingDurabilityContext = {
   contextKey: 'cycling|power|W|-|-',
@@ -408,8 +409,8 @@ function formatContextLabel(context: DerivedTrainingDurabilityContext): string {
   const source = context.outputSource === 'grade-adjusted-speed' ? 'Grade-adjusted speed' : context.outputSource === 'power' ? 'Power' : 'Speed';
   return `${formatScopeLabel(context.scope)} · ${source}`;
 }
-function formatMetric(value: number | null, suffix: string): string { return value === null ? '—' : `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value)}${suffix}`; }
-function formatPercent(value: number): string { return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value)}%`; }
+function formatMetric(value: number | null, suffix: string): string { return value === null ? '—' : `${getNumberFormatter(undefined, { maximumFractionDigits: 1 }).format(value)}${suffix}`; }
+function formatPercent(value: number): string { return `${getNumberFormatter(undefined, { maximumFractionDigits: 0 }).format(value)}%`; }
 function formatExclusionReason(reason: string, powerContext = false): string {
   const labels: Record<string, string> = {
     'missing-output': powerContext ? 'No recorded power' : 'Missing required output',

@@ -1,115 +1,135 @@
+@if (dashboardUser()?.settings?.dashboardSettings) {
+@if (dashboardUser(); as user) {
+  <app-dashboard-chart-library [user]="user" lane="section:health" [seed]="dashboardSeed()" [hideEntryAction]="true" [darkTheme]="isDarkTheme()" [providerFilter]="selectedProviders()" [timelineNotes]="timelineNotes.context()" />
+}
+}
 <main class="health-workspace qs-workspace-page" aria-labelledby="health-title">
   <app-page-header
-    variant="compact"
+    variant="route"
     title="Health"
     titleId="health-title"
     leadingIcon="cardiology"
     eyebrow="Cross-service health history"
-    subtitle="Compare each source on its own terms. Health never blends providers or chooses a preferred source.">
+    subtitle="Explore your health history, with each source kept separate.">
+    <button pageHeaderTitleActions mat-button type="button" class="health-sources-button"
+      [attr.aria-label]="sourcesAriaLabel()" [matTooltip]="sourcesAriaLabel()"
+      aria-haspopup="dialog" [attr.aria-expanded]="sourcesOpen()" (click)="openSources()">
+      <span class="health-sources-button-content">
+        @if (sourceAttention(); as tone) {
+          <span class="health-sources-dot" [attr.data-tone]="tone" aria-hidden="true"></span>
+        }
+        <span>{{ sourcesButtonLabel() }}</span>
+        <mat-icon aria-hidden="true">expand_more</mat-icon>
+      </span>
+    </button>
     <div pageHeaderActions class="health-header-actions">
-      <a mat-button routerLink="/services" aria-label="Manage Health connections in Connectivity">
-        <mat-icon aria-hidden="true">hub</mat-icon>
-        <span>Connectivity</span>
-      </a>
-      <a mat-button routerLink="/dashboard" aria-label="Return to dashboard">
-        <mat-icon aria-hidden="true">dashboard</mat-icon>
-        <span>Dashboard</span>
-      </a>
+      <app-timeline-notes-workspace #timelineNotes />
+      <button mat-button type="button" class="health-add-measurement"
+        aria-label="Add measurement" matTooltip="Add measurement"
+        [disabled]="manualMutationBusy()" (click)="openManualMeasurement()">
+        <span class="health-add-measurement-content">
+          @if (manualMutationBusy()) {
+            <mat-spinner diameter="18" aria-hidden="true"></mat-spinner>
+          } @else {
+            <mat-icon aria-hidden="true">add</mat-icon>
+          }
+          <span class="health-add-measurement-label">Add measurement</span>
+          <span class="health-add-measurement-label-compact" aria-hidden="true">Add</span>
+        </span>
+      </button>
+      <span class="cdk-visually-hidden" role="status">{{ manualMutationBusy() ? 'Updating measurements…' : '' }}</span>
     </div>
   </app-page-header>
 
-  <app-health-priority-summary
-    [cards]="priorityCards()"
-    [selectedMetric]="routeState().metric"
-    (metricSelected)="selectPriorityMetric($event)">
-  </app-health-priority-summary>
-
-  <section class="health-explorer qs-glass-card-panel" aria-labelledby="health-explorer-title">
-    <div class="health-section-heading health-explorer-heading">
-      <div>
-        <p class="health-eyebrow">Metric explorer</p>
-        <h2 id="health-explorer-title">Your Health metrics</h2>
-      </div>
-      <p>Choose a metric found in your imported history.</p>
+  @if (preferencesSaveFailed() && !isSavingPreferences()) {
+    <div class="health-range-save-status health-range-save-status-error" role="alert">
+      <mat-icon aria-hidden="true">cloud_off</mat-icon>
+      <span>This Health view is active, but it was not saved.</span>
+      <button mat-button type="button" (click)="retryPreferenceSave()">Retry</button>
     </div>
+  }
 
-    @if (metricAvailabilityNotice()) {
-      <div class="health-notice" role="status">
-        <mat-icon aria-hidden="true">info</mat-icon>
-        <span>{{ metricAvailabilityNotice() }}</span>
-      </div>
-    }
-
-    <div class="health-mobile-metric-selector">
-      @if (hasAvailableMetricSelections()) {
-        <mat-form-field appearance="outline" subscriptSizing="dynamic">
-          <mat-label>Health metric</mat-label>
-          <mat-select [value]="routeState().metric" (selectionChange)="selectMetric($event.value)">
-            @if (showSleepMetric()) {
-              <mat-option value="sleep">Sleep overview</mat-option>
-            }
-            @for (group of metricCatalogGroups(); track group.id) {
-              <mat-optgroup [label]="group.label">
-                @for (metric of group.metrics; track metric.id) {
-                  <mat-option [value]="metric.id">{{ metric.label }}</mat-option>
-                }
-              </mat-optgroup>
-            }
-          </mat-select>
-        </mat-form-field>
-      } @else {
-        <p class="health-metric-empty" role="status">No imported Health metrics yet.</p>
-      }
+  @if (metricAvailabilityNotice()) {
+    <div class="health-notice" role="status">
+      <mat-icon aria-hidden="true">info</mat-icon>
+      <span>{{ metricAvailabilityNotice() }}</span>
     </div>
+  }
 
-    <div class="health-explorer-layout">
-      <nav class="health-metric-list" aria-label="Health metrics">
-        @if (showSleepMetric()) {
-          <button
-            mat-button
-            type="button"
-            class="health-metric-option health-metric-option-sleep"
-            [class.health-metric-option-selected]="routeState().metric === 'sleep'"
-            [attr.aria-pressed]="routeState().metric === 'sleep'"
-            (click)="selectMetric('sleep')">
-            <span class="health-metric-option-content">
-              <mat-icon class="health-metric-option-icon" aria-hidden="true">{{ healthMetricIcon('sleep') }}</mat-icon>
-              <span>Sleep overview</span>
-            </span>
-          </button>
-        }
-        @for (group of metricCatalogGroups(); track group.id) {
-          <section class="health-metric-group" [attr.aria-labelledby]="'health-metric-group-' + group.id">
-            <h3 [id]="'health-metric-group-' + group.id">{{ group.label }}</h3>
-            @for (metric of group.metrics; track metric.id) {
-              <button
-                mat-button
-                type="button"
-                class="health-metric-option"
-                [class.health-metric-option-selected]="routeState().metric === metric.id"
-                [attr.aria-pressed]="routeState().metric === metric.id"
-                (click)="selectMetric(metric.id)">
-                <span class="health-metric-option-content">
-                  <mat-icon class="health-metric-option-icon" aria-hidden="true">{{ healthMetricIcon(metric.id) }}</mat-icon>
-                  <span>{{ metric.label }}</span>
-                </span>
-              </button>
-            }
-          </section>
-        }
-        @if (!hasAvailableMetricSelections()) {
-          <p class="health-metric-empty" role="status">No imported Health metrics yet.</p>
-        }
-      </nav>
+  @if (dashboardUser(); as user) {
+    <app-health-category-overview #overview [hidden]="metricDetailOpen()" [user]="user"
+      [groups]="metricCatalogGroups()" [showSleep]="showSleepMetric()" [darkTheme]="isDarkTheme()"
+      [highlightedMetrics]="highlightedOverviewMetrics()"
+      [vitalsHighlightedMetrics]="highlightedVitalsMetrics()"
+      [changeSignals]="overviewChangeSignals()"
+      [preferredSources]="preferredMetricSources()" (sourceSelected)="selectMetricSource($event)"
+      (readingOpened)="selectMetricSource($event)"
+      [savingPreferences]="isSavingPreferences()"
+      [referenceDate]="overviewEndDate()" [providerFilter]="selectedProviders()" [timelineNotes]="timelineNotes.context()"
+      (metricSelected)="selectPriorityMetric($event)" (providersObserved)="rememberOverviewProviders($event)">
+      <app-health-priority-summary healthOverviewHighlights
+        [timelineNotes]="timelineNotes.context()"
+        [cards]="visibleOverviewPriorityCards()"
+        [startTimeMs]="priorityWindow.startTimeMs"
+        [endTimeMs]="priorityWindow.endTimeMs"
+        [darkTheme]="isDarkTheme()"
+        [unitSettings]="unitSettings()"
+        [preferredSources]="preferredHighlightSources()"
+        (sourceSelected)="selectHighlightSource($event)"
+        (metricSelected)="selectPriorityMetric($event)">
+      </app-health-priority-summary>
+      <app-health-priority-summary healthVitalsHighlights titleId="health-vitals-highlight-title" heading="Today in Vitals"
+        description="Recorded heart rate throughout today."
+        [timelineNotes]="timelineNotes.context()"
+        [cards]="visibleVitalsPriorityCards()"
+        [startTimeMs]="priorityHeartRateWindow.startTimeMs"
+        [endTimeMs]="priorityHeartRateWindow.endTimeMs"
+        [darkTheme]="isDarkTheme()"
+        [unitSettings]="unitSettings()"
+        [preferredSources]="preferredHighlightSources()"
+        (sourceSelected)="selectHighlightSource($event)"
+        (metricSelected)="selectPriorityMetric($event)">
+      </app-health-priority-summary>
+    </app-health-category-overview>
+  }
 
+  <div class="health-history" [hidden]="!metricDetailOpen()">
+    <button mat-button type="button" class="health-back-overview" (click)="showOverview()">
+      <mat-icon aria-hidden="true">arrow_back</mat-icon>Back to overview
+    </button>
+
+  <section class="health-explorer" aria-label="Measurement history">
       <article class="health-detail" aria-labelledby="health-detail-title">
         <header class="health-detail-header">
-          <div>
-            <h2 id="health-detail-title">{{ detailTitle() }}</h2>
-            <p>{{ detailSubtitle() }}</p>
+          <div class="health-detail-heading">
+            <h2 #metricDetail id="health-detail-title" tabindex="-1">
+              <button mat-button type="button" class="health-mobile-metric-title"
+                [disabled]="!hasAvailableMetricSelections()"
+                [attr.aria-label]="'Choose metric: ' + detailTitle()" aria-haspopup="dialog"
+                [attr.aria-expanded]="metricPickerOpen()" (click)="openMetricPicker()">
+                <span class="health-metric-title-content"><span>{{ detailTitle() }}</span><mat-icon aria-hidden="true">expand_more</mat-icon></span>
+              </button>
+            </h2>
+            @if (!hasAvailableMetricSelections()) {
+              <p class="health-mobile-metric-empty" role="status">No imported Health metrics yet.</p>
+            }
+            <button mat-icon-button type="button" class="health-dashboard-action"
+              [attr.aria-label]="metricOnDashboard() ? 'View on dashboard' : 'Add to dashboard'"
+              [matTooltip]="metricOnDashboard() ? 'View on dashboard' : 'Add to dashboard'"
+              [disabled]="dashboardLibrary.busy()" (click)="addToDashboard()">
+              <mat-icon>{{ metricOnDashboard() ? 'dashboard' : 'add' }}</mat-icon>
+            </button>
           </div>
+          <div class="health-detail-controls">
+
           <div class="health-window-navigation" aria-label="Health data window">
-            <button mat-icon-button type="button" matTooltip="Older window" aria-label="Show older Health data" (click)="navigateWindow('older')">
+            <button
+              mat-icon-button
+              type="button"
+              class="health-window-older"
+              matTooltip="Older window"
+              aria-label="Show older Health data"
+              (click)="navigateWindow('older')">
               <mat-icon aria-hidden="true">chevron_left</mat-icon>
             </button>
             <mat-button-toggle-group
@@ -119,12 +139,30 @@
               aria-label="Health range"
               (change)="selectRange($event.value)">
               @for (option of ranges; track option.range) {
-                <mat-button-toggle [value]="option.range">{{ option.buttonLabel }}</mat-button-toggle>
+                <mat-button-toggle [value]="option.range" [aria-label]="option.label" [disabled]="isRangeDisabled(option.range)">{{ option.buttonLabel }}</mat-button-toggle>
               }
             </mat-button-toggle-group>
+            <button mat-button type="button" class="health-range-menu-button"
+              [matMenuTriggerFor]="healthRangeMenu" [attr.aria-label]="rangeAriaLabel()"
+              (menuOpened)="haptics.selection()">
+              <span class="health-range-menu-content">
+                <span>{{ rangeButtonLabel() }}</span>
+                <mat-icon aria-hidden="true">expand_more</mat-icon>
+              </span>
+            </button>
+            <mat-menu #healthRangeMenu="matMenu" class="qs-menu-panel">
+              @for (option of ranges; track option.range) {
+                <button mat-menu-item type="button" role="menuitemradio"
+                  [attr.aria-checked]="routeState().range === option.range" [disabled]="isRangeDisabled(option.range)" (click)="selectRange(option.range)">
+                  <mat-icon aria-hidden="true">{{ routeState().range === option.range ? 'check' : 'calendar_today' }}</mat-icon>
+                  <span>{{ option.label }}</span>
+                </button>
+              }
+            </mat-menu>
             <button
               mat-icon-button
               type="button"
+              class="health-window-newer"
               matTooltip="Newer window"
               aria-label="Show newer Health data"
               [disabled]="!selectedWindow().canNavigateNewer"
@@ -132,57 +170,24 @@
               <mat-icon aria-hidden="true">chevron_right</mat-icon>
             </button>
           </div>
-        </header>
-
-        @if (isSavingPreferences()) {
-          <div class="health-range-save-status" role="status" aria-live="polite">
-            <mat-spinner diameter="16" aria-hidden="true"></mat-spinner>
-            <span>Saving Health view…</span>
           </div>
-        } @else if (preferencesSaveFailed()) {
-          <div class="health-range-save-status health-range-save-status-error" role="alert">
-            <mat-icon aria-hidden="true">cloud_off</mat-icon>
-            <span>This Health view is active, but it was not saved.</span>
-            <button mat-button type="button" (click)="retryPreferenceSave()">Retry</button>
-          </div>
-        }
-
-        @if (providerFilterOptions().length > 0) {
-          <div class="health-provider-filters" role="group" aria-label="Filter Health sources">
-            <button
-              mat-stroked-button
-              type="button"
-              class="health-provider-filter"
-              [class.health-provider-filter-selected]="allProvidersSelected()"
-              [attr.aria-pressed]="allProvidersSelected()"
-              (click)="showAllProviders()">
-              <span class="health-provider-filter-content">
-                <mat-icon aria-hidden="true">select_all</mat-icon>
-                <span>All sources</span>
-              </span>
-            </button>
-            @for (option of providerFilterOptions(); track option.provider) {
-              <button
-                mat-stroked-button
-                type="button"
-                class="health-provider-filter"
-                [class.health-provider-filter-selected]="option.selected && !allProvidersSelected()"
-                [attr.aria-pressed]="option.selected && !allProvidersSelected()"
-                (click)="toggleProvider(option.provider)">
-                <span class="health-provider-filter-content">
-                  @if (option.presentation) {
-                    <app-service-source-icon
-                      [presentation]="option.presentation"
-                      [showText]="false"
-                      [showTooltip]="false">
-                    </app-service-source-icon>
-                  }
-                  <span>{{ option.label }}</span>
-                </span>
+          <div class="health-detail-window">
+            <p>{{ detailSubtitle() }}</p>
+            <span class="health-view-progress" role="status" aria-live="polite"
+              [matTooltip]="healthViewStatusText()">
+              @if (healthViewStatusText()) {
+                <mat-spinner diameter="16" aria-hidden="true"></mat-spinner>
+                <span class="cdk-visually-hidden">{{ healthViewStatusText() }}</span>
+              }
+            </span>
+            @if (selectedWindow().canNavigateNewer) {
+              <button mat-icon-button type="button" class="health-window-today"
+                matTooltip="Jump to today" aria-label="Jump to today" (click)="jumpToToday()">
+                <mat-icon aria-hidden="true">today</mat-icon>
               </button>
             }
           </div>
-        }
+        </header>
 
         @if (incompleteNotice()) {
           <div class="health-notice health-notice-warning" role="alert">
@@ -196,10 +201,22 @@
             <span>{{ revisionNotice() }}</span>
           </div>
         }
-        @if (partialCoverageNotice()) {
+        @if (omittedSampleSourceNotice()) {
+          <div class="health-notice health-notice-warning" role="status">
+            <mat-icon aria-hidden="true">timeline</mat-icon>
+            <span>{{ omittedSampleSourceNotice() }}</span>
+          </div>
+        }
+        @if (partialCoverageNotice() && routeState().metric !== 'heart_rate') {
           <div class="health-notice" role="status">
             <mat-icon aria-hidden="true">data_usage</mat-icon>
             <span>{{ partialCoverageNotice() }}</span>
+          </div>
+        }
+        @if (metricSourceNotice()) {
+          <div class="health-notice" role="status">
+            <mat-icon aria-hidden="true">info</mat-icon>
+            <span>{{ metricSourceNotice() }}</span>
           </div>
         }
         @if (activitySourceNotice()) {
@@ -214,38 +231,54 @@
             <span>{{ workoutMetricNotice() }}</span>
           </div>
         }
+        @if (workoutWeightFallback()) {
+          <div class="health-notice" role="note">
+            <mat-icon aria-hidden="true">fitness_center</mat-icon>
+            <span>
+              No weigh-in is available in this view. Weight saved in your latest workout profile:
+              {{ workoutWeightFallback()!.valueText }} from {{ workoutWeightFallback()!.sourceLabel }}
+              on {{ workoutWeightFallback()!.observedText }}. It is not plotted as a weigh-in.
+            </span>
+          </div>
+        }
+        @if (sleepHrvNotice()) {
+          <div class="health-notice" role="note">
+            <mat-icon aria-hidden="true">bedtime</mat-icon>
+            <span>{{ sleepHrvNotice() }}</span>
+          </div>
+        }
         @if (!selectedIsSleep() && metricView().conflictCount > 0) {
           <div class="health-notice health-notice-conflict" role="alert">
             <mat-icon aria-hidden="true">difference</mat-icon>
-            <span>{{ metricView().conflictCount }} conflicting source {{ metricView().conflictCount === 1 ? 'window is' : 'windows are' }} highlighted. Values remain separate.</span>
+            <span>Some sources report different values for the same period. Each source is shown separately.</span>
           </div>
         }
         @if (!selectedIsSleep() && metricView().hasNativeOnlySeries) {
           <div class="health-notice" role="status">
             <mat-icon aria-hidden="true">category</mat-icon>
-            <span>Native-only or non-comparable readings are isolated from canonical series.</span>
+            <span>Some readings use the source’s own format and cannot be directly compared with other readings. They are shown separately.</span>
           </div>
         }
 
         @if (isLoading()) {
-          <div class="health-detail-state qs-glass-card-panel" role="status" aria-live="polite">
+          <div class="health-detail-state" role="status" aria-live="polite">
             <mat-spinner diameter="34" aria-hidden="true"></mat-spinner>
             <div>
               <strong>Loading {{ detailTitle() }}</strong>
-              <span>Collecting bounded source pages before calculating coverage and conflicts.</span>
+              <span>Loading readings from your connected sources…</span>
             </div>
           </div>
         } @else if (isDenied()) {
-          <div class="health-detail-state health-detail-state-error qs-glass-card-panel" role="alert">
+          <div class="health-detail-state health-detail-state-error" role="alert">
             <mat-icon aria-hidden="true">lock</mat-icon>
             <div>
               <strong>Health data access was denied</strong>
-              <span>Review this provider’s permissions and connection.</span>
+              <span>Check permissions for this service in Connectivity.</span>
               <a mat-stroked-button routerLink="/services">Open Connectivity</a>
             </div>
           </div>
         } @else if (hasLoadError()) {
-          <div class="health-detail-state health-detail-state-error qs-glass-card-panel" role="alert">
+          <div class="health-detail-state health-detail-state-error" role="alert">
             <mat-icon aria-hidden="true">sync_problem</mat-icon>
             <div>
               <strong>Health data could not be loaded</strong>
@@ -254,42 +287,61 @@
             </div>
           </div>
         } @else if (sampleOnlyLongRange()) {
-          <div class="health-detail-state qs-glass-card-panel">
+          <div class="health-detail-state">
             <mat-icon aria-hidden="true">timeline</mat-icon>
             <div>
-              <strong>This metric is stored as detailed samples</strong>
-              <span>Detailed samples load only for Today, 14-day, and 30-day windows. Choose a shorter range to view them.</span>
-              <button mat-stroked-button type="button" (click)="selectRange('30d')">View 30 days</button>
+              <strong>Choose a shorter date range for these readings</strong>
+              <span>No daily summary is available here. Choose 1d, 14d, 30d, or 90d to view the detailed readings.</span>
+              <button mat-stroked-button type="button" (click)="selectRange('90d')">View 90 days</button>
             </div>
           </div>
         } @else if (isEmpty()) {
-          <div class="health-detail-state qs-glass-card-panel">
+          <div class="health-detail-state">
             <mat-icon aria-hidden="true">monitor_heart</mat-icon>
             <div>
               <strong>No {{ detailTitle() }} data in this window</strong>
-              <span>Choose another window or review which providers support this metric.</span>
-              <a mat-stroked-button routerLink="/services">Open Connectivity</a>
+              <span>
+                @if (selectedManualMetric()) {
+                  Add a measurement, choose another date range, or select another metric.
+                } @else {
+                  Choose another date range or a metric with imported readings.
+                }
+              </span>
+              @if (!allProvidersSelected()) {
+                <span>No readings from your selected sources in this window.</span>
+                <button mat-button type="button" (click)="showAllProviders()">Show all sources</button>
+              }
             </div>
           </div>
         } @else if (selectedIsSleep()) {
-          <section class="health-sleep-chart qs-glass-card-panel" aria-label="Normalized Sleep trend">
+          <section class="health-sleep-chart" aria-label="Sleep history">
             <app-sleep-trend-chart
+              [timelineNotes]="timelineNotes.context()"
+              [mobileTapFeedbackOptions]="mobileTapFeedbackOptions"
               [darkTheme]="isDarkTheme()"
+              [unitSettings]="unitSettings()"
               [isLoading]="false"
               [sleepTrend]="sleepTrend()"
               [sleepRange]="sleepChartRange()"
               [sleepWindowLabel]="selectedWindow().label"
               [canNavigateOlder]="true"
               [canNavigateNewer]="selectedWindow().canNavigateNewer"
-              infoTooltip="Sleep sessions stay in the normalized Sleep model. Health resolves references to that model and keeps providers separate.">
+              infoTooltip="These are your recorded sleep sessions. Each source is shown separately.">
             </app-sleep-trend-chart>
           </section>
         } @else {
           <app-health-metric-chart
+            [readingNotice]="heartRateReadingNotice()"
+            [selectedSourceKey]="preferredMetricSources()[routeState().metric] || null"
+            (sourceSelected)="selectDetailSource($event)"
+            [fillHeight]="true"
+            [timelineNotes]="timelineNotes.context()"
             [series]="metricView().series"
             [startTimeMs]="selectedWindow().startTimeMs"
             [endTimeMs]="selectedWindow().endTimeMs"
-            [darkTheme]="isDarkTheme()">
+            [darkTheme]="isDarkTheme()"
+            [unitSettings]="unitSettings()"
+            [chartStatuses]="selectedHrvChartStatuses()">
           </app-health-metric-chart>
         }
 
@@ -299,80 +351,12 @@
             [detailTitle]="detailTitle()"
             [sleepRows]="sleepRows()"
             [metricRows]="metricRows()"
-            [truncationText]="tableTruncationText()">
+            [truncationText]="tableTruncationText()"
+            (editManualMeasurement)="editManualMeasurement($event)"
+            (deleteManualMeasurement)="deleteManualMeasurement($event)">
           </app-health-source-observation-table>
         }
       </article>
-    </div>
   </section>
-
-  <footer class="health-sync-footer" aria-label="Health source sync status">
-    @if (syncStatesStatus() === 'loading') {
-      <span class="health-sync-state" role="status" aria-live="polite">
-        <mat-spinner diameter="16" aria-hidden="true"></mat-spinner>
-        Loading source status…
-      </span>
-    } @else if (syncStatesStatus() === 'denied' || syncStatesStatus() === 'error') {
-      <span class="health-sync-state" role="alert">
-        <span class="health-sync-dot" data-tone="error" aria-hidden="true"></span>
-        {{ syncStatesStatus() === 'denied' ? 'Health sync status access was denied' : 'Source status could not be loaded' }}
-      </span>
-    } @else if (syncStateViews().length === 0) {
-      <span class="health-sync-state" data-tone="neutral">
-        <span class="health-sync-dot" aria-hidden="true"></span>
-        No source updates yet
-      </span>
-    } @else {
-      <ul class="health-sync-list" aria-label="Connected Health sources">
-        @for (state of syncStateViews(); track state.provider) {
-          <li class="health-sync-item">
-            <span class="health-sync-dot" [attr.data-tone]="state.tone" aria-hidden="true"></span>
-            <strong class="health-sync-provider">{{ state.label }}</strong>
-            <span class="health-sync-status">{{ state.statusLabel }}</span>
-            <span aria-hidden="true">·</span>
-            @if (state.lastUpdateDateTime) {
-              <time class="health-sync-update" [attr.datetime]="state.lastUpdateDateTime">{{ state.lastUpdateText }}</time>
-            } @else {
-              <span class="health-sync-update">{{ state.lastUpdateText }}</span>
-            }
-            @if (state.historyImportStatusText) {
-              <span aria-hidden="true">·</span>
-              <span class="health-sync-import-status" role="status">{{ state.historyImportStatusText }}</span>
-            }
-            @if (state.historyImportError) {
-              <span class="health-sync-import-error" role="alert">{{ state.historyImportError }}</span>
-            }
-            @if (state.historyImportActionLabel) {
-              <button
-                mat-icon-button
-                type="button"
-                class="health-sync-actions"
-                [disabled]="state.historyImportBusy"
-                [matMenuTriggerFor]="historyImportMenu"
-                [attr.aria-label]="'More actions for ' + state.label"
-                matTooltip="More actions">
-                @if (state.historyImportBusy) {
-                  <mat-spinner diameter="14" aria-hidden="true"></mat-spinner>
-                } @else {
-                  <mat-icon aria-hidden="true">more_horiz</mat-icon>
-                }
-              </button>
-              <mat-menu #historyImportMenu="matMenu" class="qs-menu-panel">
-                <button
-                  mat-menu-item
-                  type="button"
-                  [disabled]="state.historyImportBusy"
-                  [attr.aria-label]="state.historyImportActionLabel + ' for ' + state.label"
-                  (click)="startHistoryImport(state.provider)">
-                  <mat-icon aria-hidden="true">history</mat-icon>
-                  <span>{{ state.historyImportActionLabel }}</span>
-                </button>
-              </mat-menu>
-            }
-          </li>
-        }
-      </ul>
-    }
-    <a mat-button routerLink="/services" aria-label="Manage Health connections in Connectivity">Connectivity</a>
-  </footer>
+  </div>
 </main>

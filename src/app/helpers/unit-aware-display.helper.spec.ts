@@ -3,17 +3,25 @@ import {
   DataAscent,
   DataDescent,
   DataDistance,
+  DynamicDataLoader,
   DataDuration,
   DataHeartRateMax,
   DataJumpDistance,
   DataPaceAvg,
+  DataRRRMSSD,
+  DataRRCoverage,
+  DataRRHeartRateAvg,
+  DataRRDFAAlpha1Median,
   DataSpeedAvg,
+  DataTrainingStressScore,
+  DataWeight,
   DaysOfTheWeek,
   DistanceUnits,
   PaceUnits,
   SpeedUnits,
   SwimPaceUnits,
   VerticalSpeedUnits,
+  WeightUnits,
 } from '@sports-alliance/sports-lib';
 import {
   formatUnitAwareDataValue,
@@ -23,6 +31,42 @@ import {
 } from '@shared/unit-aware-display';
 
 describe('unit-aware-display', () => {
+  it('renders R-R summaries through canonical classes under default and imperial preferences', () => {
+    const settings = [getDefaultUserUnitSettings(), normalizeUserUnitSettings({
+      distanceUnits: DistanceUnits.Miles, speedUnits: [SpeedUnits.MilesPerHour], weightUnits: WeightUnits.Pounds,
+    })];
+    for (const DataClass of [DataRRRMSSD, DataRRCoverage, DataRRHeartRateAvg, DataRRDFAAlpha1Median]) {
+      for (const value of [0, 42.125]) {
+        const expected = new DataClass(value);
+        for (const preference of settings) {
+          expect(resolveUnitAwareDisplayFromValue(DataClass.type, value, preference)).toMatchObject({
+            value: String(expected.getDisplayValue()), unit: expected.getDisplayUnit(),
+          });
+        }
+      }
+    }
+  });
+
+  it('formats sustainable-distance observations in the requested units without changing their canonical values', () => {
+    let supported = false;
+    try { supported = !!DynamicDataLoader.getDataClassFromDataType('Estimated Sustainable Distance'); } catch { /* Pending library release. */ }
+    if (!supported) return;
+    for (const type of ['Estimated Sustainable Distance', 'Minimum Estimated Sustainable Distance']) {
+      expect(resolveUnitAwareDisplayFromValue(type, 10000, getDefaultUserUnitSettings())).toMatchObject({ value: '10.00', unit: 'Km' });
+      expect(resolveUnitAwareDisplayFromValue(type, 10000, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })))
+        .toMatchObject({ value: '6.22', unit: 'mi' });
+      expect(resolveUnitAwareDisplayFromValue(type, 0, getDefaultUserUnitSettings())).toMatchObject({ value: '0.0', unit: 'm' });
+    }
+  });
+
+  it('uses Sports Lib for optional one-decimal TSS display under metric and imperial settings', () => {
+    for (const distanceUnits of [DistanceUnits.Kilometers, DistanceUnits.Miles]) {
+      const settings = normalizeUserUnitSettings({ distanceUnits });
+      expect(resolveUnitAwareDisplayFromValue(DataTrainingStressScore.type, 87.34, settings)?.value).toBe('87');
+      expect(resolveUnitAwareDisplayFromValue(DataTrainingStressScore.type, 87.34, settings,
+        { trainingStressScoreDecimals: 1 })).toMatchObject({ value: '87.3', unit: '' });
+    }
+  });
   it('should provide the current default user unit settings', () => {
     expect(getDefaultUserUnitSettings()).toEqual({
       speedUnits: [SpeedUnits.KilometersPerHour],
@@ -32,6 +76,7 @@ describe('unit-aware-display', () => {
       swimPaceUnits: [SwimPaceUnits.MinutesPer100Meter],
       verticalSpeedUnits: [VerticalSpeedUnits.MetersPerSecond],
       distanceUnits: DistanceUnits.Kilometers,
+      weightUnits: WeightUnits.Kilograms,
       startOfTheWeek: DaysOfTheWeek.Monday,
     });
   });
@@ -52,6 +97,7 @@ describe('unit-aware-display', () => {
       swimPaceUnits: [SwimPaceUnits.MinutesPer100Meter],
       verticalSpeedUnits: [VerticalSpeedUnits.MetersPerSecond],
       distanceUnits: DistanceUnits.Kilometers,
+      weightUnits: WeightUnits.Kilograms,
       startOfTheWeek: DaysOfTheWeek.Monday,
     });
   });
@@ -61,6 +107,19 @@ describe('unit-aware-display', () => {
       .toBe(DistanceUnits.Kilometers);
     expect(normalizeUserUnitSettings({ distanceUnits: 'Imperial' }).distanceUnits)
       .toBe(DistanceUnits.Miles);
+  });
+
+  it('normalizes weight independently of distance and uses Sports Lib for display', () => {
+    const pounds = normalizeUserUnitSettings({
+      distanceUnits: DistanceUnits.Kilometers,
+      weightUnits: WeightUnits.Pounds,
+    });
+    expect(pounds.weightUnits).toBe(WeightUnits.Pounds);
+    expect(formatUnitAwareDataValue(DataWeight.type, 80, pounds)).toBe('176.4 lb');
+    expect(normalizeUserUnitSettings({
+      distanceUnits: DistanceUnits.Miles,
+    }).weightUnits).toBe(WeightUnits.Kilograms);
+    expect(normalizeUserUnitSettings({ weightUnits: 'stones' }).weightUnits).toBe(WeightUnits.Kilograms);
   });
 
   it('should format pace values using the preferred pace units', () => {
@@ -130,6 +189,26 @@ describe('unit-aware-display', () => {
     expect(formatUnitAwareDataValue(DataDuration.type, (24 * 60 * 60) + (2 * 60 * 60) + (15 * 60), unitSettings, {
       stripRepeatedUnit: true,
     })).toBe('1d 02h 15m');
+  });
+
+  it('should use Sports Lib compact duration formatting when requested', () => {
+    const unitSettings = getDefaultUserUnitSettings();
+
+    expect(formatUnitAwareDataValue(DataDuration.type, (8 * 60 * 60) + (19 * 60), unitSettings, {
+      compactDuration: true,
+      stripRepeatedUnit: true,
+    })).toBe('08h 19m');
+  });
+
+  it('preserves native fractional length timing independently of swim unit preferences', () => {
+    for (const swimPaceUnits of [[SwimPaceUnits.MinutesPer100Meter], [SwimPaceUnits.MinutesPer100Yard]]) {
+      const settings = normalizeUserUnitSettings({ swimPaceUnits });
+      for (const seconds of [0, 24.4, 61.8, 3661.2, 90061.2]) {
+        expect(formatUnitAwareDataValue(DataDuration.type, seconds, settings, {
+          durationMilliseconds: true,
+        })).toBe(new DataDuration(seconds).getDisplayValue(false, true, true));
+      }
+    }
   });
 
   it('should format ascent and descent values with dot grouping by default', () => {

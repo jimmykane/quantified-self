@@ -1,3 +1,5 @@
+import { dashboardChartFrameGrid } from '../../../helpers/dashboard-chart-layout.helper';
+import { trainingStateChartGrid, TRAINING_STATE_AXIS_LABEL } from '../../../helpers/training-state-chart-layout.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -10,6 +12,8 @@ import {
   ViewChild,
 } from '@angular/core';
 import type { EChartsType } from 'echarts/core';
+import { DataDuration, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { formatUnitAwareDataValue } from '@shared/unit-aware-display';
 import {
   ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
   EChartsHostController,
@@ -30,6 +34,7 @@ import {
   isDerivedMetricPendingStatus,
 } from '../../../helpers/derived-metric-status.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
+import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 import type {
   DashboardIntensityDistributionContext,
   DashboardIntensityDistributionWeek,
@@ -56,6 +61,7 @@ type IntensityXAxisLabelMode = 'day-month' | 'month-year' | 'year';
 })
 export class ChartsIntensityDistributionComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() darkTheme = false;
+  @Input() unitSettings: UserUnitSettingsInterface | null | undefined = null;
   @Input() isLoading = false;
   @Input() distribution?: DashboardIntensityDistributionContext | null;
   @Input() status?: DashboardDerivedMetricStatus | null;
@@ -100,6 +106,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
     private logger: LoggerService,
   ) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsIntensityDistributionComponent]',
@@ -116,7 +123,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
       this.updateHeaderAndErrorState();
       return;
     }
-    if (changes.darkTheme || changes.isLoading || changes.distribution || changes.status
+    if (changes.darkTheme || changes.unitSettings || changes.isLoading || changes.distribution || changes.status
       || changes.showMobileAxisPointerHandle || changes.weekContextTextOverride) {
       void this.refreshChart();
     }
@@ -213,6 +220,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
 
     const categories = weeks.map((week) => week.weekStartMs);
     const xAxisLabelMode = this.resolveXAxisLabelMode(weeks);
+    const xAxisLabelInterval = this.buildXAxisLabelInterval(weeks.length, style.isCompactLayout);
     return {
       animation: false,
       backgroundColor: 'transparent',
@@ -224,8 +232,8 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
         left: 8,
         right: 6,
         top: 6,
-        bottom: 20,
-        containLabel: true,
+        ...trainingStateChartGrid(),
+        ...dashboardChartFrameGrid(this.chartDiv.nativeElement),
       },
       tooltip: {
         show: true,
@@ -233,7 +241,8 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
         triggerOn: resolveEChartsTooltipTriggerOn(true, isMobileTooltipViewport),
         axisPointer: { type: 'shadow' },
         renderMode: 'html',
-        ...resolveEChartsTooltipSurfaceConfig(isMobileTooltipViewport),
+        // Coverage can exceed compact plot height; use the shared viewport host on phones too.
+        ...resolveEChartsTooltipSurfaceConfig(false),
         ...buildDashboardEChartsTooltipChrome(style),
         formatter: (params: Array<{ axisValue?: string | number; seriesName?: string; value?: number }>) => {
           if (!Array.isArray(params) || params.length === 0) {
@@ -253,6 +262,24 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
                 : { label: 'Value', value: valueText };
             })
             .filter((row) => row.value.trim().length > 0);
+          const coverage = this.distribution?.coverageWeeks?.find(candidate => candidate.weekStartMs === week?.weekStartMs);
+          if (coverage) {
+            rows.push({
+              label: 'Zone sources',
+              value: coverage.powerActivityCount > 0 && coverage.heartRateActivityCount > 0
+                ? 'Power and heart rate'
+                : coverage.powerActivityCount > 0 ? 'Power' : 'Heart rate',
+            });
+            for (const [label, count, seconds] of [
+              ['Power', coverage.powerActivityCount, coverage.powerZoneSeconds],
+              ['Heart rate', coverage.heartRateActivityCount, coverage.heartRateZoneSeconds],
+            ] as const) {
+              if (count > 0) {
+                rows.push({ label, value: `${count} ${count === 1 ? 'activity' : 'activities'} · ${this.formatZoneDuration(seconds)}` });
+              }
+            }
+            rows.push({ label: 'Without usable zones', value: `${coverage.excludedActivityCount} ${coverage.excludedActivityCount === 1 ? 'activity' : 'activities'}` });
+          }
           return renderDashboardEChartsTooltipCard(style, {
             title: axisHeading,
             rows,
@@ -273,9 +300,10 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
         axisLine: { lineStyle: { color: style.axisColor } },
         splitLine: { show: false },
         axisLabel: {
-          color: style.textColor,
-          fontSize: style.axisFontSize,
+          color: style.secondaryTextColor,
           hideOverlap: true,
+          interval: xAxisLabelInterval,
+          ...TRAINING_STATE_AXIS_LABEL,
           formatter: (value: string | number) => this.formatXAxisLabel(value, xAxisLabelMode),
         },
       },
@@ -334,15 +362,9 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
       return '--';
     }
 
-    const seconds = Math.max(0, Number(value));
-    if (seconds < 60) {
-      return seconds === 0 ? '0m' : `${Math.round(seconds)}s`;
-    }
-
-    const totalMinutes = Math.round(seconds / 60);
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    return hours > 0 ? `${hours}h ${minutes.toString().padStart(2, '0')}m` : `${minutes}m`;
+    return formatUnitAwareDataValue(DataDuration.type, Math.max(0, Number(value)), this.unitSettings, {
+      compactDuration: true,
+    }) ?? '--';
   }
 
   private formatZoneDurationWithPercent(value: unknown, totalSeconds: number): string {
@@ -362,14 +384,14 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
     const currentWeekStartMs = this.resolveUtcWeekStartMs(Date.now());
     const contextPrefix = weekStartMs === currentWeekStartMs ? 'Current week' : 'Latest week';
     const weekEndMs = weekStartMs + (6 * 24 * 60 * 60 * 1000);
-    const startLabel = new Date(weekStartMs).toLocaleDateString(undefined, {
+    const startLabel = getDateTimeFormatter(undefined, {
       month: 'short',
       day: 'numeric',
-    });
-    const endLabel = new Date(weekEndMs).toLocaleDateString(undefined, {
+    }).format(new Date(weekStartMs));
+    const endLabel = getDateTimeFormatter(undefined, {
       month: 'short',
       day: 'numeric',
-    });
+    }).format(new Date(weekEndMs));
     return `${contextPrefix} (${startLabel} - ${endLabel})`;
   }
 
@@ -402,6 +424,21 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
     return 'day-month';
   }
 
+  private buildXAxisLabelInterval(
+    weekCount: number,
+    isCompactLayout: boolean,
+  ): 0 | ((index: number) => boolean) {
+    const normalizedWeekCount = Math.max(0, Math.floor(weekCount));
+    const maximumLabels = isCompactLayout ? 6 : 8;
+    if (normalizedWeekCount <= maximumLabels) {
+      return 0;
+    }
+
+    const lastIndex = normalizedWeekCount - 1;
+    const step = Math.max(1, Math.ceil(lastIndex / Math.max(1, maximumLabels - 1)));
+    return (index: number) => index === 0 || index === lastIndex || index % step === 0;
+  }
+
   private formatXAxisLabel(value: string | number | null | undefined, mode: IntensityXAxisLabelMode): string {
     if (value === null || value === undefined || !Number.isFinite(Number(value))) {
       return '';
@@ -409,12 +446,12 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
     const date = new Date(Number(value));
     switch (mode) {
       case 'year':
-        return date.toLocaleDateString(undefined, { year: 'numeric' });
+        return getDateTimeFormatter(undefined, { year: 'numeric' }).format(date);
       case 'month-year':
-        return date.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+        return getDateTimeFormatter(undefined, { month: 'short', year: 'numeric' }).format(date);
       case 'day-month':
       default:
-        return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        return getDateTimeFormatter(undefined, { month: 'short', day: 'numeric' }).format(date);
     }
   }
 

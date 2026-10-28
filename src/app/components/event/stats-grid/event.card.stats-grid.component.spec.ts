@@ -2,7 +2,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { EventCardStatsGridComponent } from './event.card.stats-grid.component';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { ElementRef, signal, NO_ERRORS_SCHEMA } from '@angular/core';
-import { ActivityTypes, UserSummariesSettingsInterface, UserUnitSettingsInterface, ActivityUtilities, DynamicDataLoader, DistanceUnits } from '@sports-alliance/sports-lib';
+import { ActivityTypes, UserSummariesSettingsInterface, UserUnitSettingsInterface, ActivityUtilities, DynamicDataLoader, DistanceUnits, SwimPaceUnits } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings, getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 import { SimpleChange } from '@angular/core';
 import {
     DataAltitudeAvg,
@@ -16,12 +17,14 @@ import {
     DataDepthMax,
     DataDescent,
     DataDuration,
+    DataDistance,
     DataGradeAvg,
     DataGradeMax,
     DataGradeMin,
     DataGroundContactTimePercentageAvg,
     DataGroundContactTimePercentageMax,
     DataGroundContactTimePercentageMin,
+    DataHeartRateAvg,
     DataPaceAvg,
     DataPotentialStaminaAvg,
     DataPowerAvg,
@@ -33,10 +36,24 @@ import {
     DataStaminaAvg,
     DataStaminaMin,
     DataTemperatureMax,
+    DataRRRMSSD,
+    DataRRArtifactPercentage,
+    DataRRArtifactCount,
+    EventImporterJSON,
 } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { AppEventSummaryTabsLocalStorageService } from '../../../services/storage/app.event-summary-tabs.local.storage.service';
 import { afterEach, vi } from 'vitest';
+import { By } from '@angular/platform-browser';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { MaterialModule } from '../../../modules/material.module';
+import { SharedModule } from '../../../modules/shared.module';
+import { HeaderStatsComponent } from '../../header-stats/header-stats.component';
+import { SummaryDisclosureComponent } from '../../shared/summary-disclosure/summary-disclosure.component';
+import { AppHapticsService } from '../../../services/app.haptics.service';
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { of } from 'rxjs';
+import { MatSelect } from '@angular/material/select';
 
 const createStat = (type: string) => ({
     getType: () => type,
@@ -99,6 +116,7 @@ describe('EventCardStatsGridComponent', () => {
     let fixture: ComponentFixture<EventCardStatsGridComponent>;
     let mockUserSettingsQueryService: any;
     let mockEventSummaryTabsLocalStorageService: any;
+    let mockHaptics: { selection: ReturnType<typeof vi.fn> };
     const originalResizeObserver = globalThis.ResizeObserver;
 
     const mockUnitSettings: UserUnitSettingsInterface = {
@@ -115,6 +133,7 @@ describe('EventCardStatsGridComponent', () => {
     } as any;
 
     beforeEach(async () => {
+        mockHaptics = { selection: vi.fn() };
         mockUserSettingsQueryService = {
             unitSettings: signal(mockUnitSettings),
             summariesSettings: signal(mockSummariesSettings),
@@ -131,6 +150,7 @@ describe('EventCardStatsGridComponent', () => {
                 { provide: AppUserSettingsQueryService, useValue: mockUserSettingsQueryService },
                 { provide: AppEventColorService, useValue: { getDifferenceColor: vi.fn(() => '#00ff00') } },
                 { provide: AppEventSummaryTabsLocalStorageService, useValue: mockEventSummaryTabsLocalStorageService },
+                { provide: AppHapticsService, useValue: mockHaptics },
             ],
             schemas: [NO_ERRORS_SCHEMA],
         }).compileComponents();
@@ -156,6 +176,196 @@ describe('EventCardStatsGridComponent', () => {
             delete (globalThis as any).ResizeObserver;
         }
         vi.restoreAllMocks();
+    });
+
+    it.each([false, true])('adds a dedicated R–R category without event aggregates (benchmark: %s)', isMerge => {
+        const first = new DataRRRMSSD(8.14), second = new DataRRRMSSD(17.2);
+        const activities = [first, second].map((stat, index) => ({
+            type: index ? ActivityTypes.Cycling : ActivityTypes.Running,
+            creator: { name: 'Watch' }, getID: () => `recording-${index}`,
+            getStats: () => new Map([[stat.getType(), stat]]),
+            getStat: (type: string) => type === stat.getType() ? stat : undefined,
+        }));
+        component.event = { isMerge, getActivities: () => activities, getStats: () => new Map() } as any;
+        component.selectedActivities = activities as any;
+        component.ngOnChanges({ selectedActivities: new SimpleChange(null, activities, true) });
+        expect(component.metricTabs.map(tab => tab.id)).toEqual(['rr']);
+        expect(component.rrRecordings).toHaveLength(2);
+        expect(component.rrRecordings.map(recording => recording.stats[0].getValue())).toEqual([8.14, 17.2]);
+        expect(component.rrRecordings.map(recording => recording.label)).toEqual(['Watch (1) · Running', 'Watch (2) · Cycling']);
+        expect(component.activeRRRecording()?.stats[0]).toBe(first);
+        expect(component.rrShowDiff).toBe(isMerge);
+        expect(component.rrDiffByType.get(first.getType())?.display).toBe(isMerge ? '9.1 ms' : undefined);
+        component.onRRRecordingChange(component.rrRecordings[1].key);
+        expect(component.activeRRRecording()?.stats[0]).toBe(second);
+        expect(mockHaptics.selection).toHaveBeenCalledOnce();
+        component.onRRRecordingChange(component.rrRecordings[1].key); component.onRRRecordingChange('missing');
+        expect(mockHaptics.selection).toHaveBeenCalledOnce();
+        component.selectedActivities = [activities[1]] as any;
+        component.ngOnChanges({ selectedActivities: new SimpleChange(activities, component.selectedActivities, false) });
+        expect(component.rrRecordings).toHaveLength(1);
+        expect(component.rrRecordings[0].stats[0]).toBe(second);
+        expect(component.activeRRRecording()?.stats[0]).toBe(second);
+        expect(component.rrShowDiff).toBe(false);
+    });
+
+    it('does not show a benchmark delta for multisport legs, or invent one for a missing/invalid peer stat', () => {
+        const valid = new DataRRRMSSD(8.14), invalid = new DataRRRMSSD(17.2);
+        vi.spyOn(invalid, 'getValue').mockReturnValue(NaN);
+        const activities = [valid, invalid].map(stat => ({ type: ActivityTypes.Running,
+            getStats: () => new Map([[stat.getType(), stat]]), getStat: () => stat }));
+        component.event = { isMerge: true, mergeType: 'multi', getActivities: () => activities, getStats: () => new Map() } as any;
+        component.selectedActivities = activities as any;
+        component.ngOnChanges({ selectedActivities: new SimpleChange(null, activities, true) });
+        expect(component.rrShowDiff).toBe(false); expect(component.rrDiffByType.size).toBe(0);
+        component.event = { ...component.event, mergeType: 'benchmark' } as any;
+        component.ngOnChanges({ event: new SimpleChange(null, component.event, false) });
+        expect(component.rrShowDiff).toBe(true); expect(component.rrDiffByType.size).toBe(0);
+        expect(component.rrRecordings).toHaveLength(1);
+    });
+
+    it('preserves the selected unsaved recording when an earlier recording is filtered out', () => {
+        const activities = [8.14, 17.2].map(value => {
+            const stat = new DataRRRMSSD(value);
+            return { type: ActivityTypes.Running, getID: () => '', getStats: () => new Map([[stat.getType(), stat]]) };
+        });
+        component.event = { getActivities: () => activities, getStats: () => new Map() } as any;
+        component.selectedActivities = activities as any;
+        component.ngOnChanges({ selectedActivities: new SimpleChange(null, activities, true) });
+        const key = component.rrRecordings[1].key;
+        component.onRRRecordingChange(key);
+        component.selectedActivities = [activities[1]] as any;
+        component.ngOnChanges({ selectedActivities: new SimpleChange(activities, component.selectedActivities, false) });
+        expect(component.activeRRRecording()?.key).toBe(key);
+        expect(component.activeRRRecording()?.stats[0].getValue()).toBe(17.2);
+    });
+
+    it('shows recorded zero artifacts, honors explicit summary overrides and removes empty recording sections', () => {
+        const stat = new DataRRArtifactPercentage(0);
+        const activity = { type: ActivityTypes.Running, getStats: () => new Map([[stat.getType(), stat]]) };
+        component.event = { getActivities: () => [activity], getStats: () => new Map() } as any;
+        component.selectedActivities = [activity] as any;
+        component.ngOnChanges({ selectedActivities: new SimpleChange(null, [activity], true) });
+        expect(component.rrRecordings[0].stats[0].getValue()).toBe(0);
+        component.statsToShow = [];
+        component.ngOnChanges({ statsToShow: new SimpleChange(undefined, [], false) });
+        expect(component.rrRecordings).toEqual([]); expect(component.metricTabs).toEqual([]);
+        component.selectedActivities = [];
+        component.ngOnChanges({ selectedActivities: new SimpleChange([activity], [], false) });
+        expect(component.rrRecordings).toEqual([]);
+    });
+
+    it.each([
+        { distanceUnits: DistanceUnits.Kilometers, benchmark: false },
+        { distanceUnits: DistanceUnits.Miles, benchmark: false },
+        { distanceUnits: DistanceUnits.Kilometers, benchmark: true },
+    ])('renders the R–R category and details ($distanceUnits, benchmark: $benchmark)', async ({ distanceUnits, benchmark }) => {
+        TestBed.resetTestingModule();
+        const haptics = { selection: vi.fn() };
+        mockUserSettingsQueryService.unitSettings.set({ ...getDefaultUserUnitSettings(), distanceUnits });
+        await TestBed.configureTestingModule({
+            declarations: [EventCardStatsGridComponent, HeaderStatsComponent],
+            imports: [MaterialModule, SharedModule, SummaryDisclosureComponent, NoopAnimationsModule],
+            providers: [
+                { provide: AppUserSettingsQueryService, useValue: mockUserSettingsQueryService },
+                { provide: AppEventColorService, useValue: { getDifferenceColor: vi.fn() } },
+                { provide: AppEventSummaryTabsLocalStorageService, useValue: mockEventSummaryTabsLocalStorageService },
+                { provide: AppHapticsService, useValue: haptics },
+                { provide: BreakpointObserver, useValue: {
+                    observe: () => of({ matches: false, breakpoints: {} }), isMatched: () => false,
+                } },
+            ], schemas: [NO_ERRORS_SCHEMA],
+        }).compileComponents();
+        fixture = TestBed.createComponent(EventCardStatsGridComponent);
+        const activity = EventImporterJSON.getActivityFromJSON({
+            name: '', startDate: 0, endDate: 10000, type: ActivityTypes.Running, creator: { name: 'Strap', devices: [] },
+            stats: {}, streams: [], laps: [], events: [], intensityZones: [], powerMeter: false, trainer: false,
+        });
+        activity.addStat(new DataRRRMSSD(8.14)); activity.addStat(new DataRRArtifactCount(0));
+        activity.setID('strap');
+        const peer = EventImporterJSON.getActivityFromJSON(activity.toJSON());
+        peer.setID('peer'); peer.creator.name = 'Peer'; peer.addStat(new DataRRRMSSD(17.2));
+        const activities = benchmark ? [activity, peer] : [activity];
+        const event = { isMerge: benchmark, getActivities: () => activities, getStats: () => new Map() };
+        const readStreams = vi.spyOn(activity, 'getAllStreams');
+        fixture.componentRef.setInput('event', event);
+        fixture.componentRef.setInput('selectedActivities', activities);
+        fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+        const host = fixture.nativeElement as HTMLElement;
+        expect(host.querySelector('[role="tab"]')?.textContent).toContain('R–R & HRV');
+        expect(host.textContent).toContain('8.1 ms');
+        const summary = host.querySelector('.rr-recording-summary')!;
+        expect(summary.querySelector('h2, h3, h4, p')).toBeNull();
+        expect(summary.textContent).not.toContain('R–R & HRV');
+        expect(summary.textContent).not.toContain('Values describe this full recording');
+        expect(summary.textContent).not.toContain('Workout HRV is separate');
+        expect(summary.textContent).not.toContain('Suspected ectopic pairs are algorithm flags');
+        expect(summary.querySelector('.summary-disclosure-plain')).not.toBeNull();
+        expect(!!summary.querySelector('mat-select')).toBe(benchmark);
+        expect(host.querySelector('[role="tab"] mat-icon')?.textContent?.trim()).toBe('ecg_heart');
+        expect(host.querySelector('.stat-avatar mat-icon')?.textContent?.trim()).toBe('ssid_chart');
+        expect(host.querySelector('.stat-label')?.textContent?.trim()).toBe('RMSSD');
+        expect(readStreams).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+        const button = host.querySelector<HTMLButtonElement>('app-summary-disclosure button')!;
+        expect(summary.querySelector('.summary-disclosure-footer')).toBeNull();
+        expect(button.closest('.grid')?.lastElementChild).toBe(button.closest('.rr-summary-details-action'));
+        expect(button.getAttribute('aria-expanded')).toBe('false'); button.click(); fixture.detectChanges();
+        expect(button.getAttribute('aria-expanded')).toBe('true'); expect(haptics.selection).toHaveBeenCalledOnce();
+        expect(summary.querySelector('[summaryDetails] .stat-avatar mat-icon')?.textContent?.trim()).toBe('filter_alt');
+        expect(summary.querySelectorAll('.rr-summary-details-action button')).toHaveLength(1);
+        expect(fixture.debugElement.queryAll(By.directive(HeaderStatsComponent)).every(node => node.componentInstance.showDiff === benchmark)).toBe(true);
+        if (benchmark) {
+            expect(host.querySelector('.stat-diff-value')?.textContent).toContain('9.1 ms');
+            expect(host.querySelector('.stat-diff-percent')?.textContent).toContain('71.5%');
+            fixture.debugElement.query(By.directive(MatSelect)).triggerEventHandler('selectionChange', {
+                value: fixture.componentInstance.rrRecordings[1].key,
+            });
+            fixture.detectChanges();
+            expect(host.querySelector('.stat-value-grid')?.textContent).toContain('17.2 ms');
+            expect(button.getAttribute('aria-expanded')).toBe('false');
+            expect(haptics.selection).toHaveBeenCalledTimes(2);
+        }
+
+        fixture.componentRef.setInput('layout', 'condensed'); fixture.detectChanges();
+        expect(summary.querySelector('[summaryOverview] mat-chip mat-icon')?.textContent?.trim()).toBe('ssid_chart');
+        expect(summary.querySelector('[summaryDetails] mat-chip mat-icon')?.textContent?.trim()).toBe('filter_alt');
+        expect(summary.querySelectorAll('.condensed .rr-summary-details-action button')).toHaveLength(1);
+        expect(summary.querySelector('.summary-disclosure-footer')).toBeNull();
+        fixture.componentRef.setInput('layout', 'grid'); fixture.detectChanges();
+
+        // An ordinary event with heart rate, but no beat-interval statistics,
+        // keeps its other summaries and removes the R–R category entirely.
+        const ordinary = EventImporterJSON.getActivityFromJSON({ ...activity.toJSON(), stats: {}, streams: [] });
+        ordinary.setID('ordinary');
+        ordinary.addStat(new DataDuration(10));
+        ordinary.addStat(new DataHeartRateAvg(140));
+        const ordinaryEvent = { isMerge: false, getActivities: () => [ordinary], getStats: () => ordinary.getStats() };
+        fixture.componentRef.setInput('event', ordinaryEvent);
+        fixture.componentRef.setInput('selectedActivities', [ordinary]);
+        fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+        const renderedTabs = () => Array.from(host.querySelectorAll<HTMLElement>('[role="tab"]'));
+        expect(renderedTabs().length).toBeGreaterThan(0);
+        expect(renderedTabs().some(tab => tab.textContent?.includes('R–R & HRV'))).toBe(false);
+        expect(host.querySelector('.rr-recording-summary')).toBeNull();
+        expect(fixture.componentInstance.metricTabs.flatMap(tab => tab.metricTypes)).toContain(DataDuration.type);
+
+        // Saved HRV makes the category available without a benchmark, including
+        // a genuine zero, and never retains the previous benchmark's deltas.
+        ordinary.addStat(new DataRRRMSSD(0));
+        fixture.componentRef.setInput('selectedActivities', [ordinary]);
+        fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+        const rrTab = renderedTabs().find(tab => tab.textContent?.includes('R–R & HRV'));
+        expect(rrTab).toBeDefined();
+        rrTab!.click();
+        fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+        expect(host.querySelector('.rr-recording-summary .stat-value-grid')?.textContent).toContain('0.0 ms');
+        expect(fixture.componentInstance.rrShowDiff).toBe(false);
+        expect(host.querySelector('.rr-summary-details-action')).toBeNull();
+        expect(host.querySelector('.rr-recording-summary .stat-diff-value')).toBeNull();
+        expect(host.querySelector('.rr-recording-summary mat-select')).toBeNull();
+        expect(host.querySelector('app-summary-disclosure button')).toBeNull();
+        fixture.componentRef.setInput('selectedActivities', []); fixture.detectChanges();
+        expect(host.querySelector('.rr-recording-summary')).toBeNull();
     });
 
     it('should create', () => {
@@ -349,6 +559,31 @@ describe('EventCardStatsGridComponent', () => {
         });
 
         expect(component.showDiff).toBe(true);
+    });
+
+    it('refreshes swim comparison differences when only the units signal changes', () => {
+        const activities = [91.44, 68.58].map(meters => ({
+            type: ActivityTypes.Swimming,
+            getStat: (type: string) => type === DataDistance.type ? new DataDistance(meters) : null,
+        }));
+        component.event = {
+            isMerge: true,
+            getActivities: () => activities,
+            getStats: () => new Map([[DataDistance.type, new DataDistance(160.02)]]),
+        } as any;
+        component.selectedActivities = activities as any;
+        component.statsToShow = [DataDistance.type];
+        mockUserSettingsQueryService.unitSettings.set(normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }));
+        component.ngOnChanges({ selectedActivities: new SimpleChange([], activities, false) });
+        fixture.detectChanges();
+        expect(component.diffByType.get(DataDistance.type)?.display).toBe('22.86 m');
+
+        mockUserSettingsQueryService.unitSettings.set(normalizeUserUnitSettings({
+            distanceUnits: DistanceUnits.Miles,
+            swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
+        }));
+        fixture.detectChanges();
+        expect(component.diffByType.get(DataDistance.type)?.display).toBe('25 yd');
     });
 
     it('should not compute diff map when event is not a merge', () => {
@@ -1089,6 +1324,9 @@ describe('EventCardStatsGridComponent', () => {
 
         expect(component.selectedTabIndex).toBe(1);
         expect(mockEventSummaryTabsLocalStorageService.setLastSelectedStatsTabId).toHaveBeenCalledWith('performance');
+        expect(mockHaptics.selection).toHaveBeenCalledOnce();
+        component.onSelectedTabIndexChange(1); component.onSelectedTabIndexChange(-1);
+        expect(mockHaptics.selection).toHaveBeenCalledOnce(); expect(component.selectedTabIndex).toBe(1);
     });
 
     it('should return the configured icon for each summary tab id', () => {
@@ -1101,13 +1339,16 @@ describe('EventCardStatsGridComponent', () => {
         expect(component.getTabIcon('other')).toBe('category');
     });
 
-    it('should apply tallest tab panel height as shared min-height', () => {
+    it('sizes the tab panel to the selected category instead of the tallest hidden category', () => {
         const tabGroupElement = createTabGroupElement([120, 220, 190]);
         component.summaryTabGroupRef = new ElementRef(tabGroupElement);
 
         (component as any).syncTabBodyHeight();
 
-        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('220px');
+        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('120px');
+        component.selectedTabIndex = 2;
+        (component as any).syncTabBodyHeight();
+        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('190px');
     });
 
     it('should clear shared min-height and skip height sync on mobile viewport', () => {
@@ -1154,7 +1395,7 @@ describe('EventCardStatsGridComponent', () => {
         expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('216px');
     });
 
-    it('should not shrink shared min-height during tab-switch grow-only sync', () => {
+    it('preserves the height during an explicit grow-only sync', () => {
         const heights = [220, 180];
         const tabGroupElement = createTabGroupElement(heights);
         component.summaryTabGroupRef = new ElementRef(tabGroupElement);
@@ -1180,13 +1421,29 @@ describe('EventCardStatsGridComponent', () => {
         ] as any;
 
         (component as any).syncTabBodyHeight('allow_shrink');
-        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('292px');
+        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('220px');
 
         tabGroupElement.style.setProperty('--summary-tabs-body-min-height', '220px');
         (component as any).lastAppliedMinHeightPx = 220;
         component.onSelectedTabIndexChange(1);
 
         expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('292px');
+    });
+
+    it('shrinks when switching to a shorter category without measuring the old shared floor', () => {
+        const tabGroupElement = createTabGroupElementWithResizableIntrinsicHeights([220, 120]);
+        component.summaryTabGroupRef = new ElementRef(tabGroupElement);
+        component.metricTabs = [
+            { id: 'overall', label: 'Overall', metricTypes: [] },
+            { id: 'rr', label: 'R–R & HRV', metricTypes: [] },
+        ] as any;
+        (component as any).syncTabBodyHeight();
+        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('220px');
+
+        component.onSelectedTabIndexChange(1);
+        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('120px');
+        (component as any).syncTabBodyHeight();
+        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('120px');
     });
 
     it('should coalesce repeated height sync scheduling into one animation frame', () => {

@@ -1,6 +1,5 @@
 import { Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { isHealthWorkspaceNavigationUIDAllowed } from '@shared/health-workspace-rollout';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppSideNavService } from '../../services/side-nav/app-side-nav.service';
@@ -15,7 +14,6 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { environment } from '../../../environments/environment';
 import { AppThemePreference, SYSTEM_THEME_PREFERENCE } from '../../models/app-theme-preference.type';
 import { getAssistantRequestLimitForRole } from '@shared/limits';
-import { QUANTIFIED_SELF_SOURCE_URL } from '../../shared/open-source-license';
 
 @Component({
   selector: 'app-sidenav',
@@ -27,7 +25,6 @@ export class SideNavComponent {
 
   public events: EventInterface[] = [];
   public appVersion = environment.appVersion;
-  public readonly sourceCodeUrl = QUANTIFIED_SELF_SOURCE_URL;
   public readonly supportMailtoHref = `mailto:${environment.supportEmail}`;
 
   private themeService = inject(AppThemeService);
@@ -36,8 +33,7 @@ export class SideNavComponent {
   public themePreference = toSignal(this.themeService.getThemePreference(), { initialValue: SYSTEM_THEME_PREFERENCE });
   private analyticsService = inject(AppAnalyticsService);
   private hapticsService = inject(AppHapticsService);
-  public readonly hasHealthWorkspaceNavigationAccess = computed(() =>
-    isHealthWorkspaceNavigationUIDAllowed(this.userService.user()?.uid));
+  public readonly hasTrainingPlanningNavigationAccess = computed(() => !!this.userService.user()?.uid);
 
   constructor(
     public authService: AppAuthService,
@@ -100,12 +96,6 @@ export class SideNavComponent {
     this.analyticsService.logEvent('github_star');
     this.hapticsService.selection();
     window.open('https://github.com/jimmykane/quantified-self/');
-  }
-
-  async facebookGroup() {
-    this.analyticsService.logEvent('facebook_group_click');
-    this.hapticsService.selection();
-    window.open('https://www.facebook.com/groups/quantifiedself.io');
   }
 
   reportBug(): void {

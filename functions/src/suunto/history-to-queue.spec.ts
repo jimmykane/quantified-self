@@ -3,22 +3,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as utils from '../utils';
 import * as history from '../history';
+import { HttpsError } from 'firebase-functions/v2/https';
+import * as logger from 'firebase-functions/logger';
 import { SERVICE_NAME } from './constants';
+import { startManualActivityHistory } from '../connection-history/manual-activity';
+import { HistoryImportAdmissionError, HistoryLifecycleChangedError } from '../connection-history/execution';
+vi.mock('../connection-history/manual-activity', () => ({ startManualActivityHistory: vi.fn() }));
 
 // Mock firebase-functions/v2/https
-vi.mock('firebase-functions/v2/https', () => {
+vi.mock('firebase-functions/v2/https', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('firebase-functions/v2/https')>();
     return {
+        ...actual,
         onCall: (options: any, handler: any) => {
             return handler;
         },
-        HttpsError: class HttpsError extends Error {
-            code: string;
-            constructor(code: string, message: string) {
-                super(message);
-                this.code = code;
-                this.name = 'HttpsError';
-            }
-        }
     };
 });
 
@@ -56,9 +55,30 @@ describe('Suunto History to Queue', () => {
         vi.clearAllMocks();
         (utils.hasProAccess as any).mockResolvedValue(true);
         (history.getNextAllowedHistoryImportDate as any).mockResolvedValue(null);
+        vi.mocked(startManualActivityHistory).mockReset();
     });
 
     describe('addSuuntoAppHistoryToQueue', () => {
+        it('accepts a background request without scanning provider history in the callable', async () => {
+            const projection = { runId: 'run', active: true } as Awaited<ReturnType<typeof startManualActivityHistory>>;
+            vi.mocked(startManualActivityHistory).mockResolvedValue(projection);
+            const request = createMockRequest({ data: { startDate: '2026-10-01T21:00:00Z', endDate: '2026-10-02T20:59:59.999Z', background: true } });
+            await expect(addSuuntoAppHistoryToQueue(request as any)).resolves.toEqual({ result: 'History import accepted', historyImport: projection });
+            expect(startManualActivityHistory).toHaveBeenCalledWith('testUserID', SERVICE_NAME, new Date(request.data.startDate), new Date(request.data.endDate));
+            expect(history.addHistoryToQueue).not.toHaveBeenCalled();
+        });
+        it('requires reconnect without a legacy scan when the current account cannot be verified', async () => {
+            const error = new HttpsError('failed-precondition', 'Reconnect before importing history.');
+            vi.mocked(startManualActivityHistory).mockRejectedValue(error);
+            await expect(addSuuntoAppHistoryToQueue(createMockRequest({ data: { startDate: '2026-10-01', endDate: '2026-10-02', background: true } }) as any)).rejects.toBe(error);
+            expect(history.addHistoryToQueue).not.toHaveBeenCalled();
+        });
+        it('preserves a background admission cooldown error without falling back to a provider scan', async () => {
+            const error = new HttpsError('permission-denied', 'History import is not allowed until 2026-11-01T00:00:00.000Z');
+            vi.mocked(startManualActivityHistory).mockRejectedValue(error);
+            await expect(addSuuntoAppHistoryToQueue(createMockRequest({ data: { startDate: '2026-10-01', endDate: '2026-10-02', background: true } }) as any)).rejects.toBe(error);
+            expect(history.addHistoryToQueue).not.toHaveBeenCalled();
+        });
         it('should add history to queue and return success', async () => {
             const recentDate = new Date();
             recentDate.setDate(recentDate.getDate() - 7);
@@ -128,7 +148,60 @@ describe('Suunto History to Queue', () => {
             });
 
             await expect(addSuuntoAppHistoryToQueue(request as any))
-                .rejects.toThrow('Queue failure');
+                .rejects.toMatchObject({ code: 'internal', message: 'Queue failure' });
+            expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({ message: 'Queue failure' }));
+        });
+
+        it.each([
+            'A recent-history import is already running. Please wait for it to finish.',
+            'Another history import is running.',
+        ])('preserves the busy reservation response "%s" without logging an error', async message => {
+            const error = new HttpsError('already-exists', message);
+            vi.mocked(history.addHistoryToQueue).mockRejectedValueOnce(error);
+            const request = createMockRequest({ data: {
+                startDate: new Date(Date.now() - 86400000).toISOString(),
+                endDate: new Date().toISOString(),
+            } });
+
+            await expect(addSuuntoAppHistoryToQueue(request as any)).rejects.toBe(error);
+            expect(error.httpErrorCode.status).toBe(409);
+            expect(history.addHistoryToQueue).toHaveBeenCalledTimes(1);
+            expect(logger.info).toHaveBeenCalledWith('[SuuntoHistoryImport] History import is already running.');
+            expect(logger.error).not.toHaveBeenCalled();
+        });
+
+        it('does not downgrade a generic failure that happens to have an already-exists code', async () => {
+            const error = Object.assign(new Error('Unexpected queue failure'), { code: 'already-exists' });
+            vi.mocked(history.addHistoryToQueue).mockRejectedValueOnce(error);
+            const request = createMockRequest({ data: {
+                startDate: new Date(Date.now() - 86400000).toISOString(),
+                endDate: new Date().toISOString(),
+            } });
+
+            await expect(addSuuntoAppHistoryToQueue(request as any)).rejects.toMatchObject({
+                code: 'internal', httpErrorCode: { status: 500 },
+            });
+            expect(logger.error).toHaveBeenCalledWith(error);
+            expect(logger.info).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            new HistoryImportAdmissionError('permission-denied', 'History import is not allowed until 2026-11-01T00:00:00.000Z'),
+            new HistoryImportAdmissionError('failed-precondition', 'Reconnect before importing history.'),
+        ])('preserves shared admission refusal %s without a false failure report', async error => {
+            vi.mocked(history.addHistoryToQueue).mockRejectedValueOnce(error);
+            const request = createMockRequest({ data: { startDate: '2026-10-01', endDate: '2026-10-02' } });
+            await expect(addSuuntoAppHistoryToQueue(request as never)).rejects.toBe(error);
+            expect(logger.error).not.toHaveBeenCalled();
+        });
+
+        it('returns a callable precondition error after its shared manual lease is superseded', async () => {
+            vi.mocked(history.addHistoryToQueue).mockRejectedValueOnce(new HistoryLifecycleChangedError());
+            const request = createMockRequest({ data: { startDate: '2026-10-01', endDate: '2026-10-02' } });
+            await expect(addSuuntoAppHistoryToQueue(request as never)).rejects.toMatchObject({
+                code: 'failed-precondition', httpErrorCode: { status: 400 }, message: 'History import is no longer active. Please retry.',
+            });
+            expect(logger.error).not.toHaveBeenCalled();
         });
 
         it('should throw error if App Check fails', async () => {

@@ -1,3 +1,4 @@
+import { currentHistoryExecution } from './connection-history/context';
 export class ResponseBodyTooLargeError extends Error {
     readonly name = 'ResponseBodyTooLargeError';
 
@@ -14,6 +15,11 @@ export interface BinaryResponse {
     statusCode: number;
     contentType: string | null;
     contentLength: number | null;
+}
+
+export interface ResponseMetadata {
+    statusCode: number;
+    contentType: string | null;
 }
 
 function normalizeMaxResponseBytes(value: unknown): number | null {
@@ -112,6 +118,7 @@ export async function del(urlOrOptions: string | any, options: any = {}) {
 }
 
 async function request(urlOrOptions: string | any, options: any = {}) {
+    await currentHistoryExecution()?.beforeRequest();
     let url: string;
     let opts: any;
 
@@ -128,6 +135,12 @@ async function request(urlOrOptions: string | any, options: any = {}) {
         method: opts.method || 'GET',
         headers: opts.headers || {},
     };
+    if (opts.redirect !== undefined) {
+        if (!['error', 'manual', 'follow'].includes(opts.redirect)) {
+            throw new TypeError('Unsupported redirect policy.');
+        }
+        fetchOptions.redirect = opts.redirect;
+    }
 
     if (opts.body) {
         if (typeof opts.body === 'object' && opts.json !== false) {
@@ -165,6 +178,15 @@ async function request(urlOrOptions: string | any, options: any = {}) {
         }
 
         const response = await fetch(url, fetchOptions);
+        // Optional diagnostics must not change response/error handling or expose headers/bodies.
+        if (typeof opts.onResponseMetadata === 'function') {
+            try {
+                opts.onResponseMetadata({
+                    statusCode: response.status,
+                    contentType: response.headers?.get('content-type') ?? null,
+                } satisfies ResponseMetadata);
+            } catch { /* Observability failure must not fail the request. */ }
+        }
         const boundedResponseBody = maxResponseBytes === null
             ? null
             : await readResponseBodyWithinLimit(response, maxResponseBytes);
@@ -172,6 +194,8 @@ async function request(urlOrOptions: string | any, options: any = {}) {
         if (!response.ok) {
             const err: any = new Error(`StatusCodeError: ${response.status} - ${response.statusText}`);
             err.statusCode = response.status;
+            const retryAfter = response.headers?.get('retry-after');
+            if (retryAfter) err.response = { headers: { 'retry-after': retryAfter } };
             try {
                 err.error = boundedResponseBody === null
                     ? await response.text()

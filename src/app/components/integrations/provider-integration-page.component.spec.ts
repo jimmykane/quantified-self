@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
@@ -7,11 +7,14 @@ import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { ProviderIntegrationPageComponent } from './provider-integration-page.component';
 import { AppEventService } from '../../services/app.event.service';
 import { IntegrationProviderKey } from './integration-pages.content';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 describe('ProviderIntegrationPageComponent', () => {
   let routeStub: { snapshot: { data: { integrationProvider: IntegrationProviderKey } } };
+  const selection = vi.fn();
 
   beforeEach(async () => {
+    selection.mockClear();
     routeStub = {
       snapshot: {
         data: {
@@ -30,6 +33,7 @@ describe('ProviderIntegrationPageComponent', () => {
       providers: [
         { provide: ActivatedRoute, useValue: routeStub },
         { provide: AppEventService, useValue: { getEventMetaDataKeys: vi.fn() } },
+        { provide: AppHapticsService, useValue: { selection } },
       ],
     }).compileComponents();
   });
@@ -45,7 +49,8 @@ describe('ProviderIntegrationPageComponent', () => {
     const fixture = renderProvider('garmin');
     const text = fixture.nativeElement.textContent as string;
 
-    expect(text).toContain('Garmin Integration and Training Dashboard');
+    expect(text).toContain('Garmin Integration, Training Plans, and Dashboard');
+    expect(text).toContain('Planned workouts to Garmin');
     expect(text).toContain('What can Quantified Self do with Garmin data?');
     expect(text).toContain('Garmin to Suunto automatic activity sync');
     expect(text).toContain('centralize Garmin, Suunto, and COROS workout data');
@@ -56,8 +61,9 @@ describe('ProviderIntegrationPageComponent', () => {
     const fixture = renderProvider('suunto');
     const text = fixture.nativeElement.textContent as string;
 
-    expect(text).toContain('Suunto Integration for Activity and Route Sync');
-    expect(text).toContain('How to sync activities to Suunto and send Suunto routes to Garmin');
+    expect(text).toContain('Suunto Training Plans, Activity, and Route Sync');
+    expect(text).toContain('Send planned workouts and sync activities and routes with Suunto');
+    expect(text).toContain('Planned workouts as SuuntoPlus Guides');
     expect(text).toContain('Import routes from Suunto');
     expect(text).toContain('Send Suunto routes to Garmin');
     expect(text).toContain('Can Suunto routes sync to Garmin courses?');
@@ -76,7 +82,8 @@ describe('ProviderIntegrationPageComponent', () => {
     const fixture = renderProvider('coros');
     const text = fixture.nativeElement.textContent as string;
 
-    expect(text).toContain('COROS Integration for Activity Sync and Route Delivery');
+    expect(text).toContain('COROS Training Plans, Activity Sync, and Routes');
+    expect(text).toContain('Planned workouts to COROS');
     expect(text).toContain('COROS to Suunto automatic activity sync');
     expect(text).toContain('Send activities to COROS');
     expect(text).toContain('Send routes to COROS');
@@ -92,17 +99,28 @@ describe('ProviderIntegrationPageComponent', () => {
     const fixture = renderProvider('wahoo');
     const text = fixture.nativeElement.textContent as string;
 
-    expect(text).toContain('Wahoo Integration for Activity Sync and Training Analysis');
+    expect(text).toContain('Wahoo Integration for Activity Sync, Training Plans, and Analysis');
+    expect(text).toContain('Planned workouts to Wahoo');
     expect(text).toContain('New workout imports');
     expect(text).toContain('Wahoo history import');
     expect(text).toContain('Can I sync Wahoo activities to Suunto automatically?');
     expect(text).toContain('does not delete activities already imported');
     expect(text).toContain('Direct GPX/FIT course/route delivery');
     expect(text).toContain('Garmin, COROS, and Suunto to Wahoo sync');
-    expect(text).toContain('sleep sync and plans are not forwarded');
+    expect(text).toContain('Wahoo-owned plans are not imported or forwarded between providers');
     expect(text).toContain('Wahoo to COROS sync');
     expect(Array.from(fixture.nativeElement.querySelectorAll('a')).map((link: HTMLAnchorElement) => link.getAttribute('href')))
       .toContain('/guides/import-activities-to-wahoo');
+  });
+
+  it.each(['garmin', 'wahoo'] as const)('links %s visitors to the Garmin-to-Wahoo guide with one haptic on selection', provider => {
+    const fixture = renderProvider(provider);
+    const link = fixture.nativeElement.querySelector('a[href="/guides/sync-garmin-to-wahoo"]') as HTMLAnchorElement;
+    expect(link?.textContent).toContain('Garmin to Wahoo Activity Sync');
+    expect(selection).not.toHaveBeenCalled();
+    vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    link.click();
+    expect(selection).toHaveBeenCalledTimes(1);
   });
 
   it('should expose public CTAs, support links, and the integrations hub link', () => {

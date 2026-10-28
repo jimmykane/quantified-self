@@ -1,14 +1,20 @@
 import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BreakpointObserver } from '@angular/cdk/layout';
 import {
   ActivityInterface,
   DynamicDataLoader,
   EventInterface,
   UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
-import { Sort } from '@angular/material/sort';
+import { MatSortModule, Sort } from '@angular/material/sort';
+import { MatTableModule } from '@angular/material/table';
+import { MatTabsModule } from '@angular/material/tabs';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { EventCardJumpsComponent } from './event.card.jumps.component';
+import { getLocalDateTimeFormatter } from '../../../helpers/date-time-format.helper';
+import { of } from 'rxjs';
 
 function createStat(displayValue: string, displayUnit = '', numericValue?: number): any {
   return {
@@ -48,6 +54,10 @@ describe('EventCardJumpsComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       declarations: [EventCardJumpsComponent],
+      imports: [CommonModule, MatTableModule, MatSortModule, MatTabsModule],
+      providers: [
+        { provide: BreakpointObserver, useValue: { observe: () => of({ matches: false, breakpoints: {} }) } },
+      ],
       schemas: [NO_ERRORS_SCHEMA],
     }).compileComponents();
 
@@ -61,7 +71,7 @@ describe('EventCardJumpsComponent', () => {
     vi.restoreAllMocks();
   });
 
-  it('renders tabs only for selected activities that contain jump events', () => {
+  it('renders one jump activity directly without a redundant activity tab', () => {
     const jumpActivity = createActivity('activity-1', 'Running', [createJumpEvent(90)]);
     const noJumpActivity = createActivity('activity-2', 'Cycling', []);
 
@@ -70,7 +80,30 @@ describe('EventCardJumpsComponent', () => {
     fixture.detectChanges();
 
     expect(component.activitiesWithJumps).toEqual([jumpActivity]);
-    expect(fixture.nativeElement.querySelectorAll('mat-tab')).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('table')).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('table')?.getAttribute('aria-label')).toBe('Running jumps');
+    expect(fixture.nativeElement.querySelector('.jump-activity-label')?.textContent?.trim()).toBe('Running');
+  });
+
+  it('keeps activity tabs when multiple selected activities contain jumps', () => {
+    const running = createActivity('running', 'Running', [createJumpEvent(90)]);
+    const cycling = createActivity('cycling', 'Cycling', [createJumpEvent(120)]);
+    const noJumps = createActivity('empty', 'Hiking', []);
+    component.selectedActivities = [running, noJumps, cycling];
+    component.ngOnChanges();
+    fixture.detectChanges();
+
+    expect(component.activitiesWithJumps).toEqual([running, cycling]);
+    const tabs = [...fixture.nativeElement.querySelectorAll('[role="tab"]')] as HTMLElement[];
+    expect(tabs.map(tab => tab.textContent?.trim())).toEqual(['Running 1', 'Cycling 2']);
+
+    component.selectedActivities = [cycling];
+    component.ngOnChanges();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeNull();
+    expect(fixture.nativeElement.querySelector('table')?.getAttribute('aria-label')).toBe('Cycling jumps');
+    expect(fixture.nativeElement.querySelector('.jump-activity-label')).toBeNull();
   });
 
   it('keeps stable jump activity view keys when activity instances are rebuilt', () => {
@@ -122,6 +155,14 @@ describe('EventCardJumpsComponent', () => {
       'Jump Rotations',
       'Jump Score',
     ]);
+    fixture.detectChanges();
+    const table = fixture.nativeElement.querySelector('table');
+    expect(table.getAttribute('aria-label')).toBe('Snowboarding jumps');
+    expect(table.querySelectorAll('th')).toHaveLength(columns.length);
+    const cells = table.querySelectorAll('td');
+    expect(cells).toHaveLength(columns.length);
+    expect(cells[0].textContent.trim()).toBe('1');
+    expect(cells[1].textContent.trim()).toBe(component.getDataSource(jumpActivity)!.data[0].At);
   });
 
   it('hides the rotations column when no jump row has rotations', () => {
@@ -160,6 +201,22 @@ describe('EventCardJumpsComponent', () => {
     component.sortRows(dataSource, { active: 'At', direction: 'desc' } as Sort);
 
     expect(dataSource.data.map(row => row.sortValues.At)).toEqual([180, 120, 60]);
+
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('th[aria-label="Sort by Jump Distance"]').click();
+    fixture.detectChanges();
+    expect(dataSource.data.map(row => row['Jump Distance'])).toEqual(['3.4 m', '9.8 m', '12.1 m']);
+  });
+
+  it('preserves second-level precision for absolute jump timestamps', () => {
+    const timestamp = Date.UTC(2026, 8, 21, 10, 11, 12);
+    const jumpActivity = createActivity('activity-1', 'Snowboarding', [createJumpEvent(timestamp)]);
+
+    component.selectedActivities = [jumpActivity];
+    component.ngOnChanges();
+
+    expect(component.getDataSource(jumpActivity)?.data[0]?.At)
+      .toBe(getLocalDateTimeFormatter().format(new Date(timestamp)));
   });
 
   it('keeps rows without a sortable value after rows with data in either direction', () => {
@@ -189,6 +246,9 @@ describe('EventCardJumpsComponent', () => {
 
     expect(component.activitiesWithJumps).toEqual([]);
     expect(component.getDataSource(jumpActivity)).toBeUndefined();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-event-section-header')).toBeNull();
+    expect(fixture.nativeElement.querySelector('table')).toBeNull();
   });
 
   it('formats unit-based jump values using converted user unit preferences', () => {

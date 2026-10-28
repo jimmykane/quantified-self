@@ -3,6 +3,7 @@ import { getOrCreateEChartsTooltipHost } from './echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from './echarts-tooltip-position.helper';
 import {
   DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS,
+  resolveEChartsMiniChartTooltipSurfaceConfig,
   resolveEChartsTooltipSurfaceConfig,
   resolveEChartsTooltipTriggerOn
 } from './echarts-tooltip-interaction.helper';
@@ -44,5 +45,16 @@ describe('echarts-tooltip-interaction.helper', () => {
     expect(surface.confine).toBe(false);
     expect(surface.appendTo).toBe(getOrCreateEChartsTooltipHost);
     expect(surface.position).toBe(getViewportConstrainedTooltipPosition);
+  });
+
+  it('hosts mini-chart tooltips outside the plot and adapts chart-local coordinates to the viewport', () => {
+    const chart = {
+      ownerDocument: { documentElement: { clientWidth: 320, clientHeight: 800 } },
+      getBoundingClientRect: () => ({ left: 172, top: 460 }),
+    } as unknown as HTMLElement;
+    const surface = resolveEChartsMiniChartTooltipSurfaceConfig(chart);
+    expect(surface.confine).toBe(false);
+    expect(surface.appendTo).toBe(getOrCreateEChartsTooltipHost);
+    expect(surface.position?.([56, 19], undefined, {} as HTMLElement, undefined, { contentSize: [242, 86], viewSize: [106, 38] })).toEqual([-164, 31]);
   });
 });

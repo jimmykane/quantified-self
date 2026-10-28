@@ -1,8 +1,10 @@
+import { loadUserSettingsUtilities } from '../helpers/user-settings.loader';
+import { mergeDashboardChartLibrarySeen, newDashboardChartLibrarySeen } from '../helpers/dashboard-chart-library-revision.helper';
 import { inject, Injectable, OnDestroy, computed, signal } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 
 
-import { Observable, from, firstValueFrom, of, combineLatest, defer, distinctUntilChanged, NEVER, throwError, timer } from 'rxjs';
+import { Observable, Subject, from, firstValueFrom, of, combineLatest, defer, distinctUntilChanged, NEVER, throwError, timer } from 'rxjs';
 import { StripeRole } from '../models/stripe-role.model';
 import { User } from '@sports-alliance/sports-lib';
 import { catchError, filter, map, take, switchMap, shareReplay, retry, startWith, tap, timeout } from 'rxjs/operators';
@@ -49,7 +51,7 @@ import {
 import { DataDuration } from '@sports-alliance/sports-lib';
 import { DataDistance } from '@sports-alliance/sports-lib';
 import { DataAscent } from '@sports-alliance/sports-lib';
-import { AppUserUtilities } from '../utils/app.user.utilities';
+import { AppUserAccess } from '../helpers/user-access.helper';
 import {
   MapThemes,
   MapTypes,
@@ -65,8 +67,11 @@ import { UserSummariesSettingsInterface } from '@sports-alliance/sports-lib';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AppWindowService } from './app.window.service';
 import { LoggerService } from './logger.service';
-import { applyEventChartCanonicalOrderOverride } from '../helpers/event-chart-order.helper';
-import { getAppCanonicalChartDataTypes } from '../helpers/app-chart-data-types.helper';
+import { AppCheckReadinessService } from './app-check-readiness.service';
+import { AppCheckDiagnosticsService } from './app-check-diagnostics.service';
+import type { AppCheckOperationAttempt } from './app-check-diagnostics.service';
+import { AppCheckFailureDetails, appCheckFailureDetails } from '../helpers/app-check-error.helper';
+import { mergeUserProfileDocuments, UserProfileVerificationService } from './user-profile-verification.service';
 import { UserMyTracksSettingsInterface } from '@sports-alliance/sports-lib';
 import { DataDescription } from '@sports-alliance/sports-lib';
 import { DataActivityTypes } from '@sports-alliance/sports-lib';
@@ -80,7 +85,7 @@ import { DataDeviceNames } from '@sports-alliance/sports-lib';
 import { DataPeakEPOC } from '@sports-alliance/sports-lib';
 import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
-import { Firestore, doc, docData, setDoc, updateDoc } from 'app/firebase/firestore';
+import { Firestore, doc, docData, setDoc, updateDoc, runTransaction } from 'app/firebase/firestore';
 import { AppFunctionsService } from './app.functions.service';
 import { FunctionName } from '@shared/functions-manifest';
 import {
@@ -89,6 +94,7 @@ import {
   SuuntoHealthSyncAvailabilityResponse,
 } from '@shared/sleep-backfill';
 import { ActivitySyncRouteId } from '@shared/activity-sync-routes';
+import { HistoricalSendRequest, HistoricalSendResponse } from '@shared/historical-activity-send';
 import { RouteDeliverySyncRouteId } from '@shared/route-delivery-sync-routes';
 import { buildSuuntoServiceConnectionViewModel, SuuntoServiceConnectionViewModel } from '../helpers/suunto-service-connection.helper';
 import {
@@ -113,9 +119,11 @@ import {
   SERVICE_DISCONNECT_RETRY_BLOCKERS,
   SERVICE_DISCONNECT_RETRY_REASON,
   SERVICE_CONNECTION_STATES,
+  type ServiceOAuthCompletionResult,
   type ServiceDisconnectRetryDetails,
   type ServiceConnectionAccountProjection,
 } from '@shared/service-connection';
+import { CONNECTION_HISTORY_DEFAULT_RANGE, type ConnectionHistoryRangePreset } from '@shared/connection-history';
 import {
   getUserLegalAgreementsPath,
   OPTIONAL_USER_LEGAL_CONSENT_FIELDS,
@@ -238,9 +246,9 @@ export type AppUserProfileReadState =
   | { status: 'initializing' }
   | { status: 'signed-out' }
   | { status: 'loading'; uid: string }
-  | { status: 'recovering'; uid: string; attempt: number; code: string | null }
+  | { status: 'recovering'; uid: string; attempt: number; code: string | null; appCheckFailure?: AppCheckFailureDetails }
   | { status: 'ready'; uid: string; profileExists: boolean }
-  | { status: 'error'; uid: string; code: string | null };
+  | { status: 'error'; uid: string; code: string | null; appCheckFailure?: AppCheckFailureDetails };
 
 const PROFILE_READ_ACTIONABLE_RETRY_ATTEMPT = 4;
 
@@ -254,6 +262,7 @@ interface AuthenticatedUserProfile {
   firebaseUser: FirebaseUserType;
   dbUser: AppUserInterface | null;
   readGeneration: number;
+  diagnosticAttempt: AppCheckOperationAttempt | undefined;
 }
 
 interface MergedAuthenticatedUser {
@@ -287,6 +296,11 @@ export class AppUserService implements OnDestroy {
   private logger = inject(LoggerService);
   private http = inject(HttpClient);
   private windowService = inject(AppWindowService);
+  private readonly appCheckReadiness = inject(AppCheckReadinessService);
+  private readonly appCheckDiagnostics = inject(AppCheckDiagnosticsService);
+  private readonly profileVerification = inject(UserProfileVerificationService);
+  private readonly profileReload$ = new Subject<boolean>();
+  private profileRecoveryPromise: Promise<boolean> | null = null;
   private usersWithIncompleteProfileReads = new Set<string>();
   private profileReadGeneration = 0;
   private profilePublicationGeneration = 0;
@@ -308,6 +322,11 @@ export class AppUserService implements OnDestroy {
   private readonly authenticatedUserProfile$ = authState(this.auth).pipe(
     distinctUntilChanged((previous, current) => previous?.uid === current?.uid),
     switchMap((firebaseUser): Observable<AuthenticatedUserProfile | null> => {
+      // This stream starts before the constructor's logging subscription. Establish the generation
+      // before profile credential requests, including an already restored synchronous Auth snapshot.
+      try {
+        this.appCheckDiagnostics.setAuthState(firebaseUser ? 'signed-in' : 'signed-out');
+      } catch { /* Keep the existing Auth/profile stream independent of telemetry. */ }
       if (!firebaseUser) {
         this.usersWithIncompleteProfileReads.clear();
         this.lastPublishedProfileRead = null;
@@ -316,28 +335,44 @@ export class AppUserService implements OnDestroy {
         return of(null);
       }
 
-      this.markIncompleteProfileRead(firebaseUser.uid);
-      this.profileReadStateSignal.set({ status: 'loading', uid: firebaseUser.uid });
-
-      return this.getUserProfileWithAuthRetry(firebaseUser).pipe(
-        tap(() => {
-          this.markIncompleteProfileRead(firebaseUser.uid);
-          this.profileReadStateSignal.set({ status: 'loading', uid: firebaseUser.uid });
-        }),
-        map((dbUser) => ({
-          firebaseUser,
-          dbUser,
-          readGeneration: ++this.profileReadGeneration,
-        })),
-        catchError((error) => {
-          const code = this.getErrorCode(error);
-          this.markIncompleteProfileRead(firebaseUser.uid);
-          this.profileReadStateSignal.set({ status: 'error', uid: firebaseUser.uid, code });
-          this.logger.error('[AppUserService] User profile loading stopped after a non-recoverable error', {
-            uid: firebaseUser.uid,
-            code,
-          }, error);
-          return of(null);
+      return this.profileReload$.pipe(
+        startWith(false),
+        switchMap(forceRefresh => {
+          this.beginProfileRead(firebaseUser.uid);
+          let diagnosticAttempt: AppCheckOperationAttempt | undefined;
+          try { diagnosticAttempt = this.appCheckDiagnostics.beginOperation(); } catch { /* Diagnostics must not gate profile reads. */ }
+          return this.getUserProfileWithAuthRetry(firebaseUser, forceRefresh).pipe(
+            tap(() => {
+              this.markIncompleteProfileRead(firebaseUser.uid);
+              this.profileReadStateSignal.set({ status: 'loading', uid: firebaseUser.uid });
+            }),
+            map((dbUser) => ({
+              firebaseUser,
+              dbUser,
+              readGeneration: ++this.profileReadGeneration,
+              diagnosticAttempt,
+            })),
+            catchError((error) => {
+              const code = this.getErrorCode(error);
+              this.markIncompleteProfileRead(firebaseUser.uid);
+              const appCheckFailure = appCheckFailureDetails(error);
+              this.profileReadStateSignal.set({
+                status: 'error', uid: firebaseUser.uid, code,
+                ...(appCheckFailure ? { appCheckFailure } : {}),
+              });
+              if (appCheckFailure) {
+                this.trackAppCheckProfileOutcome('blocked', diagnosticAttempt, error);
+                // The App Check observer/readiness boundary owns the safe, deduplicated report.
+                this.logger.warn('[AppUserService] Browser verification blocked profile loading.', appCheckFailure);
+              } else {
+                this.logger.error('[AppUserService] User profile loading stopped after a non-recoverable error', {
+                  uid: firebaseUser.uid,
+                  code,
+                }, error);
+              }
+              return of(null);
+            })
+          );
         })
       );
     }),
@@ -356,7 +391,10 @@ export class AppUserService implements OnDestroy {
         return NEVER;
       }
 
-      return this.mergeClaimsWithAuthRetry(tokenUser, profile.dbUser).pipe(
+      return this.mergeClaimsWithAuthRetry(tokenUser, profile.dbUser, profile.readGeneration).pipe(
+        // A newer verification/retry may be pending while this async claim
+        // merge finishes. It must not reopen the profile gate with stale data.
+        filter(() => profile.readGeneration === this.profileReadGeneration),
         map((mergedUser) => {
           if (this.hasIncompleteProfileReads(tokenUser.uid)) {
             this.profilePublicationGeneration += 1;
@@ -367,6 +405,7 @@ export class AppUserService implements OnDestroy {
             uid: tokenUser.uid,
             profileExists: profile.dbUser !== null,
           });
+          this.trackAppCheckProfileOutcome('succeeded', profile.diagnosticAttempt);
           this.lastPublishedProfileRead = {
             uid: tokenUser.uid,
             generation: profile.readGeneration,
@@ -378,6 +417,9 @@ export class AppUserService implements OnDestroy {
           };
         }),
         catchError((error) => {
+          if (profile.readGeneration !== this.profileReadGeneration) {
+            return NEVER;
+          }
           const code = this.getErrorCode(error);
           this.markIncompleteProfileRead(tokenUser.uid);
           this.profileReadStateSignal.set({ status: 'error', uid: tokenUser.uid, code });
@@ -419,10 +461,12 @@ export class AppUserService implements OnDestroy {
       ? new Date(firebaseUser.metadata.lastSignInTime)
       : authCreationDate;
 
-    const defaultNewUserSettings = AppUserUtilities.fillMissingAppSettings({} as any);
+    const settingsUtilities = await loadUserSettingsUtilities();
+    const defaultNewUserSettings = settingsUtilities.fillMissingAppSettings({} as any);
     defaultNewUserSettings.appSettings = {
       ...defaultNewUserSettings.appSettings,
       unitSetupCompleted: false,
+      dashboardChartLibrarySeen: newDashboardChartLibrarySeen(),
     };
 
     // Use the current DB user or create a synthetic one only for a server-confirmed missing profile.
@@ -513,12 +557,26 @@ export class AppUserService implements OnDestroy {
 
   private mergeClaimsWithAuthRetry(
     firebaseUser: FirebaseUserType,
-    dbUser: AppUserInterface | null
+    dbUser: AppUserInterface | null,
+    readGeneration: number
   ): Observable<AppUserInterface | null> {
-    return defer(() => from(this.mergeClaims(firebaseUser, dbUser))).pipe(
+    return defer(() => {
+      if (readGeneration !== this.profileReadGeneration) return NEVER;
+      // A promise that never settles does not reach retry/catchError. Bound
+      // each attempt, including any token refresh performed while merging.
+      return from(this.mergeClaims(firebaseUser, dbUser)).pipe(timeout({
+        first: AppUserService.profileReadServerTimeoutMs,
+        with: () => throwError(() => Object.assign(new Error('Timed out loading account token claims.'), {
+          code: 'deadline-exceeded',
+        })),
+      }));
+    }).pipe(
       retry({
         count: AppUserService.transientReadRetryCount,
         delay: (error, retryCount) => {
+          if (readGeneration !== this.profileReadGeneration) {
+            return NEVER;
+          }
           if (!this.isFirestoreTransientReadError(error) || this.auth.currentUser?.uid !== firebaseUser.uid) {
             return throwError(() => error);
           }
@@ -547,17 +605,32 @@ export class AppUserService implements OnDestroy {
     );
   }
 
-  private getUserProfileWithAuthRetry(firebaseUser: FirebaseUserType): Observable<AppUserInterface | null> {
-    const loadUserProfile = () => defer(() => from(firebaseUser.getIdToken()).pipe(
-      switchMap(() => this.getUserByID(firebaseUser.uid, {
-        requireCompleteProfile: true,
-        waitForServer: true,
-      })),
-      timeout({
-        first: AppUserService.profileReadServerTimeoutMs,
-        with: () => throwError(() => this.createProfileReadTimeoutError()),
-      })
-    ));
+  private getUserProfileWithAuthRetry(firebaseUser: FirebaseUserType, forceRefresh = false): Observable<AppUserInterface | null> {
+    let refreshCredentials = forceRefresh;
+    const loadUserProfile = () => defer(() => {
+      this.profileVerification.invalidatePendingRead(firebaseUser.uid);
+      return from(Promise.all([
+        firebaseUser.getIdToken(refreshCredentials),
+        this.appCheckReadiness.isConfigured() ? this.appCheckReadiness.getToken(refreshCredentials) : Promise.resolve(),
+      ])).pipe(
+        switchMap(() => this.getUserByID(firebaseUser.uid, {
+          requireCompleteProfile: true,
+          waitForServer: true,
+        })),
+        switchMap(profile => {
+          if (!this.profileVerification.needsVerification(profile)) {
+            this.profileVerification.invalidatePendingRead(firebaseUser.uid);
+            return of(profile);
+          }
+          this.beginProfileRead(firebaseUser.uid);
+          return from(this.profileVerification.verifyIfIncomplete(firebaseUser.uid, profile));
+        }),
+        timeout({
+          first: AppUserService.profileReadServerTimeoutMs,
+          with: () => throwError(() => this.createProfileReadTimeoutError()),
+        })
+      );
+    });
 
     return loadUserProfile().pipe(
       retry({
@@ -569,9 +642,15 @@ export class AppUserService implements OnDestroy {
           }
 
           const code = this.getErrorCode(error);
-          const retryDelayMs = Math.min(
-            AppUserService.transientReadRetryDelayMs * Math.pow(2, retryCount - 1),
-            AppUserService.transientReadRetryMaxDelayMs
+          const appCheckFailure = appCheckFailureDetails(error);
+          const retryDelayMs = Math.max(
+            Math.min(
+              AppUserService.transientReadRetryDelayMs * Math.pow(2, retryCount - 1),
+              AppUserService.transientReadRetryMaxDelayMs
+            ),
+            // SDK duration strings round to the nearest second; add one second
+            // so the retry cannot land just before the actual cooldown expires.
+            appCheckFailure?.cooldown ? (appCheckFailure.retryAfterSeconds + 1) * 1000 : 0,
           );
 
           this.markIncompleteProfileRead(firebaseUser.uid);
@@ -580,7 +659,9 @@ export class AppUserService implements OnDestroy {
             uid: firebaseUser.uid,
             attempt: retryCount,
             code,
+            ...(appCheckFailure ? { appCheckFailure } : {}),
           });
+          this.profileReadGeneration += 1;
           this.logger.warn('[AppUserService] Retrying authoritative user profile read.', {
             uid: firebaseUser.uid,
             code,
@@ -588,19 +669,9 @@ export class AppUserService implements OnDestroy {
             retryDelayMs,
           });
 
-          if (!this.isFirestoreAuthenticationReadError(error)) {
-            return timer(retryDelayMs);
-          }
-
-          return from(firebaseUser.getIdToken(true)).pipe(
-            catchError((tokenError) => {
-              if (this.isFirestoreTransientReadError(tokenError)) {
-                return of(null);
-              }
-              return throwError(() => tokenError);
-            }),
-            switchMap(() => timer(retryDelayMs))
-          );
+          refreshCredentials = this.isFirestoreAuthenticationReadError(error)
+            || code?.startsWith('appCheck/') === true;
+          return timer(retryDelayMs);
         }
       })
     );
@@ -619,7 +690,59 @@ export class AppUserService implements OnDestroy {
   }
 
   private isRecoverableProfileReadError(error: unknown): boolean {
-    return this.isFirestoreAuthenticationReadError(error) || this.isFirestoreTransientReadError(error);
+    const appCheckFailure = appCheckFailureDetails(error);
+    if (appCheckFailure) return appCheckFailure.retryable;
+    return this.isFirestoreAuthenticationReadError(error)
+      || this.isFirestoreTransientReadError(error);
+  }
+
+  private beginProfileRead(uid: string): void {
+    this.profileReadGeneration += 1;
+    this.markIncompleteProfileRead(uid);
+    this.profileReadStateSignal.set({ status: 'loading', uid });
+  }
+
+  private trackAppCheckProfileOutcome(outcome: 'blocked' | 'succeeded', attempt: AppCheckOperationAttempt | undefined, error?: unknown): void {
+    try {
+      if (!attempt) return;
+      if (outcome === 'blocked') this.appCheckDiagnostics.reportOperationBlocked(error, 'profile-load', attempt);
+      else this.appCheckDiagnostics.reportOperationSucceeded('profile-load', attempt);
+    } catch { /* Diagnostics cannot change profile recovery or the original error. */ }
+  }
+
+  public retryProfileRead(): Promise<boolean> {
+    if (this.profileRecoveryPromise) {
+      return this.profileRecoveryPromise;
+    }
+    const firebaseUser = this.auth.currentUser;
+    if (!firebaseUser) {
+      return Promise.resolve(false);
+    }
+
+    this.beginProfileRead(firebaseUser.uid);
+    const recovery = firstValueFrom(combineLatest([
+      authState(this.auth),
+      this.profileReadState$,
+    ]).pipe(
+      filter(([currentUser, state]) => {
+        if (!currentUser || currentUser.uid !== firebaseUser.uid) {
+          return true;
+        }
+        // toObservable can still replay the previous signal value this turn.
+        return state === this.profileReadStateSignal()
+          && 'uid' in state && state.uid === firebaseUser.uid
+          && (state.status === 'ready' || state.status === 'error');
+      }),
+      take(1),
+      map(([currentUser, state]) => currentUser?.uid === firebaseUser.uid && state.status === 'ready'),
+    )).finally(() => {
+      if (this.profileRecoveryPromise === recovery) {
+        this.profileRecoveryPromise = null;
+      }
+    });
+    this.profileRecoveryPromise = recovery;
+    this.profileReload$.next(true);
+    return recovery;
   }
 
   private createProfileReadTimeoutError(): Error & { code: string } {
@@ -764,12 +887,12 @@ export class AppUserService implements OnDestroy {
 
   public readonly stripeRoleSignal = computed(() => this.user()?.stripeRole || null);
   public readonly isAdminSignal = computed(() => this.user()?.admin === true);
-  public readonly isProSignal = computed(() => AppUserUtilities.hasProAccess(this.user(), this.isAdminSignal()));
-  public readonly isBasicSignal = computed(() => AppUserUtilities.isBasicUser(this.user()));
+  public readonly isProSignal = computed(() => AppUserAccess.hasProAccess(this.user(), this.isAdminSignal()));
+  public readonly isBasicSignal = computed(() => AppUserAccess.isBasicUser(this.user()));
 
-  public readonly isGracePeriodActiveSignal = computed(() => AppUserUtilities.isGracePeriodActive(this.user()));
-  public readonly hasPaidAccessSignal = computed(() => AppUserUtilities.hasPaidAccessUser(this.user(), this.isAdminSignal()));
-  public readonly hasProAccessSignal = computed(() => AppUserUtilities.hasProAccess(this.user(), this.isAdminSignal()));
+  public readonly isGracePeriodActiveSignal = computed(() => AppUserAccess.isGracePeriodActive(this.user()));
+  public readonly hasPaidAccessSignal = computed(() => AppUserAccess.hasPaidAccessUser(this.user(), this.isAdminSignal()));
+  public readonly hasProAccessSignal = computed(() => AppUserAccess.hasProAccess(this.user(), this.isAdminSignal()));
 
   public readonly gracePeriodUntil = computed(() => {
     const user = this.user();
@@ -810,7 +933,7 @@ export class AppUserService implements OnDestroy {
   public async isPro(): Promise<boolean> {
     const user = await this.getCurrentUserForAccessCheck();
     const isAdmin = user?.admin === true;
-    return AppUserUtilities.hasProAccess(user, isAdmin);
+    return AppUserAccess.hasProAccess(user, isAdmin);
   }
 
   public async hasProAccess(): Promise<boolean> {
@@ -820,7 +943,7 @@ export class AppUserService implements OnDestroy {
   public async hasPaidAccess(): Promise<boolean> {
     const user = await this.getCurrentUserForAccessCheck();
     const isAdmin = user?.admin === true;
-    return AppUserUtilities.hasPaidAccessUser(user, isAdmin);
+    return AppUserAccess.hasPaidAccessUser(user, isAdmin);
   }
 
   private async getCurrentUserForAccessCheck(): Promise<AppUserInterface | null> {
@@ -935,33 +1058,7 @@ export class AppUserService implements OnDestroy {
       )
     }).pipe(
       distinctUntilChanged((prev, curr) => JSON.stringify(prev) === JSON.stringify(curr)),
-      map(({ user, legal, system, settings }) => {
-        const hasLegalData = !!legal && Object.keys(legal).length > 0;
-        const hasSystemData = !!system && Object.keys(system).length > 0;
-        const hasSettingsData = !!settings && Object.keys(settings).length > 0;
-        if (!user && !hasLegalData && !hasSystemData && !hasSettingsData) {
-          return null;
-        }
-
-        // Merge order: Main Doc -> Legal -> System (System overrides if overlap)
-        const u = { ...(user ?? {}) } as AppUserInterface;
-        u.uid ??= userID;
-        if (hasLegalData) {
-          Object.assign(u, legal);
-        }
-        if (hasSystemData) {
-          Object.assign(u, system);
-        }
-
-        // Settings is a special case (nested object)
-        if (hasSettingsData) {
-          u.settings = settings as any;
-        }
-
-        u.settings = AppUserUtilities.fillMissingAppSettings(u);
-
-        return u;
-      }));
+      switchMap(documents => from(mergeUserProfileDocuments(userID, documents))));
   }
 
   public async createOrUpdateUser(user: AppUserInterface) {
@@ -1330,7 +1427,8 @@ export class AppUserService implements OnDestroy {
     );
   }
 
-  async importServiceHistoryForCurrentUser(serviceName: ServiceNames, startDate: Date, endDate: Date) {
+  async importServiceHistoryForCurrentUser(serviceName: ServiceNames, startDate: Date, endDate: Date, expectedUserID?: string) {
+    const canExecute = this.captureHistoryImportAccount(expectedUserID);
     let functionName: FunctionName;
     let payload: any;
 
@@ -1340,31 +1438,33 @@ export class AppUserService implements OnDestroy {
         payload = {
           startDate: this.formatLocalCalendarDate(startDate, 'startDate'),
           endDate: this.formatLocalCalendarDate(endDate, 'endDate'),
+          background: true,
         };
         break;
       case ServiceNames.GarminAPI:
         functionName = 'backfillGarminAPIActivities';
-        payload = { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
+        payload = { startDate: startDate.toISOString(), endDate: endDate.toISOString(), background: true };
         break;
       case ServiceNames.SuuntoApp:
         functionName = 'addSuuntoAppHistoryToQueue';
-        payload = { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
+        payload = { startDate: startDate.toISOString(), endDate: endDate.toISOString(), background: true };
         break;
       case ServiceNames.WahooAPI:
         functionName = 'addWahooAPIHistoryToQueue';
-        payload = { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
+        payload = { startDate: startDate.toISOString(), endDate: endDate.toISOString(), background: true };
         break;
       default:
         throw new Error(`Service ${serviceName} not supported for history import`);
     }
 
-    const result = await this.functionsService.call(functionName, payload);
+    const result = await this.functionsService.call(functionName, payload, { canExecute });
     return result.data;
   }
 
   public checkCurrentUserCOROSBindingState(
     userID: string,
     providerUserId: string,
+    connectionStateGeneration?: string | null,
   ): Promise<COROSBindingStateResult> {
     const normalizedUserID = `${userID || ''}`.trim();
     const normalizedProviderUserId = `${providerUserId || ''}`.trim();
@@ -1372,7 +1472,13 @@ export class AppUserService implements OnDestroy {
       return Promise.reject(new Error('Cannot check COROS binding state for an inactive account.'));
     }
 
-    const requestKey = `${normalizedUserID}:${normalizedProviderUserId}`;
+    // A same-account reconnect must not reuse an earlier connection's request.
+    // This generation is local coalescing context, never callable input.
+    const requestKey = JSON.stringify([
+      normalizedUserID,
+      normalizedProviderUserId,
+      connectionStateGeneration || null,
+    ]);
     const existingRequest = this.corosBindingStateRequests.get(requestKey);
     if (existingRequest) return existingRequest;
 
@@ -1388,8 +1494,9 @@ export class AppUserService implements OnDestroy {
     return request;
   }
 
-  async backfillSuuntoSleepForCurrentUser(): Promise<SleepBackfillQueueResponse> {
-    const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillSuuntoAppSleep');
+  async backfillSuuntoSleepForCurrentUser(expectedUserID?: string): Promise<SleepBackfillQueueResponse> {
+    const canExecute = this.captureHistoryImportAccount(expectedUserID);
+    const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillSuuntoAppSleep', undefined, { canExecute });
     return result.data;
   }
 
@@ -1400,8 +1507,9 @@ export class AppUserService implements OnDestroy {
     return result.data.available === true;
   }
 
-  async backfillCorosSleepForCurrentUser(): Promise<SleepBackfillQueueResponse> {
-    const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillCorosAPISleep');
+  async backfillCorosSleepForCurrentUser(expectedUserID?: string): Promise<SleepBackfillQueueResponse> {
+    const canExecute = this.captureHistoryImportAccount(expectedUserID);
+    const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillCorosAPISleep', undefined, { canExecute });
     return result.data;
   }
 
@@ -1417,8 +1525,9 @@ export class AppUserService implements OnDestroy {
     return result.data;
   }
 
-  async backfillGarminHealthForCurrentUser(): Promise<SleepBackfillQueueResponse> {
-    const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillGarminAPIHealth');
+  async backfillGarminHealthForCurrentUser(expectedUserID?: string): Promise<SleepBackfillQueueResponse> {
+    const canExecute = this.captureHistoryImportAccount(expectedUserID);
+    const result = await this.functionsService.call<undefined, SleepBackfillQueueResponse>('backfillGarminAPIHealth', undefined, { canExecute });
     return result.data;
   }
 
@@ -1442,6 +1551,13 @@ export class AppUserService implements OnDestroy {
       endDate: normalizedEndDate.toISOString(),
     });
     return result.data as ActivitySyncBackfillSummary;
+  }
+
+  async historicalSendActivityPage(request: HistoricalSendRequest): Promise<HistoricalSendResponse> {
+    const result = await this.functionsService.call<HistoricalSendRequest, HistoricalSendResponse>(
+      'backfillActivitySyncRoute', request,
+    );
+    return result.data;
   }
 
   async backfillRouteDeliverySyncRouteForCurrentUser(
@@ -1474,7 +1590,8 @@ export class AppUserService implements OnDestroy {
     return `${year}-${month}-${day}`;
   }
 
-  async deauthorizeService(serviceName: ServiceNames): Promise<any> {
+  async deauthorizeService(serviceName: ServiceNames, isCurrentView?: () => boolean): Promise<any> {
+    const canExecute = this.captureServiceConnectionAccount(isCurrentView);
     let functionName: FunctionName;
 
     switch (serviceName) {
@@ -1494,17 +1611,18 @@ export class AppUserService implements OnDestroy {
         throw new Error(`Service ${serviceName} not supported for deauthorization`);
     }
 
-    const result = await this.callServiceDisconnectWithRefreshRetry(functionName);
+    const result = await this.callServiceDisconnectWithRefreshRetry(functionName, canExecute);
     return result.data;
   }
 
-  private async callServiceDisconnectWithRefreshRetry(functionName: FunctionName): Promise<{ data: any }> {
+  private async callServiceDisconnectWithRefreshRetry(functionName: FunctionName, canExecute: () => boolean): Promise<{ data: any }> {
     let retryAttempt = 0;
     let retryDeadlineAt: number | null = null;
 
     while (true) {
+      if (!canExecute()) throw new Error('Operation cancelled because its account or view changed.');
       try {
-        return await this.functionsService.call(functionName);
+        return await this.functionsService.call(functionName, undefined, { canExecute });
       } catch (error) {
         const details = getTokenRefreshDisconnectRetryDetails(error);
         if (!details) throw error;
@@ -1527,7 +1645,36 @@ export class AppUserService implements OnDestroy {
     }
   }
 
-  async getCurrentUserServiceTokenAndRedirectURI(serviceName: ServiceNames): Promise<{ redirect_uri: string }> {
+  private captureServiceConnectionAccount(isCurrentView?: () => boolean): () => boolean {
+    const firebaseUser = this.auth.currentUser;
+    const uid = firebaseUser?.uid;
+    return () => !!uid && this.auth.currentUser === firebaseUser && this.auth.currentUser.uid === uid
+      && (!isCurrentView || isCurrentView());
+  }
+
+  private captureHistoryImportAccount(expectedUserID?: string): () => boolean {
+    // Dialog closure does not cancel an accepted request; changing Firebase identity does.
+    return this.captureServiceConnectionAccount(() => expectedUserID === undefined || this.auth.currentUser?.uid === expectedUserID);
+  }
+
+  async retryConnectionHistoryImport(runId: string, isCurrentView?: () => boolean): Promise<void> {
+    const canExecute = this.captureServiceConnectionAccount(isCurrentView);
+    const result = await this.functionsService.call<{ runId: string }, { accepted: boolean }>('retryConnectionHistoryImport', { runId }, { canExecute })
+      .catch(error => {
+        if (!canExecute()) throw new Error('Operation cancelled because its account or view changed.');
+        throw error;
+      });
+    if (!canExecute()) throw new Error('Operation cancelled because its account or view changed.');
+    if (!result.data.accepted) throw new Error('History retry was not accepted.');
+  }
+
+  async getCurrentUserServiceTokenAndRedirectURI(
+    serviceName: ServiceNames,
+    importRecentHistory = false,
+    importHistoryRange: ConnectionHistoryRangePreset = CONNECTION_HISTORY_DEFAULT_RANGE,
+    isCurrentView?: () => boolean,
+  ): Promise<{ redirect_uri: string }> {
+    const canExecute = this.captureServiceConnectionAccount(isCurrentView);
     const currentDomain = this.windowService.currentDomain;
     const redirectUri = encodeURI(`${currentDomain}/services?serviceName=${serviceName}&connect=1`);
     let functionName: FunctionName;
@@ -1549,14 +1696,19 @@ export class AppUserService implements OnDestroy {
         throw new Error(`Service ${serviceName} not supported for auth redirect`);
     }
 
-    const result = await this.functionsService.call<{ redirectUri: string }, { redirect_uri: string }>(functionName, { redirectUri });
+    const result = await this.functionsService.call<
+      { redirectUri: string; importRecentHistory: boolean; importHistoryRange: ConnectionHistoryRangePreset; importRouteHistory?: boolean },
+      { redirect_uri: string }
+    >(functionName, { redirectUri, importRecentHistory, importHistoryRange,
+      ...(serviceName === ServiceNames.SuuntoApp ? { importRouteHistory: importRecentHistory } : {}),
+    }, { canExecute });
     return result.data;
   }
 
-  public async requestAndSetCurrentUserGarminAPIAccessToken(state: string, code: string) {
+  public async requestAndSetCurrentUserGarminAPIAccessToken(state: string, code: string): Promise<ServiceOAuthCompletionResult> {
     const currentDomain = this.windowService.currentDomain;
     const redirectUri = encodeURI(`${currentDomain}/services?serviceName=${ServiceNames.GarminAPI}&connect=1`);
-    const result = await this.functionsService.call('requestAndSetGarminAPIAccessToken', {
+    const result = await this.functionsService.call<{ state: string; code: string; redirectUri: string }, ServiceOAuthCompletionResult>('requestAndSetGarminAPIAccessToken', {
       state,
       code,
       redirectUri,
@@ -1564,30 +1716,30 @@ export class AppUserService implements OnDestroy {
     return result.data;
   }
 
-  public async requestAndSetCurrentUserSuuntoAppAccessToken(state: string, code: string) {
+  public async requestAndSetCurrentUserSuuntoAppAccessToken(state: string, code: string): Promise<ServiceOAuthCompletionResult> {
     const currentDomain = this.windowService.currentDomain;
     const redirectUri = encodeURI(`${currentDomain}/services?serviceName=${ServiceNames.SuuntoApp}&connect=1`);
-    const result = await this.functionsService.call<{ state: string; code: string; redirectUri: string }, void>(
+    const result = await this.functionsService.call<{ state: string; code: string; redirectUri: string }, ServiceOAuthCompletionResult>(
       'requestAndSetSuuntoAPIAccessToken',
       { state, code, redirectUri }
     );
     return result.data;
   }
 
-  public async requestAndSetCurrentUserCOROSAPIAccessToken(state: string, code: string) {
+  public async requestAndSetCurrentUserCOROSAPIAccessToken(state: string, code: string): Promise<ServiceOAuthCompletionResult> {
     const currentDomain = this.windowService.currentDomain;
     const redirectUri = encodeURI(`${currentDomain}/services?serviceName=${ServiceNames.COROSAPI}&connect=1`);
-    const result = await this.functionsService.call<{ state: string; code: string; redirectUri: string }, void>(
+    const result = await this.functionsService.call<{ state: string; code: string; redirectUri: string }, ServiceOAuthCompletionResult>(
       'requestAndSetCOROSAPIAccessToken',
       { state, code, redirectUri }
     );
     return result.data;
   }
 
-  public async requestAndSetCurrentUserWahooAPIAccessToken(state: string, code: string) {
+  public async requestAndSetCurrentUserWahooAPIAccessToken(state: string, code: string): Promise<ServiceOAuthCompletionResult> {
     const currentDomain = this.windowService.currentDomain;
     const redirectUri = encodeURI(`${currentDomain}/services?serviceName=${ServiceNames.WahooAPI}&connect=1`);
-    const result = await this.functionsService.call<{ state: string; code: string; redirectUri: string }, void>(
+    const result = await this.functionsService.call<{ state: string; code: string; redirectUri: string }, ServiceOAuthCompletionResult>(
       'requestAndSetWahooAPIAccessToken',
       { state, code, redirectUri },
     );
@@ -1605,6 +1757,20 @@ export class AppUserService implements OnDestroy {
     // Generic profile saves must not replay a stale server-owned value.
     const { trainingSettings: _trainingSettings, ...clientWritableSettings } = settings as Record<string, unknown>;
     return clientWritableSettings;
+  }
+
+  private writeClientSettings(uid: string, settings: Record<string, unknown>): Promise<void> {
+    const reference = doc(this.firestore, `users/${uid}/config/settings`);
+    const appSettings = settings['appSettings'] as AppUserInterface['settings']['appSettings'];
+    if (!appSettings?.dashboardChartLibrarySeen) return setDoc(reference, settings, { merge: true });
+    // An older tab can save an entire profile after another device has browsed a release.
+    // Only the acknowledgement requires a transaction; other settings keep their existing merge behavior.
+    return runTransaction(this.firestore, async transaction => {
+      const snapshot = await transaction.get(reference);
+      const seen = mergeDashboardChartLibrarySeen(snapshot.data()?.['appSettings']?.dashboardChartLibrarySeen,
+        appSettings.dashboardChartLibrarySeen);
+      transaction.set(reference, { ...settings, appSettings: { ...appSettings, dashboardChartLibrarySeen: seen } }, { merge: true });
+    });
   }
 
   public async updateUserProperties(user: AppUserInterface, propertiesToUpdate: any) {
@@ -1628,7 +1794,7 @@ export class AppUserService implements OnDestroy {
     if (propertiesToUpdate.settings) {
       const clientWritableSettings = this.getClientWritableSettings(propertiesToUpdate.settings);
       if (Object.keys(clientWritableSettings).length > 0) {
-        promises.push(setDoc(doc(this.firestore, `users/${user.uid}/config/settings`), clientWritableSettings, { merge: true })
+        promises.push(this.writeClientSettings(user.uid, clientWritableSettings)
           .catch(err => {
             this.logger.error('[AppUserService] Settings update FAILED', err);
             throw err;
@@ -1763,7 +1929,7 @@ export class AppUserService implements OnDestroy {
     if (user.settings) {
       const clientWritableSettings = this.getClientWritableSettings(user.settings);
       if (Object.keys(clientWritableSettings).length > 0) {
-        promises.push(setDoc(doc(this.firestore, `users/${user.uid}/config/settings`), clientWritableSettings, { merge: true }));
+        promises.push(this.writeClientSettings(user.uid, clientWritableSettings));
       }
     }
 
@@ -1780,7 +1946,7 @@ export class AppUserService implements OnDestroy {
     // But the guard checks "hasPaidAccess".
 
     // Let's look at the guard again.
-    // const hasPaidAccess = AppUserUtilities.hasPaidAccessUser(user);
+    // const hasPaidAccess = AppUserAccess.hasPaidAccessUser(user);
     // const onboardingCompleted = termsAccepted && (hasPaidAccess || hasSubscribedOnce);
 
     // So if I just set 'onboardingCompleted' property on the user in Firestore, 
@@ -1824,26 +1990,6 @@ export class AppUserService implements OnDestroy {
       this.logger.error(e);
       throw e;
     }
-  }
-  public getUserChartDataTypesToUse(user: User): string[] {
-    if (!user.settings?.chartSettings?.dataTypeSettings) {
-      return [];
-    }
-
-    const enabledDataTypeSet = new Set(
-      Object.keys(user.settings.chartSettings.dataTypeSettings).filter((dataTypeSettingKey) => {
-        return user.settings.chartSettings.dataTypeSettings[dataTypeSettingKey].enabled === true;
-      })
-    );
-    const canonicalDataTypes = getAppCanonicalChartDataTypes();
-    const orderedDataTypes = applyEventChartCanonicalOrderOverride(
-      canonicalDataTypes.filter((dataType) => enabledDataTypeSet.has(dataType))
-    );
-    const extraEnabledDataTypes = [...enabledDataTypeSet]
-      .filter((dataType) => !orderedDataTypes.includes(dataType))
-      .sort((left, right) => left.localeCompare(right));
-
-    return orderedDataTypes.concat(extraEnabledDataTypes);
   }
 
   ngOnDestroy() {

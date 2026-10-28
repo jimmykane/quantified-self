@@ -1,7 +1,8 @@
-import { Component, Inject } from '@angular/core';
+import { Component, Inject, inject } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { MatSelectionListChange } from '@angular/material/list';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 
 export interface BenchmarkSelectionData {
@@ -20,7 +21,7 @@ export interface BenchmarkSelectionData {
       <app-loading-overlay class="benchmark-selection-overlay" [isLoading]="isLoading" height="auto"
         minHeight="var(--benchmark-overlay-min-height)" borderRadius="12px" [showShade]="false" [showSkeleton]="true">
         @if (activities.length > 0) {
-        <mat-selection-list #list class="selection-list" (selectionChange)="onSelectionChange($event)">
+        <mat-selection-list #list class="selection-list" [disabled]="isLoading" (selectionChange)="onSelectionChange($event)">
           <mat-list-option *ngFor="let activity of activities" [value]="activity" [selected]="isSelected(activity)">
             <div class="activity-line">
               <div class="activity-main">
@@ -57,7 +58,7 @@ export interface BenchmarkSelectionData {
             </span>
           </div>
           
-          <button mat-icon-button class="swap-btn" (click)="swapActivities()" matTooltip="Swap Reference and Test">
+          <button mat-icon-button class="swap-btn" (click)="swapActivities()" aria-label="Swap reference and test activities" matTooltip="Swap reference and test activities" matTooltipTouchGestures="off">
             <mat-icon>swap_horiz</mat-icon>
           </button>
           
@@ -71,7 +72,7 @@ export interface BenchmarkSelectionData {
         </div>
         
         <div class="options-container">
-            <mat-checkbox [(ngModel)]="autoAlignTime" class="auto-align-checkbox">
+            <mat-checkbox [ngModel]="autoAlignTime" (change)="setAutoAlignTime($event.checked)" class="auto-align-checkbox">
                 Auto-align Time (Use Correlation)
             </mat-checkbox>
             
@@ -92,9 +93,9 @@ export interface BenchmarkSelectionData {
 
     </mat-dialog-content>
     <mat-dialog-actions align="end">
-      <button mat-button mat-dialog-close>Cancel</button>
+      <button mat-button type="button" (click)="cancel()">Cancel</button>
       <button mat-flat-button class="qs-mat-primary" 
-              [disabled]="selectedActivities.length !== 2"
+              [disabled]="isLoading || selectedActivities.length !== 2"
               (click)="confirm()">
         Run Benchmark
       </button>
@@ -104,6 +105,7 @@ export interface BenchmarkSelectionData {
   standalone: false
 })
 export class BenchmarkSelectionDialogComponent {
+  private readonly haptics = inject(AppHapticsService);
 
   activities: ActivityInterface[] = [];
   selectedActivities: ActivityInterface[] = [];
@@ -137,22 +139,40 @@ export class BenchmarkSelectionDialogComponent {
   }
 
   onSelectionChange(event: MatSelectionListChange): void {
-    this.selectedActivities = event.source.selectedOptions.selected.map(opt => opt.value);
+    if (this.isLoading) return;
+    const selection: ActivityInterface[] = event.source.selectedOptions.selected.map(opt => opt.value);
+    if (selection.length === this.selectedActivities.length
+        && selection.every((activity, index) => activity.getID() === this.selectedActivities[index].getID())) return;
+    this.selectedActivities = selection;
+    this.haptics.selection();
   }
 
   swapActivities(): void {
-    if (this.selectedActivities.length === 2) {
+    if (!this.isLoading && this.selectedActivities.length === 2) {
       this.selectedActivities = [this.selectedActivities[1], this.selectedActivities[0]];
+      this.haptics.selection();
     }
   }
 
   confirm(): void {
-    if (this.selectedActivities.length === 2) {
+    if (!this.isLoading && this.selectedActivities.length === 2) {
+      this.haptics.selection();
       this.dialogRef.close({
         activities: this.selectedActivities,
         options: { autoAlignTime: this.autoAlignTime }
       });
     }
+  }
+
+  setAutoAlignTime(checked: boolean): void {
+    if (this.isLoading || checked === this.autoAlignTime) return;
+    this.autoAlignTime = checked;
+    this.haptics.selection();
+  }
+
+  cancel(): void {
+    this.haptics.selection();
+    this.dialogRef.close();
   }
 
   getActivityColor(activity: ActivityInterface): string {

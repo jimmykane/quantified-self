@@ -1,3 +1,7 @@
+import { TrainingBuildMetricsComponent } from '../components/shared/training-summary/training-build-metrics.component';
+import { TrainingMixDetailsComponent } from '../components/shared/training-summary/training-mix-details.component';
+import { TimelineNotesWorkspaceComponent } from '../components/timeline-notes/timeline-notes-workspace.component';
+import { ActiveSicknessNoteComponent } from '../components/timeline-notes/active-sickness-note.component';
 import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 import {
@@ -12,7 +16,7 @@ import { TrainingDurabilityTrajectoryChartComponent } from '../components/traini
 import { TrainingMetricTextComponent } from '../components/training/training-metric-text.component';
 import { TrainingPowerSystemsTrendChartComponent } from '../components/training/training-power-systems-trend-chart.component';
 import { TrainingReadinessTrendChartComponent } from '../components/training/training-readiness-trend-chart.component';
-import { TrainingBodyWeightTrendChartComponent } from '../components/training/training-body-weight-trend-chart.component';
+import { TrainingImpactRecapComponent } from '../components/training/training-impact-recap.component';
 import { TrainingSummaryCardsComponent } from '../components/shared/training-summary/training-summary-cards.component';
 import { TrainingMetricGridComponent } from '../components/shared/training-summary/training-metric-grid.component';
 import { TrainingRoutingModule } from '../training.routing.module';
@@ -24,6 +28,15 @@ import { AppUserSettingsQueryService } from '../services/app.user-settings-query
 @NgModule({
   imports: [
     CommonModule,
+    TrainingBuildMetricsComponent,
+    TrainingMixDetailsComponent,
+    TrainingReadinessTrendChartComponent,
+    TrainingImpactRecapComponent,
+    TrainingPowerSystemsTrendChartComponent,
+    TrainingDurabilityTrajectoryChartComponent,
+    TrainingMetricTextComponent,
+    TimelineNotesWorkspaceComponent,
+    ActiveSicknessNoteComponent,
     SharedModule,
     MaterialModule,
     AppChartsModule,
@@ -37,11 +50,6 @@ import { AppUserSettingsQueryService } from '../services/app.user-settings-query
     TrainingBuildBenchmarkDialogComponent,
     TrainingSportVisibilityDialogComponent,
     TrainingSwimPerformanceChartComponent,
-    TrainingDurabilityTrajectoryChartComponent,
-    TrainingMetricTextComponent,
-    TrainingPowerSystemsTrendChartComponent,
-    TrainingReadinessTrendChartComponent,
-    TrainingBodyWeightTrendChartComponent,
   ],
   providers: [
     { provide: TRAINING_WORKSPACE_PREFERENCE_WRITER, useExisting: AppUserSettingsQueryService },

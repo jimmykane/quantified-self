@@ -13,8 +13,9 @@ import { of, Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Auth } from 'app/firebase/auth';
 import { AppThemes } from '@sports-alliance/sports-lib';
-import type { AssistantChatResponse } from '@shared/assistant.types';
+import type { AssistantChatResponse, AssistantContentProposalPreview, AssistantTrainingProposalPreview } from '@shared/assistant.types';
 import { ASSISTANT_PROMPT_EXAMPLES } from '@shared/assistant.prompts';
+import { formatAssistantCalendarDate, formatAssistantCalendarRange } from '../../helpers/assistant-message-format.helper';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -73,6 +74,28 @@ const chatResponse: AssistantChatResponse = {
   pendingRequestId: null,
 };
 
+const trainingProposal: AssistantTrainingProposalPreview = {
+  proposalRef: 'opaque-proposal-reference',
+  permissionMode: 'combined',
+  expiresAtMs: Date.parse('2026-08-03T12:15:00.000Z'),
+  scheduleRevision: 1,
+  summary: 'Create one standalone workout and send it to Garmin.',
+  requiresConfirmation: true,
+  changes: [{ index: 0, kind: 'create-workout', summary: 'Create “Easy run” on 2026-08-04 as a standalone workout.' }],
+  providerPreviews: [{ index: 1, provider: 'garmin', targetType: 'workout', action: 'send',
+    availability: 'ready', timeZone: 'Europe/Helsinki', eligibleCount: 1, warningCount: 0,
+    summary: 'Garmin: enable ongoing workout delivery; 1 currently eligible, 0 with mapping warnings.' }],
+};
+
+const contentProposal: AssistantContentProposalPreview = {
+  proposalRef: 'content-proposal-1',
+  kind: 'update_event_tags',
+  expiresAtMs: Date.now() + 60_000,
+  summary: 'Replace 1 current activity tag with 2.',
+  requiresConfirmation: true,
+  arguments: { activityRef: 'activity-ref', expectedTags: ['Easy'], tags: ['Quality', 'Reviewed'] },
+};
+
 describe('AssistantPageComponent', () => {
   let fixture: ComponentFixture<AssistantPageComponent>;
   let component: AssistantPageComponent;
@@ -80,7 +103,10 @@ describe('AssistantPageComponent', () => {
     getConversationState: vi.fn(),
     sendMessage: vi.fn(),
     resetConversation: vi.fn(),
+    applyTrainingProposal: vi.fn(),
+    applyContentProposal: vi.fn(),
     getErrorMessage: vi.fn(() => 'Friendly error'),
+    getConversationUpdateErrorMessage: vi.fn(() => 'Friendly conversation error'),
   };
   const quotaService = {
     loadQuotaStatus: vi.fn(),
@@ -119,6 +145,12 @@ describe('AssistantPageComponent', () => {
       ...chatResponse.conversation,
       messages: [],
     });
+    assistantService.applyTrainingProposal.mockReset().mockResolvedValue({
+      status: 'applied', scheduleRevision: 2, changes: [], providers: [],
+    });
+    assistantService.applyContentProposal.mockReset().mockResolvedValue({
+      status: 'applied', kind: 'update_event_tags', message: 'Event tags updated.',
+    });
     assistantService.getErrorMessage.mockClear();
     quotaService.loadQuotaStatus.mockReset().mockResolvedValue(chatResponse.quota);
     hapticsService.selection.mockReset();
@@ -155,6 +187,42 @@ describe('AssistantPageComponent', () => {
     fixture.detectChanges();
   });
 
+  it('formats assistant replies safely while retaining user messages and stored text', () => {
+    const assistantText = '**From your records**\n\n- Note ended on 2026-09-10.\n\n<img src="https://example.com/track" onerror="alert(1)">';
+    component.conversation.set({ ...chatResponse.conversation, messages: [
+      { ...chatResponse.conversation.messages[0], text: '**My text** 2026-09-10 <script>alert(1)</script>' },
+      { ...chatResponse.conversation.messages[1], text: assistantText },
+    ] });
+    fixture.detectChanges();
+    const reply = fixture.nativeElement.querySelector('.message-assistant') as HTMLElement;
+    const user = fixture.nativeElement.querySelector('.message-user') as HTMLElement;
+    expect(reply.querySelector('strong')?.textContent).toBe('From your records');
+    expect(reply.querySelector('li')?.textContent).toBe(`Note ended on ${formatAssistantCalendarDate('2026-09-10')}.`);
+    expect(reply.querySelector('img, script')).toBeNull();
+    expect(user.textContent).toContain('**My text** 2026-09-10 <script>alert(1)</script>');
+    expect(user.querySelector('strong, script')).toBeNull();
+    expect(component.conversation()?.messages[1].text).toBe(assistantText);
+    expect(hapticsService.selection).not.toHaveBeenCalled();
+  });
+
+  it('gives one haptic for an accepted Markdown link activation and none for body text', () => {
+    component.conversation.set({ ...chatResponse.conversation, messages: [
+      { ...chatResponse.conversation.messages[1], text: 'Your summary. [**Learn more**](https://example.com)' },
+    ] });
+    fixture.detectChanges();
+    const reply = fixture.nativeElement.querySelector('.assistant-message-body') as HTMLElement;
+    reply.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(hapticsService.selection).not.toHaveBeenCalled();
+    // Stop native JSDOM navigation after the component's delegated click handler.
+    fixture.nativeElement.addEventListener('click', (event: MouseEvent) => event.preventDefault());
+    reply.querySelector('strong')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(hapticsService.selection).toHaveBeenCalledTimes(1);
+    const prevented = new MouseEvent('click', { bubbles: true, cancelable: true });
+    prevented.preventDefault();
+    reply.querySelector('a')!.dispatchEvent(prevented);
+    expect(hapticsService.selection).toHaveBeenCalledTimes(1);
+  });
+
   it('invites an empty chat to ask one grounded training-history question', () => {
     const text = fixture.nativeElement.textContent as string;
 
@@ -162,7 +230,7 @@ describe('AssistantPageComponent', () => {
     expect(text).toContain('Examples & data access');
     expect(text).toContain('If you could ask your training history one question, what would it be?');
     expect(text).toContain('Ask about the training, sleep, recovery, measurements, and activities you’ve connected.');
-    expect(text).toContain('Every answer is grounded in verified, read-only evidence.');
+    expect(text).toContain('Every answer is grounded in verified evidence; optional Training changes always require your review.');
     expect(fixture.nativeElement.querySelector('.assistant-empty-state')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('mat-chip')).toBeNull();
     expect(fixture.nativeElement.querySelector('.assistant-heading-icon')).toBeNull();
@@ -181,6 +249,7 @@ describe('AssistantPageComponent', () => {
     expect(chat.contains(composer)).toBe(true);
     expect(header.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
+    expect(explore.textContent).not.toContain('Training read');
     const sendButton = fixture.nativeElement.querySelector('button[type="submit"]') as HTMLButtonElement;
     expect(sendButton.textContent).not.toContain('Send');
     expect(sendButton.getAttribute('aria-label')).toBe('Send message');
@@ -224,6 +293,311 @@ describe('AssistantPageComponent', () => {
     expect(fixture.nativeElement.querySelector('.assistant-empty-state')).toBeNull();
     expect(conversation.compareDocumentPosition(dock) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
+  });
+
+  it('shows one compact Training proposal and applies or dismisses it only through explicit app actions', async () => {
+    component.conversation.set(chatResponse.conversation);
+    component.pendingTrainingProposal.set(trainingProposal);
+    fixture.detectChanges();
+
+    const review = fixture.nativeElement.querySelector('.training-proposal') as HTMLElement;
+    expect(review.textContent).toContain('Review Training changes');
+    expect(review.textContent).toContain('Create “Easy run”');
+    expect(review.textContent).toContain('Garmin: enable ongoing workout delivery');
+
+    await component.applyPendingTrainingProposal();
+    expect(assistantService.applyTrainingProposal).toHaveBeenLastCalledWith({
+      proposalRef: trainingProposal.proposalRef,
+      permissionMode: 'combined',
+      conversationId: chatResponse.conversation.conversationId,
+      confirm: true,
+    });
+    expect(component.pendingTrainingProposal()).toBeNull();
+    expect(component.trainingProposalResult()).toBe(
+      'Training changes applied. Provider updates or checks are queued where applicable.',
+    );
+
+    component.pendingTrainingProposal.set(trainingProposal);
+    await component.dismissPendingTrainingProposal();
+    expect(assistantService.applyTrainingProposal).toHaveBeenLastCalledWith(expect.objectContaining({ confirm: false }));
+    expect(component.pendingTrainingProposal()).toBeNull();
+    expect(component.trainingProposalResult()).toContain('Nothing was changed');
+  });
+
+
+  it('shows full phase before/after metadata and range changes without applying during hydration', async () => {
+    const phases = { version: 1 as const, items: [{ id: 'base', name: 'Base', startLocalDate: '2026-10-01', endLocalDate: '2026-10-10',
+      description: 'Existing description', color: 'blue' as const }] };
+    component.conversation.set(chatResponse.conversation);
+    component.pendingTrainingProposal.set({ ...trainingProposal, permissionMode: 'schedule', providerPreviews: [],
+      changes: [{ index: 0, kind: 'set-plan-phases', summary: 'Replace phases' }], phaseReview: { planName: 'Autumn',
+        previousStartDate: '2026-10-01', previousEndDate: '2026-10-31', startDate: '2026-09-30', endDate: '2026-10-31',
+        before: phases, after: { version: 1, items: [{ ...phases.items[0], name: 'Build', description: '<script>Draft text</script>', color: 'green' }] } } });
+    assistantService.applyTrainingProposal.mockClear(); fixture.detectChanges();
+    const review = fixture.nativeElement.querySelector('.training-proposal') as HTMLElement;
+    expect(review.textContent).toContain('Existing description'); expect(review.textContent).toContain('<script>Draft text</script>');
+    expect(review.textContent).toContain('2026-09-30'); expect(review.textContent).toContain('blue'); expect(review.textContent).toContain('green');
+    expect(review.querySelector('script')).toBeNull(); expect(assistantService.applyTrainingProposal).not.toHaveBeenCalled();
+    await component.dismissPendingTrainingProposal();
+    expect(assistantService.applyTrainingProposal).toHaveBeenCalledWith(expect.objectContaining({ confirm: false, permissionMode: 'schedule' }));
+  });
+  it('shows the actual Suunto mapping loss before the single in-app Apply action', () => {
+    component.conversation.set(chatResponse.conversation);
+    component.pendingTrainingProposal.set({ ...trainingProposal, providerPreviews: [{
+      ...trainingProposal.providerPreviews[0], provider: 'suunto', warningCount: 1,
+      summary: 'Suunto: step text will be shortened to 40 characters. Confirming this proposal approves the adjustment.',
+    }] });
+    fixture.detectChanges();
+    const review = fixture.nativeElement.querySelector('.training-proposal') as HTMLElement;
+    expect(review.textContent).toContain('step text will be shortened to 40 characters');
+    expect(review.textContent).toContain('Confirming this proposal approves the adjustment');
+    expect(review.querySelectorAll('.training-proposal-actions button')).toHaveLength(2);
+  });
+
+  it.each(['applied', 'blocked'] as const)('reviews a Garmin replacement and shows its %s provider outcome without claiming receipt', async status => {
+    component.conversation.set(chatResponse.conversation);
+    component.pendingTrainingProposal.set({ ...trainingProposal, permissionMode: 'delivery',
+      changes: [{ index: 0, kind: 'garmin-workout-replacement', summary: 'Review Easy run on 2026-10-06.' }],
+      providerPreviews: [{ ...trainingProposal.providerPreviews[0], index: 0, action: 'replace' }] });
+    const message = status === 'applied' ? 'Recovery queued; receipt is not confirmed.' : 'Check evidence changed. Review again.';
+    assistantService.applyTrainingProposal.mockResolvedValueOnce({ status: status === 'applied' ? 'applied' : 'partially_applied',
+      scheduleRevision: 1, changes: [], providers: [{ index: 0, provider: 'garmin', status, message }] });
+    fixture.detectChanges();
+    const review = fixture.nativeElement.querySelector('.training-proposal') as HTMLElement;
+    expect(review.querySelector('h2')!.textContent).toBe('Review Garmin replacement copy');
+    expect(review.textContent).toContain('duplicate');
+    expect(review.textContent).toContain('Create replacement Garmin copy');
+    expect(assistantService.applyTrainingProposal).not.toHaveBeenCalled();
+    await component.applyPendingTrainingProposal();
+    expect(assistantService.applyTrainingProposal).toHaveBeenCalledWith({ proposalRef: trainingProposal.proposalRef,
+      permissionMode: 'delivery', conversationId: chatResponse.conversation.conversationId, confirm: true });
+    expect(component.trainingProposalResult()).toBe(message);
+    expect(component.pendingTrainingProposal()).toBeNull();
+  });
+
+  it('dismisses replacement without Apply and never claims success for a missing provider outcome', async () => {
+    component.conversation.set(chatResponse.conversation);
+    const proposal = { ...trainingProposal, permissionMode: 'delivery' as const,
+      changes: [{ index: 0, kind: 'garmin-workout-replacement', summary: 'Review a replacement.' }],
+      providerPreviews: [{ ...trainingProposal.providerPreviews[0], index: 0, action: 'replace' as const }] };
+    component.pendingTrainingProposal.set(proposal);
+    await component.dismissPendingTrainingProposal();
+    expect(assistantService.applyTrainingProposal).toHaveBeenLastCalledWith(expect.objectContaining({ confirm: false }));
+    component.pendingTrainingProposal.set(proposal);
+    assistantService.applyTrainingProposal.mockResolvedValueOnce({ status: 'applied', scheduleRevision: 1, changes: [], providers: [] });
+    await component.applyPendingTrainingProposal();
+    expect(component.trainingProposalResult()).toContain('No Garmin replacement result');
+  });
+
+  it.each(['delete-workout', 'delete-plan'] as const)('reviews %s and its explicit cleanup choice, then displays the server outcome', async kind => {
+    const noun = kind === 'delete-plan' ? 'plan' : 'workout';
+    const summary = 'Also request removal of older, uncompleted service copies.';
+    const message = `The ${noun} was deleted. Service-copy cleanup was requested; removal is not yet confirmed.`;
+    component.conversation.set(chatResponse.conversation);
+    component.pendingTrainingProposal.set({ ...trainingProposal,
+      changes: [{ index: 0, kind, summary }], providerPreviews: [] });
+    assistantService.applyTrainingProposal.mockResolvedValueOnce({ status: 'applied', scheduleRevision: 2,
+      changes: [{ index: 0, kind, status: 'applied', message }], providers: [] });
+    fixture.detectChanges();
+    const review = fixture.nativeElement.querySelector('.training-proposal') as HTMLElement;
+    expect(review.querySelector('h2')!.textContent).toBe(`Review ${noun} deletion`);
+    expect(review.textContent).toContain(summary);
+    expect(review.textContent).toContain('not confirmed here');
+    expect(review.textContent).toContain('Completed activities stay untouched');
+    expect(review.textContent).not.toContain('Provider results are independent');
+    const buttons = review.querySelectorAll<HTMLButtonElement>('.training-proposal-actions button');
+    expect(Array.from(buttons).map(button => button.textContent?.trim())).toEqual([`Delete ${noun}`, 'Dismiss']);
+    expect(assistantService.applyTrainingProposal).not.toHaveBeenCalled();
+    await component.applyPendingTrainingProposal();
+    expect(assistantService.applyTrainingProposal).toHaveBeenCalledWith({
+      proposalRef: trainingProposal.proposalRef, permissionMode: 'combined',
+      conversationId: chatResponse.conversation.conversationId, confirm: true,
+    });
+    expect(component.trainingProposalResult()).toBe(message);
+    expect(component.trainingProposalResult()).not.toContain('updates or checks');
+    expect(hapticsService.success).toHaveBeenCalledOnce();
+    expect(component.applyingTrainingProposal()).toBe(false);
+  });
+
+  it('preserves a declined older-copy cleanup choice in a recoverable deletion review', async () => {
+    component.conversation.set(chatResponse.conversation);
+    component.pendingTrainingProposal.set({ ...trainingProposal, changes: [{ index: 0,
+      kind: 'delete-workout', summary: 'Delete “Run”. Eligible upcoming copies withdraw; older copies remain.' }],
+    providerPreviews: [] });
+    const message = 'The workout was moved to recoverable history. Older copies remain; removal of eligible upcoming copies is not yet confirmed.';
+    assistantService.applyTrainingProposal.mockResolvedValueOnce({ status: 'applied', scheduleRevision: 2,
+      changes: [{ index: 0, kind: 'delete-workout', status: 'applied', message }], providers: [] });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.training-proposal').textContent).toContain('older copies remain');
+    await component.applyPendingTrainingProposal();
+    expect(component.trainingProposalResult()).toBe(message);
+  });
+
+  it('does not report a failed deletion as partially applied or give success feedback', async () => {
+    component.conversation.set(chatResponse.conversation);
+    component.pendingTrainingProposal.set({ ...trainingProposal,
+      changes: [{ index: 0, kind: 'delete-workout', summary: 'Delete the run.' }], providerPreviews: [] });
+    assistantService.applyTrainingProposal.mockResolvedValueOnce({ status: 'partially_applied', scheduleRevision: 1,
+      changes: [{ index: 0, kind: 'delete-workout', status: 'failed', message: 'The schedule changed. Read it again before deleting.' }], providers: [] });
+    await component.applyPendingTrainingProposal();
+    expect(component.trainingProposalResult()).toBe('The schedule changed. Read it again before deleting.');
+    expect(hapticsService.success).not.toHaveBeenCalled();
+    expect(hapticsService.error).toHaveBeenCalledOnce();
+  });
+
+  it('dismisses a deletion without applying it and does not confirm an empty deletion result', async () => {
+    component.conversation.set(chatResponse.conversation);
+    const proposal = { ...trainingProposal,
+      changes: [{ index: 0, kind: 'delete-workout', summary: 'Delete the run.' }], providerPreviews: [] };
+    component.pendingTrainingProposal.set(proposal);
+    await component.dismissPendingTrainingProposal();
+    expect(assistantService.applyTrainingProposal).toHaveBeenLastCalledWith(expect.objectContaining({ confirm: false }));
+    expect(component.trainingProposalResult()).toContain('Nothing was changed');
+    hapticsService.success.mockClear();
+    component.pendingTrainingProposal.set({ ...proposal, proposalRef: 'fresh-deletion-preview' });
+    await component.applyPendingTrainingProposal();
+    expect(component.trainingProposalResult()).toContain('No deletion result was returned');
+    expect(hapticsService.success).not.toHaveBeenCalled();
+    expect(hapticsService.error).toHaveBeenCalledOnce();
+  });
+
+  it('reviews every saved-workout placement date without irrelevant provider-failure copy', async () => {
+    component.conversation.set(chatResponse.conversation);
+    component.pendingTrainingProposal.set({ ...trainingProposal, permissionMode: 'schedule',
+      summary: 'Place one saved workout on two dates in Standalone.', providerPreviews: [],
+      changes: [{ index: 0, kind: 'place', summary: 'Dates 1–2: 2026-10-02, 2026-10-09' }] });
+    assistantService.applyTrainingProposal.mockResolvedValueOnce({ status: 'applied', scheduleRevision: 2,
+      changes: [{ index: 0, kind: 'place', status: 'applied', message: '2 workouts added to the schedule.' }],
+      providers: [] });
+    fixture.detectChanges();
+    const review = fixture.nativeElement.querySelector('.training-proposal') as HTMLElement;
+    expect(review.textContent).toContain('Review saved workout change');
+    expect(review.textContent).toContain('2026-10-02, 2026-10-09');
+    expect(review.textContent).toContain('Standalone copies need their own Send action');
+    expect(review.textContent).not.toContain('Provider results are independent');
+    await component.applyPendingTrainingProposal();
+    expect(component.trainingProposalResult()).toBe('2 workouts added to the schedule.');
+  });
+
+  it('reviews and explicitly applies or dismisses one content change', async () => {
+    component.conversation.set(chatResponse.conversation);
+    component.pendingContentProposal.set(contentProposal);
+    fixture.detectChanges();
+
+    const review = fixture.nativeElement.querySelector('.content-proposal') as HTMLElement;
+    expect(review.textContent).toContain('Review event tag change');
+    expect(review.textContent).toContain('Current: Easy');
+    expect(review.textContent).toContain('New: Quality, Reviewed');
+    expect(review.textContent).toContain('All workouts in the same event share these tags.');
+    expect(review.textContent).toContain('Nothing changes until you apply');
+
+    component.applyingTrainingProposal.set(true);
+    fixture.detectChanges();
+    expect((review.querySelector('button') as HTMLButtonElement).disabled).toBe(true);
+    await component.applyPendingContentProposal();
+    expect(assistantService.applyContentProposal).not.toHaveBeenCalled();
+    component.applyingTrainingProposal.set(false);
+
+    await component.applyPendingContentProposal();
+    expect(assistantService.applyContentProposal).toHaveBeenLastCalledWith({
+      proposalRef: contentProposal.proposalRef,
+      conversationId: chatResponse.conversation.conversationId,
+      confirm: true,
+    });
+    expect(component.pendingContentProposal()).toBeNull();
+    expect(component.contentProposalResult()).toBe('Event tags updated.');
+
+    component.pendingContentProposal.set(contentProposal);
+    await component.dismissPendingContentProposal();
+    expect(assistantService.applyContentProposal).toHaveBeenLastCalledWith(expect.objectContaining({ confirm: false }));
+    expect(component.contentProposalResult()).toContain('Nothing was changed');
+  });
+
+  it('reviews private reflection text, then applies only explicit confirmation', async () => {
+    const proposal: AssistantContentProposalPreview = {
+      proposalRef: 'reflection-proposal', kind: 'save_workout_reflection',
+      expiresAtMs: Date.now() + 60_000, summary: 'Save Run reflection · Oct 6 · this activity.',
+      requiresConfirmation: true,
+      arguments: { activityRef: 'opaque-reflection-activity', target: 'activity', expectedRevision: 2,
+        mutationId: '6d59c596-ddf1-4f29-9ed4-b822e6067dd9', note: 'Felt easy' },
+      reflectionReview: { before: { note: 'Windy' } },
+    };
+    component.conversation.set(chatResponse.conversation);
+    component.pendingContentProposal.set(proposal);
+    fixture.detectChanges();
+    const text = fixture.nativeElement.querySelector('.content-proposal').textContent;
+    expect(text).toContain('Review workout reflection');
+    expect(text).toContain('This activity only');
+    expect(text).not.toContain('Reported effort');
+    expect(text).not.toContain('Borg CR10');
+    expect(text).toContain('Windy'); expect(text).toContain('Felt easy');
+    expect(text).not.toContain('opaque-reflection-activity');
+    expect(assistantService.applyContentProposal).not.toHaveBeenCalled();
+    await component.dismissPendingContentProposal();
+    expect(assistantService.applyContentProposal).toHaveBeenLastCalledWith(expect.objectContaining({ confirm: false }));
+    component.pendingContentProposal.set({ ...proposal, kind: 'delete_workout_reflection',
+      arguments: { activityRef: 'opaque-reflection-activity', target: 'activity', expectedRevision: 2,
+        mutationId: '6d59c596-ddf1-4f29-9ed4-b822e6067dd9' } });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.content-proposal').textContent).toContain('permanently deleted');
+    expect(fixture.nativeElement.querySelector('.content-proposal button').textContent).toContain('Delete reflection');
+    await component.applyPendingContentProposal();
+    expect(assistantService.applyContentProposal).toHaveBeenLastCalledWith(expect.objectContaining({ confirm: true }));
+  });
+
+  it('shows every proposed Timeline note field before applying it', () => {
+    const noteProposal: AssistantContentProposalPreview = {
+      proposalRef: 'note-proposal-1',
+      kind: 'create_timeline_note',
+      expiresAtMs: Date.now() + 60_000,
+      summary: 'Create Timeline note “Recovery block”.',
+      requiresConfirmation: true,
+      arguments: {
+        mutationId: '6d59c596-ddf1-4f29-9ed4-b822e6067dd9',
+        category: 'injury_health',
+        title: 'Recovery block',
+        details: null,
+        startDate: '2026-09-22',
+        endDate: '2026-09-28',
+        timeZone: 'Europe/Helsinki',
+        showOnCharts: false,
+        color: 'orange',
+      },
+    };
+    component.conversation.set(chatResponse.conversation);
+    component.pendingContentProposal.set(noteProposal);
+    fixture.detectChanges();
+
+    const review = fixture.nativeElement.querySelector('.content-proposal') as HTMLElement;
+    expect(review.textContent).toContain('Title: Recovery block');
+    expect(review.textContent).toContain(`Dates: ${formatAssistantCalendarRange('2026-09-22', '2026-09-28')}`);
+    expect(review.textContent).toContain('Category: Injury health');
+    expect(review.textContent).toContain('Details: None');
+    expect(review.textContent).toContain('Charts and calendar: Hidden');
+    expect(review.textContent).toContain('Color: Orange');
+    expect(review.textContent).toContain('Time zone: Europe/Helsinki');
+  });
+
+  it('restores a pending Training proposal while recovering a still-running response', async () => {
+    const requestId = 'assistant-training-proposal-recovery';
+    assistantService.getConversationState.mockResolvedValue({
+      conversation: chatResponse.conversation,
+      pendingRequestId: requestId,
+      locationAccess: 'coordinate_free',
+      trainingPlansEnabled: true,
+      trainingPlanChangesEnabled: true,
+      trainingDeliveryEnabled: true,
+      pendingTrainingProposal: trainingProposal,
+    });
+    component.pendingRequestId.set(requestId);
+    (component as unknown as { pendingOwnerUid: string }).pendingOwnerUid = 'assistant-user';
+    (component as unknown as { pendingRecoveryDeadlineMs: number }).pendingRecoveryDeadlineMs = Date.now() + 5_000;
+    (component as unknown as { pendingRegistrationDeadlineMs: number }).pendingRegistrationDeadlineMs = 0;
+
+    await (component as unknown as { pollPendingResponse(id: string): Promise<void> }).pollPendingResponse(requestId);
+
+    expect(component.pendingTrainingProposal()).toEqual(trainingProposal);
+    (component as unknown as { cancelPendingResponsePoll(): void }).cancelPendingResponsePoll();
   });
 
   it('renders deterministic charts but waits for explicit user action before loading maps', async () => {
@@ -831,6 +1205,22 @@ describe('AssistantPageComponent', () => {
     )).toBeNull();
   });
 
+  it('clears a remembered request with a malformed measurement permission instead of retaining it for retries', () => {
+    sessionStorage.setItem('quantified-self.assistant.pending-request-id', JSON.stringify({
+      storageVersion: 2,
+      uid: 'assistant-user',
+      requestId: 'assistant-invalid-measurement-permission',
+      message: 'Log my weight as 80 kg.',
+      timeZone: 'Europe/Helsinki',
+      submittedAtMs: Date.now(),
+      measurementChangesEnabled: 'true',
+    }));
+
+    expect((component as unknown as { readRememberedPendingRequest(): unknown }).readRememberedPendingRequest()).toBeNull();
+    expect(assistantService.sendMessage).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem('quantified-self.assistant.pending-request-id')).toBeNull();
+  });
+
   it('survives a refresh that reaches the server before the pending turn is registered', async () => {
     vi.useFakeTimers();
     try {
@@ -1113,10 +1503,114 @@ describe('AssistantPageComponent', () => {
     component.openExploreSheet();
 
     expect(openSpy).toHaveBeenCalledWith(AssistantExploreBottomSheetComponent, {
-      data: { locationAccess: 'coordinate_free' },
+      data: {
+        locationAccess: 'coordinate_free',
+        timelineNotesEnabled: false,
+        activityTagChangesEnabled: false,
+        timelineNoteChangesEnabled: false,
+        measurementChangesEnabled: true,
+        reflectionChangesEnabled: true,
+        trainingPlansEnabled: false,
+        trainingPlanChangesEnabled: false,
+        trainingDeliveryEnabled: false,
+      },
     });
     expect(component.promptControl.value).toBe(routeExample.prompt);
     openSpy.mockRestore();
+  });
+  it('defaults manual measurements on only for fresh chats and resets it on New chat', async () => {
+    await component.ngOnInit();
+    expect(component.measurementChangesEnabled()).toBe(true);
+    assistantService.getConversationState.mockResolvedValueOnce({ conversation: chatResponse.conversation, pendingRequestId: null });
+    await component.ngOnInit();
+    expect(component.measurementChangesEnabled()).toBe(false);
+    await component.resetConversation();
+    expect(component.measurementChangesEnabled()).toBe(true);
+    expect(assistantService.resetConversation).toHaveBeenLastCalledWith('coordinate_free', false, chatResponse.conversation.conversationId,
+      false, false, false, false, false, true, true);
+  });
+
+  it('changes manual-entry access independently in a fresh chat, preserving other choices', async () => {
+    await component.ngOnInit();
+    component.timelineNotesEnabled.set(true);
+    component.trainingPlansEnabled.set(true);
+    component.promptControl.setValue('Keep my draft');
+    const sheet = (component as unknown as { bottomSheet: MatBottomSheet }).bottomSheet;
+    const open = vi.spyOn(sheet, 'open').mockReturnValue({ afterDismissed: () => of({ kind: 'measurement_changes', enabled: false }) } as never);
+    component.openExploreSheet();
+    await fixture.whenStable();
+    expect(component.measurementChangesEnabled()).toBe(false);
+    expect(component.timelineNotesEnabled()).toBe(true);
+    expect(component.trainingPlansEnabled()).toBe(true);
+    expect(component.promptControl.value).toBe('Keep my draft');
+    expect(assistantService.resetConversation).toHaveBeenLastCalledWith('coordinate_free', true, null, true, false, false, false, false, false, true);
+    open.mockRestore();
+  });
+
+  it('starts reflection access on, allows disabling it independently, and restores it on New chat', async () => {
+    await component.ngOnInit();
+    expect(component.reflectionChangesEnabled()).toBe(true);
+    component.timelineNotesEnabled.set(true);
+    component.promptControl.setValue('Keep my draft');
+    const sheet = (component as unknown as { bottomSheet: MatBottomSheet }).bottomSheet;
+    const open = vi.spyOn(sheet, 'open').mockReturnValue({
+      afterDismissed: () => of({ kind: 'reflection_changes', enabled: false }),
+    } as never);
+    component.openExploreSheet(); await fixture.whenStable();
+    expect(component.reflectionChangesEnabled()).toBe(false);
+    expect(component.timelineNotesEnabled()).toBe(true);
+    expect(component.promptControl.value).toBe('Keep my draft');
+    expect(assistantService.resetConversation).toHaveBeenLastCalledWith(
+      'coordinate_free', true, null, false, false, false, false, false, true, false);
+    component.openExploreSheet();
+    expect(assistantService.resetConversation).toHaveBeenCalledTimes(1);
+    await component.resetConversation();
+    expect(component.reflectionChangesEnabled()).toBe(true);
+    expect(assistantService.resetConversation).toHaveBeenLastCalledWith(
+      'coordinate_free', false, chatResponse.conversation.conversationId, false, false, false, false, false, true, true);
+    open.mockRestore();
+  });
+
+  it.each([undefined, false, true])('preserves a saved reflection choice %s when loading an existing chat', async enabled => {
+    assistantService.getConversationState.mockResolvedValueOnce({ conversation: chatResponse.conversation,
+      pendingRequestId: null, reflectionChangesEnabled: enabled });
+    await component.ngOnInit();
+    expect(component.reflectionChangesEnabled()).toBe(enabled === true);
+    expect(assistantService.resetConversation).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, false, true])('preserves a remembered first request reflection choice %s', async enabled => {
+    const requestId = 'reflection-remembered-first-request';
+    sessionStorage.setItem('quantified-self.assistant.pending-request-id', JSON.stringify({
+      storageVersion: 2, uid: 'assistant-user', requestId, message: 'How did my run feel?',
+      timeZone: 'Europe/Helsinki', submittedAtMs: Date.now(), measurementChangesEnabled: true,
+      ...(enabled === undefined ? {} : { reflectionChangesEnabled: enabled }),
+    }));
+    await component.ngOnInit(); await fixture.whenStable();
+    expect(component.reflectionChangesEnabled()).toBe(enabled === true);
+    expect(assistantService.sendMessage).toHaveBeenCalledOnce();
+    const request = assistantService.sendMessage.mock.calls[0][0];
+    expect(request.requestId).toBe(requestId);
+    expect(request.reflectionChangesEnabled === true).toBe(enabled === true);
+  });
+
+  it.each([undefined, false])('keeps a failed first request reflection choice %s off when no server chat exists', async enabled => {
+    const requestId = 'reflection-remembered-failed-request';
+    sessionStorage.setItem('quantified-self.assistant.pending-request-id', JSON.stringify({
+      storageVersion: 2, uid: 'assistant-user', requestId, message: 'How did my run feel?',
+      timeZone: 'Europe/Helsinki', submittedAtMs: Date.now(), measurementChangesEnabled: true,
+      ...(enabled === undefined ? {} : { reflectionChangesEnabled: enabled }),
+    }));
+    assistantService.sendMessage.mockRejectedValueOnce(new Error('offline'));
+    await component.ngOnInit(); await fixture.whenStable();
+    expect(component.reflectionChangesEnabled()).toBe(false);
+    await component.sendMessage();
+    const requests = assistantService.sendMessage.mock.calls.map(([request]) => request);
+    expect(requests).toHaveLength(2);
+    for (const request of requests) {
+      expect(request.requestId).toBe(requestId);
+      expect(request.reflectionChangesEnabled).not.toBe(true);
+    }
   });
 
   it('starts a fresh chat when precise activity locations are enabled', async () => {
@@ -1135,7 +1629,8 @@ describe('AssistantPageComponent', () => {
     await vi.waitFor(() => {
       expect(assistantService.resetConversation).toHaveBeenCalledWith(
         'precise_activity',
-      );
+        false,
+        null, false, false, false, false, false, true, true);
     });
     fixture.detectChanges();
 
@@ -1257,12 +1752,283 @@ describe('AssistantPageComponent', () => {
   it('starts a new server-owned conversation', async () => {
     component.conversation.set(chatResponse.conversation);
     component.locationAccess.set('precise_activity');
+    component.timelineNotesEnabled.set(true);
+    component.trainingPlansEnabled.set(true);
 
     await component.resetConversation();
 
-    expect(assistantService.resetConversation).toHaveBeenCalledWith('coordinate_free');
+    expect(assistantService.resetConversation).toHaveBeenCalledWith(
+      'coordinate_free', false, 'conversation-1', false, false, false, false, false, true, true);
     expect(component.messages()).toEqual([]);
     expect(component.locationAccess()).toBe('coordinate_free');
+    expect(component.timelineNotesEnabled()).toBe(false);
+    expect(component.trainingPlansEnabled()).toBe(false);
+  });
+
+  it('keeps enabled Training access visible without reopening the access panel', () => {
+    component.trainingPlansEnabled.set(true);
+    fixture.detectChanges();
+
+    const explore = fixture.nativeElement.querySelector('.assistant-explore-trigger') as HTMLElement;
+    expect(explore.textContent).toContain('Training read on');
+    expect(explore.querySelector('.assistant-training-status mat-icon')?.textContent).toContain('event_note');
+
+    component.trainingDeliveryEnabled.set(true);
+    fixture.detectChanges();
+    expect(explore.textContent).toContain('Training read + 1 change');
+  });
+
+  it('keeps enabled tag and note access visible without reopening the access panel', () => {
+    component.activityTagChangesEnabled.set(true);
+    component.timelineNotesEnabled.set(true);
+    component.timelineNoteChangesEnabled.set(true);
+    fixture.detectChanges();
+
+    const explore = fixture.nativeElement.querySelector('.assistant-explore-trigger') as HTMLElement;
+    expect(explore.textContent).toContain('Tag changes · Notes read/change');
+    expect(explore.querySelector('.assistant-content-status mat-icon')?.textContent).toContain('edit_note');
+  });
+
+  it('changes Training consent independently, preserving notes, locations, drafts and single-owner haptics', async () => {
+    component.locationAccess.set('precise_activity'); component.timelineNotesEnabled.set(true);
+    component.promptControl.setValue('What is planned next week?');
+    const sheet = (component as unknown as { bottomSheet: MatBottomSheet }).bottomSheet;
+    const open = vi.spyOn(sheet, 'open').mockReturnValue({ afterDismissed: () => of({ kind: 'training_plans', enabled: true }) } as never);
+    component.openExploreSheet(); await vi.waitFor(() => expect(component.trainingPlansEnabled()).toBe(true));
+    expect(assistantService.resetConversation).toHaveBeenLastCalledWith(
+      'precise_activity', true, null, true, false, false, false, false, true, true);
+    expect(component.timelineNotesEnabled()).toBe(true); expect(component.locationAccess()).toBe('precise_activity');
+    expect(component.promptControl.value).toBe('What is planned next week?');
+    expect(hapticsService.selection).toHaveBeenCalledTimes(1); expect(hapticsService.success).toHaveBeenCalledTimes(1);
+    component.openExploreSheet(); expect(assistantService.resetConversation).toHaveBeenCalledTimes(1);
+    open.mockRestore();
+  });
+
+  it('changes notes in a fresh chat without changing locations, preserves drafts and owns haptics once', async () => {
+    component.locationAccess.set('precise_activity');
+    component.promptControl.setValue('Compare sleep and my notes.');
+    const sheet = (component as unknown as { bottomSheet: MatBottomSheet }).bottomSheet;
+    const open = vi.spyOn(sheet, 'open').mockReturnValue({
+      afterDismissed: () => of({ kind: 'timeline_notes', enabled: true }),
+    } as never);
+    component.openExploreSheet();
+    await vi.waitFor(() => expect(component.timelineNotesEnabled()).toBe(true));
+    expect(assistantService.resetConversation).toHaveBeenLastCalledWith(
+      'precise_activity', true, null, false, false, false, false, false, true, true);
+    expect(component.locationAccess()).toBe('precise_activity');
+    expect(component.promptControl.value).toBe('Compare sleep and my notes.');
+    expect(hapticsService.selection).toHaveBeenCalledTimes(1);
+    expect(hapticsService.success).toHaveBeenCalledTimes(1);
+    component.openExploreSheet();
+    expect(assistantService.resetConversation).toHaveBeenCalledTimes(1);
+    expect(hapticsService.selection).toHaveBeenCalledTimes(1);
+    open.mockReturnValue({ afterDismissed: () => of({ kind: 'location_access', locationAccess: 'coordinate_free' }) } as never);
+    component.openExploreSheet();
+    await vi.waitFor(() => expect(component.locationAccess()).toBe('coordinate_free'));
+    expect(component.timelineNotesEnabled()).toBe(true);
+    expect(assistantService.resetConversation).toHaveBeenLastCalledWith(
+      'coordinate_free', true, 'conversation-1', false, false, false, false, false, true, true);
+    open.mockRestore();
+  });
+
+  it('does not change notes consent after a failed reset', async () => {
+    assistantService.resetConversation.mockRejectedValueOnce(new Error('Unavailable'));
+    const sheet = (component as unknown as { bottomSheet: MatBottomSheet }).bottomSheet;
+    const open = vi.spyOn(sheet, 'open').mockReturnValue({ afterDismissed: () => of({ kind: 'timeline_notes', enabled: true }) } as never);
+    component.promptControl.setValue('Keep my draft');
+    component.openExploreSheet();
+    await vi.waitFor(() => expect(component.errorMessage()).toBe('Friendly conversation error'));
+    expect(assistantService.getConversationUpdateErrorMessage).toHaveBeenCalledOnce();
+    expect(component.timelineNotesEnabled()).toBe(false);
+    expect(component.promptControl.value).toBe('Keep my draft');
+    expect(hapticsService.error).toHaveBeenCalledTimes(1);
+    expect(hapticsService.success).not.toHaveBeenCalled();
+    open.mockRestore();
+  });
+
+  it('refreshes stale consent without retrying a reset or losing the draft', async () => {
+    component.conversation.set(chatResponse.conversation);
+    component.timelineNotesEnabled.set(true);
+    component.promptControl.setValue('Keep my draft');
+    assistantService.resetConversation.mockRejectedValueOnce(new AssistantError('CONVERSATION_CHANGED', 'Changed'));
+    assistantService.getConversationState.mockResolvedValueOnce({
+      conversation: { ...chatResponse.conversation, conversationId: 'new-chat', messages: [] },
+      locationAccess: 'coordinate_free', timelineNotesEnabled: false, pendingRequestId: null,
+    });
+    const sheet = (component as unknown as { bottomSheet: MatBottomSheet }).bottomSheet;
+    const open = vi.spyOn(sheet, 'open').mockReturnValue({
+      afterDismissed: () => of({ kind: 'location_access', locationAccess: 'precise_activity' }),
+    } as never);
+    component.openExploreSheet();
+    await vi.waitFor(() => expect(component.resetting()).toBe(false));
+    expect(assistantService.resetConversation).toHaveBeenCalledExactlyOnceWith(
+      'precise_activity', true, 'conversation-1', false, false, false, false, false, true, true);
+    expect(component.timelineNotesEnabled()).toBe(false);
+    expect(component.reflectionChangesEnabled()).toBe(false);
+    expect(component.locationAccess()).toBe('coordinate_free');
+    expect(component.conversation()?.conversationId).toBe('new-chat');
+    expect(component.promptControl.value).toBe('Keep my draft');
+    expect(hapticsService.success).not.toHaveBeenCalled();
+    expect(hapticsService.error).toHaveBeenCalledTimes(1);
+    open.mockRestore();
+  });
+
+  it('blocks keyboard and button submission while a notes permission change is pending', async () => {
+    let finish!: (value: typeof chatResponse.conversation) => void;
+    assistantService.resetConversation.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const sheet = (component as unknown as { bottomSheet: MatBottomSheet }).bottomSheet;
+    const open = vi.spyOn(sheet, 'open').mockReturnValue({ afterDismissed: () => of({ kind: 'timeline_notes', enabled: true }) } as never);
+    component.promptControl.setValue('Read my notes');
+    component.openExploreSheet();
+    fixture.detectChanges();
+    const disabled = fixture.nativeElement.querySelector('button[type="submit"]').disabled;
+    const readonly = fixture.nativeElement.querySelector('textarea').readOnly;
+    component.handleComposerKeydown(new KeyboardEvent('keydown', { key: 'Enter' }));
+    const sends = assistantService.sendMessage.mock.calls.length;
+    finish({ ...chatResponse.conversation, messages: [] });
+    await fixture.whenStable();
+    expect(disabled).toBe(true);
+    expect(readonly).toBe(true);
+    expect(sends).toBe(0);
+    expect(component.promptControl.value).toBe('Read my notes');
+    expect(component.timelineNotesEnabled()).toBe(true);
+    expect(hapticsService.selection).toHaveBeenCalledTimes(1);
+    open.mockRestore();
+  });
+
+  it('ignores a permission-sheet result opened for a previous account', async () => {
+    const dismissed = new Subject<{ kind: 'timeline_notes'; enabled: boolean }>();
+    const sheet = (component as unknown as { bottomSheet: MatBottomSheet }).bottomSheet;
+    const open = vi.spyOn(sheet, 'open').mockReturnValue({ afterDismissed: () => dismissed } as never);
+    component.openExploreSheet();
+    auth.currentUser = { uid: 'another-account' };
+    await component.ngOnInit();
+    dismissed.next({ kind: 'timeline_notes', enabled: true });
+    dismissed.complete();
+    await fixture.whenStable();
+    expect(assistantService.resetConversation).not.toHaveBeenCalled();
+    expect(component.timelineNotesEnabled()).toBe(false);
+    expect(hapticsService.selection).not.toHaveBeenCalled();
+    open.mockRestore();
+  });
+
+  it('ignores a permission-sheet result after the same account loads a new chat generation', async () => {
+    const dismissed = new Subject<{ kind: 'timeline_notes'; enabled: boolean }>();
+    const sheet = (component as unknown as { bottomSheet: MatBottomSheet }).bottomSheet;
+    const open = vi.spyOn(sheet, 'open').mockReturnValue({ afterDismissed: () => dismissed } as never);
+    component.conversation.set(chatResponse.conversation);
+    component.openExploreSheet();
+    component.conversation.set({ ...chatResponse.conversation, conversationId: 'replacement-chat', messages: [] });
+    dismissed.next({ kind: 'timeline_notes', enabled: true });
+    dismissed.complete();
+    await fixture.whenStable();
+    expect(assistantService.resetConversation).not.toHaveBeenCalled();
+    expect(component.timelineNotesEnabled()).toBe(false);
+    expect(hapticsService.selection).not.toHaveBeenCalled();
+    open.mockRestore();
+  });
+
+  it('clears the previous account view instead of sending its draft after an account switch', async () => {
+    component.conversation.set(chatResponse.conversation);
+    component.timelineNotesEnabled.set(true);
+    component.promptControl.setValue('Old private note question');
+    auth.currentUser = { uid: 'another-account' };
+    await component.sendMessage();
+    expect(assistantService.sendMessage).not.toHaveBeenCalled();
+    expect(component.messages()).toEqual([]);
+    expect(component.timelineNotesEnabled()).toBe(false);
+    expect(component.promptControl.value).toBe('');
+    expect(component.sending()).toBe(false);
+    expect(hapticsService.selection).not.toHaveBeenCalled();
+  });
+
+  it('does not resume a saved notes-enabled request in a notes-disabled chat', async () => {
+    assistantService.getConversationState.mockResolvedValueOnce({ conversation: chatResponse.conversation,
+      pendingRequestId: null, locationAccess: 'coordinate_free', timelineNotesEnabled: false });
+    sessionStorage.setItem('quantified-self.assistant.pending-request-id', JSON.stringify({ storageVersion: 2,
+      uid: 'assistant-user', requestId: 'notes-request-00001', message: 'Read my private notes', timeZone: 'UTC',
+      locationAccess: 'coordinate_free', timelineNotesEnabled: true, submittedAtMs: Date.now(),
+      conversationId: chatResponse.conversation.conversationId }));
+    await component.ngOnInit();
+    expect(component.timelineNotesEnabled()).toBe(false);
+    expect(assistantService.sendMessage).not.toHaveBeenCalled();
+    expect(component.promptControl.value).toBe('Read my private notes');
+  });
+
+  it('preserves a notes-enabled retry until the server confirms its permission and generation', async () => {
+    const remembered = { storageVersion: 2, uid: 'assistant-user', requestId: 'notes-retry-00001',
+      message: 'Read my private notes', timeZone: 'UTC', locationAccess: 'coordinate_free',
+      timelineNotesEnabled: true, submittedAtMs: Date.now(), conversationId: chatResponse.conversation.conversationId };
+    sessionStorage.setItem('quantified-self.assistant.pending-request-id', JSON.stringify(remembered));
+    assistantService.getConversationState.mockRejectedValueOnce(new Error('offline'));
+    await component.ngOnInit();
+    expect(component.conversationLoadError()).toBe('Friendly error');
+    expect(component.timelineNotesEnabled()).toBe(false);
+    expect(assistantService.sendMessage).not.toHaveBeenCalled();
+    expect(JSON.parse(sessionStorage.getItem('quantified-self.assistant.pending-request-id')!)).toEqual(remembered);
+    assistantService.getConversationState.mockResolvedValueOnce({ conversation: chatResponse.conversation,
+      pendingRequestId: null, locationAccess: 'coordinate_free', timelineNotesEnabled: true });
+    await component.retryConversationLoad();
+    await fixture.whenStable();
+    expect(assistantService.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      requestId: remembered.requestId, timelineNotesEnabled: true, conversationId: remembered.conversationId,
+    }));
+  });
+
+  it.each(['success', 'failure'])('discards an old account send %s without reconciling its question into a new account', async outcome => {
+    component.timelineNotesEnabled.set(true);
+    component.promptControl.setValue('Private note question');
+    let finish!: () => void;
+    assistantService.sendMessage.mockImplementationOnce(() => new Promise((resolve, reject) => {
+      finish = () => outcome === 'success' ? resolve(chatResponse) : reject(new Error('account changed'));
+    }));
+    const sending = component.sendMessage();
+    const readsBefore = assistantService.getConversationState.mock.calls.length;
+    auth.currentUser = { uid: 'another-account' };
+    finish();
+    await sending;
+    expect(assistantService.getConversationState).toHaveBeenCalledTimes(readsBefore);
+    expect(component.messages()).toEqual([]);
+    expect(component.timelineNotesEnabled()).toBe(false);
+    expect(component.promptControl.value).toBe('');
+    expect(component.sending()).toBe(false);
+  });
+
+  it('does not apply a notes-access reset from a previous account', async () => {
+    await component.ngOnInit();
+    let finish!: (value: typeof chatResponse.conversation) => void;
+    assistantService.resetConversation.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const sheet = (component as unknown as { bottomSheet: MatBottomSheet }).bottomSheet;
+    const open = vi.spyOn(sheet, 'open').mockReturnValue({ afterDismissed: () => of({ kind: 'timeline_notes', enabled: true }) } as never);
+    component.openExploreSheet();
+    auth.currentUser = { uid: 'another-account' };
+    finish(chatResponse.conversation);
+    await fixture.whenStable();
+    expect(component.conversation()).toBeNull();
+    expect(component.timelineNotesEnabled()).toBe(false);
+    expect(component.resetting()).toBe(false);
+    open.mockRestore();
+  });
+
+  it('does not clear a newly loaded account when an old send completes', async () => {
+    component.promptControl.setValue('Old private question');
+    let finish!: (value: AssistantChatResponse) => void;
+    assistantService.sendMessage.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const sending = component.sendMessage();
+    auth.currentUser = { uid: 'another-account' };
+    const replacement = { ...chatResponse.conversation, conversationId: 'new-account-conversation', messages: [] };
+    assistantService.getConversationState.mockResolvedValueOnce({ conversation: replacement,
+      pendingRequestId: null, locationAccess: 'coordinate_free', timelineNotesEnabled: true });
+    const loading = component.ngOnInit();
+    const oldPendingText = component.pendingUserMessage()?.text;
+    await loading;
+    finish(chatResponse);
+    await sending;
+    expect(oldPendingText).toBeUndefined();
+    expect(component.conversation()).toEqual(replacement);
+    expect(component.timelineNotesEnabled()).toBe(true);
+    expect(component.messages()).toEqual([]);
+    expect(component.sending()).toBe(false);
   });
 
   it('does not send after the current Assistant allowance is exhausted', async () => {
@@ -1506,6 +2272,8 @@ describe('AssistantPageComponent', () => {
     assistantService.getConversationState.mockResolvedValueOnce({
       conversation: createdConversation,
       pendingRequestId: null,
+      measurementChangesEnabled: true,
+      reflectionChangesEnabled: true,
     });
     quotaService.loadQuotaStatus.mockResolvedValueOnce(exhaustedQuota);
     component.promptControl.setValue('How am I today?');

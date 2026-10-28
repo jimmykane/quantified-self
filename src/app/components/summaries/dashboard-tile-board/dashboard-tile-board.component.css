@@ -2,15 +2,9 @@
   box-sizing: border-box;
   display: grid;
   gap: 0;
-  grid-auto-rows: var(--dashboard-tile-board-row-height, 150px);
+  /* Saved sizes are minimums: summaries must never squeeze or cover a plot. */
+  grid-auto-rows: minmax(var(--dashboard-tile-board-row-height, 150px), auto);
   grid-template-columns: repeat(var(--dashboard-tile-board-cols, 1), minmax(0, 1fr));
   min-width: 0;
   overflow: hidden;
-}
-
-@media (max-width: 860px) {
-  :host(.dashboard-tile-board--activity-calendar) {
-    /* Six compact calendar rows need room for an 18 px date and a 20 px marker stage. */
-    grid-auto-rows: max(var(--dashboard-tile-board-row-height, 150px), 360px);
-  }
 }

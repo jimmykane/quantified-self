@@ -1,6 +1,12 @@
+import { ActivityIdentityConflictError } from '../shared/activity-identity-conflict';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import type { WahooAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface';
+import { withHistoryExecution } from '../connection-history/context';
+import { HistoryLifecycleChangedError, type HistoryExecution } from '../connection-history/execution';
+import { recordImportCompletion } from '../queue/import-monitoring';
+import { QueueResult } from '../queue-utils';
+vi.mock('../queue/import-monitoring', () => ({ recordImportCommit: vi.fn(), recordImportCompletion: vi.fn() }));
 
 const mocks = vi.hoisted(() => {
   const transactionGet = vi.fn();
@@ -8,7 +14,7 @@ const mocks = vi.hoisted(() => {
   const transactionUpdate = vi.fn();
   const transactionDelete = vi.fn();
   const refGet = vi.fn();
-  const ref = { id: 'queue-1', path: 'wahooAPIWorkoutQueue/queue-1', get: refGet };
+  const ref = { id: 'queue-1', path: 'wahooAPIWorkoutQueue/queue-1', parent: { id: 'wahooAPIWorkoutQueue' }, get: refGet };
   const failedRef = { id: 'queue-1', path: 'failed_jobs/queue-1' };
   const activityQueryGet = vi.fn();
   return {
@@ -121,6 +127,59 @@ describe('upsertWahooWorkoutQueueItem', () => {
     mocks.refGet.mockResolvedValue({ exists: false });
   });
 
+  it('does not commit a retry or dead letter after a history connection changes during Wahoo processing', async () => {
+    const execution = { beforeRequest: vi.fn().mockRejectedValue(new HistoryLifecycleChangedError()) } as unknown as HistoryExecution;
+    const item = { ...input, ref: mocks.ref, retryCount: 9, connectionHistoryRunId: 'run' } as WahooAPIWorkoutQueueItemInterface;
+    await expect(withHistoryExecution(execution, () => failWahooWorkoutQueueRevision(item, 'worker-1', new Error('Safe provider failure'))))
+      .rejects.toBeInstanceOf(HistoryLifecycleChangedError);
+    expect(mocks.runTransaction).not.toHaveBeenCalled();
+    expect(mocks.transactionSet).not.toHaveBeenCalled();
+    expect(mocks.transactionDelete).not.toHaveBeenCalled();
+    expect(item.retryCount).toBe(9);
+  });
+  it('checks history ownership atomically before a Wahoo failure transition commits', async () => {
+    const execution = { beforeRequest: vi.fn().mockResolvedValue(undefined), inTransaction: vi.fn().mockRejectedValue(new HistoryLifecycleChangedError()) } as unknown as HistoryExecution;
+    const item = { ...input, ref: mocks.ref, retryCount: 9, connectionHistoryRunId: 'run' } as WahooAPIWorkoutQueueItemInterface;
+    await expect(withHistoryExecution(execution, () => failWahooWorkoutQueueRevision(item, 'worker-1', new Error('Safe provider failure'))))
+      .rejects.toBeInstanceOf(HistoryLifecycleChangedError);
+    expect(execution.inTransaction).toHaveBeenCalledOnce();
+    expect(mocks.transactionSet).not.toHaveBeenCalled();
+    expect(mocks.transactionUpdate).not.toHaveBeenCalled();
+    expect(mocks.transactionDelete).not.toHaveBeenCalled();
+  });
+
+  it('commits a permanent identity conflict once without consuming the transient retry budget', async () => {
+    const item = { ...input, ref: mocks.ref, retryCount: 0, totalRetryCount: 0,
+      processingOwner: 'worker-1' } as WahooAPIWorkoutQueueItemInterface;
+    mocks.transactionGet.mockResolvedValue({ exists: true, data: () => item });
+    await expect(failWahooWorkoutQueueRevision(item, 'worker-1', new ActivityIdentityConflictError()))
+      .resolves.toBe(QueueResult.MovedToDLQ);
+    expect(mocks.transactionSet).toHaveBeenCalledWith(mocks.failedRef, expect.objectContaining({ context: 'ACTIVITY_IDENTITY_CONFLICT' }));
+    expect(mocks.transactionDelete).toHaveBeenCalledWith(mocks.ref);
+    expect(mocks.transactionUpdate).not.toHaveBeenCalled();
+  });
+
+  it.each([9, 18, 19])('applies the 20-failure budget to the current claimed revision at %i', async retryCount => {
+    const item = { ...input, ref: mocks.ref, retryCount, totalRetryCount: retryCount,
+      processingOwner: 'worker-1' } as WahooAPIWorkoutQueueItemInterface;
+    mocks.transactionGet.mockResolvedValue({ exists: true, data: () => item });
+
+    const result = await failWahooWorkoutQueueRevision(item, 'worker-1', new Error('Temporary provider failure'));
+
+    if (retryCount === 19) {
+      expect(result).toBe(QueueResult.MovedToDLQ);
+      expect(mocks.transactionSet).toHaveBeenCalledWith(mocks.failedRef, expect.objectContaining({ context: 'MAX_RETRY_REACHED' }));
+      expect(mocks.transactionDelete).toHaveBeenCalledWith(mocks.ref);
+    } else {
+      expect(result).toBe(QueueResult.RetryIncremented);
+      expect(mocks.transactionUpdate).toHaveBeenCalledWith(mocks.ref, expect.objectContaining({
+        retryCount: retryCount + 1, totalRetryCount: retryCount + 1, dispatchedToCloudTask: null,
+      }));
+      expect(mocks.transactionSet).not.toHaveBeenCalled();
+      expect(mocks.transactionDelete).not.toHaveBeenCalled();
+    }
+  });
+
   it('queues a new revision and dispatches immediate webhook work', async () => {
     mocks.transactionGet.mockResolvedValue({ exists: false });
 
@@ -148,6 +207,30 @@ describe('upsertWahooWorkoutQueueItem', () => {
       processed: false,
       dispatchedToCloudTask: null,
     })).toBe(false);
+  });
+
+  it('replaces unfinished work from an older connection without changing the provider revision', async () => {
+    mocks.transactionGet.mockResolvedValue({ exists: true, data: () => ({ ...input, connectionHistoryRunId: 'old-run', processed: false }) });
+    await expect(upsertWahooWorkoutQueueItem({ ...input, connectionHistoryRunId: 'new-run' }, 'deferred'))
+      .resolves.toMatchObject({ queued: true });
+    expect(mocks.transactionSet).toHaveBeenCalledWith(mocks.ref, expect.objectContaining({ connectionHistoryRunId: 'new-run', queueRevision: expect.any(String), processed: false }));
+    const replacement = mocks.transactionSet.mock.calls[0][1];
+    mocks.transactionGet.mockResolvedValue({ exists: true, data: () => replacement });
+    await expect(claimWahooWorkoutQueueRevision({ ...input, ref: mocks.ref, connectionHistoryRunId: 'old-run' } as WahooAPIWorkoutQueueItemInterface, 'stale-worker'))
+      .resolves.toBe('superseded');
+  });
+
+  it('preserves completed history work for the same owner', async () => {
+    mocks.transactionGet.mockResolvedValue({ exists: true, data: () => ({ ...input, connectionHistoryRunId: 'old-run', processed: true }) });
+    await expect(upsertWahooWorkoutQueueItem({ ...input, connectionHistoryRunId: 'new-run' }, 'deferred')).resolves.toMatchObject({ queued: false });
+    expect(mocks.transactionSet).not.toHaveBeenCalled();
+  });
+
+  it('retries an ownership-transfer collision without overwriting the previous owner', async () => {
+    mocks.transactionGet.mockResolvedValue({ exists: true, data: () => ({ ...input, firebaseUserID: 'another-owner', connectionHistoryRunId: 'old-run', processed: false }) });
+    await expect(upsertWahooWorkoutQueueItem({ ...input, connectionHistoryRunId: 'new-run' }, 'deferred'))
+      .rejects.toThrow('ownership is still changing');
+    expect(mocks.transactionSet).not.toHaveBeenCalled();
   });
 
   it('resets a processed item when Wahoo sends a newer summary revision', async () => {
@@ -243,6 +326,29 @@ describe('upsertWahooWorkoutQueueItem', () => {
 
     await expect(upsertWahooWorkoutQueueItem(input, 'immediate')).resolves.toEqual({ ref: mocks.ref, queued: false });
     expect(mocks.transactionUpdate).toHaveBeenCalledWith(mocks.ref, { FITFileURI: input.FITFileURI });
+    expect(mocks.enqueueWorkoutTaskWithDispatchRecovery).not.toHaveBeenCalled();
+  });
+
+  it('enriches a pending duplicate with exact Training identifiers', async () => {
+    mocks.transactionGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        ...input,
+        processed: false,
+        dateCreated: 123,
+      }),
+    });
+
+    await expect(upsertWahooWorkoutQueueItem({
+      ...input,
+      workoutToken: 'qs-workout-abcdefghijklmnopqrstuvwxyzABCDEFGH123456789',
+      planID: '77123',
+    }, 'immediate')).resolves.toEqual({ ref: mocks.ref, queued: false });
+
+    expect(mocks.transactionUpdate).toHaveBeenCalledWith(mocks.ref, {
+      workoutToken: 'qs-workout-abcdefghijklmnopqrstuvwxyzABCDEFGH123456789',
+      planID: '77123',
+    });
     expect(mocks.enqueueWorkoutTaskWithDispatchRecovery).not.toHaveBeenCalled();
   });
 
@@ -392,6 +498,7 @@ describe('upsertWahooWorkoutQueueItem', () => {
       mocks.ref,
       expect.objectContaining({ processed: true }),
     );
+    expect(recordImportCompletion).not.toHaveBeenCalled();
   });
 
   it('marks only the claimed current revision as processed', async () => {
@@ -400,13 +507,20 @@ describe('upsertWahooWorkoutQueueItem', () => {
       data: () => ({ ...input, processingOwner: 'worker-1' }),
     });
 
-    await expect(completeWahooWorkoutQueueRevision({ ...input, ref: mocks.ref } as any, 'worker-1'))
+    await expect(completeWahooWorkoutQueueRevision({ ...input, ref: mocks.ref } as any, 'worker-1', {}, true))
       .resolves.toBe('PROCESSED');
     expect(mocks.transactionUpdate).toHaveBeenCalledWith(mocks.ref, expect.objectContaining({
       processed: true,
       processedAt: expect.any(Number),
       processingOwner: 'delete-sentinel',
     }));
+    expect(recordImportCompletion).toHaveBeenCalledExactlyOnceWith('wahooAPIWorkoutQueue', {});
+  });
+
+  it('does not count a pre-persistence completion as a successful import', async () => {
+    mocks.transactionGet.mockResolvedValue({ exists: true, data: () => ({ ...input, processingOwner: 'worker-1' }) });
+    await completeWahooWorkoutQueueRevision({ ...input, ref: mocks.ref } as unknown as WahooAPIWorkoutQueueItemInterface, 'worker-1');
+    expect(recordImportCompletion).not.toHaveBeenCalled();
   });
 
   it('does not let an older worker retry overwrite a newer revision', async () => {

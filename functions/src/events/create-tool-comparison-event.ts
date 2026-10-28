@@ -19,6 +19,7 @@ import {
   shouldEnforceAppCheck,
 } from '../utils';
 import { EventWriter, FirestoreAdapter, OriginalFile, StorageAdapter } from '../shared/event-writer';
+import { saveChecksummedStorageFile } from '../shared/storage-file-save';
 import { generateActivityID } from '../shared/id-generator';
 import { EVENT_PROCESSING_ENTITY, ProcessingMetaData } from '../shared/processing-metadata.interface';
 import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
@@ -414,7 +415,9 @@ async function assertComparisonWriteAllowedForUser(userID: string): Promise<void
     userExists: deletionGuard.userExists,
     deletionInProgress: deletionGuard.deletionInProgress,
   });
-  throw new HttpStatusError(409, 'Account deletion is in progress. Please sign in again.');
+  throw new HttpStatusError(409, deletionGuard.deletionInProgress
+    ? 'Account deletion is in progress. Please sign in again.'
+    : 'Complete your account setup before creating a comparison.');
 }
 
 async function resolveUploadLimitForUser(userID: string): Promise<number | null> {
@@ -584,7 +587,7 @@ function getStorageAdapter(userID: string): StorageAdapter {
     uploadFile: async (path: string, data: unknown) => {
       await assertEventWriteUserActive(userID, `tool_comparison_original_file_upload:${path}`);
       const file = admin.storage().bucket().file(path);
-      await file.save(data as Buffer);
+      await saveChecksummedStorageFile(file, data as Buffer);
       const [metadata] = await file.getMetadata();
       return { generation: metadata.generation };
     },

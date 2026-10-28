@@ -1,0 +1,31 @@
+<section class="marketing-rich-editor" aria-label="Email body editor">
+  <div class="format-toolbar" role="toolbar" aria-label="Email formatting">
+    <button mat-icon-button type="button" aria-label="Bold" title="Bold" [attr.aria-pressed]="active.bold" [class.active]="active.bold"
+      [disabled]="disabled" (click)="format('bold')"><mat-icon>format_bold</mat-icon></button>
+    <button mat-icon-button type="button" aria-label="Italic" title="Italic" [attr.aria-pressed]="active.italic" [class.active]="active.italic"
+      [disabled]="disabled" (click)="format('italic')"><mat-icon>format_italic</mat-icon></button>
+    <span class="toolbar-divider" aria-hidden="true"></span>
+    <button mat-icon-button type="button" aria-label="Heading" title="Heading" [attr.aria-pressed]="active.heading" [class.active]="active.heading"
+      [disabled]="disabled" (click)="format('heading')"><mat-icon>title</mat-icon></button>
+    <button mat-icon-button type="button" aria-label="Bulleted list" title="Bulleted list" [attr.aria-pressed]="active.bulletList" [class.active]="active.bulletList"
+      [disabled]="disabled" (click)="format('bulletList')"><mat-icon>format_list_bulleted</mat-icon></button>
+    <button mat-icon-button type="button" aria-label="Numbered list" title="Numbered list" [attr.aria-pressed]="active.orderedList" [class.active]="active.orderedList"
+      [disabled]="disabled" (click)="format('orderedList')"><mat-icon>format_list_numbered</mat-icon></button>
+    <span class="toolbar-divider" aria-hidden="true"></span>
+    <button mat-icon-button type="button" aria-label="Insert or edit link" title="Insert or edit link (⌘/Ctrl+K)"
+      [attr.aria-expanded]="linkOpen" [attr.aria-pressed]="active.link" [class.active]="active.link || linkOpen"
+      [disabled]="disabled" (click)="openLink()"><mat-icon>link</mat-icon></button>
+  </div>
+  @if (linkOpen) {
+    <div class="link-controls">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Link destination</mat-label>
+        <input matInput type="url" [(ngModel)]="linkUrl" placeholder="https://example.com" (keydown.enter)="applyLink()">
+      </mat-form-field>
+      <button mat-button type="button" (click)="applyLink()">Apply</button>
+      @if (active.link) { <button mat-button type="button" (click)="removeLink()">Remove</button> }
+      @if (linkError) { <span class="link-error" role="alert">{{ linkError }}</span> }
+    </div>
+  }
+  <div #editorHost class="editor-host"></div>
+</section>

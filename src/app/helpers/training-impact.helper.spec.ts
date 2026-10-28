@@ -1,0 +1,228 @@
+import { describe, expect, it } from 'vitest';
+import { buildTrainingLoadPoints } from '@shared/training-load';
+import {
+  buildTrainingDayImpactView,
+  buildTrainingSessionImpactView,
+  resolveTrainingImpactUtcDayMs,
+} from './training-impact.helper';
+import type { TrainingImpactSnapshotState } from '../services/training-impact.service';
+import type { TrainingLoadView } from '../services/training-load.service';
+
+function event(
+  id: string,
+  start: string,
+  tss: number | null,
+  options: { isMerge?: boolean; isBenchmark?: boolean; legacyTss?: number | null } = {},
+): any {
+  return {
+    isMerge: options.isMerge === true,
+    hasBenchmark: options.isBenchmark === true,
+    mergeType: options.isBenchmark ? 'benchmark' : undefined,
+    startDate: new Date(start),
+    getID: () => id,
+    getStat: (type: string) => {
+      if (type === 'Training Stress Score' && tss !== null) return { getValue: () => tss };
+      if (type === 'Power Training Stress Score' && options.legacyTss != null) {
+        return { getValue: () => options.legacyTss };
+      }
+      return null;
+    },
+  };
+}
+
+function ready(loads: Array<{ dayMs: number; load: number }>): TrainingImpactSnapshotState {
+  return {
+    status: 'ready',
+    formPoints: buildTrainingLoadPoints(loads).map(point => ({
+      time: point.dayMs,
+      trainingStressScore: point.load,
+      ctl: point.ctl,
+      atl: point.atl,
+      formSameDay: point.formSameDay,
+      formPriorDay: point.formPriorDay,
+    })),
+  };
+}
+
+describe('training impact view helper', () => {
+  it.each([42, null])('keeps private session and day views silent with recorded TSS %s', tss => {
+    const activity = event('session', '2026-01-01T10:00:00Z', tss);
+    const source: TrainingImpactSnapshotState = { status: 'private', formPoints: null };
+    expect(buildTrainingSessionImpactView(activity, source))
+      .toMatchObject({ availability: 'private', message: '', headline: null, impact: null });
+    expect(buildTrainingDayImpactView([activity], source))
+      .toMatchObject({ availability: 'private', message: '', headline: null, trainingStressScore: 0, outcomes: [] });
+  });
+
+  it.each([42, null])('waits for owner data before deciding whether TSS %s is usable', tss => {
+    expect(buildTrainingSessionImpactView(event('session', '2026-01-01T10:00:00Z', tss), {
+      status: 'updating', formPoints: null,
+    })).toMatchObject({ availability: 'updating', message: 'Updating Training impact…', impact: null });
+  });
+
+  it('uses Form classification for multi merges and ignores incidental benchmark display metadata', () => {
+    const dayMs = Date.UTC(2026, 0, 1);
+    const source = ready([{ dayMs, load: 42 }]);
+    const workout = event('multi', '2026-01-01T10:00:00Z', 42);
+    for (const classification of [{ isMerge: true, mergeType: 'multi' }, { hasBenchmark: true }]) {
+      expect(buildTrainingSessionImpactView({ ...workout, ...classification }, source))
+        .toMatchObject({ availability: 'ready', impact: { trainingStressScore: 42 } });
+    }
+  });
+  it('keeps excluded-day, partial-leg, source-update and reassociation states distinct from missing TSS', () => {
+    const walk = event('walk', '2026-01-01T10:00:00Z', 87.3);
+    const state = ready([{ dayMs: Date.UTC(2026, 0, 1), load: 9 }]);
+    const load = { score: 0, status: 'excluded' as const, method: null, estimated: false, reasons: [] };
+    state.loadsByEventId = new Map([['walk', load]]);
+    expect(buildTrainingDayImpactView([walk], state)).toMatchObject({ availability: 'excluded', unavailableSessionCount: 0 });
+    state.loadsByEventId = new Map([['walk', { ...load, score: 9, status: 'partial' }]]);
+    expect(buildTrainingSessionImpactView(walk, state).message).toContain('available legs only');
+    for (const [reason, availability] of [['source-updating', 'updating'], ['activity-match-needs-review', 'unavailable']]) {
+      state.loadsByEventId = new Map([['walk', { ...load, score: null, status: 'unavailable', reasons: [reason] }]]);
+      expect(buildTrainingSessionImpactView(walk, state).availability).toBe(availability);
+    }
+  });
+  it('uses modeled overrides and distinguishes user exclusions from missing or zero load', () => {
+    const activity = event('walk', '2026-01-01T10:00:00Z', 87.3);
+    const state = ready([{ dayMs: Date.UTC(2026, 0, 1), load: 9 }]);
+    state.loadsByEventId = new Map([['walk', { score: 0, status: 'available', method: 'OVERRIDE', estimated: false, reasons: [] }]]);
+    expect(buildTrainingSessionImpactView(activity, state).impact?.trainingStressScore).toBe(0);
+    state.loadsByEventId = new Map([['walk', { score: 0, status: 'excluded', method: null, estimated: false, reasons: [] }]]);
+    expect(buildTrainingSessionImpactView(activity, state)).toMatchObject({ availability: 'excluded', impact: null });
+    state.loadsByEventId = new Map([['walk', { score: null, status: 'unavailable', method: null, estimated: false, reasons: [] }]]);
+    expect(buildTrainingSessionImpactView(activity, state).availability).toBe('missing-tss');
+  });
+  it('waits for the newly selected workout instead of falling back to its recorded TSS', () => {
+    const activity = event('new-workout', '2026-01-01T10:00:00Z', 87.3);
+    const state = ready([{ dayMs: Date.UTC(2026, 0, 1), load: 120 }]);
+    state.loadsByEventId = new Map([['previous-workout', {
+      score: 9, status: 'available', method: 'MET', estimated: true, reasons: [],
+    }]]);
+    expect(buildTrainingSessionImpactView(activity, state)).toMatchObject({ availability: 'updating', impact: null });
+    expect(buildTrainingDayImpactView([activity], state)).toMatchObject({ availability: 'updating', trainingStressScore: 0 });
+  });
+
+  it.each(['source-updating', 'selection-loading'])('waits for every selected load while %s instead of showing a stale day outcome', reason => {
+    const dayMs = Date.UTC(2026, 0, 1);
+    const events = [event('ready', '2026-01-01T10:00:00Z', 9), event('changing', '2026-01-01T12:00:00Z', 87.3)];
+    const state = ready([{ dayMs, load: 96.3 }]);
+    const loads = new Map<string, TrainingLoadView>([['ready', {
+      score: 9, status: 'available', method: 'MET', estimated: true, reasons: [],
+    }]]);
+    state.loadsByEventId = loads;
+    if (reason === 'source-updating') loads.set('changing', {
+      score: null, status: 'unavailable', method: null, estimated: false, reasons: [reason],
+    });
+    const view = buildTrainingDayImpactView(events, state);
+    expect(view).toMatchObject({ availability: 'updating', headline: null, trainingStressScore: 0,
+      ctlContribution: 0, atlContribution: 0, formContribution: 0, outcomes: [], unavailableSessionCount: 2 });
+    expect(view.sessions.every(session => session.impact === null)).toBe(true);
+    loads.set('changing', { score: 9, status: 'available', method: 'MET', estimated: true, reasons: [] });
+    const current = buildTrainingDayImpactView(events, { ...ready([{ dayMs, load: 18 }]), loadsByEventId: loads });
+    expect(current).toMatchObject({ availability: 'ready', trainingStressScore: 18, unavailableSessionCount: 0 });
+    expect(current.outcomes[0].trainingStressScore).toBe(18);
+  });
+
+  it('maps an activity to its UTC Training day and contribution', () => {
+    const activity = event('session', '2026-01-02T00:30:00+02:00', 42);
+    const dayMs = Date.UTC(2026, 0, 1);
+    expect(resolveTrainingImpactUtcDayMs(activity)).toBe(dayMs);
+    const view = buildTrainingSessionImpactView(activity, ready([{ dayMs, load: 42 }]));
+    expect(view.availability).toBe('ready');
+    expect(view.headline).toBe('Helped push the day above maintenance');
+    expect(view.impact).toMatchObject({ ctlContribution: 1, atlContribution: 6, formContribution: -5 });
+  });
+
+  it('uses the legacy TSS fallback when the current stat is missing', () => {
+    const dayMs = Date.UTC(2026, 0, 1);
+    const view = buildTrainingSessionImpactView(
+      event('legacy', '2026-01-01T10:00:00Z', null, { legacyTss: 84 }),
+      ready([{ dayMs, load: 84 }]),
+    );
+    expect(view.impact).toMatchObject({ trainingStressScore: 84, ctlContribution: 2 });
+  });
+
+  it('keeps missing TSS, merge exclusion, and updating state explicit', () => {
+    const source = ready([{ dayMs: Date.UTC(2026, 0, 1), load: 42 }]);
+    expect(buildTrainingSessionImpactView(event('missing', '2026-01-01T10:00:00Z', null), source))
+      .toMatchObject({ availability: 'missing-tss' });
+    expect(buildTrainingSessionImpactView(event('merge', '2026-01-01T10:00:00Z', 42, { isMerge: true }), source))
+      .toMatchObject({ availability: 'excluded' });
+    expect(buildTrainingSessionImpactView(event('benchmark', '2026-01-01T10:00:00Z', 42, { isBenchmark: true }), source))
+      .toMatchObject({ availability: 'excluded' });
+    expect(buildTrainingSessionImpactView(event('pending', '2026-01-01T10:00:00Z', 42), {
+      status: 'updating', formPoints: null,
+    })).toMatchObject({ availability: 'updating' });
+  });
+
+  it('sums visible session contributions and keeps UTC-day outcomes separate', () => {
+    const firstDayMs = Date.UTC(2026, 0, 1);
+    const secondDayMs = Date.UTC(2026, 0, 2);
+    const source = ready([
+      { dayMs: firstDayMs, load: 42 },
+      { dayMs: secondDayMs, load: 84 },
+    ]);
+    const view = buildTrainingDayImpactView([
+      event('late', '2026-01-01T23:30:00Z', 42),
+      event('early', '2026-01-02T00:30:00Z', 84),
+    ], source);
+
+    expect(view.availability).toBe('ready');
+    expect(view.headline).toBe('Activities span 2 UTC Training days');
+    expect(view.trainingStressScore).toBe(126);
+    expect(view.ctlContribution).toBe(3);
+    expect(view.atlContribution).toBe(18);
+    expect(view.formContribution).toBe(-15);
+    expect(view.outcomes.map(outcome => outcome.dayMs)).toEqual([firstDayMs, secondDayMs]);
+  });
+
+  it('waits when selected contributions together exceed the saved Form day', () => {
+    const dayMs = Date.UTC(2026, 0, 1);
+    // Each workout fits individually, but Form has not yet incorporated the second workout.
+    const view = buildTrainingDayImpactView([
+      event('first', '2026-01-01T10:00:00Z', 42), event('second', '2026-01-01T12:00:00Z', 42),
+    ], ready([{ dayMs, load: 42 }]));
+    expect(view).toMatchObject({ availability: 'updating', trainingStressScore: 0, outcomes: [], unavailableSessionCount: 2 });
+  });
+
+  it('allows rounding differences when the selected loads match the saved Form day', () => {
+    const dayMs = Date.UTC(2026, 0, 1);
+    expect(33.1 + 33.2).toBeGreaterThan(66.3 + Number.EPSILON);
+    const view = buildTrainingDayImpactView([
+      event('first', '2026-01-01T10:00:00Z', 33.1), event('second', '2026-01-01T12:00:00Z', 33.2),
+    ], ready([{ dayMs, load: 66.3 }]));
+    expect(view.availability).toBe('ready');
+    expect(view.trainingStressScore).toBeCloseTo(66.3);
+  });
+
+  it('retains a ready partial total while counting unavailable activities', () => {
+    const firstDayMs = Date.UTC(2026, 0, 1);
+    const secondDayMs = Date.UTC(2026, 0, 2);
+    const view = buildTrainingDayImpactView([
+      event('loaded', '2026-01-01T10:00:00Z', 42),
+      event('missing', '2026-01-02T00:30:00Z', null),
+    ], ready([
+      { dayMs: firstDayMs, load: 42 },
+      { dayMs: secondDayMs, load: 0 },
+    ]));
+    expect(view.availability).toBe('ready');
+    expect(view.unavailableSessionCount).toBe(1);
+    expect(view.message).toContain('Some completed activities');
+    expect(view.headline).toBe('Activities span 2 UTC Training days');
+    expect(view.outcomes.map(outcome => outcome.dayMs)).toEqual([firstDayMs, secondDayMs]);
+  });
+
+  it('does not add an outcome for an excluded benchmark Training day', () => {
+    const firstDayMs = Date.UTC(2026, 0, 1);
+    const secondDayMs = Date.UTC(2026, 0, 2);
+    const view = buildTrainingDayImpactView([
+      event('loaded', '2026-01-01T10:00:00Z', 42),
+      event('benchmark', '2026-01-02T00:30:00Z', 84, { isBenchmark: true }),
+    ], ready([
+      { dayMs: firstDayMs, load: 42 },
+      { dayMs: secondDayMs, load: 84 },
+    ]));
+
+    expect(view.outcomes.map(outcome => outcome.dayMs)).toEqual([firstDayMs]);
+  });
+});

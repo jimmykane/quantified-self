@@ -9,6 +9,7 @@ import { SimpleChange } from '@angular/core';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
+import { getLocalDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 
 function createReparseQueueStats(
     enabled = false,
@@ -573,9 +574,9 @@ describe('AdminQueueStatsComponent', () => {
 
     describe('formatTimestamp', () => {
         it('should format epoch milliseconds numbers', () => {
-            const result = component.formatTimestamp(1700000000000);
-            expect(result).not.toBe('1700000000000');
-            expect(result).not.toBe('N/A');
+            const timestamp = 1700000000000;
+            expect(component.formatTimestamp(timestamp))
+                .toBe(getLocalDateTimeFormatter().format(new Date(timestamp)));
         });
 
         it('should format firestore-like objects with _seconds', () => {
@@ -663,7 +664,8 @@ describe('AdminQueueStatsComponent', () => {
                     retryHistogram: {
                         '0-3': 5,
                         '4-7': 3,
-                        '8-9': 2
+                        '8-9': 2,
+                        '10-19': 4
                     },
                     topErrors: []
                 },
@@ -688,7 +690,26 @@ describe('AdminQueueStatsComponent', () => {
             expect(mockEchartsService.setOption).toHaveBeenCalled();
             const optionArg = mockEchartsService.setOption.mock.calls[0][1];
             expect(optionArg.backgroundColor).toBe('transparent');
-            expect(optionArg.series[0].data).toEqual([5, 3, 2]);
+            expect(optionArg.series[0].data).toEqual([5, 3, 2, 4]);
+            expect(optionArg.xAxis.data).toEqual(['0-3 Retries', '4-7 Retries', '8-9 Retries', '10-19 Retries']);
+        });
+
+        it('shows retry data when all pending jobs are in the 10-19 bucket', async () => {
+            component.stats = {
+                pending: 3, succeeded: 0, stuck: 0, providers: [], cloudTasks: { pending: 3 },
+                advanced: {
+                    throughput: 0, maxLagMs: 0, topErrors: [],
+                    retryHistogram: { '0-3': 0, '4-7': 0, '8-9': 0, '10-19': 3 },
+                },
+            };
+            component.ngOnChanges({ stats: new SimpleChange(null, component.stats, true) });
+            fixture.detectChanges();
+            await fixture.whenStable();
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            const optionArg = mockEchartsService.setOption.mock.calls.at(-1)?.[1];
+            expect(component.hasRetryData).toBe(true);
+            expect(optionArg.series[0].data).toEqual([0, 0, 0, 3]);
         });
 
         it('should use activity sync retry histogram in activity-sync view', async () => {
@@ -1089,6 +1110,10 @@ describe('AdminQueueStatsComponent', () => {
                     succeeded: 11,
                     stuck: 1,
                     dead: 2,
+                    breakdowns: {
+                        historical: { pending: 3, succeeded: 5, stuck: 1, manualReconciliationRequired: 0, dead: 2 },
+                        manualUploads: { pending: 1, succeeded: 2, stuck: 0, manualReconciliationRequired: null, dead: 0 },
+                    },
                     dlqByContext: [{ context: 'NO_TOKEN_FOUND', count: 2 }],
                     advanced: {
                         throughput: 7,
@@ -1109,6 +1134,13 @@ describe('AdminQueueStatsComponent', () => {
             expect(host.textContent).toContain('Dead Letter Queue (Sync)');
             expect(host.textContent).toContain('Throughput (1h)');
             expect(host.textContent).toContain('Retry Distribution (Pending Items)');
+            const breakdown = host.querySelector<HTMLElement>('.activity-sync-breakdown');
+            expect(breakdown?.textContent).toContain('Historical sends');
+            expect(breakdown?.textContent).toContain('Manual uploads');
+            expect(breakdown?.textContent).toContain('Manual uploads include retained QS originals and private temporary files');
+            expect(breakdown?.querySelectorAll('dd')).toHaveLength(15);
+            expect(Array.from(breakdown?.querySelectorAll('dd') || []).map(item => item.textContent?.trim()))
+                .toEqual(['3', '5', '1', '0', '2', '1', '2', '0', 'N/A', '0', 'N/A', 'N/A', 'N/A', 'N/A', 'N/A']);
             expect(host.textContent).not.toContain('Workout Ingestion');
             expect(host.textContent).not.toContain('Sleep Sync');
             expect(host.textContent).not.toContain('Event Reparse');
@@ -1627,6 +1659,53 @@ describe('AdminQueueStatsComponent', () => {
             expect(host.textContent).toContain('route-1');
             expect(host.textContent).toContain('3');
             expect(host.textContent).toContain('Route parse failed');
+        });
+    });
+
+    describe('Training Delivery Section', () => {
+        it('distinguishes transient jobs from workout outcomes and isolates the view', () => {
+            component.loading = false;
+            component.queueView = 'training-delivery';
+            component.stats = {
+                pending: 0, succeeded: 0, stuck: 0, providers: [],
+                cloudTasks: { pending: 2, queues: { trainingDelivery: { queueId: 'processTrainingDeliveryTask', pending: 2, state: 'RUNNING' } } },
+                trainingDelivery: {
+                    jobsAvailable: true,
+                    jobs: { total: 10, due: 3, reconcile: 4, delivery: 5, verification: 1, oldestDueLagMs: 90_000 },
+                    statusCountsAvailable: true,
+                    outcomes: { delivered: 6, retrying: 1, failed: 2, needsAttention: 1 },
+                    providers: [{ provider: 'garmin', queued: 3, delivered: 5, retrying: 0, failed: 1, needsAttention: 0 }],
+                },
+            };
+            fixture.detectChanges();
+            const host: HTMLElement = fixture.nativeElement;
+            expect(host.textContent).toContain('Jobs in Firestore');
+            expect(host.textContent).toContain('Due now');
+            expect(host.textContent).toContain('Oldest overdue 1m 30s');
+            expect(host.textContent).toContain('Remote checks: 1');
+            expect(host.textContent).toContain('Garmin');
+            expect(host.textContent).toContain('3 queued');
+            expect(host.textContent).not.toContain('Workout Ingestion');
+        });
+
+        it('shows an unavailable state rather than zero outcomes for an older backend or missing index', () => {
+            component.loading = false;
+            component.queueView = 'training-delivery';
+            component.stats = { pending: 0, succeeded: 0, stuck: 0, providers: [], cloudTasks: {
+                pending: 2, queues: { trainingDelivery: { queueId: 'processTrainingDeliveryTask', pending: 2, state: 'UNKNOWN' } },
+            } };
+            fixture.detectChanges();
+            const host: HTMLElement = fixture.nativeElement;
+            expect(host.textContent).toContain('Training delivery job counts are unavailable');
+            expect(host.textContent).toContain('Current workout delivery counts are unavailable');
+            expect(host.textContent).toContain('Cloud Tasks');
+            const cloudTasksCard = [...host.querySelectorAll('.app-stat-card')]
+                .find(card => card.textContent?.includes('Cloud Tasks'));
+            expect(cloudTasksCard?.querySelector('.app-stat-value')?.textContent?.trim()).toBe('—');
+            expect(host.textContent).not.toContain('0 delivered');
+            component.queueView = 'all';
+            fixture.detectChanges();
+            expect(host.textContent).not.toContain('Training delivery job counts are unavailable');
         });
     });
 

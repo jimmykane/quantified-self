@@ -28,7 +28,7 @@ app-loading-overlay {
   display: grid;
   gap: 4px;
   min-width: 0;
-  padding: 0 10px;
+  padding: 0 var(--qs-dashboard-chart-content-inset, 10px);
 }
 
 .intensity-header.intensity-header-reserve-actions {

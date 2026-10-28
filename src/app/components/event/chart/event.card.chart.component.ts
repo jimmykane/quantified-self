@@ -1,3 +1,5 @@
+import { getUserChartDataTypesToUse } from '../../../helpers/app-chart-data-types.helper';
+import { resolveEventLineContinuity, equalEventLineContinuity, type EventLineContinuitySettings } from '../../../helpers/event-chart-line-continuity.helper';
 import {
   ChangeDetectorRef,
   ChangeDetectionStrategy,
@@ -10,6 +12,7 @@ import {
   OnInit,
   Output,
   SimpleChanges,
+  computed,
   effect,
   inject,
   Injector,
@@ -18,11 +21,12 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { throttleTime } from 'rxjs/operators';
 import { Subject, asyncScheduler } from 'rxjs';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { AppAuthService } from '../../../authentication/app.auth.service';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 import {
   ActivityInterface,
   ChartCursorBehaviours,
-  DataDistance,
-  DataStrydDistance,
   EventInterface,
   LapTypes,
   type StreamInterface,
@@ -30,8 +34,9 @@ import {
   XAxisTypes,
 } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
+import { AppDeviceColorPreferenceService } from '../../../services/color/app-device-color-preference.service';
+import { applyComparisonDeviceAppearance } from '../../../helpers/device-chart-appearance.helper';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
-import { AppUserService } from '../../../services/app.user.service';
 import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
 import {
   AppChartSettingsLocalStorageService,
@@ -41,12 +46,14 @@ import { LoggerService } from '../../../services/logger.service';
 import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import {
   buildEventChartPanels,
+  getEventChartDistanceStream,
   buildEventLapMarkers,
   buildEventSwimLengthMarkers,
   buildEventZoomOverviewData,
   createEventChartPanelBuildSnapshot,
   EVENT_CHART_INTENSITY_ZONE_LINE_DATA_TYPES,
   EVENT_CHART_INTENSITY_ZONE_LOWER_LIMIT_KEYS,
+  hasEventChartIntensityZoneData,
   EventChartLapMarker,
   EventChartPanelModel,
   EventChartSwimLengthMarker,
@@ -59,10 +66,13 @@ import {
   EventChartRange,
   normalizeEventRange,
   resolveEventChartXAxisType,
+  resolveEventDistanceCursorSeconds,
 } from '../../../helpers/event-echarts-xaxis.helper';
 import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helper';
 import {
   areEventChartOverlayMapsEqual,
+  getEventChartOverlaySelectionKey,
+  resolveEventChartOverlayDataType,
   normalizeEventChartOverlayDataTypeByPrimary,
 } from '../../../helpers/event-chart-overlay.helper';
 import type { EventChartOverlayOption } from '../../../helpers/event-chart-overlay.helper';
@@ -123,6 +133,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   public lapMarkers: EventChartLapMarker[] = [];
   public swimLengthMarkers: EventChartSwimLengthMarker[] = [];
   public hasSelectedSwimLengths = false;
+  public hasIntensityZoneColorData = false;
   public xDomain: EventChartRange | null = null;
   public zoomBarOverviewData: Array<[number, number]> = [];
   public renderedXAxisType: XAxisTypes = XAxisTypes.Duration;
@@ -291,6 +302,10 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     return isMergeOrBenchmarkEvent(this.event);
   }
 
+  public get showIntensityZoneColorsToggle(): boolean {
+    return !isMergeOrBenchmarkEvent(this.event) && this.hasIntensityZoneColorData;
+  }
+
   public get allRecordedMetricsForced(): boolean {
     return isMergeOrBenchmarkEvent(this.event);
   }
@@ -344,11 +359,10 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   public get dataTypesToUse(): string[] {
-    return this.user ? this.userService.getUserChartDataTypesToUse(this.user) : [];
+    return this.user ? getUserChartDataTypesToUse(this.user) : [];
   }
 
   private userSettingsQuery = inject(AppUserSettingsQueryService);
-  private userService = inject(AppUserService);
   private activityCursorService = inject(AppActivityCursorService);
   private chartSettingsLocalStorageService = inject(AppChartSettingsLocalStorageService);
   private eventColorService = inject(AppEventColorService);
@@ -357,6 +371,26 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private injector = inject(Injector);
   private cdr = inject(ChangeDetectorRef);
   private destroyRef = inject(DestroyRef);
+  private readonly authService = inject(AppAuthService);
+  private readonly hapticsService = inject(AppHapticsService);
+  private readonly snackBar = inject(MatSnackBar);
+  private readonly chartSettingsUserID = signal<string | null>(null);
+  private readonly linePatternsOverride = signal<boolean | null>(null);
+  private chartSettingsAuthRevision = 0;
+  readonly isSavingDistinctLinePatterns = signal(false);
+  readonly canChangeDistinctLinePatterns = computed(() => !!this.chartSettingsUserID());
+  readonly useDistinctLinePatterns = computed(() => this.linePatternsOverride()
+    ?? (this.userSettingsQuery.chartSettings()?.useDistinctComparisonLinePatterns === true));
+  private readonly zoneColorsOverride = signal<boolean | null>(null);
+  readonly isSavingZoneColors = signal(false);
+  readonly canChangeZoneColors = computed(() => !!this.chartSettingsUserID());
+  readonly colorIntensityZoneLines = computed(() => this.zoneColorsOverride()
+    ?? (this.userSettingsQuery.chartSettings()?.colorIntensityZoneLines !== false));
+  private readonly lineContinuityOverride = signal<EventLineContinuitySettings | null>(null);
+  readonly isSavingLineContinuity = signal(false);
+  readonly canChangeLineContinuity = computed(() => !!this.chartSettingsUserID());
+  readonly lineContinuity = computed(() => this.lineContinuityOverride()
+    ?? resolveEventLineContinuity(this.userSettingsQuery.chartSettings()?.eventLineContinuity));
 
   private cursorPositionSubject = new Subject<number>();
   private xAxisTypeOverride: XAxisTypes | null = null;
@@ -385,8 +419,40 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private zoomRangeOwnerEventID: string | null = null;
 
   constructor() {
+    this.authService.user$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(user => {
+      const userID = user?.uid ?? null;
+      if (userID === this.chartSettingsUserID()) {
+        return;
+      }
+      this.chartSettingsAuthRevision += 1;
+      this.chartSettingsUserID.set(userID);
+      this.linePatternsOverride.set(null);
+      this.isSavingDistinctLinePatterns.set(false);
+      this.zoneColorsOverride.set(null);
+      this.isSavingZoneColors.set(false);
+      this.lineContinuityOverride.set(null);
+      this.isSavingLineContinuity.set(false);
+    });
     effect(() => {
+      this.deviceColorPreferences.deviceColorByName();
       const chartSettings = this.userSettingsQuery.chartSettings();
+      const distinctLinePatterns = this.useDistinctLinePatterns();
+      const zoneColors = this.colorIntensityZoneLines();
+      const lineContinuity = this.lineContinuity();
+      if (!this.isSavingLineContinuity() && this.lineContinuityOverride()
+        && equalEventLineContinuity(lineContinuity, resolveEventLineContinuity(chartSettings?.eventLineContinuity))) {
+        this.lineContinuityOverride.set(null);
+      }
+      if (!this.isSavingZoneColors()
+        && this.zoneColorsOverride() !== null
+        && zoneColors === (chartSettings?.colorIntensityZoneLines !== false)) {
+        this.zoneColorsOverride.set(null);
+      }
+      if (!this.isSavingDistinctLinePatterns()
+        && this.linePatternsOverride() !== null
+        && distinctLinePatterns === (chartSettings?.useDistinctComparisonLinePatterns === true)) {
+        this.linePatternsOverride.set(null);
+      }
       this.userSettingsQuery.unitSettings();
       if (
         this.cursorBehaviourOverride !== null
@@ -421,6 +487,8 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       this.queueRebuild('settings-effect');
     }, { injector: this.injector });
   }
+
+  private readonly deviceColorPreferences = inject(AppDeviceColorPreferenceService);
 
   ngOnInit(): void {
     this.cursorPositionSubject.pipe(
@@ -458,7 +526,114 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   public onXAxisTypeChange(value: XAxisTypes): void {
+    if (!this.user || this.event?.isMultiSport() || value === this.displayedXAxisType
+      || (value === XAxisTypes.Distance && !this.canSelectDistanceXAxis)) {
+      return;
+    }
+    this.hapticsService.selection();
     this.xAxisType = value;
+  }
+
+  async onDistinctLinePatternsChange(enabled: boolean): Promise<void> {
+    const userID = this.chartSettingsUserID();
+    if (!userID || !this.showActivityNamesInTooltip || this.destroyRef.destroyed
+      || this.isSavingDistinctLinePatterns() || enabled === this.useDistinctLinePatterns()) {
+      return;
+    }
+
+    const previousValue = this.useDistinctLinePatterns();
+    const authRevision = this.chartSettingsAuthRevision;
+    const isCurrentSave = () => !this.destroyRef.destroyed
+      && authRevision === this.chartSettingsAuthRevision
+      && this.chartSettingsUserID() === userID;
+    this.hapticsService.selection();
+    this.linePatternsOverride.set(enabled);
+    this.isSavingDistinctLinePatterns.set(true);
+    try {
+      await this.userSettingsQuery.updateChartSettings(
+        { useDistinctComparisonLinePatterns: enabled }, { force: true, expectedUserID: userID },
+      );
+      if (isCurrentSave()) {
+        this.hapticsService.success();
+      }
+    } catch (error) {
+      this.logger.error('[EventCardChart] Failed to save distinct line patterns', error);
+      if (isCurrentSave()) {
+        this.linePatternsOverride.set(previousValue);
+        this.hapticsService.error();
+        this.snackBar.open('Could not save line patterns. Please try again.', 'OK', { duration: 5000 });
+      }
+    } finally {
+      if (isCurrentSave()) {
+        this.isSavingDistinctLinePatterns.set(false);
+      }
+    }
+  }
+
+  async onColorIntensityZoneLinesChange(enabled: boolean): Promise<void> {
+    const userID = this.chartSettingsUserID();
+    if (!userID || !this.showIntensityZoneColorsToggle || this.destroyRef.destroyed
+      || this.isSavingZoneColors() || enabled === this.colorIntensityZoneLines()) {
+      return;
+    }
+
+    const previousValue = this.colorIntensityZoneLines();
+    const authRevision = this.chartSettingsAuthRevision;
+    const isCurrentSave = () => !this.destroyRef.destroyed
+      && authRevision === this.chartSettingsAuthRevision
+      && this.chartSettingsUserID() === userID;
+    this.hapticsService.selection();
+    this.zoneColorsOverride.set(enabled);
+    this.isSavingZoneColors.set(true);
+    try {
+      await this.userSettingsQuery.updateChartSettings(
+        { colorIntensityZoneLines: enabled }, { force: true, expectedUserID: userID },
+      );
+      if (isCurrentSave()) {
+        this.hapticsService.success();
+      }
+    } catch (error) {
+      this.logger.error('[EventCardChart] Failed to save zone colors', error);
+      if (isCurrentSave()) {
+        this.zoneColorsOverride.set(previousValue);
+        this.hapticsService.error();
+        this.snackBar.open('Could not save zone colors. Please try again.', 'OK', { duration: 5000 });
+      }
+    } finally {
+      if (isCurrentSave()) {
+        this.isSavingZoneColors.set(false);
+      }
+    }
+  }
+
+  async onLineContinuityChange(value: EventLineContinuitySettings): Promise<void> {
+    const userID = this.chartSettingsUserID();
+    const settings = resolveEventLineContinuity(value);
+    if (!userID || this.destroyRef.destroyed || this.isSavingLineContinuity()
+      || equalEventLineContinuity(settings, this.lineContinuity())) return;
+    const authRevision = this.chartSettingsAuthRevision;
+    const isCurrentSave = () => !this.destroyRef.destroyed
+      && authRevision === this.chartSettingsAuthRevision && this.chartSettingsUserID() === userID;
+    this.hapticsService.selection();
+    this.lineContinuityOverride.set(settings);
+    this.isSavingLineContinuity.set(true);
+    try {
+      await this.userSettingsQuery.updateChartSettings(
+        { eventLineContinuity: settings }, { force: true, expectedUserID: userID },
+      );
+      if (isCurrentSave()) this.hapticsService.success();
+    } catch (error) {
+      this.logger.error('[EventCardChart] Failed to save line continuity', error);
+      if (isCurrentSave()) {
+        // Follow the current settings stream again. Restoring the value captured
+        // before this write can mask a newer preference saved in another tab.
+        this.lineContinuityOverride.set(null);
+        this.hapticsService.error();
+        this.snackBar.open('Could not save line continuity. Please try again.', 'OK', { duration: 5000 });
+      }
+    } finally {
+      if (isCurrentSave()) this.isSavingLineContinuity.set(false);
+    }
   }
 
   public onDataTypeLegendSelectionChange(dataType: string, visible: boolean): void {
@@ -528,7 +703,15 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       ...this.getEventChartOverlayDataTypeByPrimary(),
     };
 
-    if (overlay && overlay !== primary) {
+    const primaryKey = getEventChartOverlaySelectionKey(primary);
+    const availableTypes = new Set(this.allChartPanels.map(panel => panel.dataType));
+    // Remove obsolete aliases, while preserving other unit panels explicitly displayed together.
+    Object.keys(nextOverlayMap).forEach(key => {
+      if (key !== primary && !availableTypes.has(key) && getEventChartOverlaySelectionKey(key) === primaryKey) {
+        delete nextOverlayMap[key];
+      }
+    });
+    if (overlay && overlay !== primary && (getEventChartOverlaySelectionKey(overlay) !== primaryKey || availableTypes.has(overlay))) {
       nextOverlayMap[primary] = overlay;
     } else {
       delete nextOverlayMap[primary];
@@ -664,17 +847,28 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
     const previousZoomRangeOwnerEventID = this.zoomRangeOwnerEventID;
     this.hasSelectedSwimLengths = hasSelectedSwimLengths;
+    this.hasIntensityZoneColorData = hasEventChartIntensityZoneData(selectedActivities);
     this.renderedXAxisType = effectiveXAxisType;
     this.zoomRangeOwnerEventID = nextEventID;
 
-    if (!shouldRebuildPanels && !shouldRebuildLaps && !shouldRebuildSwimLengths) {
+    // Restoring a cached view must also invalidate any worker still building
+    // an older preference, including a failed optimistic zone-color change.
+    const rebuildRequestID = this.panelBuildRequestID + 1;
+    this.panelBuildRequestID = rebuildRequestID;
+
+    if (!shouldRebuildPanels) {
+      this.allChartPanels = this.applyDeviceAppearance(this.allChartPanels, allActivities);
       this.applyDataTypeVisibility();
+    }
+
+    if (!shouldRebuildPanels && !shouldRebuildLaps && !shouldRebuildSwimLengths) {
+      if (this.isLoading) {
+        this.loaded();
+      }
       this.cdr.markForCheck();
       return;
     }
 
-    const rebuildRequestID = this.panelBuildRequestID + 1;
-    this.panelBuildRequestID = rebuildRequestID;
     this.loading();
 
     try {
@@ -688,6 +882,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
           userUnitSettings: this.userUnitSettings,
           eventColorService: this.eventColorService,
           colorIntensityZoneLines: this.shouldColorIntensityZoneLines(),
+          lineContinuity: this.lineContinuity(),
         };
         const nextChartPanels = this.eventChartPanelWorkerService.shouldUseWorker()
           ? await this.eventChartPanelWorkerService.buildPanels(
@@ -699,7 +894,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
           return;
         }
 
-        this.allChartPanels = nextChartPanels;
+        this.allChartPanels = this.applyDeviceAppearance(nextChartPanels, allActivities);
         this.lastPanelRebuildKey = panelRebuildKey;
 
         this.syncVisibleDataTypes(this.allChartPanels);
@@ -909,19 +1104,18 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private buildChartPanelViews(): EventChartPanelViewModel[] {
     const panelByDataType = new Map(this.allChartPanels.map((panel) => [panel.dataType, panel]));
     const overlayMap = this.getEventChartOverlayDataTypeByPrimary();
+    const availableTypes = [...panelByDataType.keys()];
 
     return this.chartPanels.map((panel) => {
       const overlayOptions = this.buildOverlayOptions(panel);
-      const selectedOverlayDataType = overlayMap[panel.dataType] || null;
-      const overlayPanel = selectedOverlayDataType && selectedOverlayDataType !== panel.dataType
-        ? panelByDataType.get(selectedOverlayDataType) ?? null
-        : null;
+      const selectedOverlayDataType = resolveEventChartOverlayDataType(panel.dataType, availableTypes, overlayMap);
+      const overlayPanel = selectedOverlayDataType ? panelByDataType.get(selectedOverlayDataType) ?? null : null;
 
       return {
         panel,
         overlayPanel,
         overlayOptions,
-        selectedOverlayDataType: overlayPanel ? selectedOverlayDataType : null,
+        selectedOverlayDataType: overlayPanel?.dataType ?? null,
       };
     });
   }
@@ -1066,6 +1260,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       unitSettingsKey,
       intensityZoneColoringKey,
       intensityZoneBoundariesKey,
+      JSON.stringify(this.lineContinuity()),
     ].join('|');
   }
 
@@ -1124,12 +1319,19 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
   private buildActivitiesKey(activities: ActivityInterface[]): string {
     return (activities || [])
-      .map((activity) => `${activity?.getID?.() || ''}:${activity?.type || ''}`)
+      .map((activity) => `${activity?.getID?.() || ''}:${activity?.type || ''}:${this.eventColorService.getActivityColor(activities, activity)}`)
       .join(',');
   }
 
   private shouldColorIntensityZoneLines(): boolean {
-    return this.event?.isMerge !== true;
+    return !isMergeOrBenchmarkEvent(this.event) && this.colorIntensityZoneLines();
+  }
+
+  private applyDeviceAppearance(panels: EventChartPanelModel[], allActivities: ActivityInterface[]): EventChartPanelModel[] {
+    return isMergeOrBenchmarkEvent(this.event)
+      ? applyComparisonDeviceAppearance(panels, allActivities, this.eventColorService, this.darkTheme,
+        this.useDistinctLinePatterns())
+      : panels;
   }
 
   private buildIntensityZoneBoundariesKey(activities: ActivityInterface[]): string {
@@ -1223,30 +1425,12 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private resolveDistanceCursorTime(activity: ActivityInterface, targetDistance: number): number | null {
-    const distanceStream = this.getActivityStream(activity, DataDistance.type)
-      || this.getActivityStream(activity, DataStrydDistance.type);
+    const distanceStream = getEventChartDistanceStream(activity);
     const timeStream = this.getActivityStream(activity, XAxisTypes.Time);
-    const distanceValues = this.toNumericArray(distanceStream?.getData());
-    const timeValues = this.toNumericArray(timeStream?.getData());
-
-    const length = Math.min(distanceValues.length, timeValues.length);
-    if (!length) {
-      return null;
-    }
-
-    let closestIndex = 0;
-    let smallestDelta = Number.POSITIVE_INFINITY;
-
-    for (let index = 0; index < length; index += 1) {
-      const delta = Math.abs(targetDistance - distanceValues[index]);
-      if (delta < smallestDelta) {
-        smallestDelta = delta;
-        closestIndex = index;
-      }
-    }
-
-    const seconds = timeValues[closestIndex];
-    if (!Number.isFinite(seconds)) {
+    const seconds = resolveEventDistanceCursorSeconds(
+      distanceStream?.getData(), timeStream?.getData(), targetDistance,
+    );
+    if (seconds === null) {
       return null;
     }
 
@@ -1271,13 +1455,6 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
     const streams = activity.getAllStreams?.() || [];
     return streams.find((stream) => stream?.type === streamType) || null;
-  }
-
-  private toNumericArray(value: unknown): number[] {
-    if (!Array.isArray(value)) {
-      return [];
-    }
-    return value.map((item) => Number(item));
   }
 
   private loading(): void {

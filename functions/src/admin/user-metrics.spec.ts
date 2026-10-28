@@ -143,6 +143,22 @@ describe('admin user metrics subscription provenance', () => {
 });
 
 describe('admin authentication activity plan breakdown', () => {
+    it('counts inactive and never-signed-in eligible accounts but excludes disabled accounts and admins', async () => {
+        const result = await adminUserMetricsTestInternals.collectAuthenticationMetrics(
+            { listUsers: async () => ({ users: [
+                { uid: 'inactive', metadata: { lastSignInTime: '2020-01-01T00:00:00Z' }, providerData: [] },
+                { uid: 'never', metadata: {}, providerData: [] },
+                { uid: 'disabled', disabled: true, metadata: {}, providerData: [] },
+                { uid: 'admin', customClaims: { admin: true }, metadata: {}, providerData: [] },
+            ] }) } as never,
+            new Date('2026-08-26T12:00:00Z'),
+            Promise.resolve(new Map([['inactive', 'pro' as const], ['disabled', 'pro' as const], ['admin', 'basic' as const]])),
+        );
+        expect(result.eligibleAccounts).toBe(2);
+        expect(result.eligibleAccountsByPlan).toEqual({ free: 1, basic: 0, pro: 1 });
+        expect(result.authActivity.last30Days).toBe(0);
+    });
+
     it('classifies each activity window from the canonical subscription owner map', async () => {
         const computedAt = new Date('2026-08-26T12:00:00.000Z');
         const before = (days: number) => new Date(computedAt.getTime() - (days * 24 * 60 * 60 * 1000)).toISOString();
@@ -207,5 +223,6 @@ describe('admin authentication activity plan breakdown', () => {
             },
         });
         expect(result.eligibleAccounts).toBe(4);
+        expect(result.eligibleAccountsByPlan).toEqual({ free: 2, basic: 1, pro: 1 });
     });
 });

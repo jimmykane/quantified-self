@@ -1,0 +1,111 @@
+import { createHash } from 'node:crypto';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { trainingDeliveryLocalDate } from '../../../../shared/training-provider-delivery';
+import type { PlannedWorkoutProviderId } from '../../../../shared/planned-workout-providers';
+import { hashTrainingScheduleRequestPayload } from '../persistence';
+import { requiresDeliveryMappingApproval, type DeliveryContext, type DeliveryIntent, type DeliveryLedgerV1 } from './contracts';
+import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
+import type { StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
+
+export function deliveryIdentity(uid: string, provider: PlannedWorkoutProviderId, account: string, workoutId: string): string {
+  return createHash('sha256').update(JSON.stringify([uid, provider, account, workoutId])).digest('hex');
+}
+export function deliveryContentDigest(workout: ScheduledWorkoutV1 | null, timeZone: string,
+  strength?: StrengthWorkoutDetailsV1 | null): string | null {
+  return workout ? hashTrainingScheduleRequestPayload({ title: workout.title, localDate: workout.localDate,
+    structure: workout.structure, ...(strength ? { strength: strength.exercises } : {}), timeZone }) : null;
+}
+export function resolveDeliveryIntent(context: DeliveryContext, ledger?: DeliveryLedgerV1): DeliveryIntent {
+  const { workout, connection, transport, nowMs } = context;
+  const setting = context.setting;
+  const override = context.override?.scopeGeneration === context.scopeGeneration
+    && context.override.associationPlanId === (workout?.planId ?? null) ? context.override : null;
+  const timeZone = setting?.timeZone ?? ledger?.timeZone ?? 'UTC';
+  const result = (desired: DeliveryIntent['desired'], status: DeliveryIntent['status'],
+    digest = '', issues: string[] = [], approvalDigest: string | null = null): DeliveryIntent => ({
+    desired, status, timeZone, digest: digest || hashTrainingScheduleRequestPayload({ desired, status, timeZone,
+      ...(context.pastCleanup ? { pastCleanupMutationId: context.pastCleanup.mutationId } : {}) }), issues, approvalDigest,
+  });
+  const today = trainingDeliveryLocalDate(nowMs, timeZone);
+  const retained = [ledger?.actual, ledger?.repair?.original].filter(artifact => !!artifact);
+  if (ledger?.completionLinkId) return result('preserve', 'completed');
+  if (retained.some(artifact => artifact.completed)) return result('preserve', 'completed');
+  const past = retained.some(artifact => artifact.localDate < (artifact.timeZone
+    ? trainingDeliveryLocalDate(nowMs, artifact.timeZone) : today)) || (workout && workout.localDate < today);
+  const validConsent = setting?.enabled && (setting.scope === 'plan'
+    || (setting.scopeGeneration === context.scopeGeneration && setting.associationPlanId === (workout?.planId ?? null)));
+  const stopped = override?.suppressed || !validConsent || !workout || workout.lifecycle !== 'planned';
+  const noLongerActive = !!workout?.planId && !context.planActive;
+  const cleanupPast = !!context.pastCleanup && (stopped || noLongerActive);
+  if (past && !cleanupPast) return result('preserve', 'past');
+  if (past && cleanupPast && transport && retained.some(artifact => !transport.canRemove(artifact, today, true))) {
+    return result('preserve', 'past', '', ledger?.provider === 'coros'
+      ? ['COROS permits removal only for unexecuted workouts dated today or later.']
+      : ['This past provider copy cannot be safely removed.']);
+  }
+  // Explicit disconnect ends consent, but must NOT withdraw provider copies.
+  if (setting && setting.connectionEpoch !== connection.epoch) return result('preserve', 'fresh_consent_required');
+  if (!setting && ledger && ledger.connectionEpoch !== connection.epoch) return result('preserve', 'fresh_consent_required');
+  if (connection.state !== 'connected') return result('preserve', connection.state, '', connection.issues ?? []);
+  if (ledger?.blockedConnectionGeneration === connection.generation) return result('preserve', ledger.status, '', ledger.issues);
+  if (ledger && ledger.destinationKey !== connection.destinationKey) return result('preserve', 'fresh_consent_required');
+  if (setting && setting.destinationKey !== connection.destinationKey) return result('preserve', 'fresh_consent_required');
+  if (stopped || noLongerActive) {
+    if (transport && retained.some(artifact => !transport.canRemove(artifact, today, cleanupPast))) return result('preserve', 'needs_attention');
+    return result('absent', workout?.planId && !context.planActive && !stopped ? 'paused_plan' : 'stopped');
+  }
+  if (!context.hasPro) return result('preserve', 'paused_pro');
+  if (!transport) return result('preserve', 'provider_unavailable');
+  const days = (Date.parse(`${workout!.localDate}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000;
+  if (days > transport.horizonDays) return result(transport.withdrawOutsideHorizon ? 'absent' : 'preserve', 'outside_horizon');
+  const assessment = transport.assess(workout!, connection.destinationKey, timeZone, context.strength,
+    context.suuntoWeightUnits, context.suuntoUnitSettings,
+    [ledger?.mappingApprovalProof?.suuntoApprovedUnitSettings, ledger?.mappingApprovalProof?.suuntoMappingUnitSettings]
+      .filter((units): units is NonNullable<typeof units> => !!units), context.suuntoSwimmingSettings,
+    [ledger?.mappingApprovalProof?.suuntoApprovedSwimmingSettings, ledger?.mappingApprovalProof?.suuntoMappingSwimmingSettings]
+      .filter((preferences): preferences is NonNullable<typeof preferences> => !!preferences), ledger?.suuntoGuideGeneration);
+  if (assessment.level === 'unsupported') return result('preserve', 'unsupported', assessment.digest, assessment.issues);
+  const approval = override?.approvedDigest ?? setting?.approvedDigest;
+  // A legacy payload digest can omit truncated authored text. Carry approval
+  // only with an independently retained full-prescription digest, so edits to
+  // the formerly hidden suffix cannot inherit presentation-upgrade consent.
+  const compatibleDigests = [...(assessment.compatibleApprovalDigest ? [assessment.compatibleApprovalDigest] : []),
+    ...(assessment.compatibleApprovalDigests ?? [])];
+  const canCarryApproval = !!approval && compatibleDigests.includes(approval);
+  const contentDigest = canCarryApproval ? deliveryContentDigest(workout, timeZone, context.strength) : null;
+  const compatibleApproval = canCarryApproval
+    && (((ledger?.acceptedDigest === approval || ledger?.acceptedDigest === assessment.digest)
+        && ledger?.acceptedContentDigest === contentDigest)
+      || ((ledger?.attempt?.digest === approval || ledger?.attempt?.digest === assessment.digest)
+        && ledger?.attempt?.contentDigest === contentDigest)
+      || (ledger?.mappingApprovalProof?.approvedDigest === approval
+        && (ledger.mappingApprovalProof.mappingDigest === assessment.digest
+          || compatibleDigests.includes(ledger.mappingApprovalProof.mappingDigest))
+        && ledger.mappingApprovalProof.contentDigest === contentDigest));
+  if (requiresDeliveryMappingApproval(assessment) && approval !== assessment.digest
+    && !compatibleApproval) {
+    return result('preserve', 'approval_required', assessment.digest, assessment.issues, assessment.digest);
+  }
+  const suuntoMappingUnits = ['suunto-guides-v13', 'suunto-guides-v14', 'suunto-guides-v15', 'suunto-guides-v16', 'suunto-guides-v17'].includes(assessment.mappingVersion) ? context.suuntoUnitSettings : undefined;
+  const suuntoMappingSwimmingSettings = ['suunto-guides-v14', 'suunto-guides-v15', 'suunto-guides-v16', 'suunto-guides-v17'].includes(assessment.mappingVersion)
+    && [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(workout!.structure.sport)
+    ? context.suuntoSwimmingSettings : undefined;
+  const recordSuuntoPresentation = !!(suuntoMappingUnits || suuntoMappingSwimmingSettings)
+    && requiresDeliveryMappingApproval(assessment) && approval === assessment.digest;
+  const approvedUnits = compatibleApproval && ledger?.mappingApprovalProof?.approvedDigest === approval
+    ? ledger.mappingApprovalProof.suuntoApprovedUnitSettings : recordSuuntoPresentation ? context.suuntoUnitSettings : undefined;
+  return { ...result('present', ledger?.acceptedDigest === assessment.digest ? 'delivered' : 'pending', assessment.digest, assessment.issues),
+    ...((compatibleApproval && contentDigest) || recordSuuntoPresentation ? { mappingApprovalProof: {
+      approvedDigest: approval!, mappingDigest: assessment.digest,
+      contentDigest: contentDigest ?? deliveryContentDigest(workout, timeZone, context.strength)!,
+      // Legacy approval has no original unit snapshot, but the proved v13
+      // mapping still needs one so a later metadata-only update can carry it.
+      ...(approvedUnits ? { suuntoApprovedUnitSettings: approvedUnits } : {}),
+      ...(suuntoMappingUnits ? { suuntoMappingUnitSettings: suuntoMappingUnits } : {}),
+      ...(suuntoMappingSwimmingSettings ? {
+        suuntoMappingSwimmingSettings,
+        suuntoApprovedSwimmingSettings: compatibleApproval && ledger?.mappingApprovalProof?.suuntoApprovedSwimmingSettings
+          ? ledger.mappingApprovalProof.suuntoApprovedSwimmingSettings : suuntoMappingSwimmingSettings,
+      } : {}),
+    } } : {}) };
+}

@@ -1,9 +1,11 @@
+import { getUserChartDataTypesToUse } from '../helpers/app-chart-data-types.helper';
 import { TestBed } from '@angular/core/testing';
 import { ResolveFn, Router, ActivatedRouteSnapshot, RouterStateSnapshot } from '@angular/router';
 import {
     DataAltitude,
     DataGrade,
     DataGradeSmooth,
+    DataHeartRate,
     DataPotentialStamina,
     DataStamina,
     User,
@@ -17,6 +19,8 @@ import { AppAuthService } from '../authentication/app.auth.service';
 import { eventResolver, EventResolverData } from './event.resolver';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { EVENT_DIVE_PROFILE_SOURCE_STREAM_TYPES } from '../helpers/event-dive-profile.helper';
+
+vi.mock('../helpers/app-chart-data-types.helper', importOriginal => importOriginal<typeof import('../helpers/app-chart-data-types.helper')>().then(actual => Object.assign({}, actual, { getUserChartDataTypesToUse: vi.fn() })));
 
 describe('eventResolver', () => {
     // Update ResolveFn generic type to include EventResolverData
@@ -32,6 +36,7 @@ describe('eventResolver', () => {
     const mockUser = new User('testUser');
 
     beforeEach(() => {
+        vi.mocked(getUserChartDataTypesToUse).mockImplementation(user => userServiceSpy.getUserChartDataTypesToUse(user));
         mockUser.settings = {
             chartSettings: { showAllData: false },
             unitSettings: {}
@@ -57,7 +62,7 @@ describe('eventResolver', () => {
         expect(executeResolver).toBeTruthy();
     });
 
-    it('should resolve with event when event is found', () => new Promise<void>(done => {
+    it('resolves an event with HR samples even when no charts are selected', () => new Promise<void>(done => {
         const mockEvent = { id: 'testEvent' } as any;
         eventServiceSpy.getEventActivitiesAndSomeStreams.mockReturnValue(of(mockEvent));
         userServiceSpy.getUserChartDataTypesToUse.mockReturnValue([]);
@@ -76,6 +81,7 @@ describe('eventResolver', () => {
             expect(result.event).toEqual(mockEvent);
             expect(result.user).toEqual(mockUser);
             expect(eventServiceSpy.getEventActivitiesAndSomeStreams).toHaveBeenCalled();
+            expect(eventServiceSpy.getEventActivitiesAndSomeStreams.mock.calls[0][2]).toContain(DataHeartRate.type);
             done();
         });
     }));

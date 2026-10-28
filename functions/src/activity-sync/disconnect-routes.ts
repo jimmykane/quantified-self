@@ -87,6 +87,7 @@ export async function handleServiceTokenRootDisconnected(
 export const disableActivitySyncRoutesOnGarminTokenRootDelete = onDocumentDeleted({
   document: `${GARMIN_API_TOKENS_COLLECTION_NAME}/{uid}`,
   region: REGION,
+  memory: '512MiB',
 }, async (event) => {
   await handleServiceTokenRootDisconnected(
     event.params.uid,
@@ -98,6 +99,7 @@ export const disableActivitySyncRoutesOnGarminTokenRootDelete = onDocumentDelete
 export const disableActivitySyncRoutesOnSuuntoTokenRootDelete = onDocumentDeleted({
   document: `${SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME}/{uid}`,
   region: REGION,
+  memory: '512MiB',
   retry: true,
 }, async (event) => {
   await handleServiceTokenRootDisconnected(
@@ -110,6 +112,7 @@ export const disableActivitySyncRoutesOnSuuntoTokenRootDelete = onDocumentDelete
 export const disableActivitySyncRoutesOnCOROSTokenRootDelete = onDocumentDeleted({
   document: `${COROSAPI_ACCESS_TOKENS_COLLECTION_NAME}/{uid}`,
   region: REGION,
+  memory: '512MiB',
   retry: true,
 }, async (event) => {
   await handleServiceTokenRootDisconnected(
@@ -122,6 +125,7 @@ export const disableActivitySyncRoutesOnCOROSTokenRootDelete = onDocumentDeleted
 export const disableActivitySyncRoutesOnWahooTokenRootDelete = onDocumentDeleted({
   document: `${WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME}/{uid}`,
   region: REGION,
+  memory: '512MiB',
 }, async (event) => {
   await handleServiceTokenRootDisconnected(
     event.params.uid,

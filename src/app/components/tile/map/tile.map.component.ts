@@ -1,5 +1,6 @@
+import type { EventRead } from '@shared/event-read';
 import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output } from '@angular/core';
-import { ActivityTypes, EventInterface } from '@sports-alliance/sports-lib';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
 import type { FirestoreRouteJSON } from '@shared/app-route.interface';
 import { TileAbstractDirective } from '../tile-abstract.directive';
 import { MapStyleName } from '../../../services/map/map-style.types';
@@ -26,16 +27,16 @@ export class TileMapComponent extends TileAbstractDirective {
   @Input() enableDesktopDrag = false;
   @Input() clusterMarkers!: boolean;
   @Input() showRouteEndpointMarkers = true;
-  @Input() events: EventInterface[] = [];
+  @Input() events: EventRead[] = [];
   @Input() routePreviews: FirestoreRouteJSON[] = [];
   @Input() eventFilters?: AppDashboardTileEventFiltersInterface | null;
   @Input() canNavigateTileEventsNewer = false;
-  @Output() editInDashboardManager = new EventEmitter<number>();
+  @Output() editTile = new EventEmitter<number>();
   @Output() eventFilterRangeChange = new EventEmitter<AppDashboardTileEventFilterRange>();
   @Output() eventFilterActivityTypesChange = new EventEmitter<ActivityTypes[]>();
   @Output() eventFilterNavigate = new EventEmitter<DashboardTileEventNavigationDirection>();
 
-  onEditInDashboardManager(order: number): void {
-    this.editInDashboardManager.emit(order);
+  onEditTile(order: number): void {
+    this.editTile.emit(order);
   }
 }

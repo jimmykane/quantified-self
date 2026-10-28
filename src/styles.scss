@@ -9,6 +9,8 @@
 @use 'styles/panels';
 @use 'styles/icons';
 @use 'styles/app-loader';
+@use 'styles/scrollbars';
+@use 'styles/dashboard-charts';
 
 /* Bundle app fonts locally to avoid runtime dependency on external font CDNs. */
 @import '@fontsource/inter/300.css';
@@ -574,99 +576,14 @@ mat-table {
   display: inline-block;
 }
 
-/* Reusable Custom Scrollbar */
-@mixin qs-scrollbar-skin {
-  /* Firefox */
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--mat-sys-on-surface) 36%, transparent) transparent;
-
-  &::-webkit-scrollbar {
-    height: 10px;
-    /* Horizontal scrollbar height */
-    width: 10px;
-    /* Vertical scrollbar width */
-  }
-
-  &::-webkit-scrollbar-track {
-    background: transparent;
-    border-radius: 999px;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 30%, transparent);
-    border-radius: 999px;
-    border: 2px solid transparent;
-    background-clip: content-box;
-  }
-
-  &::-webkit-scrollbar-thumb:hover {
-    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 46%, transparent);
-  }
-
-  &::-webkit-scrollbar-thumb:active {
-    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 56%, transparent);
-  }
-
-  &::-webkit-scrollbar-track-piece {
-    border-radius: 999px;
-  }
-
-  &::-webkit-scrollbar-corner {
-    background: transparent;
-    border-radius: 999px;
-  }
-}
-
-.qs-scrollbar {
-  @include qs-scrollbar-skin;
-}
-
-/* Also style shell-level scroll containers (their scrollbar is often the visible one) */
-.app-sidenav-container .mat-drawer-content,
-.app-sidenav-container .mat-drawer-inner-container {
-  @include qs-scrollbar-skin;
-}
-
-/* Dark theme support for global scrollbar */
-.dark-theme .qs-scrollbar {
-  scrollbar-color: color-mix(in srgb, var(--mat-sys-on-surface) 44%, transparent) transparent;
-
-  &::-webkit-scrollbar-thumb {
-    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 40%, transparent);
-  }
-
-  &::-webkit-scrollbar-thumb:hover {
-    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 56%, transparent);
-  }
-
-  &::-webkit-scrollbar-thumb:active {
-    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 66%, transparent);
-  }
-}
-
-.dark-theme .app-sidenav-container .mat-drawer-content,
-.dark-theme .app-sidenav-container .mat-drawer-inner-container {
-  scrollbar-color: color-mix(in srgb, var(--mat-sys-on-surface) 44%, transparent) transparent;
-
-  &::-webkit-scrollbar-thumb {
-    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 40%, transparent);
-  }
-
-  &::-webkit-scrollbar-thumb:hover {
-    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 56%, transparent);
-  }
-
-  &::-webkit-scrollbar-thumb:active {
-    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 66%, transparent);
-  }
-}
+/* Shared thin scrollbars apply to every surface, not just opted-in panels. */
+@include scrollbars.global(mat.get-theme-color($app-dark-theme, on-surface));
 
 /* Bottom Sheet Overrides
    Style the sheet once via the Material host class to avoid double-stacking when a panelClass is also present.
 */
 .mat-bottom-sheet-container {
   @extend .qs-glass-card-panel;
-  @extend .qs-scrollbar;
   --qs-glass-panel-blur: 16px;
   --mat-bottom-sheet-container-background-color: var(--qs-overlay-surface);
   --mat-bottom-sheet-container-shape: 20px;
@@ -674,9 +591,7 @@ mat-table {
   /* Keep only the top corners rounded; bottom edge stays flush with viewport */
   border-radius: 20px 20px 0 0 !important;
   border: 1px solid var(--qs-overlay-surface-border);
-  box-shadow:
-    0 -8px 32px rgba(0, 0, 0, 0.12),
-    0 -2px 8px rgba(0, 0, 0, 0.08) !important;
+  box-shadow: var(--qs-overlay-shadow) !important;
   padding: 16px !important;
   display: flex !important;
   flex-direction: column;
@@ -684,8 +599,26 @@ mat-table {
 }
 
 /* The dashboard month picker is dense; its header and calendar tile own their spacing. */
+.cdk-overlay-pane.qs-calendar-month-picker-sheet {
+  height: min(530px, 90dvh);
+}
+
 .cdk-overlay-pane.qs-calendar-month-picker-sheet .mat-bottom-sheet-container {
+  height: 100%;
+  max-height: 100%;
   padding: 0 !important;
+}
+
+/* Documented Material overlay exception: the chart picker config sets a 92dvh pane.
+   Material's default 80vh container cap would leave the fixed footer floating above
+   the viewport edge. Fill this picker pane while its content owns scrolling.
+   A sheet kept open across the desktop breakpoint must also fit the two-column picker. */
+.cdk-overlay-pane.qs-chart-picker-sheet .mat-bottom-sheet-container {
+  min-width: 0;
+  width: min(1180px, calc(100vw - 48px));
+  max-width: calc(100vw - 48px);
+  height: 100%;
+  max-height: 100%;
 }
 
 /* Normalize custom wrapper usage so inner content can own scrolling. */
@@ -694,20 +627,11 @@ mat-table {
   min-height: 0;
 }
 
-/* Ensure bottom sheet scroll areas inherit the QS scrollbar styling */
+/* Keep the sheet's content as its scroll owner; the global skin handles appearance. */
 .mat-bottom-sheet-container .bottom-sheet-content {
-  @extend .qs-scrollbar;
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-
-  &::-webkit-scrollbar-track {
-    background: var(--qs-overlay-surface);
-  }
-
-  &::-webkit-scrollbar-corner {
-    background: var(--qs-overlay-surface);
-  }
 }
 
 /* Keep mobile-sized sheets wide through Material's medium breakpoint. */
@@ -778,6 +702,13 @@ mat-table {
   backdrop-filter: none !important;
 }
 
+// Expansion's internal elements belong to Material, so its motion override is scoped here.
+@media (prefers-reduced-motion: reduce) {
+  app-calendar-period-summary .planning-panel :is(.mat-expansion-panel-content-wrapper, .mat-expansion-panel-content, .mat-expansion-indicator) {
+    transition: none;
+  }
+}
+
 .mat-mdc-dialog-surface {
   --mat-dialog-container-color: var(--qs-overlay-surface);
 
@@ -788,13 +719,13 @@ mat-table {
   -webkit-backdrop-filter: blur(var(--qs-glass-panel-blur));
   border: 1px solid var(--qs-glass-panel-border);
   border-radius: var(--qs-glass-panel-radius) !important;
-  box-shadow: var(--qs-glass-panel-shadow) !important;
+  box-shadow: var(--qs-overlay-shadow) !important;
 }
 
 .dark-theme .mat-mdc-dialog-surface,
 .cdk-overlay-container.dark-theme .mat-mdc-dialog-surface {
   border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2) !important;
+  box-shadow: var(--qs-overlay-shadow) !important;
 }
 
 /* ==========================================================================
@@ -825,16 +756,16 @@ td.mat-cell {
   font-size: 0.95rem;
 }
 
-/* Row Hover Effects */
-.mat-mdc-row:hover .mat-mdc-cell:not(.mat-column-sticky),
-tr.mat-row:hover td:not(.mat-table-sticky) {
+/* Style only this row's cells: a detail row can contain an independently scrolling nested table. */
+.mat-mdc-row:hover > .mat-mdc-cell:not(.mat-column-sticky),
+tr.mat-row:hover > td:not(.mat-table-sticky) {
   background: rgba(0, 0, 0, 0.04);
   background: var(--mat-sys-state-hover, rgba(0, 0, 0, 0.04));
   cursor: pointer;
 }
 
-.dark-theme .mat-mdc-row:hover .mat-mdc-cell:not(.mat-column-sticky),
-.dark-theme tr.mat-row:hover td:not(.mat-table-sticky) {
+.dark-theme .mat-mdc-row:hover > .mat-mdc-cell:not(.mat-column-sticky),
+.dark-theme tr.mat-row:hover > td:not(.mat-table-sticky) {
   background: rgba(255, 255, 255, 0.04);
 }
 
@@ -851,9 +782,9 @@ tr.mat-row:focus,
 /* Base menu panel style applied globally via MAT_MENU_DEFAULT_OPTIONS */
 .mat-mdc-menu-panel.qs-menu-panel {
   @extend .qs-glass-card-panel;
-  @include qs-scrollbar-skin;
   --mat-menu-container-color: var(--qs-overlay-surface);
   background: var(--qs-overlay-surface) !important;
+  box-shadow: var(--qs-overlay-shadow) !important;
   min-width: 180px !important;
   max-width: min(360px, calc(100vw - 24px)) !important;
   overflow: hidden !important;
@@ -870,14 +801,13 @@ tr.mat-row:focus,
   min-width: min(280px, calc(100vw - 24px)) !important;
 }
 
-/* Tile menu uses compact row/column selectors and does not need the wider config width. */
+/* Tile action menus use concise labels and do not need the wider config width. */
 .mat-mdc-menu-panel.qs-tile-actions-menu {
   min-width: 228px !important;
   max-width: min(320px, calc(100vw - 24px)) !important;
 }
 
 .mat-mdc-menu-panel.qs-menu-panel .mat-mdc-menu-content {
-  @extend .qs-scrollbar;
   overflow: auto;
   max-height: inherit;
   border-radius: inherit;
@@ -890,6 +820,7 @@ tr.mat-row:focus,
   @extend .qs-glass-card-panel;
   --mat-datepicker-calendar-container-background-color: var(--qs-overlay-surface);
   background: var(--qs-overlay-surface) !important;
+  box-shadow: var(--qs-overlay-shadow) !important;
   color: var(--mat-sys-on-surface);
 }
 
@@ -1152,38 +1083,21 @@ tr.mat-row:focus,
   @extend .qs-glass-card-panel;
   --mat-select-panel-background-color: var(--qs-overlay-surface);
   background: var(--qs-overlay-surface) !important;
+  box-shadow: var(--qs-overlay-shadow) !important;
   border-radius: 12px !important;
   padding: 4px 0 !important;
   max-width: min(320px, calc(100vw - 24px)) !important;
 }
 
-/* Apply QS scrollbar skin to all Material select panels globally. */
+/* Select/autocomplete surfaces share the global scrollbar skin automatically. */
 .mat-mdc-select-panel {
   --mat-select-panel-background-color: var(--qs-overlay-surface);
   background: var(--qs-overlay-surface) !important;
-  @include qs-scrollbar-skin;
 }
 
 .mat-mdc-autocomplete-panel {
   --mat-autocomplete-background-color: var(--qs-overlay-surface);
   background: var(--qs-overlay-surface) !important;
-  @include qs-scrollbar-skin;
-}
-
-.dark-theme .mat-mdc-select-panel {
-  scrollbar-color: color-mix(in srgb, var(--mat-sys-on-surface) 44%, transparent) transparent;
-
-  &::-webkit-scrollbar-thumb {
-    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 40%, transparent);
-  }
-
-  &::-webkit-scrollbar-thumb:hover {
-    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 56%, transparent);
-  }
-
-  &::-webkit-scrollbar-thumb:active {
-    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 66%, transparent);
-  }
 }
 
 .mat-mdc-select-panel.qs-config-submenu-compact {

@@ -1,0 +1,23 @@
+<h2 mat-dialog-title>Duplicate to…</h2>
+<mat-dialog-content class="duplicate-dialog-content">
+  <p class="duplicate-context"><strong>{{ data.title }}</strong><span>{{ data.scopeName }}</span></p>
+  <mat-form-field appearance="outline">
+    <mat-label>New workout date</mat-label>
+    <input matInput required [matDatepicker]="datePicker" [ngModel]="selected()"
+      (dateInput)="setDate($event.value)" (dateChange)="setDate($event.value)">
+    <mat-datepicker-toggle matSuffix [for]="datePicker"></mat-datepicker-toggle>
+    <mat-datepicker #datePicker (opened)="haptics.selection()"></mat-datepicker>
+    <mat-error>Choose a valid date.</mat-error>
+  </mat-form-field>
+  @if (extendsPlan()) {
+    <p class="duplicate-note">This date is outside the plan. You will be asked to extend its dates.</p>
+  }
+  <p class="duplicate-note">The copy starts as a new planned workout. Past completion and sync status are not copied.
+    @if (data.planRange) { If plan sync is on, an upcoming copy may be sent automatically. }
+    @else { Send a standalone copy separately if you want it synced. }
+  </p>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button appHapticTap mat-dialog-close type="button">Cancel</button>
+  <button mat-flat-button appHapticTap type="button" [disabled]="!localDate()" (click)="confirm()">Duplicate workout</button>
+</mat-dialog-actions>

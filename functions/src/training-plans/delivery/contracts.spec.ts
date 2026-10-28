@@ -1,0 +1,82 @@
+import { describe, expect, it } from 'vitest';
+import { normalizeDeliveryTimeZone, parseTrainingDeliveryCommandV1, trainingDeliveryLocalDate,
+  parseTrainingDeliveryStatusV1 } from '../../../../shared/training-provider-delivery';
+import { TrainingDeliveryTransportError } from './contracts';
+
+const command = { schemaVersion: 1, mutationId: 'test-1', scope: 'workout', scopeId: 'workout-1',
+  provider: 'garmin', action: 'send', expectedScheduleRevision: 1, expectedScopeRevision: 1,
+  expectedSettingsRevision: 0, timeZone: 'Europe/Helsinki' };
+
+describe('Training delivery contracts', () => {
+  it('keeps transport diagnostics allowlisted even with invalid or unexpected runtime fields', () => {
+    const details = { httpStatus: 200, failurePhase: 'decode', providerRejection: 'invalid_parameter',
+      providerField: 'guide_repeat', providerValidation: 'invalid_step_type', providerResponseShape: 'json',
+      wahooContractCheck: 'workout_completion_unknown',
+      body: 'private-payload', url: 'private-url' };
+    const error = new TrainingDeliveryTransportError('uncertain', 0, details as TrainingDeliveryTransportError['diagnostics']);
+    expect(error.diagnostics).toEqual({ httpStatus: 200, failurePhase: 'decode', providerRejection: 'invalid_parameter',
+      providerField: 'guide_repeat', providerValidation: 'invalid_step_type', providerResponseShape: 'json',
+      wahooContractCheck: 'workout_completion_unknown' });
+    expect(JSON.stringify(error)).not.toContain('private');
+    expect(new TrainingDeliveryTransportError('uncertain', 0,
+      { httpStatus: 999, failurePhase: 'private', providerRejection: 'private', providerField: 'private',
+        providerValidation: 'private', providerResponseShape: 'private', wahooContractCheck: 'private' } as unknown as TrainingDeliveryTransportError['diagnostics']).diagnostics).toEqual({});
+  });
+  it('round trips exact JSON without touching the workout recipe', () => {
+    expect(parseTrainingDeliveryCommandV1(JSON.parse(JSON.stringify(command)))).toEqual(command);
+  });
+  it('limits replacement to the Garmin workout, existing zone and a strict review digest', () => {
+    const { timeZone, ...base } = command;
+    expect(parseTrainingDeliveryCommandV1({ ...base, action: 'replace', approvalDigest: 'b'.repeat(64) }).action).toBe('replace');
+    for (const patch of [{ provider: 'wahoo' }, { scope: 'plan' }, { timeZone }, { remoteId: '123' }, { approvalDigest: 'bad' }]) {
+      expect(() => parseTrainingDeliveryCommandV1({ ...base, action: 'replace', ...patch })).toThrow();
+    }
+  });
+  it('limits fresh Guides to an explicit Suunto workout action with no remote IDs or new time zone', () => {
+    const { timeZone, ...base } = command;
+    const fresh = { ...base, provider: 'suunto', action: 'fresh-guide', approvalDigest: 'b'.repeat(64) };
+    expect(parseTrainingDeliveryCommandV1(fresh).action).toBe('fresh-guide');
+    for (const patch of [{ provider: 'garmin' }, { scope: 'plan' }, { timeZone }, { guideId: 'old' }, { suuntoGuideGeneration: 1 }]) {
+      expect(() => parseTrainingDeliveryCommandV1({ ...fresh, ...patch })).toThrow();
+    }
+  });
+  it.each(['retained_ownership_unknown', 'account_not_confirmed', 'plan_absence_not_confirmed'] as const)(
+    'keeps %s as a fixed private diagnostic, not arbitrary provider evidence', wahooContractCheck => {
+      const error = new TrainingDeliveryTransportError('uncertain', 0, {
+        failurePhase: 'contract', wahooContractCheck,
+        account: 'synthetic-private-account', response: 'synthetic-private-response',
+      } as TrainingDeliveryTransportError['diagnostics']);
+      expect(error.diagnostics).toEqual({ failurePhase: 'contract', wahooContractCheck });
+      expect(JSON.stringify(error)).not.toContain('synthetic-private');
+    });
+  it('accepts a preview-bound digest on Send but not on unrelated delivery actions', () => {
+    const approvalDigest = 'a'.repeat(64);
+    expect(parseTrainingDeliveryCommandV1({ ...command, approvalDigest }).approvalDigest).toBe(approvalDigest);
+    expect(() => parseTrainingDeliveryCommandV1({ ...command, action: 'approve', approvalDigest })).not.toThrow();
+    expect(() => parseTrainingDeliveryCommandV1({ ...command, action: 'stop', approvalDigest })).toThrow();
+    expect(() => parseTrainingDeliveryCommandV1({ ...command, approvalDigest: 'invalid' })).toThrow();
+  });
+  it.each([{ uid: 'other' }, { remoteId: 'secret' }, { schemaVersion: 2 }, { provider: 'fake' },
+    { scopeId: '../other' }, { expectedSettingsRevision: NaN }, { expectedScopeRevision: -1 },
+    { action: 'approve' }, { timeZone: 'invalid-zone' }, { scope: 'plan' }, { token: 'secret' }])('rejects %j', patch => {
+    expect(() => parseTrainingDeliveryCommandV1({ ...command, ...patch })).toThrow();
+  });
+  it('uses the saved zone across year and DST boundaries', () => {
+    expect(trainingDeliveryLocalDate(Date.parse('2026-12-31T23:30:00Z'), 'Europe/Helsinki')).toBe('2027-01-01');
+    expect(trainingDeliveryLocalDate(Date.parse('2026-12-31T23:30:00Z'), 'America/Los_Angeles')).toBe('2026-12-31');
+    expect(trainingDeliveryLocalDate(Date.parse('2026-03-29T01:30:00Z'), 'Europe/Helsinki')).toBe('2026-03-29');
+    expect(normalizeDeliveryTimeZone('UTC')).toBe('UTC');
+  });
+  it('rejects credential and internal fields in browser projections', () => {
+    const status = { schemaVersion: 1, id: 'id', workoutId: 'w', planId: null, provider: 'garmin', status: 'pending',
+      differsFromQS: false, hasRemoteCopy: false, timeZone: 'UTC', approvalDigest: null, issues: [], updatedAtMs: 1,
+      lastAttemptAtMs: null, lastAcceptedAtMs: null, retryCount: 0, nextRetryAtMs: null };
+    expect(parseTrainingDeliveryStatusV1(status)).toEqual(status);
+    expect(() => parseTrainingDeliveryStatusV1({ ...status, actual: { token: 'secret' } })).toThrow();
+    expect(() => parseTrainingDeliveryStatusV1({ ...status, wahooContractCheck: 'workout_completion_unknown' })).toThrow();
+    expect(() => parseTrainingDeliveryStatusV1({ ...status, removalOutcome: 'already_absent' })).toThrow();
+    expect(() => parseTrainingDeliveryStatusV1({ ...status, progress: { removalOutcome: 'already_absent' } })).toThrow();
+    expect(() => parseTrainingDeliveryStatusV1({ ...status, nextRetryAtMs: Infinity })).toThrow();
+    expect(() => normalizeDeliveryTimeZone('+03:00')).toThrow();
+  });
+});

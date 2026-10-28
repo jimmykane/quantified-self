@@ -13,9 +13,20 @@ import type {
   Query,
   QuerySnapshot as FirebaseQuerySnapshot
 } from 'firebase/firestore';
-import { onSnapshot as firebaseOnSnapshot } from 'firebase/firestore';
+import {
+  getCountFromServer as firebaseGetCountFromServer,
+  getDoc as firebaseGetDoc,
+  getDocFromServer as firebaseGetDocFromServer,
+  getDocs as firebaseGetDocs,
+  getDocsFromCache as firebaseGetDocsFromCache,
+  getDocsFromServer as firebaseGetDocsFromServer,
+  onSnapshot as firebaseOnSnapshot,
+} from 'firebase/firestore';
 import { Observable } from 'rxjs';
 import { FirebaseApp } from './app';
+import { installFirestoreHttpResponseGuard } from './firestore-http-response-guard';
+
+installFirestoreHttpResponseGuard();
 
 export {
   Timestamp,
@@ -29,11 +40,6 @@ export {
   documentId,
   endBefore,
   FieldPath,
-  getCountFromServer,
-  getDoc,
-  getDocs,
-  getDocsFromCache,
-  getDocsFromServer,
   initializeFirestore,
   limit,
   orderBy,
@@ -41,6 +47,7 @@ export {
   persistentMultipleTabManager,
   query,
   runTransaction,
+  serverTimestamp,
   setDoc,
   startAfter,
   terminate,
@@ -77,8 +84,9 @@ export function provideFirestore(factory: () => FirebaseFirestore): EnvironmentP
       provide: Firestore,
       // `deps` forces FirebaseApp initialization before resolving Firestore.
       useFactory: (_firebaseApp: unknown) => {
-        const firestore = factory();
-        rememberFirestoreZone(firestore, inject(NgZone, { optional: true }));
+        const zone = inject(NgZone, { optional: true });
+        const firestore = runOutsideAngular(zone, factory);
+        rememberFirestoreZone(firestore, zone);
         return firestore;
       },
       deps: [FirebaseApp]
@@ -97,6 +105,38 @@ function tryInjectNgZone(): NgZone | null {
 function resolveNgZoneForSource(source: Query<unknown> | DocumentReference<unknown>): NgZone | null {
   return tryInjectNgZone() ?? firestoreZoneRegistry.get(source.firestore) ?? null;
 }
+
+function runOutsideAngular<T>(zone: NgZone | null, callback: () => T): T {
+  return zone ? zone.runOutsideAngular(callback) : callback();
+}
+
+function listenOutsideAngular(zone: NgZone | null, register: () => () => void): () => void {
+  // Firebase has no Angular scheduling API. Keep SDK transport, IndexedDB and teardown
+  // tasks outside Angular; only application snapshot/error callbacks re-enter below.
+  const unsubscribe = runOutsideAngular(zone, register);
+  return () => runOutsideAngular(zone, unsubscribe);
+}
+
+// One-shot reads also start SDK/cache work. Preserve the SDK's generic signatures and
+// promises; callers' await/then continuations retain their own Angular zone context.
+export const getDoc: typeof firebaseGetDoc = reference => (
+  runOutsideAngular(resolveNgZoneForSource(reference), () => firebaseGetDoc(reference))
+);
+export const getDocFromServer: typeof firebaseGetDocFromServer = reference => (
+  runOutsideAngular(resolveNgZoneForSource(reference), () => firebaseGetDocFromServer(reference))
+);
+export const getDocs: typeof firebaseGetDocs = query => (
+  runOutsideAngular(resolveNgZoneForSource(query), () => firebaseGetDocs(query))
+);
+export const getDocsFromCache: typeof firebaseGetDocsFromCache = query => (
+  runOutsideAngular(resolveNgZoneForSource(query), () => firebaseGetDocsFromCache(query))
+);
+export const getDocsFromServer: typeof firebaseGetDocsFromServer = query => (
+  runOutsideAngular(resolveNgZoneForSource(query), () => firebaseGetDocsFromServer(query))
+);
+export const getCountFromServer: typeof firebaseGetCountFromServer = query => (
+  runOutsideAngular(resolveNgZoneForSource(query), () => firebaseGetCountFromServer(query))
+);
 
 function runInAngularZone(zone: NgZone | null, callback: () => void): void {
   if (!zone) {
@@ -165,7 +205,9 @@ export const onSnapshot: typeof firebaseOnSnapshot = ((source: unknown, ...rest:
     wrappedArgs[completeCallbackIndex] = wrapSnapshotCallback(zone, wrappedArgs[completeCallbackIndex] as (...args: unknown[]) => void);
   }
 
-  return (firebaseOnSnapshot as (...args: unknown[]) => ReturnType<typeof firebaseOnSnapshot>)(source, ...wrappedArgs);
+  return listenOutsideAngular(zone, () => (
+    (firebaseOnSnapshot as (...args: unknown[]) => ReturnType<typeof firebaseOnSnapshot>)(source, ...wrappedArgs)
+  ));
 }) as typeof firebaseOnSnapshot;
 
 function withOptionalID<T>(payload: T, id: string, options?: FirestoreDataOptions): T {
@@ -197,11 +239,9 @@ export function collectionData<T = DocumentData>(
       runInAngularZone(zone, () => subscriber.next(values));
     };
     const error = (snapshotError: Error) => runInAngularZone(zone, () => subscriber.error(snapshotError));
-    const unsubscribe = options?.waitForServer
+    return listenOutsideAngular(zone, () => options?.waitForServer
       ? firebaseOnSnapshot(query, { includeMetadataChanges: true }, next, error)
-      : firebaseOnSnapshot(query, next, error);
-
-    return unsubscribe;
+      : firebaseOnSnapshot(query, next, error));
   });
 }
 
@@ -222,15 +262,12 @@ export function docData<T = DocumentData>(
         return;
       }
 
-      runInAngularZone(zone, () => {
-        subscriber.next(withOptionalID(snapshot.data() as T, snapshot.id, options));
-      });
+      const value = withOptionalID(snapshot.data() as T, snapshot.id, options);
+      runInAngularZone(zone, () => subscriber.next(value));
     };
     const error = (snapshotError: Error) => runInAngularZone(zone, () => subscriber.error(snapshotError));
-    const unsubscribe = options?.waitForServer
+    return listenOutsideAngular(zone, () => options?.waitForServer
       ? firebaseOnSnapshot(reference, { includeMetadataChanges: true }, next, error)
-      : firebaseOnSnapshot(reference, next, error);
-
-    return unsubscribe;
+      : firebaseOnSnapshot(reference, next, error));
   });
 }

@@ -5,6 +5,7 @@ import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as requestPromise from '../request-helper';
 import { executeWithTokenRetry } from './retry-helper';
+import { isSuuntoSubscriptionKeyRejection } from './authorization-recovery';
 import { hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
 import { SERVICE_NAME, SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
 import { config } from '../config';
@@ -223,6 +224,17 @@ function toSuuntoRouteProviderOperationError(
     providerUserId,
     statusCode,
   };
+
+  if (isSuuntoSubscriptionKeyRejection(statusCode, (error as { error?: unknown } | null)?.error)) {
+    return new ProviderOperationError({
+      ...common,
+      disposition: 'permanent',
+      code: 'failed-precondition',
+      message: 'Suunto application subscription access is unavailable.',
+      providerCode: 'subscription_key_rejected',
+      dlqContext: 'SUUNTO_APPLICATION_ACCESS_REQUIRED',
+    });
+  }
 
   if (isTerminalServiceAuthError(error) || statusCode === 401) {
     return new ProviderOperationError({
@@ -469,6 +481,20 @@ function normalizeSuuntoRouteSummary(value: unknown): SuuntoRouteSummary | null 
   };
 }
 
+function assertSuuntoRouteReadAuthorized(payload: unknown): void {
+  // Route export can return a small JSON authorization error with HTTP 200.
+  // Recognize only explicit auth codes before the refresh boundary, not GPX
+  // parsing errors or ambiguous successful write responses.
+  if (typeof payload === 'string') {
+    if (payload.length > 8192 || !payload.trimStart().startsWith('{')) return;
+    try { payload = JSON.parse(payload); } catch { return; }
+  }
+  const code = (payload as { code?: unknown } | null)?.code;
+  if (code === 401 || code === 403) {
+    throw Object.assign(new Error('Suunto route read authorization was rejected.'), { statusCode: code });
+  }
+}
+
 async function executeSuuntoRouteReadOperation<T>(
   userID: string,
   context: SuuntoRouteUploadContext,
@@ -491,7 +517,9 @@ async function executeSuuntoRouteReadOperation<T>(
         latestTokenSnapshot,
         async (accessToken) => {
           await assertSuuntoRouteUploadUserActive(userID, `before_${operationName}`);
-          return operation(accessToken);
+          const result = await operation(accessToken);
+          assertSuuntoRouteReadAuthorized(result);
+          return result;
         },
         `${operationName} for user ${userID}`,
       );
@@ -526,6 +554,7 @@ async function executeSuuntoRouteReadOperation<T>(
 export async function listSuuntoRoutes(
   userID: string,
   context?: SuuntoRouteUploadContext,
+  options?: { timeout: number; maxResponseBytes: number; requireCompleteListing?: boolean },
 ): Promise<SuuntoRouteListResult> {
   const routeContext = context || await createSuuntoRouteUploadContext(userID);
   const routesByProviderKey = new Map<string, SuuntoRouteSummary>();
@@ -543,14 +572,17 @@ export async function listSuuntoRoutes(
         latestTokenSnapshot,
         async (accessToken) => {
           await assertSuuntoRouteUploadUserActive(userID, 'before_list_suunto_routes');
-          return requestPromise.get({
+          const result = await requestPromise.get({
             headers: {
               'Authorization': toSuuntoAuthorizationHeader(accessToken),
               'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
             },
             json: true,
             url: 'https://cloudapi.suunto.com/v2/route',
+            ...(options ? { timeout: options.timeout, maxResponseBytes: options.maxResponseBytes } : {}),
           });
+          assertSuuntoRouteReadAuthorized(result);
+          return result;
         },
         `list_suunto_routes for user ${userID}`,
       );
@@ -566,17 +598,23 @@ export async function listSuuntoRoutes(
         continue;
       }
 
+      const normalizedRoutes = result.map(route => normalizeSuuntoRouteSummary({
+        ...route,
+        providerUserId: tokenRef.providerUserId,
+        providerSourceKey: tokenRef.sourceKey,
+      }));
+      // A history checkpoint must not advance past silently discarded records.
+      // Validate the entire source before admitting any of its routes.
+      if (options?.requireCompleteListing && normalizedRoutes.some(route => route === null)) {
+        throw new Error('Suunto route listing contained invalid records.');
+      }
+
       successfulProviderUserIds.add(tokenRef.providerUserId);
       successfulProviderSourceKeys.add(tokenRef.sourceKey);
       failedProviderUserIds.delete(tokenRef.providerUserId);
       failedProviderSourceKeys.delete(tokenRef.sourceKey);
 
-      for (const route of result) {
-        const normalizedRoute = normalizeSuuntoRouteSummary({
-          ...route,
-          providerUserId: tokenRef.providerUserId,
-          providerSourceKey: tokenRef.sourceKey,
-        });
+      for (const normalizedRoute of normalizedRoutes) {
         if (!normalizedRoute) {
           continue;
         }

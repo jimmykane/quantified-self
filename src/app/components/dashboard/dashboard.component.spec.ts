@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DashboardComponent } from './dashboard.component';
+import { AppEventSummary } from '@shared/event-summary';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppEventService } from '../../services/app.event.service';
 import { AppUserService } from '../../services/app.user.service';
@@ -10,7 +11,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { of, Subject } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import {
     ActivityTypes,
     DateRanges,
@@ -20,7 +21,8 @@ import {
     SwimPaceUnits,
     ServiceNames,
     User,
-    VerticalSpeedUnits
+    VerticalSpeedUnits,
+    WeightUnits,
 } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { Analytics } from 'app/firebase/analytics';
@@ -35,6 +37,29 @@ import { SLEEP_PROVIDERS } from '@shared/sleep';
 import { MaterialModule } from '../../modules/material.module';
 import { APP_STORAGE } from '../../services/storage/app.storage.token';
 import { MemoryStorage } from '../../services/storage/memory.storage';
+import { AppHapticsService } from '../../services/app.haptics.service';
+import type { ConnectionHistoryStatus, ConnectionHistoryStatusProjection, HistoryResource } from '@shared/connection-history';
+
+function historyStatus(status: ConnectionHistoryStatus, resources: HistoryResource[] = ['sleep']): ConnectionHistoryStatusProjection {
+    return {
+        runId: 'saved-history-run', rangePreset: '30_days', startMs: 1, endMs: 2, updatedAtMs: 2,
+        active: ['queued', 'requesting', 'retrying'].includes(status), canRetry: status === 'failed',
+        steps: [{ id: resources[0], resources, status, count: 0 }],
+    };
+}
+
+// Static source contracts run outside component fixture hooks.
+describe('DashboardComponent', () => {
+
+    it('uses the shared overlay surface for the no-activity dashboard state', () => {
+        const styles = readFileSync(resolve(process.cwd(), 'src/app/components/dashboard/dashboard.component.scss'), 'utf8');
+
+        expect(styles).toContain('.dashboard-no-activity {');
+        expect(styles).toContain('--mdc-outlined-card-container-color: var(--qs-overlay-surface);');
+        expect(styles).toContain('--mdc-outlined-card-outline-color: var(--qs-overlay-surface-border);');
+        expect(styles).toContain('background: var(--qs-overlay-surface);');
+    });
+});
 
 describe('DashboardComponent', () => {
     let component: DashboardComponent;
@@ -49,6 +74,7 @@ describe('DashboardComponent', () => {
     let mockSnackBar: any;
     let mockLogger: any;
     let mockSleepService: any;
+    let mockHaptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
 
     const mockUser = new User('testUser') as AppUserInterface;
 
@@ -78,7 +104,7 @@ describe('DashboardComponent', () => {
         };
 
         mockEventService = {
-            getEventsBy: vi.fn().mockReturnValue(of([{ id: 'event1' }])),
+            getEventSummariesBy: vi.fn().mockReturnValue(of([{ id: 'event1' }])),
             getEventCount: vi.fn().mockResolvedValue(1),
             hasAnyActivity: vi.fn().mockResolvedValue(true)
         };
@@ -113,6 +139,7 @@ describe('DashboardComponent', () => {
         mockSleepService = {
             watchSyncState: vi.fn().mockReturnValue(of(null)),
         };
+        mockHaptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
 
         mockRouter = { navigate: vi.fn().mockResolvedValue(true) };
 
@@ -149,6 +176,7 @@ describe('DashboardComponent', () => {
                 { provide: AppWindowService, useValue: { windowRef: { location: { href: '' } } } },
                 { provide: AppSleepService, useValue: mockSleepService },
                 { provide: APP_STORAGE, useClass: MemoryStorage },
+                { provide: AppHapticsService, useValue: mockHaptics },
             ],
             schemas: [NO_ERRORS_SCHEMA]
         })
@@ -165,6 +193,16 @@ describe('DashboardComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('mounts shared import progress only on the signed-in owner dashboard', () => {
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-history-import-cards')).not.toBeNull();
+        expect(fixture.nativeElement.querySelector('app-history-import-cards').getAttribute('placement')).toBe('dashboard');
+        component.targetUser = new User('another-owner') as AppUserInterface;
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-history-import-cards')).toBeNull();
+    });
+
     it('should place event search filters inside the event table toolbar slot', () => {
         mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
 
@@ -175,6 +213,28 @@ describe('DashboardComponent', () => {
         ) as HTMLElement;
 
         expect(projectedSearch).toBeTruthy();
+        const emptyAction = fixture.nativeElement.querySelector('app-event-table [event-table-empty-action]');
+        expect(emptyAction.textContent).toContain('Change dates');
+    });
+
+    it.each([
+        { range: DateRanges.thisMonth, sports: [], message: 'No activities in this date range', hint: 'Try a wider date range.' },
+        { range: DateRanges.thisMonth, sports: [ActivityTypes.Cycling], message: 'No activities match your filters', hint: 'Change your dates or clear a filter.' },
+        { range: DateRanges.all, sports: [], message: 'No activities to show', hint: '' },
+        { range: DateRanges.all, sports: [ActivityTypes.Cycling], message: 'No activities match your filters', hint: 'Change your dates or clear a filter.' },
+    ])('uses contextual table copy for $range with sports $sports', async ({ range, sports, message, hint }) => {
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        mockActivatedRoute.snapshot.data.dashboardData.events = [];
+        mockEventService.getEventSummariesBy.mockReturnValue(of([]));
+        mockUser.settings.dashboardSettings.eventTableFilters = {
+            dateRange: range, activityTypes: sports, searchTerm: null, startDate: null, endDate: null, includeMergedEvents: true,
+        };
+        fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+        const table = fixture.nativeElement.querySelector('app-event-table');
+        expect(table.emptyMessage).toBe(message); expect(table.emptyHint).toBe(hint);
+        expect(table.emptyHint).not.toContain('import');
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        expect(mockHaptics.selection).not.toHaveBeenCalled();
     });
 
     it('renders dashboard summaries eagerly before the event table to avoid layout shifts', () => {
@@ -196,7 +256,7 @@ describe('DashboardComponent', () => {
         fixture.detectChanges(); // Trigger ngOnInit
         await fixture.whenStable(); // Wait for async operations to complete
 
-        expect(mockEventService.getEventsBy).toHaveBeenCalled();
+        expect(mockEventService.getEventSummariesBy).toHaveBeenCalled();
         expect(component.events.length).toBe(1);
         expect(component.isLoading).toBe(false);
     });
@@ -284,6 +344,30 @@ describe('DashboardComponent', () => {
         expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(false);
     });
 
+    it('keeps a failed activity count unknown and permits a later profile refresh to count again', async () => {
+        mockUser.stripeRole = 'free';
+        const users = new BehaviorSubject<AppUserInterface | null>(mockUser);
+        mockAuthService.user$ = users.asObservable();
+        const error = Object.assign(new Error('Server responded with status 504'), { code: 'unknown' });
+        mockEventService.getEventCount.mockRejectedValueOnce(error).mockResolvedValue(0);
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(false);
+        expect(mockLogger.warn).toHaveBeenCalledWith(
+            '[DashboardComponent] Failed to read activity count for dashboard prompt',
+            { userID: mockUser.uid }, error,
+        );
+
+        users.next(mockUser);
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(mockEventService.getEventCount).toHaveBeenCalledTimes(2);
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(true);
+    });
+
     it('does not show first activity upload prompt when dismissed', async () => {
         mockUser.stripeRole = 'free';
         mockUser.settings.appSettings = {
@@ -313,12 +397,12 @@ describe('DashboardComponent', () => {
         expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'firstActivityUpload')).toBe(false);
     });
 
-    it('shows the no-activity dashboard state for owner dashboards without activities', async () => {
+    it.each(['free', 'pro'] as const)('shows first activity actions before unit setup for %s owner dashboards without activities', async (role) => {
         mockActivatedRoute.snapshot.data.dashboardData.events = [];
-        mockEventService.getEventsBy.mockReturnValue(of([]));
+        mockEventService.getEventSummariesBy.mockReturnValue(of([]));
         mockEventService.hasAnyActivity.mockResolvedValue(false);
-        mockUser.stripeRole = 'pro';
-        mockUser.settings.appSettings = {};
+        mockUser.stripeRole = role;
+        mockUser.settings.appSettings = { unitSetupCompleted: false };
         mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({
             [ServiceNames.GarminAPI]: false,
             [ServiceNames.SuuntoApp]: false,
@@ -334,12 +418,82 @@ describe('DashboardComponent', () => {
         expect(mockEventService.hasAnyActivity).toHaveBeenCalledWith(mockUser);
         expect(component.showNoActivityDashboardState).toBe(true);
         expect(text).toContain('No activities yet');
-        expect(text).toContain('Upload an activity file or connect Garmin, Suunto, COROS, or Wahoo.');
+        expect(text).toContain('Connect a service or upload an activity.');
+        const emptyState = fixture.nativeElement.querySelector('.dashboard-no-activity') as HTMLElement;
+        const actionPrompts = fixture.nativeElement.querySelector('app-dashboard-action-prompts') as HTMLElement;
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'unitSetup')).toBe(true);
+        expect(emptyState.compareDocumentPosition(actionPrompts) & Node.DOCUMENT_POSITION_FOLLOWING)
+            .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
         expect(template).toContain('[fullWidth]="true"');
         expect(template).toContain('uploadLabel="Upload activity"');
         expect(template).toContain('routerLink="/features/supported-activities"');
         expect(template).not.toContain('href="/features/supported-activities"');
         expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'connectActivityService')).toBe(false);
+    });
+
+    it.each([ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])(
+        'does not offer connection setup on an empty dashboard with %s connected', async (serviceName) => {
+            mockActivatedRoute.snapshot.data.dashboardData.events = [];
+            mockEventService.getEventSummariesBy.mockReturnValue(of([]));
+            mockEventService.hasAnyActivity.mockResolvedValue(false);
+            mockUser.stripeRole = 'pro';
+            mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({ [serviceName]: true }));
+
+            fixture.detectChanges();
+            await fixture.whenStable();
+            fixture.detectChanges();
+
+            const emptyState = fixture.nativeElement.querySelector('.dashboard-no-activity');
+            expect(emptyState.textContent).toContain('No activities yet');
+            expect(emptyState.textContent).not.toContain('Connect service');
+            expect(emptyState.textContent).not.toContain('Connect a service');
+            expect(emptyState.querySelector('app-upload-activities')).toBeTruthy();
+            expect(mockHaptics.selection).not.toHaveBeenCalled();
+        },
+    );
+
+    it.each(['free', 'dismissed'])('checks connections for empty dashboards even when setup prompts are %s', async (state) => {
+        mockActivatedRoute.snapshot.data.dashboardData.events = [];
+        mockEventService.getEventSummariesBy.mockReturnValue(of([]));
+        mockEventService.hasAnyActivity.mockResolvedValue(false);
+        mockUser.stripeRole = state === 'free' ? 'free' : 'pro';
+        mockUser.settings.appSettings = {
+            dashboardActionPrompts: {
+                connectActivityService: { state: 'dismissed' },
+                enableActivityAutoSync: { state: 'dismissed' },
+                backfillGarminSleep: { state: 'dismissed', source: 'garmin-sleep-backfill' },
+            },
+        };
+        mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({ [ServiceNames.SuuntoApp]: true }));
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(mockUserService.watchActivityServiceConnectionState).toHaveBeenCalledWith(mockUser);
+        expect(fixture.nativeElement.querySelector('.dashboard-no-activity').textContent).not.toContain('Connect service');
+    });
+
+    it('waits for connection state before offering setup and reacts to a connection', async () => {
+        mockActivatedRoute.snapshot.data.dashboardData.events = [];
+        mockEventService.getEventSummariesBy.mockReturnValue(of([]));
+        mockEventService.hasAnyActivity.mockResolvedValue(false);
+        mockUser.stripeRole = 'pro';
+        const connections$ = new Subject<Record<string, boolean>>();
+        mockUserService.watchActivityServiceConnectionState.mockReturnValue(connections$);
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.dashboard-no-activity').textContent).not.toContain('Connect service');
+
+        connections$.next({ [ServiceNames.SuuntoApp]: false });
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.dashboard-no-activity').textContent).toContain('Connect service');
+
+        connections$.next({ [ServiceNames.SuuntoApp]: true });
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.dashboard-no-activity').textContent).not.toContain('Connect service');
     });
 
     it('does not show the no-activity dashboard state on another user dashboard', async () => {
@@ -352,15 +506,6 @@ describe('DashboardComponent', () => {
 
         expect(mockEventService.hasAnyActivity).not.toHaveBeenCalled();
         expect(component.showNoActivityDashboardState).toBe(false);
-    });
-
-    it('uses the shared overlay surface for the no-activity dashboard state', () => {
-        const styles = readFileSync(resolve(process.cwd(), 'src/app/components/dashboard/dashboard.component.scss'), 'utf8');
-
-        expect(styles).toContain('.dashboard-no-activity {');
-        expect(styles).toContain('--mdc-outlined-card-container-color: var(--qs-overlay-surface);');
-        expect(styles).toContain('--mdc-outlined-card-outline-color: var(--qs-overlay-surface-border);');
-        expect(styles).toContain('background: var(--qs-overlay-surface);');
     });
 
     it('dismisses first activity upload prompt and persists action prompt state', async () => {
@@ -557,7 +702,9 @@ describe('DashboardComponent', () => {
         await fixture.whenStable();
 
         expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'enableActivityAutoSync')).toBe(false);
-        expect(mockUserService.watchActivityServiceConnectionState).not.toHaveBeenCalled();
+        // Owner connection reads support the empty state; Pro-only sync actions stay unavailable.
+        expect(mockUserService.watchActivityServiceConnectionState).toHaveBeenCalledWith(mockUser);
+        expect(mockUserService.updateActivitySyncRouteSettings).not.toHaveBeenCalled();
     });
 
     it('does not show activity auto-sync prompt without a Suunto connection', async () => {
@@ -719,6 +866,57 @@ describe('DashboardComponent', () => {
         expect(prompt?.primaryAction?.id).toBe('backfillGarminSleep');
     });
 
+    it.each<ConnectionHistoryStatus>(['queued', 'requesting', 'retrying', 'requested', 'processed', 'failed', 'skipped'])(
+        'does not offer another Garmin history import after returning to a saved %s run', async (status) => {
+            mockUser.stripeRole = 'pro';
+            mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({ [ServiceNames.GarminAPI]: true }));
+            mockUserService.getUserMetaForService.mockReturnValue(of({ connectionHistoryImport: historyStatus(status) }));
+            // Recreate the dashboard with persisted metadata and no legacy backfill marker.
+            fixture.destroy();
+            fixture = TestBed.createComponent(DashboardComponent);
+            component = fixture.componentInstance;
+            fixture.detectChanges();
+            await fixture.whenStable();
+
+            expect(mockUserService.getUserMetaForService).toHaveBeenCalledWith(mockUser, ServiceNames.GarminAPI);
+            expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'backfillGarminSleep')).toBe(false);
+            expect(mockUserService.backfillGarminHealthForCurrentUser).not.toHaveBeenCalled();
+        },
+    );
+
+    it('waits for saved history metadata and responds when a connection import is accepted', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({ [ServiceNames.GarminAPI]: true }));
+        const metadata$ = new Subject<{ connectionHistoryImport?: ConnectionHistoryStatusProjection }>();
+        mockUserService.getUserMetaForService.mockReturnValue(metadata$);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'backfillGarminSleep')).toBe(false);
+
+        metadata$.next({});
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'backfillGarminSleep')).toBe(true);
+        metadata$.next({ connectionHistoryImport: historyStatus('queued') });
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'backfillGarminSleep')).toBe(false);
+    });
+
+    it('does not offer a duplicate import when saved history metadata cannot be read', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({ [ServiceNames.GarminAPI]: true }));
+        mockUserService.getUserMetaForService.mockReturnValue(throwError(() => new Error('Unavailable')));
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'backfillGarminSleep')).toBe(false);
+    });
+
+    it('still offers Sleep and Health history when only activity history was imported', async () => {
+        mockUser.stripeRole = 'pro';
+        mockUserService.watchActivityServiceConnectionState.mockReturnValue(of({ [ServiceNames.GarminAPI]: true }));
+        mockUserService.getUserMetaForService.mockReturnValue(of({ connectionHistoryImport: historyStatus('processed', ['activities']) }));
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'backfillGarminSleep')).toBe(true);
+    });
+
     it('does not show Garmin sleep backfill prompt when required Garmin health permissions are missing', async () => {
         mockUser.stripeRole = 'pro';
         mockUser.settings.appSettings = {};
@@ -772,6 +970,7 @@ describe('DashboardComponent', () => {
         (component as any).garminSleepSyncStateLoaded = true;
         (component as any).garminSleepBackfillPermissionsLoaded = true;
         (component as any).hasGarminSleepBackfillPermissions = true;
+        (component as any).garminConnectionHistoryLoaded = true;
         (component as any).analyticsService.logEvent = vi.fn();
         (component as any).syncDashboardActionPromptState();
 
@@ -804,6 +1003,7 @@ describe('DashboardComponent', () => {
         (component as any).garminSleepSyncStateLoaded = true;
         (component as any).garminSleepBackfillPermissionsLoaded = true;
         (component as any).hasGarminSleepBackfillPermissions = true;
+        (component as any).garminConnectionHistoryLoaded = true;
         (component as any).syncDashboardActionPromptState();
 
         await component.dismissGarminSleepBackfillPrompt();
@@ -829,6 +1029,8 @@ describe('DashboardComponent', () => {
     it('applies the miles unit setup preset and completes setup', async () => {
         (mockUser.settings.appSettings as any).unitSetupCompleted = false;
         (mockUser.settings.appSettings as any).otherAppSetting = 'stale-local-value';
+        (mockUser.settings.unitSettings as any).weightUnits = WeightUnits.Pounds;
+        mockUser.settings.unitSettings.startOfTheWeek = 0;
         component.user = mockUser;
         component.selectedUnitSetupPreset = 'miles';
 
@@ -846,7 +1048,9 @@ describe('DashboardComponent', () => {
                         speedUnits: [SpeedUnits.MilesPerHour],
                         paceUnits: [PaceUnits.MinutesPerMile],
                         swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
-                        verticalSpeedUnits: [VerticalSpeedUnits.FeetPerSecond]
+                        verticalSpeedUnits: [VerticalSpeedUnits.FeetPerSecond],
+                        weightUnits: WeightUnits.Pounds,
+                        startOfTheWeek: 0,
                     })
                 }
             }
@@ -856,33 +1060,77 @@ describe('DashboardComponent', () => {
             'unitSettings'
         ]);
         expect(component.showUnitSetupPrompt).toBe(false);
+        expect(component.user).not.toBe(mockUser);
+        expect(component.user).toBeInstanceOf(User);
+        expect(component.user.settings.unitSettings.distanceUnits).toBe(DistanceUnits.Miles);
+        expect(mockHaptics.success).toHaveBeenCalledOnce();
     });
 
-    it('dismisses unit setup prompt without rewriting unit settings', async () => {
-        (mockUser.settings.appSettings as any).unitSetupCompleted = false;
-        (mockUser.settings.appSettings as any).otherAppSetting = 'stale-local-value';
-        mockUser.settings.unitSettings = {
-            distanceUnits: DistanceUnits.Kilometers,
-            speedUnits: [SpeedUnits.KilometersPerHour],
-            paceUnits: [PaceUnits.MinutesPerKilometer],
-            startOfTheWeek: 1
-        } as any;
+    it('locks unit actions immediately, prevents duplicate saves, and retries after failure', async () => {
+        mockUser.settings.appSettings.unitSetupCompleted = false;
         component.user = mockUser;
+        component.selectedUnitSetupPreset = 'miles';
+        let reject!: (error: Error) => void;
+        mockUserService.updateUserProperties.mockReturnValueOnce(new Promise((_resolve, rejectSave) => { reject = rejectSave; }));
+        const pending = component.applyUnitSetupPreset();
+        expect(component.isSavingUnitSetup).toBe(true);
+        expect(component.dashboardActionPrompts.find(prompt => prompt.id === 'unitSetup')?.busy).toBe(true);
+        component.onUnitSetupPresetChange('kilometers');
+        await component.applyUnitSetupPreset();
+        component.onDashboardActionPromptMenuAction({ promptId: 'unitSetup', action: { id: 'openUnitSettings', label: 'Advanced settings' } });
+        expect(mockUserService.updateUserProperties).toHaveBeenCalledOnce();
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
+        expect(component.selectedUnitSetupPreset).toBe('miles');
+        expect(mockHaptics.selection).not.toHaveBeenCalled();
+        expect(mockHaptics.success).not.toHaveBeenCalled();
+        reject(new Error('offline'));
+        await pending;
+        expect(component.dashboardActionPrompts.find(prompt => prompt.id === 'unitSetup')).toMatchObject({busy: false, error: 'Could not save unit preferences.'});
+        expect(component.user.settings.appSettings.unitSetupCompleted).toBe(false);
+        expect(mockHaptics.error).toHaveBeenCalledOnce();
+        await component.applyUnitSetupPreset();
+        expect(component.dashboardActionPrompts.some(prompt => prompt.id === 'unitSetup')).toBe(false);
+        expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(2);
+        expect(mockHaptics.success).toHaveBeenCalledOnce();
+    });
 
-        await component.dismissUnitSetupPrompt();
+    it('does not change setup on another user dashboard or when already complete', async () => {
+        mockUser.settings.appSettings.unitSetupCompleted = false;
+        component.user = mockUser;
+        component.targetUser = {uid: 'other-user'} as AppUserInterface;
+        await component.applyUnitSetupPreset();
+        component.targetUser = null;
+        mockUser.settings.appSettings.unitSetupCompleted = true;
+        await component.applyUnitSetupPreset();
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        expect(mockHaptics.success).not.toHaveBeenCalled();
+    });
 
-        expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(
-            mockUser,
-            {
-                settings: {
-                    appSettings: {
-                        unitSetupCompleted: true
-                    }
-                }
-            }
-        );
-        expect(mockUserService.updateUserProperties.mock.calls[0][1].settings.unitSettings).toBeUndefined();
-        expect(component.showUnitSetupPrompt).toBe(false);
+    it('does not apply a completed save to a different signed-in account', async () => {
+        mockUser.settings.appSettings.unitSetupCompleted = false;
+        component.user = mockUser;
+        let resolveSave!: () => void;
+        mockUserService.updateUserProperties.mockReturnValueOnce(new Promise<void>(resolve => { resolveSave = resolve; }));
+        const pending = component.applyUnitSetupPreset();
+        const nextUser = new User('next-user') as AppUserInterface;
+        nextUser.settings = {appSettings: {unitSetupCompleted: false}, unitSettings: {distanceUnits: DistanceUnits.Kilometers}} as any;
+        component.user = nextUser;
+        resolveSave();
+        await pending;
+        expect(component.user).toBe(nextUser);
+        expect(nextUser.settings.unitSettings.distanceUnits).toBe(DistanceUnits.Kilometers);
+        expect(nextUser.settings.appSettings.unitSetupCompleted).toBe(false);
+        expect(mockHaptics.success).not.toHaveBeenCalled();
+    });
+
+    it('keeps hydration and unchanged presets silent and confirms an accepted preset change', () => {
+        fixture.detectChanges();
+        expect(mockHaptics.selection).not.toHaveBeenCalled();
+        component.selectedUnitSetupPreset = 'kilometers';
+        component.onUnitSetupPresetChange('kilometers');
+        expect(mockHaptics.selection).not.toHaveBeenCalled();
+        component.onUnitSetupPresetChange('miles');
+        expect(mockHaptics.selection).toHaveBeenCalledOnce();
     });
 
     it('navigates to settings units from the unit prompt menu action', async () => {
@@ -974,7 +1222,7 @@ describe('DashboardComponent', () => {
         mockAuthService.user$ = authUserSubject.asObservable();
         mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
         mockActivatedRoute.snapshot.data.dashboardData.events = [];
-        mockEventService.getEventsBy.mockReturnValue(of([]));
+        mockEventService.getEventSummariesBy.mockReturnValue(of([]));
         mockEventService.hasAnyActivity.mockResolvedValue(false);
         mockUser.stripeRole = 'pro';
 
@@ -1102,8 +1350,8 @@ describe('DashboardComponent', () => {
 
         await component.reconnectSuuntoServicePrompt();
 
-        expect(mockUserService.getCurrentUserServiceTokenAndRedirectURI).toHaveBeenCalledWith(ServiceNames.SuuntoApp);
-        expect(windowService.windowRef.location.href).toBe('https://suunto.example/connect');
+        expect(mockUserService.getCurrentUserServiceTokenAndRedirectURI).not.toHaveBeenCalled();
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/services'], { queryParams: { serviceName: ServiceNames.SuuntoApp, reconnect: '1' } });
     });
 
     it('should attach initial live query when resolver already returned user data', async () => {
@@ -1113,7 +1361,7 @@ describe('DashboardComponent', () => {
         fixture.detectChanges();
         await fixture.whenStable();
 
-        expect(mockEventService.getEventsBy).toHaveBeenCalled();
+        expect(mockEventService.getEventSummariesBy).toHaveBeenCalled();
         expect(component.events.length).toBe(1);
     });
 
@@ -1123,7 +1371,7 @@ describe('DashboardComponent', () => {
         mockActivatedRoute.snapshot.data.dashboardData.eventsPrefetchSkipped = true;
 
         const eventsSubject = new Subject<any[]>();
-        mockEventService.getEventsBy.mockReturnValue(eventsSubject.asObservable());
+        mockEventService.getEventSummariesBy.mockReturnValue(eventsSubject.asObservable());
 
         fixture.detectChanges();
         await fixture.whenStable();
@@ -1146,7 +1394,7 @@ describe('DashboardComponent', () => {
         mockActivatedRoute.snapshot.data.dashboardData.events = resolvedEvents;
 
         const eventsSubject = new BehaviorSubject([{ id: 'event1' }] as any);
-        mockEventService.getEventsBy.mockReturnValue(eventsSubject.asObservable());
+        mockEventService.getEventSummariesBy.mockReturnValue(eventsSubject.asObservable());
 
         fixture.detectChanges();
         await fixture.whenStable();
@@ -1168,7 +1416,7 @@ describe('DashboardComponent', () => {
         mockActivatedRoute.snapshot.data.dashboardData.eventsSource = 'cache';
 
         const eventsSubject = new BehaviorSubject([{ id: 'event1' }] as any);
-        mockEventService.getEventsBy.mockReturnValue(eventsSubject.asObservable());
+        mockEventService.getEventSummariesBy.mockReturnValue(eventsSubject.asObservable());
 
         fixture.detectChanges();
         await fixture.whenStable();
@@ -1183,7 +1431,7 @@ describe('DashboardComponent', () => {
 
     it('should update events when service emits new data', async () => {
         const eventsSubject = new BehaviorSubject([{ id: 'event1' }]);
-        mockEventService.getEventsBy.mockReturnValue(eventsSubject.asObservable());
+        mockEventService.getEventSummariesBy.mockReturnValue(eventsSubject.asObservable());
 
         fixture.detectChanges();
         await fixture.whenStable();
@@ -1243,7 +1491,7 @@ describe('DashboardComponent', () => {
         fixture.detectChanges();
         await fixture.whenStable();
 
-        expect(mockEventService.getEventsBy).toHaveBeenCalledTimes(1);
+        expect(mockEventService.getEventSummariesBy).toHaveBeenCalledTimes(1);
 
         userSubject.next({
             ...initialUser,
@@ -1262,7 +1510,7 @@ describe('DashboardComponent', () => {
 
         await fixture.whenStable();
 
-        expect(mockEventService.getEventsBy).toHaveBeenCalledTimes(1);
+        expect(mockEventService.getEventSummariesBy).toHaveBeenCalledTimes(1);
     });
 
     it('should not have throttle delay on data loading', async () => {
@@ -1286,7 +1534,7 @@ describe('DashboardComponent', () => {
         event1.self = event1;
 
         const eventsSubject = new BehaviorSubject([event1]);
-        mockEventService.getEventsBy.mockReturnValue(eventsSubject.asObservable());
+        mockEventService.getEventSummariesBy.mockReturnValue(eventsSubject.asObservable());
 
         fixture.detectChanges();
         await fixture.whenStable();
@@ -1312,7 +1560,7 @@ describe('DashboardComponent', () => {
         const event1 = new MockEvent('e1', 'Original Name', date1) as any;
 
         const eventsSubject = new BehaviorSubject([event1]);
-        mockEventService.getEventsBy.mockReturnValue(eventsSubject.asObservable());
+        mockEventService.getEventSummariesBy.mockReturnValue(eventsSubject.asObservable());
 
         fixture.detectChanges();
         await fixture.whenStable();
@@ -1350,7 +1598,80 @@ describe('DashboardComponent', () => {
             getID: () => 'event-1', name: 'Run', startDate: new Date(1000), tags: ['Recovery'],
         } as any;
 
-        expect((component as any).areEventsEquivalentByIdentity([previous], [current])).toBe(false);
+        expect((component as any).buildEventsIdentityKey([previous])).not.toBe((component as any).buildEventsIdentityKey([current]));
+    });
+
+    it('applies metric-only source updates and in-place summary revisions while reusing unchanged emissions', async () => {
+        const json = { id: 'event-1', name: 'Run', startDate: 1000, endDate: 2000,
+            stats: { Distance: 1000, 'Activity Types': ['Running'] } } as any;
+        const original = new AppEventSummary(json);
+        const resolved = [original];
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        mockActivatedRoute.snapshot.data.dashboardData.events = resolved;
+        const live = new BehaviorSubject([original]);
+        mockEventService.getEventSummariesBy.mockReturnValue(live);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(component.events).toBe(resolved);
+
+        const changed = new AppEventSummary({ ...json, stats: { ...json.stats, Distance: 2000 } });
+        const readRevision = vi.spyOn(changed, 'getReadRevision');
+        live.next([changed]);
+        expect(readRevision).toHaveBeenCalledTimes(1);
+        expect(component.events[0]).toBe(changed);
+        expect(component.events[0].getDistance()?.getValue()).toBe(2000);
+        const beforeEdit = component.events;
+
+        changed.getDistance()!.setValue(3000);
+        live.next([changed]);
+        expect(component.events).not.toBe(beforeEdit);
+        expect(component.events[0].getDistance()?.getValue()).toBe(3000);
+        const afterEdit = component.events;
+        live.next([changed]);
+        expect(component.events).toBe(afterEdit);
+        expect(readRevision).toHaveBeenCalledTimes(3);
+
+        changed.name = 'Updated in place';
+        live.next([changed]);
+        expect(component.events).not.toBe(afterEdit);
+        const afterRename = component.events;
+        changed.tags = ['Race'];
+        live.next([changed]);
+        expect(component.events).not.toBe(afterRename);
+        const afterTags = component.events;
+        live.next([changed]);
+        expect(component.events).toBe(afterTags);
+    });
+
+    it('captures resolver state before the same summary is edited by the first live emission', async () => {
+        const event = new AppEventSummary({ id: 'event-1', name: 'Run', startDate: 1000, endDate: 2000,
+            stats: { Distance: 1000, 'Activity Types': ['Running'] } } as any);
+        const resolved = [event];
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        mockActivatedRoute.snapshot.data.dashboardData.events = resolved;
+        const live = new Subject<AppEventSummary[]>();
+        mockEventService.getEventSummariesBy.mockReturnValue(live);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(component.events).toBe(resolved);
+
+        event.getDistance()!.setValue(2000);
+        live.next([event]);
+        expect(component.events).not.toBe(resolved);
+        expect(component.events[0].getDistance()?.getValue()).toBe(2000);
+    });
+
+    it('reconciles resolver data when the first live snapshot changes only metrics', async () => {
+        const json = { id: 'event-1', name: 'Run', startDate: 1000, endDate: 2000,
+            stats: { Distance: 1000, 'Activity Types': ['Running'] } } as any;
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        mockActivatedRoute.snapshot.data.dashboardData.events = [new AppEventSummary(json)];
+        const current = new AppEventSummary({ ...json, stats: { ...json.stats, Distance: 2000 } });
+        mockEventService.getEventSummariesBy.mockReturnValue(of([current]));
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(component.events[0]).toBe(current);
+        expect(component.events[0].getDistance()?.getValue()).toBe(2000);
     });
 
     it('should restore previous state when persisting dashboard search fails', async () => {
@@ -1456,7 +1777,7 @@ describe('DashboardComponent', () => {
         const eventsSubject = new BehaviorSubject([{ id: 'event1' }] as any);
         mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
         mockActivatedRoute.snapshot.data.dashboardData.events = [{ id: 'event1' }];
-        mockEventService.getEventsBy.mockReturnValue(eventsSubject.asObservable());
+        mockEventService.getEventSummariesBy.mockReturnValue(eventsSubject.asObservable());
 
         fixture.detectChanges();
         await fixture.whenStable();
@@ -1485,21 +1806,21 @@ describe('DashboardComponent', () => {
             includeMergedEvents: true
         };
 
-        const baselineCalls = mockEventService.getEventsBy.mock.calls.length;
+        const baselineCalls = mockEventService.getEventSummariesBy.mock.calls.length;
 
         await component.search(search);
         await fixture.whenStable();
 
         expect(component.isLoading).toBe(false);
-        expect(mockEventService.getEventsBy.mock.calls.length).toBeGreaterThan(baselineCalls);
+        expect(mockEventService.getEventSummariesBy.mock.calls.length).toBeGreaterThan(baselineCalls);
 
-        const callsAfterFirstSearch = mockEventService.getEventsBy.mock.calls.length;
+        const callsAfterFirstSearch = mockEventService.getEventSummariesBy.mock.calls.length;
 
         await component.search(search);
         await fixture.whenStable();
 
         expect(component.isLoading).toBe(false);
-        expect(mockEventService.getEventsBy.mock.calls.length).toBeGreaterThan(callsAfterFirstSearch);
+        expect(mockEventService.getEventSummariesBy.mock.calls.length).toBeGreaterThan(callsAfterFirstSearch);
     });
 
     it('should default bounded event table ranges to Monday when unit start of week is missing', () => {

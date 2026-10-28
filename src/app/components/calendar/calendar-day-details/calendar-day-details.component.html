@@ -1,75 +1,182 @@
 <section class="calendar-day-details" [attr.aria-label]="title">
-  <app-bottom-sheet-header [title]="title" icon="calendar_month">
-    <button mat-icon-button type="button" aria-label="Close day details" matTooltip="Close" (click)="dismiss()">
+  <app-bottom-sheet-header [title]="compactTitle" icon="calendar_month">
+    <button mat-icon-button appHapticTap type="button" aria-label="Close day details" matTooltip="Close" (click)="dismiss()">
       <mat-icon>close</mat-icon>
     </button>
   </app-bottom-sheet-header>
 
   <div class="bottom-sheet-content calendar-day-details-content">
-    <div class="calendar-day-total" aria-label="Day total">
-      <span><span class="calendar-day-number">{{ data.day.eventCount }}</span> {{ data.day.eventCount === 1 ? 'activity' : 'activities' }}</span>
-      <strong>{{ data.day.durationLabel }}</strong>
+    @if (canOpenFullDay()) {
+      <a mat-button appHapticTap class="calendar-day-details-full-day" [routerLink]="['/calendar/day', data.day.dateKey]"
+        [queryParams]="fullDayQueryParams"
+        (click)="prepareFullDayNavigation()">
+        Full day <mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon>
+      </a>
+    }
+    <app-calendar-day-context [data]="data" [compact]="true" [privateHealthEnabled]="data.privateHealthEnabled !== false"></app-calendar-day-context>
+    @if (noteRows().length) {
+    <section class="calendar-day-details-group" aria-labelledby="calendar-day-notes-title">
+      <h3 id="calendar-day-notes-title">Timeline notes</h3>
+      <mat-action-list>
+        @for (row of noteRows(); track row.note.id) {
+        <button mat-list-item appHapticTap class="calendar-day-entry-item" type="button" (click)="selectNote(row.note.id)">
+          <span class="calendar-day-entry">
+            <mat-icon class="calendar-day-entry-icon" [style.color]="row.color" aria-hidden="true">{{ row.icon }}</mat-icon>
+            <span class="calendar-day-entry-copy">
+              <span class="calendar-day-entry-title">{{ row.note.title }}</span>
+              <span class="calendar-day-entry-supporting">{{ row.category }}</span>
+              <span class="calendar-day-entry-supporting">{{ row.dates }}</span>
+            </span>
+          </span>
+        </button>
+        }
+      </mat-action-list>
+    </section>
+    }
+
+    @if (hasTrainingPlanningUIAccess()) {
+    <section class="calendar-day-planned calendar-day-details-group" aria-labelledby="calendar-day-planned-title">
+      <div class="calendar-day-section-heading">
+        <h3 id="calendar-day-planned-title">Planned workouts</h3>
+        <button mat-button appHapticTap type="button" class="calendar-day-plan-add"
+          [matMenuTriggerFor]="addDayWorkoutMenu" aria-label="Add workout for selected day">
+          <mat-icon aria-hidden="true">add</mat-icon>Add workout<mat-icon iconPositionEnd aria-hidden="true">arrow_drop_down</mat-icon>
+        </button>
+        <mat-menu #addDayWorkoutMenu="matMenu" class="qs-menu-panel">
+          <a mat-menu-item appHapticTap [routerLink]="['/training/plans/new']"
+            [queryParams]="{ date: data.day.dateKey }" (click)="prepareWorkoutNavigation()">Plan workout</a>
+          <a mat-menu-item appHapticTap [routerLink]="['/training/plans/standalone/new']"
+            [queryParams]="{ date: data.day.dateKey }" (click)="prepareWorkoutNavigation()">Standalone workout</a>
+          <a mat-menu-item appHapticTap [routerLink]="['/training/plans/library']"
+            [queryParams]="{ date: data.day.dateKey }" (click)="prepareWorkoutNavigation()">Add from library</a>
+        </mat-menu>
+      </div>
+      @if (plannedWorkoutsStatus() === 'loading') {
+      <p class="calendar-day-empty" role="status">Loading planned workouts…</p>
+      } @else if (plannedWorkoutsStatus() === 'error') {
+      <p class="calendar-day-empty" role="status">Planned workouts could not be loaded.</p>
+      } @else if (plannedWorkoutRows().length) {
+      <mat-nav-list>
+        @for (planned of plannedWorkoutRows(); track planned.id) {
+          <a mat-list-item appHapticTap class="calendar-day-entry-item calendar-day-planned-item" [routerLink]="['/training/plans/workout', planned.id]"
+            (click)="prepareWorkoutNavigation()">
+            <div class="calendar-day-entry">
+              <app-activity-type-icon class="calendar-day-entry-icon" [activityType]="planned.sport" size="20px"
+                aria-hidden="true"></app-activity-type-icon>
+              <div class="calendar-day-entry-copy">
+                <span class="calendar-day-entry-title">{{ planned.title }}</span>
+                <span class="calendar-day-entry-supporting">{{ planned.scopeLabel }} · {{ planned.lifecycleLabel }}</span>
+              </div>
+              <mat-icon class="calendar-day-item-meta" aria-hidden="true">chevron_right</mat-icon>
+            </div>
+          </a>
+        }
+      </mat-nav-list>
+      } @else {
+      <p class="calendar-day-empty">No planned workouts for this day.</p>
+      }
+    </section>
+
+    }
+
+    @if (activityState().status === 'loading') {
+    <p class="calendar-day-empty" role="status">Loading activities…</p>
+    } @else if (activityState().status === 'error') {
+    <p class="calendar-day-empty" role="status">Activities could not be loaded. Close this sheet and retry the calendar.</p>
+    } @else if (eventRows().length) {
+    <div class="calendar-day-total" aria-label="Completed activity total">
+      <span><span class="calendar-day-number">{{ day().eventCount }}</span> completed {{ day().eventCount === 1 ? 'activity' : 'activities' }}</span>
+      <strong>{{ day().durationLabel }}</strong>
     </div>
 
-    <section aria-labelledby="calendar-day-family-title">
-      <h3 id="calendar-day-family-title">Activities</h3>
-      <app-activity-calendar-volume-list [rows]="familyVolumeRows" [emphasizeNumericText]="true"
+    @if (trainingImpactState().status !== 'private') {
+    <app-training-impact [impact]="dayTrainingImpact()" variant="compact" title="Day training impact"></app-training-impact>
+    @if (dayTrainingImpact().availability === 'ready' && dayTrainingImpact().message) {
+    <p class="calendar-day-empty" role="status">{{ dayTrainingImpact().message }}</p>
+    }
+    }
+
+    @if (familyVolumeRows().length) {
+    <section class="calendar-day-details-group" aria-labelledby="calendar-day-family-title">
+      <h3 id="calendar-day-family-title">Completed activities</h3>
+      <app-activity-calendar-volume-list [rows]="familyVolumeRows()" [emphasizeNumericText]="true"
         (rowSelected)="prepareEventNavigation($event.route)"></app-activity-calendar-volume-list>
     </section>
 
-    <mat-divider></mat-divider>
+    }
 
-    <section aria-labelledby="calendar-day-activities-title">
-      <h3 id="calendar-day-activities-title">Activity details</h3>
+    <section class="calendar-day-details-group" aria-labelledby="calendar-day-activities-title">
+      <h3 id="calendar-day-activities-title">Completed activity details</h3>
       <mat-nav-list>
-        @for (event of eventRows; track event.id) {
+        @for (event of eventRows(); track event.id) {
           @if (event.route) {
-          <a mat-list-item class="calendar-day-event-item"
-            [class.calendar-day-event-item-with-metrics]="event.metricStats.length > 0" [routerLink]="event.route"
+          <a mat-list-item appHapticTap class="calendar-day-entry-item calendar-day-event-item" [routerLink]="event.route"
             (click)="prepareEventNavigation(event.route)">
-            <app-activity-type-icon matListItemIcon class="calendar-day-event-icon" [activityType]="event.activityType" size="24px"
-              aria-hidden="true"></app-activity-type-icon>
-            <span matListItemTitle>{{ event.label }}</span>
-            <div matListItemLine class="calendar-day-event-supporting">
-              <span class="calendar-day-event-detail">
-                @for (part of event.detailParts; track $index) {
-                  @if (!$first) {
-                    <span> - </span>
-                  }
-                  <span [class.calendar-day-event-metric]="part.isNumeric">{{ part.text }}</span>
+            <div class="calendar-day-entry">
+              <app-activity-type-icon class="calendar-day-entry-icon" [activityType]="event.activityType" size="20px"
+                aria-hidden="true"></app-activity-type-icon>
+              <div class="calendar-day-entry-copy">
+                <span class="calendar-day-entry-title">{{ event.label }}</span>
+                @if (event.tags.length) {
+                  <app-calendar-activity-tags [tags]="event.tags"></app-calendar-activity-tags>
                 }
-              </span>
-              @if (event.metricStats.length) {
-              <app-activity-calendar-volume-stats class="calendar-day-event-metrics"
-                [stats]="event.metricStats"></app-activity-calendar-volume-stats>
-              }
+                <div class="calendar-day-event-supporting">
+                  <span class="calendar-day-event-detail">
+                    @for (part of event.detailParts; track $index) {
+                      @if (!$first) {
+                        <span> - </span>
+                      }
+                      <span [class.calendar-day-event-metric]="part.isNumeric">{{ part.text }}</span>
+                    }
+                  </span>
+                  @if (event.metricStats.length) {
+                  <app-activity-calendar-volume-stats class="calendar-day-event-metrics"
+                    [stats]="event.metricStats"></app-activity-calendar-volume-stats>
+                  }
+                  @if (trainingImpactState().status !== 'private') {
+                  <app-training-impact class="calendar-day-event-impact" [impact]="event.trainingImpact"
+                    variant="compact"></app-training-impact>
+                  }
+                </div>
+              </div>
+              <mat-icon class="calendar-day-item-meta" aria-hidden="true">chevron_right</mat-icon>
             </div>
-            <mat-icon matListItemMeta aria-hidden="true">chevron_right</mat-icon>
           </a>
           } @else {
-          <div mat-list-item class="calendar-day-event-item"
-            [class.calendar-day-event-item-with-metrics]="event.metricStats.length > 0">
-            <app-activity-type-icon matListItemIcon class="calendar-day-event-icon" [activityType]="event.activityType" size="24px"
-              aria-hidden="true"></app-activity-type-icon>
-            <span matListItemTitle>{{ event.label }}</span>
-            <div matListItemLine class="calendar-day-event-supporting">
-              <span class="calendar-day-event-detail">
-                @for (part of event.detailParts; track $index) {
-                  @if (!$first) {
-                    <span> - </span>
-                  }
-                  <span [class.calendar-day-event-metric]="part.isNumeric">{{ part.text }}</span>
+          <div mat-list-item class="calendar-day-entry-item calendar-day-event-item">
+            <div class="calendar-day-entry">
+              <app-activity-type-icon class="calendar-day-entry-icon" [activityType]="event.activityType" size="20px"
+                aria-hidden="true"></app-activity-type-icon>
+              <div class="calendar-day-entry-copy">
+                <span class="calendar-day-entry-title">{{ event.label }}</span>
+                @if (event.tags.length) {
+                  <app-calendar-activity-tags [tags]="event.tags"></app-calendar-activity-tags>
                 }
-              </span>
-              @if (event.metricStats.length) {
-              <app-activity-calendar-volume-stats class="calendar-day-event-metrics"
-                [stats]="event.metricStats"></app-activity-calendar-volume-stats>
-              }
+                <div class="calendar-day-event-supporting">
+                  <span class="calendar-day-event-detail">
+                    @for (part of event.detailParts; track $index) {
+                      @if (!$first) {
+                        <span> - </span>
+                      }
+                      <span [class.calendar-day-event-metric]="part.isNumeric">{{ part.text }}</span>
+                    }
+                  </span>
+                  @if (event.metricStats.length) {
+                  <app-activity-calendar-volume-stats class="calendar-day-event-metrics"
+                    [stats]="event.metricStats"></app-activity-calendar-volume-stats>
+                  }
+                  @if (trainingImpactState().status !== 'private') {
+                  <app-training-impact class="calendar-day-event-impact" [impact]="event.trainingImpact"
+                    variant="compact"></app-training-impact>
+                  }
+                </div>
+              </div>
             </div>
           </div>
           }
         }
       </mat-nav-list>
     </section>
+    }
   </div>
 </section>

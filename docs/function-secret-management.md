@@ -2,19 +2,86 @@
 
 Quantified Self deploys backend credentials through Google Cloud Secret Manager and Firebase `defineSecret()` bindings. A Function receives only the secrets declared for that endpoint in `functions/src/secrets.ts`; an endpoint absent from the policy must receive none.
 
+The live Garmin and Suunto Training adapters reuse their existing OAuth client pairs through shared token refresh.
+Only `processTrainingDeliveryTask` binds those credentials; preview/mutation callables and dispatchers do not.
+Credentials never grant user consent or public provider readiness. The approved public Training rollout enables
+Garmin, Wahoo and Suunto; COROS remains disabled in the shared capability registry, with no provider UID allowlist.
+Pro, explicit plan/workout consent and per-request authority remain required. Future deployments or enablement changes
+still require separate approval; this documentation update changes no secret binding or runtime switch.
+
+`processConnectionHistoryTask` binds the existing Garmin, Suunto API, COROS and Wahoo client credentials because it coordinates their shared history operations. `onConnectionHistoryImportWritten`, `recoverConnectionHistoryImports`, and `retryConnectionHistoryImport` have no provider-secret bindings. Downstream workers retain their existing least-privilege bindings. Deploy this compatible backend before the connection-history checkbox frontend; see [the release checklist](connection-history-import.md#release-and-operations).
+
 ## Managed inventory
 
 | Area | Secret Manager names |
 | --- | --- |
 | COROS | `COROSAPI_CLIENT_ID`, `COROSAPI_CLIENT_SECRET` |
-| Garmin | `GARMINAPI_CLIENT_ID`, `GARMINAPI_CLIENT_SECRET` |
+| Garmin | `GARMINAPI_CLIENT_ID`, `GARMINAPI_CLIENT_SECRET`, `GARMINAPI_WEBHOOK_SECRET` |
 | Suunto | `SUUNTOAPP_CLIENT_ID`, `SUUNTOAPP_CLIENT_SECRET`, `SUUNTOAPP_SUBSCRIPTION_KEY`, `SUUNTOAPP_NOTIFICATION_SECRET` |
+| Suunto Training Guide application name | `SUUNTOAPP_GUIDE_OWNER` |
 | Wahoo | `WAHOOAPI_CLIENT_ID`, `WAHOOAPI_CLIENT_SECRET`, `WAHOOAPI_WEBHOOK_TOKEN`, `WAHOOAPI_ALLOWED_FILE_HOSTS` |
-| Stripe | `STRIPE_SECRET_KEY`, `STRIPE_ADMIN_BILLING_KEY` |
+| Stripe | `STRIPE_SECRET_KEY`, `STRIPE_ADMIN_BILLING_KEY`, `STRIPE_BILLING_KEY`, `STRIPE_BILLING_WEBHOOK_SECRET` |
 | Built-in Assistant | `GEMINI_API_KEY` |
 | Backend geocoding | `MAPBOX_ACCESS_TOKEN` |
+| Marketing unsubscribe | `MARKETING_UNSUBSCRIBE_SIGNING_KEY` |
+
+Training Guide delivery reuses `SUUNTOAPP_CLIENT_ID`, `SUUNTOAPP_CLIENT_SECRET`, the connected user's OAuth token,
+and `SUUNTOAPP_SUBSCRIPTION_KEY`. The [official Guides authentication instructions](https://apizone.suunto.com/how-to-use-suuntoplus-guides-api)
+refer to the normal Cloud API setup; they do not require a separate OAuth application or Guides-only subscription key.
+`processTrainingDeliveryTask` binds the existing Suunto API credential set. Reusing these credentials needs no new
+OAuth or subscription-key provisioning or reconnect; the owner-name setting is configured separately below.
+The existing subscription must grant Guides access; reuse does not establish that
+entitlement or prove a live request. Activity, route, Sleep and Health credential bindings remain unchanged.
+The earlier `SUUNTOAPP_GUIDES_SUBSCRIPTION_KEY` registration is removed and any leftover local value is ignored. If it
+was provisioned in Secret Manager, this source change does not delete it or alter a deployed worker. Deploy the updated
+worker only with separate approval; any cleanup of an unused cloud secret also needs separate explicit approval.
+Suunto's API gateway can return HTTP 401 for an invalid subscription key independently of user OAuth.
+The worker recognizes the [documented APIM key-error signature](https://learn.microsoft.com/en-us/troubleshoot/azure/api-mgmt/availability/unauthorized-errors-invoke-apis)
+and fails the delivery without invalidating the user's connection. Correct the application key through the approved
+secret workflow, then Retry; do not ask the user to reconnect to fix an application key. Error bodies are not logged.
+`SUUNTOAPP_GUIDE_OWNER` holds the **exact existing OAuth application name** from Suunto API Zone's profile → OAuth
+application settings → App name. It is public application metadata, but is managed through the same Secret Manager
+workflow as the other Suunto settings, not hardcoded. `config.suuntoapp.application_name` reads it lazily. Only
+`previewTrainingProviderDelivery`, `mutateTrainingProviderDelivery`, and `processTrainingDeliveryTask` bind this setting;
+preview/mutation do not gain access to OAuth credentials or subscription keys. Dispatch and lifecycle triggers do not
+read the owner. A missing or invalid value leaves Suunto unavailable without blocking Garmin.
+
+For local Functions emulation, add `SUUNTOAPP_GUIDE_OWNER=<exact application name>` to the ignored
+`functions/.secret.local` and restart the Functions emulator. The value-free `.secret.local.example` lists the key.
+For deployment, an authorized operator sets it interactively with
+`firebase functions:secrets:set SUUNTOAPP_GUIDE_OWNER --project <firebase-project-id>` and then redeploys those three
+Training endpoints together under separate deployment approval. No frontend release, OAuth reconnect or source-code
+change is needed to configure the name. This implementation does not set a local/cloud value, provision a secret,
+deploy, or change existing rollout/consent gates.
 
 Do not put these values in `functions/.env`, workflow YAML, repository documentation, or service-account files. Secret existence can be checked with `firebase functions:secrets:get NAME`; do not print or retrieve values during routine validation.
+
+For admin marketing campaigns, generate a random high-entropy signing key and set it through the approved Secret Manager workflow before deployment: `firebase functions:secrets:set MARKETING_UNSUBSCRIBE_SIGNING_KEY --project <firebase-project-id>`. Bindings are limited to the test-send callable, campaign start/resume dispatcher, scheduled dispatcher, and public unsubscribe endpoint. The value-free local example includes the key; do not check in a real value. The signed endpoint handles no-login opt-outs, so losing the key invalidates unsubscribe links in previously sent emails. Rotate only with a migration plan. Provisioning and deployment need separate approval.
+
+## Garmin callback credential and migration
+
+`GARMINAPI_WEBHOOK_SECRET` is a dedicated callback credential, separate from Garmin OAuth. It is bound only to
+`receiveGarminAPIHealthData`, `insertGarminAPIActivityFileToQueue`, `deauthorizeGarminAPIUsers`, and
+`receiveGarminAPIUserPermissions`. Workers keep their existing OAuth bindings and do not receive this credential.
+Store only the plain secret: 32 cryptographically random bytes encoded as exactly 64 lowercase hexadecimal
+characters, without JSON, quotes or whitespace. Missing or invalid values, including the former JSON format, fail
+closed with HTTP 503. If JSON was already provisioned, replace it through the approved secret-version workflow with
+the same underlying secret as a plain value before deploying this revision; changing its format needs no rotation.
+
+Deployment of [#800](https://github.com/jimmykane/quantified-self/pull/800) is the legacy URL cutover. Update and verify
+every enabled Garmin portal URL before deploying the four receivers. The initial rollout revision accepts both
+protected and exact bare URLs with this same plain secret so the portal can be changed after that initial deployment.
+It has no timed cutoff; #800 removes its compatibility fallback. Each cleanup receiver requires the exact
+`/<secret>/API` path and rejects bare URLs, unknown paths and incorrect secrets. There is no timestamp, cutoff parser
+or compatibility switch. Preparing or merging the PR does not change the currently deployed receivers.
+
+An authorized operator provisions the value interactively with
+`firebase functions:secrets:set GARMINAPI_WEBHOOK_SECRET --project <firebase-project-id>` and deploys the four
+receivers together. Changing an injected secret version requires redeployment; editing Secret Manager alone does
+not immediately change running functions. Follow the [Garmin deployment cutover](garmin-integration.md#production-configuration).
+Do not put credential values or complete protected URLs in commits, tickets, commands, or application logs.
+Platform request logs may retain paths, so restrict log access and treat those URLs as credentials. Secret
+provisioning, deployment, provider URL changes and eventual resource deletion each require their applicable approval.
 
 ## Source-control guardrails
 
@@ -36,11 +103,44 @@ Maintainer testing against a provider requires a separate, reviewed command path
 
 ### Stripe key separation
 
+Native billing uses `STRIPE_BILLING_KEY` only on its portal/compatibility portal and private worker; ingress binds only `STRIPE_BILLING_WEBHOOK_SECRET`. These are independent of the installed extension and gift credentials. See [Stripe billing](stripe-billing.md#credentials) for permissions, the two-value local test file, and cutover prerequisites.
+
 `STRIPE_SECRET_KEY` remains the general server key used by the existing custom Stripe Functions. `STRIPE_ADMIN_BILLING_KEY` is a separate restricted key used only by `previewAdminSubscriptionGift` and `grantAdminSubscriptionGift`. In Stripe Dashboard, create one environment-specific restricted key with subscription read/write access (`Subscriptions: Write`, which permits the retrieve and update calls) and leave every unrelated resource permission disabled. Do not reuse the Invertase extension key or the general server key for this admin path.
 
 Create distinct restricted keys for Stripe test and live mode, and put only the matching key in each Firebase project's `STRIPE_ADMIN_BILLING_KEY` secret. The preview and grant callables must be deployed together after the `subscription_time_gift` email template is available. No other Function may bind this secret; `functions/src/secrets.spec.ts` and `npm --prefix functions run secrets:check` enforce that isolation.
 
-Firebase Admin uses keyless Application Default Credentials in every environment. Auth, Firestore, and Storage emulator traffic does not require Google credentials, so local emulator startup must not depend on a `service-account.json` file. Scripts that intentionally access managed Google Cloud or Firebase resources use local user ADC (`gcloud auth application-default login`) or an approved least-privilege service-account impersonation flow. Such scripts must select their target project explicitly; `.secret.local` is only for application/provider secrets and is not an Admin SDK credential store.
+Deployed Functions use keyless Application Default Credentials. Auth, Firestore, and Storage emulator traffic does not require Google credentials, so fully local emulator startup does not depend on a `service-account.json` file. Scripts that intentionally access managed Google Cloud or Firebase resources use local user ADC (`gcloud auth application-default login`) or an approved least-privilege service-account impersonation flow. Such scripts must select their target project explicitly; `.secret.local` is only for application/provider secrets and is not an Admin SDK credential store.
+
+### Functions-only emulation with hosted Auth
+
+The default browser configuration keeps hosted Firebase Auth and sends callable requests to the Functions emulator. Admin impersonation and restoration therefore need signed custom tokens that hosted Auth accepts.
+
+When `FUNCTIONS_EMULATOR=true` and `FIREBASE_AUTH_EMULATOR_HOST` is unset, custom-token creation can sign locally using a service-account JSON file. The default Admin app always retains ADC and explicitly selects the emulator's `GCLOUD_PROJECT`; loading a local signing key never changes the identity used for user lookups, Firestore, Storage, or other backend operations.
+
+1. A service-account key at an explicit `GOOGLE_APPLICATION_CREDENTIALS` path takes precedence. An unavailable or malformed explicit file fails signing without silently switching keys. Impersonated and external-account ADC retain their normal SDK signer.
+2. Without that variable, or when it contains user ADC (`authorized_user`, including credentials injected by Firebase CLI), the signer checks the existing Git-ignored `quantified-self-io-firebase-adminsdk.json` one directory above the emulator's `functions/` working directory. User ADC remains on the default app.
+3. A local key's `project_id` must match the default Admin app's selected project. A mismatch fails token creation before activating the signing credential or changing the default app. The matching key initializes a separate, cached Admin app used only for token signing.
+4. Without a local key, token creation uses the default Admin SDK signer. Hosted custom-token signing then requires a separately configured signing identity; a user ADC login alone does not provide a local signing key.
+
+From the repository root, an existing root-level key needs only:
+
+```bash
+npm --prefix functions run build
+firebase emulators:start --only functions
+```
+
+For a key stored outside the checkout:
+
+```bash
+GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/development-service-account.json \
+  firebase emulators:start --only functions
+```
+
+Keep keys outside `functions/`, outside source control, and out of `.secret.local`. This mode accesses the hosted project, so select the intended development project and credentials. The optional key lookup happens only during custom-token creation and is skipped in deployed runtimes and whenever the Auth emulator is configured. Entering impersonation, restoring the original admin, and the existing provider custom-token helper reuse this signer; admin authorization and impersonation claims are unchanged. A wrong or malformed signing key cannot prevent unrelated Functions from starting.
+
+The signing app uses the modular `firebase-admin/app` initializer and `firebase-admin/auth` service accessor. Do not pass its credential to the namespaced `admin.initializeApp`: Firebase CLI's emulator wrapper serializes those options into debug logs, including private key material. The SDK regression tests reproduce that logging wrapper with synthetic credentials and assert that no private key reaches it.
+
+### Local script environment precedence
 
 Repository operational scripts load local values in this order without overriding an existing shell variable:
 

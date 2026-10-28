@@ -11,6 +11,7 @@ export interface DashboardEChartsStyleTokens {
   tooltipTextColor: string;
   subtleBorderColor: string;
   trendLineColor: string;
+  errorColor: string;
   isCompactLayout: boolean;
   axisFontSize: number;
   tooltipTypography: DashboardEChartsTooltipTypography;
@@ -47,6 +48,8 @@ export interface DashboardEChartsTooltipChrome {
 export interface DashboardEChartsTooltipMetricRow {
   label: string;
   value: string;
+  /** Optional population or context displayed on its own wrapping line. */
+  detail?: string | null;
   markerColor?: string | null;
   labelColor?: string | null;
   valueColor?: string | null;
@@ -72,6 +75,10 @@ export function buildDashboardEChartsStyleTokens(
 ): DashboardEChartsStyleTokens {
   const isCompactLayout = chartWidth > 0 && chartWidth < compactWidth;
   const themeTokens = buildOfficialEChartsThemeTokens(darkTheme);
+  const errorColor = resolveDashboardCssColor(
+    '--mat-sys-error',
+    darkTheme ? '#ffb4ab' : '#ba1a1a',
+  );
   const tooltipTypography: DashboardEChartsTooltipTypography = {
     bodyFontSize: isCompactLayout ? 12 : 13,
     labelFontSize: isCompactLayout ? 11 : 12,
@@ -97,10 +104,21 @@ export function buildDashboardEChartsStyleTokens(
     tooltipTextColor: themeTokens.tooltipTextColor,
     subtleBorderColor: themeTokens.subtleBorderColor,
     trendLineColor: themeTokens.trendLineColor,
+    errorColor,
     isCompactLayout,
     axisFontSize: isCompactLayout ? 11 : 12,
     tooltipTypography,
   };
+}
+
+function resolveDashboardCssColor(variableName: string, fallback: string): string {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return fallback;
+  }
+  const value = window.getComputedStyle(document.documentElement)
+    .getPropertyValue(variableName)
+    .trim();
+  return value && !value.startsWith('var(') ? value : fallback;
 }
 
 export function buildDashboardEChartsTooltipTextStyle(
@@ -137,6 +155,7 @@ export function renderDashboardEChartsTooltipCard(
   const hasHeader = title.length > 0 || subtitle.length > 0;
   const hasBody = rows.length > 0 || notes.length > 0;
   const useTwoColumnRows = options.rowColumnCount === 2 && rows.length > 1;
+  const useBoundedWidth = useTwoColumnRows || rows.some(row => row.detail?.trim());
   const maxWidthPx = Number.isFinite(options.maxWidthPx) && Number(options.maxWidthPx) > 0
     ? Number(options.maxWidthPx)
     : typography.maxWidthPx;
@@ -178,7 +197,7 @@ export function renderDashboardEChartsTooltipCard(
     : '';
 
   return (
-    `<div class="qs-dashboard-echarts-tooltip-card" style="${useTwoColumnRows ? `width:min(${maxWidthPx}px, calc(100vw - 32px));` : 'width:max-content;'}`
+    `<div class="qs-dashboard-echarts-tooltip-card" style="${useBoundedWidth ? `width:min(${maxWidthPx}px, calc(100vw - 32px));` : 'width:max-content;'}`
     + `box-sizing:border-box;min-width:0;max-width:min(${maxWidthPx}px, calc(100vw - 32px));`
     + `padding:${typography.cardPadding};font-family:${ECHARTS_GLOBAL_FONT_FAMILY};">`
     + headerHtml
@@ -205,6 +224,7 @@ function renderDashboardEChartsTooltipMetricRow(
   const typography = styleTokens.tooltipTypography;
   const label = `${row.label}`.trim();
   const value = `${row.value}`.trim();
+  const detail = `${row.detail || ''}`.trim();
   const labelColor = row.labelColor || styleTokens.secondaryTextColor;
   const valueColor = row.valueColor || styleTokens.tooltipTextColor;
   const markerHtml = row.markerColor
@@ -212,12 +232,15 @@ function renderDashboardEChartsTooltipMetricRow(
     : '';
 
   return (
-    `<div aria-label="${escapeDashboardEChartsTooltipHtml(`${label}: ${value}`)}" style="display:flex;align-items:baseline;justify-content:space-between;gap:${typography.metricValueGapPx}px;min-width:0;">`
-    + `<div style="display:flex;align-items:center;min-width:0;">`
+    `<div aria-label="${escapeDashboardEChartsTooltipHtml(`${label}: ${value}${detail ? ` · ${detail}` : ''}`)}" style="min-width:0;">`
+    + `<div style="display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;column-gap:${typography.metricValueGapPx}px;row-gap:3px;min-width:0;">`
+    + `<div style="display:flex;align-items:center;min-width:0;max-width:100%;">`
     + markerHtml
-    + `<span style="font-size:${typography.labelFontSize}px;line-height:${typography.textLineHeight};color:${labelColor};white-space:nowrap;">${escapeDashboardEChartsTooltipHtml(label)}:</span>`
+    + `<span style="font-size:${typography.labelFontSize}px;line-height:${typography.textLineHeight};color:${labelColor};white-space:normal;overflow-wrap:anywhere;">${escapeDashboardEChartsTooltipHtml(label)}:</span>`
     + `</div>`
-    + `<div style="font-family:${ECHARTS_GLOBAL_FONT_FAMILY};font-size:${typography.valueFontSize}px;line-height:${typography.valueLineHeight};font-weight:700;color:${valueColor};text-align:right;white-space:nowrap;">${escapeDashboardEChartsTooltipHtml(value)}</div>`
+    + `<div style="min-width:0;max-width:100%;margin-inline-start:auto;font-family:${ECHARTS_GLOBAL_FONT_FAMILY};font-size:${typography.valueFontSize}px;line-height:${typography.valueLineHeight};font-weight:700;color:${valueColor};text-align:right;white-space:normal;overflow-wrap:anywhere;">${escapeDashboardEChartsTooltipHtml(value)}</div>`
+    + `</div>`
+    + (detail ? `<div style="margin-top:3px;font-size:${typography.labelFontSize}px;line-height:${typography.textLineHeight};color:${styleTokens.secondaryTextColor};white-space:normal;overflow-wrap:anywhere;">${escapeDashboardEChartsTooltipHtml(detail)}</div>` : '')
     + `</div>`
   );
 }

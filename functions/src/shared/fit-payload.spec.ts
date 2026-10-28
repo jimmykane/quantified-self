@@ -24,14 +24,16 @@ describe('normalizeDownloadedFitPayload', () => {
         expect(normalized.data.equals(fitPayload)).toBe(true);
     });
 
-    it('unwraps multipart/form-data wrapper and returns embedded FIT payload', () => {
+    it.each([
+        'application/octet-stream', 'application/vnd.ant.fit',
+    ])('unwraps a multipart %s part and returns the embedded FIT payload', (contentType) => {
         const fitPayload = createSyntheticFitPayload(Buffer.from([0xaa, 0xbb, 0xcc, 0xdd]));
         const boundary = '------WebKitFormBoundaryTestBoundary';
         const multipartPayload = Buffer.concat([
             Buffer.from(
                 `${boundary}\r\n` +
                 'Content-Disposition: form-data; name="file"; filename="sample.fit"\r\n' +
-                'Content-Type: application/octet-stream\r\n\r\n',
+                `Content-Type: ${contentType}\r\n\r\n`,
                 'latin1'
             ),
             fitPayload,
@@ -45,14 +47,16 @@ describe('normalizeDownloadedFitPayload', () => {
         expect(normalized.data.equals(fitPayload)).toBe(true);
     });
 
-    it('unwraps multipart wrapper when headers are mixed-case and content-type has parameters', () => {
+    it.each([
+        'APPLICATION/OCTET-STREAM', 'Application/Vnd.Ant.Fit',
+    ])('unwraps mixed-case multipart headers with %s and parameters', (contentType) => {
         const fitPayload = createSyntheticFitPayload(Buffer.from([0x01, 0x02, 0x03, 0x04]));
         const boundary = '------WebKitFormBoundaryCaseInsensitive';
         const multipartPayload = Buffer.concat([
             Buffer.from(
                 `${boundary}\r\n` +
                 'cOnTeNt-dIsPoSiTiOn: FORM-DATA; name="file"; FILENAME="sample.fit"\r\n' +
-                'CONTENT-TYPE: application/octet-stream; charset=binary\r\n\r\n',
+                `CONTENT-TYPE: ${contentType}; charset=binary\r\n\r\n`,
                 'latin1'
             ),
             fitPayload,
@@ -66,7 +70,9 @@ describe('normalizeDownloadedFitPayload', () => {
         expect(normalized.data.equals(fitPayload)).toBe(true);
     });
 
-    it('does not let a multipart boundary hide a missing FIT file CRC', () => {
+    it.each([
+        'application/octet-stream', 'application/vnd.ant.fit',
+    ])('does not let a multipart %s boundary hide a missing FIT file CRC', (contentType) => {
         const fitPayload = createSyntheticFitPayload(Buffer.from([0xaa, 0xbb, 0xcc, 0xdd]));
         const truncatedFit = fitPayload.subarray(0, fitPayload.length - 2);
         const boundary = '------WebKitFormBoundaryTruncatedFit';
@@ -74,11 +80,51 @@ describe('normalizeDownloadedFitPayload', () => {
             Buffer.from(
                 `${boundary}\r\n` +
                 'Content-Disposition: form-data; name="file"; filename="sample.fit"\r\n' +
-                'Content-Type: application/octet-stream\r\n\r\n',
+                `Content-Type: ${contentType}\r\n\r\n`,
                 'latin1'
             ),
             truncatedFit,
             Buffer.from(`\r\n${boundary}--\r\n`, 'latin1'),
+        ]);
+
+        const normalized = normalizeDownloadedFitPayload(multipartPayload);
+
+        expect(normalized.normalizedFromMultipart).toBe(false);
+        expect(normalized.data.equals(multipartPayload)).toBe(true);
+    });
+
+    it.each([
+        'text/plain',
+        'application/json',
+        'application/octet-stream-extra',
+        'application/vnd.ant.fit-extra',
+    ])('does not unwrap an unsupported multipart media type %s', (contentType) => {
+        const fitPayload = createSyntheticFitPayload(Buffer.from([0x01, 0x02]));
+        const boundary = '------UnsupportedTypeBoundary';
+        const multipartPayload = Buffer.concat([
+            Buffer.from(`${boundary}\r\n`
+                + 'Content-Disposition: form-data; name="file"; filename="sample.fit"\r\n'
+                + `Content-Type: ${contentType}\r\n\r\n`, 'latin1'),
+            fitPayload,
+            Buffer.from(`\r\n${boundary}--\r\n`, 'latin1'),
+        ]);
+
+        const normalized = normalizeDownloadedFitPayload(multipartPayload);
+
+        expect(normalized.normalizedFromMultipart).toBe(false);
+        expect(normalized.data.equals(multipartPayload)).toBe(true);
+    });
+
+    it.each([
+        'application/octet-stream', 'application/vnd.ant.fit',
+    ])('does not unwrap a multipart %s part without its matching boundary', (contentType) => {
+        const fitPayload = createSyntheticFitPayload(Buffer.from([0x01, 0x02]));
+        const multipartPayload = Buffer.concat([
+            Buffer.from('------ExpectedBoundary\r\n'
+                + 'Content-Disposition: form-data; name="file"; filename="sample.fit"\r\n'
+                + `Content-Type: ${contentType}\r\n\r\n`, 'latin1'),
+            fitPayload,
+            Buffer.from('\r\n------DifferentBoundary--\r\n', 'latin1'),
         ]);
 
         const normalized = normalizeDownloadedFitPayload(multipartPayload);

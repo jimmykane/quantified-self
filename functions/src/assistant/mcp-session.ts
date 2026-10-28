@@ -1,18 +1,33 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { TRAINING_PREVIEW_TOOLS, TRAINING_READ_TOOLS } from '../mcp/training-plans.schemas';
+import { MCP_MANUAL_MEASUREMENT_READ_TOOLS } from '../mcp/manual-measurements.schemas';
+import { InMemoryTransport } from '@modelcontextprotocol/server';
+import type { McpServer } from '@modelcontextprotocol/server';
+import { Client } from '@modelcontextprotocol/client';
+import { ZodError } from 'zod';
 import {
   createMcpServer,
+  MCP_ACTIVITY_SAMPLES_INSTRUCTIONS,
   type AuthenticatedMcpRequest,
 } from '../mcp/server';
 import type { McpDataErrorCode } from '../mcp/data.service';
 import { MCP_OAUTH_SCOPES } from '../mcp/oauth.service';
 import type { AssistantLocationAccess } from '../../../shared/assistant.types';
+import type { AssistantPromptWorkflow } from '../../../shared/assistant.prompts';
+import { assistantRecoveryDurationSeconds, type AssistantWorkoutReview } from '../../../shared/assistant-workout-review';
+import {
+  ASSISTANT_CONTENT_PROPOSAL_TOOLS,
+  assistantContentProposalInputJsonSchema,
+  createAssistantContentProposal,
+  isAssistantContentProposalTool,
+  type AssistantContentProposalTool,
+} from './content-proposal';
 import {
   AssistantMetricHistoryQueryError,
   mergeAssistantMetricHistoryResponses,
   splitAssistantMetricHistoryQuery,
 } from './metric-history-query';
+import { projectGeminiToolInputSchema } from './gemini-tool-schema';
+import { getAssistantErrorDiagnostic, type AssistantErrorDiagnostic } from './error-diagnostics';
 
 export const ASSISTANT_BASE_MCP_TOOL_NAMES = [
   'list_activity_types',
@@ -23,10 +38,13 @@ export const ASSISTANT_BASE_MCP_TOOL_NAMES = [
   'query_metrics',
   'list_training_metrics',
   'get_training_metric',
+  'get_training_impact',
+  'prepare_training_metrics',
   'list_sleep_vitals',
   'list_sleep_sessions',
   'get_sleep_trend',
   'get_today_readiness',
+  'get_current_readiness',
   'get_daily_report',
   'query_activities',
   'list_activity_laps',
@@ -34,7 +52,9 @@ export const ASSISTANT_BASE_MCP_TOOL_NAMES = [
   'list_activity_swim_lengths',
   'get_activity_overview',
   'list_activity_chart_metrics',
+  'list_activity_chart_metrics_v2',
   'get_activity_chart_data',
+  'get_activity_chart_data_v2',
   'get_activity_metrics',
   'rank_activities_by_metric',
   'list_routes',
@@ -47,6 +67,14 @@ export const ASSISTANT_ACTIVITY_LOCATION_MCP_TOOL_NAMES = [
 export const ASSISTANT_MCP_TOOL_NAMES = [
   ...ASSISTANT_BASE_MCP_TOOL_NAMES,
   ...ASSISTANT_ACTIVITY_LOCATION_MCP_TOOL_NAMES,
+  'get_workout_reflection',
+  'query_timeline_notes',
+  'query_activities_with_tags',
+  'query_editable_timeline_notes',
+  ...ASSISTANT_CONTENT_PROPOSAL_TOOLS,
+  ...MCP_MANUAL_MEASUREMENT_READ_TOOLS,
+  ...TRAINING_READ_TOOLS,
+  ...TRAINING_PREVIEW_TOOLS,
 ] as const;
 
 export type AssistantMcpToolName = typeof ASSISTANT_MCP_TOOL_NAMES[number];
@@ -70,7 +98,10 @@ const RECOVERABLE_ASSISTANT_TOOL_ERROR_CODES = [
   'metric_not_ready',
   'detail_not_available',
   'query_too_large',
-] as const satisfies readonly Exclude<McpDataErrorCode, 'temporarily_unavailable'>[];
+  'invalid_tool_input',
+] as const satisfies readonly (
+  Exclude<McpDataErrorCode, 'temporarily_unavailable'> | 'invalid_tool_input'
+)[];
 
 type RecoverableAssistantToolErrorCode =
   typeof RECOVERABLE_ASSISTANT_TOOL_ERROR_CODES[number];
@@ -78,6 +109,30 @@ type RecoverableAssistantToolErrorCode =
 const RECOVERABLE_ASSISTANT_TOOL_ERROR_CODE_SET = new Set<string>(
   RECOVERABLE_ASSISTANT_TOOL_ERROR_CODES,
 );
+const MCP_TOOL_ERROR_CODE_SET = new Set<string>([
+  ...RECOVERABLE_ASSISTANT_TOOL_ERROR_CODES,
+  'temporarily_unavailable',
+  'internal_error',
+]);
+
+export type AssistantMcpToolFailureCode = McpDataErrorCode | 'internal_error'
+  | 'invalid_tool_input' | 'client_call_failed' | 'missing_structured_result' | 'unclassified_error';
+export type AssistantMcpToolFailureStage = 'input_validation' | 'tool_response'
+  | 'client_call' | 'result_validation';
+
+export class AssistantMcpToolFailure extends Error {
+  readonly diagnostic?: AssistantErrorDiagnostic;
+
+  constructor(
+    readonly code: AssistantMcpToolFailureCode,
+    readonly stage: AssistantMcpToolFailureStage,
+    cause?: unknown,
+  ) {
+    super('The Assistant MCP tool could not complete the request.');
+    this.name = 'AssistantMcpToolFailure';
+    if (cause !== undefined) this.diagnostic = getAssistantErrorDiagnostic(cause);
+  }
+}
 
 const ASSISTANT_TOOL_ERROR_GUIDANCE: Record<
   RecoverableAssistantToolErrorCode,
@@ -86,9 +141,10 @@ const ASSISTANT_TOOL_ERROR_GUIDANCE: Record<
   invalid_request: 'Use the advertised input schema. Discover canonical activity types before filtering activity data.',
   invalid_metric: 'Discover the supported metric before selecting it.',
   invalid_timezone: 'Use the current IANA time zone supplied with this request.',
-  metric_not_ready: 'Use a currently ready Training-derived metric or explain that it is not ready.',
+  metric_not_ready: 'Call prepare_training_metrics for this kind first; when it reports ready, read the snapshot.',
   detail_not_available: 'Select another available record or explain that this detail is unavailable.',
   query_too_large: 'Use a valid, narrower date range. Long activity-metric histories are paged automatically by the Assistant.',
+  invalid_tool_input: 'Correct the request to match the advertised input schema exactly, without unadvertised fields. For workout recipes, use an exact supported sport, version 1, and steps with stable unique ids, purpose, ending, and a targets array. A relative target requires its exact numeric reference; when that value is unavailable, omit the target instead of inventing it.',
 };
 
 /**
@@ -100,13 +156,25 @@ export class AssistantRecoverableMcpToolError extends Error {
   constructor(
     readonly code: RecoverableAssistantToolErrorCode,
     readonly guidance: string,
+    readonly retryable = true,
   ) {
     super('The Assistant MCP tool needs corrected input.');
     this.name = 'AssistantRecoverableMcpToolError';
   }
 }
 
+export const ASSISTANT_GARMIN_REPLACEMENT_BLOCKED_GUIDANCE =
+  'Garmin replacement is blocked for this review. Open the workout’s Garmin sync details, run Check, and review its current status before requesting a replacement. Missing-copy evidence does not prove deletion. Nothing was applied or sent; Send and Retry were not used.';
+
+export class AssistantTrainingMetricsPreparingError extends Error {
+  constructor(readonly retryAfterSeconds: number) {
+    super('Training metrics are still preparing.');
+    this.name = 'AssistantTrainingMetricsPreparingError';
+  }
+}
+
 export interface AssistantMcpSession {
+  getTrainingWorkoutReviews?: (proposalRef: string, prompt: string) => Promise<AssistantWorkoutReview[]>;
   instructions: string;
   tools: AssistantMcpToolDefinition[];
   callTool: (
@@ -126,8 +194,33 @@ interface AssistantMcpSessionDependencies {
 const ASSISTANT_TOOL_NAME_SET = new Set<string>(ASSISTANT_MCP_TOOL_NAMES);
 const ASSISTANT_CONNECTION_ID = 'first-party-assistant-v1';
 const ASSISTANT_CLIENT_ID = 'https://quantified-self.io/internal/assistant';
+const TIMELINE_NOTE_DATE_GUIDANCE = 'Use valid YYYY-MM-DD calendar dates for startDate and endDate, never timestamps. Use endDate: null for an ongoing note. Supply timeZone as a separate IANA timezone; ask the user if dates are ambiguous.';
 
-function recoverableAssistantToolError(message: string): AssistantRecoverableMcpToolError | null {
+const ASSISTANT_CONTENT_TOOL_COPY: Record<AssistantContentProposalTool, { title: string; description: string }> = {
+  prepare_workout_reflection_save: { title: 'Prepare workout reflection', description: 'Prepare explicit private reflection text for QS review only. First discover the exact activity and read get_workout_reflection for the explicit activity or whole-recording target and current revision. This cannot change workout RPE; direct RPE changes to QS Edit details. This never writes or adapts Training.' },
+  prepare_workout_reflection_delete: { title: 'Prepare reflection deletion', description: 'Prepare permanent clearing of one exact current reflection for QS review only. First read its explicit activity/recording target and revision. Require explicit deletion intent; this never deletes the recording or changes completion.' },
+  prepare_manual_measurement_create: { title: 'Prepare a manual Health measurement', description: 'Prepare a manual entry for QS review only. Discover units and metadata first. Resolve now from catalog serverTime once; preserve that instant and a UUID on retries. Never guess VO2 metadata or blood-pressure readings.' },
+  prepare_manual_measurement_update: { title: 'Prepare a manual measurement edit', description: 'Prepare a manual entry edit for QS review only. First get the exact manual entry and current revision. Omitted time/metadata stay unchanged. Provider imports cannot be edited.' },
+  prepare_manual_measurement_delete: { title: 'Prepare manual measurement deletion', description: 'Prepare permanent deletion for QS review only. First get the exact manual entry and current revision; never infer which entry to delete from an ambiguous query.' },
+  prepare_activity_tag_change: {
+    title: 'Prepare an activity tag change',
+    description: 'Prepare a complete activity tag replacement for review in Quantified Self. First read the selected activity and pass its exact current tags as expectedTags. This never writes data.',
+  },
+  prepare_timeline_note_create: {
+    title: 'Prepare a Timeline note',
+    description: `Prepare one new Timeline note from explicit user-provided content for review in Quantified Self. ${TIMELINE_NOTE_DATE_GUIDANCE} Reuse the same mutationId when correcting or retrying this create attempt. This never writes data.`,
+  },
+  prepare_timeline_note_update: {
+    title: 'Prepare a Timeline note edit',
+    description: `Prepare a complete replacement of one current Timeline note for review in Quantified Self. First read its current reference, revision and authored fields. ${TIMELINE_NOTE_DATE_GUIDANCE} This never writes data.`,
+  },
+  prepare_timeline_note_delete: {
+    title: 'Prepare Timeline note deletion',
+    description: 'Prepare permanent deletion of one current Timeline note for review in Quantified Self. First read its current reference and revision. This never writes data.',
+  },
+};
+
+function parseMcpToolErrorCode(message: string): McpDataErrorCode | 'internal_error' | null {
   let payload: unknown;
   try {
     payload = JSON.parse(message);
@@ -138,8 +231,23 @@ function recoverableAssistantToolError(message: string): AssistantRecoverableMcp
     return null;
   }
   const code = (payload as { error?: unknown }).error;
-  if (typeof code !== 'string' || !RECOVERABLE_ASSISTANT_TOOL_ERROR_CODE_SET.has(code)) {
+  if (typeof code !== 'string' || !MCP_TOOL_ERROR_CODE_SET.has(code)) {
     return null;
+  }
+  return code as McpDataErrorCode | 'internal_error';
+}
+
+function recoverableAssistantToolError(message: string, name: AssistantMcpToolName): AssistantRecoverableMcpToolError | null {
+  const code = parseMcpToolErrorCode(message);
+  if (!code || !RECOVERABLE_ASSISTANT_TOOL_ERROR_CODE_SET.has(code)) {
+    return null;
+  }
+  // Strict input-validation failures remain correctable. A server rejection of
+  // a valid replacement request is instead a closed review, not another Send.
+  if (name === 'preview_garmin_workout_replacement'
+    && (code === 'invalid_request' || code === 'detail_not_available')) {
+    return new AssistantRecoverableMcpToolError(code,
+      ASSISTANT_GARMIN_REPLACEMENT_BLOCKED_GUIDANCE, false);
   }
   return new AssistantRecoverableMcpToolError(
     code as RecoverableAssistantToolErrorCode,
@@ -160,10 +268,12 @@ async function callAssistantMcpTool(
   name: AssistantMcpToolName,
   args: Record<string, unknown>,
 ): Promise<AssistantMcpToolResult> {
-  const result = await client.callTool({
-    name,
-    arguments: args,
-  });
+  let result: Awaited<ReturnType<Client['callTool']>>;
+  try {
+    result = await client.callTool({ name, arguments: args });
+  } catch (error) {
+    throw new AssistantMcpToolFailure('client_call_failed', 'client_call', error);
+  }
   if ('isError' in result && result.isError) {
     const content = 'content' in result && Array.isArray(result.content)
       ? result.content
@@ -173,16 +283,31 @@ async function callAssistantMcpTool(
       .map(item => item.text)
       .join(' ')
       .trim();
-    const recoverableError = recoverableAssistantToolError(message);
+    const recoverableError = recoverableAssistantToolError(message, name);
     if (recoverableError) {
       throw recoverableError;
     }
-    throw new Error(message || `The ${name} tool could not complete the request.`);
+    if (message.includes('Input validation error: Invalid arguments for tool ')) {
+      throw new AssistantRecoverableMcpToolError(
+        'invalid_tool_input',
+        ASSISTANT_TOOL_ERROR_GUIDANCE.invalid_tool_input,
+      );
+    }
+    throw new AssistantMcpToolFailure(parseMcpToolErrorCode(message) ?? 'unclassified_error', 'tool_response');
   }
   if (!('structuredContent' in result)
     || !result.structuredContent
     || typeof result.structuredContent !== 'object') {
-    throw new Error(`The ${name} tool returned no structured result.`);
+    throw new AssistantMcpToolFailure('missing_structured_result', 'result_validation');
+  }
+  const structuredContent = result.structuredContent as Record<string, unknown>;
+  if (name === 'prepare_training_metrics'
+    && structuredContent.status === 'preparing') {
+    throw new AssistantTrainingMetricsPreparingError(
+      typeof structuredContent.retryAfterSeconds === 'number'
+        ? structuredContent.retryAfterSeconds
+        : 5,
+    );
   }
   return {
     structuredContent: result.structuredContent as Record<string, unknown>,
@@ -234,7 +359,7 @@ function projectAssistantInputSchema(
       };
     }
   }
-  if (activityLocationEnabled || name !== 'get_activity_chart_data') {
+  if (activityLocationEnabled || !['get_activity_chart_data', 'get_activity_chart_data_v2'].includes(name)) {
     return projectedSchema;
   }
   const properties = projectedSchema.properties;
@@ -259,30 +384,86 @@ function projectAssistantInputSchema(
   };
 }
 
+function projectAssistantGeminiSchema(
+  name: AssistantMcpToolName,
+  schema: AssistantMcpToolDefinition['inputSchema'],
+): AssistantMcpToolDefinition['inputSchema'] {
+  try {
+    return projectGeminiToolInputSchema(schema);
+  } catch (error) {
+    throw new Error(`Assistant tool ${name} has an incompatible model input schema: ${error instanceof Error ? error.message : 'unknown error'}`);
+  }
+}
+
 export async function createAssistantMcpSession(
   uid: string,
   publicBaseUrl: string,
   dependencies: AssistantMcpSessionDependencies = defaultDependencies,
   locationAccess: AssistantLocationAccess = 'coordinate_free',
+  timelineNotesEnabled = false,
+  trainingPlansEnabled = false,
+  trainingPlanChangesEnabled = false,
+  trainingDeliveryEnabled = false,
+  conversationId?: string,
+  activityTagChangesEnabled = false,
+  timelineNoteChangesEnabled = false,
+  measurementChangesEnabled = false,
+  reflectionChangesEnabled = false,
+  activityDisciplines?: AssistantPromptWorkflow['activityDisciplineOverrides'],
 ): Promise<AssistantMcpSession> {
+  if ((activityTagChangesEnabled || timelineNoteChangesEnabled || measurementChangesEnabled || reflectionChangesEnabled) && !conversationId) {
+    throw new Error('Assistant content changes require a current conversation.');
+  }
+  if (timelineNoteChangesEnabled && !timelineNotesEnabled) {
+    throw new Error('Assistant Timeline note changes require Timeline notes access.');
+  }
   const activityLocationEnabled = locationAccess === 'precise_activity';
-  const expectedToolNames: readonly AssistantMcpToolName[] = activityLocationEnabled
-    ? ASSISTANT_MCP_TOOL_NAMES
-    : ASSISTANT_BASE_MCP_TOOL_NAMES;
+  const expectedToolNames: readonly AssistantMcpToolName[] = [
+    ...ASSISTANT_BASE_MCP_TOOL_NAMES,
+    ...(reflectionChangesEnabled ? ['get_workout_reflection' as const, 'prepare_workout_reflection_save' as const, 'prepare_workout_reflection_delete' as const] : []),
+    ...(measurementChangesEnabled ? [...MCP_MANUAL_MEASUREMENT_READ_TOOLS,
+      'prepare_manual_measurement_create' as const, 'prepare_manual_measurement_update' as const,
+      'prepare_manual_measurement_delete' as const] : []),
+    ...(activityLocationEnabled ? ASSISTANT_ACTIVITY_LOCATION_MCP_TOOL_NAMES : []),
+    ...(timelineNotesEnabled ? ['query_timeline_notes' as const] : []),
+    ...(activityTagChangesEnabled
+      ? ['query_activities_with_tags' as const, 'prepare_activity_tag_change' as const]
+      : []),
+    ...(timelineNoteChangesEnabled
+      ? ['query_editable_timeline_notes' as const, 'prepare_timeline_note_create' as const,
+          'prepare_timeline_note_update' as const, 'prepare_timeline_note_delete' as const]
+      : []),
+    ...(trainingPlansEnabled ? TRAINING_READ_TOOLS : []),
+    ...(trainingPlanChangesEnabled
+      ? TRAINING_PREVIEW_TOOLS.filter(name => !['preview_training_deletion', 'preview_garmin_workout_replacement'].includes(name) || trainingDeliveryEnabled)
+      : trainingDeliveryEnabled ? ['preview_training_changes' as const, 'preview_garmin_workout_replacement' as const] : []),
+  ];
   const auth: AuthenticatedMcpRequest = {
     uid,
     clientId: ASSISTANT_CLIENT_ID,
-    connectionId: ASSISTANT_CONNECTION_ID,
+    connectionId: conversationId
+      ? `${ASSISTANT_CONNECTION_ID}:${conversationId}`
+      : ASSISTANT_CONNECTION_ID,
     scopes: [
       MCP_OAUTH_SCOPES.MetricsRead,
       MCP_OAUTH_SCOPES.MeasurementsRead,
+      ...(measurementChangesEnabled ? [MCP_OAUTH_SCOPES.MeasurementsWrite] : []),
+      ...(reflectionChangesEnabled ? [MCP_OAUTH_SCOPES.WorkoutReflectionsRead, MCP_OAUTH_SCOPES.WorkoutReflectionsWrite] : []),
       MCP_OAUTH_SCOPES.SleepRead,
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
       ...(activityLocationEnabled
         ? [MCP_OAUTH_SCOPES.ActivityLocationRead]
         : []),
       MCP_OAUTH_SCOPES.RoutesRead,
+      ...(timelineNotesEnabled ? [MCP_OAUTH_SCOPES.TimelineNotesRead] : []),
+      ...(activityTagChangesEnabled ? [MCP_OAUTH_SCOPES.EventsWrite] : []),
+      ...(timelineNoteChangesEnabled ? [MCP_OAUTH_SCOPES.TimelineNotesWrite] : []),
+      ...(trainingPlansEnabled ? [MCP_OAUTH_SCOPES.TrainingPlansRead] : []),
+      ...(trainingPlanChangesEnabled ? [MCP_OAUTH_SCOPES.TrainingPlansWrite] : []),
+      ...(trainingDeliveryEnabled ? [MCP_OAUTH_SCOPES.TrainingDeliveryWrite] : []),
     ],
+    ...(conversationId ? { assistantConversationId: conversationId } : {}),
+    ...(activityDisciplines ? { assistantActivityDisciplines: activityDisciplines } : {}),
   };
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const server = dependencies.createServer(auth, publicBaseUrl);
@@ -297,16 +478,30 @@ export async function createAssistantMcpSession(
     const listedTools = (await client.listTools()).tools;
     const listedToolsByName = new Map(listedTools.map(tool => [tool.name, tool]));
     const tools = expectedToolNames.flatMap((name) => {
+      if (isAssistantContentProposalTool(name)) {
+        const copy = ASSISTANT_CONTENT_TOOL_COPY[name];
+        return [{
+          name,
+          title: copy.title,
+          description: copy.description,
+          inputSchema: projectAssistantGeminiSchema(name, assistantContentProposalInputJsonSchema(name)),
+        }];
+      }
       const tool = listedToolsByName.get(name);
       return tool ? [{
         name: tool.name as AssistantMcpToolName,
         title: tool.title || tool.name,
-        description: tool.description || tool.title || tool.name,
-        inputSchema: projectAssistantInputSchema(
+        // The public preview describes native MCP approval. In this adapter the
+        // same proposal is confirmed by the user in QS, never by a model tool.
+        description: (tool.description || tool.title || tool.name).replace(
+          /\bapply_(?:training_changes|saved_workout_change)\b/g,
+          'app-owned Apply confirmation in Quantified Self (not a model tool)',
+        ),
+        inputSchema: projectAssistantGeminiSchema(name, projectAssistantInputSchema(
           name,
           tool.inputSchema as AssistantMcpToolDefinition['inputSchema'],
           activityLocationEnabled,
-        ),
+        )),
         ...(tool.outputSchema
           ? { outputSchema: tool.outputSchema as AssistantMcpToolDefinition['outputSchema'] }
           : {}),
@@ -318,12 +513,55 @@ export async function createAssistantMcpSession(
       throw new Error(`Assistant MCP tools are unavailable: ${missingToolNames.join(', ')}`);
     }
 
+    let preparedContentProposalRef: string | null = null;
+    const readyTrainingKinds = new Set<string>();
     return {
-      instructions: client.getInstructions() || '',
+      getTrainingWorkoutReviews: async (proposalRef, prompt) => {
+        const { loadAssistantTrainingWorkoutReviews } = await import('../mcp/training-plans-write.service');
+        const seconds = assistantRecoveryDurationSeconds(prompt);
+        try {
+          return await loadAssistantTrainingWorkoutReviews({ uid, connectionId: auth.connectionId, scopes: auth.scopes, proposalRef,
+            ...(seconds === null ? {} : { recoveryDurationSeconds: seconds }) });
+        } catch (error) {
+          if (error && typeof error === 'object' && 'code' in error && error.code === 'invalid_request') {
+            throw new AssistantRecoverableMcpToolError('invalid_request',
+              'Prepare a fresh complete workout review. For a recovery-duration-only request preserve every other field, including the exact destination.');
+          }
+          throw error;
+        }
+      },
+      // The Assistant keeps its compact evidence budget; detailed sample pagination is an external-client workflow.
+      instructions: (client.getInstructions() || '').replace(MCP_ACTIVITY_SAMPLES_INSTRUCTIONS, '').trim(),
       tools,
       callTool: async (name, args) => {
-        if (!isAssistantToolName(name)) {
+        if (!isAssistantToolName(name) || !expectedToolNames.includes(name)) {
           throw new Error('The requested tool is not available to the Assistant.');
+        }
+        if (name === 'get_training_metric' && !readyTrainingKinds.has(`${args.metricKind || ''}`)) {
+          throw new AssistantRecoverableMcpToolError(
+            'metric_not_ready',
+            'Call prepare_training_metrics for this metricKind first, then retry this read when it reports ready.',
+          );
+        }
+        if (isAssistantContentProposalTool(name)) {
+          if (preparedContentProposalRef) {
+            throw new Error('The Assistant can prepare only one content change per response.');
+          }
+          try {
+            const proposal = createAssistantContentProposal(name, args);
+            preparedContentProposalRef = proposal.proposalRef;
+            return { structuredContent: proposal as unknown as Record<string, unknown> };
+          } catch (error) {
+            // Only local note-input validation is correctable. Never turn
+            // permission, output-validation or backend failures into model guidance.
+            if (error instanceof ZodError
+              && (name === 'prepare_timeline_note_create' || name === 'prepare_timeline_note_update')) {
+              throw new AssistantRecoverableMcpToolError('invalid_tool_input',
+                `Correct the Timeline-note input to match the advertised schema. ${TIMELINE_NOTE_DATE_GUIDANCE}${name === 'prepare_timeline_note_create'
+                  ? ' Reuse the same mutationId for this create attempt.' : ''}`);
+            }
+            throw error;
+          }
         }
         let metricHistoryPages: Record<string, unknown>[] | null;
         try {
@@ -338,7 +576,14 @@ export async function createAssistantMcpSession(
           throw error;
         }
         if (!metricHistoryPages) {
-          return callAssistantMcpTool(client, name, args);
+          const response = await callAssistantMcpTool(client, name, args);
+          if (name === 'prepare_training_metrics') {
+            for (const kind of Array.isArray(response.structuredContent.readyMetricKinds)
+              ? response.structuredContent.readyMetricKinds : []) {
+              if (typeof kind === 'string') readyTrainingKinds.add(kind);
+            }
+          }
+          return response;
         }
         const responses: Record<string, unknown>[] = [];
         for (const page of metricHistoryPages) {

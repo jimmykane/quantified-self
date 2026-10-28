@@ -2,7 +2,7 @@
   <mat-card appearance="outlined" class="mcp-authorization__card">
     <mat-card-header>
       <mat-card-title>Connect an MCP client</mat-card-title>
-      <mat-card-subtitle>Choose exactly what this client may read from your account.</mat-card-subtitle>
+    <mat-card-subtitle>Choose exactly what this client may access or change.</mat-card-subtitle>
     </mat-card-header>
 
     <mat-card-content>
@@ -51,6 +51,11 @@
           </div>
         }
 
+        @if (needsAccountSetup()) {
+          <p role="note">Complete your account setup before allowing access. A paid plan is not required.
+            Setup does not connect this client; you will return here to review and approve the request.</p>
+        }
+
         <section class="mcp-authorization__permissions" aria-labelledby="mcp-permissions-title">
           <h2 id="mcp-permissions-title">Requested permissions</h2>
           @for (option of scopeOptions(); track option.scope) {
@@ -65,7 +70,8 @@
             </mat-checkbox>
           }
           <p class="mcp-authorization__privacy">
-            This connection is read-only. Activity details and saved-route summaries exclude locations unless you
+            Training changes are always previewed, then sent through a separate write tool using your client's native
+            approval controls. Keep automatic approval disabled if you want to review every proposal. Activity details and saved-route summaries exclude locations unless you
             separately approve their matching location permission. Activity locations can reveal exact starts, ends,
             MTB jumps, and bounded breadcrumb traces. Saved-route locations can reveal exact bounds, preview geometry,
             segment endpoints, and waypoints. These permissions are independent: granting one never grants the other.
@@ -93,10 +99,15 @@
 
     @if (request()) {
       <mat-card-actions class="mcp-authorization__actions">
+        @if (needsAccountSetup()) {
+          <button mat-flat-button type="button" [disabled]="deciding() !== null" (click)="completeAccountSetup()">
+            Complete account setup
+          </button>
+        } @else {
         <button
           mat-flat-button
           type="button"
-          [disabled]="deciding() !== null || selectedScopes().length === 0"
+          [disabled]="!hasAccountProfile() || deciding() !== null || selectedScopes().length === 0"
           (click)="approve()">
           <span class="mcp-authorization__button-content">
             @if (deciding() === 'approve') {
@@ -108,6 +119,7 @@
             }
           </span>
         </button>
+        }
         <button mat-button type="button" [disabled]="deciding() !== null" (click)="deny()">
           <span class="mcp-authorization__button-content">
             @if (deciding() === 'deny') {

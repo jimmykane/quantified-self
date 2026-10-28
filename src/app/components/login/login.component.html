@@ -7,17 +7,31 @@
         @if (userService.hasActionableProfileReadFailure()) {
         <div class="profile-read-error" role="alert" data-testid="profile-read-error">
           <mat-icon aria-hidden="true">error_outline</mat-icon>
-          @if (userService.profileReadState().status === 'error') {
+          @if (profileSettingsLoadFailed()) {
+          <h2 class="title">We couldn't load the account software</h2>
+          <p class="subtitle">You're still signed in. Check your connection, then reload the page to download the account software again. Your saved data stays unchanged.</p>
+          } @else if (profileVerificationNeedsReload()) {
+          <h2 class="title">We couldn't verify this browser</h2>
+          <p class="subtitle">You're still signed in. The browser security check failed, so your account data couldn't load.</p>
+          @if (profileVerificationFailure()?.cooldown) {
+          <p class="subtitle">Verification is temporarily paused. Repeated retries in this page won't help; the pause can last up to 24 hours.</p>
+          }
+          <p class="subtitle">Reload the page to start a new check. If it fails again, try a regular browser window or another trusted network. Check whether a privacy extension is blocking Google's verification scripts on this site.</p>
+          <p class="subtitle">Reloading may still fail if verification is rejected again. Your saved data stays unchanged.</p>
+          } @else if (userService.profileReadState().status === 'error') {
           <h2 class="title">We couldn't load your account</h2>
-          <p class="subtitle">Your account data could not be verified securely. Check your connection, then sign out and try again.</p>
+          <p class="subtitle">You're still signed in, but we couldn't verify your account data. Check your connection, then try again.</p>
           } @else {
           <h2 class="title">We can't reach your account data</h2>
-          <p class="subtitle">The secure server check is still retrying. Check your connection or sign out and try again.</p>
+          <p class="subtitle">You're still signed in. The secure server check is retrying. Check your connection, then try again.</p>
           }
-          <button mat-raised-button class="action-button qs-mat-primary" data-testid="profile-read-error-sign-out"
+          <button mat-raised-button class="action-button qs-mat-primary" data-testid="profile-read-error-retry"
             (click)="recoverFromProfileReadError()" [disabled]="isProfileRecoveryInProgress">
-            {{ isProfileRecoveryInProgress ? 'Signing out…' : 'Sign out and try again' }}
+            {{ isProfileRecoveryInProgress ? (profileVerificationNeedsReload() ? 'Reloading…' : 'Retrying…') : profileVerificationNeedsReload() ? 'Reload page' : 'Retry' }}
           </button>
+          @if (profileVerificationNeedsReload() && !profileSettingsLoadFailed()) {
+          <a mat-button routerLink="/help" fragment="troubleshooting" appHapticTap>Browser verification help</a>
+          }
         </div>
         } @else {
 

@@ -5,6 +5,7 @@ import {
     RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import { readFileSync } from 'fs';
+import { createHash } from 'node:crypto';
 import { resolve } from 'path';
 import { beforeEach, describe, it, beforeAll, afterAll, expect } from 'vitest';
 
@@ -17,7 +18,7 @@ describe('Firestore Security Rules', () => {
             firestore: {
                 rules: readFileSync(resolve(__dirname, '../firestore.rules'), 'utf8'),
                 host: 'localhost',
-                port: 8081,
+                port: Number(process.env.FIRESTORE_RULES_EMULATOR_PORT || 8081),
             },
         });
     });
@@ -30,6 +31,543 @@ describe('Firestore Security Rules', () => {
 
     beforeEach(async () => {
         await testEnv.clearFirestore();
+    });
+
+    describe('Activity send projections', () => {
+        beforeEach(async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc('users/send-owner/activitySends/batch').set({ provider: 'suunto', state: 'confirmed' });
+                await context.firestore().doc('users/send-owner/activitySends/batch/rows/row').set({ status: 'processing' });
+                await context.firestore().doc('users/send-owner/activitySendOperations/batch').set({ providerAccount: 'private-canary' });
+                await context.firestore().doc('users/send-owner/activitySendOperations/batch/rows/row').set({ digest: 'private-canary' });
+                await context.firestore().doc('activitySendUploadCleanup/private-upload').set({ userID: 'send-owner', path: 'private-canary' });
+            });
+        });
+        it('lets the owner read retained results without Pro and denies other readers', async () => {
+            await assertSucceeds(testEnv.authenticatedContext('send-owner').firestore().doc('users/send-owner/activitySends/batch').get());
+            await assertSucceeds(testEnv.authenticatedContext('send-owner').firestore().doc('users/send-owner/activitySends/batch/rows/row').get());
+            await assertFails(testEnv.authenticatedContext('other').firestore().doc('users/send-owner/activitySends/batch').get());
+            await assertFails(testEnv.unauthenticatedContext().firestore().doc('users/send-owner/activitySends/batch').get());
+        });
+        it('denies projection writes and all private operation/quota access', async () => {
+            const owner = testEnv.authenticatedContext('send-owner').firestore();
+            await assertFails(owner.doc('users/send-owner/activitySends/batch').update({ state: 'complete' }));
+            await assertFails(owner.doc('users/send-owner/activitySends/batch/rows/row').update({ status: 'delivered' }));
+            await assertFails(owner.doc('users/send-owner/activitySendOperations/batch').get());
+            await assertFails(owner.doc('users/send-owner/activitySendOperations/batch/rows/row').get());
+            await assertFails(owner.doc('users/send-owner/activitySendQuota/current').set({ bytes: 0 }));
+        });
+        it('denies upload-cleanup access and descendants for owners, other users, admins and anonymous clients', async () => {
+            const contexts = [testEnv.authenticatedContext('send-owner'), testEnv.authenticatedContext('other'),
+                testEnv.authenticatedContext('admin', { admin: true }), testEnv.unauthenticatedContext()];
+            for (const context of contexts) {
+                const db = context.firestore();
+                const ref = db.doc('activitySendUploadCleanup/private-upload');
+                await assertFails(ref.get());
+                await assertFails(ref.update({ userID: 'other' }));
+                await assertFails(ref.delete());
+                await assertFails(db.doc('activitySendUploadCleanup/new-upload').set({ userID: 'send-owner' }));
+                await assertFails(ref.collection('unexpected').doc('child').set({ path: 'archive-canary' }));
+                await assertFails(ref.collection('unexpected').doc('child').get());
+            }
+        });
+    });
+
+    describe('Training load controls and dated policies', () => {
+        const path = 'users/owner/events/workout/metaData/trainingLoad';
+        async function seed() {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                const db = context.firestore();
+                await db.doc('users/owner').set({ created: true });
+                await db.doc('users/owner/events/workout').set({ privacy: 'public' });
+                await db.doc('users/owner/activities/leg').set({ eventID: 'workout' });
+            });
+        }
+        async function edit(revision = 1, override = 0) {
+            const { serverTimestamp } = await import('firebase/firestore');
+            return { version: 1, revision, excluded: false, controls: { leg: { override } },
+                editedLegKey: 'leg', updatedAt: serverTimestamp() };
+        }
+        it('keeps compact load summaries private and rejects client writes to cache or coordination fields', async () => {
+            await seed();
+            const cachePath = 'users/owner/trainingLoadCache/b_a';
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc(cachePath).set({ version: 1, leaf: true, entries: {} });
+                await context.firestore().doc(path).set({ version: 1, revision: 1, excluded: false, controls: {},
+                    sourceWritePending: true, sourceWriteId: 'server-attempt', sourceRevision: 1, sourceWriteTimes: { event: '1:2' } });
+            });
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            await assertSucceeds(owner.doc(cachePath).get());
+            await assertFails(testEnv.unauthenticatedContext().firestore().doc(cachePath).get());
+            await assertFails(testEnv.authenticatedContext('other').firestore().doc(cachePath).get());
+            await assertFails(owner.doc(cachePath).set({ version: 1, leaf: true, entries: {} }));
+            await assertFails(owner.doc(cachePath).delete());
+            for (const fields of [{ sourceWritePending: false }, { sourceFirstImport: true }, { sourceRevision: 2 }, { loadRevision: 2 },
+                { sourceWriteTimes: {} }, { sourceWriteId: 'forged' }, { sourceDigest: 'forged' }])
+                await assertFails(owner.doc(path).update({ ...await edit(2), ...fields }));
+            await assertSucceeds(owner.doc(path).update(await edit(2)));
+        });
+        it('permits owner zero overrides and revision-bound edits while keeping the overlay private', async () => {
+            await seed();
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            await assertSucceeds(owner.doc(path).set(await edit()));
+            await assertFails(testEnv.unauthenticatedContext().firestore().doc(path).get());
+            await assertFails(testEnv.authenticatedContext('other').firestore().doc(path).get());
+            await assertFails(owner.doc(path).set(await edit()));
+            await assertFails(owner.doc(path).set(await edit(2, -1)));
+            await assertFails(owner.doc(path).set(await edit(2, 10000)));
+            await assertSucceeds(owner.doc(path).set(await edit(2, 9999)));
+            await assertFails(owner.doc(path).delete());
+        });
+        it('rejects forged calculated values, foreign legs and writes during account or event deletion', async () => {
+            await seed();
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            await assertFails(owner.doc(path).set({ ...await edit(), legs: {} }));
+            await assertFails(owner.doc(path).set({ ...await edit(), controls: { foreign: { override: 1 } }, editedLegKey: 'foreign' }));
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc('userDeletionTombstones/owner').set({ deleting: true });
+            });
+            await assertFails(owner.doc(path).set(await edit()));
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc('userDeletionTombstones/owner').delete();
+                await context.firestore().doc('users/owner/events/workout').delete();
+            });
+            await assertFails(owner.doc(path).set(await edit()));
+        });
+        it('preserves server evaluations and saved policies through a reset', async () => {
+            await seed();
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc(path).set({ ...await edit(), updatedAt: new Date(),
+                    legs: { leg: { activityId: 'leg', policy: { method: 'HR', included: true },
+                        evaluations: { automatic: { method: 'HR', score: 70, hrAlgorithm: 'THRESHOLD', estimated: true } } } } });
+            });
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const { serverTimestamp } = await import('firebase/firestore');
+            await assertFails(owner.doc(path).update({ 'legs.leg.policy.method': 'MET', revision: 2, updatedAt: serverTimestamp() }));
+            await assertFails(owner.doc(path).update({ 'legs.leg.evaluations.automatic.hrAlgorithm': 'BANISTER', revision: 2, updatedAt: serverTimestamp() }));
+            await assertSucceeds(owner.doc(path).update({ controls: {}, editedLegKey: null, revision: 2, updatedAt: serverTimestamp() }));
+            const saved = (await owner.doc(path).get()).data()?.legs.leg;
+            expect(saved.policy.method).toBe('HR');
+            expect(saved.evaluations.automatic).toMatchObject({ score: 70, hrAlgorithm: 'THRESHOLD', estimated: true });
+        });
+        it('requires saved leg keys after reparse and protects frozen legacy identities', async () => {
+            await seed();
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc(path).set({ version: 1, revision: 1, excluded: false, controls: {},
+                    legacyLegs: { leg: { identity: { type: 'Walking' } } },
+                    legs: { stable: { activityId: 'leg', policy: { method: 'HR', included: true } } } });
+            });
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const { serverTimestamp } = await import('firebase/firestore');
+            await assertFails(owner.doc(path).update(await edit(2)));
+            await assertFails(owner.doc(path).update({ legacyLegs: {}, revision: 2, updatedAt: serverTimestamp() }));
+            await assertSucceeds(owner.doc(path).update({ ...await edit(2), editedLegKey: 'stable', controls: { stable: { override: 0 } } }));
+        });
+        it('requires atomic immutable policy revisions with server timestamps', async () => {
+            await seed();
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const head = owner.doc('users/owner/trainingLoadPolicies/walking-hiking');
+            const history = head.collection('revisions').doc('r1');
+            const { serverTimestamp } = await import('firebase/firestore');
+            const data = { revision: 1, revisionId: 'r1', method: 'HR', included: true, effectiveAt: serverTimestamp() };
+            await assertFails(head.set(data));
+            const batch = owner.batch(); batch.set(head, data); batch.set(history, data);
+            await assertSucceeds(batch.commit());
+            await assertFails(history.update({ included: false }));
+            await assertFails(history.delete());
+            const next = owner.batch();
+            const backdated = { ...data, revision: 2, revisionId: 'r2', effectiveAt: new Date(0) };
+            next.set(head, backdated); next.set(head.collection('revisions').doc('r2'), backdated);
+            await assertFails(next.commit());
+        });
+    });
+
+    describe('Account deletion fences for existing client sessions', () => {
+        const uid = 'deleting-owner';
+        const accountPath = `users/${uid}`;
+        const checkoutPath = `customers/${uid}/checkout_sessions/session`;
+        const checkout = (owner: string) => ({ price: 'price_123', mode: 'subscription',
+            success_url: 'https://quantified-self.io/success', cancel_url: 'https://quantified-self.io/cancel',
+            metadata: { firebaseUID: owner }, automatic_tax: { enabled: true }, allow_promotion_codes: true });
+        const fixtures = {
+            [accountPath]: { displayName: 'Owner' },
+            [`${accountPath}/config/settings`]: { theme: 'dark' },
+            [`${accountPath}/legal/agreements`]: { acceptedMarketingPolicy: true },
+            [`${accountPath}/events/event`]: { name: 'Run', privacy: 'private' },
+            [`${accountPath}/routes/route`]: { name: 'Route' },
+            [`${accountPath}/activities/activity`]: { eventID: 'event', name: 'Activity' },
+            [checkoutPath]: checkout(uid),
+            'configuration/stripeBilling': { owner: 'native', requestsEnabled: true },
+            'stripeBillingPrices/price_123': { active: true, product: 'prod_existing', mode: 'subscription', trialDays: 0 },
+            'products/prod_existing': { active: true },
+        };
+        const mutations = [
+            { name: 'profile creation', path: accountPath, operation: 'create', data: { displayName: 'Late profile' } },
+            { name: 'profile update', path: accountPath, operation: 'update', data: { displayName: 'Late profile' } },
+            { name: 'settings creation', path: `${accountPath}/config/settings`, operation: 'create', data: { theme: 'light' } },
+            { name: 'settings update', path: `${accountPath}/config/settings`, operation: 'update', data: { theme: 'light' } },
+            { name: 'settings deletion', path: `${accountPath}/config/settings`, operation: 'delete' },
+            { name: 'legal creation', path: `${accountPath}/legal/agreements`, operation: 'create', data: { acceptedMarketingPolicy: false } },
+            { name: 'legal update', path: `${accountPath}/legal/agreements`, operation: 'update', data: { acceptedMarketingPolicy: false } },
+            { name: 'event update', path: `${accountPath}/events/event`, operation: 'update', data: { name: 'Late event' } },
+            { name: 'event deletion', path: `${accountPath}/events/event`, operation: 'delete' },
+            { name: 'route update', path: `${accountPath}/routes/route`, operation: 'update', data: { name: 'Late route' } },
+            { name: 'route deletion', path: `${accountPath}/routes/route`, operation: 'delete' },
+            { name: 'activity update', path: `${accountPath}/activities/activity`, operation: 'update', data: { name: 'Late activity' } },
+            { name: 'checkout creation', path: checkoutPath, operation: 'create', data: checkout(uid) },
+            { name: 'checkout update', path: checkoutPath, operation: 'update', data: { price: 'price_456' } },
+            { name: 'checkout deletion', path: checkoutPath, operation: 'delete' },
+        ] as const;
+
+        beforeEach(async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                const batch = context.firestore().batch();
+                for (const [path, data] of Object.entries(fixtures)) batch.set(context.firestore().doc(path), data);
+                await batch.commit();
+            });
+        });
+
+        it.each(mutations)('blocks $name after the pending fence even for an existing session', async mutation => {
+            // The session predates deletion: signing out another tab cannot revoke this client.
+            const owner = testEnv.authenticatedContext(uid).firestore();
+            await assertSucceeds(owner.doc(accountPath).get());
+            await testEnv.withSecurityRulesDisabled(async context => {
+                const db = context.firestore();
+                if (mutation.operation === 'create') await db.doc(mutation.path).delete();
+                await db.doc(`userDeletionTombstones/${uid}`).set({ cleanupStatus: 'pending' });
+            });
+            const ref = owner.doc(mutation.path);
+            if (mutation.operation === 'delete') await assertFails(ref.delete());
+            else if (mutation.operation === 'create') await assertFails(ref.set(mutation.data));
+            else await assertFails(ref.update(mutation.data));
+        });
+
+        it.each([
+            { name: 'retained completion', marker: { cleanupStatus: 'complete', expireAt: new Date('2100-01-01') } },
+            { name: 'malformed expiration', marker: { cleanupStatus: 'pending', expireAt: 'expired' } },
+        ])('keeps $name fenced after the roots disappear', async ({ marker }) => {
+            const owner = testEnv.authenticatedContext(uid).firestore();
+            await testEnv.withSecurityRulesDisabled(async context => {
+                const db = context.firestore();
+                await db.doc(accountPath).delete();
+                await db.doc(`${accountPath}/config/settings`).delete();
+                await db.doc(checkoutPath).delete();
+                await db.doc(`userDeletionTombstones/${uid}`).set(marker);
+            });
+            await assertFails(owner.doc(accountPath).set({ displayName: 'Resurrected' }));
+            await assertFails(owner.doc(`${accountPath}/config/settings`).set({ theme: 'light' }));
+            await assertFails(owner.doc(checkoutPath).set(checkout(uid)));
+        });
+
+        it('preserves ordinary owner reads and backend writes while pending', async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                const db = context.firestore();
+                await db.doc(`userDeletionTombstones/${uid}`).set({ cleanupStatus: 'pending' });
+                await db.doc(accountPath).update({ displayName: 'Backend update' });
+                await db.doc(`${accountPath}/config/settings`).set({ theme: 'backend' });
+                await db.doc(checkoutPath).update({ status: 'closed' });
+            });
+            const owner = testEnv.authenticatedContext(uid).firestore();
+            expect((await assertSucceeds(owner.doc(accountPath).get())).data()?.displayName).toBe('Backend update');
+            expect((await assertSucceeds(owner.doc(`${accountPath}/config/settings`).get())).data()?.theme).toBe('backend');
+            await assertSucceeds(owner.doc(`${accountPath}/events/event`).get());
+            await assertSucceeds(owner.doc(checkoutPath).get());
+            await assertFails(owner.doc(`userDeletionTombstones/${uid}`).get());
+            await assertFails(owner.doc(`userDeletionTombstones/${uid}`).delete());
+        });
+
+        it.each(['absent', 'expired'])('permits normal account creation with an $0 deletion marker', async markerState => {
+            const newUid = 'new-owner';
+            if (markerState === 'expired') {
+                await testEnv.withSecurityRulesDisabled(async context => {
+                    await context.firestore().doc(`userDeletionTombstones/${newUid}`)
+                        .set({ cleanupStatus: 'complete', expireAt: new Date(0) });
+                });
+            }
+            const owner = testEnv.authenticatedContext(newUid).firestore();
+            await assertSucceeds(owner.doc(`users/${newUid}`).set({ displayName: 'New owner', creationDate: new Date() }));
+            await assertSucceeds(owner.doc(`users/${newUid}/config/settings`).set({ theme: 'light' }));
+            await assertSucceeds(owner.doc(`users/${newUid}/legal/agreements`).set({ acceptedMarketingPolicy: false }));
+            await assertSucceeds(owner.doc(`customers/${newUid}/checkout_sessions/new`).set(checkout(newUid)));
+            await assertFails(owner.doc(`users/${uid}`).update({ displayName: 'Wrong owner' }));
+        });
+    });
+
+    describe('Private workout reflection leaves', () => {
+        const path = 'users/owner/events/e/workoutReflections/recording';
+        const value = { schemaVersion: 1, revision: 1, deleted: false,
+            mutationId: '11111111-1111-4111-8111-111111111111', note: 'private context' };
+        beforeEach(async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc('users/owner').set({ active: true });
+                await context.firestore().doc('users/owner/events/e').set({ privacy: 'public' });
+                await context.firestore().doc('users/owner/activities/a').set({ eventID: 'e' });
+            });
+        });
+        it('keeps public recording reflections owner-only with no unbounded list', async () => {
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            await assertSucceeds(owner.doc(path).set({ ...value, note: 'First line\nSecond line\t🧡' }));
+            await assertSucceeds(owner.doc(path).get());
+            await assertFails(testEnv.authenticatedContext('other').firestore().doc(path).get());
+            await assertFails(testEnv.unauthenticatedContext().firestore().doc(path).get());
+            await assertFails(owner.collection('users/owner/events/e/workoutReflections').get());
+            await assertFails(owner.doc(path + '/nested/leaf').set(value));
+        });
+        it('atomically saves event feedback with a private note and rolls back both on a stale note revision', async () => {
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const eventRef = owner.doc('users/owner/events/e');
+            const reflectionRef = owner.doc(path);
+            const batch = owner.batch();
+            batch.update(eventRef, { 'stats.Rated Perceived Exertion': 5, name: 'Run' });
+            batch.set(reflectionRef, value);
+            await assertSucceeds(batch.commit());
+            expect((await eventRef.get()).data()).toEqual({ privacy: 'public', name: 'Run', stats: { 'Rated Perceived Exertion': 5 } });
+            await assertFails(testEnv.unauthenticatedContext().firestore().doc(path).get());
+            const stale = owner.batch();
+            stale.update(eventRef, { 'stats.Rated Perceived Exertion': 9, name: 'Stale edit' });
+            stale.set(reflectionRef, { ...value, note: 'stale note' });
+            await assertFails(stale.commit());
+            expect((await eventRef.get()).data()?.stats).toEqual({ 'Rated Perceived Exertion': 5 });
+            expect((await eventRef.get()).data()?.name).toBe('Run');
+            expect((await reflectionRef.get()).data()?.note).toBe('private context');
+        });
+        it('enforces target membership, note-only fields, revisions and permanent clearing', async () => {
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            await assertSucceeds(owner.doc('users/owner/events/e/workoutReflections/activity_a').set(value));
+            await assertFails(owner.doc('users/owner/events/e/workoutReflections/activity_wrong').set(value));
+            for (const patch of [{ effort: 5 }, { effort: null }, { effortScale: 'borg_cr10' }, { note: null }, { note: 'a'.repeat(2001) },
+                { provider: 'leak' }, { revision: 2 }, { deleted: true }, { note: '\u0000' }, { note: 'safe\n\u0000' }, { note: '  \n  ' }]) {
+                await assertFails(owner.doc(path).set({ ...value, ...patch }));
+            }
+            await assertSucceeds(owner.doc(path).set(value));
+            await assertFails(owner.doc(path).update({ revision: 2 }));
+            await assertFails(owner.doc(path).delete());
+            await assertSucceeds(owner.doc(path).set({ ...value, revision: 2, deleted: true, note: null,
+                mutationId: '22222222-2222-4222-8222-222222222222' }));
+            await assertFails(owner.doc(path).set(value));
+        });
+        it('refuses deleted accounts, missing recordings and benchmark targets', async () => {
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc('users/owner/events/e').update({ mergeType: 'benchmark' });
+            });
+            await assertFails(owner.doc(path).set(value));
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc('users/owner/events/e').update({ mergeType: 'multi' });
+                await context.firestore().doc('userDeletionTombstones/owner').set({ deleting: true });
+            });
+            await assertFails(owner.doc(path).set(value));
+        });
+    });
+
+    describe('Event tag catalog', () => {
+        const key = (name: string) => createHash('sha256').update(name.toLowerCase()).digest('hex');
+
+        it('allows only the owner to read and rejects changes to saved entries', async () => {
+            const path = 'users/owner/eventTagCatalog/race';
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc(path).set({ name: 'Race' });
+            });
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const other = testEnv.authenticatedContext('other').firestore();
+            const guest = testEnv.unauthenticatedContext().firestore();
+            await assertSucceeds(owner.doc(path).get());
+            await assertSucceeds(owner.collection('users/owner/eventTagCatalog').get());
+            await assertFails(other.doc(path).get());
+            await assertFails(other.collection('users/owner/eventTagCatalog').get());
+            await assertFails(guest.doc(path).get());
+            await assertFails(owner.doc(path).set({ name: 'Changed' }));
+            await assertFails(owner.doc(path).update({ name: 'Changed' }));
+            await assertFails(owner.doc(path).delete());
+        });
+
+        it('lets the owner create normalized labels under hash-shaped keys', async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc('users/owner').set({ created: true });
+            });
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const other = testEnv.authenticatedContext('other').firestore();
+            const guest = testEnv.unauthenticatedContext().firestore();
+            for (const name of ['Race', 'İstanbul', '🏃 Trail']) {
+                await assertSucceeds(owner.doc(`users/owner/eventTagCatalog/${key(name)}`).set({ name }));
+            }
+            await assertFails(owner.doc(`users/owner/eventTagCatalog/${key('race')}`).set({ name: 'race' }));
+            await assertFails(owner.doc('users/owner/eventTagCatalog/wrong-key').set({ name: 'New' }));
+            await assertFails(owner.doc(`users/owner/eventTagCatalog/${key(' padded')}`).set({ name: ' padded' }));
+            await assertFails(owner.doc(`users/owner/eventTagCatalog/${key('bad  space')}`).set({ name: 'bad  space' }));
+            await assertFails(owner.doc(`users/owner/eventTagCatalog/${key('New')}`).set({ name: 'New', extra: true }));
+            await assertFails(other.doc(`users/owner/eventTagCatalog/${key('Other')}`).set({ name: 'Other' }));
+            await assertFails(guest.doc(`users/owner/eventTagCatalog/${key('Guest')}`).set({ name: 'Guest' }));
+        });
+
+        it('refuses catalog creation after account deletion begins', async () => {
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const tagRef = owner.doc(`users/owner/eventTagCatalog/${key('Race')}`);
+            await assertFails(tagRef.set({ name: 'Race' }));
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc('users/owner').set({ created: true });
+                await context.firestore().doc('userDeletionTombstones/owner').set({ deleting: true });
+            });
+            await assertFails(tagRef.set({ name: 'Race' }));
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc('userDeletionTombstones/owner').set({ expireAt: new Date(Date.now() + 60_000) });
+            });
+            await assertFails(tagRef.set({ name: 'Race' }));
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc('userDeletionTombstones/owner').set({ expireAt: new Date(0) });
+            });
+            await assertSucceeds(tagRef.set({ name: 'Race' }));
+        });
+
+        it('rolls back the event edit when account deletion blocks its catalog entry', async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                const db = context.firestore();
+                await db.doc('users/owner').set({ created: true });
+                await db.doc('users/owner/events/event-1').set({ privacy: 'private', tags: [] });
+                await db.doc('userDeletionTombstones/owner').set({ deleting: true });
+            });
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const eventRef = owner.doc('users/owner/events/event-1');
+            const tagRef = owner.doc(`users/owner/eventTagCatalog/${key('Trail')}`);
+            await assertFails(owner.runTransaction(async transaction => {
+                await transaction.get(eventRef);
+                const catalogEntry = await transaction.get(tagRef);
+                if (!catalogEntry.exists) transaction.set(tagRef, { name: 'Trail' });
+                transaction.update(eventRef, { tags: ['Trail'] });
+            }));
+            expect((await eventRef.get()).data()?.tags).toEqual([]);
+        });
+
+        it('commits an event tag edit and its catalog entry together', async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc('users/owner').set({ created: true });
+                await context.firestore().doc('users/owner/events/event-1')
+                    .set({ privacy: 'private', tags: [] });
+            });
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const eventRef = owner.doc('users/owner/events/event-1');
+            const tagRef = owner.doc(`users/owner/eventTagCatalog/${key('Trail')}`);
+            await assertSucceeds(owner.runTransaction(async transaction => {
+                await transaction.get(eventRef);
+                const tag = await transaction.get(tagRef);
+                if (!tag.exists) transaction.set(tagRef, { name: 'Trail' });
+                transaction.update(eventRef, { tags: ['Trail'] });
+            }));
+        });
+
+        it('allows an event to acquire the full ten-tag limit atomically', async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc('users/owner').set({ created: true });
+                await context.firestore().doc('users/owner/events/event-1')
+                    .set({ privacy: 'private', tags: [] });
+            });
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const eventRef = owner.doc('users/owner/events/event-1');
+            const tags = Array.from({ length: 10 }, (_, index) => `Tag ${index}`);
+            const refs = tags.map(name => owner.doc(`users/owner/eventTagCatalog/${key(name)}`));
+            await assertSucceeds(owner.runTransaction(async transaction => {
+                await transaction.get(eventRef);
+                const snapshots = await Promise.all(refs.map(ref => transaction.get(ref)));
+                snapshots.forEach((snapshot, index) => {
+                    if (!snapshot.exists) transaction.set(refs[index], { name: tags[index] });
+                });
+                transaction.update(eventRef, { tags });
+            }));
+            expect((await owner.collection('users/owner/eventTagCatalog').get()).size).toBe(10);
+        });
+
+        it('keeps simultaneous additions to different events and deduplicates the same label', async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                const db = context.firestore();
+                await db.doc('users/owner').set({ created: true });
+                for (const eventID of ['one', 'two', 'three']) {
+                    await db.doc(`users/owner/events/${eventID}`).set({ privacy: 'private', tags: [] });
+                }
+            });
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const edit = (eventID: string, name: string) => owner.runTransaction(async transaction => {
+                const eventRef = owner.doc(`users/owner/events/${eventID}`);
+                const tagRef = owner.doc(`users/owner/eventTagCatalog/${key(name)}`);
+                await transaction.get(eventRef);
+                const catalogEntry = await transaction.get(tagRef);
+                if (!catalogEntry.exists) transaction.set(tagRef, { name });
+                transaction.update(eventRef, { tags: [name] });
+            });
+
+            await Promise.all([
+                edit('one', 'Race'), edit('two', 'race'), edit('three', 'Trail'),
+            ]);
+
+            for (const [eventID, name] of [['one', 'Race'], ['two', 'race'], ['three', 'Trail']]) {
+                expect((await owner.doc(`users/owner/events/${eventID}`).get()).data()?.tags).toEqual([name]);
+            }
+            const entries = await owner.collection('users/owner/eventTagCatalog').get();
+            expect(entries.docs.map(doc => doc.id).sort()).toEqual([key('Race'), key('Trail')].sort());
+        });
+    });
+
+    describe('Connection history imports', () => {
+        it('keeps runs server-only and exposes safe progress only to the metadata owner', async () => {
+            const statusPath = 'users/owner/meta/Wahoo API';
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc(statusPath).set({ connectionHistoryImport: { runId: 'opaque', active: true, steps: [] } });
+                await context.firestore().doc('connectionHistoryImports/opaque').set({ userID: 'owner', tokenPath: 'private' });
+            });
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            await assertSucceeds(owner.doc(statusPath).get());
+            await assertFails(testEnv.authenticatedContext('other').firestore().doc(statusPath).get());
+            await assertFails(owner.doc(statusPath).update({ connectionHistoryImport: { active: false } }));
+            for (const context of [testEnv.authenticatedContext('owner'), testEnv.authenticatedContext('admin', { admin: true }), testEnv.unauthenticatedContext()]) {
+                await assertFails(context.firestore().doc('connectionHistoryImports/opaque').get());
+                await assertFails(context.firestore().doc('connectionHistoryImports/opaque').set({ userID: 'owner' }));
+                await assertFails(context.firestore().doc('connectionHistoryImports/opaque/receipts/unit').get());
+            }
+        });
+    });
+
+    describe('Timeline notes', () => {
+        it('supports inclusive overlapping ranges, earlier starts, ongoing and future history pages', async () => {
+            const path = 'users/owner/timelineNotes';
+            await testEnv.withSecurityRulesDisabled(async context => {
+                for (const [id, startDate, endDate] of [
+                    ['earlier', '2026-01-01', '2026-09-02'], ['single', '2026-09-02', '2026-09-02'],
+                    ['ongoing', '2026-01-01', null], ['future', '2027-01-01', '2027-01-02'],
+                    ['old', '2026-01-01', '2026-09-01'],
+                ]) await context.firestore().doc(`${path}/${id}`).set({ startDate, endDate });
+            });
+            const collection = testEnv.authenticatedContext('owner').firestore().collection(path);
+            const closed = await assertSucceeds(collection.where('endDate', '>=', '2026-09-02')
+                .where('startDate', '<=', '2026-09-03').orderBy('endDate').orderBy('startDate').limit(65).get());
+            expect(closed.docs.map(doc => doc.id)).toEqual(['earlier', 'single']);
+            const ongoing = await assertSucceeds(collection.where('endDate', '==', null)
+                .where('startDate', '<=', '2026-09-03').orderBy('endDate').orderBy('startDate').limit(65).get());
+            expect(ongoing.docs.map(doc => doc.id)).toEqual(['ongoing']);
+            const history = await assertSucceeds(collection.orderBy('startDate', 'desc').limit(2).get());
+            expect(history.docs[0].id).toBe('future');
+            const next = await assertSucceeds(collection.orderBy('startDate', 'desc').startAfter(history.docs[1]).limit(2).get());
+            expect(next.docs).toHaveLength(2);
+        });
+        it('allows only bounded owner reads and rejects browser writes, receipts and descendants', async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc('users/owner/timelineNotes/note').set({ startDate: '2026-09-01', endDate: null, showOnCharts: false });
+            });
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const other = testEnv.authenticatedContext('other').firestore();
+            const guest = testEnv.unauthenticatedContext().firestore();
+            const path = 'users/owner/timelineNotes';
+            await assertSucceeds(owner.doc(`${path}/note`).get());
+            await assertSucceeds(owner.collection(path).limit(65).get());
+            await assertFails(owner.collection(path).get());
+            await assertFails(owner.collection(path).limit(66).get());
+            await assertFails(other.collection(path).limit(64).get());
+            await assertFails(guest.doc(`${path}/note`).get());
+            await assertFails(owner.doc(`${path}/note`).set({ title: 'client' }));
+            await assertFails(owner.doc(`${path}/note`).update({ showOnCharts: true }));
+            await assertFails(owner.doc(`${path}/note`).delete());
+            await assertFails(owner.doc(`${path}/note/children/x`).set({}));
+            await assertFails(owner.doc('users/owner/timelineNoteDeletions/note').get());
+            await assertFails(owner.doc('users/owner/timelineNoteDeletions/note').set({ deleted: true }));
+        });
     });
 
     describe('Customers Collection', () => {
@@ -99,6 +637,107 @@ describe('Firestore Security Rules', () => {
         });
 
 
+    });
+
+    describe('Stripe checkout entitlement boundary', () => {
+        const uid = 'checkout_owner';
+        const path = `customers/${uid}/checkout_sessions/attempt`;
+        const payload = {
+            price: 'price_existing123', mode: 'subscription',
+            success_url: 'https://quantified-self.io/success', cancel_url: 'https://quantified-self.io/cancel',
+            metadata: { firebaseUID: uid }, automatic_tax: { enabled: true },
+            allow_promotion_codes: true, payment_method_collection: 'if_required', trial_period_days: 7
+        };
+
+
+        beforeEach(async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                const db = context.firestore();
+                await db.doc(`users/${uid}`).set({});
+                await db.doc('configuration/stripeBilling').set({ owner: 'native', requestsEnabled: true });
+                await db.doc('stripeBillingPrices/price_existing123').set({ active: true, product: 'prod_existing', mode: 'subscription', trialDays: 7 });
+                await db.doc('products/prod_existing').set({ active: true });
+            });
+        });
+        it.each([
+            { customer: 'cus_forged' }, { price: 'price_unknown' }, { trial_period_days: 730 },
+            { sessionId: 'cs_forged' }, { url: 'https://attacker.example' }, { mode: 'payment' },
+            { status: 'updating' }, { replacement: { sessionId: 'cs_forged' } },
+            { metadata: { firebaseUID: 'other' } }, { automatic_tax: { enabled: false } },
+            { success_url: 'https://attacker.example/' }, { error: { message: 'forged' } },
+            { checkout_terms_version: 'future' }, { checkout_terms_version: null }, { payment_method_collection: 'always' }
+        ])('rejects forged checkout fields %j', async patch => {
+            await assertFails(testEnv.authenticatedContext(uid).firestore().doc(path).set({ ...payload, ...patch }));
+        });
+        it('accepts the current offer acknowledgement while leaving billing policy server-owned', async () => {
+            const ref = testEnv.authenticatedContext(uid).firestore().doc(path);
+            await assertSucceeds(ref.set({ ...payload, checkout_terms_version: 'pro-trial-payment-method-v1' }));
+            await assertFails(ref.update({ checkout_terms_version: 'future' }));
+        });
+        it('lets the owner observe server progress without changing it or the selection', async () => {
+            const owner = testEnv.authenticatedContext(uid).firestore().doc(path);
+            await assertSucceeds(owner.set(payload));
+            await testEnv.withSecurityRulesDisabled(async c => { await c.firestore().doc(path).update({ status: 'updating' }); });
+            expect((await assertSucceeds(owner.get())).get('status')).toBe('updating');
+            await assertFails(owner.update({ status: 'ready' }));
+            await assertFails(owner.update({ price: 'price_other' }));
+        });
+        it('blocks cached clients during maintenance and account deletion', async () => {
+            const ref = testEnv.authenticatedContext(uid).firestore().doc(path);
+            await testEnv.withSecurityRulesDisabled(async c => { await c.firestore().doc('configuration/stripeBilling').update({ requestsEnabled: false }); });
+            await assertFails(ref.set(payload));
+            await testEnv.withSecurityRulesDisabled(async c => {
+                await c.firestore().doc('configuration/stripeBilling').update({ requestsEnabled: true });
+                await c.firestore().doc(`userDeletionTombstones/${uid}`).set({});
+            });
+            await assertFails(ref.set(payload));
+        });
+        it.each(['stripeBillingJobs/job', `stripeBillingAccounts/${uid}`, 'stripeBillingLocks/lock'])('hides private billing records: %s', async path => {
+            const ref = testEnv.authenticatedContext(uid).firestore().doc(path);
+            await assertFails(ref.get()); await assertFails(ref.set({}));
+        });
+        it.each([true, false])('preserves create, read and delete but rejects mutation with email_verified=%s', async (email_verified) => {
+            const owner = testEnv.authenticatedContext(uid, { email_verified }).firestore().doc(path);
+            await assertSucceeds(owner.set(payload));
+            await assertFails(owner.set({ ...payload, mode: 'payment' }, { merge: true }));
+            await assertSucceeds(owner.get());
+            await assertSucceeds(owner.delete());
+        });
+
+        it.each([
+            { line_items: [{ price_data: { currency: 'eur', unit_amount: 0, recurring: { interval: 'month' }, product_data: { name: 'Forged Pro', metadata: { firebaseRole: 'pro' } } } }] },
+            { line_items: [{ price_data: { currency: 'eur', unit_amount: 0, recurring: { interval: 'month' }, product: 'prod_existing_pro' } }] },
+            { line_items: [{ price: 'price_existing123' }] },
+            { line_items: [] },
+            { line_items: null }
+        ])('rejects caller line_items on both create and update: %j', async ({ line_items }) => {
+            const owner = testEnv.authenticatedContext(uid).firestore().doc(path);
+            await assertFails(owner.set({ ...payload, line_items }));
+            await assertSucceeds(owner.set(payload));
+            await assertFails(owner.update({ line_items }));
+        });
+
+        it('does not allow another account or an unauthenticated caller to access checkout sessions', async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc(path).set(payload);
+            });
+            for (const caller of [testEnv.authenticatedContext('another_user'), testEnv.unauthenticatedContext()]) {
+                const ref = caller.firestore().doc(path);
+                await assertFails(ref.get());
+                await assertFails(ref.set(payload));
+                await assertFails(ref.update({ price: 'price_other' }));
+                await assertFails(ref.delete());
+            }
+        });
+
+        it('preserves owner reads and deletion of legacy inline checkout records', async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc(path).set({ ...payload, line_items: [{ price: 'price_existing123' }] });
+            });
+            const owner = testEnv.authenticatedContext(uid).firestore().doc(path);
+            await assertSucceeds(owner.get());
+            await assertSucceeds(owner.delete());
+        });
     });
 
     describe('Role protected content', () => {
@@ -561,6 +1200,27 @@ describe('Firestore Security Rules', () => {
                 await assertFails(ownerDb
                     .doc(`users/${userId}/eventMergeOperations/forged-operation`)
                     .set({ status: 'completed' }));
+            });
+        });
+
+        describe('Server-owned disconnect cleanup intents', () => {
+            const path = 'serviceDisconnectCleanup/opaque-episode-account';
+
+            beforeEach(async () => {
+                await testEnv.withSecurityRulesDisabled(async context => {
+                    await context.firestore().doc(path).set({ userID: userId, config: { providerUserId: 'private-test-provider' }, nextAttemptAt: 0 });
+                });
+            });
+
+            it('denies owner, other-user and unauthenticated reads and all browser writes, including descendants', async () => {
+                const owner = testEnv.authenticatedContext(userId).firestore();
+                for (const db of [owner, testEnv.authenticatedContext(otherId).firestore(), testEnv.unauthenticatedContext().firestore()]) {
+                    await assertFails(db.doc(path).get());
+                    await assertFails(db.doc(path).set({ nextAttemptAt: 0 }));
+                    await assertFails(db.doc(path).update({ nextAttemptAt: 0 }));
+                    await assertFails(db.doc(path).delete());
+                    await assertFails(db.doc(`${path}/children/forged`).set({ nextAttemptAt: 0 }));
+                }
             });
         });
 
@@ -1129,6 +1789,42 @@ describe('Firestore Security Rules', () => {
                     benchmarkStatus: 'complete'
                 }));
             });
+
+            it('denies owner changes to the server-owned benchmark source revision', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/events/${eventId}`).set({
+                        name: 'Comparison', privacy: 'private', benchmarkSourceRevision: 2,
+                    });
+                });
+                await assertFails(db.collection(`users/${userId}/events`).doc(eventId).update({ benchmarkSourceRevision: 1 }));
+                await assertSucceeds(db.collection(`users/${userId}/events`).doc(eventId).update({ hasBenchmark: true }));
+            });
+
+            it('blocks benchmark writes during source replacement while retaining ordinary owner edits', async () => {
+                const { deleteField } = await import('firebase/firestore');
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await testEnv.withSecurityRulesDisabled(async context => {
+                    await context.firestore().doc(`users/${userId}/events/${eventId}`).set({
+                        name: 'Comparison', privacy: 'private', benchmarkSourceRevision: 2, benchmarkSourceWritePending: true,
+                    });
+                });
+                const ref = db.doc(`users/${userId}/events/${eventId}`);
+                await assertFails(ref.update({ benchmarkSourceWritePending: false }));
+                await assertFails(ref.update({ benchmarkSourceWritePending: deleteField() }));
+                for (const patch of [{ benchmarkResults: { pair: {} } }, { benchmarkResult: {} }, { hasBenchmark: true },
+                    { benchmarkDevices: ['device'] }, { benchmarkLatestAt: new Date() }]) {
+                    await assertFails(ref.update(patch));
+                }
+                await assertSucceeds(ref.update({ name: 'Edited while reparsing', tags: ['firmware'] }));
+                await testEnv.withSecurityRulesDisabled(async context => {
+                    await context.firestore().doc(`users/${userId}/events/${eventId}`).update({
+                        benchmarkSourceRevision: 3, benchmarkSourceWritePending: false,
+                    });
+                });
+                await assertSucceeds(ref.update({ benchmarkResults: { pair: {} }, hasBenchmark: true }));
+                await assertFails(ref.update({ benchmarkSourceWritePending: true }));
+            });
         });
 
         describe('Routes (users/{uid}/routes/{routeId})', () => {
@@ -1438,6 +2134,237 @@ describe('Firestore Security Rules', () => {
             });
         });
 
+        describe('Training plans and scheduled workouts', () => {
+            it('allows only owner reads of delivery projections and denies internal delivery state even to owners', async () => {
+                const owner = testEnv.authenticatedContext(userId).firestore();
+                const other = testEnv.authenticatedContext(otherId).firestore();
+                for (const collection of ['trainingDeliverySettings', 'trainingDeliveryStatuses', 'trainingDeliveryVerifications',
+                    'trainingWorkoutCompletions']) {
+                    const path = `users/${userId}/${collection}/example`;
+                    await testEnv.withSecurityRulesDisabled(context => context.firestore().doc(path).set({ schemaVersion: 1 }));
+                    await assertSucceeds(owner.doc(path).get());
+                    await assertFails(other.doc(path).get());
+                    await assertFails(testEnv.unauthenticatedContext().firestore().doc(path).get());
+                    await assertFails(owner.doc(path).set({ forged: true }));
+                    await assertFails(owner.doc(path).update({ forged: true }));
+                    await assertFails(owner.doc(path).delete());
+                    await assertFails(owner.doc(`${path}/internal/value`).get());
+                }
+                for (const path of [`users/${userId}/events/event/trainingCompletionEvidence/fit`,
+                    `users/${userId}/trainingActivityCompletionLinks/id`,
+                    `users/${userId}/trainingDeliveryLedger/id`,
+                    `users/${userId}/trainingDeliveryLedger/id/attempts/attempt`,
+                    `users/${userId}/trainingDeliveryState/current`,
+                    `users/${userId}/trainingDeliveryState/current/receipts/mutation`,
+                    `users/${userId}/trainingDeliveryState/current/pastCleanup/workout_w`,
+                    `users/${userId}/trainingDeliveryScopes/workout`, 'trainingDeliveryQueue/job', 'trainingProviderCapacity/garmin_app',
+                    'trainingDeliveryCorosIntegerClaims/12345',
+                    `users/${userId}/trainingProviderCapacity/garmin_account`,
+                    `users/${userId}/trainingDeliveryLedger/id/inspections/read`,
+                    `users/${userId}/trainingDeliveryLedger/id/attempts/attempt/acceptances/checkpoint`,
+                    `users/${userId}/trainingDeliveryState/current/checks/workout_w_garmin`]) {
+                    await assertFails(owner.doc(path).get());
+                    await assertFails(owner.doc(path).set({ forged: true }));
+                }
+                for (const path of [`users/${userId}/trainingMcpLibraryProposals/proposal`,
+                    `users/${userId}/trainingMcpLibraryProposals/proposal/internal/value`]) {
+                    await assertFails(owner.doc(path).get());
+                    await assertFails(owner.doc(path).set({ forged: true }));
+                    await assertFails(other.doc(path).get());
+                }
+                const evidence = `users/${userId}/events/event/trainingCompletionEvidence/fit`;
+                await testEnv.withSecurityRulesDisabled(context => context.firestore().doc(evidence).set({ schemaVersion: 1 }));
+                for (const client of [owner, other, testEnv.unauthenticatedContext().firestore()]) {
+                    await assertFails(client.doc(evidence).get());
+                    await assertFails(client.doc(evidence).update({ forged: true }));
+                    await assertFails(client.doc(evidence).delete());
+                    await assertFails(client.collection(`users/${userId}/events/event/trainingCompletionEvidence`).get());
+                }
+            });
+            const seedCurrentTrainingData = async () => {
+                await testEnv.withSecurityRulesDisabled(async context => {
+                    const userRef = context.firestore().collection('users').doc(userId);
+                    await userRef.collection('trainingPlanState').doc('current').set({
+                        schemaVersion: 1,
+                        activePlanId: 'plan-1',
+                        revision: 1,
+                        currentWorkoutCount: 1,
+                        updatedAtMs: 1,
+                    });
+                    await userRef.collection('trainingPlanState').doc('internal').set({
+                        privateState: true,
+                    });
+                    await userRef.collection('trainingPlans').doc('plan-1').set({ id: 'plan-1' });
+                    await userRef.collection('workoutLibrary').doc('saved-1').set({ id: 'saved-1', title: 'Easy run' });
+                    await userRef.collection('scheduledWorkouts').doc('workout-1').set({
+                        id: 'workout-1', planId: 'plan-1', localDate: '2026-09-02', lifecycle: 'planned',
+                    });
+                    for (const [id, deletedAtMs] of [['deleted-a', 100], ['deleted-b', 101]] as const) {
+                        await userRef.collection('scheduledWorkouts').doc(id).set({
+                            id, planId: 'plan-1', localDate: '2026-09-01', lifecycle: 'deleted', deletedAtMs,
+                        });
+                    }
+                    await userRef.collection('scheduledWorkouts').doc('workout-1')
+                        .collection('strengthDetails').doc('current').set({ version: 1, privatePrescription: true });
+                    await userRef.collection('trainingPlans').doc('plan-1')
+                        .collection('revisions').doc('0000000001').set({ privateDelta: true });
+                    await userRef.collection('trainingPlans').doc('plan-1')
+                        .collection('revisions').doc('0000000001')
+                        .collection('chunks').doc('checkpoint-workouts-0000').set({ privatePayload: true });
+                    await userRef.collection('scheduledWorkouts').doc('workout-1')
+                        .collection('revisions').doc('0000000001').set({ privateSnapshot: true });
+                    await userRef.collection('trainingPlanState').doc('current')
+                        .collection('mutationReceipts').doc('mutation-1').set({ requestHash: 'private' });
+                    await userRef.collection('trainingPlanState').doc('current')
+                        .collection('workoutLibraryMutationReceipts').doc('mutation-1').set({ requestHash: 'private' });
+                    await userRef.collection('trainingPlanState').doc('current')
+                        .collection('workoutLibraryPlacementReceipts').doc('mutation-1').set({ requestHash: 'private' });
+                    await userRef.collection('trainingPlanState').doc('current')
+                        .collection('workoutLibraryState').doc('current').set({ revision: 1 });
+                    await userRef.collection('trainingPlanState').doc('current')
+                        .collection('planDeletionLocks').doc('plan-1').set({ requestHash: 'private' });
+                    await userRef.collection('trainingPlanState').doc('current')
+                        .collection('planDeletionLocks').doc('_bulk_shift').set({ requestHash: 'private' });
+                    await userRef.collection('trainingPlanState').doc('current')
+                        .collection('deletionTombstones').doc('hashed-entity-id').set({ entityIdHash: 'private' });
+                    await userRef.collection('trainingPlanState').doc('current')
+                        .collection('trainingCleanupJobs').doc('workout_cleanup').set({ kind: 'workout', mutationId: 'private' });
+                });
+            };
+
+            it('allows owners to read and list current state, plans, and workouts', async () => {
+                await seedCurrentTrainingData();
+                const userRef = testEnv.authenticatedContext(userId).firestore().collection('users').doc(userId);
+
+                await assertSucceeds(userRef.collection('trainingPlanState').doc('current').get());
+                await assertSucceeds(userRef.collection('trainingPlans').doc('plan-1').get());
+                await assertSucceeds(userRef.collection('trainingPlans').get());
+                await assertSucceeds(userRef.collection('workoutLibrary').doc('saved-1').get());
+                await assertSucceeds(userRef.collection('workoutLibrary').get());
+                await assertSucceeds(userRef.collection('scheduledWorkouts').doc('workout-1').get());
+                await assertSucceeds(userRef.collection('scheduledWorkouts').get());
+                await assertFails(userRef.collection('trainingPlanState').doc('internal').get());
+                await assertFails(userRef.collection('trainingPlanState').get());
+            });
+
+            it('hides workout roots during a staged restore and exposes only its availability leaf', async () => {
+                await seedCurrentTrainingData();
+                const base = `users/${userId}/trainingPlanState/current`;
+                await testEnv.withSecurityRulesDisabled(async context => {
+                    const db = context.firestore();
+                    await db.doc(`${base}/planDeletionLocks/_bulk_restore`).set({ requestHash: 'private' });
+                    await db.doc(`${base}/availability/restore`).set({ schemaVersion: 1, status: 'restoring' });
+                });
+                const owner = testEnv.authenticatedContext(userId).firestore();
+                const other = testEnv.authenticatedContext(otherId).firestore();
+                await assertSucceeds(owner.doc(`${base}/availability/restore`).get());
+                await assertFails(other.doc(`${base}/availability/restore`).get());
+                await assertFails(owner.doc(`${base}/planDeletionLocks/_bulk_restore`).get());
+                await assertFails(owner.collection(`${base}/availability`).get());
+                await assertFails(owner.doc(`${base}/availability/restore`).set({ status: 'ready' }));
+                await assertSucceeds(owner.doc(`users/${userId}/trainingPlans/plan-1`).get());
+                await assertFails(owner.doc(`users/${userId}/scheduledWorkouts/workout-1`).get());
+                await assertFails(owner.collection(`users/${userId}/scheduledWorkouts`).get());
+                await assertFails(owner.doc(`users/${userId}/scheduledWorkouts/workout-1/strengthDetails/current`).get());
+                await testEnv.withSecurityRulesDisabled(async context => {
+                    const db = context.firestore();
+                    await db.doc(`${base}/availability/restore`).delete();
+                    await db.doc(`${base}/planDeletionLocks/_bulk_restore`).delete();
+                });
+                await assertSucceeds(owner.doc(`users/${userId}/scheduledWorkouts/workout-1`).get());
+            });
+
+            it('denies cross-user and unauthenticated reads of current training data', async () => {
+                await seedCurrentTrainingData();
+                const ownerPath = `users/${userId}/scheduledWorkouts/workout-1`;
+                await assertFails(testEnv.authenticatedContext(otherId).firestore().doc(ownerPath).get());
+                await assertFails(testEnv.unauthenticatedContext().firestore().doc(ownerPath).get());
+                const saved = `users/${userId}/workoutLibrary/saved-1`;
+                await assertFails(testEnv.authenticatedContext(otherId).firestore().doc(saved).get());
+                await assertFails(testEnv.unauthenticatedContext().firestore().doc(saved).get());
+            });
+
+            it('allows only the owner to page deleted workouts while cleanup jobs remain internal', async () => {
+                await seedCurrentTrainingData();
+                const path = `users/${userId}/scheduledWorkouts`;
+                const owner = testEnv.authenticatedContext(userId).firestore();
+                const other = testEnv.authenticatedContext(otherId).firestore();
+                const page = owner.collection(path).where('planId', '==', 'plan-1')
+                    .where('lifecycle', '==', 'deleted').where('deletedAtMs', '>', 99)
+                    .orderBy('deletedAtMs', 'desc').orderBy('__name__', 'desc').limit(1);
+                const first = await assertSucceeds(page.get());
+                expect(first.docs.map(doc => doc.id)).toEqual(['deleted-b']);
+                const second = await assertSucceeds(owner.collection(path).where('planId', '==', 'plan-1')
+                    .where('lifecycle', '==', 'deleted').where('deletedAtMs', '>', 99)
+                    .orderBy('deletedAtMs', 'desc').orderBy('__name__', 'desc')
+                    .startAfter(101, first.docs[0].id).limit(1).get());
+                expect(second.docs.map(doc => doc.id)).toEqual(['deleted-a']);
+                await assertFails(other.collection(path).where('planId', '==', 'plan-1')
+                    .where('lifecycle', '==', 'deleted').where('deletedAtMs', '>', 99)
+                    .orderBy('deletedAtMs', 'desc').orderBy('__name__', 'desc').limit(1).get());
+                const internal = `users/${userId}/trainingPlanState/current/trainingCleanupJobs/workout_cleanup`;
+                for (const client of [owner, other, testEnv.unauthenticatedContext().firestore()]) {
+                    await assertFails(client.doc(internal).get());
+                    await assertFails(client.doc(internal).set({ forged: true }));
+                }
+            });
+
+            it('allows only owner reads of current strength details and denies every browser write', async () => {
+                await seedCurrentTrainingData();
+                const path = `users/${userId}/scheduledWorkouts/workout-1/strengthDetails/current`;
+                const owner = testEnv.authenticatedContext(userId).firestore();
+                const other = testEnv.authenticatedContext(otherId).firestore();
+                await assertSucceeds(owner.doc(path).get());
+                await assertFails(other.doc(path).get());
+                await assertFails(testEnv.unauthenticatedContext().firestore().doc(path).get());
+                await assertFails(owner.doc(path).set({ version: 1, forged: true }));
+                await assertFails(owner.doc(path).update({ forged: true }));
+                await assertFails(owner.doc(path).delete());
+                await assertFails(owner.doc(`users/${userId}/scheduledWorkouts/workout-1/strengthDetails/private`).get());
+            });
+
+            it('denies every direct browser create, update, and delete', async () => {
+                await seedCurrentTrainingData();
+                const db = testEnv.authenticatedContext(userId).firestore();
+                const planRef = db.doc(`users/${userId}/trainingPlans/plan-1`);
+                const workoutRef = db.doc(`users/${userId}/scheduledWorkouts/workout-1`);
+                const stateRef = db.doc(`users/${userId}/trainingPlanState/current`);
+
+                await assertFails(db.doc(`users/${userId}/trainingPlans/plan-2`).set({ id: 'plan-2' }));
+                await assertFails(planRef.update({ name: 'Browser edit' }));
+                await assertFails(planRef.delete());
+                await assertFails(db.doc(`users/${userId}/scheduledWorkouts/workout-2`).set({ id: 'workout-2' }));
+                await assertFails(workoutRef.update({ lifecycle: 'skipped' }));
+                await assertFails(workoutRef.delete());
+                await assertFails(stateRef.update({ revision: 99 }));
+                const saved = db.doc(`users/${userId}/workoutLibrary/saved-1`);
+                await assertFails(db.doc(`users/${userId}/workoutLibrary/saved-2`).set({ title: 'Forged' }));
+                await assertFails(saved.update({ title: 'Forged' }));
+                await assertFails(saved.delete());
+            });
+
+            it('keeps revisions, receipts, deletion locks, and tombstones inaccessible to owners', async () => {
+                await seedCurrentTrainingData();
+                const db = testEnv.authenticatedContext(userId).firestore();
+                const internalPaths = [
+                    `users/${userId}/trainingPlans/plan-1/revisions/0000000001`,
+                    `users/${userId}/trainingPlans/plan-1/revisions/0000000001/chunks/checkpoint-workouts-0000`,
+                    `users/${userId}/scheduledWorkouts/workout-1/revisions/0000000001`,
+                    `users/${userId}/trainingPlanState/current/mutationReceipts/mutation-1`,
+                    `users/${userId}/trainingPlanState/current/workoutLibraryMutationReceipts/mutation-1`,
+                    `users/${userId}/trainingPlanState/current/workoutLibraryPlacementReceipts/mutation-1`,
+                    `users/${userId}/trainingPlanState/current/workoutLibraryState/current`,
+                    `users/${userId}/trainingPlanState/current/planDeletionLocks/plan-1`,
+                    `users/${userId}/trainingPlanState/current/planDeletionLocks/_bulk_shift`,
+                    `users/${userId}/trainingPlanState/current/deletionTombstones/hashed-entity-id`,
+                ];
+                for (const path of internalPaths) {
+                    await assertFails(db.doc(path).get());
+                    await assertFails(db.doc(path).set({ forged: true }));
+                }
+            });
+        });
+
         describe('Sleep Sessions and Sync State', () => {
             it('should allow owners to read their own sleep session docs', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
@@ -1496,6 +2423,26 @@ describe('Firestore Security Rules', () => {
         });
 
         describe('Unified Health Source Records and Sync State', () => {
+            it('denies all browser access to manual measurement deletion markers and descendants', async () => {
+                const path = `users/${userId}/manualHealthMeasurementDeletions/opaque-record`;
+                await testEnv.withSecurityRulesDisabled(async context => {
+                    await context.firestore().doc(path).set({ deleted: true });
+                });
+                for (const context of [
+                    testEnv.authenticatedContext(userId),
+                    testEnv.authenticatedContext(otherId),
+                    testEnv.unauthenticatedContext(),
+                ]) {
+                    const ref = context.firestore().doc(path);
+                    await assertFails(ref.get());
+                    await assertFails(ref.parent.get());
+                    await assertFails(ref.set({ deleted: false }));
+                    await assertFails(ref.delete());
+                    await assertFails(ref.collection('children').doc('forbidden').get());
+                    await assertFails(ref.collection('children').doc('forbidden').set({ value: true }));
+                }
+            });
+
             it('allows owners to get their own health documents', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
 
@@ -1810,10 +2757,43 @@ describe('Firestore Security Rules', () => {
             }));
         });
 
+        it('protects source identity while allowing an owner sport edit', async () => {
+            const db = testEnv.authenticatedContext(userId).firestore();
+            const path = `users/${userId}/activities/${activityId}`;
+            const source = { type: 'Stretching', eventID: 'original_event' };
+            const sourceIdentity = { version: 1, activityId, startMs: 1000, endMs: 61000, importedType: 'Stretching' };
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().collection(`users/${userId}/events`).doc('original_event').set({ type: 'Stretching' });
+                await context.firestore().doc(path).set(source);
+            });
+            await assertFails(db.doc(path).update({ sourceIdentity }));
+            await testEnv.withSecurityRulesDisabled(context => context.firestore().doc(path).update({ sourceIdentity }));
+            await assertSucceeds(db.doc(path).update({ type: 'Yoga' }));
+            await assertFails(db.doc(path).update({ sourceIdentity: { ...sourceIdentity, importedType: 'Yoga' } }));
+            await assertFails(db.doc(path).set(source));
+        });
+
         it('should deny user from reading another users activity', async () => {
             const db = testEnv.authenticatedContext(userId).firestore();
             await assertFails(db.collection(`users/${otherId}/activities`).doc('some_activity').get());
         });
+
+        it.each([['ascentCorrection', 'Ascent'], ['descentCorrection', 'Descent']])(
+            'denies direct creation, replacement and removal of server-owned %s', async (field, metric) => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                const path = `users/${userId}/activities/${activityId}`;
+                const source = { type: 'Running', eventID: 'original_event', stats: { [metric]: 100 } };
+                await testEnv.withSecurityRulesDisabled(async context => {
+                    await context.firestore().collection(`users/${userId}/events`).doc('original_event').set({ type: 'Running' });
+                    await context.firestore().doc(path).set(source);
+                });
+                await assertFails(db.doc(path).update({ [field]: { value: 50, sourceValue: 100 }, [`stats.${metric}`]: 50 }));
+                await testEnv.withSecurityRulesDisabled(async context => {
+                    await context.firestore().doc(path).update({ [field]: { value: 50, sourceValue: 100 } });
+                });
+                await assertFails(db.doc(path).update({ [field]: { value: 25, sourceValue: 100 } }));
+                await assertFails(db.doc(path).set(source));
+            });
 
         it('should deny user from writing to another users activity', async () => {
             const db = testEnv.authenticatedContext(userId).firestore();
@@ -2123,6 +3103,28 @@ describe('Firestore Security Rules', () => {
             await assertFails(adminDb
                 .doc('suuntoHealthWebhookAccountBindings/binding-1/children/forbidden')
                 .set({ value: 1 }));
+        });
+    });
+
+    describe('Marketing campaigns', () => {
+        it('keeps campaigns, recipient snapshots, control and daily usage server-only', async () => {
+            const paths = [
+                'marketingCampaigns/campaign1234567890',
+                'marketingCampaigns/campaign1234567890/recipients/user',
+                'marketingControl/global',
+                'marketingDispatchDays/2026-09-23',
+            ];
+            await testEnv.withSecurityRulesDisabled(async context => {
+                for (const path of paths) await context.firestore().doc(path).set({ test: true });
+            });
+            for (const context of [testEnv.unauthenticatedContext(), testEnv.authenticatedContext('owner'),
+                testEnv.authenticatedContext('admin', { admin: true })]) {
+                const db = context.firestore();
+                for (const path of paths) {
+                    await assertFails(db.doc(path).get());
+                    await assertFails(db.doc(path).set({ test: false }));
+                }
+            }
         });
     });
 

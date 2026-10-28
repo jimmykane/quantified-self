@@ -1,0 +1,95 @@
+import { describe, expect, it } from 'vitest';
+import { hasSameMarketingEmail, renderMarketingContent, validateMarketingDraft } from './marketing-content';
+
+const draft = {
+  name: 'September update',
+  subject: 'A note from Dimitrios',
+  content: {
+    type: 'doc',
+    content: [
+      { type: 'paragraph', content: [
+        { type: 'text', text: 'A new ', marks: [{ type: 'bold' }] },
+        { type: 'text', text: 'feature', marks: [{ type: 'link', attrs: { href: 'https://quantified-self.io/features' } }] },
+        { type: 'text', text: ' <script>alert(1)</script>' },
+      ] },
+      { type: 'bulletList', content: [
+        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'One benefit' }] }] },
+      ] },
+      { type: 'orderedList', content: [
+        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'First step' }] }] },
+        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Second step' }] }] },
+      ] },
+    ],
+  },
+  cta: { label: 'Open QS', url: 'https://quantified-self.io' },
+  filters: { plans: ['free', 'basic', 'pro'], signupFrom: null, signupTo: null },
+};
+
+describe('marketing content', () => {
+  it.each([
+    { name: 'Renamed campaign' },
+    { schedule: { time: '17:00', timeZone: 'Europe/Helsinki' } },
+    { filters: { plans: ['pro'], signupFrom: '2026-09-01', signupTo: null } },
+    { subject: `  ${draft.subject}  `, senderName: '  Dimitrios from Quantified Self  ',
+      cta: { label: '  Open QS  ', url: 'https://quantified-self.io/' } },
+  ])('preserves test approval for changes outside the normalized email %#', change => {
+    expect(hasSameMarketingEmail(validateMarketingDraft(draft), validateMarketingDraft({ ...draft, ...change }))).toBe(true);
+  });
+
+  it.each([
+    { subject: 'A different subject' },
+    { senderName: 'Dimitrios' },
+    { content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Different body' }] }] } },
+    { content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'A new ', marks: [{ type: 'italic' }] }] }] } },
+    { content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'feature', marks: [{ type: 'link', attrs: { href: 'https://quantified-self.io/help' } }] }] }] } },
+    { cta: { label: 'Different button', url: draft.cta.url } },
+    { cta: { label: draft.cta.label, url: 'https://quantified-self.io/help' } },
+    { cta: null },
+  ])('invalidates test approval for email changes %#', change => {
+    expect(hasSameMarketingEmail(validateMarketingDraft(draft), validateMarketingDraft({ ...draft, ...change }))).toBe(false);
+  });
+
+  it('defaults legacy drafts and normalizes personal sender names', () => {
+    expect(validateMarketingDraft(draft).senderName).toBe('Dimitrios from Quantified Self');
+    expect(validateMarketingDraft({ ...draft, senderName: '  Élodie, from QS  ' }).senderName).toBe('Élodie, from QS');
+    expect(validateMarketingDraft({ ...draft, senderName: 'A'.repeat(120) }).senderName).toHaveLength(120);
+  });
+
+  it.each(['', '   ', null, 42, 'A'.repeat(121), '\r\nDimitrios', 'Dimitrios\n',
+    'Name\r\nBcc: person@example.com', 'Name\t', 'Name\u007f', 'Name\u0085', 'Name\u2028'])('rejects invalid sender names %#', senderName => {
+    expect(() => validateMarketingDraft({ ...draft, senderName })).toThrow(/sender name/i);
+  });
+
+  it('renders safe email HTML and plaintext from the allowlisted editor document', () => {
+    const result = renderMarketingContent(validateMarketingDraft(draft));
+    expect(result.bodyHtml).toContain('<strong>A new </strong>');
+    expect(result.bodyHtml).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(result.bodyHtml).not.toContain('<script>');
+    expect(result.bodyHtml).toContain('<ul');
+    expect(result.bodyText).toContain('One benefit');
+    expect(result.bodyText).toContain('• One benefit');
+    expect(result.bodyText).toContain('1. First step\n2. Second step');
+    expect(result.bodyText).toContain('feature (https://quantified-self.io/features)');
+    expect(result.ctaHtml).toContain('https://quantified-self.io/');
+    expect(result.ctaHtml).toContain('font-size:14px;line-height:20px;');
+    expect(result.ctaHtml).toContain('padding:2px 10px;');
+    expect(result.ctaHtml).toContain('max-width:100%;box-sizing:border-box;overflow-wrap:anywhere;word-break:break-word;');
+  });
+
+  it.each([
+    { content: { type: 'doc', content: [{ type: 'image', attrs: { src: 'https://bad.example' } }] } },
+    { content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x', marks: [{ type: 'link', attrs: { href: 'javascript:alert(1)' } }] }] }] } },
+    { content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: '   ' }] }] } },
+    { content: { type: 'doc', content: [{ type: 'text', text: 'Invalid top-level text' }] } },
+    { cta: { label: 'Open', url: 'http://unsafe.example' } },
+    { subject: 'Injected\r\nBcc: person@example.com' },
+    { filters: { plans: ['free', 'free'], signupFrom: null, signupTo: null } },
+  ])('rejects unsupported or unsafe input %#', change => {
+    expect(() => validateMarketingDraft({ ...draft, ...change })).toThrow();
+  });
+
+  it('accepts the same content regardless of auth provider or email verification state', () => {
+    // Eligibility belongs to the campaign worker, not the content format.
+    expect(validateMarketingDraft(draft).filters.plans).toEqual(['free', 'basic', 'pro']);
+  });
+});

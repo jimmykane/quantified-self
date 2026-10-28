@@ -55,6 +55,9 @@
   background: var(--loading-shade-error-background, var(--qs-overlay-surface));
   color: var(--mat-sys-on-surface);
   text-align: center;
+  backdrop-filter: blur(var(--loading-shade-error-blur, 0px));
+  -webkit-backdrop-filter: blur(var(--loading-shade-error-blur, 0px));
+  box-shadow: var(--loading-shade-error-shadow, none);
 }
 
 .error mat-icon {

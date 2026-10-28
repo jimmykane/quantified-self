@@ -1,9 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
+import { AppHapticsService } from '../../../services/app.haptics.service';
+import { AppUserService } from '../../../services/app.user.service';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheet, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { of } from 'rxjs';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
+import { TrainingPlansService } from '../../../services/training-plans.service';
+import { TrainingImpactService } from '../../../services/training-impact.service';
 import {
   CalendarMonthPickerBottomSheetComponent,
   type CalendarMonthPickerBottomSheetData,
@@ -16,13 +21,29 @@ describe('CalendarMonthPickerBottomSheetComponent', () => {
 
   it('shows a pageable month grid with a stable header', async () => {
     const dismiss = vi.fn();
+    const selection = vi.fn();
+    const timelineNotes = signal(null);
     await TestBed.configureTestingModule({
       imports: [CalendarMonthPickerBottomSheetComponent],
       providers: [
-        { provide: MAT_BOTTOM_SHEET_DATA, useValue: data },
+        { provide: MAT_BOTTOM_SHEET_DATA, useValue: { ...data, timelineNotes } },
+        { provide: AppHapticsService, useValue: { selection } },
+        { provide: AppUserService, useValue: { user: signal(data.user), user$: of(data.user) } },
         { provide: MatBottomSheetRef, useValue: { dismiss } },
         { provide: MatBottomSheet, useValue: { open: vi.fn() } },
         { provide: ActivityCalendarService, useValue: { watchEvents: vi.fn().mockReturnValue(of([])) } },
+        { provide: TrainingImpactService, useValue: { watch: vi.fn(() => of({ status: 'private', formPoints: null })) } },
+        {
+          provide: TrainingPlansService,
+          useValue: {
+            watchSchedule: vi.fn().mockReturnValue(of({
+              state: { schemaVersion: 1, activePlanId: null, revision: 0, currentWorkoutCount: 0, updatedAtMs: 0 },
+              plans: [],
+              workouts: [],
+            })),
+            watchWorkoutCompletions: vi.fn().mockReturnValue(of([])),
+          },
+        },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(CalendarMonthPickerBottomSheetComponent);
@@ -34,9 +55,18 @@ describe('CalendarMonthPickerBottomSheetComponent', () => {
     expect(fixture.nativeElement.querySelector('.activity-calendar-tile-navigation')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('[aria-label="Previous month"]')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('[aria-label="Next month"]')).not.toBeNull();
+    expect(fixture.debugElement.query(element => element.name === 'app-activity-calendar-tile').componentInstance.timelineNotes()).toBe(timelineNotes);
+    const tile = fixture.debugElement.query(element => element.name === 'app-activity-calendar-tile').componentInstance;
+    expect(tile.fillHeight()).toBe(false);
+    expect(tile.calmMonth()).toBe(true);
+    expect(fixture.nativeElement.querySelector('.activity-calendar--calm-month')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.activity-calendar--fill-height')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-tile--auto-height')).not.toBeNull();
+    expect(selection).not.toHaveBeenCalled();
 
     (fixture.nativeElement.querySelector('[aria-label="Close calendar"]') as HTMLButtonElement).click();
     expect(dismiss).toHaveBeenCalledOnce();
+    expect(selection).toHaveBeenCalledOnce();
   });
 
   it('keeps its header outside the scrollable month grid', () => {

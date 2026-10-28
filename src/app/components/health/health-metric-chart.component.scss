@@ -2,51 +2,48 @@
   display: block;
   min-width: 0;
 }
+.health-reading-controls { margin-block-end:0.25rem; min-width:0; }
+.health-reading-controls p { color:var(--mat-sys-on-surface-variant); font:var(--mat-sys-body-small); margin-block:8px; }
 
 .health-chart-grid {
   display: grid;
-  gap: 0.5rem;
+  gap: 0.5rem 1rem;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
 }
 
 .health-chart-panel {
-  --qs-glass-panel-radius: 12px;
-
-  box-shadow: none !important;
   min-width: 0;
+}
+
+// Only the desktop workspace opts in; previews and mobile stay content-sized.
+@media (min-width: 960px) {
+  :host(.health-metric-chart-fill-height.health-metric-chart-has-picker) { grid-template-rows:auto minmax(0, 1fr); }
+  :host(.health-metric-chart-fill-height) {
+    display: grid;
+
+    app-health-metric-series-chart {
+      --health-metric-series-chart-height: 100%;
+
+      flex: 1;
+      min-height: 190px;
+    }
+  }
+
+  // Recording details can have different lengths. Size these plots together
+  // from the viewport so opening one disclosure cannot shrink only its chart.
+  :host(.health-metric-chart-fill-height.health-metric-chart-has-picker) app-health-metric-series-chart {
+    --health-metric-series-chart-height: clamp(210px, 32vh, 360px);
+
+    flex: 0 0 auto;
+  }
 }
 
 .health-chart-panel-native {
-  border-style: dashed;
-}
-
-.health-chart-header {
-  align-items: flex-start;
-  display: flex;
-  gap: 0.5rem;
-  justify-content: space-between;
-  padding: 0.7rem 0.75rem 0;
-}
-
-.health-chart-heading {
-  min-width: 0;
-}
-
-.health-chart-heading mat-card-title {
-  font: var(--mat-sys-title-small);
-}
-
-.health-chart-heading mat-card-subtitle {
-  font: var(--mat-sys-body-small);
-  margin-top: 0.15rem;
+  border-bottom-style: dashed;
 }
 
 .health-chart-status {
   flex: 0 0 auto;
-}
-
-.health-chart-content {
-  padding: 0.2rem 0.75rem 0;
 }
 
 .health-chart-footer {
@@ -55,17 +52,29 @@
   flex-wrap: wrap;
   font: var(--mat-sys-body-small);
   gap: 0.2rem 0.6rem;
-  padding: 0 0.75rem 0.65rem;
 }
 
-.health-chart-footer span:first-child {
+.health-chart-unit {
   font-family: 'Barlow Condensed', sans-serif;
   font-variant-numeric: tabular-nums;
   font-weight: 650;
 }
 
-@media (max-width: 480px) {
-  .health-chart-header {
-    flex-wrap: wrap;
-  }
-}
+.health-chart-evidence, .health-chart-details { color:var(--mat-sys-on-surface-variant); font:var(--mat-sys-body-small); overflow-wrap:anywhere; }
+.health-chart-details p { margin-block:0.5rem; }
+
+.health-chart-details-trigger { align-self:flex-start; }
+
+.health-chart-reading-header { display:flex; align-items:flex-end; justify-content:space-between; flex-wrap:wrap; gap:0.5rem 1rem; }
+.health-chart-reading-label, .health-chart-recorded-date, .health-chart-coverage { color:var(--mat-sys-on-surface-variant); font:var(--mat-sys-body-small); }
+.health-chart-reading-label { display:block; }
+.health-chart-reading-value { display:block; font-family:'Barlow Condensed',sans-serif; font-size:2.5rem; font-weight:600; line-height:1.15; overflow-wrap:anywhere; }
+.health-chart-recorded-date { max-width:50%; text-align:end; }
+.health-chart-coverage { margin-block:0.25rem 0.5rem; overflow-wrap:anywhere; }
+
+.health-hrv-status { margin-block:0.25rem 0.5rem; font:var(--mat-sys-body-medium); }
+.health-hrv-summary { display:flex; flex-wrap:wrap; gap:0.5rem 2rem; margin:0; }
+.health-hrv-summary > div { flex:1 1 130px; min-width:0; }
+.health-hrv-summary dt, .health-hrv-attribution { color:var(--mat-sys-on-surface-variant); font:var(--mat-sys-body-small); }
+.health-hrv-summary dd { margin:0; font:600 1.5rem/1.2 'Barlow Condensed',sans-serif; overflow-wrap:anywhere; }
+.health-hrv-attribution { margin-block:0.5rem; }

@@ -18,7 +18,11 @@
     [selectedActivities]="selectedActivitiesInstant()" [unitSettings]="userUnitSettings()"
     [statsToShow]="basicStatsTypes">
 
-    <!-- Keep performance charts first, followed by the pinned dive profile and ordinary charts. -->
+    @if (trainingImpact(); as impact) {
+    <app-training-impact after-summary variant="strip" [impact]="impact" [unitSettings]="userUnitSettings()"></app-training-impact>
+    }
+
+    <!-- Keep performance charts and the pinned dive profile before R–R and ordinary charts. -->
     @if (hasDiveProfileFlag() || hasPerformanceChartsFlag()) {
     <div after-stats class="event-charts-summary-wrapper">
       <mat-divider></mat-divider>
@@ -39,6 +43,11 @@
       </app-event-dive-profile>
       }
     </div>
+    }
+
+    @if (hasRRDataFlag()) {
+    <app-benchmark-rr after-stats [event]="activeEvent" [activities]="selectedActivitiesInstant()"
+      [unitSettings]="userUnitSettings()" [darkTheme]="darkTheme()"></app-benchmark-rr>
     }
 
     <!-- Secondary Details Section -->
@@ -92,7 +101,7 @@
         }
 
         @if (hasJumpsFlag()) {
-        <mat-divider></mat-divider>
+        <mat-divider class="event-jumps-divider"></mat-divider>
         <app-event-card-jumps [selectedActivities]="selectedActivitiesInstant()" [unitSettings]="userUnitSettings()"
           [event]="activeEvent">
         </app-event-card-jumps>

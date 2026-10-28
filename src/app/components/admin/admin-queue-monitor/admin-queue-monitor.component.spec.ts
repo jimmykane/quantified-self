@@ -9,6 +9,9 @@ import { LoggerService } from '../../../services/logger.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
+import { AppHapticsService } from '../../../services/app.haptics.service';
+import { HapticTapDirective } from '../../../directives/haptic-tap.directive';
+import { By } from '@angular/platform-browser';
 
 describe('AdminQueueMonitorComponent', () => {
     let fixture: ComponentFixture<AdminQueueMonitorComponent>;
@@ -96,6 +99,7 @@ describe('AdminQueueMonitorComponent', () => {
             providers: [
                 { provide: AdminService, useValue: adminServiceSpy },
                 { provide: LoggerService, useValue: { error: vi.fn(), log: vi.fn() } },
+                { provide: AppHapticsService, useValue: { selection: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn() } },
                 { provide: ActivatedRoute, useValue: { snapshot: { data: routeData } } },
                 { provide: AppThemeService, useValue: { getAppTheme: vi.fn().mockReturnValue(of(AppThemes.Light)) } },
                 {
@@ -210,6 +214,22 @@ describe('AdminQueueMonitorComponent', () => {
 
         expect(routeDeliverySyncComponent.queueView).toBe('route-delivery-sync');
         expect(routeDeliverySyncComponent.pageTitle).toContain('Route Delivery Sync Queue');
+    });
+
+    it('opens the Training delivery view and gives feedback only for an enabled navigation action', () => {
+        routeData.queueView = 'training-delivery';
+        const trainingFixture = TestBed.createComponent(AdminQueueMonitorComponent);
+        trainingFixture.detectChanges();
+        expect(trainingFixture.componentInstance.queueView).toBe('training-delivery');
+        expect(trainingFixture.componentInstance.pageTitle).toBe('Training Delivery Queue');
+        const button = trainingFixture.debugElement.query(By.css('button[routerLink="/admin/queues/training-delivery"]'));
+        const directive = button.injector.get(HapticTapDirective);
+        const haptics = TestBed.inject(AppHapticsService);
+        directive.onHostClick();
+        expect(haptics.selection).not.toHaveBeenCalled();
+        button.nativeElement.disabled = false;
+        directive.onHostClick();
+        expect(haptics.selection).toHaveBeenCalledOnce();
     });
 
     it('should configure sleep sync queue view from route data', () => {

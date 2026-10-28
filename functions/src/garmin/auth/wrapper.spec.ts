@@ -3,6 +3,10 @@ import * as utils from '../../utils';
 import * as OAuth2 from '../../OAuth2';
 import * as functions from 'firebase-functions/v1';
 
+const hoisted = vi.hoisted(() => ({
+    callableOptions: new Map<unknown, { memory?: string }>(),
+}));
+
 // Define stable mocks
 const mockDelete = vi.fn().mockResolvedValue({});
 const mockSet = vi.fn().mockResolvedValue({});
@@ -56,7 +60,20 @@ vi.mock('firebase-functions/v1', async () => {
     return {
         ...actual,
         region,
-        runWith: () => ({ region }),
+        runWith: (options: { memory?: string }) => ({
+            region: () => ({
+                https: {
+                    onCall: (handler: unknown) => {
+                        hoisted.callableOptions.set(handler, options);
+                        return handler;
+                    },
+                    onRequest: (handler: unknown) => {
+                        hoisted.callableOptions.set(handler, options);
+                        return handler;
+                    },
+                },
+            }),
+        }),
     };
 });
 
@@ -100,6 +117,7 @@ import {
     getGarminAPIAuthRequestTokenRedirectURI,
     requestAndSetGarminAPIAccessToken,
     deauthorizeGarminAPI,
+    deauthorizeGarminAPIUsers,
     receiveGarminAPIDeregistration,
     receiveGarminAPIUserPermissions,
 } from './wrapper';
@@ -111,7 +129,17 @@ import * as logger from 'firebase-functions/logger';
 describe('Garmin Auth Wrapper', () => {
     let context: any;
 
+    it.each([
+        ['getGarminAPIAuthRequestTokenRedirectURI', getGarminAPIAuthRequestTokenRedirectURI],
+        ['requestAndSetGarminAPIAccessToken', requestAndSetGarminAPIAccessToken],
+        ['deauthorizeGarminAPI', deauthorizeGarminAPI],
+        ['deauthorizeGarminAPIUsers', deauthorizeGarminAPIUsers],
+    ])('configures %s with 512 MiB', (_name, callable) => {
+        expect(hoisted.callableOptions.get(callable)).toMatchObject({ memory: '512MB' });
+    });
+
     beforeEach(() => {
+        process.env.GARMINAPI_WEBHOOK_SECRET = 'a'.repeat(64);
         vi.clearAllMocks();
 
         vi.mocked(utils.isCorsAllowed).mockReturnValue(true);
@@ -129,12 +157,12 @@ describe('Garmin Auth Wrapper', () => {
     describe('getGarminAPIAuthRequestTokenRedirectURI', () => {
         it('should return redirect URI from OAuth2 helper', async () => {
             vi.mocked(OAuth2.getServiceOAuth2CodeRedirectAndSaveStateToUser).mockResolvedValue('https://garmin.com/oauth');
-            const data = { redirectUri: 'https://callback' };
+            const data = { redirectUri: 'https://callback', importRecentHistory: true, importHistoryRange: 'maximum' };
 
             const result = await (getGarminAPIAuthRequestTokenRedirectURI as any)(data, context);
 
             expect(serviceOAuthAccess.hasServiceOAuthConnectAccess).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI);
-            expect(OAuth2.getServiceOAuth2CodeRedirectAndSaveStateToUser).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI, 'https://callback');
+            expect(OAuth2.getServiceOAuth2CodeRedirectAndSaveStateToUser).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI, 'https://callback', true, 'maximum');
             expect(result).toEqual({ redirect_uri: 'https://garmin.com/oauth' });
         });
 
@@ -186,9 +214,15 @@ describe('Garmin Auth Wrapper', () => {
         it('should exchange tokens if state is valid', async () => {
             const data = { state: 'validState', code: 'validCode', redirectUri: 'https://callback' };
             vi.mocked(OAuth2.validateOAuth2State).mockResolvedValue(true);
-            vi.mocked(OAuth2.getAndSetServiceOAuth2AccessTokenForUser).mockResolvedValue(undefined);
+            vi.mocked(OAuth2.getAndSetServiceOAuth2AccessTokenForUser).mockResolvedValue({
+                connected: true,
+                outcome: 'connected',
+            });
 
-            await (requestAndSetGarminAPIAccessToken as any)(data, context);
+            await expect((requestAndSetGarminAPIAccessToken as any)(data, context)).resolves.toEqual({
+                connected: true,
+                outcome: 'connected',
+            });
 
             expect(serviceOAuthAccess.hasServiceOAuthConnectAccess).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI);
             expect(OAuth2.validateOAuth2State).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI, 'validState');
@@ -248,6 +282,7 @@ describe('Garmin Auth Wrapper', () => {
 
         beforeEach(() => {
             req = {
+                path: `/${'a'.repeat(64)}/API`,
                 method: 'POST',
                 body: {},
                 headers: {},
@@ -260,6 +295,15 @@ describe('Garmin Auth Wrapper', () => {
                 set: vi.fn().mockReturnThis(),
                 write: vi.fn().mockReturnThis()
             };
+        });
+
+        it.each([receiveGarminAPIDeregistration, deauthorizeGarminAPIUsers])('rejects forged deregistration through both names before lookup or cleanup', async handler => {
+            req.path = '/wrong/API';
+            Object.defineProperty(req, 'body', { get() { throw new Error('body accessed'); } });
+            await handler(req, res);
+            expect(res.status).toHaveBeenCalledWith(403);
+            expect(mockCollectionGroup).not.toHaveBeenCalled();
+            expect(serviceAuthLifecycle.cleanupServiceTokenById).not.toHaveBeenCalled();
         });
 
         it('should clean up users by reverse lookup using the shared lifecycle cleanup', async () => {
@@ -458,6 +502,7 @@ describe('Garmin Auth Wrapper', () => {
 
         beforeEach(() => {
             req = {
+                path: `/${'a'.repeat(64)}/API`,
                 method: 'POST',
                 body: {},
                 headers: {},
@@ -470,6 +515,16 @@ describe('Garmin Auth Wrapper', () => {
                 set: vi.fn().mockReturnThis(),
                 write: vi.fn().mockReturnThis()
             };
+        });
+
+        it('rejects forged permissions before lookup or writes', async () => {
+            req.path = '/';
+            Object.defineProperty(req, 'body', { get() { throw new Error('body accessed'); } });
+            await receiveGarminAPIUserPermissions(req, res);
+            expect(res.status).toHaveBeenCalledWith(403);
+            expect(mockCollectionGroup).not.toHaveBeenCalled();
+            expect(mockBatchUpdate).not.toHaveBeenCalled();
+            expect(mockBatchCommit).not.toHaveBeenCalled();
         });
 
         it('should process valid permission change payload and update token', async () => {

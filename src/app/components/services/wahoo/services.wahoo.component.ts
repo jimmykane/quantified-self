@@ -72,18 +72,18 @@ export class ServicesWahooComponent extends ServicesAbstractComponentDirective {
 
   get connectionDescription(): string {
     return this.isReconnectRequired
-      ? 'Reconnect Wahoo to resume history imports, automatic activity sync, and route delivery.'
+      ? 'Reconnect Wahoo to resume history imports, planned-workout delivery, activity sync, and route delivery.'
       : this.isDisconnectPending
       ? 'Disconnect is pending while Wahoo finishes deauthorization. Imports are paused.'
-      : 'Imports Wahoo-recorded activities and can send FIT activities plus GPX or FIT routes to Wahoo.';
+      : 'Imports Wahoo-recorded activities and can send compatible planned workouts, FIT activities, and GPX or FIT routes to Wahoo.';
   }
 
   get shouldShowConnectAction(): boolean {
-    return (!this.isConnectedToService() || this.isReconnectRequired) && !this.isDisconnectPending;
+    return (this.reconnectRequested || !this.isConnectedToService() || this.isReconnectRequired) && !this.isDisconnectPending;
   }
 
   get connectButtonLabel(): string {
-    return this.isReconnectRequired ? 'Reconnect' : 'Connect';
+    return this.reconnectRequested || this.isConnectedToService() || this.isReconnectRequired ? 'Reconnect' : 'Connect';
   }
 
   protected override onServiceDataChanged(): void {
@@ -114,13 +114,9 @@ export class ServicesWahooComponent extends ServicesAbstractComponentDirective {
     return token.redirect_uri;
   }
 
-  async requestAndSetToken(): Promise<void> {
-    const authorizationError = this.route.snapshot.queryParamMap.get('error');
-    const state = this.route.snapshot.queryParamMap.get('state');
-    const code = this.route.snapshot.queryParamMap.get('code');
-    if (authorizationError) throw new Error('Wahoo authorization was not completed.');
-    if (!state || !code) throw new Error('Wahoo authorization callback is missing state or code.');
-    await this.userService.requestAndSetCurrentUserWahooAPIAccessToken(state, code);
+  async requestAndSetToken(params = this.route.snapshot.queryParamMap) {
+    const { state, code } = this.getOAuthCallbackParameters(params);
+    return this.userService.requestAndSetCurrentUserWahooAPIAccessToken(state, code);
   }
 
   private async hydrateWahooAccountId(): Promise<void> {

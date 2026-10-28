@@ -1,6 +1,6 @@
 # Email lifecycle
 
-This document is the source of truth for Quantified Self transactional email ownership, copy, template rollout, and verification. Marketing campaigns are outside the automatic transactional lifecycle. The existing `development_update` template remains intentionally excluded from every seed path. Explicitly reviewed manual campaigns, such as `coros_delivery_update`, are excluded from the default seed and smoke-test flows and can be selected only by exact template ID.
+This document is the source of truth for Quantified Self transactional and admin marketing email ownership, copy, template rollout, and verification. Marketing campaigns are outside the automatic transactional lifecycle. The existing `development_update` template remains intentionally excluded from every seed path. Explicitly reviewed manual campaigns, such as `coros_delivery_update`, are excluded from the default seed and smoke-test flows and can be selected only by exact template ID.
 
 ## Lifecycle and ownership
 
@@ -14,12 +14,195 @@ This document is the source of truth for Quantified Self transactional email own
 | Subscription expiring soon | `checkSubscriptionNotifications` + Trigger Email extension | `subscription_expiring_soon` | Standard transactional sender | Standard transactional reply address |
 | Admin grants complimentary subscription time | `grantAdminSubscriptionGift` + Trigger Email extension | `subscription_time_gift` | Standard transactional sender | Standard transactional reply address |
 | Account deletion accepted | `deleteSelf` + Trigger Email extension | `account_deleted_confirmation` | Standard transactional sender | Standard transactional reply address |
+| Admin marketing campaign | Admin workspace + scheduled worker + Trigger Email extension | Inline-rendered `marketing_campaign` | `<campaign sender name> <updates@quantified-self.io>` (default: Dimitrios from Quantified Self) | `Dimitrios <dimitrios@quantified-self.io>` |
 | Passwordless sign-in | Firebase Authentication | Firebase email-link template | `Quantified Self <noreply@quantified-self.io>` | `support@quantified-self.io` |
 | Password reset | Firebase Authentication | Firebase password-reset template | Firebase Auth sender above | `support@quantified-self.io` |
 
 The founder welcome is sent once, only when `users/{uid}.onboardingCompleted` first changes to `true`. It combines a formal welcome to the Quantified Self platform with Dimitrios's personal introduction and asks which one question the recipient would ask their training history. The hypothetical wording does not claim that connected data is complete, and the invitation to reply also covers support needs, feature requests, and other product feedback. The copy deliberately avoids assuming why someone joined or how they intend to use the platform. Its recipient and greeting come from Firebase Auth, not profile email data supplied by the client. The TTL-managed mail document is `registration_welcome_{uid}`; durable deduplication is stored in the server-owned `users/{uid}/system/emailLifecycle` document and is created atomically with the mail item. There is no existing-user backfill, generic registration email, delayed follow-up, or marketing-consent dependency.
 
 The subscription-time gift email is optional and defaults on in the admin dialog. It names the existing plan, gifted calendar-month count, and new access date, but never receives or renders the internal admin reason. Mail is queued only after Stripe is confirmed successful. Its deterministic document ID includes a digest of the user and operation plus a bounded attempt number; a retry reuses the same operation, deduplicates a pending or delivered message, and creates a new attempt only after the Trigger Email extension records an error. While requested delivery is queued or remains retryable, the preview API restores the successful operation and the dialog exposes a notification-only check or retry action; that path cannot apply the Stripe gift again. Email failure is recorded on the audit operation and never rolls back access. The mail item carries `toUids` so normal account deletion can remove it even if the Auth email lookup later becomes unavailable.
+
+## Admin marketing campaigns
+
+Admins use `/admin/marketing` to create a structured email in a constrained rich editor (paragraphs, emphasis, lists, links and one optional button). A debounced live preview uses the server renderer and shows the complete HTML, including the fixed footer, at desktop and phone widths or plaintext beside the editor; the preview uses a sample greeting and never submits mail. The preview frame grows with the email, and HTTPS and mailto links open separately instead of replacing the preview. Admins can choose Free, Basic or Pro plus an inclusive UTC Auth signup-date range. Server validation accepts only the supported document nodes and HTTPS or `mailto:` links; button links require HTTPS. The server renders the local `marketing_campaign` template using the founder welcome's header layout and a separate marketing footer. The onboarding welcome and its footer stay unchanged. The local template files are copied into the Functions deployment bundle by `npm --prefix functions run build`; the campaign does not depend on seeding a Firestore template. The Trigger Email extension receives a trusted inline `message` with HTML and text. Its top-level `headers` include `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click`.
+
+### Sender name
+
+Each campaign stores `senderName`, defaulting to **Dimitrios from Quantified Self** for new drafts and existing documents without the field. Admins can change this display name in drafts or paused campaigns. The actual sending address remains `updates@quantified-self.io`, Reply-to remains `Dimitrios <dimitrios@quantified-self.io>`, and the founder signature, header and marketing footer stay unchanged. The live preview returns and displays From, Reply-to and Subject; saved and unsaved test sends use the same sender formatter as campaign submissions.
+
+The server trims the name and requires 1–120 printable characters, rejecting control characters before trimming. Punctuation, quotes, backslashes and Unicode names are safely quoted/escaped for the Trigger Email extension's address parser; clients cannot change the sending address through this field. Cloning preserves the name. A save from an older client that omits `senderName` preserves the stored name. A sender-only edit clears the saved test approval, and sender names participate in the stale-composer comparison for test, Start and Resume requests. Already queued mail keeps its original From header; remaining recipients and explicit retries use the sender read from the current campaign inside the reservation transaction.
+
+The form and server share sender-name validation. Whitespace-only names and control characters produce an accessible error beside the field, including before a subject or body has been entered. Deploy the marketing Functions before the frontend: an older server ignores `senderName`. The frontend rejects preview responses missing From or Reply-to instead of enabling a test with an unverified sender.
+
+Rollout requires the frontend and the existing marketing Functions (`listMarketingCampaigns`, `saveMarketingCampaign`, `cloneMarketingCampaign`, `previewMarketingCampaign`, `prepareMarketingCampaign`, `sendMarketingTest`, `changeMarketingCampaignStatus`, `dispatchMarketingCampaigns`, `trackMarketingDelivery`, and `setMarketingDailyCap`, which returns the campaign list). No migration, new secret, DNS record, permission or Function is required. Production deployment needs separate approval. Queue monitoring is unchanged: sender payload formatting and saved email-test approval change; queue states, worker identity, daily limits, schedules, retries and delivery tracking retain their current behavior and telemetry.
+
+`marketingCampaigns/{id}` is server-owned. An unsaved composer, saved draft, ready campaign, or paused campaign can be test-sent to one admin-selected email address. An unsaved test validates and renders the supplied message, reserves a daily slot and creates only the mail document; it does not create a campaign or satisfy a later campaign's launch requirement. The server validates the address, marks the subject `[TEST]`, and uses a test-only unsubscribe link whose GET and POST never change consent. The admin-only send still consumes a global UTC daily slot. Saving changes to the sender name, subject, body, formatting, links or button clears the previous test result; Start and Resume require the latest saved-campaign test to be SMTP accepted. Saving only the internal name, audience filters or sending schedule preserves the current test reference and delivery state. Paused audiences remain fixed. Comparison uses validated, normalized email fields inside the save transaction, after preserving sender names omitted by older clients. Pending tests remain pending until the extension accepts them; a metadata save never creates approval. Approval already cleared by an earlier save is not reconstructed from mail history.
+
+The test address has its own form and autocomplete section. Internal name, subject and sender name explicitly disable autocomplete to keep mobile contact autofill separate from campaign content. Editing the recipient does not edit the message or invalidate its saved test approval.
+
+Saved and unsaved test mail resolves the selected recipient's Auth UID into `marketing.uid`; it never uses the initiating admin as recipient ownership. Registered recipients must still have a user root and no active deletion fence inside the mail/quota transaction. Missing-account lookup is permitted only as the existing explicit external-inbox test path, with expiry and no UID; other Auth errors abort without mail, quota consumption or a new saved-test reference. Test unsubscribe links remain inert. Existing mail is not backfilled. Deploy this `sendMarketingTest` writer fix before the replacement account-cleanup owner under separate approval; dispatch/tracking telemetry and expected callable-error exclusions remain unchanged.
+
+**Prepare audience** queries the canonical `users/{uid}/legal/agreements.acceptedMarketingPolicy === true` document, excludes missing/disabled/admin Auth accounts, missing email/profile, deletion tombstones, and mismatched plan/signup dates, then writes a fixed `recipients/{uid}` snapshot with exact eligible and exclusion counts. Auth provider and `emailVerified` are deliberately not filters. New opt-ins do not enter a prepared campaign. Prepared filters and the recipient snapshot remain fixed; Clone creates a new draft with an editable audience.
+
+Recipient creation rechecks the user root, deletion fence and preparation lease in transactions of at most 100 recipients. A previously selected account cannot be recreated in the audience after cleanup. Account cleanup may remove partial snapshots while preparation is running or has failed back to draft, before counters exist. The final preparation transaction counts the remaining snapshot identities before publishing the ready audience; retries do not double-count deletion exclusions. Deploy the updated `prepareMarketingCampaign` writer before the replacement `cleanupUserAccounts` owner, under separate deployment approval. Monitoring coverage is unchanged: account-stage failures retain the existing cleanup alerts, while mail dispatch, tracking, submission states, caps and their email alerts are unchanged. Expected deletion exclusions are not delivery failures.
+
+Users manage marketing consent and usage analytics in **Settings → Privacy** (`/settings?section=privacy`), then select **Save changes**. Both controls use the existing owner-scoped legal-agreements write path and persist only explicitly changed booleans. Turning marketing consent off does not stop transactional account or billing messages. Newly rendered campaign emails link **Email preferences** directly to this section; already queued mail retains its original link.
+
+Campaign HTML reuses the founder header and body shell, with a separate marketing footer. At phone widths (620 px and below), campaign body and footer use aligned 16 px side gutters and the outer gutter is removed; desktop spacing and onboarding welcome spacing are preserved. Already queued mail retains its rendered layout.
+
+**Delete draft** and **Delete campaign** are available beside draft and prepared campaign rows and in the selected campaign's header. Prepared (`ready`) campaigns can be deleted before Start, removing their fixed recipient snapshot too. It requires confirmation and uses the existing admin-only `changeMarketingCampaignStatus` callable with `action: "delete"`. Deleting a different campaign preserves the current composer and unsaved edits. A failed deletion refreshes server state before showing the original error, exposing `Retry deletion` and locking edits if cleanup already began. Responses after navigating away do not update the detached composer or emit feedback. The shared UI/server eligibility check permits `draft`, a retry of `deleting`, or `ready` with no `startedAt` and zero queued, accepted, failed and skipped recipients. Pending/eligible recipients and saved test results do not block deletion. The server transaction atomically marks the campaign `deleting` and serializes with Start; a started campaign stays protected even if its scheduled sending time has not arrived. Saves, preparation, cloning, Start and saved tests reject that state. It recursively deletes every descendant collection before recursively deleting the campaign root, keeping the marker visible for retry if subtree cleanup fails. The list includes all `deleting` campaigns alongside other active campaigns. Repeating a completed deletion safely cleans any remaining orphaned descendants. Already submitted test mail, its delivery lifecycle and reserved daily slots remain intact; delivery callbacks do not recreate the removed campaign. Preparing, running, paused and completed campaigns cannot be deleted through this action. No new Function, Firestore permission or index is needed; rollout requires deploying `changeMarketingCampaignStatus` and the frontend with separate approval.
+
+Admins can pause a running campaign, edit its internal name, sender name, subject, body, links, button or sending schedule, and save changes. A new SMTP-accepted test is required only when the email itself changes. Internal-name or schedule-only saves retain the previous approval and allow Resume without another test. Saving while paused preserves the recipient snapshot, progress counts, exclusions and original start time. It never rewrites mail already queued, which may still be sent by the extension while the campaign is paused. Remaining pending recipients and explicit retries use the newly saved message. Pausing, resuming, changing the daily cap, and saving only metadata retain the existing successful test. Locking or unlocking the rich editor does not emit a content change or mark the composer as edited.
+
+### Daily sending time
+
+**Send now** is the default, including for existing campaigns without a schedule. Start and Resume can immediately submit mail under the global cap. **Send daily at…** stores a validated `schedule: { time: "HH:mm", timeZone: "Europe/Helsinki" }` on the campaign. Choose the schedule before preparing the audience, or pause to change it. Start arms `nextScheduledSendAt` for the next occurrence in the selected IANA timezone. The existing five-minute worker begins the batch on its first run at or after that time; it is not a guarantee of exact SMTP or inbox delivery time. Tests bypass the schedule and still consume a daily slot.
+
+The first mail reservation of a daily batch atomically advances `nextScheduledSendAt` and stores `scheduledDispatchUtcDate`. The batch can continue across worker invocations and cap increases within that UTC day, up to the shared limit. A UTC quota reset does not release another batch before the next selected daily time. The worker catches up a missed occurrence during its UTC day, with five minutes of grace for a tick just after UTC midnight; expired occurrences are skipped. With multiple campaigns, the oldest campaign eligible to send runs first; a future scheduled campaign does not block immediate campaigns. Daily caps remain UTC-based regardless of the campaign timezone.
+
+Resume continues a batch already opened on the current UTC day. Otherwise it waits for the next occurrence, skipping times missed while paused. Saving a changed schedule clears the scheduling cursor and current batch marker while retaining the current email test; Resume then arms the new time. Message-only edits preserve those markers. Clone copies the selected schedule into a new draft without its cursor or progress. Older clients that omit the schedule on Save preserve the existing setting; explicit null selects immediate sending.
+
+Timezone offsets follow daylight-saving changes. A nonexistent local time moves forward by the clock-change gap (for example 02:30 becomes 03:30). A repeated local time uses its first occurrence, once per local date. No new Function, secret, index or scheduled job is required: deploy the updated frontend and existing marketing Functions through the normal approved deployment process.
+
+### State consistency and dispatch
+
+Composer controls stay disabled during mutations so a save response cannot discard text typed during the request. Status refreshes reload changed saved content only when the composer has no unsaved edits; delivery-only updates preserve the current preview and chosen test address. Reads that started before a mutation, or before a newer refresh, cannot replace the latest state. The current admin UI includes its draft in saved-test, Start and Resume requests. The server validates and compares it with the saved campaign before submitting a test or changing sending state, rejecting a stale browser message with an instruction to refresh and review. The draft parameter is optional for existing callers; their saved-test and successful-test requirements remain enforced.
+
+If preparation fails, the campaign returns to draft. A hard timeout may prevent that cleanup; after an 11-minute lease expires, admins can retry preparation. The retry replaces any partial recipient snapshot before marking the campaign ready. The worker pages through running campaigns in creation order, and through each campaign's pending recipients before moving to a newer campaign, so queued or skipped recipients do not hide later work. If an in-flight worker observes a pause or a future sending time, it stops processing that audience and moves to the next campaign. Account-based skips recheck the campaign status and schedule transactionally, leaving recipients pending until the edited schedule is due. The admin list retains all active campaigns alongside the newest 100 campaigns.
+
+The worker runs every five minutes in UTC, processes running campaigns oldest first, and submits at most 25 messages per invocation. Before each submission it re-reads Auth state, consent, profile/deletion guard and current active subscription plan. A Firestore transaction reads `marketingControl/global.dailyCap` (default 10), the day's `marketingDispatchDays/YYYY-MM-DD.used`, recipient and campaign state, and creates a deterministic `mail` document together with the slot reservation. Rendering uses the campaign content read in that transaction, so a worker that began before pause/edit/resume cannot submit its earlier cached text. Tests and explicit failed-recipient retries consume the same global cap. Lowering the cap below already used slots blocks further submissions until a later UTC day. A campaign may be paused or resumed. `mail/{mailId}.delivery.state` updates recipient counts idempotently; `SUCCESS` means [SMTP acceptance by the extension](https://firebase.google.com/docs/extensions/official/firestore-send-email/delivery-status), not inbox delivery or opens. Failed recipients require an admin retry. Open, click, bounce and inbox placement metrics are not collected here.
+
+The signed `/email/unsubscribe?token=...` endpoint is public: GET only shows a confirmation form; POST changes the canonical marketing preference to false and is idempotent. The same POST supports one-click mail client requests. It does not affect transactional mail. The signing key is the bound `MARKETING_UNSUBSCRIBE_SIGNING_KEY` Secret Manager parameter. Account deletion removes recipient records and marketing mail documents by their server-owned UID marker; historical aggregate campaign counts remain without the deleted recipient's details. All marketing collections are inaccessible to clients through Firestore Rules.
+
+Rollout requires separate approval. Before deployment, an operator must provision the signing secret, verify `updates@quantified-self.io` as an allowed sender with the existing SMTP provider, deploy Functions/Hosting/Rules/indexes, inspect desktop and phone previews, and perform a controlled-inbox test. Neither local tests nor a PR prove sender-domain authorization or inbox placement. Do not launch a live campaign without separate approval.
+
+## Cloud Monitoring (#835)
+
+The email monitoring dashboard, twelve metrics and seven policies were activated on 12 October 2026 with explicit
+owner approval. Configuration readback, all chart/condition queries and duplicate-free serial reapplication passed.
+Following the approved dispatcher timing correction, both source heartbeats and live sampled-count/age series were
+verified from a natural scheduler run. Production acceptance evidence is recorded in #835. It uses the existing Firestore `mail`
+outbox and installed Trigger Email extension, not Cloud Tasks or another SMTP sender. Future production deployments,
+monitoring changes and any controlled email send require separate approval. See
+[Firebase delivery states](https://firebase.google.com/docs/extensions/official/firestore-send-email/delivery-status).
+
+### Lean storage and lifecycle
+
+Every new application/operator mail producer spreads `newEmailDeliveryFields()` into its **existing** mail write.
+It supplies `queuedAt` and a complete initial `delivery` object: `PENDING`, `startTime`, zero attempts and null error.
+Both timestamps are server commit timestamps. This lets a read-only state query see mail even if the extension has
+not picked it up. It adds fields, not another write, collection, projection, observer Function or recipient history.
+Never use the helper to update retained mail: resetting a terminal state can resend it. Existing deterministic IDs,
+deduplication, deletion guards, consent, sender/template content and retry controls remain unchanged.
+
+The checked-in extension has `TTL_EXPIRE_TYPE=never`; the existing top-level `expireAt` mail policy remains 90 days.
+No TTL policy, retention, cleanup or extension configuration changes. The offline contract test deliberately rejects
+changing that extension TTL boundary without reviewing pending-state initialization. Existing account cleanup still
+owns the original mail, with no new user-data copy to remove.
+
+The existing `trackMarketingDelivery` updated-document trigger emits fixed-category observations for all mail, while
+preserving its marketing-only tracking behavior. `PENDING` is queued work, **not extension acceptance**; `PROCESSING`
+is a claimed attempt, not delivery. `SUCCESS` is SMTP acceptance; nonempty rejected/pending recipient arrays make it
+partial acceptance. `ERROR` is failure. None proves inbox delivery, reading, opens or clicks. Only state categories
+are emitted, never those arrays or SMTP response/error text. Unchanged state/attempt updates do not count as a new
+transition. Eventarc notifications are at-least-once; counters are observations, not unique recipients or messages.
+
+`dispatchCampaigns` emits completed/failed invocation categories and completed-run submission counts, including the
+existing Start/Resume path. A submission is not SMTP success. Normal daily caps, future schedules and consent/account
+suppression do not become failures. The existing scheduled dispatcher remains every five minutes, UTC, with its
+current resources/secrets. In the first five-minute slot of each UTC quarter-hour it additionally runs `observeEmailOutbox`
+in `finally`, so interval jobs with an offset minute phase still sample every fifteen minutes. Idle,
+capped and failed dispatches still produce observation heartbeats. Monitoring/client/logging failures cannot replace
+the dispatcher's result or original exception. No new Function, secret, scheduler, SMTP call or automatic retry exists.
+
+### Read bounds, exclusions and privacy
+
+One field-masked query reads at most 21 actual mail records with `delivery.state` in `PENDING`, `PROCESSING`, `RETRY`;
+20 are classified and one is a saturation sentinel. It uses the existing single-field index, without a new composite
+index or Rules change. It has a five-second waiting budget and suppresses late observations after a timeout. No
+message/subject/template, address, unsubscribe token, SMTP error/response or credential fields are fetched by the probe.
+Source markers are used only to select the fixed `transactional`/`marketing` category; their values never reach logs.
+
+- Pending age uses `queuedAt`; legacy pending records without that field use document creation time.
+- Explicit `RETRY`, or `PENDING` resend with prior attempts, ages from the latest document write, not the original message.
+- A live processing lease is excluded. An expired lease is due only from its expiry; a missing/invalid lease is unknown.
+- Terminal states and deleted mail are not queried. Unavailable/invalid observations and capped zeroes are **not**
+  healthy empty backlogs. Positive samples remain lower bounds, never complete queue totals or oldest-mail guarantees.
+- Pending campaign recipients are not mail backlog: daily caps, schedules, pauses, unsubscribed/suppressed accounts and
+  empty audiences cannot create stalled-campaign alerts. Pausing a campaign does not pause mail already submitted.
+- Legacy mail with **no delivery state at all** is outside the indexed sample. New mail prevents this gap by starting
+  PENDING. Activation must record a bounded, read-only legacy audit; never initialize/resubmit old mail merely for
+  monitoring. Do not claim historical outbox coverage from a healthy sample.
+
+The fixed log envelope is `[EmailDelivery]`, `telemetryVersion: 1`, with events `state_observed`, `operation`,
+`dispatch_deferred`, `outbox_sample`, `outbox_sample_unavailable`. Labels are fixed source/state/operation/outcome
+categories, not IDs or payload-derived strings. Native ERROR metrics select only the exact installed extension and
+background email runtimes, without free-text extraction. Callable Auth/validation/test-approval failures are excluded
+from native runtime pages; actual callable-triggered dispatch exceptions still have their structured dispatch signal.
+Generated extension code/logging is not modified; keep any existing
+private diagnostics in the authorized console, never copied into incident documentation.
+
+### Bundle, initial thresholds and cost
+
+`tools/email-monitoring/` reuses the shared ownership-checked, paginated provisioner. Owner is
+`qs-email-monitoring-v1`: one dashboard, twelve versioned log metrics and seven policies (nine conditions). It preserves
+other bundles/channels and retained policy/condition identities on serial reapplication; it has no DELETE operation.
+Alerts use the existing **direct Cloud Monitoring Alerts email channel**, not the monitored Send Email extension.
+
+| Policy | Initial condition |
+| --- | --- |
+| Submitted-mail stall | Three positive samples at least 15 minutes overdue, per source, within one hour |
+| SMTP/delivery errors | Three observed ERROR/partial-success attempts per source in 15 minutes |
+| Extension/runtime errors | Three native ERROR log observations per generation in 15 minutes, with explicit Gen 1/Gen 2 conditions |
+| Marketing dispatcher failures | Three actual dispatch exceptions in 15 minutes |
+| Delivery tracking failures | Three existing-tracker exceptions in 15 minutes |
+| Observation unavailable | Two unknown/unavailable samples per source within one hour |
+| Missing heartbeat | No observation for one hour, separately for both source groups |
+
+Thresholds are initial operational values to tune from measured volume. Idle mail is not an outage. Absence conditions
+need an initial post-activation series. The dashboard distinguishes supported states, submissions, SMTP errors,
+runtime failures, bounded backlog/age and heartbeats; extension Gen 1/Gen 2 native charts are generation-dependent.
+Do not treat empty native charts for the other generation as failed delivery.
+
+No extra document write or Function invocation is added to a mail producer; the existing trigger adds bounded logs.
+At the normal 96 quarter-hour sampling slots/day, the probe reads at most 2,016 mail documents (an empty query still incurs its
+minimum read). Scheduler duplicates/retries can add invocations. Standard Firestore, Logging, custom-metric and alert
+charges apply; no cost-free claim is made. Metric labels have fixed, small cardinality. Existing SMTP pricing and mail
+retention are unchanged.
+
+### Verification and separately approved activation
+
+Local checks: `npm run test:email-monitoring`, focused Functions email/marketing tests, the isolated `mcp-data`
+emulator group (including caps, schedules, consent, idempotency and a 100-mail bounded sample), emulator/workflow guards,
+Functions build, entrypoint/secret/deployment-file checks, targeted lint and `git diff --check`.
+The demo runner starts only loopback Auth/Firestore, never Functions/Extensions or SMTP, and scrubs real credentials.
+Local tests are not live extension acceptance or production policy/email evidence.
+
+After separate approval:
+
+1. Deploy the affected existing Functions: `sendRegistrationWelcomeEmail`, `onSubscriptionUpdated`,
+   `checkSubscriptionNotifications`, `previewAdminSubscriptionGift`, `grantAdminSubscriptionGift`, `deleteSelf`,
+   `sendMarketingTest`, `changeMarketingCampaignStatus`, `dispatchMarketingCampaigns`, `trackMarketingDelivery`.
+   Preserve their current generations, regions, resources, schedules, retries and secret bindings. No Hosting, Rules,
+   indexes, extension update or resource deletion is needed for this ticket. Operator scripts use the updated build.
+2. Record the bounded read-only audit of retained mail/legacy missing-state coverage and verify deployed configuration.
+   This authorizes no backfill, state reset, resend, purge or new campaign.
+3. Preview without credentials/network: `node tools/email-monitoring/cli.mjs --project=quantified-self-io`.
+   With separately approved configuration authority, apply using `--apply`, matching
+   `--confirm-project=quantified-self-io` and `--notification-channel=projects/quantified-self-io/notificationChannels/CHANNEL_ID`.
+   Verify that channel is the existing independent Alerts channel; do not create another sender/channel.
+4. Read back the owned dashboard/metrics/seven policies, validate every chart/condition query, then reapply serially
+   and prove no duplicates or changes to unrelated configuration. Record both native extension generation and actual
+   post-creation heartbeat/count/age series from a natural first-slot tick in a UTC quarter-hour. Native-only idle is not delivery proof.
+5. Reuse #655's same-channel alert-email proof where valid. Any new controlled SMTP email, temporary test policy,
+   deliberate fault or resource deletion requires separate exact-scope approval. Record representative real delivery
+   state/dispatcher evidence and exclusions on #835 before operational completion.
+
+MCP/Assistant impact: **none**. Monitoring changes no tools, schemas, responses, permissions, consent, metrics exposed
+to athletes, provider actions or product availability. Help reviewed: existing notification and marketing-consent
+guidance remains accurate, so no user-facing copy change is needed. Fitness-provider queues, Training plans and their
+monitoring bundles are unchanged. Approved production activation/readback and natural-heartbeat evidence are recorded
+in #835 separately from local test results; no simulated outage or new test email is claimed.
 
 ## Firestore template source of truth
 

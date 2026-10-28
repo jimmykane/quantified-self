@@ -5,8 +5,11 @@ import { filter, map, mergeMap } from 'rxjs/operators';
 import { DOCUMENT, isPlatformBrowser } from '@angular/common';
 import { Subscription } from 'rxjs';
 import { environment } from '../../environments/environment';
+import { HOME_SEO_JSON_LD } from '../shared/home-seo';
 
 const PRODUCTION_CANONICAL_ORIGIN = 'https://quantified-self.io';
+export const DEFAULT_SOCIAL_IMAGE_URL = `${PRODUCTION_CANONICAL_ORIGIN}/assets/images/og-image-v4.jpg`;
+export const DEFAULT_SOCIAL_IMAGE_ALT = 'Quantified Self training charts and activity analysis';
 
 @Injectable({
     providedIn: 'root'
@@ -71,9 +74,37 @@ export class SeoService implements OnDestroy {
         }
 
         this.updateRobotsTag(data['robots']);
+        this.updateSocialImageTags(data['socialImage'], data['socialImageAlt']);
 
         // URL
         this.updateOgUrl();
+    }
+
+    private updateSocialImageTags(image: unknown, imageAlt: unknown) {
+        const resolvedImage = this.resolveSocialImage(image);
+        const resolvedAlt = typeof imageAlt === 'string' && imageAlt.trim()
+            ? imageAlt.trim()
+            : DEFAULT_SOCIAL_IMAGE_ALT;
+        this.metaService.updateTag({ property: 'og:type', content: 'website' });
+        this.metaService.updateTag({ property: 'og:image', content: resolvedImage });
+        this.metaService.updateTag({ property: 'og:image:alt', content: resolvedAlt });
+        this.metaService.updateTag({ name: 'twitter:card', content: 'summary_large_image' });
+        this.metaService.updateTag({ name: 'twitter:image', content: resolvedImage });
+        this.metaService.updateTag({ name: 'twitter:image:alt', content: resolvedAlt });
+    }
+
+    private resolveSocialImage(image: unknown): string {
+        if (typeof image !== 'string' || !image.trim()) {
+            return DEFAULT_SOCIAL_IMAGE_URL;
+        }
+        try {
+            const parsed = new URL(image.trim(), PRODUCTION_CANONICAL_ORIGIN);
+            return parsed.protocol === 'https:'
+                ? parsed.toString()
+                : DEFAULT_SOCIAL_IMAGE_URL;
+        } catch {
+            return DEFAULT_SOCIAL_IMAGE_URL;
+        }
     }
 
     private updateRobotsTag(robots: unknown) {
@@ -165,29 +196,7 @@ export class SeoService implements OnDestroy {
         }
 
         if (this.router.url === '/') {
-            this.setJsonLd({
-                "@context": "https://schema.org",
-                "@type": "SoftwareApplication",
-                "name": "Quantified Self",
-                "applicationCategory": "HealthApplication",
-                "operatingSystem": "Web",
-                "description": "Analyze Garmin, Suunto, COROS, and Wahoo training in one dashboard with readiness, load, intensity, durability, sleep, service sync, and read-only MCP access.",
-                "featureList": [
-                    "Week, Month, and Year activity calendar with duration-scaled activity groups",
-                    "Curated training analysis for readiness, load, intensity, durability, sleep context, and best builds",
-                    "Automatic Garmin to Suunto activity sync",
-                    "Automatic COROS to Suunto activity sync",
-                    "Automatic Wahoo to Suunto activity sync",
-                    "Activity and route delivery to Wahoo",
-                    "Read-only MCP access for compatible clients",
-                    "Sync past activities to Suunto by date"
-                ],
-                "offers": {
-                    "@type": "Offer",
-                    "price": "0",
-                    "priceCurrency": "USD"
-                }
-            });
+            this.setJsonLd(HOME_SEO_JSON_LD);
         } else {
             this.removeJsonLd();
         }

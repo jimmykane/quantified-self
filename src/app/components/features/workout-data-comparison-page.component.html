@@ -77,13 +77,13 @@
 
     <div class="compact-list">
       @for (item of sourceItems; track item.title; let last = $last) {
-      <app-compact-feature-row
+      <app-compact-row
         [icon]="item.icon"
         iconTone="primary"
         [title]="item.title"
         [summary]="item.copy"
         [showDivider]="!last"
-      ></app-compact-feature-row>
+      ></app-compact-row>
       }
     </div>
   </section>
@@ -100,13 +100,13 @@
 
     <div class="compact-list">
       @for (item of analysisItems; track item.title; let last = $last) {
-      <app-compact-feature-row
+      <app-compact-row
         [icon]="item.icon"
         iconTone="secondary"
         [title]="item.title"
         [summary]="item.copy"
         [showDivider]="!last"
-      ></app-compact-feature-row>
+      ></app-compact-row>
       }
     </div>
   </section>
@@ -123,13 +123,13 @@
 
     <div class="compact-list">
       @for (item of reviewItems; track item.title; let last = $last) {
-      <app-compact-feature-row
+      <app-compact-row
         [icon]="item.icon"
         iconTone="tertiary"
         [title]="item.title"
         [summary]="item.copy"
         [showDivider]="!last"
-      ></app-compact-feature-row>
+      ></app-compact-row>
       }
     </div>
   </section>

@@ -25,6 +25,8 @@ import {
   formatDashboardNumericValue,
   resolveDashboardAxisDisplayUnit,
 } from '../../helpers/dashboard-chart-data.helper';
+import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
+import { getNumberFormatter } from '../../helpers/number-format.helper';
 import {
   buildDashboardEChartsStyleTokens,
   buildDashboardEChartsTooltipChrome,
@@ -140,7 +142,7 @@ export class AssistantVisualChartComponent implements AfterViewInit, OnChanges, 
     const unitSettings = this.userSettingsQuery.unitSettings();
     const yAxes = this.buildYAxisPresentations(unitSettings);
     const xAxis = this.buildXAxisPresentation(unitSettings);
-    const dateFormatter = new Intl.DateTimeFormat(undefined, {
+    const dateFormatter = getDateTimeFormatter(undefined, {
       dateStyle: 'medium',
       ...(this.visual.xAxis.timeZone
         ? { timeZone: this.visual.xAxis.timeZone }
@@ -365,7 +367,7 @@ export class AssistantVisualChartComponent implements AfterViewInit, OnChanges, 
   }
 
   private formatRawValue(value: number, unit: string | null): string {
-    const formatted = new Intl.NumberFormat(undefined, {
+    const formatted = getNumberFormatter(undefined, {
       maximumFractionDigits: 2,
     }).format(value);
     return `${formatted}${unit ? ` ${unit}` : ''}`;

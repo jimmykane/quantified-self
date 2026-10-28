@@ -5,9 +5,15 @@
 }
 
 :host,
-:host > * {
+:host > *,
+.preview-content > * {
   box-sizing: border-box;
 }
+
+.preview-content { min-width: 0; }
+.preview-placeholder--readiness { min-height: 14rem; }
+.preview-placeholder--explorer { min-height: 30rem; }
+.preview-placeholder--training-plans { min-height: 46rem; }
 
 .preview-placeholder,
 .map-stage {
@@ -19,17 +25,28 @@
     var(--mat-sys-surface-container-low);
 }
 
+// Preserve the reserved layout while nearby examples prepare, without gray panels flashing on scroll.
+:host(.preview-prepares-ahead) .preview-placeholder {
+  border-color: transparent;
+  background: transparent;
+}
+
 .preview-placeholder--training,
 .preview-placeholder--flow {
   min-height: 22rem;
 }
+
+.preview-placeholder--health { min-height: 15rem; }
+.preview-placeholder--note-comparison { min-height: 41rem; }
+.preview-placeholder--health-sleep { min-height: 28rem; }
+.preview-placeholder--health-overview { min-height: 73rem; }
 
 .preview-placeholder--dashboard {
   min-height: 30rem;
 }
 
 .preview-placeholder--reviewer {
-  min-height: 116rem;
+  min-height: 70rem;
 }
 
 .preview-placeholder--assistant,
@@ -46,7 +63,7 @@
 }
 
 .map-stage {
-  height: clamp(20rem, 48vw, 32.5rem);
+  height: var(--public-preview-map-height, clamp(20rem, 48vw, 32.5rem));
   overflow: hidden;
 }
 
@@ -56,16 +73,27 @@
   border-radius: 0;
 }
 
+@media (max-width: 799.98px) {
+  .preview-placeholder--reviewer { min-height: 106rem; }
+}
+
+@media (max-width: 980px) { .preview-placeholder--health-overview { min-height: 106rem; } }
+@media (max-width: 600px) { .preview-placeholder--health-overview { min-height: 190rem; } }
+
+@media (max-width: 599.98px) {
+  .preview-placeholder--reviewer { min-height: 135rem; }
+}
+
 @media (max-width: 440px) {
+  .preview-placeholder--training-plans {
+    min-height: 42rem;
+  }
+
   .preview-placeholder--signals {
     min-height: 64rem;
   }
 
   .preview-placeholder--workout {
     min-height: 64rem;
-  }
-
-  .preview-placeholder--reviewer {
-    min-height: 161rem;
   }
 }

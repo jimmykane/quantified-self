@@ -1,3 +1,4 @@
+import { assertHistoryWrite } from '../connection-history/context';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import {
@@ -26,6 +27,7 @@ import {
     UserDeletionGuardReadError,
 } from '../shared/user-deletion-guard';
 import { generateIDFromParts } from '../shared/id-generator';
+import { healthAccountIdentityParts } from '../../../shared/nightly-hrv';
 import {
     areTokenCredentialSnapshotsEqual,
     getTokenCredentialSnapshot,
@@ -42,6 +44,8 @@ export { HealthWriteSizeError } from './validation';
 
 type HealthIdGenerator = (parts: string[]) => Promise<string>;
 const OPAQUE_ID_PATTERN = /^[a-f0-9]{64}$/;
+export const HEALTH_SOURCE_RECORD_TRANSACTION_BATCH_SIZE = 8;
+const HEALTH_SOURCE_RECORD_TRANSACTION_MAX_WRITES = 450;
 
 export interface HealthLifecycleDocumentFieldGuard {
     documentRef: admin.firestore.DocumentReference;
@@ -50,7 +54,11 @@ export interface HealthLifecycleDocumentFieldGuard {
 
 export interface HealthWriterDependencies {
     db?: admin.firestore.Firestore;
+    /** Server-owned access/proposal fence, checked before any transaction writes. */
+    transactionPrecondition?: (transaction: admin.firestore.Transaction) => Promise<void>;
     generateId?: HealthIdGenerator;
+    /** Skip replacement when a durable deletion/idempotency marker exists. */
+    requiredMissingDocumentRef?: admin.firestore.DocumentReference;
     /** Skip the replacement if this lifecycle authority document is absent. */
     requiredExistingDocumentRef?: admin.firestore.DocumentReference;
     /** Require the same in-memory OAuth credential revision at commit time. */
@@ -63,6 +71,8 @@ export interface HealthWriterDependencies {
 
 export interface HealthSyncStateWriterDependencies {
     db?: admin.firestore.Firestore;
+    /** Stage status in the existing queue transaction; its caller owns commit. */
+    transaction?: admin.firestore.Transaction;
     /** Skip the state transition if this lifecycle authority document exists. */
     requiredMissingDocumentRef?: admin.firestore.DocumentReference;
     /** Skip the state transition if this lifecycle authority document is absent. */
@@ -119,6 +129,21 @@ export class HealthLifecycleGuardReadError extends Error {
     constructor() {
         super('Health lifecycle guard could not be read.');
     }
+}
+
+export class HealthSourceRecordBatchSplitRequiredError extends Error {
+    public readonly name = 'HealthSourceRecordBatchSplitRequiredError';
+
+    constructor() {
+        super('Health source-record batch must be split before writing.');
+    }
+}
+
+export function isHealthSourceRecordBatchSplittableError(error: unknown): boolean {
+    return error instanceof HealthSourceRecordBatchSplitRequiredError
+        || error instanceof HealthSourceRecordRevisionConflictError
+        || error instanceof HealthWriteSizeError
+        || error instanceof HealthWriteValidationError;
 }
 
 export interface BuiltHealthSourceRecordWrite {
@@ -215,6 +240,13 @@ export function assertHealthSourceRecordWriteSize(
     sourceRecord: HealthSourceRecord,
     chunks: readonly HealthSampleChunk[],
 ): void {
+    healthSourceRecordWriteBytes(sourceRecord, chunks);
+}
+
+function healthSourceRecordWriteBytes(
+    sourceRecord: HealthSourceRecord,
+    chunks: readonly HealthSampleChunk[],
+): number {
     const sourceRecordBytes = documentBytes(sourceRecord);
     if (sourceRecordBytes > HEALTH_MAX_SOURCE_RECORD_DOCUMENT_BYTES) {
         throw new HealthWriteSizeError(`Health source record ${sourceRecord.id} exceeds the bounded document size.`);
@@ -223,6 +255,7 @@ export function assertHealthSourceRecordWriteSize(
     for (const chunk of chunks) {
         totalBytes = addHealthSampleChunkWriteBytes(totalBytes, chunk);
     }
+    return totalBytes;
 }
 
 function addHealthSampleChunkWriteBytes(totalBytes: number, chunk: HealthSampleChunk): number {
@@ -265,6 +298,21 @@ function storedHealthRevisionWatermark(sourceRecord: HealthSourceRecord): number
     return watermark;
 }
 
+export function buildHealthSourceRecordId(
+    userID: string,
+    source: Pick<HealthSourceRecordInput, 'provider' | 'providerAccountId' | 'sourceRecordType' | 'sourceRecordKey'>,
+    generateId: HealthIdGenerator = generateIDFromParts,
+): Promise<string> {
+    return generateOpaqueId(generateId, [
+        'health-source-record-v1',
+        userID,
+        source.provider,
+        source.providerAccountId,
+        source.sourceRecordType,
+        source.sourceRecordKey,
+    ]);
+}
+
 export async function buildHealthSourceRecordWrite(
     userID: string,
     value: unknown,
@@ -273,12 +321,7 @@ export async function buildHealthSourceRecordWrite(
 ): Promise<BuiltHealthSourceRecordWrite> {
     validateWriteContext(userID, nowMs);
     const input = canonicalizeInput(validateHealthSourceRecordInput(value));
-    const accountKey = await generateOpaqueId(generateId, [
-        'health-account-v1',
-        userID,
-        input.provider,
-        input.providerAccountId,
-    ]);
+    const accountKey = await generateOpaqueId(generateId, healthAccountIdentityParts(userID, input.provider, input.providerAccountId));
     const opaqueSourceRecordKey = await generateOpaqueId(generateId, [
         'health-source-key-v1',
         userID,
@@ -287,14 +330,7 @@ export async function buildHealthSourceRecordWrite(
         input.sourceRecordType,
         input.sourceRecordKey,
     ]);
-    const id = await generateOpaqueId(generateId, [
-        'health-source-record-v1',
-        userID,
-        input.provider,
-        input.providerAccountId,
-        input.sourceRecordType,
-        input.sourceRecordKey,
-    ]);
+    const id = await buildHealthSourceRecordId(userID, input, generateId);
     const digest = await generateOpaqueId(generateId, [
         'health-source-record-content-v1',
         JSON.stringify(digestPayload(input)),
@@ -423,11 +459,28 @@ async function getHealthLifecycleGuardSnapshot(
     }
 }
 
-async function healthLifecycleFieldsMatch(
+type HealthLifecycleSnapshotReader = (
+    ref: admin.firestore.DocumentReference,
+) => Promise<admin.firestore.DocumentSnapshot>;
+
+function createHealthLifecycleSnapshotReader(
     transaction: admin.firestore.Transaction,
+): HealthLifecycleSnapshotReader {
+    const snapshots = new Map<string, Promise<admin.firestore.DocumentSnapshot>>();
+    return ref => {
+        const existing = snapshots.get(ref.path);
+        if (existing) return existing;
+        const pending = getHealthLifecycleGuardSnapshot(transaction, ref);
+        snapshots.set(ref.path, pending);
+        return pending;
+    };
+}
+
+async function healthLifecycleFieldsMatch(
+    readSnapshot: HealthLifecycleSnapshotReader,
     guard: HealthLifecycleDocumentFieldGuard,
 ): Promise<boolean> {
-    const snapshot = await getHealthLifecycleGuardSnapshot(transaction, guard.documentRef);
+    const snapshot = await readSnapshot(guard.documentRef);
     const data = snapshot.exists
         ? snapshot.data() as Record<string, unknown> | undefined
         : undefined;
@@ -436,7 +489,7 @@ async function healthLifecycleFieldsMatch(
 }
 
 async function allHealthLifecycleFieldsMatch(
-    transaction: admin.firestore.Transaction,
+    readSnapshot: HealthLifecycleSnapshotReader,
     dependencies: Pick<
         HealthWriterDependencies & HealthSyncStateWriterDependencies,
         'requiredDocumentFieldValues' | 'additionalRequiredDocumentFieldValues'
@@ -449,7 +502,7 @@ async function allHealthLifecycleFieldsMatch(
         ...(dependencies.additionalRequiredDocumentFieldValues || []),
     ];
     for (const guard of guards) {
-        if (!(await healthLifecycleFieldsMatch(transaction, guard))) {
+        if (!(await healthLifecycleFieldsMatch(readSnapshot, guard))) {
             return false;
         }
     }
@@ -482,28 +535,60 @@ function validateRequiredExistingHealthLifecycleGuard(
     }
 }
 
-export async function replaceHealthSourceRecord(
-    userID: string,
-    value: unknown,
-    nowMs = Date.now(),
-    dependencies: HealthWriterDependencies = {},
-): Promise<HealthSourceRecordWriteResult> {
-    validateRequiredExistingHealthLifecycleGuard(dependencies);
-    const db = dependencies.db || admin.firestore();
-    const built = await buildHealthSourceRecordWrite(
-        userID,
-        value,
-        nowMs,
-        dependencies.generateId || generateIDFromParts,
-    );
-    const sourceRecordRef = userHealthCollection(
-        db,
-        userID,
-        HEALTH_SOURCE_RECORDS_COLLECTION_ID,
-    ).doc(built.sourceRecord.id);
-    const chunkCollection = userHealthCollection(db, userID, HEALTH_SAMPLE_CHUNKS_COLLECTION_ID);
+interface PreparedHealthSourceRecordWrite extends BuiltHealthSourceRecordWrite {
+    writeBytes: number;
+}
 
-    const result = await db.runTransaction(async transaction => {
+interface PlannedHealthSourceRecordWrite {
+    sourceRecordRef: admin.firestore.DocumentReference;
+    staleChunkIds: readonly string[];
+    chunks: readonly HealthSampleChunk[];
+    sourceRecord: HealthSourceRecord | null;
+    updateRevisionWatermark: number | null;
+    result: HealthSourceRecordWriteResult;
+}
+
+function skippedHealthSourceRecordWriteResult(
+    built: BuiltHealthSourceRecordWrite,
+    status: 'skipped_deleted_user' | 'skipped_lifecycle_guard',
+): HealthSourceRecordWriteResult {
+    return {
+        sourceRecordId: built.sourceRecord.id,
+        status,
+        sourceRecord: null,
+        chunksWritten: 0,
+        chunksDeleted: 0,
+    };
+}
+
+function assertPreparedHealthSourceRecordBatchIsBounded(
+    prepared: readonly PreparedHealthSourceRecordWrite[],
+): void {
+    if (prepared.length > HEALTH_SOURCE_RECORD_TRANSACTION_BATCH_SIZE) {
+        throw new HealthSourceRecordBatchSplitRequiredError();
+    }
+    let batchBytes = 0;
+    const sourceRecordIds = new Set<string>();
+    for (const item of prepared) {
+        if (sourceRecordIds.has(item.sourceRecord.id)
+            || batchBytes + item.writeBytes > HEALTH_MAX_WRITE_BYTES) {
+            throw new HealthSourceRecordBatchSplitRequiredError();
+        }
+        batchBytes += item.writeBytes;
+        sourceRecordIds.add(item.sourceRecord.id);
+    }
+}
+
+async function replacePreparedHealthSourceRecordBatch(
+    userID: string,
+    prepared: readonly PreparedHealthSourceRecordWrite[],
+    nowMs: number,
+    dependencies: HealthWriterDependencies,
+): Promise<HealthSourceRecordWriteResult[]> {
+    const db = dependencies.db || admin.firestore();
+    const chunkCollection = userHealthCollection(db, userID, HEALTH_SAMPLE_CHUNKS_COLLECTION_ID);
+    const results = await db.runTransaction(async transaction => {
+        await assertHistoryWrite(transaction);
         let deletionGuard;
         try {
             deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID, nowMs);
@@ -511,132 +596,214 @@ export async function replaceHealthSourceRecord(
             throw new UserDeletionGuardReadError(userID, 'health_source_record_write', error);
         }
         if (deletionGuard.shouldSkip) {
-            return {
-                sourceRecordId: built.sourceRecord.id,
-                status: 'skipped_deleted_user' as const,
-                sourceRecord: null,
-                chunksWritten: 0,
-                chunksDeleted: 0,
-            };
+            return prepared.map(item => skippedHealthSourceRecordWriteResult(
+                item,
+                'skipped_deleted_user',
+            ));
         }
+        await dependencies.transactionPrecondition?.(transaction);
+        const readLifecycleSnapshot = createHealthLifecycleSnapshotReader(transaction);
         if (dependencies.requiredExistingDocumentRef) {
-            const requiredExistingSnapshot = await getHealthLifecycleGuardSnapshot(
-                transaction,
+            const requiredExistingSnapshot = await readLifecycleSnapshot(
                 dependencies.requiredExistingDocumentRef,
             );
             if (!healthLifecycleSnapshotMatchesCredential(
                 requiredExistingSnapshot,
                 dependencies.requiredExistingTokenCredential,
             )) {
-                return {
-                    sourceRecordId: built.sourceRecord.id,
-                    status: 'skipped_lifecycle_guard' as const,
-                    sourceRecord: null,
-                    chunksWritten: 0,
-                    chunksDeleted: 0,
-                };
+                return prepared.map(item => skippedHealthSourceRecordWriteResult(
+                    item,
+                    'skipped_lifecycle_guard',
+                ));
             }
         }
-        if (!(await allHealthLifecycleFieldsMatch(transaction, dependencies))) {
-            return {
-                sourceRecordId: built.sourceRecord.id,
-                status: 'skipped_lifecycle_guard' as const,
-                sourceRecord: null,
-                chunksWritten: 0,
-                chunksDeleted: 0,
-            };
+        const deletionMarkerExists = dependencies.requiredMissingDocumentRef
+            && (await readLifecycleSnapshot(dependencies.requiredMissingDocumentRef)).exists;
+        if (deletionMarkerExists || !(await allHealthLifecycleFieldsMatch(readLifecycleSnapshot, dependencies))) {
+            return prepared.map(item => skippedHealthSourceRecordWriteResult(
+                item,
+                'skipped_lifecycle_guard',
+            ));
         }
 
-        const snapshot = await transaction.get(sourceRecordRef);
-        const existingSourceRecord = snapshot.exists ? snapshot.data() as HealthSourceRecord : null;
-        const existingRevisionWatermark = existingSourceRecord
-            ? storedHealthRevisionWatermark(existingSourceRecord)
-            : null;
-        if (existingSourceRecord
-            && existingRevisionWatermark! > built.sourceRecord.source.revision.order) {
-            return {
-                sourceRecordId: existingSourceRecord.id,
-                status: 'stale' as const,
-                sourceRecord: existingSourceRecord,
-                chunksWritten: 0,
-                chunksDeleted: 0,
-            };
-        }
-        const unchanged = existingSourceRecord
-            && existingSourceRecord.source.revision.token === built.sourceRecord.source.revision.token
-            && existingSourceRecord.source.revision.digest === built.sourceRecord.source.revision.digest;
-        if (unchanged) {
-            const sourceRecord = existingRevisionWatermark! < built.sourceRecord.source.revision.order
-                ? {
-                    ...existingSourceRecord,
-                    source: {
-                        ...existingSourceRecord.source,
-                        maxObservedRevisionOrder: built.sourceRecord.source.revision.order,
+        const sourceRecordRefs = prepared.map(item => userHealthCollection(
+            db,
+            userID,
+            HEALTH_SOURCE_RECORDS_COLLECTION_ID,
+        ).doc(item.sourceRecord.id));
+        const snapshots = await Promise.all(sourceRecordRefs.map(ref => transaction.get(ref)));
+        const plans: PlannedHealthSourceRecordWrite[] = [];
+        let writeOperations = 0;
+
+        for (let index = 0; index < prepared.length; index += 1) {
+            const built = prepared[index];
+            const sourceRecordRef = sourceRecordRefs[index];
+            const snapshot = snapshots[index];
+            const existingSourceRecord = snapshot.exists ? snapshot.data() as HealthSourceRecord : null;
+            const existingRevisionWatermark = existingSourceRecord
+                ? storedHealthRevisionWatermark(existingSourceRecord)
+                : null;
+            if (existingSourceRecord
+                && existingRevisionWatermark! > built.sourceRecord.source.revision.order) {
+                plans.push({
+                    sourceRecordRef,
+                    staleChunkIds: [],
+                    chunks: [],
+                    sourceRecord: null,
+                    updateRevisionWatermark: null,
+                    result: {
+                        sourceRecordId: existingSourceRecord.id,
+                        status: 'stale',
+                        sourceRecord: existingSourceRecord,
+                        chunksWritten: 0,
+                        chunksDeleted: 0,
                     },
-                }
-                : existingSourceRecord;
-            if (sourceRecord !== existingSourceRecord) {
-                transaction.update(sourceRecordRef, {
-                    'source.maxObservedRevisionOrder': built.sourceRecord.source.revision.order,
+                });
+                continue;
+            }
+            const unchanged = existingSourceRecord
+                && existingSourceRecord.source.revision.token === built.sourceRecord.source.revision.token
+                && existingSourceRecord.source.revision.digest === built.sourceRecord.source.revision.digest;
+            if (unchanged) {
+                const updateRevisionWatermark = existingRevisionWatermark! < built.sourceRecord.source.revision.order
+                    ? built.sourceRecord.source.revision.order
+                    : null;
+                const sourceRecord = updateRevisionWatermark !== null
+                    ? {
+                        ...existingSourceRecord,
+                        source: {
+                            ...existingSourceRecord.source,
+                            maxObservedRevisionOrder: updateRevisionWatermark,
+                        },
+                    }
+                    : existingSourceRecord;
+                if (updateRevisionWatermark !== null) writeOperations += 1;
+                plans.push({
+                    sourceRecordRef,
+                    staleChunkIds: [],
+                    chunks: [],
+                    sourceRecord: null,
+                    updateRevisionWatermark,
+                    result: {
+                        sourceRecordId: existingSourceRecord.id,
+                        status: 'unchanged',
+                        sourceRecord,
+                        chunksWritten: 0,
+                        chunksDeleted: 0,
+                    },
+                });
+                continue;
+            }
+            if (existingSourceRecord
+                && existingRevisionWatermark === built.sourceRecord.source.revision.order) {
+                throw new HealthSourceRecordRevisionConflictError(built.sourceRecord.id);
+            }
+
+            const existingChunkIds = existingSourceRecord?.sampleChunkIds || [];
+            if (!Array.isArray(existingChunkIds)
+                || existingChunkIds.length > HEALTH_MAX_SAMPLE_CHUNKS_PER_SOURCE_RECORD
+                || new Set(existingChunkIds).size !== existingChunkIds.length
+                || existingChunkIds.some(chunkId => typeof chunkId !== 'string' || !OPAQUE_ID_PATTERN.test(chunkId))) {
+                throw new HealthWriteValidationError(
+                    'Stored health source record violates the bounded sample-chunk invariant.',
+                );
+            }
+            const incomingChunkIds = new Set(built.sourceRecord.sampleChunkIds);
+            const staleChunkIds = existingChunkIds.filter(chunkId => !incomingChunkIds.has(chunkId));
+            const sourceRecord = {
+                ...built.sourceRecord,
+                createdAtMs: existingSourceRecord?.createdAtMs ?? built.sourceRecord.createdAtMs,
+            };
+            writeOperations += staleChunkIds.length + built.chunks.length + 1;
+            plans.push({
+                sourceRecordRef,
+                staleChunkIds,
+                chunks: built.chunks,
+                sourceRecord,
+                updateRevisionWatermark: null,
+                result: {
+                    sourceRecordId: sourceRecord.id,
+                    status: 'written',
+                    sourceRecord,
+                    chunksWritten: built.chunks.length,
+                    chunksDeleted: staleChunkIds.length,
+                },
+            });
+        }
+
+        if (writeOperations > HEALTH_SOURCE_RECORD_TRANSACTION_MAX_WRITES) {
+            throw new HealthSourceRecordBatchSplitRequiredError();
+        }
+
+        for (const plan of plans) {
+            if (plan.updateRevisionWatermark !== null) {
+                transaction.update(plan.sourceRecordRef, {
+                    'source.maxObservedRevisionOrder': plan.updateRevisionWatermark,
                 });
             }
-            return {
-                sourceRecordId: existingSourceRecord.id,
-                status: 'unchanged' as const,
-                sourceRecord,
-                chunksWritten: 0,
-                chunksDeleted: 0,
-            };
+            for (const chunkId of plan.staleChunkIds) {
+                // Health sample chunks are permanent leaf documents by schema; descendants are forbidden by Rules.
+                transaction.delete(chunkCollection.doc(chunkId));
+            }
+            for (const chunk of plan.chunks) {
+                transaction.set(chunkCollection.doc(chunk.id), chunk);
+            }
+            if (plan.sourceRecord) {
+                transaction.set(plan.sourceRecordRef, plan.sourceRecord);
+            }
         }
-        if (existingSourceRecord
-            && existingRevisionWatermark === built.sourceRecord.source.revision.order) {
-            throw new HealthSourceRecordRevisionConflictError(built.sourceRecord.id);
-        }
+        return plans.map(plan => plan.result);
+    });
+    for (let index = 0; index < results.length; index += 1) {
+        const result = results[index];
+        logger.info('[HealthSync] Health source-record write completed.', {
+            provider: prepared[index].sourceRecord.source.provider,
+            sourceRecordId: prepared[index].sourceRecord.id,
+            status: result.status,
+            chunksWritten: result.chunksWritten,
+            chunksDeleted: result.chunksDeleted,
+        });
+    }
+    return results;
+}
 
-        const existingChunkIds = existingSourceRecord?.sampleChunkIds || [];
-        if (!Array.isArray(existingChunkIds)
-            || existingChunkIds.length > HEALTH_MAX_SAMPLE_CHUNKS_PER_SOURCE_RECORD
-            || new Set(existingChunkIds).size !== existingChunkIds.length
-            || existingChunkIds.some(chunkId => typeof chunkId !== 'string' || !OPAQUE_ID_PATTERN.test(chunkId))) {
-            throw new HealthWriteValidationError(
-                'Stored health source record violates the bounded sample-chunk invariant.',
-            );
-        }
-        const incomingChunkIds = new Set(built.sourceRecord.sampleChunkIds);
-        const staleChunkIds = existingChunkIds.filter(chunkId => !incomingChunkIds.has(chunkId));
-        for (const chunkId of staleChunkIds) {
-            // Health sample chunks are permanent leaf documents by schema; descendants are forbidden by Rules.
-            transaction.delete(chunkCollection.doc(chunkId));
-        }
-        for (const chunk of built.chunks) {
-            transaction.set(chunkCollection.doc(chunk.id), chunk);
-        }
-        const sourceRecord = {
-            ...built.sourceRecord,
-            createdAtMs: existingSourceRecord?.createdAtMs ?? built.sourceRecord.createdAtMs,
-        };
-        transaction.set(sourceRecordRef, sourceRecord);
+export async function replaceHealthSourceRecords(
+    userID: string,
+    values: readonly unknown[],
+    nowMs = Date.now(),
+    dependencies: HealthWriterDependencies = {},
+): Promise<HealthSourceRecordWriteResult[]> {
+    validateWriteContext(userID, nowMs);
+    validateRequiredExistingHealthLifecycleGuard(dependencies);
+    if (values.length === 0) return [];
+    if (values.length > HEALTH_SOURCE_RECORD_TRANSACTION_BATCH_SIZE) {
+        throw new HealthSourceRecordBatchSplitRequiredError();
+    }
+    const generateId = dependencies.generateId || generateIDFromParts;
+    const prepared = await Promise.all(values.map(async value => {
+        const built = await buildHealthSourceRecordWrite(userID, value, nowMs, generateId);
         return {
-            sourceRecordId: sourceRecord.id,
-            status: 'written' as const,
-            sourceRecord,
-            chunksWritten: built.chunks.length,
-            chunksDeleted: staleChunkIds.length,
+            ...built,
+            writeBytes: healthSourceRecordWriteBytes(built.sourceRecord, built.chunks),
         };
-    });
+    }));
+    assertPreparedHealthSourceRecordBatchIsBounded(prepared);
+    return replacePreparedHealthSourceRecordBatch(userID, prepared, nowMs, dependencies);
+}
 
-    logger.info('[HealthSync] Health source-record write completed.', {
-        provider: built.sourceRecord.source.provider,
-        sourceRecordId: built.sourceRecord.id,
-        status: result.status,
-        chunksWritten: result.chunksWritten,
-        chunksDeleted: result.chunksDeleted,
-    });
+export async function replaceHealthSourceRecord(
+    userID: string,
+    value: unknown,
+    nowMs = Date.now(),
+    dependencies: HealthWriterDependencies = {},
+): Promise<HealthSourceRecordWriteResult> {
+    const [result] = await replaceHealthSourceRecords(userID, [value], nowMs, dependencies);
     return result;
 }
 
 export interface HealthSyncStateUpdate {
     status?: HealthSyncStatus;
+    retryPending?: boolean;
     lastWebhookAtMs?: number | null;
     lastPollAtMs?: number | null;
     lastSyncedAtMs?: number | null;
@@ -685,6 +852,12 @@ function validateSyncUpdate(provider: unknown, value: unknown): { provider: Heal
         }
         status = input.status as HealthSyncStatus;
     }
+    if (input.retryPending !== undefined && typeof input.retryPending !== 'boolean') {
+        throw new HealthWriteValidationError('retryPending must be a boolean.');
+    }
+    if (input.retryPending === true && status !== HEALTH_SYNC_STATUSES.Failed) {
+        throw new HealthWriteValidationError('A pending retry requires a failed sync attempt.');
+    }
     let lastErrorCode: string | null | undefined;
     if (input.lastErrorCode === null) {
         lastErrorCode = null;
@@ -701,6 +874,7 @@ function validateSyncUpdate(provider: unknown, value: unknown): { provider: Heal
         provider,
         update: {
             status,
+            retryPending: input.retryPending as boolean | undefined,
             lastWebhookAtMs: optionalSyncTime(input.lastWebhookAtMs, 'lastWebhookAtMs'),
             lastPollAtMs: optionalSyncTime(input.lastPollAtMs, 'lastPollAtMs'),
             lastSyncedAtMs: optionalSyncTime(input.lastSyncedAtMs, 'lastSyncedAtMs'),
@@ -740,7 +914,8 @@ export async function updateHealthSyncState(
         : null;
     const db = dependencies.db || admin.firestore();
     const stateRef = userHealthCollection(db, userID, HEALTH_SYNC_STATE_COLLECTION_ID).doc(provider);
-    const written = await db.runTransaction(async transaction => {
+    const writeInTransaction = async (transaction: admin.firestore.Transaction): Promise<boolean> => {
+        await assertHistoryWrite(transaction);
         let deletionGuard;
         try {
             deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID, nowMs);
@@ -750,9 +925,9 @@ export async function updateHealthSyncState(
         if (deletionGuard.shouldSkip) {
             return false;
         }
+        const readLifecycleSnapshot = createHealthLifecycleSnapshotReader(transaction);
         if (dependencies.requiredMissingDocumentRef) {
-            const requiredMissingSnapshot = await getHealthLifecycleGuardSnapshot(
-                transaction,
+            const requiredMissingSnapshot = await readLifecycleSnapshot(
                 dependencies.requiredMissingDocumentRef,
             );
             if (requiredMissingSnapshot.exists) {
@@ -760,8 +935,7 @@ export async function updateHealthSyncState(
             }
         }
         if (dependencies.requiredExistingDocumentRef) {
-            const requiredExistingSnapshot = await getHealthLifecycleGuardSnapshot(
-                transaction,
+            const requiredExistingSnapshot = await readLifecycleSnapshot(
                 dependencies.requiredExistingDocumentRef,
             );
             if (!healthLifecycleSnapshotMatchesCredential(
@@ -771,13 +945,12 @@ export async function updateHealthSyncState(
                 return false;
             }
         }
-        if (!(await allHealthLifecycleFieldsMatch(transaction, dependencies))) {
+        if (!(await allHealthLifecycleFieldsMatch(readLifecycleSnapshot, dependencies))) {
             return false;
         }
         let effectiveUpdate = update;
         if (conditionalUpdate && alternateUpdate) {
-            const conditionalSnapshot = await getHealthLifecycleGuardSnapshot(
-                transaction,
+            const conditionalSnapshot = await readLifecycleSnapshot(
                 conditionalUpdate.documentRef,
             );
             const conditionalData = conditionalSnapshot.exists
@@ -806,6 +979,11 @@ export async function updateHealthSyncState(
             status: preserveNewerStatus
                 ? undefined
                 : effectiveUpdate.status ?? (snapshot.exists ? undefined : HEALTH_SYNC_STATUSES.Ready),
+            retryPending: preserveNewerStatus
+                ? undefined
+                : effectiveUpdate.status !== undefined
+                    ? effectiveUpdate.status === HEALTH_SYNC_STATUSES.Failed && effectiveUpdate.retryPending === true
+                    : effectiveUpdate.retryPending,
             lastWebhookAtMs: monotonicSyncTime(effectiveUpdate.lastWebhookAtMs, existing?.lastWebhookAtMs, staleUpdate),
             lastPollAtMs: monotonicSyncTime(effectiveUpdate.lastPollAtMs, existing?.lastPollAtMs, staleUpdate),
             lastSyncedAtMs: monotonicSyncTime(effectiveUpdate.lastSyncedAtMs, existing?.lastSyncedAtMs, staleUpdate),
@@ -815,8 +993,11 @@ export async function updateHealthSyncState(
         });
         transaction.set(stateRef, state, { merge: true });
         return true;
-    });
-    logger.info('[HealthSync] Health sync state write completed.', { provider, written });
+    };
+    const written = dependencies.transaction
+        ? await writeInTransaction(dependencies.transaction)
+        : await db.runTransaction(writeInTransaction);
+    if (!dependencies.transaction) logger.info('[HealthSync] Health sync state write completed.', { provider, written });
     return written;
 }
 

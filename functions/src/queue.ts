@@ -1,5 +1,9 @@
+import { withHistoryQueueExecution, type HistoryExecution } from './connection-history/execution';
 import * as functions from 'firebase-functions/v1';
-import { MAX_RETRY_COUNT, QUEUE_SCHEDULE, MAX_PENDING_TASKS, DISPATCH_SPREAD_SECONDS } from './shared/queue-config';
+import { fitActivityReferencesFromEvent, retainSuuntoGuideCompletions } from './suunto/guide-completion';
+import { retainCOROSTrainingCompletion } from './coros/training-completion';
+import { config } from './config';
+import { PROVIDER_MAX_RETRY_COUNT, QUEUE_SCHEDULE, MAX_PENDING_TASKS, DISPATCH_SPREAD_SECONDS } from './shared/queue-config';
 import { getExpireAtTimestamp, TTL_CONFIG } from './shared/ttl-config';
 import { QueueErrors, QueueLogs } from './shared/constants';
 import * as admin from 'firebase-admin';
@@ -25,11 +29,14 @@ import {
 import {
   getTokenData,
   TerminalServiceAuthError,
+  TokenRefreshInProgressError,
   TokenRefreshSkippedForDeletedUserError,
 } from './tokens';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { SuuntoAppEventMetaData } from '@sports-alliance/sports-lib';
 import { uploadDebugFile } from './debug-utils';
+import { isActivityIdentityConflict } from './shared/activity-identity-conflict';
+import { ProviderImportDuplicateError } from './shared/provider-import-duplicate';
 import { createParsingOptions } from '../../shared/parsing-options';
 import { inspectFitPayload, normalizeDownloadedFitPayload } from './shared/fit-payload';
 import { enqueueActivitySyncAfterEventPersistence } from './activity-sync/enqueue-after-event-persistence';
@@ -49,6 +56,9 @@ import {
 } from './queue/cleanup-tombstone';
 import { resolveProviderImportEventID } from './queue/provider-event-id';
 import { processWahooWorkoutQueueItem } from './wahoo/processor';
+import {
+  deferWorkoutQueueItemForTokenRefreshContention,
+} from './queue/token-refresh-contention';
 import { getActiveCOROSTokenSnapshot } from './coros/account';
 import {
   downloadCOROSFITFile,
@@ -82,6 +92,10 @@ import {
   SUUNTO_FIT_RETRY_EXHAUSTED_CONTEXT,
 } from './suunto/fit-download';
 import { getServiceTokenRootDocumentRef } from './service-token-store';
+import { ResponseBodyTooLargeError } from './request-helper';
+import { SUUNTO_FIT_DOWNLOAD_TOO_LARGE_CONTEXT } from './suunto/constants';
+import { observeImportQueue, recordImportCompletion, recordImportDispatch, recordImportQueueUnavailable } from './queue/import-monitoring';
+import { isSuuntoImportDisconnected } from './suunto/disconnected-import';
 
 type ProviderWorkoutQueueItem = SuuntoAppWorkoutQueueItemInterface
   | GarminAPIActivityQueueItemInterface
@@ -286,6 +300,38 @@ async function attachFirebaseUserIDToQueueItem<T extends ProviderWorkoutQueueIte
 
 
 export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
+  try {
+    await dispatchQueueItemTasksInternal(serviceName);
+    recordImportDispatch(serviceName, 'completed');
+  } catch (error) {
+    recordImportDispatch(serviceName, 'failed');
+    throw error;
+  } finally {
+    // Keep even client initialization/unexpected observation errors outside the
+    // dispatch result. A failed observation must not replace a dispatch error.
+    try { await observeImportQueue(admin.firestore(), serviceName); }
+    catch { recordImportQueueUnavailable(serviceName); }
+  }
+}
+
+interface HistoryWorkoutBatch {
+  execution: HistoryExecution;
+  queueItemIds: readonly string[];
+}
+
+const CONNECTION_HISTORY_DISPATCH_SPREAD_SECONDS = 60;
+
+/** Dispatch only this coordinator's bounded batch, without changing bulk import/recovery schedules. */
+export async function dispatchConnectionHistoryWorkoutBatch(execution: HistoryExecution, queueItemIds: readonly string[]): Promise<void> {
+  if (![ServiceNames.SuuntoApp, ServiceNames.COROSAPI].includes(execution.serviceName) || queueItemIds.length > 100) {
+    throw new Error('Unsupported connection-history activity batch.');
+  }
+  if (!queueItemIds.length) return;
+  await execution.beforeRequest();
+  await dispatchQueueItemTasksInternal(execution.serviceName, { execution, queueItemIds });
+}
+
+async function dispatchQueueItemTasksInternal(serviceName: ServiceNames, historyBatch?: HistoryWorkoutBatch) {
   // Check queue depth
   const pendingTasks = await getCloudTaskQueueDepth(true);
   if (pendingTasks >= MAX_PENDING_TASKS) {
@@ -298,11 +344,13 @@ export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
   const batchSize = availableSlots; // Caps at 1000 max
 
   // @todo add queue item sort date for creation
-  const querySnapshot = await admin.firestore()
+  const querySnapshot = historyBatch
+    ? await readHistoryWorkoutBatch(serviceName, historyBatch, batchSize)
+    : await admin.firestore()
     .collection(getServiceWorkoutQueueName(serviceName))
     .where('processed', '==', false)
     .where('dispatchedToCloudTask', '==', null)
-    .where('retryCount', '<', MAX_RETRY_COUNT)
+    .where('retryCount', '<', PROVIDER_MAX_RETRY_COUNT)
     .limit(batchSize)
     .get();
 
@@ -313,7 +361,8 @@ export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
 
   logger.info(`Dispatching ${querySnapshot.size} items for ${serviceName} (${pendingTasks} already pending)`);
 
-  const delayPerItem = DISPATCH_SPREAD_SECONDS / querySnapshot.size;
+  const spreadSeconds = historyBatch ? CONNECTION_HISTORY_DISPATCH_SPREAD_SECONDS : DISPATCH_SPREAD_SECONDS;
+  const delayPerItem = spreadSeconds / querySnapshot.size;
 
   const promises = querySnapshot.docs.map(async (doc, index): Promise<boolean> => {
     const delay = Math.floor(index * delayPerItem);
@@ -395,9 +444,30 @@ export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
     }
   });
 
-  const dispatchResults = await Promise.all(promises);
+  // Finish every started enqueue before the coordinator checkpoints its child paths.
+  // Failed immediate attempts keep their durable rows for the scheduled safety net.
+  const dispatchResults = await Promise.all(historyBatch ? promises.map(promise => promise.catch(() => {
+    try { logger.warn('[ConnectionHistory] Activity dispatch deferred to scheduled recovery.', { service: serviceName }); }
+    catch { /* Diagnostics must not interrupt other enqueues or durable admission. */ }
+    return false;
+  })) : promises);
   const dispatchedCount = dispatchResults.filter(Boolean).length;
-  logger.info(`Dispatched ${dispatchedCount}/${querySnapshot.size} tasks spread over ${DISPATCH_SPREAD_SECONDS}s`);
+  logger.info(`Dispatched ${dispatchedCount}/${querySnapshot.size} tasks spread over ${spreadSeconds}s`);
+}
+
+async function readHistoryWorkoutBatch(serviceName: ServiceNames, batch: HistoryWorkoutBatch, limit: number) {
+  const db = admin.firestore();
+  const snapshots = await db.getAll(...batch.queueItemIds.map(id => db.collection(getServiceWorkoutQueueName(serviceName)).doc(id)));
+  const now = Date.now();
+  const docs = snapshots.filter(snapshot => {
+    const data = snapshot.data();
+    return data?.connectionHistoryRunId === batch.execution.runId
+      && data.firebaseUserID === batch.execution.userID
+      && data[serviceName === ServiceNames.SuuntoApp ? 'userName' : 'openId'] === batch.execution.providerUserId
+      && data.processed === false && data.dispatchedToCloudTask === null && data.retryCount === 0
+      && !data.resultStatus && !(Number(data.processingLeaseExpiresAt) > now);
+  }).slice(0, limit);
+  return { docs, size: docs.length, empty: docs.length === 0 };
 }
 
 const TIMEOUT_DEFAULT = 300;
@@ -698,6 +768,7 @@ export async function parseWorkoutQueueItemForServiceName(
   tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>,
   usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>,
   pendingWrites?: Map<string, number>,
+  taskRecoveryGeneration?: number,
 ): Promise<QueueResult> {
   if (serviceName !== ServiceNames.COROSAPI) {
     return parseWorkoutQueueItemForServiceNameInternal(
@@ -707,6 +778,8 @@ export async function parseWorkoutQueueItemForServiceName(
       tokenCache,
       usageCache,
       pendingWrites,
+      undefined,
+      taskRecoveryGeneration,
     );
   }
 
@@ -744,6 +817,7 @@ export async function parseWorkoutQueueItemForServiceName(
       usageCache,
       pendingWrites,
       claimState,
+      taskRecoveryGeneration,
     );
   } finally {
     await releaseCOROSRevisionClaimIfHeld(corosQueueItem, claimState);
@@ -759,9 +833,38 @@ async function parseWorkoutQueueItemForServiceNameInternal(
   usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>,
   pendingWrites?: Map<string, number>,
   corosClaimState?: COROSQueueProcessingClaim,
+  taskRecoveryGeneration?: number,
+): Promise<QueueResult> {
+  return withHistoryQueueExecution(queueItem, () => parseHistoryGuardedWorkoutQueueItem(
+    serviceName,
+    queueItem,
+    bulkWriter,
+    tokenCache,
+    usageCache,
+    pendingWrites,
+    corosClaimState,
+    taskRecoveryGeneration,
+  ));
+}
+async function parseHistoryGuardedWorkoutQueueItem(
+  serviceName: ServiceNames,
+  queueItem: ProviderWorkoutQueueItem,
+  bulkWriter?: admin.firestore.BulkWriter,
+  tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>,
+  usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>,
+  pendingWrites?: Map<string, number>,
+  corosClaimState?: COROSQueueProcessingClaim,
+  taskRecoveryGeneration?: number,
 ): Promise<QueueResult> {
   if (serviceName === ServiceNames.GarminAPI) {
-    return processGarminAPIActivityQueueItem(queueItem as GarminAPIActivityQueueItemInterface, bulkWriter, tokenCache, usageCache, pendingWrites);
+    return processGarminAPIActivityQueueItem(
+      queueItem as GarminAPIActivityQueueItemInterface,
+      bulkWriter,
+      tokenCache,
+      usageCache,
+      pendingWrites,
+      taskRecoveryGeneration,
+    );
   }
   if (serviceName === ServiceNames.WahooAPI) {
     return processWahooWorkoutQueueItem(queueItem as WahooAPIWorkoutQueueItemInterface);
@@ -811,14 +914,45 @@ async function parseWorkoutQueueItemForServiceNameInternal(
     )
     : tokenQuerySnapshots.docs;
 
-  // If there is no token for the bound user, give them a few chances to reconnect.
+  // Only a confirmed completed disconnect turns missing credentials into a skip.
   if (!tokenQueryDocuments.length) {
+    const expected = { ...queueItem } as SuuntoAppWorkoutQueueItemInterface;
+    const owner = expected.firebaseUserID;
+    if (serviceName === ServiceNames.SuuntoApp && owner
+      && await isSuuntoImportDisconnected(owner)) {
+      if (!expected.ref) throw new Error('Missing Suunto queue document reference.');
+      const completion = { processed: true, processedAt: Date.now(), resultStatus: 'skipped', skippedReason: 'service_disconnected' };
+      const result = await updateQueueItemIfUserActive({
+        queueItemDocument: expected.ref,
+        queueItemId: expected.id,
+        userID: owner,
+        phase: 'suunto_disconnected_import',
+        logPrefix: 'SuuntoWorkoutQueue',
+        actionDescription: 'disconnected import skip',
+        updateData: completion,
+        cleanupOnDeletedUser: false,
+        isCurrent: current => current.processed !== true
+          && current.firebaseUserID === owner
+          && current.userName === expected.userName
+          && current.workoutID === expected.workoutID
+          && current.dateCreated === expected.dateCreated
+          && current.queueRevision === expected.queueRevision,
+      });
+      if (result === QueueItemUserGuardedUpdateResult.Updated) {
+        recordImportCompletion(expected.ref.parent.id, completion);
+        logger.info('[SuuntoWorkoutQueue] Import skipped after completed disconnect.', {
+          queueItemId: expected.id, reason: 'service_disconnected',
+        });
+      }
+      return QueueResult.Processed;
+    }
     logger.warn(QueueLogs.NO_TOKEN_FOUND.replace('${id}', queueItem.id));
     // return updateToProcessed(queueItem, bulkWriter, { processingError: 'NO_TOKEN_FOUND' });
     return moveToDeadLetterQueue(queueItem, new Error(QueueErrors.NO_TOKEN_FOUND), bulkWriter, 'NO_TOKEN_FOUND');
   }
 
   let oneSuccess = false;
+  let sourceIdentityConflict: Error | null = null;
   let retryIncrement = 1;
   let lastError = new Error(QueueErrors.ALL_TOKENS_FAILED);
   let retryableSuuntoFITPayloadError: RetryableSuuntoFITPayloadError | null = null;
@@ -827,7 +961,9 @@ async function parseWorkoutQueueItemForServiceNameInternal(
   let sawUserDeletionSkip = false;
   let sawPendingDisconnectSkip = false;
   let pendingDisconnectFirebaseUserID: string | null = null;
+  let tokenRefreshContentionFirebaseUserID: string | null = null;
   let sawInactiveProviderAccount = false;
+  let suuntoAccessDeniedError: Error | undefined;
   let processedAdditionalData: Record<string, unknown> | undefined;
 
   for (const tokenQueryDocumentSnapshot of tokenQueryDocuments) {
@@ -886,6 +1022,10 @@ async function parseWorkoutQueueItemForServiceNameInternal(
     try {
       serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName);
     } catch (e: any) {
+      if (e instanceof TokenRefreshInProgressError) {
+        tokenRefreshContentionFirebaseUserID ??= parentID;
+        continue;
+      }
       if (isTokenRefreshSkippedForDeletedUserError(e)) {
         sawUserDeletionSkip = true;
         logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} for token ${tokenQueryDocumentSnapshot.id} because the owning user is missing or deletion is in progress.`);
@@ -995,6 +1135,10 @@ async function parseWorkoutQueueItemForServiceNameInternal(
             );
             result = normalizeDownloadedFitPayload(downloadedPayload).data;
           } catch (retryError: unknown) {
+            if (retryError instanceof TokenRefreshInProgressError) {
+              tokenRefreshContentionFirebaseUserID ??= parentID;
+              continue;
+            }
             if (isTokenUseSkippedForPendingDisconnectError(retryError)) {
               sawPendingDisconnectSkip = true;
               pendingDisconnectFirebaseUserID = parentID;
@@ -1042,6 +1186,10 @@ async function parseWorkoutQueueItemForServiceNameInternal(
         }
       } else if (e instanceof PermanentCOROSFITDownloadError) {
         return moveToDeadLetterQueue(queueItem, e, bulkWriter, 'COROS_FIT_DOWNLOAD_REJECTED');
+      } else if (serviceName === ServiceNames.SuuntoApp && e instanceof ResponseBodyTooLargeError) {
+        return moveToDeadLetterQueue(queueItem,
+          new Error('Suunto FIT response exceeded the 128 MiB download limit.'),
+          bulkWriter, SUUNTO_FIT_DOWNLOAD_TOO_LARGE_CONTEXT);
       } else if (e instanceof RetryableSuuntoFITPayloadError) {
         logger.warn('Suunto FIT response was incomplete and will be retried.', {
           queueItemId: queueItem.id,
@@ -1054,11 +1202,23 @@ async function parseWorkoutQueueItemForServiceNameInternal(
         retryableSuuntoFITPayloadError = e;
         sawRetryableFailure = true;
         continue;
-      } else if (e.statusCode === 401) {
-        logger.warn(`Unauthorized to download workout for ${queueItem.id}, attempting to force refresh token and retry...`);
+      } else if (e.statusCode === 401 || (serviceName === ServiceNames.SuuntoApp && e.statusCode === 403)) {
+        logger.warn('Workout download authorization rejected; refreshing the same account token once.', {
+          queueItemId: queueItem.id,
+          serviceName,
+          providerStatusCode: e.statusCode,
+        });
+        let refreshedDownloadStarted = false;
         try {
           // Force refresh token and save
           serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, true);
+          if (serviceName === ServiceNames.SuuntoApp
+            && (serviceToken as SuuntoAPIAuth2ServiceTokenInterface).userName
+              !== (queueItem as SuuntoAppWorkoutQueueItemInterface).userName) {
+            sawInactiveProviderAccount = true;
+            continue;
+          }
+          refreshedDownloadStarted = true;
           const downloadedPayload = await getWorkoutForService(
             serviceName,
             queueItem as SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface,
@@ -1071,6 +1231,10 @@ async function parseWorkoutQueueItemForServiceNameInternal(
           }
           result = normalizedPayload.data;
         } catch (retryError: any) {
+          if (retryError instanceof TokenRefreshInProgressError) {
+            tokenRefreshContentionFirebaseUserID ??= parentID;
+            continue;
+          }
           if (isTokenUseSkippedForPendingDisconnectError(retryError)) {
             sawPendingDisconnectSkip = true;
             pendingDisconnectFirebaseUserID = parentID;
@@ -1090,6 +1254,11 @@ async function parseWorkoutQueueItemForServiceNameInternal(
             terminalAuthError = selectPreferredTerminalAuthError(terminalAuthError, retryError);
             continue;
           }
+          if (serviceName === ServiceNames.SuuntoApp && retryError instanceof ResponseBodyTooLargeError) {
+            return moveToDeadLetterQueue(queueItem,
+              new Error('Suunto FIT response exceeded the 128 MiB download limit.'),
+              bulkWriter, SUUNTO_FIT_DOWNLOAD_TOO_LARGE_CONTEXT);
+          }
           if (retryError instanceof RetryableSuuntoFITPayloadError) {
             logger.warn('Suunto FIT response remained incomplete after token refresh and will be retried.', {
               queueItemId: queueItem.id,
@@ -1103,6 +1272,14 @@ async function parseWorkoutQueueItemForServiceNameInternal(
             sawRetryableFailure = true;
             continue;
           }
+          if (refreshedDownloadStarted && serviceName === ServiceNames.SuuntoApp && retryError.statusCode === 403) {
+            suuntoAccessDeniedError = new Error('Suunto workout access denied after token refresh (HTTP 403).');
+            logger.warn('Suunto workout access remains denied after one token refresh.', {
+              queueItemId: queueItem.id,
+              providerStatusCode: 403,
+            });
+            continue;
+          }
           lastError = retryError instanceof Error ? retryError : new Error(`${retryError}`);
           sawRetryableFailure = true;
           logger.error(new Error(`Could not get workout for ${queueItem.id} even after force refresh: ${retryError.message}`));
@@ -1110,12 +1287,6 @@ async function parseWorkoutQueueItemForServiceNameInternal(
           continue;
         }
 
-      } else if (e.statusCode === 403) {
-        logger.error(new Error(`Could not get workout for ${queueItem.id} due to 403, increasing retry by 20`));
-        retryIncrement = 20;
-        lastError = e;
-        sawRetryableFailure = true;
-        continue;
       } else if (e.statusCode === 500) {
         logger.warn(`Partner service internal error (500) for ${queueItem.id}, will retry soon.`);
         retryIncrement = 1;
@@ -1246,6 +1417,21 @@ async function parseWorkoutQueueItemForServiceNameInternal(
               : {}),
           });
           const setEventResult = await setEvent(parentID, deterministicID, event, corosMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
+          if (corosWorkoutQueueItem.planWorkoutId) {
+            await retainCOROSTrainingCompletion(
+              admin.firestore(),
+              parentID,
+              deterministicID,
+              corosWorkoutQueueItem.openId,
+              tokenQueryDocumentSnapshot.id,
+              typeof tokenQueryDocumentSnapshot.data().tokenCredentialGeneration === 'string'
+                ? tokenQueryDocumentSnapshot.data().tokenCredentialGeneration
+                : null,
+              corosWorkoutQueueItem.planWorkoutId,
+              corosWorkoutQueueItem.componentKey,
+              fitActivityReferencesFromEvent(event),
+            );
+          }
           if (!bulkWriter) {
             const skippedAfterDeletionStarted = await enqueueActivitySyncAfterEventPersistence({
               userID: parentID,
@@ -1285,6 +1471,9 @@ async function parseWorkoutQueueItemForServiceNameInternal(
             providerEventIDField: 'serviceWorkoutID',
           });
           const setEventResult = await setEvent(parentID, deterministicID, event, suuntoMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
+          await retainSuuntoGuideCompletions(admin.firestore(), parentID, deterministicID, suuntoWorkoutQueueItem.userName,
+            String(tokenQueryDocumentSnapshot.data().tokenCredentialGeneration ?? ''), Buffer.from(result), config.suuntoapp.client_id,
+            fitActivityReferencesFromEvent(event));
           if (!bulkWriter) {
             const skippedAfterDeletionStarted = await enqueueActivitySyncAfterEventPersistence({
               userID: parentID,
@@ -1306,6 +1495,16 @@ async function parseWorkoutQueueItemForServiceNameInternal(
       oneSuccess = true;
       break;
     } catch (e: any) {
+      if (serviceName === ServiceNames.SuuntoApp && e instanceof ProviderImportDuplicateError) {
+        logger.info('Skipping a verified Suunto copy of a saved Garmin activity.', { queueItemId: queueItem.id, eventID: e.eventID });
+        oneSuccess = true;
+        processedAdditionalData = { resultStatus: 'skipped', skippedReason: 'cross_provider_duplicate', duplicateEventID: e.eventID };
+        break;
+      }
+      if (isActivityIdentityConflict(e)) {
+        sourceIdentityConflict = e;
+        continue; // A legacy shared-provider row can still have another usable token.
+      }
       // @todo should delete event  or separate catch
       logger.error(e);
       if (isEventWriteSkippedForDeletedUserError(e)) {
@@ -1370,6 +1569,27 @@ async function parseWorkoutQueueItemForServiceNameInternal(
     return updateToProcessed(queueItem, bulkWriter, processedAdditionalData);
   }
 
+  // Refresh-lease contention means a usable credential is being rotated by a
+  // different worker. It outranks terminal/inactive sibling tokens on legacy
+  // shared-provider rows, but not an unrelated retryable provider failure.
+  if (tokenRefreshContentionFirebaseUserID && !sawRetryableFailure) {
+    const contentionUserID = tokenRefreshContentionFirebaseUserID;
+    return deferWorkoutQueueItemForTokenRefreshContention({
+      serviceName,
+      queueItem,
+      userID: contentionUserID,
+      phase: `workout_queue_token_refresh_contention:${serviceName}`,
+      logPrefix: 'WorkoutQueue',
+      isCurrent: currentQueueItem => isCurrentWorkoutQueueItemForTokenRefreshContention(
+        queueItem,
+        serviceName,
+        contentionUserID,
+        currentQueueItem,
+      ),
+      taskRecoveryGeneration,
+    });
+  }
+
   if (sawPendingDisconnectSkip && !sawRetryableFailure) {
     logger.warn(`Deferring ${serviceName} queue item ${queueItem.id} because at least one matching token is pending disconnect and no token succeeded.`);
     return deferWorkoutQueueItemForPendingDisconnect(
@@ -1380,6 +1600,10 @@ async function parseWorkoutQueueItemForServiceNameInternal(
     );
   }
 
+  if (sourceIdentityConflict && !sawRetryableFailure) {
+    return moveToDeadLetterQueue(queueItem, sourceIdentityConflict, bulkWriter, 'ACTIVITY_IDENTITY_CONFLICT');
+  }
+
   if (terminalAuthError && !sawRetryableFailure) {
     logger.warn(`At least one matching ${serviceName} token for ${queueItem.id} failed with terminal auth and none succeeded; moving queue item to DLQ with ${terminalAuthError.dlqContext}`);
     return moveToDeadLetterQueue(queueItem, terminalAuthError, bulkWriter, terminalAuthError.dlqContext);
@@ -1387,6 +1611,10 @@ async function parseWorkoutQueueItemForServiceNameInternal(
 
   if (terminalAuthError) {
     logger.warn(`At least one matching ${serviceName} token for ${queueItem.id} failed with terminal auth, but another matching token only failed retryably. Keeping the queue item retryable.`);
+  }
+
+  if (suuntoAccessDeniedError && !sawRetryableFailure) {
+    return moveToDeadLetterQueue(queueItem, suuntoAccessDeniedError, bulkWriter, 'SUUNTO_WORKOUT_ACCESS_DENIED');
   }
 
   if (sawUserDeletionSkip && !sawRetryableFailure) {
@@ -1412,6 +1640,22 @@ async function parseWorkoutQueueItemForServiceNameInternal(
       ? SUUNTO_FIT_RETRY_EXHAUSTED_CONTEXT
       : undefined,
   );
+}
+
+function isCurrentWorkoutQueueItemForTokenRefreshContention(
+  queueItem: ProviderWorkoutQueueItem,
+  serviceName: ServiceNames,
+  firebaseUserID: string,
+  currentQueueItem: Record<string, unknown>,
+): boolean {
+  if (currentQueueItem.processed === true) return false;
+  if (typeof currentQueueItem.firebaseUserID === 'string'
+    && currentQueueItem.firebaseUserID !== firebaseUserID) return false;
+  if (currentQueueItem.dispatchedToCloudTask !== queueItem.dispatchedToCloudTask) return false;
+  if (serviceName === ServiceNames.COROSAPI) {
+    return workoutQueueGenerationMatches(queueItem, currentQueueItem);
+  }
+  return currentQueueItem.dateCreated === queueItem.dateCreated;
 }
 
 function isFirestoreAlreadyExistsError(error: unknown): boolean {
@@ -1468,8 +1712,10 @@ async function advanceWorkoutQueueDispatchRecoveryGeneration(
       }
 
       const currentQueueItem = queueItemSnapshot.data() as Partial<QueueItemInterface>;
+      // Suunto history also has explicit revisions; a reserved old task name
+      // cannot authorize advancing or dispatching its replacement.
       if ((currentQueueItem as { processed?: unknown }).processed === true
-        || (serviceName === ServiceNames.COROSAPI
+        || ((serviceName === ServiceNames.COROSAPI || normalizeQueueRevision(queueItem.queueRevision) !== null)
           && !workoutQueueGenerationMatches(queueItem, currentQueueItem as Record<string, unknown>))
         || currentQueueItem.dispatchedToCloudTask !== null && currentQueueItem.dispatchedToCloudTask !== undefined) {
         return { status: 'not_current' as const };

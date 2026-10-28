@@ -4,12 +4,13 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import type { PublicSeoPage } from './public-seo-pages.content';
 import { PublicFeaturePreviewComponent } from './public-feature-preview.component';
-import { CompactFeatureRowComponent } from '../shared/compact-feature-row/compact-feature-row.component';
+import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
+import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
 
 @Component({
   selector: 'app-public-seo-page',
   standalone: true,
-  imports: [RouterLink, MatButtonModule, MatIconModule, PublicFeaturePreviewComponent, CompactFeatureRowComponent],
+  imports: [RouterLink, MatButtonModule, MatIconModule, PublicFeaturePreviewComponent, CompactRowComponent, AppChartSharedModule],
   templateUrl: './public-seo-page.component.html',
   styleUrls: ['./public-seo-page.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,

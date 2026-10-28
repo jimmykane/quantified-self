@@ -67,7 +67,7 @@ describe('TrainingDurabilityTrajectoryChartComponent', () => {
       subscribeToViewportResize: vi.fn(() => () => undefined),
     };
     await TestBed.configureTestingModule({
-      declarations: [TrainingDurabilityTrajectoryChartComponent],
+      imports: [TrainingDurabilityTrajectoryChartComponent],
       providers: [
         { provide: EChartsLoaderService, useValue: eChartsLoader },
         { provide: LoggerService, useValue: { error: vi.fn() } },
@@ -113,7 +113,7 @@ describe('TrainingDurabilityTrajectoryChartComponent', () => {
       subscribeToViewportResize: vi.fn(() => () => undefined),
     };
     await TestBed.configureTestingModule({
-      declarations: [TrainingDurabilityTrajectoryChartComponent],
+      imports: [TrainingDurabilityTrajectoryChartComponent],
       providers: [
         { provide: EChartsLoaderService, useValue: eChartsLoader },
         { provide: LoggerService, useValue: { error: vi.fn() } },
@@ -157,7 +157,7 @@ describe('TrainingDurabilityTrajectoryChartComponent', () => {
       subscribeToViewportResize: vi.fn(() => () => undefined),
     };
     await TestBed.configureTestingModule({
-      declarations: [TrainingDurabilityTrajectoryChartComponent],
+      imports: [TrainingDurabilityTrajectoryChartComponent],
       providers: [
         { provide: EChartsLoaderService, useValue: eChartsLoader },
         { provide: LoggerService, useValue: { error: vi.fn() } },
@@ -172,7 +172,7 @@ describe('TrainingDurabilityTrajectoryChartComponent', () => {
     fixture.detectChanges();
     const firstChartElement = fixture.nativeElement.querySelector('.durability-trajectory-chart');
     expect(firstChartElement).not.toBeNull();
-    expect(eChartsLoader.init).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(eChartsLoader.init).toHaveBeenCalledTimes(1));
 
     fixture.componentRef.setInput('trajectory', null);
     fixture.detectChanges();

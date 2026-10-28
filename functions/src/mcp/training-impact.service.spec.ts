@@ -1,0 +1,672 @@
+import { describe, expect, it, vi } from 'vitest';
+import { Timestamp } from 'firebase-admin/firestore';
+import { createMcpOutputSchemaRegistry } from './tool-output-schemas';
+import { defaultAppliedTrainingLoadPolicy, type TrainingLoadLeg } from '../../../shared/training-load-policy';
+import {
+  DERIVED_FORM_PAYLOAD_VERSION,
+  DERIVED_METRIC_KINDS,
+  DERIVED_METRIC_SCHEMA_VERSION,
+  DERIVED_METRICS_ENTRY_TYPES,
+} from '../../../shared/derived-metrics';
+import {
+  getMcpTrainingImpact,
+  type McpTrainingImpactDocument,
+  type McpTrainingImpactInput,
+  type McpTrainingImpactReads,
+} from './training-impact.service';
+
+const DAY_ONE = Date.parse('2026-01-01T00:00:00.000Z');
+const DAY_TWO = Date.parse('2026-01-02T00:00:00.000Z');
+const NOW = Date.parse('2026-01-03T00:00:00.000Z');
+
+function formSnapshot(
+  dailyLoads: Array<{ dayMs: number; load: number }>,
+  status: 'ready' | 'building' | 'failed' | 'stale' = 'ready',
+) {
+  return {
+    entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot,
+    metricKind: DERIVED_METRIC_KINDS.Form,
+    schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+    status,
+    payload: status === 'ready' ? {
+      payloadVersion: DERIVED_FORM_PAYLOAD_VERSION,
+      dayBoundary: 'UTC',
+      rangeStartDayMs: dailyLoads[0]?.dayMs ?? null,
+      rangeEndDayMs: dailyLoads[dailyLoads.length - 1]?.dayMs ?? null,
+      dailyLoads: dailyLoads.map(entry => ({ ...entry, activityCount: 1 })),
+      excludesMergedEvents: true,
+    } : null,
+  };
+}
+
+function activity(
+  id: string,
+  eventId: string,
+  startDate: string,
+  tss: unknown,
+  legacyTss?: unknown,
+): McpTrainingImpactDocument {
+  return {
+    id,
+    data: {
+      eventID: eventId,
+      startDate: new Date(startDate),
+      endDate: new Date(Date.parse(startDate) + 60 * 60 * 1000),
+      stats: {
+        ...(tss === undefined ? {} : { 'Training Stress Score': tss }),
+        ...(legacyTss === undefined ? {} : { 'Power Training Stress Score': legacyTss }),
+      },
+    },
+  };
+}
+
+function reads(options: {
+  activities?: McpTrainingImpactDocument[];
+  events?: McpTrainingImpactDocument[];
+  snapshot?: Record<string, unknown> | null;
+  activeOwner?: boolean;
+} = {}): McpTrainingImpactReads {
+  return {
+    activeOwner: vi.fn().mockResolvedValue(options.activeOwner !== false),
+    fetchActivities: vi.fn().mockResolvedValue(options.activities || [
+      activity('activity-1', 'event-1', '2026-01-01T10:00:00.000Z', 42),
+    ]),
+    fetchEvents: vi.fn().mockResolvedValue(options.events || [
+      { id: 'event-1', data: {} },
+    ]),
+    fetchFormSnapshot: vi.fn().mockResolvedValue(
+      options.snapshot === undefined
+        ? formSnapshot([{ dayMs: DAY_ONE, load: 42 }])
+        : options.snapshot,
+    ),
+  };
+}
+
+function sessionInput(overrides: Partial<McpTrainingImpactInput> = {}): McpTrainingImpactInput {
+  return {
+    uid: 'user-1',
+    mode: 'session',
+    references: [{ activityId: 'activity-1', eventId: 'event-1' }],
+    localDate: null,
+    timeZone: null,
+    nowMs: NOW,
+    ...overrides,
+  };
+}
+
+describe('MCP Training impact service', () => {
+  it.each([null, 9])('projects swimming load %s without exposing its private missing-threshold reason', async score => {
+    const loadReads = reads({ snapshot: formSnapshot([{ dayMs: DAY_ONE, load: score ?? 0 }]) });
+    const evaluation = { preference: 'AUTOMATIC', method: score === null ? null : 'MET', score,
+      estimated: score !== null, provenance: score === null ? null : 'calculated',
+      reasons: ['missing-hr-calibration', 'missing-swim-threshold', ...(score === null ? ['missing-met-inputs'] : [])] };
+    loadReads.fetchLoadMetadata = vi.fn().mockResolvedValue(new Map([['event-1', {
+      version: 1, revision: 1, excluded: false, controls: {}, legs: { swim: {
+        activityId: 'activity-1', policy: defaultAppliedTrainingLoadPolicy('Swimming'), recordedTss: 42,
+        identity: { startMs: DAY_ONE, endMs: DAY_ONE + 3600000, type: 'Swimming', duration: 3600, distance: null },
+        evaluations: { version: 1, automatic: evaluation, hr: { ...evaluation, preference: 'HR' },
+          met: { ...evaluation, preference: 'MET' } },
+      } },
+    }]]));
+    const result = await getMcpTrainingImpact(sessionInput(), loadReads);
+    if (score === null) {
+      expect(result).toMatchObject({ status: 'unavailable', reason: 'missing_tss', contribution: null,
+        coverage: { unavailableSessionCount: 0, missingTssSessionCount: 1 } });
+    } else {
+      expect(result).toMatchObject({ status: 'ready', contribution: { trainingStressScore: score },
+        coverage: { modeledSessionCount: 1, unavailableSessionCount: 0 } });
+    }
+    expect(createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false }).get_training_impact.safeParse(result).success).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/missing-swim-threshold|missing-hr-calibration|evaluations|policy|activity-1|event-1/);
+  });
+  it('projects threshold HR load through the frozen public schema without exposing private calibration diagnostics', async () => {
+    const loadReads = reads({ snapshot: formSnapshot([{ dayMs: DAY_ONE, load: 70 }]) });
+    const evaluation = { preference: 'AUTOMATIC', method: 'HR', score: 70, estimated: true,
+      provenance: 'calculated', hrAlgorithm: 'THRESHOLD', reasons: ['threshold-hr-fallback'] };
+    loadReads.fetchLoadMetadata = vi.fn().mockResolvedValue(new Map([['event-1', {
+      version: 1, revision: 1, excluded: false, controls: {}, legs: { run: {
+        activityId: 'activity-1', policy: defaultAppliedTrainingLoadPolicy('Running'), recordedTss: 42,
+        identity: { startMs: DAY_ONE, endMs: DAY_ONE + 3600000, type: 'Running', duration: 3600, distance: null },
+        evaluations: { version: 1, automatic: evaluation, hr: { ...evaluation, preference: 'HR' },
+          met: { ...evaluation, preference: 'MET', method: 'MET', score: 9 } },
+      } },
+    }]]));
+    const result = await getMcpTrainingImpact(sessionInput(), loadReads);
+    expect(result).toMatchObject({ status: 'ready', contribution: { trainingStressScore: 70 } });
+    expect(createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false }).get_training_impact.safeParse(result).success).toBe(true);
+    expect(JSON.stringify(result)).not.toContain('threshold-hr-fallback');
+    const keys = (value: unknown): string[] => value && typeof value === 'object'
+      ? Object.entries(value).flatMap(([key, child]) => [key, ...keys(child)]) : [];
+    expect(keys(result)).not.toEqual(expect.arrayContaining(['hrAlgorithm']));
+    expect(keys(result)).not.toEqual(expect.arrayContaining(['evaluations']));
+  });
+  it.each(['parent', 'leg', 'unrecognized'])('reports a stale %s as updating even when no usable score is cached', async stalePart => {
+    const loadReads = reads();
+    const leg: TrainingLoadLeg = { activityId: stalePart === 'unrecognized' ? 'replacement' : 'activity-1',
+      identity: { startMs: DAY_ONE, endMs: DAY_ONE + 3600000, type: 'Walking', duration: 3600, distance: null },
+      policy: defaultAppliedTrainingLoadPolicy('Walking'), evaluations: null, recordedTss: null,
+      ...(stalePart === 'leg' ? { sourceFingerprint: 'old-leg' } : {}) };
+    loadReads.fetchLoadMetadata = vi.fn().mockResolvedValue(new Map([['event-1', {
+      version: 1, revision: 1, excluded: false, controls: {}, legs: { saved: leg },
+      ...(stalePart === 'parent' ? { parentFingerprint: 'old-parent' } : {}),
+    }]]));
+    const result = await getMcpTrainingImpact(sessionInput(), loadReads);
+    expect(result).toMatchObject({ status: 'updating', reason: 'form_updating', contribution: null,
+      coverage: { eligibleSessionCount: 1, unavailableSessionCount: 1, missingTssSessionCount: 0 } });
+    expect(createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false }).get_training_impact.safeParse(result).success).toBe(true);
+  });
+  it('uses the existing updating/excluded states for pending imports without exposing coordination metadata', async () => {
+    const loadReads = reads();
+    const metadata = { version: 1, revision: 1, excluded: false, sourceWritePending: true,
+      controls: { 'activity-1': { override: 0 } } };
+    loadReads.fetchLoadMetadata = vi.fn().mockResolvedValue(new Map([['event-1', metadata]]));
+    const pending = await getMcpTrainingImpact(sessionInput(), loadReads);
+    expect(pending).toMatchObject({ status: 'updating', contribution: null,
+      coverage: { unavailableSessionCount: 1, missingTssSessionCount: 0 } });
+    metadata.excluded = true;
+    const excluded = await getMcpTrainingImpact(sessionInput(), loadReads);
+    expect(excluded).toMatchObject({ status: 'excluded', coverage: { excludedSessionCount: 1, benchmarkOrMergeSessionCount: 0 } });
+    const schema = createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false }).get_training_impact;
+    expect(schema.safeParse(pending).success).toBe(true); expect(schema.safeParse(excluded).success).toBe(true);
+    expect(JSON.stringify([pending, excluded])).not.toMatch(/sourceWritePending|controls|activity-1|event-1/);
+  });
+  it('keeps unmatched load identities unavailable without classifying them as missing recorded TSS', async () => {
+    const loadReads = reads();
+    loadReads.fetchLoadMetadata = vi.fn().mockResolvedValue(new Map([['event-1', {
+      version: 1, revision: 1, excluded: false, controls: { old: { override: 9 } },
+      legs: { old: { activityId: null, policy: defaultAppliedTrainingLoadPolicy('Walking') } },
+    }]]));
+    const result = await getMcpTrainingImpact(sessionInput(), loadReads);
+    expect(result).toMatchObject({ status: 'unavailable', reason: 'no_usable_sessions', contribution: null,
+      coverage: { eligibleSessionCount: 1, unavailableSessionCount: 1, missingTssSessionCount: 0 } });
+    expect(createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false }).get_training_impact.safeParse(result).success).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/controls|policy|activity-1|event-1/);
+  });
+  it('models zero overrides and user exclusions without leaking policy data or calling them benchmarks', async () => {
+    const loadReads = reads();
+    loadReads.fetchLoadMetadata = vi.fn().mockResolvedValue(new Map([['event-1', {
+      version: 1, revision: 1, excluded: false, controls: { 'activity-1': { override: 0 } },
+    }]]));
+    const zero = await getMcpTrainingImpact(sessionInput(), loadReads);
+    expect(zero.contribution?.trainingStressScore).toBe(0);
+    expect(zero.sessionRole).toBe('no-load');
+    expect(JSON.stringify(zero)).not.toMatch(/controls|policy|revision|activity-1|event-1/);
+    loadReads.fetchLoadMetadata = vi.fn().mockResolvedValue(new Map([['event-1', {
+      version: 1, revision: 2, excluded: true, controls: {},
+    }]]));
+    const excluded = await getMcpTrainingImpact(sessionInput(), loadReads);
+    expect(excluded).toMatchObject({ status: 'excluded', reason: 'no_usable_sessions', contribution: null,
+      coverage: { excludedSessionCount: 1, benchmarkOrMergeSessionCount: 0, notCompletedSessionCount: 0 } });
+    const schema = createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false }).get_training_impact;
+    expect(schema.safeParse(excluded).success).toBe(true);
+    expect(schema.safeParse({ ...excluded, coverage: { ...excluded.coverage, benchmarkOrMergeSessionCount: 2 } }).success).toBe(false);
+  });
+  it.each(['epoch-ms', 'firestore-fractional'])('holds impact until Form includes a load edit timestamped as %s', async timestampKind => {
+    const loadReads = reads();
+    const updatedAt = timestampKind === 'epoch-ms' ? NOW : new Timestamp(NOW / 1000, 123456000);
+    vi.mocked(loadReads.fetchFormSnapshot).mockResolvedValue({
+      ...formSnapshot([{ dayMs: DAY_ONE, load: 42 }]), updatedAtMs: NOW - 1000,
+    });
+    loadReads.fetchLoadMetadata = vi.fn().mockResolvedValue(new Map([['event-1', {
+      version: 1, revision: 2, excluded: false, controls: { 'activity-1': { override: 5 } }, updatedAt,
+    }]]));
+    const pending = await getMcpTrainingImpact(sessionInput(), loadReads);
+    expect(pending).toMatchObject({ status: 'updating', reason: 'form_updating', contribution: null });
+    vi.mocked(loadReads.fetchFormSnapshot).mockResolvedValue({
+      ...formSnapshot([{ dayMs: DAY_ONE, load: 5 }]), updatedAtMs: NOW + 1000,
+    });
+    const ready = await getMcpTrainingImpact(sessionInput(), loadReads);
+    expect(ready).toMatchObject({ status: 'ready', contribution: { trainingStressScore: 5 } });
+    const schema = createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false }).get_training_impact;
+    expect(schema.safeParse(pending).success).toBe(true); expect(schema.safeParse(ready).success).toBe(true);
+    expect(JSON.stringify([pending, ready])).not.toMatch(/updatedAt|controls|revision|activity-1|event-1/);
+  });
+  it.each(['excluded', 'review', 'benchmark'])('validates partial-day coverage when another selected workout is %s', async state => {
+    const loadReads = reads({ activities: [
+      activity('activity-1', 'event-1', '2026-01-01T10:00:00.000Z', 42),
+      activity('activity-2', 'event-2', '2026-01-01T12:00:00.000Z', 87.3),
+    ], events: [{ id: 'event-1', data: {} }, { id: 'event-2', data: state === 'benchmark' ? { isMerge: true } : {} }] });
+    loadReads.fetchLoadMetadata = vi.fn().mockResolvedValue(new Map([['event-2', {
+      version: 1, revision: 1, excluded: state === 'excluded', controls: {},
+      ...(state === 'review' ? { legs: { old: { activityId: null } } } : {}),
+      ...(state === 'benchmark' ? { parentFingerprint: 'outdated-excluded-source', updatedAt: NOW } : {}),
+    }]]));
+    const result = await getMcpTrainingImpact(sessionInput({ mode: 'day', localDate: '2026-01-01', timeZone: 'UTC',
+      references: [{ activityId: 'activity-1', eventId: 'event-1' }, { activityId: 'activity-2', eventId: 'event-2' }],
+    }), loadReads);
+    expect(result).toMatchObject({ status: 'partial', reason: 'partial_coverage', contribution: { trainingStressScore: 42 },
+      coverage: { eligibleSessionCount: state === 'review' ? 2 : 1, modeledSessionCount: 1,
+        unavailableSessionCount: state === 'review' ? 1 : 0, excludedSessionCount: state === 'review' ? 0 : 1,
+        missingTssSessionCount: 0, benchmarkOrMergeSessionCount: state === 'benchmark' ? 1 : 0, notCompletedSessionCount: 0 } });
+    expect(createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false }).get_training_impact.safeParse(result).success).toBe(true);
+  });
+  it.each(['epoch-ms', 'firestore-fractional'])('waits for the day rebuild when another workout exclusion is timestamped as %s', async timestampKind => {
+    const loadReads = reads({ activities: [
+      activity('activity-1', 'event-1', '2026-01-01T10:00:00.000Z', 42),
+      activity('activity-2', 'event-2', '2026-01-01T12:00:00.000Z', 42),
+    ], events: [{ id: 'event-1', data: {} }, { id: 'event-2', data: {} }],
+    snapshot: formSnapshot([{ dayMs: DAY_ONE, load: 84 }]) });
+    loadReads.fetchLoadMetadata = vi.fn().mockResolvedValue(new Map([['event-2', {
+      version: 1, revision: 1, excluded: true, controls: {},
+      updatedAt: timestampKind === 'epoch-ms' ? NOW : new Timestamp(NOW / 1000, 123456000),
+    }]]));
+    expect(await getMcpTrainingImpact(sessionInput({ mode: 'day', localDate: '2026-01-01', timeZone: 'UTC',
+      references: [{ activityId: 'activity-1', eventId: 'event-1' }, { activityId: 'activity-2', eventId: 'event-2' }],
+    }), loadReads)).toMatchObject({ status: 'updating', reason: 'form_updating', contribution: null,
+      coverage: { excludedSessionCount: 1, benchmarkOrMergeSessionCount: 0 } });
+  });
+  it('returns a ready identity-free session contribution and actual UTC-day outcome', async () => {
+    const result = await getMcpTrainingImpact(sessionInput(), reads());
+
+    expect(result).toMatchObject({
+      schemaVersion: 1,
+      mode: 'session',
+      localDate: null,
+      timeZone: null,
+      status: 'ready',
+      reason: null,
+      sessionRole: 'pushed-above-maintenance',
+      coverage: {
+        requestedSessionCount: 1,
+        eligibleSessionCount: 1,
+        modeledSessionCount: 1,
+        missingTssSessionCount: 0,
+        excludedSessionCount: 0,
+        benchmarkOrMergeSessionCount: 0,
+        notCompletedSessionCount: 0,
+        unavailableSessionCount: 0,
+      },
+      contribution: {
+        trainingStressScore: 42,
+        fitnessLoadCtlContribution: 1,
+        fatigueLoadAtlContribution: 6,
+        freshnessFormContribution: -5,
+      },
+      outcomes: [{
+        trainingDay: '2026-01-01',
+        fitnessLoadOutcome: 'raised',
+        fitnessLoadCtlChange: 1,
+      }],
+      model: {
+        basis: 'TSS',
+        ctlTimeConstantDays: 42,
+        atlTimeConstantDays: 7,
+        measuresPhysiologicalAdaptation: false,
+      },
+    });
+    expect(JSON.stringify(result)).not.toMatch(
+      /activity-1|event-1|provider|device|sourceKey|title|label/,
+    );
+  });
+
+  it('uses wrapped legacy TSS and treats zero as a valid modeled contribution', async () => {
+    const legacy = reads({
+      activities: [activity(
+        'activity-1',
+        'event-1',
+        '2026-01-01T10:00:00.000Z',
+        undefined,
+        { rawValue: 84 },
+      )],
+      snapshot: formSnapshot([{ dayMs: DAY_ONE, load: 84 }]),
+    });
+    await expect(getMcpTrainingImpact(sessionInput(), legacy)).resolves.toMatchObject({
+      status: 'ready',
+      contribution: {
+        trainingStressScore: 84,
+        fitnessLoadCtlContribution: 2,
+      },
+    });
+
+    const zero = reads({
+      activities: [activity(
+        'activity-1',
+        'event-1',
+        '2026-01-01T10:00:00.000Z',
+        { value: 0 },
+      )],
+      snapshot: formSnapshot([{ dayMs: DAY_ONE, load: 0 }]),
+    });
+    await expect(getMcpTrainingImpact(sessionInput(), zero)).resolves.toMatchObject({
+      status: 'ready',
+      sessionRole: 'no-load',
+      contribution: {
+        trainingStressScore: 0,
+        fitnessLoadCtlContribution: 0,
+        fatigueLoadAtlContribution: 0,
+        freshnessFormContribution: 0,
+      },
+    });
+  });
+
+  it('keeps missing TSS, merge/benchmark records, and incomplete activities explicit', async () => {
+    const missing = reads({
+      activities: [activity(
+        'activity-1',
+        'event-1',
+        '2026-01-01T10:00:00.000Z',
+        undefined,
+      )],
+    });
+    await expect(getMcpTrainingImpact(sessionInput(), missing)).resolves.toMatchObject({
+      status: 'unavailable',
+      reason: 'missing_tss',
+      contribution: null,
+    });
+    expect(missing.fetchFormSnapshot).not.toHaveBeenCalled();
+
+    const benchmark = reads({
+      events: [{ id: 'event-1', data: { mergeType: 'benchmark' } }],
+    });
+    await expect(getMcpTrainingImpact(sessionInput(), benchmark)).resolves.toMatchObject({
+      status: 'excluded',
+      reason: 'benchmark_or_merge',
+      contribution: null,
+    });
+    expect(benchmark.fetchFormSnapshot).not.toHaveBeenCalled();
+
+    const merged = reads({
+      events: [{ id: 'event-1', data: { isMerge: true } }],
+    });
+    await expect(getMcpTrainingImpact(sessionInput(), merged)).resolves.toMatchObject({
+      status: 'excluded',
+      reason: 'benchmark_or_merge',
+    });
+
+    const explicitMulti = reads({
+      events: [{ id: 'event-1', data: { isMerge: true, mergeType: 'multi' } }],
+    });
+    await expect(getMcpTrainingImpact(sessionInput(), explicitMulti)).resolves.toMatchObject({
+      status: 'ready',
+      contribution: { trainingStressScore: 42 },
+    });
+
+    const pendingActivity = activity(
+      'activity-1',
+      'event-1',
+      '2026-01-01T10:00:00.000Z',
+      42,
+    );
+    pendingActivity.data.endDate = new Date(NOW + 1);
+    await expect(getMcpTrainingImpact(
+      sessionInput(),
+      reads({ activities: [pendingActivity] }),
+    )).resolves.toMatchObject({
+      status: 'excluded',
+      reason: 'not_completed',
+    });
+  });
+
+  it.each([
+    ['building', 'updating', 'form_updating'],
+    ['stale', 'updating', 'form_updating'],
+    ['failed', 'unavailable', 'form_failed'],
+  ] as const)(
+    'maps a %s Form snapshot to %s without calculating a contribution',
+    async (snapshotStatus, expectedStatus, expectedReason) => {
+      const result = await getMcpTrainingImpact(
+        sessionInput(),
+        reads({ snapshot: formSnapshot([], snapshotStatus) }),
+      );
+      expect(result).toMatchObject({
+        status: expectedStatus,
+        reason: expectedReason,
+        contribution: null,
+        sessionRole: null,
+        outcomes: [],
+        coverage: { unavailableSessionCount: 1 },
+      });
+    },
+  );
+
+  it('fails closed when a ready Form payload has inconsistent retained-range metadata', async () => {
+    const malformed = formSnapshot([{ dayMs: DAY_ONE, load: 42 }]);
+    (malformed.payload as { rangeEndDayMs: number | null }).rangeEndDayMs = null;
+
+    await expect(getMcpTrainingImpact(
+      sessionInput(),
+      reads({ snapshot: malformed }),
+    )).resolves.toMatchObject({
+      status: 'updating',
+      reason: 'form_updating',
+      contribution: null,
+      outcomes: [],
+    });
+  });
+
+  it('returns one contribution total and separate outcomes for two UTC Training days', async () => {
+    const dayReads = reads({
+      activities: [
+        activity('activity-1', 'event-1', '2026-01-01T22:30:00.000Z', 42),
+        activity('activity-2', 'event-2', '2026-01-02T10:00:00.000Z', 84),
+      ],
+      events: [
+        { id: 'event-1', data: {} },
+        { id: 'event-2', data: {} },
+      ],
+      snapshot: formSnapshot([
+        { dayMs: DAY_ONE, load: 42 },
+        { dayMs: DAY_TWO, load: 84 },
+      ]),
+    });
+    const result = await getMcpTrainingImpact({
+      uid: 'user-1',
+      mode: 'day',
+      references: [
+        { activityId: 'activity-1', eventId: 'event-1' },
+        { activityId: 'activity-2', eventId: 'event-2' },
+      ],
+      localDate: '2026-01-02',
+      timeZone: 'Europe/Helsinki',
+      nowMs: NOW,
+    }, dayReads);
+
+    expect(result).toMatchObject({
+      mode: 'day',
+      localDate: '2026-01-02',
+      timeZone: 'Europe/Helsinki',
+      status: 'ready',
+      sessionRole: null,
+      contribution: {
+        trainingStressScore: 126,
+        fitnessLoadCtlContribution: 3,
+        fatigueLoadAtlContribution: 18,
+        freshnessFormContribution: -15,
+      },
+    });
+    expect(result.outcomes.map(outcome => outcome.trainingDay)).toEqual([
+      '2026-01-01',
+      '2026-01-02',
+    ]);
+  });
+
+  it('returns an aggregate partial result without exposing which activity was unavailable', async () => {
+    const result = await getMcpTrainingImpact({
+      uid: 'user-1',
+      mode: 'day',
+      references: [
+        { activityId: 'activity-1', eventId: 'event-1' },
+        { activityId: 'activity-2', eventId: 'event-2' },
+        { activityId: 'activity-3', eventId: 'event-3' },
+      ],
+      localDate: '2026-01-01',
+      timeZone: 'UTC',
+      nowMs: NOW,
+    }, reads({
+      activities: [
+        activity('activity-1', 'event-1', '2026-01-01T10:00:00.000Z', 42),
+        activity('activity-2', 'event-2', '2026-01-01T11:00:00.000Z', undefined),
+        activity('activity-3', 'event-3', '2026-01-01T12:00:00.000Z', 999),
+      ],
+      events: [
+        { id: 'event-1', data: {} },
+        { id: 'event-2', data: {} },
+        { id: 'event-3', data: { isMerge: true } },
+      ],
+    }));
+
+    expect(result).toMatchObject({
+      status: 'partial',
+      reason: 'partial_coverage',
+      coverage: {
+        requestedSessionCount: 3,
+        eligibleSessionCount: 1,
+        modeledSessionCount: 1,
+        missingTssSessionCount: 1,
+        excludedSessionCount: 1,
+        benchmarkOrMergeSessionCount: 1,
+        notCompletedSessionCount: 0,
+        unavailableSessionCount: 0,
+      },
+      contribution: { trainingStressScore: 42 },
+    });
+    expect(result).not.toHaveProperty('sessions');
+  });
+
+  it('keeps one UTC outcome when the other half of a local day is outside retained Form history', async () => {
+    const result = await getMcpTrainingImpact({
+      uid: 'user-1',
+      mode: 'day',
+      references: [
+        { activityId: 'activity-1', eventId: 'event-1' },
+        { activityId: 'activity-2', eventId: 'event-2' },
+      ],
+      localDate: '2026-01-02',
+      timeZone: 'Europe/Helsinki',
+      nowMs: NOW,
+    }, reads({
+      activities: [
+        activity('activity-1', 'event-1', '2026-01-01T22:30:00.000Z', 42),
+        activity('activity-2', 'event-2', '2026-01-02T10:00:00.000Z', 84),
+      ],
+      events: [
+        { id: 'event-1', data: {} },
+        { id: 'event-2', data: {} },
+      ],
+      snapshot: formSnapshot([{ dayMs: DAY_TWO, load: 84 }]),
+    }));
+
+    expect(result).toMatchObject({
+      status: 'partial',
+      reason: 'partial_coverage',
+      coverage: {
+        requestedSessionCount: 2,
+        eligibleSessionCount: 2,
+        modeledSessionCount: 1,
+        unavailableSessionCount: 1,
+      },
+      contribution: { trainingStressScore: 84 },
+      outcomes: [{ trainingDay: '2026-01-02' }],
+    });
+  });
+
+  it('rejects duplicate, cross-date, unavailable, and cross-owner selections', async () => {
+    await expect(getMcpTrainingImpact(sessionInput({
+      mode: 'day',
+      references: [
+        { activityId: 'activity-1', eventId: 'event-1' },
+        { activityId: 'activity-1', eventId: 'event-1' },
+      ],
+      localDate: '2026-01-01',
+      timeZone: 'UTC',
+    }), reads())).rejects.toMatchObject({ code: 'invalid_request' });
+
+    await expect(getMcpTrainingImpact(sessionInput({
+      mode: 'day',
+      localDate: '2026-01-02',
+      timeZone: 'UTC',
+    }), reads())).rejects.toMatchObject({ code: 'invalid_request' });
+
+    await expect(getMcpTrainingImpact(sessionInput(), reads({ activities: [] })))
+      .rejects.toMatchObject({ code: 'detail_not_available' });
+
+    const inactive = reads({ activeOwner: false });
+    await expect(getMcpTrainingImpact(sessionInput(), inactive))
+      .rejects.toMatchObject({ code: 'temporarily_unavailable' });
+    expect(inactive.fetchActivities).not.toHaveBeenCalled();
+    expect(inactive.fetchEvents).not.toHaveBeenCalled();
+    expect(inactive.fetchFormSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when owner deletion begins while the exact reads are in flight', async () => {
+    const guardedReads = reads();
+    vi.mocked(guardedReads.activeOwner)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+
+    await expect(getMcpTrainingImpact(sessionInput(), guardedReads))
+      .rejects.toMatchObject({ code: 'temporarily_unavailable' });
+    expect(guardedReads.fetchActivities).toHaveBeenCalledTimes(1);
+    expect(guardedReads.fetchEvents).toHaveBeenCalledTimes(1);
+    expect(guardedReads.fetchFormSnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats a ready Form snapshot that does not contain the activity load as updating', async () => {
+    const result = await getMcpTrainingImpact(
+      sessionInput(),
+      reads({ snapshot: formSnapshot([{ dayMs: DAY_ONE, load: 20 }]) }),
+    );
+    expect(result).toMatchObject({
+      status: 'updating',
+      reason: 'form_updating',
+      contribution: null,
+      coverage: { unavailableSessionCount: 1 },
+    });
+  });
+
+  it('does not calculate a day when selected TSS exceeds the matching Form day in aggregate', async () => {
+    const result = await getMcpTrainingImpact({
+      uid: 'user-1',
+      mode: 'day',
+      references: [
+        { activityId: 'activity-1', eventId: 'event-1' },
+        { activityId: 'activity-2', eventId: 'event-2' },
+      ],
+      localDate: '2026-01-01',
+      timeZone: 'UTC',
+      nowMs: NOW,
+    }, reads({
+      activities: [
+        activity('activity-1', 'event-1', '2026-01-01T10:00:00.000Z', 30),
+        activity('activity-2', 'event-2', '2026-01-01T12:00:00.000Z', 30),
+      ],
+      events: [
+        { id: 'event-1', data: {} },
+        { id: 'event-2', data: {} },
+      ],
+      snapshot: formSnapshot([{ dayMs: DAY_ONE, load: 50 }]),
+    }));
+
+    expect(result).toMatchObject({
+      status: 'updating',
+      reason: 'form_updating',
+      coverage: {
+        requestedSessionCount: 2,
+        eligibleSessionCount: 2,
+        modeledSessionCount: 0,
+        unavailableSessionCount: 2,
+      },
+      contribution: null,
+      outcomes: [],
+    });
+  });
+
+  it.each(['session', 'day'] as const)('accepts equivalent decimal load totals in %s impact', async mode => {
+    const references = mode === 'session'
+      ? [{ activityId: 'activity-1', eventId: 'event-1' }]
+      : [{ activityId: 'activity-1', eventId: 'event-1' }, { activityId: 'activity-2', eventId: 'event-2' }];
+    const result = await getMcpTrainingImpact(sessionInput({ mode, references,
+      localDate: mode === 'day' ? '2026-01-01' : null, timeZone: mode === 'day' ? 'UTC' : null }), reads({
+      activities: mode === 'session'
+        ? [activity('activity-1', 'event-1', '2026-01-01T10:00:00.000Z', 33.1 + 33.2)]
+        : [activity('activity-1', 'event-1', '2026-01-01T10:00:00.000Z', 33.1),
+          activity('activity-2', 'event-2', '2026-01-01T12:00:00.000Z', 33.2)],
+      events: references.map(reference => ({ id: reference.eventId, data: {} })),
+      snapshot: formSnapshot([{ dayMs: DAY_ONE, load: 66.3 }]),
+    }));
+    expect(result).toMatchObject({ status: 'ready', reason: null, contribution: { trainingStressScore: 66.3 },
+      coverage: { modeledSessionCount: references.length, unavailableSessionCount: 0 } });
+    expect(createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false })
+      .get_training_impact.safeParse(result).success).toBe(true);
+  });
+});

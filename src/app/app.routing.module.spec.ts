@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { Route } from '@angular/router';
+import { type Route, provideRouter, Router } from '@angular/router';
+import { Component } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { RouterTestingHarness } from '@angular/router/testing';
 import { routes as appRoutes } from './app.routing.module';
 import { authGuard } from './authentication/app.auth.guard';
 import { assistantGuard } from './authentication/assistant.guard';
@@ -8,12 +11,17 @@ import { pricingRedirectGuard } from './authentication/pricing-redirect.guard';
 import { toolsCompareAuthResolver } from './resolvers/tools-compare-auth.resolver';
 import { lazyRouteResolver } from './resolvers/lazy-route.resolver';
 import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS } from './components/public-seo/public-seo-pages.paths';
+import { TRAINING_PLANS_SEO_CONTENT } from './components/public-seo/training-plans-page.content';
 import {
   LEGACY_WORKOUT_DATA_COMPARISON_PATHS,
   WORKOUT_DATA_COMPARISON_PATH,
 } from './components/features/workout-data-comparison-page.paths';
 import { PublicPricingComponent } from './components/public-pricing/public-pricing.component';
 import { PricingComponent } from './components/pricing/pricing.component';
+import { ActivitiesPageComponent } from './components/activities/activities-page.component';
+
+@Component({ standalone: true, template: '' })
+class ActivityRouteStub {}
 
 const publicLayoutRoute = appRoutes.find(route => route.path === '' && Array.isArray(route.children));
 const routes = [
@@ -43,9 +51,46 @@ async function resolvedRouteData(route: Route | undefined): Promise<Record<strin
 }
 
 describe('AppRoutingModule routes', () => {
+  it('keeps Activities authenticated, lazy loaded, and outside the public layout', async () => {
+    const route = appRoutes.find(route => route.path === 'activities');
+    expect(route?.canMatch).toEqual([authGuard, onboardingGuard]);
+    expect(route?.data).toMatchObject({ title: 'Activities', preload: true, robots: 'noindex, follow' });
+    expect(await route?.loadComponent?.()).toBe(ActivitiesPageComponent);
+    expect(publicLayoutRoute?.children?.some(route => route.path === 'activities')).toBe(false);
+  });
+  it('redirects old tag links to Activities while preserving filters and fragments', async () => {
+    const legacy = appRoutes.find(route => route.path === 'tags')!;
+    expect(legacy).toMatchObject({ pathMatch: 'full', redirectTo: 'activities' });
+    TestBed.configureTestingModule({ providers: [provideRouter([legacy, { path: 'activities', component: ActivityRouteStub }])] });
+    await RouterTestingHarness.create('/tags?tag=Race%20day&sport=Running#history');
+    const router = TestBed.inject(Router);
+    const url = router.parseUrl(router.url);
+    expect(url.root.children['primary'].segments.map(segment => segment.path)).toEqual(['activities']);
+    expect(url.queryParams).toEqual({ tag: 'Race day', sport: 'Running' });
+    expect(url.fragment).toBe('history');
+  });
+
   it('disables shell cross-fades for public layout navigation', () => {
     expect(publicLayoutRoute?.data?.['disableRouteAnimation']).toBe(true);
     expect(publicLayoutRoute?.children?.some(route => route.path === 'help')).toBe(true);
+  });
+
+  it.each([
+    ['/membership?source=footer#plans', '/pricing?source=footer#plans'],
+    ['/help/getting-started?source=guide', '/help?source=guide#getting-started'],
+    ['/help/plans-and-billing', '/help#plans-and-billing'],
+    ['/help/plans-billing#old', '/help#plans-and-billing'],
+  ])('redirects public entry %s to %s', async (entry, destination) => {
+    const aliases = routes.filter(route => ['membership', 'help/getting-started', 'help/plans-and-billing', 'help/plans-billing'].includes(route.path ?? ''));
+    expect(aliases).toHaveLength(4);
+    expect(aliases.every(route => route.pathMatch === 'full' && !route.canMatch)).toBe(true);
+    TestBed.configureTestingModule({ providers: [provideRouter([
+      ...aliases,
+      { path: 'pricing', component: ActivityRouteStub },
+      { path: 'help', component: ActivityRouteStub },
+    ])] });
+    await RouterTestingHarness.create(entry);
+    expect(TestBed.inject(Router).url).toBe(destination);
   });
 
   it('should define a public help route with help metadata', () => {
@@ -56,7 +101,7 @@ describe('AppRoutingModule routes', () => {
     expect(helpRoute?.loadComponent).toBeTypeOf('function');
     expect(helpRoute?.data).toMatchObject({
       title: 'Help & Support',
-      description: 'Get help with Training analysis, provider imports and sync, Wahoo activity and route delivery, read-only MCP client setup, uploads, billing, privacy, and troubleshooting.',
+      description: 'Get help with Training analysis, provider imports and sync, Wahoo activity and route delivery, MCP client setup, uploads, billing, privacy, and troubleshooting.',
       animation: 'Help',
       preload: true,
       jsonLd: {
@@ -76,7 +121,7 @@ describe('AppRoutingModule routes', () => {
     expect(helpAbout).toContain('Send Suunto routes to Garmin');
     expect(helpAbout).toContain('Send GPX/FIT routes to Wahoo');
     expect(helpAbout).toContain('Sync past activities');
-    expect(helpAbout).toContain('Read-only MCP client access');
+    expect(helpAbout).toContain('Permission-scoped MCP client access and focused changes');
   });
 
   it('defines dedicated public privacy and terms routes for reviewer-readable legal pages', () => {
@@ -116,10 +161,9 @@ describe('AppRoutingModule routes', () => {
     });
   });
 
-  it('should define a public pricing route with membership JSON-LD', async () => {
+  it('should define a public, noindexed pricing route with live membership data', async () => {
     const pricingRoute = routes.find(route => route.path === 'pricing');
     const subscriptionsRoute = routes.find(route => route.path === 'subscriptions');
-    const jsonLd = pricingRoute?.data?.['jsonLd'] as Record<string, unknown> | undefined;
 
     expect(pricingRoute).toBeTruthy();
     expect(pricingRoute?.loadComponent).toBeTypeOf('function');
@@ -130,13 +174,8 @@ describe('AppRoutingModule routes', () => {
     expect(pricingRoute?.data?.['title']).toBe('Membership');
     expect(pricingRoute?.data?.['description']).toContain('Support the development of Quantified Self');
     expect(pricingRoute?.data?.['keywords']).toBeUndefined();
-    expect(jsonLd).toMatchObject({
-      '@context': 'https://schema.org',
-      '@type': 'WebPage',
-      name: 'Quantified Self Membership',
-      url: 'https://quantified-self.io/pricing',
-      inLanguage: 'en',
-    });
+    expect(pricingRoute?.data?.['robots']).toBe('noindex, nofollow');
+    expect(pricingRoute?.data?.['jsonLd']).toBeUndefined();
   });
 
   it('should allow any authenticated onboarded user to access mytracks', () => {
@@ -172,15 +211,81 @@ describe('AppRoutingModule routes', () => {
     });
     expect(healthRoute?.data?.['description']).toContain('source-separated');
   });
+  it('keeps selected-note comparisons owner-only through authenticated lazy routing, with a static noindex title', () => {
+    const route = routes.find(route => route.path === 'health/compare/:noteId');
+    expect(route?.canMatch).toEqual([authGuard, onboardingGuard]);
+    expect(route?.loadComponent).toBeTypeOf('function');
+    expect(route?.data).toMatchObject({ title: 'Note comparison', robots: 'noindex, nofollow' });
+    expect(publicLayoutRoute?.children?.some(route => route.path === 'health/compare/:noteId')).toBe(false);
+  });
+  it('routes the comparisons landing page privately without matching a selected-note path', () => {
+    const route = routes.find(route => route.path === 'health/compare');
+    expect(route?.pathMatch).toBe('full');
+    expect(route?.canMatch).toEqual([authGuard, onboardingGuard]);
+    expect(route?.loadComponent).toBeTypeOf('function');
+    expect(route?.data).toMatchObject({ title: 'Note comparisons', robots: 'noindex, nofollow' });
+    expect(publicLayoutRoute?.children?.some(route => route.path === 'health/compare')).toBe(false);
+  });
 
   it('should keep the activity calendar authenticated and noindexed', () => {
     const calendarRoute = routes.find(route => route.path === 'calendar');
+    const dayRoute = routes.find(route => route.path === 'calendar/day/:date');
 
     expect(calendarRoute).toBeTruthy();
+    expect(dayRoute).toBeTruthy();
+    expect(dayRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
+    expect(dayRoute?.data?.['calendarMode']).toBe('day');
+    expect(dayRoute?.data?.['robots']).toBe('noindex, follow');
     expect(calendarRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
     expect(calendarRoute?.data?.['description']).toContain('Week, Month, and Year activity calendar');
     expect(calendarRoute?.data?.['description']).not.toMatch(/\bprivate\b/i);
     expect(calendarRoute?.data?.['robots']).toBe('noindex, follow');
+  });
+
+  it('keeps manual training plans authenticated, client-rendered, and noindexed', () => {
+    const plansRoute = routes.find(route => route.path === 'training/plans');
+    const planRoutes = routes.filter(route => route.path?.startsWith('training/plans'));
+
+    expect(plansRoute).toBeTruthy();
+    expect(plansRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
+    expect(plansRoute?.loadComponent).toBeTypeOf('function');
+    expect(plansRoute?.data).toMatchObject({
+      title: 'Plans',
+      preload: true,
+      robots: 'noindex, follow',
+    });
+    expect(plansRoute?.data?.['description']).toContain('standalone workouts');
+    expect(planRoutes.map(route => route.path)).toEqual([
+      'training/plans/workout/:workoutId',
+      'training/plans/library/new',
+      'training/plans/library/:itemId',
+      'training/plans/library',
+      'training/plans/standalone/new',
+      'training/plans/plan/:planId/new',
+      'training/plans/new',
+      'training/plans/standalone',
+      'training/plans/plan/:planId',
+      'training/plans',
+    ]);
+    expect(planRoutes.every(route => route.canMatch?.[0] === authGuard && route.canMatch?.[1] === onboardingGuard
+      && route.canMatch?.length === 2)).toBe(true);
+    expect(planRoutes.every(route => route.loadComponent instanceof Function)).toBe(true);
+    expect(planRoutes.every(route => route.data?.['robots'] === 'noindex, follow')).toBe(true);
+    expect(planRoutes.every(route => route.data?.['disableRouteAnimation'] === true)).toBe(true);
+    expect(planRoutes.find(route => route.path === 'training/plans/workout/:workoutId')?.data)
+      .toMatchObject({ trainingPlansMode: 'edit', trainingPlansScope: 'plans' });
+    expect(planRoutes.find(route => route.path === 'training/plans/library/new')?.data)
+      .toMatchObject({ trainingPlansMode: 'library-create' });
+    expect(planRoutes.find(route => route.path === 'training/plans/library/:itemId')?.data)
+      .toMatchObject({ trainingPlansMode: 'library-edit' });
+    expect(planRoutes.find(route => route.path === 'training/plans/library')?.data)
+      .toMatchObject({ trainingPlansMode: 'library-browse' });
+    expect(planRoutes.find(route => route.path === 'training/plans/plan/:planId/new')?.data)
+      .toMatchObject({ trainingPlansMode: 'create', trainingPlansScope: 'plans' });
+    expect(planRoutes.find(route => route.path === 'training/plans/standalone/new')?.data)
+      .toMatchObject({ trainingPlansMode: 'create', trainingPlansScope: 'standalone' });
+    expect(routes.indexOf(plansRoute!)).toBeLessThan(routes.findIndex(route => route.path === 'training'));
+    expect(routes.some(route => route.path === 'plans')).toBe(false);
   });
 
   it('should keep the private routes library authenticated and noindexed', () => {
@@ -248,6 +353,7 @@ describe('AppRoutingModule routes', () => {
       title: 'Assistant',
       preload: true,
       animation: 'Assistant',
+      disableRouteAnimation: true,
     });
   });
 
@@ -278,10 +384,10 @@ describe('AppRoutingModule routes', () => {
 
   it('should define public Garmin, Suunto, COROS, and Wahoo provider integration routes', async () => {
     const expectedRoutes = [
-      { path: 'integrations/garmin', provider: 'garmin', descriptionText: 'Garmin training dashboard' },
-      { path: 'integrations/suunto', provider: 'suunto', descriptionText: 'Sync Garmin and COROS activities to Suunto' },
-      { path: 'integrations/coros', provider: 'coros', descriptionText: 'COROS to Suunto activity sync' },
-      { path: 'integrations/wahoo', provider: 'wahoo', descriptionText: 'Automatic FIT activity imports' },
+      { path: 'integrations/garmin', provider: 'garmin', descriptionText: 'planned workouts to Garmin Connect' },
+      { path: 'integrations/suunto', provider: 'suunto', descriptionText: 'planned workouts as SuuntoPlus Guides' },
+      { path: 'integrations/coros', provider: 'coros', descriptionText: 'planned-workout delivery is coming soon' },
+      { path: 'integrations/wahoo', provider: 'wahoo', descriptionText: 'planned running and cycling workouts to Wahoo' },
     ];
 
     for (const expectedRoute of expectedRoutes) {
@@ -305,7 +411,7 @@ describe('AppRoutingModule routes', () => {
     }
 
     const garminRoute = routes.find(candidate => candidate.path === 'integrations/garmin');
-    expect((await resolvedRouteData(garminRoute))['title']).toBe('Garmin Training Dashboard');
+    expect((await resolvedRouteData(garminRoute))['title']).toBe('Garmin Training Plans and Dashboard');
   });
 
   it('should define public tools routes with compare workflow metadata', () => {
@@ -417,25 +523,31 @@ describe('AppRoutingModule routes', () => {
     const expectedRoutes = [
       {
         path: PUBLIC_FEATURE_PATHS.hub,
-        title: 'Features for Endurance Training Data',
-        h1: 'Features for endurance training data',
-        descriptionText: 'training analysis, maps, dashboards, comparisons, and AI answers',
+        title: 'Activity, Training & Health Features',
+        h1: 'Features for your activities, training, and health',
+        descriptionText: 'activity analysis, workout planning, health tracking, maps, comparisons, and AI answers',
       },
       {
         path: PUBLIC_FEATURE_PATHS.activityCalendar,
-        title: 'Activity Calendar for Endurance Training',
-        h1: 'Activity calendar for endurance training',
+        title: 'Activity Calendar for Workouts and Plans',
+        h1: 'Activity calendar for workouts and plans',
         descriptionText: 'Week, Month, and Year calendar views',
       },
       {
         path: PUBLIC_FEATURE_PATHS.trainingAnalysis,
-        title: 'Training Analysis for Endurance Athletes',
-        h1: 'Training analysis for endurance athletes',
+        title: 'Training Analysis, Readiness & Recovery',
+        h1: 'Training analysis, readiness, and recovery',
         descriptionText: 'training load, readiness, intensity, durability, sleep, power, and sport-specific trends',
       },
       {
+        path: PUBLIC_FEATURE_PATHS.trainingPlans,
+        title: TRAINING_PLANS_SEO_CONTENT.title,
+        h1: TRAINING_PLANS_SEO_CONTENT.h1,
+        descriptionText: TRAINING_PLANS_SEO_CONTENT.description,
+      },
+      {
         path: PUBLIC_FEATURE_PATHS.trainingDashboard,
-        title: 'Custom Training Dashboard for Endurance Athletes',
+        title: 'Custom Activity and Training Dashboard',
         h1: 'Build the training dashboard you need',
         descriptionText: 'KPI, chart, and map tiles, independent filters',
       },
@@ -446,8 +558,14 @@ describe('AppRoutingModule routes', () => {
         descriptionText: 'Map GPS workouts, filter by sport or date',
       },
       {
+        path: PUBLIC_FEATURE_PATHS.health,
+        title: 'Sleep, HRV and Health Trends Across Your Devices',
+        h1: 'Your Health, Beyond Training.',
+        descriptionText: 'compare recorded health before and after a Timeline note',
+      },
+      {
         path: PUBLIC_FEATURE_PATHS.mcpServer,
-        title: 'Read-only MCP Server for Training Data',
+        title: 'MCP Server for Training Data',
         h1: 'Connect ChatGPT or Claude to your training data',
         descriptionText: 'ChatGPT, Claude, or another MCP client',
       },
@@ -488,12 +606,18 @@ describe('AppRoutingModule routes', () => {
       expect(routeData['title']).toBe(expectedRoute.title);
       expect(routeData['description']).toContain(expectedRoute.descriptionText);
       expect(routeData['keywords']).toBeUndefined();
+      expect(routeData['socialImage']).toMatch(/^https:\/\/quantified-self\.io\/assets\/images\//);
+      expect(routeData['socialImageAlt']).toBeTypeOf('string');
       expect(page?.['h1']).toBe(expectedRoute.h1);
       expect(jsonLd?.['@type']).toBe('WebPage');
       expect(jsonLd?.['url']).toBe(`https://quantified-self.io/${expectedRoute.path}`);
 
       if (expectedRoute.path === PUBLIC_FEATURE_PATHS.hub) {
         expect(route?.pathMatch).toBe('full');
+      }
+
+      if (expectedRoute.path === PUBLIC_FEATURE_PATHS.trainingPlans) {
+        expect(routeData['socialImage']).toBe('https://quantified-self.io/assets/images/training-plans-social.png');
       }
     }
   });
@@ -530,12 +654,16 @@ describe('AppRoutingModule routes', () => {
         h1: 'How to sync Garmin data to Suunto automatically',
       },
       {
+        path: PUBLIC_GUIDE_PATHS.syncGarminToWahoo,
+        h1: 'Sync Garmin activities to Wahoo',
+      },
+      {
         path: PUBLIC_GUIDE_PATHS.syncCorosToSuunto,
-        h1: 'How to sync COROS workouts to Suunto automatically',
+        h1: 'Sync COROS activities to Suunto',
       },
       {
         path: PUBLIC_GUIDE_PATHS.syncWahooToSuunto,
-        h1: 'How to sync Wahoo activities to Suunto automatically',
+        h1: 'Sync Wahoo activities to Suunto',
       },
       {
         path: PUBLIC_GUIDE_PATHS.importActivitiesToSuunto,
@@ -584,10 +712,13 @@ describe('AppRoutingModule routes', () => {
     expect(homeRoute?.canMatch).toBeUndefined();
     expect(homeRoute?.pathMatch).toBe('full');
     expect(homeRoute?.data).toMatchObject({
-      title: 'Training Dashboard',
+      title: 'Training Analysis & Workout Planning',
       animation: 'Home',
     });
-    expect(homeRoute?.data?.['description']).toBe('Connect Garmin, Suunto, COROS, and Wahoo in one training dashboard. Analyze readiness, training load, sleep, routes, and performance trends.');
+    expect(homeRoute?.data?.['description']).toBe('Bring your activities, sleep and health data together. Analyze training, build structured workouts and plan your next session with Quantified Self.');
+    expect(homeRoute?.data?.['jsonLd']?.['description']).toBe(homeRoute?.data?.['description']);
+    expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Manual blood pressure, weight, body composition, blood oxygen, and VO₂ max logging');
+    expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Timeline notes for travel, sickness, stress, and time away');
     expect(homeRoute?.data?.['keywords']).toBeUndefined();
     expect(homeRoute?.data?.['jsonLd']).toMatchObject({
       '@context': 'https://schema.org',
@@ -598,7 +729,7 @@ describe('AppRoutingModule routes', () => {
     expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Curated training analysis for readiness, load, intensity, durability, sleep context, and best builds');
     expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Automatic Wahoo to Suunto activity sync');
     expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Activity and route delivery to Wahoo');
-    expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Read-only MCP access for compatible clients');
+    expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Permission-scoped MCP access for compatible clients');
   });
 
   it('should keep the dashboard as the authenticated app entry route', () => {

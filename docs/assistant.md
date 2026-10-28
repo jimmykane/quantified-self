@@ -14,6 +14,40 @@ MCP server, schemas, projections, and Sports Lib-backed metric discovery used by
 public URL remains `/ai-insights` so existing links and post-auth return URLs continue to work, but that route now loads
 the conversational Assistant.
 
+For a user-requested dated workout suggestion, the server collects a bounded context before asking Gemini to
+recommend anything. It prepares Form, Form Now, ramp-rate and Training Summary snapshots through the existing
+`prepare_training_metrics` lifecycle, then reads the ready Form, ramp-rate and Training Summary payloads. A preparing
+snapshot uses the existing retry path rather than being presented as a value. The server then reads today's load, sleep,
+HRV and readiness from `get_daily_report`, counts recorded local weekdays from canonical daily Duration buckets, and
+checks today's recorded activities. When the independent **Timeline notes** choice is on, it reads up to two 64-note
+pages from the recent window through the requested future day, including overlapping ongoing notes; closed notes precede ongoing notes.
+The existing 366-day query bound remains; a more distant target reports incomplete note coverage and cannot support a preview.
+It marks each note ended, ongoing or upcoming from its actual dates. When **Training plans** is on, it reads the requested day's calendar workouts and
+their exact stored completion states through one bounded bulk lookup. The authored schedule list alone never establishes
+completion. The server appends these checked facts to the answer, including missing-access or incomplete-scan limits.
+An incomplete note, activity or plan scan cannot support a new workout preview. If note or plan access is off, the
+answer says that domain was not checked.
+Notes inform context but never alter the recorded metrics, supply instructions, or authorize a write. The Assistant may
+offer a cautious optional session rather than a medical prescription, then prepare one current-revision Training
+proposal for in-app review only if the user asked to create/send it.
+Sparse weekday counts are reported as limited evidence, not a consistent habit, and unfiltered Duration totals cannot
+establish which sport was performed.
+Preview and queued delivery are not provider acceptance or watch receipt.
+Short follow-ups such as “What about tomorrow?”, “For tomorrow please” and “without that plan” keep this evidence path
+only through an uninterrupted recommendation thread. The requested date is separate from the current evidence date:
+the calendar and weekday pattern follow the workout date, while readiness, sleep and completed activities remain dated
+as of the current turn. Tomorrow's suggestion is conditional on rechecking readiness, not a forecast of tomorrow's sleep.
+Relative dates inherited from earlier user messages use their stored timestamp and the current turn's IANA timezone;
+ambiguous or impossible dates require clarification. “Today is done” and a no-plan hypothetical remain explicit constraints
+for short continuations; a prior day's “today is done” does not block a new day. A hypothetical never modifies the actual
+schedule. An explicit new request supersedes the earlier recommendation's constraints. A create preview for the wrong
+date is rejected before MCP, with one-date correction guidance. A missing/withheld preview tool does not force Gemini to
+call an unavailable tool. No follow-up inherits permission to create, send or apply a change.
+Combined comparison-and-workout requests retain the live daily and activity tools instead of being forced into a
+single-purpose comparison workflow. Plan-level and provider-only actions use the batch Training preview even when a
+strength or pool workout is mentioned; one authored strength or pool-length change uses its focused preview.
+Explicit plan creation remains on that multi-workout workflow rather than being reduced to a one-date recommendation.
+
 ## Request architecture
 
 ```text
@@ -35,6 +69,13 @@ registration, scope checks, input schemas, output validation, and data projectio
 must fail closed if any required allowlisted tool disappears. Authenticated app links use only an allowlisted production
 or Beta caller origin (or loopback while running the Functions emulator), with the production origin as a safe fallback.
 
+First-party server instructions and preview descriptions use the app-owned review/Apply workflow, never public MCP
+write-tool names. Tag guidance follows the independent tag choice; nearby-activity guidance follows precise-location
+access, and route-location guidance remains excluded. Each model generation receives its exact callable catalog and
+remaining six-call allowance. Tool-specific Training guidance follows that generation's available tools, including
+the read-first gate and the narrower preview-only correction. Unadvertised calls still fail closed, including a preview
+bundled with the first schedule read; instructions and a successful parallel read never expand execution authority.
+
 The callable surface consists of:
 
 - `assistantChat`: validates the prompt, client-generated request ID, IANA timezone, and conversation-bound activity-location access mode; reserves quota while it
@@ -46,10 +87,18 @@ The callable surface consists of:
   pending turn for the signed-in user.
 - `resetAssistantConversation`: replaces the active conversation generation with an explicit location-access mode so an
   older in-flight response cannot restore cleared content or cross a consent boundary.
+- `applyAssistantTrainingProposal`: the deployed compatibility name for applying or dismissing the one current bounded
+  Training or content proposal after an explicit user action; Gemini never receives or invokes this callable. Content
+  proposals still execute through the existing MCP mutation services rather than a parallel callable or write path.
 
-All four require Firebase Authentication and App Check. Before a chat turn can reserve quota or send data to Gemini,
+All five require Firebase Authentication and App Check. Before a chat turn can reserve quota or send data to Gemini,
 the backend also verifies the required privacy, data, and Terms agreements in the server-authoritative legal document.
 Firestore rules deny browser access to `users/{uid}/assistantConversations/active`.
+
+Conversation replacement and proposal application use an explicit 512 MiB runtime floor because both load the shared
+Assistant, MCP content-write, and Training contract graph. The internal MCP connection identity includes the server-owned conversation
+generation; Training reads recognize only the reserved fixed identity or its colon-delimited generation form, while
+external clients still require their OAuth connection record. These are runtime boundaries, not public MCP contracts.
 
 ## Tool and data boundary
 
@@ -59,6 +108,8 @@ The internal session always grants `metrics:read`, `measurements:read`, `sleep:r
 - daily report and live Readiness;
 - normalized sleep sessions, trends, and safe aggregate vitals;
 - Training and activity metric discovery and bounded queries;
+- identity-safe TSS-based Training impact for one exact completed session or one bounded local-date activity selection,
+  with separate UTC Training-day outcomes and no activity/event identity or provider provenance;
 - first-class body-measurement discovery and bounded history;
 - bounded activity lists, overview, selected metrics, rankings, laps, MTB jumps, swim lengths, and on-demand chart series;
 - coordinate-free saved-route summaries filtered by canonical activity type, name, or recency.
@@ -75,11 +126,223 @@ The selected access mode is stored with the server-owned conversation. `beginTur
 fingerprints bind precise-location retries to that wider consent, changing the setting creates a new generation, and
 **New chat** always creates a coordinate-free generation. This prevents coordinate-bearing history from later being
 sent as part of a coordinate-free chat. Route-location scope, saved-route bounds, route geometry, route waypoints,
-original source files, write tools, and dashboard settings remain unavailable in both modes. Coordinate-free chats can
+original source files, direct write tools, and dashboard settings remain unavailable in both modes. Coordinate-free chats can
 read bounded activity chart series but never their breadcrumb location stream. Precise-activity chats can request that
 existing location stream when an activity map is relevant.
+Detailed activity sample pagination remains an external MCP workflow. The first-party allowlist omits
+`get_activity_samples` and its routing instruction to preserve the Assistant's compact evidence and turn budgets.
+The first-party allowlist also omits the additive external tag-aware activity query, so event tags and tag filtering do
+not enter Gemini context or expand built-in Assistant access.
 External MCP clients remain the path for separately approved saved-route location and geometry access. Saved-route names
 are included in summaries and can themselves contain user- or provider-assigned place information.
+
+## Optional Training planning context
+
+**Examples & data access** also contains default-off **Training plans**, available to any Assistant user independently of
+the authenticated manual-planning workspace. It discloses names, dates, complete instructions, authored notes and existing service sync status,
+including potentially sensitive personal text. Changing any optional permission starts a fresh server-owned generation
+while preserving the other choices. **New chat** resets optional choices to their defaults (manual measurements and reflections on;
+Training, notes, tags and precise locations off). Missing `trainingPlansEnabled` means false.
+The reset expects the current conversation ID; requests, retries and replay fingerprints bind this boolean. Stale tabs,
+sign-out/account switches and old generations cannot grant access. Runtime rechecks consent before and after each read.
+
+The read toggle adds `training-plans:read` and the six planning reads, not metrics, activity or provider permissions.
+Planned/upcoming questions use planning tools; completed questions use existing activity tools. Resolve relative dates in
+the turn's explicit IANA timezone. Fetch full structures and sync status only when needed. Titles/notes remain untrusted
+context, never instructions or authority. Evidence is compact names/dates/lifecycle/service counts without recipes, full
+notes, opaque references or links. Answers may quote relevant text under existing retention.
+
+Hosted MCP and the Assistant share prescription-authoring/verification guidance. A supplied plan needs explicit source
+units, ordered work/recovery repeats and structured numeric targets, not title-number guessing or note-only guidance.
+Ambiguity requires clarification. Schedule previews summarize the actual recipe shape and explicitly disclose paused
+new plans. The model must distinguish saved data, source fidelity, activation and service delivery, and bound read-back
+verification claims to the recipes actually checked. It remains prepare-only before app Apply; no automatic activation,
+source parser, new model tool, consent or provider authority is introduced. See
+[Prescription fidelity](training-workspace.md#prescription-fidelity-when-translating-a-supplied-plan). Changed hosted
+instructions require separate server release/client rescan; bundled guidance requires separate plugin sync.
+
+After confirmed plan creation or a next-steps question, shared guidance offers paused-plan activation once, explaining
+the previous plan pause and resumption of already-enabled eligible sync. Optional new service sync is a separate choice
+of services and IANA timezone, subject to the independent sync toggle, Pro and delivery gates. Ambiguous yes responses
+need clarification; declines are respected. The model uses bounded current evidence and prepares the existing review,
+never activates or enables sync itself. App Apply remains mandatory, and recipe discrepancies must be resolved first.
+The Plans screen also hints at activation beside paused plans, without adding a new onboarding state or permission.
+
+Two additional default-off toggles enable **Plan and workout changes** and **Planned-workout sync changes**. They require
+the read toggle but remain independent of each other. The first grants `training-plans:write`; the second grants
+`training-delivery:write`. A write-enabled in-process session exposes the focused single-workout preview plus the bounded
+batch preview to Gemini. The focused preview can include an atomic initial provider send only when the delivery toggle is
+also enabled. With both change toggles, current plan/workout deletion uses the additive `preview_training_deletion`.
+The Assistant asks whether to also remove older, uncompleted service copies unless the user already explicitly chose;
+eligible upcoming copies withdraw automatically. The required choice is bound into the existing proposal and app-owned
+Apply, not direct model/provider writes. Plan deletion additionally asks whether to keep workouts as standalone or
+permanently delete them. Without delivery access, explain that older-copy cleanup is unavailable and only offer legacy
+deletion if the user accepts that limitation. Completed activities stay untouched, and valid access/provider support
+may prevent cleanup; an applied deletion is not provider/app/watch removal proof. Replies keep the focused preview
+only through an uninterrupted deletion clarification chain; a new task or cancellation ends that routing. Removing a
+workout from a plan is an association change, not inferred deletion. Routing never supplies Apply approval. The model
+can prepare one strict proposal after reading current records. For Workout Library changes it
+must also read the library revision and exact saved recipe or source workout, then use the additive library preview.
+That preview supports one create, save, duplicate, edit, archive/restore, confirmed permanent recipe delete, or
+explicit-date placement. Saved recipes have no date or provider consent. The model cannot call
+`apply_training_changes`, `apply_saved_workout_change` or provider
+transport. Quantified Self stores the safe preview with the conversation and shows an **Apply changes** / **Dismiss**
+surface. Single current deletions instead show **Review plan deletion** / **Delete plan** or **Review workout deletion** /
+**Delete workout** and **Dismiss**. For non-strength scheduled workouts the review also shows server-captured complete
+before/after prescriptions, exact ordered changes, analyzer totals with uncertainty, local provider mapping consequences,
+and the shared profile with changed definitions highlighted. The private app-only projection is bounded and grant/revision
+checked; it is never added to model tool output or the registered MCP preview. Recovery-duration-only requests have a
+narrow deterministic preservation guard. Strength and Workout Library retain their existing review paths. Detailed
+implementation and limits live in [Training proposal review](training-workspace.md#assistant-workout-proposal-review-training-11).
+The deletion review keeps the server-authored workout disposition and service-copy choice;
+it never infers older-copy removal from combined permission or changes it in the browser. Plan/history deletion is
+permanent; workout deletion is recoverable. Apply displays the actual server deletion receipt rather than a generic
+sync-update message. Requested cleanup remains unconfirmed, and a failed or missing deletion outcome never reports
+partial success or gives success haptics. The access sheet explains both required change choices and that removal,
+unlike new delivery, does not require Pro but still needs valid service access/provider support.
+Applying uses a dedicated Auth + App Check callable that rechecks the same conversation generation and toggles,
+then invokes the common proposal service. Dismissal clears the server-owned proposal without changes. New chat, a toggle
+change, account switch, expiry, schedule conflict or stale grant makes the proposal unusable. Provider results are
+independent and a send failure never removes a newly authored workout. Call/output budgets and quotas are unchanged.
+Apply and Dismiss also append a bounded server-authored **Training review result** to the latest assistant message's
+existing evidence array. It includes the review timestamp, compact reviewed summary, authored outcome counts and grouped
+service-request outcomes, not proposal references, remote identities or raw provider messages. Subsequent turns receive
+this confirmation, so a suggestion is not mistaken for an applied change or a queued request for delivery. Generation and
+deletion fences remain transaction-scoped; a concurrent follow-up completion preserves the stored result. This update
+does not extend retention or add a message, collection, public field or callable. If the authored change was accepted but
+recording its chat result fails, Apply still reports the accepted change; an allowlisted warning records the cleanup failure.
+For a Suunto-bound workout, the Assistant omits unrequested step notes and keeps necessary watch instructions concise.
+If a provider must shorten authored instructions or make another mapping adjustment, the proposal review names the
+consequence before the user's one in-app confirmation; that confirmation also approves the current digest-bound Send.
+Changed mappings fail closed, and a queued Send is not a provider or watch receipt.
+Source support does not deploy or promote an app. See the
+[MCP planning contract](mcp-server.md#training-plans-and-planned-workouts-690).
+
+For an explicit request to replace a missing Garmin copy, the delivery-change toggle exposes the focused additive
+replacement preview. The model supplies only the exact current opaque workout reference and revisions, not private
+artifact IDs or an approval digest. A fresh paired not-found Check is required. The app reviews the exact workout/date
+and warns that the original may reappear and leave a duplicate; **Create replacement Garmin copy** is the app-owned
+confirmation. It queues existing journaled recovery, never confirms provider/watch receipt or rewrites the workout.
+Send, Retry, missing status and lost replies do not authorize replacement. Stale evidence, changed grants/accounts,
+Stop/completion and other shared delivery fences reject Apply; malformed/mixed replacement reviews are rejected.
+
+The page keeps a compact Training read/change indicator beside **Examples & data access** while Training reads are enabled, so
+closing the access sheet does not hide the current state. The sheet presents Training read, schedule-change and delivery-
+change permissions as compact rows, explains the read dependency before enabling either child permission and keeps every
+toggle keyboard- and screen-reader-labelled. A failed conversation replacement states that the previous conversation and
+access choices remain unchanged.
+
+## Optional tags and Timeline notes
+
+**Examples & data access** includes independent, default-off compact-row choices for **Activity tag changes** and
+**Timeline notes**. Timeline notes discloses full private titles/details, including notes hidden from charts and
+potentially sensitive health or personal text. Changing any optional access replaces the active chat generation while
+preserving the other choices. **New chat** resets these choices off, independently of manual measurements. Missing `timelineNotesEnabled`,
+`activityTagChangesEnabled`, or `timelineNoteChangesEnabled` in older clients, stored chats, responses, or pending
+requests means disabled. No contract version or generic permission framework is added.
+
+The server stores these booleans with its active conversation. Enabling requires the existing reset path; a chat request
+cannot grant itself access. Requests and replay fingerprints bind enabled access, and `beginTurn` rejects a mismatched
+generation or setting. The runtime rechecks the active generation and relevant permission before and after each private
+read or prepare call. Completion retains the existing generation/lease fence. The frontend validates response agreement,
+ignores account-switched responses, and never retries an originating account's call as a newly signed-in user. Pending
+recovery preserves the independent access choices. Permission resets carry the expected conversation ID (`null` means no
+unexpired conversation), checked in the same transaction as replacement. Stale tabs and delayed retries cannot restore
+access through an unrelated setting change. A conflict reloads the server's choices without automatically retrying the
+reset or discarding the draft. The composer is read-only during a reset; sheet results bind to their opening account and
+generation. Account loads clear old messages, pending questions, and permissions before waiting for replacement state,
+and old completions cannot clear a newer account's view.
+
+When Timeline notes read access is enabled, `query_timeline_notes` and `timeline-notes:read` are available. A separate
+default-off **Timeline note changes** child choice requires that read access and adds
+`query_editable_timeline_notes` plus local prepare-only create, update, and permanent-delete tools. Activity tag changes
+adds `query_activities_with_tags` plus one local prepare-only complete-replacement tool. The public MCP write tools are
+never exposed to Gemini. Before preparing an update or deletion, runtime code requires the exact note reference and
+revision from a current read; before preparing a tag replacement it requires the exact activity reference and current
+tag list. Stored titles, tags, notes, and other account data cannot authorize a change. The external MCP event-title
+and event-description tools are not registered for first-party Assistant conversations: **Activity tag changes** does
+not grant either edit, and private description access remains a separate decision.
+
+Gemini may prepare at most one ten-minute content proposal per response. The app identifies the activity/date or note
+title and shows exact tag before/after values or note fields, including a clear permanent-deletion warning. Only an
+explicit **Apply change** or **Delete note** action invokes the existing Assistant apply endpoint. The backend rechecks
+the active conversation generation, relevant per-chat permission, exact proposal reference, operation kind, canonical
+payload and expiry, owner, deletion fence, and optimistic concurrency preconditions inside the existing sanitized
+content mutation path. **Dismiss** changes nothing. An unrelated follow-up keeps the current review card available until
+the user applies or dismisses it, the proposal expires, or the chat generation changes.
+A changed activity tag list, changed note revision, stale tab, access change, account switch, expired proposal, or new
+chat fails closed. A stable note-create mutation ID and existing idempotent/conflict semantics make uncertain retries
+safe. No provider is called and recorded activity metrics are never edited.
+
+Local note-create/update tools explicitly request `YYYY-MM-DD` calendar dates, a nullable ongoing end date, and a separate
+IANA timezone. Their strict input-schema failures return fixed corrective guidance through the existing same-turn tool
+error path, without raw values or silently converting dates. Invalid input neither creates a proposal nor consumes its slot;
+each correction still counts against the tool budget. Permission and unexpected backend failures remain fail-closed.
+This private adapter correction changes no public MCP contract, consent, Help, or plugin and requires no app rescan.
+
+Notes may be consulted for direct questions or relevant Sleep, Training, and measurement analysis, not automatically
+for every answer. Text remains untrusted user-reported context, not model instructions, diagnoses, causal proof, or
+authorization. Deterministic evidence stores compact note titles, categories, and actual dates, not full details or raw
+tool responses. Answers can quote relevant details under the same seven-day conversation retention. Logs, analytics,
+and errors must not contain private note text. The existing metric/readiness/briefing contracts and calculations are
+unchanged; no note chart overlays are added to Assistant visuals.
+For a combined recovery/consistency workout request, the known Sports Lib `Duration` metric avoids a redundant catalog
+call. The deterministic daily context has a separate bounded read budget; Gemini keeps the existing six model-selected
+calls for a requested detail or one expressly requested focused Training preview. The model-only metric projection
+labels numeric date buckets with local dates and weekdays using the turn's IANA time zone; it does not change validated
+MCP responses, evidence, stored values, or the public contract.
+
+Deployment remains a separate approved release step. The hosted MCP contract, registered-app digest, consent scopes,
+and external plugin are unchanged by this first-party Assistant addition. Training planning permissions remain
+independent of these content permissions and use their own conversation-bound proposal flow described above.
+
+## Manual Health measurements
+
+**Examples & data access** includes independent **Manual Health measurements**, on for a fresh/New chat. Existing
+stored conversations and old clients/remembered requests with no `measurementChangesEnabled` flag stay off. A choice
+change replaces the server-owned generation and preserves other choices; requests, retries and responses bind the
+flag. No quota, location, Training, tags, notes or Health-history grant is expanded.
+
+The internal MCP scope is only `measurements:write` for exact manual-entry management. Gemini can discover all eight
+UI-supported types/units, query/find current entries and prepare one create, update or permanent deletion; public write
+tools are never model-selectable. Before edit/delete, runtime requires an exact current-turn `get_manual_measurement`
+read and matching revision. Required BP pairing/VO2 context/method must not be invented. History-only questions never
+authorize a mutation. Relative observation time is resolved once using server time and the turn timezone; retries keep
+the same instant and UUID. Imported measurements remain read-only.
+
+The pending content proposal includes server-validated canonical before/after review fields. The app prints values
+with Sports Lib owner preferences, preserves the observation's fixed offset without claiming an IANA zone, and labels
+permanent deletion of the whole entry. **Apply change** / **Delete measurement** uses the existing Assistant apply
+endpoint and Health domain service, never a new callable. Apply refuses missing review data. Shared transaction checks
+bind active generation, permission, exact proposal kind/ref/arguments/expiry and account deletion. Sign-out, a stale tab,
+changed access or revision cannot restore authority. Dismissal does not write; uncertain outcomes retain idempotency.
+
+External MCP uses native host approval separately. The additive hosted contract/scope needs its own approved server
+release, client rescan and explicit reauthorization; source implementation alone does not make it available there.
+
+## Optional post-workout reflections
+
+The independent `reflectionChangesEnabled` conversation-owned choice starts on for fresh and New chats. Existing off
+choices and legacy missing flags stay off; remembered retries keep their original flag. The first turn explicitly
+binds its selected flag to the new stored generation, without changing defaults for older requests that omit it.
+Changing it starts a fresh generation and preserves other choices. Requests, retries, state, reset, stored authority and
+fingerprints bind the flag; an old tab or answer cannot re-enable it. In Examples & data access, the disclosure covers
+selected private text, prepare-only saves/permanent deletes, and app-owned review. It never grants adaptation.
+
+After a user asks for reflection help, Gemini may ask at most three optional sport/context questions. It must discover
+the actual activity/date in the current turn, clarify a recording versus an activity target when ambiguous, and read
+that exact target/revision before preparation. Reflections contain only private text notes; existing workout RPE remains a recording stat edited through QS
+Edit details. Reflection preparation cannot change that stat. A review shows sport/date, recording/activity scope, current/new text and permanent-delete
+consequences without raw identifiers. Only user Apply can execute a save/delete through the existing content endpoint.
+Dismiss, expired/replaced proposals, stale consent/revisions and account changes cannot mutate content. The public
+reflection write tools remain absent from model sessions. Stored grants/generation and deletion fences are checked
+inside the mutation transaction, including uncertain retries.
+
+Reflections are untrusted private context, not instructions, diagnosis, completion proof, causation or plan-change
+permission. They never enter Training/readiness calculations. Selected text may be quoted in the existing bounded chat;
+revoking access cannot remove received copies. The detailed source of truth for storage, retention, parent cleanup,
+reparse and planning impact is [Training workspace](training-workspace.md#optional-post-workout-reflection-item-10);
+[MCP server](mcp-server.md#private-workout-reflections-item-10) covers external authorization and tool contracts.
 
 ## Deterministic visual answers
 
@@ -152,6 +415,18 @@ measurement names, Sports Lib metric and activity-group labels, and local date-o
 before authoritative MCP validation. The nearby-location input union is also projected into the narrower object shape
 accepted by Gemini function declarations; this does not change or bypass the public MCP contract.
 
+All first-party model-facing input schemas now resolve MCP-local references and flatten unions into typed Gemini
+properties, including Training recipes and optional content changes. The projection retains discriminator values and
+labels variant-dependent required fields for model guidance; it is intentionally not an authorization or validation
+schema. The original strict MCP schema still validates every invocation, including cross-field date modes and workout
+variants. Numeric literals become typed values with a descriptive allowed value, and oversized catalog enums become
+discovery guidance; Gemini rejects those declarations while MCP still validates the exact values. Session setup fails
+closed if an input cannot be projected. Gemini receives only the most relevant Training preview for the current question
+(focused workout create, batch lifecycle, strength, pool-length, library, or deletion), because combining the nested preview
+schemas with the full read catalogue exceeds its accepted tool request. The authorized in-process MCP session remains
+complete. Regression coverage walks every tool with all optional permissions enabled and checks that Gemini cannot
+receive an undefined required property, array item, or non-string enum.
+
 Raw chart-stream labels are also normalized to their persisted summary family when an aggregate or per-activity
 summary read requires it. For example, an average/minimum/maximum `Temperature` selection resolves to Sports Lib's
 `Average Temperature`, `Minimum Temperature`, and `Maximum Temperature` stats rather than treating the absence of a raw
@@ -169,7 +444,8 @@ unsupported answer.
 The model receives only:
 
 - the current user message and IANA timezone;
-- at most the latest six completed conversation turns;
+- at most the latest six completed conversation turns, each carrying its stored `createdAt` timestamp and any compact
+  server-authored Training confirmation; prior metric evidence and chart payloads are not copied into model history;
 - the MCP server instructions and allowlisted tool schemas;
 - the bounded validated outputs of tools selected for the current question, with direct in-app URLs removed before
   model delivery. Absolute numeric MCP fields ending in `TimeMs`, `DateMs`, `DayMs`, or `AtMs`, plus `bucketStartMs`,
@@ -197,6 +473,28 @@ the model's system instructions, while the user's message remains untrusted. The
 tool is absent or generation does not invoke the declared tools in order. Tests execute every current example through
 every declared mocked MCP workflow tool and verify each workflow against the production MCP tool registry. The
 Assistant examples are therefore the only user-facing conversational prompt catalog that needs maintenance.
+
+The existing **Today's workout** contextual card asks for one new standalone session using readiness, recorded recovery,
+recent load and the 28-day recorded weekday pattern. It conditionally includes relevant recent/ongoing Timeline notes
+and checks existing workouts under their independent read choices. It asks the model to establish the suggested sport's
+usual recorded per-session duration and load with the period/session count, compare the proposed duration/load with
+those values, explain any reduction using current recovery/training evidence, and ask for missing information before
+choosing a duration when that baseline is unavailable. This is a contextual prompt instruction using
+existing reads, not a new duration calculation or a minimum workout length. Selecting it only fills the composer; optional access
+and change permissions remain off until the user enables them, and adding the session still requires app-owned review
+and **Apply changes**. Missing records do not establish skipped training or a regular habit. MCP impact: this starter-copy
+update reuses the existing bounded daily context and focused workout proposal; it changes no tool, schema, scope, metric,
+consent default, provider action, registered contract or bundled plugin. No new read or write coverage is required.
+The example uses "does not duplicate" so the existing negative-qualifier routing keeps the focused create-workout
+preview; the contraction "doesn't duplicate" is currently interpreted as a separate duplication request. Runtime tests
+validate the exact shared example against the focused preview, daily context and schedule-only proposal behavior.
+
+The latest-workout and yesterday Training-impact cards are contextual examples rather than fixed workflow examples.
+They use the ordinary guarded Training-impact routing because the exact activity reference or complete local-day
+selection exists only at request time: discover the completed activity or bounded day, prepare Form, then call the
+identity-safe Training-impact read. The MCP service still validates opaque-reference ownership, completion, local-date
+membership, UTC Training-day coverage, and benchmark exclusion. These cards add no tool, output field, OAuth scope,
+plugin starter, registered-app contract, provider action, or mutation.
 
 `functions/src/assistant/metric-intent.ts` adds one narrow catalog-driven workflow outside that marketing catalog: an
 unambiguous yearly or all-history request for one Sports Lib summary family with explicit average, minimum, or maximum
@@ -229,6 +527,13 @@ Cycling load and route workflows also receive the complete app-owned Cycling/MTB
 of relying on the model to reproduce catalog values. Because these selectors are server-owned, the workflows omit
 redundant discovery calls and spend their bounded tool budget only on account-data reads.
 
+These fixed family selectors are bound to the first-party session outside model tool arguments. The MCP data service
+resolves every family member supported by the installed Sports Lib catalog inside the existing bounded event or route
+scan. A family may exceed the public input's 20 explicit-type limit; that public schema and service validation remain
+unchanged. Metric queries aggregate each matching event once, including recordings with multiple family sports, instead
+of merging overlapping sport-query results. Route cursors bind the complete canonical family and retain the existing
+scan, byte, result and continuation limits. External clients and arbitrary tool fields cannot select this internal scope.
+
 ## Grounded evidence
 
 The model writes only the answer. Evidence shown in the UI is generated deterministically from validated tool results,
@@ -239,12 +544,33 @@ not authored by the model. The evidence adapter:
   exact ISO start time, rank, and scan count;
 - presents a jump's relative `timestampMs` as human-readable elapsed activity time rather than a raw implementation
   field;
+- presents Training impact as status, TSS, CTL, ATL, Form, and dated CTL-outcome facts while omitting the selected
+  opaque references, labels, exact start times, and provenance;
 - removes identifiers, cursors, source/provider/device provenance, tokens, and similar fields again before display;
 - accepts production links only on exact HTTPS Quantified Self origins, with explicit loopback origins permitted only
   while running the Functions emulator;
 - never stores raw tool output in the conversation document.
 
 This evidence is a compact audit aid, not a full transcript of internal tool calls.
+Historical answers are conversational context, not fresh account facts. Validated reads for the current turn override
+earlier sleep, readiness, completed-volume and plan claims, including a newly complete empty activity list. A pending
+preview is not an applied change. Only server-authored confirmation establishes acceptance; current sync reads are still
+needed to establish provider delivery.
+
+Assistant answer bodies render simple Markdown through an Assistant-specific renderer and Angular's normal HTML
+sanitization. Raw HTML is escaped, external images never load, and only HTTP(S) Markdown links are interactive. User
+messages remain plain text. Headings, lists, tables and code use app typography and surfaces; wide tables and code
+have their own shared QS scrollbars. Standalone ISO calendar dates in prose display using the app's regional formatting
+preference with an explicit UTC formatter, preserving the calendar day. Timestamps, code, IDs, filenames and link
+destinations are left intact; stored messages and proposal arguments remain unchanged. Note-review dates use the same
+calendar formatter.
+
+For dated workout recommendations, the server-authored **From your records** list keeps the workout/evidence dates,
+target-weekday counts, today's actual activities, ongoing/ended/upcoming notes, exact persisted activity links and unavailable/incomplete data explicit. It uses
+familiar app labels instead of snapshot/read diagnostics. This is presentation only: no MCP tool, schema, scope,
+consent, Training calculation, completion inference, mutation or proposal/confirmation contract changes. No public
+contract refresh or plugin rebuild is required. Updated server copy requires a separately approved Functions release;
+existing saved answers receive only the frontend formatting improvements.
 
 ## Conversation lifecycle and quota
 
@@ -255,7 +581,13 @@ There is one active document at `users/{uid}/assistantConversations/active`:
 - `createdAt`, `updatedAt`, and `expireAt` timestamps;
 - an opaque conversation generation ID;
 - one `coordinate_free` or `precise_activity` location-access mode for the generation;
+- one independent `timelineNotesEnabled` flag (missing means false);
 - one four-minute pending-turn lease to serialize requests.
+
+This is active-chat context, not cross-chat memory. **New chat**, expiry and account changes do not retrieve an earlier
+conversation or infer durable preferences. The date/follow-up and confirmation corrections preserve the same six-turn,
+seven-day and transcript-byte bounds. Existing saved messages gain date context when read; missing historical Apply
+results cannot be fabricated retroactively.
 
 Each browser send also carries a client-generated opaque request ID. That ID becomes the stored user-message ID. On
 completion, the server also records a SHA-256 request fingerprint in the private receipt array; it does not duplicate
@@ -267,7 +599,7 @@ different text is rejected. Documents from before this field existed derive rece
 in memory and persist them on the next write.
 
 While a send outcome is ambiguous, the page keeps a versioned, account-bound, bounded resumption record in tab-scoped
-session storage: the Firebase UID, question, opaque request ID, IANA timezone, location-access mode, original conversation generation when
+session storage: the Firebase UID, question, opaque request ID, IANA timezone, location-access mode, notes-access flag, original conversation generation when
 present, and submission time. A record is discarded without rendering or resubmission if the signed-in UID changes. This
 lets a refreshed page render the pending question immediately. If the refresh cancelled the HTTP request before the
 server registered its turn, the page resubmits the same question with the same request ID; server idempotency prevents a
@@ -301,9 +633,13 @@ write, including failure cleanup, checks the shared user-deletion guard so an in
 after deletion starts.
 
 The Assistant reuses the existing request ledger and role limits. A reservation remains releasable while MCP session
-creation, tool discovery, and other non-billable setup runs. It is finalized immediately before the first Gemini model
-or MCP tool attempt; a defensive completion fallback prevents a grounded answer from being committed uncharged. A
-setup failure therefore releases the reservation, while a failed model or tool attempt still consumes the request.
+creation, tool discovery, and grounded work run. The reservation holds an allowance slot and is finalized before a
+grounded answer is committed, or after a failed model or tool attempt. A setup failure releases the reservation.
+For Training-derived reads, the Assistant first calls `prepare_training_metrics`. If the snapshot is still preparing
+after the bounded wait, the turn and quota reservation are released without a stored user or Assistant message, and
+the page retains the question with a clear retry message. If releasing the reservation fails, its ten-minute lease
+expires without incrementing usage. Completed answers and other failed model or tool attempts still consume one
+allowance. This does not schedule a background Assistant reply or email.
 Loading or resetting a conversation does not consume quota. Usage documents are read directly by period ID, so their
 server-only fields and dynamic reservation map are exempt from automatic single-field indexing. `periodEnd`
 deliberately remains indexed because the admin fallback orders historical usage by that field when no current
@@ -344,6 +680,29 @@ Do not log prompts, conversation text, tool arguments, tool output, coordinates,
 Operational logs should contain only safe error classes and lifecycle outcomes. Monitor callable errors, quota failures,
 tool/schema drift, model latency, and abandoned turn locks. The generation callable caps both instances and per-instance
 concurrency; preserve an explicit platform-level cost bound when changing its runtime options.
+
+Grounded-response retry warnings and final errors retain the tool name, fixed failure code and stage. Tool failures
+also include `causeErrorType` (a fixed built-in category, never the exception's arbitrary name) and `causeErrorCode`
+(allowlisted network/service codes or bounded gRPC/JSON-RPC codes; otherwise `unknown`). MCP Zod failures include at
+most five `causeSchemaIssues`, each containing only a fixed validation code and schema-label path. Paths stop after
+eight components, mask indexes as `*` and unknown/dynamic keys as `<field>`. Rejected values, messages, raw issues,
+unknown keys, union contents, stacks and nested causes are never logged. SDK client exceptions retain only this sanitized
+snapshot, not the original exception. These are diagnostics only: severity, retry behavior, Training/content authority,
+grounding, public MCP schemas and app review/Apply remain unchanged. No registered-app refresh, plugin sync or Help
+change is required; deployment of `assistantChat` still needs separate approval.
+
+Rejected model calls also retain `toolRejectionReason`: `unknown_tool`, `not_in_turn_catalog` or `not_advertised`.
+Only exact names from the existing Assistant/public MCP catalogs can enter `toolName`; arbitrary model strings become
+`unknown`, not raw or hashed text. `modelGeneration` is one-based, `requestedToolCount` describes the current response,
+and `toolCallCount` counts model-requested calls examined by the loop, including rejected tool selections, not successful
+executions. At the continuation limit the pending response has not entered that loop; its count is separate.
+Budget failures identify `initial_calls`, `cumulative_calls`, `continuation_turns` or `execution_calls` through
+`toolBudgetKind`, with fixed stage and count/limit fields. Execution counts cover the outer runtime's admitted calls;
+its deterministic daily-context limit remains 18, distinct from the six model-selected calls and six continuations.
+Retry and final failure use the same sanitized diagnostics. No prompt, arguments, model output, unknown tool name or
+identity is retained. These changes do not raise budgets, change quota charging/retries, broaden permissions, or alter
+the public MCP contract, bundled plugin or app Help. A model may still request an invalid tool; these diagnostics
+identify that case rather than claiming instruction alignment guarantees model compliance.
 
 TTL policy deployment is an explicit infrastructure step. The local helper includes `assistantConversations`, but code
 deployment alone does not enable or update the production TTL policy.

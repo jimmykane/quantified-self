@@ -9,6 +9,9 @@ import { AppFunctionsService } from '../../services/app.functions.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { LoggerService } from '../../services/logger.service';
 import { McpConnectionsComponent } from './mcp-connections.component';
+import { AppHapticsService } from '../../services/app.haptics.service';
+import { MatDialog } from '@angular/material/dialog';
+import { MCP_SCOPE_CONTENT, type McpScope } from '../../helpers/mcp-permissions.helper';
 
 describe('McpConnectionsComponent', () => {
   const connection = {
@@ -17,22 +20,20 @@ describe('McpConnectionsComponent', () => {
     clientName: 'Training Copilot',
     redirectHost: 'client.example',
     scopes: [
+      'training-plans:read',
+      'training-delivery:write',
+      'health:read',
       'metrics:read',
       'measurements:read',
       'sleep:read',
       'activity-details:read',
+      'events:write',
       'activity-location:read',
+      'timeline-notes:read',
+      'timeline-notes:write',
       'routes:read',
       'route-location:read',
-    ] as Array<
-      | 'metrics:read'
-      | 'measurements:read'
-      | 'sleep:read'
-      | 'activity-details:read'
-      | 'activity-location:read'
-      | 'routes:read'
-      | 'route-location:read'
-    >,
+    ] as McpScope[],
     createdAtMs: 1_700_000_000_000,
     lastUsedAtMs: 1_700_001_000_000,
   };
@@ -41,6 +42,7 @@ describe('McpConnectionsComponent', () => {
     call: vi.fn(),
   };
   const snackBar = { open: vi.fn() };
+  const haptics = { selection: vi.fn() };
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -59,11 +61,12 @@ describe('McpConnectionsComponent', () => {
         { provide: Clipboard, useValue: clipboard },
         { provide: LoggerService, useValue: { error: vi.fn() } },
         { provide: MatSnackBar, useValue: snackBar },
+        { provide: AppHapticsService, useValue: haptics },
       ],
     }).compileComponents();
   });
 
-  it('lists the client and its granted scopes', async () => {
+  it('lists every shared permission and distinguishes data access from optional changes', async () => {
     const fixture = TestBed.createComponent(McpConnectionsComponent);
     fixture.detectChanges();
     await fixture.whenStable();
@@ -71,25 +74,112 @@ describe('McpConnectionsComponent', () => {
 
     const content = fixture.nativeElement.textContent as string;
     expect(content).toContain('Training Copilot');
+    expect(content).toContain('Data access');
+    expect(content).toContain('Changes');
+    expect(content).toContain('Training plans and planned workouts');
+    expect(content).toContain('Change Training plans and workouts');
+    expect(content).toContain('Change planned-workout sync');
+    expect(content).toContain('Change Timeline notes');
+    expect(content).toContain('Change events');
     expect(content).toContain('Activity and Training metrics');
+    expect(MCP_SCOPE_CONTENT['metrics:read'].description)
+      .toContain('identity-safe TSS-based Training impact');
     expect(content).toContain('Body measurements');
+    expect(content).toContain('Health metrics');
     expect(content).toContain('Sleep summaries');
     expect(content).toContain('Individual activity details');
     expect(content).toContain('Activity locations');
     expect(content).toContain('Saved-route summaries');
     expect(content).toContain('Saved-route locations and geometry');
-    expect(content).toContain('These apps can only view the data you approved');
+    expect(content).toContain('These apps can access only the data and changes you approve');
     expect(content).toContain('Disconnect an app here to stop sharing');
-    expect(content).toContain('Reconnecting the same app keeps the current connection active');
+    expect(content).toContain('Authorizing the same app again keeps its current connection active');
+    expect(content).toContain('start authorization again in Training Copilot');
+    expect(content).toContain('refresh or rescan its Quantified Self connection');
 
-    const permissionInputs = Array.from(
-      fixture.nativeElement.querySelectorAll<HTMLInputElement>(
-        '.mcp-connections__permissions input[type="checkbox"]',
-      ),
+    const rows = fixture.componentInstance.connectionDetails()[0].permissions;
+    expect(rows).toHaveLength(Object.keys(MCP_SCOPE_CONTENT).length);
+    expect(rows.filter(permission => permission.granted).map(permission => permission.scope).sort())
+      .toEqual([...connection.scopes].sort());
+    expect(rows.find(permission => permission.scope === 'training-plans:read')).toMatchObject({
+      title: 'Training plans and planned workouts', granted: true,
+    });
+    expect(rows.find(permission => permission.scope === 'training-plans:write')).toMatchObject({
+      title: 'Change Training plans and workouts', granted: false,
+      parentTitle: 'Training plans and planned workouts',
+      summary: 'Requires Training plans and planned workouts.',
+    });
+    expect(MCP_SCOPE_CONTENT['training-plans:read'].description).toContain('undated saved workout recipes');
+    expect(MCP_SCOPE_CONTENT['training-plans:write'].description).toContain('permanently delete an undated saved workout recipe');
+    expect(rows.find(permission => permission.scope === 'training-delivery:write')).toMatchObject({
+      title: 'Change planned-workout sync', granted: true,
+      parentTitle: 'Training plans and planned workouts',
+    });
+    expect(rows.find(permission => permission.scope === 'timeline-notes:write')).toMatchObject({
+      title: 'Change Timeline notes', granted: true, parentTitle: 'Timeline notes',
+    });
+    expect(rows.find(permission => permission.scope === 'events:write')).toMatchObject({
+      title: 'Change events', granted: true, parentTitle: 'Individual activity details',
+    });
+    expect(fixture.nativeElement.querySelectorAll('app-compact-row')).toHaveLength(Object.keys(MCP_SCOPE_CONTENT).length);
+    const states = Array.from(fixture.nativeElement.querySelectorAll<HTMLElement>('.mcp-connections__permission-state'));
+    expect(states.filter(state => state.textContent?.trim() === 'Granted')).toHaveLength(connection.scopes.length);
+    expect(states.filter(state => state.textContent?.trim() === 'Not granted')).toHaveLength(
+      Object.keys(MCP_SCOPE_CONTENT).length - connection.scopes.length,
     );
-    expect(permissionInputs).toHaveLength(connection.scopes.length);
-    expect(permissionInputs.every(input => input.checked)).toBe(true);
-    expect(permissionInputs.every(input => input.disabled)).toBe(true);
+    expect(content).toContain('Requires Training plans and planned workouts.');
+    expect(functions.call).toHaveBeenCalledTimes(1);
+  });
+
+  it('recomputes each connection independently when grants change', async () => {
+    const fixture = TestBed.createComponent(McpConnectionsComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.componentInstance.connections.set([
+      { ...connection, scopes: ['metrics:read'] },
+      { ...connection, connectionId: 'connection-2', scopes: ['sleep:read'] },
+    ]);
+    fixture.detectChanges();
+    const rows = fixture.componentInstance.connectionDetails();
+    expect(rows[0].permissions.filter(permission => permission.granted).map(permission => permission.scope))
+      .toEqual(['metrics:read']);
+    expect(rows[1].permissions.filter(permission => permission.granted).map(permission => permission.scope))
+      .toEqual(['sleep:read']);
+    expect(functions.call).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows concise permission rows and opens the matching details with selection feedback', async () => {
+    const fixture = TestBed.createComponent(McpConnectionsComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const card = fixture.nativeElement.querySelector('[aria-labelledby="mcp-authorization-title"]');
+    const buttons = Array.from(card.querySelectorAll<HTMLButtonElement>('button'));
+    expect(buttons).toHaveLength(Object.keys(MCP_SCOPE_CONTENT).length);
+    expect(card.textContent).not.toContain('Text may include sensitive health');
+    expect(card.textContent).toContain('Start authorization again in an app to grant additional permissions');
+    expect(haptics.selection).not.toHaveBeenCalled();
+    for (const permission of fixture.componentInstance.permissionInfo) {
+      buttons.find(button => button.getAttribute('aria-label') === `About ${permission.title}`)!.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      const dialog = document.querySelector('mat-dialog-container')!;
+      expect(dialog.textContent).toContain(permission.description);
+      if (permission.scope === 'activity-details:read') {
+        expect(dialog.textContent).toContain('event tags');
+        expect(dialog.textContent).toContain('exact case-insensitive tags');
+        expect(dialog.textContent).toContain('personal, health, or location context');
+        expect(dialog.textContent).toContain('untrusted labels');
+      }
+      if (permission.parentTitle) expect(dialog.textContent).toContain(`Requires ${permission.parentTitle} permission`);
+      expect(dialog.textContent).toContain('Start authorization again in the app and approve this permission');
+      (dialog.querySelector('button') as HTMLButtonElement).click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+    }
+    expect(haptics.selection).toHaveBeenCalledTimes(buttons.length * 2);
+    expect(TestBed.inject(MatDialog).openDialogs).toHaveLength(0);
+    expect(functions.call).toHaveBeenCalledTimes(1);
   });
 
   it('uses a standard glass-card stack matching the connection workspace', async () => {
@@ -132,21 +222,16 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('ChatGPT setup');
     expect(content).toContain('https://quantified-self.io/mcp');
     expect(content).toContain('Copy endpoint');
-    expect(content).toContain('Exact starts, ends, jump positions, and breadcrumb traces');
-    expect(content).toContain('location permissions are independent');
     expect(content).toContain('ChatGPT app icon');
     expect(content).toContain('recommended size');
     expect(content).toContain('under its 10 KB limit');
     expect(content).toContain('Download recommended icon · 256 px · 9.4 KB');
-    expect(content).toContain('review or disconnect a client at any time');
-    expect(content).toContain('Existing clients must reconnect');
     expect(content).toContain('Authorizing on Android');
     expect(content).toContain('Desktop setup is the most reliable option');
     expect(content).toContain('Open supported links');
     expect(content).toContain('no active connection is created');
     expect(content).toContain('Authorization and data access');
-    expect(content).toContain('any combination of these access categories');
-    expect(content).toContain('metrics, body measurements');
+    expect(content).toContain('data access and optional change permissions');
 
     const iconDownloads = fixture.nativeElement.querySelectorAll<HTMLAnchorElement>(
       '.mcp-connections__icon-actions a',
@@ -204,6 +289,32 @@ describe('McpConnectionsComponent', () => {
       'Training Copilot was disconnected.',
       undefined,
       { duration: 4000 },
+    );
+  });
+
+  it('ends loading and allows retry when MCP connections cannot be loaded', async () => {
+    functions.call.mockRejectedValueOnce(new Error('App Check is taking too long'));
+    const fixture = TestBed.createComponent(McpConnectionsComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.componentInstance.loading()).toBe(false);
+    expect(fixture.componentInstance.error()).toBe('Could not load MCP connections.');
+  });
+
+  it('re-enables disconnect after a failed request', async () => {
+    const fixture = TestBed.createComponent(McpConnectionsComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    functions.call.mockRejectedValueOnce(new Error('App Check is taking too long'));
+
+    await fixture.componentInstance.revoke(connection);
+
+    expect(fixture.componentInstance.revokingConnectionId()).toBeNull();
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Could not disconnect this MCP client. Please try again.',
+      undefined,
+      { duration: 5000 },
     );
   });
 });

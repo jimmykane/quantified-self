@@ -1,5 +1,7 @@
+import { getRejectedSwimTiming, RejectedSwimTiming } from '@shared/swim-timing';
 import {
   ActivityInterface,
+  DataActiveLap,
   DataDuration,
   DataEnergy,
   DataHeartRate,
@@ -8,9 +10,11 @@ import {
   DataSpeed,
   DataStrokeRate,
   DataSwimDistance,
-} from '@sports-alliance/sports-lib';
+  LapInterface,
+} from '@sports-alliance/sports-lib/metrics';
 
 export interface AppSwimLength {
+  timingValidity?: RejectedSwimTiming;
   index: number;
   lapIndex: number | null;
   startDate: Date;
@@ -21,6 +25,8 @@ export interface AppSwimLength {
   elapsedTime: DataDuration | null;
   timerTime: DataDuration | null;
   distance: DataSwimDistance | null;
+  /** Frontend-only: a rejected recorded distance must not become a missing-distance fallback. */
+  distanceIsInvalid?: true;
   poolLength: DataPoolLength | null;
   avgSpeed: DataSpeed | null;
   /** Average stroke rate. The property name is retained by Sports Lib for JSON compatibility. */
@@ -107,7 +113,14 @@ export function normalizeSwimLength(value: unknown): AppSwimLength | null {
     return null;
   }
 
+  const rawDistance = getRecordValue(record, 'distance');
+  const distance = normalizeDataNumber(rawDistance, DataSwimDistance);
+  // Retain rejection through repeated normalization of the interval display adapter.
+  const distanceIsInvalid = distance === null
+    && (record.distanceIsInvalid === true || (rawDistance !== null && rawDistance !== undefined));
+
   return {
+    ...(getRejectedSwimTiming(record) ? { timingValidity: getRejectedSwimTiming(record) } : {}),
     index,
     lapIndex: normalizeNumber(getRecordValue(record, 'lapIndex')),
     startDate,
@@ -117,7 +130,8 @@ export function normalizeSwimLength(value: unknown): AppSwimLength | null {
     strokes: normalizeNumber(getRecordValue(record, 'strokes')),
     elapsedTime: normalizeDataNumber(getRecordValue(record, 'elapsedTime'), DataDuration),
     timerTime: normalizeDataNumber(getRecordValue(record, 'timerTime'), DataDuration),
-    distance: normalizeDataNumber(getRecordValue(record, 'distance'), DataSwimDistance),
+    distance,
+    ...(distanceIsInvalid ? { distanceIsInvalid: true } : {}),
     poolLength: normalizeDataNumber(getRecordValue(record, 'poolLength'), DataPoolLength),
     avgSpeed: normalizeDataNumber(getRecordValue(record, 'avgSpeed'), DataSpeed),
     avgCadence: normalizeDataNumber(getRecordValue(record, 'avgCadence'), DataStrokeRate),
@@ -142,9 +156,80 @@ export function getActivitySwimLengths(activity: ActivityInterface | null | unde
     return [];
   }
 
+  const laps = activity.getLaps?.() || [];
   return rawSwimLengths
     .map(normalizeSwimLength)
-    .filter((swimLength): swimLength is AppSwimLength => swimLength !== null);
+    .filter((swimLength): swimLength is AppSwimLength => swimLength !== null)
+    .map(length => ({ ...length, lapIndex: getDisplaySwimLengthLapIndex(length, laps) }));
+}
+
+function getDisplaySwimLengthLapIndex(length: AppSwimLength, laps: LapInterface[]): number | null {
+  const recordedIndex = length.lapIndex;
+  if (!Number.isInteger(recordedIndex) || recordedIndex < 1 || recordedIndex > laps.length) {
+    return recordedIndex;
+  }
+  const active = isRestSwimLength(length) ? false : length.type.trim().toLowerCase() === 'active' ? true : null;
+  const recordedActive = getRecordedLapActive(laps[recordedIndex - 1]);
+  if (active === null || recordedActive === null || recordedActive === active) {
+    return recordedIndex;
+  }
+
+  // Older FIT imports used overlapping, rounded lap windows. Correct only an explicit
+  // active/rest contradiction with a unique exact start and matching recorded lap state.
+  const matches = laps.map((lap, index) => ({ lap, index })).filter(({ lap }) =>
+    lap.startDate?.getTime() === length.startDate.getTime()
+      && getRecordedLapActive(lap) === active);
+  return matches.length === 1 ? matches[0].index + 1 : recordedIndex;
+}
+
+export function getRecordedLapActive(lap: LapInterface): boolean | null {
+  const stat = lap.getStat?.(DataActiveLap.type);
+  const value = stat ? stat.getValue() : null;
+  return typeof value === 'boolean' ? value : null;
+}
+
+export function isRestSwimLength(swimLength: AppSwimLength | null | undefined): boolean {
+  const type = `${swimLength?.type || ''}`.trim().toLowerCase();
+  return type === 'idle' || type === 'rest';
+}
+
+/** A categorical label from recorded non-rest lengths; never infer stroke from numeric metrics. */
+export function getSwimStrokeLabel(swimLengths: readonly AppSwimLength[]): string {
+  const strokes = new Set(swimLengths
+    .filter(length => !isRestSwimLength(length))
+    .map(length => length.stroke?.trim().toLowerCase())
+    .filter((stroke): stroke is string => !!stroke));
+  if (strokes.size === 0) {
+    return '';
+  }
+  if (strokes.size > 1) {
+    return 'Mixed';
+  }
+  return [...strokes][0].replace(/[_-]+/g, ' ').replace(/\s+/g, ' ')
+    .replace(/\b\w/g, match => match.toUpperCase());
+}
+
+/** lapIndex is one-based in the complete activity lap list, before filtering by lap type. */
+export function getSwimLapStrokeLabels(activity: ActivityInterface): Map<LapInterface, string> {
+  return new Map([...getSwimLapLengths(activity)].map(([lap, lengths]) => [
+    lap, getRecordedLapActive(lap) === false ? '' : getSwimStrokeLabel(lengths),
+  ]));
+}
+
+/** Recorded length membership, using the complete lap list rather than displayed row numbers. */
+export function getSwimLapLengths(activity: ActivityInterface): Map<LapInterface, AppSwimLength[]> {
+  const lengthsByLapIndex = new Map<number, AppSwimLength[]>();
+  for (const length of getActivitySwimLengths(activity)) {
+    if (!Number.isInteger(length.lapIndex) || length.lapIndex < 1) {
+      continue;
+    }
+    const lengths = lengthsByLapIndex.get(length.lapIndex) || [];
+    lengths.push(length);
+    lengthsByLapIndex.set(length.lapIndex, lengths);
+  }
+  return new Map((activity.getLaps?.() || []).map((lap, index) => [
+    lap, lengthsByLapIndex.get(index + 1) || [],
+  ]));
 }
 
 export function hasVisibleSwimLengths(activities: ActivityInterface[] | null | undefined): boolean {

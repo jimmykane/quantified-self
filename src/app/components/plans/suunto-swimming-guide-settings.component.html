@@ -1,0 +1,73 @@
+<button mat-button type="button" [attr.aria-expanded]="expanded()" [attr.aria-controls]="fieldsRegionId"
+  (click)="toggle()">{{ expanded() ? 'Hide' : 'Show' }} swimming Guide screens</button>
+<section [id]="fieldsRegionId" [hidden]="!expanded()" aria-label="Suunto swimming Guide screens">
+  <p>Choose extra fields for future pool/open-water Guides. Order matters; Suunto adapts the watch layout.</p>
+  <p>Countdown, targets and instructions take priority. Target readings stay together; extra fields fill remaining space, up to five fields.</p>
+  <p>Counters use the heading (<strong>Rest 1/10</strong>), not a metric slot. Previous/next distances share one short text field that Suunto may crop. Choices are priorities, not guaranteed watch cells.</p>
+  @if (availability(); as allocation) {
+    <button mat-button type="button" [attr.aria-expanded]="availabilityExpanded()" [attr.aria-controls]="availabilityRegionId"
+      (click)="toggleAvailability()">{{ availabilityExpanded() ? 'Hide' : 'Show' }} field availability for this workout</button>
+    <div [id]="availabilityRegionId" [hidden]="!availabilityExpanded()">
+      <p>This shows the new normal layout, not the Guide on your watch. Included means requested from Suunto, not guaranteed visible or measured. Targets/notes reduce slots; large Guides may omit interval headings, planned distances and Last Work lap readings to fit the file-size limit.</p>
+      @if (allocation.blocked) {
+        <p>This recipe cannot currently be sent as a Suunto Guide. Review its compatibility before relying on a field allocation.</p>
+      } @else if (allocation.compact) {
+        <p>This workout exceeds the expanded-screen limit. It uses compact screens without individual interval headings, adjacent planned-distance context or Last Work lap readings.</p>
+      } @else {
+        @for (row of visibleAvailabilityRows(); track row.index) {
+          <div class="availability-step">
+            <h4>{{ row.title }} <span class="limitations">· Step {{ row.index + 1 }} · {{ row.requiredCount }} fields</span></h4>
+            <ul>
+              @for (choice of row.choices; track choice.field) {
+                <li><span><strong>{{ choice.status }}</strong> — {{ choice.label }}. {{ choice.reason }}</span></li>
+              }
+            </ul>
+          </div>
+        }
+        @if (availabilityLimit() < allocation.rows.length) {
+          <button mat-button type="button" (click)="showMoreAvailability()">Show more steps</button>
+        }
+      }
+    </div>
+  } @else {
+    <p class="limitations">Open a swimming workout's Suunto sync details to inspect which choices fit each Work and Rest step.</p>
+  }
+  @for (section of sections(); track section.key) {
+    <h4>{{ section.label }} screen</h4>
+    @if (section.key === 'restFields') {
+      <p>Last/next mean the Work blocks before/after this Rest, not measured distance. Equal repeats show the same value for both. Lap-only Work has no prescribed distance, regardless of titles/notes.</p>
+    }
+    <ol>
+      @for (row of section.fields; track row.index) {
+        <li>
+          <mat-form-field>
+            <mat-label>{{ section.label }} extra field {{ row.index + 1 }}</mat-label>
+            <mat-select [value]="row.field" [disabled]="saving()" (selectionChange)="choose(section.key, row.index, $event.value)">
+              @for (choice of row.choices; track choice.value) { <mat-option [value]="choice.value" [disabled]="choice.disabled">{{ choice.label }}</mat-option> }
+            </mat-select>
+          </mat-form-field>
+          <div class="field-actions">
+            <button mat-icon-button type="button" [disabled]="saving() || row.index === 0" (click)="move(section.key, row.index, -1)"
+              [attr.aria-label]="'Move ' + section.label + ' ' + row.label + ' earlier'"><mat-icon>arrow_upward</mat-icon></button>
+            <button mat-icon-button type="button" [disabled]="saving() || row.index === section.fields.length - 1" (click)="move(section.key, row.index, 1)"
+              [attr.aria-label]="'Move ' + section.label + ' ' + row.label + ' later'"><mat-icon>arrow_downward</mat-icon></button>
+            <button mat-icon-button type="button" [disabled]="saving()" (click)="remove(section.key, row.index)"
+              [attr.aria-label]="'Remove ' + section.label + ' ' + row.label"><mat-icon>close</mat-icon></button>
+          </div>
+        </li>
+      }
+    </ol>
+    <button mat-button type="button" [disabled]="saving() || section.fields.length >= 5" (click)="add(section.key)"><mat-icon>add</mat-icon>Add {{ section.label }} field</button>
+  }
+  <p class="limitations">Distances are planned, not measured. Work 1/10 is the first of ten Work blocks; Rest 1/10 follows it. These count Work blocks, not pool lengths or recorded laps. Suunto controls the heading's font size.</p>
+  <p class="limitations">Last Work lap pace, time and stroke count show the previous closed manual lap on Rest immediately after Work. Selecting these readings creates missing lap boundaries at automatic step endings, even without Work averages. Lap-button endings are not duplicated. An extra Lap press during Work splits it: these fields then show only its final segment, not the whole interval. Another Lap recorded without ending Rest changes which lap is shown; these are relative lap readings, not a saved Work summary. Rest countdown stays first. Pace and stroke readings depend on the watch and recorded swim data.</p>
+  <p class="limitations">Your watch controls live pace units and sound/vibration. QS cannot force pace per 100m or a five-second beep sequence. QS Units &amp; formatting changes planned-distance text, not the watch's live pace format. Pool distance and automatic transitions wait for detected lengths; QS does not estimate them.</p>
+  <p class="limitations">Generated start popups are skipped for timed swimming rests of 20 seconds or less, so they do not cover the next Work alert. Your own Rest instructions still show. This does not guarantee a sound or vibration.</p>
+  <p class="limitations">To repeat a completed workout, choose Duplicate to… in its sync details or workout actions, or place a new copy from your workout library. Editing its date does not unlock the protected completed Guide. Removing a Guide in Suunto can hide it while its cloud record remains. For an eligible uncompleted workout, Send a fresh Guide offers a reviewed new identity without changing your QS workout. The earlier Guide is left untouched and may still be visible; old recordings stay intact. QS never recreates a hidden Guide automatically.</p>
+  @if (error()) { <p role="alert">{{ error() }}</p> }
+  @if (notice()) { <p role="status">{{ notice() }}</p> }
+  <div class="save-actions">
+    <button mat-button type="button" [disabled]="saving()" (click)="reset()">Restore defaults</button>
+    <button mat-flat-button type="button" [disabled]="!canSave()" (click)="save()">{{ saving() ? 'Saving screens…' : 'Save Guide screens' }}</button>
+  </div>
+</section>

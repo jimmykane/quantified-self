@@ -2,6 +2,7 @@ import * as admin from 'firebase-admin';
 import { FUNCTIONS_MANIFEST, SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME } from '../../shared/functions-manifest';
 
 interface SuuntoAppConfig {
+    readonly application_name: string;
     client_id: string;
     client_secret: string;
     subscription_key: string;
@@ -30,9 +31,11 @@ interface CloudTasksConfig {
     workoutQueue: string;
     routeSyncQueue: string;
     routeDeliverySyncQueue: string;
+    trainingDeliveryQueue: string;
     activitySyncQueue: string;
     sleepSyncQueue: string;
     garminHealthBackfillQueue: string;
+    connectionHistoryQueue: string;
     sportsLibReparseQueue: string;
     sportsLibReparseHeavyQueue: string;
     sportsLibRouteReparseQueue: string;
@@ -66,6 +69,9 @@ export const config: AppConfig = {
 
     get suuntoapp() {
         return {
+            get application_name() {
+                return getEnvVar('SUUNTOAPP_GUIDE_OWNER');
+            },
             get client_id() {
                 return getEnvVar('SUUNTOAPP_CLIENT_ID');
             },
@@ -123,8 +129,10 @@ export const config: AppConfig = {
             workoutQueue: 'processWorkoutTask',
             routeSyncQueue: 'processRouteSyncTask',
             routeDeliverySyncQueue: 'processRouteDeliverySyncTask',
+            trainingDeliveryQueue: 'processTrainingDeliveryTask',
             activitySyncQueue: 'processActivitySyncTask',
             sleepSyncQueue: 'processSleepSyncTask',
+            connectionHistoryQueue: FUNCTIONS_MANIFEST.processConnectionHistoryTask.name,
             garminHealthBackfillQueue: FUNCTIONS_MANIFEST.processGarminHealthBackfillTask.name,
             sportsLibReparseQueue: 'processSportsLibReparseTask',
             sportsLibReparseHeavyQueue: SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME,

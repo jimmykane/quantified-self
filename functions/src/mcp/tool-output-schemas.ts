@@ -1,9 +1,16 @@
+import { activityStreamSeriesSchema } from './activity-stream.schema';
+import { MCP_WORKOUT_REFLECTION_TOOLS, MCP_WORKOUT_REFLECTION_OUTPUTS } from './workout-reflections.schemas';
+import { calculateReadinessScore as calculateCurrentReadinessScore, resolveReadinessConfidence } from '../../../shared/readiness';
+import { isReadinessHrvRangeValidAt, normalizeReadinessHrvPersonalRange } from '../../../shared/readiness-hrv-validation';
+import { currentHrvRangeSchema, currentReadinessHistorySchema } from './readiness-output-schemas';
+import { MCP_ACTIVITY_SAMPLES_SCHEMA, MCP_ACTIVITY_SAMPLES_V2_SCHEMA } from './activity-samples.schema';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
 import { z } from 'zod';
+import { MCP_MANUAL_MEASUREMENT_TOOLS, MCP_MANUAL_MEASUREMENT_OUTPUTS } from './manual-measurements.schemas';
 import {
   DERIVED_METRIC_KINDS,
   DerivedMetricKind,
@@ -15,7 +22,7 @@ import {
 import {
   READINESS_FORMULA_VERSION,
   READINESS_TOTAL_SIGNAL_COUNT,
-} from '../../../shared/readiness';
+} from '../../../shared/readiness-legacy';
 import { PUBLIC_TRAINING_DISCIPLINES } from '../../../shared/training-disciplines';
 import {
   MCP_ACTIVITY_CHART_DEFAULT_LOCATION_POINTS,
@@ -23,6 +30,7 @@ import {
   MCP_ACTIVITY_CHART_MAX_LOCATION_POINTS,
   MCP_ACTIVITY_CHART_MAX_POINTS,
   MCP_ACTIVITY_CHART_METRICS,
+  MCP_ACTIVITY_STREAM_METRICS,
 } from './activity-chart.service';
 import {
   MCP_DERIVED_PAYLOAD_SCHEMAS,
@@ -30,12 +38,38 @@ import {
   validateMcpDerivedPayload,
 } from './derived-output-schemas';
 import { MCP_MEASUREMENT_TYPE_IDS } from './measurement-catalog';
+import { MCP_HEALTH_CATALOG_SCHEMA, MCP_HEALTH_QUERY_SCHEMA } from './health.service';
+import { MCP_HRV_RANGE_SCHEMA } from './hrv-personal-range.service';
+import { MCP_ACTIVITY_DESCRIPTION_MAX_LENGTH } from './activity-description.service';
+import { MCP_TIMELINE_NOTES_SCHEMA } from './timeline-notes.service';
+import { TRAINING_READ_TOOLS, TRAINING_READ_OUTPUTS, TRAINING_WRITE_OUTPUTS, TRAINING_WRITE_TOOLS,
+  TRAINING_CHANGE_STATUS_OUTPUT } from './training-plans.schemas';
 import { MCP_SLEEP_VITAL_TYPES } from './sleep-vitals';
+import { EVENT_TAG_LIMIT, EVENT_TAG_MAX_LENGTH } from '../../../shared/event-tags';
 import {
   MCP_TRAINING_METRIC_CATEGORIES,
 } from './training-metric-catalog';
+import {
+  MCP_TRAINING_IMPACT_MAX_ACTIVITIES,
+  MCP_TRAINING_IMPACT_SCHEMA_VERSION,
+} from './training-impact.service';
+import {
+  MCP_CONTENT_WRITE_OUTPUTS,
+  MCP_CONTENT_WRITE_TOOLS,
+} from './content-write.schemas';
 
 export const PUBLIC_MCP_TOOL_NAMES = [
+  ...MCP_WORKOUT_REFLECTION_TOOLS,
+  ...MCP_MANUAL_MEASUREMENT_TOOLS,
+  ...TRAINING_READ_TOOLS,
+  ...TRAINING_WRITE_TOOLS,
+  'get_training_change_status',
+  ...MCP_CONTENT_WRITE_TOOLS,
+  'get_activity_description',
+  'query_timeline_notes',
+  'list_health_metrics',
+  'query_health_metric',
+  'get_hrv_personal_range',
   'list_measurement_types',
   'query_measurements',
   'list_metrics',
@@ -43,22 +77,31 @@ export const PUBLIC_MCP_TOOL_NAMES = [
   'query_metrics',
   'list_training_metrics',
   'get_training_metric',
+  'get_training_impact',
+  'prepare_training_metrics',
   'list_sleep_vitals',
   'list_sleep_sessions',
   'query_sleep_summary',
   'get_sleep_trend',
   'get_today_readiness',
+  'get_current_readiness',
+  'get_readiness_history',
   'get_daily_report',
   'get_daily_briefing',
   'list_activity_types',
   'list_activities',
   'query_activities',
+  'query_activities_with_tags',
   'find_activities_near_location',
   'search_activities_near_location',
   'list_activity_laps',
   'list_activity_jumps',
   'list_activity_swim_lengths',
   'list_activity_chart_metrics',
+  'list_activity_chart_metrics_v2',
+  'get_activity_chart_data_v2',
+  'get_activity_samples_v2',
+  'get_activity_samples',
   'get_activity_chart_data',
   'get_activity_metrics',
   'get_activity_overview',
@@ -321,6 +364,179 @@ const trainingMetricOutput = z.strictObject({
   additionalProperties: false,
   definitions: derivedPayloadDefinitions,
   allOf: derivedPayloadConditionals,
+});
+
+const trainingImpactContribution = z.strictObject({
+  trainingStressScore: nonNegativeNumber,
+  fitnessLoadCtlContribution: nonNegativeNumber,
+  fatigueLoadAtlContribution: nonNegativeNumber,
+  freshnessFormContribution: number,
+});
+const trainingImpactOutcome = z.strictObject({
+  trainingDay: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  trainingStressScore: nonNegativeNumber,
+  previousFitnessLoadCtl: nonNegativeNumber,
+  fitnessLoadCtl: nonNegativeNumber,
+  fitnessLoadCtlChange: number,
+  previousFatigueLoadAtl: nonNegativeNumber,
+  fatigueLoadAtl: nonNegativeNumber,
+  fatigueLoadAtlChange: number,
+  previousFreshnessForm: number,
+  freshnessForm: number,
+  freshnessFormChange: number,
+  fitnessLoadOutcome: z.enum(['raised', 'held', 'declined']),
+});
+const trainingImpactOutput = z.strictObject({
+  schemaVersion: z.literal(MCP_TRAINING_IMPACT_SCHEMA_VERSION),
+  mode: z.enum(['session', 'day']),
+  localDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+  timeZone: z.string().min(1).max(80).nullable(),
+  status: z.enum(['ready', 'partial', 'updating', 'unavailable', 'excluded']),
+  reason: z.enum([
+    'partial_coverage',
+    'form_updating',
+    'form_failed',
+    'missing_tss',
+    'benchmark_or_merge',
+    'not_completed',
+    'no_usable_sessions',
+    'training_day_not_available',
+  ]).nullable(),
+  model: z.strictObject({
+    basis: z.literal('TSS'),
+    ctlTimeConstantDays: z.literal(42),
+    atlTimeConstantDays: z.literal(7),
+    measuresPhysiologicalAdaptation: z.literal(false),
+  }),
+  coverage: z.strictObject({
+    requestedSessionCount: count.min(1).max(MCP_TRAINING_IMPACT_MAX_ACTIVITIES),
+    eligibleSessionCount: count.max(MCP_TRAINING_IMPACT_MAX_ACTIVITIES),
+    modeledSessionCount: count.max(MCP_TRAINING_IMPACT_MAX_ACTIVITIES),
+    missingTssSessionCount: count.max(MCP_TRAINING_IMPACT_MAX_ACTIVITIES),
+    excludedSessionCount: count.max(MCP_TRAINING_IMPACT_MAX_ACTIVITIES),
+    benchmarkOrMergeSessionCount: count.max(MCP_TRAINING_IMPACT_MAX_ACTIVITIES),
+    notCompletedSessionCount: count.max(MCP_TRAINING_IMPACT_MAX_ACTIVITIES),
+    unavailableSessionCount: count.max(MCP_TRAINING_IMPACT_MAX_ACTIVITIES),
+  }),
+  contribution: trainingImpactContribution.nullable(),
+  sessionRole: z.enum([
+    'pushed-above-maintenance',
+    'added-to-building-day',
+    'offset-fitness-decay',
+    'no-load',
+  ]).nullable(),
+  outcomes: z.array(trainingImpactOutcome).max(2),
+}).superRefine((value, context) => {
+  const { coverage } = value;
+  const reasonMatchesStatus = value.status === 'ready'
+    ? value.reason === null
+    : value.status === 'partial'
+      ? value.reason === 'partial_coverage'
+      : value.status === 'updating'
+        ? value.reason === 'form_updating'
+        : value.status === 'excluded'
+          ? value.reason === 'benchmark_or_merge'
+            || value.reason === 'not_completed'
+            || value.reason === 'no_usable_sessions'
+          : value.reason === 'form_failed'
+            || value.reason === 'missing_tss'
+            || value.reason === 'no_usable_sessions'
+            || value.reason === 'training_day_not_available';
+  if (!reasonMatchesStatus) {
+    context.addIssue({
+      code: 'custom',
+      path: ['reason'],
+      message: 'Training impact status and reason must match.',
+    });
+  }
+  if (
+    coverage.eligibleSessionCount
+      + coverage.missingTssSessionCount
+      + coverage.excludedSessionCount
+      !== coverage.requestedSessionCount
+    || coverage.modeledSessionCount + coverage.unavailableSessionCount
+      !== coverage.eligibleSessionCount
+    // Owner load exclusions contribute to the total without belonging to either legacy subset.
+    || coverage.benchmarkOrMergeSessionCount + coverage.notCompletedSessionCount
+      > coverage.excludedSessionCount
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['coverage'],
+      message: 'Training impact coverage counts must reconcile.',
+    });
+  }
+  if (value.mode === 'session') {
+    if (
+      value.localDate !== null
+      || value.timeZone !== null
+      || coverage.requestedSessionCount !== 1
+      || (value.status === 'partial')
+      || ((value.status === 'ready') && value.outcomes.length !== 1)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['mode'],
+        message: 'Session Training impact must describe exactly one private selection.',
+      });
+    }
+  } else if (
+    value.localDate === null
+    || value.timeZone === null
+    || value.sessionRole !== null
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['mode'],
+      message: 'Day Training impact must retain its local date and timezone.',
+    });
+  }
+  const calculated = value.status === 'ready' || value.status === 'partial';
+  if (calculated) {
+    if (
+      value.contribution === null
+      || value.outcomes.length < 1
+      || coverage.modeledSessionCount < 1
+      || (value.mode === 'session' && value.sessionRole === null)
+      || (value.status === 'ready' && (
+        value.reason !== null
+        || coverage.modeledSessionCount !== coverage.requestedSessionCount
+        || coverage.unavailableSessionCount !== 0
+      ))
+      || (value.status === 'partial' && (
+        value.reason !== 'partial_coverage'
+        || coverage.modeledSessionCount >= coverage.requestedSessionCount
+      ))
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['status'],
+        message: 'Calculated Training impact fields must match readiness and coverage.',
+      });
+    }
+  } else if (
+    value.reason === null
+    || value.contribution !== null
+    || value.sessionRole !== null
+    || value.outcomes.length !== 0
+    || coverage.modeledSessionCount !== 0
+    || coverage.unavailableSessionCount !== coverage.eligibleSessionCount
+    || (value.status === 'excluded'
+      && coverage.excludedSessionCount !== coverage.requestedSessionCount)
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['status'],
+      message: 'Unavailable Training impact must not expose calculated fields.',
+    });
+  }
+  if (new Set(value.outcomes.map(outcome => outcome.trainingDay)).size !== value.outcomes.length) {
+    context.addIssue({
+      code: 'custom',
+      path: ['outcomes'],
+      message: 'Training impact outcomes must use unique UTC Training days.',
+    });
+  }
 });
 
 const sleepProvider = z.enum([
@@ -855,6 +1071,31 @@ function createTodayReadinessOutputSchema() {
   });
 }
 
+function createCurrentReadinessOutputSchema() {
+  return z.strictObject({ ...createTodayReadinessOutputSchema().shape,
+    formulaVersion: z.literal(4),
+    drivers: z.strictObject({ load: todayReadinessLoadDriver, sleep: todayReadinessSleepDriver,
+      overnightHeartRate: todayReadinessOvernightHeartRateDriver,
+      hrv: z.strictObject({ weightPercent: z.literal(20), baselineWindowDays: z.literal(60), currentWindowDays: z.literal(7),
+        personalRange: currentHrvRangeSchema.nullable() }),
+    }),
+  }).superRefine((value, context) => {
+    const range = normalizeReadinessHrvPersonalRange(value.drivers.hrv.personalRange);
+    const score = calculateCurrentReadinessScore({ form: value.drivers.load.form, rampRate: value.drivers.load.rampRate,
+      sleepScore: value.drivers.sleep.score, hrvPersonalRange: range,
+      overnightHeartRateRatio: value.drivers.overnightHeartRate.combinedRatio });
+    const expectedLabel = score ? score.score >= 75 ? 'Ready' : score.score >= 55 ? 'Mixed' : 'Recover' : null;
+    if (value.score !== (score?.score ?? null) || value.label !== expectedLabel
+      || value.status !== (score ? 'available' : 'no_signal')
+      || value.availableSignalCount !== (score?.availableSignalCount ?? 0)
+      || value.availableWeightPercent !== (score?.availableWeight ?? 0)
+      || value.confidence !== (score ? resolveReadinessConfidence(score.availableWeight, value.baselineEvidenceCount) : null)
+      || (range !== null && !isReadinessHrvRangeValidAt(range, value.asOfTimeMs))) {
+      context.addIssue({ code: 'custom', message: 'Readiness must match its current range and other drivers.' });
+    }
+  });
+}
+
 const dailyReportSleep = z.strictObject({
   status: z.enum(['available', 'no_completed_session']),
   latestSession: dailyReportSleepSession.nullable(),
@@ -949,6 +1190,11 @@ const activitySummaryWithLocation = z.strictObject({
   endPosition: MCP_COORDINATE_OUTPUT_SCHEMA.nullable(),
   locationRedacted: z.literal(false),
 }).meta({ title: 'McpActivitySummaryWithLocation' });
+const taggedActivitySummary = z.strictObject({
+  ...activitySummaryBaseShape,
+  tags: z.array(z.string().min(1).max(EVENT_TAG_MAX_LENGTH)).max(EVENT_TAG_LIMIT),
+  locationRedacted: z.literal(true),
+}).meta({ title: 'McpTaggedActivitySummaryRedacted' });
 
 const nearbyLocationResult = z.strictObject({
   source: z.enum(['coordinates', 'mapbox']),
@@ -1027,6 +1273,14 @@ const chartCatalogMetricSchemas = MCP_ACTIVITY_CHART_METRICS.map(metric => (
   }).meta({ title: `McpChartCatalog_${metric.id}` })
 )) as unknown as [z.ZodType, z.ZodType, ...z.ZodType[]];
 const chartCatalogMetric = z.union(chartCatalogMetricSchemas);
+const chartCatalogMetricSchemasV2 = MCP_ACTIVITY_STREAM_METRICS.map(metric => (
+  z.strictObject({
+    metric: z.literal(metric.id),
+    label: z.literal(metric.label),
+    canonicalUnit: z.literal(metric.unit),
+  }).meta({ title: `McpChartCatalog_${metric.id}` })
+)) as unknown as [z.ZodType, z.ZodType, ...z.ZodType[]];
+const chartCatalogMetricV2 = z.union(chartCatalogMetricSchemasV2);
 const activityOverviewChartMetric = z.enum(
   MCP_ACTIVITY_CHART_METRICS.map(metric => metric.id) as [
     typeof MCP_ACTIVITY_CHART_METRICS[number]['id'],
@@ -1059,6 +1313,17 @@ const chartSeriesSchemas = MCP_ACTIVITY_CHART_METRICS.map(metric => (
   }).meta({ title: `McpChartSeries_${metric.id}` })
 )) as unknown as [z.ZodType, z.ZodType, ...z.ZodType[]];
 const chartSeries = z.union(chartSeriesSchemas);
+const chartSeriesV2 = activityStreamSeriesSchema({
+  xValues: z.array(number).max(MCP_ACTIVITY_CHART_MAX_POINTS),
+  values: z.array(number).max(MCP_ACTIVITY_CHART_MAX_POINTS),
+  sourceSampleCount: count,
+  returnedSampleCount: count,
+  missingSampleCount: count,
+}).superRefine((value, context) => {
+  if (value.xValues.length !== value.values.length || value.returnedSampleCount !== value.values.length) {
+    context.addIssue({ code: 'custom', message: 'Chart arrays and returnedSampleCount must align.' });
+  }
+});
 const chartLocation = z.strictObject({
   xValues: z.array(number).max(MCP_ACTIVITY_CHART_MAX_LOCATION_POINTS),
   latitudeDegrees: z.array(z.number().min(-90).max(90))
@@ -1284,9 +1549,10 @@ function paginatedItems<T extends z.ZodType>(items: T) {
   });
 }
 
-function chartDataOutput(includeLocation: boolean) {
+function chartDataOutput(includeLocation: boolean, includeEndurance = false) {
   const schema = z.strictObject({
     ...chartDataBaseShape,
+    ...(includeEndurance ? { series: z.array(chartSeriesV2).min(1).max(4) } : {}),
     ...(includeLocation ? {
       location: chartLocation.optional(),
     } : {}),
@@ -1331,6 +1597,20 @@ function chartDataOutput(includeLocation: boolean) {
  */
 export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
   const registry = {
+    list_health_metrics: MCP_HEALTH_CATALOG_SCHEMA,
+    query_health_metric: MCP_HEALTH_QUERY_SCHEMA,
+    get_hrv_personal_range: MCP_HRV_RANGE_SCHEMA,
+    get_activity_description: z.strictObject({
+      activityRef: MCP_ACTIVITY_REFERENCE_OUTPUT_SCHEMA,
+      description: z.string().max(MCP_ACTIVITY_DESCRIPTION_MAX_LENGTH).nullable(),
+    }),
+    query_timeline_notes: MCP_TIMELINE_NOTES_SCHEMA,
+    ...MCP_CONTENT_WRITE_OUTPUTS,
+    ...MCP_WORKOUT_REFLECTION_OUTPUTS,
+    ...MCP_MANUAL_MEASUREMENT_OUTPUTS,
+    ...TRAINING_READ_OUTPUTS,
+    ...TRAINING_WRITE_OUTPUTS,
+    get_training_change_status: TRAINING_CHANGE_STATUS_OUTPUT,
     list_measurement_types: z.strictObject({
       measurementTypes: z.array(measurementDescriptor),
     }),
@@ -1382,6 +1662,13 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
       metrics: trainingMetricCatalog,
     }),
     get_training_metric: trainingMetricOutput,
+    get_training_impact: trainingImpactOutput,
+    prepare_training_metrics: z.strictObject({
+      status: z.enum(['ready', 'preparing', 'unavailable']),
+      metricKinds: z.array(z.enum(DERIVED_METRIC_KINDS)).min(1).max(8),
+      readyMetricKinds: z.array(z.enum(DERIVED_METRIC_KINDS)).max(8),
+      retryAfterSeconds: z.number().int().min(1).max(60).nullable(),
+    }),
     list_sleep_vitals: z.strictObject({
       matchedSessionCount: count,
       vitals: z.array(sleepVitalAvailability),
@@ -1418,9 +1705,11 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
       buckets: z.array(sleepSummaryBucket),
     }),
     get_today_readiness: createTodayReadinessOutputSchema(),
+    get_current_readiness: createCurrentReadinessOutputSchema(),
+    get_readiness_history: currentReadinessHistorySchema,
     get_daily_report: z.strictObject({
       sleep: dailyReportSleep,
-      readiness: createTodayReadinessOutputSchema(),
+      readiness: createCurrentReadinessOutputSchema(),
       trainingSummary: dailyTrainingSummary,
     }),
     get_daily_briefing: z.strictObject({
@@ -1487,6 +1776,13 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
       ...MCP_PAGINATION_OUTPUT_SHAPE,
       scanComplete: z.boolean(),
     }),
+    query_activities_with_tags: z.strictObject({
+      scannedActivityCount: count,
+      skippedActivityCount: count,
+      activities: z.array(taggedActivitySummary).max(100),
+      ...MCP_PAGINATION_OUTPUT_SHAPE,
+      scanComplete: z.boolean(),
+    }),
     find_activities_near_location: scope.activityLocation
       ? z.strictObject({
           location: nearbyLocationResult,
@@ -1536,6 +1832,33 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
         maximumLocation: z.literal(MCP_ACTIVITY_CHART_MAX_LOCATION_POINTS),
       }),
     }),
+    list_activity_chart_metrics_v2: z.strictObject({
+      activityType: z.string().min(1).max(120).nullable(),
+      metrics: z.array(chartCatalogMetricV2),
+      xAxes: z.tuple([
+        z.strictObject({
+          xAxis: z.literal('elapsed_time'),
+          canonicalUnit: z.literal('seconds'),
+        }),
+        z.strictObject({
+          xAxis: z.literal('distance'),
+          canonicalUnit: z.literal('meters'),
+        }),
+      ]).meta({
+        minItems: 2,
+        maxItems: 2,
+        additionalItems: false,
+      }),
+      pointLimits: z.strictObject({
+        defaultPerMetric: z.literal(MCP_ACTIVITY_CHART_DEFAULT_POINTS),
+        maximumPerMetric: z.literal(MCP_ACTIVITY_CHART_MAX_POINTS),
+        defaultLocation: z.literal(MCP_ACTIVITY_CHART_DEFAULT_LOCATION_POINTS),
+        maximumLocation: z.literal(MCP_ACTIVITY_CHART_MAX_LOCATION_POINTS),
+      }),
+    }),
+    get_activity_samples: MCP_ACTIVITY_SAMPLES_SCHEMA,
+    get_activity_samples_v2: MCP_ACTIVITY_SAMPLES_V2_SCHEMA,
+    get_activity_chart_data_v2: chartDataOutput(scope.activityLocation, true),
     get_activity_chart_data: chartDataOutput(scope.activityLocation),
     get_activity_metrics: z.strictObject({
       selectedMetricCount: count,

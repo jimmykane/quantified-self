@@ -33,6 +33,95 @@ function loadFirestoreIndexes(): FirestoreIndexesConfig {
 }
 
 describe('firestore indexes', () => {
+    it('keeps large Training history payloads unindexed and cleanup retries queryable', () => {
+        const config = loadFirestoreIndexes();
+        for (const [collectionGroup, fieldPath] of [
+            ['scheduledWorkouts', 'structure'],
+            ['revisions', 'snapshot'],
+            ['chunks', 'payloadBase64'],
+            ['trainingCleanupJobs', 'response'],
+            ['planDeletionLocks', 'request'],
+            ['planDeletionLocks', 'mcpAuthority'],
+        ]) {
+            expect(config.fieldOverrides).toContainEqual({ collectionGroup, fieldPath, ttl: false, indexes: [] });
+        }
+        for (const collectionGroup of ['trainingCleanupJobs', 'planDeletionLocks']) {
+            expect(config.fieldOverrides.filter(field => field.collectionGroup === collectionGroup
+                && field.fieldPath === 'nextAttemptAtMs')).toEqual([{
+                collectionGroup,
+                fieldPath: 'nextAttemptAtMs',
+                ttl: false,
+                indexes: [
+                    { order: 'ASCENDING', queryScope: 'COLLECTION' },
+                    { order: 'DESCENDING', queryScope: 'COLLECTION' },
+                    { arrayConfig: 'CONTAINS', queryScope: 'COLLECTION' },
+                    { order: 'ASCENDING', queryScope: 'COLLECTION_GROUP' },
+                ],
+            }]);
+        }
+        expect(config.indexes).toContainEqual({
+            collectionGroup: 'scheduledWorkouts', queryScope: 'COLLECTION', density: 'SPARSE_ALL',
+            fields: [
+                { fieldPath: 'planId', order: 'ASCENDING' },
+                { fieldPath: 'lifecycle', order: 'ASCENDING' },
+                { fieldPath: '__name__', order: 'ASCENDING' },
+            ],
+        });
+    });
+    it('does not declare a composite for a single ascending or descending field with its implicit document path', () => {
+        const config = loadFirestoreIndexes();
+        for (const index of config.indexes) {
+            const [field, documentPath] = index.fields;
+            if (index.fields.length === 2 && documentPath.fieldPath === '__name__') {
+                expect(field.order === documentPath.order && field.order !== undefined).toBe(false);
+            }
+        }
+    });
+    it('adds marketing recipient cleanup lookup without disabling default collection indexes', () => {
+        const config = loadFirestoreIndexes();
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'recipients',
+            fieldPath: 'uid',
+            ttl: false,
+            indexes: [
+                { order: 'ASCENDING', queryScope: 'COLLECTION' },
+                { order: 'DESCENDING', queryScope: 'COLLECTION' },
+                { arrayConfig: 'CONTAINS', queryScope: 'COLLECTION' },
+                { order: 'ASCENDING', queryScope: 'COLLECTION_GROUP' },
+            ],
+        });
+    });
+    it('supports durable explicit-disconnect recovery without indexing cleanup payloads', () => {
+        const config = loadFirestoreIndexes();
+        expect(config.fieldOverrides).toContainEqual({ collectionGroup: 'serviceDisconnectCleanup', fieldPath: '*', indexes: [] });
+        expect(config.fieldOverrides).toContainEqual({ collectionGroup: 'serviceDisconnectCleanup', fieldPath: 'nextAttemptAt', indexes: [
+            { order: 'ASCENDING', queryScope: 'COLLECTION' },
+        ] });
+        expect(config.fieldOverrides).toContainEqual({ collectionGroup: 'serviceDisconnectCleanup', fieldPath: 'userID', indexes: [
+            { order: 'ASCENDING', queryScope: 'COLLECTION' },
+        ] });
+    });
+    it('indexes private note overlap without indexing free text', () => {
+        const config = loadFirestoreIndexes();
+        expect(config.indexes).toContainEqual({ collectionGroup: 'timelineNotes', queryScope: 'COLLECTION', density: 'SPARSE_ALL', fields: [
+            { fieldPath: 'endDate', order: 'ASCENDING' }, { fieldPath: 'startDate', order: 'ASCENDING' }, { fieldPath: '__name__', order: 'ASCENDING' },
+        ] });
+        for (const fieldPath of ['title', 'details']) expect(config.fieldOverrides).toContainEqual({ collectionGroup: 'timelineNotes', fieldPath, indexes: [] });
+    });
+    it('indexes manual Health references by source type, metric, and date before the Training read cap', () => {
+        expect(loadFirestoreIndexes().indexes).toContainEqual({
+            collectionGroup: 'healthSourceRecords',
+            queryScope: 'COLLECTION',
+            fields: [
+                { fieldPath: 'source.sourceRecordType', order: 'ASCENDING' },
+                { fieldPath: 'metricIds', arrayConfig: 'CONTAINS' },
+                { fieldPath: 'calendarDate', order: 'ASCENDING' },
+                { fieldPath: '__name__', order: 'ASCENDING' },
+            ],
+            density: 'SPARSE_ALL',
+        });
+    });
+
     it('keeps canonical marketing consent queryable across user legal agreement documents', () => {
         const config = loadFirestoreIndexes();
 
@@ -64,6 +153,11 @@ describe('firestore indexes', () => {
         ));
 
         expect(cleanupOverrides).toEqual([]);
+    });
+
+    it('keeps unresolved activity upload reservations on default collection indexes without TTL', () => {
+        const config = loadFirestoreIndexes();
+        expect(config.fieldOverrides.filter(field => field.collectionGroup === 'activitySendUploadCleanup')).toEqual([]);
     });
 
     it('expires durable Suunto Health webhook ingress envelopes', () => {
@@ -748,6 +842,75 @@ describe('firestore indexes', () => {
             fieldPath: 'sportsLibData',
             ttl: false,
             indexes: [],
+        });
+    });
+
+    it('supports dated plan overlays, bounded indexing, deletion fencing, and expiring mutation receipts', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.indexes).toEqual(expect.arrayContaining([
+            {
+                collectionGroup: 'scheduledWorkouts',
+                queryScope: 'COLLECTION',
+                fields: [
+                    { fieldPath: 'planId', order: 'ASCENDING' },
+                    { fieldPath: 'localDate', order: 'ASCENDING' },
+                    { fieldPath: 'lifecycle', order: 'ASCENDING' },
+                    { fieldPath: '__name__', order: 'ASCENDING' },
+                ],
+                density: 'SPARSE_ALL',
+            },
+            {
+                collectionGroup: 'scheduledWorkouts',
+                queryScope: 'COLLECTION',
+                fields: [
+                    { fieldPath: 'planId', order: 'ASCENDING' },
+                    { fieldPath: 'lifecycle', order: 'ASCENDING' },
+                    { fieldPath: '__name__', order: 'ASCENDING' },
+                ],
+                density: 'SPARSE_ALL',
+            },
+        ]));
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'mutationReceipts',
+            fieldPath: 'expireAt',
+            ttl: true,
+            indexes: [],
+        });
+        expect(config.fieldOverrides).toEqual(expect.arrayContaining([
+            {
+                collectionGroup: 'scheduledWorkouts',
+                fieldPath: 'structure',
+                ttl: false,
+                indexes: [],
+            },
+            {
+                collectionGroup: 'revisions',
+                fieldPath: 'snapshot',
+                ttl: false,
+                indexes: [],
+            },
+            {
+                collectionGroup: 'chunks',
+                fieldPath: 'payloadBase64',
+                ttl: false,
+                indexes: [],
+            },
+        ]));
+    });
+
+    it('supports bounded provider batch grouping on delivery queue leaves', () => {
+        expect(loadFirestoreIndexes().indexes).toContainEqual({
+            collectionGroup: 'trainingDeliveryQueue',
+            queryScope: 'COLLECTION',
+            fields: [
+                { fieldPath: 'kind', order: 'ASCENDING' },
+                { fieldPath: 'uid', order: 'ASCENDING' },
+                { fieldPath: 'provider', order: 'ASCENDING' },
+                { fieldPath: 'destinationKey', order: 'ASCENDING' },
+                { fieldPath: 'operationKind', order: 'ASCENDING' },
+                { fieldPath: 'dueAtMs', order: 'ASCENDING' },
+            ],
         });
     });
 });

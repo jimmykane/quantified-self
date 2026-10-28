@@ -1,3 +1,4 @@
+import { withHistoryQueueExecution } from '../connection-history/execution';
 import * as admin from 'firebase-admin';
 import * as crypto from 'crypto';
 import * as logger from 'firebase-functions/logger';
@@ -33,11 +34,20 @@ import {
     updateSleepSyncState,
     upsertSleepSessions,
 } from './writer';
-import { replaceHealthSourceRecord, updateHealthSyncState } from '../health/writer';
+import {
+    HEALTH_SOURCE_RECORD_TRANSACTION_BATCH_SIZE,
+    isHealthSourceRecordBatchSplittableError,
+    replaceHealthSourceRecord,
+    replaceHealthSourceRecords,
+    updateHealthSyncState,
+    type HealthSyncStateWriterDependencies,
+} from '../health/writer';
 import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
 import * as requestPromise from '../request-helper';
 import { config } from '../config';
 import { toSuuntoAuthorizationHeader } from '../suunto/authorization-header';
+import { executeWithTokenRetry } from '../suunto/retry-helper';
+import { isSuuntoImportDisconnected } from '../suunto/disconnected-import';
 import {
     deferQueueItemForPendingDisconnect,
     increaseRetryCountForQueueItem,
@@ -103,10 +113,15 @@ import {
     getActiveRevisionProcessingLease,
 } from '../queue/revision-processing-lease';
 import { isSuuntoHealthSyncEnabled } from '../suunto/health-flags';
+import { checkpointSuuntoHealthProgress, isValidSuuntoHealthProgress } from '../suunto/health-progress';
 import {
+    getSuuntoHealthFailureTelemetry,
     processSuuntoHealthQueueItem,
     sanitizeSuuntoHealthErrorForTelemetry,
     SuuntoHealthWriteLifecycleGuards,
+    type SuuntoHealthFeed,
+    type SuuntoHealthFailureStage,
+    type SuuntoHealthRequestObservation,
 } from '../suunto/health-sync';
 import {
     SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH,
@@ -139,10 +154,13 @@ import {
     type GarminHealthWriteLifecycleGuards,
 } from '../garmin/health-lifecycle';
 import {
+    getGarminHealthFailureTelemetry,
     GarminHealthPermissionError,
     processGarminHealthQueueItem,
     sanitizeGarminHealthErrorForTelemetry,
+    type GarminHealthRequestStage,
 } from '../garmin/health-sync';
+import { getHealthFailureTelemetry } from '../health/error-diagnostics';
 import {
     GARMIN_HEALTH_MAX_SUMMARIES_PER_CALLBACK,
     GarminHealthValidationError,
@@ -187,6 +205,7 @@ interface COROSWriteLifecycleGuards {
 }
 
 interface AddSleepSyncQueueItemInput {
+    connectionHistoryRunId?: string;
     type: SleepSyncQueueItemType;
     provider: SleepProvider;
     providerUserId: string;
@@ -205,8 +224,14 @@ interface AddSleepSyncQueueItemInput {
     rangeStartMs?: number;
     rangeEndMs?: number;
     healthTrigger?: 'poll' | 'webhook' | 'backfill';
+    suuntoHealthWebhookFeedMask?: 1 | 2;
+    dispatchAfterMs?: number;
+    /** Opaque ingress ID used only if its scheduled bucket has already started. */
+    lateArrivalKey?: string;
     dedupeKey?: string;
     dispatchImmediately?: boolean;
+    /** Admin catch-up only: never reset an existing deterministic queue ID or cursor. */
+    preserveExisting?: boolean;
     suuntoHealthTokenCredentialGeneration?: string | null;
     suuntoHealthRootOAuthCredentialGeneration?: string | null;
     suuntoHealthConnectionStateGeneration?: string | null;
@@ -271,12 +296,26 @@ function isValidSleepProvider(value: unknown): value is SleepProvider {
     return Object.values(SLEEP_PROVIDERS).includes(value as SleepProvider);
 }
 
-function getMalformedSleepQueueItemReason(queueItem: SleepSyncQueueItemInterface): string | null {
+export function getMalformedSleepQueueItemReason(queueItem: SleepSyncQueueItemInterface): string | null {
     if (!SLEEP_SYNC_QUEUE_ITEM_TYPES.has(queueItem.type)) {
         return `invalid type ${queueItem.type || 'missing'}`;
     }
     if (!isValidSleepProvider(queueItem.provider)) {
         return `invalid provider ${queueItem.provider || 'missing'}`;
+    }
+    if (queueItem.dispatchAfterMs !== undefined
+        && (queueItem.type !== 'suunto_health_poll'
+            || queueItem.healthTrigger !== 'webhook'
+            || !Number.isSafeInteger(queueItem.dispatchAfterMs)
+            || queueItem.dispatchAfterMs <= 0)) {
+        return 'invalid Suunto Health webhook dispatch time';
+    }
+    if (queueItem.suuntoHealthWebhookFeedMask !== undefined
+        && (queueItem.type !== 'suunto_health_poll'
+            || queueItem.provider !== SLEEP_PROVIDERS.SuuntoApp
+            || queueItem.healthTrigger !== 'webhook'
+            || ![1, 2, 3].includes(queueItem.suuntoHealthWebhookFeedMask))) {
+        return 'invalid Suunto Health webhook feed mask';
     }
     const garminSummaryType = queueItem.garminSummaryType
         || (queueItem.provider === SLEEP_PROVIDERS.GarminAPI ? 'sleeps' : undefined);
@@ -403,6 +442,9 @@ function getMalformedSleepQueueItemReason(queueItem: SleepSyncQueueItemInterface
     if (queueItem.type === 'suunto_health_poll' && queueItem.provider !== SLEEP_PROVIDERS.SuuntoApp) {
         return 'Suunto Health queue item has an invalid provider';
     }
+    if (!isValidSuuntoHealthProgress(queueItem)) {
+        return 'Suunto Health queue item has invalid window progress';
+    }
     if (queueItem.type === 'suunto_health_poll'
         && !SUUNTO_HEALTH_QUEUE_TRIGGERS.has(`${queueItem.healthTrigger || ''}`)) {
         return 'Suunto Health queue item has an invalid trigger';
@@ -490,6 +532,7 @@ function parseGarminPingBatchCallbackURLs(
 function compactQueuePayload(input: AddSleepSyncQueueItemInput): Partial<SleepSyncQueueItemInterface> {
     const payload: Partial<SleepSyncQueueItemInterface> = {
         type: input.type,
+        connectionHistoryRunId: input.connectionHistoryRunId,
         provider: input.provider,
         providerUserId: input.providerUserId,
         userID: input.userID,
@@ -508,6 +551,8 @@ function compactQueuePayload(input: AddSleepSyncQueueItemInput): Partial<SleepSy
         rangeStartMs: input.rangeStartMs,
         rangeEndMs: input.rangeEndMs,
         healthTrigger: input.healthTrigger,
+        suuntoHealthWebhookFeedMask: input.suuntoHealthWebhookFeedMask,
+        dispatchAfterMs: input.dispatchAfterMs,
         suuntoHealthTokenCredentialGeneration: input.suuntoHealthTokenCredentialGeneration,
         suuntoHealthRootOAuthCredentialGeneration:
             input.suuntoHealthRootOAuthCredentialGeneration,
@@ -556,6 +601,7 @@ function comparableQueuePayload(payload: Partial<SleepSyncQueueItemInterface>): 
         rangeStartMs: payload.rangeStartMs,
         rangeEndMs: payload.rangeEndMs,
         healthTrigger: payload.healthTrigger,
+        dispatchAfterMs: payload.dispatchAfterMs,
         suuntoHealthTokenCredentialGeneration: payload.suuntoHealthTokenCredentialGeneration,
         suuntoHealthRootOAuthCredentialGeneration:
             payload.suuntoHealthRootOAuthCredentialGeneration,
@@ -575,17 +621,18 @@ function isSameQueuePayload(
     return queuePayloadFingerprint(existing) === queuePayloadFingerprint(incoming);
 }
 
-function garminHealthStateGuardsForCurrentQueueRevision(
+function healthStateGuardsForCurrentQueueRevision<T extends HealthSyncStateWriterDependencies>(
     queueItem: SleepSyncQueueItemInterface,
-    guards: GarminHealthWriteLifecycleGuards,
-): GarminHealthWriteLifecycleGuards {
+    guards: T,
+    requireStoredOwner = true,
+): T {
     if (!queueItem.ref) return guards;
     const queueRevision = typeof queueItem.queueRevision === 'string'
         ? queueItem.queueRevision.trim()
         : '';
     const expectedFields: Record<string, unknown> = {
         processed: false,
-        ...(queueItem.userID ? { userID: queueItem.userID } : {}),
+        ...(requireStoredOwner && queueItem.userID ? { userID: queueItem.userID } : {}),
         ...(queueRevision
             ? { queueRevision }
             : { dateCreated: queueItem.dateCreated }),
@@ -712,6 +759,7 @@ interface SleepQueueWriteResult {
     queueRevision: string;
     dateCreated: number;
     shouldDispatchImmediately: boolean;
+    coalesced?: boolean;
 }
 
 async function prepareGarminHealthQueueAdmission(
@@ -844,6 +892,13 @@ async function writeSleepQueueItemIfUserActive(
         const current = snapshot.exists
             ? snapshot.data() as Partial<SleepSyncQueueItemInterface>
             : null;
+        if (input.preserveExisting && current) {
+            return {
+                queueRevision: current.queueRevision || '',
+                dateCreated: Number(current.dateCreated),
+                shouldDispatchImmediately: false,
+            };
+        }
         const activeLease = current && (
             !current.userID || current.userID === userID
         ) ? getActiveRevisionProcessingLease(current, nowMs) : null;
@@ -856,6 +911,11 @@ async function writeSleepQueueItemIfUserActive(
             && current.dispatchedToCloudTask == null
             && !activeLease
             && isSameQueuePayload(current, queuePayload)) {
+            const combinedFeedMask = (current.suuntoHealthWebhookFeedMask || 0)
+                | (queuePayload.suuntoHealthWebhookFeedMask || 0);
+            if (combinedFeedMask !== (current.suuntoHealthWebhookFeedMask || 0)) {
+                transaction.update(docRef, { suuntoHealthWebhookFeedMask: combinedFeedMask });
+            }
             const currentRevision = typeof current.queueRevision === 'string'
                 ? current.queueRevision.trim()
                 : '';
@@ -863,6 +923,7 @@ async function writeSleepQueueItemIfUserActive(
                 queueRevision: currentRevision,
                 dateCreated: Number(current.dateCreated),
                 shouldDispatchImmediately: true,
+                coalesced: input.lateArrivalKey !== undefined,
             };
         }
 
@@ -886,6 +947,75 @@ async function writeSleepQueueItemIfUserActive(
             shouldDispatchImmediately: !activeLease,
         };
     });
+}
+
+async function mergeScheduledSuuntoWebhookFeedMask(
+    docRef: admin.firestore.DocumentReference,
+    queuePayload: Partial<SleepSyncQueueItemInterface>,
+    input: AddSleepSyncQueueItemInput,
+    userID: string,
+): Promise<boolean> {
+    const incomingMask = queuePayload.suuntoHealthWebhookFeedMask || 0;
+    if (!incomingMask) return true;
+    const db = admin.firestore();
+    return db.runTransaction(async transaction => {
+        const nowMs = Date.now();
+        let deletionGuard;
+        try {
+            deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID, nowMs);
+        } catch (error) {
+            throw new UserDeletionGuardReadError(userID, `sleep_sync_queue_feed_mask_merge:${input.provider}`, error);
+        }
+        if (deletionGuard.shouldSkip) {
+            throw new ProviderQueueUserDeletedOrDeletingError(
+                ServiceNames.SuuntoApp, userID, input.providerUserId, docRef.id,
+            );
+        }
+        const requiredDocumentFieldValues = input.requiredDocumentFieldValues || [];
+        const requiredSnapshots = await Promise.all(requiredDocumentFieldValues.map(guard =>
+            transaction.get(guard.documentRef)
+        ));
+        if (requiredSnapshots.some((snapshot, index) => !documentMatchesExpectedFields(
+            snapshot, requiredDocumentFieldValues[index].expectedFields,
+        ))) {
+            throw new ProviderQueueUserNotConnectedError(
+                ServiceNames.SuuntoApp, input.providerUserId, docRef.id,
+            );
+        }
+        const snapshot = await transaction.get(docRef);
+        const current = snapshot.exists ? snapshot.data() as SleepSyncQueueItemInterface : null;
+        if (!current || current.processed || !isSameQueuePayload(current, queuePayload)
+            || current.dispatchAfterMs === undefined
+            || Date.now() >= current.dispatchAfterMs
+            || getActiveRevisionProcessingLease(current, Date.now())) return false;
+        const combinedMask = (current.suuntoHealthWebhookFeedMask || 0) | incomingMask;
+        if (combinedMask !== (current.suuntoHealthWebhookFeedMask || 0)) {
+            transaction.update(docRef, { suuntoHealthWebhookFeedMask: combinedMask });
+        }
+        return true;
+    });
+}
+
+async function resolveLateSuuntoHealthWebhookRef(
+    input: AddSleepSyncQueueItemInput,
+    originalQueueId: string,
+    queuePayload: Partial<SleepSyncQueueItemInterface>,
+    lateArrivalKey: string,
+): Promise<{ queueId: string; docRef: admin.firestore.DocumentReference; reused: boolean }> {
+    const queueId = await generateIDFromParts([
+        input.provider, input.type, input.providerUserId,
+        input.dedupeKey || originalQueueId, 'late', lateArrivalKey,
+    ]);
+    const docRef = queueCollection().doc(queueId);
+    const snapshot = await docRef.get();
+    if (!snapshot.exists) return { queueId, docRef, reused: false };
+    if (!isSameQueuePayload(snapshot.data() as Partial<SleepSyncQueueItemInterface>, queuePayload)) {
+        throw new Error('Suunto Health late-arrival queue identity collision.');
+    }
+    logger.info('[HealthSync][Suunto] Reused late webhook refetch.', {
+        duplicateIngressWindows: 1,
+    });
+    return { queueId, docRef, reused: true };
 }
 
 export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): Promise<admin.firestore.DocumentReference> {
@@ -941,6 +1071,22 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
         || !isValidOptionalLifecycleGeneration(input.suuntoHealthConnectionStateGeneration)) {
         throw new Error('Invalid Suunto Health queue lifecycle fences.');
     }
+    if ((input.dispatchAfterMs !== undefined || input.lateArrivalKey !== undefined)
+        && (input.type !== 'suunto_health_poll'
+            || input.healthTrigger !== 'webhook'
+            || !Number.isSafeInteger(input.dispatchAfterMs)
+            || (input.dispatchAfterMs || 0) <= 0
+            || !/^[a-f0-9]{64}$/.test(input.lateArrivalKey || ''))) {
+        throw new Error('Invalid Suunto Health webhook coalescing fields.');
+    }
+    if (input.suuntoHealthWebhookFeedMask !== undefined
+        && (input.type !== 'suunto_health_poll'
+            || input.provider !== SLEEP_PROVIDERS.SuuntoApp
+            || input.healthTrigger !== 'webhook'
+            || (input.suuntoHealthWebhookFeedMask !== 1
+                && input.suuntoHealthWebhookFeedMask !== 2))) {
+        throw new Error('Invalid Suunto Health webhook feed mask.');
+    }
     if ((input.type === 'suunto_webhook'
             && input.suuntoWebhookAuthorityDigest !== undefined
             && !/^[a-f0-9]{64}$/.test(input.suuntoWebhookAuthorityDigest))
@@ -989,28 +1135,68 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
     if (input.dispatchImmediately) {
         const existingSnapshot = await docRef.get();
         const existingQueueItem = existingSnapshot.exists ? existingSnapshot.data() as Partial<SleepSyncQueueItemInterface> : null;
-        if (existingQueueItem?.processed || existingQueueItem?.dispatchedToCloudTask) {
+        const queueAdmissionNowMs = Date.now();
+        if (existingQueueItem && input.lateArrivalKey && (
+            input.dispatchAfterMs! <= queueAdmissionNowMs
+            || (existingQueueItem as { processed?: boolean }).processed === true
+            || getActiveRevisionProcessingLease(existingQueueItem, queueAdmissionNowMs) !== null
+        )) {
+            // The bucket's task may already be processing. A delayed ingress
+            // needs its own deterministic follow-up instead of being mistaken
+            // for a notification that the earlier refetch already covered.
+            const late = await resolveLateSuuntoHealthWebhookRef(
+                input, queueId, queuePayload, input.lateArrivalKey,
+            );
+            queueId = late.queueId;
+            docRef = late.docRef;
+            if (late.reused) return docRef;
+        } else if (existingQueueItem?.processed || existingQueueItem?.dispatchedToCloudTask) {
             if (isSameQueuePayload(existingQueueItem, queuePayload)) {
-                logger.info(`[SleepSync] Reusing existing immediate queue item ${queueId} for duplicate ${input.provider} ${input.type} notification.`);
-                return docRef;
-            }
-
-            const revisionQueueId = await generateIDFromParts([
-                input.provider,
-                input.type,
-                input.providerUserId,
-                input.dedupeKey || input.callbackURL || queueId,
-                'revision',
-                queuePayloadFingerprint(queuePayload),
-            ]);
-            queueId = revisionQueueId;
-            docRef = queueCollection().doc(queueId);
-            const revisionSnapshot = await docRef.get();
-            const existingRevisionQueueItem = revisionSnapshot.exists ? revisionSnapshot.data() as Partial<SleepSyncQueueItemInterface> : null;
-            if ((existingRevisionQueueItem?.processed || existingRevisionQueueItem?.dispatchedToCloudTask)
-                && isSameQueuePayload(existingRevisionQueueItem, queuePayload)) {
-                logger.info(`[SleepSync] Reusing existing immediate queue item ${queueId} for duplicate ${input.provider} ${input.type} notification revision.`);
-                return docRef;
+                if (input.lateArrivalKey) {
+                    const existingMask = existingQueueItem.suuntoHealthWebhookFeedMask || 0;
+                    const incomingMask = queuePayload.suuntoHealthWebhookFeedMask || 0;
+                    let merged = true;
+                    if ((existingMask | incomingMask) !== existingMask) {
+                        merged = await mergeScheduledSuuntoWebhookFeedMask(docRef, queuePayload,
+                            queuePayloadInput, userID);
+                    }
+                    if (merged) {
+                        logger.info('[HealthSync][Suunto] Coalesced webhook refetch.', {
+                            coalescedWindows: 1,
+                        });
+                        return docRef;
+                    }
+                    // The scheduled task may have started between the initial read
+                    // and the mask transaction. Preserve this notification in a
+                    // deterministic follow-up instead of undercounting its feed.
+                    const late = await resolveLateSuuntoHealthWebhookRef(
+                        input, queueId, queuePayload, input.lateArrivalKey,
+                    );
+                    queueId = late.queueId;
+                    docRef = late.docRef;
+                    if (late.reused) return docRef;
+                } else {
+                    logger.info(`[SleepSync] Reusing existing immediate queue item ${queueId} for duplicate ${input.provider} ${input.type} notification.`);
+                    return docRef;
+                }
+            } else {
+                const revisionQueueId = await generateIDFromParts([
+                    input.provider,
+                    input.type,
+                    input.providerUserId,
+                    input.dedupeKey || input.callbackURL || queueId,
+                    'revision',
+                    queuePayloadFingerprint(queuePayload),
+                ]);
+                queueId = revisionQueueId;
+                docRef = queueCollection().doc(queueId);
+                const revisionSnapshot = await docRef.get();
+                const existingRevisionQueueItem = revisionSnapshot.exists ? revisionSnapshot.data() as Partial<SleepSyncQueueItemInterface> : null;
+                if ((existingRevisionQueueItem?.processed || existingRevisionQueueItem?.dispatchedToCloudTask)
+                    && isSameQueuePayload(existingRevisionQueueItem, queuePayload)) {
+                    logger.info(`[SleepSync] Reusing existing immediate queue item ${queueId} for duplicate ${input.provider} ${input.type} notification revision.`);
+                    return docRef;
+                }
             }
         }
     }
@@ -1023,6 +1209,11 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
         userID,
         nowMs,
     );
+    if (writeResult.coalesced) {
+        logger.info('[HealthSync][Suunto] Coalesced webhook refetch.', {
+            coalescedWindows: 1,
+        });
+    }
 
     try {
         await assertSleepQueueUserCanReceiveWork(input, userID, queueId, `sleep_sync_queue_after_write:${input.provider}`);
@@ -1037,19 +1228,22 @@ export async function addSleepSyncQueueItem(input: AddSleepSyncQueueItemInput): 
         const enqueueTask = input.type === 'garmin_health_backfill'
             ? enqueueGarminHealthBackfillTask
             : enqueueSleepSyncTask;
-        const wasTaskEnqueued = await enqueueTask(queueId, writeResult.dateCreated, undefined, {
+        const dispatchDelaySeconds = input.dispatchAfterMs === undefined
+            ? undefined
+            : Math.max(1, Math.ceil((input.dispatchAfterMs - Date.now()) / 1000));
+        const wasTaskEnqueued = await enqueueTask(queueId, writeResult.dateCreated, dispatchDelaySeconds, {
             queueRevision: writeResult.queueRevision,
             queueDateCreated: writeResult.dateCreated,
         });
         if (wasTaskEnqueued) {
-            const didMarkDispatched = await markSleepQueueItemDispatched(
+            const dispatchMarkerResult = await markSleepQueueItemDispatched(
                 docRef,
                 queueId,
                 userID,
                 nowMs,
                 writeResult,
             );
-            if (!didMarkDispatched) {
+            if (dispatchMarkerResult === QueueDispatchMarkerResult.SkippedDeletedUser) {
                 throw new ProviderQueueUserDeletedOrDeletingError(
                     serviceNameForProvider(input.provider),
                     userID,
@@ -1079,7 +1273,7 @@ async function markSleepQueueItemDispatched(
     userID: string,
     dispatchedAtMs: number,
     identity: Pick<SleepSyncQueueItemInterface, 'queueRevision' | 'dateCreated'>,
-): Promise<boolean> {
+): Promise<QueueDispatchMarkerResult> {
     try {
         const result = await markQueueItemDispatchedIfUserActive({
             queueItemDocument,
@@ -1090,7 +1284,7 @@ async function markSleepQueueItemDispatched(
             logPrefix: 'SleepSync',
             isCurrent: currentQueueItem => isCurrentSleepQueueRevision(currentQueueItem, identity),
         });
-        return result !== QueueDispatchMarkerResult.SkippedDeletedUser;
+        return result;
     } catch (error) {
         if (!isFirestoreNotFoundError(error)) {
             throw error;
@@ -1100,7 +1294,7 @@ async function markSleepQueueItemDispatched(
         const failedJob = failedJobSnapshot.exists ? failedJobSnapshot.data() as { originalCollection?: unknown } : null;
         if (failedJob?.originalCollection === SLEEP_SYNC_QUEUE_COLLECTION_NAME) {
             logger.info(`[SleepSync] Queue item ${queueItemId} was already moved to failed_jobs before dispatch timestamp update.`);
-            return true;
+            return QueueDispatchMarkerResult.NotCurrent;
         }
 
         throw error;
@@ -1532,50 +1726,51 @@ async function processSuuntoQueueItem(
         if (!Number.isFinite(queueItem.rangeStartMs) || !Number.isFinite(queueItem.rangeEndMs)) {
             throw new Error(`Suunto poll queue item ${queueItem.id} has invalid range`);
         }
-        const tokenData = await getTokenData(tokenSnapshot, ServiceNames.SuuntoApp);
-        const refreshedProviderUserId = typeof tokenData.userName === 'string'
-            ? tokenData.userName.trim()
-            : '';
-        if (refreshedProviderUserId !== queueItem.providerUserId) {
-            throw new SuuntoSleepLifecycleChangedError();
-        }
-        const refreshedTokenSnapshot = {
-            id: tokenSnapshot.id,
-            ref: tokenSnapshot.ref,
-            data: () => ({
-                ...(tokenSnapshot.data() as Record<string, unknown> | undefined),
-                ...(tokenData as unknown as Record<string, unknown>),
-                serviceName: ServiceNames.SuuntoApp,
-                userName: refreshedProviderUserId,
-                tokenCredentialGeneration:
-                    initialLifecycleGuards.requiredExistingTokenCredential.credentialGeneration,
-            }),
-        } as unknown as TokenSnapshot;
-        const currentLifecycleGuards = await captureActiveSuuntoWebhookWriteLifecycleGuards(
-            admin.firestore(),
-            firebaseUserID,
-            queueItem.providerUserId,
-            refreshedTokenSnapshot,
-        );
-        if (!currentLifecycleGuards
-            || !areSuuntoWebhookWriteLifecycleGuardsContinuous(
-                initialLifecycleGuards,
-                currentLifecycleGuards,
-            )) {
-            throw new SuuntoSleepLifecycleChangedError();
-        }
-        // Publish the rotated credential guard before provider I/O so a later
-        // request failure cannot make our own refresh suppress error state.
-        onLifecycleGuardsCaptured(currentLifecycleGuards);
-        const payload = await requestPromise.get({
-            headers: {
-                Authorization: toSuuntoAuthorizationHeader(tokenData.accessToken),
-                'Content-Type': 'application/json',
-                'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
-            },
-            json: true,
-            url: `https://cloudapi.suunto.com/247samples/sleep?from=${Math.floor(queueItem.rangeStartMs || 0)}&to=${Math.floor(queueItem.rangeEndMs || 0)}`,
-        });
+        const payload = await executeWithTokenRetry(tokenSnapshot, async (_accessToken, tokenData) => {
+            const refreshedProviderUserId = typeof tokenData.userName === 'string'
+                ? tokenData.userName.trim()
+                : '';
+            if (refreshedProviderUserId !== queueItem.providerUserId) {
+                throw new SuuntoSleepLifecycleChangedError();
+            }
+            const refreshedTokenSnapshot = {
+                id: tokenSnapshot.id,
+                ref: tokenSnapshot.ref,
+                data: () => ({
+                    ...(tokenSnapshot.data() as Record<string, unknown> | undefined),
+                    ...(tokenData as unknown as Record<string, unknown>),
+                    serviceName: ServiceNames.SuuntoApp,
+                    userName: refreshedProviderUserId,
+                    tokenCredentialGeneration:
+                        initialLifecycleGuards.requiredExistingTokenCredential.credentialGeneration,
+                }),
+            } as unknown as TokenSnapshot;
+            const currentLifecycleGuards = await captureActiveSuuntoWebhookWriteLifecycleGuards(
+                admin.firestore(),
+                firebaseUserID,
+                queueItem.providerUserId,
+                refreshedTokenSnapshot,
+            );
+            if (!currentLifecycleGuards
+                || !areSuuntoWebhookWriteLifecycleGuardsContinuous(
+                    initialLifecycleGuards,
+                    currentLifecycleGuards,
+                )) {
+                throw new SuuntoSleepLifecycleChangedError();
+            }
+            // Publish the rotated credential guard before provider I/O so a later
+            // request failure cannot make our own refresh suppress error state.
+            onLifecycleGuardsCaptured(currentLifecycleGuards);
+            return requestPromise.get({
+                headers: {
+                    Authorization: toSuuntoAuthorizationHeader(tokenData.accessToken),
+                    'Content-Type': 'application/json',
+                    'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
+                },
+                json: true,
+                url: `https://cloudapi.suunto.com/247samples/sleep?from=${Math.floor(queueItem.rangeStartMs || 0)}&to=${Math.floor(queueItem.rangeEndMs || 0)}`,
+            });
+        }, 'sleep_poll');
         return keepBestMapperResultPerSourceSession(normalizePayloadArray(payload, 'samples')
             .map((sample) => mapSuuntoSleepSample(sample, queueItem.providerUserId, Date.now()))
             .filter((result): result is SleepMapperResult => result !== null));
@@ -1664,6 +1859,62 @@ async function runWithSuuntoHealthCredentialRebase<T>(
         guards = rebasedGuards;
     }
     throw new SuuntoCredentialRotationRetryableError();
+}
+
+async function replaceSuuntoHealthSourceRecordBatchWithRebase(
+    firebaseUserID: string,
+    queueItem: SleepSyncQueueItemInterface,
+    authorityBaseline: SuuntoWebhookWriteLifecycleGuards,
+    currentGuards: SuuntoHealthWriteLifecycleGuards,
+    writeBatch: readonly SuuntoHealthResult[],
+): Promise<{
+    result: Awaited<ReturnType<typeof replaceHealthSourceRecords>>;
+    guards: SuuntoHealthWriteLifecycleGuards | null;
+    complete: boolean;
+}> {
+    try {
+        const attempt = await runWithSuuntoHealthCredentialRebase(
+            firebaseUserID,
+            queueItem.providerUserId,
+            authorityBaseline,
+            currentGuards,
+            guards => replaceHealthSourceRecords(
+                firebaseUserID,
+                writeBatch.map(healthResult => healthResult.input),
+                Date.now(),
+                healthStateGuardsForCurrentQueueRevision(queueItem, guards),
+            ),
+            candidates => candidates.some(
+                candidate => candidate.status === 'skipped_lifecycle_guard',
+            ),
+        );
+        return { ...attempt, complete: true };
+    } catch (error) {
+        if (!isHealthSourceRecordBatchSplittableError(error) || writeBatch.length === 1) {
+            throw error;
+        }
+        const midpoint = Math.ceil(writeBatch.length / 2);
+        const left = await replaceSuuntoHealthSourceRecordBatchWithRebase(
+            firebaseUserID,
+            queueItem,
+            authorityBaseline,
+            currentGuards,
+            writeBatch.slice(0, midpoint),
+        );
+        if (!left.guards) return { ...left, complete: false };
+        const right = await replaceSuuntoHealthSourceRecordBatchWithRebase(
+            firebaseUserID,
+            queueItem,
+            authorityBaseline,
+            left.guards,
+            writeBatch.slice(midpoint),
+        );
+        return {
+            result: [...left.result, ...right.result],
+            guards: right.guards,
+            complete: right.complete,
+        };
+    }
 }
 
 function expectedSuuntoLifecycleField(
@@ -2099,11 +2350,12 @@ async function checkpointGarminHealthProgress(params: {
     });
 }
 
-async function dispatchGarminHealthContinuation(
+async function dispatchHealthContinuation(
     queueItem: SleepSyncQueueItemInterface,
     userID: string,
     continuationRevision: string,
 ): Promise<QueueResult> {
+    const provider = queueItem.provider === SLEEP_PROVIDERS.SuuntoApp ? 'Suunto' : 'Garmin';
     const taskIdentity = {
         queueRevision: continuationRevision,
         queueDateCreated: queueItem.dateCreated,
@@ -2120,7 +2372,7 @@ async function dispatchGarminHealthContinuation(
             taskIdentity,
         );
         if (!enqueued) {
-            logger.warn('[HealthSync][Garmin] Continuation remains queued for dispatcher recovery.');
+            logger.warn(`[HealthSync][${provider}] Continuation remains queued for dispatcher recovery.`);
             return QueueResult.Deferred;
         }
         const marked = await markSleepQueueItemDispatched(
@@ -2130,12 +2382,13 @@ async function dispatchGarminHealthContinuation(
             Date.now(),
             queueIdentity,
         );
-        return marked ? QueueResult.Deferred : QueueResult.Processed;
+        return marked === QueueDispatchMarkerResult.Marked ? QueueResult.HealthContinuationScheduled
+            : marked === QueueDispatchMarkerResult.SkippedDeletedUser ? QueueResult.Processed : QueueResult.Deferred;
     } catch (error) {
         // The durable row has already moved to an undispatched continuation
         // revision. Scheduled reconciliation can recover an enqueue/marker
         // outage without replaying this stale worker revision.
-        logger.error('[HealthSync][Garmin] Failed to dispatch callback continuation.', {
+        logger.error(`[HealthSync][${provider}] Failed to dispatch callback continuation.`, {
             errorName: error instanceof Error ? error.name : 'UnknownError',
         });
         return QueueResult.Deferred;
@@ -2143,7 +2396,11 @@ async function dispatchGarminHealthContinuation(
 }
 
 export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInterface): Promise<QueueResult> {
+    return withHistoryQueueExecution(queueItem, () => processHistoryGuardedSleepQueueItem(queueItem));
+}
+async function processHistoryGuardedSleepQueueItem(queueItem: SleepSyncQueueItemInterface): Promise<QueueResult> {
     logger.info(`[SleepSync] Processing queue item ${queueItem.id}`);
+    const suuntoQueueOwner = queueItem.provider === SLEEP_PROVIDERS.SuuntoApp ? queueItem.userID : undefined;
     const processingStartedAtMs = Date.now();
     // Lease fields read from Firestore belong to whichever invocation claimed
     // them. Never let a duplicate task reuse those values as proof of ownership
@@ -2161,6 +2418,21 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
         : null;
     let processingOwner: string | null = null;
     let processingUserID: string | null = null;
+    let healthFailureStage: SuuntoHealthFailureStage = 'queue_validation';
+    let garminRequestStage: GarminHealthRequestStage | 'provider_sync' = 'provider_sync';
+    const suuntoFeedMetrics = {
+        activity: { requests: 0, requestMs: 0, succeeded: 0, unauthorized: 0, failed: 0, written: 0, unchanged: 0, stale: 0, chunksWritten: 0, chunksDeleted: 0 },
+        statistics: { requests: 0, requestMs: 0, succeeded: 0, unauthorized: 0, failed: 0, written: 0, unchanged: 0, stale: 0, chunksWritten: 0, chunksDeleted: 0 },
+        recovery: { requests: 0, requestMs: 0, succeeded: 0, unauthorized: 0, failed: 0, written: 0, unchanged: 0, stale: 0, chunksWritten: 0, chunksDeleted: 0 },
+    };
+    const observeSuuntoRequest = ({ feed, outcome, durationMs }: SuuntoHealthRequestObservation): void => {
+        const metrics = suuntoFeedMetrics[feed];
+        metrics.requests += 1;
+        metrics.requestMs += durationMs;
+        if (outcome === 'success') metrics.succeeded += 1;
+        else if (outcome === 'unauthorized') metrics.unauthorized += 1;
+        else metrics.failed += 1;
+    };
 
     try {
         const providerForDeletionGuard = isValidSleepProvider(queueItem.provider) ? queueItem.provider : null;
@@ -2241,6 +2513,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
             throw new UnsupportedGarminPushPayloadError();
         }
 
+        healthFailureStage = 'token_resolution';
         const resolvedTokenAndUser = await resolveTokenAndUser(queueItem);
         let tokenSnapshot = resolvedTokenAndUser.tokenSnapshot;
         const firebaseUserID = resolvedTokenAndUser.firebaseUserID;
@@ -2258,6 +2531,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 sessionsSkipped: 0,
             });
         }
+        healthFailureStage = 'lifecycle_check';
         if (queueItem.provider === SLEEP_PROVIDERS.SuuntoApp) {
             suuntoSleepLifecycleGuards = await captureActiveSuuntoWebhookWriteLifecycleGuards(
                 admin.firestore(),
@@ -2369,7 +2643,10 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                     'connectionStateGeneration',
                 ),
             );
-            if ((queueItem.suuntoHealthTokenCredentialGeneration !== undefined
+            if ((queueItem.suuntoHealthProgress !== undefined
+                    && queueItem.suuntoHealthProgress.authorityDigest
+                        !== getSuuntoWebhookWriteLifecycleAuthorityDigest(suuntoHealthLifecycleGuards))
+                || (queueItem.suuntoHealthTokenCredentialGeneration !== undefined
                     && queueItem.suuntoHealthTokenCredentialGeneration !== capturedTokenGeneration)
                 || (queueItem.suuntoHealthRootOAuthCredentialGeneration !== undefined
                     && queueItem.suuntoHealthRootOAuthCredentialGeneration
@@ -2406,6 +2683,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
         }
 
         processingOwner = crypto.randomUUID();
+        healthFailureStage = 'queue_claim';
         const claimResult = await claimSleepQueueRevision(queueItem, firebaseUserID, processingOwner);
         if (claimResult === 'deleted_user') {
             return markQueueItemSkipped(queueItem, undefined, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
@@ -2435,6 +2713,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
 
         let mapperResults: SleepMapperResult[] = [];
         let healthResults: Array<COROSDailyHealthResult | SuuntoHealthResult | GarminHealthResult> = [];
+        let suuntoHealthContinuation: Awaited<ReturnType<typeof processSuuntoHealthQueueItem>>['continuation'] = null;
         let garminHealthContinuation: Awaited<ReturnType<
             typeof processGarminHealthQueueItem
         >>['continuation'] | null = null;
@@ -2445,6 +2724,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                     if (!initialGarminLifecycleGuards) {
                         throw new GarminHealthAccountValidationError();
                     }
+                    healthFailureStage = 'provider_sync';
                     const garminHealthResult = await processGarminHealthQueueItem(
                         queueItem,
                         tokenSnapshot,
@@ -2453,6 +2733,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                         guards => {
                             garminHealthLifecycleGuards = guards;
                         },
+                        stage => { garminRequestStage = stage; },
                     );
                     healthResults = garminHealthResult.healthResults;
                     garminHealthLifecycleGuards = garminHealthResult.lifecycleGuards;
@@ -2471,6 +2752,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                     if (!initialSuuntoLifecycleGuards) {
                         throw new Error('Missing Suunto Health lifecycle guards.');
                     }
+                    healthFailureStage = 'provider_sync';
                     const suuntoHealthResult = await processSuuntoHealthQueueItem(
                         queueItem,
                         tokenSnapshot,
@@ -2479,9 +2761,12 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                         guards => {
                             suuntoHealthLifecycleGuards = guards;
                         },
+                        stage => { healthFailureStage = stage; },
+                        observeSuuntoRequest,
                     );
                     healthResults = suuntoHealthResult.healthResults;
                     suuntoHealthLifecycleGuards = suuntoHealthResult.lifecycleGuards;
+                    suuntoHealthContinuation = suuntoHealthResult.continuation;
                 } else {
                     const initialSuuntoLifecycleGuards = suuntoSleepLifecycleGuards;
                     if (!initialSuuntoLifecycleGuards) {
@@ -2578,10 +2863,11 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 healthRecordsStale: 0,
             });
         }
-        let healthRecordsWritten = garminHealthContinuation?.recordsWritten ?? 0;
-        let healthRecordsUnchanged = garminHealthContinuation?.recordsUnchanged ?? 0;
-        let healthRecordsStale = garminHealthContinuation?.recordsStale ?? 0;
+        let healthRecordsWritten = garminHealthContinuation?.recordsWritten ?? queueItem.suuntoHealthProgress?.recordsWritten ?? 0;
+        let healthRecordsUnchanged = garminHealthContinuation?.recordsUnchanged ?? queueItem.suuntoHealthProgress?.recordsUnchanged ?? 0;
+        let healthRecordsStale = garminHealthContinuation?.recordsStale ?? queueItem.suuntoHealthProgress?.recordsStale ?? 0;
         let healthResultIndex = garminHealthContinuation?.startIndex ?? 0;
+        healthFailureStage = 'health_write';
         while (healthResultIndex < healthResults.length) {
             const batchEndIndex = garminHealthContinuation
                 ? Math.min(
@@ -2590,65 +2876,91 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 )
                 : healthResults.length;
             while (healthResultIndex < batchEndIndex) {
-                const healthResult = healthResults[healthResultIndex];
-                let writeResult: Awaited<ReturnType<typeof replaceHealthSourceRecord>>;
+                healthFailureStage = 'health_write';
+                const writeBatchEndIndex = isSuuntoHealthQueueItem(queueItem)
+                    ? Math.min(
+                        batchEndIndex,
+                        healthResultIndex + HEALTH_SOURCE_RECORD_TRANSACTION_BATCH_SIZE,
+                    )
+                    : healthResultIndex + 1;
+                const writeBatch = healthResults.slice(healthResultIndex, writeBatchEndIndex);
+                let writeResults: Awaited<ReturnType<typeof replaceHealthSourceRecords>>;
+                let writeBatchComplete = true;
                 if (isSuuntoHealthQueueItem(queueItem)
                     && suuntoHealthLifecycleGuards
                     && suuntoAuthorityBaseline) {
-                    const writeAttempt = await runWithSuuntoHealthCredentialRebase(
+                    const writeAttempt = await replaceSuuntoHealthSourceRecordBatchWithRebase(
                         firebaseUserID,
-                        queueItem.providerUserId,
+                        queueItem,
                         suuntoAuthorityBaseline,
                         suuntoHealthLifecycleGuards,
-                        guards => replaceHealthSourceRecord(
-                            firebaseUserID,
-                            healthResult.input,
-                            Date.now(),
-                            guards,
-                        ),
-                        candidate => candidate.status === 'skipped_lifecycle_guard',
+                        writeBatch as readonly SuuntoHealthResult[],
                     );
-                    writeResult = writeAttempt.result;
+                    writeResults = writeAttempt.result;
+                    writeBatchComplete = writeAttempt.complete;
                     suuntoHealthLifecycleGuards = writeAttempt.guards;
                 } else if (isGarminHealthQueueItem(queueItem) && garminHealthLifecycleGuards) {
-                    writeResult = await replaceHealthSourceRecord(
+                    writeResults = [await replaceHealthSourceRecord(
                         firebaseUserID,
-                        healthResult.input,
+                        writeBatch[0].input,
                         Date.now(),
                         garminHealthLifecycleGuards,
-                    );
+                    )];
                 } else {
-                    writeResult = await replaceHealthSourceRecord(
+                    writeResults = [await replaceHealthSourceRecord(
                         firebaseUserID,
-                        healthResult.input,
+                        writeBatch[0].input,
                         Date.now(),
                         corosHealthLifecycleGuards || {},
-                    );
+                    )];
                 }
-                if (writeResult.status === 'skipped_deleted_user') {
-                    return markQueueItemSkipped(queueItem, undefined, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
-                        skippedContext: 'USER_DELETION_GUARD',
-                        sessionsWritten: result.written,
-                        sessionsSkipped: result.skipped,
-                        healthRecordsWritten,
-                        healthRecordsUnchanged,
-                        healthRecordsStale,
-                    });
+                const isShortCircuitLifecycleSkip = !writeBatchComplete
+                    && writeResults.some(writeResult => writeResult.status === 'skipped_lifecycle_guard');
+                if (writeResults.length !== writeBatch.length && !isShortCircuitLifecycleSkip) {
+                    throw new Error('Health source-record batch returned an unexpected result count.');
                 }
-                if (writeResult.status === 'skipped_lifecycle_guard') {
-                    return markQueueItemSkipped(queueItem, undefined, 'provider_disconnected_during_sync', {
-                        skippedContext: 'PROVIDER_LIFECYCLE_GUARD',
-                        sessionsWritten: result.written,
-                        sessionsSkipped: result.skipped,
-                        healthRecordsWritten,
-                        healthRecordsUnchanged,
-                        healthRecordsStale,
-                    });
+                for (const [writeOffset, writeResult] of writeResults.entries()) {
+                    if (writeResult.status === 'skipped_deleted_user') {
+                        return markQueueItemSkipped(queueItem, undefined, QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting, {
+                            skippedContext: 'USER_DELETION_GUARD',
+                            sessionsWritten: result.written,
+                            sessionsSkipped: result.skipped,
+                            healthRecordsWritten,
+                            healthRecordsUnchanged,
+                            healthRecordsStale,
+                        });
+                    }
+                    if (writeResult.status === 'skipped_lifecycle_guard') {
+                        return markQueueItemSkipped(queueItem, undefined, 'provider_disconnected_during_sync', {
+                            skippedContext: 'PROVIDER_LIFECYCLE_GUARD',
+                            sessionsWritten: result.written,
+                            sessionsSkipped: result.skipped,
+                            healthRecordsWritten,
+                            healthRecordsUnchanged,
+                            healthRecordsStale,
+                        });
+                    }
+                    if (writeResult.status === 'written') healthRecordsWritten += 1;
+                    if (writeResult.status === 'unchanged') healthRecordsUnchanged += 1;
+                    if (writeResult.status === 'stale') healthRecordsStale += 1;
+                    if (isSuuntoHealthQueueItem(queueItem)) {
+                        const sourceType = writeBatch[writeOffset].input.sourceRecordType;
+                        const feed: SuuntoHealthFeed | null = sourceType === 'suunto_247_activity'
+                            ? 'activity'
+                            : sourceType === 'suunto_247_daily_activity_statistics'
+                                ? 'statistics'
+                                : sourceType === 'suunto_247_recovery'
+                                    ? 'recovery'
+                                    : null;
+                        if (feed && (writeResult.status === 'written'
+                            || writeResult.status === 'unchanged' || writeResult.status === 'stale')) {
+                            suuntoFeedMetrics[feed][writeResult.status] += 1;
+                            suuntoFeedMetrics[feed].chunksWritten += writeResult.chunksWritten;
+                            suuntoFeedMetrics[feed].chunksDeleted += writeResult.chunksDeleted;
+                        }
+                    }
+                    healthResultIndex += 1;
                 }
-                if (writeResult.status === 'written') healthRecordsWritten += 1;
-                if (writeResult.status === 'unchanged') healthRecordsUnchanged += 1;
-                if (writeResult.status === 'stale') healthRecordsStale += 1;
-                healthResultIndex += 1;
                 if (garminHealthContinuation
                     && healthResultIndex < healthResults.length
                     && Date.now() - processingStartedAtMs
@@ -2658,6 +2970,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
             }
 
             if (garminHealthContinuation && healthResultIndex < healthResults.length) {
+                healthFailureStage = 'window_checkpoint';
                 const expectedProgress = garminHealthProgressFromQueue(queueItem);
                 const nextProgress: GarminHealthProgress = {
                     cursor: healthResultIndex,
@@ -2692,7 +3005,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 }
                 if (checkpointResult === 'superseded') return QueueResult.Processed;
                 if (typeof checkpointResult === 'object') {
-                    return dispatchGarminHealthContinuation(
+                    return dispatchHealthContinuation(
                         queueItem,
                         firebaseUserID,
                         checkpointResult.continuationRevision,
@@ -2709,6 +3022,31 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 queueItem.garminHealthRecordsStale = nextProgress.recordsStale;
             }
         }
+        const healthLastObservedAtMs = Math.max(queueItem.suuntoHealthProgress?.lastObservedAtMs ?? 0,
+            ...healthResults.map(item => item.observedAtMs));
+        if (suuntoHealthContinuation && suuntoHealthLifecycleGuards && suuntoAuthorityBaseline) {
+            healthFailureStage = 'window_checkpoint';
+            const next = { ...suuntoHealthContinuation, recordsWritten: healthRecordsWritten,
+                recordsUnchanged: healthRecordsUnchanged, recordsStale: healthRecordsStale,
+                lastObservedAtMs: healthLastObservedAtMs };
+            const checkpoint = await runWithSuuntoHealthCredentialRebase(
+                firebaseUserID, queueItem.providerUserId, suuntoAuthorityBaseline, suuntoHealthLifecycleGuards,
+                guards => checkpointSuuntoHealthProgress(queueItem, firebaseUserID, guards, next),
+                outcome => outcome === 'lifecycle_changed',
+            );
+            if (checkpoint.result === 'superseded') return QueueResult.Processed;
+            if (typeof checkpoint.result === 'string') {
+                return markQueueItemSkipped(queueItem, undefined, checkpoint.result === 'deleted'
+                    ? QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting : 'user_or_provider_lifecycle_changed');
+            }
+            logger.info('[HealthSync][Suunto] Window checkpointed; continuing remaining range.', {
+                recordsInWindow: healthResults.length,
+                remainingWindowMs: Number(queueItem.rangeEndMs) - next.nextStartMs,
+                targetWindowMs: next.targetWindowMs,
+            });
+            return dispatchHealthContinuation(queueItem, firebaseUserID, checkpoint.result.continuationRevision);
+        }
+        healthFailureStage = 'sync_state_write';
         const stateUpdateMs = Date.now();
         if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI
             || isSuuntoHealthQueueItem(queueItem)
@@ -2728,9 +3066,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                     || isGarminHealthQueueItem(queueItem)
                     ? stateUpdateMs
                     : undefined,
-                lastObservedAtMs: healthResults.length > 0
-                    ? Math.max(...healthResults.map(item => item.observedAtMs))
-                    : undefined,
+                lastObservedAtMs: healthLastObservedAtMs || undefined,
                 lastErrorCode: null,
             };
             let healthStateWritten: boolean;
@@ -2747,7 +3083,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                         healthProvider,
                         healthStateUpdate,
                         stateUpdateMs,
-                        guards,
+                        healthStateGuardsForCurrentQueueRevision(queueItem, guards),
                     ),
                     written => !written,
                 );
@@ -2857,7 +3193,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
         if (error instanceof ProviderOperationStillInFlightError) throw error;
         if (error instanceof SuuntoCredentialRotationRetryableError) {
             logger.warn('[SleepSync][Suunto] Credential kept rotating during an authorized write; retrying the current queue revision.');
-            return increaseRetryCountForQueueItem(queueItem, error);
+            if (!isSuuntoHealthQueueItem(queueItem)) return increaseRetryCountForQueueItem(queueItem, error);
         }
         if (error instanceof SuuntoSleepLifecycleChangedError) {
             return markQueueItemSkipped(
@@ -2889,7 +3225,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
         }
         if (error instanceof GarminHealthPermissionError) {
             if (garminHealthLifecycleGuards) {
-                const stateGuards = garminHealthStateGuardsForCurrentQueueRevision(
+                const stateGuards = healthStateGuardsForCurrentQueueRevision(
                     queueItem,
                     garminHealthLifecycleGuards,
                 );
@@ -2928,9 +3264,13 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
         }
         if (isGarminHealthQueueItem(queueItem)
             && error instanceof GarminHealthValidationError) {
-            logger.warn(`[HealthSync][Garmin] Queue item ${queueItem.id} contains an invalid provider response; moving to DLQ`);
+            logger.warn(`[HealthSync][Garmin] Queue item ${queueItem.id} contains an invalid provider response; moving to DLQ`, {
+                queueItemId: queueItem.id,
+                code: error.code,
+                validation: error.diagnostic ?? null,
+            });
             if (garminHealthLifecycleGuards && resolvedFirebaseUserID) {
-                const stateGuards = garminHealthStateGuardsForCurrentQueueRevision(
+                const stateGuards = healthStateGuardsForCurrentQueueRevision(
                     queueItem,
                     garminHealthLifecycleGuards,
                 );
@@ -2998,6 +3338,34 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
             );
         }
         if (error instanceof MissingSleepProviderTokenError) {
+            if (suuntoQueueOwner && await isSuuntoImportDisconnected(suuntoQueueOwner)) {
+                logger.info('[SleepSync][Suunto] Skipping work after completed disconnect.', {
+                    queueItemId: queueItem.id, reason: 'service_disconnected',
+                });
+                return markQueueItemSkipped(queueItem, undefined, 'service_disconnected', {
+                    skippedContext: 'SERVICE_DISCONNECTED',
+                });
+            }
+            if (queueItem.provider === SLEEP_PROVIDERS.COROSAPI
+                && queueItem.type === 'coros_poll' && queueItem.userID) {
+                const meta = await getServiceConnectionMeta(queueItem.userID, ServiceNames.COROSAPI);
+                // An account/credential mismatch also looks like a missing token.
+                // Only a cleared lifecycle, confirmed empty projection AND absent
+                // token root prove the queued poll outlived a completed disconnect.
+                if (meta?.connectionState === undefined
+                    && typeof meta?.connectionStateGeneration === 'string' && meta.connectionStateGeneration.trim()
+                    && typeof meta.connectionAccountsRevisionKey === 'string' && meta.connectionAccountsRevisionKey.trim()
+                    && Array.isArray(meta.connectionAccounts) && meta.connectionAccounts.length === 0
+                    && !(await getServiceTokenRootDocumentRef(queueItem.userID, ServiceNames.COROSAPI).get()).exists) {
+                    logger.info('[SleepSync][COROS] Skipping poll after completed disconnect.', {
+                        queueItemId: queueItem.id,
+                        reason: 'service_disconnected',
+                    });
+                    return markQueueItemSkipped(queueItem, undefined, 'service_disconnected', {
+                        skippedContext: 'SERVICE_DISCONNECTED',
+                    });
+                }
+            }
             if (!isHealthQueueItem(queueItem)
                 && queueItem.userID
                 && (queueItem.provider !== SLEEP_PROVIDERS.COROSAPI || corosLifecycleGuards)) {
@@ -3022,7 +3390,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                     await markSleepSyncError(queueItem.userID, queueItem.provider, error);
                 }
             }
-            logger.warn(`[SleepSync] Queue item ${queueItem.id} has no connected ${error.provider} token; moving to DLQ`);
+            logger.warn(`[SleepSync] Skipping provider work for queue item ${queueItem.id}: no matching connected ${error.provider} token; moving to failed_jobs (NO_TOKEN_FOUND).`);
             return moveSleepQueueItemToDeadLetterQueue(
                 queueItem,
                 error,
@@ -3118,6 +3486,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
             : queueItem.provider === SLEEP_PROVIDERS.COROSAPI
                 ? sanitizeCOROSDailyErrorForTelemetry(error)
                 : error;
+        let onHealthRetryExhausted: Parameters<typeof increaseRetryCountForQueueItem>[5];
         if (queueItem.userID) {
             const sleepErrorStateWritten = isHealthQueueItem(queueItem)
                 ? undefined
@@ -3170,15 +3539,42 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                     : corosLifecycleGuards;
             const failedHealthUserID = queueItem.userID;
             if (failedHealthProvider && failedHealthLifecycleGuards && failedHealthUserID) {
+                // The claim already authenticated the owner; legacy rows may lack a durable UID.
+                const pendingGuards = (guards: typeof failedHealthLifecycleGuards) =>
+                    healthStateGuardsForCurrentQueueRevision(queueItem, guards, false);
                 try {
                     const failedAtMs = Date.now();
                     const failureStateUpdate = {
                         status: HEALTH_SYNC_STATUSES.Failed,
+                        retryPending: true,
                         lastErrorCode: isSuuntoHealthQueueItem(queueItem)
                             ? 'suunto_health_sync_failed'
                             : isGarminHealthQueueItem(queueItem)
                                 ? 'garmin_health_sync_failed'
                                 : 'coros_daily_sync_failed',
+                    };
+                    onHealthRetryExhausted = async transaction => {
+                        const guards = isSuuntoHealthQueueItem(queueItem)
+                            ? suuntoHealthLifecycleGuards || failedHealthLifecycleGuards
+                            : failedHealthLifecycleGuards;
+                        const tokenRef = guards.requiredExistingDocumentRef;
+                        const credential = guards.requiredExistingTokenCredential;
+                        // Resolve only the status credential inside this transaction. Import authority is unchanged.
+                        const snapshot = tokenRef && credential
+                            ? await transaction.get(tokenRef).catch(() => {
+                                throw new Error('Health retry status could not be finalized.');
+                            }) : null;
+                        const currentCredential = snapshot ? getTokenCredentialSnapshot(snapshot.data()) : credential;
+                        const accountField = isGarminHealthQueueItem(queueItem) ? 'userID'
+                            : isSuuntoHealthQueueItem(queueItem) ? 'userName' : 'openId';
+                        if (snapshot && (!snapshot.exists
+                            || currentCredential?.credentialGeneration !== credential?.credentialGeneration
+                            || snapshot.data()?.[accountField] !== queueItem.providerUserId)) return;
+                        await updateHealthSyncState(failedHealthUserID, failedHealthProvider,
+                            { ...failureStateUpdate, retryPending: false }, failedAtMs, {
+                                ...guards, transaction,
+                                requiredExistingTokenCredential: currentCredential,
+                            });
                     };
                     let healthStateWritten: boolean;
                     if (isSuuntoHealthQueueItem(queueItem)
@@ -3194,7 +3590,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                                 failedHealthProvider,
                                 failureStateUpdate,
                                 failedAtMs,
-                                guards,
+                                pendingGuards(guards),
                             ),
                             written => !written,
                         );
@@ -3206,7 +3602,7 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                             failedHealthProvider,
                             failureStateUpdate,
                             failedAtMs,
-                            failedHealthLifecycleGuards,
+                            pendingGuards(failedHealthLifecycleGuards),
                         );
                     }
                     if (!healthStateWritten) {
@@ -3221,10 +3617,13 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                             },
                         );
                     }
-                } catch {
+                } catch (stateError) {
                     // Queue retry accounting is the durable recovery path. A
                     // sync-state outage must not bypass that transition.
                     logger.error('[HealthSync] Failed to record provider Health sync failure.', {
+                        queueItemId: queueItem.id,
+                        provider: failedHealthProvider,
+                        ...getHealthFailureTelemetry(stateError, 'failure_state_write', Date.now() - processingStartedAtMs),
                         failure: isSuuntoHealthQueueItem(queueItem)
                             ? 'suunto_health_state_write_failed'
                             : isGarminHealthQueueItem(queueItem)
@@ -3234,12 +3633,40 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 }
             }
         }
-        logger.error(`[SleepSync] Queue item ${queueItem.id} failed`, telemetryError);
+        const safeHealthFailureTelemetry = isGarminHealthQueueItem(queueItem)
+            ? { queueItemId: queueItem.id, provider: HEALTH_PROVIDERS.GarminAPI,
+                ...getGarminHealthFailureTelemetry(error,
+                    healthFailureStage === 'provider_sync' ? garminRequestStage : healthFailureStage,
+                    Date.now() - processingStartedAtMs) }
+            : isSuuntoHealthQueueItem(queueItem)
+            ? getSuuntoHealthFailureTelemetry(error, healthFailureStage, Date.now() - processingStartedAtMs)
+            : null;
+        logger.error(
+            `[SleepSync] Queue item ${queueItem.id} failed`,
+            safeHealthFailureTelemetry || telemetryError,
+        );
         return increaseRetryCountForQueueItem(
             queueItem,
             telemetryError instanceof Error ? telemetryError : new Error(`${telemetryError}`),
+            1, undefined, undefined, onHealthRetryExhausted,
         );
     } finally {
+        if (isSuuntoHealthQueueItem(queueItem)) {
+            try {
+                logger.info('[HealthSync][Suunto] Feed telemetry', {
+                    healthTrigger: queueItem.healthTrigger === 'webhook'
+                        || queueItem.healthTrigger === 'poll'
+                        || queueItem.healthTrigger === 'backfill'
+                        ? queueItem.healthTrigger : 'unknown',
+                    webhookFeedMask: queueItem.healthTrigger === 'webhook'
+                        && [1, 2, 3].includes(queueItem.suuntoHealthWebhookFeedMask || 0)
+                        ? queueItem.suuntoHealthWebhookFeedMask : 0,
+                    feeds: suuntoFeedMetrics,
+                });
+            } catch {
+                // Telemetry must not affect task acknowledgement or retries.
+            }
+        }
         if (processingOwner && processingUserID) {
             try {
                 await releaseSleepQueueRevision(queueItem, processingUserID, processingOwner);

@@ -8,14 +8,23 @@ import { resolve } from 'node:path';
 import {
   DataAirPower,
   DataAltitude,
+  DataCadence,
+  DataSpeed,
+  DataStrokeRate,
+  DataSwimPace,
   ChartCursorBehaviours,
   DataDepth,
   DataDistance,
+  DataGNSSDistance,
+  DataGNSSDistanceMiles,
+  DataStrydDistance,
   DataHeartRate,
   DataPotentialStamina,
   DataPower,
   DataStamina,
   DistanceUnits,
+  WeightUnits,
+  SpeedUnits,
   DynamicDataLoader,
   LapTypes,
   XAxisTypes,
@@ -30,6 +39,11 @@ import { AppShareService } from '../../../../services/app.share.service';
 import { getOrCreateEChartsTooltipHost } from '../../../../helpers/echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from '../../../../helpers/echarts-tooltip-position.helper';
 import { MaterialModule } from '../../../../modules/material.module';
+import { resolveDeviceChartColor } from '../../../../helpers/device-chart-appearance.helper';
+import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
+import { init } from 'echarts';
+import type { LineSeriesOption } from 'echarts/charts';
+import { AppHapticsService } from '../../../../services/app.haptics.service';
 
 describe('EventCardChartPanelComponent', () => {
   let fixture: ComponentFixture<EventCardChartPanelComponent>;
@@ -62,6 +76,7 @@ describe('EventCardChartPanelComponent', () => {
     }),
     setOption: vi.fn(),
     convertFromPixel: vi.fn((_finder: unknown, value: number | number[]) => value),
+    convertToPixel: vi.fn((_finder: unknown, value: number | number[]) => value),
     resize: vi.fn(),
     dispose: vi.fn(),
     isDisposed: vi.fn().mockReturnValue(false),
@@ -81,11 +96,67 @@ describe('EventCardChartPanelComponent', () => {
   const snackBarMock = {
     open: vi.fn(),
   };
+  const hapticsMock = { selection: vi.fn() };
   const altitudeGradeColors = {
     moderate: '#F9A825',
     hard: '#E64A19',
     verySteep: '#7F1D1D',
   };
+
+  it('renders four device patterns with matching accessible legend samples and overlay styles', async () => {
+    component.strokeWidth = 1;
+    const base = component.panel!.series[0];
+    component.showActivityNamesInTooltip = true;
+    component.panel = { ...component.panel!, series: ['solid', 'dashed', 'dotted', 'dash-dot'].map((lineStyle, index) => ({
+      ...base, id: `device-${index}`, activityID: `device-${index}`, activityName: `Device ${index + 1}`, lineStyle,
+    })) } as any;
+    component.overlayPanel = { ...component.panel, dataType: DataAltitude.type, displayName: 'Altitude' } as any;
+    await renderComponent();
+    const option = getRenderedOption();
+    expect(option.series.slice(0, 4).map((series: any) => series.lineStyle.type)).toEqual(['solid', 'dashed', 'dotted', [8, 3, 2, 3]]);
+    expect(option.series.slice(4).map((series: any) => series.lineStyle.type)).toEqual(['solid', 'dashed', 'dotted', [8, 3, 2, 3]]);
+    expect(option.series.every((series: any) => series.lineStyle.width === 1)).toBe(true);
+    expect(option.series.slice(4).every((series: any) => series.lineStyle.opacity === 1)).toBe(true);
+    expect(option.series[4].lineStyle.width).toBe(option.series[0].lineStyle.width);
+    const samples = [...fixture.nativeElement.querySelectorAll('.event-chart-panel__series-legend-dot--line')] as HTMLElement[];
+    expect(samples.map(sample => sample.getAttribute('aria-label'))).toEqual([
+      'solid line', 'dashed line', 'dotted line', 'dash-dot line', 'solid line', 'dashed line', 'dotted line', 'dash-dot line',
+    ]);
+    expect(samples[1].style.borderTopStyle).toBe('dashed');
+    expect(samples[2].style.borderTopStyle).toBe('dotted');
+    expect(samples[3].classList.contains('event-chart-panel__series-legend-dot--dash-dot')).toBe(true);
+    expect(samples[0].style.getPropertyValue('--series-line-width')).toBe(`${option.series[0].lineStyle.width}px`);
+    expect(samples[4].style.getPropertyValue('--series-line-width')).toBe(`${option.series[4].lineStyle.width}px`);
+
+    component.panel = { ...component.panel!, series: component.panel!.series.map(series => ({ ...series, lineStyle: undefined })) };
+    component.overlayPanel = { ...component.overlayPanel!, series: component.overlayPanel!.series.map(series => ({ ...series, lineStyle: undefined })) };
+    // Model changes use ECharts merge updates; explicitly solid types clear old dashes.
+    fixture.componentRef.setInput('panel', component.panel);
+    fixture.componentRef.setInput('overlayPanel', component.overlayPanel);
+    await renderComponent();
+    const disabledOption = getRenderedOption();
+    expect(disabledOption.series.every((series: any) => series.lineStyle.type === 'solid')).toBe(true);
+    expect(disabledOption.series[0].lineStyle.width).toBe(1);
+    expect(disabledOption.series[4].lineStyle.width).toBe(1);
+    expect(disabledOption.series[4].lineStyle.opacity).toBeLessThan(1);
+    expect(fixture.nativeElement.querySelectorAll('.event-chart-panel__series-legend-dot--line')).toHaveLength(0);
+  });
+
+  it.each([0.5, 1, 2, 6])('keeps primary, overlay and legend widths unchanged when enabling patterns at %spx', async (strokeWidth) => {
+    component.strokeWidth = strokeWidth;
+    component.showActivityNamesInTooltip = true;
+    component.overlayPanel = { ...component.panel!, dataType: DataAltitude.type, displayName: 'Altitude' };
+    await renderComponent();
+    const normalWidths = getRenderedOption().series.map((series: any) => series.lineStyle.width);
+    expect(normalWidths[0]).toBe(strokeWidth);
+
+    fixture.componentRef.setInput('panel', { ...component.panel!, series: component.panel!.series.map(series => ({ ...series, lineStyle: 'dashed' })) });
+    fixture.componentRef.setInput('overlayPanel', { ...component.overlayPanel!, series: component.overlayPanel!.series.map(series => ({ ...series, lineStyle: 'dashed' })) });
+    await renderComponent();
+    expect(getRenderedOption().series.map((series: any) => series.lineStyle.width)).toEqual(normalWidths);
+    const samples = [...fixture.nativeElement.querySelectorAll('.event-chart-panel__series-legend-dot--line')] as HTMLElement[];
+    expect(samples.map(sample => sample.style.getPropertyValue('--series-line-width'))).toEqual(normalWidths.map(width => `${width}px`));
+  });
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -157,6 +228,7 @@ describe('EventCardChartPanelComponent', () => {
       imports: [MaterialModule, NoopAnimationsModule],
       declarations: [EventCardChartPanelComponent],
       providers: [
+        { provide: AppHapticsService, useValue: hapticsMock },
         { provide: EChartsLoaderService, useValue: eChartsLoaderMock },
         { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), log: vi.fn() } },
         { provide: AppShareService, useValue: shareServiceMock },
@@ -255,8 +327,198 @@ describe('EventCardChartPanelComponent', () => {
   }
 
   function getRenderedOption(): any {
-    return eChartsLoaderMock.setOption.mock.calls.findLast(([, option]) => option?.series)?.[1] as any;
+    return eChartsLoaderMock.setOption.mock.calls.findLast(([, option]) =>
+      option?.series?.some(series => series.type === 'line'))?.[1] as any;
   }
+
+  function setPowerPanel(values = [100, 100, 396, 200, 0, 100, 110]): void {
+    fixture.componentRef.setInput('panel', buildTestPanel(DataPower.type,
+      values.map((y, index) => ({ x: index, y, time: index * 1000 })), { displayName: 'Power' }));
+    fixture.componentRef.setInput('xDomain', { start: 0, end: values.length - 1 });
+  }
+
+  function getFullPowerOption(): ReturnType<typeof getRenderedOption> {
+    return eChartsLoaderMock.setOption.mock.calls.findLast(([, option]) => option?.series?.some(series => series.id === `a1::${DataPower.type}`))?.[1];
+  }
+
+  it('defaults Power to Raw, switches through Material with one haptic and keeps range stats and source data unchanged', async () => {
+    setPowerPanel();
+    fixture.componentRef.setInput('selectedRange', { start: 0, end: 6 });
+    await renderComponent();
+    expect(component.powerView()).toBe('raw');
+    expect(fixture.nativeElement.querySelector('mat-button-toggle[value="raw"] button').getAttribute('aria-checked')).toBe('true');
+    expect(getFullPowerOption().series).toHaveLength(1);
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+    const source = structuredClone(component.panel);
+    const stats = structuredClone(component.rangeStats);
+
+    fixture.nativeElement.querySelector('mat-button-toggle[value="3s"] button').click();
+    await renderComponent();
+    const option = getFullPowerOption();
+    expect(component.powerView()).toBe('3s');
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+    expect([...option.series[0].data].slice(0, 6)).toEqual([0, NaN, 1, NaN, 2, 596 / 3]);
+    expect(option.series).toHaveLength(2);
+    expect(option.series[0].areaStyle.opacity).toBe(0);
+    expect(option.series[1]).toMatchObject({ type: 'custom', silent: true, clip: true });
+    expect(option.series[1].data).toContainEqual([2, 396, 596 / 3]);
+    expect(option.series[1].data).toContainEqual([4, 0, 596 / 3]);
+    expect(component.panel).toEqual(source);
+    expect(component.rangeStats).toEqual(stats);
+
+    component.setPowerView('3s');
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+    component.setPowerView('raw');
+    await renderComponent();
+    expect(getFullPowerOption().series).toHaveLength(1);
+    expect(Array.from(getFullPowerOption().series[0].data)).toEqual(source!.series[0].points!.flatMap(p => [p.x, p.y]));
+    expect(component.rangeStats).toEqual(stats);
+  });
+
+  it('keeps each comparison and its recorded extrema independent, preserves overlays and rebuckets on zoom', async () => {
+    setPowerPanel();
+    const primary = component.panel!;
+    fixture.componentRef.setInput('panel', { ...primary, series: [...primary.series,
+      { ...primary.series[0], id: 'second::Power', activityID: 'second', points: primary.series[0].points!.map(p => ({ ...p, y: p.y! * 2 })) }] });
+    fixture.componentRef.setInput('overlayPanel', buildTestPanel(DataHeartRate.type, [120, 130]));
+    await renderComponent();
+    component.setPowerView('3s');
+    await renderComponent();
+    const option = getFullPowerOption();
+    expect(option.series.map(series => series.type)).toEqual(['line', 'custom', 'line', 'custom', 'line']);
+    expect(option.series[2].data[5]).toBe(option.series[0].data[5] * 2);
+    expect(Array.from(option.series[4].data)).toEqual([0, 120, 10, 130]);
+    expect(option.series[3].data).toContainEqual([2, 792, 1192 / 3]);
+    chart.getOption.mockReturnValue({ dataZoom: [{ startValue: 3, endValue: 6 }] });
+    fixture.componentRef.setInput('sharedZoomRange', { start: 3, end: 6 });
+    component['applyCanonicalAxisScales']();
+    const update = eChartsLoaderMock.setOption.mock.calls.at(-1)![1];
+    expect(update.series.map(series => series.id)).toEqual([
+      'power-whiskers::a1::Power', 'power-whiskers::second::Power',
+    ]);
+    expect(update.series.slice(0, 2).every(series => series.data.every(point => point[0] >= 3 && point[0] <= 6))).toBe(true);
+    expect(eChartsLoaderMock.setOption.mock.calls.at(-1)![2].replaceMerge).toBeUndefined();
+    expect(component.panel).toEqual({ ...primary, series: [...primary.series,
+      { ...primary.series[0], id: 'second::Power', activityID: 'second', points: primary.series[0].points!.map(p => ({ ...p, y: p.y! * 2 })) }] });
+    expect(component.powerView()).toBe('3s');
+  });
+
+  it('keeps recorded minimum and maximum while a zoomed 3s average includes samples before the visible range', async () => {
+    setPowerPanel([900, 900, 900, 500, 490, 480]);
+    fixture.componentRef.setInput('selectedRange', { start: 3, end: 5 });
+    await renderComponent();
+    const recordedStats = structuredClone(component.rangeStats);
+    component.setPowerView('3s');
+    await renderComponent();
+    chart.getOption.mockReturnValue({ dataZoom: [{ startValue: 3, endValue: 5 }] });
+    component['applyCanonicalAxisScales']();
+    const update = eChartsLoaderMock.setOption.mock.calls.at(-1)![1];
+    expect(update.yAxis.max).toBeGreaterThanOrEqual(2300 / 3);
+    expect(update.series[0].data).toContainEqual([3, 500, 2300 / 3]);
+    expect(update.series[0].data).toContainEqual([5, 480, 490]);
+    expect(component.rangeStats).toEqual(recordedStats);
+    expect(recordedStats[0].min.value).toBe(String(DynamicDataLoader.getDataInstanceFromDataType(DataPower.type, 480).getDisplayValue()));
+    expect(recordedStats[0].max.value).toBe(String(DynamicDataLoader.getDataInstanceFromDataType(DataPower.type, 500).getDisplayValue()));
+    expect(component.panel!.series[0].points!.slice(3).map(point => point.y)).toEqual([500, 490, 480]);
+  });
+
+  it('scales a narrow 3s view to the average segment without offscreen raw whiskers', async () => {
+    setPowerPanel([100, 100, 100, 900, 100]);
+    await renderComponent();
+    const before = structuredClone(component.panel);
+    component.setPowerView('3s');
+    await renderComponent();
+    chart.getOption.mockReturnValue({ dataZoom: [{ startValue: 2.25, endValue: 2.75 }] });
+    component['applyCanonicalAxisScales']();
+    const update = eChartsLoaderMock.setOption.mock.calls.at(-1)![1];
+    expect(update.yAxis.min).toBeLessThanOrEqual(100);
+    expect(update.yAxis.max).toBeGreaterThanOrEqual(1100 / 3);
+    expect(update.yAxis.max).toBeLessThan(900);
+    expect(update.series[0].data).toEqual([]); // No recorded whisker lies inside this range.
+    expect(component.panel).toEqual(before);
+  });
+
+  it('renders recorded whiskers in ECharts, keeps the 3s line on zoom and removes whiskers on Raw', async () => {
+    setPowerPanel();
+    await renderComponent();
+    const canvasContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    const rendered = init(null, undefined, { renderer: 'svg', ssr: true, width: 640, height: 320 });
+    const applyFull = () => rendered.setOption(getFullPowerOption(), { notMerge: false, replaceMerge: ['series', 'xAxis', 'yAxis', 'dataZoom'], lazyUpdate: false });
+    try {
+      applyFull();
+      component.setPowerView('3s');
+      await renderComponent();
+      applyFull();
+      expect(rendered.getOption().series).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'a1::Power', type: 'line' }),
+        expect.objectContaining({ id: 'power-whiskers::a1::Power', type: 'custom', silent: true }),
+      ]));
+      expect(rendered.renderToSVGString()).toMatch(/(?:stroke-)?opacity="0\.55"/);
+      chart.getOption.mockReturnValue({ dataZoom: [{ startValue: 3, endValue: 6 }] });
+      component['applyCanonicalAxisScales']();
+      rendered.setOption(eChartsLoaderMock.setOption.mock.calls.at(-1)![1], { notMerge: false, lazyUpdate: false });
+      expect(rendered.getOption().series).toHaveLength(2);
+      expect(rendered.getOption().series[0]).toMatchObject({ id: 'a1::Power', type: 'line' });
+      component.setPowerView('raw');
+      await renderComponent();
+      applyFull();
+      expect(rendered.getOption().series).toHaveLength(1);
+      expect(rendered.getOption().series[0]).toMatchObject({ id: 'a1::Power', type: 'line' });
+    } finally {
+      rendered.dispose();
+      canvasContext.mockRestore();
+    }
+  });
+
+  it('keeps zone coloring on both averaged lines rather than their whiskers', async () => {
+    setPowerPanel();
+    const base = component.panel!;
+    const colored = { ...base.series[0], zoneColorPieces: [
+      { zone: 'Easy', color: '#0099ff', lt: 200 }, { zone: 'Hard', color: '#ffaa00', gte: 200 },
+    ] };
+    fixture.componentRef.setInput('panel', { ...base, series: [colored, { ...colored, id: 'second::Power', activityID: 'second' }] });
+    await renderComponent();
+    component.setPowerView('3s');
+    await renderComponent();
+    expect(getFullPowerOption().visualMap.map(map => map.seriesIndex)).toEqual([0, 2]);
+  });
+
+  it.each([DistanceUnits.Kilometers, DistanceUnits.Miles])('labels derived and original tooltip values through Sports Lib with %s settings', async distanceUnits => {
+    setPowerPanel([0, 300, 600]);
+    fixture.componentRef.setInput('userUnitSettings', { ...getDefaultUserUnitSettings(), distanceUnits });
+    fixture.componentRef.setInput('xAxisType', XAxisTypes.Distance);
+    await renderComponent();
+    component.setPowerView('3s');
+    await renderComponent();
+    const html = getFullPowerOption().tooltip.formatter([{ value: [2, 300] }]);
+    const average = DynamicDataLoader.getDataInstanceFromDataType(DataPower.type, 300);
+    const raw = DynamicDataLoader.getDataInstanceFromDataType(DataPower.type, 600);
+    expect(html).toContain(`3s average: ${average.getDisplayValue()}${average.getDisplayUnit()}`);
+    expect(html).toContain(`Recorded: ${raw.getDisplayValue()}${raw.getDisplayUnit()}`);
+    expect(html).not.toContain('3s average: 600');
+  });
+
+  it('silently resets Raw for another activity, keeps 3s across axis changes and hides controls for unsupported metrics or short streams', async () => {
+    setPowerPanel();
+    await renderComponent();
+    component.setPowerView('3s');
+    await renderComponent();
+    fixture.componentRef.setInput('xAxisType', XAxisTypes.Time);
+    await renderComponent();
+    expect(component.powerView()).toBe('3s');
+    fixture.componentRef.setInput('panel', { ...component.panel!, series: component.panel!.series.map(s => ({ ...s, id: 'new-ride::Power' })) });
+    await renderComponent();
+    expect(component.powerView()).toBe('raw');
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+    setPowerPanel([100, 200]);
+    await renderComponent();
+    expect(fixture.nativeElement.querySelector('.event-chart-panel__power-view')).toBeNull();
+    component.setPowerView('3s');
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+    fixture.componentRef.setInput('panel', buildTestPanel(DataHeartRate.type, [100, 200, 300]));
+    await renderComponent();
+    expect(fixture.nativeElement.querySelector('.event-chart-panel__power-view')).toBeNull();
+  });
 
   function createTouch(identifier: number, clientX: number, clientY: number): Touch {
     return { identifier, clientX, clientY } as Touch;
@@ -354,7 +616,8 @@ describe('EventCardChartPanelComponent', () => {
     component.showZoomBar = true;
     await renderComponent();
 
-    expect(eChartsLoaderMock.init).toHaveBeenCalledTimes(2);
+    expect(eChartsLoaderMock.init).toHaveBeenCalledOnce();
+    expect(eChartsLoaderMock.dispose).not.toHaveBeenCalledWith(chart);
     expect(eChartsLoaderMock.setOption).toHaveBeenCalled();
     expect(chart.on).not.toHaveBeenCalledWith('click', expect.any(Function));
     expect(intersectionObserverObserveSpies).toHaveLength(1);
@@ -374,11 +637,11 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.brush?.brushMode).toBe('single');
     expect(option?.dataZoom?.[0]?.zoomOnMouseWheel).toBe(false);
     expect(option?.dataZoom?.[0]?.disabled).toBe(false);
-    expect(option?.dataZoom?.[0]?.filterMode).toBe('filter');
+    expect(option?.dataZoom?.[0]?.filterMode).toBe('none');
     expect(option?.dataZoom?.[0]?.moveOnMouseMove).toBe(true);
     expect(option?.dataZoom?.[0]?.moveOnMouseWheel).toBe(false);
     expect(option?.dataZoom?.[1]?.show).toBe(true);
-    expect(option?.dataZoom?.[1]?.filterMode).toBe('filter');
+    expect(option?.dataZoom?.[1]?.filterMode).toBe('none');
   });
 
   it('renders a non-interactive chart when preview mode is enabled', async () => {
@@ -391,11 +654,12 @@ describe('EventCardChartPanelComponent', () => {
     const option = getRenderedOption();
     expect(fixture.nativeElement.querySelector('.event-chart-panel__actions')).toBeNull();
     expect(option?.tooltip?.show).toBe(false);
-    expect(option?.yAxis?.axisLabel?.show).toBe(false);
+    expect(option?.yAxis?.axisLabel?.show).toBe(true);
     expect(option?.series?.[0]?.silent).toBe(true);
-    expect(chart.on).not.toHaveBeenCalled();
+    expect(chart.on.mock.calls).toEqual([['finished', expect.any(Function)]]);
     expect(zr.on).not.toHaveBeenCalled();
     expect(intersectionObserverObserveSpies).toHaveLength(0);
+    expect(fixture.nativeElement.querySelector('.event-chart-panel__chart--pinch-enabled')).toBeNull();
   });
 
   it('keeps compact preview chrome while enabling the production tooltip and interactions', async () => {
@@ -410,10 +674,123 @@ describe('EventCardChartPanelComponent', () => {
     expect(fixture.nativeElement.querySelector('.event-chart-panel__actions')).toBeNull();
     expect(option?.tooltip?.show).toBe(true);
     expect(option?.tooltip?.triggerOn).toBe('mousemove|click');
-    expect(option?.yAxis?.axisLabel?.show).toBe(false);
+    expect(option?.yAxis?.axisLabel?.show).toBe(true);
     expect(option?.series?.[0]?.silent).toBe(false);
     expect(chart.on).toHaveBeenCalledWith('datazoom', expect.any(Function));
     expect(intersectionObserverObserveSpies).toHaveLength(1);
+  });
+
+  it.each([DataHeartRate.type, DataAltitude.type, DataPower.type, DataDepth.type])(
+    'keeps readable axes in the mobile %s preview', async dataType => {
+      setMobileViewport();
+      component.previewMode = true;
+      component.previewInteractions = true;
+      component.panel = buildTestPanel(dataType, [0, 60, 120]);
+
+      await renderComponent();
+
+      const option = getRenderedOption();
+      expect(option?.yAxis?.axisLabel).toEqual(expect.objectContaining({
+        show: true, hideOverlap: true, showMinLabel: true, showMaxLabel: true, fontSize: 11, margin: 8,
+      }));
+      expect(option?.xAxis?.axisLabel).toEqual(expect.objectContaining({
+        hideOverlap: true, fontSize: 11, margin: 10,
+      }));
+      expect(option?.grid).toEqual(expect.objectContaining({
+        outerBoundsMode: 'same', outerBoundsContain: 'axisLabel',
+      }));
+      expect(option?.yAxis?.inverse).toBe(dataType === DataDepth.type);
+    },
+  );
+
+  it.each([
+    [DistanceUnits.Kilometers, '10.00Km'],
+    [DistanceUnits.Miles, '6.22mi'],
+  ] as const)('labels preview Distance ticks with their actual %s unit', async (distanceUnits, expected) => {
+    component.previewMode = true;
+    component.userUnitSettings = { ...getDefaultUserUnitSettings(), distanceUnits };
+    component.panel = buildTestPanel(DataDistance.type, [0, 10000]);
+
+    await renderComponent();
+
+    const option = getRenderedOption();
+    expect(option?.yAxis?.axisLabel?.show).toBe(true);
+    expect(option?.yAxis?.axisLabel?.formatter(10000)).toBe(expected);
+  });
+
+  it.each([DataDistance.type, DataStrydDistance.type, DataGNSSDistance.type, 'Step Length', 'Jump Distance'].flatMap(type =>
+    [false, true].map(overlay => ({ type, overlay }))))(
+    'labels $type ticks on the primary or overlay axis (overlay=$overlay)', async ({ type, overlay }) => {
+      const panel = buildTestPanel(type, [0, 800, 1000, 10000]);
+      if (overlay) component.overlayPanel = panel;
+      else component.panel = panel;
+      await renderComponent();
+      const axes = getRenderedOption()?.yAxis;
+      const axis = overlay ? axes[1] : axes;
+      expect(axis.axisLabel.formatter(0)).toBe('0.0m');
+      expect(axis.axisLabel.formatter(800)).toBe('800.0m');
+      expect(axis.axisLabel.formatter(1000)).toBe('1.00Km');
+      expect(axis.axisLabel.formatter(10000)).toBe('10.00Km');
+    },
+  );
+
+  it.each([false, true])('keeps Weight axes, tooltips and range statistics in pounds (overlay=%s)', async overlay => {
+    component.userUnitSettings = { ...getDefaultUserUnitSettings(), weightUnits: WeightUnits.Pounds };
+    const panel = buildTestPanel('Weight', [70, 80], { unit: 'lb' });
+    const before = structuredClone(panel);
+    if (overlay) component.overlayPanel = panel;
+    else component.panel = panel;
+    await renderComponent();
+    const axes = getRenderedOption()?.yAxis;
+    expect((overlay ? axes[1] : axes).axisLabel.formatter(70)).toBe('154.3');
+    expect(component['formatDataValue']('Weight', 70)).toBe('154.3lb');
+    component['updateRangeStats']({ start: 0, end: 10 });
+    expect(component.rangeStats.flatMap(stat => stat.entries).some(entry => entry.value === '165.3lb')).toBe(true);
+    expect(panel).toEqual(before);
+  });
+
+  it('keeps each selected speed unit on its own axis and tooltip', async () => {
+    component.userUnitSettings = { ...getDefaultUserUnitSettings(), speedUnits: [SpeedUnits.MilesPerHour, SpeedUnits.MetersPerSecond] };
+    component.panel = buildTestPanel('Speed', [1, 2], { unit: 'm/s' });
+    component.overlayPanel = buildTestPanel(SpeedUnits.MilesPerHour, [2.237, 4.474], { unit: 'mph' });
+    await renderComponent();
+    const axes = getRenderedOption()?.yAxis;
+    expect(axes).toHaveLength(2);
+    expect(axes[0].axisLabel.formatter(2)).toBe('2.00');
+    expect(axes[1].axisLabel.formatter(4.474)).toBe('4.47');
+    expect(component['formatDataValue']('Speed', 2)).toBe('2.00m/s');
+    expect(component['formatDataValue'](SpeedUnits.MilesPerHour, 4.474)).toBe('4.47mph');
+  });
+
+  it.each([false, true])('labels imperial GNSS Distance without converting it twice (overlay=%s)', async overlay => {
+    component.userUnitSettings = { ...getDefaultUserUnitSettings(), distanceUnits: DistanceUnits.Miles };
+    const panel = buildTestPanel(DataGNSSDistanceMiles.type, [0, 6.22]);
+    panel.unit = 'mi';
+    if (overlay) component.overlayPanel = panel;
+    else component.panel = panel;
+    await renderComponent();
+    const axes = getRenderedOption()?.yAxis;
+    expect((overlay ? axes[1] : axes).axisLabel.formatter(6.22)).toBe('6.22');
+    expect(component['formatDataValue'](DataGNSSDistanceMiles.type, 6.22)).toBe('6.22mi');
+  });
+
+  it.each([
+    [false, DistanceUnits.Kilometers], [true, DistanceUnits.Kilometers],
+    [false, DistanceUnits.Miles], [true, DistanceUnits.Miles],
+  ] as const)('renders sustainable-distance axes and tooltips on mobile=%s with %s', async (mobile, distanceUnits) => {
+    try { DynamicDataLoader.getDataClassFromDataType('Estimated Sustainable Distance'); } catch { return; }
+    if (mobile) setMobileViewport();
+    component.userUnitSettings = { ...getDefaultUserUnitSettings(), distanceUnits };
+    const imperial = distanceUnits === DistanceUnits.Miles;
+    const type = `Estimated Sustainable Distance${imperial ? ' in miles' : ''}`;
+    component.panel = buildTestPanel(type, imperial ? [0, 6.22] : [0, 10000]);
+    component.panel.unit = imperial ? 'mi' : '';
+    await renderComponent();
+    const formatAxis = getRenderedOption()?.yAxis?.axisLabel?.formatter;
+    expect(formatAxis(imperial ? 6.22 : 10000)).toBe(imperial ? '6.22' : '10.00Km');
+    if (!imperial) expect(formatAxis(800)).toBe('800.0m');
+    expect((component as any).formatDataValue(type, imperial ? 6.22 : 10000)).toBe(imperial ? '6.22mi' : '10.00Km');
+    expect((component as any).formatDataValue(type, 0)).toBe(imperial ? '0.00mi' : '0.0m');
   });
 
   it('clears the active tooltip before replacing series for an overlay', async () => {
@@ -478,6 +855,286 @@ describe('EventCardChartPanelComponent', () => {
     const option = getRenderedOption();
     expect(option?.yAxis?.max).toBe(100);
     expect(option?.yAxis?.axisLabel?.formatter(100)).toBe('100');
+  });
+
+  it.each([DataHeartRate.type, DataPower.type, DataCadence.type, DataSpeed.type, DataAltitude.type, DataStrokeRate.type, DataSwimPace.type, DataDistance.type].flatMap(streamType =>
+    (['legacy', 'packed'] as const).flatMap(format => [false, true].map(overlay => ({ streamType, format, overlay })))))(
+    'connects two-second recorded readings with real line breaks, no dots and unchanged data ($streamType, $format, overlay=$overlay)',
+    async ({ streamType, format, overlay }) => {
+      const points = [118, null, 117, null, null, null, 115, 114, null, 113]
+        .map((y, x) => ({ x, y, time: x * 1000 }));
+      const base = component.panel!.series[0];
+      const series = {
+        ...base, id: 'test::hr', streamType,
+        lineContinuity: { mode: 'custom' as const, maxGapSeconds: 2 },
+        zoneColorPieces: [
+          { zone: 'Zone 1', color: '#0099ff', lt: 110 },
+          { zone: 'Zone 2', color: '#00aa00', gte: 110, lt: 120 },
+          { zone: 'Zone 3', color: '#ffaa00', gte: 120 },
+        ],
+        points: format === 'legacy' ? points : undefined,
+        ...(format === 'packed' ? {
+          lineValues: Float64Array.from(points.flatMap(p => [p.x, p.y ?? NaN])),
+          timeValues: Float64Array.from(points.map(p => p.time)),
+          pointCount: points.length,
+        } : {}),
+      };
+      const hrPanel = { ...component.panel!, dataType: streamType, minX: 0, maxX: 9, series: [series] };
+      if (overlay) {
+        component.overlayPanel = hrPanel;
+      } else {
+        component.panel = hrPanel;
+      }
+      component.xDomain = { start: 0, end: 9 };
+      const snapshot = () => ({
+        ...hrPanel,
+        series: hrPanel.series.map(item => ({
+          ...item,
+          lineValues: item.lineValues && Array.from(item.lineValues),
+          timeValues: item.timeValues && Array.from(item.timeValues),
+        })),
+      });
+      const before = structuredClone(snapshot());
+      const option = component['buildOption']();
+      const lines = option.series as LineSeriesOption[];
+      const seriesIndex = overlay ? 1 : 0;
+      const line = lines[seriesIndex];
+      expect(line).toMatchObject({ showSymbol: false, connectNulls: false });
+      expect(line.markPoint).toBeUndefined();
+      expect(Array.from(line.data as unknown as Float64Array))
+        .toEqual([0, 118, 2, 117, 6, NaN, 6, 115, 7, 114, 9, 113]);
+      if (overlay) expect(lines[0].showSymbol).toBe(false);
+      expect(component['resolveTooltipPointsAtX'](1).filter(point => point.series.id === series.id)).toEqual([]);
+      expect(component['resolveTooltipPointsAtX'](2).find(point => point.series.id === series.id)?.point.y).toBe(117);
+
+      const canvasContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+      const rendered = init(null, undefined, { renderer: 'svg', ssr: true, width: 640, height: 320 });
+      const hostChart = vi.spyOn(component['chartHost'], 'getChart').mockReturnValue(rendered);
+      const hostOptions = vi.spyOn(component['chartHost'], 'setOption')
+        .mockImplementation(update => rendered.setOption(update, { lazyUpdate: false }));
+      try {
+        rendered.setOption(option);
+        const model = (rendered as unknown as {
+          getModel(): { getSeriesByIndex(index: number): { getData(): {
+            count(): number;
+            getItemGraphicEl(index: number): { getSymbolType(): string } | undefined;
+            getRawIndex(index: number): number;
+          } } };
+        }).getModel();
+        const hrPaths = () => {
+          const svg = new DOMParser().parseFromString(rendered.renderToSVGString(), 'image/svg+xml');
+          expect(svg.querySelectorAll(`path[ecmeta_series_index="${seriesIndex}"][ecmeta_silent="true"]`)).toHaveLength(0);
+          return [...svg.querySelectorAll('path[fill="none"][stroke]')]
+            .filter(path => Number(path.getAttribute('stroke-width') || 1) === line.lineStyle!.width)
+            .filter(path => overlay ? path.getAttribute('stroke') === series.color : path.getAttribute('stroke')?.startsWith('url('))
+            .map(path => path.getAttribute('d') || '').filter(d => d.includes('L'));
+        };
+        // Inspect the actual ECharts geometry and clip rectangle, not just its input data.
+        const visibleHrSegments = () => {
+          const displayList = rendered.getZr().storage.getDisplayList() as unknown as Array<{
+            type: string;
+            shape: { points: Float32Array };
+            style: { lineWidth: number };
+            __clipPaths: Array<{ getBoundingRect(): { x: number; width: number } }>;
+          }>;
+          const paths = displayList.filter(item => item.type === 'ec-polyline' && item.style.lineWidth === line.lineStyle!.width);
+          expect(paths).toHaveLength(1);
+          const path = paths[0];
+          const clip = path.__clipPaths[0].getBoundingRect();
+          const points = path.shape.points;
+          let segments = 0;
+          for (let i = 2; i < points.length; i += 2) {
+            const coordinates = [points[i - 2], points[i - 1], points[i], points[i + 1]];
+            if (coordinates.every(Number.isFinite)
+              && Math.max(points[i - 2], points[i]) >= clip.x
+              && Math.min(points[i - 2], points[i]) <= clip.x + clip.width) segments++;
+          }
+          return segments;
+        };
+        const zoom = (startValue: number, endValue: number) => {
+          rendered.dispatchAction({ type: 'dataZoom', startValue, endValue });
+          component['applyCanonicalAxisScales']();
+          return visibleHrSegments();
+        };
+        // ECharts renders two continuous subpaths: [0,2] and [6,7,9].
+        expect(hrPaths().map(d => [(d.match(/M/g) || []).length, (d.match(/L/g) || []).length])).toContainEqual([2, 3]);
+        expect(visibleHrSegments()).toBe(3);
+        rendered.dispatchAction({ type: 'highlight', seriesIndex, dataIndex: 3 });
+        expect(model.getSeriesByIndex(seriesIndex).getData().getItemGraphicEl(3)?.getSymbolType()).toBe('emptyCircle');
+        rendered.dispatchAction({ type: 'downplay', seriesIndex, dataIndex: 3 });
+        expect(zoom(0, 2)).toBe(1);
+        expect(zoom(0.5, 1.5)).toBe(1); // Both recorded endpoints are outside the view.
+        expect(zoom(3, 5)).toBe(0); // A real gap stays blank, with neither endpoint in view.
+        expect(component['formatTooltip']([{ value: [2, 117], seriesId: line.id as string }])).toBe('');
+        expect(component['formatTooltip']([{ value: [6, 115], seriesId: line.id as string }])).toBe('');
+        component['updateRangeStats']({ start: 3, end: 5 });
+        expect(component.rangeStats.filter(stat => stat.activityID === series.activityID)).toEqual([]);
+        expect(zoom(5.5, 6.5)).toBe(1); // Only one recorded endpoint is in view.
+        expect(zoom(0, 9)).toBe(3);
+        expect(hrPaths().map(d => [(d.match(/M/g) || []).length, (d.match(/L/g) || []).length])).toContainEqual([2, 3]);
+        expect(snapshot()).toEqual(before);
+      } finally {
+        hostChart.mockRestore();
+        hostOptions.mockRestore();
+        rendered.dispose();
+        canvasContext.mockRestore();
+      }
+    }
+  );
+
+  it.each([DataHeartRate.type, DataPower.type, DataCadence.type, DataSpeed.type, DataAltitude.type, DataStrokeRate.type, DataSwimPace.type, DataDistance.type].flatMap(streamType =>
+    (['legacy', 'packed'] as const).flatMap(format => [false, true].flatMap(overlay => [XAxisTypes.Duration, XAxisTypes.Time, XAxisTypes.Distance].map(axis => ({ streamType, format, overlay, axis }))))))(
+    'keeps connected recorded segments inside the vertical scale through zoom cycles ($streamType, $format, overlay=$overlay, $axis)',
+    ({ streamType, format, overlay, axis }) => {
+      const x = (seconds: number) => axis === XAxisTypes.Time ? 1700000000000 + seconds * 1000
+        : axis === XAxisTypes.Distance ? 500 + seconds * 0.1 : seconds;
+      component.xAxisType = axis;
+      const hrPanel = buildTestPanel(streamType, [
+        { x: 0, y: 100, time: 0 }, { x: 2, y: 120, time: 2000 },
+        { x: 6, y: 80, time: 6000 }, { x: 8, y: 100, time: 8000 },
+      ].map(point => ({ ...point, x: x(point.x) })), { color: '#008800' });
+      hrPanel.series[0].lineContinuity = { mode: 'detect', maxGapSeconds: 10 };
+      if (format === 'packed') {
+        hrPanel.series = hrPanel.series.map(series => ({
+          ...series,
+          lineValues: Float64Array.from(series.points.flatMap(point => [point.x, point.y])),
+          timeValues: Float64Array.from(series.points.map(point => point.time)),
+          pointCount: series.points.length,
+          points: undefined,
+        }));
+      }
+      if (overlay) component.overlayPanel = hrPanel;
+      else component.panel = hrPanel;
+      component.xDomain = { start: x(0), end: x(8) };
+      const before = JSON.stringify(hrPanel);
+      const canvasContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+      const rendered = init(null, undefined, { renderer: 'svg', ssr: true, width: 640, height: 320 });
+      const hostChart = vi.spyOn(component['chartHost'], 'getChart').mockReturnValue(rendered);
+      const hostOptions = vi.spyOn(component['chartHost'], 'setOption')
+        .mockImplementation(update => rendered.setOption(update, { lazyUpdate: false }));
+      try {
+        rendered.setOption(component['buildOption']());
+        const seriesIndex = overlay ? 1 : 0;
+        const expectVisible = (seconds: number, y: number) => {
+          const pixel = rendered.convertToPixel({ seriesIndex }, [x(seconds), y]) as number[];
+          expect(rendered.containPixel({ gridIndex: 0 }, pixel)).toBe(true);
+        };
+        for (let cycle = 0; cycle < 2; cycle++) {
+          for (const [start, end, seconds, y] of [
+            [0, 1.5, 1.4, 114], // Following endpoint lies outside the viewport.
+            [0.5, 1.5, 1, 110], // Both endpoints lie outside the viewport.
+            [6.5, 8, 6.6, 86], // Preceding endpoint lies outside the viewport.
+            [0, 8, 1, 110],
+          ]) {
+            rendered.dispatchAction({ type: 'dataZoom', startValue: x(start), endValue: x(end) });
+            component['applyCanonicalAxisScales']();
+            expectVisible(seconds, y);
+          }
+          rendered.dispatchAction({ type: 'dataZoom', startValue: x(2.5), endValue: x(5.5) });
+          component['applyCanonicalAxisScales']();
+          const displayList = rendered.getZr().storage.getDisplayList() as unknown as Array<{
+            type: string;
+            style: { stroke: string };
+            shape: { points: Float32Array };
+            __clipPaths: Array<{ getBoundingRect(): { x: number; width: number } }>;
+          }>;
+          const paths = displayList.filter(item => item.type === 'ec-polyline' && item.style.stroke === '#008800');
+          expect(paths).toHaveLength(1);
+          const path = paths[0];
+          const clip = path.__clipPaths[0].getBoundingRect();
+          const pixels = path.shape.points;
+          for (let i = 2; i < pixels.length; i += 2) {
+            if (![pixels[i - 2], pixels[i - 1], pixels[i], pixels[i + 1]].every(Number.isFinite)) continue;
+            const crossesView = Math.max(pixels[i - 2], pixels[i]) >= clip.x
+              && Math.min(pixels[i - 2], pixels[i]) <= clip.x + clip.width;
+            expect(crossesView).toBe(false);
+          }
+          component['updateRangeStats']({ start: x(2.5), end: x(5.5) });
+          expect(component.rangeStats).toEqual([]);
+        }
+        expect(JSON.stringify(hrPanel)).toBe(before);
+      } finally {
+        hostChart.mockRestore();
+        hostOptions.mockRestore();
+        rendered.dispose();
+        canvasContext.mockRestore();
+      }
+    }
+  );
+
+  it.each((['continuous', 'detect', 'custom'] as const).flatMap(mode =>
+    [false, true].flatMap(overlay => [XAxisTypes.Duration, XAxisTypes.Time, XAxisTypes.Distance].map(axis => ({ mode, overlay, axis })))))(
+    'renders the selected policy through zoom cycles with sparse sampling ($mode, overlay=$overlay, $axis)', ({ mode, overlay, axis }) => {
+      const x = (seconds: number) => axis === XAxisTypes.Time ? 1700000000000 + seconds * 1000
+        : axis === XAxisTypes.Distance ? 500 + seconds * 3 : seconds;
+      component.xAxisType = axis;
+      const points = Array.from({ length: 40 }, (_, index) => ({
+        x: x(index * 5), time: index * 5000, y: index >= 20 && index <= 23 ? null : 100 + index,
+      }));
+      const panel = buildTestPanel(DataHeartRate.type, points, { color: '#008800' });
+      // Leave the default absent for existing accounts.
+      if (mode !== 'continuous') panel.series[0].lineContinuity = { mode, maxGapSeconds: 10 };
+      if (overlay) component.overlayPanel = panel;
+      else component.panel = panel;
+      component.xDomain = { start: x(0), end: x(195) };
+      const before = JSON.stringify(panel);
+      const canvas = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+      const rendered = init(null, undefined, { renderer: 'svg', ssr: true, width: 640, height: 320 });
+      const hostChart = vi.spyOn(component['chartHost'], 'getChart').mockReturnValue(rendered);
+      const hostOptions = vi.spyOn(component['chartHost'], 'setOption')
+        .mockImplementation(update => rendered.setOption(update, { lazyUpdate: false }));
+      const crossesViewport = () => {
+        const paths = (rendered.getZr().storage.getDisplayList() as any[])
+          .filter(item => item.type === 'ec-polyline' && item.style.stroke === '#008800');
+        expect(paths).toHaveLength(1);
+        const pixels = paths[0].shape.points;
+        const clip = paths[0].__clipPaths[0].getBoundingRect();
+        for (let i = 2; i < pixels.length; i += 2) {
+          if ([pixels[i - 2], pixels[i - 1], pixels[i], pixels[i + 1]].every(Number.isFinite)
+            && Math.max(pixels[i - 2], pixels[i]) >= clip.x
+            && Math.min(pixels[i - 2], pixels[i]) <= clip.x + clip.width) return true;
+        }
+        return false;
+      };
+      try {
+        rendered.setOption(component['buildOption']());
+        for (let cycle = 0; cycle < 2; cycle++) {
+          for (const [start, end, connected] of [[0, 195, true], [86, 89, true], [98, 115, mode === 'continuous']] as const) {
+            rendered.dispatchAction({ type: 'dataZoom', startValue: x(start), endValue: x(end) });
+            component['applyCanonicalAxisScales']();
+            expect(crossesViewport()).toBe(connected);
+          }
+          component['updateRangeStats']({ start: x(98), end: x(115) });
+          expect(component.rangeStats).toEqual([]);
+          expect(component['resolveTooltipPointsAtX'](x(105)).filter(point => point.series.id === panel.series[0].id)).toEqual([]);
+        }
+        expect(JSON.stringify(panel)).toBe(before);
+      } finally {
+        hostChart.mockRestore(); hostOptions.mockRestore(); rendered.dispose(); canvas.mockRestore();
+      }
+    },
+  );
+
+  it('applies a custom gap limit to sparse Battery readings', () => {
+    component.panel = buildTestPanel('Battery Charge', [
+      { x: 0, time: 0, y: 90 }, { x: 10, time: 10_000, y: 89 }, { x: 40, time: 40_000, y: 88 },
+    ]);
+    component.panel.series[0].lineContinuity = { mode: 'custom', maxGapSeconds: 10 };
+    const option = component['buildOption']();
+    const line = (option.series as LineSeriesOption[])[0];
+    expect(line.connectNulls).toBe(false);
+    expect(Array.from(line.data as unknown as Float64Array)).toEqual([0, 90, 10, 89, 40, NaN, 40, 88]);
+  });
+
+  it('keeps native clipping when overlays are added and removed', async () => {
+    await renderComponent();
+    expect(getRenderedOption().dataZoom.map(zoom => zoom.filterMode)).toEqual(['none', 'none']);
+    fixture.componentRef.setInput('overlayPanel', buildTestPanel(DataHeartRate.type, [120, 130]));
+    await renderComponent();
+    expect(getRenderedOption().dataZoom.map(zoom => zoom.filterMode)).toEqual(['none', 'none']);
+    fixture.componentRef.setInput('overlayPanel', null);
+    await renderComponent();
+    expect(getRenderedOption().dataZoom.map(zoom => zoom.filterMode)).toEqual(['none', 'none']);
   });
 
   it('uses native confined tooltip placement on mobile panels', async () => {
@@ -559,11 +1216,7 @@ describe('EventCardChartPanelComponent', () => {
 
     const option = getRenderedOption();
     expect(option?.series?.[0]?.connectNulls).toBe(true);
-    expect(option?.series?.[0]?.data).toEqual([
-      [0, 40],
-      [1, null],
-      [2, 41],
-    ]);
+    expect(option?.series?.[0]?.data).toEqual([[0, 40], [1, null], [2, 41]]);
   });
 
   it('renders an overlay panel on a secondary y-axis with solid no-fill series', async () => {
@@ -619,7 +1272,7 @@ describe('EventCardChartPanelComponent', () => {
       opacity: 0.82,
     }));
     expect(option?.series?.[1]?.lineStyle?.width).toBeLessThanOrEqual(option?.series?.[0]?.lineStyle?.width);
-    expect(option?.series?.[1]?.lineStyle?.type).toBeUndefined();
+    expect(option?.series?.[1]?.lineStyle?.type).toBe('solid');
     expect(option?.series?.[1]?.lineStyle?.shadowBlur).toBeUndefined();
   });
 
@@ -806,8 +1459,10 @@ describe('EventCardChartPanelComponent', () => {
     expect(chart.dispatchAction).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'dataZoom' }));
   });
 
-  it('zooms from the first horizontal mobile drag', async () => {
+  it('pans a zoomed chart from the first horizontal mobile drag and syncs the range', async () => {
     setMobileViewport();
+    chart.getOption.mockReturnValue({ dataZoom: [{ startValue: 20, endValue: 80 }] });
+    const zoomRangeEmit = vi.spyOn(component.zoomRangeChange, 'emit');
     await renderComponent();
     const boundsSpy = vi.spyOn(component.chartDiv.nativeElement, 'getBoundingClientRect').mockReturnValue({
       left: 0,
@@ -823,23 +1478,88 @@ describe('EventCardChartPanelComponent', () => {
     chart.dispatchAction.mockClear();
 
     try {
-      dispatchChartTouch('touchstart', [createTouch(1, 20, 100)]);
-      const moveEvent = dispatchChartTouch('touchmove', [createTouch(1, 80, 103)]);
-      dispatchChartTouch('touchend', [], [createTouch(1, 80, 103)]);
+      dispatchChartTouch('touchstart', [createTouch(1, 80, 100)]);
+      const moveEvent = dispatchChartTouch('touchmove', [createTouch(1, 90, 103)]);
+      dispatchChartTouch('touchend', [], [createTouch(1, 100, 103)]);
 
       expect(moveEvent.defaultPrevented).toBe(false);
-      expect(chart.dispatchAction).toHaveBeenCalledWith(expect.objectContaining({
-        type: 'brush',
-        areas: [expect.objectContaining({ coordRange: [20, 80] })],
-      }));
-      expect(chart.dispatchAction).toHaveBeenCalledWith(expect.objectContaining({
+      expect(chart.dispatchAction).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'brush' }));
+      expect(chart.dispatchAction).toHaveBeenNthCalledWith(1, {
         type: 'dataZoom',
-        startValue: 20,
-        endValue: 80,
-      }));
+        startValue: 10,
+        endValue: 70,
+        $from: 'event-chart-touch-zoom',
+      });
+      expect(chart.dispatchAction).toHaveBeenLastCalledWith({
+        type: 'dataZoom',
+        startValue: 0,
+        endValue: 60,
+        $from: 'event-chart-touch-zoom',
+      });
+      expect(zoomRangeEmit).toHaveBeenLastCalledWith({ start: 0, end: 60 });
     } finally {
       boundsSpy.mockRestore();
     }
+  });
+
+  it('leaves an unzoomed chart in place during a horizontal mobile drag', async () => {
+    setMobileViewport();
+    await renderComponent();
+    chart.dispatchAction.mockClear();
+    const zoomRangeEmit = vi.spyOn(component.zoomRangeChange, 'emit');
+
+    dispatchChartTouch('touchstart', [createTouch(1, 40, 100)]);
+    dispatchChartTouch('touchmove', [createTouch(1, 80, 102)]);
+    dispatchChartTouch('touchend', [], [createTouch(1, 100, 102)]);
+
+    expect(chart.dispatchAction).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'dataZoom' }));
+    expect(zoomRangeEmit).not.toHaveBeenCalled();
+  });
+
+  it('starts a pinch from the panned range when a second finger joins', async () => {
+    setMobileViewport();
+    await renderComponent();
+    let visibleRange = { start: 20, end: 80 };
+    chart.getOption.mockImplementation(() => ({ dataZoom: [{
+      startValue: visibleRange.start,
+      endValue: visibleRange.end,
+    }] }));
+    chart.dispatchAction.mockImplementation((action: { type: string; startValue?: number; endValue?: number }) => {
+      if (action.type === 'dataZoom') {
+        visibleRange = { start: action.startValue!, end: action.endValue! };
+      }
+    });
+    dispatchChartTouch('touchstart', [createTouch(1, 40, 100)]);
+    dispatchChartTouch('touchmove', [createTouch(1, 50, 102)]);
+    expect(visibleRange).toEqual({ start: 10, end: 70 });
+
+    dispatchChartTouch('touchstart', [createTouch(1, 50, 102), createTouch(2, 70, 102)],
+      [createTouch(2, 70, 102)]);
+    expect(chart.convertToPixel).toHaveBeenCalledWith({ xAxisIndex: 0 }, 10);
+    expect(chart.convertToPixel).toHaveBeenCalledWith({ xAxisIndex: 0 }, 70);
+    dispatchChartTouch('touchmove', [createTouch(1, 40, 102), createTouch(2, 80, 102)]);
+
+    expect(visibleRange.end - visibleRange.start).toBe(30);
+  });
+
+  it('stops a chart pan when the mode changes to selection', async () => {
+    setMobileViewport();
+    chart.getOption.mockReturnValue({ dataZoom: [{ startValue: 20, endValue: 80 }] });
+    await renderComponent();
+
+    dispatchChartTouch('touchstart', [createTouch(1, 80, 100)]);
+    dispatchChartTouch('touchmove', [createTouch(1, 90, 102)]);
+    component.cursorBehaviour = ChartCursorBehaviours.SelectX;
+    component.ngOnChanges({
+      cursorBehaviour: new SimpleChange(ChartCursorBehaviours.ZoomX, ChartCursorBehaviours.SelectX, false),
+    });
+    chart.dispatchAction.mockClear();
+    const zoomRangeEmit = vi.spyOn(component.zoomRangeChange, 'emit');
+
+    dispatchChartTouch('touchend', [], [createTouch(1, 110, 102)]);
+
+    expect(chart.dispatchAction).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'dataZoom' }));
+    expect(zoomRangeEmit).not.toHaveBeenCalled();
   });
 
   it('selects from the first horizontal mobile drag', async () => {
@@ -1336,18 +2056,18 @@ describe('EventCardChartPanelComponent', () => {
     component.panel = buildTestPanel(
       DataStamina.type,
       [
-        { x: 0, y: 80 },
-        { x: 200, y: 85 },
-        { x: 600, y: 95 },
+        { x: 0, y: 80, time: 0 },
+        { x: 200, y: 85, time: 200000 },
+        { x: 600, y: 95, time: 600000 },
       ],
       { unit: '%', displayName: DataStamina.type }
     );
     component.overlayPanel = buildTestPanel(
       DataPotentialStamina.type,
       [
-        { x: 0, y: 40 },
-        { x: 200, y: 45 },
-        { x: 600, y: 100 },
+        { x: 0, y: 40, time: 0 },
+        { x: 200, y: 45, time: 200000 },
+        { x: 600, y: 100, time: 600000 },
       ],
       { unit: '%', displayName: DataPotentialStamina.type, color: '#0066cc' }
     );
@@ -1384,7 +2104,7 @@ describe('EventCardChartPanelComponent', () => {
           inverse: false,
           interval: 5,
           min: 35,
-          max: 90,
+          max: 100, // Readings across a real gap do not widen the shared viewport scale.
         }
       },
       {
@@ -1481,6 +2201,58 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.yAxis?.splitArea).toBeUndefined();
   });
 
+  it.each([DataHeartRate.type, DataPower.type])('removes and restores %s zone colors in the same ECharts instance', async type => {
+    const plainPanel = {
+      ...component.panel!, dataType: type,
+      series: component.panel!.series.map(series => ({ ...series, streamType: type })),
+    };
+    const coloredPanel = {
+      ...plainPanel,
+      series: plainPanel.series.map(series => ({
+        ...series,
+        zoneColorPieces: [
+          { zone: 'Zone 1', color: '#0099ff', lt: 110 },
+          { zone: 'Zone 2', color: '#00aa00', gte: 110, lt: 130 },
+          { zone: 'Zone 3', color: '#ffaa00', gte: 130 },
+        ],
+      })),
+    };
+    component.panel = coloredPanel;
+    component.sharedZoomRange = { start: 2, end: 8 };
+    await renderComponent();
+    const canvasContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    const rendered = init(null, undefined, { renderer: 'svg', ssr: true, width: 640, height: 320 });
+    const applyLastUpdate = () => {
+      const update = eChartsLoaderMock.setOption.mock.calls.findLast(([, option]) =>
+        option?.series?.some(series => series.type === 'line'));
+      rendered.setOption(update![1], { ...update![2], lazyUpdate: false });
+    };
+    try {
+      applyLastUpdate();
+      expect(rendered.getOption().visualMap).toHaveLength(1);
+      component.panel = plainPanel;
+      component.ngOnChanges({ panel: new SimpleChange(coloredPanel, plainPanel, false) });
+      await flushQueuedChartRefreshes();
+      applyLastUpdate();
+      expect(rendered.getOption().visualMap || []).toHaveLength(0);
+      expect(rendered.getOption().dataZoom).toEqual(expect.arrayContaining([
+        expect.objectContaining({ startValue: 2, endValue: 8 }),
+      ]));
+
+      component.panel = coloredPanel;
+      component.ngOnChanges({ panel: new SimpleChange(plainPanel, coloredPanel, false) });
+      await flushQueuedChartRefreshes();
+      applyLastUpdate();
+      expect(rendered.getOption().visualMap).toHaveLength(1);
+      const series = rendered.getOption().series as Array<{ lineStyle?: { color?: string } }>;
+      expect(series[0].lineStyle?.color).toBeUndefined();
+      expect(rendered.renderToSVGString()).toContain('<svg');
+    } finally {
+      rendered.dispose();
+      canvasContext.mockRestore();
+    }
+  });
+
   it('renders heart-rate zone visual maps scoped to the matching series index', async () => {
     component.fillOpacity = 0.4;
     component.panel = {
@@ -1572,13 +2344,15 @@ describe('EventCardChartPanelComponent', () => {
   it('keeps heart-rate zone coloring mapped to y values on time-axis charts', async () => {
     const startTime = Date.UTC(2024, 0, 1, 12, 0, 0);
     component.xAxisType = XAxisTypes.Time;
+    component.xDomain = { start: startTime, end: startTime + 2_000 };
+    chart.getOption.mockReturnValue({ dataZoom: [{ startValue: startTime, endValue: startTime + 2_000 }] });
     component.panel = {
       dataType: DataHeartRate.type,
       displayName: 'Heart Rate',
       unit: 'bpm',
       colorGroupKey: 'Heart Rate',
       minX: startTime,
-      maxX: startTime + 10_000,
+      maxX: startTime + 2_000,
       series: [
         {
           id: 'a1::Heart Rate',
@@ -1590,7 +2364,7 @@ describe('EventCardChartPanelComponent', () => {
           unit: 'bpm',
           points: [
             { x: startTime, y: 110, time: startTime },
-            { x: startTime + 10_000, y: 130, time: startTime + 10_000 },
+            { x: startTime + 2_000, y: 130, time: startTime + 2_000 },
           ],
           zoneColorPieces: [
             { zone: 'Zone 1', color: '#0099ff', lt: 120 },
@@ -1606,10 +2380,7 @@ describe('EventCardChartPanelComponent', () => {
     const option = getRenderedOption();
     expect(option?.xAxis?.type).toBe('time');
     expect(option?.series?.[0]?.dimensions).toEqual(['x', 'y']);
-    expect(option?.series?.[0]?.data).toEqual([
-      [startTime, 110],
-      [startTime + 10_000, 130],
-    ]);
+    expect(Array.from(option?.series?.[0]?.data)).toEqual([startTime, 110, startTime + 2_000, 130]);
     expect(option?.visualMap?.[0]).toEqual(
       expect.objectContaining({
         seriesIndex: 0,
@@ -1622,7 +2393,7 @@ describe('EventCardChartPanelComponent', () => {
         seriesId: 'a1::Heart Rate',
         seriesName: 'Garmin',
         color: '#aa0000',
-        value: [startTime + 10_000, 130],
+        value: [startTime + 2_000, 130],
       }
     ]);
     expect(tooltipHtml).toContain('background:#00aa00;');
@@ -1695,6 +2466,46 @@ describe('EventCardChartPanelComponent', () => {
         },
       })
     ]);
+  });
+
+  it.each([false, true])('preserves grade-colored gap policy for activity/route lines (route=%s)', route => {
+    const points = [100, null, 120, null, null, null, 80, null, 100]
+      .map((y, x) => ({ x, y, time: x * 1000 }));
+    component.panel = buildTestPanel(DataAltitude.type, points);
+    const series = component.panel!.series[0];
+    series.lineContinuity = { mode: 'custom', maxGapSeconds: 2 };
+    if (route) series.lineGapPolicy = 'adjacent';
+    series.gradeColorValues = Float64Array.from(points.map(() => 4));
+    component.colorAltitudeByGrade = true;
+    const snapshot = () => ({ ...series, gradeColorValues: Array.from(series.gradeColorValues!) });
+    const before = structuredClone(snapshot());
+    const option = component['buildOption']();
+    const lines = option.series as LineSeriesOption[];
+    if (route) expect(lines).toEqual([]); // Explicit missing route elevations still break the line.
+    else {
+      expect(lines).toHaveLength(1);
+      expect(Array.from(lines[0].data as unknown as Float64Array))
+        .toEqual([0, 100, 2, 120, 6, NaN, 6, 80, 8, 100]);
+    }
+    expect(snapshot()).toEqual(before);
+  });
+
+  it('keeps untimed route segments connected regardless of distance spacing, without closing missing elevations', () => {
+    component.panel = buildTestPanel(DataAltitude.type, [
+      { x: 0, y: 100, time: 0 }, { x: 5000, y: 120, time: 5000 },
+      { x: 6000, y: null, time: 6000 }, { x: 7000, y: 80, time: 7000 },
+      { x: 12000, y: 100, time: 12000 },
+    ]);
+    const series = component.panel!.series[0];
+    series.lineGapPolicy = 'adjacent';
+    series.gradeColorValues = Float64Array.from([4, 4, 4, 4, 4]);
+    component.colorAltitudeByGrade = true;
+    const line = (component['buildOption']().series as LineSeriesOption[])[0];
+    expect(Array.from(line.data as unknown as Float64Array))
+      .toEqual([0, 100, 5000, 120, 7000, NaN, 7000, 80, 12000, 100]);
+    component.colorAltitudeByGrade = false;
+    const plain = (component['buildOption']().series as LineSeriesOption[])[0];
+    expect(plain.data).toEqual([[0, 100], [5000, 120], [6000, null], [7000, 80], [12000, 100]]);
   });
 
   it('renders altitude grade color segments without third-dimension visual maps', async () => {
@@ -1819,10 +2630,7 @@ describe('EventCardChartPanelComponent', () => {
         color: '#00aa00',
       })
     );
-    expect(option?.series?.[0]?.data).toEqual([
-      [0, 100],
-      [10, 120],
-    ]);
+    expect(Array.from(option?.series?.[0]?.data)).toEqual([0, 100, 10, 120]);
     expect(option?.visualMap).toBeUndefined();
     expect(component.gradeLegendItems).toEqual([]);
   });
@@ -1863,7 +2671,7 @@ describe('EventCardChartPanelComponent', () => {
         color: '#00aa00',
       })
     );
-    expect(option?.series?.[0]?.data).toEqual([[0, 100]]);
+    expect(Array.from(option?.series?.[0]?.data)).toEqual([0, 100]);
     expect(option?.visualMap).toBeUndefined();
     expect(component.gradeLegendItems).toEqual([]);
   });
@@ -2087,8 +2895,8 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.grid).toEqual(expect.objectContaining({
       left: 12,
       right: 44,
-      top: 8,
-      bottom: 24,
+      top: 4,
+      bottom: 16,
     }));
     expect(option?.dataZoom?.[0]?.type).toBe('slider');
     expect(option?.dataZoom?.[0]?.show).toBe(true);
@@ -2237,6 +3045,74 @@ describe('EventCardChartPanelComponent', () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 20));
 
     expect(emitSpy).toHaveBeenCalledWith({ start: 15, end: 75 });
+  });
+
+  it('pinches a panel on the x-axis and emits its range for the other charts', async () => {
+    const emitSpy = vi.spyOn(component.zoomRangeChange, 'emit');
+    await renderComponent();
+    chart.dispatchAction.mockClear();
+
+    dispatchChartTouch('touchstart', [createTouch(1, 30, 20)]);
+    dispatchChartTouch('touchstart', [createTouch(1, 30, 20), createTouch(2, 90, 20)],
+      [createTouch(2, 90, 20)]);
+    dispatchChartTouch('touchmove', [createTouch(1, 15, 20), createTouch(2, 105, 20)]);
+    dispatchChartTouch('touchend', [createTouch(1, 15, 20)], [createTouch(2, 105, 20)]);
+
+    expect(chart.dispatchAction).toHaveBeenCalledWith({
+      type: 'dataZoom', startValue: 20, endValue: 100, $from: 'event-chart-touch-zoom',
+    });
+    expect(emitSpy).toHaveBeenCalledWith({ start: 20, end: 100 });
+    expect(fixture.nativeElement.querySelector('.event-chart-panel__chart--pinch-enabled')).not.toBeNull();
+  });
+
+  it('leaves the chart range unchanged when pinching in selection mode', async () => {
+    component.cursorBehaviour = ChartCursorBehaviours.SelectX;
+    await renderComponent();
+    chart.dispatchAction.mockClear();
+    const emitSpy = vi.spyOn(component.zoomRangeChange, 'emit');
+
+    dispatchChartTouch('touchstart', [createTouch(1, 30, 20), createTouch(2, 90, 20)]);
+    dispatchChartTouch('touchmove', [createTouch(1, 15, 20), createTouch(2, 105, 20)]);
+    dispatchChartTouch('touchend', [], [createTouch(1, 15, 20), createTouch(2, 105, 20)]);
+
+    expect(chart.dispatchAction).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'dataZoom' }));
+    expect(emitSpy).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('.event-chart-panel__chart--pinch-enabled')).toBeNull();
+  });
+
+  it('stops an active pinch when chart mode changes to selection', async () => {
+    await renderComponent();
+    dispatchChartTouch('touchstart', [createTouch(1, 30, 20), createTouch(2, 90, 20)]);
+
+    component.cursorBehaviour = ChartCursorBehaviours.SelectX;
+    component.ngOnChanges({
+      cursorBehaviour: new SimpleChange(ChartCursorBehaviours.ZoomX, ChartCursorBehaviours.SelectX, false),
+    });
+    fixture.detectChanges();
+    chart.dispatchAction.mockClear();
+    const emitSpy = vi.spyOn(component.zoomRangeChange, 'emit');
+
+    dispatchChartTouch('touchmove', [createTouch(1, 15, 20), createTouch(2, 105, 20)]);
+    dispatchChartTouch('touchend', [], [createTouch(1, 15, 20), createTouch(2, 105, 20)]);
+
+    expect(chart.dispatchAction).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'dataZoom' }));
+    expect(emitSpy).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('.event-chart-panel__chart--pinch-enabled')).toBeNull();
+  });
+
+  it('zooms horizontally from a vertical pinch and applies its final touch position', async () => {
+    const emitSpy = vi.spyOn(component.zoomRangeChange, 'emit');
+    await renderComponent();
+    chart.dispatchAction.mockClear();
+
+    dispatchChartTouch('touchstart', [createTouch(1, 60, 20), createTouch(2, 60, 120)]);
+    dispatchChartTouch('touchmove', [createTouch(1, 60, -10), createTouch(2, 60, 150)]);
+    dispatchChartTouch('touchend', [], [createTouch(1, 60, -30), createTouch(2, 60, 170)]);
+
+    expect(chart.dispatchAction).toHaveBeenLastCalledWith({
+      type: 'dataZoom', startValue: 30, endValue: 90, $from: 'event-chart-touch-zoom',
+    });
+    expect(emitSpy).toHaveBeenLastCalledWith({ start: 30, end: 90 });
   });
 
   it('renders empty-axis no-data option when panel is null outside zoom mode', async () => {
@@ -2675,6 +3551,84 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.series?.[0]?.markLine?.tooltip).toEqual({ show: false });
   });
 
+  it('renders a zoom-aligned swim/rest strip without changing metric data or its y axis, and removes it when disabled', async () => {
+    component.showZoomBar = false;
+    await renderComponent();
+    const originalOption = getRenderedOption();
+    const marker = { markerType: 'swimLength' as const, timelineStartXValue: 0, xValue: 30,
+      label: 'Length 1', color: '#2656a8', swimLengthIndex: 1, swimLengthType: 'active', isIdle: false,
+      activityID: 'a1', activityName: 'Garmin', tooltipTitle: 'Length 1 (Active)',
+      tooltipDetails: [{ label: 'Swim Pace', value: '02:00 min/100m' }] };
+    fixture.componentRef.setInput('swimLengthMarkers', [marker,
+      { ...marker, timelineStartXValue: 30, xValue: 50, swimLengthIndex: 2, swimLengthType: 'idle', isIdle: true,
+        tooltipTitle: 'Length 2 (Idle)', tooltipDetails: [{ label: 'Duration', value: '00:20' }] },
+      { ...marker, timelineStartXValue: 60, xValue: 90, swimLengthIndex: 3 }]);
+    await renderComponent();
+    const option = getRenderedOption();
+    const strip = option.series.find(series => series.id === 'swim-rest-timeline');
+    expect(strip.data.map(item => item.value)).toEqual([[0, 30, 0], [30, 50, 0], [60, 90, 0]]);
+    expect(option.grid.top).toBe(originalOption.grid.top + 22);
+    expect([option.yAxis.min, option.yAxis.max, option.yAxis.inverse, option.yAxis.type])
+      .toEqual([originalOption.yAxis.min, originalOption.yAxis.max, originalOption.yAxis.inverse, originalOption.yAxis.type]);
+    expect(option.series[0].data).toEqual(originalOption.series[0].data);
+    expect(strip.tooltip.trigger).toBe('item');
+    expect(strip.tooltip.show).toBe(false);
+    expect(chart.on).toHaveBeenCalledWith('click', { seriesId: 'swim-rest-timeline' }, expect.any(Function));
+    const click = chart.on.mock.calls.find(([name]) => name === 'click')?.[2];
+    expect(click).toBeTypeOf('function');
+    click({ componentType: 'series', seriesId: 'swim-rest-timeline', data: strip.data[1], event: { offsetX: 100, offsetY: 15 } });
+    const showTip = chart.dispatchAction.mock.calls.at(-1)[0];
+    expect(showTip).toMatchObject({ type: 'showTip', escapeConnect: true });
+    expect(showTip.tooltip.formatter()).toContain('Duration: 00:20');
+    expect(strip.silent).toBe(false);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[aria-label="Swim and rest timeline legend"]').textContent).toContain('Gaps: unavailable');
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+    expect(eChartsLoaderMock.attachMobileSeriesTapFeedback).toHaveBeenCalled();
+
+    const canvasContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    const rendered = init(null, undefined, { renderer: 'svg', ssr: true, width: 640, height: 320 });
+    const apply = () => rendered.setOption(getRenderedOption(), {
+      notMerge: false, replaceMerge: ['series', 'xAxis', 'yAxis', 'dataZoom'], lazyUpdate: false,
+    });
+    try {
+      apply();
+      expect(rendered.renderToSVGString()).toContain('stroke-dasharray="3,2"');
+      rendered.dispatchAction({ type: 'dataZoom', startValue: 20, endValue: 70 });
+      expect(rendered.renderToSVGString()).toContain('stroke-dasharray="3,2"');
+      fixture.componentRef.setInput('showSwimLengths', false);
+      await renderComponent();
+      apply();
+      expect(rendered.getOption().series).toHaveLength(originalOption.series.length);
+      expect(getRenderedOption().grid.top).toBe(originalOption.grid.top);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('[aria-label="Swim and rest timeline legend"]')).toBeNull();
+    } finally {
+      rendered.dispose();
+      canvasContext.mockRestore();
+    }
+  });
+
+  it('keeps comparison timelines separate, hides the strip on distance axes, and disables preview interaction', async () => {
+    const base = component.panel!.series[0];
+    fixture.componentRef.setInput('panel', { ...component.panel!, series: [base,
+      { ...base, id: 'second', activityID: 'second', activityName: 'Suunto' }] });
+    fixture.componentRef.setInput('swimLengthMarkers', ['a1', 'second', 'unselected'].map(activityID => ({
+      markerType: 'swimLength', timelineStartXValue: 0, xValue: 30, label: 'Length 1', color: '#2656a8',
+      swimLengthIndex: 1, swimLengthType: 'active', isIdle: false, activityID, activityName: activityID,
+      tooltipTitle: 'Length 1', tooltipDetails: [],
+    })));
+    fixture.componentRef.setInput('previewMode', true);
+    await renderComponent();
+    expect(component.swimTimelineLanes().map(lane => lane.activityID)).toEqual(['a1', 'second']);
+    expect(getRenderedOption().series.find(series => series.id === 'swim-rest-timeline').silent).toBe(true);
+    expect(getRenderedOption().grid.top).toBe(52);
+    fixture.componentRef.setInput('xAxisType', XAxisTypes.Distance);
+    await renderComponent();
+    expect(getRenderedOption().series.some(series => series.id === 'swim-rest-timeline')).toBe(false);
+    expect(component.swimTimelineLanes()).toEqual([]);
+  });
+
   it('renders lap and swim length markers together with swim idle styling', async () => {
     component.showZoomBar = false;
     component.showLaps = true;
@@ -2745,6 +3699,34 @@ describe('EventCardChartPanelComponent', () => {
         lineStyle: expect.objectContaining({ type: 'dotted', opacity: 0.24 }),
       })
     ]);
+  });
+
+  it.each([false, true])('keeps neutral marker colors visible in dark mode, including the zoom bar (%s)', async (zoomBar) => {
+    component.showZoomBar = zoomBar;
+    if (zoomBar) {
+      component.panel = null;
+      component.zoomBarOverviewData = [[0, 0], [120, 1]];
+    }
+    component.showLaps = true;
+    component.showSwimLengths = true;
+    component.lapTypes = [LapTypes.AutoLap];
+    component.lapMarkers = [{
+      markerType: 'lap', xValue: 5, label: 'Lap 1', color: '#000000', lapType: 'auto', lapNumber: 1,
+      activityID: 'a1', activityName: 'Garmin', tooltipTitle: 'Lap 1', tooltipDetails: [],
+    }];
+    component.swimLengthMarkers = [{
+      markerType: 'swimLength', xValue: 10, label: 'Length 1', color: '#3D3D3D', swimLengthIndex: 1,
+      swimLengthType: 'active', isIdle: false, activityID: 'a1', activityName: 'Garmin',
+      tooltipTitle: 'Length 1', tooltipDetails: [],
+    }];
+    component.darkTheme = true;
+    await renderComponent();
+    const markers = getRenderedOption().series[0].markLine.data;
+    expect(markers.map(marker => marker.lineStyle.color)).toEqual([
+      resolveDeviceChartColor('#000000', true), resolveDeviceChartColor('#3D3D3D', true),
+    ]);
+    expect(component.lapMarkers[0].color).toBe('#000000');
+    expect(component.swimLengthMarkers[0].color).toBe('#3D3D3D');
   });
 
   it('filters session end lap markers from the chart even when configured', async () => {
@@ -3124,6 +4106,79 @@ describe('EventCardChartPanelComponent', () => {
     expect(tooltipHtml).toContain('Altitude:');
   });
 
+  it.each([
+    ['legacy', false], ['packed', false], ['legacy', true], ['packed', true],
+  ] as const)('omits offscreen tooltip rows at both zoom edges without changing samples (%s, HR overlay=%s)', async (format, hrOverlay) => {
+    component.xAxisType = XAxisTypes.Distance;
+    component.xDomain = { start: 0, end: 1000 };
+    const hrPanel = buildTestPanel(DataHeartRate.type, [
+      { x: 500, y: 110, time: 0 }, { x: 600, y: 120, time: 2000 },
+    ]);
+    const powerPanel = buildTestPanel(DataPower.type, [
+      { x: 500.2, y: 200, time: 0 }, { x: 599.8, y: 210, time: 2000 },
+    ]);
+    if (format === 'packed') {
+      for (const panel of [hrPanel, powerPanel]) {
+        panel.series = panel.series.map(series => ({
+          ...series,
+          lineValues: Float64Array.from(series.points.flatMap(point => [point.x, point.y])),
+          timeValues: Float64Array.from(series.points.map(point => point.time)),
+          pointCount: series.points.length,
+          points: undefined,
+        }));
+      }
+    }
+    component.panel = hrOverlay ? powerPanel : hrPanel;
+    component.overlayPanel = hrOverlay ? hrPanel : powerPanel;
+    const snapshot = () => [component.panel!, component.overlayPanel!].map(panel => ({
+      ...panel,
+      series: panel.series.map(series => ({
+        ...series,
+        lineValues: series.lineValues && Array.from(series.lineValues),
+        timeValues: series.timeValues && Array.from(series.timeValues),
+      })),
+    }));
+    const before = structuredClone(snapshot());
+    await renderComponent();
+
+    chart.getOption.mockReturnValue({ dataZoom: [{ startValue: 500.1, endValue: 599.9 }] });
+    for (const x of [500.2, 599.8]) {
+      const tooltip = component['formatTooltip']([{ value: [x, 200] }]);
+      expect(tooltip).toContain(`${DataPower.type}:`);
+      expect(tooltip).not.toContain(`${DataHeartRate.type}:`);
+    }
+
+    // Points exactly on the viewport boundary are visible; zooming out restores them.
+    chart.getOption.mockReturnValue({ dataZoom: [{ startValue: 500, endValue: 600 }] });
+    for (const x of [500.2, 599.8]) {
+      const tooltip = component['formatTooltip']([{ value: [x, 200] }]);
+      expect(tooltip).toContain(`${DataPower.type}:`);
+      expect(tooltip).toContain(`${DataHeartRate.type}:`);
+    }
+    expect(snapshot()).toEqual(before);
+  });
+
+  it('uses the current native zoom for tooltip proximity before the shared zoom catches up', async () => {
+    component.xAxisType = XAxisTypes.Distance;
+    component.xDomain = { start: 0, end: 1000 };
+    component.panel = buildTestPanel(DataPower.type, [
+      { x: 500, y: 200 }, { x: 600, y: 210 },
+    ]);
+    component.overlayPanel = buildTestPanel(DataHeartRate.type, [
+      { x: 501.5, y: 110 }, { x: 599, y: 120 },
+    ]);
+    await renderComponent();
+    // Both readings are inside the viewport, but 1.5 m is far apart at this zoom.
+    component.sharedZoomRange = { start: 500, end: 600 };
+    chart.getOption.mockReturnValue({ dataZoom: [{ startValue: 500, endValue: 510 }] });
+    const tooltip = component['formatTooltip']([{ value: [500, 200] }]);
+    expect(tooltip).toContain(`${DataPower.type}:`);
+    expect(tooltip).not.toContain(`${DataHeartRate.type}:`);
+
+    chart.getOption.mockReturnValue({ dataZoom: [{ startValue: 500, endValue: 600 }] });
+    expect(component['formatTooltip']([{ value: [500, 200] }])).toContain(`${DataHeartRate.type}:`);
+  });
+
   it('skips synced tooltip rows whose series value is null', async () => {
     component.showActivityNamesInTooltip = true;
     await renderComponent();
@@ -3250,6 +4305,7 @@ describe('EventCardChartPanelComponent', () => {
     component.showActivityNamesInTooltip = true;
     component.xAxisType = XAxisTypes.Duration;
     component.xDomain = { start: 0, end: 36_000 };
+    chart.getOption.mockReturnValue({ dataZoom: [{ startValue: 0, endValue: 36_000 }] });
     component.panel = {
       ...(component.panel as any),
       minX: 0,

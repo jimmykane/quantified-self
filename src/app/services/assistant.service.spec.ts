@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AssistantChatResponse } from '@shared/assistant.types';
+import { Auth } from 'app/firebase/auth';
 import { AppFunctionsService } from './app.functions.service';
 import { AssistantError, AssistantService } from './assistant.service';
 
@@ -44,17 +45,45 @@ const requestId = 'assistant-request-0001';
 
 describe('AssistantService', () => {
   const functionsService = { call: vi.fn() };
+  const auth: {
+    currentUser: { uid: string; getIdToken: ReturnType<typeof vi.fn> } | null;
+  } = {
+    currentUser: { uid: 'owner', getIdToken: vi.fn() },
+  };
   let service: AssistantService;
 
   beforeEach(() => {
     functionsService.call.mockReset();
+    auth.currentUser = { uid: 'owner', getIdToken: vi.fn() };
     TestBed.configureTestingModule({
       providers: [
         AssistantService,
         { provide: AppFunctionsService, useValue: functionsService },
+        { provide: Auth, useValue: auth },
       ],
     });
     service = TestBed.inject(AssistantService);
+  });
+
+  it('requires explicit Training consent confirmation and preserves its independence from notes', async () => {
+    const request = { requestId, message: 'What is planned tomorrow?', timeZone: 'Europe/Helsinki',
+      locationAccess: 'coordinate_free' as const, trainingPlansEnabled: true };
+    functionsService.call.mockResolvedValue({ data: response });
+    await expect(service.sendMessage(request)).rejects.toMatchObject({ code: 'CONVERSATION_CHANGED' });
+    await expect(service.resetConversation('coordinate_free', false, 'expected-chat', true))
+      .rejects.toMatchObject({ code: 'CONVERSATION_CHANGED' });
+    functionsService.call.mockResolvedValue({ data: { ...response, trainingPlansEnabled: true } });
+    await expect(service.sendMessage(request)).resolves.toMatchObject({ trainingPlansEnabled: true });
+    await expect(service.sendMessage({ ...request, trainingPlansEnabled: false }))
+      .rejects.toMatchObject({ code: 'CONVERSATION_CHANGED' });
+    await expect(service.getConversationState()).resolves.toMatchObject({ trainingPlansEnabled: true });
+    await expect(service.resetConversation('coordinate_free', false, 'expected-chat', true)).resolves.toEqual(response.conversation);
+    expect(functionsService.call).toHaveBeenLastCalledWith('resetAssistantConversation', {
+      locationAccess: 'coordinate_free', conversationId: 'expected-chat', trainingPlansEnabled: true,
+    });
+    functionsService.call.mockResolvedValue({ data: { ...response, trainingPlansEnabled: 'true' } });
+    await expect(service.getConversationState()).rejects.toMatchObject({ code: 'INTERNAL' });
+    await expect(service.sendMessage(request)).rejects.toMatchObject({ code: 'INTERNAL' });
   });
 
   it('calls the Assistant callable and validates its response', async () => {
@@ -72,6 +101,80 @@ describe('AssistantService', () => {
       timeZone: 'Europe/Helsinki',
       locationAccess: 'coordinate_free',
     });
+  });
+
+  it('requires matching notes consent in replies and confirms it before enabling a reset chat', async () => {
+    const request = { requestId, message: 'Read my notes', timeZone: 'UTC', locationAccess: 'coordinate_free' as const,
+      timelineNotesEnabled: true };
+    functionsService.call.mockResolvedValue({ data: response });
+    await expect(service.sendMessage(request)).rejects.toMatchObject({ code: 'CONVERSATION_CHANGED' });
+    await expect(service.resetConversation('coordinate_free', true)).rejects.toMatchObject({ code: 'CONVERSATION_CHANGED' });
+    functionsService.call.mockResolvedValue({ data: { ...response, timelineNotesEnabled: true } });
+    await expect(service.sendMessage(request)).resolves.toMatchObject({ timelineNotesEnabled: true });
+    await expect(service.sendMessage({ ...request, timelineNotesEnabled: false })).rejects.toMatchObject({ code: 'CONVERSATION_CHANGED' });
+    await expect(service.getConversationState()).resolves.toMatchObject({ timelineNotesEnabled: true });
+    await expect(service.resetConversation('precise_activity', true, 'expected-chat')).resolves.toEqual(response.conversation);
+    expect(functionsService.call).toHaveBeenLastCalledWith('resetAssistantConversation', { locationAccess: 'precise_activity', timelineNotesEnabled: true, conversationId: 'expected-chat' });
+    functionsService.call.mockResolvedValue({ data: { ...response, timelineNotesEnabled: 'true' } });
+    await expect(service.getConversationState()).rejects.toMatchObject({ code: 'INTERNAL' });
+    await expect(service.sendMessage(request)).rejects.toMatchObject({ code: 'INTERNAL' });
+  });
+  it('binds manual measurement choice to requests, replies and current conversation state', async () => {
+    const request = { requestId, message: 'Log my weight', timeZone: 'UTC', measurementChangesEnabled: true };
+    functionsService.call.mockResolvedValue({ data: response });
+    await expect(service.sendMessage(request)).rejects.toMatchObject({ code: 'CONVERSATION_CHANGED' });
+    functionsService.call.mockResolvedValue({ data: { ...response, measurementChangesEnabled: true } });
+    await expect(service.sendMessage(request)).resolves.toMatchObject({ measurementChangesEnabled: true });
+    await expect(service.sendMessage({ ...request, measurementChangesEnabled: false })).rejects.toMatchObject({ code: 'CONVERSATION_CHANGED' });
+    await expect(service.getConversationState()).resolves.toMatchObject({ measurementChangesEnabled: true });
+    functionsService.call.mockResolvedValue({ data: { ...response, measurementChangesEnabled: 'true' } });
+    await expect(service.getConversationState()).rejects.toMatchObject({ code: 'INTERNAL' });
+  });
+
+  it('does not return an old account response or retry its request as a newly signed-in account', async () => {
+    functionsService.call.mockImplementationOnce(async () => {
+      auth.currentUser = { uid: 'other-owner', getIdToken: vi.fn() };
+      return { data: response };
+    });
+    await expect(service.getConversationState()).rejects.toMatchObject({ code: 'UNAUTHENTICATED' });
+    auth.currentUser = { uid: 'owner', getIdToken: vi.fn() };
+    functionsService.call.mockClear().mockImplementationOnce(async () => {
+      auth.currentUser = { uid: 'other-owner', getIdToken: vi.fn() };
+      throw { code: 'functions/unauthenticated' };
+    });
+    await expect(service.getConversationState()).rejects.toMatchObject({ code: 'UNAUTHENTICATED' });
+    expect(functionsService.call).toHaveBeenCalledTimes(1);
+    expect(auth.currentUser.getIdToken).not.toHaveBeenCalled();
+  });
+
+  it('rejects a manual measurement proposal without its server-owned value review', async () => {
+    const pendingContentProposal = { proposalRef: 'manual-review', kind: 'create_manual_measurement',
+      expiresAtMs: 1_800_000_000_000, summary: 'Log weight', requiresConfirmation: true,
+      arguments: { mutationId: '00000000-0000-4000-8000-000000000000', metricId: 'body_weight',
+        observedAt: '2026-10-01T09:00:00Z', value: 80, unit: 'kg' } };
+    functionsService.call.mockResolvedValue({ data: { ...response, pendingContentProposal } });
+    await expect(service.getConversationState()).rejects.toMatchObject({ code: 'INTERNAL' });
+    functionsService.call.mockResolvedValue({ data: { ...response, pendingContentProposal: {
+      ...pendingContentProposal, measurementReview: { before: null, after: { metricId: 'body_weight',
+        canonicalValue: 80, observedAtMs: Date.parse('2026-10-01T09:00:00Z'), timezoneOffsetSeconds: 0 } },
+    } } });
+    await expect(service.getConversationState()).resolves.toMatchObject({ pendingContentProposal: { kind: 'create_manual_measurement' } });
+  });
+
+  it.each(['2026-10-01T09:00:00.123Z', '2026-10-01T12:00:00.123+03:00',
+    '2026-10-01T03:30:00-05:30', '2026-10-01T09:00Z'])('accepts exact manual observation instants (%s)', async observedAt => {
+    const pendingContentProposal = { proposalRef: 'manual-review', kind: 'create_manual_measurement',
+      expiresAtMs: 1_800_000_000_000, summary: 'Log weight', requiresConfirmation: true,
+      arguments: { mutationId: '00000000-0000-4000-8000-000000000000', metricId: 'body_weight', observedAt, value: 80, unit: 'kg' },
+      measurementReview: { before: null, after: { metricId: 'body_weight', canonicalValue: 80,
+        observedAtMs: Date.parse(observedAt), timezoneOffsetSeconds: 0 } } };
+    functionsService.call.mockResolvedValue({ data: { ...response, pendingContentProposal } });
+    await expect(service.getConversationState()).resolves.toMatchObject({ pendingContentProposal: { arguments: { observedAt } } });
+    for (const invalidAt of ['2026-10-01T12:00:00', '2026-02-30T09:00:00Z', '2026-10-01T24:00:00Z', '2026-10-01T09:00:00+24:00']) {
+      functionsService.call.mockResolvedValue({ data: { ...response, pendingContentProposal: { ...pendingContentProposal,
+        arguments: { ...pendingContentProposal.arguments, observedAt: invalidAt } } } });
+      await expect(service.getConversationState()).rejects.toMatchObject({ code: 'INTERNAL' });
+    }
   });
 
   it('rejects malformed conversation payloads', async () => {
@@ -135,6 +238,30 @@ describe('AssistantService', () => {
     ))).toContain('still in progress');
   });
 
+  it('shows a retry message for pending Training metrics without suggesting quota was used', async () => {
+    functionsService.call.mockRejectedValue({
+      code: 'functions/unavailable',
+      message: 'Training metrics are still preparing.',
+      details: { reason: 'training_metrics_preparing', retryAfterSeconds: 5 },
+    });
+    const error = await service.sendMessage({
+      requestId, message: 'How is my Training load?', timeZone: 'UTC', locationAccess: 'coordinate_free',
+    }).catch(value => value);
+    expect(error).toMatchObject({ code: 'TRAINING_METRICS_PREPARING' });
+    expect(service.getErrorMessage(error)).toContain('does not use your Assistant allowance');
+  });
+
+  it('uses conversation-specific copy for reset failures while preserving actionable errors', () => {
+    expect(service.getConversationUpdateErrorMessage(new AssistantError(
+      'INTERNAL',
+      'Function crashed.',
+    ))).toBe('The Assistant could not update this chat. Your conversation and data access settings are unchanged. Please try again.');
+    expect(service.getConversationUpdateErrorMessage(new AssistantError(
+      'APP_CHECK_REQUIRED',
+      'App verification failed.',
+    ))).toContain('App verification failed');
+  });
+
   it('loads and resets the server-owned active conversation', async () => {
     functionsService.call
       .mockResolvedValueOnce({
@@ -148,8 +275,33 @@ describe('AssistantService', () => {
     expect(functionsService.call).toHaveBeenNthCalledWith(
       2,
       'resetAssistantConversation',
-      { locationAccess: 'coordinate_free' },
+      { locationAccess: 'coordinate_free', conversationId: null },
     );
+  });
+
+  it('refreshes the signed-in user token and retries an unauthenticated Assistant callable once', async () => {
+    functionsService.call
+      .mockRejectedValueOnce({ code: 'functions/unauthenticated' })
+      .mockResolvedValueOnce({
+        data: { conversation: response.conversation, pendingRequestId: null },
+      });
+
+    await expect(service.getConversationState()).resolves.toMatchObject({
+      conversation: response.conversation,
+    });
+    expect(auth.currentUser?.getIdToken).toHaveBeenCalledWith(true);
+    expect(functionsService.call).toHaveBeenNthCalledWith(1, 'getAssistantConversation');
+    expect(functionsService.call).toHaveBeenNthCalledWith(2, 'getAssistantConversation');
+  });
+
+  it('preserves an unauthenticated failure when there is no signed-in user to refresh', async () => {
+    auth.currentUser = null;
+    functionsService.call.mockRejectedValueOnce({ code: 'functions/unauthenticated' });
+
+    await expect(service.getConversationState()).rejects.toMatchObject({
+      code: 'UNAUTHENTICATED',
+    });
+    expect(functionsService.call).not.toHaveBeenCalled();
   });
 
   it('cleans legacy storage-unit suffixes from saved evidence labels', async () => {
@@ -295,7 +447,7 @@ describe('AssistantService', () => {
       .toEqual(response.conversation);
     expect(functionsService.call).toHaveBeenLastCalledWith(
       'resetAssistantConversation',
-      { locationAccess: 'precise_activity' },
+      { locationAccess: 'precise_activity', conversationId: null },
     );
   });
 });

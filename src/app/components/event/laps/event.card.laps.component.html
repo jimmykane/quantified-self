@@ -1,84 +1,168 @@
-@if (availableLapTypes.length > 0) {
+@if (availableLapTypes.length > 0 || hasSwimIntervals) {
 <mat-divider></mat-divider>
-<app-event-section-header icon="linear_scale" title="Laps">
+<app-event-section-header icon="linear_scale" [title]="hasSwimIntervals && !showOriginalLaps() ? 'Intervals' : 'Laps'">
   @if (canCustomize && lapColumnMenuGroups.length > 0) {
-  <button mat-icon-button [matMenuTriggerFor]="lapColumnsMenu" matTooltip="Choose lap columns"
+  <button mat-icon-button (click)="openLapColumnsDialog()" matTooltip="Choose lap columns"
     aria-label="Choose lap columns">
     <mat-icon>view_column</mat-icon>
   </button>
   }
 </app-event-section-header>
-<mat-menu #lapColumnsMenu="matMenu" xPosition="before"
-  class="qs-menu-panel qs-menu-panel-form qs-config-menu lap-column-menu-panel">
-    <div class="lap-column-menu-content">
-      @if (lapColumnMenuGroups.length > 1) {
-      <mat-button-toggle-group class="lap-column-family-toggle"
-        [value]="activeLapColumnMenuGroup?.family"
-        aria-label="Lap sport family"
-        (change)="onLapColumnMenuSportFamilyChange($event.value)">
+@if (hasSwimIntervals) {
+<div class="swim-interval-controls">
+  <mat-button-toggle-group class="qs-segmented-button-group" [value]="showOriginalLaps()" (change)="setOriginalLaps($event.value)" aria-label="Swim table view">
+    <mat-button-toggle [value]="false">Intervals</mat-button-toggle>
+    <mat-button-toggle [value]="true">Original laps</mat-button-toggle>
+  </mat-button-toggle-group>
+  <p class="mat-body-small">{{ showOriginalLaps()
+    ? 'As recorded by the watch. Lap types can overlap and their totals should not be added together.'
+    : 'Swim and rest intervals from recorded lengths. Expand an interval to see its lengths.' }}</p>
+  @if (availableLapTypes.length === 0) {
+  <p class="mat-body-small">No separate original laps to display.</p>
+  }
+</div>
+}
+<ng-template #lapColumnsDialog>
+  <h2 mat-dialog-title>Choose lap columns</h2>
+  <mat-dialog-content class="lap-column-dialog-content">
+    <div class="lap-column-dialog-body">
+    @if (lapColumnMenuGroups.length > 1) {
+    <mat-form-field appearance="outline" class="lap-column-family-field" subscriptSizing="dynamic">
+      <mat-label>Lap sport family</mat-label>
+      <mat-select [value]="activeLapColumnMenuGroup?.family" aria-label="Lap sport family"
+        (openedChange)="onLapColumnSportSelectOpened($event)"
+        (selectionChange)="onLapColumnMenuSportFamilyChange($event.value)">
         @for (familyGroup of lapColumnMenuGroups; track familyGroup.family) {
-        <mat-button-toggle [value]="familyGroup.family" (click)="$event.stopPropagation()">
-          <mat-icon>{{ familyGroup.icon }}</mat-icon>
-          <span>{{ familyGroup.label }}</span>
-        </mat-button-toggle>
+        <mat-option [value]="familyGroup.family">{{ familyGroup.label }}</mat-option>
         }
-      </mat-button-toggle-group>
-      }
-      @if (activeLapColumnMenuGroup; as group) {
-      <p class="lap-column-menu-copy">Choose columns for {{ group.label.toLowerCase() }} laps. Values use your saved units.</p>
-      @if (group.selectedUnavailableMetricCount > 0) {
-      <p class="lap-column-availability-summary" role="status">
-        {{ group.selectedUnavailableMetricCount }} selected {{ group.selectedUnavailableMetricCount === 1 ? 'column is' : 'columns are' }} unavailable in these laps and hidden from the table.
-      </p>
-      }
-      <mat-form-field appearance="outline" class="lap-column-search-field" subscriptSizing="dynamic">
-        <mat-label>Search metrics</mat-label>
-        <input matInput [value]="group.searchTerm" (click)="$event.stopPropagation()"
-          (input)="onLapColumnMetricSearchInput(group, $event)"
-          placeholder="Speed, heart rate, power..." [attr.aria-label]="'Search ' + group.label.toLowerCase() + ' lap metrics'"
-          autocomplete="off">
-        @if (group.searchTerm) {
-        <button mat-icon-button matSuffix type="button" (click)="$event.stopPropagation(); clearLapColumnMetricSearch(group)"
-          aria-label="Clear metric search">
-          <mat-icon>close</mat-icon>
-        </button>
-        } @else {
-        <mat-icon matSuffix>search</mat-icon>
-        }
-      </mat-form-field>
-      @if (savingLapColumnSportFamilies().has(group.family)) {
-      <div class="lap-column-menu-saving" aria-live="polite">
-        <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
-        <span>Saving columns</span>
-      </div>
-      }
-      <mat-selection-list [multiple]="true" [disabled]="savingLapColumnSportFamilies().has(group.family)"
-        (click)="$event.stopPropagation()"
-        [aria-label]="group.label + ' lap columns'" (selectionChange)="onLapColumnSelectionChange(group.family, $event)">
-        @for (metricGroup of group.filteredMetricGroups; track metricGroup.id) {
-        <div mat-subheader>{{ metricGroup.label }}</div>
-        @for (metric of metricGroup.metrics; track metric.type) {
-        <mat-list-option [selected]="group.selectedMetricTypes.includes(metric.type)" [value]="metric.type">
-          <app-data-type-icon matListItemIcon [dataType]="metric.type" size="18px"></app-data-type-icon>
-          <span matListItemTitle>{{ metric.label }}</span>
+      </mat-select>
+    </mat-form-field>
+    }
+    @if (activeLapColumnMenuGroup; as group) {
+    <p class="lap-column-menu-copy">Choose columns for {{ group.label.toLowerCase() }} laps. Values use your saved units. Changes save automatically.</p>
+    @if (group.selectedUnavailableMetricCount > 0) {
+    <p class="lap-column-availability-summary" role="status">
+      {{ group.selectedUnavailableMetricCount }} selected {{ group.selectedUnavailableMetricCount === 1 ? 'column is' : 'columns are' }} unavailable in these laps and hidden from the table.
+    </p>
+    }
+    <h3 class="lap-column-section-title">Selected columns · table order</h3>
+    <ol class="lap-column-selected-list" [attr.aria-label]="group.label + ' selected columns in table order'"
+      [attr.aria-busy]="savingLapColumnSportFamilies().has(group.family)">
+      @for (metric of group.selectedMetrics; track metric.type; let first = $first; let last = $last) {
+      <li class="lap-column-selected-row" [attr.data-lap-column]="metric.type">
+        <div class="lap-column-selected-metric">
+          <mat-checkbox [checked]="true" [disabled]="savingLapColumnSportFamilies().has(group.family)"
+            (change)="onLapColumnCheckedChange(group.family, metric.type, $event.checked)">
+            {{ metric.label }}
+          </mat-checkbox>
           @if (group.metricAvailability[metric.type]?.label; as availabilityLabel) {
-          <span matListItemLine>{{ availabilityLabel }}</span>
+          <p class="lap-column-metric-availability">{{ availabilityLabel }}</p>
           }
-        </mat-list-option>
-        }
-        }
-        @empty {
-        <p class="lap-column-menu-empty" role="status">No matching metrics.</p>
-        }
-      </mat-selection-list>
+        </div>
+        <div class="lap-column-order-actions">
+          <button mat-icon-button type="button" [disabled]="first || savingLapColumnSportFamilies().has(group.family)"
+            [attr.aria-label]="'Move ' + metric.label + ' up'" matTooltip="Move up"
+            (click)="moveLapColumn(group.family, metric.type, -1)">
+            <mat-icon>arrow_upward</mat-icon>
+          </button>
+          <button mat-icon-button type="button" [disabled]="last || savingLapColumnSportFamilies().has(group.family)"
+            [attr.aria-label]="'Move ' + metric.label + ' down'" matTooltip="Move down"
+            (click)="moveLapColumn(group.family, metric.type, 1)">
+            <mat-icon>arrow_downward</mat-icon>
+          </button>
+        </div>
+      </li>
+      } @empty {
+      <li class="lap-column-menu-empty">No columns selected.</li>
+      }
+    </ol>
+    @if (savingLapColumnSportFamilies().has(group.family)) {
+    <div class="lap-column-menu-saving" role="status">
+      <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
+      <span>Saving columns</span>
+    </div>
+    }
+    <p class="cdk-visually-hidden" role="status" aria-live="polite">{{ lapColumnAnnouncement() }}</p>
+    <h3 class="lap-column-section-title">Add columns</h3>
+    <mat-form-field appearance="outline" class="lap-column-search-field" subscriptSizing="dynamic">
+      <mat-label>Search metrics</mat-label>
+      <input matInput data-lap-column-search [value]="group.searchTerm" (input)="onLapColumnMetricSearchInput(group, $event)"
+        [placeholder]="group.family === 'swimming' ? 'Swim pace, stroke, SWOLF...' : 'Speed, heart rate, power...'" [attr.aria-label]="'Search ' + group.label.toLowerCase() + ' lap metrics'"
+        autocomplete="off">
+      @if (group.searchTerm) {
+      <button mat-icon-button matSuffix type="button" (click)="clearLapColumnMetricSearch(group)" aria-label="Clear metric search">
+        <mat-icon>close</mat-icon>
+      </button>
+      } @else {
+      <mat-icon matSuffix>search</mat-icon>
+      }
+    </mat-form-field>
+    @if (group.additionalMetricGroups.length > 0) {
+    <div class="lap-column-additional-controls">
+      <button mat-button type="button" (click)="toggleLapAdditionalMetrics(group)"
+        [attr.aria-expanded]="group.showAdditionalMetrics" [attr.aria-controls]="'lap-other-metrics-' + group.family">
+        {{ group.showAdditionalMetrics ? 'Hide other metrics' : 'Show other metrics' }}
+      </button>
+      <p class="lap-column-menu-copy">{{ group.selectedAdditionalMetricCount }} selected · {{ group.recordedAdditionalMetricCount }} recorded in current laps</p>
+      @if (!group.showAdditionalMetrics && group.additionalSearchMatchCount && group.filteredMetricGroups.length > 0) {
+      <p class="lap-column-menu-copy" role="status">{{ group.additionalSearchMatchCount }} more {{ group.additionalSearchMatchCount === 1 ? 'match' : 'matches' }} under Show other metrics.</p>
       }
     </div>
-</mat-menu>
+    }
+    <mat-selection-list [multiple]="true" [disabled]="savingLapColumnSportFamilies().has(group.family)"
+      [aria-label]="group.label + ' available lap columns'" (selectionChange)="onLapColumnSelectionChange(group.family, $event)">
+      @for (metricGroup of group.filteredMetricGroups; track metricGroup.id) {
+      <div mat-subheader>{{ metricGroup.label }}</div>
+      @for (metric of metricGroup.metrics; track metric.type) {
+      <mat-list-option class="lap-column-metric-option" [lines]="group.metricAvailability[metric.type]?.label ? 3 : 2" [value]="metric.type" [attr.aria-label]="metric.type === swolfColumn ? metric.label : metric.type">
+        <app-data-type-icon matListItemIcon [dataType]="metric.type" size="18px"></app-data-type-icon>
+        <span matListItemTitle class="lap-column-metric-title">{{ metric.label }}</span>
+        @if (group.metricAvailability[metric.type]?.label; as availabilityLabel) {
+        <span matListItemLine class="lap-column-metric-status">{{ availabilityLabel }}</span>
+        }
+      </mat-list-option>
+      }
+      } @empty {
+      @if (!group.showAdditionalMetrics && group.additionalSearchMatchCount) {
+      <p class="lap-column-menu-empty" role="status">{{ group.additionalSearchMatchCount }} {{ group.additionalSearchMatchCount === 1 ? 'match is' : 'matches are' }} available under Show other metrics.</p>
+      } @else if (!group.showAdditionalMetrics || group.filteredAdditionalMetricGroups.length === 0) {
+      <p class="lap-column-menu-empty" role="status">{{ group.searchTerm.trim() ? 'No matching metrics.' : 'All these columns are selected.' }}</p>
+      }
+      }
+    </mat-selection-list>
+    @if (group.additionalMetricGroups.length > 0) {
+    <div [id]="'lap-other-metrics-' + group.family" [hidden]="!group.showAdditionalMetrics">
+      @if (group.showAdditionalMetrics) {
+    <mat-selection-list [multiple]="true" [disabled]="savingLapColumnSportFamilies().has(group.family)"
+      [aria-label]="group.label + ' other available lap columns'" (selectionChange)="onLapColumnSelectionChange(group.family, $event)">
+      @for (metricGroup of group.filteredAdditionalMetricGroups; track metricGroup.id) {
+      <div mat-subheader>{{ metricGroup.label }}</div>
+      @for (metric of metricGroup.metrics; track metric.type) {
+      <mat-list-option class="lap-column-metric-option" [lines]="group.metricAvailability[metric.type]?.label ? 3 : 2" [value]="metric.type" [attr.aria-label]="metric.type === swolfColumn ? metric.label : metric.type">
+        <app-data-type-icon matListItemIcon [dataType]="metric.type" size="18px"></app-data-type-icon>
+        <span matListItemTitle class="lap-column-metric-title">{{ metric.label }}</span>
+        @if (group.metricAvailability[metric.type]?.label; as availabilityLabel) {
+        <span matListItemLine class="lap-column-metric-status">{{ availabilityLabel }}</span>
+        }
+      </mat-list-option>
+      }
+      }
+    </mat-selection-list>
+      }
+    </div>
+    }
+    }
+    </div>
+  </mat-dialog-content>
+  <mat-dialog-actions align="end">
+    <button mat-button mat-dialog-close type="button">Done</button>
+  </mat-dialog-actions>
+</ng-template>
 @if (lapTableGroups.length === 1) {
 @if (lapTableGroups[0]; as lapTableGroup) {
 <ng-container *ngTemplateOutlet="lapTableGroupTables; context: { $implicit: lapTableGroup }"></ng-container>
 }
-} @else {
+} @else if (lapTableGroups.length > 1) {
 <mat-tab-group class="lap-type-tabs" [dynamicHeight]="true" [preserveContent]="true">
   @for (lapTableGroup of lapTableGroups; track lapTableGroup.lapType) {
   <mat-tab [aria-label]="lapTableGroup.lapType">
@@ -100,61 +184,117 @@
   <section>
     @if (selectedActivities.length > 1 || hasMultipleEventActivities) {
     <app-activity-toggle [event]="event" [showToggle]="false" [showDate]="false" [showStats]="false"
-      [activity]="lapTable.activity" [selectedActivities]="selectedActivities">
+      [activity]="lapTable.sourceActivity" [selectedActivities]="selectedActivities">
     </app-activity-toggle>
     }
     @if (selectedActivities.length > 1) {
     <mat-divider [inset]="true"></mat-divider>
     }
-    <section class="table-container">
-      <table mat-table [dataSource]="lapTable.dataSource">
+    <ng-container *ngTemplateOutlet="lapRowsTable; context: { $implicit: lapTable, rows: lapTable.dataSource, nested: false }"></ng-container>
+  </section>
+  }
+</ng-template>
+
+<ng-template #lapRowsTable let-lapTable let-rows="rows" let-nested="nested">
+    <section class="table-container" [class.lap-context-table]="lapTable.hasContextLabels">
+      <table mat-table [dataSource]="rows" multiTemplateDataRows>
         @for (column of lapTable.columns; track column) {
         <ng-container [matColumnDef]="column" [sticky]="column === 'selection' || column === '#'">
           <mat-header-cell *matHeaderCellDef [class.lap-selection-cell]="column === 'selection'"
             [class.lap-index-cell]="column === '#'"
-            [class.lap-duration-cell]="column === 'Duration'">
-            @if (column === 'selection') {
+            [class.lap-duration-cell]="column === 'Duration'"
+            [class.lap-length-toggle-cell]="column === 'lengths'"
+            [class.lap-swolf-cell]="column === swolfColumn">
+            @if (column === 'selection' && !nested) {
             <mat-checkbox [checked]="lapTable.allLapRowsSelected"
               [indeterminate]="lapTable.someLapRowsSelected"
               (change)="toggleAllLapSelections(lapTable)"
-              aria-label="Select all laps in this table">
+              [aria-label]="'Select all ' + lapTable.rowNoun + 's in this table'">
             </mat-checkbox>
-            } @else if (column !== '#') {
-            <app-data-type-icon [dataType]="column"></app-data-type-icon>
+            } @else if (column === 'lengths') {
+            <mat-icon aria-hidden="true" matTooltip="Recorded lap details">linear_scale</mat-icon>
+            <span class="cdk-visually-hidden">Lap details</span>
+            } @else if (column === swolfColumn) {
+            <span class="swim-swolf-heading" tabindex="0" [matTooltip]="lapTable.columnTooltips[column] || swolfColumnLabel" [attr.aria-label]="swolfColumnLabel + '. ' + (lapTable.columnTooltips[column] || '')">{{ swolfColumnLabel }}</span>
+            } @else if (column !== '#' && column !== 'selection') {
+            <app-data-type-icon [dataType]="column" [tooltip]="lapTable.columnTooltips[column]" [focusable]="true"></app-data-type-icon>
             }
           </mat-header-cell>
           <mat-cell *matCellDef="let row" [class.lap-selection-cell]="column === 'selection'"
             [class.lap-index-cell]="column === '#'"
+            [class.lap-average-label]="row.isLapAverage && column === 'selection'"
+            [class.lap-average-index-spacer]="row.isLapAverage && column === '#'"
             [class.lap-duration-cell]="column === 'Duration'"
-            [class.lap-average-cell]="row.isLapAverage">
-            @if (column === 'selection' && !row.isLapAverage) {
-            <mat-checkbox [checked]="row.isSelected"
+            [class.lap-length-toggle-cell]="column === 'lengths'"
+            [class.lap-swolf-cell]="column === swolfColumn"
+            [class.lap-average-cell]="row.isLapAverage" [matTooltip]="row.metricNotes?.[column] || ''">
+            @if (column === 'selection' && row.isLapAverage) {
+            {{ row['#'] }}
+            } @else if (column === 'selection' && !row.isLapAverage) {
+            <mat-checkbox [checked]="row.isSelected" [indeterminate]="row.isPartiallySelected || false"
               (change)="toggleLapSelection(lapTable, row)"
-              [attr.aria-label]="'Select lap ' + row['#']">
+              [aria-label]="(row.members ? 'Select laps ' : 'Select ' + lapTable.rowNoun + ' ') + row['#']">
             </mat-checkbox>
-            } @else if (column !== 'selection') {
+            } @else if (column === 'lengths') {
+            @if (row.hasLengths || row.members) {
+            <button mat-icon-button (click)="toggleLapLengths(row)"
+              [attr.aria-label]="(row.lengthsExpanded ? 'Hide' : 'Show') + (row.members ? ' recorded laps ' : ' lengths for ' + lapTable.rowNoun + ' ') + row['#']"
+              [attr.aria-expanded]="row.lengthsExpanded" [attr.aria-controls]="row.detailId">
+              <mat-icon>{{ row.lengthsExpanded ? 'expand_less' : 'expand_more' }}</mat-icon>
+            </button>
+            }
+            } @else if (column === '#' && !row.isLapAverage) {
+            <span class="lap-index-label">{{ row[column] }}
+              @if (row.isFinalLap) { <span class="lap-final-label">Final lap</span> }
+              @if (row.isRest) { <span class="mat-label-small">Rest</span> }
+              @if (row.timingExplanation) { <mat-icon tabindex="0" aria-hidden="false" [matTooltip]="row.timingExplanation" [attr.aria-label]="row.timingExplanation">info</mat-icon> }
+              @if (row.contextLabel) { <span class="mat-label-small">{{ row.contextLabel }}</span> }
+            </span>
+            } @else if (column !== 'selection' && column !== '#') {
             {{ row[column] }}
             }
           </mat-cell>
           <mat-footer-cell *matFooterCellDef [class.lap-selection-cell]="column === 'selection'"
             [class.lap-index-cell]="column === '#'"
             [class.lap-duration-cell]="column === 'Duration'"
+            [class.lap-length-toggle-cell]="column === 'lengths'"
+            [class.lap-swolf-cell]="column === swolfColumn"
             [class.lap-selected-summary-label]="column === 'selection'"
-            [class.lap-selected-summary-index-spacer]="column === '#'">
+            [class.lap-selected-summary-index-spacer]="column === '#'"
+            [matTooltip]="column === maximumHeartRateType ? 'Peak of the selected row maxima, including rest. Coverage counts contributing rows.' : ''">
             @if (column === 'selection') {
             {{ lapTable.selectedSummaryLabel }}
-            } @else if (column !== '#') {
+            } @else if (column !== '#' && column !== 'lengths') {
             {{ lapTable.selectedSummary[column] }}
             }
           </mat-footer-cell>
         </ng-container>
         }
+        <ng-container matColumnDef="lengthDetails">
+          <mat-cell *matCellDef="let row" class="lap-length-detail-cell">
+            <div [id]="row.detailId" [attr.aria-label]="(row.members ? 'Recorded laps ' : 'Lengths for ' + lapTable.rowNoun + ' ') + row['#']">
+              @if (row.lengthsExpanded && row.members) {
+              <p class="mat-label-medium">Recorded laps · {{ row['#'] }}</p>
+              <ng-container *ngTemplateOutlet="lapRowsTable; context: { $implicit: lapTable, rows: row.members, nested: true }"></ng-container>
+              } @else if (row.lengthsExpanded && row.lap) {
+              <p class="mat-label-medium">Recorded lengths · {{ lapTable.rowNoun | titlecase }} {{ row['#'] }}</p>
+              <app-event-card-swim-lengths [event]="event" [selectedActivities]="[lapTable.activity]"
+                [unitSettings]="unitSettings" [lap]="row.lap"></app-event-card-swim-lengths>
+              }
+            </div>
+          </mat-cell>
+        </ng-container>
         <mat-header-row *matHeaderRowDef="lapTable.columns"></mat-header-row>
-        <mat-row *matRowDef="let row; columns: lapTable.columns;" [class.lap-average-row]="row.isLapAverage"></mat-row>
+        <!-- CDK measures sticky offsets per row definition. Summary labels span both pinned
+             identifiers, so they must not supply the widths for ordinary lap rows. -->
+        <mat-row *matRowDef="let row; columns: lapTable.columns; when: isLapAverageRow" class="lap-average-row"></mat-row>
+        <mat-row *matRowDef="let row; columns: lapTable.columns; when: isLapDataRow" [class.lap-rest-row]="row.isRest"></mat-row>
+        <mat-row *matRowDef="let row; columns: ['lengthDetails']; when: hasRecordedLengths" class="lap-length-detail-row"
+          [attr.hidden]="row.lengthsExpanded ? null : ''"></mat-row>
+        @if (!nested) {
         <mat-footer-row *matFooterRowDef="lapTable.columns; sticky: true" class="lap-selected-summary-row"
           [attr.hidden]="lapTable.selectedCount === 0 ? '' : null"></mat-footer-row>
+        }
       </table>
     </section>
-  </section>
-  }
 </ng-template>

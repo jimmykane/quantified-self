@@ -1,15 +1,17 @@
 import {
   ActivityInterface,
+  ActivityTypes,
   DataDistance,
   DataStrydDistance,
   EventInterface,
   UserUnitSettingsInterface,
   XAxisTypes,
 } from '@sports-alliance/sports-lib';
-import { getBrowserLocale } from '../shared/adapters/date-locale.config';
+import { getAppLocale } from '../shared/adapters/app-locale';
 import { formatUnitAwareDataValue } from '@shared/unit-aware-display';
 import { normalizeEventRange } from './event-chart-range.helper';
 import type { EventChartRange } from './event-chart-range.helper';
+import { getDateTimeFormatter } from './date-time-format.helper';
 
 export { normalizeEventRange } from './event-chart-range.helper';
 export type { EventChartRange } from './event-chart-range.helper';
@@ -70,7 +72,39 @@ export function resolveEventChartXAxisType(
 
 export function canSelectEventChartDistanceXAxis(activities: ActivityInterface[] | null | undefined): boolean {
   const selectedActivities = Array.isArray(activities) ? activities : [];
-  return !selectedActivities.some((activity) => !activityHasFiniteDistanceData(activity));
+  return !selectedActivities.some((activity) => activity?.type === ActivityTypes.Swimming
+    || !activityHasFiniteDistanceData(activity));
+}
+
+/** Match a distance cursor to a recorded pair without coercing or filling missing readings. */
+export function resolveEventDistanceCursorSeconds(
+  distanceValues: unknown,
+  timeValues: unknown,
+  targetDistance: number,
+): number | null {
+  if (!Number.isFinite(targetDistance) || !Array.isArray(distanceValues) || !Array.isArray(timeValues)) {
+    return null;
+  }
+
+  let closestSeconds: number | null = null;
+  let smallestDelta = Number.POSITIVE_INFINITY;
+  const length = Math.min(distanceValues.length, timeValues.length);
+  for (let index = 0; index < length; index += 1) {
+    const distance = distanceValues[index];
+    const seconds = timeValues[index];
+    if (typeof distance !== 'number' || !Number.isFinite(distance)
+      || typeof seconds !== 'number' || !Number.isFinite(seconds)) {
+      continue;
+    }
+
+    const delta = Math.abs(targetDistance - distance);
+    if (delta < smallestDelta) {
+      smallestDelta = delta;
+      closestSeconds = seconds;
+    }
+  }
+
+  return closestSeconds;
 }
 
 export function formatEventXAxisValue(value: number, axisType: XAxisTypes, options?: EventXAxisFormatOptions): string {
@@ -78,7 +112,7 @@ export function formatEventXAxisValue(value: number, axisType: XAxisTypes, optio
     return '';
   }
 
-  const locale = options?.locale || getBrowserLocale();
+  const locale = options?.locale || getAppLocale();
 
   switch (axisType) {
     case XAxisTypes.Time: {
@@ -88,19 +122,19 @@ export function formatEventXAxisValue(value: number, axisType: XAxisTypes, optio
       }
       const includeDate = options?.includeDateForTime !== false;
       if (includeDate) {
-        return date.toLocaleString(locale, {
+        return getDateTimeFormatter(locale, {
           hour: '2-digit',
           minute: '2-digit',
           second: '2-digit',
           day: '2-digit',
           month: 'short'
-        });
+        }).format(date);
       }
-      return date.toLocaleTimeString(locale, {
+      return getDateTimeFormatter(locale, {
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
-      });
+      }).format(date);
     }
     case XAxisTypes.Duration:
       return formatDurationSeconds(value);

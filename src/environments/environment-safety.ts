@@ -32,7 +32,8 @@ export function assertEnvironmentSafety(candidate: AppEnvironment): void {
   if (candidate.production || candidate.beta || !candidate.localhost) {
     throw new Error('[environment] Emulator mode requires non-production localhost build flags.');
   }
-  if (candidate.billingMode !== 'disabled') {
+  // Preserve the existing explicit Stripe-test profile; the contributor demo always disables billing.
+  if (candidate.billingMode !== 'disabled' && candidate.firebase.projectId !== 'demo-stripe-billing') {
     throw new Error('[environment] Billing must be disabled in emulator mode.');
   }
   if (!candidate.useAuthEmulator || !candidate.useFunctionsEmulator) {

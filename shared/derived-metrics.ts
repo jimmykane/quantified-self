@@ -9,35 +9,14 @@ import {
   type TrainingSportContextId,
 } from './training-disciplines';
 import type { SleepProvider } from './sleep';
-import type { ReadinessConfidence, ReadinessLabel } from './readiness';
+import type { HealthProvider } from './health';
+import type { ReadinessConfidence, ReadinessLabel, ReadinessHrvPersonalRange } from './readiness';
 
-export const DERIVED_METRIC_KINDS = {
-  Form: 'form',
-  RecoveryNow: 'recovery_now',
-  Acwr: 'acwr',
-  RampRate: 'ramp_rate',
-  MonotonyStrain: 'monotony_strain',
-  FormNow: 'form_now',
-  FormPlus7d: 'form_plus_7d',
-  EasyPercent: 'easy_percent',
-  HardPercent: 'hard_percent',
-  EfficiencyDelta4w: 'efficiency_delta_4w',
-  FreshnessForecast: 'freshness_forecast',
-  IntensityDistribution: 'intensity_distribution',
-  EfficiencyTrend: 'efficiency_trend',
-  TrainingSummary: 'training_summary',
-  TrainingCapacity: 'training_capacity',
-  TrainingPowerSystems: 'training_power_systems',
-  PowerCurve: 'power_curve',
-  TrainingExplanation: 'training_explanation',
-  TrainingDurability: 'training_durability',
-  TrainingBuildComparison: 'training_build_comparison',
-  TrainingReadiness: 'training_readiness',
-  BodyWeightTrend: 'body_weight_trend',
-  TrainingSwimPerformance: 'training_swim_performance',
-} as const;
-
-export type DerivedMetricKind = typeof DERIVED_METRIC_KINDS[keyof typeof DERIVED_METRIC_KINDS];
+import { DERIVED_METRIC_KINDS, DERIVED_METRICS_ENTRY_TYPES, normalizeDerivedMetricKindsStrict,
+  type DerivedMetricKind } from './derived-metric-kinds';
+export { DERIVED_METRIC_KINDS, DERIVED_METRICS_COLLECTION_ID, DERIVED_METRICS_COORDINATOR_DOC_ID,
+  DERIVED_METRICS_ENTRY_TYPES, isDerivedMetricKind, normalizeDerivedMetricKindsStrict,
+  type DerivedMetricKind } from './derived-metric-kinds';
 
 export const DEFAULT_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
   DERIVED_METRIC_KINDS.Form,
@@ -91,18 +70,13 @@ export const CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
   DERIVED_METRIC_KINDS.TrainingSwimPerformance,
 ];
 
-export const DERIVED_METRICS_COLLECTION_ID = 'derivedMetrics';
-export const DERIVED_METRICS_COORDINATOR_DOC_ID = 'coordinator';
-export const DERIVED_METRIC_SCHEMA_VERSION = 19;
+// Refresh existing snapshots after canonical sport membership changes.
+export const DERIVED_METRIC_SCHEMA_VERSION = 22;
+export const DERIVED_FORM_PAYLOAD_VERSION = 2;
 export const DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS = 14 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS = 2 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS =
   DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS + DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS;
-
-export const DERIVED_METRICS_ENTRY_TYPES = {
-  Coordinator: 'coordinator',
-  Snapshot: 'snapshot',
-} as const;
 
 export type DerivedMetricsEntryType = typeof DERIVED_METRICS_ENTRY_TYPES[keyof typeof DERIVED_METRICS_ENTRY_TYPES];
 
@@ -136,6 +110,10 @@ export interface DerivedFormDailyLoadEntry {
   load: number;
 }
 
+export interface DerivedFormDailyLoadEntryWithActivityCount extends DerivedFormDailyLoadEntry {
+  activityCount: number;
+}
+
 export type LegacyDerivedFormDailyLoadEntry = readonly [number, number];
 
 export interface DerivedMetricSnapshotBase<TPayload> {
@@ -151,10 +129,11 @@ export interface DerivedMetricSnapshotBase<TPayload> {
 }
 
 export interface DerivedFormMetricPayload {
+  payloadVersion: typeof DERIVED_FORM_PAYLOAD_VERSION;
   dayBoundary: 'UTC';
   rangeStartDayMs: number | null;
   rangeEndDayMs: number | null;
-  dailyLoads: DerivedFormDailyLoadEntry[];
+  dailyLoads: DerivedFormDailyLoadEntryWithActivityCount[];
   excludesMergedEvents: boolean;
 }
 
@@ -242,6 +221,8 @@ export interface DerivedFormPlus7dMetricPayload {
 }
 
 export interface DerivedEasyPercentMetricPayload {
+  /** Internal calculation version; omitted from MCP projections. */
+  intensityPolicyVersion?: number;
   dayBoundary: 'UTC';
   latestWeekStartMs: number | null;
   value: number | null;
@@ -249,6 +230,8 @@ export interface DerivedEasyPercentMetricPayload {
 }
 
 export interface DerivedHardPercentMetricPayload {
+  /** Internal calculation version; omitted from MCP projections. */
+  intensityPolicyVersion?: number;
   dayBoundary: 'UTC';
   latestWeekStartMs: number | null;
   value: number | null;
@@ -293,9 +276,22 @@ export interface DerivedIntensityDistributionWeek {
   source: DerivedIntensityDistributionSource;
 }
 
+export interface DerivedIntensityDistributionCoverage {
+  weekStartMs: number;
+  powerActivityCount: number;
+  heartRateActivityCount: number;
+  excludedActivityCount: number;
+  powerZoneSeconds: number;
+  heartRateZoneSeconds: number;
+}
+
 export interface DerivedIntensityDistributionMetricPayload {
+  /** Internal calculation version; omitted from MCP projections. */
+  intensityPolicyVersion?: number;
   dayBoundary: 'UTC';
   weeks: DerivedIntensityDistributionWeek[];
+  /** Internal app coverage; includes excluded-only weeks without adding intensity bars. */
+  coverageWeeks?: DerivedIntensityDistributionCoverage[];
   latestWeekStartMs: number | null;
   latestEasyPercent: number | null;
   latestModeratePercent: number | null;
@@ -474,6 +470,8 @@ export interface DerivedTrainingDisciplineSummary {
 }
 
 export interface DerivedTrainingSummaryMetricPayload {
+  /** Internal calculation version; omitted from MCP projections. */
+  intensityPolicyVersion?: number;
   dayBoundary: 'UTC';
   asOfDayMs: number;
   currentWindowDays: number;
@@ -502,6 +500,22 @@ export interface DerivedTrainingCapacityDiscipline {
   discipline: DerivedPowerCapacityDiscipline;
   ftpSetting: DerivedTrainingCapacityImportedMetric | null;
   importedVo2Max: DerivedTrainingCapacityImportedMetric | null;
+  referenceVo2Max: DerivedTrainingCapacityReferenceVo2Max | null;
+}
+
+export interface DerivedTrainingCapacityReferenceVo2Max {
+  kind: 'vo2-max';
+  value: number;
+  context: DerivedPowerCapacityDiscipline;
+  method: 'lab-test' | 'field-test';
+  observedAtMs: number;
+  provenance: 'manual-health-measurement';
+  comparison: {
+    value: number;
+    observedAtMs: number;
+    delta: number;
+    gapDays: number;
+  } | null;
 }
 
 export interface DerivedTrainingCapacityMetricPayload {
@@ -511,7 +525,7 @@ export interface DerivedTrainingCapacityMetricPayload {
   disciplines: DerivedTrainingCapacityDiscipline[];
 }
 
-export const DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION = 1 as const;
+export const DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION = 2 as const;
 export const DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS = 42 as const;
 export const DERIVED_TRAINING_POWER_SYSTEMS_HISTORY_DAYS = 84 as const;
 
@@ -676,6 +690,16 @@ export interface DerivedTrainingPowerSystemsMetricPayload {
   excludesMergedEvents: true;
   activityTypes: DerivedTrainingPowerSystemsActivityType[];
 }
+
+/** Private snapshot sidecar preserving exact-type policy 1 for the four pooled labels. */
+export type DerivedTrainingPowerSystemsLegacyPolicy1Sidecar = Omit<DerivedTrainingPowerSystemsMetricPayload, 'policyVersion'> & {
+  policyVersion: 1;
+};
+export const DERIVED_TRAINING_POWER_SYSTEMS_LEGACY_POLICY1_ACTIVITY_TYPES = [
+  'Cycling', 'Road Cycling', 'Running', 'Road Running',
+] as const;
+export const DERIVED_TRAINING_POWER_SYSTEMS_LEGACY_POLICY1_MAX_BYTES = 128 * 1024;
+export const DERIVED_TRAINING_POWER_SYSTEMS_MAX_SNAPSHOT_BYTES = 900 * 1024;
 
 export interface DerivedTrainingExplanationLoadCoverage {
   totalCount: number;
@@ -888,7 +912,7 @@ export const DERIVED_TRAINING_RECOVERY_MAX_VALID_SLEEP_SECONDS = 16 * 60 * 60;
 export const DERIVED_TRAINING_RECOVERY_MAX_BEDTIME_VARIATION_MINUTES = 12 * 60;
 // Increment only when the persisted recovery-context calculation changes. This
 // lets Training rebuild the affected snapshot without invalidating unrelated metrics.
-export const DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION = 3;
+export const DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION = 4;
 
 export function getDerivedTrainingRecoveryMinimumComparableNights(expectedNightCount: number): number {
   const normalizedExpectedNightCount = Number.isFinite(expectedNightCount)
@@ -951,6 +975,8 @@ export interface DerivedTrainingBuildDurabilityComparison {
 }
 
 export interface DerivedTrainingBuildComparisonMetricPayload {
+  /** Internal calculation version; omitted from MCP projections. */
+  intensityPolicyVersion?: number;
   recoveryVersion: number;
   dayBoundary: 'UTC';
   asOfDayMs: number;
@@ -959,7 +985,7 @@ export interface DerivedTrainingBuildComparisonMetricPayload {
   disciplines: DerivedTrainingBuildComparisonDiscipline[];
 }
 
-export interface DerivedTrainingReadinessHistoryPoint {
+export interface LegacyDerivedTrainingReadinessHistoryPoint {
   dayMs: number;
   score: number | null;
   label: ReadinessLabel | null;
@@ -977,7 +1003,25 @@ export interface DerivedTrainingReadinessHistoryPoint {
   overnightHeartRateRatio: number | null;
 }
 
+export interface DerivedTrainingReadinessHistoryPoint extends LegacyDerivedTrainingReadinessHistoryPoint {
+  hrvPersonalRange: ReadinessHrvPersonalRange | null;
+}
+
+export interface LegacyDerivedTrainingReadinessMetricPayload {
+  evidenceVersion?: number;
+  formulaVersion: number;
+  dayBoundary: 'UTC';
+  asOfDayMs: number;
+  generatedAtMs: number;
+  historyDays: 14;
+  points: LegacyDerivedTrainingReadinessHistoryPoint[];
+}
+
 export interface DerivedTrainingReadinessMetricPayload {
+  /** Frozen formula-3 history for registered MCP clients, never used by the app. */
+  legacyPoints?: LegacyDerivedTrainingReadinessHistoryPoint[];
+  /** Internal evidence pipeline version; omitted from public MCP projections. */
+  evidenceVersion?: number;
   formulaVersion: number;
   dayBoundary: 'UTC';
   asOfDayMs: number;
@@ -989,6 +1033,26 @@ export interface DerivedTrainingReadinessMetricPayload {
 export interface DerivedBodyWeightTrendPoint {
   dayMs: number;
   weightKg: number | null;
+}
+
+export type DerivedBodyWeightSourceKind = 'health-measurement' | 'workout-profile-context';
+
+export interface DerivedBodyWeightTrendSeries {
+  sourceKind: DerivedBodyWeightSourceKind;
+  provider: HealthProvider | null;
+  /** Opaque Health account key or bounded workout-source label. Never expose through MCP. */
+  sourceKey: string;
+  latestWeightKg: number | null;
+  latestWeightDayMs: number | null;
+  median7dKg: number | null;
+  median28dKg: number | null;
+  change7dKg: number | null;
+  change7dPercent: number | null;
+  change28dKg: number | null;
+  change28dPercent: number | null;
+  recordedDayCount7d: number;
+  recordedDayCount28d: number;
+  points: DerivedBodyWeightTrendPoint[];
 }
 
 export interface DerivedBodyWeightTrendMetricPayload {
@@ -1008,6 +1072,8 @@ export interface DerivedBodyWeightTrendMetricPayload {
   recordedDayCount7d: number;
   recordedDayCount28d: number;
   points: DerivedBodyWeightTrendPoint[];
+  /** Source-separated series; legacy scalar fields are populated only for a single source. */
+  series: DerivedBodyWeightTrendSeries[];
 }
 
 export type DerivedPowerCurveScope = DerivedPowerCapacityDiscipline;
@@ -1099,7 +1165,9 @@ export type DerivedIntensityDistributionMetricSnapshot = DerivedMetricSnapshotBa
 export type DerivedEfficiencyTrendMetricSnapshot = DerivedMetricSnapshotBase<DerivedEfficiencyTrendMetricPayload>;
 export type DerivedTrainingSummaryMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingSummaryMetricPayload>;
 export type DerivedTrainingCapacityMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingCapacityMetricPayload>;
-export type DerivedTrainingPowerSystemsMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingPowerSystemsMetricPayload>;
+export type DerivedTrainingPowerSystemsMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingPowerSystemsMetricPayload> & {
+  legacyPowerSystemsPolicy1?: DerivedTrainingPowerSystemsLegacyPolicy1Sidecar;
+};
 export type DerivedPowerCurveMetricSnapshot = DerivedMetricSnapshotBase<DerivedPowerCurveMetricPayload>;
 export type DerivedTrainingExplanationMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingExplanationMetricPayload>;
 export type DerivedTrainingDurabilityMetricSnapshot = DerivedMetricSnapshotBase<DerivedTrainingDurabilityMetricPayload>;
@@ -1143,18 +1211,6 @@ export interface EnsureDerivedMetricsResponse {
   queued: boolean;
   generation: number | null;
   metricKinds: DerivedMetricKind[];
-}
-
-export function isDerivedMetricKind(value: unknown): value is DerivedMetricKind {
-  return Object.values(DERIVED_METRIC_KINDS).includes(`${value}` as DerivedMetricKind);
-}
-
-export function normalizeDerivedMetricKindsStrict(metricKinds: readonly unknown[] | null | undefined): DerivedMetricKind[] {
-  return Array.from(new Set(
-    (metricKinds || [])
-      .filter(isDerivedMetricKind)
-      .map(metricKind => `${metricKind}` as DerivedMetricKind),
-  ));
 }
 
 export function normalizeDerivedMetricKinds(metricKinds: readonly unknown[] | null | undefined): DerivedMetricKind[] {
@@ -1234,8 +1290,138 @@ export function normalizeDerivedFormDailyLoads(
 
 export function buildDerivedFormDailyLoads(
   loadByDayMs: ReadonlyMap<number, number>,
-): DerivedFormDailyLoadEntry[] {
-  return normalizeDerivedFormDailyLoads(
-    [...loadByDayMs.entries()].map(([dayMs, load]) => ({ dayMs, load })),
+  activityCountByDayMs: ReadonlyMap<number, number>,
+): DerivedFormDailyLoadEntryWithActivityCount[] {
+  return normalizeDerivedFormDailyLoadsWithActivityCounts(
+    [...loadByDayMs.entries()].map(([dayMs, load]) => ({
+      dayMs,
+      load,
+      activityCount: activityCountByDayMs.get(dayMs),
+    })),
   );
+}
+
+export function normalizeDerivedFormDailyLoadsWithActivityCounts(
+  dailyLoads: unknown,
+): DerivedFormDailyLoadEntryWithActivityCount[] {
+  const entries = Array.isArray(dailyLoads) ? dailyLoads : [];
+  const loadByDayMs = new Map<number, { load: number; activityCount: number }>();
+  for (const candidate of entries) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+      continue;
+    }
+    const entry = candidate as Record<string, unknown>;
+    const dayMs = toFiniteNumber(entry.dayMs);
+    const load = toFiniteNumber(entry.load);
+    if (
+      dayMs === null
+      || dayMs < 0
+      || load === null
+      || load < 0
+      || !Number.isSafeInteger(entry.activityCount)
+      || Number(entry.activityCount) <= 0
+    ) {
+      continue;
+    }
+    const normalizedDayMs = Math.floor(dayMs);
+    const previous = loadByDayMs.get(normalizedDayMs);
+    loadByDayMs.set(normalizedDayMs, {
+      load: (previous?.load || 0) + load,
+      activityCount: (previous?.activityCount || 0) + Number(entry.activityCount),
+    });
+  }
+  return [...loadByDayMs.entries()]
+    .sort((left, right) => left[0] - right[0])
+    .map(([dayMs, values]) => ({ dayMs, ...values }));
+}
+
+export function resolveDerivedFormMetricPayload(
+  payload: unknown,
+): DerivedFormMetricPayload | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return null;
+  }
+  const source = payload as Record<string, unknown>;
+  if (
+    source.payloadVersion !== DERIVED_FORM_PAYLOAD_VERSION
+    || source.dayBoundary !== 'UTC'
+    || source.excludesMergedEvents !== true
+    || !Array.isArray(source.dailyLoads)
+  ) {
+    return null;
+  }
+
+  const dailyLoads: DerivedFormDailyLoadEntryWithActivityCount[] = [];
+  let previousDayMs = -Infinity;
+  for (const candidate of source.dailyLoads) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+      return null;
+    }
+    const entry = candidate as Record<string, unknown>;
+    if (
+      !Number.isSafeInteger(entry.dayMs)
+      || Number(entry.dayMs) < 0
+      || Number(entry.dayMs) % (24 * 60 * 60 * 1000) !== 0
+      || Number(entry.dayMs) <= previousDayMs
+      || typeof entry.load !== 'number'
+      || !Number.isFinite(entry.load)
+      || entry.load < 0
+      || !Number.isSafeInteger(entry.activityCount)
+      || Number(entry.activityCount) <= 0
+    ) {
+      return null;
+    }
+    dailyLoads.push({
+      dayMs: Number(entry.dayMs),
+      load: entry.load,
+      activityCount: Number(entry.activityCount),
+    });
+    previousDayMs = Number(entry.dayMs);
+  }
+
+  const rangeStartDayMs = source.rangeStartDayMs === null
+    ? null
+    : Number.isSafeInteger(source.rangeStartDayMs)
+      ? Number(source.rangeStartDayMs)
+      : undefined;
+  const rangeEndDayMs = source.rangeEndDayMs === null
+    ? null
+    : Number.isSafeInteger(source.rangeEndDayMs)
+      ? Number(source.rangeEndDayMs)
+      : undefined;
+  if (
+    rangeStartDayMs === undefined
+    || rangeEndDayMs === undefined
+    || rangeStartDayMs !== (dailyLoads[0]?.dayMs ?? null)
+    || rangeEndDayMs !== (dailyLoads[dailyLoads.length - 1]?.dayMs ?? null)
+  ) {
+    return null;
+  }
+
+  return {
+    payloadVersion: DERIVED_FORM_PAYLOAD_VERSION,
+    dayBoundary: 'UTC',
+    rangeStartDayMs,
+    rangeEndDayMs,
+    dailyLoads,
+    excludesMergedEvents: true,
+  };
+}
+
+export function hasMatchingDerivedFormSourceEventCount(
+  payload: unknown,
+  sourceEventCount: unknown,
+): boolean {
+  const resolvedPayload = resolveDerivedFormMetricPayload(payload);
+  if (
+    !resolvedPayload
+    || !Number.isSafeInteger(sourceEventCount)
+    || Number(sourceEventCount) < 0
+  ) {
+    return false;
+  }
+  return resolvedPayload.dailyLoads.reduce(
+    (total, entry) => total + entry.activityCount,
+    0,
+  ) === Number(sourceEventCount);
 }

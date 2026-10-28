@@ -13,6 +13,7 @@ import type { DashboardFormPoint } from '../../../helpers/dashboard-form.helper'
 type ResizeObserverRecord = {
   observe: ReturnType<typeof vi.fn>;
   disconnect: ReturnType<typeof vi.fn>;
+  notify: () => void;
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -99,10 +100,11 @@ describe('ChartsFormComponent', () => {
       public observe = vi.fn();
       public disconnect = vi.fn();
 
-      constructor(_: ResizeObserverCallback) {
+      constructor(callback: ResizeObserverCallback) {
         resizeObserverRecords.push({
           observe: this.observe,
           disconnect: this.disconnect,
+          notify: () => callback([], this as unknown as ResizeObserver),
         });
       }
     }
@@ -176,6 +178,46 @@ describe('ChartsFormComponent', () => {
     return (call?.[1] || {}) as Record<string, any>;
   };
 
+  it('resizes only dashboard panel geometry and ignores repeated or width-only notifications', async () => {
+    const frames: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const flushFrames = () => { while (frames.length) frames.shift()!(0); };
+    const canvas = component.chartDiv.nativeElement;
+    let height = 440;
+    let width = 393;
+    fixture.nativeElement.classList.add('dashboard-chart-frame');
+    Object.defineProperty(canvas, 'clientHeight', { get: () => height });
+    Object.defineProperty(canvas, 'clientWidth', { get: () => width });
+    fixture.detectChanges();
+    await waitForChartStabilization();
+    const fullOption = getLastFullChartOption();
+    expect(fullOption.grid[0]).toMatchObject({ top: 8, height: 196 });
+    expect(fullOption.grid[1]).toMatchObject({ bottom: 24, height: 196 });
+    mockLoader.setOption.mockClear();
+    flushFrames();
+    expect(mockLoader.setOption).not.toHaveBeenCalled();
+
+    height = 800;
+    resizeObserverRecords[0].notify();
+    flushFrames();
+    expect(mockLoader.setOption).toHaveBeenCalledOnce();
+    expect(mockLoader.setOption).toHaveBeenLastCalledWith(mockChart, {
+      grid: [{ top: 8, height: 376 }, { bottom: 24, height: 376 }],
+    }, { notMerge: false, lazyUpdate: false, silent: true });
+    expect(fullOption.series).toHaveLength(3);
+    expect(points[0].ctl).toBe(10.4);
+
+    resizeObserverRecords[0].notify();
+    flushFrames();
+    width = 700;
+    resizeObserverRecords[0].notify();
+    flushFrames();
+    expect(mockLoader.setOption).toHaveBeenCalledOnce();
+  });
+
   it('should initialize echarts with two panes and default same-day form series', async () => {
     fixture.detectChanges();
     await waitForChartStabilization();
@@ -203,9 +245,11 @@ describe('ChartsFormComponent', () => {
     expect(option.dataZoom).toBeUndefined();
     expect(option.toolbox).toBeUndefined();
     expect(option.xAxis[1].minInterval).toBe(7 * DAY_MS);
+    expect(option.xAxis[1].interval).toBe(7 * DAY_MS);
     expect(option.xAxis[1].splitNumber).toBeGreaterThanOrEqual(2);
     expect(option.xAxis[1].splitNumber).toBeLessThanOrEqual(7);
     expect(typeof option.xAxis[1].axisLabel.formatter).toBe('function');
+    expect(option.xAxis[1].axisLabel.margin).toBe(3);
     expect(option.xAxis[0].axisPointer?.snap).toBe(true);
     expect(option.xAxis[1].axisPointer?.snap).toBe(true);
     expect(option.axisPointer?.snap).toBe(true);
@@ -411,6 +455,32 @@ describe('ChartsFormComponent', () => {
     expect(yearlyOption.toolbox).toBeUndefined();
   });
 
+  it.each(['w', 'm'] as const)('scales both %s-view panes to the visible period rather than older extremes', async timelineWindow => {
+    const history = buildLongRangePoints(1200).map((point, index) => index < 40
+      ? { ...point, ctl: 1000, atl: 2000, formSameDay: -1000 } : point);
+    component.data = history;
+    component.timelineWindow = timelineWindow;
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const recent = getLastFullChartOption();
+    expect(recent.yAxis[0].min).toBe(0);
+    expect(recent.yAxis[0].max).toBeLessThan(500);
+    expect(recent.yAxis[1].min).toBe(0);
+    expect(recent.yAxis[1].max).toBeLessThan(100);
+    expect(recent.series[0].data[0][1]).toBe(1000);
+    expect(recent.series[1].data[0][1]).toBe(2000);
+    expect(recent.series[2].data[0][1]).toBe(-1000);
+
+    component.timelineWindow = 'y';
+    fixture.detectChanges();
+    await waitForChartStabilization();
+    const full = getLastFullChartOption();
+    expect(full.yAxis[0].max).toBeGreaterThanOrEqual(2000);
+    expect(full.yAxis[1].min).toBeLessThanOrEqual(-1000);
+    expect(history[0]).toMatchObject({ ctl: 1000, atl: 2000, formSameDay: -1000 });
+  });
+
   it('should render a rich tooltip card with shared dashboard tooltip typography', async () => {
     fixture.detectChanges();
     await waitForChartStabilization();
@@ -468,19 +538,22 @@ describe('ChartsFormComponent', () => {
       expect(option.xAxis?.[1]?.axisLabel?.margin).toBe(3);
       expect(option.grid?.[0]?.top).toBe('3%');
       expect(option.grid?.[0]?.height).toBe('36%');
-      expect(option.grid?.[1]?.top).toBe('49%');
+      expect(option.grid?.[1]?.bottom).toBe(24);
       expect(option.grid?.[1]?.height).toBe('36%');
     } finally {
       window.matchMedia = originalMatchMedia;
     }
   });
 
+});
+
+describe('ChartsFormComponent styles', () => {
   it('should keep the mobile stat header compact above the two-pane chart', () => {
     const stylesPath = resolve(process.cwd(), 'src/app/components/charts/form/charts.form.component.css');
     const styles = readFileSync(stylesPath, 'utf8');
 
     expect(styles).toContain('@media (max-width: 640px)');
-    expect(styles).toContain('padding: 4px 8px 0;');
+    expect(styles).toContain('padding: 4px var(--qs-dashboard-chart-content-inset, 8px) 0;');
     expect(styles).toContain('gap: 4px;');
     expect(styles).toContain('margin-bottom: 4px;');
     expect(styles).toContain('font-size: 1.08rem;');

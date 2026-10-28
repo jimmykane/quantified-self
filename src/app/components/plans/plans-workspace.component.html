@@ -1,0 +1,1169 @@
+@if (hasTrainingPlanningUIAccess()) {
+<main class="plans-workspace qs-workspace-page" aria-labelledby="plans-title">
+  <app-page-header
+    [title]="libraryView() ? (editor() ? (libraryEditorItem() ? 'Edit saved workout' : 'Save a workout') : 'Workout library') : editor() ? (editor()!.mode === 'create' ? 'Add workout' : 'Edit workout') : showPlanForm() ? 'New plan' : 'Plans'"
+    titleId="plans-title"
+    leadingIcon="event_note"
+    [subtitle]="libraryView() ? (editor() ? 'Build a reusable workout. Add dates later.' : 'Keep your common workouts ready for any plan.') : editor() ? 'Date, sport, and workout steps.' : showPlanForm() ? 'Workouts across a date range.' : 'Workouts, with or without a plan.'"
+    [status]="pageStatus()">
+    @if (browsing() && !libraryView()) {
+      <app-training-delivery-button pageHeaderTitleActions scope="history" entityId="current"
+        title="Plans and standalone workouts" historyLabel="Sync"
+        [disabled]="busyAction() !== null || scheduleState().status !== 'ready'"></app-training-delivery-button>
+    }
+    @if (browsing() && libraryView()) {
+      <div pageHeaderActions class="plans-header-actions">
+        <a mat-button routerLink="/training/plans" appHapticTap><mat-icon aria-hidden="true">arrow_back</mat-icon>Plans</a>
+        <a mat-flat-button routerLink="/training/plans/library/new" appHapticTap
+          [queryParams]="{ date: libraryCalendarDate() }"
+          [state]="{ trainingPlansEditorReturn: { uid: currentUser()?.uid, url: libraryBrowseUrl() } }">
+          <mat-icon aria-hidden="true">add</mat-icon>New saved workout
+        </a>
+      </div>
+    }
+  </app-page-header>
+
+  @if (browsing() && !libraryView() && scheduleState().status === 'ready') {
+  <nav #scopeNavigation class="plans-view-navigation" aria-label="Workout scope" tabindex="-1">
+    <mat-button-toggle-group
+      [value]="view()"
+      [disabled]="busyAction() !== null"
+      hideSingleSelectionIndicator
+      aria-label="View plans or standalone workouts"
+      (change)="selectView($event.value)">
+      <mat-button-toggle value="plans">
+        <mat-icon aria-hidden="true">event_note</mat-icon>
+        <span>Plans</span>
+      </mat-button-toggle>
+      <mat-button-toggle value="standalone">
+        <mat-icon aria-hidden="true">directions_run</mat-icon>
+        <span>Standalone</span>
+      </mat-button-toggle>
+    </mat-button-toggle-group>
+    <button mat-button type="button" appHapticTap (click)="openLibrary()" [disabled]="busyAction() !== null">
+      <mat-icon aria-hidden="true">library_books</mat-icon><span>Workout library</span>
+    </button>
+    @if (view() === 'plans' && planOptions().length) {
+    <button mat-button type="button" appHapticTap (click)="beginPlanCreation()" [disabled]="busyAction() !== null">
+      <mat-icon aria-hidden="true">playlist_add</mat-icon>
+      <span>New plan</span>
+    </button>
+    }
+  </nav>
+  }
+
+  @if (scheduleState().status === 'loading') {
+    <section class="plans-status" aria-live="polite">
+      <mat-spinner diameter="28"></mat-spinner>
+      <span>{{ scheduleState().message ?? 'Loading your training schedule…' }}</span>
+    </section>
+  } @else if (scheduleState().status === 'error') {
+    <section class="plans-status plans-status--error" role="alert">
+      <mat-icon aria-hidden="true">error_outline</mat-icon>
+      <span>{{ scheduleState().message }}</span>
+    </section>
+  } @else {
+    @if (showPlanForm()) {
+      <section class="plan-form" aria-labelledby="plans-title">
+          <fieldset class="editor-fields" [disabled]="busyAction() !== null" aria-label="Plan details">
+          <div class="plan-form-grid">
+            <mat-form-field>
+              <mat-label>Plan name</mat-label>
+              <input #planNameInput matInput maxlength="120" [ngModel]="planDraft().name"
+                (ngModelChange)="updatePlanDraft('name', $event)">
+            </mat-form-field>
+            <mat-form-field subscriptSizing="dynamic">
+              <mat-label>Plan color</mat-label>
+              <mat-select [value]="planDraft().color" [disabled]="busyAction() !== null"
+                (openedChange)="$event && haptics.selection()" (selectionChange)="updatePlanDraft('color', $event.value)">
+                <mat-select-trigger><span class="plan-color-label">
+                  <mat-icon [style.color]="planDraftAppearance().color" aria-hidden="true">circle</mat-icon>
+                  <span>{{ planDraftAppearance().label }}</span>
+                </span></mat-select-trigger>
+                @for (option of planColorOptions; track option.id) {
+                  <mat-option [value]="option.id"><mat-icon [style.color]="option.color" aria-hidden="true">circle</mat-icon>{{ option.label }}</mat-option>
+                }
+              </mat-select>
+              <mat-hint>Used in plan and Calendar workout markers</mat-hint>
+            </mat-form-field>
+            <mat-form-field>
+              <mat-label>Start date</mat-label>
+              <input matInput type="date" [ngModel]="planDraft().startLocalDate"
+                (ngModelChange)="updatePlanDraft('startLocalDate', $event)">
+            </mat-form-field>
+            <mat-form-field>
+              <mat-label>End date</mat-label>
+              <input matInput type="date" [ngModel]="planDraft().endLocalDate"
+                (ngModelChange)="updatePlanDraft('endLocalDate', $event)">
+              <mat-hint>Up to 366 days, including both dates</mat-hint>
+            </mat-form-field>
+          </div>
+          <mat-checkbox [ngModel]="planDraft().activate"
+            [disabled]="busyAction() !== null"
+            (ngModelChange)="updatePlanDraft('activate', $event)">
+            Make this the active plan
+          </mat-checkbox>
+          @if (planDraft().activate && activePlan(); as currentPlan) {
+            <p class="workout-destination-note">Creating this plan will pause {{ currentPlan.name }}.</p>
+          }
+          </fieldset>
+        <div class="form-actions">
+          <button appHapticTap mat-button type="button" (click)="cancelPlanCreation()" [disabled]="busyAction() !== null">Cancel</button>
+          <button appHapticTap mat-flat-button type="button" (click)="createPlan()"
+            [disabled]="busyAction() !== null || !planDraft().name.trim()">
+            <span class="button-content">
+              @if (busyAction() === 'create-plan') {
+                <mat-spinner diameter="18"></mat-spinner>
+              } @else {
+                <mat-icon aria-hidden="true">add</mat-icon>
+              }
+              <span>Create plan</span>
+            </span>
+          </button>
+        </div>
+      </section>
+    }
+
+    @if (browsing() && !libraryView() && view() === 'plans') {
+      <section class="plan-scope" aria-label="Selected plan">
+        @if (selectedPlan(); as plan) {
+        <div class="plan-selector-row">
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>Training plan</mat-label>
+            <mat-select [value]="selectedPlanId()" (selectionChange)="selectPlan($event.value)"
+              [disabled]="busyAction() !== null">
+              <mat-select-trigger><span class="plan-color-label">
+                <mat-icon [style.color]="selectedPlanAppearance().color" aria-hidden="true">circle</mat-icon>
+                <span>{{ plan.name }}</span>
+              </span></mat-select-trigger>
+              @for (plan of planOptions(); track plan.id) {
+                <mat-option [value]="plan.id"><mat-icon [style.color]="planAppearances()[plan.id].color" aria-hidden="true">circle</mat-icon>{{ plan.name }} · {{ plan.lifecycle | titlecase }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+            <div class="plan-actions">
+              <button appHapticTap mat-icon-button type="button" [matMenuTriggerFor]="planActionsMenu"
+                [disabled]="busyAction() !== null" matTooltip="Plan actions"
+                [attr.aria-label]="selectedPlanActionBusy() ? 'Updating plan' : 'Plan actions'">
+                @if (selectedPlanActionBusy()) {
+                  <mat-spinner diameter="18"></mat-spinner>
+                } @else {
+                  <mat-icon aria-hidden="true">more_vert</mat-icon>
+                }
+                <span class="cdk-visually-hidden">{{ selectedPlanActionBusy() ? 'Updating plan' : 'Plan actions' }}</span>
+              </button>
+              <mat-menu #planActionsMenu="matMenu" class="qs-menu-panel">
+                <button appHapticTap mat-menu-item type="button" (click)="setPlanLifecycle(plan, plan.lifecycle === 'active' ? 'paused' : 'active')">
+                  <mat-icon aria-hidden="true">{{ plan.lifecycle === 'active' ? 'pause_circle' : 'play_circle' }}</mat-icon>
+                  <span>{{ plan.lifecycle === 'active' ? 'Pause plan' : 'Activate plan' }}</span>
+                </button>
+                <button appHapticTap mat-menu-item type="button" (click)="beginRename(plan)">
+                  <mat-icon aria-hidden="true">edit</mat-icon><span>Rename</span>
+                </button>
+                <button appHapticTap mat-menu-item type="button" (click)="editPlanPhases(plan)">
+                  <mat-icon aria-hidden="true">view_timeline</mat-icon><span>Phases</span>
+                </button>
+                <button appHapticTap mat-menu-item type="button" [matMenuTriggerFor]="planColorMenu">
+                  <mat-icon [style.color]="selectedPlanAppearance().color" aria-hidden="true">palette</mat-icon><span>Plan color</span>
+                </button>
+                <button appHapticTap mat-menu-item type="button" (click)="beginShift(plan)">
+                  <mat-icon aria-hidden="true">date_range</mat-icon><span>Shift dates</span>
+                </button>
+                <button appHapticTap mat-menu-item type="button" (click)="openHistory({ kind: 'plan', id: plan.id })">
+                  <mat-icon aria-hidden="true">history</mat-icon><span>History</span>
+                </button>
+                @if (plan.lifecycle !== 'archived') {
+                  <button appHapticTap mat-menu-item type="button" (click)="setPlanLifecycle(plan, 'archived')">
+                    <mat-icon aria-hidden="true">archive</mat-icon><span>Archive</span>
+                  </button>
+                }
+                <button appHapticTap mat-menu-item type="button" (click)="beginPlanDeletion(plan)">
+                  <mat-icon aria-hidden="true">delete</mat-icon><span>Delete plan</span>
+                </button>
+              </mat-menu>
+              <mat-menu #planColorMenu="matMenu" class="qs-menu-panel" [hasBackdrop]="false">
+                @for (option of planColorOptions; track option.id) {
+                  <button mat-menu-item type="button" [disabled]="busyAction() !== null"
+                    [attr.aria-label]="option.label + (selectedPlanAppearance().id === option.id ? ', current plan color' : '')"
+                    (click)="setPlanColor(plan, option.id)">
+                    <mat-icon [style.color]="option.color" aria-hidden="true">{{ selectedPlanAppearance().id === option.id ? 'check_circle' : 'circle' }}</mat-icon>
+                    <span>{{ option.label }}</span>
+                  </button>
+                }
+              </mat-menu>
+            </div>
+          </div>
+          <div class="plan-context">
+            <mat-chip-set aria-label="Selected plan status">
+              <mat-chip [highlighted]="plan.lifecycle === 'active'">{{ plan.lifecycle | titlecase }}</mat-chip>
+            </mat-chip-set>
+            <span>{{ plan.startLocalDate | date:'mediumDate' }} – {{ plan.endLocalDate | date:'mediumDate' }}</span>
+            @if (plan.lifecycle === 'archived') {
+              <span>Visible here. Hidden from the main Calendar until this plan is active.</span>
+            }
+          </div>
+          @if (plan.lifecycle === 'paused') {
+            <div class="plan-activation-hint">
+              <div>
+                <p>Activate to show workouts in Calendar. Any plan sync you’ve already enabled resumes for eligible upcoming workouts.</p>
+                @if (activePlan(); as currentPlan) {
+                  @if (currentPlan.id !== plan.id) { <p>This will pause {{ currentPlan.name }}.</p> }
+                }
+              </div>
+              <button mat-button appHapticTap type="button" (click)="setPlanLifecycle(plan, 'active')"
+                [disabled]="busyAction() !== null">
+                <span class="button-content">
+                  @if (busyAction() === 'lifecycle-' + plan.id) {
+                    <mat-spinner diameter="18"></mat-spinner>
+                  } @else {
+                    <mat-icon aria-hidden="true">play_circle</mat-icon>
+                  }
+                  <span>{{ busyAction() === 'lifecycle-' + plan.id ? 'Activating…' : 'Activate plan' }}</span>
+                </span>
+              </button>
+            </div>
+          }
+          <app-training-delivery-button scope="plan" [entityId]="plan.id" [title]="plan.name"
+            [summaryWorkouts]="schedule().workouts" [summaryPlan]="plan" [summaryCompletions]="completions()"
+            [summaryNowMs]="nowMs()"
+            [disabled]="busyAction() !== null"></app-training-delivery-button>
+
+          @if (renamingPlanId() === plan.id) {
+            <div class="inline-plan-action">
+              <mat-form-field subscriptSizing="dynamic">
+                <mat-label>Plan name</mat-label>
+                <input matInput maxlength="120" [ngModel]="renameValue()" (ngModelChange)="renameValue.set($event)"
+                  [disabled]="busyAction() !== null">
+              </mat-form-field>
+              <button appHapticTap mat-flat-button type="button" (click)="renamePlan(plan)"
+                [disabled]="busyAction() !== null || !renameValue().trim()">
+                <span class="button-content">
+                  @if (busyAction() === 'rename-' + plan.id) {
+                    <mat-spinner diameter="18"></mat-spinner>
+                  } @else {
+                    <mat-icon aria-hidden="true">save</mat-icon>
+                  }
+                  <span>Save</span>
+                </span>
+              </button>
+              <button appHapticTap mat-button type="button" (click)="renamingPlanId.set(null)" [disabled]="busyAction() !== null">Cancel</button>
+            </div>
+          }
+
+          @if (shiftingPlanId() === plan.id) {
+            <div class="inline-plan-action">
+              <mat-form-field subscriptSizing="dynamic">
+                <mat-label>Days to shift</mat-label>
+                <input matInput type="number" min="-366" max="366" [ngModel]="shiftDays()"
+                  (ngModelChange)="shiftDays.set(+$event)" [disabled]="busyAction() !== null">
+                <mat-hint>Negative moves the plan earlier</mat-hint>
+              </mat-form-field>
+              <button appHapticTap mat-flat-button type="button" (click)="shiftPlan(plan)" [disabled]="busyAction() !== null">
+                <span class="button-content">
+                  @if (busyAction() === 'shift-' + plan.id) {
+                    <mat-spinner diameter="18"></mat-spinner>
+                  } @else {
+                    <mat-icon aria-hidden="true">date_range</mat-icon>
+                  }
+                  <span>Shift plan</span>
+                </span>
+              </button>
+              <button appHapticTap mat-button type="button" (click)="shiftingPlanId.set(null)" [disabled]="busyAction() !== null">Cancel</button>
+            </div>
+          }
+
+          @if (deletingPlanId() === plan.id) {
+            <mat-card class="plan-deletion-card">
+              <mat-card-header>
+                <mat-card-title>Delete {{ plan.name }}?</mat-card-title>
+                <mat-card-subtitle>Archiving is the non-destructive alternative. Deleting removes plan history.</mat-card-subtitle>
+              </mat-card-header>
+              <mat-card-content>
+                <mat-radio-group [ngModel]="deleteDisposition()" [disabled]="busyAction() !== null"
+                  (ngModelChange)="deleteDisposition.set($event); haptics.selection()">
+                  <mat-radio-button value="convert-to-standalone">
+                    Keep current workouts as standalone
+                  </mat-radio-button>
+                  <mat-radio-button value="delete-workouts">
+                    Permanently delete current workouts
+                  </mat-radio-button>
+                </mat-radio-group>
+                <div class="past-provider-cleanup-option">
+                  <mat-checkbox [checked]="removePastProviderCopies()" [disabled]="busyAction() !== null"
+                    (change)="removePastProviderCopies.set($event.checked); haptics.selection()">
+                    Also try to remove past provider copies
+                  </mat-checkbox>
+                  <p>Only uncompleted provider workouts are eligible. Some providers cannot remove past workouts. Provider apps and devices may retain copies; completed activities are never deleted.</p>
+                </div>
+              </mat-card-content>
+              <mat-card-actions align="end">
+                <button appHapticTap mat-button type="button" (click)="deletingPlanId.set(null)" [disabled]="busyAction() !== null">Cancel</button>
+                <button appHapticTap mat-stroked-button type="button" (click)="setPlanLifecycle(plan, 'archived')"
+                  [disabled]="busyAction() !== null">
+                  <span class="button-content">
+                    @if (busyAction() === 'lifecycle-' + plan.id) {
+                      <mat-spinner diameter="18"></mat-spinner>
+                    } @else {
+                      <mat-icon aria-hidden="true">archive</mat-icon>
+                    }
+                    <span>Archive instead</span>
+                  </span>
+                </button>
+                <button appHapticTap mat-flat-button color="warn" type="button" (click)="deletePlan(plan)"
+                  [disabled]="busyAction() !== null">
+                  <span class="button-content">
+                    @if (busyAction() === 'delete-plan-' + plan.id) {
+                      <mat-spinner diameter="18"></mat-spinner>
+                    } @else {
+                      <mat-icon aria-hidden="true">delete</mat-icon>
+                    }
+                    <span>Delete plan</span>
+                  </span>
+                </button>
+              </mat-card-actions>
+            </mat-card>
+          }
+        } @else {
+          <section class="plans-empty-state">
+            <mat-icon aria-hidden="true">event_note</mat-icon>
+            <h2 id="plan-scope-title">No plans yet</h2>
+            <p>Create a plan, or switch to Standalone to add workouts without one.</p>
+            <button appHapticTap mat-flat-button type="button" (click)="beginPlanCreation()" [disabled]="busyAction() !== null">Create your first plan</button>
+          </section>
+        }
+      </section>
+    }
+
+    @if (browsing() && libraryView()) {
+      <section class="workout-library" aria-labelledby="library-heading">
+        <div class="workout-list-heading">
+          <div>
+            <h2 id="library-heading" tabindex="-1">Saved workouts <span class="workout-count">({{ libraryRows().length }})</span></h2>
+            <p>Reusable recipes, without dates or service sync. Adding one makes independent calendar workouts.</p>
+          </div>
+        </div>
+        @if (libraryCalendarDate()) {
+          <p class="library-calendar-context">Selected Calendar day: <strong>{{ libraryCalendarDate() }}</strong></p>
+        }
+        @if (!placementItem()) {
+        <div class="library-filters" aria-label="Filter saved workouts">
+          <mat-form-field><mat-label>Search saved workouts</mat-label>
+            <input matInput type="search" maxlength="120" [ngModel]="librarySearch()" (ngModelChange)="librarySearch.set($event)">
+          </mat-form-field>
+          <mat-form-field><mat-label>Sport</mat-label>
+            <mat-select [value]="librarySport() ?? 'all'" (selectionChange)="setLibrarySport($event.value)">
+              <mat-option value="all">All sports</mat-option>
+              @for (sport of librarySports(); track sport) { <mat-option [value]="sport">{{ sport }}</mat-option> }
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field><mat-label>Saved workout status</mat-label>
+            <mat-select [value]="libraryStatus()" (selectionChange)="setLibraryStatusFilter($event.value)">
+              <mat-option value="active">Active</mat-option><mat-option value="archived">Archived</mat-option>
+              <mat-option value="all">All</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+        @if (libraryState().status === 'loading') {
+          <div class="workout-empty-state" role="status">
+            <mat-spinner diameter="24" aria-hidden="true"></mat-spinner><span>Loading saved workouts…</span>
+          </div>
+        } @else if (libraryState().status === 'error') {
+          <div class="workout-empty-state" role="alert">
+            <mat-icon aria-hidden="true">error_outline</mat-icon>
+            <div class="library-status-copy">
+              <span>Could not load saved workouts. {{ libraryState().message }}</span>
+              <button mat-button type="button" appHapticTap (click)="retryLibraryLoad()">Retry</button>
+            </div>
+          </div>
+        } @else if (libraryItems().length === 0) {
+          <div class="workout-empty-state" role="status">
+            <mat-icon aria-hidden="true">library_books</mat-icon>
+            <span>No saved workouts yet. Save one from a plan or create a new recipe here.</span>
+          </div>
+        } @else if (libraryRows().length === 0) {
+          <p role="status">No saved workouts match these filters. Change the search, sport, or status.</p>
+        } @else {
+          <p class="library-result-count" role="status">{{ libraryRows().length }} of {{ libraryItems().length }} saved workouts</p>
+        @for (row of libraryRows(); track row.item.id; let last = $last) {
+          <app-compact-row class="workout-row" layout="stacked" density="compact" [mobileActionFullWidth]="true" [title]="row.item.title"
+            [titleId]="'saved-workout-' + row.item.id" [headingLevel]="3" [showDivider]="!last">
+            <div class="workout-row-meta">
+              <app-activity-type-icon [activityType]="row.item.structure.sport" size="18px" aria-hidden="true"></app-activity-type-icon>
+              <span>{{ row.item.structure.sport }}</span>
+              @if (row.item.status === 'archived') { <span> · Archived</span> }
+            </div>
+            <div class="workout-row-meta workout-prescription-summary">{{ row.prescriptionSummary }}</div>
+            <ol class="workout-summary">
+              @for (summary of row.summary; track $index) { <li>{{ summary }}</li> }
+            </ol>
+            @if (!row.item.strength) {
+              <app-workout-profile [structure]="row.item.structure" [unitSettings]="currentUser()?.settings?.unitSettings ?? null"
+                [contextKey]="currentUser()?.uid + '/library/' + row.item.id + '/' + row.item.revision" [initiallyExpanded]="false"
+                unavailableReason="This saved recipe cannot be profiled. Its original instructions remain above."></app-workout-profile>
+            }
+            <button mat-button type="button" class="library-prescription-toggle" appHapticTap (click)="toggleLibraryPreview(row.item.id)"
+              [attr.aria-expanded]="libraryExpandedIds().includes(row.item.id)"
+              [attr.aria-controls]="'library-details-' + row.item.id">
+              {{ libraryExpandedIds().includes(row.item.id) ? 'Hide' : 'Show' }} prescription
+            </button>
+            <div class="library-prescription-details" [id]="'library-details-' + row.item.id" [hidden]="!libraryExpandedIds().includes(row.item.id)">
+              @if (libraryExpandedIds().includes(row.item.id)) {
+              <ol class="workout-summary" tabindex="0" [attr.aria-label]="'Prescription for ' + row.item.title">@for (detail of row.details; track $index) { <li>{{ detail }}</li> }</ol>
+              }
+            </div>
+            @if (!row.editable) { <p class="library-editor-note">This recipe can be placed exactly as saved. Its instructions are not supported by the manual editor.</p> }
+            <div compactRowAction class="workout-row-actions">
+              @if (row.item.status === 'active') {
+                <button mat-flat-button type="button" appHapticTap (click)="beginLibraryPlacement(row.item)"
+                  [attr.data-library-add]="row.item.id"
+                  [disabled]="placementLocked()"><mat-icon aria-hidden="true">event_available</mat-icon> Add to dates</button>
+              }
+              @if (row.editable) {
+              <a mat-button [routerLink]="['/training/plans/library', row.item.id]" appHapticTap
+                [queryParams]="{ date: libraryCalendarDate() }"
+                [state]="{ trainingPlansEditorReturn: { uid: currentUser()?.uid, url: libraryBrowseUrl() } }"
+                [attr.aria-label]="'Edit saved workout ' + row.item.title"><mat-icon aria-hidden="true">edit</mat-icon> Edit</a>
+              }
+              <button mat-icon-button type="button" appHapticTap [matMenuTriggerFor]="libraryActions"
+                [attr.aria-label]="busyAction() === 'library-' + row.item.id ? 'Updating ' + row.item.title : 'More actions for ' + row.item.title"
+                [disabled]="busyAction() !== null">
+                @if (busyAction() === 'library-' + row.item.id) {
+                  <mat-spinner diameter="18" aria-hidden="true"></mat-spinner>
+                } @else {
+                  <mat-icon aria-hidden="true">more_vert</mat-icon>
+                }
+              </button>
+              <mat-menu #libraryActions="matMenu" class="qs-menu-panel">
+                <button mat-menu-item type="button" appHapticTap (click)="copyLibraryItem(row.item)">
+                  <mat-icon aria-hidden="true">content_copy</mat-icon>Copy saved workout
+                </button>
+                <button mat-menu-item type="button" appHapticTap
+                  (click)="setLibraryStatus(row.item, row.item.status === 'active' ? 'archived' : 'active')">
+                  <mat-icon aria-hidden="true">{{ row.item.status === 'active' ? 'archive' : 'unarchive' }}</mat-icon>
+                  {{ row.item.status === 'active' ? 'Archive' : 'Restore' }}
+                </button>
+                <button mat-menu-item type="button" appHapticTap (click)="deleteLibraryItem(row.item)">
+                  <mat-icon aria-hidden="true">delete</mat-icon>Delete saved workout
+                </button>
+              </mat-menu>
+            </div>
+          </app-compact-row>
+        }
+        }
+        }
+        @if (placementItem(); as item) {
+          <section class="library-placement" aria-labelledby="library-placement-heading">
+            <h3 id="library-placement-heading" tabindex="-1">Add {{ item.title }} to your calendar</h3>
+            <p>Choose a date range and weekdays. Each date gets its own independent workout.</p>
+            <p>{{ item.structure.sport }} · Saved version {{ item.revision }}</p>
+            <ol class="workout-summary" tabindex="0" aria-label="Saved prescription">@for (detail of placementPreview()?.details; track $index) { <li>{{ detail }}</li> }</ol>
+            <fieldset [disabled]="placementLocked()">
+              <div class="library-placement-fields">
+                <mat-form-field><mat-label>Save to</mat-label>
+                  <mat-select [value]="placementPlanId() ?? 'standalone'" [disabled]="placementLocked()"
+                    (selectionChange)="setPlacementPlan($event.value)">
+                    @if (placementLocked()) {
+                      <mat-option [value]="placementPlanId() ?? 'standalone'">{{ placementDestinationLabel() }}</mat-option>
+                    } @else {
+                      <mat-option value="standalone">Standalone</mat-option>
+                      @for (plan of planOptions(); track plan.id) {
+                        @if (plan.lifecycle !== 'archived') { <mat-option [value]="plan.id">{{ plan.name }}</mat-option> }
+                      }
+                    }
+                  </mat-select>
+                </mat-form-field>
+                <mat-form-field><mat-label>From</mat-label>
+                  <input matInput type="date" [ngModel]="placementStartDate()" (ngModelChange)="setPlacementStartDate($event)" (change)="haptics.selection()">
+                </mat-form-field>
+                <mat-form-field><mat-label>Through</mat-label>
+                  <input matInput type="date" [ngModel]="placementEndDate()" (ngModelChange)="setPlacementEndDate($event)" (change)="haptics.selection()">
+                </mat-form-field>
+              </div>
+              <div class="library-weekdays" role="group" aria-label="Repeat on weekdays">
+                @for (option of placementWeekdayOptions(); track option.day) {
+                <mat-checkbox [checked]="placementWeekdays().includes(option.day)" [disabled]="placementLocked()"
+                    (change)="togglePlacementWeekday(option.day)">{{ option.label }}</mat-checkbox>
+                }
+              </div>
+            </fieldset>
+            <p aria-live="polite">{{ placementDates().length }} {{ placementDates().length === 1 ? 'date' : 'dates' }} selected
+              @if (placementOverlaps()) { · {{ placementOverlaps() }} existing {{ placementOverlaps() === 1 ? 'workout' : 'workouts' }} in this destination on those dates }
+              @if (placementDates().length > 100) { · Maximum 100 dates at once }
+            </p>
+            <p class="library-placement-review"><strong>{{ placementDestinationLabel() }}</strong>
+              · {{ placementDates().join(', ') }}
+            </p>
+            @if (placementRangeExtension()) {
+              @if (placementRetry()?.confirmPlanRangeExtension) {
+                <p>Confirmed plan date extension: {{ placementRangeExtension() }}.</p>
+              } @else {
+                <p>Plan dates would extend to {{ placementRangeExtension() }}. QS will ask you to confirm.</p>
+              }
+            }
+            @if (placementRetry() && !busyAction()) {
+              <p role="alert">The result could not be confirmed. Retry this exact placement to recover the result safely. Dates and destination stay locked until it is resolved.</p>
+            }
+            @if (placementError()) { <p class="library-placement-error" role="alert">{{ placementError() }}</p> }
+            <div class="form-actions">
+              <button mat-button type="button" appHapticTap (click)="cancelLibraryPlacement()" [disabled]="placementLocked()">Cancel</button>
+              <button mat-flat-button type="button" appHapticTap (click)="placeLibraryItem()"
+                [disabled]="busyAction() !== null || placementError() !== null || placementDates().length === 0">
+                <span class="button-content">
+                  @if (busyAction() === 'place-' + item.id) { <mat-spinner diameter="18" aria-hidden="true"></mat-spinner> }
+                  @else { <mat-icon aria-hidden="true">event_available</mat-icon> }
+                  <span>{{ busyAction() === 'place-' + item.id ? 'Adding…' : placementRetry() ? 'Retry exact placement' : 'Add ' + placementDates().length + (placementDates().length === 1 ? ' workout' : ' workouts') }}</span>
+                </span>
+              </button>
+            </div>
+          </section>
+        }
+      </section>
+    }
+
+    @if (editor(); as session) {
+      <section class="workout-editor" aria-labelledby="plans-title">
+          <fieldset class="editor-fields" [disabled]="busyAction() !== null" aria-label="Workout details">
+          <div class="workout-editor-basics" [class.workout-editor-basics--library]="libraryView()">
+            <mat-form-field subscriptSizing="dynamic">
+              <mat-label>Workout title</mat-label>
+              <input #workoutTitleInput matInput maxlength="120" [ngModel]="session.value.title"
+                (ngModelChange)="updateEditorField('title', $event)">
+            </mat-form-field>
+            @if (!libraryView()) {
+            <mat-form-field subscriptSizing="dynamic">
+              <mat-label>Date</mat-label>
+              <input matInput required [matDatepicker]="workoutDatePicker" [ngModel]="workoutDatePickerValue()"
+                (dateInput)="updateWorkoutDateInput($event.value)"
+                (dateChange)="updateWorkoutDate($event.value)">
+              <mat-datepicker-toggle matSuffix [for]="workoutDatePicker"></mat-datepicker-toggle>
+              <mat-datepicker #workoutDatePicker (opened)="haptics.selection()"></mat-datepicker>
+              <mat-error>Choose a valid date.</mat-error>
+            </mat-form-field>
+            }
+            <mat-form-field subscriptSizing="dynamic">
+              <mat-label>Sport</mat-label>
+              <mat-select [value]="session.value.sport" [disabled]="busyAction() !== null"
+                (selectionChange)="updateEditorField('sport', $event.value)">
+                @for (group of sportOptionGroups; track group.label) {
+                  <mat-optgroup [label]="group.label">
+                    @for (sport of group.options; track sport.value) {
+                      <mat-option [value]="sport.value"
+                        [disabled]="session.mode === 'edit' && (group.strength || editorIsStrength()) && sport.value !== session.value.sport">{{ sport.label }}</mat-option>
+                    }
+                  </mat-optgroup>
+                }
+              </mat-select>
+            </mat-form-field>
+            @if (editorIsPoolSwimming()) {
+            <div class="workout-pool-fields">
+              <mat-form-field subscriptSizing="dynamic">
+                <mat-label>Pool length (optional)</mat-label>
+                <input matInput type="number" min="1" max="1000" step="0.01"
+                  [ngModel]="session.value.poolLengthValue ?? null"
+                  (ngModelChange)="updateEditorField('poolLengthValue', $event === '' || $event === null ? null : +$event)">
+                <mat-hint>Leave empty for an unspecified pool size. Some Garmin devices need a specified length.</mat-hint>
+              </mat-form-field>
+              <mat-form-field subscriptSizing="dynamic">
+                <mat-label>Pool unit</mat-label>
+                <mat-select [value]="session.value.poolLengthUnit ?? 'meters'" [disabled]="busyAction() !== null"
+                  (selectionChange)="updateEditorField('poolLengthUnit', $event.value)">
+                  <mat-option value="meters">Metres</mat-option>
+                  <mat-option value="yards">Yards</mat-option>
+                </mat-select>
+              </mat-form-field>
+            </div>
+            }
+          </div>
+
+          @if (!libraryView()) {
+          <fieldset class="workout-destination">
+            <legend>Save to</legend>
+            <mat-button-toggle-group
+              [value]="session.destinationPlanId === null ? 'standalone' : 'plan'"
+              [disabled]="busyAction() !== null"
+              hideSingleSelectionIndicator
+              aria-label="Plan association"
+              (change)="updateEditorDestination($event.value === 'standalone' ? null : (selectedPlanId() || activePlan()?.id || planOptions()[0]?.id || null))">
+              <mat-button-toggle value="plan" [disabled]="planOptions().length === 0">Plan</mat-button-toggle>
+              <mat-button-toggle value="standalone">Standalone</mat-button-toggle>
+            </mat-button-toggle-group>
+            @if (session.destinationPlanId !== null) {
+              <mat-form-field subscriptSizing="dynamic">
+                <mat-label>Plan</mat-label>
+                <mat-select [value]="session.destinationPlanId" [disabled]="busyAction() !== null"
+                  (selectionChange)="updateEditorDestination($event.value)">
+                  @for (plan of planOptions(); track plan.id) {
+                    @if (plan.lifecycle !== 'archived' || plan.id === session.destinationPlanId) {
+                      <mat-option [value]="plan.id">{{ plan.name }} · {{ plan.lifecycle | titlecase }}</mat-option>
+                    }
+                  }
+                </mat-select>
+              </mat-form-field>
+            } @else {
+              <p class="workout-destination-note">This workout will stay visible in your calendar without a plan.</p>
+            }
+          </fieldset>
+          }
+
+          <div class="editor-prescription-summary" role="group" aria-labelledby="editor-prescription-title">
+            <span id="editor-prescription-title" class="editor-prescription-label">Workout totals</span>
+            <p>{{ editorPrescriptionSummary() ?? 'Complete valid workout details to see totals.' }}</p>
+          </div>
+
+          @if (editorIsStrength()) {
+            <section class="workout-nodes" aria-labelledby="strength-exercises-title">
+              <div class="workout-nodes-heading">
+                <div>
+                  <h2 id="strength-exercises-title">Exercises and sets</h2>
+                  <p>List each exercise in order. Repetitions, timed holds, load, and rest stay with this workout.</p>
+                </div>
+                <button appHapticTap mat-stroked-button type="button" (click)="addStrengthExercise()"
+                  [disabled]="busyAction() !== null || !session.strength">
+                  <mat-icon aria-hidden="true">add</mat-icon><span>Add exercise</span>
+                </button>
+              </div>
+              @if (session.strengthLoading) {
+                <p role="status">Loading exercise prescription…</p>
+              } @else if (session.strengthLoadFailed) {
+                <p role="alert">The exercise prescription could not be loaded. Close and reopen this workout to retry.</p>
+              } @else if (session.strength; as strength) {
+                @for (exercise of strength.exercises; track exercise.id; let exerciseIndex = $index; let lastExercise = $last) {
+                  <app-compact-row class="workout-node-row" layout="stacked" density="compact"
+                    [title]="exercise.name || 'Exercise ' + (exerciseIndex + 1)"
+                    [titleId]="'strength-exercise-' + exercise.id" [showDivider]="!lastExercise">
+                    <button compactRowAction appHapticTap mat-icon-button type="button" matTooltip="Remove exercise"
+                      [attr.aria-label]="'Remove exercise ' + (exerciseIndex + 1)" (click)="removeStrengthExercise(exerciseIndex)"
+                      [disabled]="busyAction() !== null || strength.exercises.length === 1">
+                      <mat-icon aria-hidden="true">delete</mat-icon>
+                    </button>
+                    <div class="strength-exercise-fields">
+                      <mat-form-field subscriptSizing="dynamic">
+                        <mat-label>Exercise name</mat-label>
+                        <input matInput maxlength="80" [ngModel]="exercise.name"
+                          (ngModelChange)="updateStrengthExerciseName(exerciseIndex, $event)">
+                      </mat-form-field>
+                      @for (set of exercise.sets; track set.id; let setIndex = $index) {
+                        <div class="strength-set-fields" [attr.aria-label]="exercise.name + ' set ' + (setIndex + 1)">
+                          <span class="strength-set-number">Set {{ setIndex + 1 }}</span>
+                          <mat-form-field class="strength-set-type" subscriptSizing="dynamic">
+                            <mat-label>Set type</mat-label>
+                            <mat-select [value]="set.ending.kind"
+                              (selectionChange)="updateStrengthSet(exerciseIndex, setIndex, 'kind', $event.value)">
+                              <mat-option value="repetitions">Repetitions</mat-option>
+                              <mat-option value="time">Timed hold</mat-option>
+                            </mat-select>
+                          </mat-form-field>
+                          <mat-form-field subscriptSizing="dynamic">
+                            <mat-label>{{ set.ending.kind === 'time' ? 'Seconds' : 'Reps' }}</mat-label>
+                            <input matInput type="number" min="1" step="1"
+                              [ngModel]="set.ending.kind === 'time' ? set.ending.seconds : set.ending.repetitions"
+                              (ngModelChange)="updateStrengthSet(exerciseIndex, setIndex, 'value', $event)">
+                          </mat-form-field>
+                          <mat-form-field subscriptSizing="dynamic">
+                            <mat-label>Load ({{ editorWeightUnit() }})</mat-label>
+                            <input matInput type="number" min="0" step="any" [ngModel]="strengthLoadInputValue(set.externalLoadKg)"
+                              [attr.aria-label]="'External load (' + editorWeightUnit() + ', optional)'"
+                              (ngModelChange)="updateStrengthSet(exerciseIndex, setIndex, 'externalLoadKg', $event)">
+                            <mat-hint>Optional external load</mat-hint>
+                          </mat-form-field>
+                          <mat-form-field class="strength-set-rest" subscriptSizing="dynamic">
+                            <mat-label>Rest after (s)</mat-label>
+                            <input matInput type="number" min="1" step="1" [ngModel]="set.restAfterSeconds ?? null"
+                              aria-label="Rest after (seconds, optional)"
+                              (ngModelChange)="updateStrengthSet(exerciseIndex, setIndex, 'restAfterSeconds', $event)">
+                            <mat-hint>Optional</mat-hint>
+                          </mat-form-field>
+                          <button appHapticTap mat-icon-button type="button" matTooltip="Remove set"
+                            [attr.aria-label]="'Remove set ' + (setIndex + 1) + ' of ' + exercise.name"
+                            (click)="removeStrengthSet(exerciseIndex, setIndex)" [disabled]="busyAction() !== null || exercise.sets.length === 1">
+                            <mat-icon aria-hidden="true">remove_circle</mat-icon>
+                          </button>
+                        </div>
+                      }
+                      <button appHapticTap mat-button type="button" (click)="addStrengthSet(exerciseIndex)"
+                        [disabled]="busyAction() !== null">
+                        <mat-icon aria-hidden="true">add</mat-icon><span>Add set</span>
+                      </button>
+                    </div>
+                  </app-compact-row>
+                }
+              } @else {
+                <p role="alert">Exercise details are unavailable. Reload before editing this workout.</p>
+              }
+            </section>
+          } @else {
+          <app-workout-profile [structure]="editorProfile()" [unitSettings]="session.unitSettings"
+            [contextKey]="editorProfileContext()" (stepSelected)="editorProfileSelection.set($event)"></app-workout-profile>
+          <section class="workout-nodes" aria-labelledby="workout-steps-title">
+            <div class="workout-nodes-heading">
+              <div>
+                <h2 id="workout-steps-title">Workout steps</h2>
+                <p>Follow these steps in order. Drag a handle or use the step actions to move or duplicate. A repeat loops its steps.</p>
+              </div>
+              <div class="workout-node-add-actions">
+                <button appHapticTap mat-stroked-button type="button" (click)="addEditorStep()" [disabled]="busyAction() !== null || editorNodeCount() >= editorNodeLimit">
+                  <mat-icon aria-hidden="true">add</mat-icon><span>Add step</span>
+                </button>
+                <button appHapticTap mat-stroked-button type="button" (click)="addEditorRepeat()" [disabled]="busyAction() !== null || editorNodeCount() + 3 > editorNodeLimit">
+                  <mat-icon aria-hidden="true">repeat</mat-icon><span>Add repeat</span>
+                </button>
+              </div>
+            </div>
+
+            @if (editorNodeCount() >= editorNodeLimit) {
+              <p class="workout-node-limit">This workout has reached the {{ editorNodeLimit }}-node limit, including repeat blocks and their steps.</p>
+            }
+            <div cdkDropList class="workout-node-list" [cdkDropListData]="null" [cdkDropListDisabled]="busyAction() !== null"
+              (cdkDropListDropped)="dropEditorNode($event)">
+            @for (node of session.value.nodes; track node.id; let nodeIndex = $index; let lastNode = $last) {
+              <app-compact-row cdkDrag [cdkDragData]="node.id" [cdkDragDisabled]="busyAction() !== null"
+                [cdkDragStartDelay]="editorDragDelay" cdkDragPreviewContainer="parent"
+                (cdkDragStarted)="startEditorDrag(node.id)"
+                class="workout-node-row" layout="stacked" density="compact"
+                [class.profile-selected]="editorProfileStepId() === node.id || (editorProfileStepId() && editorProfileSelection()?.repeatId === node.id)"
+                [title]="node.kind === 'step' ? 'Step ' + (nodeIndex + 1) : 'Repeat block ' + (nodeIndex + 1)"
+                [titleId]="'workout-node-' + node.id" [showDivider]="!lastNode">
+                  <div compactRowAction class="workout-node-actions">
+                  <button cdkDragHandle mat-icon-button class="workout-drag-handle" type="button"
+                    [disabled]="busyAction() !== null" matTooltip="Drag to reorder; use actions for keyboard moves"
+                    [attr.aria-label]="'Drag workout node ' + (nodeIndex + 1) + ' to reorder; use actions for keyboard moves'">
+                    <mat-icon aria-hidden="true">drag_indicator</mat-icon>
+                  </button>
+                  <button appHapticTap mat-icon-button type="button" [matMenuTriggerFor]="nodeActions" [matMenuTriggerRestoreFocus]="false"
+                    (menuOpened)="openEditorNodeMenu(node.id)" (menuClosed)="closeEditorNodeMenu()"
+                    [disabled]="busyAction() !== null" [attr.data-editor-node-action]="node.id"
+                    [attr.aria-label]="'Actions for workout node ' + (nodeIndex + 1)">
+                    <mat-icon aria-hidden="true">more_vert</mat-icon>
+                  </button>
+                  <mat-menu #nodeActions="matMenu" class="qs-menu-panel">
+                    <button mat-menu-item type="button" (click)="moveEditorNode(node.id, -1)" [disabled]="busyAction() !== null || nodeIndex === 0">
+                      <mat-icon aria-hidden="true">arrow_upward</mat-icon><span>Move up</span>
+                    </button>
+                    <button mat-menu-item type="button" (click)="moveEditorNode(node.id, 1)" [disabled]="busyAction() !== null || lastNode">
+                      <mat-icon aria-hidden="true">arrow_downward</mat-icon><span>Move down</span>
+                    </button>
+                    <button mat-menu-item type="button" (click)="duplicateEditorNode(node.id)"
+                      [disabled]="busyAction() !== null || editorNodeCount() + (node.kind === 'repeat' ? node.steps.length + 1 : 1) > editorNodeLimit">
+                      <mat-icon aria-hidden="true">content_copy</mat-icon><span>Duplicate {{ node.kind === 'repeat' ? 'repeat block' : 'step' }}</span>
+                    </button>
+                  </mat-menu>
+                  <button appHapticTap mat-icon-button type="button" matTooltip="Remove node" [disabled]="busyAction() !== null"
+                    [attr.aria-label]="'Remove workout node ' + (nodeIndex + 1)" (click)="removeEditorNode(nodeIndex)">
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                  </div>
+                  @if (node.kind === 'repeat') {
+                    <div class="repeat-heading">
+                      <mat-form-field subscriptSizing="dynamic">
+                        <mat-label>Repeat count</mat-label>
+                        <input matInput type="number" min="1" max="100" [ngModel]="node.count"
+                          (ngModelChange)="updateNode(nodeIndex, 'count', +$event)">
+                      </mat-form-field>
+                      <button appHapticTap mat-button type="button" (click)="addRepeatStep(nodeIndex)" [disabled]="busyAction() !== null || editorNodeCount() >= editorNodeLimit">
+                        <mat-icon aria-hidden="true">add</mat-icon><span>Add repeat step</span>
+                      </button>
+                    </div>
+                    <div cdkDropList class="repeat-step-list" [cdkDropListData]="node.id" [cdkDropListDisabled]="busyAction() !== null"
+                      (cdkDropListDropped)="dropEditorNode($event, node.id)">
+                    @for (step of node.steps; track step.id; let stepIndex = $index; let lastStep = $last) {
+                      <div cdkDrag [cdkDragData]="step.id" [cdkDragDisabled]="busyAction() !== null"
+                        [cdkDragStartDelay]="editorDragDelay" cdkDragPreviewContainer="parent"
+                        (cdkDragStarted)="startEditorDrag(step.id, node.id)"
+                        class="workout-step-editor repeat-step-editor" [class.profile-selected]="editorProfileStepId() === step.id">
+                        <span class="cdk-visually-hidden">@if (editorProfileStepId() === step.id) { Selected in workout profile }</span>
+                        <div class="step-index">{{ stepIndex + 1 }}</div>
+                        <div class="repeat-step-actions">
+                          <button cdkDragHandle mat-icon-button class="workout-drag-handle" type="button" [disabled]="busyAction() !== null"
+                            matTooltip="Drag within this repeat; use actions for keyboard moves"
+                            [attr.aria-label]="'Drag step ' + (stepIndex + 1) + ' within repeat block ' + (nodeIndex + 1) + '; use actions for keyboard moves'">
+                            <mat-icon aria-hidden="true">drag_indicator</mat-icon>
+                          </button>
+                          <button appHapticTap mat-icon-button type="button" [matMenuTriggerFor]="childActions" [matMenuTriggerRestoreFocus]="false"
+                            (menuOpened)="openEditorNodeMenu(step.id)" (menuClosed)="closeEditorNodeMenu()"
+                            [disabled]="busyAction() !== null" [attr.data-editor-node-action]="step.id"
+                            [attr.aria-label]="'Actions for step ' + (stepIndex + 1) + ' within repeat block ' + (nodeIndex + 1)">
+                            <mat-icon aria-hidden="true">more_vert</mat-icon>
+                          </button>
+                          <mat-menu #childActions="matMenu" class="qs-menu-panel">
+                            <button mat-menu-item type="button" (click)="moveEditorNode(step.id, -1, node.id)" [disabled]="busyAction() !== null || stepIndex === 0">
+                              <mat-icon aria-hidden="true">arrow_upward</mat-icon><span>Move up</span>
+                            </button>
+                            <button mat-menu-item type="button" (click)="moveEditorNode(step.id, 1, node.id)" [disabled]="busyAction() !== null || lastStep">
+                              <mat-icon aria-hidden="true">arrow_downward</mat-icon><span>Move down</span>
+                            </button>
+                            <button mat-menu-item type="button" (click)="duplicateEditorNode(step.id, node.id)"
+                              [disabled]="busyAction() !== null || editorNodeCount() >= editorNodeLimit">
+                              <mat-icon aria-hidden="true">content_copy</mat-icon><span>Duplicate step</span>
+                            </button>
+                          </mat-menu>
+                          <button appHapticTap mat-icon-button type="button" matTooltip="Remove repeat step" [disabled]="busyAction() !== null"
+                            [attr.aria-label]="'Remove repeat step ' + (stepIndex + 1)"
+                            (click)="removeRepeatStep(nodeIndex, stepIndex)">
+                            <mat-icon aria-hidden="true">remove_circle</mat-icon>
+                          </button>
+                        </div>
+                        <ng-container *ngTemplateOutlet="stepFields; context: {
+                          $implicit: step, nodeIndex: nodeIndex, stepIndex: stepIndex
+                        }"></ng-container>
+                      </div>
+                    }
+                    </div>
+                  } @else {
+                    <div class="workout-step-editor">
+                      <ng-container *ngTemplateOutlet="stepFields; context: {
+                        $implicit: node, nodeIndex: nodeIndex, stepIndex: null
+                      }"></ng-container>
+                    </div>
+                  }
+              </app-compact-row>
+            }
+            </div>
+          </section>
+          }
+          </fieldset>
+          @if (savedEditorWorkout(); as workout) {
+            <app-training-delivery-button scope="workout" [entityId]="workout.id" [title]="workout.title"
+              [summaryWorkouts]="[workout]" [summaryPlan]="savedEditorPlan()" [summaryCompletions]="completions()"
+              [standalone]="workout.planId === null" [disabled]="busyAction() !== null"></app-training-delivery-button>
+          }
+        <div class="form-actions editor-save-actions">
+          @if (!libraryView() && session.mode === 'edit' && savedEditorWorkout()) {
+            <button appHapticTap mat-stroked-button class="editor-library-copy-action" type="button"
+              (click)="saveEditorCopyToLibrary()"
+              [disabled]="busyAction() !== null || !session.value.title.trim() || (editorIsStrength() ? session.strengthLoading || !session.strength : session.value.nodes.length === 0)"
+              matTooltip="Save the editor's current version as a separate reusable workout; calendar changes still need Save workout">
+              <span class="button-content">
+                @if (busyAction() === 'save-library-from-editor') {
+                  <mat-spinner diameter="18"></mat-spinner>
+                } @else {
+                  <mat-icon aria-hidden="true">library_add</mat-icon>
+                }
+                <span>Save copy to library</span>
+              </span>
+            </button>
+          }
+          <button appHapticTap mat-button type="button" (click)="cancelEditor()" [disabled]="busyAction() !== null">Cancel</button>
+          <button appHapticTap mat-flat-button type="button" (click)="saveWorkout()"
+            [disabled]="busyAction() !== null || !session.value.title.trim() || (!libraryView() && (!workoutDatePickerValue() || workoutDateInputInvalid())) || (editorIsStrength() ? session.strengthLoading || !session.strength : session.value.nodes.length === 0)">
+            <span class="button-content">
+              @if (busyAction() === 'save-workout' || busyAction() === 'save-library') {
+                <mat-spinner diameter="18"></mat-spinner>
+              } @else {
+                <mat-icon aria-hidden="true">save</mat-icon>
+              }
+              <span>{{ libraryView() ? (libraryEditorItem() ? 'Save changes' : 'Save to library') : session.mode === 'create' ? 'Add workout' : 'Save workout' }}</span>
+            </span>
+          </button>
+        </div>
+      </section>
+    }
+
+    <ng-template #stepFields let-step let-nodeIndex="nodeIndex" let-stepIndex="stepIndex">
+      <div class="step-fields">
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>Purpose</mat-label>
+          <mat-select [value]="step.purpose" [disabled]="busyAction() !== null" (selectionChange)="updateStep(nodeIndex, stepIndex, 'purpose', $event.value)">
+            @for (purpose of purposeOptions; track purpose) {
+              <mat-option [value]="purpose">{{ purpose | titlecase }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>End by</mat-label>
+          <mat-select [value]="step.endingKind" [disabled]="busyAction() !== null" (selectionChange)="updateStep(nodeIndex, stepIndex, 'endingKind', $event.value)">
+            @for (ending of endingOptions; track ending.value) {
+              <mat-option [value]="ending.value">{{ ending.label }}</mat-option>
+            }
+          </mat-select>
+          @if (step.endingKind === 'manual') {
+            <mat-hint>Press Lap to finish this step, without a time or distance limit. Wahoo delivery is unsupported.</mat-hint>
+          }
+        </mat-form-field>
+        @if (step.endingKind === 'time') {
+          <app-workout-time-input class="workout-duration-input" [value]="step.endingValue"
+            [disabled]="busyAction() !== null"
+            (durationChange)="updateStep(nodeIndex, stepIndex, 'endingValue', $event.minutes, $event.seconds)"></app-workout-time-input>
+        } @else if (step.endingKind === 'distance') {
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>{{ editorDistanceUnit() }}</mat-label>
+            <input matInput type="number" min="0" step="any" [ngModel]="step.endingValue"
+              (ngModelChange)="updateStep(nodeIndex, stepIndex, 'endingValue', +$event)">
+          </mat-form-field>
+        }
+        @if (step.endingKind === 'time' || step.endingKind === 'distance') {
+          <div class="early-lap-option">
+            <mat-checkbox [checked]="step.allowEarlyLap === true" [disabled]="busyAction() !== null"
+              [aria-describedby]="'early-lap-hint-' + nodeIndex + '-' + (stepIndex ?? 'single')"
+              (change)="updateStep(nodeIndex, stepIndex, 'allowEarlyLap', $event.checked)">Also finish this step with Lap</mat-checkbox>
+            <p class="editor-hint" [id]="'early-lap-hint-' + nodeIndex + '-' + (stepIndex ?? 'single')">
+              @if (step.allowEarlyLap === true) {
+                Suunto: this step ends at the {{ step.endingKind === 'time' ? 'time' : 'distance' }} limit or when you press Lap.
+              } @else {
+                Suunto: this step ends only at the {{ step.endingKind === 'time' ? 'time' : 'distance' }} limit. Lap does not start the next step.
+              }
+            </p>
+          </div>
+        }
+        <app-workout-targets-editor [targets]="step.targets" [sport]="editor().value.sport" [unitSettings]="editor().unitSettings"
+          [disabled]="busyAction() !== null" (targetsChange)="updateStep(nodeIndex, stepIndex, 'targets', $event)"></app-workout-targets-editor>
+      </div>
+    </ng-template>
+
+    @if (browsing() && !libraryView() && (view() === 'standalone' || selectedPlan())) {
+    <section class="workout-list" aria-labelledby="workouts-title">
+      @if (view() === 'plans') {
+        <div class="plan-schedule-heading">
+          <h2 id="workouts-title">Plan schedule <span class="workout-count">({{ currentWorkoutRows().length }} {{ currentWorkoutRows().length === 1 ? 'workout' : 'workouts' }})</span></h2>
+        </div>
+      }
+      <div [class.plan-schedule-layout]="view() === 'plans'">
+      @if (view() === 'plans' && selectedPlan(); as plan) {
+        <app-plan-schedule-calendar [plan]="plan" [workouts]="schedule().workouts"
+          [completedWorkoutIds]="completedWorkoutIds()"
+          [selectedDate]="planScheduleDate()!" [today]="today()"
+          [startOfWeek]="currentUser()?.settings?.unitSettings?.startOfTheWeek ?? null"
+          [disabled]="busyAction() !== null" (dateSelected)="selectScheduleDate($event)"
+          (workoutSelected)="editScheduledWorkout($event)"></app-plan-schedule-calendar>
+      }
+      <div class="workout-day-details">
+      <div class="workout-list-heading">
+        <div>
+          @if (view() === 'standalone') {
+            <h2 id="workouts-title">Standalone workouts <span class="workout-count">({{ currentWorkoutRows().length }})</span></h2>
+            <p>On your calendar, without a plan. You can attach them later.</p>
+          } @else {
+            <h3 id="selected-plan-day" aria-live="polite">{{ planScheduleDate() | date:'EEEE, MMM d' }}</h3>
+            @if (selectedDayPhase(); as phase) {
+              <p>Phase: {{ phase.name }} · {{ phase.startLocalDate }} – {{ phase.endLocalDate }}</p>
+              @if (phase.description) { <p>{{ phase.description }}</p> }
+            }
+            <p>{{ displayedWorkoutRows().length }} {{ displayedWorkoutRows().length === 1 ? 'workout' : 'workouts' }}</p>
+          }
+        </div>
+        <button appHapticTap #addWorkoutButton mat-flat-button type="button"
+          (click)="openNewWorkout(view() === 'plans' ? selectedPlanId() : null, addWorkoutDate())"
+          [disabled]="busyAction() !== null || (view() === 'plans' && !selectedPlanId())">
+          <mat-icon aria-hidden="true">add</mat-icon><span>Add workout</span>
+        </button>
+      </div>
+
+      @if (displayedWorkoutRows().length === 0) {
+        <div class="workout-empty-state" role="status">
+          <mat-icon aria-hidden="true">event_available</mat-icon>
+          <span>{{ view() === 'standalone' ? 'No standalone workouts yet.' : 'Nothing scheduled. Leave this day open, or add a workout.' }}</span>
+        </div>
+      } @else {
+        <div class="workout-rows">
+          @for (row of displayedWorkoutRows(); track row.workout.id; let lastWorkout = $last) {
+            <app-compact-row class="workout-row compact-row-host--mobile-action-full" layout="stacked" density="compact" tabindex="-1"
+              [attr.data-workout-id]="row.workout.id"
+              [attr.aria-label]="'Workout ' + row.workout.title"
+              [title]="row.workout.title" [titleId]="'scheduled-workout-' + row.workout.id"
+              [headingLevel]="view() === 'plans' ? 4 : 3" [showDivider]="!lastWorkout">
+              <div class="workout-row-meta">
+                <app-activity-type-icon [activityType]="row.workout.structure.sport" size="18px"
+                  aria-hidden="true"></app-activity-type-icon>
+                <span>{{ row.workout.structure.sport }}@if (view() === 'standalone') { · {{ row.workout.localDate | date:'mediumDate' }} }</span>
+                @if (row.workout.lifecycle === 'skipped') {
+                <mat-chip-set aria-label="Workout state">
+                  <mat-chip>Skipped</mat-chip>
+                </mat-chip-set>
+                }
+                @if (row.completion) {
+                <span class="workout-completion-state">
+                  <mat-icon aria-hidden="true">task_alt</mat-icon>
+                  <span>Completed · activity linked@if (row.completion.workoutRevisionAtLink !== row.workout.revision) { · workout changed since
+                    } @else if (row.completion.timing === 'late') { · late
+                    } @else if (row.completion.timing === 'early') { · early }</span>
+                </span>
+                }
+              </div>
+                <div class="workout-row-meta workout-prescription-summary">{{ row.prescriptionSummary }}</div>
+                @if (row.mayHaveStrengthDetails) {
+                  <div class="workout-row-meta strength-summary-hint">Interval summary only. Choose Edit for the full workout and any saved lifting loads.</div>
+                }
+                <ol class="workout-summary">
+                  @for (summary of row.summary; track $index) {
+                    <li>{{ summary }}</li>
+                  }
+                </ol>
+                @if (row.workout.structure.sport !== strengthSport) {
+                  <app-workout-profile [structure]="row.workout.structure" [unitSettings]="currentUser()?.settings?.unitSettings ?? null"
+                    [contextKey]="currentUser()?.uid + '/workout/' + row.workout.id + '/' + row.workout.revision" [initiallyExpanded]="false"
+                    unavailableReason="This saved recipe cannot be profiled. Its original instructions remain above."></app-workout-profile>
+                }
+                <app-training-delivery-button scope="workout" [entityId]="row.workout.id" [title]="row.workout.title"
+                  [summaryWorkouts]="[row.workout]" [summaryPlan]="view() === 'plans' ? selectedPlan() : null"
+                  [summaryCompletions]="completions()"
+                  [standalone]="row.workout.planId === null" [disabled]="busyAction() !== null"></app-training-delivery-button>
+              <div compactRowAction class="workout-row-actions">
+                <button appHapticTap mat-button type="button" aria-label="Edit workout" (click)="editWorkout(row.workout)" [disabled]="busyAction() !== null">
+                  <mat-icon aria-hidden="true">edit</mat-icon><span>Edit</span>
+                </button>
+                <button appHapticTap mat-button type="button" (click)="saveExistingWorkoutToLibrary(row.workout)"
+                  [attr.aria-label]="'Save ' + row.workout.title + ' to Workout library'"
+                  [disabled]="busyAction() !== null">
+                  @if (busyAction() === 'library-' + row.workout.id) {
+                    <mat-spinner diameter="18"></mat-spinner>
+                  } @else {
+                    <mat-icon aria-hidden="true">library_add</mat-icon>
+                  }
+                  <span>Save to library</span>
+                </button>
+                <button appHapticTap mat-icon-button type="button" [matMenuTriggerFor]="workoutActionsMenu"
+                  [attr.aria-label]="'Actions for ' + row.workout.title" matTooltip="Workout actions"
+                  [disabled]="busyAction() !== null">
+                  @if (row.actionBusy && busyAction() !== 'library-' + row.workout.id) {
+                    <mat-spinner diameter="18"></mat-spinner>
+                  } @else {
+                    <mat-icon>more_vert</mat-icon>
+                  }
+                </button>
+                <mat-menu #workoutActionsMenu="matMenu" class="qs-menu-panel">
+                  <button appHapticTap mat-menu-item type="button" (click)="duplicateWorkout(row.workout)">
+                    <mat-icon aria-hidden="true">content_copy</mat-icon><span>Duplicate to…</span>
+                  </button>
+                  <button appHapticTap mat-menu-item type="button" (click)="setWorkoutSkipped(row.workout, row.workout.lifecycle !== 'skipped')">
+                    <mat-icon aria-hidden="true">{{ row.workout.lifecycle === 'skipped' ? 'undo' : 'skip_next' }}</mat-icon>
+                    <span>{{ row.workout.lifecycle === 'skipped' ? 'Unskip workout' : 'Skip workout' }}</span>
+                  </button>
+                  <button appHapticTap mat-menu-item type="button" (click)="openHistory(row.historyScope)">
+                    <mat-icon aria-hidden="true">history</mat-icon><span>Workout history</span>
+                  </button>
+                  <button appHapticTap mat-menu-item type="button" (click)="deleteWorkout(row.workout)">
+                    <mat-icon aria-hidden="true">delete</mat-icon><span>Delete workout</span>
+                  </button>
+                </mat-menu>
+              </div>
+            </app-compact-row>
+          }
+        </div>
+      }
+      </div>
+      </div>
+    </section>
+    }
+
+    @if (browsing() && !libraryView() && deletedWorkoutScope()) {
+      <section class="deleted-workouts-panel" aria-label="Deleted workouts">
+        <button mat-button type="button" appHapticTap (click)="toggleDeletedWorkouts()"
+          [attr.aria-expanded]="deletedWorkoutsExpanded()" aria-controls="deleted-workout-list">
+          <mat-icon aria-hidden="true">{{ deletedWorkoutsExpanded() ? 'expand_less' : 'expand_more' }}</mat-icon>
+          Deleted workouts ({{ deletedWorkoutRecoveryDays }} days)
+        </button>
+        <div id="deleted-workout-list" [hidden]="!deletedWorkoutsExpanded()">
+          @if (deletedWorkoutPanel()?.status === 'loading' && !deletedWorkoutRows().length) {
+            <div class="history-status"><mat-spinner diameter="24"></mat-spinner><span>Loading deleted workouts…</span></div>
+          }
+          @if (deletedWorkoutPanel()?.status === 'error') {
+            <div class="history-status history-status--error" role="alert">
+              <span>Could not load deleted workouts. {{ deletedWorkoutPanel()?.error }}</span>
+              <button appHapticTap mat-button type="button" (click)="loadDeletedWorkouts()">Retry</button>
+            </div>
+          }
+          @if (deletedWorkoutPanel()?.status === 'ready' && !deletedWorkoutRows().length) {
+            <p>No deleted workouts in this {{ view() === 'plans' ? 'plan' : 'Standalone view' }}.</p>
+          }
+          <ul class="deleted-workout-rows" aria-label="Recoverable workouts">
+            @for (row of deletedWorkoutRows(); track row.workout.id; let last = $last) {
+              <li>
+                <app-compact-row class="deleted-workout-row" [title]="row.workout.title"
+                  [titleId]="'deleted-workout-' + row.workout.id" [headingLevel]="3"
+                  layout="stacked" density="compact" [mobileActionFullWidth]="true" [showDivider]="!last">
+                  <app-activity-type-icon compactRowTitlePrefix [activityType]="row.workout.structure.sport"
+                    size="24px" aria-hidden="true"></app-activity-type-icon>
+                  <p class="deleted-workout-details">
+                    {{ row.workout.structure.sport }} · {{ row.workout.localDate | date:'mediumDate' }}
+                  </p>
+                  <p class="deleted-workout-details">Open {{ row.workout.planId ? 'plan' : 'workout' }} history to restore.</p>
+                  <div compactRowAction class="deleted-workout-actions">
+                    <button appHapticTap mat-button type="button" (click)="openHistory(row.historyScope)"
+                      [attr.aria-describedby]="'deleted-workout-' + row.workout.id" [disabled]="busyAction() !== null">
+                      <mat-icon aria-hidden="true">history</mat-icon><span>History</span>
+                    </button>
+                    <button appHapticTap mat-icon-button type="button" matTooltip="Delete permanently" aria-label="Delete workout permanently"
+                      [attr.aria-describedby]="'deleted-workout-' + row.workout.id"
+                      (click)="permanentlyDeleteWorkout(row.workout)" [disabled]="busyAction() !== null">
+                      @if (busyAction() === 'permanent-' + row.workout.id) {
+                        <mat-spinner diameter="18"></mat-spinner>
+                      } @else {
+                        <mat-icon>delete_forever</mat-icon>
+                      }
+                    </button>
+                  </div>
+                </app-compact-row>
+              </li>
+            }
+          </ul>
+          @if (deletedWorkoutPanel()?.nextCursor) {
+            <button appHapticTap mat-button type="button" (click)="loadDeletedWorkouts()"
+              [disabled]="deletedWorkoutPanel()?.status === 'loading'">
+              Show more deleted workouts
+            </button>
+          }
+        </div>
+      </section>
+    }
+
+    @if (historyPanel(); as history) {
+      <app-compact-row class="history-panel" id="history-panel" role="region" tabindex="-1"
+        aria-labelledby="history-panel-title" title="Revision history" titleId="history-panel-title"
+        [headingLevel]="2" summary="Restoring creates a new revision; it never rewrites history."
+        layout="stacked" density="compact" [showDivider]="false">
+          <button compactRowAction appHapticTap mat-icon-button type="button" matTooltip="Close history" aria-label="Close history" (click)="closeHistory()">
+            <mat-icon>close</mat-icon>
+          </button>
+          @if (history.status === 'loading') {
+            <div class="history-status"><mat-spinner diameter="24"></mat-spinner><span>Loading history…</span></div>
+          } @else if (history.status === 'error') {
+            <div class="history-status history-status--error" role="alert">
+              <mat-icon aria-hidden="true">error_outline</mat-icon>
+              <span>Could not load revision history. {{ history.error }}</span>
+              <button appHapticTap mat-button type="button" (click)="openHistory(history.scope)"
+                [disabled]="busyAction() !== null">Retry</button>
+            </div>
+          } @else if (history.entries.length === 0) {
+            <p>No revisions are available.</p>
+          } @else {
+            <ul class="history-entries" aria-label="Schedule revisions" tabindex="0">
+              @for (entry of history.entries; track entry.revision) {
+                <li class="history-entry">
+                  <div class="history-entry-details">
+                    <h3>Revision {{ entry.revision }} · {{ entry.operationKind }}</h3>
+                    <p>{{ entry.createdAtMs | date:'medium' }}{{ entry.isCheckpoint ? ' · checkpoint' : '' }}</p>
+                  </div>
+                  <button appHapticTap mat-button type="button" (click)="restoreHistoryEntry(entry)"
+                    [disabled]="busyAction() !== null">
+                    <span class="button-content">
+                      @if (busyAction() === 'restore-' + entry.revision) {
+                        <mat-spinner diameter="18"></mat-spinner>
+                      } @else {
+                        <mat-icon aria-hidden="true">restore</mat-icon>
+                      }
+                      <span>Restore</span>
+                    </span>
+                  </button>
+                </li>
+              }
+            </ul>
+            @if (history.nextBeforeRevision !== null) {
+              <div class="history-load-more">
+                <button appHapticTap mat-stroked-button type="button" (click)="loadOlderHistory()"
+                  [disabled]="busyAction() !== null">
+                  <span class="button-content">
+                    @if (busyAction() === 'history-older') {
+                      <mat-spinner diameter="18"></mat-spinner>
+                    } @else {
+                      <mat-icon aria-hidden="true">expand_more</mat-icon>
+                    }
+                    <span>Load older revisions</span>
+                  </span>
+                </button>
+              </div>
+            }
+          }
+      </app-compact-row>
+    }
+  }
+</main>
+}

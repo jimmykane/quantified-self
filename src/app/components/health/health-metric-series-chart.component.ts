@@ -1,3 +1,5 @@
+import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
+import { dashboardChartFrameGrid } from '../../helpers/dashboard-chart-layout.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -22,11 +24,15 @@ import {
 } from '../../helpers/echarts-tooltip-interaction.helper';
 import { resolveEChartsThemeName } from '../../helpers/echarts-theme.helper';
 import {
+  HealthChartStatusOverlay,
   HealthChartSeriesModel,
   buildHealthMetricEChartsOption,
+  nearestTimezoneOffsetSeconds,
 } from '../../helpers/health-metric-chart.helper';
+import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
+import type { NoteComparisonWindow } from '../../helpers/timeline-note-comparison.helper';
 
 @Component({
   selector: 'app-health-metric-series-chart',
@@ -40,6 +46,14 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
   @Input({ required: true }) startTimeMs!: number;
   @Input({ required: true }) endTimeMs!: number;
   @Input() darkTheme = false;
+  @Input() timelineNotes: TimelineNoteChartContext | null = null;
+  @Input() unitSettings: UserUnitSettingsInterface | null = null;
+  @Input() compact = false;
+  @Input() thumbnail = false;
+  @Input() fillHeight = false;
+  @Input() statusOverlay: HealthChartStatusOverlay | null = null;
+  @Input() statusDescription: string | null = null;
+  @Input() comparisonWindow: NoteComparisonWindow | null = null;
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
   private readonly chartHost: EChartsHostController;
@@ -47,6 +61,7 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
 
   constructor(eChartsLoader: EChartsLoaderService, logger: LoggerService) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader,
       logger,
       logPrefix: '[HealthMetricSeriesChartComponent]',
@@ -60,7 +75,14 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (this.viewInitialized && (changes.model || changes.startTimeMs || changes.endTimeMs || changes.darkTheme)) {
+    if (changes.timelineNotes && Object.keys(changes).length === 1) {
+      this.chartHost.updateTimelineNotes(this.timelineNotes);
+      return;
+    }
+    if (this.viewInitialized && (
+      changes.model || changes.startTimeMs || changes.endTimeMs || changes.darkTheme || changes.unitSettings
+      || changes.compact || changes.thumbnail || changes.statusOverlay || changes.timelineNotes || changes.comparisonWindow
+    )) {
       void this.refresh();
     }
   }
@@ -86,16 +108,40 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
       this.chartDiv.nativeElement.clientWidth || 0,
     );
     this.chartHost.hideTooltip();
-    this.chartHost.setOption(
-      buildHealthMetricEChartsOption(
+    this.chartHost.setTimelineNotes(this.timelineNotes, {
+      offsetSeconds: timestamp => nearestTimezoneOffsetSeconds(this.model.displayedPoints, timestamp) ?? 0,
+    });
+    const option = buildHealthMetricEChartsOption(
         this.model,
         this.startTimeMs,
         this.endTimeMs,
         style,
         isEChartsMobileTooltipViewport(),
-      ),
-      ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
-    );
+        this.unitSettings,
+        this.compact || this.thumbnail,
+        this.statusOverlay,
+        this.comparisonWindow,
+      );
+    if (!this.thumbnail) Object.assign(option.grid, dashboardChartFrameGrid(this.chartDiv.nativeElement));
+    if (this.thumbnail) {
+      Object.assign(option, { grid:{left:2,right:2,top:3,bottom:3}, tooltip:{show:false}, legend:{show:false}, dataZoom:[] });
+      // A sparkline has no date axis: fit the recorded span so sparse history is
+      // still legible, preserving every value and the gaps between readings.
+      const points = this.model.displayedPoints;
+      if (points.length) {
+        const first = points[0].timestampMs, last = points.at(-1)!.timestampMs;
+        const padding = Math.max((last - first) * 0.05, 1);
+        for (const axis of [option.xAxis].flat()) if (axis) Object.assign(axis, { min:first - padding, max:last + padding });
+      }
+      // Zero is a real reading too: a minimal bar keeps an all-zero thumbnail visible.
+      for (const series of [option.series].flat()) if (series && typeof series === 'object' && 'type' in series) {
+        if (series.type === 'bar') Object.assign(series, {barMinHeight:2});
+        if (series.type === 'line' && 'lineStyle' in series) Object.assign(series.lineStyle, {width:1.5});
+        if (points.length === 1 && (series.type === 'scatter' || series.type === 'line')) Object.assign(series, {symbolSize:6});
+      }
+      for (const axis of [option.xAxis, option.yAxis].flat()) if (axis) Object.assign(axis, {show:false});
+    }
+    this.chartHost.setOption(option, ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
   }
 }

@@ -1,8 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as utils from '../utils';
 import * as history from '../history';
+import { https } from 'firebase-functions/v1';
+import * as logger from 'firebase-functions/logger';
 import { SERVICE_NAME } from './constants';
 import { COROS_HISTORY_IMPORT_LIMIT_MONTHS } from '../../../shared/history-import.constants';
+import { startManualActivityHistory } from '../connection-history/manual-activity';
+import { HistoryLifecycleChangedError } from '../connection-history/execution';
+vi.mock('../connection-history/manual-activity', () => ({ startManualActivityHistory: vi.fn() }));
 
 const accountMocks = vi.hoisted(() => ({
     getActiveCOROSTokenSnapshot: vi.fn(),
@@ -11,7 +16,7 @@ const accountMocks = vi.hoisted(() => ({
 }));
 
 // Mock dependencies
-vi.mock('firebase-functions/v1', () => ({
+vi.mock('firebase-functions/v1', async () => ({
     region: () => ({
         https: {
             onCall: (handler: any) => handler
@@ -25,12 +30,7 @@ vi.mock('firebase-functions/v1', () => ({
         })
     }),
     https: {
-        HttpsError: class HttpsError extends Error {
-            constructor(public code: string, message: string) {
-                super(message);
-                this.name = 'HttpsError';
-            }
-        }
+        HttpsError: (await import('firebase-functions/v2/https')).HttpsError
     }
 }));
 
@@ -39,10 +39,14 @@ vi.mock('../utils', () => ({
     PRO_REQUIRED_MESSAGE: 'Service sync is a Pro feature.'
 }));
 
-vi.mock('../history', () => ({
-    addHistoryToQueue: vi.fn().mockResolvedValue({ successCount: 1, failureCount: 0, processedBatches: 1, failedBatches: 0 }),
-    getNextAllowedHistoryImportDate: vi.fn().mockResolvedValue(null)
-}));
+vi.mock('../history', () => {
+    const addHistoryToQueue = vi.fn().mockResolvedValue({ successCount: 1, failureCount: 0, processedBatches: 1, failedBatches: 0 });
+    return {
+        addHistoryToQueue,
+        withActivityHistoryImportReservation: vi.fn((uid, service, operation) => operation((start, end, options) => addHistoryToQueue(uid, service, start, end, options))),
+        getNextAllowedHistoryImportDate: vi.fn().mockResolvedValue(null),
+    };
+});
 
 vi.mock('./account', () => ({
     getActiveCOROSTokenSnapshot: (...args: unknown[]) => accountMocks.getActiveCOROSTokenSnapshot(...args),
@@ -69,6 +73,7 @@ describe('COROS History to Queue', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.mocked(startManualActivityHistory).mockReset();
         (utils.hasProAccess as any).mockResolvedValue(true);
         (history.getNextAllowedHistoryImportDate as any).mockResolvedValue(null);
         accountMocks.getActiveCOROSTokenSnapshot.mockResolvedValue({ id: 'coros-open-id-1' });
@@ -94,10 +99,66 @@ describe('COROS History to Queue', () => {
     });
 
     describe('addCOROSAPIHistoryToQueue', () => {
+        it('accepts the validated calendar range as a background activity import, including the last day', async () => {
+            const projection = { runId: 'run', active: true } as Awaited<ReturnType<typeof startManualActivityHistory>>;
+            vi.mocked(startManualActivityHistory).mockResolvedValue(projection);
+            await expect(addCOROSAPIHistoryToQueue({ ...data, background: true }, context)).resolves.toEqual({ result: 'History import accepted', historyImport: projection });
+            const [, , start, end] = vi.mocked(startManualActivityHistory).mock.calls[0];
+            expect(start.toISOString()).toBe(data.startDate.slice(0, 10) + 'T00:00:00.000Z');
+            expect(end.toISOString()).toBe(data.endDate.slice(0, 10) + 'T23:59:59.999Z');
+            expect(history.addHistoryToQueue).not.toHaveBeenCalled();
+            expect(accountMocks.getActiveCOROSTokenSnapshot).not.toHaveBeenCalled();
+        });
+        it('requires reconnect without a legacy scan when the current account cannot be verified', async () => {
+            const error = new https.HttpsError('failed-precondition', 'Reconnect before importing history.');
+            vi.mocked(startManualActivityHistory).mockRejectedValue(error);
+            await expect(addCOROSAPIHistoryToQueue({ ...data, background: true }, context)).rejects.toBe(error);
+            expect(history.addHistoryToQueue).not.toHaveBeenCalled();
+            expect(accountMocks.getActiveCOROSTokenSnapshot).not.toHaveBeenCalled();
+        });
+        it('preserves a busy reservation before importing any window', async () => {
+            const error = new https.HttpsError('already-exists', 'A recent-history import is already running. Please wait for it to finish.');
+            vi.mocked(history.withActivityHistoryImportReservation).mockRejectedValueOnce(error);
+
+            await expect(addCOROSAPIHistoryToQueue(data, context)).rejects.toBe(error);
+            expect(history.addHistoryToQueue).not.toHaveBeenCalled();
+            expect(logger.error).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            [new https.HttpsError('already-exists', 'Another import is running.'), 'already-exists'],
+            [new HistoryLifecycleChangedError(), 'failed-precondition'],
+        ])('preserves expected window invalidation without reporting an import failure (%s)', async (error, code) => {
+            vi.mocked(history.addHistoryToQueue).mockRejectedValueOnce(error);
+            await expect(addCOROSAPIHistoryToQueue(data, context)).rejects.toMatchObject({ code });
+            expect(logger.error).not.toHaveBeenCalled();
+        });
+
+        it.each(['already-exists', 'functions/already-exists'])('reports a generic queue failure with code %s instead of hiding it as contention', async code => {
+            const error = Object.assign(new Error('Unexpected queue failure'), { code });
+            vi.mocked(history.addHistoryToQueue).mockRejectedValueOnce(error);
+            await expect(addCOROSAPIHistoryToQueue(data, context)).rejects.toMatchObject({ code: 'internal' });
+            expect(logger.error).toHaveBeenCalled();
+        });
+
+        it.each(['deletion', 'reconnect'] as const)('keeps a %s refusal after account lookup callable-safe without an ERROR log', async reason => {
+            if (reason === 'deletion') {
+                accountMocks.getUserDeletionGuardState.mockResolvedValueOnce({ shouldSkip: false }).mockResolvedValueOnce({ shouldSkip: true });
+            } else {
+                accountMocks.isServiceUnavailableForSyncForUser.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+            }
+            await expect(addCOROSAPIHistoryToQueue(data, context)).rejects.toMatchObject({
+                code: 'failed-precondition', httpErrorCode: { status: 400 },
+                message: reason === 'deletion' ? 'Account is being deleted or no longer exists.' : 'Reconnect COROS before importing history.',
+            });
+            expect(history.addHistoryToQueue).not.toHaveBeenCalled();
+            expect(logger.error).not.toHaveBeenCalled();
+        });
+
         it('should add history to queue and return success', async () => {
             const result = await addCOROSAPIHistoryToQueue(data, context);
 
-            expect(history.getNextAllowedHistoryImportDate).toHaveBeenCalledWith('testUserID', SERVICE_NAME);
+            expect(history.getNextAllowedHistoryImportDate).not.toHaveBeenCalled();
             expect(history.addHistoryToQueue).toHaveBeenCalledWith(
                 'testUserID',
                 SERVICE_NAME,
@@ -176,6 +237,7 @@ describe('COROS History to Queue', () => {
 
             await addCOROSAPIHistoryToQueue(data, context);
 
+            expect(history.withActivityHistoryImportReservation).toHaveBeenCalledTimes(1);
             // 40 days / 30 days batches = 2 batches
             expect(history.addHistoryToQueue).toHaveBeenCalledTimes(2);
             expect(history.addHistoryToQueue).toHaveBeenNthCalledWith(

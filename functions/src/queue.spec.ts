@@ -1,7 +1,19 @@
+import { ActivityIdentityConflictError } from './shared/activity-identity-conflict';
+import { ProviderImportDuplicateError } from './shared/provider-import-duplicate';
 import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
 import { getExpireAtTimestamp, TTL_CONFIG } from './shared/ttl-config';
-import { MAX_PENDING_TASKS, DISPATCH_SPREAD_SECONDS } from './shared/queue-config';
+import { PROVIDER_MAX_RETRY_COUNT, MAX_PENDING_TASKS, DISPATCH_SPREAD_SECONDS } from './shared/queue-config';
 import { ServiceNames, ActivityParsingOptions, EventImporterFIT, COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/sports-lib';
+import * as logger from 'firebase-functions/logger';
+import { HistoryLifecycleChangedError, type HistoryExecution } from './connection-history/execution';
+
+const mockGetAll = vi.hoisted(() => vi.fn());
+
+const mockGetServiceConnectionMeta = vi.hoisted(() => vi.fn());
+vi.mock('./service-connection-meta', async importOriginal => ({
+    ...await importOriginal<typeof import('./service-connection-meta')>(),
+    getServiceConnectionMeta: mockGetServiceConnectionMeta,
+}));
 
 // Mock firebase-functions first (needed by auth modules at load time)
 vi.mock('firebase-functions', () => ({
@@ -29,7 +41,7 @@ vi.mock('firebase-functions', () => ({
     }),
 }));
 
-const { mockDocRef, mockBatch, mockCollection, mockRecursiveDelete, mockShouldSkipQueueWorkForDeletedUser, mockGetUserDeletionGuardState, mockGetUserDeletionGuardStateInTransaction, mockRunTransaction, mockMarkQueueItemDeletedForUserCleanup, mockIsActivitySyncOutboundEcho, mockGetActiveCOROSTokenSnapshot, mockDownloadCOROSFITFile, mockRecoverCOROSFITFileURL } = vi.hoisted(() => {
+const { mockDocRef, mockBatch, mockCollection, mockRecursiveDelete, mockShouldSkipQueueWorkForDeletedUser, mockGetUserDeletionGuardState, mockGetUserDeletionGuardStateInTransaction, mockRunTransaction, mockMarkQueueItemDeletedForUserCleanup, mockIsActivitySyncOutboundEcho, mockGetActiveCOROSTokenSnapshot, mockDownloadCOROSFITFile, mockRecoverCOROSFITFileURL, mockDeferWorkoutQueueItemForTokenRefreshContention } = vi.hoisted(() => {
     const docRef = {
         update: vi.fn(() => Promise.resolve()),
         set: vi.fn(() => Promise.resolve()),
@@ -72,6 +84,7 @@ const { mockDocRef, mockBatch, mockCollection, mockRecursiveDelete, mockShouldSk
             size: 1,
         })),
         where: vi.fn().mockImplementation(function (this: any) { return this; }),
+        select: vi.fn(() => collection),
         limit: vi.fn().mockImplementation(function (this: any) { return this; }),
         orderBy: vi.fn().mockImplementation(function (this: any) { return this; }),
     };
@@ -105,14 +118,22 @@ const { mockDocRef, mockBatch, mockCollection, mockRecursiveDelete, mockShouldSk
         mockGetActiveCOROSTokenSnapshot: vi.fn().mockResolvedValue({ id: 'corosOpenId' }),
         mockDownloadCOROSFITFile: vi.fn().mockResolvedValue(Buffer.from('test-fit-data')),
         mockRecoverCOROSFITFileURL: vi.fn().mockResolvedValue('https://oss.coros.com/fit/recovered.fit'),
+        mockDeferWorkoutQueueItemForTokenRefreshContention: vi.fn(),
     };
 });
+
+const { mockFitActivityReferencesFromEvent, mockRetainSuuntoGuideCompletions, mockRetainCOROSTrainingCompletion } = vi.hoisted(() => ({
+    mockFitActivityReferencesFromEvent: vi.fn().mockReturnValue([]),
+    mockRetainSuuntoGuideCompletions: vi.fn().mockResolvedValue({ retained: false, linkedWorkoutIds: [] }),
+    mockRetainCOROSTrainingCompletion: vi.fn().mockResolvedValue({ retained: false, linkedWorkoutIds: [] }),
+}));
 
 // Mock firebase-admin before importing modules that use it
 vi.mock('firebase-admin', () => {
     const mockFirestore = {
         collection: vi.fn(() => mockCollection),
         collectionGroup: vi.fn(() => mockCollection),
+        getAll: mockGetAll,
         batch: vi.fn(() => mockBatch),
         runTransaction: mockRunTransaction,
         recursiveDelete: mockRecursiveDelete,
@@ -148,7 +169,8 @@ vi.mock('./history', () => ({
 }));
 
 // Mock request-helper (used by queue.ts)
-vi.mock('./request-helper', () => {
+vi.mock('./request-helper', async (importOriginal) => {
+    const { ResponseBodyTooLargeError } = await importOriginal<typeof import('./request-helper')>();
     const mock: any = vi.fn().mockResolvedValue(Buffer.from('test-fit-data'));
     mock.get = vi.fn().mockResolvedValue(Buffer.from('test-fit-data'));
     mock.getBinaryResponse = mock.get;
@@ -157,6 +179,7 @@ vi.mock('./request-helper', () => {
     mock.delete = vi.fn().mockResolvedValue(Buffer.from('test-fit-data'));
     return {
         __esModule: true,
+        ResponseBodyTooLargeError,
         default: mock,
         ...mock
     };
@@ -184,7 +207,8 @@ vi.mock('./utils', () => ({
 }));
 
 import * as utils from './utils';
-import { getBinaryResponse } from './request-helper';
+import { getBinaryResponse, ResponseBodyTooLargeError } from './request-helper';
+import { SUUNTO_FIT_MAX_RESPONSE_BYTES } from './suunto/constants';
 
 vi.mock('./queue/provider-event-id', () => ({
     resolveProviderImportEventID: vi.fn().mockResolvedValue('standardized-event-id'),
@@ -213,6 +237,10 @@ vi.mock('./tokens', () => {
         }
     }
 
+    class MockTokenRefreshInProgressError extends Error {
+        readonly name = 'TokenRefreshInProgressError';
+    }
+
     return {
         getTokenData: vi.fn().mockResolvedValue({
             accessToken: 'mock-access-token',
@@ -220,11 +248,16 @@ vi.mock('./tokens', () => {
             openId: 'mock-openid'
         }),
         TerminalServiceAuthError: MockTerminalServiceAuthError,
+        TokenRefreshInProgressError: MockTokenRefreshInProgressError,
         TokenRefreshSkippedForDeletedUserError: class TokenRefreshSkippedForDeletedUserError extends Error {
             readonly name = 'TokenRefreshSkippedForDeletedUserError';
         },
     };
 });
+
+vi.mock('./queue/token-refresh-contention', () => ({
+    deferWorkoutQueueItemForTokenRefreshContention: mockDeferWorkoutQueueItemForTokenRefreshContention,
+}));
 
 vi.mock('./queue/user-deletion-skip', () => ({
     shouldSkipQueueWorkForDeletedUser: mockShouldSkipQueueWorkForDeletedUser,
@@ -311,6 +344,15 @@ vi.mock('./garmin/queue', () => ({
     processGarminAPIActivityQueueItem: vi.fn().mockResolvedValue('PROCESSED'),
 }));
 
+vi.mock('./suunto/guide-completion', () => ({
+    fitActivityReferencesFromEvent: mockFitActivityReferencesFromEvent,
+    retainSuuntoGuideCompletions: mockRetainSuuntoGuideCompletions,
+}));
+
+vi.mock('./coros/training-completion', () => ({
+    retainCOROSTrainingCompletion: mockRetainCOROSTrainingCompletion,
+}));
+
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
     const original: any = await importOriginal();
     return {
@@ -347,7 +389,7 @@ import {
     ProviderQueueUserNotConnectedError,
 } from './queue';
 import { QueueItemInterface, SuuntoAppWorkoutQueueItemInterface, COROSAPIWorkoutQueueItemInterface } from './queue/queue-item.interface';
-import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from './tokens';
+import { getTokenData, TerminalServiceAuthError, TokenRefreshInProgressError, TokenRefreshSkippedForDeletedUserError } from './tokens';
 import { processGarminAPIActivityQueueItem } from './garmin/queue';
 import { QUEUE_SKIPPED_REASONS, QueueResult, increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue } from './queue-utils';
 import { PermanentCOROSFITDownloadError } from './coros/file-download';
@@ -380,6 +422,9 @@ function createBinaryResponse(body: Buffer, contentType = 'application/octet-str
 describe('queue', () => {
     beforeEach(async () => {
         vi.clearAllMocks();
+        mockGetAll.mockReset();
+        mockGetServiceConnectionMeta.mockReset().mockResolvedValue(null);
+        mockDeferWorkoutQueueItemForTokenRefreshContention.mockResolvedValue(QueueResult.TokenRefreshDeferred);
         mockDocRef.update.mockResolvedValue(undefined);
         mockDocRef.set.mockResolvedValue(undefined);
         mockDocRef.create.mockResolvedValue(undefined);
@@ -404,6 +449,12 @@ describe('queue', () => {
         mockDownloadCOROSFITFile.mockResolvedValue(Buffer.from('test-fit-data'));
         mockRecoverCOROSFITFileURL.mockReset();
         mockRecoverCOROSFITFileURL.mockResolvedValue('https://oss.coros.com/fit/recovered.fit');
+        mockFitActivityReferencesFromEvent.mockReset();
+        mockFitActivityReferencesFromEvent.mockReturnValue([]);
+        mockRetainSuuntoGuideCompletions.mockReset();
+        mockRetainSuuntoGuideCompletions.mockResolvedValue({ retained: false, linkedWorkoutIds: [] });
+        mockRetainCOROSTrainingCompletion.mockReset();
+        mockRetainCOROSTrainingCompletion.mockResolvedValue({ retained: false, linkedWorkoutIds: [] });
         mockGetUserDeletionGuardState.mockResolvedValue({
             userExists: true,
             deletionInProgress: false,
@@ -476,6 +527,18 @@ describe('queue', () => {
             }));
         });
 
+        it.each([9, 18])('keeps legacy provider work retryable after %i failures', async retryCount => {
+            const admin = await import('firebase-admin');
+            const ref = { update: vi.fn().mockResolvedValue(undefined), parent: { id: 'suuntoAppWorkoutQueue' } };
+            const item = { id: 'legacy-provider-retry', ref, retryCount, totalRetryCount: retryCount,
+                processed: false, dateCreated: Date.now() } as unknown as QueueItemInterface;
+
+            expect(await increaseRetryCountForQueueItem(item, new Error('Temporary download failure')))
+                .toBe(QueueResult.RetryIncremented);
+            expect(ref.update).toHaveBeenCalledWith(expect.objectContaining({ retryCount: retryCount + 1 }));
+            expect(admin.firestore().batch().set).not.toHaveBeenCalled();
+        });
+
         it('should move to DLQ if max retries reached', async () => {
             const admin = await import('firebase-admin');
             const firestore = admin.firestore();
@@ -501,8 +564,8 @@ describe('queue', () => {
                 },
             };
 
-            // 10 is max retry count
-            await increaseRetryCountForQueueItem(queueItem, new Error('Big error'), 10);
+            // Exhaust the provider application retry budget.
+            await increaseRetryCountForQueueItem(queueItem, new Error('Big error'), PROVIDER_MAX_RETRY_COUNT);
 
             // Should NOT verify update on original ref
             expect(mockRef.update).not.toHaveBeenCalled();
@@ -524,7 +587,7 @@ describe('queue', () => {
             const queueItem: QueueItemInterface = {
                 id: 'provider-retry-exhausted',
                 ref: mockRef as any,
-                retryCount: 9,
+                retryCount: PROVIDER_MAX_RETRY_COUNT - 1,
                 processed: false,
                 dateCreated: Date.now(),
                 dispatchedToCloudTask: null,
@@ -695,7 +758,263 @@ describe('queue', () => {
         });
     });
 
+    describe('dispatchConnectionHistoryWorkoutBatch', () => {
+        const execution = (serviceName = ServiceNames.SuuntoApp): HistoryExecution => ({
+            userID: 'history-user', serviceName, runId: 'history-run', providerUserId: 'history-account',
+            tokenPath: 'token', cooldownStartedAtMs: 1, requiredDocumentFieldValues: [],
+            beforeRequest: vi.fn().mockResolvedValue(undefined), inTransaction: vi.fn(), onQueued: vi.fn(),
+        });
+        function child(id: string, overrides: Record<string, unknown> = {}) {
+            const data = {
+                dateCreated: Date.now(), queueRevision: `revision-${id}`, firebaseUserID: 'history-user',
+                userName: 'history-account', openId: 'history-account', connectionHistoryRunId: 'history-run',
+                processed: false, retryCount: 0, dispatchedToCloudTask: null, ...overrides,
+            };
+            const ref = { update: vi.fn(), get: vi.fn(async () => ({ exists: true, data: () => data })) };
+            return { id, ref, exists: true, data: () => data };
+        }
+        beforeEach(() => vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0));
+
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('dispatches only the selected %s children with a 60-second spread and revisions', async serviceName => {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            const context = execution(serviceName);
+            const docs = [child('one'), child('two'), child('three')];
+            mockGetAll.mockResolvedValue(docs);
+
+            await dispatchConnectionHistoryWorkoutBatch(context, docs.map(doc => doc.id));
+
+            expect(context.beforeRequest).toHaveBeenCalledTimes(1);
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(3);
+            docs.forEach((doc, index) => {
+                expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(index + 1, serviceName, doc.id, expect.any(Number),
+                    index * 20, { recoveryTaskKey: 0, queueRevision: `revision-${doc.id}` });
+                expect(doc.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+            });
+            expect(mockCollection.where).not.toHaveBeenCalled();
+            expect(logger.info).toHaveBeenCalledWith('Dispatched 3/3 tasks spread over 60s');
+        });
+
+        it.each([
+            { serviceName: ServiceNames.SuuntoApp, size: 1 },
+            { serviceName: ServiceNames.SuuntoApp, size: 100 },
+            { serviceName: ServiceNames.COROSAPI, size: 1 },
+            { serviceName: ServiceNames.COROSAPI, size: 100 },
+        ])('keeps a $size-item $serviceName history batch within one minute', async ({ serviceName, size }) => {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            const docs = Array.from({ length: size }, (_, index) => child(`item-${index}`));
+            mockGetAll.mockResolvedValue(docs);
+
+            await dispatchConnectionHistoryWorkoutBatch(execution(serviceName), docs.map(doc => doc.id));
+
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(size);
+            docs.forEach((doc, index) => {
+                expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(index + 1, serviceName, doc.id,
+                    expect.any(Number), Math.floor(index * 60 / size),
+                    { recoveryTaskKey: 0, queueRevision: `revision-${doc.id}` });
+            });
+        });
+
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('preserves completed, dispatched, retrying, leased, parked, other-run/account/owner and missing %s rows', async serviceName => {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            const docs = [
+                child('done', { processed: true }), child('issued', { dispatchedToCloudTask: Date.now() }),
+                child('retry', { retryCount: 1 }), child('leased', { processingLeaseExpiresAt: Date.now() + 60_000 }),
+                child('parked', { resultStatus: 'deferred' }), child('other-run', { connectionHistoryRunId: 'other' }),
+                child('other-account', { userName: 'other', openId: 'other' }), child('other-owner', { firebaseUserID: 'other' }),
+                { id: 'missing', exists: false, data: () => undefined },
+            ];
+            mockGetAll.mockResolvedValue(docs);
+
+            await dispatchConnectionHistoryWorkoutBatch(execution(serviceName), docs.map(doc => doc.id));
+
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+            expect(mockRunTransaction).not.toHaveBeenCalled();
+        });
+
+        it('rechecks lifecycle before dispatching and leaves queue rows alone after disconnect', async () => {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            const context = execution();
+            vi.mocked(context.beforeRequest).mockRejectedValue(new HistoryLifecycleChangedError());
+            await expect(dispatchConnectionHistoryWorkoutBatch(context, ['one'])).rejects.toBeInstanceOf(HistoryLifecycleChangedError);
+            expect(mockGetAll).not.toHaveBeenCalled();
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+        });
+
+        it('honors queue capacity without scanning or modifying unrelated work', async () => {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(MAX_PENDING_TASKS);
+            await dispatchConnectionHistoryWorkoutBatch(execution(), ['one']);
+            expect(mockGetAll).not.toHaveBeenCalled();
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+        });
+
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('paces the capacity-limited %s selection over 60 seconds without marking unissued children', async serviceName => {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            const docs = [child('one'), child('two'), child('three'), child('four')];
+            mockGetAll.mockResolvedValue(docs);
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(MAX_PENDING_TASKS - 3);
+
+            await dispatchConnectionHistoryWorkoutBatch(execution(serviceName), docs.map(doc => doc.id));
+
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(3);
+            docs.slice(0, 3).forEach((doc, index) => {
+                expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(index + 1, serviceName, doc.id,
+                    expect.any(Number), index * 20, { recoveryTaskKey: 0, queueRevision: `revision-${doc.id}` });
+                expect(doc.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+            });
+            expect(docs[3].ref.update).not.toHaveBeenCalled();
+        });
+
+        it.each([undefined, 14])('leaves the row recoverable when enqueue succeeds but marker writes fail (code=%s)', async code => {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            const doc = child('one');
+            doc.ref.update.mockRejectedValue(Object.assign(new Error('PRIVATE_MARKER_FAILURE'), { code }));
+            mockGetAll.mockResolvedValue([doc]);
+            await dispatchConnectionHistoryWorkoutBatch(execution(), [doc.id]);
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(1);
+            expect(doc.ref.update).toHaveBeenCalledTimes(code === 14 ? 3 : 1);
+            expect(doc.data().dispatchedToCloudTask).toBeNull();
+        });
+
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('does not dispatch a replacement %s revision if the old task name is reserved', async serviceName => {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            const doc = child('one');
+            mockGetAll.mockResolvedValue([doc]);
+            doc.ref.get.mockResolvedValue({ exists: true, data: () => ({
+                ...doc.data(), queueRevision: 'replacement', connectionHistoryRunId: 'replacement-run',
+            }) });
+            vi.mocked(utils.enqueueWorkoutTask).mockResolvedValueOnce(false);
+
+            await dispatchConnectionHistoryWorkoutBatch(execution(serviceName), [doc.id]);
+
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(1);
+            expect(doc.ref.update).not.toHaveBeenCalled();
+        });
+
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI].flatMap(serviceName =>
+            ['completed', 'replaced'].map(transition => ({ serviceName, transition }))))(
+            'does not mark $serviceName history dispatched after it was $transition during enqueue', async ({ serviceName, transition }) => {
+                const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+                const doc = child('one');
+                mockGetAll.mockResolvedValue([doc]);
+                const changed = { ...doc.data(), ...(transition === 'completed'
+                    ? { processed: true }
+                    : { queueRevision: 'replacement', connectionHistoryRunId: 'replacement-run' }) };
+                vi.mocked(utils.enqueueWorkoutTask).mockImplementationOnce(async () => {
+                    doc.ref.get.mockResolvedValue({ exists: true, data: () => changed });
+                    return true;
+                });
+
+                await dispatchConnectionHistoryWorkoutBatch(execution(serviceName), [doc.id]);
+
+                expect(utils.enqueueWorkoutTask).toHaveBeenCalledExactlyOnceWith(serviceName, doc.id, doc.data().dateCreated, 0,
+                    { recoveryTaskKey: 0, queueRevision: 'revision-one' });
+                expect(doc.ref.update).not.toHaveBeenCalled();
+            });
+
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('preserves a replacement %s revision after recovery enqueue succeeds', async serviceName => {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            const doc = child('one');
+            mockGetAll.mockResolvedValue([doc]);
+            const replacement = { ...doc.data(), queueRevision: 'replacement', connectionHistoryRunId: 'replacement-run' };
+            vi.mocked(utils.enqueueWorkoutTask).mockResolvedValueOnce(false).mockImplementationOnce(async () => {
+                doc.ref.get.mockResolvedValue({ exists: true, data: () => replacement });
+                return true;
+            });
+
+            await dispatchConnectionHistoryWorkoutBatch(execution(serviceName), [doc.id]);
+
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(2);
+            expect(utils.enqueueWorkoutTask).toHaveBeenLastCalledWith(serviceName, doc.id, doc.data().dateCreated, 0,
+                { recoveryTaskKey: '0-1', dispatchRecoveryGeneration: 1, queueRevision: 'revision-one' });
+            expect(doc.ref.update).toHaveBeenCalledExactlyOnceWith({ dispatchRecoveryGeneration: 1 });
+        });
+
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('still recovers a reserved task name for the unchanged %s revision', async serviceName => {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            const doc = child('one');
+            mockGetAll.mockResolvedValue([doc]);
+            vi.mocked(utils.enqueueWorkoutTask).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+
+            await dispatchConnectionHistoryWorkoutBatch(execution(serviceName), [doc.id]);
+
+            expect(doc.ref.update).toHaveBeenCalledWith({ dispatchRecoveryGeneration: 1 });
+            expect(utils.enqueueWorkoutTask).toHaveBeenLastCalledWith(serviceName, doc.id, doc.data().dateCreated, 0,
+                { recoveryTaskKey: '0-1', dispatchRecoveryGeneration: 1, queueRevision: 'revision-one' });
+            expect(doc.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+        });
+
+        it.each([false, true])('waits for every started enqueue after a partial failure (diagnostic throws=%s)', async diagnosticThrows => {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            const docs = [child('failed'), child('succeeds')];
+            mockGetAll.mockResolvedValue(docs);
+            let completeEnqueue!: (value: boolean) => void;
+            vi.mocked(utils.enqueueWorkoutTask).mockRejectedValueOnce(new Error('PRIVATE_ENQUEUE_FAILURE'))
+                .mockImplementationOnce(() => new Promise(resolve => { completeEnqueue = resolve; }));
+            const warning = vi.mocked(logger.warn);
+            if (diagnosticThrows) warning.mockImplementationOnce(() => { throw new Error('PRIVATE_LOG_FAILURE'); });
+            let outcome = 'pending';
+            const pending = dispatchConnectionHistoryWorkoutBatch(execution(), docs.map(doc => doc.id))
+                .then(() => { outcome = 'completed'; }, () => { outcome = 'failed'; });
+            try {
+                await vi.waitFor(() => expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(2));
+                expect(outcome).toBe('pending');
+                completeEnqueue(true);
+                await pending;
+                expect(outcome).toBe('completed');
+                expect(docs[0].ref.update).not.toHaveBeenCalled();
+                expect(docs[1].ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+            } finally { completeEnqueue?.(true); await pending; warning.mockReset(); }
+        });
+
+        it('rejects oversized batches and leaves other providers untouched', async () => {
+            const { dispatchConnectionHistoryWorkoutBatch } = await import('./queue');
+            await expect(dispatchConnectionHistoryWorkoutBatch(execution(), Array(101).fill('one'))).rejects.toThrow('Unsupported');
+            await expect(dispatchConnectionHistoryWorkoutBatch(execution(ServiceNames.WahooAPI), ['one'])).rejects.toThrow('Unsupported');
+            await expect(dispatchConnectionHistoryWorkoutBatch(execution(ServiceNames.GarminAPI), ['one'])).rejects.toThrow('Unsupported');
+            await dispatchConnectionHistoryWorkoutBatch(execution(), []);
+            expect(mockGetAll).not.toHaveBeenCalled();
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+        });
+    });
+
     describe('dispatchQueueItemTasks', () => {
+        it.each(['completed', 'failed'] as const)('preserves the %s dispatch result when monitoring unexpectedly rejects', async outcome => {
+            const telemetry = await import('./queue/import-monitoring');
+            const { dispatchQueueItemTasks } = await import('./queue');
+            const dispatchError = new Error('PRIVATE_DISPATCH_FAILURE');
+            const observation = vi.spyOn(telemetry, 'observeImportQueue').mockRejectedValueOnce(new Error('PRIVATE_PROBE_FAILURE'));
+            const unavailable = vi.spyOn(telemetry, 'recordImportQueueUnavailable');
+            const recordDispatch = vi.spyOn(telemetry, 'recordImportDispatch');
+            try {
+                if (outcome === 'failed') vi.mocked(utils.getCloudTaskQueueDepth).mockRejectedValueOnce(dispatchError);
+                else vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValueOnce(MAX_PENDING_TASKS);
+                const result = dispatchQueueItemTasks(ServiceNames.GarminAPI);
+                if (outcome === 'failed') await expect(result).rejects.toBe(dispatchError);
+                else await expect(result).resolves.toBeUndefined();
+                expect(observation).toHaveBeenCalledExactlyOnceWith(expect.anything(), ServiceNames.GarminAPI);
+                expect(unavailable).toHaveBeenCalledExactlyOnceWith(ServiceNames.GarminAPI);
+                expect(recordDispatch).toHaveBeenCalledExactlyOnceWith(ServiceNames.GarminAPI, outcome);
+                expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+            } finally {
+                observation.mockRestore(); unavailable.mockRestore(); recordDispatch.mockRestore();
+            }
+        });
+
+        it('does not fail an idle dispatch when the observation Firestore client cannot initialize', async () => {
+            const telemetry = await import('./queue/import-monitoring');
+            const admin = await import('firebase-admin');
+            const { dispatchQueueItemTasks } = await import('./queue');
+            const client = vi.spyOn(admin, 'firestore').mockImplementationOnce(() => { throw new Error('PRIVATE_CLIENT_FAILURE'); });
+            const unavailable = vi.spyOn(telemetry, 'recordImportQueueUnavailable');
+            try {
+                vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValueOnce(MAX_PENDING_TASKS);
+                await expect(dispatchQueueItemTasks(ServiceNames.GarminAPI)).resolves.toBeUndefined();
+                expect(unavailable).toHaveBeenCalledExactlyOnceWith(ServiceNames.GarminAPI);
+                expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+            } finally { client.mockRestore(); unavailable.mockRestore(); }
+        });
+
         it('should skip dispatch if queue is full', async () => {
             const utils = await import('./utils');
             vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(MAX_PENDING_TASKS); // Max pending
@@ -748,17 +1067,20 @@ describe('queue', () => {
             expect(mockDoc2.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
 
-        it('should apply staggered delay to dispatched tasks', async () => {
+        it.each([ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])('keeps scheduled %s dispatch on the shared 15-minute spread', async serviceName => {
             const utils = await import('./utils');
             vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
             const { dispatchQueueItemTasks } = await import('./queue');
             const admin = await import('firebase-admin');
 
-            const mockDocs = [
-                { id: '1', ref: { update: vi.fn() }, data: () => ({ dateCreated: Date.now(), firebaseUserID: 'firebase-1', userID: 'garmin-1' }) },
-                { id: '2', ref: { update: vi.fn() }, data: () => ({ dateCreated: Date.now(), firebaseUserID: 'firebase-2', userID: 'garmin-2' }) },
-                { id: '3', ref: { update: vi.fn() }, data: () => ({ dateCreated: Date.now(), firebaseUserID: 'firebase-3', userID: 'garmin-3' }) }
-            ];
+            const mockDocs = ['1', '2', '3'].map(id => {
+                const data = {
+                    dateCreated: Date.now(), firebaseUserID: `firebase-${id}`, processed: false,
+                    dispatchedToCloudTask: null, userID: `garmin-${id}`, userName: `suunto-${id}`,
+                    openId: `coros-${id}`, workoutSummaryID: `wahoo-${id}`, summaryUpdatedAt: 1234,
+                };
+                return { id, ref: { update: vi.fn(), get: vi.fn(async () => ({ exists: true, data: () => data })) }, data: () => data };
+            });
 
             const firestore = admin.firestore();
             const delayPerItem = Math.floor(DISPATCH_SPREAD_SECONDS / mockDocs.length);
@@ -770,14 +1092,16 @@ describe('queue', () => {
                 isEqual: vi.fn(), // Fix TS error
             } as any);
 
-            await dispatchQueueItemTasks(ServiceNames.GarminAPI);
+            await dispatchQueueItemTasks(serviceName);
 
             expect(utils.getCloudTaskQueueDepth).toHaveBeenCalledWith(true);
-            // Expected spread: Total 1800s. Size 3. Delay per item = 600s.
-            // Items: 0, 600, 1200
-            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(1, ServiceNames.GarminAPI, '1', expect.any(Number), 0, { recoveryTaskKey: 0 });
-            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(2, ServiceNames.GarminAPI, '2', expect.any(Number), delayPerItem, { recoveryTaskKey: 0 });
-            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(3, ServiceNames.GarminAPI, '3', expect.any(Number), delayPerItem * 2, { recoveryTaskKey: 0 });
+            expect(DISPATCH_SPREAD_SECONDS).toBe(900);
+            // A three-item scheduled batch remains at 0, 300 and 600 seconds.
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(1, serviceName, '1', expect.any(Number), 0, { recoveryTaskKey: 0 });
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(2, serviceName, '2', expect.any(Number), delayPerItem, { recoveryTaskKey: 0 });
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(3, serviceName, '3', expect.any(Number), delayPerItem * 2, { recoveryTaskKey: 0 });
+            mockDocs.forEach(doc => expect(doc.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) }));
+            expect(logger.info).toHaveBeenCalledWith('Dispatched 3/3 tasks spread over 900s');
         });
 
         it('should delete user-owned queue docs instead of dispatching when account deletion is active', async () => {
@@ -1242,7 +1566,7 @@ describe('queue', () => {
                 'stuck-doc',
                 dateCreated,
                 0,
-                { recoveryTaskKey: '0-1' },
+                { recoveryTaskKey: '0-1', dispatchRecoveryGeneration: 1 },
             );
             expect(mockDoc.ref.update).toHaveBeenCalledWith({ dispatchRecoveryGeneration: 1 });
             expect(mockDoc.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
@@ -1308,7 +1632,7 @@ describe('queue', () => {
                 'stuck-doc',
                 dateCreated,
                 0,
-                { recoveryTaskKey: '0-1' },
+                { recoveryTaskKey: '0-1', dispatchRecoveryGeneration: 1 },
             );
             expect(update).not.toHaveBeenCalledWith({ dispatchRecoveryGeneration: 2 });
             expect(update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
@@ -1687,7 +2011,7 @@ describe('queue', () => {
 
             expect(utils.enqueueWorkoutTask).toHaveBeenCalled();
             expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(2);
-            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(2, ServiceNames.GarminAPI, 'u1-f1', expect.any(Number), undefined, { recoveryTaskKey: '0-1' });
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(2, ServiceNames.GarminAPI, 'u1-f1', expect.any(Number), undefined, { recoveryTaskKey: '0-1', dispatchRecoveryGeneration: 1 });
             expect(mockDocRef.update).toHaveBeenCalledWith({ dispatchRecoveryGeneration: 1 });
             expect(mockDocRef.update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
@@ -2102,7 +2426,7 @@ describe('queue', () => {
 
             expect(result.id).toBe('mock-doc-id');
             expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', 123456, undefined, { recoveryTaskKey: 0 });
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', 123456, undefined, { recoveryTaskKey: '0-1' });
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', 123456, undefined, { recoveryTaskKey: '0-1', dispatchRecoveryGeneration: 1 });
             expect(mockDocRef.update).toHaveBeenCalledWith({ dispatchRecoveryGeneration: 1 });
             expect(mockDocRef.update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
@@ -2400,7 +2724,7 @@ describe('queue', () => {
                 dispatchedToCloudTask: null,
                 dispatchRecoveryGeneration: expect.any(Number),
             }));
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminAPI, 'u1-file123', 123456, undefined, { recoveryTaskKey: '7-2' });
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminAPI, 'u1-file123', 123456, undefined, { recoveryTaskKey: '7-2', dispatchRecoveryGeneration: 2 });
             expect(mockDocRef.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
 
@@ -2654,6 +2978,37 @@ describe('queue', () => {
             vi.mocked(getBinaryResponse).mockResolvedValue(createBinaryResponse(createSyntheticFitPayload()));
         });
 
+        it('acknowledges a verified cross-provider duplicate as skipped without retrying or completing another import', async () => {
+            vi.mocked(utils.setEvent).mockRejectedValueOnce(new ProviderImportDuplicateError('saved-garmin-event'));
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem)).resolves.toBe(QueueResult.Processed);
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: true, resultStatus: 'skipped', skippedReason: 'cross_provider_duplicate', duplicateEventID: 'saved-garmin-event',
+            }));
+            expect(mockRetainSuuntoGuideCompletions).not.toHaveBeenCalled();
+            expect(mockBatch.set).not.toHaveBeenCalled();
+        });
+
+        it('dead-letters a verified Suunto identity conflict without another parse retry', async () => {
+            vi.mocked(utils.setEvent).mockRejectedValueOnce(new ActivityIdentityConflictError());
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+            expect(result).toBe(QueueResult.MovedToDLQ);
+            expect(mockBatch.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ context: 'ACTIVITY_IDENTITY_CONFLICT' }));
+            expect(mockBatch.delete).toHaveBeenCalledWith(mockRef);
+        });
+
+        it('tries a usable sibling token after a legacy shared-provider identity conflict', async () => {
+            const tokenFor = (id: string) => ({ id: `token-${id}`, ref: { parent: { id: 'tokens', parent: { id } } }, data: () => ({}) });
+            mockCollection.get.mockResolvedValueOnce({ size: 2, docs: [tokenFor('owner-a'), tokenFor('owner-b')], empty: false });
+            vi.mocked(utils.setEvent).mockImplementation(async (uid: string) => {
+                if (uid === 'owner-a') throw new ActivityIdentityConflictError();
+                return { eventID: 'standardized-event-id', savedOriginalFiles: [] };
+            });
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+            expect(result).toBe(QueueResult.Processed);
+            expect(vi.mocked(utils.setEvent).mock.calls.map(([uid]) => uid)).toEqual(['owner-a', 'owner-b']);
+            expect(mockBatch.set).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ context: 'ACTIVITY_IDENTITY_CONFLICT' }));
+        });
+
         it('should call garmin processor for GarminAPI service', async () => {
             const garminItem: any = { id: 'garmin1' };
             const result = await parseWorkoutQueueItemForServiceName(ServiceNames.GarminAPI, garminItem);
@@ -2673,6 +3028,17 @@ describe('queue', () => {
                 undefined,
                 undefined,
                 undefined
+            );
+            expect(mockFitActivityReferencesFromEvent).toHaveBeenCalledOnce();
+            expect(mockRetainSuuntoGuideCompletions).toHaveBeenCalledWith(
+                expect.anything(),
+                'mock-user-id',
+                'standardized-event-id',
+                'suuntoUser',
+                expect.any(String),
+                expect.any(Buffer),
+                'test-suunto-client-id',
+                [],
             );
             expect(vi.mocked(resolveProviderImportEventID)).toHaveBeenCalledWith({
                 userID: 'mock-user-id',
@@ -2823,6 +3189,27 @@ describe('queue', () => {
             expect(mockBatch.set).not.toHaveBeenCalled();
         });
 
+        it('should defer initial token-refresh contention without consuming the provider retry budget', async () => {
+            vi.mocked(getTokenData).mockRejectedValueOnce(new TokenRefreshInProgressError(
+                ServiceNames.SuuntoApp,
+                'token-1',
+            ));
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.TokenRefreshDeferred);
+            expect(mockDeferWorkoutQueueItemForTokenRefreshContention).toHaveBeenCalledWith(expect.objectContaining({
+                serviceName: ServiceNames.SuuntoApp,
+                queueItem: suuntoQueueItem,
+                userID: 'mock-user-id',
+            }));
+            expect(getBinaryResponse).not.toHaveBeenCalled();
+            expect(mockRef.update).not.toHaveBeenCalledWith(expect.objectContaining({
+                retryCount: expect.any(Number),
+            }));
+            expect(mockBatch.set).not.toHaveBeenCalled();
+        });
+
         it('should mark processed as skipped without retrying when account deletion starts before event write', async () => {
             mockShouldSkipQueueWorkForDeletedUser
                 .mockResolvedValueOnce(false)
@@ -2896,6 +3283,101 @@ describe('queue', () => {
             const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
             expect(result).toBe(QueueResult.MovedToDLQ);
             expect(mockBatch.delete).toHaveBeenCalledWith(mockRef);
+        });
+
+        describe('owned Suunto imports after completed disconnect', () => {
+            const disconnectedMeta = {
+                connectionStateGeneration: 'cleared-generation',
+                connectionAccountsRevisionKey: 'empty-accounts-revision',
+                connectionAccounts: [],
+            };
+            const committedLogs = () => vi.mocked(logger.info).mock.calls.filter(([message, data]) =>
+                message === '[ActivityImport]' && data?.event === 'committed');
+
+            beforeEach(() => {
+                suuntoQueueItem.firebaseUserID = 'mock-user-id';
+                mockGetServiceConnectionMeta.mockResolvedValue(disconnectedMeta);
+                mockCollection.get.mockResolvedValue({ size: 0, docs: [], empty: true });
+                mockRef.get.mockResolvedValue({ exists: true, data: () => ({ ...suuntoQueueItem }) });
+            });
+
+            it.each([false, true])('commits an INFO skip without provider work or DLQ (cached: %s)', async cached => {
+                await expect(parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem,
+                    undefined, cached ? new Map() : undefined)).resolves.toBe(QueueResult.Processed);
+                expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                    processed: true, resultStatus: 'skipped', skippedReason: 'service_disconnected',
+                }));
+                expect(mockGetServiceConnectionMeta).toHaveBeenCalledWith('mock-user-id', ServiceNames.SuuntoApp);
+                expect(logger.info).toHaveBeenCalledWith('[SuuntoWorkoutQueue] Import skipped after completed disconnect.', {
+                    queueItemId: suuntoQueueItem.id, reason: 'service_disconnected',
+                });
+                expect(logger.warn).not.toHaveBeenCalled();
+                expect(mockBatch.set).not.toHaveBeenCalled();
+                expect(mockBatch.delete).not.toHaveBeenCalled();
+                expect(getTokenData).not.toHaveBeenCalled();
+                expect(getBinaryResponse).not.toHaveBeenCalled();
+                expect(utils.setEvent).not.toHaveBeenCalled();
+                expect(committedLogs()).toEqual([[expect.any(String), expect.objectContaining({
+                    provider: 'suunto', outcome: 'skipped',
+                })]]);
+            });
+
+            it.each([null, {}, { ...disconnectedMeta, connectionState: 'connected' },
+                { ...disconnectedMeta, connectionState: 'reconnect_required' },
+                { ...disconnectedMeta, connectionState: 'disconnect_pending' },
+                { ...disconnectedMeta, connectionAccounts: [{ providerUserId: 'another-account' }] },
+            ])('retains missing-token failure when disconnect is not confirmed: %j', async meta => {
+                mockGetServiceConnectionMeta.mockResolvedValue(meta);
+                await expect(parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem)).resolves.toBe(QueueResult.MovedToDLQ);
+                expect(mockRef.update).not.toHaveBeenCalled();
+                expect(mockBatch.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ context: 'NO_TOKEN_FOUND' }));
+            });
+
+            it('does not classify a legacy unowned job as disconnected', async () => {
+                suuntoQueueItem.firebaseUserID = undefined;
+                await expect(parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem)).resolves.toBe(QueueResult.MovedToDLQ);
+                expect(mockGetServiceConnectionMeta).not.toHaveBeenCalled();
+            });
+
+            it('does not borrow another retained account or hide a missing exact credential', async () => {
+                mockCollection.get.mockResolvedValueOnce({ size: 0, docs: [], empty: true })
+                    .mockResolvedValueOnce({ size: 1, docs: [{}], empty: false });
+                await expect(parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem)).resolves.toBe(QueueResult.MovedToDLQ);
+                expect(mockRef.update).not.toHaveBeenCalled();
+                expect(getTokenData).not.toHaveBeenCalled();
+            });
+
+            it.each(['processed', 'owner', 'account', 'workout', 'date', 'revision', 'removed'])('does not overwrite a changed %s row', async state => {
+                const changes = {
+                    processed: { processed: true }, owner: { firebaseUserID: 'another-owner' },
+                    account: { userName: 'another-account' }, workout: { workoutID: 'another-workout' },
+                    date: { dateCreated: 1 }, revision: { queueRevision: 'replacement-revision' }, removed: {},
+                };
+                mockRef.get.mockResolvedValue({ exists: state !== 'removed', data: () => ({ ...suuntoQueueItem, ...changes[state as keyof typeof changes] }) });
+                await expect(parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem)).resolves.toBe(QueueResult.Processed);
+                expect(mockRef.update).not.toHaveBeenCalled();
+                expect(mockBatch.set).not.toHaveBeenCalled();
+                expect(logger.info).not.toHaveBeenCalledWith('[SuuntoWorkoutQueue] Import skipped after completed disconnect.', expect.anything());
+                expect(committedLogs()).toEqual([]);
+            });
+
+            it('does not write or count a skip after account deletion wins', async () => {
+                mockGetUserDeletionGuardStateInTransaction.mockResolvedValue({ shouldSkip: true });
+                await expect(parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem)).resolves.toBe(QueueResult.Processed);
+                expect(mockRef.update).not.toHaveBeenCalled();
+                expect(committedLogs()).toEqual([]);
+            });
+
+            it.each(['metadata', 'credentials', 'completion'])('leaves %s failures retryable without a false completion', async stage => {
+                const error = new Error('temporary Firestore failure');
+                if (stage === 'metadata') mockGetServiceConnectionMeta.mockRejectedValueOnce(error);
+                else if (stage === 'credentials') mockCollection.get.mockResolvedValueOnce({ size: 0, docs: [], empty: true }).mockRejectedValueOnce(error);
+                else mockRunTransaction.mockRejectedValueOnce(error);
+                await expect(parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem)).rejects.toBe(error);
+                expect(mockRef.update).not.toHaveBeenCalled();
+                expect(mockBatch.set).not.toHaveBeenCalled();
+                expect(committedLogs()).toEqual([]);
+            });
         });
 
         it('service-scopes Suunto token lookups before processing', async () => {
@@ -3184,6 +3666,8 @@ describe('queue', () => {
                 openId: 'corosOpenId',
                 workoutID: 'cw1',
                 FITFileURI: 'https://coros.com/fit',
+                planWorkoutId: '123456789',
+                componentKey: 'root',
                 retryCount: 0,
                 processed: false,
                 dateCreated,
@@ -3218,14 +3702,30 @@ describe('queue', () => {
                 undefined,
                 undefined
             );
+            expect(mockRetainCOROSTrainingCompletion).toHaveBeenCalledWith(
+                expect.anything(),
+                'mock-user-id',
+                'standardized-event-id',
+                'corosOpenId',
+                'mock-doc-id',
+                null,
+                '123456789',
+                'root',
+                [],
+            );
             expect(vi.mocked(resolveProviderImportEventID)).toHaveBeenCalledWith({
                 userID: 'mock-user-id',
                 startDate: new Date('2026-01-14T10:00:00.000Z'),
                 serviceName: ServiceNames.COROSAPI,
                 providerEventID: 'cw1',
                 providerEventIDField: 'serviceWorkoutID',
-                providerEventSecondaryID: 'https://coros.com/fit',
-                providerEventSecondaryIDField: 'serviceFITFileURI',
+                providerEventSecondaryID: 'root',
+                providerEventSecondaryIDField: 'serviceWorkoutComponentKey',
+                legacyProviderEventSecondaryIdentities: [{
+                    field: 'serviceFITFileURI',
+                    value: 'https://coros.com/fit',
+                }],
+                allowLegacySecondaryFieldPresenceMatch: true,
             });
         });
 
@@ -3633,6 +4133,52 @@ describe('queue', () => {
             expect(mockDownloadCOROSFITFile).toHaveBeenCalledWith('https://oss.coros.com/fit/after-refresh.fit');
         });
 
+        it('defers COROS detail recovery when another worker owns the forced token refresh', async () => {
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            const dateCreated = Date.now();
+            mockRef.get.mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    processed: false,
+                    firebaseUserID: 'mock-user-id',
+                    dateCreated,
+                    openId: 'corosOpenId',
+                    workoutID: '418173315956375553',
+                    componentKey: 'root',
+                    dispatchedToCloudTask: 123,
+                }),
+            });
+            mockRecoverCOROSFITFileURL.mockRejectedValueOnce(new COROSFITDetailAuthError('5006'));
+            vi.mocked(getTokenData)
+                .mockResolvedValueOnce({ accessToken: 'stale-token', openId: 'corosOpenId' } as any)
+                .mockRejectedValueOnce(new TokenRefreshInProgressError(ServiceNames.COROSAPI, 'token-1'));
+            const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                id: 'detail-auth-contention',
+                ref: mockRef,
+                firebaseUserID: 'mock-user-id',
+                openId: 'corosOpenId',
+                workoutID: '418173315956375553',
+                mode: 8,
+                subMode: 1,
+                componentKey: 'root',
+                retryCount: 0,
+                processed: false,
+                dateCreated,
+                dispatchedToCloudTask: 123,
+            };
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.TokenRefreshDeferred);
+
+            expect(getTokenData).toHaveBeenCalledTimes(2);
+            expect(mockDeferWorkoutQueueItemForTokenRefreshContention).toHaveBeenCalledWith(expect.objectContaining({
+                serviceName: ServiceNames.COROSAPI,
+                queueItem: corosItem,
+                userID: 'mock-user-id',
+            }));
+            expect(mockDownloadCOROSFITFile).not.toHaveBeenCalled();
+        });
+
         it('moves permanently invalid COROS detail responses to the DLQ', async () => {
             mockRef.parent.id = 'COROSAPIWorkoutQueue';
             mockRecoverCOROSFITFileURL.mockRejectedValueOnce(
@@ -3869,9 +4415,9 @@ describe('queue', () => {
             }));
         });
 
-        it('should handle 401 Unauthorized with token refresh and retry', async () => {
+        it.each([401, 403])('recovers a Suunto download HTTP %s with one token refresh and retry', async statusCode => {
             vi.mocked(getBinaryResponse)
-                .mockRejectedValueOnce({ statusCode: 401 })
+                .mockRejectedValueOnce({ statusCode })
                 .mockResolvedValueOnce(createBinaryResponse(createSyntheticFitPayload()));
 
             const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
@@ -3879,10 +4425,57 @@ describe('queue', () => {
             expect(getBinaryResponse).toHaveBeenCalledTimes(2);
             expect(result).toBe(QueueResult.Processed);
             expect(getTokenData).toHaveBeenCalledTimes(2); // Initial + Force Refresh
+            expect(getTokenData).toHaveBeenLastCalledWith(
+                vi.mocked(getTokenData).mock.calls[0][0], ServiceNames.SuuntoApp, true,
+            );
         });
 
-        it('should move to DLQ when forced refresh after download 401 returns terminal invalid_grant', async () => {
-            vi.mocked(getBinaryResponse).mockRejectedValueOnce({ statusCode: 401 });
+        it.each([false, true])('moves an oversized Suunto FIT to DLQ without parsing or retrying (after refresh: %s)', async (afterRefresh) => {
+            const error = Object.assign(new ResponseBodyTooLargeError(
+                SUUNTO_FIT_MAX_RESPONSE_BYTES, SUUNTO_FIT_MAX_RESPONSE_BYTES + 1,
+            ), { message: 'private provider body and credential URL' });
+            if (afterRefresh) vi.mocked(getBinaryResponse).mockRejectedValueOnce({ statusCode: 401 });
+            vi.mocked(getBinaryResponse).mockRejectedValueOnce(error);
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.MovedToDLQ);
+            expect(getBinaryResponse).toHaveBeenCalledTimes(afterRefresh ? 2 : 1);
+            expect(EventImporterFIT.getFromArrayBuffer).not.toHaveBeenCalled();
+            expect(utils.setEvent).not.toHaveBeenCalled();
+            expect(mockBatch.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+                context: 'SUUNTO_ACTIVITY_FILE_TOO_LARGE',
+                error: 'Suunto FIT response exceeded the 128 MiB download limit.',
+            }));
+            expect(JSON.stringify(mockBatch.set.mock.calls)).not.toContain('private provider body');
+            expect(mockBatch.delete).toHaveBeenCalledWith(mockRef);
+        });
+
+        it.each([401, 403])('defers a Suunto HTTP %s retry when another worker owns token refresh', async statusCode => {
+            vi.mocked(getBinaryResponse).mockRejectedValueOnce({ statusCode });
+            vi.mocked(getTokenData)
+                .mockResolvedValueOnce({
+                    accessToken: 'stale-token',
+                    userName: 'suuntoUser',
+                } as any)
+                .mockRejectedValueOnce(new TokenRefreshInProgressError(ServiceNames.SuuntoApp, 'token-1'));
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.TokenRefreshDeferred);
+            expect(getTokenData).toHaveBeenCalledTimes(2);
+            expect(mockDeferWorkoutQueueItemForTokenRefreshContention).toHaveBeenCalledWith(expect.objectContaining({
+                serviceName: ServiceNames.SuuntoApp,
+                queueItem: suuntoQueueItem,
+                userID: 'mock-user-id',
+            }));
+            expect(mockRef.update).not.toHaveBeenCalledWith(expect.objectContaining({
+                retryCount: expect.any(Number),
+            }));
+        });
+
+        it.each([401, 403])('retains terminal invalid_grant handling after download HTTP %s', async statusCode => {
+            vi.mocked(getBinaryResponse).mockRejectedValueOnce({ statusCode });
             vi.mocked(getTokenData)
                 .mockResolvedValueOnce({
                     accessToken: 'stale-token',
@@ -3909,14 +4502,84 @@ describe('queue', () => {
             expect(mockBatch.delete).toHaveBeenCalledWith(mockRef);
         });
 
-        it('should handle 403 Forbidden by increasing retry count significantly', async () => {
-            vi.mocked(getBinaryResponse).mockRejectedValue({ statusCode: 403 });
+        it.each([401, 403])('records refreshed Suunto 403 after HTTP %s as access denied without fabricated retries', async statusCode => {
+            vi.mocked(getBinaryResponse)
+                .mockRejectedValueOnce({ statusCode })
+                .mockRejectedValueOnce(Object.assign(new Error('private-provider-response'), { statusCode: 403 }));
 
             const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
             expect(result).toBe(QueueResult.MovedToDLQ);
             expect(mockBatch.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-                context: 'MAX_RETRY_REACHED'
+                context: 'SUUNTO_WORKOUT_ACCESS_DENIED',
+                retryCount: 0,
+                error: 'Suunto workout access denied after token refresh (HTTP 403).',
             }));
+            expect(getTokenData).toHaveBeenCalledTimes(2);
+            expect(getBinaryResponse).toHaveBeenCalledTimes(2);
+            expect(utils.setEvent).not.toHaveBeenCalled();
+            expect(JSON.stringify(mockBatch.set.mock.calls)).not.toContain('private-provider-response');
+        });
+
+        it('does not download with a different account returned during 403 recovery', async () => {
+            vi.mocked(getBinaryResponse).mockRejectedValueOnce({ statusCode: 403 });
+            vi.mocked(getTokenData)
+                .mockResolvedValueOnce({ accessToken: 'old-account-token', userName: 'suuntoUser' } as any)
+                .mockResolvedValueOnce({ accessToken: 'new-account-token', userName: 'different-account' } as any);
+
+            await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(getBinaryResponse).toHaveBeenCalledTimes(1);
+            expect(utils.setEvent).not.toHaveBeenCalled();
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({ resultStatus: 'skipped' }));
+        });
+
+        it('skips the refreshed download if account deletion starts during 403 recovery', async () => {
+            vi.mocked(getBinaryResponse).mockRejectedValueOnce({ statusCode: 403 });
+            vi.mocked(getTokenData)
+                .mockResolvedValueOnce({ accessToken: 'old-token', userName: 'suuntoUser' } as any)
+                .mockRejectedValueOnce(new TokenRefreshSkippedForDeletedUserError());
+
+            await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(getBinaryResponse).toHaveBeenCalledTimes(1);
+            expect(utils.setEvent).not.toHaveBeenCalled();
+            expect(mockBatch.set).not.toHaveBeenCalled();
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                skippedReason: QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting,
+            }));
+        });
+
+        it('defers instead of downloading if disconnect starts during 403 recovery', async () => {
+            const error = Object.assign(new Error('disconnect pending'), { name: 'TokenUseSkippedForPendingDisconnectError' });
+            vi.mocked(getBinaryResponse).mockRejectedValueOnce({ statusCode: 403 });
+            vi.mocked(getTokenData)
+                .mockResolvedValueOnce({ accessToken: 'old-token', userName: 'suuntoUser' } as any)
+                .mockRejectedValueOnce(error);
+            mockRef.get.mockResolvedValue({ exists: true, data: () => ({ ...suuntoQueueItem, ref: undefined }) });
+            mockDocRef.get.mockResolvedValue({ exists: true, data: () => ({
+                disconnectState: 'disconnect_pending', disconnectGeneration: 'pending-generation',
+            }) });
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem))
+                .resolves.toBe(QueueResult.Deferred);
+
+            expect(getBinaryResponse).toHaveBeenCalledTimes(1);
+            expect(utils.setEvent).not.toHaveBeenCalled();
+            expect(mockBatch.set).not.toHaveBeenCalled();
+        });
+
+        it.each([403, 503])('keeps a refresh HTTP %s failure retryable without claiming workout access denied', async refreshStatusCode => {
+            vi.mocked(getBinaryResponse).mockRejectedValueOnce({ statusCode: 403 });
+            vi.mocked(getTokenData)
+                .mockResolvedValueOnce({ accessToken: 'old-token', userName: 'suuntoUser' } as any)
+                .mockRejectedValueOnce(Object.assign(new Error('refresh unavailable'), { statusCode: refreshStatusCode }));
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem))
+                .resolves.toBe(QueueResult.RetryIncremented);
+
+            expect(getBinaryResponse).toHaveBeenCalledTimes(1);
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({ retryCount: 1 }));
+            expect(mockBatch.set).not.toHaveBeenCalled();
         });
 
         it('should handle 500 Internal Server Error by retrying instead of immediate DLQ', async () => {
@@ -3956,7 +4619,7 @@ describe('queue', () => {
         });
 
         it('retains a Suunto-specific DLQ context when incomplete FIT responses exhaust retries', async () => {
-            suuntoQueueItem.retryCount = 9;
+            suuntoQueueItem.retryCount = PROVIDER_MAX_RETRY_COUNT - 1;
             const providerBody = Buffer.from('temporary provider response', 'utf8');
             vi.mocked(getBinaryResponse).mockResolvedValue(createBinaryResponse(providerBody, 'text/plain'));
 
@@ -3993,8 +4656,10 @@ describe('queue', () => {
             } as any);
             vi.mocked(getTokenData)
                 .mockResolvedValueOnce({ accessToken: 'forbidden', userName: 'suuntoUser' } as any)
+                .mockResolvedValueOnce({ accessToken: 'refreshed-forbidden', userName: 'suuntoUser' } as any)
                 .mockResolvedValueOnce({ accessToken: 'provider-ready', userName: 'suuntoUser' } as any);
             vi.mocked(getBinaryResponse)
+                .mockRejectedValueOnce({ statusCode: 403 })
                 .mockRejectedValueOnce({ statusCode: 403 })
                 .mockResolvedValueOnce(createBinaryResponse(Buffer.from('FIT is still preparing'), 'text/plain'));
 

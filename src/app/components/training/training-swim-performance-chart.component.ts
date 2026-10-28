@@ -1,3 +1,4 @@
+import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -54,6 +55,7 @@ export class TrainingSwimPerformanceChartComponent implements AfterViewInit, OnC
   @Input() performance: DashboardTrainingSwimPerformanceContext | null = null;
   @Input() status: DashboardDerivedMetricStatus = 'missing';
   @Input() darkTheme = false;
+  @Input() timelineNotes: TimelineNoteChartContext | null = null;
   @Input() unitSettings: UserUnitSettingsInterface | null = null;
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -67,6 +69,7 @@ export class TrainingSwimPerformanceChartComponent implements AfterViewInit, OnC
 
   constructor(eChartsLoader: EChartsLoaderService, logger: LoggerService) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader,
       logger,
       logPrefix: '[TrainingSwimPerformanceChartComponent]',
@@ -78,7 +81,11 @@ export class TrainingSwimPerformanceChartComponent implements AfterViewInit, OnC
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes.performance || changes.status || changes.darkTheme || changes.unitSettings) {
+    if (changes.timelineNotes && Object.keys(changes).length === 1) {
+      this.chartHost.updateTimelineNotes(this.timelineNotes);
+      return;
+    }
+    if (changes.performance || changes.status || changes.darkTheme || changes.unitSettings || changes.timelineNotes) {
       void this.refresh();
     }
   }
@@ -98,6 +105,7 @@ export class TrainingSwimPerformanceChartComponent implements AfterViewInit, OnC
       return;
     }
     this.chartHost.hideTooltip();
+    this.chartHost.setTimelineNotes(this.timelineNotes, { bucketDays: 7 });
     this.chartHost.setOption(this.buildOption(), ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
   }
@@ -167,7 +175,7 @@ export class TrainingSwimPerformanceChartComponent implements AfterViewInit, OnC
             }
             return [{
               label: row.label,
-              value: `${formatTrainingSwimPace(row.point.paceSeconds, this.view.usesYards)} · ${new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(row.point.distanceMeters)} m · ${row.point.activityCount} swim ${row.point.activityCount === 1 ? 'workout' : 'workouts'}`,
+              value: `${formatTrainingSwimPace(row.point.paceSeconds, this.view.usesYards)} · ${row.point.distanceText} · ${row.point.activityCount} swim ${row.point.activityCount === 1 ? 'workout' : 'workouts'}`,
             }];
           });
           return renderDashboardEChartsTooltipCard(style, {

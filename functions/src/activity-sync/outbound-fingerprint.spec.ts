@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ServiceNames } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataActivityTypes, DataDistance, DataDuration, EventImporterJSON, FileType, Privacy, ServiceNames } from '@sports-alliance/sports-lib';
 
 const mocks = vi.hoisted(() => {
   interface MockDocumentReference {
@@ -130,6 +130,7 @@ function parsedEvent() {
     startDate: activity.startDate,
     endDate: activity.endDate,
     getActivities: () => [activity],
+    getActivityTypesAsArray: () => ['Running'],
   };
 }
 
@@ -149,6 +150,66 @@ describe('activity sync outbound fingerprints', () => {
     expect(first.exactFingerprintId).not.toBe(second.exactFingerprintId);
     expect(first.fingerprintIds).toHaveLength(2);
     expect(first.fingerprintIds[1]).toBe(second.fingerprintIds[1]);
+    expect(first.activityTypes).toEqual(['Running']);
+  });
+
+  it('keeps missing and zero duration distinct through JSON restoration and semantic fingerprints', async () => {
+    const fingerprints: string[] = [];
+    for (const seconds of [undefined, 0, 3600]) {
+      const event = EventImporterJSON.getEventFromJSON({
+        name: 'Synthetic', startDate: 0, endDate: 3600000, srcFileType: FileType.FIT,
+        description: null, isMerge: false, privacy: Privacy.Private, stats: {}, activities: [],
+      });
+      const activity = EventImporterJSON.getActivityFromJSON({
+        name: null, startDate: 0, endDate: 3600000, type: ActivityTypes.Running,
+        creator: { name: 'Synthetic', devices: [] }, powerMeter: false, trainer: false,
+        stats: {}, streams: [], laps: [], intensityZones: [], events: [],
+      });
+      activity.setDistance(new DataDistance(10000));
+      if (seconds !== undefined) activity.setDuration(new DataDuration(seconds));
+      event.addActivity(activity);
+      event.addStat(new DataActivityTypes([activity.type]));
+      const restored = EventImporterJSON.getEventFromJSON(event.toJSON());
+      const results = [];
+      for (const parsed of [event, restored]) {
+        mocks.importer.mockResolvedValueOnce(parsed);
+        results.push(await buildActivitySyncOutboundFingerprintIds(Buffer.from('same-synthetic-fit')));
+      }
+      expect(results[0].fingerprintIds).toHaveLength(2);
+      expect(results[1].fingerprintIds).toEqual(results[0].fingerprintIds);
+      fingerprints.push(results[0].fingerprintIds[1]);
+    }
+    expect(new Set(fingerprints).size).toBe(3);
+    expect(mocks.loggerWarn).not.toHaveBeenCalled();
+  });
+
+  it('keeps exact-only suppression with safe diagnostics when semantic parsing fails', async () => {
+    mocks.importer.mockRejectedValueOnce(new Error('File CRC mismatch'));
+    const result = await buildActivitySyncOutboundFingerprintIds(Buffer.from('bad-fit'));
+    expect(result.fingerprintIds).toEqual([result.exactFingerprintId]);
+    expect(result.activityTypes).toEqual([]);
+    expect(mocks.loggerWarn).toHaveBeenCalledWith(
+      '[ActivitySync] Could not create a semantic outbound FIT fingerprint.',
+      expect.objectContaining({ errorName: 'Error', errorMessage: 'File CRC mismatch', payloadBytes: 7, fallback: 'exact_only' }),
+    );
+  });
+
+  it('keeps the semantic receipt when optional activity-type extraction fails', async () => {
+    mocks.importer.mockResolvedValueOnce({
+      ...parsedEvent(),
+      getActivityTypesAsArray: () => {
+        throw new Error('Activity type extraction failed');
+      },
+    });
+
+    const result = await buildActivitySyncOutboundFingerprintIds(Buffer.from('valid-fit'));
+
+    expect(result.fingerprintIds).toHaveLength(2);
+    expect(result.activityTypes).toEqual([]);
+    expect(mocks.loggerWarn).toHaveBeenCalledWith(
+      '[ActivitySync] Could not derive activity types from a parsed outbound FIT.',
+      expect.objectContaining({ fallback: 'provider_inference' }),
+    );
   });
 
   it('writes receipts under the user root before provider delivery', async () => {

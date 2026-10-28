@@ -1,4 +1,41 @@
+import type { EventStatAggregationEvent } from '../../../shared/event-stat-aggregation.types';
+import type { DataInterface } from '@sports-alliance/sports-lib/metrics';
+import { readActivitySourceIdentity } from '../../../shared/activity-source-identity';
+import { getRejectedSwimTiming, resolveSwimTiming } from '../../../shared/swim-timing';
+import { getTrainingSportDefinition, type TrainingSportId } from '../../../shared/training-disciplines';
+import { runMcpWorkoutReflection } from './workout-reflections.service';
+import type { McpWorkoutReflectionTool } from './workout-reflections.schemas';
+import { hasCurrentIntensityPolicy } from '../../../shared/intensity-zones';
+import { readinessHrvObservations, buildReadinessEvaluation as buildCurrentReadinessEvaluation,
+  calculateReadinessScore as calculateCurrentReadinessScore, READINESS_SLEEP_LOOKBACK_MS as CURRENT_READINESS_LOOKBACK_MS,
+  type ReadinessEvaluation as CurrentReadinessEvaluation } from '../../../shared/readiness';
+import { normalizeDerivedTrainingReadinessMetricPayload as normalizeCurrentReadiness } from '../../../shared/training-readiness-metric';
+import { normalizeDerivedTrainingReadinessMetricPayload as normalizeLegacyReadiness } from '../../../shared/training-readiness-metric-legacy';
+import { ActivitySampleCache } from './activity-sample-cache';
+import { ActivitySampleContext, ActivitySamplesInput, ActivitySamplesDependencies, ActivitySamplesError, queryActivitySamples } from './activity-samples.service';
+import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
+import { supplementNightlyHrvSleepDocuments, supplementNightlyHealthSleepDocuments } from '../sleep/nightly-hrv';
+import { aggregateNightlyHrvEvidence, sleepEvidenceSourceKey } from '../../../shared/nightly-hrv';
+import { calculatedHeartRateSourceKeys } from '../../../shared/nightly-heart-rate';
 import * as admin from 'firebase-admin';
+import { runMcpManualMeasurement, defaultManualMeasurementDependencies } from './manual-measurements.service';
+import type { McpManualMeasurementTool } from './manual-measurements.schemas';
+import {
+  firestoreHrvRangeReads,
+  HrvRangeInput,
+  MCP_SLEEP_CANONICAL_TIME_FIELDS,
+  queryHrvPersonalRange,
+} from './hrv-personal-range.service';
+import {
+  firestoreActivityDescriptionReads, McpActivityDescriptionInput, McpActivityDescriptionReads,
+  MCP_ACTIVITY_DESCRIPTION_MAX_BYTES, MCP_ACTIVITY_DESCRIPTION_MAX_LENGTH, MCP_ACTIVITY_DESCRIPTION_MAX_RESULT_BYTES,
+} from './activity-description.service';
+import { firestoreTimelineNotesReads, queryMcpTimelineNotes, McpTimelineNotesError,
+  McpTimelineNotesInput, McpTimelineNotesReads } from './timeline-notes.service';
+import {
+  firestoreHealthReads, getMcpHealthCatalog, queryMcpHealth,
+  McpHealthError, McpHealthInput, McpHealthReadDependencies,
+} from './health.service';
 import { FieldPath } from 'firebase-admin/firestore';
 import {
   createCipheriv,
@@ -30,8 +67,6 @@ import {
   DataSpeedMax,
   DataStartPosition,
   decodeRoutePolyline5,
-  EventImporterJSON,
-  EventInterface,
   EventJSONInterface,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
@@ -46,34 +81,55 @@ import {
 import {
   DERIVED_METRIC_KINDS,
   DERIVED_METRIC_SCHEMA_VERSION,
+  DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
   DERIVED_METRICS_ENTRY_TYPES,
-  DerivedFormMetricPayload,
+  DerivedFormDailyLoadEntry,
   DerivedFormNowMetricPayload,
+  DerivedEasyPercentMetricPayload,
+  DerivedIntensityDistributionMetricPayload,
+  DerivedBodyWeightTrendMetricPayload,
   DerivedMetricKind,
   DerivedRampRateMetricPayload,
   DerivedTrainingReadinessMetricPayload,
   DerivedTrainingBuildComparisonMetricPayload,
   DerivedTrainingBuildWindow,
+  DerivedTrainingCapacityMetricPayload,
   DerivedTrainingDurabilityMetricPayload,
   DerivedTrainingExplanationMetricPayload,
   DerivedTrainingExplanationSportLoad,
   DerivedTrainingExplanationWindowMetrics,
   DerivedTrainingSummaryMetricPayload,
   isDerivedMetricKind,
+  resolveDerivedFormMetricPayload,
 } from '../../../shared/derived-metrics';
 import {
+  HEALTH_METRIC_IDS,
+  HEALTH_SOURCE_RECORD_KINDS,
+  HEALTH_SOURCE_RECORDS_COLLECTION_ID,
+  type HealthSourceRecord,
+} from '../../../shared/health';
+import {
   buildEventStatAggregation,
+  EventStatAggregationContext,
   isValidIanaTimeZone,
   resolveDateAggregationBucketStart,
 } from '../../../shared/event-stat-aggregation';
+import {
+  EVENT_TAG_LIMIT,
+  EVENT_TAG_MAX_LENGTH,
+  getEventTags,
+} from '../../../shared/event-tags';
 import { isBenchmarkEventForTrainingMetrics } from '../../../shared/event-classification';
 import {
   canonicalizePersistedSportsLibStats,
   getPersistedEventActivityTypes,
   getPersistedSportsLibMetricReadTypes,
-  normalizePersistedEventMetricSemantics,
 } from '../../../shared/sports-lib-metric-semantics';
 import {
+  groupCanonicalSleepNightFragments,
+  resolveSleepDisplayDate,
+  resolveSleepEffectiveStartTimeMs,
+  sumSleepFragmentInterruptionSeconds,
   SLEEP_PROVIDERS,
   SLEEP_SPORTS_LIB_METRIC_FIELDS,
   SLEEP_STAGES,
@@ -82,21 +138,24 @@ import {
   SleepStage,
 } from '../../../shared/sleep';
 import {
+  decodeHealthMetricSportsLibData,
   decodeSleepSessionSportsLibData,
   SportsLibDataValidationError,
 } from '../../../shared/sports-lib-health-data';
 import {
   buildReadinessEvaluation,
+  READINESS_EVIDENCE_VERSION as LEGACY_READINESS_EVIDENCE_VERSION,
   READINESS_FORMULA_VERSION,
   READINESS_SLEEP_LOOKBACK_MS,
   READINESS_TOTAL_SIGNAL_COUNT,
   ReadinessEvaluation,
   ReadinessRatioEvidence,
   ReadinessSleepEvidencePoint,
-} from '../../../shared/readiness';
+} from '../../../shared/readiness-legacy';
 import {
   buildTrainingLoadPoints,
 } from '../../../shared/training-load';
+import { projectTrainingPowerSystemsPolicy1 } from './training-power-systems-compatibility';
 import {
   PUBLIC_TRAINING_DISCIPLINES,
   TRAINING_DISCIPLINES,
@@ -112,6 +171,14 @@ import {
   getMcpTrainingMetricDescriptors,
   McpTrainingMetricDescriptor,
 } from './training-metric-catalog';
+import {
+  firestoreTrainingImpactReads,
+  getMcpTrainingImpact,
+  MCP_TRAINING_IMPACT_MAX_ACTIVITIES,
+  McpTrainingImpactError,
+  type McpTrainingImpactMode,
+  type McpTrainingImpactReads,
+} from './training-impact.service';
 import {
   McpMetricDescriptor,
   projectSportsLibNumericMetricValue,
@@ -157,8 +224,27 @@ import {
   McpActivityChartRateLimitError,
 } from './activity-chart-rate-limit';
 import {
+  firestoreActivityTagReads,
+  McpActivityTagDocument,
+} from './activity-tags.service';
+import {
+  createMcpTimelineNote,
+  defaultMcpContentWriteDependencies,
+  deleteMcpTimelineNote,
+  getMcpEventTitle,
+  McpContentWriteError,
+  queryEditableMcpTimelineNotes,
+  updateMcpEventDescription,
+  updateMcpEventTags,
+  updateMcpEventTitle,
+  updateMcpTimelineNote,
+  type McpContentWriteDependencies,
+  type McpContentWriteInput,
+} from './content-write.service';
+import {
   MCP_DERIVED_PAYLOAD_SCHEMAS,
   MCP_TRAINING_METRIC_SCHEMA_VERSION,
+  MCP_TRAINING_RECOVERY_VERSION,
 } from './derived-output-schemas';
 import { ActivityIdentityLike } from '../shared/activity-identity-matcher';
 import {
@@ -172,10 +258,13 @@ import {
 const MAX_EVENT_QUERY_RANGE_MS = 366 * 24 * 60 * 60 * 1000;
 const MAX_EVENT_QUERY_DOCUMENTS = 2000;
 const EVENT_QUERY_PAGE_SIZE = 25;
+const MAX_EXPLICIT_ACTIVITY_TYPES = 20;
 const MAX_EVENT_QUERY_STATS_BYTES = 4 * 1024 * 1024;
 const MAX_EVENT_QUERY_STAT_ENTRIES = 20_000;
 const METRIC_DISCOVERY_EVENT_LIMIT = 500;
 const MAX_MEASUREMENT_RESPONSE_BYTES = 128 * 1024;
+const HEALTH_MEASUREMENT_QUERY_PAGE_SIZE = 25;
+const MAX_HEALTH_MEASUREMENT_QUERY_BYTES = 4 * 1024 * 1024;
 const MAX_SLEEP_QUERY_DOCUMENTS = 1000;
 const MAX_SLEEP_PAGE_SIZE = 100;
 const DAILY_BRIEFING_SLEEP_LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
@@ -198,6 +287,7 @@ const OPAQUE_VALUE_VERSION = 1;
 const OPAQUE_VALUE_NONCE_BYTES = 12;
 const OPAQUE_VALUE_AUTH_TAG_BYTES = 16;
 const MAX_ACTIVITY_LIST_BYTES = 512 * 1024;
+const MAX_ACTIVITY_TAG_RESPONSE_BYTES = 256 * 1024;
 const MAX_ACTIVITY_PAGE_SIZE = 100;
 const MAX_ACTIVITY_LIST_SCAN_DOCUMENTS = 100;
 const RELATIVE_DAY_FORWARD_PROBE_MS = 36 * 60 * 60 * 1000;
@@ -304,6 +394,7 @@ interface ActivityListCursor extends OrderedDocumentCursor {
   activityTypesHash?: string;
   relativePeriod?: McpActivityRelativePeriod | null;
   timeZone?: string | null;
+  tagQueryHash?: string;
 }
 
 interface RouteListCursor extends OrderedDocumentCursor {
@@ -327,10 +418,19 @@ interface ResolvedRouteListQuery {
 type ActivityDetailKind = 'laps' | 'jumps' | 'swim_lengths';
 type RouteDocumentKind = 'geometry' | 'source';
 type OpaqueValueKind =
+  | 'manual_measurement_ref'
+  | 'manual_measurement_cursor'
+  | 'training_read'
+  | 'training_proposal'
+  | 'timeline_notes_cursor'
+  | 'timeline_notes_edit_cursor'
+  | 'timeline_note_ref'
   | 'activity_ref'
   | 'route_ref'
   | 'activity_cursor'
+  | 'activity_tags_cursor'
   | 'route_cursor'
+  | 'activity_samples_cursor'
   | 'activity_detail_cursor'
   | 'activity_nearby_cursor'
   | 'route_nearby_cursor';
@@ -413,12 +513,43 @@ export function resolveMcpActivitySourcePath(
   return path;
 }
 
+function resolveActivitySourceLocation(uid: string, eventId: string, sourceFile: OriginalFileMetaData) {
+  const defaultBucketName = admin.storage().bucket().name;
+  const projectId = `${process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || ''}`.trim();
+  const approvedBuckets = [defaultBucketName, ...(projectId ? [projectId, `${projectId}.appspot.com`] : [])];
+  const path = resolveMcpActivitySourcePath(uid, eventId, sourceFile, approvedBuckets);
+  return {path, bucketName: `${sourceFile.bucket || ''}`.trim() || defaultBucketName};
+}
+
+const activitySampleCache = new ActivitySampleCache();
+const defaultActivitySamplesReads: NonNullable<McpDataServiceDependencies['activitySamplesReads']> = {
+  cache: activitySampleCache,
+  activeOwner: async uid => !(await getUserDeletionGuardState(admin.firestore(), uid)).shouldSkip,
+  sourceVersions: async (uid, eventId, sources) => Promise.all(sources.map(async source => {
+    const {bucketName, path} = resolveActivitySourceLocation(uid, eventId, source);
+    const [metadata] = await admin.storage().bucket(bucketName).file(path, source.generation ? {generation: source.generation} : undefined).getMetadata();
+    const generation = `${metadata.generation || ''}`;
+    if (!/^\d{1,40}$/.test(generation) || (source.generation && source.generation !== generation)) {
+      throw new McpDataError('detail_not_available', 'The original activity revision is unavailable.');
+    }
+    return {...source, generation};
+  })),
+};
+
 interface ActivityChartContextDocuments {
   event: RawDocument;
   activities: RawDocument[];
 }
 
 export interface McpDataServiceDependencies {
+  manualMeasurementDependencies?: import('./manual-measurements.service').ManualMeasurementDependencies;
+  activitySamplesReads?: Pick<ActivitySamplesDependencies, 'activeOwner' | 'sourceVersions' | 'cache' | 'parseSource'>;
+  activityDescriptionReads?: McpActivityDescriptionReads;
+  timelineNotesReads?: McpTimelineNotesReads;
+  contentWriteDependencies?: McpContentWriteDependencies;
+  trainingReads?: import('./training-plans.service').TrainingReads;
+  healthReads?: McpHealthReadDependencies;
+  trainingImpactReads?: McpTrainingImpactReads;
   now: () => number;
   fetchMetricDiscoveryDocuments: (
     uid: string,
@@ -429,6 +560,14 @@ export interface McpDataServiceDependencies {
     startTimeMs: number,
     endTimeMs: number,
     statTypes: readonly string[],
+    limit: number,
+    cursor?: unknown,
+  ) => Promise<RawDocument[]>;
+  fetchHealthSourceRecordDocuments: (
+    uid: string,
+    metricId: string,
+    startDate: string,
+    endDate: string,
     limit: number,
     cursor?: unknown,
   ) => Promise<RawDocument[]>;
@@ -447,6 +586,8 @@ export interface McpDataServiceDependencies {
     limit: number,
     cursor?: SleepCursor,
   ) => Promise<RawDocument[]>;
+  supplementSleepDocuments?: typeof supplementNightlyHrvSleepDocuments;
+  supplementReadinessDocuments?: typeof supplementNightlyHealthSleepDocuments;
   fetchReadinessSleepDocuments: (
     uid: string,
     startTimeMs: number,
@@ -462,6 +603,10 @@ export interface McpDataServiceDependencies {
     cursor?: OrderedDocumentCursor,
     includeLocation?: boolean,
   ) => Promise<RawDocument[]>;
+  fetchActivityEventTagDocuments: (
+    uid: string,
+    eventIds: readonly string[],
+  ) => Promise<McpActivityTagDocument[]>;
   fetchNearbyActivityDocuments: (
     uid: string,
     startTimeMs: number | undefined,
@@ -544,7 +689,7 @@ export interface McpDataServiceDependencies {
     uid: string,
     connectionId: string,
   ) => Promise<void>;
-  importEvent: (data: EventJSONInterface, id: string) => EventInterface;
+  importEvent: (data: EventJSONInterface, id: string, stats: ReadonlyMap<string, DataInterface>) => EventStatAggregationEvent;
 }
 
 async function readStorageFileWithinLimit(
@@ -643,6 +788,37 @@ const defaultDependencies: McpDataServiceDependencies = {
       cursor: doc,
     }));
   },
+  fetchHealthSourceRecordDocuments: async (
+    uid,
+    metricId,
+    startDate,
+    endDate,
+    limit,
+    cursor,
+  ) => {
+    let query = admin.firestore()
+      .collection('users')
+      .doc(uid)
+      .collection(HEALTH_SOURCE_RECORDS_COLLECTION_ID)
+      .where('metricIds', 'array-contains', metricId)
+      .where('calendarDate', '>=', startDate)
+      .where('calendarDate', '<=', endDate)
+      .orderBy('calendarDate', 'asc')
+      .orderBy(FieldPath.documentId(), 'asc')
+      .limit(limit)
+      // Snapshot cursors require every explicit orderBy field, even though the
+      // calendar date is internal pagination state and never part of MCP output.
+      .select('calendarDate', 'kind', 'endTimeMs', 'metrics');
+    if (cursor) {
+      query = query.startAfter(cursor as admin.firestore.QueryDocumentSnapshot);
+    }
+    const snapshot = await query.get();
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      data: doc.data() as Record<string, unknown>,
+      cursor: doc,
+    }));
+  },
   fetchDerivedSnapshot: async (uid, metricKind) => {
     const snapshot = await admin.firestore()
       .collection('users')
@@ -668,6 +844,7 @@ const defaultDependencies: McpDataServiceDependencies = {
         'schemaVersion',
         'updatedAtMs',
         'sourceEventCount',
+        'payload.intensityPolicyVersion',
       )
       .get();
     return snapshot.docs.map(doc => ({
@@ -687,6 +864,7 @@ const defaultDependencies: McpDataServiceDependencies = {
       .limit(limit)
       .select(
         new FieldPath('source', 'provider'),
+        new FieldPath('source', 'providerUserId'),
         'sleepDate',
         'startTimeMs',
         'endTimeMs',
@@ -695,7 +873,7 @@ const defaultDependencies: McpDataServiceDependencies = {
         ...Object.values(SLEEP_SPORTS_LIB_METRIC_FIELDS)
           .map(field => new FieldPath('sportsLibData', 'metrics', field)),
         'inBedDurationSeconds',
-        'timezoneOffsetSeconds',
+        ...MCP_SLEEP_CANONICAL_TIME_FIELDS,
         'isNap',
         ...Object.values(SLEEP_STAGES)
           .map(stage => new FieldPath('stageDurationsSeconds', stage)),
@@ -712,6 +890,8 @@ const defaultDependencies: McpDataServiceDependencies = {
       data: doc.data() as Record<string, unknown>,
     }));
   },
+  supplementSleepDocuments: supplementNightlyHrvSleepDocuments,
+  supplementReadinessDocuments: supplementNightlyHealthSleepDocuments,
   fetchReadinessSleepDocuments: async (
     uid,
     startTimeMs,
@@ -730,6 +910,7 @@ const defaultDependencies: McpDataServiceDependencies = {
       .limit(limit)
       .select(
         new FieldPath('source', 'provider'),
+        new FieldPath('source', 'providerUserId'),
         'sleepDate',
         'startTimeMs',
         'endTimeMs',
@@ -739,13 +920,15 @@ const defaultDependencies: McpDataServiceDependencies = {
         new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.Score),
         new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHrv),
         new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.OvernightHrv),
+        new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.HrvSampleCount),
         new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHeartRate),
         new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.MinimumHeartRate),
-        'timezoneOffsetSeconds',
+        ...MCP_SLEEP_CANONICAL_TIME_FIELDS,
         'isNap',
         new FieldPath('score', 'value'),
         new FieldPath('vitals', 'averageHrvMs'),
         new FieldPath('vitals', 'overnightHrvMs'),
+        new FieldPath('vitals', 'hrvSampleCount'),
         new FieldPath('vitals', 'averageHeartRateBpm'),
         new FieldPath('vitals', 'minimumHeartRateBpm'),
         ...(includeDailyReportFields
@@ -807,6 +990,7 @@ const defaultDependencies: McpDataServiceDependencies = {
       data: doc.data() as Record<string, unknown>,
     }));
   },
+  fetchActivityEventTagDocuments: firestoreActivityTagReads.fetchEvents,
   fetchNearbyActivityDocuments: async (
     uid,
     startTimeMs,
@@ -1002,6 +1186,7 @@ const defaultDependencies: McpDataServiceDependencies = {
           'endDate',
           'type',
           'sourceActivityKey',
+          'sourceIdentity',
           new FieldPath('stats', DataDuration.type),
           new FieldPath('stats', DataDistance.type),
         )
@@ -1028,20 +1213,7 @@ const defaultDependencies: McpDataServiceDependencies = {
     sourceFile,
     maxBytes,
   ) => {
-    const defaultBucketName = admin.storage().bucket().name;
-    const projectId = `${process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || ''}`
-      .trim();
-    const approvedBuckets = [
-      defaultBucketName,
-      ...(projectId ? [projectId, `${projectId}.appspot.com`] : []),
-    ];
-    const path = resolveMcpActivitySourcePath(
-      uid,
-      eventId,
-      sourceFile,
-      approvedBuckets,
-    );
-    const bucketName = `${sourceFile.bucket || ''}`.trim() || defaultBucketName;
+    const {bucketName, path} = resolveActivitySourceLocation(uid, eventId, sourceFile);
     return readStorageFileWithinLimit(
       bucketName,
       path,
@@ -1146,9 +1318,7 @@ const defaultDependencies: McpDataServiceDependencies = {
   consumeGeocodingRateLimit: (uid, connectionId) => (
     consumeMcpGeocodingRateLimit(uid, connectionId)
   ),
-  importEvent: (data, id) => normalizePersistedEventMetricSemantics(
-    EventImporterJSON.getEventFromJSON(data).setID(id),
-  ),
+  importEvent: createMetricAggregationReader,
 };
 
 function asFiniteNumber(value: unknown): number | null {
@@ -1231,6 +1401,9 @@ export const MCP_ACTIVITY_RELATIVE_PERIODS = [
 ] as const;
 export type McpActivityRelativePeriod =
   typeof MCP_ACTIVITY_RELATIVE_PERIODS[number];
+
+export const MCP_ACTIVITY_TAG_MATCHES = ['any', 'all'] as const;
+export type McpActivityTagMatch = typeof MCP_ACTIVITY_TAG_MATCHES[number];
 
 function requireTimeZone(timeZone: string): string {
   const normalized = `${timeZone || ''}`.trim();
@@ -1327,7 +1500,7 @@ function deriveOpaqueValueKey(
     .digest();
 }
 
-function encodeOpaqueValue(
+export function encodeOpaqueValue(
   kind: OpaqueValueKind,
   value: Record<string, unknown>,
   uid: string,
@@ -1351,7 +1524,7 @@ function encodeOpaqueValue(
   ]).toString('base64url');
 }
 
-function decodeOpaqueValue(
+export function decodeOpaqueValue(
   kind: OpaqueValueKind,
   encodedValue: string | undefined,
   uid: string,
@@ -1486,6 +1659,85 @@ function buildActivityTypesHash(activityTypes: readonly string[]): string {
     .digest('base64url');
 }
 
+interface ActivityListCursorBinding {
+  kind: 'activity_cursor' | 'activity_tags_cursor';
+  tagQueryHash?: string;
+}
+
+const DEFAULT_ACTIVITY_LIST_CURSOR_BINDING: ActivityListCursorBinding = {
+  kind: 'activity_cursor',
+};
+
+function resolveActivityTagFilters(
+  requestedTags: readonly string[] | undefined,
+): string[] {
+  if (requestedTags === undefined) {
+    return [];
+  }
+  if (
+    !Array.isArray(requestedTags)
+    || requestedTags.length === 0
+    || requestedTags.length > EVENT_TAG_LIMIT
+  ) {
+    throw new McpDataError(
+      'invalid_request',
+      `Choose between 1 and ${EVENT_TAG_LIMIT} event tags when filtering activities.`,
+    );
+  }
+  const normalizedTags = requestedTags.map((requestedTag) => {
+    if (typeof requestedTag !== 'string') {
+      throw new McpDataError('invalid_request', 'Each event tag must be text.');
+    }
+    const normalizedTag = requestedTag.trim().replace(/\s+/g, ' ');
+    if (
+      normalizedTag.length === 0
+      || normalizedTag.length > EVENT_TAG_MAX_LENGTH
+    ) {
+      throw new McpDataError(
+        'invalid_request',
+        `Each event tag must contain between 1 and ${EVENT_TAG_MAX_LENGTH} characters.`,
+      );
+    }
+    return normalizedTag;
+  });
+  return [...new Map(normalizedTags.map(tag => [tag.toLowerCase(), tag])).values()];
+}
+
+function resolveActivityTagMatch(
+  requestedMatch: McpActivityTagMatch | undefined,
+): McpActivityTagMatch {
+  const match = requestedMatch ?? 'any';
+  if (!MCP_ACTIVITY_TAG_MATCHES.includes(match)) {
+    throw new McpDataError('invalid_request', 'Tag matching must be any or all.');
+  }
+  return match;
+}
+
+function buildActivityTagQueryHash(
+  tags: readonly string[],
+  match: McpActivityTagMatch,
+): string {
+  return createHash('sha256')
+    .update(JSON.stringify({
+      tags: tags.map(tag => tag.toLowerCase()).sort(),
+      match,
+    }), 'utf8')
+    .digest('base64url');
+}
+
+function activityTagsMatch(
+  activityTags: readonly string[],
+  requestedTags: readonly string[],
+  match: McpActivityTagMatch,
+): boolean {
+  if (requestedTags.length === 0) {
+    return true;
+  }
+  const available = new Set(activityTags.map(tag => tag.toLowerCase()));
+  const matches = requestedTags.map(tag => available.has(tag.toLowerCase()));
+  return match === 'all' ? matches.every(Boolean) : matches.some(Boolean);
+}
+
 function buildRouteSearchHash(search: string | null): string {
   return createHash('sha256')
     .update(search ?? '', 'utf8')
@@ -1504,6 +1756,7 @@ function decodeActivityListCursor(
     | 'timeZone'
   >,
   activityTypes: readonly string[],
+  binding: ActivityListCursorBinding = DEFAULT_ACTIVITY_LIST_CURSOR_BINDING,
 ): {
   cursor: OrderedDocumentCursor;
   query: ResolvedActivityListQuery;
@@ -1512,7 +1765,7 @@ function decodeActivityListCursor(
     return undefined;
   }
   const parsed = decodeOpaqueValue(
-    'activity_cursor',
+    binding.kind,
     cursor,
     input.uid,
     input.connectionId,
@@ -1541,6 +1794,7 @@ function decodeActivityListCursor(
     || cursorActivityTypesHash !== buildActivityTypesHash(activityTypes)
     || cursorRelativePeriod !== requestedRelativePeriod
     || cursorTimeZone !== requestedTimeZone
+    || parsed.tagQueryHash !== binding.tagQueryHash
     || (
       relativeCursor
       && (
@@ -1579,14 +1833,18 @@ function encodeActivityListCursor(
   cursor: OrderedDocumentCursor,
   input: Pick<ListActivitiesInput, 'uid' | 'connectionId'>,
   query: ResolvedActivityListQuery,
+  binding: ActivityListCursorBinding = DEFAULT_ACTIVITY_LIST_CURSOR_BINDING,
 ): string {
-  return encodeOpaqueValue('activity_cursor', {
+  return encodeOpaqueValue(binding.kind, {
     ...cursor,
     startTimeMs: query.startTimeMs ?? null,
     endTimeMs: query.endTimeMs ?? null,
     activityTypesHash: buildActivityTypesHash(query.activityTypes),
     relativePeriod: query.relativePeriod,
     timeZone: query.timeZone,
+    ...(binding.tagQueryHash === undefined
+      ? {}
+      : { tagQueryHash: binding.tagQueryHash }),
   }, input.uid, input.connectionId);
 }
 
@@ -1915,7 +2173,9 @@ function projectLap(value: unknown, index: number, activityType?: unknown) {
     endTimeMs,
     startSampleIndex: asSafeInteger(lap.startIndex),
     endSampleIndex: asSafeInteger(lap.endIndex),
-    stats: projectActivityStats(lap.stats, activityType),
+    stats: { ...projectActivityStats(lap.stats, activityType),
+      ...(getRejectedSwimTiming(lap)?.timerTime !== undefined ? { durationSeconds: null } : {}),
+    },
   };
 }
 
@@ -1990,8 +2250,8 @@ function projectSwimLength(value: unknown, index: number) {
     type: asBoundedString(length.type, 40, /^[\p{L}\p{N}_ -]+$/u),
     stroke: asBoundedString(length.stroke, 40, /^[\p{L}\p{N}_ -]+$/u),
     strokeCount: asSafeInteger(length.strokes),
-    elapsedTimeSeconds: asNonNegativeNumber(length.elapsedTime),
-    timerTimeSeconds: asNonNegativeNumber(length.timerTime),
+    elapsedTimeSeconds: resolveSwimTiming(length).elapsedTime,
+    timerTimeSeconds: resolveSwimTiming(length).timerTime,
     distanceMeters: asNonNegativeNumber(length.distance),
     poolLengthMeters: asNonNegativeNumber(length.poolLength),
     averageSpeedMetersPerSecond: asNonNegativeNumber(length.avgSpeed),
@@ -2364,7 +2624,7 @@ function buildMeasurementPoints(
 }
 
 function resolveActivityTypes(activityTypes: readonly string[] | undefined): ActivityTypes[] {
-  if ((activityTypes || []).length > 20) {
+  if ((activityTypes || []).length > MAX_EXPLICIT_ACTIVITY_TYPES) {
     throw new McpDataError(
       'invalid_request',
       'At most 20 activity types can be requested.',
@@ -2385,6 +2645,22 @@ function resolveCanonicalActivityTypes(
   return [
     ...new Set(resolveActivityTypes(activityTypes).map(String)),
   ].sort();
+}
+
+/** Internal workflow family, applied once inside the ordinary bounded scan. */
+function resolveWorkflowActivityTypes(
+  explicitTypes: readonly string[] | undefined,
+  discipline?: TrainingSportId,
+): ActivityTypes[] {
+  // Keep the explicit input validation even for internal callers.
+  const explicit = resolveActivityTypes(explicitTypes);
+  if (!discipline) return [...new Set(explicit)];
+  const types = getTrainingSportDefinition(discipline)?.contexts.flatMap(context => context.activityTypes) ?? [];
+  const canonical = [...new Set(types.flatMap(type => ActivityTypesHelper.resolveActivityType(type) || []))];
+  if (!canonical.length) {
+    throw new McpDataError('invalid_request', 'The workflow activity family has no supported canonical sports.');
+  }
+  return canonical;
 }
 
 function resolveRankingActivityTypes(
@@ -2419,12 +2695,6 @@ function resolveRankingActivityTypes(
       ...groupActivityTypes,
     ]),
   ].sort();
-  if (combined.length > 20) {
-    throw new McpDataError(
-      'invalid_request',
-      'At most 20 activity types can be requested after activity-group expansion.',
-    );
-  }
   return combined;
 }
 
@@ -2439,12 +2709,12 @@ function normalizeRouteSearch(search: string | undefined): string | null {
   return normalized || null;
 }
 
-function resolveRouteListQuery(input: ListRoutesInput): {
+function resolveRouteListQuery(input: ListRoutesInput, discipline?: TrainingSportId): {
   cursor?: OrderedDocumentCursor;
   query: ResolvedRouteListQuery;
 } {
   const query: ResolvedRouteListQuery = {
-    activityTypes: resolveCanonicalActivityTypes(input.activityTypes),
+    activityTypes: resolveWorkflowActivityTypes(input.activityTypes, discipline).map(String).sort(),
     search: normalizeRouteSearch(input.search),
   };
   return {
@@ -2500,6 +2770,7 @@ function resolveActivityListQuery(
     ListActivitiesInput,
     'appBaseUrl' | 'includeLocation' | 'limit'
   >,
+  cursorBinding: ActivityListCursorBinding = DEFAULT_ACTIVITY_LIST_CURSOR_BINDING,
 ): {
   cursor?: OrderedDocumentCursor;
   query: ResolvedActivityListQuery;
@@ -2545,6 +2816,7 @@ function resolveActivityListQuery(
       timeZone: timeZone ?? undefined,
     },
     activityTypes,
+    cursorBinding,
   );
   if (decoded) {
     return decoded;
@@ -2574,7 +2846,7 @@ function resolveActivityListQuery(
   };
 }
 
-function eventMatchesActivityFilter(event: EventInterface, activityTypes: readonly ActivityTypes[]): boolean {
+function eventMatchesActivityFilter(event: EventStatAggregationEvent, activityTypes: readonly ActivityTypes[]): boolean {
   if (!activityTypes.length) {
     return true;
   }
@@ -2582,10 +2854,22 @@ function eventMatchesActivityFilter(event: EventInterface, activityTypes: readon
   return activityTypes.some(activityType => eventActivityTypes.includes(activityType));
 }
 
+/** Validated persisted metrics only: implicit speed/pace derivation must not widen availability. */
+export function createMetricAggregationReader(data: EventJSONInterface, id: string,
+  stats: ReadonlyMap<string, DataInterface>): EventStatAggregationEvent {
+  return {
+    startDate: new Date(data.startDate),
+    getID: () => id,
+    getStat: <T>(type: string) => stats.get(type) as DataInterface<T> | undefined,
+    getActivityTypesAsArray: () => (stats.get(DataActivityTypes.type)?.getValue() || []) as string[],
+  };
+}
+
 function buildMetricAggregationEventJson(
   data: Record<string, unknown>,
   metricTypes: readonly string[],
-): EventJSONInterface {
+): { json: EventJSONInterface; stats: ReadonlyMap<string, DataInterface> } {
+  const instances = new Map<string, DataInterface>();
   const rawStats = data.stats && typeof data.stats === 'object' && !Array.isArray(data.stats)
     ? data.stats as Record<string, unknown>
     : {};
@@ -2599,7 +2883,7 @@ function buildMetricAggregationEventJson(
         return [];
       }
       try {
-        DynamicDataLoader.getDataInstanceFromDataType(type, value);
+        instances.set(type, DynamicDataLoader.getDataInstanceFromDataType(type, value));
         return [[type, value]];
       } catch {
         return [];
@@ -2611,14 +2895,13 @@ function buildMetricAggregationEventJson(
     getPersistedEventActivityTypes(selectedStats),
   );
 
-  return {
-    ...data,
-    stats,
-    // Only the requested metric stats and activity type cross the Sports Lib
-    // import boundary after the cumulative query budgets have passed.
-    activities: [],
-    powerCurve: null,
-  } as unknown as EventJSONInterface;
+  // Compatibility renames need their canonical class; ordinary selected instances are reused.
+  const canonicalInstances = new Map(Object.entries(stats).map(([type, value]) => [type,
+    instances.get(type) || DynamicDataLoader.getDataInstanceFromDataType(type, value)]));
+  return { stats: canonicalInstances, json: {
+    ...data, stats, activities: [], powerCurve: null,
+  } as unknown as EventJSONInterface };
+
 }
 
 function measureStatsWork(data: Record<string, unknown>): {
@@ -2709,6 +2992,83 @@ async function fetchBoundedEventDocuments(
   }
 
   return documents;
+}
+
+function utcCalendarDateWithOffset(timeMs: number, offsetDays: number): string {
+  return new Date(timeMs + (offsetDays * 24 * 60 * 60 * 1000)).toISOString().slice(0, 10);
+}
+
+async function fetchBoundedHealthMeasurementDocuments(
+  dependencies: McpDataServiceDependencies,
+  input: Pick<QueryMeasurementsInput, 'uid' | 'startTimeMs' | 'endTimeMs'>,
+): Promise<RawDocument[]> {
+  const documents: RawDocument[] = [];
+  let cursor: unknown;
+  let metricBytes = 0;
+  // Health calendar dates use the source-local offset. Widen the indexed date
+  // bounds by one day, then apply the exact instant range below.
+  const startDate = utcCalendarDateWithOffset(input.startTimeMs, -1);
+  const endDate = utcCalendarDateWithOffset(input.endTimeMs, 1);
+
+  while (documents.length <= MAX_EVENT_QUERY_DOCUMENTS) {
+    const pageLimit = Math.min(
+      HEALTH_MEASUREMENT_QUERY_PAGE_SIZE,
+      MAX_EVENT_QUERY_DOCUMENTS + 1 - documents.length,
+    );
+    const page = await dependencies.fetchHealthSourceRecordDocuments(
+      input.uid,
+      HEALTH_METRIC_IDS.BodyWeight,
+      startDate,
+      endDate,
+      pageLimit,
+      cursor,
+    );
+    if (page.length > pageLimit) {
+      throw new McpDataError(
+        'query_too_large',
+        `The query matches more than ${MAX_EVENT_QUERY_DOCUMENTS} measurements. Narrow the date range.`,
+      );
+    }
+    for (const document of page) {
+      let serializedMetrics: string;
+      try {
+        serializedMetrics = JSON.stringify(document.data.metrics ?? null) || 'null';
+      } catch {
+        throw new McpDataError(
+          'query_too_large',
+          'The query contains Health measurements that cannot be processed safely.',
+        );
+      }
+      metricBytes += Buffer.byteLength(serializedMetrics, 'utf8');
+      if (metricBytes > MAX_HEALTH_MEASUREMENT_QUERY_BYTES) {
+        throw new McpDataError(
+          'query_too_large',
+          'The query contains too much Health measurement data. Narrow the date range.',
+        );
+      }
+      documents.push({ id: document.id, data: document.data });
+      if (documents.length > MAX_EVENT_QUERY_DOCUMENTS) {
+        throw new McpDataError(
+          'query_too_large',
+          `The query matches more than ${MAX_EVENT_QUERY_DOCUMENTS} measurements. Narrow the date range.`,
+        );
+      }
+    }
+    if (page.length < pageLimit) {
+      return documents;
+    }
+    cursor = page[page.length - 1]?.cursor;
+    if (!cursor) {
+      throw new McpDataError(
+        'query_too_large',
+        'The Health measurement query could not continue safely.',
+      );
+    }
+  }
+  throw new McpDataError(
+    'query_too_large',
+    `The query matches more than ${MAX_EVENT_QUERY_DOCUMENTS} measurements. Narrow the date range.`,
+  );
 }
 
 export interface ListMetricsInput {
@@ -2834,11 +3194,12 @@ function resolveMetricSelectors(
 async function querySelectedMetrics(
   dependencies: McpDataServiceDependencies,
   input: QueryMetricsInput,
+  discipline?: TrainingSportId,
 ) {
   validateBoundedRange(input.startTimeMs, input.endTimeMs);
   const timeZone = requireTimeZone(input.timeZone);
   const selectors = resolveMetricSelectors(input.metrics);
-  const activityTypes = resolveActivityTypes(input.activityTypes);
+  const activityTypes = resolveWorkflowActivityTypes(input.activityTypes, discipline);
   const metricTypes = [...new Set(
     selectors.map(selector => selector.metric.type),
   )];
@@ -2855,15 +3216,14 @@ async function querySelectedMetrics(
       return [];
     }
     try {
-      const event = dependencies.importEvent(
-        buildMetricAggregationEventJson(doc.data, metricTypes),
-        doc.id,
-      );
+      const selected = buildMetricAggregationEventJson(doc.data, metricTypes);
+      const event = dependencies.importEvent(selected.json, doc.id, selected.stats);
       return eventMatchesActivityFilter(event, activityTypes) ? [event] : [];
     } catch {
       return [];
     }
   });
+  const aggregationContext = new EventStatAggregationContext();
   const results = selectors.map(selector => ({
     metric: selector.metric,
     matchedEventCount: events.length,
@@ -2873,7 +3233,7 @@ async function querySelectedMetrics(
       categoryType: resolveCategoryType(input.groupBy),
       requestedTimeInterval: resolveTimeInterval(input.interval),
       timeZone,
-    }),
+    }, undefined, aggregationContext),
   }));
   const result = {
     results,
@@ -3146,7 +3506,7 @@ function projectTrainingBuildComparisonForMcp(payload: unknown): unknown {
     return null;
   }
   return {
-    recoveryVersion: source.recoveryVersion,
+    recoveryVersion: source.recoveryVersion === DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION ? MCP_TRAINING_RECOVERY_VERSION : source.recoveryVersion,
     dayBoundary: source.dayBoundary,
     asOfDayMs: source.asOfDayMs,
     excludesMergedEvents: source.excludesMergedEvents,
@@ -3199,12 +3559,99 @@ function projectTrainingDurabilityForMcp(payload: unknown): unknown {
   };
 }
 
+function projectTrainingCapacityForMcp(payload: unknown): unknown {
+  const source = payload as Partial<DerivedTrainingCapacityMetricPayload>;
+  if (!Array.isArray(source.disciplines)) {
+    return null;
+  }
+  const disciplines = source.disciplines.filter(discipline => (
+    discipline?.discipline === 'running' || discipline?.discipline === 'cycling'
+  ));
+  if (
+    disciplines.length !== source.disciplines.length
+    || new Set(disciplines.map(discipline => discipline.discipline)).size !== disciplines.length
+  ) {
+    return null;
+  }
+  return {
+    dayBoundary: source.dayBoundary,
+    asOfDayMs: source.asOfDayMs,
+    excludesMergedEvents: source.excludesMergedEvents,
+    disciplines: disciplines.map(discipline => ({
+      discipline: discipline.discipline,
+      ftpSetting: discipline.ftpSetting,
+      importedVo2Max: discipline.importedVo2Max,
+    })),
+  };
+}
+
+function projectBodyWeightTrendForMcp(payload: unknown): unknown {
+  const source = payload as Partial<DerivedBodyWeightTrendMetricPayload>;
+  return {
+    dayBoundary: source.dayBoundary,
+    asOfDayMs: source.asOfDayMs,
+    trendDays: source.trendDays,
+    comparisonWindowDays: source.comparisonWindowDays,
+    minimumComparableDayCount: source.minimumComparableDayCount,
+    latestWeightKg: source.latestWeightKg,
+    latestWeightDayMs: source.latestWeightDayMs,
+    median7dKg: source.median7dKg,
+    median28dKg: source.median28dKg,
+    change7dKg: source.change7dKg,
+    change7dPercent: source.change7dPercent,
+    change28dKg: source.change28dKg,
+    change28dPercent: source.change28dPercent,
+    recordedDayCount7d: source.recordedDayCount7d,
+    recordedDayCount28d: source.recordedDayCount28d,
+    points: source.points,
+  };
+}
+
+function projectFormForMcp(payload: unknown): unknown {
+  const source = resolveDerivedFormMetricPayload(payload);
+  if (!source) {
+    return null;
+  }
+  return {
+    dayBoundary: source.dayBoundary,
+    rangeStartDayMs: source.rangeStartDayMs,
+    rangeEndDayMs: source.rangeEndDayMs,
+    dailyLoads: source.dailyLoads.map(({ dayMs, load }) => ({ dayMs, load })),
+    excludesMergedEvents: source.excludesMergedEvents,
+  };
+}
+
 export function projectDerivedMetricPayloadForMcp(
   metricKind: DerivedMetricKind,
   payload: unknown,
+  legacyPowerSystemsPolicy1?: unknown,
 ): unknown {
   try {
     switch (metricKind) {
+      case DERIVED_METRIC_KINDS.IntensityDistribution: {
+        const source = payload as Partial<DerivedIntensityDistributionMetricPayload>;
+        return { dayBoundary: source.dayBoundary,
+          weeks: source.weeks?.map(week => ({ weekStartMs: week.weekStartMs, easySeconds: week.easySeconds,
+            moderateSeconds: week.moderateSeconds, hardSeconds: week.hardSeconds, source: week.source })),
+          latestWeekStartMs: source.latestWeekStartMs, latestEasyPercent: source.latestEasyPercent,
+          latestModeratePercent: source.latestModeratePercent, latestHardPercent: source.latestHardPercent };
+      }
+      case DERIVED_METRIC_KINDS.EasyPercent:
+      case DERIVED_METRIC_KINDS.HardPercent: {
+        const source = payload as Partial<DerivedEasyPercentMetricPayload>;
+        return { dayBoundary: source.dayBoundary, latestWeekStartMs: source.latestWeekStartMs,
+          value: source.value, trend8Weeks: source.trend8Weeks?.map(point => ({ weekStartMs: point.weekStartMs, value: point.value })) };
+      }
+      case DERIVED_METRIC_KINDS.Form:
+        return projectFormForMcp(payload);
+      case DERIVED_METRIC_KINDS.TrainingReadiness: {
+        const source = payload as DerivedTrainingReadinessMetricPayload;
+        const legacy = source.formulaVersion === 4
+          ? normalizeLegacyReadiness({ ...source, formulaVersion: 3,
+            evidenceVersion: LEGACY_READINESS_EVIDENCE_VERSION, points: source.legacyPoints }) : source;
+        return legacy ? { formulaVersion: legacy.formulaVersion, dayBoundary: legacy.dayBoundary,
+          asOfDayMs: legacy.asOfDayMs, generatedAtMs: legacy.generatedAtMs, historyDays: legacy.historyDays, points: legacy.points } : null;
+      }
       case DERIVED_METRIC_KINDS.TrainingSummary:
         return projectTrainingSummaryForMcp(payload);
       case DERIVED_METRIC_KINDS.TrainingExplanation:
@@ -3213,6 +3660,12 @@ export function projectDerivedMetricPayloadForMcp(
         return projectTrainingBuildComparisonForMcp(payload);
       case DERIVED_METRIC_KINDS.TrainingDurability:
         return projectTrainingDurabilityForMcp(payload);
+      case DERIVED_METRIC_KINDS.TrainingCapacity:
+        return projectTrainingCapacityForMcp(payload);
+      case DERIVED_METRIC_KINDS.TrainingPowerSystems:
+        return projectTrainingPowerSystemsPolicy1(payload, legacyPowerSystemsPolicy1, redactDerivedPayload);
+      case DERIVED_METRIC_KINDS.BodyWeightTrend:
+        return projectBodyWeightTrendForMcp(payload);
       default:
         return payload;
     }
@@ -3225,13 +3678,37 @@ export function projectDerivedMetricPayloadForMcp(
 }
 
 const MCP_PROJECTED_TRAINING_METRIC_KINDS = new Set<DerivedMetricKind>([
+  DERIVED_METRIC_KINDS.IntensityDistribution,
+  DERIVED_METRIC_KINDS.EasyPercent,
+  DERIVED_METRIC_KINDS.HardPercent,
+  DERIVED_METRIC_KINDS.Form,
+  DERIVED_METRIC_KINDS.TrainingReadiness,
   DERIVED_METRIC_KINDS.TrainingSummary,
   DERIVED_METRIC_KINDS.TrainingExplanation,
   DERIVED_METRIC_KINDS.TrainingBuildComparison,
   DERIVED_METRIC_KINDS.TrainingDurability,
+  DERIVED_METRIC_KINDS.TrainingCapacity,
+  DERIVED_METRIC_KINDS.TrainingPowerSystems,
+  DERIVED_METRIC_KINDS.BodyWeightTrend,
 ]);
 
-function redactDerivedPayload(
+function parseMcpTrainingMetricPayload(metricKind: DerivedMetricKind, payload: unknown, legacyPowerSystemsPolicy1?: unknown): unknown | null {
+  if (!hasCurrentIntensityPolicy(metricKind, payload) || payload === null || payload === undefined) {
+    return null;
+  }
+  const projectedPayload = MCP_PROJECTED_TRAINING_METRIC_KINDS.has(metricKind)
+    ? projectDerivedMetricPayloadForMcp(metricKind, payload, legacyPowerSystemsPolicy1)
+    : payload;
+  const parsed = MCP_DERIVED_PAYLOAD_SCHEMAS[metricKind]
+    .safeParse(redactDerivedPayload(projectedPayload));
+  return parsed.success ? parsed.data : null;
+}
+
+export function isMcpTrainingMetricPayloadReadable(metricKind: DerivedMetricKind, payload: unknown, legacyPowerSystemsPolicy1?: unknown): boolean {
+  return parseMcpTrainingMetricPayload(metricKind, payload, legacyPowerSystemsPolicy1) !== null;
+}
+
+export function redactDerivedPayload(
   value: unknown,
   parentKey = '',
   inheritedEventIdentityContext = false,
@@ -3341,21 +3818,33 @@ function toSafeSleepSession(data: Record<string, unknown>): SafeSleepSession | n
     ? normalizedData.source as Record<string, unknown>
     : {};
   const provider = normalizeSleepProvider(source.provider);
-  const startTimeMs = asFiniteNumber(normalizedData.startTimeMs);
-  const endTimeMs = asFiniteNumber(normalizedData.endTimeMs);
+  const startTimeMs = asSafeOperationalTimestampMs(normalizedData.startTimeMs);
+  const endTimeMs = asSafeOperationalTimestampMs(normalizedData.endTimeMs);
   const durationSeconds = asNonNegativeNumber(normalizedData.durationSeconds);
-  const sleepDate = normalizeCalendarDate(normalizedData.sleepDate);
+  const storedSleepDate = normalizeCalendarDate(normalizedData.sleepDate);
+  const hasExplicitSleepDate = normalizedData.sleepDate !== undefined
+    && normalizedData.sleepDate !== null
+    && !(typeof normalizedData.sleepDate === 'string' && !normalizedData.sleepDate.trim());
   if (
     !provider
     || startTimeMs === null
     || endTimeMs === null
+    || !Number.isFinite(new Date(startTimeMs).getTime())
+    || !Number.isFinite(new Date(endTimeMs).getTime())
     || endTimeMs <= startTimeMs
     || durationSeconds === null
     || durationSeconds <= 0
-    || sleepDate === null
+    || (hasExplicitSleepDate && storedSleepDate === null)
   ) {
     return null;
   }
+  const sleepDate = resolveSleepDisplayDate({
+    ...(normalizedData as unknown as SleepSession),
+    startTimeMs,
+    endTimeMs,
+    sleepDate: storedSleepDate || '',
+  });
+  if (sleepDate === null) return null;
 
   const rawScore = normalizedData.score && typeof normalizedData.score === 'object'
     ? normalizedData.score as Record<string, unknown>
@@ -3366,11 +3855,14 @@ function toSafeSleepSession(data: Record<string, unknown>): SafeSleepSession | n
     && rawScore.qualifier.trim().length <= 120
     ? rawScore.qualifier.trim()
     : null;
+  const effectiveStartTimeMs = resolveSleepEffectiveStartTimeMs(
+    normalizedData as unknown as SleepSession,
+  );
 
   return {
     provider,
     sleepDate,
-    startTimeMs,
+    startTimeMs: effectiveStartTimeMs,
     endTimeMs,
     durationSeconds,
     inBedDurationSeconds: asNonNegativeNumber(normalizedData.inBedDurationSeconds),
@@ -3384,7 +3876,139 @@ function toSafeSleepSession(data: Record<string, unknown>): SafeSleepSession | n
   };
 }
 
+interface SafeSleepDocument {
+  id: string;
+  sourceKey: string;
+  averageHeartRateSourceKey?: string;
+  minimumHeartRateSourceKey?: string;
+  session: SafeSleepSession;
+}
+
+function positiveVitalValues(
+  sessions: readonly SafeSleepSession[],
+  type: McpSleepVitalType,
+): number[] {
+  return sessions.map(session => session.vitals?.[type])
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0);
+}
+
+function averageVital(values: readonly number[]): number | undefined {
+  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : undefined;
+}
+
+function unambiguousVital(values: readonly number[]): number | undefined {
+  if (!values.length) return undefined;
+  return new Set(values).size === 1 ? values[0] : undefined;
+}
+
+function withoutCanonicalNightHrv(session: SafeSleepSession): SafeSleepSession {
+  if (!session.vitals) return session;
+  const remainingVitals = { ...session.vitals };
+  delete remainingVitals.averageHrvMs;
+  delete remainingVitals.overnightHrvMs;
+  delete remainingVitals.hrvSampleCount;
+  return {
+    ...session,
+    vitals: Object.keys(remainingVitals).length ? remainingVitals : null,
+  };
+}
+
+function aggregateSafeSleepDocumentGroup(group: readonly SafeSleepDocument[]): SafeSleepDocument {
+  if (group.length === 1) return group[0];
+  const sorted = [...group].sort((left, right) => left.session.startTimeMs - right.session.startTimeMs
+    || left.session.endTimeMs - right.session.endTimeMs || left.id.localeCompare(right.id));
+  const byRecency = [...sorted].sort((left, right) => left.session.endTimeMs - right.session.endTimeMs
+    || left.session.startTimeMs - right.session.startTimeMs || left.id.localeCompare(right.id));
+  const latest = byRecency[byRecency.length - 1];
+  const sessions = sorted.map(entry => entry.session);
+  const startTimeMs = Math.min(...sessions.map(session => session.startTimeMs));
+  const endTimeMs = Math.max(...sessions.map(session => session.endTimeMs));
+  const interruptionSeconds = sumSleepFragmentInterruptionSeconds(sessions);
+  const inBedDurationValues = sessions.map(session => session.inBedDurationSeconds);
+  const inBedDurationSeconds = inBedDurationValues.every(
+    (value): value is number => typeof value === 'number',
+  )
+    ? inBedDurationValues.reduce((sum, value) => sum + value, 0)
+    : null;
+  const hrv = aggregateNightlyHrvEvidence(sessions.map(session => ({
+    averageHrvMs: session.vitals?.averageHrvMs ?? null,
+    hrvSampleCount: session.vitals?.hrvSampleCount ?? null,
+    hrvSourceKey: JSON.stringify(['sleep', latest.sourceKey, 'average']),
+  })), { requireEveryPoint: true });
+  const stageDurationsSeconds = Object.fromEntries(Object.values(SLEEP_STAGES).flatMap(stage => {
+    const values = sessions.map(session => session.stageDurationsSeconds[stage])
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0);
+    const total = values.reduce((sum, value) => sum + value, 0)
+      + (stage === SLEEP_STAGES.Awake ? interruptionSeconds : 0);
+    return total > 0 ? [[stage, total]] : [];
+  })) as Partial<Record<SleepStage, number>>;
+  const averageHeartRateBpm = averageVital(positiveVitalValues(sessions, 'averageHeartRateBpm'));
+  const minimumHeartRateValues = positiveVitalValues(sessions, 'minimumHeartRateBpm');
+  const restingHeartRateBpm = averageVital(positiveVitalValues(sessions, 'restingHeartRateBpm'));
+  const overnightHrvMs = unambiguousVital(positiveVitalValues(sessions, 'overnightHrvMs'));
+  const maxSpo2Values = positiveVitalValues(sessions, 'maxSpo2Percent');
+  const averageRespirationBrpm = averageVital(positiveVitalValues(sessions, 'averageRespirationBrpm'));
+  const vitals = Object.fromEntries([
+    ['averageHeartRateBpm', averageHeartRateBpm],
+    ['minimumHeartRateBpm', minimumHeartRateValues.length ? Math.min(...minimumHeartRateValues) : undefined],
+    ['restingHeartRateBpm', restingHeartRateBpm],
+    ['averageHrvMs', hrv.averageHrvMs ?? undefined],
+    ['hrvSampleCount', hrv.hrvSampleCount],
+    ['overnightHrvMs', overnightHrvMs],
+    ['maxSpo2Percent', maxSpo2Values.length ? Math.max(...maxSpo2Values) : undefined],
+    ['averageRespirationBrpm', averageRespirationBrpm],
+  ].filter((entry): entry is [string, number] => typeof entry[1] === 'number')) as McpSafeSleepVitals;
+  return {
+    id: sorted.map(entry => entry.id).join('|'),
+    sourceKey: latest.sourceKey,
+    session: {
+      ...latest.session,
+      startTimeMs,
+      endTimeMs,
+      durationSeconds: sessions.reduce((sum, session) => sum + session.durationSeconds, 0),
+      inBedDurationSeconds,
+      stageDurationsSeconds,
+      vitals: Object.keys(vitals).length ? vitals : null,
+    },
+  };
+}
+
+function canonicalizeSafeSleepDocuments(
+  documents: readonly RawDocument[],
+): SafeSleepDocument[] {
+  const candidates = documents.flatMap(document => {
+    const session = toSafeSleepSession(document.data);
+    if (!session) return [];
+    const rawSource = document.data.source && typeof document.data.source === 'object'
+      ? document.data.source as Record<string, unknown>
+      : {};
+    const providerUserId = typeof rawSource.providerUserId === 'string'
+      ? rawSource.providerUserId.trim() || null
+      : null;
+    const safeDocument = {
+      id: document.id,
+      sourceKey: sleepEvidenceSourceKey(document.data as unknown as SleepSession),
+      ...calculatedHeartRateSourceKeys(document.data as unknown as SleepSession),
+      session: session.provider === SLEEP_PROVIDERS.SuuntoApp && !providerUserId
+        ? withoutCanonicalNightHrv(session)
+        : session,
+    };
+    return [{
+      safeDocument,
+      provider: session.provider,
+      providerUserId,
+      sleepDate: session.sleepDate,
+      isNap: session.isNap,
+      startTimeMs: session.startTimeMs,
+      endTimeMs: session.endTimeMs,
+    }];
+  });
+  return groupCanonicalSleepNightFragments(candidates)
+    .map(group => aggregateSafeSleepDocumentGroup(group.map(candidate => candidate.safeDocument)));
+}
+
 export interface ListSleepSessionsInput {
+  scopes?: readonly string[];
   uid: string;
   connectionId: string;
   startTimeMs: number;
@@ -3396,6 +4020,7 @@ export interface ListSleepSessionsInput {
 }
 
 export interface ListSleepVitalsInput {
+  scopes?: readonly string[];
   uid: string;
   startTimeMs: number;
   endTimeMs: number;
@@ -3415,6 +4040,7 @@ export interface ListSleepVitalsResult {
 export type McpSleepSummaryGroupBy = 'day' | 'week' | 'month';
 
 export interface QuerySleepSummaryInput {
+  scopes?: readonly string[];
   uid: string;
   startTimeMs: number;
   endTimeMs: number;
@@ -3452,6 +4078,7 @@ export interface GetSleepTrendResult extends QuerySleepSummaryResult {
 }
 
 export interface GetDailyBriefingInput {
+  scopes?: readonly string[];
   uid: string;
   timeZone: string;
 }
@@ -3459,6 +4086,7 @@ export interface GetDailyBriefingInput {
 export type GetDailyReportInput = GetDailyBriefingInput;
 
 export interface GetTodayReadinessInput {
+  scopes?: readonly string[];
   uid: string;
   timeZone: string;
 }
@@ -3659,7 +4287,7 @@ function projectDailyBriefingReadiness(
 
   const parsed = MCP_DERIVED_PAYLOAD_SCHEMAS[
     DERIVED_METRIC_KINDS.TrainingReadiness
-  ].safeParse(snapshot.payload);
+  ].safeParse(projectDerivedMetricPayloadForMcp(DERIVED_METRIC_KINDS.TrainingReadiness, snapshot.payload));
   if (!parsed.success) {
     return unavailableDailyBriefingReadiness('not_ready');
   }
@@ -3761,6 +4389,7 @@ function projectDailyTrainingSummary(
     || snapshot.status !== 'ready'
     || snapshot.payload == null
     || schemaVersion !== DERIVED_METRIC_SCHEMA_VERSION
+    || !hasCurrentIntensityPolicy(DERIVED_METRIC_KINDS.TrainingSummary, snapshot.payload)
   ) {
     return unavailableDailyTrainingSummary('not_ready');
   }
@@ -3853,7 +4482,7 @@ function resolveTodayReadinessLoadContext(
   nowTimeMs: number,
 ): TodayReadinessLoadContext {
   const asOfDayMs = resolveUtcDayStartTimeMs(nowTimeMs);
-  const readyForm = parseReadyDerivedPayload<DerivedFormMetricPayload>(
+  const readyForm = parseReadyDerivedPayload<{ dailyLoads: DerivedFormDailyLoadEntry[] }>(
     formSnapshot,
     DERIVED_METRIC_KINDS.Form,
   );
@@ -3926,7 +4555,10 @@ function parseReadyDerivedPayload<T>(
   ) {
     return null;
   }
-  const parsed = MCP_DERIVED_PAYLOAD_SCHEMAS[metricKind].safeParse(snapshot.payload);
+  const payload = metricKind === DERIVED_METRIC_KINDS.Form
+    ? projectFormForMcp(snapshot.payload)
+    : snapshot.payload;
+  const parsed = MCP_DERIVED_PAYLOAD_SCHEMAS[metricKind].safeParse(payload);
   return parsed.success
     ? {
         payload: parsed.data as T,
@@ -3942,15 +4574,22 @@ function buildTodayReadinessSleepNights(
     session: SafeSleepSession;
     evidence: ReadinessSleepEvidencePoint;
   }>>();
-  for (const document of documents) {
-    const session = toSafeSleepSession(document.data);
-    if (!session || session.isNap) {
+  for (const candidate of canonicalizeSafeSleepDocuments(documents)) {
+    const { session } = candidate;
+    if (session.isNap) {
       continue;
     }
     const evidence: ReadinessSleepEvidencePoint = {
-      id: document.id,
-      sleepDate: resolveTodayReadinessSleepDate(document.data, session),
+      id: candidate.id,
+      sleepDate: session.sleepDate,
       provider: session.provider,
+      sourceKey: candidate.sourceKey,
+      hrvSourceKey: session.vitals?.averageHrvMs
+        ? JSON.stringify(['sleep', candidate.sourceKey, 'average'])
+        : session.vitals?.overnightHrvMs
+          ? JSON.stringify(['sleep', candidate.sourceKey, 'overnight'])
+          : undefined,
+      hrvSampleCount: session.vitals?.hrvSampleCount ?? null,
       startTimeMs: session.startTimeMs,
       endTimeMs: session.endTimeMs,
       totalSeconds: session.durationSeconds,
@@ -3960,8 +4599,15 @@ function buildTodayReadinessSleepNights(
         ?? null,
       averageHeartRateBpm: session.vitals?.averageHeartRateBpm ?? null,
       minimumHeartRateBpm: session.vitals?.minimumHeartRateBpm ?? null,
+      averageHeartRateSourceKey: candidate.averageHeartRateSourceKey,
+      minimumHeartRateSourceKey: candidate.minimumHeartRateSourceKey,
     };
-    const key = `${evidence.sleepDate}:${evidence.provider}`;
+    evidence.hrvObservations = readinessHrvObservations(evidence);
+    const key = JSON.stringify([
+      evidence.sleepDate,
+      evidence.sourceKey,
+      session.provider === SLEEP_PROVIDERS.SuuntoApp ? candidate.id : null,
+    ]);
     grouped.set(key, [
       ...(grouped.get(key) || []),
       {
@@ -3984,18 +4630,13 @@ function buildTodayReadinessSleepNights(
     const overnightHrvValues = positiveValues(
       entries.map(entry => entry.session.vitals?.overnightHrvMs ?? null),
     );
-    const selectedHrvValues = positiveValues(
-      entries.map(entry => (
-        entry.session.vitals?.averageHrvMs
-        ?? entry.session.vitals?.overnightHrvMs
-        ?? null
-      )),
-    );
     const averageHeartRateValues = positiveValues(
-      entries.map(entry => entry.session.vitals?.averageHeartRateBpm ?? null),
+      entries.filter(entry => entry.evidence.averageHeartRateSourceKey === latest.evidence.averageHeartRateSourceKey)
+        .map(entry => entry.session.vitals?.averageHeartRateBpm ?? null),
     );
     const minimumHeartRateValues = positiveValues(
-      entries.map(entry => entry.session.vitals?.minimumHeartRateBpm ?? null),
+      entries.filter(entry => entry.evidence.minimumHeartRateSourceKey === latest.evidence.minimumHeartRateSourceKey)
+        .map(entry => entry.session.vitals?.minimumHeartRateBpm ?? null),
     );
     const inBedDurationValues = entries
       .map(entry => entry.session.inBedDurationSeconds)
@@ -4017,12 +4658,14 @@ function buildTodayReadinessSleepNights(
       startTimeMs,
       endTimeMs,
       totalSeconds: durationSeconds,
-      averageHrvMs: average(selectedHrvValues),
+      ...aggregateNightlyHrvEvidence(entries.map(entry => entry.evidence)),
+      hrvObservations: undefined,
       averageHeartRateBpm: average(averageHeartRateValues),
       minimumHeartRateBpm: minimumHeartRateValues.length
         ? Math.min(...minimumHeartRateValues)
         : null,
     };
+    evidence.hrvObservations = readinessHrvObservations(evidence);
     return {
       id,
       provider: latest.session.provider,
@@ -4057,24 +4700,6 @@ function buildTodayReadinessSleepNights(
     || right.sleepDate.localeCompare(left.sleepDate)
     || right.id.localeCompare(left.id)
   ));
-}
-
-function resolveTodayReadinessSleepDate(
-  data: Record<string, unknown>,
-  session: SafeSleepSession,
-): string {
-  if (session.provider !== SLEEP_PROVIDERS.SuuntoApp) {
-    return session.sleepDate;
-  }
-  const offsetSeconds = asFiniteNumber(data.timezoneOffsetSeconds);
-  const safeOffsetSeconds = offsetSeconds !== null
-    && Math.abs(offsetSeconds) <= 18 * 60 * 60
-    ? offsetSeconds
-    : 0;
-  const localEndDate = new Date(
-    session.endTimeMs + (safeOffsetSeconds * 1000),
-  ).toISOString().slice(0, 10);
-  return normalizeCalendarDate(localEndDate) || session.sleepDate;
 }
 
 function projectTodayReadinessMetric(
@@ -4201,8 +4826,28 @@ function projectTodayReadiness(
   };
 }
 
+function projectCurrentReadiness(input: Parameters<typeof projectTodayReadiness>[0] & { current: CurrentReadinessEvaluation | null }) {
+  const previous = projectTodayReadiness({ ...input, evaluation: input.current
+    ? { ...input.current, hrv: input.evaluation?.hrv ?? emptyReadinessRatioEvidence() } : null });
+  const signals = input.current?.signals ?? null;
+  return {
+    ...previous,
+    formulaVersion: 4 as const,
+    status: signals ? 'available' as const : 'no_signal' as const,
+    score: signals?.score ?? null, label: signals?.label ?? null, confidence: signals?.confidence ?? null,
+    availableSignalCount: signals?.availableSignalCount ?? 0,
+    availableWeightPercent: signals ? calculateCurrentReadinessScore(signals)?.availableWeight ?? 0 : 0,
+    baselineEvidenceCount: signals?.baselineEvidenceCount ?? 0,
+    drivers: { ...previous.drivers,
+      hrv: { weightPercent: 20 as const, baselineWindowDays: 60 as const, currentWindowDays: 7 as const,
+        personalRange: signals?.hrvPersonalRange ?? null },
+    },
+  };
+}
+
 interface LoadedTodayReadiness {
   result: GetTodayReadinessResult;
+  currentResult: ReturnType<typeof projectCurrentReadiness>;
   sleepNights: DailyReportSleepNight[];
 }
 
@@ -4211,6 +4856,7 @@ async function loadTodayReadiness(
   input: GetTodayReadinessInput,
   options: {
     includeDailyReportFields?: boolean;
+    currentFormula?: boolean;
   } = {},
 ): Promise<LoadedTodayReadiness> {
   const timeZone = requireTimeZone(input.timeZone);
@@ -4223,14 +4869,14 @@ async function loadTodayReadiness(
   const sleepDocumentsPromise = options.includeDailyReportFields
     ? dependencies.fetchReadinessSleepDocuments(
         input.uid,
-        nowTimeMs - READINESS_SLEEP_LOOKBACK_MS,
+        nowTimeMs - (options.currentFormula ? CURRENT_READINESS_LOOKBACK_MS : READINESS_SLEEP_LOOKBACK_MS),
         nowTimeMs,
         MAX_LIVE_READINESS_SLEEP_DOCUMENTS + 1,
         true,
       )
     : dependencies.fetchReadinessSleepDocuments(
         input.uid,
-        nowTimeMs - READINESS_SLEEP_LOOKBACK_MS,
+        nowTimeMs - (options.currentFormula ? CURRENT_READINESS_LOOKBACK_MS : READINESS_SLEEP_LOOKBACK_MS),
         nowTimeMs,
         MAX_LIVE_READINESS_SLEEP_DOCUMENTS + 1,
       );
@@ -4266,11 +4912,13 @@ async function loadTodayReadiness(
     rampRateSnapshot,
     nowTimeMs,
   );
-  const sleepNights = buildTodayReadinessSleepNights(sleepDocuments);
+  const sleepNights = buildTodayReadinessSleepNights(await supplementAuthorizedSleep(dependencies, input, sleepDocuments, options.currentFormula === true));
   const evaluation = buildReadinessEvaluation({
     form: load.form,
     rampRate: load.rampRate,
-    sleepPoints: sleepNights.map(night => night.evidence),
+    sleepPoints: sleepNights.map(({ evidence }) => ({ ...evidence,
+      averageHeartRateBpm: evidence.averageHeartRateSourceKey ? null : evidence.averageHeartRateBpm,
+      minimumHeartRateBpm: evidence.minimumHeartRateSourceKey ? null : evidence.minimumHeartRateBpm })),
     nowMs: nowTimeMs,
   });
   return {
@@ -4281,6 +4929,11 @@ async function loadTodayReadiness(
       localDayEndTimeMs: localDay.endTimeMs,
       load,
       evaluation,
+    }),
+    currentResult: projectCurrentReadiness({
+      nowTimeMs, timeZone, localDayStartTimeMs: localDay.startTimeMs, localDayEndTimeMs: localDay.endTimeMs,
+      load, evaluation, current: buildCurrentReadinessEvaluation({ form: load.form, rampRate: load.rampRate,
+        sleepPoints: sleepNights.map(night => night.evidence), nowMs: nowTimeMs }),
     }),
     sleepNights,
   };
@@ -4293,6 +4946,7 @@ function projectDailyReportSleep(
   const baseline = latestNight
     ? sleepNights.filter(night => (
       night.provider === latestNight.provider
+      && night.evidence.sourceKey === latestNight.evidence.sourceKey
       && night.sleepDate !== latestNight.sleepDate
       && night.endTimeMs < latestNight.endTimeMs
     )).slice(0, MAX_DAILY_REPORT_BASELINE_NIGHTS)
@@ -4358,6 +5012,14 @@ export interface ListActivitiesInput {
   limit?: number;
 }
 
+export interface QueryActivitiesWithTagsInput extends Omit<
+  ListActivitiesInput,
+  'includeLocation'
+> {
+  tags?: readonly string[];
+  tagMatch?: McpActivityTagMatch;
+}
+
 export type McpNearbyLocation =
   | {
     query: string;
@@ -4402,6 +5064,16 @@ export interface GetActivityOverviewInput {
   uid: string;
   connectionId: string;
   activityRef: string;
+}
+
+export interface GetTrainingImpactInput {
+  uid: string;
+  connectionId: string;
+  mode: McpTrainingImpactMode;
+  activityRef?: string;
+  activityRefs?: readonly string[];
+  localDate?: string;
+  timeZone?: string;
 }
 
 export interface RankActivitiesByMetricInput {
@@ -4570,6 +5242,7 @@ function buildSleepSummaryResult(
 
 interface SafeActivityListEntry {
   id: string;
+  eventId: string;
   sortTimeMs: number;
   summary: {
     activityRef: string;
@@ -4587,6 +5260,10 @@ interface SafeActivityListEntry {
     stats: SafeActivityStats;
   };
 }
+
+type SafeTaggedActivitySummary = SafeActivityListEntry['summary'] & {
+  tags: string[];
+};
 
 interface SafeRouteListEntry {
   id: string;
@@ -4797,6 +5474,7 @@ function projectActivityListEntry(
     : {};
   return {
     id: document.id,
+    eventId,
     sortTimeMs,
     summary: {
       activityRef: encodeOpaqueValue('activity_ref', {
@@ -5251,59 +5929,71 @@ async function fetchBoundedActivityRankingDocuments(
   metricType: string,
 ): Promise<RawDocument[]> {
   const documents: RawDocument[] = [];
-  let cursor: unknown;
   let cumulativeBytes = 0;
+  const activityTypes = input.activityTypes || [];
+  // The public list stays bounded at 20; a catalog group can be larger. Query
+  // disjoint type batches with one cumulative budget instead of clipping the
+  // family or falling back to scanning unrelated history. Date-range queries
+  // already scan the bounded range and apply the complete sport filter below.
+  const typeBatches: readonly string[][] = input.startTimeMs === undefined && activityTypes.length > MAX_EXPLICIT_ACTIVITY_TYPES
+    ? Array.from({ length: Math.ceil(activityTypes.length / MAX_EXPLICIT_ACTIVITY_TYPES) }, (_, index) => (
+      activityTypes.slice(index * MAX_EXPLICIT_ACTIVITY_TYPES, (index + 1) * MAX_EXPLICIT_ACTIVITY_TYPES)
+    ))
+    : [[...activityTypes]];
 
-  while (documents.length <= MAX_ACTIVITY_RANKING_DOCUMENTS) {
-    const pageLimit = Math.min(
-      ACTIVITY_RANKING_PAGE_SIZE,
-      MAX_ACTIVITY_RANKING_DOCUMENTS + 1 - documents.length,
-    );
-    const page = await dependencies.fetchActivityRankingDocuments(
-      input.uid,
-      input.startTimeMs,
-      input.endTimeMs,
-      metricType,
-      input.activityTypes || [],
-      pageLimit,
-      cursor,
-    );
-    if (page.length > pageLimit) {
-      throw new McpDataError(
-        'query_too_large',
-        `The ranking query matches more than ${MAX_ACTIVITY_RANKING_DOCUMENTS} activities. Narrow the requested period or activity set.`,
+  for (const typeBatch of typeBatches) {
+    let cursor: unknown;
+    while (documents.length <= MAX_ACTIVITY_RANKING_DOCUMENTS) {
+      const pageLimit = Math.min(
+        ACTIVITY_RANKING_PAGE_SIZE,
+        MAX_ACTIVITY_RANKING_DOCUMENTS + 1 - documents.length,
       );
-    }
-    for (const document of page) {
-      cumulativeBytes += measureJsonBytes(
-        document.data,
-        'The ranking query contains activity data that cannot be processed safely.',
+      const page = await dependencies.fetchActivityRankingDocuments(
+        input.uid,
+        input.startTimeMs,
+        input.endTimeMs,
+        metricType,
+        typeBatch,
+        pageLimit,
+        cursor,
       );
-      if (cumulativeBytes > MAX_ACTIVITY_RANKING_DOCUMENT_BYTES) {
-        throw new McpDataError(
-          'query_too_large',
-          'The ranking query contains too much activity metric data. Narrow the requested period or activity set.',
-        );
-      }
-      documents.push({
-        id: document.id,
-        data: document.data,
-      });
-      if (documents.length > MAX_ACTIVITY_RANKING_DOCUMENTS) {
+      if (page.length > pageLimit) {
         throw new McpDataError(
           'query_too_large',
           `The ranking query matches more than ${MAX_ACTIVITY_RANKING_DOCUMENTS} activities. Narrow the requested period or activity set.`,
         );
       }
-    }
-    if (page.length < pageLimit) {
-      return documents;
-    }
-    cursor = page[page.length - 1]?.cursor;
-    if (cursor === undefined) {
-      throw new Error(
-        'The MCP activity ranking page did not provide a pagination cursor.',
-      );
+      for (const document of page) {
+        cumulativeBytes += measureJsonBytes(
+          document.data,
+          'The ranking query contains activity data that cannot be processed safely.',
+        );
+        if (cumulativeBytes > MAX_ACTIVITY_RANKING_DOCUMENT_BYTES) {
+          throw new McpDataError(
+            'query_too_large',
+            'The ranking query contains too much activity metric data. Narrow the requested period or activity set.',
+          );
+        }
+        documents.push({
+          id: document.id,
+          data: document.data,
+        });
+        if (documents.length > MAX_ACTIVITY_RANKING_DOCUMENTS) {
+          throw new McpDataError(
+            'query_too_large',
+            `The ranking query matches more than ${MAX_ACTIVITY_RANKING_DOCUMENTS} activities. Narrow the requested period or activity set.`,
+          );
+        }
+      }
+      if (page.length < pageLimit) {
+        break;
+      }
+      cursor = page[page.length - 1]?.cursor;
+      if (cursor === undefined) {
+        throw new Error(
+          'The MCP activity ranking page did not provide a pagination cursor.',
+        );
+      }
     }
   }
   return documents;
@@ -5313,13 +6003,8 @@ async function rankActivitiesByMetric(
   dependencies: McpDataServiceDependencies,
   input: RankActivitiesByMetricInput,
 ) {
-  const { query } = resolveActivityListQuery(dependencies, {
-    ...input,
-    activityTypes: resolveRankingActivityTypes(
-      input.activityTypes,
-      input.activityGroup,
-    ),
-  });
+  const { query } = resolveActivityListQuery(dependencies, input);
+  query.activityTypes = resolveRankingActivityTypes(input.activityTypes, input.activityGroup);
   const metric = resolveSportsLibNumericMetric(input.metric);
   if (!metric || isFirstClassMcpMeasurementMetric(metric.type)) {
     throw new McpDataError(
@@ -5430,7 +6115,7 @@ function extractActivityChartSourceFiles(
     : eventData.originalFile
       ? [eventData.originalFile]
       : [];
-  return values.flatMap((value) => {
+  const sources = values.flatMap((value) => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       return [];
     }
@@ -5439,21 +6124,27 @@ function extractActivityChartSourceFiles(
     const bucket = source.bucket === undefined
       ? undefined
       : asBoundedString(source.bucket, 200, /^[A-Za-z0-9._-]+$/);
-    if (!path || (source.bucket !== undefined && !bucket)) {
+    const generation = source.generation === undefined
+      ? undefined
+      : asBoundedString(source.generation, 40, /^\d+$/);
+    if (!path || (source.bucket !== undefined && !bucket)
+      || (source.generation !== undefined && !generation)) {
       return [];
     }
     return [{
       path,
       ...(bucket ? { bucket } : {}),
-      ...(asBoundedString(source.generation, 40, /^\d+$/)
-        ? { generation: `${source.generation}` }
-        : {}),
+      ...(generation ? { generation } : {}),
       startDate: new Date(0),
       ...(asBoundedString(source.originalFilename, 255)
         ? { originalFilename: `${source.originalFilename}` }
         : {}),
     }];
   });
+  if (sources.length !== values.length) {
+    throw new McpDataError('detail_not_available', 'The original activity source metadata is incomplete.');
+  }
+  return sources;
 }
 
 function toActivityChartIdentity(document: RawDocument): ActivityIdentityLike {
@@ -5463,9 +6154,11 @@ function toActivityChartIdentity(document: RawDocument): ActivityIdentityLike {
     ? document.data.stats as Record<string, unknown>
     : {};
   return {
+    getID: () => document.id,
     startDate: document.data.startDate,
     endDate: document.data.endDate,
     type: document.data.type,
+    sourceIdentity: document.data.sourceIdentity,
     sourceActivityKey: asBoundedString(
       document.data.sourceActivityKey,
       256,
@@ -5478,17 +6171,11 @@ function toActivityChartIdentity(document: RawDocument): ActivityIdentityLike {
   };
 }
 
-async function getActivityChartData(
-  dependencies: McpDataServiceDependencies,
-  input: GetActivityChartDataInput,
-) {
-  const reference = decodeActivityReference(
-    input.activityRef,
-    input.uid,
-    input.connectionId,
-  );
+async function resolveActivityStreamContext(
+  dependencies: McpDataServiceDependencies, uid: string, reference: ActivityReference, metrics: readonly string[],
+): Promise<ActivitySampleContext> {
   const context = await dependencies.fetchActivityChartContext(
-    input.uid,
+    uid,
     reference.eventId,
   );
   if (
@@ -5499,7 +6186,7 @@ async function getActivityChartData(
   ) {
     throw new McpDataError(
       'detail_not_available',
-      'The original activity source is not available for charting.',
+      'The original activity source is not available for detailed reading.',
     );
   }
   const targetExistingIndex = context.activities.findIndex(document => (
@@ -5509,7 +6196,7 @@ async function getActivityChartData(
   if (targetExistingIndex < 0) {
     throw new McpDataError(
       'detail_not_available',
-      'The referenced activity is not available for charting.',
+      'The referenced activity is not available for detailed reading.',
     );
   }
   const targetActivityType = normalizeActivityType(
@@ -5518,16 +6205,16 @@ async function getActivityChartData(
   if (!targetActivityType) {
     throw new McpDataError(
       'detail_not_available',
-      'The referenced activity type is not available for charting.',
+      'The referenced activity type is not available for detailed reading.',
     );
   }
   if (
-    getUnsupportedActivityChartMetrics(input.metrics, targetActivityType)
+    getUnsupportedActivityChartMetrics(metrics, targetActivityType)
       .length > 0
   ) {
     throw new McpDataError(
       'invalid_metric',
-      'One or more chart metrics are not supported for this activity type.',
+      'One or more activity metrics are not supported for this activity type.',
     );
   }
   const sourceFiles = extractActivityChartSourceFiles(context.event.data);
@@ -5541,16 +6228,40 @@ async function getActivityChartData(
     );
   }
 
+  const existingActivities = context.activities.map(toActivityChartIdentity);
+  // Hash only the bounded identity/source inputs used by the parser. Never serialize whole documents.
+  const identities = existingActivities.map((activity, index) => [
+    asBoundedString(context.activities[index].id, 1_500),
+    typeof activity.startDate === 'string' ? asBoundedString(activity.startDate, 64) : asTimestampMs(activity.startDate),
+    typeof activity.endDate === 'string' ? asBoundedString(activity.endDate, 64) : asTimestampMs(activity.endDate),
+    asBoundedString(activity.type, 120), activity.sourceActivityKey ?? null,
+    readActivitySourceIdentity(activity.sourceIdentity, activity.getID?.()),
+    activity.getStat?.(DataDuration.type)?.getValue?.() ?? null,
+    activity.getStat?.(DataDistance.type)?.getValue?.() ?? null,
+  ]);
+  return {
+    sourceFiles, existingActivities, targetExistingIndex,
+    identityFingerprint: createHash('sha256').update(JSON.stringify([identities, sourceFiles])).digest('hex'),
+  };
+}
+
+async function getActivityChartData(
+  dependencies: McpDataServiceDependencies,
+  input: GetActivityChartDataInput,
+) {
+  const reference = decodeActivityReference(
+    input.activityRef,
+    input.uid,
+    input.connectionId,
+  );
+  const context = await resolveActivityStreamContext(dependencies, input.uid, reference, input.metrics);
+
   try {
     await dependencies.consumeActivityChartRateLimit(
       input.uid,
       input.connectionId,
     );
-    return await dependencies.buildActivityChartData({
-      sourceFiles,
-      existingActivities: context.activities.map(toActivityChartIdentity),
-      targetExistingIndex,
-    }, input, {
+    return await dependencies.buildActivityChartData(context, input, {
       loadSource: (sourceFile, maximumBytes) => dependencies.downloadActivityChartSource(
         input.uid,
         reference.eventId,
@@ -5582,9 +6293,57 @@ async function getActivityChartData(
   }
 }
 
+async function supplementAuthorizedSleep(
+  dependencies: McpDataServiceDependencies, input: { uid: string; scopes?: readonly string[] }, docs: RawDocument[],
+  includeCalculatedHeartRate = false,
+): Promise<RawDocument[]> {
+  if (!input.scopes?.includes('health:read') || !input.scopes.includes('sleep:read')) return docs;
+  const supplement = includeCalculatedHeartRate
+    ? dependencies.supplementReadinessDocuments ?? dependencies.supplementSleepDocuments
+    : dependencies.supplementSleepDocuments;
+  if (!supplement) return docs;
+  try { return await supplement(input.uid, docs); }
+  catch (error) {
+    if (error instanceof Error && /limit|bounded|page|cursor/i.test(error.message)) {
+      throw new McpDataError('query_too_large', 'Nightly Health evidence exceeds the complete-read limit.');
+    }
+    throw new McpDataError('temporarily_unavailable', 'Nightly Health evidence is temporarily unavailable.');
+  }
+}
+
 export function createMcpDataService(
   dependencies: McpDataServiceDependencies = defaultDependencies,
 ) {
+  const contentWriteCodec = {
+    decodeActivityRef: decodeActivityReference,
+    encodeNoteRef: (value: Record<string, unknown>, uid: string, connectionId: string) =>
+      encodeOpaqueValue('timeline_note_ref', value, uid, connectionId),
+    decodeNoteRef: (value: string, uid: string, connectionId: string) =>
+      decodeOpaqueValue('timeline_note_ref', value, uid, connectionId, 'Timeline note reference'),
+    encodeEditCursor: (value: Record<string, unknown>, uid: string, connectionId: string) =>
+      encodeOpaqueValue('timeline_notes_edit_cursor', value, uid, connectionId),
+    decodeEditCursor: (value: string, uid: string, connectionId: string) =>
+      decodeOpaqueValue('timeline_notes_edit_cursor', value, uid, connectionId, 'pagination cursor'),
+  };
+  const runMcpContentWrite = async <T>(
+    input: McpContentWriteInput,
+    operation: (
+      value: McpContentWriteInput,
+      codec: typeof contentWriteCodec,
+      deps: McpContentWriteDependencies,
+    ) => Promise<T>,
+    fallbackMessage: string,
+  ): Promise<T> => {
+    const deps = dependencies.contentWriteDependencies
+      ?? (dependencies === defaultDependencies ? defaultMcpContentWriteDependencies() : null);
+    if (!deps) throw new McpDataError('temporarily_unavailable', 'MCP content changes are unavailable.');
+    try {
+      return await operation(input, contentWriteCodec, deps);
+    } catch (error) {
+      if (error instanceof McpContentWriteError) throw new McpDataError(error.code, error.message);
+      throw new McpDataError('temporarily_unavailable', fallbackMessage);
+    }
+  };
   const fetchBoundedSafeSleepSessions = async (
     input: ListSleepVitalsInput,
   ): Promise<SafeSleepSession[]> => {
@@ -5600,8 +6359,9 @@ export function createMcpDataService(
         `The query matches more than ${MAX_SLEEP_QUERY_DOCUMENTS} sleep sessions. Narrow the date range.`,
       );
     }
-    return docs.flatMap((doc) => {
-      const session = toSafeSleepSession(doc.data);
+    return canonicalizeSafeSleepDocuments(
+      await supplementAuthorizedSleep(dependencies, input, docs),
+    ).flatMap(({ session }) => {
       return session
         && (input.includeNaps || !session.isNap)
         && (!input.provider || session.provider === input.provider)
@@ -5649,8 +6409,8 @@ export function createMcpDataService(
         activityTypes,
       };
     },
-    listActivityChartMetrics(activityType?: string) {
-      return listActivityChartMetrics(activityType);
+    listActivityChartMetrics(activityType?: string, includeEndurance = false) {
+      return listActivityChartMetrics(activityType, includeEndurance);
     },
     async listMetrics(input: ListMetricsInput): Promise<ListMetricsResult> {
       const rawLimit = Math.floor(input.limit || 50);
@@ -5718,6 +6478,8 @@ export function createMcpDataService(
           || snapshotMetricKind !== descriptor.metricKind
         ) {
           status = 'schema_mismatch';
+        } else if (rawStatus === 'ready' && !hasCurrentIntensityPolicy(descriptor.metricKind, snapshot.payload)) {
+          status = 'stale';
         } else if (
           rawStatus === 'ready'
           || rawStatus === 'building'
@@ -5746,19 +6508,243 @@ export function createMcpDataService(
       return result;
     },
 
-    async queryMetric(input: QueryMetricInput) {
+    async queryMetric(input: QueryMetricInput, discipline?: TrainingSportId) {
       const result = await querySelectedMetrics(dependencies, {
         ...input,
         metrics: [{
           metric: input.metric,
           aggregation: input.aggregation,
         }],
-      });
+      }, discipline);
       return result.results[0];
     },
 
     async queryMetrics(input: QueryMetricsInput) {
       return querySelectedMetrics(dependencies, input);
+    },
+
+    async listHealthMetrics() {
+      return getMcpHealthCatalog();
+    },
+
+    async getActivityDescription(input: McpActivityDescriptionInput) {
+      if (!input.scopes.includes('activity-details:read') || !input.scopes.includes('activity-descriptions:read')) {
+        throw new McpDataError('invalid_request', 'Individual activity details and Activity descriptions permissions are required. Reauthorize to enable them.');
+      }
+      const reference = decodeActivityReference(input.activityRef, input.uid, input.connectionId);
+      const reads = dependencies.activityDescriptionReads
+        ?? (dependencies === defaultDependencies ? firestoreActivityDescriptionReads : null);
+      if (!reads) throw new McpDataError('temporarily_unavailable', 'Activity description reads are unavailable.');
+      try {
+        const assertOwner = async () => {
+          if (!await reads.activeOwner(input.uid)) {
+            throw new McpDataError('invalid_request', 'Activity descriptions are unavailable for this account.');
+          }
+        };
+        await assertOwner();
+        const activity = await reads.fetchActivity(input.uid, reference.activityId);
+        if (!activity || activity.id !== reference.activityId || activity.data.eventID !== reference.eventId) {
+          throw new McpDataError('detail_not_available', 'The activity description is unavailable.');
+        }
+        const event = await reads.fetchEvent(input.uid, reference.eventId);
+        if (!event || event.id !== reference.eventId) {
+          throw new McpDataError('detail_not_available', 'The activity description is unavailable.');
+        }
+        const description = event.data.description ?? null;
+        if (description !== null && typeof description !== 'string') {
+          throw new McpDataError('detail_not_available', 'The activity description is unavailable.');
+        }
+        if (description !== null && (description.length > MCP_ACTIVITY_DESCRIPTION_MAX_LENGTH
+          || Buffer.byteLength(description, 'utf8') > MCP_ACTIVITY_DESCRIPTION_MAX_BYTES)) {
+          throw new McpDataError('query_too_large', 'The activity description exceeds the 64 KiB text limit. Read it in Quantified Self.');
+        }
+        const result = { activityRef: input.activityRef, description };
+        requireJsonBudget(result, MCP_ACTIVITY_DESCRIPTION_MAX_RESULT_BYTES, 'The activity description exceeds the MCP response limit. Read it in Quantified Self.');
+        await assertOwner();
+        return result;
+      } catch (error) {
+        if (error instanceof McpDataError) throw error;
+        throw new McpDataError('temporarily_unavailable', 'The activity description could not be read safely. Try again later.');
+      }
+    },
+
+    async readTrainingPlans(input: import('./training-plans.service').TrainingReadInput) {
+      const { readTrainingPlans, firestoreTrainingReads, TrainingReadError } = await import('./training-plans.service');
+      const reads = dependencies.trainingReads ?? (dependencies === defaultDependencies ? firestoreTrainingReads : null);
+      if (!reads) throw new McpDataError('temporarily_unavailable', 'Training reads are unavailable.');
+      try {
+        return await readTrainingPlans(input, reads, {
+          encode: (value, uid, connectionId) => encodeOpaqueValue('training_read', value, uid, connectionId),
+          decode: (value, uid, connectionId) => decodeOpaqueValue('training_read', value, uid, connectionId, 'Training reference'),
+          encodeActivity: (value, uid, connectionId) => encodeOpaqueValue('activity_ref', value, uid, connectionId),
+        }, dependencies.now());
+      } catch (error) {
+        if (error instanceof TrainingReadError) throw new McpDataError(error.code, error.message);
+        throw new McpDataError('temporarily_unavailable', 'Training records could not be read safely. Try again later.');
+      }
+    },
+
+    async previewTrainingChanges(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewTrainingChanges } = await import('./training-plans-write.service');
+      return previewTrainingChanges(input);
+    },
+    async previewTrainingPlanPhases(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewTrainingPlanPhases } = await import('./training-plans-write.service');
+      return previewTrainingPlanPhases(input);
+    },
+    async previewGarminWorkoutReplacement(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewGarminWorkoutReplacement } = await import('./training-plans-write.service');
+      return previewGarminWorkoutReplacement(input);
+    },
+    async previewTrainingDeletion(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewTrainingDeletion } = await import('./training-plans-write.service');
+      return previewTrainingDeletion(input);
+    },
+    async previewStrengthWorkoutChange(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewStrengthWorkoutChange } = await import('./training-plans-write.service');
+      return previewStrengthWorkoutChange(input);
+    },
+    async previewPlannedWorkoutV2Change(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewPlannedWorkoutV2Change } = await import('./training-plans-write.service');
+      return previewPlannedWorkoutV2Change(input);
+    },
+
+    async previewCreatePlannedWorkout(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewCreatePlannedWorkout } = await import('./training-plans-write.service');
+      return previewCreatePlannedWorkout(input);
+    },
+
+    async previewPlannedWorkoutV3Change(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewPlannedWorkoutV3Change } = await import('./training-plans-write.service');
+      return previewPlannedWorkoutV3Change(input);
+    },
+    async previewPlannedWorkoutV3Changes(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewPlannedWorkoutV3Changes } = await import('./training-plans-write.service');
+      return previewPlannedWorkoutV3Changes(input);
+    },
+    async previewSavedWorkoutV2Change(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewSavedWorkoutChange } = await import('./workout-library-write.service');
+      return previewSavedWorkoutChange(input, undefined, 'v2');
+    },
+    async previewSavedWorkoutChange(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewSavedWorkoutChange } = await import('./workout-library-write.service');
+      return previewSavedWorkoutChange(input);
+    },
+
+    async applyTrainingChanges(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { applyTrainingChanges } = await import('./training-plans-write.service');
+      return applyTrainingChanges(input);
+    },
+
+    async getTrainingChangeStatus(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { getTrainingChangeStatus } = await import('./training-plans-write.service');
+      return getTrainingChangeStatus(input);
+    },
+
+    async applySavedWorkoutChange(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { applySavedWorkoutChange } = await import('./workout-library-write.service');
+      return applySavedWorkoutChange(input);
+    },
+
+    async queryTimelineNotes(input: McpTimelineNotesInput) {
+      const reads = dependencies.timelineNotesReads
+        ?? (dependencies === defaultDependencies ? firestoreTimelineNotesReads : null);
+      if (!reads) throw new McpDataError('temporarily_unavailable', 'Timeline notes reads are unavailable.');
+      try {
+        return await queryMcpTimelineNotes(input, reads, {
+          encode: (value, uid, connectionId) => encodeOpaqueValue('timeline_notes_cursor', value, uid, connectionId),
+          decode: (value, uid, connectionId) => decodeOpaqueValue('timeline_notes_cursor', value, uid, connectionId, 'pagination cursor'),
+        }, dependencies.now());
+      } catch (error) {
+        if (error instanceof McpTimelineNotesError) throw new McpDataError(error.code, error.message);
+        throw new McpDataError('temporarily_unavailable', 'Timeline notes could not be read safely. Try again later.');
+      }
+    },
+
+    async workoutReflection(tool: McpWorkoutReflectionTool, input: McpContentWriteInput) {
+      return runMcpContentWrite(input, (value, codec, deps) => runMcpWorkoutReflection(tool, value, codec, deps),
+        'The reflection request could not be completed safely.');
+    },
+
+    async updateEventTags(input: McpContentWriteInput) {
+      return runMcpContentWrite(
+        input,
+        updateMcpEventTags,
+        'Event tags could not be changed safely. Try again later.',
+      );
+    },
+
+    async getEventTitle(input: McpContentWriteInput) {
+      return runMcpContentWrite(input, getMcpEventTitle,
+        'The event title could not be read safely. Try again later.');
+    },
+
+    async updateEventTitle(input: McpContentWriteInput) {
+      return runMcpContentWrite(input, updateMcpEventTitle,
+        'The event title could not be changed safely. Try again later.');
+    },
+
+    async updateEventDescription(input: McpContentWriteInput) {
+      return runMcpContentWrite(input, updateMcpEventDescription,
+        'The event description could not be changed safely. Try again later.');
+    },
+
+    async queryEditableTimelineNotes(input: McpContentWriteInput) {
+      return runMcpContentWrite(
+        input,
+        queryEditableMcpTimelineNotes,
+        'Timeline notes could not be read safely. Try again later.',
+      );
+    },
+
+    async createTimelineNote(input: McpContentWriteInput) {
+      return runMcpContentWrite(input, createMcpTimelineNote, 'Timeline note could not be created safely. Try again later.');
+    },
+
+    async manualMeasurement(tool: McpManualMeasurementTool, input: McpContentWriteInput) {
+      const deps = dependencies.manualMeasurementDependencies
+        ?? (dependencies === defaultDependencies ? defaultManualMeasurementDependencies() : null);
+      if (!deps) throw new McpDataError('temporarily_unavailable', 'Manual measurement management is unavailable.');
+      try {
+        return await runMcpManualMeasurement(tool, input, {
+          encode: (kind, value, uid, connectionId) => encodeOpaqueValue(
+            kind === 'ref' ? 'manual_measurement_ref' : 'manual_measurement_cursor', value, uid, connectionId),
+          decode: (kind, value, uid, connectionId) => decodeOpaqueValue(
+            kind === 'ref' ? 'manual_measurement_ref' : 'manual_measurement_cursor', value, uid, connectionId, 'manual measurement reference or cursor'),
+        }, deps);
+      } catch (error) {
+        if (error instanceof McpContentWriteError) throw new McpDataError(error.code, error.message);
+        throw new McpDataError('temporarily_unavailable', 'Manual measurements could not be managed safely.');
+      }
+    },
+
+    async updateTimelineNote(input: McpContentWriteInput) {
+      return runMcpContentWrite(input, updateMcpTimelineNote, 'Timeline note could not be updated safely. Try again later.');
+    },
+
+    async deleteTimelineNote(input: McpContentWriteInput) {
+      return runMcpContentWrite(input, deleteMcpTimelineNote, 'Timeline note could not be deleted safely. Try again later.');
+    },
+
+    async queryHealthMetric(input: McpHealthInput) {
+      const healthReads = dependencies.healthReads
+        ?? (dependencies === defaultDependencies ? firestoreHealthReads : null);
+      if (!healthReads) throw new McpDataError('temporarily_unavailable', 'Health reads are unavailable.');
+      try {
+        return await queryMcpHealth(input, healthReads);
+      } catch (error) {
+        if (error instanceof McpHealthError) throw new McpDataError(error.code, error.message);
+        // Do not expose parser errors, provider content, or database identifiers.
+        throw new McpDataError('temporarily_unavailable', 'Health data could not be read safely. Try again later.');
+      }
+    },
+
+    async getHrvPersonalRange(input: HrvRangeInput) {
+      try { return await queryHrvPersonalRange(input, firestoreHrvRangeReads); }
+      catch (error) {
+        if (error instanceof McpHealthError) throw new McpDataError(error.code, error.message);
+        throw new McpDataError('temporarily_unavailable', 'HRV history could not be read safely. Try again later.');
+      }
     },
 
     async listMeasurementTypes(): Promise<ListMeasurementTypesResult> {
@@ -5801,39 +6787,38 @@ export function createMcpDataService(
         );
       }
 
-      const documents = await fetchBoundedEventDocuments(
-        dependencies,
-        input,
-        [definition.canonicalMetricType],
-      );
+      const documents = await fetchBoundedHealthMeasurementDocuments(dependencies, input);
       const measurements = documents.flatMap((document) => {
-        if (isBenchmarkEventForTrainingMetrics(document.data)) {
-          return [];
-        }
-        const recordedAtMs = asTimestampMs(document.data.startDate);
-        const stats = document.data.stats;
+        const record = document.data as Partial<HealthSourceRecord>;
+        const recordedAtMs = asTimestampMs(record.endTimeMs);
         if (
-          recordedAtMs === null
-          || !stats
-          || typeof stats !== 'object'
-          || Array.isArray(stats)
+          record.kind !== HEALTH_SOURCE_RECORD_KINDS.PointMeasurement
+          || recordedAtMs === null
+          || recordedAtMs < input.startTimeMs
+          || recordedAtMs > input.endTimeMs
+          || !Array.isArray(record.metrics)
         ) {
           return [];
         }
-        const value = projectSportsLibNumericMetricValue(
-          definition.canonicalMetricType,
-          (stats as Record<string, unknown>)[definition.canonicalMetricType],
-        );
-        if (
-          value === null
-          || !isMcpMeasurementValueAllowed(definition, value)
-        ) {
-          return [];
-        }
-        return [{
-          recordedAtMs,
-          value,
-        }];
+        return record.metrics.flatMap((storedMetric) => {
+          let metric;
+          try {
+            metric = decodeHealthMetricSportsLibData(storedMetric);
+          } catch (error) {
+            if (error instanceof SportsLibDataValidationError) return [];
+            throw error;
+          }
+          const value = metric.kind === 'value'
+            && metric.metricId === HEALTH_METRIC_IDS.BodyWeight
+            && metric.aggregation === 'measurement'
+            && metric.normalizationStatus === 'canonical'
+            && typeof metric.canonical?.value === 'number'
+            ? metric.canonical.value
+            : null;
+          return value !== null && isMcpMeasurementValueAllowed(definition, value)
+            ? [{ recordedAtMs, value }]
+            : [];
+        });
       });
       const points = buildMeasurementPoints(
         measurements,
@@ -5884,18 +6869,9 @@ export function createMcpDataService(
         throw new McpDataError('metric_not_ready', 'The requested Training-derived metric is not ready.');
       }
 
-      const projectedPayload = projectDerivedMetricPayloadForMcp(
-        metricKind,
-        snapshot.payload,
-      );
-      const redactedPayload = redactDerivedPayload(projectedPayload);
-      let safePayload = redactedPayload;
-      if (MCP_PROJECTED_TRAINING_METRIC_KINDS.has(metricKind)) {
-        const parsedPayload = MCP_DERIVED_PAYLOAD_SCHEMAS[metricKind].safeParse(redactedPayload);
-        if (!parsedPayload.success) {
-          throw new McpDataError('metric_not_ready', 'The requested Training-derived metric is not ready.');
-        }
-        safePayload = parsedPayload.data;
+      const safePayload = parseMcpTrainingMetricPayload(metricKind, snapshot.payload, snapshot.legacyPowerSystemsPolicy1);
+      if (safePayload === null) {
+        throw new McpDataError('metric_not_ready', 'The requested Training-derived metric is not ready.');
       }
 
       return {
@@ -5905,6 +6881,68 @@ export function createMcpDataService(
         sourceEventCount: asNonNegativeNumber(snapshot.sourceEventCount),
         payload: safePayload,
       };
+    },
+
+    async getTrainingImpact(input: GetTrainingImpactInput) {
+      const sessionMode = input.mode === 'session';
+      const dayMode = input.mode === 'day';
+      const rawReferences = sessionMode && typeof input.activityRef === 'string'
+        ? [input.activityRef]
+        : dayMode && Array.isArray(input.activityRefs)
+          ? [...input.activityRefs]
+          : [];
+      if (
+        (!sessionMode && !dayMode)
+        || (sessionMode && (
+          rawReferences.length !== 1
+          || input.activityRefs !== undefined
+          || input.localDate !== undefined
+          || input.timeZone !== undefined
+        ))
+        || (dayMode && (
+          input.activityRef !== undefined
+          || rawReferences.length < 1
+          || rawReferences.length > MCP_TRAINING_IMPACT_MAX_ACTIVITIES
+          || typeof input.localDate !== 'string'
+          || typeof input.timeZone !== 'string'
+        ))
+      ) {
+        throw new McpDataError(
+          'invalid_request',
+          'Choose either one session activityRef or a bounded local day activityRefs selection.',
+        );
+      }
+      const references = rawReferences.map(activityRef => decodeActivityReference(
+        activityRef,
+        input.uid,
+        input.connectionId,
+      ));
+      const reads = dependencies.trainingImpactReads
+        ?? (dependencies === defaultDependencies ? firestoreTrainingImpactReads : null);
+      if (!reads) {
+        throw new McpDataError(
+          'temporarily_unavailable',
+          'Training impact reads are unavailable.',
+        );
+      }
+      try {
+        return await getMcpTrainingImpact({
+          uid: input.uid,
+          mode: input.mode,
+          references,
+          localDate: dayMode ? input.localDate as string : null,
+          timeZone: dayMode ? input.timeZone as string : null,
+          nowMs: dependencies.now(),
+        }, reads);
+      } catch (error) {
+        if (error instanceof McpTrainingImpactError) {
+          throw new McpDataError(error.code, error.message);
+        }
+        throw new McpDataError(
+          'temporarily_unavailable',
+          'Training impact could not be read safely. Try again later.',
+        );
+      }
     },
 
     async getTodayReadiness(
@@ -5919,6 +6957,29 @@ export function createMcpDataService(
       return result;
     },
 
+    async getCurrentReadiness(input: GetTodayReadinessInput) {
+      const { currentResult } = await loadTodayReadiness(dependencies, input, { currentFormula: true });
+      requireJsonBudget(currentResult, MAX_TODAY_READINESS_RESPONSE_BYTES, 'The current readiness response exceeds the MCP response limit.');
+      return currentResult;
+    },
+
+    async getReadinessHistory(input: { uid: string; scopes: readonly string[] }) {
+      // Persisted history can contain absolute HRV values enriched from Health.
+      // Its identity-free projection cannot reconstruct a Sleep-only alternative.
+      if (!['metrics:read', 'sleep:read', 'health:read'].every(scope => input.scopes.includes(scope))) {
+        throw new McpDataError('invalid_request', 'Readiness history requires Activity and Training metrics, Sleep and Health access.');
+      }
+      const snapshot = await dependencies.fetchDerivedSnapshot(input.uid, DERIVED_METRIC_KINDS.TrainingReadiness);
+      const history = snapshot?.status === 'ready' && snapshot.schemaVersion === DERIVED_METRIC_SCHEMA_VERSION
+        ? normalizeCurrentReadiness(snapshot.payload) : null;
+      if (!history) throw new McpDataError('metric_not_ready', 'Readiness history is not ready.');
+      const result = { formulaVersion: history.formulaVersion, dayBoundary: history.dayBoundary,
+        asOfDayMs: history.asOfDayMs, generatedAtMs: history.generatedAtMs,
+        historyDays: history.historyDays, points: history.points };
+      requireJsonBudget(result, MAX_DAILY_REPORT_RESPONSE_BYTES, 'The readiness history exceeds the MCP response limit.');
+      return result;
+    },
+
     async getDailyReport(input: GetDailyReportInput) {
       const timeZone = requireTimeZone(input.timeZone);
       const [
@@ -5930,6 +6991,7 @@ export function createMcpDataService(
           timeZone,
         }, {
           includeDailyReportFields: true,
+          currentFormula: true,
         }),
         dependencies.fetchDerivedSnapshot(
           input.uid,
@@ -5937,8 +6999,9 @@ export function createMcpDataService(
         ),
       ]);
       const result = {
-        sleep: projectDailyReportSleep(readiness.sleepNights),
-        readiness: readiness.result,
+        sleep: projectDailyReportSleep(readiness.sleepNights.filter(night =>
+          night.endTimeMs >= readiness.result.asOfTimeMs - READINESS_SLEEP_LOOKBACK_MS)),
+        readiness: readiness.currentResult,
         trainingSummary: projectDailyTrainingSummary(
           trainingSummarySnapshot,
           readiness.result.asOfTimeMs,
@@ -5972,10 +7035,10 @@ export function createMcpDataService(
           'The daily briefing sleep query returned more data than requested.',
         );
       }
-      const sessions = docs
-        .flatMap(doc => {
-          const session = toSafeSleepSession(doc.data);
-          return session && !session.isNap && session.endTimeMs <= nowTimeMs
+      const sessions = canonicalizeSafeSleepDocuments(docs)
+        .flatMap(candidate => {
+          const { session } = candidate;
+          return !session.isNap && session.endTimeMs <= nowTimeMs
             ? [session]
             : [];
         })
@@ -6136,6 +7199,181 @@ export function createMcpDataService(
         nextCursor,
         scanComplete: nextCursor === null,
       };
+    },
+
+    async queryActivitiesWithTags(input: QueryActivitiesWithTagsInput) {
+      const requestedTags = resolveActivityTagFilters(input.tags);
+      const tagMatch = resolveActivityTagMatch(input.tagMatch);
+      const cursorBinding: ActivityListCursorBinding = {
+        kind: 'activity_tags_cursor',
+        tagQueryHash: buildActivityTagQueryHash(requestedTags, tagMatch),
+      };
+      const {
+        cursor,
+        query,
+      } = resolveActivityListQuery(dependencies, input, cursorBinding);
+      const limit = Math.min(
+        MAX_ACTIVITY_PAGE_SIZE,
+        Math.max(1, Math.floor(input.limit || 25)),
+      );
+      const scanLimit = query.activityTypes.length || requestedTags.length
+        ? MAX_ACTIVITY_LIST_SCAN_DOCUMENTS
+        : limit;
+      const documents = await dependencies.fetchActivityDocuments(
+        input.uid,
+        query.startTimeMs,
+        query.endTimeMs,
+        scanLimit + 1,
+        cursor,
+        false,
+      );
+      if (documents.length > scanLimit + 1) {
+        throw new McpDataError(
+          'query_too_large',
+          'The tagged activity query returned more data than requested.',
+        );
+      }
+
+      const projectedEntries: Array<{
+        document: RawDocument;
+        entry: SafeActivityListEntry | null;
+      }> = [];
+      let cumulativeBytes = 0;
+      let eligibleActivityCount = 0;
+      for (const document of documents.slice(0, scanLimit)) {
+        cumulativeBytes += measureJsonBytes(
+          document.data,
+          'The tagged activity query contains data that cannot be processed safely.',
+        );
+        if (cumulativeBytes > MAX_ACTIVITY_LIST_BYTES) {
+          throw new McpDataError(
+            'query_too_large',
+            'The tagged activity query exceeds the MCP processing limit.',
+          );
+        }
+        const entry = projectActivityListEntry(document, {
+          uid: input.uid,
+          connectionId: input.connectionId,
+          appBaseUrl: input.appBaseUrl,
+          includeLocation: false,
+        });
+        projectedEntries.push({ document, entry });
+        if (
+          entry
+          && activityTypeMatches(entry.summary.activityType, query.activityTypes)
+        ) {
+          eligibleActivityCount += 1;
+          if (requestedTags.length === 0 && eligibleActivityCount >= limit) {
+            break;
+          }
+        }
+      }
+      const eventIds = [...new Set(projectedEntries.flatMap(({ entry }) => (
+        entry
+        && activityTypeMatches(entry.summary.activityType, query.activityTypes)
+          ? [entry.eventId]
+          : []
+      )))];
+      let tagDocuments: McpActivityTagDocument[];
+      try {
+        tagDocuments = await dependencies.fetchActivityEventTagDocuments(
+          input.uid,
+          eventIds,
+        );
+      } catch {
+        throw new McpDataError(
+          'temporarily_unavailable',
+          'Activity tags could not be read safely. Try again later.',
+        );
+      }
+      const requestedEventIds = new Set(eventIds);
+      const tagsByEventId = new Map<string, string[]>();
+      for (const document of tagDocuments) {
+        cumulativeBytes += measureJsonBytes(
+          document.data,
+          'The tagged activity query contains data that cannot be processed safely.',
+        );
+        if (cumulativeBytes > MAX_ACTIVITY_LIST_BYTES) {
+          throw new McpDataError(
+            'query_too_large',
+            'The tagged activity query exceeds the MCP processing limit.',
+          );
+        }
+        if (
+          requestedEventIds.has(document.id)
+          && isValidFirestoreDocumentId(document.id)
+        ) {
+          tagsByEventId.set(document.id, getEventTags(document.data));
+        }
+      }
+
+      const activities: SafeTaggedActivitySummary[] = [];
+      let scannedActivityCount = 0;
+      let skippedActivityCount = 0;
+      let lastScannedDocument: RawDocument | undefined;
+      for (const { document, entry } of projectedEntries) {
+        scannedActivityCount += 1;
+        lastScannedDocument = document;
+        if (
+          !entry
+          || !activityTypeMatches(entry.summary.activityType, query.activityTypes)
+        ) {
+          skippedActivityCount += 1;
+          continue;
+        }
+        const tags = tagsByEventId.get(entry.eventId);
+        if (tags === undefined) {
+          skippedActivityCount += 1;
+          continue;
+        }
+        if (!activityTagsMatch(tags, requestedTags, tagMatch)) {
+          skippedActivityCount += 1;
+          continue;
+        }
+        activities.push({
+          ...entry.summary,
+          tags,
+        });
+        if (activities.length >= limit) {
+          break;
+        }
+      }
+      const hasMore = scannedActivityCount < documents.length;
+      const lastScannedTimeMs = asTimestampMs(
+        lastScannedDocument?.data.eventStartDate,
+      );
+      if (
+        hasMore
+        && (
+          !lastScannedDocument
+          || lastScannedTimeMs === null
+          || !isValidFirestoreDocumentId(lastScannedDocument.id)
+        )
+      ) {
+        throw new McpDataError(
+          'temporarily_unavailable',
+          'The tagged activity query could not be paginated safely.',
+        );
+      }
+      const nextCursor = hasMore && lastScannedDocument && lastScannedTimeMs !== null
+        ? encodeActivityListCursor({
+            timeMs: lastScannedTimeMs,
+            id: lastScannedDocument.id,
+          }, input, query, cursorBinding)
+        : null;
+      const result = {
+        scannedActivityCount,
+        skippedActivityCount,
+        activities,
+        nextCursor,
+        scanComplete: nextCursor === null,
+      };
+      requireJsonBudget(
+        result,
+        MAX_ACTIVITY_TAG_RESPONSE_BYTES,
+        'The tagged activity results exceed the MCP response limit.',
+      );
+      return result;
     },
 
     async findActivitiesNearLocation(input: FindNearbyActivitiesInput) {
@@ -6323,15 +7561,40 @@ export function createMcpDataService(
       return rankActivitiesByMetric(dependencies, input);
     },
 
+    async getActivitySamples(input: ActivitySamplesInput) {
+      const reads = dependencies.activitySamplesReads
+        ?? (dependencies === defaultDependencies ? defaultActivitySamplesReads : null);
+      if (!reads) throw new McpDataError('temporarily_unavailable', 'Activity sample reads are unavailable.');
+      try {
+        return await queryActivitySamples(input, {
+          ...reads, now: dependencies.now,
+          context: (uid, eventId, activityId, metrics) => resolveActivityStreamContext(dependencies, uid, {eventId, activityId}, metrics),
+          loadSource: dependencies.downloadActivityChartSource,
+          consumeParse: dependencies.consumeActivityChartRateLimit,
+        }, {
+          reference: decodeActivityReference,
+          encode: (value, uid, connectionId) => encodeOpaqueValue('activity_samples_cursor', value, uid, connectionId),
+          decode: (value, uid, connectionId) => decodeOpaqueValue('activity_samples_cursor', value, uid, connectionId, 'activity sample cursor'),
+        });
+      } catch (error) {
+        if (error instanceof McpDataError) throw error;
+        if (error instanceof ActivitySamplesError) throw new McpDataError(error.code, error.message);
+        if (error instanceof McpActivityChartRateLimitError) {
+          throw new McpDataError('temporarily_unavailable', 'Activity parsing is temporarily rate limited. Retry later.');
+        }
+        throw new McpDataError('detail_not_available', 'The original activity samples could not be read safely.');
+      }
+    },
+
     async getActivityChartData(input: GetActivityChartDataInput) {
       return getActivityChartData(dependencies, input);
     },
 
-    async listRoutes(input: ListRoutesInput) {
+    async listRoutes(input: ListRoutesInput, discipline?: TrainingSportId) {
       const {
         cursor,
         query,
-      } = resolveRouteListQuery(input);
+      } = resolveRouteListQuery(input, discipline);
       const limit = Math.min(
         MAX_ROUTE_PAGE_SIZE,
         Math.max(1, Math.floor(input.limit || 25)),
@@ -6786,7 +8049,7 @@ export function createMcpDataService(
         scanLimit + 1,
         cursor,
       );
-      const scannedDocs = docs.slice(0, scanLimit);
+      const scannedDocs = await supplementAuthorizedSleep(dependencies, input, docs.slice(0, scanLimit));
       const matches = scannedDocs.flatMap((doc) => {
         const session = toSafeSleepSession(doc.data);
         if (

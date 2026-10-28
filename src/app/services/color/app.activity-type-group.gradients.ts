@@ -1,6 +1,8 @@
+import { WALKING_ACTIVITY_TYPE_GROUP } from '@shared/activity-type-compatibility';
 import { ActivityTypeGroups, type ActivityTypeGroup } from '@sports-alliance/sports-lib';
 
 export const AppActivityTypeGroupGradients: Record<ActivityTypeGroup, { start: string; end: string }> = {
+    ...{ [WALKING_ACTIVITY_TYPE_GROUP]: { start: '#55D781', end: '#2E7D32' } },
     [ActivityTypeGroups.RunningGroup]: { start: '#FDD300', end: '#FF9100' },          // Yellow -> Deep Orange
     [ActivityTypeGroups.TrailRunningGroup]: { start: '#c7ef0c', end: '#8bc34a' },     // Lime -> Light Green
     [ActivityTypeGroups.CyclingGroup]: { start: '#FF7C3B', end: '#d84315' },          // Orange -> Burnt Orange

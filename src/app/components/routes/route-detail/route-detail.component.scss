@@ -402,3 +402,20 @@ h2 {
     max-height: 360px;
   }
 }
+
+.route-send-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  overflow-wrap: anywhere;
+  color: var(--mat-sys-on-surface-variant);
+
+  &:has(span) {
+    padding-bottom: 16px;
+  }
+
+  mat-spinner {
+    flex: 0 0 20px;
+  }
+}

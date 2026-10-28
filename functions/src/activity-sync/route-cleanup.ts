@@ -120,6 +120,23 @@ export function getDisabledServiceSyncSettingsUpdate(
   };
 }
 
+/** Explicit user disconnect must also discard any earlier automatic restore intent. */
+export function getExplicitDisconnectSettingsUpdate(serviceName: ServiceNames): Record<string, unknown> {
+  const markers: Record<string, unknown> = {};
+  const affected = getAffectedServiceSyncRoutes(serviceName);
+  for (const route of affected) {
+    markers[getPendingDisconnectRouteRestoreMarkerKey(route)] = FieldValue.delete();
+    markers[route.id] = FieldValue.delete();
+  }
+  for (const provider of [ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI]) {
+    markers[provider] = Object.fromEntries(affected.map(route => [route.id, FieldValue.delete()]));
+  }
+  return { serviceSyncSettings: {
+    ...getDisabledServiceSyncSettingsUpdate(serviceName),
+    pendingDisconnectRouteRestore: markers,
+  } };
+}
+
 function getAffectedServiceSyncRoutes(serviceName: ServiceNames): ServiceSyncRouteDescriptor[] {
   const activityRoutes = getAffectedActivityRouteIds(serviceName).map((routeId): ServiceSyncRouteDescriptor => ({
     id: routeId,

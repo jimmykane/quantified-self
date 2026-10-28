@@ -1,0 +1,8 @@
+:host { display: block; min-width: 0; }
+.health-preview { min-width: 0; }
+.preview-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.5rem 1rem; }
+.preview-heading span, .range-status { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+.range-status { margin: 0.5rem 0; }
+.sleep-trend {
+  height: 320px;
+}

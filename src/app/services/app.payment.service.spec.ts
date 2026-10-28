@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { AppPaymentService, LOCAL_BILLING_DISABLED_MESSAGE } from './app.payment.service';
+import { AppPaymentService, LOCAL_BILLING_DISABLED_MESSAGE, CheckoutStartError, type StripePrice } from './app.payment.service';
 import { Firestore } from 'app/firebase/firestore';
 import { Auth } from 'app/firebase/auth';
 import { Functions } from 'app/firebase/functions';
@@ -7,8 +7,11 @@ import { MatDialog } from '@angular/material/dialog';
 import { FirebaseApp } from 'app/firebase/app';
 import { AppWindowService } from './app.window.service';
 import { AppFunctionsService } from './app.functions.service';
-import { defer, firstValueFrom, Observable, of, Subject, throwError } from 'rxjs';
+import { LoggerService } from './logger.service';
+import { defer, firstValueFrom, NEVER, Observable, of, Subject, throwError } from 'rxjs';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { initializeProductionAnalytics } from '../helpers/analytics-runtime.helper';
+import { FUNCTIONS_MANIFEST } from '@shared/functions-manifest';
 import { environment } from '../../environments/environment';
 import type { AppEnvironment } from '../../environments/environment.interface';
 
@@ -29,6 +32,7 @@ vi.mock('app/firebase/functions', async () => {
 
 
 const {
+    mockBillingControl,
     mockSetDoc,
     mockGetDoc,
     mockGetDocsFromServer,
@@ -42,6 +46,7 @@ const {
     mockRunInInjectionContext
 } = vi.hoisted(() => {
     return {
+        mockBillingControl: vi.fn(),
         mockSetDoc: vi.fn(),
         mockGetDoc: vi.fn(),
         mockGetDocsFromServer: vi.fn(),
@@ -56,11 +61,15 @@ const {
     };
 });
 
+const liteFirestore = vi.hoisted(() => ({ getFirestore: vi.fn(), connectFirestoreEmulator: vi.fn(), doc: vi.fn(), getDoc: vi.fn() }));
+vi.mock('firebase/firestore/lite', () => liteFirestore);
+
 // Mock the module
 vi.mock('app/firebase/firestore', async () => {
     const actual = await vi.importActual('app/firebase/firestore');
     return {
         ...actual,
+        getDocFromServer: mockBillingControl,
         setDoc: mockSetDoc,
         getDoc: mockGetDoc,
         getDocsFromServer: mockGetDocsFromServer,
@@ -80,7 +89,7 @@ const mockFirebaseApp = {};
 const mockWindowService = {
     currentDomain: 'http://localhost:4200'
 };
-const mockFirestore = {}; // The service injects the class token
+const mockFirestore = { app: mockFirebaseApp }; // The service injects the class token
 const mockAuth = {
     currentUser: {
         uid: 'test_user_uid',
@@ -93,14 +102,29 @@ const mockFunctionsService = {
     call: vi.fn().mockResolvedValue({ data: {} })
 };
 
+const productionAnalyticsEnvironment = {
+    production: true, beta: false, localhost: false, appVersion: 'test',
+    firebase: { projectId: 'quantified-self-io' },
+};
+
 describe('AppPaymentService', () => {
     let service: AppPaymentService;
     let generatedCheckoutDocSequence = 0;
+
+    it('shows maintenance and prevents checkout writes and portal calls', async () => {
+        mockBillingControl.mockResolvedValue({ data: () => ({ requestsEnabled: false }) });
+        await expect(service.appendCheckoutSession('price_test')).rejects.toThrow('temporarily unavailable');
+        await expect(service.manageSubscriptions()).rejects.toThrow('temporarily unavailable');
+        expect(mockSetDoc).not.toHaveBeenCalled();
+        expect(mockFunctionsService.call).not.toHaveBeenCalled();
+    });
 
     beforeEach(() => {
         (environment as AppEnvironment).billingMode = 'stripe';
         vi.clearAllMocks(); // Reset spies
         generatedCheckoutDocSequence = 0;
+        mockWindowService.currentDomain = 'http://localhost:4200';
+        mockBillingControl.mockResolvedValue({ data: () => ({ requestsEnabled: true }) });
 
         mockAuth.currentUser = {
             uid: 'test_user_uid',
@@ -126,7 +150,13 @@ describe('AppPaymentService', () => {
             exists: () => false,
             data: () => undefined
         });
+        liteFirestore.getFirestore.mockReturnValue('lite-firestore');
+        liteFirestore.doc.mockImplementation((_firestore: unknown, path: string) => path);
+        liteFirestore.getDoc.mockResolvedValue({ data: () => undefined });
         mockLimit.mockImplementation((value: number) => value);
+        mockCollection.mockImplementation((_firestore: unknown, path: string) => ({ path }));
+        mockWhere.mockImplementation((field: string, op: string, value: unknown) => ({ field, op, value }));
+        mockQuery.mockImplementation((collection: unknown, ...constraints: unknown[]) => ({ collection, constraints }));
         mockRunInInjectionContext.mockImplementation((injector: any, fn: any) => fn());
 
         TestBed.configureTestingModule({
@@ -164,6 +194,61 @@ describe('AppPaymentService', () => {
         expect(mockGetDocsFromServer).not.toHaveBeenCalled();
         expect(mockSetDoc).not.toHaveBeenCalled();
         expect(mockFunctionsService.call).not.toHaveBeenCalled();
+    });
+
+    describe('Analytics compatibility with native billing', () => {
+        it('excludes the actual production Checkout success and cancellation return URLs from referrals', async () => {
+            mockWindowService.currentDomain = 'https://quantified-self.io';
+            await service.appendCheckoutSession('price_123', undefined, undefined, () => false);
+            const payload = mockSetDoc.mock.calls[0][1];
+
+            for (const href of [payload.success_url, payload.cancel_url]) {
+                const initialize = vi.fn();
+                initializeProductionAnalytics(productionAnalyticsEnvironment, {
+                    isBrowser: true, href, referrer: 'https://checkout.stripe.com/c/pay/synthetic',
+                }, initialize);
+
+                expect(initialize).toHaveBeenCalledExactlyOnceWith({ config: {
+                    app_name: 'quantified-self-io', app_version: 'test', debug_mode: false, ignore_referrer: true,
+                } });
+            }
+        });
+
+        it('excludes the actual return URL passed to the native portal callable from referrals', async () => {
+            mockWindowService.currentDomain = 'https://quantified-self.io';
+            // Stop this mocked request before browser navigation; no portal session is created.
+            const stopBeforeRedirect = new Error('Synthetic portal request stopped');
+            mockFunctionsService.call.mockRejectedValueOnce(stopBeforeRedirect);
+            await expect(service.manageSubscriptions()).rejects.toBe(stopBeforeRedirect);
+            expect(mockFunctionsService.call).toHaveBeenCalledExactlyOnceWith('createPortalLink', {
+                returnUrl: 'https://quantified-self.io/subscriptions',
+            });
+            expect(FUNCTIONS_MANIFEST.createPortalLink).toEqual({ name: 'createStripePortalLink', region: 'europe-west3' });
+
+            const initialize = vi.fn();
+            initializeProductionAnalytics(productionAnalyticsEnvironment, {
+                isBrowser: true, href: mockFunctionsService.call.mock.calls[0][1].returnUrl,
+                referrer: 'https://billing.stripe.com/p/session/synthetic',
+            }, initialize);
+
+            expect(initialize).toHaveBeenCalledExactlyOnceWith({ config: {
+                app_name: 'quantified-self-io', app_version: 'test', debug_mode: false, ignore_referrer: true,
+            } });
+        });
+
+        it.each(['http://localhost:4210', 'https://beta.quantified-self.io'])('does not initialize Analytics for Checkout returns on %s', async currentDomain => {
+            mockWindowService.currentDomain = currentDomain;
+            await service.appendCheckoutSession('price_123', undefined, undefined, () => false);
+            const payload = mockSetDoc.mock.calls[0][1];
+
+            for (const href of [payload.success_url, payload.cancel_url]) {
+                const initialize = vi.fn();
+                expect(initializeProductionAnalytics(productionAnalyticsEnvironment, {
+                    isBrowser: true, href, referrer: 'https://checkout.stripe.com/c/pay/synthetic',
+                }, initialize)).toBeNull();
+                expect(initialize).not.toHaveBeenCalled();
+            }
+        });
     });
 
     it('should refresh auth and recover a permission-denied subscription listener', async () => {
@@ -289,6 +374,167 @@ describe('AppPaymentService', () => {
     });
 
     describe('appendCheckoutSession', () => {
+        const trialPrice: StripePrice = {
+            id: 'price_monthly_trial', type: 'recurring', active: true,
+            currency: 'eur', unit_amount: 1000, description: 'Monthly',
+            interval: 'month', interval_count: 1, trial_period_days: null,
+            metadata: { trial_days: '30' }
+        };
+        const subscriptionDoc = (status: string, id = `sub_${status}`) => ({ id, data: () => ({ status }) });
+
+        it.each(['canceled', 'past_due', 'unpaid', 'incomplete', 'incomplete_expired', 'paused', 'future_status'])(
+            'uses one server read and denies another trial for %s history', async status => {
+                mockGetDocsFromServer.mockResolvedValueOnce({ docs: [subscriptionDoc(status)] });
+
+                await service.appendCheckoutSession(trialPrice);
+
+                expect(mockGetDocsFromServer).toHaveBeenCalledTimes(1);
+                expect(mockLimit).toHaveBeenCalledWith(100);
+                expect(mockSetDoc).toHaveBeenCalledOnce();
+                expect(mockSetDoc.mock.calls[0][1].trial_period_days).toBeUndefined();
+            });
+
+        it.each(['active', 'trialing'])('uses the combined read to route %s subscribers to management', async status => {
+            mockGetDocsFromServer.mockResolvedValueOnce({
+                docs: [subscriptionDoc('canceled'), subscriptionDoc(status)]
+            });
+            const manageSpy = vi.spyOn(service, 'manageSubscriptions').mockResolvedValue();
+
+            await service.appendCheckoutSession(trialPrice);
+
+            expect(mockGetDocsFromServer).toHaveBeenCalledTimes(1);
+            expect(manageSpy).toHaveBeenCalledWith('test_user_uid');
+            expect(mockSetDoc).not.toHaveBeenCalled();
+        });
+
+        it('reads subscriptions only after the linking check completes', async () => {
+            let finishLink: (value: { data: { linked: boolean } }) => void;
+            mockFunctionsService.call.mockImplementationOnce(() => new Promise(resolve => { finishLink = resolve; }));
+            const manageSpy = vi.spyOn(service, 'manageSubscriptions').mockResolvedValue();
+            const checkout = service.appendCheckoutSession(trialPrice);
+            await vi.waitFor(() => expect(mockFunctionsService.call).toHaveBeenCalledWith('linkExistingStripeCustomer'));
+            expect(mockGetDocsFromServer).not.toHaveBeenCalled();
+            expect(mockSetDoc).not.toHaveBeenCalled();
+
+            // A subscription became visible while linking was running.
+            mockGetDocsFromServer.mockResolvedValueOnce({ docs: [subscriptionDoc('active')] });
+            finishLink!({ data: { linked: false } });
+            await checkout;
+
+            expect(manageSpy).toHaveBeenCalledWith('test_user_uid');
+            expect(mockSetDoc).not.toHaveBeenCalled();
+        });
+
+        it('does not read history or create checkout when the trial candidate is restored', async () => {
+            mockFunctionsService.call.mockResolvedValueOnce({ data: { linked: true, role: 'pro' } });
+
+            await expect(service.appendCheckoutSession(trialPrice)).rejects.toThrow('SUBSCRIPTION_RESTORED:pro');
+
+            expect(mockGetDocsFromServer).not.toHaveBeenCalled();
+            expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledWith(true);
+            expect(mockSetDoc).not.toHaveBeenCalled();
+        });
+
+        it('checks subscriptions even when the linking callable fails', async () => {
+            mockFunctionsService.call.mockRejectedValueOnce(new Error('Link check unavailable'));
+            mockGetDocsFromServer.mockResolvedValueOnce({ docs: [subscriptionDoc('trialing')] });
+            const manageSpy = vi.spyOn(service, 'manageSubscriptions').mockResolvedValue();
+
+            await service.appendCheckoutSession(trialPrice);
+
+            expect(manageSpy).toHaveBeenCalledWith('test_user_uid');
+            expect(mockSetDoc).not.toHaveBeenCalled();
+        });
+
+        it.each([true, false])('bounds long histories and checks active subscriptions beyond the page (active=%s)', async active => {
+            mockGetDocsFromServer
+                .mockResolvedValueOnce({ docs: Array.from({ length: 100 }, (_, i) => subscriptionDoc('canceled', `sub_${i}`)) })
+                .mockResolvedValueOnce({ docs: active ? [subscriptionDoc('active')] : [] });
+            const manageSpy = vi.spyOn(service, 'manageSubscriptions').mockResolvedValue();
+
+            await service.appendCheckoutSession(trialPrice);
+
+            expect(mockGetDocsFromServer).toHaveBeenCalledTimes(2);
+            expect(mockLimit).toHaveBeenCalledWith(100);
+            expect(mockLimit).toHaveBeenCalledWith(1);
+            expect(mockGetDocsFromServer).toHaveBeenNthCalledWith(2, {
+                collection: { path: 'customers/test_user_uid/subscriptions' },
+                constraints: [{ field: 'status', op: 'in', value: ['active', 'trialing'] }, 1]
+            });
+            if (active) {
+                expect(manageSpy).toHaveBeenCalledWith('test_user_uid');
+                expect(mockSetDoc).not.toHaveBeenCalled();
+            } else {
+                expect(manageSpy).not.toHaveBeenCalled();
+                expect(mockSetDoc).toHaveBeenCalledOnce();
+                expect(mockSetDoc.mock.calls[0][1].trial_period_days).toBeUndefined();
+            }
+        });
+
+        it('uses one read when a full history page already contains an active subscription', async () => {
+            mockGetDocsFromServer.mockResolvedValueOnce({
+                docs: [...Array.from({ length: 99 }, () => subscriptionDoc('canceled')), subscriptionDoc('trialing')]
+            });
+            const manageSpy = vi.spyOn(service, 'manageSubscriptions').mockResolvedValue();
+
+            await service.appendCheckoutSession(trialPrice);
+
+            expect(mockGetDocsFromServer).toHaveBeenCalledOnce();
+            expect(manageSpy).toHaveBeenCalledWith('test_user_uid');
+            expect(mockSetDoc).not.toHaveBeenCalled();
+        });
+
+        it('rejects an account change while the long-history fallback is pending', async () => {
+            let finishRead: (value: { docs: [] }) => void;
+            mockGetDocsFromServer
+                .mockResolvedValueOnce({ docs: Array.from({ length: 100 }, () => subscriptionDoc('canceled')) })
+                .mockImplementationOnce(() => new Promise(resolve => { finishRead = resolve; }));
+            const checkout = service.appendCheckoutSession(trialPrice);
+            await vi.waitFor(() => expect(mockGetDocsFromServer).toHaveBeenCalledTimes(2));
+            mockAuth.currentUser = { uid: 'other_user', getIdToken: vi.fn() };
+            finishRead!({ docs: [] });
+
+            await expect(checkout).rejects.toThrow('Authenticated user changed');
+            expect(mockSetDoc).not.toHaveBeenCalled();
+        });
+
+        it('blocks checkout when the bounded-history fallback fails', async () => {
+            const readError = new Error('Active subscription read unavailable');
+            mockGetDocsFromServer
+                .mockResolvedValueOnce({ docs: Array.from({ length: 100 }, () => subscriptionDoc('canceled')) })
+                .mockRejectedValueOnce(readError);
+
+            await expect(service.appendCheckoutSession(trialPrice)).rejects.toBe(readError);
+
+            expect(mockSetDoc).not.toHaveBeenCalled();
+        });
+
+        it('rejects an account change while the combined read is pending', async () => {
+            let finishRead: (value: { docs: [] }) => void;
+            mockGetDocsFromServer.mockImplementationOnce(() => new Promise(resolve => { finishRead = resolve; }));
+            const checkout = service.appendCheckoutSession(trialPrice);
+            await vi.waitFor(() => expect(mockGetDocsFromServer).toHaveBeenCalledOnce());
+            mockAuth.currentUser = { uid: 'other_user', getIdToken: vi.fn() };
+            finishRead!({ docs: [] });
+
+            await expect(checkout).rejects.toThrow('Authenticated user changed');
+            expect(mockSetDoc).not.toHaveBeenCalled();
+        });
+
+        it('reads fresh history again on a stale-customer retry before offering a trial', async () => {
+            mockDocData.mockReturnValueOnce(of({ error: { message: 'No such customer' } }))
+                .mockReturnValueOnce(of({ url: 'http://stripe.com/checkout' }));
+            mockGetDocsFromServer.mockResolvedValueOnce({ docs: [] })
+                .mockResolvedValueOnce({ docs: [subscriptionDoc('canceled')] });
+
+            await service.appendCheckoutSession(trialPrice);
+
+            expect(mockGetDocsFromServer).toHaveBeenCalledTimes(2);
+            expect(mockSetDoc).toHaveBeenCalledTimes(2);
+            expect(mockSetDoc.mock.calls[0][1].trial_period_days).toBe(30);
+            expect(mockSetDoc.mock.calls[1][1].trial_period_days).toBeUndefined();
+        });
+
         it('should add subscription checkout metadata and if_required payment collection when mode is subscription', async () => {
             const priceId = 'price_123';
             // Force mode to be subscription for this test by passing a price object with recurring type
@@ -342,6 +588,11 @@ describe('AppPaymentService', () => {
             const payload = args[1];
 
             expect(payload.mode).toBe('payment');
+            expect(mockGetDocsFromServer).toHaveBeenCalledOnce();
+            expect(mockGetDocsFromServer).toHaveBeenCalledWith({
+                collection: { path: 'customers/test_user_uid/subscriptions' },
+                constraints: [{ field: 'status', op: 'in', value: ['active', 'trialing'] }, 1]
+            });
 
             // CHECK 1: Top-level metadata MUST be present
             expect(payload.metadata).toEqual({
@@ -378,9 +629,13 @@ describe('AppPaymentService', () => {
             const payload = args[1];
 
             expect(payload.trial_period_days).toBe(14);
+            expect(payload.checkout_terms_version).toBe('pro-trial-payment-method-v1');
+            expect(mockGetDocsFromServer).toHaveBeenCalledTimes(1);
             expect(payload.promotion_code).toBeUndefined();
             expect(payload.allow_promotion_codes).toBe(true);
-            expect(mockGetDocsFromServer).toHaveBeenCalledTimes(2);
+            expect(mockGetDocsFromServer).toHaveBeenCalledWith({
+                collection: { path: 'customers/test_user_uid/subscriptions' }, constraints: [100]
+            });
         });
 
         it('should not set trial_period_days when user has paid subscription history', async () => {
@@ -398,7 +653,7 @@ describe('AppPaymentService', () => {
             } as any;
 
             mockGetDocsFromServer.mockResolvedValueOnce({
-                docs: [{ id: 'sub_existing' }]
+                docs: [{ id: 'sub_existing', data: () => ({ status: 'canceled' }) }]
             });
 
             await service.appendCheckoutSession(recurringPriceWithTrial);
@@ -412,7 +667,7 @@ describe('AppPaymentService', () => {
             expect(payload.allow_promotion_codes).toBe(true);
         });
 
-        it('should not set trial_period_days when history lookup fails during checkout gating (fail-closed)', async () => {
+        it('blocks checkout when the combined history and active-subscription read fails', async () => {
             const recurringPriceWithTrial = {
                 id: 'price_recurring_trial_history_error',
                 type: 'recurring',
@@ -426,17 +681,12 @@ describe('AppPaymentService', () => {
                 }
             } as any;
 
-            mockGetDocsFromServer.mockRejectedValueOnce(new Error('Firestore unavailable'));
+            const readError = new Error('Firestore unavailable');
+            mockGetDocsFromServer.mockRejectedValueOnce(readError);
 
-            await service.appendCheckoutSession(recurringPriceWithTrial);
-
-            expect(mockSetDoc).toHaveBeenCalled();
-            const args = mockSetDoc.mock.calls[0];
-            const payload = args[1];
-
-            expect(payload.trial_period_days).toBeUndefined();
-            expect(payload.promotion_code).toBeUndefined();
-            expect(payload.allow_promotion_codes).toBe(true);
+            await expect(service.appendCheckoutSession(recurringPriceWithTrial)).rejects.toBe(readError);
+            expect(mockGetDocsFromServer).toHaveBeenCalledTimes(1);
+            expect(mockSetDoc).not.toHaveBeenCalled();
         });
 
         it('should not set trial_period_days when recurring price has no valid trial days', async () => {
@@ -520,7 +770,7 @@ describe('AppPaymentService', () => {
             expect(mockSetDoc).not.toHaveBeenCalled();
         });
 
-        it('should exit checkout when user cancels manage-subscription prompt', async () => {
+        it('should signal cancellation when user dismisses the manage-subscription prompt', async () => {
             const dialog = TestBed.inject(MatDialog);
             vi.spyOn(dialog, 'open').mockReturnValue({
                 afterClosed: () => of(false)
@@ -529,7 +779,7 @@ describe('AppPaymentService', () => {
                 docs: [{ id: 'sub_active', data: () => ({ status: 'active' }) }]
             });
 
-            await service.appendCheckoutSession('price_123');
+            await expect(service.appendCheckoutSession('price_123')).rejects.toThrow('User cancelled redirection to portal.');
 
             expect(mockSetDoc).not.toHaveBeenCalled();
         });
@@ -619,6 +869,45 @@ describe('AppPaymentService', () => {
             await expect(portalPromise).rejects.toThrow('Authenticated user changed while checkout was being prepared.');
         });
 
+        it('reports replacement progress once and still waits for the checkout URL', async () => {
+            const updates = new Subject<unknown>(); mockDocData.mockReturnValueOnce(updates.asObservable());
+            const progress = vi.fn();
+            const checkout = service.appendCheckoutSession('price_123', undefined, undefined, () => false, progress);
+            await vi.waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1));
+            updates.next({ status: 'updating' });
+            expect(progress).not.toHaveBeenCalled(); // A destroyed view receives no progress.
+            updates.next({ url: 'https://checkout.stripe.com/synthetic' });
+            await checkout;
+        });
+        it('shows updating progress without logging a normal superseded selection as an error', async () => {
+            const updates = new Subject<unknown>(); mockDocData.mockReturnValueOnce(updates.asObservable());
+            const progress = vi.fn(), errors = vi.spyOn(TestBed.inject(LoggerService), 'error');
+            const checkout = service.appendCheckoutSession('price_123', undefined, undefined, () => true, progress);
+            const rejected = expect(checkout).rejects.toThrow('Continue with your latest selection');
+            await vi.waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1));
+            updates.next({ status: 'updating' }); updates.next({ status: 'updating' });
+            expect(progress).toHaveBeenCalledExactlyOnceWith('updating');
+            updates.next({ error: { code: 'checkout_replaced', message: 'Continue with your latest selection' } });
+            await rejected; expect(errors).not.toHaveBeenCalled();
+        });
+        it('refreshes subscription recovery when the original checkout completes during switching', async () => {
+            mockDocData.mockReturnValueOnce(of({ error: { code: 'checkout_completed', message: 'Refresh Membership' } }));
+            mockFunctionsService.call.mockResolvedValueOnce({ data: { linked: false } })
+                .mockResolvedValueOnce({ data: { linked: true, role: 'pro' } });
+            await expect(service.appendCheckoutSession('price_123')).rejects.toThrow('SUBSCRIPTION_RESTORED:pro');
+            expect(mockFunctionsService.call).toHaveBeenCalledTimes(2);
+            expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledWith(true);
+            expect(mockSetDoc).toHaveBeenCalledTimes(1);
+        });
+        it('reports an expired checkout without an error log, recovery call, or automatic replacement', async () => {
+            const errors = vi.spyOn(TestBed.inject(LoggerService), 'error');
+            mockDocData.mockReturnValueOnce(of({ error: { code: 'checkout_expired', message: 'Choose a plan again' } }));
+            await expect(service.appendCheckoutSession('price_123')).rejects.toThrow('Choose a plan again');
+            expect(errors).not.toHaveBeenCalled();
+            expect(mockFunctionsService.call).toHaveBeenCalledExactlyOnceWith('linkExistingStripeCustomer');
+            expect(mockSetDoc).toHaveBeenCalledTimes(1);
+        });
+
         it('should retry checkout once after stale customer error and then continue', async () => {
             mockDocData
                 .mockReturnValueOnce(of({ error: { message: 'No such customer: cus_123' } }))
@@ -632,18 +921,159 @@ describe('AppPaymentService', () => {
         });
 
         it('should stop retrying after max retry attempts for stale customer errors', async () => {
-            const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
             mockDocData
                 .mockReturnValueOnce(of({ error: { message: 'No such customer: cus_123' } }))
                 .mockReturnValueOnce(of({ error: { message: 'No such customer: cus_456' } }));
 
-            await service.appendCheckoutSession('price_123');
+            await expect(service.appendCheckoutSession('price_123')).rejects.toThrow('Payment error: No such customer: cus_456');
 
             expect(mockSetDoc).toHaveBeenCalledTimes(2);
             const cleanupCalls = mockFunctionsService.call.mock.calls.filter(call => call[0] === 'cleanupStripeCustomer');
             expect(cleanupCalls).toHaveLength(1);
-            expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('No such customer'));
-            alertSpy.mockRestore();
+        });
+
+        it('accepts a checkout URL that arrives after the old 15-second deadline', async () => {
+            vi.useFakeTimers();
+            try {
+                const checkoutSession$ = new Subject<{ url: string }>();
+                mockDocData.mockReturnValueOnce(checkoutSession$.asObservable());
+
+                const checkoutPromise = service.appendCheckoutSession('price_123');
+                await vi.advanceTimersByTimeAsync(15001);
+                expect(mockSetDoc).toHaveBeenCalledTimes(1);
+                checkoutSession$.next({ url: 'http://stripe.com/checkout' });
+
+                await expect(checkoutPromise).resolves.toBeUndefined();
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+
+        it('recovers a checkout URL from the server when the listener misses the update', async () => {
+            vi.useFakeTimers();
+            try {
+                mockDocData.mockReturnValueOnce(of(undefined));
+                liteFirestore.getDoc.mockResolvedValueOnce({ data: () => ({ url: 'http://stripe.com/checkout' }) });
+
+                const checkoutPromise = service.appendCheckoutSession('price_123');
+                await vi.advanceTimersByTimeAsync(5001);
+
+                await expect(checkoutPromise).resolves.toBeUndefined();
+                expect(liteFirestore.getFirestore).toHaveBeenCalledWith(mockFirebaseApp);
+                expect(liteFirestore.doc).toHaveBeenCalledWith(
+                    'lite-firestore',
+                    'customers/test_user_uid/checkout_sessions/test_session_id_1'
+                );
+                expect(liteFirestore.getDoc).toHaveBeenCalledWith('customers/test_user_uid/checkout_sessions/test_session_id_1');
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+
+        it('keeps polling when the extension has not written a URL yet', async () => {
+            vi.useFakeTimers();
+            try {
+                mockDocData.mockReturnValueOnce(of(undefined));
+                liteFirestore.getDoc
+                    .mockResolvedValueOnce({ data: () => ({ price: 'price_123' }) })
+                    .mockResolvedValueOnce({ data: () => ({ url: 'http://stripe.com/checkout' }) });
+
+                const checkoutPromise = service.appendCheckoutSession('price_123');
+                await vi.advanceTimersByTimeAsync(15001);
+
+                await expect(checkoutPromise).resolves.toBeUndefined();
+                expect(liteFirestore.getDoc).toHaveBeenCalledTimes(2);
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+
+        it('fails promptly when the independent server read has an unexpected error', async () => {
+            vi.useFakeTimers();
+            try {
+                mockDocData.mockReturnValueOnce(of(undefined));
+                liteFirestore.getDoc.mockRejectedValueOnce(new Error('Invalid Firestore app'));
+
+                const checkoutPromise = service.appendCheckoutSession('price_123');
+                const expectation = expect(checkoutPromise).rejects.toThrow(CheckoutStartError);
+                await vi.advanceTimersByTimeAsync(5001);
+
+                await expectation;
+                expect(liteFirestore.getDoc).toHaveBeenCalledTimes(1);
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+
+        it('retries a temporary server read failure and uses a later checkout URL', async () => {
+            vi.useFakeTimers();
+            try {
+                mockDocData.mockReturnValueOnce(of(undefined));
+                liteFirestore.getDoc
+                    .mockRejectedValueOnce(Object.assign(new Error('Service unavailable'), { code: 'unavailable' }))
+                    .mockResolvedValueOnce({ data: () => ({ url: 'http://stripe.com/checkout' }) });
+
+                const checkoutPromise = service.appendCheckoutSession('price_123');
+                await vi.advanceTimersByTimeAsync(15001);
+
+                await expect(checkoutPromise).resolves.toBeUndefined();
+                expect(liteFirestore.getDoc).toHaveBeenCalledTimes(2);
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+
+        it('does not use a server-recovered checkout URL after the account changes', async () => {
+            vi.useFakeTimers();
+            try {
+                mockDocData.mockReturnValueOnce(NEVER);
+                liteFirestore.getDoc.mockResolvedValueOnce({ data: () => ({ url: 'http://stripe.com/old-user-checkout' }) });
+
+                const checkoutPromise = service.appendCheckoutSession('price_123');
+                const expectation = expect(checkoutPromise).rejects.toThrow('Authenticated user changed while checkout was being prepared.');
+                await vi.advanceTimersByTimeAsync(1);
+                mockAuth.currentUser = {
+                    uid: 'different_user_uid',
+                    getIdToken: vi.fn().mockResolvedValue('different-token')
+                };
+                await vi.advanceTimersByTimeAsync(5000);
+
+                await expectation;
+                expect(liteFirestore.getDoc).toHaveBeenCalledTimes(1);
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+
+        it('does not redirect after the caller leaves the page', async () => {
+            const checkoutSession$ = new Subject<{ url: string }>();
+            mockDocData.mockReturnValueOnce(checkoutSession$.asObservable());
+            const redirectLog = vi.spyOn(TestBed.inject(LoggerService), 'log');
+            let canRedirect = true;
+
+            const checkoutPromise = service.appendCheckoutSession('price_123', undefined, undefined, () => canRedirect);
+            await vi.waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1));
+            canRedirect = false;
+            checkoutSession$.next({ url: 'http://stripe.com/checkout' });
+
+            await expect(checkoutPromise).resolves.toBeUndefined();
+            expect(redirectLog).not.toHaveBeenCalledWith('Redirecting to Stripe:', 'http://stripe.com/checkout');
+        });
+
+        it('reports a checkout timeout after the full wait window', async () => {
+            vi.useFakeTimers();
+            try {
+                mockDocData.mockReturnValueOnce(NEVER);
+                const checkoutPromise = service.appendCheckoutSession('price_123');
+                const expectation = expect(checkoutPromise).rejects.toThrow(CheckoutStartError);
+
+                await vi.advanceTimersByTimeAsync(60001);
+
+                await expectation;
+                expect(mockSetDoc).toHaveBeenCalledTimes(1);
+            } finally {
+                vi.useRealTimers();
+            }
         });
 
     });
@@ -725,6 +1155,32 @@ describe('AppPaymentService', () => {
     });
 
     describe('hasPaidSubscriptionHistory', () => {
+        it('allows trial messaging for an authenticated user with no subscription history', async () => {
+            await expect(service.hasPaidSubscriptionHistory()).resolves.toBe(false);
+            expect(mockGetDocsFromServer).toHaveBeenCalledOnce();
+            expect(mockGetDocsFromServer).toHaveBeenCalledWith({
+                collection: { path: 'customers/test_user_uid/subscriptions' }, constraints: [1]
+            });
+        });
+
+        it.each(['paused', 'future_status', undefined])(
+            'suppresses trial offers for existing history with status %s, matching checkout', async status => {
+                const historyDoc = { id: 'sub_previous', data: () => ({ status }) };
+                mockGetDocsFromServer.mockImplementation(async (request: { constraints: unknown[] }) => {
+                    const statusFilter = request.constraints.find(constraint => typeof constraint === 'object'
+                        && constraint !== null && 'field' in constraint && constraint.field === 'status') as
+                        { value: string[] } | undefined;
+                    return { docs: !statusFilter || statusFilter.value.includes(status) ? [historyDoc] : [] };
+                });
+
+                await expect(service.hasPaidSubscriptionHistory()).resolves.toBe(true);
+
+                expect(mockGetDocsFromServer).toHaveBeenCalledOnce();
+                expect(mockGetDocsFromServer).toHaveBeenCalledWith({
+                    collection: { path: 'customers/test_user_uid/subscriptions' }, constraints: [1]
+                });
+            });
+
         it('should return false when there is no authenticated user', async () => {
             mockAuth.currentUser = null;
 

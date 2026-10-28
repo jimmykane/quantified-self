@@ -1,13 +1,17 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter, Input, OnDestroy, OnInit, Output, inject } from '@angular/core';
+import { isCompleteEvent, type EventRead } from '@shared/event-read';
+import { Auth } from 'app/firebase/auth';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, EventEmitter, Input, OnDestroy, OnInit, Output, inject } from '@angular/core';
 import { Location } from '@angular/common';
 import { Router } from '@angular/router';
-import { EventInterface, Privacy } from '@sports-alliance/sports-lib';
+import { Privacy } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
 import { AppFileService } from '../../services/app.file.service';
 import { User } from '@sports-alliance/sports-lib';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import { take } from 'rxjs/operators';
-import { Subscription } from 'rxjs';
+import { Subscription, firstValueFrom } from 'rxjs';
+import { activityElevationMetric, applySavedActivityElevation, type ActivityElevationUpdate } from '@shared/activity-ascent';
+import { isBenchmarkEvent } from '@shared/event-classification';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
@@ -39,17 +43,64 @@ import { AppHapticsService } from '../../services/app.haptics.service';
   standalone: false
 })
 export class EventActionsComponent implements OnInit, OnDestroy {
-  @Input() event!: EventInterface;
+  private readonly sendAuth = inject(Auth, { optional: true });
+  private readonly destroyRef = inject(DestroyRef);
+  private ascentEditorOpen = false;
+  get canSendOwnedActivities(): boolean { return !!this.user && this.sendAuth?.currentUser?.uid === this.user.uid; }
+  get canEditAscent(): boolean {
+    return this.canSendOwnedActivities && !isBenchmarkEvent(this.event as unknown as { isMerge?: unknown; mergeType?: unknown });
+  }
+  async editAscent(): Promise<void> {
+    if (!this.canEditAscent || this.isReprocessing || this.ascentEditorOpen || this.destroyRef.destroyed) return;
+    const event = this.event, eventId = event.getID(), owner = this.user;
+    const isCurrent = () => !this.destroyRef.destroyed && this.event === event && event.getID() === eventId
+      && this.user?.uid === owner.uid && this.canEditAscent && !this.isReprocessing;
+    this.ascentEditorOpen = true;
+    let opened = false;
+    try {
+      const { ActivityAscentEditorComponent } = await import('../activity-ascent-editor/activity-ascent-editor.component');
+      if (!isCurrent()) return;
+      this.hapticsService.selection();
+      const ref = this.dialog.open(ActivityAscentEditorComponent, {
+        data: { eventId, user: owner }, width: '480px', maxWidth: 'calc(100vw - 32px)',
+      });
+      opened = true;
+      this.ascentDialogSubscription = ref.afterClosed().pipe(take(1)).subscribe((saved: ActivityElevationUpdate | undefined) => {
+        this.ascentEditorOpen = false;
+        if (!saved || !isCurrent()) return;
+        if (isCompleteEvent(event)) applySavedActivityElevation(event, saved);
+        else event.applySavedStat?.(activityElevationMetric(saved.metric).type, saved.eventValue);
+        this.ascentChanged.emit(event);
+        this.changeDetectorRef.markForCheck();
+      });
+    } catch (error) {
+      this.logger.error('Could not open the elevation editor', error);
+      if (isCurrent()) {
+        this.hapticsService.error();
+        this.snackBar.open('Could not open elevation editing. Try again.', undefined, { duration: 3500 });
+      }
+    } finally { if (!opened) this.ascentEditorOpen = false; }
+  }
+  async sendToService(): Promise<void> {
+    if (!this.canSendOwnedActivities) return;
+    const ids = [this.event.getID()];
+    const opened = await this.router.navigate(['/send-activities'], { queryParams: { source: 'saved' }, state: { activitySendSelection: ids, activitySendOwner: this.user.uid } });
+    if (opened) this.hapticsService.selection();
+  }
+
+  @Input() event!: EventRead;
   @Input() user!: User;
   @Input() showDownloadOriginal = false;
   @Input() navigateAfterDelete = true;
   @Output() eventDeleted = new EventEmitter<string>();
+  @Output() ascentChanged = new EventEmitter<EventRead>();
 
   public isReprocessing = false;
   public isSharing = false;
 
   public garminAPIServiceMetaData!: GarminAPIEventMetaData;
   private deleteConfirmationSubscription!: Subscription;
+  private ascentDialogSubscription?: Subscription;
 
   private analyticsService = inject(AppAnalyticsService);
   private originalFileDownloadService = inject(AppOriginalFileDownloadService);
@@ -79,6 +130,10 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   }
 
   async menuOpen(_event: unknown) {
+    if (this.isSharing) {
+      return;
+    }
+    this.hapticsService.selection();
     if (!this.showDownloadOriginal) {
       return;
     }
@@ -90,17 +145,17 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   }
 
   isHydrated() {
-    const activities = this.event.getActivities();
+    const activities = this.event.getActivities?.() ?? [];
     return activities.some(activity => activity.getAllStreams().length > 0);
   }
 
   hasDistance() {
-    const activities = this.event.getActivities();
+    const activities = this.event.getActivities?.() ?? [];
     return activities.some(activity => activity.hasStreamData(DataDistance.type));
   }
 
   hasPositionalData() {
-    return this.event.getStat(DataStartPosition.type) || this.event.getActivities().filter(activity => activity.hasPositionData()).length > 0
+    return this.event.getStat(DataStartPosition.type) || (this.event.getActivities?.() ?? []).filter(activity => activity.hasPositionData()).length > 0
   }
 
   public canReimportFromOriginalFile(): boolean {
@@ -113,7 +168,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     if (this.canReimportFromOriginalFile()) {
       return '';
     }
-    return 'No original source files available for this event';
+    return 'No original source files available for this activity';
   }
 
   public get isPubliclyShared(): boolean {
@@ -127,8 +182,8 @@ export class EventActionsComponent implements OnInit, OnDestroy {
 
     const eventID = this.event.getID();
     const confirmed = await this.confirmReprocessAction({
-      title: 'Share event publicly?',
-      message: 'Anyone with the link will be able to view this event, its activities, and every source-file object stored under this event folder while sharing is enabled.',
+      title: 'Share activity publicly?',
+      message: 'Anyone with the link will be able to view this activity and its source files while sharing is enabled.',
       confirmLabel: 'Share',
       confirmColor: 'primary',
     });
@@ -140,6 +195,9 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   }
 
   async copyPublicEventLink(): Promise<void> {
+    if (this.isSharing) {
+      return;
+    }
     const eventID = this.event.getID();
     const copied = this.eventSharingService.copyShareUrl('event', this.user.uid, eventID);
     this.snackBar.open(copied ? 'Public link copied' : 'Could not copy public link', undefined, {
@@ -159,8 +217,8 @@ export class EventActionsComponent implements OnInit, OnDestroy {
 
     const eventID = this.event.getID();
     const confirmed = await this.confirmReprocessAction({
-      title: 'Stop sharing this event?',
-      message: 'The public event and comparison links will stop working. The event remains available to you.',
+      title: 'Stop sharing this activity?',
+      message: 'The public activity and comparison links will stop working. The activity remains available to you.',
       confirmLabel: 'Stop sharing',
       confirmColor: 'warn',
     });
@@ -172,6 +230,9 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   }
 
   private async updateEventSharing(eventID: string, enabled: boolean, copyKind: 'event' | 'comparison'): Promise<void> {
+    if (this.isSharing) {
+      return;
+    }
     this.isSharing = true;
     this.changeDetectorRef.markForCheck();
     try {
@@ -198,6 +259,9 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     if (this.isReprocessing) {
       return;
     }
+    const source = this.event, owner = this.user;
+    const viewerID = this.sendAuth?.currentUser?.uid;
+    const isCurrent = () => this.isCurrentEvent(source, owner) && this.sendAuth?.currentUser?.uid === viewerID;
     try {
       this.isReprocessing = true;
       const confirmed = await this.confirmReprocessAction({
@@ -206,7 +270,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         confirmLabel: 'Regenerate',
         confirmColor: 'primary',
       });
-      if (!confirmed) {
+      if (!confirmed || !isCurrent()) {
         return;
       }
 
@@ -217,18 +281,25 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       this.processingService.updateJob(jobId, { status: 'processing', progress: 5 });
 
       try {
-        await this.eventReprocessService.regenerateEventStatistics(this.user, this.event as any, {
+        await this.eventReprocessService.regenerateEventStatistics(owner, source, {
+          canExecute: isCurrent,
           onProgress: (progress) => this.updateReprocessJob(jobId, progress),
         });
 
-        this.processingService.completeJob(jobId, 'Activity and event statistics recalculated');
-        this.snackBar.open('Activity and event statistics have been recalculated', undefined, {
+        this.processingService.completeJob(jobId, 'Activity statistics recalculated');
+        if (!isCurrent()) return;
+        this.snackBar.open('Activity statistics have been recalculated', undefined, {
           duration: 2000,
         });
         this.hapticsService.success();
-        this.changeDetectorRef.detectChanges();
       } catch (error) {
-        this.processingService.failJob(jobId, 'Re-calculation failed');
+        if (error instanceof ReprocessError && error.code === 'CANCELLED') {
+          this.processingService.removeJob(jobId);
+          return;
+        }
+        if (error instanceof ReprocessError && error.code === 'PERSIST_FAILED') this.processingService.completeJob(jobId, 'Activity reprocessed; refresh needed');
+        else this.processingService.failJob(jobId, 'Re-calculation failed');
+        if (!isCurrent()) return;
         this.logger.error('[EventActionsComponent] Failed to re-calculate activity statistics', error);
         this.snackBar.open(this.getReprocessErrorMessage(error, 'Could not recalculate statistics.'), undefined, {
           duration: 4000,
@@ -237,6 +308,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       }
     } finally {
       this.isReprocessing = false;
+      if (!this.destroyRef.destroyed) this.changeDetectorRef.markForCheck();
     }
   }
 
@@ -244,6 +316,9 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     if (this.isReprocessing || !this.canReimportFromOriginalFile()) {
       return;
     }
+    const source = this.event, owner = this.user;
+    const viewerID = this.sendAuth?.currentUser?.uid;
+    const isCurrent = () => this.isCurrentEvent(source, owner) && this.sendAuth?.currentUser?.uid === viewerID;
     try {
       this.isReprocessing = true;
       const sourceFilesCount = this.getSourceFilesCount();
@@ -255,7 +330,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         confirmLabel: 'Reimport',
         confirmColor: 'primary',
       });
-      if (!confirmed) {
+      if (!confirmed || !isCurrent()) {
         return;
       }
 
@@ -266,18 +341,25 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       this.processingService.updateJob(jobId, { status: 'processing', progress: 5 });
 
       try {
-        await this.eventReprocessService.reimportEventFromOriginalFiles(this.user, this.event as any, {
+        await this.eventReprocessService.reimportEventFromOriginalFiles(owner, source, {
+          canExecute: isCurrent,
           onProgress: (progress) => this.updateReprocessJob(jobId, progress),
         });
 
         this.processingService.completeJob(jobId, 'Activity reimport completed');
+        if (!isCurrent()) return;
         this.snackBar.open('Activity reimported from source file', undefined, {
           duration: 2000,
         });
         this.hapticsService.success();
-        this.changeDetectorRef.detectChanges();
       } catch (error) {
-        this.processingService.failJob(jobId, 'Reimport failed');
+        if (error instanceof ReprocessError && error.code === 'CANCELLED') {
+          this.processingService.removeJob(jobId);
+          return;
+        }
+        if (error instanceof ReprocessError && error.code === 'PERSIST_FAILED') this.processingService.completeJob(jobId, 'Activity reprocessed; refresh needed');
+        else this.processingService.failJob(jobId, 'Reimport failed');
+        if (!isCurrent()) return;
         this.logger.error('[EventActionsComponent] Failed to reimport activity from source file', error);
         this.snackBar.open(this.getReprocessErrorMessage(error, 'Could not reimport activity from file.'), undefined, {
           duration: 4000,
@@ -286,6 +368,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       }
     } finally {
       this.isReprocessing = false;
+      if (!this.destroyRef.destroyed) this.changeDetectorRef.markForCheck();
     }
   }
 
@@ -311,7 +394,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       case 'regenerating_stats':
         return 'Generating statistics...';
       case 'persisting':
-        return 'Saving event...';
+        return 'Saving activity...';
       case 'done':
         return 'Done';
       default:
@@ -321,8 +404,9 @@ export class EventActionsComponent implements OnInit, OnDestroy {
 
   private getReprocessErrorMessage(error: unknown, fallback: string): string {
     if (error instanceof ReprocessError) {
+      if (error.code === 'NON_ACTIVITY_SOURCE') return error.message;
       if (error.code === 'NO_ORIGINAL_FILES') {
-        return 'No original source files found for this event.';
+        return 'No original source files found for this activity.';
       }
       if (error.code === 'MULTI_FILE_INCOMPLETE') {
         return 'Reimport failed because one or more source files could not be parsed.';
@@ -331,7 +415,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         return 'Could not parse the original source file.';
       }
       if (error.code === 'PERSIST_FAILED') {
-        return 'Could not save the updated event after reprocessing.';
+        return error.message;
       }
     }
     return fallback;
@@ -356,7 +440,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     return confirmed === true;
   }
 
-  // downloadEventAsTCX(event: EventInterface) {
+  // downloadEventAsTCX(event: EventRead) {
   //   // EventUtilities.getEventAsTCXBloB(event).then((blob: Blob) => {
   //   //   FileService.downloadFile(
   //   //     blob,
@@ -369,13 +453,32 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   //   // });
   // }
 
+  private isCurrentEvent(source: EventRead, owner: User): boolean {
+    return !this.destroyRef.destroyed && this.event === source && this.user?.uid === owner?.uid;
+  }
+
+  private async completeEvent(source: EventRead, owner: User, isCurrent: () => boolean) {
+    if (!isCurrent()) return null;
+    if (isCompleteEvent(source)) return source;
+    const event = await firstValueFrom(this.eventService.getEventAndActivitiesOnce(owner, source.getID()));
+    if (!isCurrent()) return null;
+    if (!event) throw new Error('Activity no longer exists');
+    return event;
+  }
+
   async downloadGPX() {
+    const source = this.event, owner = this.user;
+    const viewerID = this.sendAuth?.currentUser?.uid;
+    const isCurrent = () => this.isCurrentEvent(source, owner) && this.sendAuth?.currentUser?.uid === viewerID;
     this.hapticsService.selection();
     try {
-      const blob = await this.eventService.getEventAsGPXBloB(this.user, this.event as any);
+      const event = await this.completeEvent(source, owner, isCurrent);
+      if (!event || !isCurrent()) return;
+      const blob = await this.eventService.getEventAsGPXBloB(owner, event);
+      if (!isCurrent()) return;
       this.fileService.downloadFile(
         blob,
-        this.getFileName(this.event),
+        this.getFileName(source),
         new EventExporterGPX().fileExtension,
       );
       this.analyticsService.logEvent('downloaded_gpx_file');
@@ -384,6 +487,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       });
       this.hapticsService.success();
     } catch (error) {
+      if (!isCurrent()) return;
       this.logger.error('[EventActionsComponent] Failed to download GPX from original files', error);
       this.snackBar.open('Could not download GPX file', undefined, {
         duration: 3000,
@@ -433,9 +537,9 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   async delete() {
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       data: {
-        title: 'Are you sure you want to delete?',
-        message: 'All data will be permanently deleted. This operation cannot be undone.',
-        confirmLabel: 'Delete',
+        title: 'Delete activity?',
+        message: 'This activity, its recorded data and original files will be permanently deleted. You cannot undo this.',
+        confirmLabel: 'Delete activity',
         cancelLabel: 'Cancel',
         confirmColor: 'warn',
       } as ConfirmationDialogData,
@@ -451,13 +555,13 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         if (this.navigateAfterDelete) {
           await this.leaveDeletedEventRoute();
         }
-        this.snackBar.open('Event deleted', undefined, {
+        this.snackBar.open('Activity deleted', undefined, {
           duration: 2000,
         });
         this.hapticsService.success();
       } catch (error) {
         this.logger.error('[EventActionsComponent] Failed to delete event', error);
-        this.snackBar.open('Could not delete event', undefined, {
+        this.snackBar.open('Could not delete activity', undefined, {
           duration: 3000,
         });
         this.hapticsService.error();
@@ -474,12 +578,13 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.ascentDialogSubscription?.unsubscribe();
     if (this.deleteConfirmationSubscription) {
       this.deleteConfirmationSubscription.unsubscribe()
     }
   }
 
-  private getFileName(event: EventInterface): string {
+  private getFileName(event: EventRead): string {
     const eventDate = this.fileService.toDate(event.startDate);
     const dateStr = eventDate ? eventDate.toISOString() : 'unknown';
     return `${dateStr}#${event.getActivityTypesAsString()}`

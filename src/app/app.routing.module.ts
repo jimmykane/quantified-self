@@ -1,6 +1,6 @@
-import { NgModule } from '@angular/core';
-import { RouterModule } from '@angular/router';
-import type { ResolveData, Routes } from '@angular/router';
+import { NgModule, inject } from '@angular/core';
+import { Router, RouterModule } from '@angular/router';
+import type { Data, ResolveData, Route, Routes } from '@angular/router';
 import { NetworkAwarePreloadingStrategy } from './resolvers/network-aware-preloading.strategy';
 import { authGuard } from './authentication/app.auth.guard';
 import { assistantGuard } from './authentication/assistant.guard';
@@ -21,10 +21,16 @@ import {
 import type { PublicSeoPageKey } from './components/public-seo/public-seo-pages.paths';
 import { lazyRouteResolver } from './resolvers/lazy-route.resolver';
 import { PublicLayoutComponent } from './components/public-layout/public-layout.component';
+import { HOME_SEO_DESCRIPTION, HOME_SEO_JSON_LD } from './shared/home-seo';
+import { PUBLIC_ENTRY_REDIRECTS } from './shared/public-entry-redirects';
 
-const HOME_SEO_DESCRIPTION = 'Connect Garmin, Suunto, COROS, and Wahoo in one training dashboard. Analyze readiness, training load, sleep, routes, and performance trends.';
 const SEO_RESOLVED_KEYS = ['title', 'description', 'jsonLd'] as const;
-const PUBLIC_SEO_RESOLVED_KEYS = [...SEO_RESOLVED_KEYS, 'publicSeoPage'] as const;
+const PUBLIC_SEO_RESOLVED_KEYS = [
+  ...SEO_RESOLVED_KEYS,
+  'publicSeoPage',
+  'socialImage',
+  'socialImageAlt',
+] as const;
 
 type IntegrationProviderKey = 'garmin' | 'suunto' | 'coros' | 'wahoo';
 
@@ -78,6 +84,29 @@ function publicSeoRouteData(page: PublicSeoPageKey): ResolveData {
   );
 }
 
+const TRAINING_PLANS_ROUTE_DATA: Data = {
+  title: 'Plans',
+  animation: 'Plans',
+  disableRouteAnimation: true,
+  description: 'Create standalone workouts and organize date-based running and cycling training plans.',
+  robots: 'noindex, follow',
+};
+
+function trainingPlansRoute(
+  path: string,
+  mode: 'browse' | 'create' | 'edit' | 'library-browse' | 'library-create' | 'library-edit',
+  scope: 'plans' | 'standalone' = 'plans',
+  preload = false,
+): Route {
+  return {
+    path,
+    loadComponent: () => import('./components/plans/plans-workspace.component')
+      .then(module => module.PlansWorkspaceComponent),
+    data: { ...TRAINING_PLANS_ROUTE_DATA, trainingPlansMode: mode, trainingPlansScope: scope, preload },
+    canMatch: [authGuard, onboardingGuard],
+  };
+}
+
 const PUBLIC_LAYOUT_ROUTE_PATHS = new Set<string>([
   '',
   '**',
@@ -105,6 +134,16 @@ const PUBLIC_LAYOUT_ROUTE_PATHS = new Set<string>([
 ]);
 
 const topLevelRoutes: Routes = [
+  ...PUBLIC_ENTRY_REDIRECTS.map(({ path, destination }): Route => ({
+    path,
+    pathMatch: 'full',
+    redirectTo: ({ queryParams, fragment }) => {
+      const url = inject(Router).parseUrl(destination);
+      url.queryParams = queryParams;
+      url.fragment ??= fragment;
+      return url;
+    },
+  })),
   ...LEGACY_WORKOUT_DATA_COMPARISON_PATHS.map(path => ({
     path,
     redirectTo: WORKOUT_DATA_COMPARISON_PATH,
@@ -116,7 +155,8 @@ const topLevelRoutes: Routes = [
     data: {
       title: 'Login',
       animation: 'Login',
-      description: 'Login to your Quantified Self account to access your dashboard and activity data.'
+      description: 'Login to your Quantified Self account to access your dashboard and activity data.',
+      robots: 'noindex, nofollow',
     },
   },
   {
@@ -140,42 +180,7 @@ const topLevelRoutes: Routes = [
       title: 'Membership',
       preload: true,
       description: 'Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Garmin, Suunto, COROS, and Wahoo while helping keep the project independent.',
-      jsonLd: {
-        "@context": "https://schema.org",
-        "@type": "WebPage",
-        "name": "Quantified Self Membership",
-        "description": "Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Garmin, Suunto, COROS, and Wahoo while helping keep the project independent.",
-        "url": "https://quantified-self.io/pricing",
-        "inLanguage": "en",
-        "isPartOf": {
-          "@type": "WebSite",
-          "name": "Quantified Self",
-          "url": "https://quantified-self.io"
-        },
-        "mainEntity": {
-          "@type": "OfferCatalog",
-          "name": "Quantified Self memberships",
-          "itemListElement": [
-            {
-              "@type": "Offer",
-              "name": "Starter",
-              "price": "0",
-              "priceCurrency": "USD",
-              "description": "Free plan with manual uploads and core analysis tools."
-            },
-            {
-              "@type": "Offer",
-              "name": "Basic",
-              "description": "Paid membership for higher activity limits and deeper tracking."
-            },
-            {
-              "@type": "Offer",
-              "name": "Pro",
-              "description": "Paid membership for service connections, cross-service sync, and unlimited tracking."
-            }
-          ]
-        }
-      }
+      robots: 'noindex, nofollow',
     }
   },
   {
@@ -200,12 +205,12 @@ const topLevelRoutes: Routes = [
       title: 'Help & Support',
       preload: true,
       animation: 'Help',
-      description: 'Get help with Training analysis, provider imports and sync, Wahoo activity and route delivery, read-only MCP client setup, uploads, billing, privacy, and troubleshooting.',
+      description: 'Get help with Training analysis, provider imports and sync, Wahoo activity and route delivery, MCP client setup, uploads, billing, privacy, and troubleshooting.',
       jsonLd: {
         "@context": "https://schema.org",
         "@type": "WebPage",
         "name": "Quantified Self Help & Support",
-        "description": "Get help with Training analysis, provider imports and sync, Wahoo activity and route delivery, read-only MCP client setup, uploads, billing, privacy, and troubleshooting.",
+        "description": "Get help with Training analysis, provider imports and sync, Wahoo activity and route delivery, MCP client setup, uploads, billing, privacy, and troubleshooting.",
         "url": "https://quantified-self.io/help",
         "inLanguage": "en",
         "isPartOf": {
@@ -226,7 +231,7 @@ const topLevelRoutes: Routes = [
           "Send Suunto routes to Wahoo",
           "Send GPX/FIT routes to Wahoo",
           "Sync past activities",
-          "Read-only MCP client access",
+          "Permission-scoped MCP client access and focused changes",
           "Garmin integration",
           "Suunto integration",
           "COROS integration",
@@ -400,6 +405,15 @@ const topLevelRoutes: Routes = [
     },
   },
   {
+    path: PUBLIC_FEATURE_PATHS.trainingPlans,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    resolve: publicSeoRouteData('trainingPlans'),
+    data: {
+      preload: true,
+      animation: 'PublicSeo',
+    },
+  },
+  {
     path: PUBLIC_FEATURE_PATHS.trainingDashboard,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
     resolve: publicSeoRouteData('trainingDashboard'),
@@ -407,6 +421,12 @@ const topLevelRoutes: Routes = [
       preload: true,
       animation: 'PublicSeo',
     },
+  },
+  {
+    path: PUBLIC_FEATURE_PATHS.health,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    resolve: publicSeoRouteData('health'),
+    data: { preload: true, animation: 'PublicSeo' },
   },
   {
     path: PUBLIC_FEATURE_PATHS.activityMap,
@@ -467,6 +487,15 @@ const topLevelRoutes: Routes = [
     path: PUBLIC_GUIDE_PATHS.syncGarminToSuunto,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
     resolve: publicSeoRouteData('syncGarminToSuunto'),
+    data: {
+      preload: true,
+      animation: 'PublicSeo',
+    },
+  },
+  {
+    path: PUBLIC_GUIDE_PATHS.syncGarminToWahoo,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    resolve: publicSeoRouteData('syncGarminToWahoo'),
     data: {
       preload: true,
       animation: 'PublicSeo',
@@ -534,6 +563,7 @@ const topLevelRoutes: Routes = [
       title: 'Assistant',
       preload: true,
       animation: 'Assistant',
+      disableRouteAnimation: true,
       description: 'Chat with the built-in Assistant grounded in read-only Quantified Self tools for sleep, readiness, Training, measurements, and activities.',
     }
   },
@@ -546,13 +576,7 @@ const topLevelRoutes: Routes = [
       preload: true,
       animation: 'Releases',
       description: 'Stay up to date with the latest features, improvements, and bug fixes in Quantified Self.',
-      jsonLd: {
-        "@context": "https://schema.org",
-        "@type": "ItemList",
-        "name": "Quantified Self Release Notes",
-        "description": "Chronological list of updates and changes to the Quantified Self application.",
-        "itemListElement": [] // We could populate this dynamically if we were rendering on server, but static metadata is better than nothing for the list page itself.
-      }
+      robots: 'noindex, nofollow',
     }
   },
   {
@@ -560,6 +584,18 @@ const topLevelRoutes: Routes = [
     loadComponent: () => import('./components/payment-cancel/payment-cancel.component').then(m => m.PaymentCancelComponent),
     canMatch: [authGuard, onboardingGuard],
     data: { title: 'Payment Cancelled' }
+  },
+  {
+    path: 'send-activities/:provider',
+    loadComponent: () => import('./components/activity-send/activity-send-page.component').then(module => module.ActivitySendPageComponent),
+    canMatch: [authGuard, onboardingGuard],
+    data: { title: 'Send activities', robots: 'noindex, follow' },
+  },
+  {
+    path: 'send-activities',
+    loadComponent: () => import('./components/activity-send/activity-send-page.component').then(module => module.ActivitySendPageComponent),
+    canMatch: [authGuard, onboardingGuard],
+    data: { title: 'Send activities', robots: 'noindex, follow' },
   },
   {
     path: 'services',
@@ -574,6 +610,21 @@ const topLevelRoutes: Routes = [
     canMatch: [authGuard, onboardingGuard]
   },
   {
+    path: 'health/compare',
+    pathMatch: 'full',
+    loadComponent: () => import('./components/timeline-notes/timeline-note-comparisons-page.component')
+      .then(module => module.TimelineNoteComparisonsPageComponent),
+    data: { title: 'Note comparisons', animation: 'Health', robots: 'noindex, nofollow' },
+    canMatch: [authGuard, onboardingGuard]
+  },
+  {
+    path: 'health/compare/:noteId',
+    loadComponent: () => import('./components/timeline-notes/timeline-note-comparison-page.component')
+      .then(module => module.TimelineNoteComparisonPageComponent),
+    data: { title: 'Note comparison', animation: 'Health', robots: 'noindex, nofollow' },
+    canMatch: [authGuard, onboardingGuard]
+  },
+  {
     path: 'health',
     loadComponent: () => import('./components/health/health-workspace.component')
       .then(module => module.HealthWorkspaceComponent),
@@ -582,6 +633,30 @@ const topLevelRoutes: Routes = [
       animation: 'Health',
       preload: true,
       description: 'Cross-service Sleep, heart rate, HRV, and health metric history with source-separated comparisons.',
+      robots: 'noindex, follow',
+    },
+    canMatch: [authGuard, onboardingGuard]
+  },
+  {
+    path: 'activities',
+    loadComponent: () => import('./components/activities/activities-page.component').then(module => module.ActivitiesPageComponent),
+    data: {
+      title: 'Activities', animation: 'Activities', preload: true,
+      description: 'Explore your activity history with search, tags, date range and sport filters.',
+      robots: 'noindex, follow',
+    },
+    canMatch: [authGuard, onboardingGuard],
+  },
+  { path: 'tags', pathMatch: 'full', redirectTo: 'activities' },
+  {
+    path: 'calendar/day/:date',
+    loadComponent: () => import('./components/calendar/calendar-page/calendar-page.component')
+      .then(module => module.CalendarPageComponent),
+    data: {
+      title: 'Calendar day',
+      animation: 'Calendar',
+      calendarMode: 'day',
+      description: 'Activities, health, Timeline notes, and planned workouts for a selected day.',
       robots: 'noindex, follow',
     },
     canMatch: [authGuard, onboardingGuard]
@@ -599,6 +674,16 @@ const topLevelRoutes: Routes = [
     },
     canMatch: [authGuard, onboardingGuard]
   },
+  trainingPlansRoute('training/plans/workout/:workoutId', 'edit'),
+  trainingPlansRoute('training/plans/library/new', 'library-create'),
+  trainingPlansRoute('training/plans/library/:itemId', 'library-edit'),
+  trainingPlansRoute('training/plans/library', 'library-browse'),
+  trainingPlansRoute('training/plans/standalone/new', 'create', 'standalone'),
+  trainingPlansRoute('training/plans/plan/:planId/new', 'create'),
+  trainingPlansRoute('training/plans/new', 'create'),
+  trainingPlansRoute('training/plans/standalone', 'browse', 'standalone'),
+  trainingPlansRoute('training/plans/plan/:planId', 'browse'),
+  trainingPlansRoute('training/plans', 'browse', 'plans', true),
   {
     path: 'training',
     loadChildren: () => import('./modules/training.module').then(module => module.TrainingModule),
@@ -734,33 +819,10 @@ const topLevelRoutes: Routes = [
     path: '',
     loadComponent: () => import('./components/home/home.component').then(component => component.HomeComponent),
     data: {
-      title: 'Training Dashboard',
+      title: 'Training Analysis & Workout Planning',
       animation: 'Home',
       description: HOME_SEO_DESCRIPTION,
-      jsonLd: {
-        "@context": "https://schema.org",
-        "@type": "SoftwareApplication",
-        "name": "Quantified Self",
-        "applicationCategory": "HealthApplication",
-        "operatingSystem": "Web",
-        "description": HOME_SEO_DESCRIPTION,
-        "featureList": [
-          "Week, Month, and Year activity calendar with duration-scaled activity groups",
-          "Curated training analysis for readiness, load, intensity, durability, sleep context, and best builds",
-          "Automatic Garmin to Suunto activity sync",
-          "Automatic COROS to Suunto activity sync",
-          "Automatic Wahoo to Suunto activity sync",
-          "Activity and route delivery to Wahoo",
-          "Read-only MCP access for compatible clients",
-          "Sync past activities to Suunto by date"
-        ],
-        "offers": {
-          "@type": "Offer",
-          "price": "0",
-          "priceCurrency": "USD"
-        },
-        "url": "https://quantified-self.io/"
-      }
+      jsonLd: HOME_SEO_JSON_LD,
     },
     pathMatch: 'full'
   },

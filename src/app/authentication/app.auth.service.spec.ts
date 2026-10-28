@@ -386,6 +386,18 @@ describe('AppAuthService', () => {
     });
 
     describe('email link auth', () => {
+        it('keeps demo billing email links on the current local HTTP origin and port', async () => {
+            const previous = environment.firebase.projectId;
+            environment.firebase.projectId = 'demo-stripe-billing';
+            try {
+                const { sendSignInLinkToEmail } = await import('app/firebase/auth');
+                await service.sendEmailLink('synthetic@example.com', '/payment/success');
+                expect(sendSignInLinkToEmail).toHaveBeenCalledWith(mockAuth, 'synthetic@example.com', expect.objectContaining({
+                    url: `${window.location.origin}/login?returnUrl=%2Fpayment%2Fsuccess`, handleCodeInApp: true,
+                }));
+            } finally { environment.firebase.projectId = previous; }
+        });
+
         it('sendEmailLink should persist email and show success snackbar', async () => {
             const { sendSignInLinkToEmail } = await import('app/firebase/auth');
             const email = 'test@example.com';
@@ -428,6 +440,19 @@ describe('AppAuthService', () => {
             );
             expect(mockLocalStorageService.setItem).toHaveBeenCalledWith('emailForSignIn', email);
             expect(mockLocalStorageService.setItem).toHaveBeenCalledWith(EMAIL_LINK_RETURN_URL_STORAGE_KEY, '/tools/compare/saved');
+        });
+
+        it('keeps the selected membership price through an email sign-in link', async () => {
+            const { sendSignInLinkToEmail } = await import('app/firebase/auth');
+            const returnUrl = '/subscriptions?priceId=price_pro_yearly';
+
+            await service.sendEmailLink('member@example.com', returnUrl);
+
+            expect(sendSignInLinkToEmail).toHaveBeenCalledWith(mockAuth, 'member@example.com', expect.objectContaining({
+                url: `${environment.appUrl}/login?returnUrl=%2Fsubscriptions%3FpriceId%3Dprice_pro_yearly`,
+                handleCodeInApp: true,
+            }));
+            expect(mockLocalStorageService.setItem).toHaveBeenCalledWith(EMAIL_LINK_RETURN_URL_STORAGE_KEY, returnUrl);
         });
 
         it('sendEmailLink should ignore unsafe return URLs and clear stale cached return URLs', async () => {

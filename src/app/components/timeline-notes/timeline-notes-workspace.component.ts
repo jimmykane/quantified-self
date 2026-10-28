@@ -1,0 +1,202 @@
+import { ChangeDetectionStrategy, Component, DestroyRef, NgZone, computed, effect, inject, input, signal, untracked } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatDialog } from '@angular/material/dialog';
+import { TIMELINE_NOTE_LIMITS, isTimelineNoteVisible, timelineNoteEnd, timelineNoteOverlaps, type TimelineNote, type TimelineNoteRange, type TimelineNotesLoad } from '@shared/timeline-notes';
+import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
+import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
+import { TimelineNotesDialogComponent } from './timeline-notes-dialog.component';
+import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
+
+// Decoded notes contain only scalar fields; equivalent cache/server results must not redraw every chart.
+const sameNotes = (previous: readonly TimelineNote[], next: readonly TimelineNote[]) =>
+  previous.length === next.length && previous.every((note, index) => {
+    const other = next[index];
+    const keys = Object.keys(note) as (keyof TimelineNote)[];
+    return note === other || (keys.length === Object.keys(other).length && keys.every(key => note[key] === other[key]));
+  });
+const unionRange = (ranges: TimelineNoteRange[]): TimelineNoteRange | null => ranges.length ? {
+  startDate: ranges.map(value => value.startDate).sort()[0],
+  endDate: ranges.map(value => value.endDate).sort().at(-1)!,
+} : null;
+
+/** Workspace-owned loading; shared charts only receive an explicit private-data input. */
+@Component({
+  selector: 'app-timeline-notes-workspace', standalone: true,
+  imports: [MatButtonModule, MatIconModule, MatProgressBarModule, MatTooltipModule, AppChartSharedModule],
+  template: `
+    <div class="timeline-notes-action" [attr.aria-busy]="loading()">
+      <button mat-button type="button" class="timeline-notes-button" appHapticTap (click)="open()"
+        [disabled]="!activeOwner()" aria-label="Timeline notes" matTooltip="Timeline notes">
+        <mat-icon aria-hidden="true">event_note</mat-icon><span>Timeline notes</span>
+      </button>
+      <mat-progress-bar class="timeline-notes-progress" [class.timeline-notes-progress-visible]="loading()"
+        mode="indeterminate" aria-hidden="true" />
+    </div>
+    <span class="cdk-visually-hidden" role="status">{{ loading() ? 'Loading notes…' : '' }}</span>
+    @if (error()) {
+      <button mat-button type="button" appHapticTap (click)="refresh()" matTooltip="Notes could not load. The rest of this view is still available.">Retry notes</button>
+    }
+    @if (incomplete()) {
+      <button mat-button type="button" appHapticTap (click)="open()" matTooltip="Some notes are not shown because this view reached its note or data limit. Browse all notes here.">Some notes not shown</button>
+    }
+  `,
+  styleUrls: ['./timeline-notes-workspace.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class TimelineNotesWorkspaceComponent {
+  /** Shared/profile surfaces must explicitly match their displayed owner to the signed-in account. */
+  readonly ownerUid = input<string | null | undefined>(undefined);
+  /** Non-chart workspaces can register an explicit visible calendar range. */
+  readonly visibleRange = input<TimelineNoteRange | null>(null);
+  readonly service = inject(AppTimelineNotesService);
+  readonly activeOwner = computed(() => {
+    if (this.destroyed()) return null;
+    const uid = this.service.uid();
+    return this.ownerUid() === undefined || this.ownerUid() === uid ? uid : null;
+  });
+  private readonly dialogs = inject(MatDialog);
+  private readonly haptics = inject(AppHapticsService);
+  private readonly zone = inject(NgZone);
+  private readonly destroy = inject(DestroyRef);
+  private readonly notes = signal<readonly TimelineNote[]>([], { equal: sameNotes });
+  private readonly currentNotes = signal<readonly TimelineNote[]>([], { equal: sameNotes });
+  readonly loading = signal(false);
+  readonly error = signal(false);
+  readonly incomplete = signal<TimelineNotesLoad['incomplete']>(null);
+  private readonly ranges = new Map<object, TimelineNoteRange>();
+  private readonly currentRanges = new Map<object, () => TimelineNoteRange>();
+  private version = 0;
+  private queued = false;
+  private readonly destroyed = signal(false);
+  private rangeKey = '';
+  private forceRefresh = false;
+  private readonly ongoingDates = signal('');
+  private readonly loadedOwner = signal<string | null>(null);
+  private readonly reportRange = (key: object, range: TimelineNoteRange | null) => {
+    if (this.destroyed()) return;
+    if (range) this.ranges.set(key, range); else this.ranges.delete(key);
+    this.schedule();
+  };
+  private readonly reportCurrentRange = (key: object, range: (() => TimelineNoteRange) | null) => {
+    if (this.destroyed()) return;
+    if (range) this.currentRanges.set(key, range); else this.currentRanges.delete(key);
+    this.schedule();
+  };
+  readonly context = computed<TimelineNoteChartContext>(() => {
+    const owner = this.activeOwner();
+    this.ongoingDates(); // Reproject ongoing periods only when their captured-zone date changes.
+    return {
+      ownerUid: owner,
+      notes: this.service.showOnCharts() && owner === this.loadedOwner() ? this.notes().filter(isTimelineNoteVisible) : [],
+      currentNotes: this.service.showOnCharts() && owner === this.loadedOwner() ? this.currentNotes().filter(isTimelineNoteVisible) : [],
+      // ECharts callbacks run outside Angular; entering here lets Material own dialog/focus lifecycle.
+      select: notes => this.zone.run(() => {
+        if (this.destroyed() || !notes.length || !owner || owner !== this.activeOwner() || !this.service.isOwner(owner) || !this.service.showOnCharts() || owner !== this.loadedOwner()) return;
+        // A queued marker click must not reopen a note that was hidden or removed since it rendered.
+        const ids = new Set(notes.map(note => note.id));
+        const available = new Map([...this.notes(), ...this.currentNotes()].map(note => [note.id, note]));
+        const selected = [...available.values()].filter(note => ids.has(note.id) && isTimelineNoteVisible(note));
+        if (!selected.length) return;
+        // Note markers are not metric-series clicks; this accepted action owns their feedback.
+        this.haptics.selection();
+        this.open(selected);
+      }),
+      reportRange: this.reportRange,
+      reportCurrentRange: this.reportCurrentRange,
+    };
+  });
+
+  constructor() {
+    effect(() => this.reportRange(this, this.visibleRange()));
+    effect(() => {
+      this.activeOwner(); this.service.showOnCharts();
+      untracked(() => { this.rangeKey = ''; this.schedule(); });
+    });
+    this.service.changes$.pipe(takeUntilDestroyed()).subscribe(() => {
+      // Explicit invalidation can follow an edit/hide/delete: discard that stale snapshot immediately.
+      this.version++;
+      this.notes.set([]); this.currentNotes.set([]); this.incomplete.set(null);
+      this.rangeKey = ''; this.schedule();
+    });
+    const returned = () => { if (document.visibilityState === 'visible') this.refresh(false); };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', returned);
+      document.addEventListener('visibilitychange', returned);
+      this.destroy.onDestroy(() => { window.removeEventListener('focus', returned); document.removeEventListener('visibilitychange', returned); });
+    }
+    this.destroy.onDestroy(() => { this.destroyed.set(true); this.version++; this.ranges.clear(); this.currentRanges.clear();
+      this.notes.set([]); this.currentNotes.set([]); this.loadedOwner.set(null); this.loading.set(false); this.error.set(false); this.incomplete.set(null); });
+  }
+  open(notes?: readonly TimelineNote[]): void {
+    const uid = this.activeOwner();
+    if (this.destroyed() || !uid || !this.service.isOwner(uid)) return;
+    this.dialogs.open(TimelineNotesDialogComponent, { width: '560px', maxWidth: 'calc(100vw - 32px)', data: { uid, notes } });
+  }
+  refresh(force = true): void {
+    this.updateOngoingDates();
+    // Focus and visibilitychange commonly arrive separately; neither should restart a pending load.
+    if (this.loading() || this.destroyed()) return;
+    this.forceRefresh ||= force;
+    this.rangeKey = ''; this.schedule();
+  }
+  private updateOngoingDates(): void {
+    this.ongoingDates.set(this.notes().filter(note => note.endDate === null && isTimelineNoteVisible(note))
+      .map(note => `${note.id}:${timelineNoteEnd(note)}`).join('|'));
+  }
+  private schedule(): void {
+    if (this.queued || this.destroyed()) return;
+    this.queued = true;
+    queueMicrotask(() => { this.queued = false; if (!this.destroyed()) void this.load(); });
+  }
+  private async load(): Promise<void> {
+    const uid = this.activeOwner();
+    // Resolve dynamic windows here: foreground events can precede a child's clock/render effect.
+    const currentRange = unionRange([...this.currentRanges.values()].map(resolve => resolve()));
+    const range = unionRange([...this.ranges.values(), ...(currentRange ? [currentRange] : [])]);
+    const key = JSON.stringify([uid, this.service.showOnCharts(), range, currentRange]);
+    if (key === this.rangeKey) return;
+    this.rangeKey = key;
+    const version = ++this.version;
+    const forceRefresh = this.forceRefresh; this.forceRefresh = false;
+    const canLoad = !!uid && !!range && this.service.showOnCharts();
+    // Lazy charts register as they approach the viewport. Retain this owner's annotations while their
+    // union expands/contracts, then replace the snapshot atomically; a new range is not a privacy reset.
+    if (!canLoad || uid !== this.loadedOwner()) {
+      this.notes.set([]); this.currentNotes.set([]); this.incomplete.set(null);
+    }
+    this.loadedOwner.set(uid);
+    this.error.set(false); this.loading.set(false);
+    if (!currentRange) this.currentNotes.set([]);
+    if (!canLoad) return;
+    const isCurrent = () => version === this.version && uid === this.activeOwner() && this.service.isOwner(uid);
+    const acceptCurrent = (result: TimelineNotesLoad) => {
+      if (!currentRange) return;
+      // Absence in a partial scan is not deletion. Retain positive evidence until a complete
+      // bounded result replaces it; explicit mutation/owner/visibility invalidation still clears it.
+      const notes = result.incomplete ? [...new Map([...this.currentNotes(), ...result.notes].map(note => [note.id, note])).values()] : result.notes;
+      this.currentNotes.set(notes.filter(note => timelineNoteOverlaps(note, currentRange)).slice(0, TIMELINE_NOTE_LIMITS.records));
+    };
+    this.loading.set(true);
+    try {
+      const cached = this.service.cachedRange(uid, range);
+      if (cached) { this.notes.set(cached.notes); this.incomplete.set(cached.incomplete); acceptCurrent(cached); }
+      this.updateOngoingDates();
+      const result = await this.service.loadRange(uid, range, forceRefresh);
+      if (!isCurrent()) return;
+      this.notes.set(result.notes); this.incomplete.set(result.incomplete); acceptCurrent(result); this.updateOngoingDates();
+      // Complete unions satisfy both consumers without another request. Only a capped broad
+      // history needs a narrower validation through the same owner-fenced cache/query service.
+      if (result.incomplete && currentRange && (range.startDate !== currentRange.startDate || range.endDate !== currentRange.endDate)) {
+        const current = await this.service.loadRange(uid, currentRange, forceRefresh);
+        if (isCurrent()) acceptCurrent(current);
+      }
+    } catch {
+      if (version === this.version && uid === this.activeOwner() && this.service.isOwner(uid)) this.error.set(true);
+    } finally { if (version === this.version) this.loading.set(false); }
+  }
+}

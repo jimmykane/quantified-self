@@ -1,6 +1,7 @@
 import { Component, Inject, inject } from '@angular/core';
 import { FormBuilder, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { AppHapticsService } from '../../../../services/app.haptics.service';
 
 export interface DeviceNameEditDialogData {
   activityID: string;
@@ -18,6 +19,7 @@ export class DeviceNameEditDialogComponent {
   readonly minLength = 3;
   readonly maxLength = 20;
   private formBuilder = inject(FormBuilder);
+  private readonly haptics = inject(AppHapticsService);
 
   readonly form;
 
@@ -35,6 +37,7 @@ export class DeviceNameEditDialogComponent {
   }
 
   close(): void {
+    this.haptics.selection();
     this.dialogRef.close();
   }
 
@@ -49,6 +52,7 @@ export class DeviceNameEditDialogComponent {
       return;
     }
 
+    this.haptics.selection();
     this.dialogRef.close(trimmedName);
   }
 

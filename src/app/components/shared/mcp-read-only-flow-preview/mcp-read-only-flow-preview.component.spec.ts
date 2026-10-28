@@ -14,13 +14,13 @@ describe('McpReadOnlyFlowPreviewComponent', () => {
     fixture.detectChanges();
   });
 
-  it('explains the external clients, approved scopes, and read-only boundary', () => {
+  it('explains the external clients, approved scopes, and focused change boundary', () => {
     const text = fixture.nativeElement.textContent as string;
     expect(text).toContain('ChatGPT');
     expect(text).toContain('Claude');
     expect(text).toContain('Training');
     expect(text).toContain('Activities');
-    expect(text).toContain('Routes');
-    expect(text).toContain('no account changes');
+    expect(text).toContain('Notes');
+    expect(text).toContain('separately approved note, tag, and Training changes');
   });
 });

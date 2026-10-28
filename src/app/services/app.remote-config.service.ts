@@ -73,7 +73,7 @@ export class AppRemoteConfigService {
     readonly isLoading = computed(() => !this._configLoaded());
 
     constructor() {
-        if (!this.remoteConfig) {
+        if (!this.remoteConfig || environment.firebase.projectId === 'demo-stripe-billing') {
             this._isAdmin.set(false);
             this._configLoaded.set(true);
             return;

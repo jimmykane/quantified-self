@@ -59,7 +59,7 @@ describe('DashboardActionPromptsComponent', () => {
     title: 'Default units',
     description: 'Choose units.',
     primaryAction: { id: 'applyUnitSetup', label: 'Apply' },
-    secondaryAction: { id: 'dismissUnitSetup', label: 'Not now' },
+    menuActions: [{ id: 'openUnitSettings', label: 'Advanced settings', icon: 'tune' }],
   }, {
     id: 'enableRouteDeliveryAutoSync',
     icon: 'sync_alt',
@@ -112,6 +112,10 @@ describe('DashboardActionPromptsComponent', () => {
     expect(toggleGroup).toBeTruthy();
     expect(toggleGroup.textContent).toContain('Kilometers');
     expect(toggleGroup.textContent).toContain('Miles');
+    const unitCard = fixture.nativeElement.querySelector('app-dashboard-action-prompt');
+    expect([...unitCard.querySelectorAll('.dashboard-action-prompt__actions button')].map(button => button.textContent.trim())).toEqual([
+      'tuneAdvanced settings', 'Apply',
+    ]);
   });
 
   it('emits standard prompt events', () => {

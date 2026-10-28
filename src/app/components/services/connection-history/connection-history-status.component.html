@@ -1,0 +1,57 @@
+@if (status(); as history) {
+<mat-expansion-panel [expanded]="expanded()" (opened)="setExpanded(true)" (closed)="setExpanded(false)">
+  <mat-expansion-panel-header>
+    <mat-panel-title>History import</mat-panel-title>
+  </mat-expansion-panel-header>
+  <p role="status">{{ summary() }}</p>
+  <p>Requested range: {{ rangeLabel() }}</p>
+  @if (isAllAvailableRange()) {
+  <p>All available history through {{ history.endMs | date:'mediumDate':'UTC' }} (UTC)</p>
+  } @else {
+  <p>{{ history.startMs | date:'mediumDate':rangeTimezone() }} – {{ history.endMs | date:'mediumDate':rangeTimezone() }}@if (rangeTimezone()) { (UTC) }</p>
+  }
+  <p class="history-explanation">This is the range requested, not confirmed data coverage. Providers may supply less history, with different limits for activities, Sleep and each Health metric. Submitted requests and processed items do not guarantee a reading on every day.</p>
+  @for (step of steps(); track step.id) {
+  <div class="history-step">
+    <strong>{{ step.label }}</strong>
+    <span>{{ step.description }}</span>
+    @if (step.resources.includes('routes')) { <span>Entire saved route library</span> }
+    @if (step.count > 0) { <span>{{ step.count }} items or requests</span> }
+    @if (step.message) { <p>{{ step.message }}</p> }
+    @if (step.nextAllowedAtMs) { <p>Available again: {{ step.nextAllowedAtMs | date:'medium' }}</p> }
+  </div>
+  }
+  @if (checkingHistory() || storedHistory().length) {
+  <section class="stored-history" [attr.aria-labelledby]="storedHistoryTitleId()" [attr.aria-busy]="checkingHistory()">
+    <h3 [id]="storedHistoryTitleId()">Stored history</h3>
+    @if (checkingHistory()) { <p role="status">Checking first stored dates…</p> }
+    @for (start of storedHistory(); track start.resource) {
+    <p>{{ start.label }}:
+      @if (start.unavailable) { stored history could not be checked. }
+      @else if (start.firstDate) { first stored date {{ start.firstDate | date:'mediumDate':'UTC' }}. }
+      @else { no records stored yet. }
+    </p>
+    }
+    @if (sleepCutoff(); as cutoff) {
+    <p>Last reported Garmin Sleep history cutoff: {{ cutoff | date:'mediumDate':'UTC' }} (UTC). This is a saved provider response, not a guarantee for the current account or for Health metrics.</p>
+    }
+    @if (cutoffUnavailable()) { <p>The saved Sleep provider limit could not be checked.</p> }
+    <p class="history-explanation">First dates include all retained records from this provider, including earlier imports or accounts. Gaps and missing metrics may remain; these dates do not prove this import delivered the entire requested range. Refresh to check for newly arrived readings.</p>
+    <button mat-button type="button" [disabled]="checkingHistory()" (click)="refreshStoredHistory()">Refresh stored dates</button>
+  </section>
+  }
+  @if (retrying()) { <mat-progress-bar mode="indeterminate" aria-label="Requesting history retry"></mat-progress-bar> }
+  @if (error()) { <p role="alert">{{ error() }}</p> }
+  <div class="history-actions">
+    @if (history.canRetry) {
+    <button mat-stroked-button type="button" [disabled]="disabled() || retrying()" (click)="retry()">
+      {{ retrying() ? 'Requesting retry…' : 'Retry failed imports' }}
+    </button>
+    }
+    @if (needsReconnect()) {
+    <button mat-button type="button" [disabled]="disabled()" (click)="reviewReconnect()">Review reconnect options</button>
+    }
+  </div>
+</mat-expansion-panel>
+<p class="history-summary" aria-live="polite">{{ summary() }}</p>
+}

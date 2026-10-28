@@ -68,11 +68,13 @@ describe('dashboard-training-insights.helper', () => {
             previousSourceKey: 'garmin:watch',
             changePct: 3.85,
           },
+          referenceVo2Max: null,
         },
         {
           discipline: 'cycling',
           ftpSetting: null,
           importedVo2Max: null,
+          referenceVo2Max: null,
         },
       ],
     });
@@ -109,6 +111,7 @@ describe('dashboard-training-insights.helper', () => {
           previousSourceKey: 'suunto:watch',
           changePct: null,
         },
+        referenceVo2Max: null,
       }],
     });
 
@@ -330,10 +333,10 @@ describe('dashboard-training-insights.helper', () => {
     });
 
     expect(context?.label).toBe('Ready');
-    expect(context?.confidence).toBe('high');
-    expect(context?.availableSignalCount).toBe(4);
+    expect(context?.confidence).toBe('medium');
+    expect(context?.availableSignalCount).toBe(3);
     expect(context?.score).toBeGreaterThanOrEqual(78);
-    expect(context?.hrvRatio).toBeCloseTo(1.1);
+    expect(context?.hrvRatio).toBeNull();
     expect(context?.averageHeartRateRatio).toBeCloseTo(0.9);
     expect(context?.minimumHeartRateRatio).toBeCloseTo(0.96);
     expect(context?.overnightHeartRateRatio).toBeCloseTo(0.918);
@@ -388,10 +391,10 @@ describe('dashboard-training-insights.helper', () => {
 
     expect(context).toMatchObject({
       sleepScore: 90,
-      hrvRatio: 1.1,
+      hrvRatio: null,
       averageHeartRateRatio: 0.9,
       minimumHeartRateRatio: 0.96,
-      availableSignalCount: 3,
+      availableSignalCount: 2,
     });
     expect(context?.overnightHeartRateRatio).toBeCloseTo(0.918);
   });
@@ -569,7 +572,7 @@ describe('dashboard-training-insights.helper', () => {
     });
 
     expect(context).toMatchObject({
-      availableSignalCount: 3,
+      availableSignalCount: 2,
       baselineEvidenceCount: 3,
       confidence: 'medium',
     });

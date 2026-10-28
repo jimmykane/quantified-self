@@ -515,6 +515,7 @@ export async function handleCOROSBindingStateRequest(request: {
 export const getCOROSAPIBindingState = onCall({
   region: FUNCTIONS_MANIFEST.getCOROSAPIBindingState.region,
   cors: ALLOWED_CORS_ORIGINS,
+  memory: '512MiB',
   timeoutSeconds: 60,
   maxInstances: 10,
 }, handleCOROSBindingStateRequest);

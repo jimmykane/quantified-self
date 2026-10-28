@@ -1,5 +1,6 @@
 :host {
   display: block;
+  min-width: 0;
 }
 
 .event-chart-panel {
@@ -38,6 +39,14 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.event-chart-panel__title-row--power {
+  flex-wrap: wrap;
+}
+
+.event-chart-panel__power-view {
+  flex: 0 0 auto;
 }
 
 .event-chart-panel__title {
@@ -102,6 +111,25 @@
   min-width: 0;
 }
 
+.event-chart-panel__swim-timeline-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.event-chart-panel__swim-timeline-swatch {
+  width: 14px;
+  height: 8px;
+  flex: 0 0 auto;
+  background: currentColor;
+  border: 1px solid currentColor;
+}
+
+.event-chart-panel__swim-timeline-swatch--rest {
+  background: transparent;
+  border-style: dashed;
+}
+
 .event-chart-panel__series-legend-item {
   display: inline-flex;
   align-items: center;
@@ -120,6 +148,23 @@
   flex: 0 0 auto;
 }
 
+.event-chart-panel__series-legend-item--device {
+  opacity: 1;
+}
+
+.event-chart-panel__series-legend-dot--line {
+  width: 24px;
+  height: 0;
+  border-radius: 0;
+  border-top: var(--series-line-width, 3px) solid var(--series-color);
+}
+
+.event-chart-panel__series-legend-dot--dash-dot {
+  height: var(--series-line-width, 3px);
+  border-top: 0;
+  background: repeating-linear-gradient(to right, var(--series-color) 0 8px, transparent 8px 11px, var(--series-color) 11px 13px, transparent 13px 16px);
+}
+
 .event-chart-panel__series-legend-label {
   min-width: 0;
   overflow: hidden;
@@ -130,13 +175,16 @@
 .event-chart-panel__chart {
   width: 100%;
   height: var(--event-chart-panel-height, 360px);
-  // Keep vertical flings and pinch zoom browser-owned. Horizontal touch
-  // gestures are direction-locked by the chart gesture controller.
+  // Keep native vertical scrolling; the chart controller owns horizontal drags.
   touch-action: pan-y pinch-zoom;
 }
 
+.event-chart-panel__chart--pinch-enabled {
+  touch-action: pan-y;
+}
+
 .event-chart-panel__chart--zoom-only {
-  height: 56px;
+  height: 44px;
 }
 
 .event-chart-panel__stats {

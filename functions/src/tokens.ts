@@ -1,3 +1,5 @@
+import { currentHistoryExecution } from './connection-history/context';
+import { HistoryLifecycleChangedError } from './connection-history/execution';
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
@@ -139,6 +141,9 @@ export async function refreshTokens(querySnapshot: QuerySnapshot, serviceName: S
 }
 
 interface GetTokenDataOptions {
+  /** Optional caller-owned quota admission, after claiming refresh but before HTTP.
+   * Throwing here releases the refresh lease without classifying an auth failure. */
+  beforeRefreshRequest?: () => Promise<void>;
   recoverTerminalAuthFailure?: boolean;
   allowSupersededSnapshotRetry?: boolean;
   allowDisconnectPendingTokenUse?: boolean;
@@ -291,6 +296,11 @@ export async function getTokenData(
   forceRefreshAndSave = false,
   options: GetTokenDataOptions = {},
 ): Promise<SuuntoAPIAuth2ServiceTokenInterface | COROSAPIAuth2ServiceTokenInterface | GarminAPIAuth2ServiceTokenInterface | WahooAPIAuth2ServiceTokenInterface> {
+  const execution = currentHistoryExecution();
+  if (execution) {
+    await execution.beforeRequest();
+    if (doc.ref.path !== execution.tokenPath) throw new HistoryLifecycleChangedError();
+  }
   const serviceConfig = getServiceAdapter(serviceName, true);
   const serviceTokenData = <Auth2ServiceTokenInterface | undefined>doc.data();
   if (!serviceTokenData) {
@@ -308,7 +318,7 @@ export async function getTokenData(
   if (!token.expired() && !forceRefreshAndSave) {
     await assertTokenUseAllowedForUser(doc, serviceName, 'before_return', options);
     if (options.opaqueTelemetry) {
-      logger.info('[ServiceAuth] Provider token remains valid.', { serviceName });
+      logger.info('[ServiceAuth] Provider token is unexpired; provider access has not been verified.', { serviceName });
     } else {
       logger.info(`Token is not expired won't refresh ${doc.id}`);
     }
@@ -473,6 +483,7 @@ export async function getTokenData(
       : null;
 
     let responseToken: any;
+    await options.beforeRefreshRequest?.();
     try {
       responseToken = await refreshToken.refresh({}, {
         timeout: TOKEN_REFRESH_REQUEST_TIMEOUT_MS,

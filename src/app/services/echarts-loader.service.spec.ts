@@ -26,6 +26,7 @@ const echartsModulesMock = vi.hoisted(() => ({
   titleComponent: { component: 'title' },
   axisPointerComponent: { component: 'axisPointer' },
   markLineComponent: { component: 'markLine' },
+  markPointComponent: { component: 'markPoint' },
   visualMapComponent: { component: 'visualMap' },
   toolboxComponent: { component: 'toolbox' },
   dataZoomComponent: { component: 'dataZoom' },
@@ -57,6 +58,8 @@ vi.mock('echarts/components', () => ({
   TitleComponent: echartsModulesMock.titleComponent,
   AxisPointerComponent: echartsModulesMock.axisPointerComponent,
   MarkLineComponent: echartsModulesMock.markLineComponent,
+  MarkPointComponent: echartsModulesMock.markPointComponent,
+  MarkAreaComponent: 'MarkAreaComponent',
   VisualMapComponent: echartsModulesMock.visualMapComponent,
   ToolboxComponent: echartsModulesMock.toolboxComponent,
   DataZoomComponent: echartsModulesMock.dataZoomComponent,
@@ -175,6 +178,8 @@ describe('EChartsLoaderService', () => {
       echartsModulesMock.titleComponent,
       echartsModulesMock.axisPointerComponent,
       echartsModulesMock.markLineComponent,
+      echartsModulesMock.markPointComponent,
+      'MarkAreaComponent',
       echartsModulesMock.visualMapComponent,
       echartsModulesMock.toolboxComponent,
       echartsModulesMock.dataZoomComponent,
@@ -439,41 +444,63 @@ describe('EChartsLoaderService', () => {
     dataZoomHandler?.({ $from: 'view-component-inside' });
     expect(hapticsMock.selection).toHaveBeenCalledTimes(5);
 
-    brushEndHandler?.({ areas: [{ coordRange: [10, 20] }] });
+    dataZoomHandler?.({ $from: 'event-chart-touch-zoom' });
     expect(hapticsMock.selection).toHaveBeenCalledTimes(6);
+
+    brushEndHandler?.({ areas: [{ coordRange: [10, 20] }] });
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(7);
 
     brushEndHandler?.({ areas: [] });
-    expect(hapticsMock.selection).toHaveBeenCalledTimes(6);
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(7);
 
     brushEndHandler?.({ $from: 'view-component-brush', areas: [{ coordRange: [10, 20] }] });
-    expect(hapticsMock.selection).toHaveBeenCalledTimes(7);
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(8);
 
     brushEndHandler?.({ $from: 'event-chart-selection-sync', areas: [{ coordRange: [10, 20] }] });
-    expect(hapticsMock.selection).toHaveBeenCalledTimes(7);
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(8);
 
     brushEndHandler?.({ $from: 'event-chart-brush-zoom', areas: [{ coordRange: [10, 20] }] });
-    expect(hapticsMock.selection).toHaveBeenCalledTimes(7);
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(8);
 
     axisPointerHandler?.({ axesInfo: [{ axisDim: 'y', axisIndex: 0, value: 90 }] });
-    expect(hapticsMock.selection).toHaveBeenCalledTimes(7);
-
-    axisPointerHandler?.({ axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 100 }] });
     expect(hapticsMock.selection).toHaveBeenCalledTimes(8);
 
     axisPointerHandler?.({ axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 100 }] });
-    expect(hapticsMock.selection).toHaveBeenCalledTimes(8);
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(9);
+
+    axisPointerHandler?.({ axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 100 }] });
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(9);
 
     axisPointerHandler?.({ axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 101 }] });
-    expect(hapticsMock.selection).toHaveBeenCalledTimes(9);
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(10);
 
     axisPointerHandler?.({ $from: 'event-chart-tooltip-sync', axesInfo: [{ axisDim: 'x', axisIndex: 0, value: 102 }] });
-    expect(hapticsMock.selection).toHaveBeenCalledTimes(9);
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(10);
 
     unsubscribe();
     expect(chart.off).toHaveBeenCalledWith('click', clickHandler);
     expect(chart.off).toHaveBeenCalledWith('datazoom', dataZoomHandler);
     expect(chart.off).toHaveBeenCalledWith('brushEnd', brushEndHandler);
     expect(chart.off).toHaveBeenCalledWith('updateAxisPointer', axisPointerHandler);
+  });
+
+  it('opts into legend paging feedback without vibrating during setup or synchronized changes', () => {
+    const handlers = new Map<string, (params: unknown) => void>();
+    const chart = {
+      on: vi.fn((name: string, handler: (params: unknown) => void) => handlers.set(name, handler)),
+      off: vi.fn((name: string) => handlers.delete(name)),
+    } as unknown as Parameters<EChartsLoaderService['attachMobileSeriesTapFeedback']>[0];
+    const unsubscribe = service.attachMobileSeriesTapFeedback(chart, { legendScrollFeedback: true });
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+    handlers.get('legendscroll')?.({ scrollDataIndex: 3, $from: 'dashboard-sync' });
+    handlers.get('legendscroll')?.({ scrollDataIndex: -1 });
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+    handlers.get('legendscroll')?.({ scrollDataIndex: 3 });
+    expect(hapticsMock.selection).toHaveBeenCalledOnce();
+    unsubscribe();
+    expect(handlers.has('legendscroll')).toBe(false);
+    service.attachMobileSeriesTapFeedback(chart);
+    expect(handlers.has('legendscroll')).toBe(false);
   });
 
   it('should gate axis-pointer haptics until the first intentional chart interaction when requested', () => {

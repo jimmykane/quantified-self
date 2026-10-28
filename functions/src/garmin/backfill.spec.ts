@@ -1,8 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- Firebase callable tests use intentionally partial mocks. */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as requestHelper from '../request-helper';
-import { backfillGarminAPIActivities } from './backfill';
+import { backfillGarminAPIActivities, processGarminBackfill } from './backfill';
 import * as utils from '../utils';
+import * as logger from 'firebase-functions/logger';
+import { startManualActivityHistory } from '../connection-history/manual-activity';
+import { ServiceNames } from '@sports-alliance/sports-lib';
+import { HttpsError } from 'firebase-functions/v2/https';
+
+vi.mock('../connection-history/manual-activity', () => ({ startManualActivityHistory: vi.fn() }));
 
 // Simple, robust mock setup
 const getMock = vi.fn();
@@ -55,6 +61,7 @@ collectionMock.mockReturnValue(collectionObj); // collection() -> collection
 vi.mock('firebase-admin', () => ({
     firestore: () => ({
         collection: collectionMock,
+        doc: docMock,
         collectionGroup: vi.fn(), // added collectionGroup if needed
         runTransaction: runTransactionMock,
     })
@@ -131,6 +138,7 @@ describe('Garmin Backfill', () => {
         vi.useFakeTimers();
         vi.setSystemTime(new Date('2026-08-12T12:00:00.000Z'));
         vi.clearAllMocks();
+        vi.mocked(startManualActivityHistory).mockReset();
         metaState = {};
         deletionGuardMocks.getUserDeletionGuardState.mockReset().mockResolvedValue({ shouldSkip: false });
         deletionGuardMocks.getUserDeletionGuardStateInTransaction.mockReset().mockResolvedValue({ shouldSkip: false });
@@ -205,6 +213,52 @@ describe('Garmin Backfill', () => {
         vi.useRealTimers();
     });
 
+    it('accepts background history without requesting Garmin or updating legacy completion metadata', async () => {
+        const data = { startDate: '2026-07-01T21:00:00.000Z', endDate: '2026-08-11T20:59:59.999Z', background: true };
+        const historyImport = { runId: 'accepted-run', active: true } as Awaited<ReturnType<typeof startManualActivityHistory>>;
+        vi.mocked(startManualActivityHistory).mockResolvedValue(historyImport);
+        await expect((backfillGarminAPIActivities as any)(data, context)).resolves.toEqual({ result: 'History import accepted', historyImport });
+        expect(startManualActivityHistory).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI, new Date(data.startDate), new Date(data.endDate));
+        expect(requestHelper.get).not.toHaveBeenCalled();
+        expect(tokens.getTokenData).not.toHaveBeenCalled();
+        expect(setMock).not.toHaveBeenCalled();
+    });
+
+    it.each([undefined, false])('preserves the legacy void response for older clients with background=%s', async background => {
+        await expect((backfillGarminAPIActivities as any)({ startDate: '2026-08-01', endDate: '2026-08-11', background }, context)).resolves.toBeUndefined();
+        expect(startManualActivityHistory).not.toHaveBeenCalled();
+        expect(requestHelper.get).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(['already-exists', 'permission-denied', 'failed-precondition'] as const)('preserves the %s admission refusal without falling back to provider work', async code => {
+        const error = new HttpsError(code, 'Admission refused');
+        vi.mocked(startManualActivityHistory).mockRejectedValue(error);
+        await expect((backfillGarminAPIActivities as any)({ startDate: '2026-08-01', endDate: '2026-08-11', background: true }, context)).rejects.toBe(error);
+        expect(requestHelper.get).not.toHaveBeenCalled();
+        expect(setMock).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        { startDate: '2026-08-01', endDate: '2026-08-11', background: 'true' },
+        { startDate: 'invalid', endDate: '2026-08-11', background: true },
+        { startDate: '2026-08-11', endDate: '2026-08-01', background: true },
+        { startDate: '2026-08-01', endDate: '2026-08-15', background: true },
+        { startDate: '2020-01-01', endDate: '2026-08-11', background: true },
+    ])('rejects invalid background inputs before admission: %j', async data => {
+        await expect((backfillGarminAPIActivities as any)(data, context)).rejects.toMatchObject({ code: 'invalid-argument' });
+        expect(startManualActivityHistory).not.toHaveBeenCalled();
+        expect(requestHelper.get).not.toHaveBeenCalled();
+    });
+
+    it.each(['app-check', 'auth', 'pro'])('retains the %s gate before background admission', async gate => {
+        if (gate === 'app-check') context.app = undefined;
+        if (gate === 'auth') context.auth = undefined;
+        if (gate === 'pro') vi.mocked(utils.hasProAccess).mockResolvedValue(false);
+        await expect((backfillGarminAPIActivities as any)({ startDate: '2026-08-01', endDate: '2026-08-11', background: true }, context)).rejects.toThrow();
+        expect(startManualActivityHistory).not.toHaveBeenCalled();
+        expect(requestHelper.get).not.toHaveBeenCalled();
+    });
+
     it('should trigger backfill and return void on success', async () => {
         const data = { startDate: '2023-01-01', endDate: '2023-01-10' };
 
@@ -232,6 +286,14 @@ describe('Garmin Backfill', () => {
         await expect((backfillGarminAPIActivities as any)(data, context)).rejects.toThrow('The function must be called while authenticated.');
     });
 
+    it('preserves an automatic token refresh retry hint for the coordinator', async () => {
+        const error = Object.assign(new Error('refresh delayed'), { retryAt: Date.now() + 7200000 });
+        vi.mocked(tokens.getTokenData).mockRejectedValueOnce(error);
+        const execution = { runId: 'run', tokenPath: 'token', providerUserId: 'account', cooldownStartedAtMs: Date.now(), requiredDocumentFieldValues: [], beforeRequest: vi.fn(), inTransaction: vi.fn(), onQueued: vi.fn() };
+        await expect(processGarminBackfill('testUserID', new Date('2026-08-01'), new Date('2026-08-12'), execution)).rejects.toBe(error);
+        expect(requestHelper.get).not.toHaveBeenCalled();
+    });
+
     it('should throw permission-denied if throttled', async () => {
         metaState.didLastHistoryImport = Date.now();
 
@@ -255,6 +317,30 @@ describe('Garmin Backfill', () => {
 
         expect(tokens.getTokenData).not.toHaveBeenCalled();
         expect(requestHelper.get).not.toHaveBeenCalled();
+        expect(logger.info).toHaveBeenCalledWith('[GarminHistoryImport] History import is already running.');
+        expect(logger.error).not.toHaveBeenCalled();
+    });
+
+    it('preserves an automatic-history reservation conflict as HTTP 409 before provider work', async () => {
+        metaState.connectionHistoryReservation = 'automatic-run';
+        metaState.connectionHistoryReservationExpiresAt = Date.now() + 60_000;
+        const originalMeta = { ...metaState };
+
+        await expect((backfillGarminAPIActivities as any)({
+            startDate: '2023-01-01',
+            endDate: '2023-01-10',
+        }, context)).rejects.toMatchObject({
+            code: 'already-exists',
+            httpErrorCode: { status: 409 },
+            message: 'A recent-history import is already running. Please wait for it to finish.',
+        });
+
+        expect(tokens.getTokenData).not.toHaveBeenCalled();
+        expect(requestHelper.get).not.toHaveBeenCalled();
+        expect(setMock).not.toHaveBeenCalled();
+        expect(metaState).toEqual(originalMeta);
+        expect(logger.info).toHaveBeenCalledWith('[GarminHistoryImport] History import is already running.');
+        expect(logger.error).not.toHaveBeenCalled();
     });
 
     it('should reclaim an expired history import lease', async () => {
@@ -285,6 +371,7 @@ describe('Garmin Backfill', () => {
         expect(metaState.historyImportLeaseOwner).toBeUndefined();
         expect(metaState.historyImportLeaseExpiresAt).toBeUndefined();
         expect(metaState.didLastHistoryImport).toBeUndefined();
+        expect(logger.error).toHaveBeenCalledWith('Error backfilling Garmin:', expect.anything());
     });
 
     it('should expose deletion-guard read failures as retryable', async () => {

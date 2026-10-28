@@ -7,7 +7,7 @@ import { isActivitySyncRouteUIDAllowlisted } from '@shared/activity-sync-rollout
 import { isDisconnectPendingServiceConnection, isReconnectRequiredServiceConnection } from '@shared/service-connection';
 import { getProviderDisplayName } from '@shared/provider-presentation';
 import { AppUserInterface } from '../../../models/app-user.interface';
-import { ActivitySyncBackfillSummary, AppUserService } from '../../../services/app.user.service';
+import { AppUserService } from '../../../services/app.user.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { LoggerService } from '../../../services/logger.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -33,11 +33,6 @@ export class ActivitySyncRouteControlComponent implements OnChanges, OnDestroy {
   public destinationReconnectRequired = false;
   public destinationDisconnectPending = false;
   public isSaving = false;
-  public isBackfilling = false;
-  public backfillStartDate = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000));
-  public backfillEndDate = new Date();
-  public backfillSummary: ActivitySyncBackfillSummary | null = null;
-  public backfillSummaryReasonText: string | null = null;
 
   private destinationConnectionSubscription: Subscription | null = null;
 
@@ -73,10 +68,6 @@ export class ActivitySyncRouteControlComponent implements OnChanges, OnDestroy {
   get routeEnabled(): boolean {
     return !!this.routeId
       && this.user?.settings?.serviceSyncSettings?.activitySyncRoutes?.[this.routeId]?.enabled === true;
-  }
-
-  get isBackfillDateRangeInvalid(): boolean {
-    return this.backfillStartDate > this.backfillEndDate;
   }
 
   get canUseRoute(): boolean {
@@ -118,81 +109,6 @@ export class ActivitySyncRouteControlComponent implements OnChanges, OnDestroy {
     } finally {
       this.isSaving = false;
     }
-  }
-
-  async runBackfill(event: Event): Promise<void> {
-    event.preventDefault();
-    if (!this.user || !this.routeId || this.isBackfilling) return;
-    if (!this.routeAvailableForUser) {
-      this.snackBar.open('Activity sync is not available for this account.', undefined, { duration: 4000 });
-      return;
-    }
-    if (!this.canUseRoute) {
-      this.snackBar.open(`Connect ${this.sourceName} and ${this.destinationName} before syncing past activities.`, undefined, { duration: 4500 });
-      return;
-    }
-    if (this.isBackfillDateRangeInvalid) {
-      this.snackBar.open('The start date must be before the end date.', undefined, { duration: 3500 });
-      return;
-    }
-
-    this.hapticsService.selection();
-    this.isBackfilling = true;
-    try {
-      const summary = await this.userService.backfillActivitySyncRouteForCurrentUser(
-        this.sourceServiceName,
-        this.destinationServiceName,
-        this.backfillStartDate,
-        this.backfillEndDate,
-      );
-      this.backfillSummary = summary;
-      this.backfillSummaryReasonText = this.getBackfillSummaryReasonText(summary);
-      this.analyticsService.logActivitySyncRouteBackfill(this.routeId, {
-        scanned: summary.scanned,
-        queued: summary.queued,
-        failedCount: summary.failedCount,
-      });
-      const failureSuffix = summary.failedCount > 0 ? ` Could not schedule: ${summary.failedCount}.` : '';
-      this.snackBar.open(`${summary.queued} ${summary.queued === 1 ? 'activity' : 'activities'} scheduled for syncing to ${this.destinationName}.${failureSuffix}`, undefined, { duration: 4500 });
-      if (summary.failedCount > 0) {
-        this.hapticsService.warning();
-      } else {
-        this.hapticsService.success();
-      }
-    } catch (error: any) {
-      this.logger.error(error);
-      this.snackBar.open(`Could not start activity sync: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
-      this.hapticsService.error();
-    } finally {
-      this.isBackfilling = false;
-    }
-  }
-
-  private getBackfillSummaryReasonText(summary: ActivitySyncBackfillSummary): string | null {
-    const skippedByReason = summary.skippedByReason || {};
-    const messages: string[] = [];
-    const notImportedCount = Number(skippedByReason.not_imported_from_source || 0);
-    if (notImportedCount > 0) {
-      messages.push(`${notImportedCount} ${notImportedCount === 1 ? 'was' : 'were'} not imported from ${this.sourceName}`);
-    }
-    const alreadyPendingCount = Number(skippedByReason.already_pending || 0);
-    if (alreadyPendingCount > 0) {
-      messages.push(`${alreadyPendingCount} ${alreadyPendingCount === 1 ? 'is' : 'are'} already queued`);
-    }
-    const alreadySyncedCount = Number(skippedByReason.already_synced || 0);
-    if (alreadySyncedCount > 0) {
-      messages.push(`${alreadySyncedCount} ${alreadySyncedCount === 1 ? 'was' : 'were'} already sent to ${this.destinationName}`);
-    }
-    const missingOriginalFilesCount = Number(skippedByReason.missing_original_files || 0);
-    if (missingOriginalFilesCount > 0) {
-      messages.push(`${missingOriginalFilesCount} ${missingOriginalFilesCount === 1 ? 'has' : 'have'} no retained original file`);
-    }
-    const unsupportedOriginalFileCount = Number(skippedByReason.unsupported_original_file || 0);
-    if (unsupportedOriginalFileCount > 0) {
-      messages.push(`${unsupportedOriginalFileCount} ${unsupportedOriginalFileCount === 1 ? 'has' : 'have'} no supported activity file`);
-    }
-
-    return messages.length > 0 ? `Not newly scheduled: ${messages.join('; ')}.` : null;
   }
 
   private watchDestinationConnection(): void {

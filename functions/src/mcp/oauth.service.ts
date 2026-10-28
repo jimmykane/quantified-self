@@ -18,9 +18,20 @@ import {
 
 export const MCP_OAUTH_SCOPES = {
   MetricsRead: 'metrics:read',
+  HealthRead: 'health:read',
+  WorkoutReflectionsRead: 'workout-reflections:read',
+  WorkoutReflectionsWrite: 'workout-reflections:write',
+  TimelineNotesRead: 'timeline-notes:read',
+  TimelineNotesWrite: 'timeline-notes:write',
+  TrainingPlansRead: 'training-plans:read',
+  TrainingPlansWrite: 'training-plans:write',
+  TrainingDeliveryWrite: 'training-delivery:write',
   MeasurementsRead: 'measurements:read',
+  MeasurementsWrite: 'measurements:write',
   SleepRead: 'sleep:read',
   ActivityDetailsRead: 'activity-details:read',
+  EventsWrite: 'events:write',
+  ActivityDescriptionsRead: 'activity-descriptions:read',
   ActivityLocationRead: 'activity-location:read',
   RoutesRead: 'routes:read',
   RouteLocationRead: 'route-location:read',
@@ -33,11 +44,24 @@ export function hasValidMcpScopeDependencies(
 ): boolean {
   const selected = new Set(scopes);
   return !(
-    selected.has(MCP_OAUTH_SCOPES.ActivityLocationRead)
+    (selected.has(MCP_OAUTH_SCOPES.ActivityLocationRead)
+      || selected.has(MCP_OAUTH_SCOPES.ActivityDescriptionsRead)
+      || selected.has(MCP_OAUTH_SCOPES.EventsWrite)
+      || selected.has(MCP_OAUTH_SCOPES.WorkoutReflectionsRead)
+      || selected.has(MCP_OAUTH_SCOPES.WorkoutReflectionsWrite))
     && !selected.has(MCP_OAUTH_SCOPES.ActivityDetailsRead)
+  ) && !(
+    selected.has(MCP_OAUTH_SCOPES.WorkoutReflectionsWrite) && !selected.has(MCP_OAUTH_SCOPES.WorkoutReflectionsRead)
+  ) && !(
+    selected.has(MCP_OAUTH_SCOPES.TimelineNotesWrite)
+    && !selected.has(MCP_OAUTH_SCOPES.TimelineNotesRead)
   ) && !(
     selected.has(MCP_OAUTH_SCOPES.RouteLocationRead)
     && !selected.has(MCP_OAUTH_SCOPES.RoutesRead)
+  ) && !(
+    (selected.has(MCP_OAUTH_SCOPES.TrainingPlansWrite)
+      || selected.has(MCP_OAUTH_SCOPES.TrainingDeliveryWrite))
+    && !selected.has(MCP_OAUTH_SCOPES.TrainingPlansRead)
   );
 }
 
@@ -127,11 +151,32 @@ export type OAuthErrorCode =
   | 'access_denied'
   | 'temporarily_unavailable';
 
+/** Internal fixed labels only; never pass request values into diagnostics. */
+export type McpOAuthDiagnosticReason =
+  | 'invalid_parameters'
+  | 'repeated_parameters'
+  | 'invalid_audience'
+  | 'invalid_pkce_verifier'
+  | 'invalid_or_expired_authorization_code'
+  | 'invalid_or_expired_refresh_token'
+  | 'unavailable_grant'
+  | 'unavailable_connection'
+  | 'incomplete_connection_metadata'
+  | 'invalid_client_binding'
+  | 'superseded_grant'
+  | 'inactive_connection'
+  | 'refresh_token_reuse'
+  | 'scope_exceeds_grant'
+  | 'invalid_scope_dependencies'
+  | 'unsupported_content_type'
+  | 'request_body_too_large';
+
 export class McpOAuthError extends Error {
   constructor(
     readonly code: OAuthErrorCode,
     message: string,
     readonly statusCode = 400,
+    readonly diagnosticReason?: McpOAuthDiagnosticReason,
   ) {
     super(message);
     this.name = 'McpOAuthError';
@@ -775,11 +820,11 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
           || code.codeChallenge !== input.codeChallenge
           || !clientAuthBindingsMatch(code.clientAuth, input.clientAuth)
         ) {
-          throw new McpOAuthError('invalid_grant', 'The authorization code is invalid or expired.');
+          throw new McpOAuthError('invalid_grant', 'The authorization code is invalid or expired.', 400, 'invalid_or_expired_authorization_code');
         }
         const guard = await getUserDeletionGuardStateInTransaction(db, transaction, code.uid, input.nowMs);
         if (guard.shouldSkip) {
-          throw new McpOAuthError('invalid_grant', 'The authorization grant is no longer valid.');
+          throw new McpOAuthError('invalid_grant', 'The authorization grant is no longer valid.', 400, 'unavailable_grant');
         }
         const activeConnectionRef = connectionRef(code.uid, code.connectionId);
         const connection = documentData<McpConnection>(
@@ -799,12 +844,12 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
           || !clientAuthBindingsMatch(connection.clientAuth, input.clientAuth)
           || !validConnectionState
         ) {
-          throw new McpOAuthError('invalid_grant', 'The MCP connection is no longer available.');
+          throw new McpOAuthError('invalid_grant', 'The MCP connection is no longer available.', 400, 'unavailable_connection');
         }
         const clientName = code.clientName || connection.clientName;
         const redirectHost = code.redirectHost || connection.redirectHost;
         if (!clientName || !redirectHost) {
-          throw new McpOAuthError('invalid_grant', 'The MCP connection metadata is incomplete.');
+          throw new McpOAuthError('invalid_grant', 'The MCP connection metadata is incomplete.', 400, 'incomplete_connection_metadata');
         }
         const grantId = input.refreshTokenRecord.familyId;
         transaction.delete(codeRef);
@@ -866,11 +911,11 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
           || refresh.audience !== input.audience
           || !clientAuthBindingsMatch(refresh.clientAuth, input.clientAuth)
         ) {
-          throw new McpOAuthError('invalid_grant', 'The refresh token is invalid or expired.');
+          throw new McpOAuthError('invalid_grant', 'The refresh token is invalid or expired.', 400, 'invalid_or_expired_refresh_token');
         }
         const guard = await getUserDeletionGuardStateInTransaction(db, transaction, refresh.uid, input.nowMs);
         if (guard.shouldSkip) {
-          throw new McpOAuthError('invalid_grant', 'The authorization grant is no longer valid.');
+          throw new McpOAuthError('invalid_grant', 'The authorization grant is no longer valid.', 400, 'unavailable_grant');
         }
         const activeConnectionRef = connectionRef(refresh.uid, refresh.connectionId);
         const connection = documentData<McpConnection>(
@@ -890,16 +935,16 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
             && logicalConnection.clientId !== refresh.clientId
           )
         ) {
-          throw new McpOAuthError('invalid_grant', 'The MCP client binding is invalid.');
+          throw new McpOAuthError('invalid_grant', 'The MCP client binding is invalid.', 400, 'invalid_client_binding');
         }
         if (isSupersededLegacyConnection(refresh.connectionId, logicalConnection)) {
-          throw new McpOAuthError('invalid_grant', 'The authorization grant was superseded.');
+          throw new McpOAuthError('invalid_grant', 'The authorization grant was superseded.', 400, 'superseded_grant');
         }
         if (!isActiveMcpConnection(connection)) {
-          throw new McpOAuthError('invalid_grant', 'The MCP connection is no longer active.');
+          throw new McpOAuthError('invalid_grant', 'The MCP connection is no longer active.', 400, 'inactive_connection');
         }
         if (!isCurrentMcpGrant(refresh.connectionId, connection, refresh.familyId)) {
-          throw new McpOAuthError('invalid_grant', 'The authorization grant was superseded.');
+          throw new McpOAuthError('invalid_grant', 'The authorization grant was superseded.', 400, 'superseded_grant');
         }
         if (refresh.active !== true) {
           markConnectionRevoked(transaction, activeConnectionRef, input.nowMs, {
@@ -915,6 +960,8 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
           throw new McpOAuthError(
             'invalid_scope',
             'The requested scope exceeds the refresh token grant.',
+            400,
+            'scope_exceeds_grant',
           );
         }
         const nextScopes = input.requestedScopes || refresh.scopes;
@@ -925,6 +972,8 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
           throw new McpOAuthError(
             'invalid_scope',
             'The authorization grant contains an invalid dependent scope.',
+            400,
+            'invalid_scope_dependencies',
           );
         }
         transaction.update(refreshRef, {
@@ -968,6 +1017,8 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
         throw new McpOAuthError(
           'invalid_grant',
           'Refresh-token reuse was detected and the MCP connection was revoked.',
+          400,
+          'refresh_token_reuse',
         );
       }
       return outcome.refresh;
@@ -1264,7 +1315,7 @@ export function createPkceChallenge(verifier: string): string {
 function requireString(value: unknown, name: string, maxLength = 2048): string {
   const exact = typeof value === 'string' ? value : '';
   if (!exact || !exact.trim() || exact.length > maxLength) {
-    throw new McpOAuthError('invalid_request', `${name} is required.`);
+    throw new McpOAuthError('invalid_request', `${name} is required.`, 400, 'invalid_parameters');
   }
   return exact;
 }
@@ -1364,7 +1415,7 @@ export function normalizeOAuthScopes(value: unknown): McpOAuthScope[] {
   if (!hasValidMcpScopeDependencies(unique as McpOAuthScope[])) {
     throw new McpOAuthError(
       'invalid_scope',
-      'Location scopes require their matching activity-detail or saved-route scope.',
+      'Dependent permissions require their matching parent read permission.',
     );
   }
   return unique as McpOAuthScope[];
@@ -1375,6 +1426,8 @@ export function rejectRepeatedOAuthParameters(params: Record<string, unknown>): 
     throw new McpOAuthError(
       'invalid_request',
       'OAuth request parameters must not be included more than once.',
+      400,
+      'repeated_parameters',
     );
   }
 }
@@ -2107,7 +2160,17 @@ export function createMcpOAuthService(
       if (!request || request.status !== 'pending' || request.expiresAtMs <= nowMs) {
         throw new McpOAuthError('invalid_request', 'The authorization request is invalid or expired.');
       }
-      const grantedScopes = normalizeOAuthScopes(input.grantedScopes || request.scopes);
+      // Legacy consent requests may omit the selection. Preserve their existing
+      // permissions, but never implicitly opt them into authored notes, descriptions or planning data.
+      const grantedScopes = normalizeOAuthScopes(input.grantedScopes
+        ?? request.scopes.filter(scope => scope !== MCP_OAUTH_SCOPES.TimelineNotesRead
+          && scope !== MCP_OAUTH_SCOPES.TimelineNotesWrite
+          && scope !== MCP_OAUTH_SCOPES.MeasurementsWrite
+          && scope !== MCP_OAUTH_SCOPES.TrainingPlansRead
+          && scope !== MCP_OAUTH_SCOPES.TrainingPlansWrite
+          && scope !== MCP_OAUTH_SCOPES.TrainingDeliveryWrite
+          && scope !== MCP_OAUTH_SCOPES.ActivityDescriptionsRead
+          && scope !== MCP_OAUTH_SCOPES.EventsWrite));
       if (grantedScopes.some(scope => !request.scopes.includes(scope))) {
         throw new McpOAuthError('invalid_scope', 'A scope was not included in the original request.');
       }
@@ -2164,10 +2227,10 @@ export function createMcpOAuthService(
       const verifier = requireString(params.code_verifier, 'code_verifier', 128);
       const audience = requireString(params.resource, 'resource');
       if (audience !== `${baseUrl}/mcp`) {
-        throw new McpOAuthError('invalid_grant', 'The token audience is invalid.');
+        throw new McpOAuthError('invalid_grant', 'The token audience is invalid.', 400, 'invalid_audience');
       }
       if (!/^[A-Za-z0-9._~-]{43,128}$/.test(verifier)) {
-        throw new McpOAuthError('invalid_grant', 'The PKCE verifier is invalid.');
+        throw new McpOAuthError('invalid_grant', 'The PKCE verifier is invalid.', 400, 'invalid_pkce_verifier');
       }
       const nowMs = resolvedDependencies.now();
       const codeHash = hashOpaqueValue(code);
@@ -2181,7 +2244,7 @@ export function createMcpOAuthService(
         || storedCode.audience !== audience
         || storedCode.codeChallenge !== codeChallenge
       ) {
-        throw new McpOAuthError('invalid_grant', 'The authorization code is invalid or expired.');
+        throw new McpOAuthError('invalid_grant', 'The authorization code is invalid or expired.', 400, 'invalid_or_expired_authorization_code');
       }
       const clientAuth = await resolveStoredClientAuth(
         storedCode.clientAuth,
@@ -2249,7 +2312,7 @@ export function createMcpOAuthService(
       const clientId = requireString(params.client_id, 'client_id');
       const audience = requireString(params.resource, 'resource');
       if (audience !== `${baseUrl}/mcp`) {
-        throw new McpOAuthError('invalid_grant', 'The token audience is invalid.');
+        throw new McpOAuthError('invalid_grant', 'The token audience is invalid.', 400, 'invalid_audience');
       }
       const requestedScopes = params.scope === undefined || params.scope === null || params.scope === ''
         ? null
@@ -2263,7 +2326,7 @@ export function createMcpOAuthService(
         || storedRefresh.clientId !== clientId
         || storedRefresh.audience !== audience
       ) {
-        throw new McpOAuthError('invalid_grant', 'The refresh token is invalid or expired.');
+        throw new McpOAuthError('invalid_grant', 'The refresh token is invalid or expired.', 400, 'invalid_or_expired_refresh_token');
       }
       const clientAuth = await resolveStoredClientAuth(
         storedRefresh.clientAuth,
@@ -2411,6 +2474,7 @@ export function createMcpOAuthService(
         uid: token.uid,
         clientId: token.clientId,
         connectionId: token.connectionId,
+        grantId: token.grantId,
         scopes: token.scopes,
       };
     },
@@ -2462,9 +2526,9 @@ export class McpOAuthCleanupIncompleteError extends Error {
 }
 
 async function cleanupMcpOAuthQuery(
-  db: admin.firestore.Firestore,
   baseQuery: admin.firestore.Query,
   maxDocuments: number,
+  deleteDocument: (ref: admin.firestore.DocumentReference) => Promise<unknown>,
 ): Promise<McpOAuthCleanupPageResult> {
   let deletedCount = 0;
 
@@ -2487,7 +2551,7 @@ async function cleanupMcpOAuthQuery(
       const results = await Promise.allSettled(
         docsToDelete
           .slice(index, index + MCP_OAUTH_CLEANUP_DELETE_CONCURRENCY)
-          .map(doc => db.recursiveDelete(doc.ref)),
+          .map(doc => deleteDocument(doc.ref)),
       );
       const failedDelete = results.find(
         (result): result is PromiseRejectedResult => result.status === 'rejected',
@@ -2506,7 +2570,10 @@ async function cleanupMcpOAuthQuery(
   return { deletedCount, hasMore: true };
 }
 
-export async function cleanupMcpOAuthStateForUser(uid: string): Promise<void> {
+export async function cleanupMcpOAuthStateForUser(
+  uid: string,
+  deleteDocument?: (ref: admin.firestore.DocumentReference) => Promise<unknown>,
+): Promise<void> {
   const db = admin.firestore();
   const queries: admin.firestore.Query[] = [
     db.collection(MCP_OAUTH_COLLECTIONS.authorizationRequests).where('uid', '==', uid),
@@ -2527,7 +2594,7 @@ export async function cleanupMcpOAuthStateForUser(uid: string): Promise<void> {
       }
       continue;
     }
-    const result = await cleanupMcpOAuthQuery(db, queries[index], remainingBudget);
+    const result = await cleanupMcpOAuthQuery(queries[index], remainingBudget, deleteDocument ?? (ref => db.recursiveDelete(ref)));
     deletedCount += result.deletedCount;
     if (result.hasMore) {
       throw new McpOAuthCleanupIncompleteError(deletedCount);

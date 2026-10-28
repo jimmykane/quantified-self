@@ -1,0 +1,26 @@
+:host { display: block; min-width: 0; }
+
+.activity-picker-field {
+  --mat-form-field-container-height: var(--qs-table-filter-height, 46px);
+  --mat-form-field-container-text-size: var(--qs-table-filter-text-size, 0.95rem);
+  --mat-form-field-container-vertical-padding: var(--qs-table-filter-padding, 10px);
+  width: 100%;
+}
+
+.activity-picker-field input { cursor: pointer; }
+// Keep floating labels inside the scroll viewport, as in the lap column picker.
+.activity-picker-body { display: flex; flex-direction: column; gap: 8px; padding-block-start: 8px; min-width: 0; }
+.activity-picker-search { width: 100%; flex: 0 0 auto; }
+.activity-picker-summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; font: var(--mat-sys-body-small); }
+.activity-picker-shortcuts { display: flex; flex-direction: column; }
+.activity-picker-body .activity-picker-option { height: auto; min-height: 48px; padding-block: 8px; }
+.activity-picker-option .activity-picker-option-label { display: block; white-space: normal; overflow-wrap: anywhere; }
+
+.activity-picker-compact-trigger {
+  --mat-icon-button-state-layer-size: 30px;
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+}
+.activity-picker-compact-trigger mat-icon { width: 18px; height: 18px; font-size: 18px; }
+.activity-picker-compact-trigger.is-active { color: var(--mat-sys-primary); }

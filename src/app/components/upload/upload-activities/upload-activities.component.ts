@@ -1,5 +1,7 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, inject, Input, OnInit, Output } from '@angular/core';
+import { Component, DestroyRef, EventEmitter, inject, Input, OnInit, Output } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { take } from 'rxjs';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -14,7 +16,7 @@ import { FileInterface } from '../file.interface';
 import { USAGE_LIMITS } from '@shared/limits';
 import { isSupportedActivityFileBaseExtension } from '@shared/activity-file-formats';
 import { BrowserCompatibilityService } from '../../../services/browser.compatibility.service';
-import { UploadError } from '../../../services/upload-error';
+import { markUploadErrorUserActionHandled, UploadError } from '../../../services/upload-error';
 
 const TEXT_COMPRESSIBLE_EXTENSIONS = new Set(['gpx', 'tcx', 'json', 'sml']);
 const ACCOUNT_DELETION_UPLOAD_ERROR_CODE = 'user_deleted_or_deleting';
@@ -43,10 +45,13 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
   protected authService = inject(AppAuthService);
   protected fitUploadService = inject(AppFitUploadService);
   protected browserCompatibilityService = inject(BrowserCompatibilityService);
+  private readonly destroyRef = inject(DestroyRef);
 
   public uploadCount: number | null = null;
   public uploadLimit: number | null = null;
   private accountDeletionSignOut: { userID: string; promise: Promise<void> } | null = null;
+  private pendingRouteActionUserID: string | null = null;
+  private activeUploadBatches = 0;
 
   constructor() {
     super();
@@ -132,6 +137,21 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
     return { bytes: compressed, extension: `${extension}.gz` };
   }
 
+  override async getFiles(event: Parameters<UploadAbstractDirective['getFiles']>[0]): Promise<void> {
+    this.activeUploadBatches++;
+    try {
+      await super.getFiles(event);
+    } finally {
+      this.activeUploadBatches--;
+      this.isUploading = this.activeUploadBatches > 0;
+      if (!this.isUploading) {
+        const routeActionUserID = this.pendingRouteActionUserID;
+        this.pendingRouteActionUserID = null;
+        if (routeActionUserID) this.showRouteUploadAction(routeActionUserID);
+      }
+    }
+  }
+
   processAndUploadFile(file: FileInterface): Promise<{ eventId: string }> {
     const extension = file.extension.toLowerCase().trim();
     this.analyticsService.logEvent('upload_file', { method: extension });
@@ -173,6 +193,15 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
             await this.clearDeletedAccountSession(uploadUserID);
           }
 
+          if (error instanceof UploadError && error.status === 400 && error.code === 'route_file_in_activity_upload') {
+            // Present the action after the whole batch, so later failures do
+            // not replace it and navigation cannot interrupt remaining files.
+            if (this.activeUploadBatches > 0) this.pendingRouteActionUserID = uploadUserID;
+            else this.showRouteUploadAction(uploadUserID);
+            reject(markUploadErrorUserActionHandled(error));
+            return;
+          }
+
           const message = this.getUploadErrorMessage(error);
           this.snackBar.open(`Could not upload ${file.name}, reason: ${message}`, 'OK', { duration: 4000 });
           reject(error);
@@ -186,6 +215,18 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
       };
 
       fileReader.readAsArrayBuffer(file.file);
+    });
+  }
+
+  private showRouteUploadAction(uploadUserID: string | null): void {
+    if (this.destroyRef.destroyed || !uploadUserID || this.authService.currentUser?.uid !== uploadUserID) return;
+    this.snackBar.open(
+      'This file contains a route, not a workout. Open Routes and select the file there.',
+      'Upload as route', { duration: 10000 },
+    ).onAction().pipe(take(1), takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+      if (this.activeUploadBatches > 0 || this.authService.currentUser?.uid !== uploadUserID) return;
+      this.hapticsService.selection();
+      void this.router.navigate(['/routes']);
     });
   }
 

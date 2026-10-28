@@ -1,0 +1,68 @@
+import { TrainingDeliveryContractError, type TrainingDeliveryAction, type TrainingDeliveryStatus, type TrainingDeliveryStatusV1 } from '@shared/training-provider-delivery';
+import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
+
+export const TRAINING_DELIVERY_STATUS_LABELS: Record<TrainingDeliveryStatus, string> = {
+  pending: 'Waiting to sync', delivered: 'Up to date', removed: 'Removed from connected app', stopped: 'Sync stopped',
+  paused_plan: 'Plan inactive — withdrawing future copies', paused_pro: 'Paused — Pro required',
+  provider_unavailable: 'Workout sync is unavailable', reconnect_required: 'Reconnect this account',
+  connection_repair: 'Connection needs repair', fresh_consent_required: 'Send again to give fresh consent',
+  outside_horizon: 'Scheduled for later', past: 'Past workout · previously sent',
+  completed: 'Completed in connected app', unsupported: 'This workout cannot be mapped',
+  approval_required: 'Review workout differences', retrying: 'Retry scheduled',
+  needs_attention: 'Sync could not be confirmed — inspect before retrying', failed: 'Sync failed',
+};
+
+/** Completion belongs to the authored workout; the provider remains delivery/provenance context. */
+export function trainingDeliveryStatusLabel(status: TrainingDeliveryStatusV1,
+  completion?: Pick<TrainingWorkoutCompletionV1, 'workoutId' | 'provider'>): string {
+  const confirmedCopy = status.hasRemoteCopy && !status.differsFromQS && status.lastAcceptedAtMs !== null;
+  if (completion?.workoutId === status.workoutId && confirmedCopy) {
+    return completion.provider === status.provider ? 'Completed · activity linked' : 'Sent · workout completed';
+  }
+  return TRAINING_DELIVERY_STATUS_LABELS[status.status];
+}
+
+/** Show the latest transport event, not an older success ahead of a newer failure. */
+export function trainingDeliveryLatestEvent(status: Pick<TrainingDeliveryStatusV1, 'lastAcceptedAtMs' | 'lastAttemptAtMs' | 'updatedAtMs'>): {
+  timestamp: number; timestampLabel: string;
+} {
+  if (status.lastAcceptedAtMs !== null && (status.lastAttemptAtMs === null || status.lastAcceptedAtMs >= status.lastAttemptAtMs)) {
+    return { timestamp: status.lastAcceptedAtMs, timestampLabel: 'Last accepted' };
+  }
+  if (status.lastAttemptAtMs !== null) return { timestamp: status.lastAttemptAtMs, timestampLabel: 'Last attempt' };
+  return { timestamp: status.updatedAtMs, timestampLabel: 'Updated' };
+}
+
+/** A retained artifact is not proof that the full workout/calendar delivery finished. */
+export function trainingDeliveryCopyMessage(status: TrainingDeliveryStatusV1): string | null {
+  if (!status.differsFromQS) return null;
+  if (status.status === 'paused_plan') return 'The plan is inactive. Eligible future copies are awaiting removal.';
+  if (status.lastAcceptedAtMs === null) return status.provider === 'suunto'
+    ? 'A Suunto Guide may exist, but acceptance of this delivery is not confirmed.'
+    : 'A sent workout exists, but sync is not fully confirmed yet.';
+  return status.provider === 'suunto'
+    ? 'Suunto accepted an earlier Guide, but the latest changes were not accepted.'
+    : 'Your latest changes are not confirmed in the connected app.';
+}
+
+export function trainingDeliveryCommandError(error: unknown, saving: boolean, action?: TrainingDeliveryAction): string {
+  const code = (error as { code?: unknown } | null)?.code;
+  const name = (error as { name?: unknown } | null)?.name;
+  if (code === 'functions/aborted' || code === 'aborted') return 'The schedule or sync settings changed. Cancel and review the latest version.';
+  if (code === 'functions/unauthenticated' || code === 'unauthenticated') return 'Your session expired. Sign in again to manage delivery.';
+  if (code === 'functions/permission-denied' || code === 'permission-denied') return 'This account cannot make this sync change. Check your access and Pro subscription.';
+  if (action === 'replace' && (code === 'functions/failed-precondition' || code === 'failed-precondition')) {
+    return 'Replacement is unavailable for the current state. Cancel this review, check Garmin again, then review the latest workout. Past or completed workouts and unfinished sends cannot be replaced.';
+  }
+  if (action === 'fresh-guide' && (code === 'functions/failed-precondition' || code === 'failed-precondition')) {
+    return 'A fresh Guide is unavailable for this state. Resolve unfinished sends and check current sync consent first. Past or completed workouts cannot be resent this way; use Duplicate to… for a completed workout. After eight fresh copies, use Duplicate to… instead.';
+  }
+  if (saving) return 'Saving was not confirmed. Retry this confirmation safely with the same request, or close and check the sync status.';
+  if (code === 'functions/deadline-exceeded' || code === 'deadline-exceeded' || name === 'TimeoutError') {
+    return 'The sync check timed out. No sync settings were changed. Check your connection and try again.';
+  }
+  if (code === 'functions/invalid-argument' || code === 'invalid-argument' || error instanceof TrainingDeliveryContractError) {
+    return 'Check the workout time zone and review again using the latest schedule.';
+  }
+  return 'Unable to check sync right now. No sync settings were changed. Check your connection and try again.';
+}

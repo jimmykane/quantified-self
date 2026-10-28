@@ -152,7 +152,7 @@ Copy `src/environments/mapbox-token.local.example.ts` to the ignored `.local.ts`
 
 ### Java or Node warnings appear
 
-Use Java 21. The root project selects Node 20.19+ for frontend CI, while `functions/package.json` declares Node 22 for the deployed Functions runtime. Firebase can warn when the emulator uses Node 20; use Node 22 when validating exact Functions runtime behavior.
+Use Java 21. The root project, frontend CI and Functions runtime all use Node 22.
 
 ### The role does not update
 
@@ -187,3 +187,5 @@ QS_ALLOW_HOSTED_FUNCTIONS=quantified-self-io npm run start:functions:prod
 ```
 
 That command can read and write hosted resources. It must never appear in contributor Quick Start instructions, automation, or emulator troubleshooting.
+
+The isolated launcher sets `QS_ISOLATED_LOCAL_RUNTIME=true`; bootstrap validates every local emulator host before Admin initialization. Existing Functions-only maintainer emulation and the dedicated `demo-stripe-billing` profile retain their separate paths. The Stripe-test profile can use billing while the contributor demo keeps it disabled.

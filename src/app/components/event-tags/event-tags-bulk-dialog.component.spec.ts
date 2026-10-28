@@ -4,6 +4,8 @@ import { ComponentFixture } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { EventTagCatalogService } from '../../services/event-tag-catalog.service';
+import { Auth } from 'app/firebase/auth';
 import { describe, beforeEach, expect, it, vi } from 'vitest';
 
 import { EventTagsBulkDialogComponent } from './event-tags-bulk-dialog.component';
@@ -20,6 +22,7 @@ describe('EventTagsBulkDialogComponent', () => {
   let snackbar: ReturnType<typeof vi.fn>;
   let dialogRef: { close: ReturnType<typeof vi.fn>; disableClose: boolean };
   let hapticsService: any;
+  let listAllTags: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     save = vi.fn().mockResolvedValue({});
@@ -32,6 +35,7 @@ describe('EventTagsBulkDialogComponent', () => {
       warning: vi.fn(),
       error: vi.fn(),
     };
+    listAllTags = vi.fn().mockResolvedValue(['Historical', 'Race']);
     TestBed.configureTestingModule({
       imports: [EventTagsBulkDialogComponent, NoopAnimationsModule],
       providers: [
@@ -39,12 +43,38 @@ describe('EventTagsBulkDialogComponent', () => {
         { provide: MatDialogRef, useValue: dialogRef },
         { provide: MatSnackBar, useValue: { open: snackbar } },
         { provide: AppHapticsService, useValue: hapticsService },
+        { provide: EventTagCatalogService, useValue: { listAllTags } },
+        { provide: Auth, useValue: { currentUser: { uid: 'owner-1' } } },
       ],
     });
     fixture = TestBed.createComponent(EventTagsBulkDialogComponent);
     component = fixture.componentInstance;
     (component as unknown as { snackBar: { open: typeof snackbar } }).snackBar = { open: snackbar };
     fixture.detectChanges();
+  });
+
+  it('gives one selection feedback on cancel and none while disabled', () => {
+    component.isSaving.set(true); fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('button[mat-button]') as HTMLButtonElement;
+    button.click();
+    expect(hapticsService.selection).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
+    component.isSaving.set(false); fixture.detectChanges(); button.click();
+    expect(hapticsService.selection).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it('uses activity language for the selected rows', () => {
+    expect(fixture.nativeElement.textContent).toContain('Update activity tags');
+    expect(fixture.nativeElement.textContent).toContain('3 selected activities');
+  });
+
+  it('includes saved tags among add suggestions without extra haptics', async () => {
+    await fixture.whenStable();
+    expect(listAllTags).toHaveBeenCalledWith('owner-1');
+    expect(component.addSuggestions()).toEqual(['Historical', 'Race']);
+    expect(component.removeSuggestions()).toEqual(['Old']);
+    expect(hapticsService.selection).not.toHaveBeenCalled();
   });
 
   it('stages separate add and remove changes and applies them', async () => {

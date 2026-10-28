@@ -1,19 +1,20 @@
 import { Injectable, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../components/confirmation-dialog/confirmation-dialog.component';
-import { environment } from '../../environments/environment';
-import { Firestore, collection, collectionData, doc, docData, getDocsFromServer, limit, query, setDoc, where } from 'app/firebase/firestore';
+import { Firestore, collection, collectionData, doc, docData, getDocFromServer, getDocsFromServer, limit, query, setDoc, where } from 'app/firebase/firestore';
 
 // ... (other imports)
 
 
 import { Auth } from 'app/firebase/auth';
 import type { FirebaseUserType } from 'app/firebase/auth';
-import { Observable, catchError, from, switchMap, filter, take, map, of, retry, throwError, timeout, timer, firstValueFrom } from 'rxjs';
+import { EMPTY, Observable, catchError, from, mergeMap, switchMap, filter, take, map, merge, of, retry, throwError, timeout, timer, firstValueFrom, tap } from 'rxjs';
 import { AppWindowService } from './app.window.service';
 import { LoggerService } from './logger.service';
 import { AppFunctionsService } from './app.functions.service';
 import { UpcomingRenewalAmountResult } from '@shared/stripe-renewal';
+import { STRIPE_CHECKOUT_TERMS_VERSION } from '@shared/stripe-checkout-terms';
+import { environment } from '../../environments/environment';
 
 export const LOCAL_BILLING_DISABLED_MESSAGE = 'Billing is disabled in the isolated local runtime. Use npm run local:role to test free or pro access.';
 
@@ -64,6 +65,11 @@ interface CheckoutInput {
     mode: CheckoutMode;
 }
 
+interface CheckoutSubscriptionState {
+    hasHistory: boolean;
+    hasActiveSubscription: boolean;
+}
+
 interface CheckoutSessionPayload {
     price: string;
     success_url: string;
@@ -72,6 +78,7 @@ interface CheckoutSessionPayload {
     mode: CheckoutMode;
     automatic_tax: { enabled: true };
     metadata: { firebaseUID: string };
+    checkout_terms_version: typeof STRIPE_CHECKOUT_TERMS_VERSION;
     payment_method_collection?: 'if_required';
     trial_period_days?: number;
     promotion_code?: string;
@@ -79,7 +86,15 @@ interface CheckoutSessionPayload {
 
 interface CheckoutSessionDocumentData {
     url?: string;
-    error?: string | { message?: string };
+    error?: string | { code?: string; message?: string };
+    status?: 'updating' | 'ready' | 'failed';
+}
+
+export class CheckoutStartError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'CheckoutStartError';
+    }
 }
 
 @Injectable({
@@ -92,9 +107,10 @@ export class AppPaymentService {
     private dialog = inject(MatDialog);
     private readonly userCancelledPortalMessage = 'User cancelled redirection to portal.';
     private readonly maxCheckoutRetryAttempts = 1;
+    private readonly checkoutSubscriptionReadLimit = 100;
+    private readonly checkoutSessionWaitMs = 60000;
     private readonly subscriptionReadRetryAttempts = 4;
     private readonly subscriptionReadRetryDelayMs = 750;
-    private readonly subscriptionStatuses: StripeSubscription['status'][] = ['active', 'trialing', 'canceled', 'incomplete', 'incomplete_expired', 'past_due', 'unpaid'];
 
     constructor(private windowService: AppWindowService, private logger: LoggerService) { }
 
@@ -300,16 +316,17 @@ export class AppPaymentService {
     /**
      * Creates a checkout session and redirects the user to Stripe.
      */
-    async appendCheckoutSession(price: string | StripePrice, successUrl?: string, cancelUrl?: string): Promise<void> {
+    async appendCheckoutSession(price: string | StripePrice, successUrl?: string, cancelUrl?: string, canRedirect?: () => boolean, onProgress?: (status: 'updating') => void): Promise<void> {
         this.assertBillingEnabled();
         const user = this.auth.currentUser;
         if (!user) {
             throw new Error('User must be authenticated to create a checkout session.');
         }
 
+        await this.assertBillingAvailable();
         const success = successUrl || `${this.windowService.currentDomain}/payment/success`;
         const cancel = cancelUrl || `${this.windowService.currentDomain}/payment/cancel`;
-        await this.appendCheckoutSessionWithAttempt(price, user.uid, success, cancel, user, 0);
+        await this.appendCheckoutSessionWithAttempt(price, user.uid, success, cancel, user, 0, canRedirect, onProgress);
     }
 
     private async appendCheckoutSessionWithAttempt(
@@ -318,17 +335,24 @@ export class AppPaymentService {
         successUrl: string,
         cancelUrl: string,
         user: { getIdToken: (forceRefresh?: boolean) => Promise<string> },
-        attempt: number
+        attempt: number,
+        canRedirect?: () => boolean,
+        onProgress?: (status: 'updating') => void
     ): Promise<void> {
         this.assertCheckoutUserStillCurrent(userId);
         const checkoutInput = this.resolveCheckoutInput(price);
-        const trialPeriodDays = await this.resolveTrialPeriodDaysForCheckout(price);
-        this.assertCheckoutUserStillCurrent(userId);
+        const offeredTrialPeriodDays = this.resolveOfferedTrialPeriodDays(price);
 
         await this.runPreCheckoutLinkCheck(user, userId);
         this.assertCheckoutUserStillCurrent(userId);
 
-        const shouldExitCheckout = await this.handleExistingActiveSubscriptions(userId);
+        // Read once after linking, which can restore an existing subscription.
+        // Keep this per attempt: neither pricing-page state nor a previous
+        // checkout attempt is authoritative enough for the duplicate/trial gate.
+        const subscriptions = await this.readCheckoutSubscriptionState(userId, offeredTrialPeriodDays !== null);
+        this.assertCheckoutUserStillCurrent(userId);
+        const trialPeriodDays = subscriptions.hasHistory ? null : offeredTrialPeriodDays;
+        const shouldExitCheckout = await this.handleExistingActiveSubscriptions(userId, subscriptions.hasActiveSubscription);
         if (shouldExitCheckout) {
             return;
         }
@@ -350,37 +374,47 @@ export class AppPaymentService {
 
         let session: CheckoutSessionDocumentData;
         try {
-            session = await this.waitForCheckoutSessionUpdate(userId, checkoutSessionDocId);
+            session = await this.waitForCheckoutSessionUpdate(userId, checkoutSessionDocId, status => {
+                if (this.auth.currentUser?.uid === userId && canRedirect?.() !== false) onProgress?.(status);
+            });
         } catch (error) {
             this.logger.error('Error waiting for checkout session URL:', error);
             const errorName = error instanceof Error ? error.name : '';
             if (errorName === 'TimeoutError') {
-                alert('Payment system is slow to respond. Please check if the popup was blocked or try again.');
-            } else {
-                alert('An error occurred starting the payment. Please try again.');
+                throw new CheckoutStartError('Checkout is taking longer than expected. Please try again. If the problem continues, contact support.');
             }
-            return;
+            throw new CheckoutStartError('An error occurred starting the payment. Please try again.');
         }
         this.assertCheckoutUserStillCurrent(userId);
+        if (canRedirect?.() === false) {
+            return;
+        }
 
         if (session.error) {
             const errorMessage = this.getCheckoutErrorMessage(session.error);
-            this.logger.error('Stripe extension returned an error:', session.error);
+            const code = typeof session.error === 'object' ? session.error.code : undefined;
+            if (code === 'checkout_completed' || code === 'checkout_expired' || code === 'checkout_replaced') {
+                this.logger.log('Checkout selection changed:', code);
+                if (code === 'checkout_completed' && checkoutInput.mode === 'subscription') {
+                    await this.runPreCheckoutLinkCheck(user, userId);
+                    this.assertCheckoutUserStillCurrent(userId);
+                }
+                throw new CheckoutStartError(errorMessage);
+            }
+            this.logger.error('Stripe billing returned an error:', session.error);
 
             if (errorMessage.includes('No such customer') && attempt < this.maxCheckoutRetryAttempts) {
                 this.logger.log('Detected stale Stripe customer ID. Clearing and retrying...');
                 await this.functionsService.call<void, { success: boolean, cleaned: boolean }>('cleanupStripeCustomer');
-                await this.appendCheckoutSessionWithAttempt(price, userId, successUrl, cancelUrl, user, attempt + 1);
+                await this.appendCheckoutSessionWithAttempt(price, userId, successUrl, cancelUrl, user, attempt + 1, canRedirect, onProgress);
                 return;
             }
 
-            alert(`Payment error: ${errorMessage}`);
-            return;
+            throw new CheckoutStartError(`Payment error: ${errorMessage}`);
         }
 
         if (!session.url) {
-            alert('An error occurred starting the payment. Please try again.');
-            return;
+            throw new CheckoutStartError('An error occurred starting the payment. Please try again.');
         }
 
         this.logger.log('Redirecting to Stripe:', session.url);
@@ -401,7 +435,7 @@ export class AppPaymentService {
         };
     }
 
-    private async resolveTrialPeriodDaysForCheckout(price: string | StripePrice): Promise<number | null> {
+    private resolveOfferedTrialPeriodDays(price: string | StripePrice): number | null {
         if (typeof price === 'string') {
             return null;
         }
@@ -410,17 +444,7 @@ export class AppPaymentService {
             return null;
         }
 
-        const trialPeriodDays = this.resolveMetadataTrialDays(price.metadata?.trial_days);
-        if (trialPeriodDays === null) {
-            return null;
-        }
-
-        const hasPaidHistory = await this.hasPaidSubscriptionHistoryForCheckoutEligibility();
-        if (hasPaidHistory) {
-            return null;
-        }
-
-        return trialPeriodDays;
+        return this.resolveMetadataTrialDays(price.metadata?.trial_days);
     }
 
     private resolveMetadataTrialDays(metadataTrialDays: string | undefined): number | null {
@@ -459,18 +483,45 @@ export class AppPaymentService {
         }
     }
 
-    private async handleExistingActiveSubscriptions(userId: string): Promise<boolean> {
+    private async readCheckoutSubscriptionState(userId: string, checkHistory: boolean): Promise<CheckoutSubscriptionState> {
         const subscriptionsRef = collection(this.firestore, `customers/${userId}/subscriptions`);
-        const activeQuery = query(subscriptionsRef, where('status', 'in', ['active', 'trialing']));
+        const activeQuery = query(subscriptionsRef, where('status', 'in', ['active', 'trialing']), limit(1));
 
         try {
-            const activeSubscriptionsSnapshot = await getDocsFromServer(activeQuery);
+            // Any history rules out another trial, including statuses not yet
+            // known to this client. Without an offered trial, only check active access.
+            const snapshot = await getDocsFromServer(checkHistory
+                ? query(subscriptionsRef, limit(this.checkoutSubscriptionReadLimit))
+                : activeQuery);
             this.assertCheckoutUserStillCurrent(userId);
+            let hasActiveSubscription = snapshot.docs.some(subscription => {
+                const status = subscription.data().status;
+                return status === 'active' || status === 'trialing';
+            });
 
-            if (!activeSubscriptionsSnapshot.docs.length) {
-                return false;
+            // A full history page may hide an active subscription beyond the
+            // read bound. Check it directly instead of scanning all old records.
+            if (checkHistory && !hasActiveSubscription && snapshot.docs.length >= this.checkoutSubscriptionReadLimit) {
+                const activeSnapshot = await getDocsFromServer(activeQuery);
+                this.assertCheckoutUserStillCurrent(userId);
+                hasActiveSubscription = activeSnapshot.docs.length > 0;
             }
 
+            return { hasHistory: snapshot.docs.length > 0, hasActiveSubscription };
+        } catch (error) {
+            // This read also guards against duplicate subscriptions. Never turn
+            // an unavailable read into an empty history or a trial-free checkout.
+            this.logger.error('Error checking existing subscriptions:', error);
+            throw error;
+        }
+    }
+
+    private async handleExistingActiveSubscriptions(userId: string, hasActiveSubscription: boolean): Promise<boolean> {
+        if (!hasActiveSubscription) {
+            return false;
+        }
+
+        try {
             this.logger.warn('User already has an active subscription. Opening management dialog.');
             const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
                 data: {
@@ -491,7 +542,7 @@ export class AppPaymentService {
             return true;
         } catch (error) {
             if (error instanceof Error && error.message === this.userCancelledPortalMessage) {
-                return true;
+                throw error;
             }
 
             this.logger.error('Error checking existing subscriptions:', error);
@@ -519,7 +570,8 @@ export class AppPaymentService {
             allow_promotion_codes: true,
             mode: checkoutInput.mode,
             automatic_tax: { enabled: true },
-            metadata: { firebaseUID: userId }
+            metadata: { firebaseUID: userId },
+            checkout_terms_version: STRIPE_CHECKOUT_TERMS_VERSION,
         };
 
         if (checkoutInput.mode === 'subscription') {
@@ -532,19 +584,61 @@ export class AppPaymentService {
         return payload;
     }
 
-    private async waitForCheckoutSessionUpdate(userId: string, checkoutSessionDocId: string): Promise<CheckoutSessionDocumentData> {
+    private async waitForCheckoutSessionUpdate(userId: string, checkoutSessionDocId: string, onProgress?: (status: 'updating') => void): Promise<CheckoutSessionDocumentData> {
         const sessionRef = doc(this.firestore, `customers/${userId}/checkout_sessions/${checkoutSessionDocId}`);
+        let reportedServerReadFailure = false;
+        let reportedUpdating = false;
+        // A server read also recovers sessions when the live Firestore listener misses a billing update.
+        const serverUpdates$ = timer(5000, 10000).pipe(
+            mergeMap(() => from(this.readCheckoutSessionFromServer(userId, checkoutSessionDocId)).pipe(
+                catchError((error: unknown) => {
+                    if (!this.isRecoverableFirestoreReadError(error)) {
+                        return throwError(() => error);
+                    }
+                    if (!reportedServerReadFailure) {
+                        reportedServerReadFailure = true;
+                        this.logger.warn('[AppPaymentService] Checkout session server read failed; retrying.', {
+                            code: this.getErrorCode(error),
+                        });
+                    }
+                    return EMPTY;
+                })
+            ), 1)
+        );
         const session = await firstValueFrom(
-            docData(sessionRef).pipe(
+            merge(docData(sessionRef), serverUpdates$).pipe(
+                tap(sessionData => {
+                    const data = sessionData as CheckoutSessionDocumentData | undefined;
+                    if (data?.status === 'updating' && !data.url && !data.error && !reportedUpdating) {
+                        reportedUpdating = true;
+                        onProgress?.('updating');
+                    }
+                }),
                 filter((sessionData): sessionData is CheckoutSessionDocumentData => {
                     const data = sessionData as CheckoutSessionDocumentData | null | undefined;
                     return !!data && (!!data.url || !!data.error);
                 }),
                 take(1),
-                timeout(15000)
+                timeout(this.checkoutSessionWaitMs)
             )
         );
         return session;
+    }
+
+    private async assertBillingAvailable(): Promise<void> {
+        const snapshot = await getDocFromServer(doc(this.firestore, 'configuration/stripeBilling'));
+        if (snapshot.data()?.requestsEnabled !== true) {
+            throw new CheckoutStartError('Billing is temporarily unavailable. Your existing subscription continues normally. Please try again later.');
+        }
+    }
+
+    private async readCheckoutSessionFromServer(userId: string, checkoutSessionDocId: string): Promise<CheckoutSessionDocumentData | undefined> {
+        // The full SDK's getDocFromServer can reuse a stale watch/cache result. Lite reads through REST.
+        const { getFirestore, doc: liteDoc, getDoc } = await import('firebase/firestore/lite');
+        const liteFirestore = getFirestore(this.firestore.app);
+        const sessionRef = liteDoc(liteFirestore, `customers/${userId}/checkout_sessions/${checkoutSessionDocId}`);
+        const sessionSnapshot = await getDoc(sessionRef);
+        return sessionSnapshot.data() as CheckoutSessionDocumentData | undefined;
     }
 
     private getCheckoutErrorMessage(error: CheckoutSessionDocumentData['error']): string {
@@ -623,7 +717,7 @@ export class AppPaymentService {
             return throwError(() => error);
         }
 
-        if (!this.isRecoverableSubscriptionReadError(error)) {
+        if (!this.isRecoverableFirestoreReadError(error)) {
             return throwError(() => error);
         }
 
@@ -642,7 +736,7 @@ export class AppPaymentService {
 
         return from(user.getIdToken(true)).pipe(
             catchError((tokenError) => {
-                if (this.isRecoverableSubscriptionReadError(tokenError)) {
+                if (this.isRecoverableFirestoreReadError(tokenError)) {
                     this.logger.warn('[AppPaymentService] Auth refresh was temporarily unavailable; retrying the subscription read.', {
                         uid: user.uid,
                         code: this.getErrorCode(tokenError),
@@ -668,7 +762,7 @@ export class AppPaymentService {
         );
     }
 
-    private isRecoverableSubscriptionReadError(error: unknown): boolean {
+    private isRecoverableFirestoreReadError(error: unknown): boolean {
         const code = this.getErrorCode(error);
         return this.isPermissionDenied(error)
             || code === 'unauthenticated'
@@ -703,35 +797,20 @@ export class AppPaymentService {
     }
 
     async hasPaidSubscriptionHistory(): Promise<boolean | null> {
-        return this.checkPaidSubscriptionHistory('fail-open');
-    }
-
-    private async hasPaidSubscriptionHistoryForCheckoutEligibility(): Promise<boolean> {
-        return (await this.checkPaidSubscriptionHistory('fail-closed')) ?? true;
-    }
-
-    private async checkPaidSubscriptionHistory(onError: 'fail-open' | 'fail-closed'): Promise<boolean | null> {
         const user = this.auth.currentUser;
         if (!user) {
             return false;
         }
 
         const subscriptionsRef = collection(this.firestore, `customers/${user.uid}/subscriptions`);
-        const historyQuery = query(
-            subscriptionsRef,
-            where('status', 'in', this.subscriptionStatuses),
-            limit(1)
-        );
+        // Match checkout's server-side trial policy: any subscription history
+        // counts, including paused, future or missing status projections.
+        const historyQuery = query(subscriptionsRef, limit(1));
 
         try {
             const snapshot = await getDocsFromServer(historyQuery);
             return snapshot.docs.length > 0;
         } catch (error) {
-            if (onError === 'fail-closed') {
-                this.logger.warn('Could not verify subscription history for checkout gating. Blocking trial eligibility (fail-closed).', error);
-                return true;
-            }
-
             this.logger.warn('Could not verify subscription history. Suppressing trial messaging until the read recovers.', error);
             return null;
         }
@@ -795,6 +874,8 @@ export class AppPaymentService {
         if (!userId) {
             throw new Error('User must be authenticated to manage subscriptions.');
         }
+        this.assertCheckoutUserStillCurrent(userId);
+        await this.assertBillingAvailable();
         this.assertCheckoutUserStillCurrent(userId);
         const returnUrl = `${this.windowService.currentDomain}/subscriptions`;
 

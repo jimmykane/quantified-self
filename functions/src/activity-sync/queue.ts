@@ -1,7 +1,9 @@
 import * as admin from 'firebase-admin';
+import { isSendWindowOpen } from '../activity-send/policy';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { ActivitySyncRouteId } from '../../../shared/activity-sync-routes';
+import { ActivityDeliveryRouteId, ActivityDeliverySource } from '../../../shared/activity-sync-routes';
+import { getActivitySyncMetadataDocId } from './metadata';
 import { enqueueActivitySyncTask, generateIDFromParts } from '../utils';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from './constants';
 import { ActivitySyncOriginalFileMetadata, ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
@@ -19,16 +21,21 @@ import {
     markQueueItemDeletedForUserCleanup,
     QUEUE_CLEANUP_TOMBSTONE_REASONS,
 } from '../queue/cleanup-tombstone';
+import { canPromotePendingActivitySyncQueueItem } from './queue-promotion';
 
 export interface EnqueueActivitySyncQueueItemParams {
-    routeId: ActivitySyncRouteId;
-    sourceServiceName: ServiceNames;
+    routeId: ActivityDeliveryRouteId;
+    sourceServiceName: ActivityDeliverySource;
     destinationServiceName: ServiceNames;
     userID: string;
     eventID: string;
     sourceActivityID?: string;
     originalFile: ActivitySyncOriginalFileMetadata;
     manual: boolean;
+    deliveryMode?: 'automatic' | 'historical' | 'direct';
+    sendBatchID?: string;
+    sendRowID?: string;
+    destinationPinnedProviderUserID?: string;
 }
 
 export interface EnqueueActivitySyncQueueItemResult {
@@ -113,7 +120,7 @@ async function markActivitySyncQueueItemDispatchedIfUserActive(
 }
 
 export async function buildActivitySyncQueueItemId(
-    routeId: ActivitySyncRouteId,
+    routeId: ActivityDeliveryRouteId,
     userID: string,
     eventID: string,
 ): Promise<string> {
@@ -126,8 +133,19 @@ export async function enqueueActivitySyncQueueItem(
     const queueItemId = await buildActivitySyncQueueItemId(params.routeId, params.userID, params.eventID);
     const db = admin.firestore();
     const queueDocRef = db.collection(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME).doc(queueItemId);
+    const metadataRef = db.doc(`users/${params.userID}/events/${params.eventID}/metaData/${getActivitySyncMetadataDocId(params.routeId)}`);
     const decision = await db.runTransaction(async (transaction): Promise<QueueInsertDecision> => {
         const existingSnapshot = await transaction.get(queueDocRef);
+        const metadataSnapshot = params.deliveryMode === 'direct' ? null : await transaction.get(metadataRef);
+        let sendRowRef: admin.firestore.DocumentReference | undefined;
+        if (params.sendBatchID) {
+            const send = await transaction.get(db.doc(`users/${params.userID}/activitySendOperations/${params.sendBatchID}`));
+            if (!isSendWindowOpen(send.data())) return { enqueued: false, queueItemId, reason: 'already_processed' };
+            if (!params.sendRowID) throw new Error('Activity send row is required.');
+            sendRowRef = send.ref.collection('rows').doc(params.sendRowID);
+            const source = await transaction.get(sendRowRef);
+            if (!source.exists || source.data()?.admitted || source.data()?.removed || source.data()?.excluded) return { enqueued: false, queueItemId, reason: 'already_processed' };
+        }
         let deletionGuard;
         try {
             deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, params.userID);
@@ -143,19 +161,33 @@ export async function enqueueActivitySyncQueueItem(
             };
         }
 
+        if (metadataSnapshot?.data()?.status === 'success') {
+            return { enqueued: false, queueItemId, reason: 'already_processed' };
+        }
+
         if (existingSnapshot.exists) {
             const existingData = existingSnapshot.data() as Partial<ActivitySyncQueueItemInterface>;
+            if (params.sendBatchID && (existingData.destinationUploadID || existingData.providerOperationStartedAt)) return { enqueued: false, queueItemId, reason: 'already_processed' };
             if (!existingData.processed) {
-                return {
-                    enqueued: false,
-                    queueItemId,
-                    reason: 'already_pending',
-                    dateCreated: Number(existingData.dateCreated) || Date.now(),
-                    shouldDispatchExisting: existingData.dispatchedToCloudTask === null || existingData.dispatchedToCloudTask === undefined,
-                };
+                if (!(params.manual === true && params.deliveryMode === 'historical'
+                    && !existingData.sendBatchID && canPromotePendingActivitySyncQueueItem(existingData)
+                    && existingData.routeId === params.routeId
+                    && existingData.userID === params.userID
+                    && existingData.eventID === params.eventID
+                    && existingData.sourceServiceName === params.sourceServiceName
+                    && existingData.destinationServiceName === params.destinationServiceName)) {
+                    return {
+                        enqueued: false,
+                        queueItemId,
+                        reason: 'already_pending',
+                        dateCreated: Number(existingData.dateCreated) || Date.now(),
+                        shouldDispatchExisting: existingData.dispatchedToCloudTask === null || existingData.dispatchedToCloudTask === undefined,
+                    };
+                }
             }
 
-            if (existingData.resultStatus === 'manual_reconciliation_required') {
+            if (existingData.resultStatus === 'manual_reconciliation_required'
+                || existingData.resultStatus === 'success') {
                 return {
                     enqueued: false,
                     queueItemId,
@@ -172,7 +204,14 @@ export async function enqueueActivitySyncQueueItem(
             }
         }
 
-        const dateCreated = Date.now();
+        // Replacing an unaccepted automatic row creates a new task generation.
+        // In-flight workers from the previous generation then fail their guarded writes.
+        const previousDateCreated = existingSnapshot.exists
+            ? Number(existingSnapshot.data()?.dateCreated)
+            : NaN;
+        const dateCreated = Number.isFinite(previousDateCreated)
+            ? Math.max(Date.now(), previousDateCreated + 1)
+            : Date.now();
         const queueItem: ActivitySyncQueueItemInterface = {
             id: queueItemId,
             dateCreated,
@@ -181,7 +220,7 @@ export async function enqueueActivitySyncQueueItem(
             totalRetryCount: 0,
             errors: [],
             dispatchedToCloudTask: null,
-            expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
+            expireAt: getExpireAtTimestamp(params.sendBatchID ? 30 : TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
             routeId: params.routeId,
             sourceServiceName: params.sourceServiceName,
             destinationServiceName: params.destinationServiceName,
@@ -190,10 +229,15 @@ export async function enqueueActivitySyncQueueItem(
             sourceActivityID: params.sourceActivityID || '',
             originalFile: params.originalFile,
             manual: params.manual === true,
+            ...(params.deliveryMode ? { deliveryMode: params.deliveryMode } : {}),
             outboundFingerprintID: null,
+            ...(params.sendBatchID ? { sendBatchID: params.sendBatchID, sendRowID: params.sendRowID, destinationPinnedProviderUserID: params.destinationPinnedProviderUserID } : {}),
         };
 
         transaction.set(queueDocRef, queueItem);
+        // Publish the ownership link before any task can run or Stop can inspect it.
+        // Concurrent admission then observes the committed row rather than replacing it.
+        if (sendRowRef) transaction.update(sendRowRef, { admitted: true, queueId: queueItemId });
         return {
             enqueued: true,
             queueItemId,

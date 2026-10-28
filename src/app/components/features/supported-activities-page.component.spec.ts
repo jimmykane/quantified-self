@@ -19,8 +19,8 @@ describe('SupportedActivitiesPageComponent', () => {
     const fixture: ComponentFixture<SupportedActivitiesPageComponent> = TestBed.createComponent(SupportedActivitiesPageComponent);
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain('Quantified Self recognizes 131 activity types.');
-    expect(fixture.nativeElement.querySelectorAll('.family-card')).toHaveLength(17);
+    expect(fixture.nativeElement.textContent).toContain('Quantified Self recognizes 284 activity types.');
+    expect(fixture.nativeElement.querySelectorAll('.family-card')).toHaveLength(18);
     expect(fixture.nativeElement.querySelector('[data-family-id="motorized_group"]')?.textContent).toContain('Boating');
 
     const activityTypeList = fixture.nativeElement.querySelector('.activity-type-list') as HTMLElement;

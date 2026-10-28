@@ -1,9 +1,10 @@
+import type { TrainingBuildMetricRowViewModel } from '../shared/training-summary/training-build-metrics.component';
+import type { TrainingMixDetailsViewModel, TrainingMixZoneViewModel, TrainingContextMetricViewModel, TrainingContextMetricsViewModel } from '../shared/training-summary/training-mix-details.component';
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, Inject, InjectionToken, LOCALE_ID, NgZone, OnDestroy, OnInit, Optional, QueryList, Signal, TemplateRef, ViewChild, ViewChildren, computed, signal } from '@angular/core';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatBottomSheet, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { MatSelect } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppThemes, DataAscent, DataAvgStrokeDistance, DataDistance, DataJumpDistance, DataStrokeRate, DataSwimDistance, SwimPaceUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
@@ -15,13 +16,22 @@ import type {
   DashboardTrainingDisciplineSummary,
   DashboardTrainingRecoveryComparison,
   DashboardTrainingRecoveryWindow,
+  DashboardFreshnessForecastPoint,
 } from '../../helpers/dashboard-derived-metrics.helper';
 import {
   resolveDashboardFormNowContextFromPoints,
   resolveDashboardRampRateContextFromPoints,
+  resolveDashboardMonotonyHistoryFromFormPoints,
 } from '../../helpers/dashboard-derived-metrics.helper';
-import { buildCurrentTrainingStateContext } from '../../helpers/current-training-state.helper';
+import { buildCurrentTrainingStateContext, type CurrentTrainingStateContext } from '../../helpers/current-training-state.helper';
+import type { MetricHistory, MetricHistoryPoint } from '../../helpers/metric-history-chart.helper';
+import {
+  resolveActivityTypeIconColor,
+  resolveActivityTypeMaterialIcon,
+} from '../../helpers/activity-type-presentation.helper';
 import { resolveDashboardChartInfoTooltip } from '../../helpers/dashboard-chart-info.helper';
+import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
+import { getNumberFormatter } from '../../helpers/number-format.helper';
 import {
   DASHBOARD_FORM_CHART_TYPE,
   DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
@@ -30,7 +40,7 @@ import {
   buildTrainingCapacityViewModels,
   type TrainingCapacityDisciplineViewModel,
 } from '../../helpers/training-capacity.helper';
-import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
+import { resolveUnitAwareDisplayStat, resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
 import { resolveMetricSemantics, type MetricSemanticsDirection } from '@shared/metric-semantics';
 import {
   DERIVED_METRIC_KINDS,
@@ -79,10 +89,7 @@ import {
   buildTrainingReadinessViewModel,
   type TrainingReadinessViewModel,
 } from '../../helpers/training-readiness.helper';
-import {
-  buildTrainingBodyWeightViewModel,
-  type TrainingBodyWeightViewModel,
-} from '../../helpers/training-body-weight.helper';
+import { resolveReadinessHrvRecentTrend } from '@shared/readiness';
 import {
   isDerivedMetricPendingStatus,
   resolveDerivedMetricsRefreshPhase,
@@ -166,22 +173,12 @@ import {
   TRAINING_WORKSPACE_DERIVED_METRIC_KINDS,
   type DashboardDerivedMetricsState,
 } from '../../services/dashboard-derived-metrics.service';
-import { environment } from '../../../environments/environment';
 
-interface TrainingMixDisciplineViewModel {
+interface TrainingMixDisciplineViewModel extends TrainingMixDetailsViewModel {
   summary: DashboardTrainingDisciplineSummary;
-  label: string;
   iconActivityType: TrainingSportDefinition['iconActivityType'];
-  activityCountText: string;
-  baselineActivityCountText: string;
-  durationText: string;
-  baselineDurationText: string;
   tssText: string;
   baselineTssText: string;
-  zones: TrainingMixZoneViewModel[];
-  intensityEvidenceText: string | null;
-  contexts: TrainingContextMetricsViewModel[];
-  guidance: TrainingCardGuidanceViewModel;
 }
 
 interface TrainingDestinationOptionViewModel {
@@ -190,6 +187,7 @@ interface TrainingDestinationOptionViewModel {
   details: string;
   sport: TrainingSportDefinition | null;
   materialIcon: string | null;
+  iconColor: string | null;
 }
 
 type TrainingDestinationSelectionSource = 'shortcut' | 'desktop_selector' | 'mobile_selector';
@@ -204,27 +202,6 @@ export interface TrainingWorkspacePreferenceWriter {
 export const TRAINING_WORKSPACE_PREFERENCE_WRITER = new InjectionToken<TrainingWorkspacePreferenceWriter>(
   'TRAINING_WORKSPACE_PREFERENCE_WRITER',
 );
-
-interface TrainingContextMetricViewModel {
-  metric: TrainingProfileMetricId;
-  label: string;
-  currentText: string;
-  referenceText: string;
-}
-
-interface TrainingContextMetricsViewModel {
-  context: TrainingSportContextId;
-  label: string;
-  metrics: TrainingContextMetricViewModel[];
-}
-
-interface TrainingMixZoneViewModel {
-  label: 'Easy' | 'Moderate' | 'Hard';
-  currentText: string;
-  baselineText: string;
-  currentPercent: number | null;
-  baselinePercent: number | null;
-}
 
 interface TrainingStatusViewModel {
   stateLabel: string;
@@ -275,15 +252,6 @@ interface TrainingBuildCardViewModel {
 }
 
 const TRAINING_DAY_MS = 24 * 60 * 60 * 1000;
-
-interface TrainingBuildMetricRowViewModel {
-  label: string;
-  currentText: string;
-  benchmarkText: string;
-  deltaText: string;
-  deltaTone?: TrainingComparisonDeltaTone;
-  isIntensity: boolean;
-}
 
 type TrainingRecoveryState = 'updating' | 'unavailable' | 'empty' | 'limited' | 'ready';
 type TrainingComparisonDeltaTone = 'positive' | 'negative' | 'neutral';
@@ -358,12 +326,10 @@ function createEmptyTrainingLoadMetricsViewModel(): TrainingLoadMetricsViewModel
   standalone: false,
 })
 export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
-  public readonly trainingFeedbackMailtoHref = `mailto:${environment.supportEmail}?subject=${encodeURIComponent('Training feedback')}`;
   public isLoading = true;
   public derivedState: DashboardDerivedMetricsState = createDashboardDerivedMetricsMissingState();
   public trainingRecovery = createEmptyTrainingRecoveryViewModel();
   public trainingReadiness: TrainingReadinessViewModel = buildTrainingReadinessViewModel(null, { isPreparing: true });
-  public bodyWeightTrend: TrainingBodyWeightViewModel = buildTrainingBodyWeightViewModel(null, 'building', null);
   public trainingRecoveryEstimate: TrainingRecoveryEstimateViewModel | null = null;
   public trainingExplanationView: TrainingExplanationViewModel | null = null;
   public trainingDurabilityScopes: TrainingDurabilityScopeViewModel[] = [];
@@ -378,6 +344,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public trainingComparisonState: TrainingComparisonState = 'preparing';
   public trainingSummaryCards: readonly TrainingSummaryCard[] = [];
   public trainingDataAsOfText: string | null = null;
+  public readonly derivedMetricsStatusExpanded = signal(false);
   public derivedMetricsRouteStatus: TrainingDerivedMetricsRouteStatus | null = {
     type: 'pending',
     title: 'Building derived metrics',
@@ -400,7 +367,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public sportShortcuts: TrainingVisibleDiscipline[] = [];
   public visibleSportShortcuts: TrainingVisibleDiscipline[] = [];
   public visibleSportShortcutOptions: TrainingDestinationOptionViewModel[] = [];
-  public desktopAllSportsSelectorValue: TrainingDestinationId | null = null;
+  public selectedTrainingDestinationOption: TrainingDestinationOptionViewModel | null = null;
   public sportShortcutsCompactLabel = 'Automatic shortcuts';
   public sportShortcutsAccessibleLabel = 'Choose sport shortcuts. Automatic selection.';
   public isOverviewDestination = true;
@@ -427,6 +394,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   public trainingRecoveryHistoryExpanded = false;
   public readonly isDarkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
   public readonly useTrainingStateDetailsDialog: Signal<boolean>;
+  public trainingImpactRecapNowMs = Date.now();
 
   private readonly subscriptions = new Subscription();
   private dataSubscriptions = new Subscription();
@@ -600,6 +568,14 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.trainingRecoveryHistoryExpanded = !this.trainingRecoveryHistoryExpanded;
   }
 
+  public toggleDerivedMetricsStatusDetails(): void {
+    if (!this.derivedMetricsRouteStatus) {
+      return;
+    }
+    this.derivedMetricsStatusExpanded.update(expanded => !expanded);
+    this.hapticsService?.selection();
+  }
+
   public retryDerivedMetricsRebuild(): void {
     const uid = this.currentUserUID;
     if (!uid) {
@@ -637,7 +613,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       return '--';
     }
     const prefix = signed && value > 0 ? '+' : '';
-    return `${prefix}${new Intl.NumberFormat(undefined, {
+    return `${prefix}${getNumberFormatter(undefined, {
       maximumFractionDigits: fractionDigits,
       minimumFractionDigits: 0,
     }).format(value)}`;
@@ -688,10 +664,13 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       }
       const currentMetrics = new Map(currentContext?.metrics.map(metric => [metric.metric, metric]) || []);
       const referenceMetrics = new Map(referenceContext?.metrics.map(metric => [metric.metric, metric]) || []);
-      const metrics = contextDefinition.profileMetrics
+      const profileMetrics: readonly TrainingProfileMetricId[] = contextDefinition.profileMetrics;
+      const metrics = profileMetrics
         .filter(metric => metric !== 'moving-time')
         .filter(metric => metric !== 'elapsed-time'
-          || (showSummaryCommonMetrics && contextDefinition.profile === 'strength'))
+          || (showSummaryCommonMetrics
+            ? contextDefinition.showElapsedTimeInSummary === true
+            : contextDefinition.showElapsedTimeInComparison === true))
         .filter(metric => metric !== 'distance' || showSummaryCommonMetrics || observedContextCount > 1)
         .flatMap((metric): TrainingContextMetricViewModel[] => {
           const definition = getTrainingProfileMetricDefinition(metric);
@@ -741,7 +720,9 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         return formattedDistance || `${this.formatNumber(value, 1)} m`;
       }
       case 'duration':
-        return this.formatTrainingBuildDuration(value);
+        return resolveUnitAwareDisplayFromValue(definition.statTypes[0], value, this.unitSettings, {
+          compactDuration: true, stripRepeatedUnit: true,
+        })?.text || '--';
       case 'count':
         return this.formatNumber(value, 0);
       case 'jump-distance': {
@@ -784,14 +765,12 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     if (definition?.unit === 'pace-500m') {
       return `${this.formatTrainingProfileMetric(metric, Math.abs(delta), discipline)} ${delta < 0 ? 'faster' : 'slower'}`;
     }
-    if (definition?.unit === 'duration') {
-      return this.formatTrainingBuildDurationDelta(current, reference);
-    }
     const formatted = this.formatTrainingProfileMetric(metric, Math.abs(delta), discipline);
     return `${delta > 0 ? '+' : '−'}${formatted}`;
   }
 
   private resetWorkspace(): void {
+    this.derivedMetricsStatusExpanded.set(false);
     this.preferenceWriteGeneration += 1;
     this.queuedDestinationWrite = null;
     this.isSavingDestination = false;
@@ -815,7 +794,6 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.derivedState = createDashboardDerivedMetricsMissingState();
     this.trainingRecovery = createEmptyTrainingRecoveryViewModel();
     this.trainingReadiness = buildTrainingReadinessViewModel(null, { isPreparing: true });
-    this.bodyWeightTrend = buildTrainingBodyWeightViewModel(null, 'building', null);
     this.trainingRecoveryEstimate = null;
     this.trainingExplanationView = null;
     this.trainingDurabilityScopes = [];
@@ -860,7 +838,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.sportShortcuts = [];
     this.visibleSportShortcuts = [];
     this.visibleSportShortcutOptions = [];
-    this.desktopAllSportsSelectorValue = null;
+    this.selectedTrainingDestinationOption = null;
     this.sportShortcutsCompactLabel = 'Automatic shortcuts';
     this.sportShortcutsAccessibleLabel = 'Choose sport shortcuts. Automatic selection.';
     this.isOverviewDestination = true;
@@ -1035,7 +1013,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       })
       .filter(view => this.visibleDisciplines.includes(view.summary.discipline))
       .filter(view => view.summary.current28d.activityCount > 0 || view.summary.baseline28d.activityCount > 0);
-    this.capacityDisciplines = buildTrainingCapacityViewModels(this.derivedState.trainingCapacity)
+    this.capacityDisciplines = buildTrainingCapacityViewModels(this.derivedState.trainingCapacity, this.unitSettings)
       .filter(view => isTrainingVisibleDiscipline(view.discipline) && this.visibleDisciplines.includes(view.discipline));
     this.trainingDurabilityScopes = buildTrainingDurabilityScopeViewModels(
       this.derivedState.trainingDurability,
@@ -1068,7 +1046,6 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         this.derivedState.trainingExplanationStatus,
         this.derivedState.trainingReadinessStatus,
         this.derivedState.trainingBuildComparisonStatus,
-        this.derivedState.bodyWeightTrendStatus,
       );
       if (!currentTrainingState.formNowFromSeries) {
         statuses.push(this.derivedState.formNowStatus);
@@ -1126,6 +1103,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       return;
     }
     this.derivedMetricsRouteStatus = null;
+    this.derivedMetricsStatusExpanded.set(false);
   }
 
   private refreshTrainingSportVisibility(): void {
@@ -1205,13 +1183,15 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         details: 'Global readiness, load, sleep, intensity, and sport mix',
         sport: null,
         materialIcon: 'monitoring',
+        iconColor: null,
       },
       ...availableSports.map(sport => ({
         id: sport.id,
         label: sport.label,
         details: sport.details,
         sport,
-        materialIcon: null,
+        materialIcon: resolveActivityTypeMaterialIcon(sport.iconActivityType),
+        iconColor: resolveActivityTypeIconColor(sport.iconActivityType),
       })),
       ...(this.hasOtherPowerActivities || this.isOtherPowerDestination ? [{
         id: 'other-power' as const,
@@ -1219,14 +1199,14 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         details: 'Exact power activity types outside the Training sport registry',
         sport: null,
         materialIcon: 'bolt',
+        iconColor: null,
       }] : []),
     ];
     this.visibleSportShortcutOptions = this.visibleSportShortcuts
       .map(id => this.trainingDestinationOptions.find(option => option.id === id))
       .filter((option): option is TrainingDestinationOptionViewModel => option !== undefined);
-    this.desktopAllSportsSelectorValue = this.isOtherPowerDestination
-      ? this.selectedTrainingDestination
-      : null;
+    this.selectedTrainingDestinationOption = this.trainingDestinationOptions
+      .find(option => option.id === this.selectedTrainingDestination) || null;
   }
 
   private reconcilePreferredTrainingDestination(): void {
@@ -1290,15 +1270,6 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.refreshSportSpecificViewModels();
     this.changeDetector.markForCheck();
     this.queuePreferredTrainingDestinationWrite(destination, source);
-  }
-
-  public selectDesktopTrainingDestination(value: unknown, select: MatSelect): void {
-    this.selectTrainingDestination(value, 'desktop_selector');
-    // MatSelect updates its own value before selectionChange. When a selected
-    // sport is then injected into the shortcut row, the bound value remains
-    // null and Angular has no changed input to write back, so clear it through
-    // the component's public value API to avoid showing the destination twice.
-    select.value = this.desktopAllSportsSelectorValue;
   }
 
   public refreshDurabilityChartsAfterTabAnimation(): void {
@@ -1748,7 +1719,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   private formatTrainingUtcDate(dayMs: number): string {
-    const formatter = new Intl.DateTimeFormat(undefined, {
+    const formatter = getDateTimeFormatter(undefined, {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -1766,9 +1737,9 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       timeZone: 'UTC',
     };
     try {
-      return new Intl.DateTimeFormat(this.locale || undefined, options).format(new Date(dayMs));
+      return getDateTimeFormatter(this.locale || undefined, options).format(new Date(dayMs));
     } catch {
-      return new Intl.DateTimeFormat(undefined, options).format(new Date(dayMs));
+      return getDateTimeFormatter(undefined, options).format(new Date(dayMs));
     }
   }
 
@@ -1814,11 +1785,6 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       currentTrainingState.info,
     );
     this.trainingExplanationView = buildTrainingExplanationViewModel(this.derivedState.trainingExplanation);
-    this.bodyWeightTrend = buildTrainingBodyWeightViewModel(
-      this.derivedState.bodyWeightTrend,
-      this.derivedState.bodyWeightTrendStatus,
-      this.unitSettings,
-    );
     this.refreshTrainingRecoveryEstimate();
     this.trainingRecovery = this.buildTrainingRecoveryViewModel(
       this.derivedState.trainingBuildComparison?.recovery || null,
@@ -1838,7 +1804,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       freshnessPlusSevenDaysText: this.formatNumber(finalForecastPoint?.formSameDay ?? this.derivedState.formPlus7d?.value, 1, true),
     };
     this.trainingSummaryCards = this.buildTrainingSummaryCards();
-    this.trainingLoadMetricItems = this.buildTrainingLoadMetricItems();
+    this.trainingLoadMetricItems = this.buildTrainingLoadMetricItems(currentTrainingState, forecastPoints);
     this.trainingLoadGuidance = buildTrainingLoadGuidance(
       currentFormNow?.value ?? latestCurrentPoint?.formSameDay ?? null,
       finalForecastPoint?.formSameDay ?? this.derivedState.formPlus7d?.value ?? null,
@@ -1849,6 +1815,8 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     this.trainingRecoveryEstimate = buildTrainingRecoveryEstimateViewModel(
       this.derivedState.recoveryNow,
       this.derivedState.recoveryNowStatus,
+      Date.now(),
+      { locale: this.locale, unitSettings: this.unitSettings },
     );
   }
 
@@ -1866,6 +1834,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         this.changeDetector.markForCheck();
       },
       error: () => {
+        this.readinessSleepSessions = [];
         this.readinessSleepLoading = false;
         this.readinessSleepFailed = true;
         this.updateTrainingReadinessSleepRefreshTimer();
@@ -1877,27 +1846,34 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
 
   private refreshTrainingReadiness(): void {
     const nowMs = Date.now();
-    const formNowFromSeries = resolveDashboardFormNowContextFromPoints(this.derivedState.formPoints, nowMs);
-    const rampRateFromSeries = resolveDashboardRampRateContextFromPoints(this.derivedState.formPoints, nowMs);
+    const formNowFromSeries = this.derivedState.formStatus === 'ready'
+      ? resolveDashboardFormNowContextFromPoints(this.derivedState.formPoints, nowMs)
+      : null;
+    const rampRateFromSeries = this.derivedState.formStatus === 'ready'
+      ? resolveDashboardRampRateContextFromPoints(this.derivedState.formPoints, nowMs)
+      : null;
     const formNow = formNowFromSeries
-      || this.derivedState.formNow;
+      || (this.derivedState.formNowStatus === 'ready' ? this.derivedState.formNow : null);
     const rampRate = rampRateFromSeries
-      || this.derivedState.rampRate;
+      || (this.derivedState.rampRateStatus === 'ready' ? this.derivedState.rampRate : null);
     const loadStatuses = [
       formNowFromSeries ? this.derivedState.formStatus : this.derivedState.formNowStatus,
       rampRateFromSeries ? this.derivedState.formStatus : this.derivedState.rampRateStatus,
     ];
-    const isUpdating = this.readinessSleepLoading
-      || !this.hasReceivedDerivedState
+    const isInitialLoading = this.readinessSleepLoading || !this.hasReceivedDerivedState;
+    const isUpdating = isInitialLoading
       || loadStatuses
         .some(status => isDerivedMetricPendingStatus(status));
-    const context = buildDashboardReadinessSignalsContext({
+    // An unresolved listener is not missing evidence: wait before showing a partial score.
+    const sleepTrend = buildDashboardSleepTrendContext(this.readinessSleepSessions);
+    const context = isInitialLoading ? null : buildDashboardReadinessSignalsContext({
       formNow,
       rampRate,
-      sleepTrend: buildDashboardSleepTrendContext(this.readinessSleepSessions),
+      sleepTrend,
       nowMs,
     });
     this.trainingReadiness = buildTrainingReadinessViewModel(context, {
+      unitSettings: this.unitSettings,
       isPreparing: !context && isUpdating,
       isUpdating,
       calculatedAtMs: nowMs,
@@ -1906,6 +1882,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         .some(status => status === 'failed'),
       history: this.derivedState.trainingReadiness,
       historyStatus: this.derivedState.trainingReadinessStatus,
+      hrvRecentTrend: context ? resolveReadinessHrvRecentTrend(sleepTrend.points, nowMs) : null,
     });
   }
 
@@ -1943,6 +1920,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     const handleRollover = (): void => {
       this.readinessDayRolloverTimeoutHandle = null;
       const refresh = (): void => {
+        this.trainingImpactRecapNowMs = Date.now();
         this.refreshTrainingReadiness();
         const uid = this.currentUserUID;
         if (uid) {
@@ -1954,7 +1932,6 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
               DERIVED_METRIC_KINDS.FormPlus7d,
               DERIVED_METRIC_KINDS.FreshnessForecast,
               DERIVED_METRIC_KINDS.TrainingReadiness,
-              DERIVED_METRIC_KINDS.BodyWeightTrend,
             ],
           });
         }
@@ -2827,16 +2804,35 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     ];
   }
 
-  private buildTrainingLoadMetricItems(): TrainingSummaryMetric[] {
+  private buildTrainingLoadMetricItems(
+    current?: CurrentTrainingStateContext,
+    forecast: readonly DashboardFreshnessForecastPoint[] = [],
+  ): TrainingSummaryMetric[] {
+    const history = (points: readonly MetricHistoryPoint[] | undefined, digits = 0, signed = false): MetricHistory | undefined => points?.length ? {
+      caption: '8-week history',
+      points: points.map(point => ({ ...point, valueText: this.formatNumber(point.value, digits, signed) })),
+    } : undefined;
+    const monotonyHistory = resolveDashboardMonotonyHistoryFromFormPoints(
+      this.derivedState.formPoints,
+      this.derivedState.monotonyStrain?.latestDayMs ?? Date.now(),
+    );
+    const latestCurrentPoint = [...forecast].reverse().find(point => !point.isForecast);
+    const futurePoints = forecast.filter(point => point.isForecast);
+    const forecastHistory: MetricHistory | undefined = futurePoints.length ? {
+      caption: 'Next 7 days', mode: 'forecast',
+      points: [...(latestCurrentPoint ? [latestCurrentPoint] : []), ...futurePoints].map(point => ({
+        time: point.dayMs, value: point.formSameDay, valueText: this.formatNumber(point.formSameDay, 1, true),
+      })),
+    } : undefined;
     return [
-      { id: 'ctl', label: 'CTL', valueText: this.loadMetrics.ctlText },
-      { id: 'atl', label: 'ATL', valueText: this.loadMetrics.atlText },
-      { id: 'ramp', label: 'Ramp', valueText: this.loadMetrics.rampText },
-      { id: 'acwr', label: 'ACWR', valueText: this.loadMetrics.acwrText },
-      { id: 'monotony', label: 'Monotony', valueText: this.loadMetrics.monotonyText },
-      { id: 'strain', label: 'Strain', valueText: this.loadMetrics.strainText },
-      { id: 'now', label: 'Now', valueText: this.loadMetrics.freshnessNowText },
-      { id: 'plus-seven-days', label: '+7 days', valueText: this.loadMetrics.freshnessPlusSevenDaysText },
+      { id: 'ctl', label: 'CTL', valueText: this.loadMetrics.ctlText, detailText: '42-day load', history: history(current?.fitness?.trend8Weeks) },
+      { id: 'atl', label: 'ATL', valueText: this.loadMetrics.atlText, detailText: '7-day load', history: history(current?.fatigue?.trend8Weeks) },
+      { id: 'ramp', label: 'Ramp', valueText: this.loadMetrics.rampText, detailText: '7-day fitness change', history: history(current?.rampRate?.trend8Weeks, 2, true) },
+      { id: 'acwr', label: 'ACWR', valueText: this.loadMetrics.acwrText, detailText: 'Acute ÷ chronic load', history: history(this.derivedState.acwr?.trend8Weeks, 2) },
+      { id: 'monotony', label: 'Monotony', valueText: this.loadMetrics.monotonyText, detailText: 'Weekly load variability', history: history(monotonyHistory, 2) },
+      { id: 'strain', label: 'Strain', valueText: this.loadMetrics.strainText, detailText: 'Load × monotony', history: history(this.derivedState.monotonyStrain?.trend8Weeks) },
+      { id: 'now', label: 'Now', valueText: this.loadMetrics.freshnessNowText, detailText: 'Fitness − fatigue', history: history(current?.formNow?.trend8Weeks, 0, true) },
+      { id: 'plus-seven-days', label: '+7 days', valueText: this.loadMetrics.freshnessPlusSevenDaysText, detailText: 'No-additional-load scenario', history: forecastHistory },
     ];
   }
 

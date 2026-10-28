@@ -353,6 +353,7 @@ export async function createIsolatedLocalProcessEnvironment(sourceEnvironment = 
   const environment = {
     ...sourceEnvironment,
     CLOUDSDK_CONFIG: cloudSdkConfigPath,
+    QS_ISOLATED_LOCAL_RUNTIME: 'true',
     NO_GCE_CHECK: 'true',
     XDG_CONFIG_HOME: cloudSdkConfigPath,
   };

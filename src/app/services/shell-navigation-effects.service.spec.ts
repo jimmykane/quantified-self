@@ -45,6 +45,22 @@ describe('ShellNavigationEffectsService', () => {
     service = TestBed.inject(ShellNavigationEffectsService);
   });
 
+  it('resets shell and window scroll without navigation or additional haptics', () => {
+    const scrollSpy = vi.mocked(window.scrollTo);
+    const drawerContent = document.createElement('div');
+    drawerContent.scrollTop = 120;
+    drawerContent.scrollLeft = 30;
+    service.setShellScroller(drawerContent);
+
+    service.scrollToTop();
+
+    expect(drawerContent.scrollTop).toBe(0);
+    expect(drawerContent.scrollLeft).toBe(0);
+    expect(scrollSpy).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'auto' });
+    expect(service.animationState()).toBeNull();
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+  });
+
   it('starts with null animation state', () => {
     expect(service.animationState()).toBeNull();
   });
@@ -97,6 +113,16 @@ describe('ShellNavigationEffectsService', () => {
     events$.next(new NavigationEnd(1, '/dashboard', '/dashboard'));
     events$.next(new NavigationStart(2, '/dashboard', 'popstate'));
     events$.next(new NavigationEnd(2, '/dashboard', '/dashboard'));
+
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+  });
+
+  it('leaves query-only metric and overview feedback to the active workspace', () => {
+    events$.next(new NavigationEnd(1, '/health', '/health'));
+    events$.next(new NavigationStart(2, '/health?metric=body_weight', 'imperative'));
+    events$.next(new NavigationEnd(2, '/health?metric=body_weight', '/health?metric=body_weight'));
+    events$.next(new NavigationStart(3, '/health', 'imperative'));
+    events$.next(new NavigationEnd(3, '/health', '/health'));
 
     expect(hapticsMock.selection).not.toHaveBeenCalled();
   });

@@ -1,5 +1,7 @@
-import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
+import { hasDashboardTileSettings, resolveDashboardTilePresentation } from '../../../../helpers/dashboard-tile-presentation.helper';
+import { Component, Input, OnInit } from '@angular/core';
 import {
+  TileTypes,
   TileSettingsInterface,
   TileChartSettingsInterface,
   ChartDataCategoryTypes,
@@ -25,19 +27,24 @@ import { AppDashboardAutoTileState, AppDashboardSettingsInterface } from '../../
 
 @Component({
   selector: 'app-tile-chart-actions',
-  templateUrl: './tile.chart.actions.component.html',
-  styleUrls: ['../tile.actions.abstract.css', './tile.chart.actions.component.css'],
+  templateUrl: '../tile-actions-menu.html',
+  styleUrls: ['../tile.actions.abstract.css'],
   providers: [],
   standalone: false
 })
 export class TileChartActionsComponent extends TileActionsAbstractDirective implements OnInit {
-  @Input() chartType: DashboardChartType;
+  private currentChartType: DashboardChartType;
+  @Input() set chartType(value: DashboardChartType) {
+    this.currentChartType = value;
+    this.canConfigure = hasDashboardTileSettings({ type: TileTypes.Chart, chartType: value });
+    this.presentation = resolveDashboardTilePresentation({ type: TileTypes.Chart, chartType: value });
+  }
+  get chartType(): DashboardChartType { return this.currentChartType; }
   @Input() chartDataType: string;
   @Input() chartDataValueType: ChartDataValueTypes;
   @Input() chartDataCategoryType: ChartDataCategoryTypes;
   @Input() chartTimeInterval: TimeIntervals;
   @Input() chartOrder: number;
-  @Output() editInDashboardManager = new EventEmitter<number>();
   private persistAutoTileStateWithNextSave = false;
 
   constructor(
@@ -47,9 +54,8 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
 
   override async deleteTile(event: unknown) {
     const dashboardTiles = this.user?.settings?.dashboardSettings?.tiles || [];
-    if (dashboardTiles.length <= 1) {
-      return super.deleteTile(event);
-    }
+    if (this.isSaving || !dashboardTiles.some(tile => tile.order === this.order)) return;
+    this.captureDashboardBaseline();
 
     const dashboardSettings = this.user.settings.dashboardSettings as AppDashboardSettingsInterface;
     const previousTiles = this.cloneTiles(dashboardTiles);
@@ -87,13 +93,6 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
     if (!this.user) {
       throw new Error('Component needs user');
     }
-  }
-
-  openEditInDashboardManager(event: MouseEvent): void {
-    event.preventDefault();
-    event.stopPropagation();
-    this.hapticsService.selection();
-    this.editInDashboardManager.emit(this.order);
   }
 
   private cloneTiles(tiles: TileSettingsInterface[]): TileSettingsInterface[] {

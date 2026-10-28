@@ -56,6 +56,11 @@ export class LoggerService {
         }
     }
 
+    getUser(): Sentry.User {
+        // Sentry.setUser writes to the isolation scope, not the current scope.
+        return { ...Sentry.getIsolationScope().getUser() };
+    }
+
     setUser(user: { id?: string; email?: string; username?: string; ip_address?: string } | null) {
         if (environment.observabilityEnabled) {
             Sentry.setUser(user);

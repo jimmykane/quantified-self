@@ -1,6 +1,8 @@
 import type { EChartsType } from 'echarts/core';
+import { TimelineNotesChartBinding, type TimelineNoteChartContext, type TimelineNoteAxisHints } from './timeline-notes-chart.helper';
 import { EChartsLoaderService } from '../services/echarts-loader.service';
 import type { EChartsMobileTapFeedbackOptions } from './echarts-tooltip-interaction.helper';
+import { chartViewportQueue } from './chart-viewport-queue';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartSetOptionSettings = Parameters<EChartsType['setOption']>[1];
@@ -42,9 +44,40 @@ export interface EChartsHostControllerConfig {
   initOptions?: ChartInitSettings;
   enableMobileTapFeedback?: boolean;
   mobileTapFeedbackOptions?: MobileTapFeedbackOptionsResolver;
+  deferUntilNearViewport?: boolean;
+  /** Update size-dependent chart options after a real container resize. */
+  onContainerResize?: (size: { width: number; height: number }) => void;
 }
 
 export class EChartsHostController {
+  private readonly timelineNotes = new TimelineNotesChartBinding();
+  private noteLayoutPending = false;
+  private readonly onChartFinished = () => {
+    if (this.noteLayoutPending || !this.timelineNotes.hasLabels) return;
+    const chart = this.chart;
+    this.noteLayoutPending = true;
+    // ECharts may emit during setOption; defer the overlay patch until it leaves its render pass.
+    void Promise.resolve().then(() => {
+      this.noteLayoutPending = false;
+      if (!chart || chart !== this.chart || chart.isDisposed()) return;
+      const layout = this.timelineNotes.updateLayout(chart, this.currentTheme === 'dark');
+      if (layout) this.config.eChartsLoader.setOption(chart, layout, { notMerge: false, lazyUpdate: false, silent: true });
+    }).catch(error => this.config.logger?.error?.('[EChartsHostController] Failed to lay out Timeline note labels', error));
+  };
+  public setTimelineNotes(context: TimelineNoteChartContext | null, hints: TimelineNoteAxisHints = {}): void {
+    this.timelineNotes.set(context, hints);
+  }
+  /** A note-only input change must not rebuild or resize the underlying chart. */
+  public updateTimelineNotes(context: TimelineNoteChartContext | null): void {
+    this.timelineNotes.set(context);
+    if (!this.chart || this.chart.isDisposed()) return;
+    const option = this.timelineNotes.update(this.chart, this.currentTheme === 'dark');
+    if (!option) return;
+    // Click-triggered tooltips stay open across setOption. Dismiss stale note content,
+    // including edits, visibility changes and an owner switch, before updating overlays.
+    this.hideTooltip();
+    this.config.eChartsLoader.setOption(this.chart, option, { notMerge: false, lazyUpdate: false });
+  }
   private chart: EChartsType | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private resizeFrameId: number | null = null;
@@ -54,6 +87,11 @@ export class EChartsHostController {
   private unsubscribeTapFeedback: (() => void) | null = null;
   private currentTheme: string | undefined;
   private lifecycleVersion = 0;
+  private lastResizeSize: { width: number; height: number; pixelRatio: number } | null = null;
+  private cancelViewportWait: (() => void) | null = null;
+  private initRequestID = 0;
+  private pendingContainer: HTMLElement | null = null;
+  private pendingTheme: string | undefined;
 
   constructor(private readonly config: EChartsHostControllerConfig) { }
 
@@ -61,6 +99,8 @@ export class EChartsHostController {
     if (!container) {
       return null;
     }
+
+    const requestID = ++this.initRequestID;
 
     const requestedTheme = theme || undefined;
 
@@ -72,10 +112,18 @@ export class EChartsHostController {
       this.dispose();
     }
 
+    // A removed off-screen host will never intersect. Cancel that wait rather
+    // than making its replacement (or a new theme) depend on the old container.
+    if (this.initPromise && this.cancelViewportWait
+      && (this.pendingContainer !== container || this.pendingTheme !== requestedTheme)) {
+      this.dispose();
+    }
+
     if (this.initPromise) {
       const lifecycleVersion = this.lifecycleVersion;
       const pendingInitialization = this.initPromise;
       await pendingInitialization;
+      if (this.config.deferUntilNearViewport && requestID !== this.initRequestID) return null;
       if (this.initPromise === pendingInitialization) {
         this.initPromise = null;
       }
@@ -86,8 +134,17 @@ export class EChartsHostController {
     }
 
     const lifecycleVersion = this.lifecycleVersion;
+    this.pendingContainer = container;
+    this.pendingTheme = requestedTheme;
     const initialization = (async () => {
       try {
+        if (this.config.deferUntilNearViewport) {
+          const gate = chartViewportQueue.wait(container, () => this.config.eChartsLoader.load());
+          this.cancelViewportWait = gate.cancel;
+          const ready = await gate.ready;
+          if (this.cancelViewportWait === gate.cancel) this.cancelViewportWait = null;
+          if (!ready || lifecycleVersion !== this.lifecycleVersion) return null;
+        }
         const chart = await this.config.eChartsLoader.init(container, requestedTheme, this.config.initOptions);
         if (!chart) {
           return null;
@@ -98,6 +155,7 @@ export class EChartsHostController {
         }
 
         this.chart = chart;
+        chart.on?.('finished', this.onChartFinished);
         this.currentTheme = requestedTheme;
         this.observeContainer(container);
         this.subscribeToViewportResize();
@@ -115,10 +173,14 @@ export class EChartsHostController {
     })();
     this.initPromise = initialization;
     try {
-      return await initialization;
+      const chart = await initialization;
+      // Only the newest waiting refresh may apply its captured data after scrolling into view.
+      return this.config.deferUntilNearViewport && requestID !== this.initRequestID ? null : chart;
     } finally {
       if (this.initPromise === initialization) {
         this.initPromise = null;
+        this.pendingContainer = null;
+        this.pendingTheme = undefined;
       }
     }
   }
@@ -131,7 +193,7 @@ export class EChartsHostController {
     if (!this.chart) {
       return false;
     }
-    this.config.eChartsLoader.setOption(this.chart, option, settings);
+    this.config.eChartsLoader.setOption(this.chart, this.timelineNotes.apply(this.chart, option, this.currentTheme === 'dark'), settings);
     return true;
   }
 
@@ -163,7 +225,10 @@ export class EChartsHostController {
   }
 
   public dispose(): void {
+    this.timelineNotes.dispose();
     this.lifecycleVersion += 1;
+    this.cancelViewportWait?.();
+    this.cancelViewportWait = null;
 
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
@@ -171,6 +236,7 @@ export class EChartsHostController {
     }
 
     this.observedContainer = null;
+    this.lastResizeSize = null;
     this.unsubscribeViewportResize?.();
     this.unsubscribeViewportResize = null;
     this.unsubscribeTapFeedback?.();
@@ -181,12 +247,15 @@ export class EChartsHostController {
       this.resizeFrameId = null;
     }
 
+    this.chart?.off?.('finished', this.onChartFinished);
     this.config.eChartsLoader.dispose(this.chart);
     this.chart = null;
     this.currentTheme = undefined;
   }
 
   private observeContainer(container: HTMLElement): void {
+    // Retain the host even when only the shared viewport-resize fallback is available.
+    this.observedContainer = container;
     if (typeof ResizeObserver === 'undefined') {
       return;
     }
@@ -198,8 +267,6 @@ export class EChartsHostController {
       this.scheduleResize();
     });
     this.resizeObserver.observe(container);
-
-    this.observedContainer = container;
   }
 
   private resizeToContainer(): void {
@@ -209,29 +276,52 @@ export class EChartsHostController {
 
     const { width, height } = this.getContainerSize(this.observedContainer);
     if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      this.lastResizeSize = null;
       return;
     }
 
+    const pixelRatio = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
+    if (this.lastResizeSize?.width === width && this.lastResizeSize.height === height
+      && this.lastResizeSize.pixelRatio === pixelRatio) return;
+
     this.config.eChartsLoader.resize(this.chart, {
+      // ECharts hides its canvas while measuring 'auto', which can reflow flex/grid
+      // tiles and measure a transient height. Use the live content box measured
+      // before that reflow, also replacing any fixed initialization dimensions.
+      width,
+      height,
       silent: true,
     });
+    this.lastResizeSize = { width, height, pixelRatio };
+    const noteLayout = this.timelineNotes.update(this.chart, this.currentTheme === 'dark');
+    if (noteLayout) {
+      this.config.eChartsLoader.setOption(this.chart, noteLayout, { notMerge: false, lazyUpdate: false, silent: true });
+    }
+    this.config.onContainerResize?.({ width, height });
+    // Dashboard alignment can change the flex allocation later in this frame,
+    // returning to the observer's previously reported size without a new event.
+    // Recheck next frame; the unchanged-size guard ends the work once settled.
+    if (typeof requestAnimationFrame !== 'undefined') this.scheduleResize();
   }
 
   private getContainerSize(container: HTMLElement): { width: number; height: number } {
     const clientWidth = Number(container.clientWidth);
     const clientHeight = Number(container.clientHeight);
+    const style = window.getComputedStyle(container);
+    const paddingX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+    const paddingY = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
 
     if (Number.isFinite(clientWidth) && Number.isFinite(clientHeight) && clientWidth > 0 && clientHeight > 0) {
       return {
-        width: clientWidth,
-        height: clientHeight,
+        width: clientWidth - paddingX,
+        height: clientHeight - paddingY,
       };
     }
 
     const rect = container.getBoundingClientRect();
     return {
-      width: rect.width,
-      height: rect.height,
+      width: rect.width - paddingX,
+      height: rect.height - paddingY,
     };
   }
 

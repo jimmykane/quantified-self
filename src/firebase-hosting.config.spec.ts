@@ -6,6 +6,8 @@ import {
   PRERENDERED_PUBLIC_ROUTES,
   PUBLIC_REDIRECT_ROUTES,
 } from './app/app.routes.server';
+import { LEGACY_WORKOUT_DATA_COMPARISON_PATHS } from './app/components/features/workout-data-comparison-page.paths';
+import { PUBLIC_ENTRY_REDIRECTS } from './app/shared/public-entry-redirects';
 
 interface FirebaseHostingTarget {
   target: string;
@@ -42,6 +44,7 @@ interface AngularBuildOptions {
 }
 
 interface AngularBuildConfiguration {
+  budgets?: Array<{ type: string; maximumWarning?: string; maximumError?: string }>;
   optimization?: boolean | {
     styles?: {
       inlineCritical?: boolean;
@@ -83,7 +86,7 @@ const robotsTxt = readFileSync(resolve(__dirname, 'robots.txt'), 'utf8');
 const sitemapXml = readFileSync(resolve(__dirname, 'sitemap.xml'), 'utf8');
 
 const expectedCsrRewriteSources = CLIENT_RENDERED_APP_ROUTES.map(routePathToHostingSource);
-const expectedComparisonRedirects = PUBLIC_REDIRECT_ROUTES.map(path => ({
+const expectedComparisonRedirects = LEGACY_WORKOUT_DATA_COMPARISON_PATHS.map(path => ({
   source: routePathToHostingSource(path),
   destination: '/features/workout-data-comparison',
   type: 301,
@@ -97,6 +100,10 @@ const expectedMcpFunctionRewriteSources = [
   '/oauth/token',
   '/oauth/revoke',
 ];
+const unsubscribeFunctionRewrite = {
+  source: '/email/unsubscribe',
+  function: { functionId: 'marketingUnsubscribe', region: 'europe-west2' },
+};
 const siteOrigin = 'https://quantified-self.io';
 const betaNoIndexHeader = {
   key: 'X-Robots-Tag',
@@ -152,8 +159,36 @@ function isAllowedByRobots(source: string): boolean {
     .map(line => line.replace('Allow: ', ''));
 
   return allowSources.some(allowSource => (
-    source === allowSource || (allowSource !== '/' && source.startsWith(`${allowSource}/`))
+    allowSource === '/' || source === allowSource || source.startsWith(`${allowSource}/`)
   ));
+}
+
+function sitemapUrls(): string[] {
+  return [...sitemapXml.matchAll(/<loc>(https:\/\/quantified-self\.io[^<]*)<\/loc>/g)]
+    .map(([, url]) => url);
+}
+
+function headerSourceMatchesPath(source: string, path: string): boolean {
+  if (source === '**' || source === '/**') {
+    return true;
+  }
+
+  const sourceSegments = source.split('/').filter(Boolean);
+  const pathSegments = path.split('/').filter(Boolean);
+  let pathIndex = 0;
+
+  for (let sourceIndex = 0; sourceIndex < sourceSegments.length; sourceIndex += 1) {
+    const sourceSegment = sourceSegments[sourceIndex];
+    if (sourceSegment === '**') {
+      return true;
+    }
+    if (pathIndex >= pathSegments.length || (sourceSegment !== '*' && sourceSegment !== pathSegments[pathIndex])) {
+      return false;
+    }
+    pathIndex += 1;
+  }
+
+  return pathIndex === pathSegments.length;
 }
 
 function findHtmlFiles(directory: string): string[] {
@@ -176,9 +211,22 @@ function getCspDirective(policy: string, directiveName: string): string | undefi
 }
 
 describe('Firebase Hosting configuration', () => {
+  it('serves pre-release Plans at its Training URL without retaining /plans as a redirect, rewrite, or offline fallback', () => {
+    for (const hosting of firebaseConfig.hosting) {
+      const rewriteSources = (hosting.rewrites ?? []).map(rewrite => rewrite.source);
+      const redirectSources = (hosting.redirects ?? []).map(redirect => redirect.source);
+
+      expect(matchesAnyHostingSource(rewriteSources, '/training/plans')).toBe(true);
+      expect(matchesAnyHostingSource(rewriteSources, '/plans')).toBe(false);
+      expect(matchesAnyHostingSource(redirectSources, '/plans')).toBe(false);
+    }
+    expect(serviceWorkerConfig.navigationUrls).toContain('/training/plans');
+    expect(serviceWorkerConfig.navigationUrls).not.toContain('/plans');
+  });
+
   it('permanently redirects legacy comparison pages to the consolidated canonical page', () => {
     for (const target of firebaseConfig.hosting) {
-      expect(target.redirects).toEqual(expectedComparisonRedirects);
+      expect(target.redirects).toEqual(expect.arrayContaining(expectedComparisonRedirects));
       expect(target.redirects?.every(redirect => redirect.type === 301)).toBe(true);
 
       const rewriteSources = new Set((target.rewrites ?? []).map(rewrite => rewrite.source));
@@ -186,6 +234,33 @@ describe('Firebase Hosting configuration', () => {
         expect(rewriteSources.has(redirect.source)).toBe(false);
       }
     }
+  });
+
+  it('redirects public membership and help entry links without hiding unknown paths or indexing aliases', () => {
+    const entryRedirects = PUBLIC_ENTRY_REDIRECTS.map(({ path, destination }) => ({
+      source: `/${path}`, destination, type: 301,
+    }));
+    for (const target of firebaseConfig.hosting) {
+      expect(target.redirects).toEqual([...entryRedirects, ...expectedComparisonRedirects]);
+      const sources = (target.redirects ?? []).map(redirect => redirect.source);
+      expect(matchesAnyHostingSource(sources, '/help/unknown-topic')).toBe(false);
+      expect(matchesAnyHostingSource(sources, '/membership/unknown')).toBe(false);
+      for (const { source } of entryRedirects) {
+        expect(sitemapUrls()).not.toContain(`${siteOrigin}${source}`);
+        expect(serviceWorkerConfig.navigationUrls).not.toContain(source);
+      }
+    }
+    expect(PUBLIC_REDIRECT_ROUTES).toEqual([
+      ...LEGACY_WORKOUT_DATA_COMPARISON_PATHS,
+      ...PUBLIC_ENTRY_REDIRECTS.map(redirect => redirect.path),
+    ]);
+    // Includes contextual provider offers, trial review and paginated Connections navigation.
+    // Includes shared history-progress lifecycle/refresh guidance and local Dashboard visibility controls (26 October).
+    // Includes the Pro trial payment-method and cancellation terms refreshed today.
+    // Manual-history help now explains existing-account verification and reconnect requirements.
+    // Pool-swim help covers intervals without source laps, recorded membership and keyboard header explanations.
+    // Training swim help also applies swim units to weekly distances and the SWOLF pool-length label.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-28');
   });
 
   it('rewrites only known CSR app routes so unknown URLs can fall through to 404.html', () => {
@@ -197,7 +272,10 @@ describe('Firebase Hosting configuration', () => {
 
       expect(target.public).toBe('dist/browser');
       expect(sources).toEqual(expectedCsrRewriteSources);
-      expect(functionRewrites.map(rewrite => rewrite.source)).toEqual(expectedMcpFunctionRewriteSources);
+      expect(functionRewrites.map(rewrite => rewrite.source)).toEqual([
+        ...expectedMcpFunctionRewriteSources,
+        unsubscribeFunctionRewrite.source,
+      ]);
       expect(new Set(rewrites.map(rewrite => rewrite.source)).size).toBe(rewrites.length);
       expect(sources).not.toContain('**');
       expect(sources).not.toContain('/**');
@@ -207,10 +285,9 @@ describe('Firebase Hosting configuration', () => {
         expect(rewrite.destination).toBe('/index.csr.html');
       }
       for (const rewrite of functionRewrites) {
-        expect(rewrite.function).toEqual({
-          functionId: 'mcpApi',
-          region: 'europe-west2',
-        });
+        expect(rewrite.function).toEqual(rewrite.source === unsubscribeFunctionRewrite.source
+          ? unsubscribeFunctionRewrite.function
+          : { functionId: 'mcpApi', region: 'europe-west2' });
       }
     }
   });
@@ -223,7 +300,17 @@ describe('Firebase Hosting configuration', () => {
     expect(matchesAnyHostingSource(sources, '/mcp/authorize')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/dashboard')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/calendar')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/calendar/day/2026-09-25')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/training/plans/library')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/training/plans/library/new')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/training/plans/library/saved-workout-1')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/routes')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/tags')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/activities')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/activities/unknown')).toBe(false);
+    expect(matchesAnyHostingSource(sources, '/health/compare')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/health/compare/example-note')).toBe(true);
+    expect(matchesAnyHostingSource(sources, '/health/compare/example-note/extra')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/admin/queues/workout')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/admin/queues/route-reparse')).toBe(true);
     expect(matchesAnyHostingSource(sources, '/user/user-1/event/event-1')).toBe(true);
@@ -237,6 +324,7 @@ describe('Firebase Hosting configuration', () => {
     expect(matchesAnyHostingSource(sources, '/definitely-missing')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/integrations/garmin')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/features/activity-calendar')).toBe(false);
+    expect(matchesAnyHostingSource(sources, '/calendar/day/2026-09-25/extra')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/features/ai-insights')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/tools')).toBe(false);
     expect(matchesAnyHostingSource(sources, '/tools/compare')).toBe(false);
@@ -266,69 +354,140 @@ describe('Firebase Hosting configuration', () => {
     }
   });
 
-  it('marks route-delivery SEO launch pages as recently updated in sitemap', () => {
-    const expectedLastmod = '2026-06-26';
-    const updatedUrls = [
-      `${siteOrigin}/features/fit-gpx-route-files`,
-      `${siteOrigin}/guides/sync-suunto-routes-to-garmin-courses`,
-    ];
+  it('keeps the sitemap exactly aligned with prerendered public routes', () => {
+    const expectedUrls = PRERENDERED_PUBLIC_ROUTES
+      .map(path => `${siteOrigin}${routePathToHostingSource(path)}`)
+      .sort();
 
-    for (const url of updatedUrls) {
-      expect(sitemapLastmodForUrl(url), url).toBe(expectedLastmod);
-    }
+    expect(sitemapUrls().sort()).toEqual(expectedUrls);
   });
 
-  it('marks recently updated public discovery surfaces in sitemap', () => {
-    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-09-02');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-08-03');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-09-02');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-08-04');
+  it('records the route-delivery feature launch and the newer guide setup fix in sitemap', () => {
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-route-files`)).toBe('2026-06-26');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-suunto-routes-to-garmin-courses`)).toBe('2026-10-24');
+  });
+
+  it('marks note-comparison previews and other recently updated public discovery surfaces in sitemap', () => {
+    // Help also describes bounded dashboard freshness retries, Health range menus, newest-first sorting and empty notices.
+    // Help also documents the collapsed R-R chart panel, overlaid recordings and legend labels for unavailable beats.
+    // Help also explains ongoing-note comparisons, stored versus requested history,
+    // QS-calculated Garmin sleep-window HR, remembered Plans/Standalone navigation,
+    // measurement-first Heart rate choices, compact history, source comparison, visible coverage and recording details,
+    // bounded background Training rebuilds during bulk imports/reparse,
+    // browser verification recovery with bounded temporary-error retries,
+    // and display-only Raw/3s Power charts with recorded peaks and dips.
+    // Includes saved Continuous/Detect/Custom event chart continuity and single-week Efficiency display.
+    // This same-day Help revision includes ascent corrections/reset and file-supplied sports on safely matched updates.
+    // Help covers power data, ascent corrections, history-import refresh timing, HRV chart eligibility and compact summary controls.
+    // File-comparison signup help also covers required account setup and the return to Compare.
+    // COROS history help also explains cross-client admission, partial scans and queued-work completion.
+    // MCP signup help also covers returning to explicit consent, denial and request expiry after free setup.
+    // Startup recovery help covers the 15-second deadline and reload without clearing browser storage.
+    // Checkout help covers the 20-second access check, confirmed Pro setup and recovery before another payment.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-28');
+    // Homepage makes automatic imports, supported activity sync and the signup/free starting points explicit.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-24');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-10-09');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-10-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-09-02');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-09-02');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-10-07');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations`)).toBe('2026-09-02');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-08-03');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/suunto`)).toBe('2026-08-03');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/coros`)).toBe('2026-08-26');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/wahoo`)).toBe('2026-08-03');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-09-02');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/supported-activities`)).toBe('2026-08-24');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-07-21');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-suunto`)).toBe('2026-07-28');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-wahoo`)).toBe('2026-07-28');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-07-21');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-10-24');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/suunto`)).toBe('2026-10-13');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/coros`)).toBe('2026-10-10');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/wahoo`)).toBe('2026-10-24');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-10-23');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/supported-activities`)).toBe('2026-10-17');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-10-24');
+    // Same-day guide review corrects scheduling counts versus Suunto delivery confirmation.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-garmin-to-suunto`)).toBe('2026-10-24');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-garmin-to-wahoo`)).toBe('2026-10-24');
+    // COROS guide clarifies the history limit and keeps its setup tab through signup.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-coros-to-suunto`)).toBe('2026-10-25');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-suunto`)).toBe('2026-10-24');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-wahoo`)).toBe('2026-10-24');
+    // Wahoo-to-Suunto distinguishes delivery paths and preserves setup context through sign-in/onboarding.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-10-25');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/centralize-garmin-suunto-coros-workout-data`)).toBe('2026-07-21');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-09-02');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-dashboard`)).toBe('2026-09-02');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-10-09');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-plans`)).toBe('2026-10-09');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-dashboard`)).toBe('2026-10-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-map`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-tcx-file-analyzer`)).toBe('2026-09-02');
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/workout-file-comparison`);
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-08-26');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-08-26');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-08-26');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-08-05');
+    // Help includes the dialog feedback and safe haptic behavior guidance.
+    // This same-day Help revision covers sentence-only Dashboard glance, Health recovery, and the event-chart zone-color toggle.
+    // Billing help covers maintenance, checkout switching and expiry recovery (2026-10-26).
+    // Health help also covers primary Heart rate choices, nightly HRV history, same-account daily averages, automatic retries and final failures.
+    // It also documents the flat Training & health navigation for Plans and Timeline notes.
+    // Help now distinguishes the comparisons landing page from the explicit note manager.
+    // The same date also covers bounded Suunto initialization retries and acceptance-uncertainty guidance.
+    // Help uses Duplicate to… consistently for workout actions and completed-workout sync details.
+    // Swimming Guide screen controls are scoped to individual pool/open-water swimming workouts.
+    // Help distinguishes last/next planned Work distances from measured results and the Work/Rest counter.
+    // Event details also distinguishes session Max HR from selected-lap peaks, including rest.
+    // Event details now documents the compact TSS / Workout CTL / Day CTL strip.
+    // The same-day Help revision clarifies preview timeouts, source provenance and checked/ready/excluded draft counts.
+    // Account deletion now lives in the separate Data management settings section.
+    // Help also explains the sport-wide threshold-HR estimate in Sports Lib 23.1.0.
+    // Dashboard range help also covers rolling seven-day windows and the previous calendar month.
+    // Recording-update help also covers stable legs, saved preferences and retained-original reprocessing.
+    // Benchmark R–R help covers source-separated summaries, linked plots and the original-timing boundary.
+    // R–R & HRV summaries and plots cover ordinary events and multisport legs; paired-stat deltas remain benchmark-only.
+    // Saved comparisons also explains cached R–R statistics, the detail dialog and unloaded draft rows.
+    // Help also documents Poincaré pairs, flagged-point inspection and preserved adjacency.
+    // Poincaré help also covers the responsive square plot and browser-supported fullscreen controls.
+    // Artifact help explains QS-specific flags and why values differ across platforms.
+    // Single-lap tables omit the persistent Summary row; selected summaries remain available.
+    // Single-activity Jumps tables omit redundant activity tabs, while multi-activity tables retain them.
+    // Unambiguous Session end segments append as Final lap rows without changing recorded data.
+    // Pool swims default to Duration and disable the Distance chart axis.
+    // Strength-name previews disclose interval-only summaries and point to Edit for saved lifting loads.
+    // Form/TSS axes fit the displayed period without changing training values or hiding the neutral baseline.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-28');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');
   });
 
-  it('keeps private client-rendered routes out of sitemap and disallowed by robots', () => {
+  it('keeps client-rendered routes out of the sitemap and noindexed at the hosting layer', () => {
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/tools/compare/saved</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/share/event/');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/share/comparison/');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/routes</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/calendar</loc>');
+    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/training/plans</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/training</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/health</loc>');
+    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/tags</loc>');
+    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/activities</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/mcp</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/mcp/authorize</loc>');
-    expect(robotsTxt).toContain('Disallow: /tools/compare/saved');
-    expect(robotsTxt).toContain('Disallow: /routes');
-    expect(robotsTxt).toContain('Disallow: /calendar');
-    expect(robotsTxt).toContain('Disallow: /training');
-    expect(robotsTxt).toContain('Disallow: /health');
+    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/login</loc>');
+    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/pricing</loc>');
+    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/releases</loc>');
     expect(robotsTxt).toContain('Disallow: /mcp');
-    expect(robotsTxt).toContain('Disallow: /mcp/authorize');
+    expect(robotsTxt).toContain('Allow: /mcp/authorize');
     expect(robotsTxt).toContain('Disallow: /oauth/');
     expect(robotsTxt).toContain('Disallow: /.well-known/oauth-protected-resource');
     expect(robotsTxt).toContain('Disallow: /.well-known/oauth-authorization-server');
+
+    const productionTarget = firebaseConfig.hosting.find(target => target.target === 'production');
+    const noIndexHeaders = productionTarget?.headers?.filter(header => (
+      header.headers.some(headerValue => (
+        headerValue.key === betaNoIndexHeader.key && headerValue.value === betaNoIndexHeader.value
+      ))
+    )) ?? [];
+
+    for (const routePath of CLIENT_RENDERED_APP_ROUTES) {
+      const routeSource = routePathToHostingSource(routePath);
+      expect(
+        noIndexHeaders.some(header => headerSourceMatchesPath(header.source, routeSource)),
+        routePath,
+      ).toBe(true);
+    }
   });
 
   it('marks public share routes noindex at the hosting layer', () => {
@@ -387,7 +546,8 @@ describe('Firebase Hosting configuration', () => {
       expect(reportOnlyPolicy).not.toContain('https://*.mapbox.com');
     }
 
-    expect(targetHeaderSets[1]).toEqual(targetHeaderSets[0]);
+    expect(targetHeaderSets[0]).toContainEqual(betaNoIndexHeader);
+    expect(targetHeaderSets[1]).not.toContainEqual(betaNoIndexHeader);
   });
 
   it('keeps executable scripts and event handlers compatible with a strict script policy', () => {
@@ -411,6 +571,22 @@ describe('Firebase Hosting configuration', () => {
         },
       });
     }
+  });
+
+  it.each(['production', 'beta'])('bounds total scripts with matching release budgets for %s', configuration => {
+    const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
+    expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
+      type: 'allScript', maximumWarning: '13000kb', maximumError: '13700kb',
+    });
+  });
+
+  it.each(['production', 'beta'])('bounds the sports-lib 23.5 startup output for %s', configuration => {
+    const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
+    // Published 23.5.0 with power and R-R metrics measures 1,472.76 kB of initial output.
+    // Keep a narrow matching startup limit for both release builds, independent of allScript.
+    expect(budgets?.find(budget => budget.type === 'initial')).toEqual({
+      type: 'initial', maximumWarning: '1474kb', maximumError: '1474kb',
+    });
   });
 
   it('copies the static Firebase 404 page into the hosting output', () => {

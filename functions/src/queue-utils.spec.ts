@@ -1,7 +1,13 @@
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import * as logger from 'firebase-functions/logger';
+import type { BulkWriter } from 'firebase-admin/firestore';
+import type { GarminAPIActivityQueueItemInterface, SleepSyncQueueItemInterface } from './queue/queue-item.interface';
 import { deferQueueItemForPendingDisconnect, deferQueueItemForPendingDisconnectIfCurrentUserActive, deferQueueItemForReconnectRequiredIfCurrentUserActive, moveToDeadLetterQueue, moveToDeadLetterQueueIfCurrentUserActive, increaseRetryCountForQueueItem, increaseRetryCountIfCurrentUserActive, isCurrentSleepQueueTransition, isProviderOperationInFlightLeaseActive, markQueueItemSkipped, PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER, PROVIDER_OPERATION_IN_FLIGHT_LEASE_MS, PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER, QUEUE_DEFERRED_REASONS, QUEUE_SKIPPED_REASONS, updateToProcessed, QueueResult } from './queue-utils';
+import { PROVIDER_MAX_RETRY_COUNT } from './shared/queue-config';
 import { TTL_CONFIG } from './shared/ttl-config';
+import { withHistoryExecution } from './connection-history/context';
+import { HistoryLifecycleChangedError, type HistoryExecution } from './connection-history/execution';
 
 // Hoisted Firestore mocks
 const hoisted = vi.hoisted(() => {
@@ -98,6 +104,34 @@ vi.mock('./service-token-store', () => ({
 }));
 
 describe('queue-utils', () => {
+    it('does not retry or dead-letter a history child when a converted provider error belongs to a superseded connection', async () => {
+        const execution = { beforeRequest: vi.fn().mockRejectedValue(new HistoryLifecycleChangedError()) } as unknown as HistoryExecution;
+        const item = { id: 'history-child', retryCount: 9, connectionHistoryRunId: 'run', ref: { id: 'history-child' } } as unknown as SleepSyncQueueItemInterface;
+        await withHistoryExecution(execution, async () => {
+            await expect(increaseRetryCountForQueueItem(item, new Error('Safe provider failure'))).rejects.toBeInstanceOf(HistoryLifecycleChangedError);
+            await expect(moveToDeadLetterQueue(item, new Error('Safe provider failure'))).rejects.toBeInstanceOf(HistoryLifecycleChangedError);
+            await expect(moveToDeadLetterQueueIfCurrentUserActive({ queueItem: item, error: new Error('Safe provider failure'), userID: 'owner', phase: 'history', logPrefix: 'History', isCurrent: () => true }))
+                .rejects.toBeInstanceOf(HistoryLifecycleChangedError);
+        });
+        expect(item.retryCount).toBe(9);
+        expect(hoisted.runTransaction).not.toHaveBeenCalled();
+        expect(hoisted.batch.set).not.toHaveBeenCalled();
+        expect(hoisted.transaction.delete).not.toHaveBeenCalled();
+    });
+    it('fences a connection change between the initial failure check and the retry/DLQ transaction', async () => {
+        const execution = { beforeRequest: vi.fn().mockResolvedValue(undefined), inTransaction: vi.fn().mockRejectedValue(new HistoryLifecycleChangedError()) } as unknown as HistoryExecution;
+        const item = { id: 'history-child', userID: 'owner', queueRevision: 'revision', retryCount: 9, connectionHistoryRunId: 'run',
+            ref: { id: 'history-child', parent: { id: 'sleepSyncQueue' } } } as unknown as SleepSyncQueueItemInterface;
+        await withHistoryExecution(execution, async () => {
+            await expect(increaseRetryCountForQueueItem(item, new Error('Safe provider failure'))).rejects.toBeInstanceOf(HistoryLifecycleChangedError);
+            await expect(moveToDeadLetterQueue(item, new Error('Safe provider failure'))).rejects.toBeInstanceOf(HistoryLifecycleChangedError);
+        });
+        expect(execution.inTransaction).toHaveBeenCalledTimes(2);
+        expect(item.retryCount).toBe(9);
+        expect(hoisted.transaction.set).not.toHaveBeenCalled();
+        expect(hoisted.transaction.update).not.toHaveBeenCalled();
+        expect(hoisted.transaction.delete).not.toHaveBeenCalled();
+    });
     beforeEach(() => {
         vi.clearAllMocks();
         hoisted.batch.set.mockReset();
@@ -121,6 +155,118 @@ describe('queue-utils', () => {
 
     afterEach(() => {
         vi.restoreAllMocks();
+    });
+
+    describe('Health/Sleep committed observations', () => {
+        const observed = () => vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[HealthSleep]');
+        const item = () => ({ id: 'qa', provider: 'GarminAPI', type: 'garmin_ping', userID: 'user-1', queueRevision: 'R1', dateCreated: 1, processed: false, retryCount: 0,
+            ref: { parent: { id: 'sleepSyncQueue' }, id: 'qa' }, payload: 'PRIVATE_PAYLOAD' } as unknown as SleepSyncQueueItemInterface);
+        it('emits once after a retried completion transaction commits, not inside its callbacks', async () => {
+            vi.spyOn(logger, 'info').mockImplementation(() => {});
+            const current = item();
+            hoisted.transaction.get.mockResolvedValue({ exists: true, data: () => ({ ...current }) });
+            hoisted.runTransaction.mockImplementationOnce(async callback => {
+                await callback(hoisted.transaction);
+                expect(observed()).toHaveLength(0);
+                return callback(hoisted.transaction);
+            });
+            expect(await updateToProcessed(current, undefined, { resultStatus: 'success' })).toBe(QueueResult.Processed);
+            expect(observed()).toEqual([['[HealthSleep]', { telemetryVersion: 1, provider: 'GarminAPI', workload: 'sleep_sync', event: 'committed', outcome: 'completed' }]]);
+        });
+        it('does not emit success for stale, deletion-fenced or failed completion', async () => {
+            vi.spyOn(logger, 'info').mockImplementation(() => {});
+            const current = item();
+            hoisted.transaction.get.mockResolvedValue({ exists: true, data: () => ({ ...current, queueRevision: 'R2' }) });
+            await updateToProcessed(current, undefined, { resultStatus: 'success' });
+            hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValueOnce({ shouldSkip: true });
+            await updateToProcessed(current, undefined, { resultStatus: 'success' });
+            hoisted.runTransaction.mockRejectedValueOnce(new Error('PRIVATE_FAILURE'));
+            expect(await updateToProcessed(current, undefined, { resultStatus: 'success' })).toBe(QueueResult.Failed);
+            expect(observed()).toHaveLength(0);
+        });
+        it.each(['retry', 'expected_contention'])('counts a committed %s separately without extracting raw errors', async outcome => {
+            vi.spyOn(logger, 'info').mockImplementation(() => {});
+            const current = item();
+            hoisted.transaction.get.mockResolvedValue({ exists: true, data: () => ({ ...current }) });
+            const error = new Error('PRIVATE_ERROR');
+            if (outcome === 'expected_contention') error.name = 'TokenRefreshInProgressError';
+            expect(await increaseRetryCountIfCurrentUserActive({ queueItem: current, error, userID: 'user-1', phase: 'qa', logPrefix: 'qa', isCurrent: () => true })).toBe(QueueResult.RetryIncremented);
+            expect(observed()).toEqual([['[HealthSleep]', { telemetryVersion: 1, provider: 'GarminAPI', workload: 'sleep_sync', event: 'retry_transition', outcome }]]);
+        });
+    });
+
+    describe('recorded import commit observations', () => {
+        const observed = () => vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityImport]');
+        it('counts a new dead letter only after batch commit and not failed persistence', async () => {
+            const createItem = () => ({ id: 'qa', ref: { parent: { id: 'garminAPIActivityQueue' }, id: 'qa' } } as unknown as GarminAPIActivityQueueItemInterface);
+            const log = vi.spyOn(logger, 'info').mockImplementation(() => {});
+            hoisted.batch.commit.mockRejectedValueOnce(new Error('PRIVATE_FAILURE'));
+            expect(await moveToDeadLetterQueue(createItem(), new Error('PRIVATE_PROVIDER'))).toBe(QueueResult.Failed);
+            expect(observed()).toHaveLength(0);
+            hoisted.batch.commit.mockResolvedValueOnce(undefined);
+            expect(await moveToDeadLetterQueue(createItem(), new Error('PRIVATE_PROVIDER'))).toBe(QueueResult.MovedToDLQ);
+            expect(log).toHaveBeenCalledWith('[ActivityImport]', { telemetryVersion: 1, provider: 'garmin', event: 'committed', outcome: 'dead_lettered' });
+            expect(observed()).toHaveLength(1);
+        });
+
+        it('separates durable success/skip from a stale acknowledgement', async () => {
+            vi.spyOn(logger, 'info').mockImplementation(() => {});
+            const item = { id: 'qa', firebaseUserID: 'owner', queueRevision: 'R1', ref: { parent: { id: 'suuntoAppWorkoutQueue' }, id: 'qa' } } as unknown as GarminAPIActivityQueueItemInterface;
+            hoisted.transaction.get.mockResolvedValue({ exists: true, data: () => ({ queueRevision: 'R2', processed: false }) });
+            await updateToProcessed(item);
+            expect(observed()).toHaveLength(0);
+            hoisted.transaction.get.mockResolvedValue({ exists: true, data: () => ({ queueRevision: 'R1', processed: false }) });
+            await updateToProcessed(item);
+            await markQueueItemSkipped(item, undefined, 'expected_skip');
+            expect(observed().map(([, fields]) => fields?.outcome)).toEqual(['imported', 'skipped']);
+        });
+    });
+
+    describe('route committed observations', () => {
+        const observed = () => vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[RouteQueue]');
+        const item = () => ({ id: 'qa', routeId: 'SuuntoApp_to_WahooAPI', sourceServiceName: ServiceNames.SuuntoApp, destinationServiceName: ServiceNames.WahooAPI,
+            dateCreated: 1, processed: false, retryCount: 0, errors: [], userID: 'PRIVATE', ref: { parent: { id: 'routeDeliverySyncQueue' }, id: 'qa' } } as unknown as GarminAPIActivityQueueItemInterface);
+        it('emits new dead-letter/manual markers once, after transaction retry commits', async () => {
+            vi.spyOn(logger, 'info').mockImplementation(() => {});
+            const current = item();
+            hoisted.transaction.get.mockResolvedValue({ exists: true, data: () => ({ ...current }) });
+            hoisted.runTransaction.mockImplementationOnce(async callback => {
+                await callback(hoisted.transaction);
+                expect(observed()).toHaveLength(0);
+                return callback(hoisted.transaction);
+            });
+            expect(await moveToDeadLetterQueueIfCurrentUserActive({ queueItem: current, error: new Error('PRIVATE'), userID: 'PRIVATE', phase: 'qa', logPrefix: 'qa', isCurrent: () => true,
+                manualReconciliation: { additionalData: { destinationProviderRouteId: 'PRIVATE' } } })).toBe(QueueResult.MovedToDLQ);
+            expect(observed().map(([, fields]) => fields?.outcome)).toEqual(['dead_lettered', 'manual_reconciliation']);
+            expect(JSON.stringify(observed())).not.toContain('PRIVATE');
+        });
+        it.each(['stale', 'deleted', 'failed'])('does not claim new failures for %s transitions', async state => {
+            vi.spyOn(logger, 'info').mockImplementation(() => {});
+            hoisted.transaction.get.mockResolvedValue({ exists: true, data: () => ({ processed: false }) });
+            if (state === 'deleted') hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValueOnce({ shouldSkip: true });
+            if (state === 'failed') hoisted.runTransaction.mockRejectedValueOnce(new Error('PRIVATE'));
+            await moveToDeadLetterQueueIfCurrentUserActive({ queueItem: item(), error: new Error('PRIVATE'), userID: 'PRIVATE', phase: 'qa', logPrefix: 'qa', isCurrent: () => state !== 'stale', manualReconciliation: {} });
+            expect(observed()).toHaveLength(0);
+        });
+        it('counts retry-exhausted reconciliation without counting a retry as success', async () => {
+            vi.spyOn(logger, 'info').mockImplementation(() => {});
+            const current = item();
+            hoisted.transaction.get.mockResolvedValue({ exists: true, data: () => ({ ...current, retryCount: PROVIDER_MAX_RETRY_COUNT - 1 }) });
+            expect(await increaseRetryCountIfCurrentUserActive({ queueItem: current, error: new Error('PRIVATE'), userID: 'PRIVATE', phase: 'qa', logPrefix: 'qa', isCurrent: () => true, manualReconciliation: {} })).toBe(QueueResult.MovedToDLQ);
+            expect(observed().map(([, fields]) => fields?.outcome)).toEqual(['dead_lettered', 'manual_reconciliation']);
+        });
+        it('records legacy import commits only after successful persistence, not queued BulkWriter writes', async () => {
+            vi.spyOn(logger, 'info').mockImplementation(() => {});
+            const ref = { parent: { id: 'routeSyncQueue' }, update: vi.fn().mockResolvedValue(undefined) };
+            const current = { ...item(), sourceServiceName: ServiceNames.SuuntoApp, ref } as unknown as GarminAPIActivityQueueItemInterface;
+            await updateToProcessed(current, undefined, { resultStatus: 'success' });
+            expect(observed()).toHaveLength(1);
+            ref.update.mockRejectedValueOnce(new Error('PRIVATE'));
+            await updateToProcessed({ ...current, ref }, undefined, { resultStatus: 'success' });
+            const bulk = { update: vi.fn() } as unknown as BulkWriter;
+            await updateToProcessed({ ...current, ref }, bulk, { resultStatus: 'success' });
+            expect(observed()).toHaveLength(1);
+        });
     });
 
     describe('provider operation claim lease', () => {
@@ -179,6 +325,53 @@ describe('queue-utils', () => {
     });
 
     describe('moveToDeadLetterQueue', () => {
+        it.each(['batch', 'bulkWriter'])('retains a Garmin workout callback and the failed-job TTL with %s', async writer => {
+            const info = vi.spyOn(logger, 'info').mockImplementation(() => {});
+            const queueItem = {
+                id: 'garmin-workout',
+                ref: { parent: { id: 'garminAPIActivityQueue' }, id: 'garmin-workout' },
+                callbackURL: 'https://apis.garmin.com/wellness-api/rest/activityFile?id=123&token=test-only',
+            } as unknown as GarminAPIActivityQueueItemInterface;
+            const nowMs = Date.now();
+            vi.spyOn(Date, 'now').mockReturnValue(nowMs);
+
+            const result = await moveToDeadLetterQueue(queueItem, new Error('failed import'),
+                writer === 'bulkWriter' ? hoisted.bulkWriter as unknown as BulkWriter : undefined);
+
+            expect(result).toBe(QueueResult.MovedToDLQ);
+            const failedPayload = (writer === 'bulkWriter' ? hoisted.bulkWriter.set : hoisted.batch.set).mock.calls[0][1];
+            expect(failedPayload).toMatchObject({
+                originalCollection: 'garminAPIActivityQueue',
+                callbackURL: queueItem.callbackURL,
+                expireAt: new Date(nowMs + TTL_CONFIG.FAILED_JOBS_IN_DAYS * 24 * 60 * 60 * 1000),
+            });
+            expect(JSON.stringify(info.mock.calls)).not.toContain(queueItem.callbackURL);
+        });
+
+        it.each(['garmin_ping', 'garmin_ping_batch'])('retains callbacks when the guarded %s revision fails', async type => {
+            const queueItem = {
+                id: 'garmin-health',
+                ref: { parent: { id: 'sleepSyncQueue' }, id: 'garmin-health' },
+                userID: 'user-1',
+                queueRevision: 'revision-1',
+                type,
+                ...(type === 'garmin_ping'
+                    ? { callbackURL: 'https://apis.garmin.com/wellness-api/rest/dailies?token=test-only' }
+                    : { garminCallbackURLs: ['https://apis.garmin.com/wellness-api/rest/dailies?token=test-only'] }),
+            } as unknown as SleepSyncQueueItemInterface;
+            hoisted.transaction.get.mockResolvedValue({ exists: true, data: () => queueItem });
+
+            await expect(moveToDeadLetterQueue(queueItem, new Error('invalid summary'))).resolves.toBe(QueueResult.MovedToDLQ);
+
+            expect(hoisted.transaction.set.mock.calls[0][1]).toMatchObject({
+                originalCollection: 'sleepSyncQueue',
+                ...(type === 'garmin_ping'
+                    ? { callbackURL: queueItem.callbackURL }
+                    : { garminCallbackURLs: queueItem.garminCallbackURLs }),
+            });
+            expect(hoisted.transaction.delete).toHaveBeenCalledWith(queueItem.ref);
+        });
+
         it('uses bulkWriter when provided', async () => {
             const queueItem: any = {
                 id: 'q1',
@@ -217,6 +410,8 @@ describe('queue-utils', () => {
                 ref: { parent: { id: 'activitySyncQueue' }, id: 'guarded-q1' },
                 dateCreated: 1,
                 retryCount: 0,
+                deliveryMode: 'historical',
+                sourceServiceName: 'manualUpload',
                 destinationUploadContinuation: {
                     type: 'suunto_blob_put_v1',
                     uploadUrl: 'https://blob.example/signed',
@@ -248,9 +443,14 @@ describe('queue-utils', () => {
                 expect.any(Object),
             );
             const failedPayload = hoisted.transaction.set.mock.calls[0][1];
+            expect(failedPayload).toMatchObject({
+                originalCollection: 'activitySyncQueue',
+                deliveryMode: 'historical',
+                sourceServiceName: 'manualUpload',
+            });
             expect(failedPayload).not.toHaveProperty('destinationUploadContinuation');
-            expect(failedPayload).not.toHaveProperty('callbackURL');
-            expect(failedPayload).not.toHaveProperty('garminCallbackURLs');
+            expect(failedPayload.callbackURL).toBe(queueItem.callbackURL);
+            expect(failedPayload.garminCallbackURLs).toEqual(queueItem.garminCallbackURLs);
             expect(hoisted.transaction.delete).toHaveBeenCalledWith(queueItem.ref);
             expect(hoisted.batch.commit).not.toHaveBeenCalled();
         });
@@ -414,8 +614,8 @@ describe('queue-utils', () => {
                 exists: true,
                 data: () => ({
                     revision: 'expected',
-                    retryCount: 9,
-                    totalRetryCount: 9,
+                    retryCount: PROVIDER_MAX_RETRY_COUNT - 1,
+                    totalRetryCount: PROVIDER_MAX_RETRY_COUNT - 1,
                     destinationUploadContinuation: {
                         uploadUrl: 'https://blob.example/signed',
                     },
@@ -436,8 +636,8 @@ describe('queue-utils', () => {
             expect(hoisted.transaction.set).toHaveBeenCalledWith(
                 expect.objectContaining({ id: 'guarded-retry-2' }),
                 expect.objectContaining({
-                    retryCount: 10,
-                    totalRetryCount: 10,
+                    retryCount: PROVIDER_MAX_RETRY_COUNT,
+                    totalRetryCount: PROVIDER_MAX_RETRY_COUNT,
                     context: 'PROVIDER_RETRY_EXHAUSTED',
                 }),
             );
@@ -451,8 +651,8 @@ describe('queue-utils', () => {
             const queueItem: any = {
                 id: 'guarded-retry-manual',
                 ref: { parent: { id: 'activitySyncQueue' }, id: 'guarded-retry-manual' },
-                retryCount: 9,
-                totalRetryCount: 9,
+                retryCount: PROVIDER_MAX_RETRY_COUNT - 1,
+                totalRetryCount: PROVIDER_MAX_RETRY_COUNT - 1,
                 dispatchedToCloudTask: 123,
                 destinationUploadID: 'upload-1',
             };
@@ -460,8 +660,8 @@ describe('queue-utils', () => {
                 exists: true,
                 data: () => ({
                     revision: 'expected',
-                    retryCount: 9,
-                    totalRetryCount: 9,
+                    retryCount: PROVIDER_MAX_RETRY_COUNT - 1,
+                    totalRetryCount: PROVIDER_MAX_RETRY_COUNT - 1,
                     destinationUploadID: 'upload-1',
                 }),
             });
@@ -484,8 +684,8 @@ describe('queue-utils', () => {
 
             expect(result).toBe(QueueResult.MovedToDLQ);
             expect(hoisted.transaction.update).toHaveBeenCalledWith(queueItem.ref, expect.objectContaining({
-                retryCount: 10,
-                totalRetryCount: 10,
+                retryCount: PROVIDER_MAX_RETRY_COUNT,
+                totalRetryCount: PROVIDER_MAX_RETRY_COUNT,
                 processed: true,
                 resultStatus: 'manual_reconciliation_required',
                 manualReconciliationContext: 'SUUNTO_ACTIVITY_UPLOAD_RETRY_EXHAUSTED',
@@ -526,6 +726,31 @@ describe('queue-utils', () => {
     });
 
     describe('increaseRetryCountForQueueItem', () => {
+        it('retains the current Garmin callback batch when retries are exhausted', async () => {
+            const queueItem = {
+                id: 'garmin-health-exhausted',
+                ref: { parent: { id: 'sleepSyncQueue' }, id: 'garmin-health-exhausted' },
+                userID: 'user-1',
+                queueRevision: 'revision-1',
+                retryCount: PROVIDER_MAX_RETRY_COUNT - 1,
+            } as unknown as SleepSyncQueueItemInterface;
+            const callbacks = ['https://apis.garmin.com/wellness-api/rest/dailies?token=test-only'];
+            hoisted.transaction.get.mockResolvedValue({
+                exists: true,
+                data: () => ({ ...queueItem, garminCallbackURLs: callbacks }),
+            });
+
+            await expect(increaseRetryCountForQueueItem(queueItem, new Error('provider unavailable')))
+                .resolves.toBe(QueueResult.MovedToDLQ);
+
+            expect(hoisted.transaction.set.mock.calls[0][1]).toMatchObject({
+                originalCollection: 'sleepSyncQueue',
+                retryCount: PROVIDER_MAX_RETRY_COUNT,
+                garminCallbackURLs: callbacks,
+            });
+            expect(hoisted.transaction.delete).toHaveBeenCalledWith(queueItem.ref);
+        });
+
         it('does not let an older Sleep queue revision reset retry state on its replacement', async () => {
             const queueItem: any = {
                 id: 'sleep-retry',

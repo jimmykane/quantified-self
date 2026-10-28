@@ -82,6 +82,12 @@ describe('getSubscriptionHistoryTrend Cloud Function', () => {
         vi.useRealTimers();
     });
 
+    it('uses 512 MiB for the subscription history query workload', () => {
+        expect((getSubscriptionHistoryTrend as unknown as { __options?: unknown }).__options).toMatchObject({
+            memory: '512MiB',
+        });
+    });
+
     it('should return 12 chronological buckets with net values', async () => {
         setupTrendCollectionMocks(
             [
@@ -340,4 +346,3 @@ describe('getUserGrowthTrend Cloud Function', () => {
         await expect((getUserGrowthTrend as any)(request)).rejects.toThrow('Only admins can call this function.');
     });
 });
-

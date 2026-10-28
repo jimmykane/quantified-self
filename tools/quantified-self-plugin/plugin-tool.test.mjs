@@ -478,7 +478,7 @@ test('rejects missing bundled skill files before generating account-bound files'
   });
 });
 
-test('requires exactly the registered six bundled skill directories', async () => {
+test('requires exactly the registered bundled skill directories', async () => {
   const missingRoot = await makeRepositoryFixture();
   await rm(
     join(
@@ -1043,6 +1043,7 @@ test('bundled skills cover focused workflows without copying the live tool catal
   const expectedMarkers = new Map([
     ['analyze-quantified-self', /Cross-Domain Workflow/],
     ['analyze-quantified-self-activity', /server, not the model/],
+    ['analyze-quantified-self-health', /recorded Health metrics/],
     ['analyze-quantified-self-measurements', /first-class recorded measurements/],
     ['analyze-quantified-self-sleep', /normalized sleep summaries/],
     ['analyze-quantified-self-training', /live metric catalog/],
@@ -1073,6 +1074,51 @@ test('bundled skills cover focused workflows without copying the live tool catal
       skillName,
     );
   }
+});
+
+test('activity-aware skills route around connector date-schema rejection without losing filters', async () => {
+  for (const skillName of [
+    'analyze-quantified-self',
+    'analyze-quantified-self-activity',
+    'analyze-quantified-self-training',
+  ]) {
+    const skill = await readFile(join(DEFAULT_REPO_ROOT, 'plugins', 'quantified-self',
+      'skills', skillName, 'SKILL.md'), 'utf8');
+    assert.match(skill, /simple-schema (?:activity )?listing/i, skillName);
+    assert.match(skill, /same filters|identical filters/i, skillName);
+    assert.match(skill, /do not (?:retry|loop)|instead of retrying/i, skillName);
+    assert.match(skill, /no (?:completed|recorded) activity|no activity was recorded/i, skillName);
+  }
+});
+
+test('Training authoring guidance preserves source prescriptions and bounds verification claims', async () => {
+  const training = await readFile(join(DEFAULT_REPO_ROOT, 'plugins', 'quantified-self',
+    'skills', 'analyze-quantified-self-training', 'SKILL.md'), 'utf8');
+  for (const marker of ['unit legend', 'five passes of a 180-second work step', 'not a five-mile run',
+    'executable steps/targets, not only notes', 'verify the first accepted batch', 'a sample or count audit does not prove every workout',
+    'paused plan creation', 'separate outcomes', 'untrusted context']) assert.ok(training.includes(marker), marker);
+  for (const skill of ['analyze-quantified-self', 'analyze-quantified-self-activity']) {
+    const source = await readFile(join(DEFAULT_REPO_ROOT, 'plugins', 'quantified-self', 'skills', skill, 'SKILL.md'), 'utf8');
+    assert.match(source, /Training workflow|workflow's prescription-fidelity/);
+    assert.match(source, /successful save/);
+  }
+});
+
+test('strength workflows distinguish complete companions from legacy intervals and retain sport names', async () => {
+  for (const skill of ['analyze-quantified-self', 'analyze-quantified-self-training']) {
+    const source = await readFile(join(DEFAULT_REPO_ROOT, 'plugins', 'quantified-self', 'skills', skill, 'SKILL.md'), 'utf8');
+    const text = source.replace(/\s+/g, ' ');
+    for (const sport of ['Strength Training', 'Weight Training', 'Kettlebell', 'Calisthenics', 'Core Training',
+      'LES MILLS CORE', 'LES MILLS GRIT Strength', 'LES MILLS BODYPUMP']) assert.ok(text.includes(sport), `${skill}: ${sport}`);
+    assert.match(text, /[Oo]lder aliases (?:may|can) be interval-only/);
+    assert.match(text, /unavailable details read does not (?:prove|establish)/);
+    assert.match(text, /QS Edit/);
+  }
+  const training = (await readFile(join(DEFAULT_REPO_ROOT, 'plugins', 'quantified-self', 'skills',
+    'analyze-quantified-self-training', 'SKILL.md'), 'utf8')).replace(/\s+/g, ' ');
+  assert.match(training, /updates preserve the original strength sport name/);
+  assert.match(training, /New strength creates through that preview use Strength Training/);
+  assert.match(training, /QS editor to create another strength sport/);
 });
 
 test('every CLI-dependent root command bootstraps the pinned plugin tooling', async () => {

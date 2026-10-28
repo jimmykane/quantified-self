@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DistanceUnits, WeightUnits } from '@sports-alliance/sports-lib';
 import {
   HEALTH_COVERAGE_STATUSES,
   HEALTH_METRIC_CATALOG,
@@ -25,20 +26,94 @@ import {
   type ActivityHealthObservation,
 } from '@shared/activity-health';
 import { projectLoadedHealthRange } from '@shared/health-query';
+import { enrichSleepWithNightlyHrv, nightlyHealthAccountKey } from '@shared/nightly-hrv';
+import { withDailyHeartRateSummaries } from './health-heart-rate-summary.helper';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import { formatCanonicalHealthMetricSportsLibValue } from '@shared/sports-lib-health-data';
 import {
   buildHealthMetricCatalogGroups,
+  buildHealthOverviewCategories,
+  selectHealthOverviewMetrics,
   buildHealthMetricWorkspaceView,
+  buildHealthHrvPersonalRangeStatus,
+  HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS,
+  buildHealthPriorityRows,
+  buildSleepObservationRows,
   buildSleepPriorityRows,
   filterHealthRangeResultByProviders,
+  formatHealthAxisValue,
+  formatHealthUnit,
+  formatHealthValue,
+  isSleepHrvSemanticVariant,
   navigateHealthWorkspaceWindow,
   normalizeHealthWorkspaceMetric,
   normalizeHealthWorkspaceRange,
   resolveHealthWorkspaceWindow,
   resolveSleepReferenceValue,
+  selectHealthPriorityTrendSeries,
+  selectTodayHeartRateHighlightSeries,
   selectActivityHealthObservations,
+  selectWorkoutWeightContextFallback,
+  sleepSessionHasHrv,
+  sleepSessionsHaveCanonicalHrv,
+  sleepSummaryMetricIds,
+  type HealthWorkspaceSeries,
 } from './health-workspace.helper';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+describe('dense Health chart projections', () => {
+  it.each([
+    ['activity_interval_average', 'average', 'qs_daily_interval_mean', HEALTH_PROVIDERS.SuuntoApp],
+    ['daily_15_second', 'representative_sample', 'qs_daily_sample_mean', HEALTH_PROVIDERS.GarminAPI],
+  ] as const)('pairs %s with its same-account daily average', (variant, aggregation, dailyVariant, provider) => {
+    const records = ['one', 'two'].map(accountKey => sourceRecord({ id: accountKey, provider, accountKey, metrics: [valueEntry({
+      metricId: HEALTH_METRIC_IDS.HeartRate, semanticVariant: dailyVariant, origin: HEALTH_VALUE_ORIGINS.QuantifiedSelfDerived,
+      recordingMethod: HEALTH_RECORDING_METHODS.QuantifiedSelfCalculated,
+    })] }));
+    const chunks = records.map(record => ({ ...sampleChunk({ id: record.id, provider, accountKey: record.source.accountKey,
+      metricId: HEALTH_METRIC_IDS.HeartRate, semanticVariant: variant }), aggregation }));
+    const query = { startDate: '2026-08-01', endDate: '2026-08-14', metricIds: [HEALTH_METRIC_IDS.HeartRate], includeSamples: true };
+    const result = projectLoadedHealthRange(records, chunks, query, { sourceRecordsComplete: true, samplesComplete: true });
+    const all = buildHealthMetricWorkspaceView(result).series;
+    expect(all).toHaveLength(4);
+    for (const daytime of all.filter(series => series.semanticVariant === variant)) {
+      const daily = all.find(series => series.id === daytime.alternateResolutionKey)!;
+      expect(daily.semanticVariant).toBe(dailyVariant);
+      expect(daily.alternateResolutionKey).toBe(daytime.id);
+      expect(daily.sourceSelectionKey).toBe(daytime.sourceSelectionKey);
+      expect(all.filter(series => series.id === daytime.alternateResolutionKey)).toHaveLength(1);
+    }
+    const native = { ...chunks[0], normalizationStatus: HEALTH_NORMALIZATION_STATUSES.NativeOnly, canonicalValues: null, canonicalUnit: null };
+    const invalid = projectLoadedHealthRange([], [native, { ...chunks[1], semanticVariant: 'activity_interval_minimum' }], query,
+      { sourceRecordsComplete: true, samplesComplete: true });
+    expect(buildHealthMetricWorkspaceView(invalid).series.every(series => !series.alternateResolutionKey)).toBe(true);
+  });
+  it('preserves every sample and separate account series while bounding table rows', () => {
+    const result = projectLoadedHealthRange([], [], {
+      startDate: '2026-08-01', endDate: '2026-08-30',
+      metricIds: [HEALTH_METRIC_IDS.HeartRate], includeSamples: true,
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    result.sampleChunks = Array.from({ length: 300 }, (_, index) => {
+      const startTimeMs = Date.parse('2026-08-01T00:00:00Z') + index * 3600000;
+      return {
+        ...sampleChunk({ id: `chunk-${index}`, metricId: HEALTH_METRIC_IDS.HeartRate,
+          accountKey: index % 2 ? 'one' : 'two', values: Array.from({ length: 60 }, (_, sample) => 50 + sample) }),
+        startTimeMs, endTimeMs: startTimeMs + 59 * 60000,
+        calendarDate: new Date(startTimeMs).toISOString().slice(0, 10),
+      };
+    });
+    const view = buildHealthMetricWorkspaceView(result);
+    expect(view.series).toHaveLength(2);
+    expect(view.series.map(series => series.points.length)).toEqual([9000, 9000]);
+    expect(view.series.every(series => series.points[0].value === 50 && series.points.at(-1)?.value === 109)).toBe(true);
+    expect(view.totalRowCount).toBe(300);
+    expect(view.rows).toHaveLength(250);
+    expect(view.rows[0].id).toBe('chunk:chunk-299');
+    expect(view.rows.at(-1)?.id).toBe('chunk:chunk-50');
+    expect(result.sampleChunks[0].canonicalValues).toHaveLength(60);
+  });
+});
 
 function valueEntry(overrides: Partial<HealthMetricValue> = {}): HealthMetricValue {
   return {
@@ -102,6 +177,7 @@ function sampleChunk(input: {
   values?: Array<number | string>;
   valueType?: 'number' | 'category';
   normalizationStatus?: 'canonical' | 'native_only';
+  timezoneOffsetSeconds?: number | null;
 }): HealthSampleChunk {
   const startTimeMs = Date.parse('2026-08-01T00:00:00.000Z');
   const values = input.values || [50, 51, 52];
@@ -134,6 +210,7 @@ function sampleChunk(input: {
     calendarDate: '2026-08-01',
     startTimeMs,
     endTimeMs: startTimeMs + ((values.length - 1) * 60_000),
+    timezoneOffsetSeconds: input.timezoneOffsetSeconds,
     receivedAtMs: startTimeMs + DAY_MS,
     seriesKey: input.id,
     chunkIndex: 0,
@@ -172,6 +249,51 @@ function sleepSession(overrides: Partial<SleepSession> = {}): SleepSession {
   };
 }
 
+function sleepHrvReferenceRecord(session: SleepSession, accountKey: string): HealthSourceRecord {
+  return sourceRecord({ id: `sleep-hrv-reference-${session.id}`, provider: session.source.provider, accountKey,
+    calendarDate: session.sleepDate, metrics: [{ kind: 'sleep_reference', metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+      valueType: HEALTH_VALUE_TYPES.Number, aggregation: 'average', semanticVariant: 'sleep_session_average_hrv',
+      origin: HEALTH_VALUE_ORIGINS.ProviderSummary, recordingMethod: HEALTH_RECORDING_METHODS.ProviderCalculated,
+      quality: { status: HEALTH_QUALITY_STATUSES.Valid },
+      reference: { domain: 'sleep', documentId: session.id!, field: 'vitals.averageHrvMs' },
+    }] });
+}
+
+function hrvSeries(values: ReadonlyArray<{ daysAgo: number; value: number }>): HealthWorkspaceSeries {
+  const endDayMs = Date.parse('2026-08-01T00:00:00.000Z');
+  return {
+    id: 'suunto-sleep-hrv',
+    metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+    provider: HEALTH_PROVIDERS.SuuntoApp,
+    providerLabel: 'Suunto',
+    sourceLabel: 'Suunto',
+    accountLabel: null,
+    semanticLabel: 'Average HRV · Sleep session · Provider summary · Provider calculated',
+    aggregation: 'average',
+    semanticVariant: 'sleep_session_average_hrv',
+    origin: HEALTH_VALUE_ORIGINS.ProviderSummary,
+    recordingMethod: HEALTH_RECORDING_METHODS.ProviderCalculated,
+    unit: HEALTH_UNITS.Millisecond,
+    normalizationStatus: HEALTH_NORMALIZATION_STATUSES.Canonical,
+    nativeOnly: false,
+    valueType: HEALTH_VALUE_TYPES.Number,
+    chartKind: 'line',
+    points: values.map(({ daysAgo, value }) => {
+      const timestampMs = endDayMs - (daysAgo * DAY_MS);
+      return {
+        timestampMs,
+        calendarDate: new Date(timestampMs).toISOString().slice(0, 10),
+        value,
+        qualityCode: null,
+      };
+    }).sort((left, right) => left.timestampMs - right.timestampMs),
+    deviceLabel: 'Suunto test watch',
+    coverageText: 'Unknown',
+    freshnessText: 'Fresh',
+    hasConflict: false,
+  };
+}
+
 function activityObservation(overrides: Partial<ActivityHealthObservation> = {}): ActivityHealthObservation {
   return {
     id: 'opaque-workout-observation',
@@ -189,6 +311,55 @@ function activityObservation(overrides: Partial<ActivityHealthObservation> = {})
 }
 
 describe('Health workspace helpers', () => {
+  it('formats calculated daily HR values and units through Sports Lib under default and saved unit preferences', () => {
+    const record = sourceRecord({ id: 'parent', provider: HEALTH_PROVIDERS.SuuntoApp, accountKey: 'suunto', metrics: [] });
+    record.metricIds = [HEALTH_METRIC_IDS.HeartRate];
+    record.sampleChunkIds = ['samples'];
+    const chunk = { ...sampleChunk({ id: 'samples', provider: HEALTH_PROVIDERS.SuuntoApp, accountKey: 'suunto',
+      metricId: HEALTH_METRIC_IDS.HeartRate, semanticVariant: 'activity_interval_average', values: [61, 72, 80] }),
+      parentSourceRecordId: record.id, aggregation: 'average', revision: record.source.revision };
+    const projected = projectLoadedHealthRange(withDailyHeartRateSummaries([record], [chunk]), [], {
+      startDate: '2026-08-01', endDate: '2026-08-01', metricIds: [HEALTH_METRIC_IDS.HeartRate], includeSamples: false,
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    for (const settings of [null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })]) {
+      const view = buildHealthMetricWorkspaceView(projected, [], [], settings);
+      const display = formatCanonicalHealthMetricSportsLibValue(HEALTH_METRIC_IDS.HeartRate, 71, settings)!;
+      const average = view.rows.find(row => row.semanticsText.includes('Daily average'))!;
+      expect(average.valueText).toBe(`${display.value} ${display.unit}`);
+      expect(average.semanticsText).toContain('Calculated by QS');
+      expect(average.sourceLabel).toBe('Suunto');
+      expect(view.series).toHaveLength(3);
+    }
+  });
+  it('formats canonical values and units through Sports Lib while keeping native-only values provider-specific', () => {
+    expect(formatHealthValue(
+      HEALTH_METRIC_IDS.Vo2Max,
+      52,
+      HEALTH_UNITS.MillilitersPerKilogramPerMinute,
+    )).toBe('52.00 ml/kg/min');
+    expect(formatHealthValue(HEALTH_METRIC_IDS.ActiveDuration, 3_600, HEALTH_UNITS.Second))
+      .toBe('01h 00m 00s');
+    expect(formatHealthUnit(HEALTH_METRIC_IDS.Vo2Max, 52, HEALTH_UNITS.MillilitersPerKilogramPerMinute))
+      .toBe('ml/kg/min');
+    expect(formatHealthAxisValue(HEALTH_METRIC_IDS.Vo2Max, 52, HEALTH_UNITS.MillilitersPerKilogramPerMinute))
+      .toBe('52.00');
+
+    const miles = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    expect(formatHealthValue(HEALTH_METRIC_IDS.Distance, 10_000, HEALTH_UNITS.Meter, false, miles))
+      .toBe('6.22 mi');
+    expect(formatHealthUnit(HEALTH_METRIC_IDS.Distance, 10_000, HEALTH_UNITS.Meter, false, miles))
+      .toBe('mi');
+    expect(formatHealthAxisValue(HEALTH_METRIC_IDS.Distance, 10_000, HEALTH_UNITS.Meter, false, miles))
+      .toBe('6.22');
+
+    expect(formatHealthValue(
+      HEALTH_METRIC_IDS.BodyEnergy,
+      55,
+      'garmin_body_battery_points',
+      true,
+    )).toBe('55 Garmin body battery points');
+  });
+
   it('normalizes saved Health ranges and falls back invalid settings to 30 days', () => {
     expect(normalizeHealthWorkspaceRange('today')).toBe('today');
     expect(normalizeHealthWorkspaceRange('14d')).toBe('14d');
@@ -216,18 +387,18 @@ describe('Health workspace helpers', () => {
     const older = navigateHealthWorkspaceWindow(state, 'older', '2026-08-30');
     expect(older.endDate).toBe('2026-08-16');
     expect(navigateHealthWorkspaceWindow(older, 'newer', '2026-08-30').endDate).toBe('2026-08-30');
-    expect(resolveHealthWorkspaceWindow({ ...state, range: '90d' }, '2026-08-30').includeSamples).toBe(false);
+    expect(resolveHealthWorkspaceWindow({ ...state, range: '90d' }, '2026-08-30').includeSamples).toBe(true);
+    expect(resolveHealthWorkspaceWindow({ ...state, range: '1y' }, '2026-08-30').includeSamples).toBe(false);
   });
 
-  it('loads Today as one sample-enabled day and pages it one day at a time', () => {
+  it('labels one-day history by its inspected date and pages it one day at a time', () => {
     const state = { metric: HEALTH_METRIC_IDS.HeartRate, range: 'today' as const, endDate: '2026-08-30' };
-    const explicitTodayLabel = new Intl.DateTimeFormat(undefined, {
-      weekday: 'long',
+    const relativeDateFormatter = new Intl.DateTimeFormat(undefined, {
       month: 'short',
       day: 'numeric',
-      year: 'numeric',
       timeZone: 'UTC',
-    }).format(new Date('2026-08-30T00:00:00.000Z'));
+    });
+    const explicitTodayLabel = relativeDateFormatter.format(new Date('2026-08-30T00:00:00.000Z'));
 
     expect(resolveHealthWorkspaceWindow(state, '2026-08-30')).toMatchObject({
       startDate: '2026-08-30',
@@ -240,23 +411,44 @@ describe('Health workspace helpers', () => {
       label: `Today · ${explicitTodayLabel}`,
     });
     const older = navigateHealthWorkspaceWindow(state, 'older', '2026-08-30');
+    const explicitYesterdayLabel = relativeDateFormatter.format(new Date('2026-08-29T00:00:00.000Z'));
+    expect(older.endDate).toBe('2026-08-29');
+    expect(resolveHealthWorkspaceWindow(older, '2026-08-30')).toMatchObject({
+      canNavigateNewer: true,
+      label: `Yesterday · ${explicitYesterdayLabel}`,
+    });
+    const olderAgain = navigateHealthWorkspaceWindow(older, 'older', '2026-08-30');
     const explicitOlderLabel = new Intl.DateTimeFormat(undefined, {
       weekday: 'long',
       month: 'short',
       day: 'numeric',
       year: 'numeric',
       timeZone: 'UTC',
-    }).format(new Date('2026-08-29T00:00:00.000Z'));
-    expect(older.endDate).toBe('2026-08-29');
-    expect(resolveHealthWorkspaceWindow(older, '2026-08-30').label).toBe(explicitOlderLabel);
+    }).format(new Date('2026-08-28T00:00:00.000Z'));
+    expect(resolveHealthWorkspaceWindow(olderAgain, '2026-08-30').label).toBe(explicitOlderLabel);
     expect(navigateHealthWorkspaceWindow(older, 'newer', '2026-08-30').endDate).toBe('2026-08-30');
   });
 
-  it('publishes every catalog metric once in category groups', () => {
+  it('publishes every visible catalog metric once in category groups', () => {
     const groups = buildHealthMetricCatalogGroups();
     const metricIds = groups.flatMap(group => group.metrics.map(metric => metric.id));
-    expect(metricIds).toHaveLength(Object.keys(HEALTH_METRIC_CATALOG).length);
+    expect(metricIds).toHaveLength(Object.keys(HEALTH_METRIC_CATALOG).length - 3);
     expect(new Set(metricIds).size).toBe(metricIds.length);
+  });
+
+  it('hides distance, active duration and altitude even with stored data and resets old selections', () => {
+    const hidden = [HEALTH_METRIC_IDS.Distance, HEALTH_METRIC_IDS.ActiveDuration, HEALTH_METRIC_IDS.Altitude];
+    expect(buildHealthMetricCatalogGroups(hidden)).toEqual([]);
+    const visible = buildHealthMetricCatalogGroups().flatMap(group => group.metrics.map(metric => metric.id));
+    for (const metric of hidden) {
+      expect(visible).not.toContain(metric);
+      expect(normalizeHealthWorkspaceMetric(metric)).toBe(HEALTH_METRIC_IDS.RestingHeartRate);
+      expect(HEALTH_METRIC_CATALOG[metric]).toBeDefined();
+    }
+    expect(visible).toEqual(expect.arrayContaining([
+      HEALTH_METRIC_IDS.Steps, HEALTH_METRIC_IDS.FloorsClimbed,
+      HEALTH_METRIC_IDS.ModerateIntensityDuration, HEALTH_METRIC_IDS.VigorousIntensityDuration,
+    ]));
   });
 
   it('keeps category ordering while hiding catalog metrics without stored data', () => {
@@ -273,6 +465,48 @@ describe('Health workspace helpers', () => {
       HEALTH_METRIC_IDS.BodyWeight,
     ]);
     expect(buildHealthMetricCatalogGroups([])).toEqual([]);
+  });
+
+  it('groups every available metric once without changing the stored catalog categories', () => {
+    const groups = buildHealthMetricCatalogGroups();
+    const categories = buildHealthOverviewCategories(groups, true);
+    expect(categories.map(category => category.id)).toEqual(['body', 'vitals', 'movement', 'recovery', 'fitness']);
+    const metrics = categories.flatMap(category => category.metrics.map(metric => metric.id));
+    expect(new Set(metrics).size).toBe(metrics.length);
+    expect(metrics).toEqual(expect.arrayContaining(['sleep', ...groups.flatMap(group => group.metrics.map(metric => metric.id))]));
+    expect(categories.find(category => category.id === 'fitness')!.metrics.map(metric => metric.id)).toContain('vo2_max');
+    expect(categories.find(category => category.id === 'body')!.metrics.map(metric => metric.id)).toContain('body_weight');
+    expect(HEALTH_METRIC_CATALOG.body_weight.category).toBe('body');
+    expect(buildHealthOverviewCategories([], false)).toEqual([]);
+    expect(buildHealthOverviewCategories([], true)).toMatchObject([{ id: 'recovery', metrics: [{ id: 'sleep' }] }]);
+  });
+
+  it('uses a stable recovery-first overview without filling gaps with other metrics', () => {
+    const categories = buildHealthOverviewCategories(buildHealthMetricCatalogGroups(), true);
+    expect(selectHealthOverviewMetrics(categories).map(metric => metric.id)).toEqual([
+      'sleep', 'heart_rate_variability', 'resting_heart_rate', 'vo2_max', 'body_weight', 'steps',
+    ]);
+    const sparse = buildHealthOverviewCategories(buildHealthMetricCatalogGroups(['body_fat', 'steps']), false);
+    expect(selectHealthOverviewMetrics(sparse).map(metric => metric.id)).toEqual(['steps']);
+    const secondaryOnly = buildHealthOverviewCategories(buildHealthMetricCatalogGroups([
+      'heart_rate', 'body_fat', 'fitness_age', 'active_energy', 'floors_climbed',
+    ]), false);
+    expect(selectHealthOverviewMetrics(secondaryOnly)).toEqual([]);
+    expect(secondaryOnly.flatMap(category => category.metrics)).toHaveLength(5);
+    expect(selectHealthOverviewMetrics([])).toEqual([]);
+  });
+
+  it('keeps intensity durations in categories without using them to fill the landing overview', () => {
+    const intensityMetrics = [HEALTH_METRIC_IDS.ModerateIntensityDuration, HEALTH_METRIC_IDS.VigorousIntensityDuration];
+    const categories = buildHealthOverviewCategories(buildHealthMetricCatalogGroups([
+      ...intensityMetrics, HEALTH_METRIC_IDS.Steps, HEALTH_METRIC_IDS.FloorsClimbed,
+    ]), false);
+    expect(selectHealthOverviewMetrics(categories).map(metric => metric.id)).toEqual(['steps']);
+    expect(categories.find(category => category.id === 'movement')!.metrics.map(metric => metric.id))
+      .toEqual(expect.arrayContaining(intensityMetrics));
+    const intensityOnly = buildHealthOverviewCategories(buildHealthMetricCatalogGroups(intensityMetrics), false);
+    expect(selectHealthOverviewMetrics(intensityOnly)).toEqual([]);
+    expect(intensityOnly[0].metrics).toHaveLength(2);
   });
 
   it('keeps providers, accounts, semantics, native values, gaps, and conflicts isolated', () => {
@@ -318,7 +552,48 @@ describe('Health workspace helpers', () => {
       .toEqual(['Garmin account 1', 'Garmin account 2']);
     expect(view.series.find(series => series.nativeOnly)?.chartKind).toBe('step');
     expect(view.series.map(series => JSON.stringify(series)).join(' ')).not.toContain('secret-account');
-    expect(view.series[0].coverageText).toContain('/4 days');
+    expect(view.series[0].coverageText).toContain('of 4 days with readings');
+  });
+
+  it('keeps series IDs stable across range projections without exposing account keys', () => {
+    const augustRecord = sourceRecord({
+      id: 'august-record',
+      provider: HEALTH_PROVIDERS.SuuntoApp,
+      accountKey: 'secret-stable-account',
+      calendarDate: '2026-08-01',
+    });
+    const septemberRecord = sourceRecord({
+      id: 'september-record',
+      provider: HEALTH_PROVIDERS.SuuntoApp,
+      accountKey: 'secret-stable-account',
+      calendarDate: '2026-09-01',
+    });
+    const august = buildHealthMetricWorkspaceView(projectLoadedHealthRange(
+      [augustRecord],
+      [],
+      {
+        startDate: '2026-08-01',
+        endDate: '2026-08-31',
+        metricIds: [HEALTH_METRIC_IDS.RestingHeartRate],
+      },
+      { sourceRecordsComplete: true, samplesComplete: true },
+    ));
+    const september = buildHealthMetricWorkspaceView(projectLoadedHealthRange(
+      [septemberRecord],
+      [],
+      {
+        startDate: '2026-09-01',
+        endDate: '2026-09-30',
+        metricIds: [HEALTH_METRIC_IDS.RestingHeartRate],
+      },
+      { sourceRecordsComplete: true, samplesComplete: true },
+    ));
+
+    expect(august.series[0].id).toBe(september.series[0].id);
+    expect(august.series[0].sourceSelectionKey).toMatch(/^health-series-[a-f0-9]{16}$/);
+    expect(august.series[0].sourceSelectionKey).toBe(september.series[0].sourceSelectionKey);
+    expect(august.series[0].id).not.toContain('secret-stable-account');
+    expect(JSON.stringify(august.series)).not.toContain('secret-stable-account');
   });
 
   it('keeps coverage and freshness scoped to unit and normalization-separated series', () => {
@@ -361,17 +636,19 @@ describe('Health workspace helpers', () => {
     const canonical = view.series.find(series => !series.nativeOnly);
     const native = view.series.find(series => series.nativeOnly);
 
-    expect(canonical?.coverageText).toBe('1/2 days');
-    expect(native?.coverageText).toBe('1/2 days');
-    expect(canonical?.freshnessText).toContain('Stale');
+    expect(canonical?.coverageText).toBe('1 of 2 days with readings');
+    expect(native?.coverageText).toBe('1 of 2 days with readings');
+    expect(canonical?.freshnessText).toContain('Older reading');
+    expect(canonical?.freshnessText).not.toContain('updates');
+    expect(view.rows.map(row => row.freshnessText)).toContain('Older reading');
     expect(canonical?.freshnessText).toContain('Aug 1');
-    expect(native?.freshnessText).toContain('Fresh');
+    expect(native?.freshnessText).toContain('Last recorded');
     expect(native?.freshnessText).toContain('Aug 2');
   });
 
   it('renders canonical samples as lines and categorical samples as stepped series', () => {
     const result = projectLoadedHealthRange([], [
-      sampleChunk({ id: 'numeric' }),
+      sampleChunk({ id: 'numeric', timezoneOffsetSeconds: 10_800 }),
       sampleChunk({ id: 'category', values: ['rest', 'high', 'rest'], valueType: HEALTH_VALUE_TYPES.Category }),
       sampleChunk({ id: 'native', values: [1, 2], normalizationStatus: HEALTH_NORMALIZATION_STATUSES.NativeOnly }),
     ], {
@@ -382,8 +659,306 @@ describe('Health workspace helpers', () => {
 
     const view = buildHealthMetricWorkspaceView(result);
     expect(view.series.map(series => series.chartKind).sort()).toEqual(['line', 'line', 'step']);
+    const canonicalNumericSeries = view.series.find(series =>
+      series.metricId === HEALTH_METRIC_IDS.RestingHeartRate && !series.nativeOnly);
+    expect(canonicalNumericSeries?.points[0].timezoneOffsetSeconds).toBe(10_800);
     expect(view.series.filter(series => series.nativeOnly)).toHaveLength(1);
-    expect(view.rows.every(row => row.valueText.includes('samples'))).toBe(true);
+    expect(view.rows.every(row => row.valueText.includes('readings'))).toBe(true);
+  });
+
+  it('puts the newest sample-backed Health highlight before older provider summaries', () => {
+    const result = projectLoadedHealthRange([
+      sourceRecord({
+        id: 'garmin-summary',
+        provider: HEALTH_PROVIDERS.GarminAPI,
+        accountKey: 'garmin-one',
+        calendarDate: '2026-07-31',
+        metrics: [valueEntry({
+          metricId: HEALTH_METRIC_IDS.HeartRate,
+          semanticVariant: 'rolling_7_day_average',
+          native: { metric: 'heartRate', value: 54, unit: 'bpm' },
+          canonical: { value: 54, unit: HEALTH_UNITS.BeatsPerMinute },
+        })],
+      }),
+    ], [
+      sampleChunk({
+        id: 'suunto-heart-rate',
+        provider: HEALTH_PROVIDERS.SuuntoApp,
+        accountKey: 'suunto-one',
+        metricId: HEALTH_METRIC_IDS.HeartRate,
+        values: [68, 69, 70],
+      }),
+    ], {
+      startDate: '2026-07-31',
+      endDate: '2026-08-01',
+      metricIds: [HEALTH_METRIC_IDS.HeartRate],
+      includeSamples: true,
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+
+    const rows = buildHealthPriorityRows(result);
+
+    expect(rows.map(row => row.sourceLabel)).toEqual(['Suunto', 'Garmin']);
+    expect(rows.every(row => !/provider summary|native only|representative sample/i.test(row.contextText))).toBe(true);
+    expect(rows[0]).toMatchObject({ valueText: '70 bpm', observedAtMs: Date.parse('2026-08-01T00:02:00.000Z') });
+
+    const trendSeries = selectHealthPriorityTrendSeries(result);
+    expect(trendSeries.map(series => [series.sourceLabel, series.aggregation])).toEqual([
+      ['Suunto', 'sample'],
+      ['Garmin', 'average'],
+    ]);
+  });
+
+  it('shows only recorded all-day HR samples inside the local day, retaining separate accounts', () => {
+    const window = resolveHealthWorkspaceWindow({ metric: HEALTH_METRIC_IDS.HeartRate, range: 'today', endDate: '2026-08-01' });
+    const eligible = (id: string, provider = HEALTH_PROVIDERS.GarminAPI as HealthProvider) => ({
+      ...sampleChunk({ id, provider, accountKey: id, metricId: HEALTH_METRIC_IDS.HeartRate,
+        semanticVariant: provider === HEALTH_PROVIDERS.GarminAPI ? 'daily_15_second' : 'activity_interval_average',
+        values: [50, 51, 52, 53] }),
+      aggregation: provider === HEALTH_PROVIDERS.GarminAPI ? 'representative_sample' : 'average',
+      startTimeMs: window.startTimeMs - 1,
+      endTimeMs: window.endTimeMs + 1,
+      offsetMs: [0, 1, window.endTimeMs - window.startTimeMs + 1, window.endTimeMs - window.startTimeMs + 2],
+    });
+    const garmin = eligible('garmin');
+    const result = projectLoadedHealthRange([], [], {
+      startDate: '2026-07-31', endDate: '2026-08-02', metricIds: [HEALTH_METRIC_IDS.HeartRate], includeSamples: true,
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    result.sampleChunks = [garmin, eligible('garmin-two'), eligible('suunto', HEALTH_PROVIDERS.SuuntoApp),
+      { ...garmin, id: 'native', normalizationStatus: HEALTH_NORMALIZATION_STATUSES.NativeOnly },
+      { ...garmin, id: 'calculated', origin: HEALTH_VALUE_ORIGINS.ProviderSummary },
+      { ...garmin, id: 'manual', recordingMethod: HEALTH_RECORDING_METHODS.Manual },
+      { ...garmin, id: 'coros', provider: HEALTH_PROVIDERS.COROSAPI, semanticVariant: 'hrv_interval_mean' },
+      ...['daily_minimum', 'daily_maximum', 'rolling_7_day_average', 'sleep_average', 'health_snapshot', 'activity_interval_minimum']
+        .map(semanticVariant => ({ ...garmin, id: semanticVariant, semanticVariant })),
+    ];
+    const series = selectTodayHeartRateHighlightSeries(result, window);
+    expect(series).toHaveLength(3);
+    expect(series.map(item => item.sourceLabel).sort()).toEqual(['Garmin account 1', 'Garmin account 2', 'Suunto']);
+    expect(series.every(item => item.points.map(point => point.value).join() === '51,52')).toBe(true);
+    expect(series.every(item => item.points[0].timestampMs === window.startTimeMs
+      && item.points[1].timestampMs === window.endTimeMs)).toBe(true);
+    expect(selectTodayHeartRateHighlightSeries(result, {
+      startTimeMs: window.endTimeMs + DAY_MS, endTimeMs: window.endTimeMs + DAY_MS * 2,
+    })).toEqual([]);
+    expect(selectTodayHeartRateHighlightSeries(null, window)).toEqual([]);
+  });
+
+  it('does not substitute scalar HR summaries when today has no eligible samples', () => {
+    const result = projectLoadedHealthRange([sourceRecord({ id: 'summary', provider: HEALTH_PROVIDERS.GarminAPI,
+      accountKey: 'garmin', metrics: [valueEntry({ metricId: HEALTH_METRIC_IDS.HeartRate, semanticVariant: 'rolling_7_day_average' })],
+    })], [], { startDate: '2026-08-01', endDate: '2026-08-01', includeSamples: true,
+      metricIds: [HEALTH_METRIC_IDS.HeartRate] }, { sourceRecordsComplete: true, samplesComplete: true });
+    expect(result.observations).toHaveLength(1);
+    expect(selectTodayHeartRateHighlightSeries(result, resolveHealthWorkspaceWindow({
+      metric: HEALTH_METRIC_IDS.HeartRate, range: 'today', endDate: '2026-08-01',
+    }))).toEqual([]);
+  });
+
+  it('requires enough source-separated HRV observations in the selected trend window', () => {
+    const hrvMetric = (value: number): HealthMetricValue => valueEntry({
+      metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+      semanticVariant: 'sleep_session_average_hrv',
+      native: { metric: 'averageHrv', value, unit: 'ms' },
+      canonical: { value, unit: HEALTH_UNITS.Millisecond },
+    });
+    const result = projectLoadedHealthRange([
+      sourceRecord({
+        id: 'outside-window',
+        provider: HEALTH_PROVIDERS.SuuntoApp,
+        accountKey: 'suunto-one',
+        calendarDate: '2026-07-15',
+        metrics: [hrvMetric(35)],
+      }),
+      ...[
+        ['2026-07-27', 40],
+        ['2026-07-29', 42],
+        ['2026-08-01', 44],
+      ].map(([calendarDate, value], index) => sourceRecord({
+        id: `inside-window-${index}`,
+        provider: HEALTH_PROVIDERS.SuuntoApp,
+        accountKey: 'suunto-one',
+        calendarDate: `${calendarDate}`,
+        metrics: [hrvMetric(Number(value))],
+      })),
+    ], [], {
+      startDate: '2026-07-01',
+      endDate: '2026-08-01',
+      metricIds: [HEALTH_METRIC_IDS.HeartRateVariability],
+      includeSamples: false,
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    const window = {
+      startTimeMs: Date.parse('2026-07-19T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-08-01T23:59:59.999Z'),
+      minimumPointCount: 3,
+    };
+
+    const trendSeries = selectHealthPriorityTrendSeries(result, [], null, window);
+
+    expect(trendSeries).toHaveLength(1);
+    expect(trendSeries[0].points.map(point => point.value)).toEqual([40, 42, 44]);
+    expect(selectHealthPriorityTrendSeries(result, [], null, {
+      ...window,
+      startTimeMs: Date.parse('2026-07-29T00:00:00.000Z'),
+    })).toEqual([]);
+  });
+
+  it('keeps the personal HRV range on nightly recovery summaries', () => {
+    const hrvMetric = (semanticVariant: string, value: number): HealthMetricValue => valueEntry({
+      metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+      semanticVariant,
+      native: { metric: semanticVariant, value, unit: 'ms' },
+      canonical: { value, unit: HEALTH_UNITS.Millisecond },
+    });
+    const result = projectLoadedHealthRange([
+      ...['2026-07-30', '2026-07-31', '2026-08-01'].map((calendarDate, index) => sourceRecord({
+        id: `hrv-${index}`,
+        provider: HEALTH_PROVIDERS.GarminAPI,
+        accountKey: 'garmin-one',
+        calendarDate,
+        metrics: [
+          hrvMetric('health_snapshot_rmssd', 70 + index),
+          hrvMetric('sleep_session_average_hrv', 50 + index),
+          hrvMetric('overnight_rmssd', 40 + index),
+        ],
+      })),
+    ], [], {
+      startDate: '2026-07-01',
+      endDate: '2026-08-01',
+      metricIds: [HEALTH_METRIC_IDS.HeartRateVariability],
+      includeSamples: false,
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+
+    expect(selectHealthPriorityTrendSeries(result, [], null, {
+      minimumPointCount: 3,
+      semanticVariants: HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS,
+      semanticVariantPriority: HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS,
+    }).map(series => series.semanticVariant)).toEqual(['overnight_rmssd']);
+    expect(selectHealthPriorityTrendSeries(result, [], null, {
+      minimumPointCount: 3,
+      semanticVariants: [],
+    })).toEqual([]);
+    expect(buildHealthHrvPersonalRangeStatus({
+      ...hrvSeries([{ daysAgo: 0, value: 72 }]),
+      semanticVariant: 'health_snapshot_rmssd',
+    }, Date.parse('2026-08-01T23:59:59.999Z'))).toBeNull();
+  });
+
+  it('grades the source-specific 7-day HRV average against a 60-day personal range', () => {
+    const endTimeMs = Date.parse('2026-08-01T23:59:59.999Z');
+    const building = buildHealthHrvPersonalRangeStatus(hrvSeries(
+      Array.from({ length: 13 }, (_, daysAgo) => ({ daysAgo, value: 50 })),
+    ), endTimeMs);
+    expect(building).toMatchObject({
+      tone: 'neutral',
+      label: 'Building personal range',
+      detailText: '13/14 nights',
+      observationDayCount: 13,
+      currentAverage: null,
+      normalRange: null,
+    });
+
+    const withinRange = buildHealthHrvPersonalRangeStatus(hrvSeries(
+      Array.from({ length: 20 }, (_, daysAgo) => ({ daysAgo, value: daysAgo % 2 === 0 ? 49 : 51 })),
+    ), endTimeMs);
+    expect(withinRange.tone).toBe('positive');
+    expect(withinRange.label).toBe('Within personal range');
+    expect(withinRange.detailText).toMatch(/^7-day average .* ms · 60-day range .* ms–.* ms$/);
+
+    const caution = buildHealthHrvPersonalRangeStatus(hrvSeries([
+      ...Array.from({ length: 15 }, (_, index) => ({ daysAgo: index + 5, value: 50 })),
+      ...Array.from({ length: 5 }, (_, daysAgo) => ({ daysAgo, value: 100 })),
+    ]), endTimeMs);
+    expect(caution.tone).toBe('caution');
+    expect(caution.label).toBe('Outside personal range');
+
+    const negative = buildHealthHrvPersonalRangeStatus(hrvSeries([
+      ...Array.from({ length: 17 }, (_, index) => ({ daysAgo: index + 7, value: 50 })),
+      { daysAgo: 0, value: 100 },
+      { daysAgo: 2, value: 100 },
+      { daysAgo: 4, value: 100 },
+    ]), endTimeMs);
+    expect(negative.tone).toBe('negative');
+    expect(negative.label).toBe('Far outside personal range');
+  });
+
+  it('grades each HRV chart date against the personal range at that date', () => {
+    const endTimeMs = Date.parse('2026-08-01T23:59:59.999Z');
+    const sourceSeries = hrvSeries([
+      ...Array.from({ length: 57 }, (_, index) => ({
+        daysAgo: index + 3,
+        value: index % 2 === 0 ? 49 : 51,
+      })),
+      { daysAgo: 2, value: 100 },
+      { daysAgo: 1, value: 100 },
+      { daysAgo: 0, value: 100 },
+    ]);
+    const normalTimestamp = sourceSeries.points.find(point => point.calendarDate === '2026-07-26')?.timestampMs;
+    const latestTimestamp = sourceSeries.points.find(point => point.calendarDate === '2026-08-01')?.timestampMs;
+    const status = buildHealthHrvPersonalRangeStatus(
+      sourceSeries,
+      endTimeMs,
+      null,
+      [normalTimestamp, latestTimestamp].filter((value): value is number => value !== undefined),
+    );
+
+    expect(status?.pointStatuses).toEqual([
+      { timestampMs: normalTimestamp, tone: 'positive', label: 'Within personal range', normalRange: expect.any(Object) },
+      { timestampMs: latestTimestamp, tone: 'negative', label: 'Far outside personal range', normalRange: expect.any(Object) },
+    ]);
+    expect(status?.pointStatuses[0].normalRange).not.toEqual(status?.pointStatuses[1].normalRange);
+    expect(status?.tone).toBe('caution');
+  });
+
+  it.each(HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS)('retains historical ranges without future leakage for %s', semanticVariant => {
+    const endTimeMs = Date.parse('2026-08-01T23:59:59.999Z');
+    const sourceSeries = { ...hrvSeries(Array.from({ length: 90 }, (_, daysAgo) => ({
+      daysAgo, value: daysAgo >= 30 ? 40 + daysAgo % 3 : 70 + daysAgo % 3,
+    }))), semanticVariant };
+    const status = buildHealthHrvPersonalRangeStatus(sourceSeries, endTimeMs)!;
+    expect(status.pointStatuses.slice(0, 13).every(point => point.normalRange === null)).toBe(true);
+    const first = status.pointStatuses[13];
+    const last = status.pointStatuses.at(-1)!;
+    expect(first.normalRange!.max).toBeLessThan(last.normalRange!.max);
+    const prefix = buildHealthHrvPersonalRangeStatus({
+      ...sourceSeries, points: sourceSeries.points.filter(point => point.timestampMs <= first.timestampMs),
+    }, first.timestampMs)!;
+    expect(prefix.pointStatuses.at(-1)).toEqual(first);
+    const stale = buildHealthHrvPersonalRangeStatus(sourceSeries, endTimeMs + 30 * 86400000)!;
+    expect(stale.normalRange).toBeNull();
+    expect(stale.pointStatuses).toEqual(status.pointStatuses);
+  });
+
+  it.each(HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS)('keeps a daily baseline without fabricating readings for %s', semanticVariant => {
+    const end = Date.parse('2026-08-01T23:59:59.999Z');
+    const source = { ...hrvSeries(Array.from({ length: 20 }, (_, index) => ({ daysAgo: index + 5, value: 40 + index % 3 }))), semanticVariant };
+    const status = buildHealthHrvPersonalRangeStatus(source, end)!;
+    const lastReading = Math.max(...source.points.map(point => point.timestampMs));
+    expect(status.pointStatuses.every(point => point.timestampMs <= lastReading)).toBe(true);
+    expect(status.rangePoints!.filter(point => point.timestampMs > lastReading).length).toBeGreaterThan(1);
+    expect(status.rangePoints!.at(-1)).toEqual({ timestampMs: end, normalRange: expect.any(Object) });
+    const start = end - 3 * 86400000;
+    const missingWindow = buildHealthHrvPersonalRangeStatus(source, end, null, [], start)!;
+    expect(missingWindow.pointStatuses).toEqual([]);
+    expect(missingWindow.rangePoints).toHaveLength(4);
+    expect(missingWindow.rangePoints![0]).toEqual({ timestampMs: start, normalRange: expect.any(Object) });
+    const stale = buildHealthHrvPersonalRangeStatus(source, end + 60 * 86400000)!;
+    expect(stale.rangePoints!.at(-1)?.normalRange).toBeNull();
+    const futureSource = { ...source, points: [...source.points, { ...source.points[0], timestampMs: end + 86400000, value: 999 }] };
+    expect(buildHealthHrvPersonalRangeStatus(futureSource, end)!.rangePoints).toEqual(status.rangePoints);
+  });
+
+  it('counts one nightly HRV baseline value per calendar day', () => {
+    const endTimeMs = Date.parse('2026-08-01T23:59:59.999Z');
+    const sameDaySamples = hrvSeries(Array.from({ length: 14 }, (_, index) => ({
+      daysAgo: 0,
+      value: 40 + index,
+    })));
+
+    expect(buildHealthHrvPersonalRangeStatus(sameDaySamples, endTimeMs)).toMatchObject({
+      tone: 'neutral',
+      observationDayCount: 1,
+      detailText: '1/14 nights',
+    });
   });
 
   it('renders provider-specific Body Energy scores as bars without changing other series', () => {
@@ -434,7 +1009,7 @@ describe('Health workspace helpers', () => {
     expect(filtered.conflicts).toEqual([]);
   });
 
-  it('uses workout Weight only as fallback context after applying provider filters', () => {
+  it('keeps workout Weight out of measurement series and exposes it only as fallback context', () => {
     const directWeight = sourceRecord({
       id: 'health-weight',
       provider: HEALTH_PROVIDERS.GarminAPI,
@@ -452,32 +1027,41 @@ describe('Health workspace helpers', () => {
       metricIds: [HEALTH_METRIC_IDS.BodyWeight],
     }, { sourceRecordsComplete: true, samplesComplete: true });
     const workout = activityObservation();
+    const garminWorkout = activityObservation({
+      id: 'garmin-workout-weight',
+      provider: HEALTH_PROVIDERS.GarminAPI,
+    });
 
-    expect(selectActivityHealthObservations(HEALTH_METRIC_IDS.BodyWeight, result, [workout])).toEqual([]);
+    expect(selectActivityHealthObservations(
+      HEALTH_METRIC_IDS.BodyWeight,
+      result,
+      [garminWorkout, workout],
+    )).toEqual([]);
+
+    const allSourcesView = buildHealthMetricWorkspaceView(
+      result,
+      [],
+      selectActivityHealthObservations(HEALTH_METRIC_IDS.BodyWeight, result, [garminWorkout, workout]),
+    );
+    expect(allSourcesView.series.map(series => series.provider)).toEqual([HEALTH_PROVIDERS.GarminAPI]);
+    expect(selectWorkoutWeightContextFallback(result, [garminWorkout, workout])).toBeNull();
 
     const corosOnly = filterHealthRangeResultByProviders(result, [HEALTH_PROVIDERS.COROSAPI]);
-    const fallback = selectActivityHealthObservations(
-      HEALTH_METRIC_IDS.BodyWeight,
+    const fallback = selectWorkoutWeightContextFallback(
       corosOnly,
       [workout],
       [HEALTH_PROVIDERS.COROSAPI],
     );
-    expect(fallback).toEqual([workout]);
-    const view = buildHealthMetricWorkspaceView(corosOnly, [], fallback);
-    expect(view.series).toHaveLength(1);
-    expect(view.series[0]).toMatchObject({
-      provider: HEALTH_PROVIDERS.COROSAPI,
-      semanticVariant: 'workout_profile_context',
-      coverageText: '1 workout date · coverage not applicable',
-      deviceLabel: null,
+    expect(fallback).toMatchObject({
+      sourceLabel: 'COROS',
+      valueText: '72.0 kg',
+      observedText: 'Aug 2, 2026',
     });
-    expect(view.rows[0].semanticsText).toContain('Workout profile context');
-    expect(view.rows[0]).toMatchObject({
-      deviceLabel: 'Not reported',
-      coverageText: 'Not applicable',
-      freshnessText: 'Last observed Aug 2, 2026',
-    });
-    expect(JSON.stringify(view)).not.toContain('opaque-workout-account');
+    expect(selectWorkoutWeightContextFallback(
+      corosOnly, [workout], [HEALTH_PROVIDERS.COROSAPI],
+      normalizeUserUnitSettings({ weightUnits: WeightUnits.Pounds }),
+    )?.valueText).toBe('158.7 lb');
+    expect(JSON.stringify(fallback)).not.toContain('opaque-workout-account');
   });
 
   it('treats future manual Weight as a real measurement that suppresses workout fallback', () => {
@@ -494,6 +1078,7 @@ describe('Health workspace helpers', () => {
         canonical: { value: 70, unit: HEALTH_UNITS.Kilogram },
       })],
     });
+    manualWeight.source.sourceRecordType = 'manual_measurement';
     const result = projectLoadedHealthRange([manualWeight], [], {
       startDate: '2026-08-01',
       endDate: '2026-08-03',
@@ -503,8 +1088,57 @@ describe('Health workspace helpers', () => {
     expect(selectActivityHealthObservations(
       HEALTH_METRIC_IDS.BodyWeight,
       result,
-      [activityObservation({ provider: HEALTH_PROVIDERS.QuantifiedSelf })],
+      [activityObservation({ provider: HEALTH_PROVIDERS.GarminAPI })],
     )).toEqual([]);
+    expect(selectWorkoutWeightContextFallback(
+      result,
+      [activityObservation({ provider: HEALTH_PROVIDERS.GarminAPI })],
+    )).toBeNull();
+  });
+
+  it('exposes optimistic edit metadata only for canonical Quantified Self manual observations', () => {
+    const manualWeight = sourceRecord({
+      id: 'a'.repeat(64),
+      provider: HEALTH_PROVIDERS.QuantifiedSelf,
+      accountKey: 'manual-account',
+      metrics: [valueEntry({
+        metricId: HEALTH_METRIC_IDS.BodyWeight,
+        aggregation: 'measurement',
+        semanticVariant: 'point',
+        origin: HEALTH_VALUE_ORIGINS.Recorded,
+        recordingMethod: HEALTH_RECORDING_METHODS.Manual,
+        native: { metric: 'Weight', value: 70, unit: 'kg' },
+        canonical: { value: 70, unit: HEALTH_UNITS.Kilogram },
+      })],
+    });
+    manualWeight.kind = HEALTH_SOURCE_RECORD_KINDS.PointMeasurement;
+    manualWeight.source.sourceRecordType = 'manual_measurement';
+    manualWeight.timezoneOffsetSeconds = 10_800;
+    manualWeight.source.revision.order = 4;
+    const result = projectLoadedHealthRange([manualWeight], [], {
+      startDate: '2026-08-01',
+      endDate: '2026-08-03',
+      metricIds: [HEALTH_METRIC_IDS.BodyWeight],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+
+    expect(buildHealthMetricWorkspaceView(result).rows[0]).toMatchObject({
+      sourceLabel: 'Manual',
+      manualMeasurement: {
+        sourceRecordId: 'a'.repeat(64),
+        expectedRevisionOrder: 4,
+        metricId: HEALTH_METRIC_IDS.BodyWeight,
+        canonicalValue: 70,
+        timezoneOffsetSeconds: 10_800,
+      },
+    });
+
+    manualWeight.source.sourceRecordType = 'daily';
+    const nonManualResult = projectLoadedHealthRange([manualWeight], [], {
+      startDate: '2026-08-01',
+      endDate: '2026-08-03',
+      metricIds: [HEALTH_METRIC_IDS.BodyWeight],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    expect(buildHealthMetricWorkspaceView(nonManualResult).rows[0]?.manualMeasurement).toBeNull();
   });
 
   it('keeps workout VO2 separate from provider Health and manual series by discipline and origin', () => {
@@ -532,6 +1166,7 @@ describe('Health workspace helpers', () => {
         canonical: { value: 50, unit: HEALTH_UNITS.MillilitersPerKilogramPerMinute },
       })],
     });
+    manualVo2.source.sourceRecordType = 'manual_measurement';
     const result = projectLoadedHealthRange([providerVo2, manualVo2], [], {
       startDate: '2026-08-01',
       endDate: '2026-08-03',
@@ -571,6 +1206,47 @@ describe('Health workspace helpers', () => {
     ]));
     expect(view.series.filter(series => series.semanticVariant.startsWith('workout_imported_')))
       .toHaveLength(2);
+    const garminSeries = view.series.filter(series => series.provider === HEALTH_PROVIDERS.GarminAPI);
+    expect(garminSeries.find(series => series.semanticVariant === 'user_metrics_vo2_max')?.sourceLabel)
+      .toBe('Garmin Health summary');
+    expect(garminSeries.filter(series => series.semanticVariant.startsWith('workout_imported_'))
+      .map(series => series.sourceLabel)).toEqual(['Garmin workout VO₂', 'Garmin workout VO₂']);
+    expect(new Set(garminSeries.map(series => series.sourceSelectionKey)).size).toBe(2);
+    expect(new Set(view.rows.map(row => row.sourceLabel))).toEqual(new Set([
+      'Garmin Health summary',
+      'Garmin workout VO₂',
+      'Manual',
+    ]));
+  });
+
+  it.each([
+    [HEALTH_METRIC_IDS.BodyFat, 22.5],
+    [HEALTH_METRIC_IDS.MuscleMass, 52.4],
+    [HEALTH_METRIC_IDS.BodyWater, 57.8],
+    [HEALTH_METRIC_IDS.BoneMass, 3.1],
+    [HEALTH_METRIC_IDS.BloodOxygenSaturation, 98],
+    [HEALTH_METRIC_IDS.BloodPressureSystolic, 120],
+    [HEALTH_METRIC_IDS.BloodPressureDiastolic, 80],
+    [HEALTH_METRIC_IDS.PulseRate, 65],
+  ] as const)('renders manual %s with canonical units and routes paired edit actions to the whole record', (metricId, value) => {
+    const record = sourceRecord({ id: 'a'.repeat(64), provider: HEALTH_PROVIDERS.QuantifiedSelf,
+      accountKey: 'manual-account', metrics: [valueEntry({ metricId, aggregation: 'measurement', semanticVariant: 'point',
+        origin: 'recorded', recordingMethod: 'manual', native: { metric: metricId, value },
+        canonical: { value, unit: HEALTH_METRIC_CATALOG[metricId].canonicalUnit } })] });
+    record.kind = HEALTH_SOURCE_RECORD_KINDS.PointMeasurement;
+    record.source.sourceRecordType = 'manual_measurement';
+    const result = projectLoadedHealthRange([record], [], { startDate: '2026-08-01', endDate: '2026-08-03', metricIds: [metricId] },
+      { sourceRecordsComplete: true, samplesComplete: true });
+    for (const unitSettings of [null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })]) {
+      const view = buildHealthMetricWorkspaceView(result, [], [], unitSettings);
+      const display = formatCanonicalHealthMetricSportsLibValue(metricId, value, unitSettings)!;
+      expect(view.rows[0].valueText).toBe(`${display.value} ${display.unit}`);
+      expect(view.rows[0].sourceLabel).toBe('Manual');
+      expect(view.rows[0].manualMeasurement).toMatchObject({ sourceRecordId: record.id,
+        metricId: ([HEALTH_METRIC_IDS.BloodPressureDiastolic, HEALTH_METRIC_IDS.PulseRate] as readonly HealthMetricId[]).includes(metricId)
+          ? HEALTH_METRIC_IDS.BloodPressureSystolic : metricId });
+      expect(view.series).toHaveLength(1);
+    }
   });
 
   it('resolves Sleep references against the normalized Sleep model', () => {
@@ -579,11 +1255,585 @@ describe('Health workspace helpers', () => {
     expect(resolveSleepReferenceValue(session, 'vitals.restingHeartRateBpm')).toBe(51);
     expect(resolveSleepReferenceValue(session, 'vitals.averageHrvMs')).toBe(62);
     expect(resolveSleepReferenceValue(session, 'vitals.maxSpo2Percent')).toBeNull();
+    expect(resolveSleepReferenceValue(
+      sleepSession({ vitals: { averageHrvMs: null } }),
+      'vitals.averageHrvMs',
+    )).toBeNull();
+  });
+
+  it('projects unreferenced Sleep HRV as a source-separated Health series', () => {
+    const result = projectLoadedHealthRange([], [], {
+      startDate: '2026-08-01',
+      endDate: '2026-08-03',
+      metricIds: [HEALTH_METRIC_IDS.HeartRateVariability],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+
+    const view = buildHealthMetricWorkspaceView(result, [sleepSession()]);
+
+    expect(view.series).toHaveLength(1);
+    expect(view.series[0]).toMatchObject({
+      metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+      provider: HEALTH_PROVIDERS.GarminAPI,
+      sourceLabel: 'Garmin',
+      semanticVariant: 'sleep_session_average_hrv',
+      semanticLabel: 'Average HRV · Sleep session · Provider summary · Provider calculated',
+      unit: HEALTH_UNITS.Millisecond,
+      nativeOnly: false,
+    });
+    expect(view.series[0].points).toEqual([expect.objectContaining({ value: 62, calendarDate: '2026-08-02' })]);
+    expect(view.rows[0]).toMatchObject({
+      valueText: '62 ms',
+      semanticsText: 'Average sleep HRV',
+      coverageText: 'Sleep session',
+    });
+    expect(JSON.stringify(view)).not.toContain('raw-provider-user');
+
+    const miles = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    const preferredUnitView = buildHealthMetricWorkspaceView(result, [sleepSession()], [], miles);
+    expect(preferredUnitView.rows[0]?.valueText).toBe('62 ms');
+  });
+
+  it.each(Object.values(SLEEP_PROVIDERS))('projects %s Sleep duration and score without Health references', provider => {
+    const result = projectLoadedHealthRange([], [], {
+      startDate: '2026-08-01', endDate: '2026-08-03',
+      metricIds: [HEALTH_METRIC_IDS.SleepDuration, HEALTH_METRIC_IDS.SleepScore],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    const session = sleepSession({ source: { provider, providerUserId: 'account', sourceSessionKey: 'night' } });
+    for (const units of [normalizeUserUnitSettings(), normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })]) {
+      const view = buildHealthMetricWorkspaceView(result, [session], [], units);
+      expect(view.series.map(series => [series.metricId, series.points[0].value]))
+        .toEqual([[HEALTH_METRIC_IDS.SleepDuration, 28800], [HEALTH_METRIC_IDS.SleepScore, 88]]);
+      for (const [metric, value] of [[HEALTH_METRIC_IDS.SleepDuration, 28800], [HEALTH_METRIC_IDS.SleepScore, 88]] as const) {
+        const display = formatCanonicalHealthMetricSportsLibValue(metric, value, units)!;
+        expect(view.rows.map(row => row.valueText)).toContain([display.value, display.unit].filter(Boolean).join(' '));
+      }
+    }
+  });
+
+  it('keeps Sleep summary accounts and naps separate, without inventing missing or out-of-period readings', () => {
+    const result = projectLoadedHealthRange([], [], {
+      startDate: '2026-08-02', endDate: '2026-08-02',
+      metricIds: [HEALTH_METRIC_IDS.SleepDuration, HEALTH_METRIC_IDS.SleepScore],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    const session = sleepSession();
+    const second = sleepSession({ id: 'second', source: { ...session.source, providerUserId: 'second' }, score: null });
+    const nap = sleepSession({ id: 'nap', isNap: true, durationSeconds: 1200, score: null });
+    const invalid = sleepSession({ id: 'invalid', endTimeMs: session.startTimeMs });
+    expect(sleepSummaryMetricIds(invalid)).toEqual([]);
+    expect(sleepSummaryMetricIds(sleepSession({ durationSeconds: Number.NaN, score: { value: null }, vitals: {} }))).toEqual([]);
+    const view = buildHealthMetricWorkspaceView(result, [session, second, nap, invalid, sleepSession({ sleepDate: '2026-07-31' })]);
+    expect(view.series).toHaveLength(4);
+    expect(view.series.filter(series => series.metricId === HEALTH_METRIC_IDS.SleepDuration)).toHaveLength(3);
+    expect(view.series.find(series => series.semanticVariant === 'nap_duration')?.points[0].value).toBe(1200);
+    expect(new Set(view.series.map(series => series.sourceSelectionKey)).size).toBe(2);
+    expect(JSON.stringify(view)).not.toContain('raw-provider-user');
+  });
+
+  it('deduplicates typed Sleep duration references and fills missing nights in the same source', () => {
+    const session = sleepSession();
+    const record = sourceRecord({ id: 'duration-reference', provider: session.source.provider, accountKey: 'opaque-account', calendarDate: session.sleepDate,
+      metrics: [{ kind: 'sleep_reference', metricId: HEALTH_METRIC_IDS.SleepDuration, valueType: HEALTH_VALUE_TYPES.Number,
+        aggregation: 'total', semanticVariant: 'session_duration', origin: HEALTH_VALUE_ORIGINS.ProviderSummary,
+        recordingMethod: HEALTH_RECORDING_METHODS.ProviderCalculated, quality: { status: HEALTH_QUALITY_STATUSES.Valid },
+        reference: { domain: 'sleep', documentId: session.id!, field: 'durationSeconds' } }],
+    });
+    const result = projectLoadedHealthRange([record], [], {
+      startDate: '2026-08-01', endDate: '2026-08-03', metricIds: [HEALTH_METRIC_IDS.SleepDuration],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    const next = sleepSession({ id: 'next', sleepDate: '2026-08-03', startTimeMs: session.startTimeMs + DAY_MS, endTimeMs: session.endTimeMs + DAY_MS });
+    const view = buildHealthMetricWorkspaceView(result, [session, next]);
+    expect(view.series).toHaveLength(1);
+    expect(view.series[0].points).toHaveLength(2);
+    const empty = projectLoadedHealthRange([], [], result.query, { sourceRecordsComplete: true, samplesComplete: true });
+    const unreferenced = buildHealthMetricWorkspaceView(empty, [{ ...next, healthAccountKey: 'opaque-account' } as typeof next]);
+    expect(unreferenced.series[0].id).toBe(view.series[0].id);
+  });
+
+  it('uses one canonical Suunto night across Health rows, charts, and typed references', () => {
+    const source = { provider: SLEEP_PROVIDERS.SuuntoApp, providerUserId: 'suunto-account' };
+    const first = sleepSession({
+      id: 'suunto-part-1', source: { ...source, sourceSessionKey: 'sleep-id-1' }, sleepDate: '2026-09-28',
+      startTimeMs: Date.parse('2026-09-27T18:57:00Z'), endTimeMs: Date.parse('2026-09-27T23:54:00Z'),
+      timezoneOffsetSeconds: 3 * 3600, durationSeconds: 15_840,
+      stageDurationsSeconds: { deep: 3_900, light: 10_200, rem: 1_740, awake: 1_620 },
+      score: { value: 62 },
+      vitals: { averageHeartRateBpm: 65, minimumHeartRateBpm: 61, averageHrvMs: 29, hrvSampleCount: 46 },
+      providerFields: { suunto: { SleepOnsetLatencyDuration: 360 } },
+    });
+    const second = sleepSession({
+      id: 'suunto-part-2', source: { ...source, sourceSessionKey: 'sleep-id-2' }, sleepDate: '2026-09-28',
+      startTimeMs: Date.parse('2026-09-28T00:01:00Z'), endTimeMs: Date.parse('2026-09-28T04:00:00Z'),
+      timezoneOffsetSeconds: 3 * 3600, durationSeconds: 13_320,
+      stageDurationsSeconds: { deep: 2_280, light: 7_380, rem: 3_660, awake: 540 },
+      score: { value: 72 },
+      vitals: { averageHeartRateBpm: 61, minimumHeartRateBpm: 57, averageHrvMs: 40, hrvSampleCount: 35 },
+      providerFields: { suunto: { SleepOnsetLatencyDuration: 480 } },
+    });
+    const record = sourceRecord({
+      provider: SLEEP_PROVIDERS.SuuntoApp,
+      accountKey: 'opaque-suunto-account',
+      calendarDate: '2026-09-28',
+      metrics: [
+        {
+          kind: 'sleep_reference', metricId: HEALTH_METRIC_IDS.SleepDuration, valueType: HEALTH_VALUE_TYPES.Number,
+          aggregation: 'total', semanticVariant: 'session_duration', origin: HEALTH_VALUE_ORIGINS.ProviderSummary,
+          recordingMethod: HEALTH_RECORDING_METHODS.ProviderCalculated, quality: { status: HEALTH_QUALITY_STATUSES.Valid },
+          reference: { domain: 'sleep', documentId: second.id!, field: 'durationSeconds' },
+        },
+        {
+          kind: 'sleep_reference', metricId: HEALTH_METRIC_IDS.HeartRateVariability, valueType: HEALTH_VALUE_TYPES.Number,
+          aggregation: 'average', semanticVariant: 'sleep_session_average_hrv', origin: HEALTH_VALUE_ORIGINS.ProviderSummary,
+          recordingMethod: HEALTH_RECORDING_METHODS.ProviderCalculated, quality: { status: HEALTH_QUALITY_STATUSES.Valid },
+          reference: { domain: 'sleep', documentId: second.id!, field: 'vitals.averageHrvMs' },
+        },
+      ],
+    });
+    const result = projectLoadedHealthRange([record], [], {
+      startDate: '2026-09-28', endDate: '2026-09-28',
+      metricIds: [HEALTH_METRIC_IDS.SleepDuration, HEALTH_METRIC_IDS.SleepScore,
+        HEALTH_METRIC_IDS.HeartRateVariability],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+
+    const priorityRows = buildSleepPriorityRows([first, second]);
+    const observationRows = buildSleepObservationRows([first, second]);
+    const view = buildHealthMetricWorkspaceView(result, [first, second]);
+
+    expect(priorityRows).toHaveLength(1);
+    expect(priorityRows[0]).toMatchObject({ valueText: '08h 06m' });
+    expect(priorityRows[0].details).toEqual(expect.arrayContaining([
+      { label: 'Score', valueText: '72' },
+      { label: 'Sleep HRV', valueText: '33.8 ms' },
+      { label: 'Average sleep HR', valueText: '63 bpm' },
+    ]));
+    expect(observationRows).toHaveLength(1);
+    expect(observationRows[0]).toMatchObject({ durationText: '08h 06m', scoreText: '72', hrvText: '33.8 ms' });
+    expect(view.series.find(series => series.metricId === HEALTH_METRIC_IDS.SleepDuration)?.points[0].value).toBe(29_160);
+    expect(view.series.find(series => series.metricId === HEALTH_METRIC_IDS.HeartRateVariability)?.points[0].value)
+      .toBeCloseTo(33.753086, 5);
+    expect(view.series.find(series => series.metricId === HEALTH_METRIC_IDS.SleepScore)?.points[0].value).toBe(72);
+    expect(view.series.flatMap(series => series.points).some(point => point.value === 40)).toBe(false);
+  });
+
+  it('keeps average and overnight Sleep HRV as distinct semantic series', () => {
+    const result = projectLoadedHealthRange([], [], {
+      startDate: '2026-08-01',
+      endDate: '2026-08-03',
+      metricIds: [HEALTH_METRIC_IDS.HeartRateVariability],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    const session = sleepSession({
+      vitals: { averageHrvMs: 62, overnightHrvMs: 59 },
+    });
+
+    const view = buildHealthMetricWorkspaceView(result, [session]);
+
+    expect(view.series).toHaveLength(2);
+    expect(view.series.map(series => series.semanticVariant)).toEqual([
+      'sleep_session_average_hrv',
+      'sleep_overnight_hrv',
+    ]);
+    expect(view.series.map(series => series.points[0]?.value)).toEqual([62, 59]);
+  });
+
+  it.each(Object.values(SLEEP_PROVIDERS))('projects all recorded %s Sleep vitals with their original meaning and units', provider => {
+    const session = sleepSession({ source: { provider, sourceSessionKey: 'night', providerUserId: 'account' },
+      vitals: { averageHeartRateBpm: 60, minimumHeartRateBpm: 45, restingHeartRateBpm: 49,
+        maxSpo2Percent: 98, averageRespirationBrpm: 14 } });
+    const metrics = [HEALTH_METRIC_IDS.HeartRate, HEALTH_METRIC_IDS.RestingHeartRate,
+      HEALTH_METRIC_IDS.BloodOxygenSaturation, HEALTH_METRIC_IDS.RespirationRate];
+    const result = projectLoadedHealthRange([], [], { startDate: '2026-08-01', endDate: '2026-08-03', metricIds: metrics },
+      { sourceRecordsComplete: true, samplesComplete: true });
+    const expected = [
+      [HEALTH_METRIC_IDS.HeartRate, 'sleep_session_average_heart_rate', 'average', 60],
+      [HEALTH_METRIC_IDS.HeartRate, 'sleep_session_minimum_heart_rate', 'minimum', 45],
+      [HEALTH_METRIC_IDS.RestingHeartRate, 'sleep_session_resting_heart_rate', 'average', 49],
+      [HEALTH_METRIC_IDS.BloodOxygenSaturation, 'sleep_session_maximum_spo2', 'maximum', 98],
+      [HEALTH_METRIC_IDS.RespirationRate, 'sleep_session_average_respiration', 'average', 14],
+    ] as const;
+    for (const units of [normalizeUserUnitSettings(), normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })]) {
+      const view = buildHealthMetricWorkspaceView(result, [session], [], units);
+      expect(view.series).toHaveLength(5);
+      expect(sleepSummaryMetricIds(session)).toEqual(expect.arrayContaining(metrics));
+      for (const [metricId, semanticVariant, aggregation, value] of expected) {
+        const series = view.series.find(item => item.semanticVariant === semanticVariant)!;
+        expect(series).toMatchObject({ metricId, provider, aggregation, nativeOnly: false });
+        expect(series.points.map(point => point.value)).toEqual([value]);
+        expect(series.semanticLabel).toContain('Sleep session');
+        const display = formatCanonicalHealthMetricSportsLibValue(metricId, value, units)!;
+        expect(view.rows.map(row => row.valueText)).toContain([display.value, display.unit].filter(Boolean).join(' '));
+      }
+    }
+  });
+
+  it('labels QS-calculated sleep HR as derived and keeps it separate from native sleep HR', () => {
+    const native = sleepSession({ vitals: { averageHeartRateBpm: 60, minimumHeartRateBpm: 45 } });
+    const calculated = { ...native, id: 'calculated', sleepDate: '2026-08-03',
+      startTimeMs: native.startTimeMs + 86400000, endTimeMs: native.endTimeMs + 86400000,
+      qsCalculatedHeartRate: { average: true, minimum: true } };
+    const result = projectLoadedHealthRange([], [], { startDate: '2026-08-01', endDate: '2026-08-03', metricIds: [HEALTH_METRIC_IDS.HeartRate] },
+      { sourceRecordsComplete: true, samplesComplete: true });
+    for (const settings of [normalizeUserUnitSettings(), normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })]) {
+      const view = buildHealthMetricWorkspaceView(result, [native, calculated], [], settings);
+      expect(view.series).toHaveLength(4);
+      const derived = view.series.filter(s => s.semanticVariant.startsWith('qs_'));
+      expect(derived).toHaveLength(2);
+      expect(derived.every(s => s.origin === 'quantified_self_derived' && s.recordingMethod === 'quantified_self_calculated')).toBe(true);
+      expect(derived.every(s => s.semanticLabel.includes('Calculated by QS'))).toBe(true);
+      const display = formatCanonicalHealthMetricSportsLibValue(HEALTH_METRIC_IDS.HeartRate, 60, settings)!;
+      expect(view.rows.some(row => row.valueText === `${display.value} ${display.unit}`)).toBe(true);
+    }
+  });
+
+  it('keeps Sleep vital accounts, naps and standalone readings separate and excludes invalid or out-of-range evidence', () => {
+    const session = sleepSession({ vitals: { averageHeartRateBpm: 60, minimumHeartRateBpm: 45, restingHeartRateBpm: null,
+      maxSpo2Percent: 101, averageRespirationBrpm: 0 } });
+    const query = { startDate: '2026-08-01', endDate: '2026-08-03', metricIds: [HEALTH_METRIC_IDS.HeartRate, HEALTH_METRIC_IDS.RestingHeartRate,
+      HEALTH_METRIC_IDS.BloodOxygenSaturation, HEALTH_METRIC_IDS.RespirationRate] };
+    const result = projectLoadedHealthRange([sourceRecord({ metrics: [valueEntry({ metricId: HEALTH_METRIC_IDS.HeartRate,
+      semanticVariant: 'daily_average', canonical: { value: 71, unit: HEALTH_UNITS.BeatsPerMinute } })] })], [], query,
+      { sourceRecordsComplete: true, samplesComplete: true });
+    const other = { ...session, id: 'other', source: { ...session.source, providerUserId: 'second' } };
+    const view = buildHealthMetricWorkspaceView(result, [session, other, { ...session, id: 'nap', isNap: true },
+      { ...session, id: 'outside', sleepDate: '2026-07-31' }, { ...session, id: 'invalid', endTimeMs: session.startTimeMs }]);
+    expect(view.series).toHaveLength(7);
+    expect(view.series.every(series => series.metricId === HEALTH_METRIC_IDS.HeartRate)).toBe(true);
+    expect(view.series.filter(series => series.semanticVariant.startsWith('nap_'))).toHaveLength(2);
+    expect(view.series.flatMap(series => series.points)).toHaveLength(7);
+    expect(sleepSummaryMetricIds(session)).not.toContain(HEALTH_METRIC_IDS.RestingHeartRate);
+    expect(JSON.stringify(view)).not.toContain('raw-provider-user');
+  });
+
+  it('deduplicates Sleep vital references by field and preserves their established provider semantics', () => {
+    const session = sleepSession({ vitals: { averageHeartRateBpm: 60, minimumHeartRateBpm: 45 } });
+    const record = sourceRecord({ provider: session.source.provider, accountKey: 'opaque-account', calendarDate: session.sleepDate,
+      metrics: [{ kind: 'sleep_reference', metricId: HEALTH_METRIC_IDS.HeartRate, valueType: HEALTH_VALUE_TYPES.Number,
+        aggregation: 'average', semanticVariant: 'sleep_average', origin: HEALTH_VALUE_ORIGINS.ProviderSummary,
+        recordingMethod: HEALTH_RECORDING_METHODS.ProviderCalculated, quality: { status: HEALTH_QUALITY_STATUSES.Valid },
+        reference: { domain: 'sleep', documentId: session.id!, field: 'vitals.averageHeartRateBpm' } }] });
+    const result = projectLoadedHealthRange([record], [], { startDate: '2026-08-01', endDate: '2026-08-03', metricIds: [HEALTH_METRIC_IDS.HeartRate] },
+      { sourceRecordsComplete: true, samplesComplete: true });
+    const view = buildHealthMetricWorkspaceView(result, [session]);
+    expect(view.series.map(series => series.semanticVariant)).toEqual(expect.arrayContaining(['sleep_average', 'sleep_session_minimum_heart_rate']));
+    expect(view.series.flatMap(series => series.points).map(point => point.value).sort()).toEqual([45, 60]);
+    expect(view.series.every(series => series.accountLabel === null)).toBe(true);
+    const fallback = view.series.find(series => series.semanticVariant === 'sleep_session_minimum_heart_rate')!;
+    const empty = projectLoadedHealthRange([], [], result.query, { sourceRecordsComplete: true, samplesComplete: true });
+    expect(buildHealthMetricWorkspaceView(empty, [{ ...session, healthAccountKey: 'opaque-account' } as typeof session]).series
+      .find(series => series.semanticVariant === fallback.semanticVariant)?.id).toBe(fallback.id);
+  });
+
+  it('does not advertise or project nap-only HRV', () => {
+    const nap = sleepSession({ isNap: true });
+    const result = projectLoadedHealthRange([], [], {
+      startDate: '2026-08-01',
+      endDate: '2026-08-03',
+      metricIds: [HEALTH_METRIC_IDS.HeartRateVariability],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+
+    expect(sleepSessionHasHrv(nap)).toBe(false);
+    expect(buildHealthMetricWorkspaceView(result, [nap]).series).toEqual([]);
+  });
+
+  it('does not advertise unidentified or incomplete canonical Suunto HRV', () => {
+    const source = { provider: SLEEP_PROVIDERS.SuuntoApp, providerUserId: 'account' };
+    const first = sleepSession({
+      id: 'first', source: { ...source, sourceSessionKey: 'first' },
+      startTimeMs: Date.parse('2026-08-01T22:00:00Z'), endTimeMs: Date.parse('2026-08-02T01:00:00Z'),
+      durationSeconds: 10_800, vitals: { averageHrvMs: 40, hrvSampleCount: 20 },
+    });
+    const second = sleepSession({
+      id: 'second', source: { ...source, sourceSessionKey: 'second' },
+      startTimeMs: Date.parse('2026-08-02T01:10:00Z'), endTimeMs: Date.parse('2026-08-02T06:00:00Z'),
+      durationSeconds: 17_400, vitals: {},
+    });
+    const unidentified = sleepSession({
+      source: { provider: SLEEP_PROVIDERS.SuuntoApp, sourceSessionKey: 'legacy', providerUserId: '' },
+    });
+
+    expect(sleepSessionHasHrv(unidentified)).toBe(false);
+    expect(sleepSessionsHaveCanonicalHrv([first, second])).toBe(false);
+  });
+
+  it('does not classify provider Health sleep averages as Sleep-session HRV', () => {
+    expect(isSleepHrvSemanticVariant('sleep_session_average_hrv')).toBe(true);
+    expect(isSleepHrvSemanticVariant('sleep_overnight_hrv')).toBe(true);
+    expect(isSleepHrvSemanticVariant('sleep_average')).toBe(false);
+    expect(isSleepHrvSemanticVariant('sleep_window_deviation')).toBe(false);
+  });
+
+  it('keeps standalone and Sleep HRV separate without duplicating typed Sleep references', () => {
+    const session = sleepSession();
+    const standalone = sourceRecord({
+      id: 'standalone-hrv',
+      provider: HEALTH_PROVIDERS.COROSAPI,
+      accountKey: 'coros-account',
+      calendarDate: '2026-08-02',
+      metrics: [valueEntry({
+        metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+        semanticVariant: 'overnight_summary',
+        native: { metric: 'hrv', value: 55, unit: 'ms' },
+        canonical: { value: 55, unit: HEALTH_UNITS.Millisecond },
+      })],
+    });
+    const query = {
+      startDate: '2026-08-01',
+      endDate: '2026-08-03',
+      metricIds: [HEALTH_METRIC_IDS.HeartRateVariability],
+    };
+    const standaloneResult = projectLoadedHealthRange([standalone], [], query, {
+      sourceRecordsComplete: true,
+      samplesComplete: true,
+    });
+
+    const separateView = buildHealthMetricWorkspaceView(standaloneResult, [session]);
+    expect(separateView.series).toHaveLength(2);
+    expect(separateView.series.map(series => series.semanticVariant)).toEqual(expect.arrayContaining([
+      'overnight_summary',
+      'sleep_session_average_hrv',
+    ]));
+
+    const reference = sourceRecord({
+      id: 'sleep-hrv-reference',
+      provider: HEALTH_PROVIDERS.GarminAPI,
+      accountKey: 'garmin-account',
+      calendarDate: '2026-08-02',
+      metrics: [{
+        kind: 'sleep_reference',
+        metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+        valueType: HEALTH_VALUE_TYPES.Number,
+        aggregation: 'average',
+        semanticVariant: 'sleep_session_average_hrv',
+        origin: HEALTH_VALUE_ORIGINS.ProviderSummary,
+        recordingMethod: HEALTH_RECORDING_METHODS.ProviderCalculated,
+        quality: { status: HEALTH_QUALITY_STATUSES.Valid },
+        reference: {
+          domain: 'sleep',
+          documentId: 'sleep-one',
+          field: 'vitals.averageHrvMs',
+        },
+      }],
+    });
+    const referenceResult = projectLoadedHealthRange([reference], [], query, {
+      sourceRecordsComplete: true,
+      samplesComplete: true,
+    });
+
+    const referencedView = buildHealthMetricWorkspaceView(referenceResult, [session]);
+    expect(referencedView.series).toHaveLength(1);
+    expect(referencedView.series[0].points).toHaveLength(1);
+  });
+
+  it('reuses the Health account identity for Sleep HRV instead of inventing another provider account', () => {
+    const session = {
+      ...sleepSession(),
+      healthAccountKey: 'shared-garmin-account',
+    };
+    const standalone = sourceRecord({
+      id: 'standalone-garmin-hrv',
+      provider: HEALTH_PROVIDERS.GarminAPI,
+      accountKey: 'shared-garmin-account',
+      calendarDate: session.sleepDate,
+      metrics: [valueEntry({
+        metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+        semanticVariant: 'overnight_summary',
+        native: { metric: 'hrv', value: 55, unit: 'ms' },
+        canonical: { value: 55, unit: HEALTH_UNITS.Millisecond },
+      })],
+    });
+    const result = projectLoadedHealthRange([standalone], [], {
+      startDate: '2026-08-01',
+      endDate: '2026-08-03',
+      metricIds: [HEALTH_METRIC_IDS.HeartRateVariability],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+
+    const view = buildHealthMetricWorkspaceView(result, [session]);
+
+    expect(view.series).toHaveLength(2);
+    expect(view.series.map(series => series.sourceLabel)).toEqual(['Garmin', 'Garmin']);
+    expect(view.series.every(series => series.accountLabel === null)).toBe(true);
+    expect(new Set(view.series.map(series => series.sourceSelectionKey)).size).toBe(1);
+    expect(view.series.map(series => series.semanticVariant)).toEqual(expect.arrayContaining([
+      'overnight_summary',
+      'sleep_session_average_hrv',
+    ]));
+  });
+
+  it.each([null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })])(
+    'reuses a typed Sleep reference account for sibling metrics and unreferenced nights without Web Crypto (%s)', units => {
+      const session = sleepSession({ vitals: { averageHrvMs: 62, overnightHrvMs: 44, averageHeartRateBpm: 50 } });
+      const next = { ...session, id: 'sleep-next', sleepDate: '2026-08-03',
+        startTimeMs: session.startTimeMs + DAY_MS, endTimeMs: session.endTimeMs + DAY_MS };
+      const reference = sleepHrvReferenceRecord(session, 'opaque-health-account');
+      const result = projectLoadedHealthRange([reference], [], { startDate: session.sleepDate, endDate: next.sleepDate,
+        metricIds: [HEALTH_METRIC_IDS.HeartRateVariability, HEALTH_METRIC_IDS.HeartRate] },
+      { sourceRecordsComplete: true, samplesComplete: true });
+      const view = buildHealthMetricWorkspaceView(result, [session, next], [], units);
+      expect(view.series).toHaveLength(3);
+      expect(view.series.map(series => series.sourceLabel)).toEqual(['Garmin', 'Garmin', 'Garmin']);
+      expect(new Set(view.series.map(series => series.sourceSelectionKey)).size).toBe(1);
+      expect(view.series.every(series => series.points.length === 2)).toBe(true);
+      expect(view.series.map(series => formatHealthValue(series.metricId, series.points[0].value, series.unit, false, units)).sort())
+        .toEqual(['44 ms', '50 bpm', '62 ms']);
+      expect(session).not.toHaveProperty('healthAccountKey');
+    },
+  );
+
+  it('withholds a typed account alias when references disagree for the same provider account', () => {
+    const session = sleepSession({ vitals: { averageHrvMs: 62, overnightHrvMs: 44 } });
+    const next = { ...session, id: 'sleep-next', sleepDate: '2026-08-03',
+      startTimeMs: session.startTimeMs + DAY_MS, endTimeMs: session.endTimeMs + DAY_MS };
+    const result = projectLoadedHealthRange([
+      sleepHrvReferenceRecord(session, 'health-account-a'), sleepHrvReferenceRecord(next, 'health-account-b'),
+    ], [], { startDate: session.sleepDate, endDate: next.sleepDate, metricIds: [HEALTH_METRIC_IDS.HeartRateVariability] },
+    { sourceRecordsComplete: true, samplesComplete: true });
+    const view = buildHealthMetricWorkspaceView(result, [session, next]);
+    const overnight = view.series.find(series => series.semanticVariant === 'sleep_overnight_hrv')!;
+    expect(overnight.points).toHaveLength(2);
+    expect(view.series.filter(series => series.semanticVariant === 'sleep_session_average_hrv')
+      .every(series => series.sourceSelectionKey !== overnight.sourceSelectionKey)).toBe(true);
+    expect(new Set(view.series.map(series => series.sourceSelectionKey)).size).toBe(3);
+  });
+
+  it('withholds conflicting account aliases across separate visible and baseline projections', () => {
+    const session = sleepSession({ vitals: { averageHrvMs: 62, overnightHrvMs: 44 } });
+    const previous = { ...session, id: 'sleep-previous', sleepDate: '2026-08-01',
+      startTimeMs: session.startTimeMs - DAY_MS, endTimeMs: session.endTimeMs - DAY_MS };
+    const query = (item: SleepSession, account: string) => projectLoadedHealthRange([sleepHrvReferenceRecord(item, account)], [],
+      { startDate: item.sleepDate, endDate: item.sleepDate, metricIds: [HEALTH_METRIC_IDS.HeartRateVariability] },
+      { sourceRecordsComplete: true, samplesComplete: true });
+    const visible = query(session, 'health-account-a');
+    const history = query(previous, 'health-account-b');
+    const evidence = [...visible.observations, ...history.observations];
+    const views = [visible, history].map(result => buildHealthMetricWorkspaceView(result, [session, previous], [], null, {}, evidence));
+    expect(views.every(view => view.series.length === 2)).toBe(true);
+    const overnightKeys = views.map(view => view.series.find(series => series.semanticVariant === 'sleep_overnight_hrv')!.sourceSelectionKey);
+    expect(overnightKeys[0]).toBe(overnightKeys[1]);
+    expect(new Set(views.flatMap(view => view.series.map(series => series.sourceSelectionKey))).size).toBe(3);
+  });
+
+  it('restricts an unidentified Sleep account alias to the referenced document', () => {
+    const session = sleepSession({ vitals: { averageHrvMs: 62, overnightHrvMs: 44 },
+      source: { ...sleepSession().source, providerUserId: '' } });
+    const next = { ...session, id: 'sleep-next', sleepDate: '2026-08-03',
+      startTimeMs: session.startTimeMs + DAY_MS, endTimeMs: session.endTimeMs + DAY_MS };
+    const result = projectLoadedHealthRange([sleepHrvReferenceRecord(session, 'health-account-a')], [],
+      { startDate: session.sleepDate, endDate: next.sleepDate, metricIds: [HEALTH_METRIC_IDS.HeartRateVariability] },
+      { sourceRecordsComplete: true, samplesComplete: true });
+    const view = buildHealthMetricWorkspaceView(result, [session, next]);
+    expect(view.series).toHaveLength(4);
+    expect(view.series.every(series => series.points.length === 1)).toBe(true);
+    expect(new Set(view.series.map(series => series.sourceSelectionKey)).size).toBe(2);
+  });
+
+  it.each(['before', 'after'])(
+    'keeps typed Sleep reference fallbacks drawable when the reference ends %s the chart window', boundary => {
+      const session = sleepSession({ vitals: { averageHrvMs: 62, averageHeartRateBpm: 50 } });
+      const window = { startTimeMs: session.endTimeMs - 3_600_000, endTimeMs: session.endTimeMs + 3_600_000 };
+      const references = [
+        { metricId: HEALTH_METRIC_IDS.HeartRateVariability, field: 'vitals.averageHrvMs' as const,
+          aggregation: 'average', semanticVariant: 'sleep_session_average_hrv' },
+        { metricId: HEALTH_METRIC_IDS.HeartRate, field: 'vitals.averageHeartRateBpm' as const,
+          aggregation: 'average', semanticVariant: 'sleep_session_average_heart_rate' },
+        { metricId: HEALTH_METRIC_IDS.SleepDuration, field: 'durationSeconds' as const,
+          aggregation: 'total', semanticVariant: 'session_duration' },
+      ];
+      const record = { ...sleepHrvReferenceRecord(session, 'health-account'),
+        metrics: references.map(({ metricId, field, aggregation, semanticVariant }) => ({ ...sleepHrvReferenceRecord(session, 'health-account').metrics[0],
+          kind: 'sleep_reference' as const, metricId, aggregation, semanticVariant,
+          reference: { domain: 'sleep' as const, documentId: session.id!, field } })),
+        metricIds: references.map(item => item.metricId),
+        endTimeMs: boundary === 'before' ? window.startTimeMs - 1 : window.endTimeMs + 1 };
+      const result = projectLoadedHealthRange([record], [], { startDate: session.sleepDate, endDate: session.sleepDate,
+        metricIds: references.map(item => item.metricId) }, { sourceRecordsComplete: true, samplesComplete: true });
+      for (const units of [null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })]) {
+        const view = buildHealthMetricWorkspaceView(result, [session], [], units, window);
+        const visible = view.series.flatMap(series => series.points.filter(point =>
+          point.timestampMs >= window.startTimeMs && point.timestampMs <= window.endTimeMs)
+          .map(point => formatHealthValue(series.metricId, point.value, series.unit, false, units)));
+        const durationDisplay = formatCanonicalHealthMetricSportsLibValue(HEALTH_METRIC_IDS.SleepDuration, session.durationSeconds, units)!;
+        expect(visible.sort()).toEqual(['50 bpm', '62 ms', [durationDisplay.value, durationDisplay.unit].filter(Boolean).join(' ')].sort());
+        expect(new Set(view.series.map(series => series.sourceSelectionKey)).size).toBe(1);
+      }
+    },
+  );
+
+  it.each([null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })])(
+    'projects a Health overnight reading once when it also enriches Sleep (%s)', async units => {
+      const session = sleepSession({ vitals: {} });
+      const accountKey = await nightlyHealthAccountKey('user-1', 'GarminAPI', session.source.providerUserId);
+      const record = sourceRecord({ id: 'nightly-hrv', provider: HEALTH_PROVIDERS.GarminAPI, accountKey,
+        calendarDate: session.sleepDate, metrics: [valueEntry({
+          metricId: HEALTH_METRIC_IDS.HeartRateVariability, semanticVariant: 'overnight_rmssd',
+          native: { metric: 'lastNightAvg', value: 33, unit: 'ms' }, canonical: { value: 33, unit: HEALTH_UNITS.Millisecond },
+        })] });
+      const enriched = (await enrichSleepWithNightlyHrv('user-1', [session], [record]))
+        .map(item => ({ ...item, healthAccountKey: accountKey }));
+      expect(enriched[0].vitals?.overnightHrvMs).toBe(33);
+      const query = { startDate: session.sleepDate, endDate: session.sleepDate, metricIds: [HEALTH_METRIC_IDS.HeartRateVariability] };
+      const result = projectLoadedHealthRange([record], [], query, { sourceRecordsComplete: true, samplesComplete: true });
+      const view = buildHealthMetricWorkspaceView(result, enriched, [], units);
+      expect(view.series).toHaveLength(1);
+      expect(view.series[0]).toMatchObject({ sourceLabel: 'Garmin', semanticVariant: 'overnight_rmssd' });
+      expect(view.series[0].points).toHaveLength(1);
+      expect(formatHealthValue(view.series[0].metricId, view.series[0].points[0].value, view.series[0].unit, false, units)).toBe('33 ms');
+      expect(selectHealthPriorityTrendSeries(result, enriched, units)).toHaveLength(1);
+
+      const sleepOnly = projectLoadedHealthRange([], [], query, { sourceRecordsComplete: true, samplesComplete: true });
+      expect(buildHealthMetricWorkspaceView(sleepOnly, enriched).series[0])
+        .toMatchObject({ sourceLabel: 'Garmin', semanticVariant: 'sleep_overnight_hrv' });
+
+      // Identical native Sleep evidence remains independent of a Health reading.
+      const nativeSleep = { ...session, healthAccountKey: accountKey, vitals: { overnightHrvMs: 33 } };
+      expect(buildHealthMetricWorkspaceView(result, [nativeSleep]).series).toHaveLength(2);
+
+      // A matching value from another account is not the originating reading.
+      const otherAccount = projectLoadedHealthRange([{ ...record, source: { ...record.source, accountKey: 'another-account' } }],
+        [], query, { sourceRecordsComplete: true, samplesComplete: true });
+      expect(buildHealthMetricWorkspaceView(otherAccount, enriched).series).toHaveLength(2);
+
+      // A correction must not hide an older Sleep copy while the independent reads update.
+      const corrected = projectLoadedHealthRange([{ ...record, metrics: [valueEntry({
+        metricId: HEALTH_METRIC_IDS.HeartRateVariability, semanticVariant: 'overnight_rmssd',
+        native: { metric: 'lastNightAvg', value: 34, unit: 'ms' }, canonical: { value: 34, unit: HEALTH_UNITS.Millisecond },
+      })] }], [], query, { sourceRecordsComplete: true, samplesComplete: true });
+      expect(buildHealthMetricWorkspaceView(corrected, enriched).series).toHaveLength(2);
+    },
+  );
+
+  it.each(['before', 'after'])('retains enriched Sleep HRV when its Health summary ends %s the visible window', async boundary => {
+    const window = resolveHealthWorkspaceWindow({ metric: 'heart_rate_variability', range: 'today', endDate: '2026-08-02' });
+    const session = sleepSession({ startTimeMs: window.startTimeMs - 3_600_000,
+      endTimeMs: window.startTimeMs + 7 * 3_600_000, vitals: {} });
+    const accountKey = await nightlyHealthAccountKey('user-1', 'GarminAPI', session.source.providerUserId);
+    const record = { ...sourceRecord({ id: 'boundary-hrv', provider: HEALTH_PROVIDERS.GarminAPI, accountKey,
+      calendarDate: session.sleepDate, metrics: [valueEntry({
+        metricId: HEALTH_METRIC_IDS.HeartRateVariability, semanticVariant: 'overnight_rmssd',
+        native: { metric: 'lastNightAvg', value: 33, unit: 'ms' }, canonical: { value: 33, unit: HEALTH_UNITS.Millisecond },
+      })] }), startTimeMs: session.startTimeMs,
+      endTimeMs: boundary === 'before' ? window.startTimeMs - 1 : window.endTimeMs + 1 };
+    const enriched = (await enrichSleepWithNightlyHrv('user-1', [session], [record]))
+      .map(item => ({ ...item, healthAccountKey: accountKey }));
+    expect(enriched[0].vitals?.overnightHrvMs).toBe(33);
+    const result = projectLoadedHealthRange([record], [], {
+      startDate: window.startDate, endDate: window.endDate, metricIds: [HEALTH_METRIC_IDS.HeartRateVariability],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    const series = selectHealthPriorityTrendSeries(result, enriched, null, {
+      startTimeMs: window.startTimeMs, endTimeMs: window.endTimeMs, minimumPointCount: 1,
+    });
+    expect(series).toHaveLength(1);
+    expect(series[0].semanticVariant).toBe('sleep_overnight_hrv');
+    expect(series[0].points[0]).toMatchObject({ timestampMs: session.endTimeMs, value: 33 });
   });
 
   it('uses local account ordinals for Sleep priority rows and never exposes provider IDs', () => {
     const rows = buildSleepPriorityRows([
-      sleepSession(),
+      sleepSession({
+        stageDurationsSeconds: {
+          deep: 7_200,
+          light: 14_400,
+          rem: 5_400,
+          awake: 1_800,
+        },
+      }),
       sleepSession({
         id: 'sleep-two',
         source: {
@@ -593,8 +1843,78 @@ describe('Health workspace helpers', () => {
         },
         endTimeMs: Date.parse('2026-08-03T06:00:00.000Z'),
       }),
-    ]);
-    expect(rows.map(row => row.sourceLabel)).toEqual(['Garmin account 1', 'Garmin account 2']);
+    ], null, Date.parse('2026-08-03T12:00:00.000Z'));
+    expect(rows.map(row => row.sourceLabel)).toEqual(['Garmin account 2', 'Garmin account 1']);
+    expect(new Set(rows.map(row => row.sourceSelectionKey)).size).toBe(2);
+    const single = buildSleepPriorityRows([sleepSession()]);
+    expect(single[0].sourceSelectionKey).toBe(rows[1].sourceSelectionKey);
+    expect(rows[0]).toMatchObject({
+      contextText: 'Today',
+      details: [
+        { label: 'Score', valueText: '88' },
+        { label: 'Sleep HRV', valueText: '62 ms' },
+      ],
+    });
+    expect(rows[1].sleepPoint).toMatchObject({
+      deepSeconds: 7_200,
+      lightSeconds: 14_400,
+      remSeconds: 5_400,
+      awakeSeconds: 1_800,
+      providerLabel: 'Garmin',
+    });
     expect(JSON.stringify(rows)).not.toContain('provider-user');
+    for (const row of rows) {
+      expect(row.sleepPoint).not.toHaveProperty('sourceKey');
+      expect(row.sleepPoint).not.toHaveProperty('hrvSourceKey');
+      expect(row.sleepPoint?.id).toBe(row.id);
+    }
+  });
+
+  it.each(Object.values(SLEEP_PROVIDERS))('keeps %s account and HRV identities out of Sleep priority display points', provider => {
+    const session = {
+      ...sleepSession({id: undefined, source: {
+        provider, providerUserId: 'private-provider-user', sourceSessionKey: 'private-session-key',
+      }}),
+      nightlyHrvSourceKey: 'private-health-hrv-source',
+    };
+    const original = structuredClone(session);
+    const [row] = buildSleepPriorityRows([session]);
+    expect(row.sleepPoint?.averageHrvMs).toBe(62);
+    expect(row.sleepPoint?.id).toBe(row.id);
+    expect(row.sleepPoint).not.toHaveProperty('sourceKey');
+    expect(row.sleepPoint).not.toHaveProperty('hrvSourceKey');
+    expect(JSON.stringify(row)).not.toContain('private-');
+    expect(session).toEqual(original);
+  });
+
+  it('uses the explicit Sports Lib Sleep classes for Health workspace session rows', () => {
+    const [row] = buildSleepObservationRows([sleepSession({
+      vitals: { averageHrvMs: 62.4, averageHeartRateBpm: 51.6 },
+    })]);
+
+    expect(row).toMatchObject({
+      durationText: '08h 00m',
+      scoreText: '88',
+      hrvText: '62.4 ms',
+      heartRateText: '52 bpm',
+    });
+  });
+
+  it('preserves explicitly missing Sleep metrics in priority details and observation rows', () => {
+    const session = sleepSession({
+      score: { value: null },
+      vitals: {
+        averageHrvMs: null,
+        overnightHrvMs: null,
+        averageHeartRateBpm: null,
+      },
+    });
+
+    expect(buildSleepPriorityRows([session])[0]?.details).toEqual([]);
+    expect(buildSleepObservationRows([session])[0]).toMatchObject({
+      scoreText: '—',
+      hrvText: '—',
+      heartRateText: '—',
+    });
   });
 });

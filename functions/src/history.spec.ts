@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as admin from 'firebase-admin';
 import * as history from './history';
+import { HistoryLifecycleChangedError, HistoryWindowTooLargeError, type HistoryExecution } from './connection-history/execution';
 import * as tokens from './tokens';
 import * as requestHelper from './request-helper';
 import * as oauth2 from './OAuth2';
+import * as logger from 'firebase-functions/logger';
+import { ProviderPendingDisconnectError } from './shared/provider-pending-disconnect-error';
 import { COROSAPIAuth2ServiceTokenInterface, ServiceNames } from '@sports-alliance/sports-lib';
 
 // Hoisted mocks (Vitest requirement)
@@ -40,6 +43,7 @@ const hoisted = vi.hoisted(() => {
         getUserDeletionGuardState,
         getUserDeletionGuardStateInTransaction,
         assertActiveCOROSAccountInTransaction,
+        dispatchConnectionHistoryWorkoutBatch: vi.fn(),
     };
 });
 
@@ -48,6 +52,7 @@ vi.mock('firebase-admin', () => {
     return {
         firestore: Object.assign(() => ({
             collection: hoisted.collectionMock,
+            doc: hoisted.docMock,
             batch: hoisted.batchMock,
             runTransaction: hoisted.runTransactionMock,
         }), {
@@ -67,7 +72,8 @@ vi.mock('firebase-admin', () => {
     };
 });
 
-vi.mock('./tokens', () => ({
+vi.mock('./tokens', async importOriginal => ({
+    ...await importOriginal<typeof import('./tokens')>(),
     getTokenData: vi.fn().mockResolvedValue({ accessToken: 'testToken', userName: 'testUser' })
 }));
 
@@ -82,6 +88,10 @@ vi.mock('./request-helper', () => ({
 
 vi.mock('./utils', () => ({
     generateIDFromParts: vi.fn().mockReturnValue('mockID')
+}));
+
+vi.mock('./queue', () => ({
+    dispatchConnectionHistoryWorkoutBatch: hoisted.dispatchConnectionHistoryWorkoutBatch,
 }));
 
 vi.mock('./OAuth2', () => ({
@@ -134,6 +144,8 @@ vi.mock('./shared/user-deletion-guard', () => ({
 describe('history', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        hoisted.dispatchConnectionHistoryWorkoutBatch.mockReset().mockResolvedValue(undefined);
+        vi.mocked(tokens.getTokenData).mockReset().mockResolvedValue({ accessToken: 'testToken', userName: 'testUser' } as any);
         hoisted.batchSetMock.mockReset();
         hoisted.batchCommitMock.mockReset();
         hoisted.batchCommitMock.mockResolvedValue({});
@@ -163,11 +175,22 @@ describe('history', () => {
             exists: false,
             data: () => undefined,
         })));
+        let historyLeaseMetadata: Record<string, unknown> | undefined;
+        hoisted.batchSetMock.mockImplementation((_ref, payload: Record<string, unknown>) => {
+            if (Object.prototype.hasOwnProperty.call(payload, 'historyImportLeaseOwner')) {
+                historyLeaseMetadata = { ...historyLeaseMetadata, ...payload };
+            }
+        });
         hoisted.runTransactionMock.mockImplementation(async (runner: (transaction: {
             set: typeof hoisted.batchSetMock;
+            get: ReturnType<typeof vi.fn>;
             getAll: typeof hoisted.transactionGetAllMock;
         }) => unknown) => runner({
             set: hoisted.batchSetMock,
+            get: vi.fn().mockImplementation(async () => ({
+                exists: true,
+                data: () => historyLeaseMetadata,
+            })),
             getAll: hoisted.transactionGetAllMock,
         }));
 
@@ -308,7 +331,364 @@ describe('history', () => {
         });
     });
 
+    it('keeps one manual reservation across windows even after the first starts its cooldown', async () => {
+        const meta: Record<string, unknown> = {};
+        hoisted.runTransactionMock.mockImplementation(async runner => runner({
+            get: vi.fn(async () => ({ exists: true, data: () => ({ ...meta }) })),
+            getAll: hoisted.transactionGetAllMock,
+            set: vi.fn((_ref, data) => {
+                if ('historyImportLeaseOwner' in data || 'didLastHistoryImport' in data) Object.assign(meta, data);
+                hoisted.batchSetMock(_ref, data);
+            }),
+        }));
+        vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({ payload: [{ workoutKey: 'w1' }] }));
+        const start = new Date('2026-09-01');
+        await history.withActivityHistoryImportReservation('uid', ServiceNames.SuuntoApp, async importWindow => {
+            await importWindow(start, start);
+            expect(Number(meta.didLastHistoryImport)).toBeGreaterThan(0);
+            expect(meta.processedActivitiesFromLastHistoryImportCount).toBe(1);
+            await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, start, start))
+                .rejects.toMatchObject({ code: 'already-exists' });
+            await importWindow(start, new Date('2026-09-02'), {
+                cumulativeMetadata: { startDate: start, endDate: new Date('2026-09-02'), processedActivitiesCountOffset: 1 },
+            });
+        });
+        expect(requestHelper.get).toHaveBeenCalledTimes(2);
+        expect(meta.processedActivitiesFromLastHistoryImportCount).toBe(2);
+        expect(hoisted.batchSetMock.mock.calls.filter(([, data]) => typeof data.historyImportLeaseOwner === 'string')).toHaveLength(1);
+    });
+
+    function expectOnlyHistoryLeaseWrites() {
+        expect(hoisted.batchSetMock.mock.calls.map(([, payload]) => payload)).toEqual([
+            expect.objectContaining({
+                historyImportLeaseOwner: expect.any(String),
+                historyImportLeaseExpiresAt: expect.any(Number),
+            }),
+            expect.objectContaining({ historyImportLeaseOwner: expect.anything() }),
+        ]);
+    }
+
+    describe('manual history lease fencing', () => {
+        function useMetadata(meta: Record<string, unknown>) {
+            hoisted.runTransactionMock.mockImplementation(async runner => runner({
+                get: vi.fn(async () => ({ exists: true, data: () => ({ ...meta }) })),
+                getAll: hoisted.transactionGetAllMock,
+                set: vi.fn((ref, data) => {
+                    Object.assign(meta, data);
+                    hoisted.batchSetMock(ref, data);
+                }),
+            }));
+        }
+
+        it.each([
+            [ServiceNames.COROSAPI, false, 'deletion'],
+            [ServiceNames.COROSAPI, false, 'disconnect'],
+            [ServiceNames.SuuntoApp, false, 'deletion'],
+            [ServiceNames.SuuntoApp, false, 'disconnect'],
+            [ServiceNames.SuuntoApp, true, 'deletion'],
+            [ServiceNames.SuuntoApp, true, 'disconnect'],
+        ] as const)('keeps %s token lifecycle refusal callable-safe (forced refresh: %s, reason: %s)', async (service, forcedRefresh, reason) => {
+            const error = reason === 'deletion'
+                ? new tokens.TokenRefreshSkippedForDeletedUserError('uid', service, 'token1', 'before_refresh')
+                : new tokens.TokenUseSkippedForPendingDisconnectError('uid', service, 'token1', 'before_refresh');
+            if (forcedRefresh) {
+                vi.mocked(tokens.getTokenData).mockResolvedValueOnce({ accessToken: 'testToken', userName: 'testUser' } as Awaited<ReturnType<typeof tokens.getTokenData>>);
+                vi.mocked(requestHelper.get).mockReset().mockRejectedValueOnce({ statusCode: 403 });
+            }
+            vi.mocked(tokens.getTokenData).mockRejectedValueOnce(error);
+
+            await expect(history.addHistoryToQueue('uid', service, new Date(), new Date()))
+                .rejects.toBeInstanceOf(reason === 'deletion' ? history.HistoryImportSkippedForDeletedUserError : HistoryLifecycleChangedError);
+            expect(requestHelper.get).toHaveBeenCalledTimes(forcedRefresh ? 1 : 0);
+            expectOnlyHistoryLeaseWrites();
+            expect(logger.error).not.toHaveBeenCalled();
+        });
+
+        it('keeps the active-account disconnect guard within the same manual lifecycle response', async () => {
+            hoisted.getActiveCOROSTokenSnapshot.mockRejectedValueOnce(new ProviderPendingDisconnectError('uid', ServiceNames.COROSAPI, 'active_account_lookup'));
+            await expect(history.addHistoryToQueue('uid', ServiceNames.COROSAPI, new Date(), new Date()))
+                .rejects.toBeInstanceOf(HistoryLifecycleChangedError);
+            expect(requestHelper.get).not.toHaveBeenCalled();
+            expectOnlyHistoryLeaseWrites();
+        });
+
+        it('preserves the cooldown code and exact next-allowed date inside atomic admission', async () => {
+            const lastImport = Date.now();
+            useMetadata({ didLastHistoryImport: lastImport, processedActivitiesFromLastHistoryImportCount: 500 });
+            const operation = vi.fn();
+            await expect(history.withActivityHistoryImportReservation('uid', ServiceNames.COROSAPI, operation))
+                .rejects.toMatchObject({ code: 'permission-denied', message: `History import is not allowed until ${new Date(lastImport + 86_400_000).toISOString()}` });
+            expect(operation).not.toHaveBeenCalled();
+            expect(hoisted.batchSetMock).not.toHaveBeenCalled();
+        });
+
+        it('rejects a missing COROS root at admission with the existing callable reconnect response', async () => {
+            hoisted.runTransactionMock.mockImplementationOnce(async runner => runner({
+                get: vi.fn(async () => ({ exists: false, data: () => undefined })),
+                set: hoisted.batchSetMock,
+            }));
+            await expect(history.withActivityHistoryImportReservation('uid', ServiceNames.COROSAPI, vi.fn()))
+                .rejects.toMatchObject({ code: 'unauthenticated', httpErrorCode: { status: 401 }, message: 'Reconnect COROS before importing history.' });
+            expect(hoisted.batchSetMock).not.toHaveBeenCalled();
+        });
+
+        it('makes deletion admission errors callable-safe instead of relying on a plain Error code', async () => {
+            hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValueOnce({ shouldSkip: true });
+            const operation = vi.fn();
+            await expect(history.withActivityHistoryImportReservation('uid', ServiceNames.COROSAPI, operation))
+                .rejects.toMatchObject({ code: 'failed-precondition', httpErrorCode: { status: 400 } });
+            expect(operation).not.toHaveBeenCalled();
+            expect(hoisted.batchSetMock).not.toHaveBeenCalled();
+        });
+
+        it('keeps generic already-exists queue errors observable as failed batches', async () => {
+            vi.mocked(requestHelper.get).mockResolvedValueOnce(JSON.stringify({ payload: [{ workoutKey: 'w1' }] }));
+            const error = Object.assign(new Error('Unexpected database failure'), { code: 'already-exists' });
+            hoisted.transactionGetAllMock.mockRejectedValueOnce(error);
+            await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date()))
+                .resolves.toMatchObject({ successCount: 0, failureCount: 1, failedBatches: 1 });
+            expect(logger.error).toHaveBeenCalledWith(expect.any(String), error);
+        });
+
+        it.each(['owner', 'expiry', 'connection'] as const)('rejects a stale %s before queue or history writes', async change => {
+            const meta: Record<string, unknown> = {};
+            useMetadata(meta);
+            vi.mocked(tokens.getTokenData).mockResolvedValue({ accessToken: 'test', openId: 'active-coros-token' } as COROSAPIAuth2ServiceTokenInterface);
+            vi.mocked(requestHelper.get).mockImplementationOnce(async () => {
+                if (change === 'owner') meta.historyImportLeaseOwner = 'replacement';
+                if (change === 'expiry') meta.historyImportLeaseExpiresAt = Date.now() - 1;
+                if (change === 'connection') meta.connectionStateGeneration = 'replacement-connection';
+                return JSON.stringify({ result: '0000', data: [{ workoutId: '1' }] });
+            });
+            await expect(history.addHistoryToQueue('uid', ServiceNames.COROSAPI, new Date(), new Date()))
+                .rejects.toBeInstanceOf(HistoryLifecycleChangedError);
+            expect(hoisted.batchSetMock.mock.calls.filter(([, data]) => 'didLastHistoryImport' in data || 'fromHistory' in data)).toHaveLength(0);
+        });
+    });
+
     describe('addHistoryToQueue', () => {
+        function automaticExecution(serviceName = ServiceNames.SuuntoApp): HistoryExecution {
+            return {
+                userID: 'uid', serviceName, runId: 'current-run', tokenPath: 'token', providerUserId: 'testUser',
+                cooldownStartedAtMs: Date.now(), requiredDocumentFieldValues: [],
+                beforeRequest: vi.fn(), inTransaction: vi.fn(), onQueued: vi.fn(),
+            };
+        }
+
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI])('dispatches the bounded %s automatic batch only after durable admission and child registration', async serviceName => {
+            const execution = automaticExecution(serviceName);
+            hoisted.getMock.mockResolvedValue({ id: 'testUser' });
+            vi.mocked(tokens.getTokenData).mockResolvedValue({ accessToken: 'test', userName: 'testUser', openId: 'testUser' } as Awaited<ReturnType<typeof tokens.getTokenData>>);
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify(serviceName === ServiceNames.SuuntoApp
+                ? { payload: [{ workoutKey: 'w1' }] }
+                : { result: '0000', data: [{ workoutId: 'w1' }] }));
+            const commit = hoisted.runTransactionMock.getMockImplementation()!;
+            let committed = false;
+            hoisted.runTransactionMock.mockImplementation(async runner => {
+                const result = await commit(runner);
+                committed = true;
+                return result;
+            });
+            let dispatchObservation: { committed: boolean; registeredChildren: number } | undefined;
+            hoisted.dispatchConnectionHistoryWorkoutBatch.mockImplementation(async () => {
+                dispatchObservation = { committed, registeredChildren: vi.mocked(execution.onQueued).mock.calls.length };
+            });
+
+            const result = await history.addHistoryToQueue('uid', serviceName, new Date('2026-09-01'), new Date('2026-09-02'), { execution, maxItems: 100 });
+
+            expect(result.successCount).toBe(1);
+            expect(hoisted.dispatchConnectionHistoryWorkoutBatch).toHaveBeenCalledExactlyOnceWith(execution, [expect.any(String)]);
+            expect(dispatchObservation).toEqual({ committed: true, registeredChildren: 1 });
+            expect(hoisted.batchSetMock).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+                connectionHistoryRunId: execution.runId, firebaseUserID: 'uid', processed: false,
+            }));
+        });
+
+        it('leaves failed automatic dispatch durably admitted for scheduled recovery', async () => {
+            const execution = automaticExecution();
+            hoisted.getMock.mockResolvedValue({ id: 'testUser' });
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({ payload: [{ workoutKey: 'w1' }] }));
+            hoisted.dispatchConnectionHistoryWorkoutBatch.mockRejectedValue(new Error('PRIVATE_ENQUEUE_FAILURE'));
+
+            const result = await history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date(), { execution, maxItems: 100 });
+
+            expect(result).toMatchObject({ successCount: 1, failureCount: 0, processedBatches: 1 });
+            expect(execution.onQueued).toHaveBeenCalledTimes(1);
+            expect(hoisted.runTransactionMock).toHaveBeenCalledTimes(1);
+        });
+
+        it('propagates a changed connection before automatic dispatch', async () => {
+            const execution = automaticExecution();
+            hoisted.getMock.mockResolvedValue({ id: 'testUser' });
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({ payload: [{ workoutKey: 'w1' }] }));
+            hoisted.dispatchConnectionHistoryWorkoutBatch.mockRejectedValue(new HistoryLifecycleChangedError());
+
+            await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date(), { execution, maxItems: 100 }))
+                .rejects.toBeInstanceOf(HistoryLifecycleChangedError);
+        });
+
+        it('does not turn durable admission into a retry when the fallback diagnostic throws', async () => {
+            const execution = automaticExecution();
+            hoisted.getMock.mockResolvedValue({ id: 'testUser' });
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({ payload: [{ workoutKey: 'w1' }] }));
+            hoisted.dispatchConnectionHistoryWorkoutBatch.mockRejectedValue(new Error('PRIVATE_ENQUEUE_FAILURE'));
+            const warning = vi.mocked(logger.warn).mockImplementationOnce(() => { throw new Error('PRIVATE_LOG_FAILURE'); });
+            try {
+                await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date(), { execution, maxItems: 100 }))
+                    .resolves.toMatchObject({ successCount: 1, failureCount: 0 });
+                expect(execution.onQueued).toHaveBeenCalledTimes(1);
+            } finally { warning.mockReset(); }
+        });
+
+        it('does not dispatch after automatic admission fails', async () => {
+            const execution = automaticExecution();
+            hoisted.getMock.mockResolvedValue({ id: 'testUser' });
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({ payload: [{ workoutKey: 'w1' }] }));
+            hoisted.runTransactionMock.mockRejectedValueOnce(new Error('commit failed'));
+
+            await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date(), { execution, maxItems: 100 }))
+                .rejects.toThrow('commit failed');
+            expect(hoisted.dispatchConnectionHistoryWorkoutBatch).not.toHaveBeenCalled();
+        });
+
+        it.each([false, true])('does not dispatch empty history (automatic=%s)', async automatic => {
+            hoisted.getMock.mockResolvedValue({ id: 'testUser' });
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({ payload: [] }));
+            await history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date(), automatic ? { execution: automaticExecution(), maxItems: 100 } : {});
+            expect(hoisted.dispatchConnectionHistoryWorkoutBatch).not.toHaveBeenCalled();
+        });
+
+        it.each([401, 403])('refreshes the same Suunto token once after history HTTP %s', async statusCode => {
+            vi.mocked(tokens.getTokenData)
+                .mockResolvedValueOnce({ accessToken: 'old-token', userName: 'testUser' } as any)
+                .mockResolvedValueOnce({ accessToken: 'refreshed-token', userName: 'testUser' } as any);
+            vi.mocked(requestHelper.get).mockReset()
+                .mockRejectedValueOnce({ statusCode })
+                .mockResolvedValueOnce(JSON.stringify({ payload: [{ workoutKey: 'w1' }] }));
+
+            const result = await history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date());
+
+            expect(result.successCount).toBe(1);
+            expect(hoisted.dispatchConnectionHistoryWorkoutBatch).not.toHaveBeenCalled();
+            expect(tokens.getTokenData).toHaveBeenNthCalledWith(2,
+                vi.mocked(tokens.getTokenData).mock.calls[0][0], ServiceNames.SuuntoApp, true);
+            expect(requestHelper.get).toHaveBeenCalledTimes(2);
+            expect(requestHelper.get).toHaveBeenLastCalledWith(expect.objectContaining({
+                headers: expect.objectContaining({ Authorization: 'Bearer refreshed-token' }),
+            }));
+        });
+
+        it('keeps automatic history response bounds after a same-account Suunto refresh', async () => {
+            hoisted.getMock.mockResolvedValue({ id: 'token1' });
+            vi.mocked(requestHelper.get).mockReset()
+                .mockRejectedValueOnce({ statusCode: 403 })
+                .mockResolvedValueOnce(JSON.stringify({ payload: [{ workoutKey: 'w1' }, { workoutKey: 'w2' }] }));
+            const execution = {
+                runId: 'current-run', tokenPath: 'token', providerUserId: 'testUser',
+                cooldownStartedAtMs: Date.now(), requiredDocumentFieldValues: [],
+                beforeRequest: vi.fn(), inTransaction: vi.fn(), onQueued: vi.fn(),
+            } satisfies HistoryExecution;
+
+            await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp,
+                new Date('2026-09-01'), new Date('2026-09-02'), { execution, maxItems: 1 }))
+                .rejects.toBeInstanceOf(HistoryWindowTooLargeError);
+
+            expect(tokens.getTokenData).toHaveBeenNthCalledWith(2,
+                expect.objectContaining({ id: 'token1' }), ServiceNames.SuuntoApp, true);
+            expect(requestHelper.get).toHaveBeenCalledTimes(2);
+            expect(hoisted.batchSetMock).not.toHaveBeenCalled();
+            expect(execution.onQueued).not.toHaveBeenCalled();
+        });
+
+        it('rechecks automatic history ownership after Suunto refresh before another provider request', async () => {
+            hoisted.getMock.mockResolvedValue({ id: 'token1' });
+            let connectionChanged = false;
+            vi.mocked(tokens.getTokenData)
+                .mockResolvedValueOnce({ accessToken: 'old-token', userName: 'testUser' } as Awaited<ReturnType<typeof tokens.getTokenData>>)
+                .mockImplementationOnce(async () => {
+                    connectionChanged = true;
+                    return { accessToken: 'refreshed-token', userName: 'testUser' } as Awaited<ReturnType<typeof tokens.getTokenData>>;
+                });
+            vi.mocked(requestHelper.get).mockReset().mockRejectedValueOnce({ statusCode: 403 });
+            const execution = {
+                runId: 'current-run', tokenPath: 'token', providerUserId: 'testUser',
+                cooldownStartedAtMs: Date.now(), requiredDocumentFieldValues: [],
+                beforeRequest: vi.fn(async () => {
+                    if (connectionChanged) throw new HistoryLifecycleChangedError();
+                }),
+                inTransaction: vi.fn(), onQueued: vi.fn(),
+            } satisfies HistoryExecution;
+
+            await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp,
+                new Date('2026-09-01'), new Date('2026-09-02'), { execution, maxItems: 1 }))
+                .rejects.toBeInstanceOf(HistoryLifecycleChangedError);
+
+            expect(tokens.getTokenData).toHaveBeenCalledTimes(2);
+            expect(requestHelper.get).toHaveBeenCalledTimes(1);
+            expect(hoisted.batchSetMock).not.toHaveBeenCalled();
+            expect(execution.onQueued).not.toHaveBeenCalled();
+        });
+
+        it('does not loop or enqueue after a persistent Suunto history 403', async () => {
+            vi.mocked(requestHelper.get).mockReset().mockRejectedValue({ statusCode: 403 });
+
+            await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date()))
+                .rejects.toMatchObject({ statusCode: 403 });
+
+            expect(tokens.getTokenData).toHaveBeenCalledTimes(2);
+            expect(requestHelper.get).toHaveBeenCalledTimes(2);
+            expectOnlyHistoryLeaseWrites();
+        });
+
+        it('never retries history with a different Suunto account', async () => {
+            vi.mocked(requestHelper.get).mockReset().mockRejectedValueOnce({ statusCode: 403 });
+            vi.mocked(tokens.getTokenData)
+                .mockResolvedValueOnce({ accessToken: 'old-token', userName: 'testUser' } as any)
+                .mockResolvedValueOnce({ accessToken: 'new-token', userName: 'different-account' } as any);
+
+            await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date()))
+                .rejects.toThrow('Suunto history account changed during token refresh.');
+
+            expect(requestHelper.get).toHaveBeenCalledTimes(1);
+            expectOnlyHistoryLeaseWrites();
+        });
+
+        it('preserves an untrusted refresh failure named like a disconnect refusal without another provider read', async () => {
+            const error = Object.assign(new Error('Synthetic token failure'), { name: 'TokenUseSkippedForPendingDisconnectError' });
+            vi.mocked(requestHelper.get).mockReset().mockRejectedValueOnce({ statusCode: 403 });
+            vi.mocked(tokens.getTokenData)
+                .mockResolvedValueOnce({ accessToken: 'old-token', userName: 'testUser' } as any)
+                .mockRejectedValueOnce(error);
+
+            await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date())).rejects.toBe(error);
+
+            expect(requestHelper.get).toHaveBeenCalledTimes(1);
+            expectOnlyHistoryLeaseWrites();
+        });
+
+        it('checks deletion again before the refreshed Suunto history request', async () => {
+            vi.mocked(requestHelper.get).mockReset().mockRejectedValueOnce({ statusCode: 403 });
+            hoisted.getUserDeletionGuardState
+                .mockResolvedValueOnce({ shouldSkip: false })
+                .mockResolvedValueOnce({ shouldSkip: false })
+                .mockResolvedValueOnce({ shouldSkip: true });
+
+            await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date()))
+                .rejects.toMatchObject({ name: 'HistoryImportSkippedForDeletedUserError' });
+
+            expect(requestHelper.get).toHaveBeenCalledTimes(1);
+            expectOnlyHistoryLeaseWrites();
+        });
+
+        it.each([404, 429, 500])('does not refresh Suunto history for HTTP %s', async statusCode => {
+            vi.mocked(requestHelper.get).mockReset().mockRejectedValueOnce({ statusCode });
+
+            await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date()))
+                .rejects.toMatchObject({ statusCode });
+            expect(tokens.getTokenData).toHaveBeenCalledTimes(1);
+            expect(requestHelper.get).toHaveBeenCalledTimes(1);
+        });
+
         it('should fetch workouts and commit in batches', async () => {
             const firestore = admin.firestore();
             (requestHelper.get as any).mockResolvedValue(JSON.stringify({
@@ -346,13 +726,12 @@ describe('history', () => {
             });
         });
 
-        it('should handle empty workouts without writes', async () => {
-            const firestore = admin.firestore();
+        it('releases its reservation after empty history without admitting queue items', async () => {
             (requestHelper.get as any).mockResolvedValue(JSON.stringify({ payload: [] }));
 
             const result = await history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date());
 
-            expect(hoisted.runTransactionMock).toHaveBeenCalledTimes(0);
+            expectOnlyHistoryLeaseWrites();
             expect(result).toEqual({
                 successCount: 0,
                 failureCount: 0,
@@ -360,7 +739,7 @@ describe('history', () => {
                 failedBatches: 0
             });
             // ensure meta doc not touched
-            expect(firestore.collection).not.toHaveBeenCalledWith('users');
+            expect(hoisted.batchSetMock.mock.calls.some(call => call[1]?.fromHistory)).toBe(false);
         });
 
         it('should process multiple batches and count failures', async () => {
@@ -370,17 +749,16 @@ describe('history', () => {
             const workouts = Array.from({ length: 451 }, (_, i) => ({ workoutKey: `w${i}` }));
             (requestHelper.get as any).mockResolvedValue(JSON.stringify({ payload: workouts }));
 
-            // First batch commit succeeds, second fails
-            hoisted.runTransactionMock
-                .mockImplementationOnce(async (runner: (transaction: { set: typeof hoisted.batchSetMock }) => unknown) => (
-                    runner({ set: hoisted.batchSetMock })
-                ))
-                .mockRejectedValueOnce(new Error('commit failed'));
+            // Bind failure to the one-item batch, independently of lease reads.
+            hoisted.transactionGetAllMock.mockImplementation(async (...refs: unknown[]) => {
+                if (refs.length === 1) throw new Error('commit failed');
+                return refs.map(() => ({ exists: false, data: () => undefined }));
+            });
 
             const result = await history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date());
 
             // Two batches should have been created
-            expect(hoisted.runTransactionMock).toHaveBeenCalledTimes(2);
+            expect(hoisted.transactionGetAllMock.mock.calls.map(refs => refs.length)).toEqual([450, 1]);
 
             // First batch (450) succeeds, second (1) fails
             expect(result).toEqual({
@@ -464,6 +842,32 @@ describe('history', () => {
                     fromHistory: true,
                 }),
             );
+        });
+
+        it.each([
+            ['older-run', 'uid', false, true],
+            ['older-run', 'uid', true, false],
+            ['current-run', 'uid', false, false],
+            [undefined, 'uid', false, false],
+        ])('replaces only unfinished superseded history work (%s, %s, %s)', async (oldRun, owner, processed, replace) => {
+            hoisted.transactionGetAllMock.mockResolvedValue([{ exists: true, data: () => ({ connectionHistoryRunId: oldRun, firebaseUserID: owner, processed }) }]);
+            hoisted.getMock.mockResolvedValue({ id: 'token1' });
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({ payload: [{ workoutKey: 'workout' }] }));
+            const execution = { runId: 'current-run', tokenPath: 'token', providerUserId: 'account', cooldownStartedAtMs: Date.now(), requiredDocumentFieldValues: [], beforeRequest: vi.fn(), inTransaction: vi.fn(), onQueued: vi.fn() };
+            await history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date('2026-09-01'), new Date('2026-09-02'), { execution });
+            const writes = hoisted.batchSetMock.mock.calls.filter(([, data]) => data.connectionHistoryRunId);
+            expect(writes).toHaveLength(replace ? 1 : 0);
+            if (replace) expect(writes[0][1]).toMatchObject({ connectionHistoryRunId: 'current-run', firebaseUserID: 'uid', queueRevision: expect.any(String) });
+        });
+
+        it('retries a provider queue ownership transfer without overwriting the previous owner', async () => {
+            hoisted.transactionGetAllMock.mockResolvedValue([{ exists: true, data: () => ({ connectionHistoryRunId: 'older-run', firebaseUserID: 'another-owner', processed: false }) }]);
+            hoisted.getMock.mockResolvedValue({ id: 'token1' });
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({ payload: [{ workoutKey: 'workout' }] }));
+            const execution = { runId: 'current-run', tokenPath: 'token', providerUserId: 'account', cooldownStartedAtMs: Date.now(), requiredDocumentFieldValues: [], beforeRequest: vi.fn(), inTransaction: vi.fn(), onQueued: vi.fn() };
+            await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date('2026-09-01'), new Date('2026-09-02'), { execution }))
+                .rejects.toThrow('ownership is still changing');
+            expect(hoisted.batchSetMock.mock.calls.filter(([, data]) => data.connectionHistoryRunId)).toHaveLength(0);
         });
 
         it('preserves an active event-write lease when history advances the COROS revision', async () => {

@@ -15,9 +15,13 @@ import { SERVICE_NAME } from '../constants';
 import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import { hasServiceOAuthConnectAccess } from '../../service-oauth-access';
 import { FUNCTION_SECRET_BINDINGS } from '../../secrets';
+import type { ServiceOAuthCompletionResult } from '../../../../shared/service-connection';
+import type { ConnectionHistoryRangePreset } from '../../../../shared/connection-history';
 
 
 interface GetAuthRedirectURIRequest {
+  importRecentHistory?: boolean;
+  importHistoryRange?: ConnectionHistoryRangePreset;
   redirectUri: string;
 }
 
@@ -27,7 +31,7 @@ interface GetAuthRedirectURIResponse {
 
 export const getCOROSAPIAuthRequestTokenRedirectURI = functions
   .runWith({
-    memory: '256MB',
+    memory: '512MB',
     secrets: FUNCTION_SECRET_BINDINGS.getCOROSAPIAuthRequestTokenRedirectURI,
   })
   .region(FUNCTIONS_MANIFEST.getCOROSAPIAuthRequestTokenRedirectURI.region)
@@ -57,7 +61,13 @@ export const getCOROSAPIAuthRequestTokenRedirectURI = functions
 
     try {
       return {
-        redirect_uri: await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, SERVICE_NAME, redirectURI),
+        redirect_uri: await getServiceOAuth2CodeRedirectAndSaveStateToUser(
+          userID,
+          SERVICE_NAME,
+          redirectURI,
+          data.importRecentHistory,
+          data.importHistoryRange,
+        ),
       };
     } catch (error) {
       if (isServiceDisconnectInProgressError(error)) {
@@ -80,11 +90,11 @@ interface SetAccessTokenRequest {
 
 export const requestAndSetCOROSAPIAccessToken = functions
   .runWith({
-    memory: '256MB',
+    memory: '512MB',
     secrets: FUNCTION_SECRET_BINDINGS.requestAndSetCOROSAPIAccessToken,
   })
   .region(FUNCTIONS_MANIFEST.requestAndSetCOROSAPIAccessToken.region)
-  .https.onCall(async (data: SetAccessTokenRequest, context): Promise<void> => {
+  .https.onCall(async (data: SetAccessTokenRequest, context): Promise<ServiceOAuthCompletionResult> => {
     // App Check verification
     if (!context.app) {
       throw new functions.https.HttpsError('failed-precondition', 'App Check verification failed.');
@@ -115,10 +125,13 @@ export const requestAndSetCOROSAPIAccessToken = functions
     }
 
     try {
-      await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code, state);
+      return await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code, state);
     } catch (e: any) {
-      logger.error(e);
       const status = e.statusCode || (e.output && e.output.statusCode) || 500;
+      logger.error('COROS authorization code flow failed.', {
+        serviceName: SERVICE_NAME,
+        providerStatus: status,
+      });
       if (isOAuthFlowContextMismatchError(e)) {
         throw new functions.https.HttpsError('permission-denied', 'Invalid OAuth state');
       }
@@ -142,7 +155,7 @@ interface DeauthorizeResponse {
  */
 export const deauthorizeCOROSAPI = functions
   .runWith({
-    memory: '256MB',
+    memory: '512MB',
     timeoutSeconds: 120,
     secrets: FUNCTION_SECRET_BINDINGS.deauthorizeCOROSAPI,
   })

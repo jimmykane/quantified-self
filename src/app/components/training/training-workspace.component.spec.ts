@@ -1,7 +1,12 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { LOCALE_ID, NO_ERRORS_SCHEMA } from '@angular/core';
+import { APPROVED_REMAINING_SPORT_CASES } from '@shared/testing/training-remaining-sport-cases';
+import { APPROVED_WATER_TEAM_SPORT_CASES } from '@shared/testing/training-water-team-cases';
+import { TrainingBuildMetricsComponent } from '../shared/training-summary/training-build-metrics.component';
+import { TrainingMixDetailsComponent } from '../shared/training-summary/training-mix-details.component';
+import { ComponentFixture, TestBed, type TestModuleMetadata } from '@angular/core/testing';
+import { Component, LOCALE_ID, NO_ERRORS_SCHEMA, signal } from '@angular/core';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatButtonModule } from '@angular/material/button';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { BehaviorSubject, concat, NEVER, of, Subject, throwError } from 'rxjs';
@@ -11,7 +16,9 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { SLEEP_PROVIDERS, type SleepSession } from '@shared/sleep';
+import { DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION } from '@shared/derived-metrics';
 import type {
   DerivedTrainingDurabilityMetricPayload,
   TrainingBuildBenchmarkSelection,
@@ -28,7 +35,17 @@ import { TrainingMetricTextComponent } from './training-metric-text.component';
 import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 import { MetricIndicatorComponent } from '../shared/metric-indicator/metric-indicator.component';
 import { TrainingSummaryCardsComponent } from '../shared/training-summary/training-summary-cards.component';
+import { ActiveSicknessNoteComponent } from '../timeline-notes/active-sickness-note.component';
 import { TrainingMetricGridComponent } from '../shared/training-summary/training-metric-grid.component';
+import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
+import { HapticTapDirective } from '../../directives/haptic-tap.directive';
+import { By } from '@angular/platform-browser';
+import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
+import { OverlayContainer } from '@angular/cdk/overlay';
+import { buildDashboardFormPointsFromDailyLoads } from '../../helpers/dashboard-form.helper';
+
+@Component({ selector: 'app-timeline-notes-workspace', standalone: true, template: '<button>Timeline notes</button>' })
+class TimelineNotesWorkspaceStubComponent { context = signal<TimelineNoteChartContext | null>(null); }
 
 function createSleepService(sessions: readonly SleepSession[] = []) {
   return {
@@ -117,23 +134,78 @@ function createExcludedCyclingDurabilityPayload(): DerivedTrainingDurabilityMetr
 describe('TrainingWorkspaceComponent', () => {
   let analyticsService: { logEvent: ReturnType<typeof vi.fn> };
 
+  it.each(['missing', 'stale', 'failed'] as const)('ignores retired body-weight %s status in the Training route disclosure', status => {
+    const component = Object.create(TrainingWorkspaceComponent.prototype) as TrainingWorkspaceComponent;
+    Object.assign(component, {
+      isOverviewDestination: true,
+      isPowerSystemsSectionVisible: false,
+      derivedState: createRouteReadyDerivedState({ bodyWeightTrendStatus: status }),
+      derivedMetricsStatusExpanded: signal(false),
+    });
+    (component as unknown as { refreshDerivedMetricsRouteStatus(): void }).refreshDerivedMetricsRouteStatus();
+    expect(component.derivedMetricsRouteStatus).toBeNull();
+  });
+
+  it('maps only real load histories, not strain as monotony, and keeps forecasts separate', () => {
+    const component = Object.create(TrainingWorkspaceComponent.prototype) as TrainingWorkspaceComponent;
+    const time = Date.UTC(2026, 7, 3);
+    const trend8Weeks = [{ time, value: 0 }, { time: time + 7 * 86400000, value: null }];
+    component.derivedState = createRouteReadyDerivedState({
+      acwr: { ratio: 1.1, latestDayMs: time, acuteLoad7: 110, chronicLoad28: 100, trend8Weeks },
+      monotonyStrain: { monotony: 1.2, strain: 600, weeklyLoad7: 500, latestDayMs: time, trend8Weeks },
+    });
+    component.loadMetrics = { ctlText: '62', atlText: '54', rampText: '+1.4', acwrText: '1.1', monotonyText: '1.2', strainText: '600', freshnessNowText: '+8', freshnessPlusSevenDaysText: '+15' };
+    const current = { fitness: { trend8Weeks }, fatigue: { trend8Weeks }, rampRate: { trend8Weeks }, formNow: { trend8Weeks } };
+    const metrics = (component as any).buildTrainingLoadMetricItems(current, [
+      { dayMs: time, formSameDay: 8, isForecast: false },
+      { dayMs: time + 86400000, formSameDay: 9, isForecast: true },
+    ]);
+    expect(metrics.find((metric: any) => metric.id === 'ctl').history.points).toEqual([
+      { time, value: 0, valueText: '0' }, { time: time + 7 * 86400000, value: null, valueText: '--' },
+    ]);
+    expect(metrics.find((metric: any) => metric.id === 'monotony').history).toBeUndefined();
+    expect(metrics.find((metric: any) => metric.id === 'strain').history.points[0].value).toBe(0);
+    expect(metrics.find((metric: any) => metric.id === 'plus-seven-days').history).toMatchObject({
+      mode: 'forecast', points: [{ time, value: 8, valueText: '+8' }, { time: time + 86400000, value: 9, valueText: '+9' }],
+    });
+    const noHistory = (component as any).buildTrainingLoadMetricItems();
+    expect(noHistory.find((metric: any) => metric.id === 'ctl').history).toBeUndefined();
+    expect(noHistory.find((metric: any) => metric.id === 'plus-seven-days').history).toBeUndefined();
+    component.derivedState.formPoints = buildDashboardFormPointsFromDailyLoads([10, 20, 30].map((load, index) => ({ dayMs: time + index * 86400000, load })));
+    component.derivedState.monotonyStrain!.latestDayMs = time + 2 * 86400000;
+    const withMonotony = (component as any).buildTrainingLoadMetricItems();
+    expect(withMonotony.find((metric: any) => metric.id === 'monotony').history).toMatchObject({
+      caption: '8-week history', points: [{ time, value: 2.4495, valueText: '2.45' }],
+    });
+    expect(withMonotony.find((metric: any) => metric.id === 'strain').history.points[0].value).toBe(0);
+  });
+
   afterEach(() => {
     vi.useRealTimers();
   });
 
   beforeEach(() => {
     analyticsService = { logEvent: vi.fn() };
+  });
+
+  function configureFixtureTestingModule(metadata: TestModuleMetadata) {
     TestBed.configureTestingModule({
       imports: [
+        TrainingMetricTextComponent,
+        TrainingBuildMetricsComponent,
+        TrainingMixDetailsComponent,
+        TimelineNotesWorkspaceStubComponent,
         MatMenuModule,
         MatTooltipModule,
         PageHeaderComponent,
         TrainingSummaryCardsComponent,
+        ActiveSicknessNoteComponent,
         TrainingMetricGridComponent,
       ],
       providers: [{ provide: AppAnalyticsService, useValue: analyticsService }],
     });
-  });
+    return TestBed.configureTestingModule(metadata);
+  }
 
   it('renders the fixed training workspace without dashboard tile rendering', async () => {
     const trainingSummaryAsOfDayMs = Date.UTC(2026, 7, 6);
@@ -157,10 +229,13 @@ describe('TrainingWorkspaceComponent', () => {
       },
     };
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
+    const haptics = { selection: vi.fn() };
 
-    await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+    await configureFixtureTestingModule({
+      imports: [MatButtonModule],
+      declarations: [TrainingWorkspaceComponent, HapticTapDirective],
       providers: [
+        { provide: AppHapticsService, useValue: haptics },
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
         { provide: AppSleepService, useValue: createSleepService() },
@@ -177,17 +252,18 @@ describe('TrainingWorkspaceComponent', () => {
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('#training-title')?.textContent?.trim()).toBe('Training');
     expect(element.querySelector('.qs-page-header__leading-icon')?.textContent?.trim()).toBe('monitoring');
-    expect(element.querySelector('.qs-page-header__subtitle')).toBeNull();
-    const feedbackAction = element.querySelector('.training-feedback-action');
-    expect(feedbackAction?.getAttribute('aria-label')).toBe('Send feedback about Training to support');
-    expect(feedbackAction?.getAttribute('href')).toContain('mailto:');
-    expect(feedbackAction?.getAttribute('href')).toContain('subject=Training%20feedback');
-    expect(feedbackAction?.getAttribute('target')).toBeNull();
-    expect(feedbackAction?.getAttribute('rel')).toBeNull();
-    const calendarAction = element.querySelector('.training-calendar-action');
-    expect(calendarAction?.getAttribute('aria-label')).toBe('Open activity calendar');
-    expect(calendarAction?.querySelector('mat-icon')?.textContent?.trim()).toBe('calendar_month');
-    expect(element.querySelector('.training-dashboard-action')?.getAttribute('aria-label')).toBe('Return to dashboard');
+    expect(element.querySelector('.qs-page-header__subtitle')?.textContent).toContain('Data through');
+    expect(element.querySelector('.training-feedback-action')).toBeNull();
+    expect(element.querySelector('.training-calendar-action')).toBeNull();
+    expect(element.querySelector('.training-dashboard-action')).toBeNull();
+    expect(element.querySelector('.training-plans-action')).toBeNull();
+    expect(element.querySelector('a[href="/training/plans"]')).toBeNull();
+    expect(element.querySelector('.training-page-actions')).toBeNull();
+    expect(element.querySelector('.qs-page-header__actions')?.children).toHaveLength(0);
+    expect(element.querySelector('.training-derived-metrics-retry')).toBeNull();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(element.querySelector('app-timeline-notes-workspace')?.hasAttribute('hidden')).toBe(true);
+    expect(element.querySelector('app-page-header app-timeline-notes-workspace')).toBeNull();
     const sportVisibilityAction = element.querySelector('.training-sport-visibility-action');
     expect(sportVisibilityAction?.getAttribute('aria-label')).toContain('Choose sport shortcuts.');
     expect(sportVisibilityAction?.textContent).toContain('Shortcuts');
@@ -206,12 +282,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.textContent).toContain('Viewing All training · All recorded training');
     expect(element.textContent).not.toContain('Best build vs now');
     const template = readFileSync(resolve(process.cwd(), 'src/app/components/training/training-workspace.component.html'), 'utf8');
-    for (const actionClass of [
-      'training-sport-visibility-action',
-      'training-feedback-action',
-      'training-calendar-action',
-      'training-dashboard-action',
-    ]) {
+    for (const actionClass of ['training-sport-visibility-action']) {
       expect(template).toMatch(new RegExp(`<[^>]+mat-button[^>]+class="${actionClass}"`, 's'));
       expect(template).not.toMatch(new RegExp(`<[^>]+mat-stroked-button[^>]+class="${actionClass}"`, 's'));
     }
@@ -223,15 +294,18 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.textContent).toContain('How your load is changing');
     expect(element.textContent).toContain('Where your effort is going');
     expect(element.textContent).not.toContain('Settings vs recent evidence');
-    expect(element.textContent).toContain('Recorded body weight');
+    expect(element.textContent).not.toContain('Recorded body weight');
+    expect(element.textContent).not.toContain('Body context');
     const performanceGrid = element.querySelector('.training-performance-grid');
     const bodyContextSection = element.querySelector('.training-body-context-section');
     expect(performanceGrid).toBeNull();
-    expect(bodyContextSection?.querySelector('.training-body-weight-panel')).not.toBeNull();
-    expect(element.querySelector('main.training-workspace')?.lastElementChild).toBe(bodyContextSection);
+    expect(bodyContextSection).toBeNull();
+    expect(element.querySelector('app-training-body-weight-trend-chart')).toBeNull();
+    expect(element.querySelector('main.training-workspace')?.lastElementChild?.getAttribute('aria-labelledby')).toBe('training-mix-title');
     expect(element.querySelector('app-durability-reading-guide[context="training"]')).toBeNull();
     expect(element.querySelector('app-tile-chart')).toBeNull();
-    expect(fixture.componentInstance.freshnessForecastInfoTooltip).toContain('training-load only');
+    expect(fixture.componentInstance.freshnessForecastInfoTooltip).toContain('training load only');
+    expect(fixture.componentInstance.freshnessForecastInfoTooltip).toContain('Sleep and other recovery signals appear separately');
     const recoveryContext = element.querySelector('.training-recovery-context');
     const importedRecovery = recoveryContext?.querySelector('.training-readiness-imported-recovery');
     const sleepHistory = recoveryContext?.querySelector('.training-recovery-history');
@@ -239,7 +313,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(recoveryContext?.querySelector('#training-recovery-context-title')?.textContent).toContain('Recovery context');
     expect(element.querySelector('.training-readiness-source')?.nextElementSibling).toBe(recoveryContext);
     expect(importedRecovery?.textContent).toContain('Recovery left');
-    expect(importedRecovery?.textContent).toContain('remaining · until');
+    expect(importedRecovery?.textContent).toContain('remaining · expected by');
     expect(importedRecovery?.textContent).toContain('Imported post-workout estimate');
     expect(importedRecovery?.textContent).toContain('separate from Readiness and Freshness');
     expect(sleepHistory?.querySelector('#training-recovery-history-title')?.textContent).toContain('Sleep history');
@@ -256,10 +330,25 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('.training-status-grid .training-recovery-estimate-panel')).toBeNull();
     expect(element.querySelector('.training-mix-panel')).toBeNull();
     expect(element.querySelector('.training-capacity-panel')).toBeNull();
-    expect(element.textContent).toContain('No eligible running, cycling, swimming, rowing, walking & hiking, nordic skiing, strength, fitness & gym, paddling or other training workouts in the last 28 days.');
+    expect(element.textContent).toContain('No eligible running, cycling, swimming, rowing, walking & hiking, nordic skiing, strength, fitness & gym, paddling, wheelchair training, climbing & mountaineering, mountain snow sports, skating, combat & martial arts, dance, team sports, racket sports, precision sports, water sports, diving, performance sports, outdoor adventures, aerial sports, motorized activities or other training workouts in the last 28 days.');
     expect(element.textContent).not.toContain('Preparing imported capacity markers');
     expect(element.querySelector('.training-power-systems-section')).toBeNull();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
+    const workspace = fixture.debugElement.query(By.directive(TimelineNotesWorkspaceStubComponent)).componentInstance as TimelineNotesWorkspaceStubComponent;
+    const readiness = fixture.componentInstance.trainingReadiness.scoreText;
+    fixture.componentInstance.trainingStatus = { ...fixture.componentInstance.trainingStatus, stateLabel: 'Fresh', stateCaption: 'Ready to train' };
+    fixture.componentInstance.trainingSummaryCards = [{ id: 'state', kind: 'state', label: 'State', valueText: 'Fresh', captionText: 'Ready to train' }];
+    workspace.context.set({ ownerUid: 'user-1', notes: [{ id: 'sickness', category: 'sickness', title: 'Sore throat',
+      startDate: '2020-01-01', endDate: null, timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 }],
+      reportRange: vi.fn(), select: vi.fn() });
+    fixture.detectChanges();
+    expect(element.querySelector('app-active-sickness-note button')?.textContent).toContain('Sickness noted');
+    expect(element.querySelector('.training-state-panel')?.textContent).toContain('Low training load');
+    expect(element.querySelector('.training-state-panel')?.textContent).toContain('Fresh');
+    expect(fixture.componentInstance.trainingReadiness.scoreText).toBe(readiness);
+    workspace.context.set(null); fixture.detectChanges();
+    expect(element.querySelector('app-active-sickness-note button')).toBeNull();
+    expect(element.querySelector('.training-state-panel')?.textContent).toContain('Ready to train');
   });
 
   it('shows the validated training-summary cutoff when the route is ready', async () => {
@@ -274,8 +363,9 @@ describe('TrainingWorkspaceComponent', () => {
     });
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
-    await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+    await configureFixtureTestingModule({
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
@@ -306,7 +396,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(subtitle?.previousElementSibling?.querySelector('#training-title')).toBe(title);
   });
 
-  it('keeps every route-header action in one compact row through tablet widths', () => {
+  it('keeps retry and sport shortcut actions compact through tablet widths', () => {
     const stylePath = resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss');
     const styles = readFileSync(stylePath, 'utf8');
     const compactActionsStart = styles.indexOf('@media (max-width: 800px)');
@@ -315,29 +405,32 @@ describe('TrainingWorkspaceComponent', () => {
 
     expect(compactActionsStart).toBeGreaterThan(-1);
     expect(extraSmallLayoutStart).toBeGreaterThan(compactActionsStart);
-    expect(compactActionsStyles).toContain('.training-sport-visibility-action,');
-    expect(compactActionsStyles).toContain('.training-sport-visibility-action-label,');
-    expect(compactActionsStyles).toContain('.training-page-actions .training-sport-visibility-action mat-icon,');
-    expect(compactActionsStyles).toContain('.training-calendar-action,');
-    expect(compactActionsStyles).toContain('.training-calendar-action-label,');
-    expect(compactActionsStyles).toContain('.training-page-actions .training-calendar-action mat-icon,');
+    expect(compactActionsStyles).toContain('.training-sport-visibility-action {');
+    expect(compactActionsStyles).toContain('.training-sport-visibility-action-label {');
+    expect(compactActionsStyles).toContain('.training-page-actions .training-sport-visibility-action mat-icon {');
+    expect(compactActionsStyles).toContain('.training-derived-metrics-retry,');
+    expect(compactActionsStyles).not.toContain('.training-calendar-action');
     expect(compactActionsStyles).toContain('flex-wrap: nowrap;');
     expect(compactActionsStyles).toContain('width: 48px;');
   });
 
-  it('keeps the mobile header actions close to the first section divider', () => {
+  it('uses a compact header-to-navigation gap at every width, including expanded update details', () => {
     const stylePath = resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss');
     const styles = readFileSync(stylePath, 'utf8');
-    const mobileHeaderRule = styles.match(/@media \(max-width: 640px\) \{ \.training-page-header \{([^}]*)\}/)?.[1];
+    const headerRules = [...styles.matchAll(/\.training-page-header \{([^}]*)\}/g)];
 
-    expect(mobileHeaderRule).toContain('margin-bottom: 8px;');
+    expect(headerRules).toHaveLength(1);
+    expect(headerRules[0][1]).toContain('margin-bottom: 12px;');
+    expect(styles).toContain('.training-page-header:has(+ .training-update-details:not([hidden])) { margin-bottom: 8px; }');
+    expect(styles).toMatch(/\.training-update-details \{[^}]*margin: 0 0 12px;/);
+    expect(styles).not.toContain('margin: -12px 0 0;');
   });
 
   it('uses one divider between destination navigation and the first Training section', () => {
     const stylePath = resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss');
     const styles = readFileSync(stylePath, 'utf8');
 
-    expect(styles).toContain('margin: -12px 0 0;');
+    expect(styles).toContain('.training-destination-navigation { display: grid; gap: 8px; margin: 0;');
     expect(styles).toContain('.training-destination-navigation + .training-section { border-top: 0; }');
   });
 
@@ -368,14 +461,108 @@ describe('TrainingWorkspaceComponent', () => {
     expect(template).toContain('matTooltip="All sports"');
   });
 
+  it('uses a text-button menu with direct Material sport icons instead of an outlined form field', () => {
+    const template = readFileSync(
+      resolve(process.cwd(), 'src/app/components/training/training-workspace.component.html'),
+      'utf8',
+    );
+
+    const menuMarkup = template.match(/<mat-menu #desktopAllSportsMenu[\s\S]*?<\/mat-menu>/)?.[0] || '';
+    expect(menuMarkup).toContain('class="qs-menu-panel"');
+    expect(menuMarkup).toMatch(/@if \(option\.materialIcon\) \{\s*<mat-icon/s);
+    expect(menuMarkup).toContain('role="menuitemradio"');
+    expect(menuMarkup).toContain('[attr.aria-checked]');
+    expect(template).toMatch(/<button\s+mat-button[\s\S]*?class="training-all-sports-selector"/);
+    expect(template).not.toContain('desktopAllSportsSelect');
+    expect(menuMarkup).not.toContain('training-destination-option');
+    expect(menuMarkup).not.toContain('<app-activity-type-icon');
+    expect(template).not.toContain('alignDesktopTrainingDestinationOptions');
+  });
+
+  it('retains the selected sport icon and label in the desktop button and avoids feedback for repeated choices', async () => {
+    const haptics = { selection: vi.fn() };
+    await configureFixtureTestingModule({
+      imports: [MatButtonModule],
+      declarations: [TrainingWorkspaceComponent, HapticTapDirective],
+      providers: [
+        { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
+        { provide: DashboardDerivedMetricsService, useValue: { watch: vi.fn(() => of(createRouteReadyDerivedState())), ensureForDashboard: vi.fn() } },
+        { provide: AppHapticsService, useValue: haptics },
+        { provide: AppSleepService, useValue: createSleepService() },
+        { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
+      ],
+      schemas: [NO_ERRORS_SCHEMA],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(TrainingWorkspaceComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const trigger = fixture.nativeElement.querySelector('.training-all-sports-selector') as HTMLButtonElement;
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    expect(trigger.textContent).toContain('All sports');
+    expect(trigger.classList).toContain('mat-mdc-button');
+    expect(fixture.nativeElement.querySelector('.training-all-sports-selector mat-select')).toBeNull();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    trigger.click();
+    fixture.detectChanges();
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    (overlay.querySelector('[aria-label="View Cycling"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.selectedTrainingDestination).toBe('cycling');
+    expect(trigger.textContent).toContain('Cycling');
+    const selectedOption = fixture.componentInstance.selectedTrainingDestinationOption!;
+    const sportIcon = trigger.querySelector('mat-icon:not([iconPositionEnd])') as HTMLElement;
+    expect(sportIcon.textContent?.trim()).toBe(selectedOption.materialIcon);
+    const expectedColour = document.createElement('span');
+    expect(selectedOption.iconColor).toBeTruthy();
+    expectedColour.style.color = selectedOption.iconColor!;
+    expect(sportIcon.style.color).toBe(expectedColour.style.color);
+    expect(trigger.querySelector('[iconPositionEnd]')?.textContent?.trim()).toBe('expand_more');
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    trigger.click();
+    fixture.detectChanges();
+    expect(haptics.selection).toHaveBeenCalledTimes(3);
+    const selectedItem = overlay.querySelector('[aria-label="View Cycling"]') as HTMLButtonElement;
+    expect(selectedItem.getAttribute('aria-checked')).toBe('true');
+    selectedItem.click();
+    fixture.detectChanges();
+    expect(haptics.selection).toHaveBeenCalledTimes(3);
+    fixture.componentInstance.selectTrainingDestination('overview', 'shortcut');
+    fixture.detectChanges();
+    expect(trigger.textContent).toContain('All sports');
+    expect(sportIcon.textContent?.trim()).toBe('monitoring');
+    expect(sportIcon.style.color).toBe('');
+  });
+
   it('separates adjacent Training Mix sport contexts with matching dividers', () => {
-    const stylePath = resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss');
+    const stylePath = resolve(process.cwd(), 'src/app/components/shared/training-summary/training-mix-details.component.scss');
     const styles = readFileSync(stylePath, 'utf8');
     const adjacentContextRule = styles.match(/\.training-mix-contexts section \+ section \{([^}]*)\}/)?.[1];
 
-    expect(styles).toContain('--training-mix-context-divider-color: color-mix(in srgb, var(--mat-sys-outline) 28%, transparent);');
+    expect(styles).toContain('--mix-divider: color-mix(in srgb, var(--mat-sys-outline) 28%, transparent);');
     expect(adjacentContextRule).toContain('padding-top: 12px;');
-    expect(adjacentContextRule).toContain('border-top: 1px solid var(--training-mix-context-divider-color);');
+    expect(adjacentContextRule).toContain('border-top: 1px solid var(--mix-divider);');
+  });
+
+  it('uses the full section width for one sport and rearranges its comparison inside the card', () => {
+    const workspaceStyles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss'),
+      'utf8',
+    );
+    const detailsStyles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/shared/training-summary/training-mix-details.component.scss'),
+      'utf8',
+    );
+
+    expect(workspaceStyles).toMatch(/\.training-mix-grid--single\s*\{\s*grid-template-columns:\s*minmax\(0, 1fr\);/);
+    expect(workspaceStyles).not.toContain('grid-template-columns: minmax(280px, 340px) minmax(0, 1fr)');
+    expect(detailsStyles).toContain('@container (min-width: 760px)');
+    expect(detailsStyles).toMatch(/\.training-mix-details--single\s*\{[^}]*grid-template-columns:\s*minmax\(280px, \.9fr\) minmax\(340px, 1\.1fr\)/s);
+    expect(detailsStyles).toContain('@container (min-width: 760px) and (max-width: 1119px)');
+    expect(detailsStyles).toContain('@container (min-width: 1120px)');
+    expect(detailsStyles).toContain('.training-mix-details--single > .training-mix-zone-comparison');
+    expect(detailsStyles).toContain('.training-mix-details--single > .training-mix-contexts');
+    expect(detailsStyles).toContain('section:last-child:nth-child(odd) { grid-column: 1 / -1; padding-right: 0; }');
   });
 
   it('renders activity-family icons for sport-specific training driver cards and TSS in the overview mix', async () => {
@@ -495,8 +682,9 @@ describe('TrainingWorkspaceComponent', () => {
     };
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
-    await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+    await configureFixtureTestingModule({
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
@@ -588,9 +776,9 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
     try {
-      await TestBed.configureTestingModule({
-        declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
-        imports: [MetricIndicatorComponent],
+      await configureFixtureTestingModule({
+        declarations: [TrainingWorkspaceComponent],
+        imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent, MetricIndicatorComponent],
         providers: [
           { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
           { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
@@ -654,6 +842,7 @@ describe('TrainingWorkspaceComponent', () => {
     };
     const sleepSessions = [
       createSession('baseline-6', 6, 75, 50, 50),
+      ...Array.from({ length: 10 }, (_, index) => createSession(`baseline-${index + 6}`, index + 6, 75, 50, 50)),
       createSession('baseline-5', 5, 75, 50, 50),
       createSession('baseline-4', 4, 75, 50, 50),
       createSession('baseline-3', 3, 75, 50, 50),
@@ -670,7 +859,7 @@ describe('TrainingWorkspaceComponent', () => {
       rampRate: { rampRate: 1 } as any,
       trainingReadinessStatus: 'ready',
       trainingReadiness: {
-        formulaVersion: 3,
+        formulaVersion: 4,
         dayBoundary: 'UTC',
         asOfDayMs: Date.UTC(2026, 6, 16),
         generatedAtMs: nowMs - 1000,
@@ -687,7 +876,8 @@ describe('TrainingWorkspaceComponent', () => {
           rampRate: 1,
           sleepScore: 80,
           latestSleepAtMs: Date.UTC(2026, 6, 3 + index, 6),
-          hrvRatio: 1,
+          hrvRatio: null,
+          hrvPersonalRange: null,
           averageHeartRateRatio: 1,
           minimumHeartRateRatio: 1,
           overnightHeartRateRatio: 1,
@@ -704,8 +894,9 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
     try {
-      await TestBed.configureTestingModule({
-        declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      await configureFixtureTestingModule({
+        imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+        declarations: [TrainingWorkspaceComponent],
         providers: [
           { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
           { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
@@ -720,7 +911,7 @@ describe('TrainingWorkspaceComponent', () => {
 
       expect(sleepService.watchForDashboard).toHaveBeenCalledWith(
         'user-1',
-        nowMs - (30 * 24 * 60 * 60 * 1000),
+        nowMs - (60 * 24 * 60 * 60 * 1000),
         Number.MAX_SAFE_INTEGER,
       );
       const panel = fixture.nativeElement.querySelector('.training-readiness-panel') as HTMLElement;
@@ -729,7 +920,10 @@ describe('TrainingWorkspaceComponent', () => {
       expect(panel.textContent).toContain('4/4 signals');
       expect(panel.textContent).toContain('Sleep');
       expect(panel.textContent).toContain('90/100');
-      expect(panel.textContent).toContain('+10%');
+      expect(panel.textContent).toContain('HRV · 7-day average');
+      expect(panel.textContent).toContain('50.7 ms');
+      expect(panel.textContent).toContain('Within range · rising');
+      expect(panel.textContent).toContain('60-day range');
       expect(panel.textContent).toContain('-4%');
       expect(panel.textContent).toContain('14-day trend');
       expect(panel.textContent).toContain('14/14 days scored');
@@ -742,6 +936,66 @@ describe('TrainingWorkspaceComponent', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it.each(['load', 'sleep'])('waits for both initial readiness reads when %s arrives first', async first => {
+    const nowMs = Date.now();
+    const load$ = new Subject<DashboardDerivedMetricsState>();
+    const sleep$ = new Subject<SleepSession[]>();
+    const user$ = new BehaviorSubject({ uid: 'user-1' });
+    const load = createRouteReadyDerivedState({
+      formNow: { latestDayMs: nowMs, value: 10, trend8Weeks: [] },
+      rampRate: { rampRate: 1 } as never,
+    });
+    const sleep: SleepSession = {
+      id: 'latest', userID: 'user-1',
+      source: { provider: SLEEP_PROVIDERS.GarminAPI, sourceSessionKey: 'latest', providerUserId: 'garmin-user-1' },
+      sleepDate: new Date(nowMs).toISOString().slice(0, 10),
+      startTimeMs: nowMs - 9 * 60 * 60 * 1000, endTimeMs: nowMs - 60 * 60 * 1000,
+      durationSeconds: 8 * 60 * 60, isNap: false, stages: [], stageDurationsSeconds: {},
+      score: { value: 80 }, createdAtMs: nowMs, updatedAtMs: nowMs,
+    };
+    await configureFixtureTestingModule({
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
+      providers: [
+        { provide: AppAuthService, useValue: { user$ } },
+        { provide: DashboardDerivedMetricsService, useValue: { watch: () => load$, ensureForDashboard: vi.fn() } },
+        { provide: AppSleepService, useValue: { watchForDashboard: () => sleep$ } },
+        { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
+      ],
+      schemas: [NO_ERRORS_SCHEMA],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(TrainingWorkspaceComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+    if (first === 'load') load$.next(load);
+    else sleep$.next([sleep]);
+    fixture.detectChanges();
+
+    expect(component.trainingReadiness.state).toBe('preparing');
+    expect(component.trainingReadiness.score).toBeNull();
+    expect(fixture.nativeElement.querySelector('.training-readiness-summary')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Preparing readiness signals');
+    expect(component.trainingReadiness.metricRows).toEqual([]);
+
+    if (first === 'load') sleep$.next([sleep]);
+    else load$.next(load);
+    fixture.detectChanges();
+    expect(component.trainingReadiness.state).toBe('ready');
+    expect(component.trainingReadiness.availableSignalCount).toBe(2);
+
+    // A resolved empty listener is valid evidence, and later live changes still apply.
+    sleep$.next([]);
+    fixture.detectChanges();
+    expect(component.trainingReadiness.state).toBe('ready');
+    expect(component.trainingReadiness.availableSignalCount).toBe(1);
+
+    user$.next({ uid: 'user-2' });
+    fixture.detectChanges();
+    expect(component.trainingReadiness.state).toBe('preparing');
+    expect(component.trainingReadiness.score).toBeNull();
+    fixture.destroy();
   });
 
   it('shows a sleep read failure separately while retaining load-only readiness', async () => {
@@ -757,8 +1011,9 @@ describe('TrainingWorkspaceComponent', () => {
     const sleepService = {
       watchForDashboard: vi.fn(() => throwError(() => new Error('sleep read failed'))),
     };
-    await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+    await configureFixtureTestingModule({
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
@@ -777,7 +1032,7 @@ describe('TrainingWorkspaceComponent', () => {
     fixture.destroy();
   });
 
-  it('retains eligible sleep evidence when the live listener fails after loading', async () => {
+  it('drops eligible sleep evidence when the live listener fails after loading', async () => {
     const nowMs = Date.now();
     const sleepSession = {
       id: 'retained-sleep',
@@ -813,8 +1068,9 @@ describe('TrainingWorkspaceComponent', () => {
         throwError(() => new Error('listener disconnected')),
       )),
     };
-    await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+    await configureFixtureTestingModule({
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
@@ -828,8 +1084,10 @@ describe('TrainingWorkspaceComponent', () => {
     fixture.detectChanges();
     const panel = fixture.nativeElement.querySelector('.training-readiness-panel') as HTMLElement;
 
-    expect(panel.textContent).toContain('88/100');
-    expect(panel.textContent).toContain('showing the last loaded evidence');
+    expect(panel.textContent).toContain('90/100');
+    expect(panel.textContent).not.toContain('88/100');
+    expect(panel.textContent).toContain('showing available load signals only');
+    expect(panel.textContent).toContain('SleepUnavailable');
     fixture.destroy();
   });
 
@@ -841,8 +1099,9 @@ describe('TrainingWorkspaceComponent', () => {
       trainingReadinessStatus: 'failed',
     };
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
-    await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+    await configureFixtureTestingModule({
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
@@ -859,7 +1118,7 @@ describe('TrainingWorkspaceComponent', () => {
     fixture.destroy();
   });
 
-  it('requests readiness projections and the body-weight trend at the next UTC day', async () => {
+  it('refreshes the recap clock and readiness projections at the next UTC day', async () => {
     const nowMs = Date.UTC(2026, 6, 16, 23, 59, 59, 500);
     vi.useFakeTimers();
     vi.setSystemTime(nowMs);
@@ -874,8 +1133,9 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
     try {
-      await TestBed.configureTestingModule({
-        declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      await configureFixtureTestingModule({
+        imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+        declarations: [TrainingWorkspaceComponent],
         providers: [
           { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
           { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
@@ -886,9 +1146,12 @@ describe('TrainingWorkspaceComponent', () => {
       }).compileComponents();
       const fixture = TestBed.createComponent(TrainingWorkspaceComponent);
       fixture.detectChanges();
+      expect(fixture.componentInstance.trainingImpactRecapNowMs).toBe(nowMs);
       derivedMetrics.ensureForDashboard.mockClear();
 
       await vi.advanceTimersByTimeAsync(502);
+
+      expect(fixture.componentInstance.trainingImpactRecapNowMs).toBe(nowMs + 501);
 
       expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledWith(
         { uid: 'user-1' },
@@ -901,7 +1164,6 @@ describe('TrainingWorkspaceComponent', () => {
             'form_plus_7d',
             'freshness_forecast',
             'training_readiness',
-            'body_weight_trend',
           ],
         },
       );
@@ -914,8 +1176,9 @@ describe('TrainingWorkspaceComponent', () => {
   it('renders the workspace and requests snapshots when the derived stream has not emitted yet', async () => {
     const derivedMetrics = { watch: vi.fn(() => NEVER), ensureForDashboard: vi.fn() };
 
-    await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+    await configureFixtureTestingModule({
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
@@ -957,7 +1220,7 @@ describe('TrainingWorkspaceComponent', () => {
       trainingCapacity: {
         asOfDayMs: Date.UTC(2026, 6, 13),
         disciplines: [{
-          discipline: 'running', ftpSetting: null, importedVo2Max: null,
+          discipline: 'running', ftpSetting: null, importedVo2Max: null, referenceVo2Max: null,
         }, {
           discipline: 'cycling',
           ftpSetting: {
@@ -966,13 +1229,15 @@ describe('TrainingWorkspaceComponent', () => {
             previousValue: null, previousAtMs: null, previousSourceKey: null, changePct: null,
           },
           importedVo2Max: null,
+          referenceVo2Max: null,
         }],
       },
     };
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
-    await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+    await configureFixtureTestingModule({
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         {
           provide: AppAuthService,
@@ -1096,7 +1361,7 @@ describe('TrainingWorkspaceComponent', () => {
       trainingPowerSystems: {
         dayBoundary: 'UTC',
         asOfDayMs,
-        policyVersion: 1,
+        policyVersion: DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION,
         windowDays: 42,
         historyDays: 84,
         cadence: 'workout-date',
@@ -1122,8 +1387,9 @@ describe('TrainingWorkspaceComponent', () => {
       ensureForDashboard: vi.fn(),
     };
 
-    await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+    await configureFixtureTestingModule({
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         {
           provide: AppAuthService,
@@ -1222,18 +1488,19 @@ describe('TrainingWorkspaceComponent', () => {
         asOfDayMs: 2,
         disciplines: [
           {
-            discipline: 'running', ftpSetting: null, importedVo2Max: null,
+            discipline: 'running', ftpSetting: null, importedVo2Max: null, referenceVo2Max: null,
           },
           {
-            discipline: 'cycling', ftpSetting: null, importedVo2Max: null,
+            discipline: 'cycling', ftpSetting: null, importedVo2Max: null, referenceVo2Max: null,
           },
         ],
       },
     };
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
-    await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+    await configureFixtureTestingModule({
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         {
           provide: AppAuthService,
@@ -1261,7 +1528,6 @@ describe('TrainingWorkspaceComponent', () => {
       .toBe('Set benchmark');
     expect(element.querySelectorAll('.training-mix-panel')).toHaveLength(1);
     expect(element.querySelector('.training-mix-grid')?.classList.contains('training-mix-grid--single')).toBe(true);
-    expect(element.querySelector('.training-mix-panel')?.classList.contains('training-mix-panel--single')).toBe(true);
     expect(element.querySelector('.training-mix-zone-comparison')?.textContent).toContain('Intensity balance');
     expect(element.querySelectorAll('.training-mix-zone-track')).toHaveLength(3);
     expect(element.textContent).toContain('Cycling capacity evidence');
@@ -1287,8 +1553,9 @@ describe('TrainingWorkspaceComponent', () => {
     });
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
-    await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+    await configureFixtureTestingModule({
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         {
           provide: AppAuthService,
@@ -1337,8 +1604,9 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedState = new BehaviorSubject(createRouteReadyDerivedState({ trainingSummary, trainingDurability }));
     const derivedMetrics = { watch: vi.fn(() => derivedState.asObservable()), ensureForDashboard: vi.fn() };
 
-    await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+    await configureFixtureTestingModule({
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         { provide: AppAuthService, useValue: { user$: of({
           uid: 'user-1',
@@ -1388,8 +1656,9 @@ describe('TrainingWorkspaceComponent', () => {
     };
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
-    await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+    await configureFixtureTestingModule({
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         {
           provide: AppAuthService,
@@ -1456,7 +1725,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(component.sportShortcuts).toEqual(['running']);
     expect(component.visibleDisciplines).toEqual([
       'running', 'cycling', 'swimming', 'rowing', 'walking-hiking', 'nordic-skiing', 'strength',
-      'fitness-gym', 'paddling', 'other-training',
+      'fitness-gym', 'paddling', 'wheelchair', 'climbing-mountaineering', 'mountain-snow', 'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports', 'precision-sports', 'water-sports', 'diving', 'performance-sports', 'outdoor-adventures', 'aerial-sports', 'motorized-activities', 'other-training',
     ]);
 
     component.openTrainingSportVisibilityDialog();
@@ -1533,7 +1802,7 @@ describe('TrainingWorkspaceComponent', () => {
     });
   });
 
-  it('clears the desktop selector after placing an off-shortcut sport in the toggle row', () => {
+  it('retains the desktop destination presentation after placing an off-shortcut sport in the toggle row', () => {
     const component = new TrainingWorkspaceComponent(
       {} as any,
       {} as any,
@@ -1542,14 +1811,13 @@ describe('TrainingWorkspaceComponent', () => {
       { open: vi.fn() } as any,
       { markForCheck: vi.fn() } as any,
     );
-    const select = { value: 'walking-hiking' };
-
-    component.selectDesktopTrainingDestination('walking-hiking', select as any);
+    component.selectTrainingDestination('walking-hiking', 'desktop_selector');
 
     expect(component.selectedTrainingDestination).toBe('walking-hiking');
     expect(component.visibleSportShortcuts[0]).toBe('walking-hiking');
-    expect(component.desktopAllSportsSelectorValue).toBeNull();
-    expect(select.value).toBeNull();
+    expect(component.selectedTrainingDestinationOption?.id).toBe('walking-hiking');
+    expect(component.selectedTrainingDestinationOption?.label).toBe('Walking & Hiking');
+    expect(component.selectedTrainingDestinationOption?.materialIcon).toBeTruthy();
   });
 
   it('keeps the selected shortcut in a stable slot while automatic sport evidence hydrates', () => {
@@ -1646,6 +1914,7 @@ describe('TrainingWorkspaceComponent', () => {
         baselineWindowDays: 84,
         disciplines: [
           { discipline: 'fitness-gym', current28d: window(1), baseline28d: window(0) },
+          { discipline: 'wheelchair', current28d: window(0), baseline28d: window(1) },
           { discipline: 'other-training', current28d: window(0), baseline28d: window(0) },
         ],
       } as any,
@@ -1654,6 +1923,9 @@ describe('TrainingWorkspaceComponent', () => {
     (component as any).refreshTrainingSportVisibility();
 
     expect(component.trainingDestinationOptions.map(option => option.id)).toContain('fitness-gym');
+    expect(component.trainingDestinationOptions.find(option => option.id === 'wheelchair')).toMatchObject({
+      label: 'Wheelchair Training', materialIcon: 'accessible_forward',
+    });
     expect(component.trainingDestinationOptions.map(option => option.id)).not.toContain('other-training');
   });
 
@@ -1682,13 +1954,14 @@ describe('TrainingWorkspaceComponent', () => {
     component.sportShortcuts = ['cycling', 'swimming'];
     component.isAutomaticSportVisibility = true;
     component.trainingDestinationOptions = [
-      { id: 'overview', label: 'All training', details: 'All', sport: null, materialIcon: 'monitoring' },
+      { id: 'overview', label: 'All training', details: 'All', sport: null, materialIcon: 'monitoring', iconColor: null },
       {
         id: 'cycling',
         label: 'Cycling',
         details: 'Cycling',
         sport: { id: 'cycling', iconActivityType: 'Cycling' } as any,
-        materialIcon: null,
+        materialIcon: 'directions_bike',
+        iconColor: '#FF7C3B',
       },
     ];
 
@@ -2358,7 +2631,7 @@ describe('TrainingWorkspaceComponent', () => {
       metrics: [{ metric: 'elapsed-time', value: 7_200, sourceActivityCount: 2 }],
     }], [], 'strength', true)).toEqual([expect.objectContaining({
       context: 'strength',
-      metrics: [expect.objectContaining({ metric: 'elapsed-time', currentText: '2h 00m' })],
+      metrics: [expect.objectContaining({ metric: 'elapsed-time', currentText: '02h 00m' })],
     })]);
     const durabilityContext = {
       contextKey: 'pool:25:freestyle', scope: 'pool-swimming', outputSource: 'pool-length-speed',
@@ -2425,21 +2698,137 @@ describe('TrainingWorkspaceComponent', () => {
       expect.objectContaining({ label: 'Pool pace', deltaText: '0:05 /100m slower', deltaTone: 'negative' }),
     ]));
 
-    const dateTimeFormat = vi.spyOn(Intl, 'DateTimeFormat').mockImplementation(() => ({
-      format: (value: Date) => value.toISOString().slice(0, 10),
-    } as unknown as Intl.DateTimeFormat));
-    try {
-      expect((component as any).formatTrainingBuildRange(Date.UTC(2026, 0, 1), Date.UTC(2026, 0, 2)))
-        .toBe('2026-01-01 – 2026-01-02');
-      expect(dateTimeFormat).toHaveBeenCalledWith(undefined, {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        timeZone: 'UTC',
-      });
-    } finally {
-      dateTimeFormat.mockRestore();
+    const rangeFormatter = getDateTimeFormatter(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
+    expect((component as any).formatTrainingBuildRange(Date.UTC(2026, 0, 1), Date.UTC(2026, 0, 2)))
+      .toBe(`${rangeFormatter.format(new Date(Date.UTC(2026, 0, 1)))} – ${rangeFormatter.format(new Date(Date.UTC(2026, 0, 2)))}`);
+  });
+
+  it('presents canonical stair climbing ascent under metric and miles settings with its recorded-zone policy', () => {
+    const component = new TrainingWorkspaceComponent(
+      {} as any, {} as any, {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any, { markForCheck: vi.fn() } as any,
+    );
+    const contexts = [{ context: 'stair-climbing', profile: 'general', activityCount: 1, metrics: [
+      { metric: 'elapsed-time', value: 1_800, sourceActivityCount: 1 },
+      { metric: 'ascent', value: 120, sourceActivityCount: 1 },
+    ] }];
+    expect((component as any).areObservedTrainingContextsVolumeOnly(contexts, 'intensityPolicy')).toBe(false);
+    expect((component as any).buildTrainingContextMetricViews(contexts, [], 'fitness-gym', true)).toEqual([
+      expect.objectContaining({ context: 'stair-climbing', label: 'Stair Climbing', metrics: [
+        expect.objectContaining({ metric: 'elapsed-time', currentText: '30m', referenceText: '--' }),
+        expect.objectContaining({ metric: 'ascent', currentText: '120 m', referenceText: '--' }),
+      ] }),
+    ]);
+    component.unitSettings = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    expect((component as any).buildTrainingContextMetricViews(contexts, [], 'fitness-gym', true)[0].metrics[1].currentText)
+      .toBe('120 m');
+    expect((component as any).buildTrainingContextMetricViews([{ ...contexts[0], metrics: [contexts[0].metrics[0]] }], [], 'fitness-gym', true))
+      .toEqual([expect.objectContaining({ label: 'Stair Climbing', metrics: [
+        expect.objectContaining({ metric: 'elapsed-time', currentText: '30m' }),
+      ] })]);
+    expect((component as any).buildTrainingContextMetricViews([{ ...contexts[0], metrics: [] }], [], 'fitness-gym', true))
+      .toEqual([]);
+  });
+
+  it('presents both approved 50-sport context batches with separate canonical labels, durations and unit-aware recorded metrics', () => {
+    const component = new TrainingWorkspaceComponent({} as any, {} as any, {} as any,
+      { appTheme: () => AppThemes.Normal } as any, { open: vi.fn() } as any, { markForCheck: vi.fn() } as any);
+    const expected = [
+      { sport: 'walking-hiking', name: 'Snowshoeing', context: 'snowshoeing', profile: 'vertical-endurance', zones: true },
+      { sport: 'climbing-mountaineering', name: 'Bouldering', context: 'bouldering', profile: 'general', zones: false },
+      { sport: 'climbing-mountaineering', name: 'Climbing', context: 'climbing', profile: 'general', zones: false },
+      { sport: 'climbing-mountaineering', name: 'Rock Climbing', context: 'rock-climbing', profile: 'general', zones: false },
+      { sport: 'climbing-mountaineering', name: 'Indoor Climbing', context: 'indoor-climbing', profile: 'general', zones: false },
+      { sport: 'climbing-mountaineering', name: 'Via Ferrata', context: 'via-ferrata', profile: 'general', zones: false },
+      { sport: 'climbing-mountaineering', name: 'Mountaineering', context: 'mountaineering', profile: 'vertical-endurance', zones: true },
+      { sport: 'mountain-snow', name: 'Ski Touring', context: 'ski-touring', profile: 'mixed-gravity', zones: true },
+      { sport: 'mountain-snow', name: 'Ski Mountaineering', context: 'ski-mountaineering', profile: 'mixed-gravity', zones: true },
+      { sport: 'mountain-snow', name: 'Backcountry Skiing', context: 'backcountry-skiing', profile: 'mixed-gravity', zones: true },
+      { sport: 'mountain-snow', name: 'Backcountry Snowboarding', context: 'backcountry-snowboarding', profile: 'mixed-gravity', zones: true },
+      { sport: 'mountain-snow', name: 'Splitboarding', context: 'splitboarding', profile: 'mixed-gravity', zones: true },
+      { sport: 'mountain-snow', name: 'Alpine Skiing', context: 'alpine-skiing', profile: 'gravity', zones: false },
+      { sport: 'mountain-snow', name: 'Snowboarding', context: 'snowboarding', profile: 'gravity', zones: false },
+      { sport: 'mountain-snow', name: 'Telemark Skiing', context: 'telemark-skiing', profile: 'gravity', zones: false },
+      { sport: 'skating', name: 'Inline Skating', context: 'inline-skating', profile: 'endurance', zones: true },
+      { sport: 'skating', name: 'Skating', context: 'skating', profile: 'general', zones: false },
+      { sport: 'skating', name: 'Ice Skating', context: 'ice-skating', profile: 'general', zones: false },
+      { sport: 'skating', name: 'Skateboarding', context: 'skateboarding', profile: 'general', zones: false },
+      { sport: 'combat-martial-arts', name: 'Boxing', context: 'boxing', profile: 'general', zones: false },
+      { sport: 'combat-martial-arts', name: 'Combat', context: 'combat', profile: 'general', zones: false },
+      { sport: 'combat-martial-arts', name: 'Judo', context: 'judo', profile: 'general', zones: false },
+      { sport: 'combat-martial-arts', name: 'Kickboxing', context: 'kickboxing', profile: 'general', zones: false },
+      { sport: 'combat-martial-arts', name: 'Mixed Martial Arts', context: 'mixed-martial-arts', profile: 'general', zones: false },
+      { sport: 'combat-martial-arts', name: 'Taekwondo', context: 'taekwondo', profile: 'general', zones: false },
+      { sport: 'dance', name: 'Ballet Dancing', context: 'ballet-dancing', profile: 'general', zones: false },
+      { sport: 'dance', name: 'Ballroom Dancing', context: 'ballroom-dancing', profile: 'general', zones: false },
+      { sport: 'dance', name: 'Dancing', context: 'dancing', profile: 'general', zones: false },
+      { sport: 'dance', name: 'Jazz Dancing', context: 'jazz-dancing', profile: 'general', zones: false },
+      { sport: 'dance', name: 'Latin Dancing', context: 'latin-dancing', profile: 'general', zones: false },
+      { sport: 'dance', name: 'Modern Dancing', context: 'modern-dancing', profile: 'general', zones: false },
+      { sport: 'dance', name: 'Show Dancing', context: 'show-dancing', profile: 'general', zones: false },
+      { sport: 'dance', name: 'Street Dancing', context: 'street-dancing', profile: 'general', zones: false },
+      { sport: 'team-sports', name: 'Basketball', context: 'basketball', profile: 'general', zones: false },
+      { sport: 'team-sports', name: 'Wheelchair Basketball', context: 'wheelchair-basketball', profile: 'general', zones: false },
+      { sport: 'team-sports', name: 'Football', context: 'football', profile: 'general', zones: false },
+      { sport: 'team-sports', name: 'Soccer', context: 'soccer', profile: 'general', zones: false },
+      { sport: 'team-sports', name: 'Volleyball', context: 'volleyball', profile: 'general', zones: false },
+      { sport: 'team-sports', name: 'Beach Volleyball', context: 'beach-volleyball', profile: 'general', zones: false },
+      { sport: 'racket-sports', name: 'Badminton', context: 'badminton', profile: 'general', zones: false },
+      { sport: 'racket-sports', name: 'Beach Tennis', context: 'beach-tennis', profile: 'general', zones: false },
+      { sport: 'racket-sports', name: 'Padel', context: 'padel', profile: 'general', zones: false },
+      { sport: 'racket-sports', name: 'Pickleball', context: 'pickleball', profile: 'general', zones: false },
+      { sport: 'racket-sports', name: 'Platform Tennis', context: 'platform-tennis', profile: 'general', zones: false },
+      { sport: 'racket-sports', name: 'Racket Sport', context: 'racket-sport', profile: 'general', zones: false },
+      { sport: 'racket-sports', name: 'Racquet Ball', context: 'racquet-ball', profile: 'general', zones: false },
+      { sport: 'racket-sports', name: 'Squash', context: 'squash', profile: 'general', zones: false },
+      { sport: 'racket-sports', name: 'Table Tennis', context: 'table-tennis', profile: 'general', zones: false },
+      { sport: 'racket-sports', name: 'Tennis', context: 'tennis', profile: 'general', zones: false },
+      { sport: 'racket-sports', name: 'Wheelchair Tennis', context: 'wheelchair-tennis', profile: 'general', zones: false },
+      ...APPROVED_WATER_TEAM_SPORT_CASES,
+      ...APPROVED_REMAINING_SPORT_CASES,
+
+    ];
+    for (const item of expected) {
+      expect((component as any).formatTrainingProfileMetric('elapsed-time', 0, item.sport)).toBe('0s');
+      const contexts = [{ context: item.context, profile: item.profile, activityCount: 1,
+        metrics: [{ metric: 'elapsed-time', value: 1_800, sourceActivityCount: 1 }] }];
+      const zeroContexts = [{ ...contexts[0], metrics: [{ metric: 'elapsed-time', value: 0, sourceActivityCount: 1 }] }];
+      expect((component as any).buildTrainingContextMetricViews(zeroContexts, [], item.sport, true)[0]?.metrics)
+        .toContainEqual(expect.objectContaining({ metric: 'elapsed-time', currentText: '0s', referenceText: '--' }));
+      expect((component as any).buildTrainingBuildContextMetricRows({ contexts: zeroContexts }, { contexts: [] }, item.sport))
+        .toContainEqual(expect.objectContaining({ label: `${item.name} · Elapsed time`, currentText: '0s', benchmarkText: '--' }));
+      expect((component as any).areObservedTrainingContextsVolumeOnly(contexts, 'intensityPolicy')).toBe(!item.zones);
+      expect((component as any).buildTrainingBuildContextMetricRows({ contexts }, { contexts: [] }, item.sport))
+        .toContainEqual(expect.objectContaining({ label: `${item.name} · Elapsed time`, currentText: '30m', benchmarkText: '--' }));
+      expect((component as any).buildTrainingBuildContextMetricRows({ contexts: [] }, { contexts }, item.sport))
+        .toContainEqual(expect.objectContaining({ label: `${item.name} · Elapsed time`, currentText: '--', benchmarkText: '30m' }));
+      expect((component as any).buildTrainingContextMetricViews(contexts, [], item.sport, true)).toEqual([
+        expect.objectContaining({ context: item.context, label: item.name, metrics: [
+          expect.objectContaining({ metric: 'elapsed-time', currentText: '30m', referenceText: '--' }),
+        ] }),
+      ]);
     }
+    const contexts = [{ context: 'snowshoeing', profile: 'vertical-endurance', activityCount: 1, metrics: [
+      { metric: 'distance', value: 1_609.344, sourceActivityCount: 1 },
+      { metric: 'ascent', value: 120, sourceActivityCount: 1 },
+    ] }];
+    const metricRows = (component as any).buildTrainingContextMetricViews(contexts, [], 'walking-hiking', true)[0].metrics;
+    expect(metricRows.find(row => row.metric === 'distance').currentText).toBe('1.61 Km');
+    component.unitSettings = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    const milesRows = (component as any).buildTrainingContextMetricViews(contexts, [], 'walking-hiking', true)[0].metrics;
+    expect(milesRows.find(row => row.metric === 'distance').currentText).toBe('1.00 mi');
+    expect(milesRows.find(row => row.metric === 'ascent').currentText).toBe('120 m');
+    expect((component as any).formatTrainingProfileMetric('elapsed-time', 0, 'dance')).toBe('0s');
+    expect((component as any).formatTrainingProfileMetric('descent-time', 0, 'mountain-snow')).toBe('0s');
+    expect((component as any).formatTrainingProfileMetric('elapsed-time', undefined, 'dance')).toBe('--');
+    expect((component as any).formatTrainingProfileMetricDelta('elapsed-time', 120, 0, 'dance')).toBe('+02m');
+    expect((component as any).formatTrainingProfileMetric('elapsed-time', 90_000, 'dance')).toBe('1d 01h 00m');
   });
 
   it('keeps build sleep comparison compact until details are requested', async () => {
@@ -2448,8 +2837,9 @@ describe('TrainingWorkspaceComponent', () => {
     const eventId = 'event-1';
     const selection = { mode: 'event' as const, durationWeeks: 12 as const, eventId };
 
-    await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+    await configureFixtureTestingModule({
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         { provide: AppAuthService, useValue: { user$: of({
           uid: 'user-1',
@@ -2604,13 +2994,17 @@ describe('TrainingWorkspaceComponent', () => {
 
   it('keeps derived metric listeners active after the initial user change', async () => {
     const derivedState$ = new Subject<DashboardDerivedMetricsState>();
+    const user$ = new BehaviorSubject({ uid: 'user-1' });
     const derivedMetrics = { watch: vi.fn(() => derivedState$), ensureForDashboard: vi.fn() };
+    const haptics = { selection: vi.fn() };
 
-    await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+    await configureFixtureTestingModule({
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
-        { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
+        { provide: AppAuthService, useValue: { user$ } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
+        { provide: AppHapticsService, useValue: haptics },
         { provide: AppSleepService, useValue: createSleepService() },
         { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
       ],
@@ -2643,8 +3037,28 @@ describe('TrainingWorkspaceComponent', () => {
     const firstSection = fixture.nativeElement.querySelector('.training-section');
     expect(routeStatus?.textContent).toContain('Refreshing derived metrics');
     expect(routeStatus?.textContent).toContain('Available last completed values');
-    expect(pageHeader?.nextElementSibling?.classList).toContain('training-destination-navigation');
-    expect(pageHeader?.nextElementSibling?.nextElementSibling).toBe(firstSection);
+    const statusToggle = fixture.nativeElement.querySelector('.training-update-toggle') as HTMLButtonElement;
+    const statusDetails = fixture.nativeElement.querySelector('#training-update-details') as HTMLElement;
+    expect(statusToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(statusToggle.getAttribute('aria-controls')).toBe(statusDetails.id);
+    expect(statusToggle.querySelector('mat-icon')?.classList).toContain('training-update-spinning');
+    expect(statusDetails.hidden).toBe(true);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    statusToggle.click();
+    fixture.detectChanges();
+    expect(statusToggle.getAttribute('aria-expanded')).toBe('true');
+    expect(statusDetails.hidden).toBe(false);
+    expect(statusDetails.textContent).toContain('Available last completed values');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    statusToggle.click();
+    fixture.detectChanges();
+    expect(statusDetails.hidden).toBe(true);
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    expect(pageHeader?.nextElementSibling).toBe(statusDetails);
+    expect(statusDetails.nextElementSibling?.classList).toContain('training-destination-navigation');
+    const sicknessContext = statusDetails.nextElementSibling?.nextElementSibling;
+    expect(sicknessContext?.tagName.toLowerCase()).toBe('app-active-sickness-note');
+    expect(sicknessContext?.nextElementSibling).toBe(firstSection);
     expect(fixture.nativeElement.textContent).toContain('Updating your training comparison');
 
     derivedState$.next({
@@ -2661,13 +3075,35 @@ describe('TrainingWorkspaceComponent', () => {
     const retryButton = fixture.nativeElement.querySelector('.training-derived-metrics-retry') as HTMLButtonElement;
     expect(fixture.nativeElement.querySelector('.training-derived-metrics-status')?.textContent)
       .toContain('Derived metrics update failed');
+    expect(statusToggle.querySelector('mat-icon')?.classList).not.toContain('training-update-spinning');
     expect(retryButton.getAttribute('aria-label')).toBe('Retry derived metrics update');
+    expect(retryButton.parentElement?.classList).toContain('training-page-actions');
+    expect(retryButton.parentElement?.querySelectorAll('button')).toHaveLength(1);
+    expect(retryButton.parentElement?.querySelector('.training-plans-action')).toBeNull();
     retryButton.click();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenLastCalledWith(
       { uid: 'user-1' },
       expect.objectContaining({ trainingSummaryStatus: 'failed' }),
       { force: true, metricKinds: TRAINING_WORKSPACE_DERIVED_METRIC_KINDS },
     );
+    statusToggle.click();
+    fixture.detectChanges();
+    derivedState$.next(createRouteReadyDerivedState());
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.training-update-toggle')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.training-page-actions')).toBeNull();
+    expect(fixture.componentInstance.derivedMetricsStatusExpanded()).toBe(false);
+    expect(haptics.selection).toHaveBeenCalledTimes(3);
+    fixture.componentInstance.toggleDerivedMetricsStatusDetails();
+    expect(haptics.selection).toHaveBeenCalledTimes(3);
+    derivedState$.next(createRouteReadyDerivedState({ trainingSummaryStatus: 'processing' }));
+    fixture.detectChanges();
+    expect((fixture.nativeElement.querySelector('#training-update-details') as HTMLElement).hidden).toBe(true);
+    (fixture.nativeElement.querySelector('.training-update-toggle') as HTMLButtonElement).click();
+    user$.next({ uid: 'user-2' });
+    fixture.detectChanges();
+    expect(fixture.componentInstance.derivedMetricsStatusExpanded()).toBe(false);
+    expect(haptics.selection).toHaveBeenCalledTimes(4);
   });
 
   it('ignores the optional recovery status unless an active estimate is visible', () => {

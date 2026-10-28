@@ -4,6 +4,10 @@ import * as oauth2 from '../../OAuth2';
 import { SERVICE_NAME } from '../constants';
 import * as serviceOAuthAccess from '../../service-oauth-access';
 
+const hoisted = vi.hoisted(() => ({
+    callableOptions: new Map<unknown, { memory?: string }>(),
+}));
+
 // Mock dependencies
 vi.mock('firebase-functions/v1', () => ({
     region: () => ({
@@ -11,10 +15,13 @@ vi.mock('firebase-functions/v1', () => ({
             onCall: (handler: any) => handler
         }
     }),
-    runWith: () => ({
+    runWith: (options: { memory?: string }) => ({
         region: () => ({
             https: {
-                onCall: (handler: any) => handler
+                onCall: (handler: unknown) => {
+                    hoisted.callableOptions.set(handler, options);
+                    return handler;
+                },
             }
         })
     }),
@@ -57,6 +64,14 @@ describe('COROS Auth Wrapper', () => {
     let context: any;
     let data: any;
 
+    it.each([
+        ['getCOROSAPIAuthRequestTokenRedirectURI', getCOROSAPIAuthRequestTokenRedirectURI],
+        ['requestAndSetCOROSAPIAccessToken', requestAndSetCOROSAPIAccessToken],
+        ['deauthorizeCOROSAPI', deauthorizeCOROSAPI],
+    ])('configures %s with 512 MiB', (_name, callable) => {
+        expect(hoisted.callableOptions.get(callable)).toMatchObject({ memory: '512MB' });
+    });
+
     beforeEach(() => {
         vi.clearAllMocks();
         (utils.hasProAccess as any).mockResolvedValue(true);
@@ -73,13 +88,17 @@ describe('COROS Auth Wrapper', () => {
 
     describe('getCOROSAPIAuthRequestTokenRedirectURI', () => {
         it('should return redirect URI for pro user', async () => {
+            data.importRecentHistory = true;
+            data.importHistoryRange = 'maximum';
             const result = await getCOROSAPIAuthRequestTokenRedirectURI(data, context);
 
             expect(serviceOAuthAccess.hasServiceOAuthConnectAccess).toHaveBeenCalledWith('testUserID', SERVICE_NAME);
             expect(oauth2.getServiceOAuth2CodeRedirectAndSaveStateToUser).toHaveBeenCalledWith(
                 'testUserID',
                 SERVICE_NAME,
-                'https://app.com/callback'
+                'https://app.com/callback',
+                true,
+                'maximum'
             );
             expect(result).toEqual({ redirect_uri: 'https://mock-redirect.com' });
         });
@@ -137,7 +156,15 @@ describe('COROS Auth Wrapper', () => {
         });
 
         it('should validate state and set tokens', async () => {
-            await requestAndSetCOROSAPIAccessToken(data, context);
+            vi.mocked(oauth2.getAndSetServiceOAuth2AccessTokenForUser).mockResolvedValueOnce({
+                connected: true,
+                outcome: 'connected',
+            });
+
+            await expect(requestAndSetCOROSAPIAccessToken(data, context)).resolves.toEqual({
+                connected: true,
+                outcome: 'connected',
+            });
 
             expect(serviceOAuthAccess.hasServiceOAuthConnectAccess).toHaveBeenCalledWith('testUserID', SERVICE_NAME);
             expect(oauth2.validateOAuth2State).toHaveBeenCalledWith('testUserID', SERVICE_NAME, 'validState');

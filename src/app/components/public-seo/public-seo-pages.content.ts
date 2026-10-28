@@ -5,6 +5,9 @@ import {
 } from './public-seo-pages.paths';
 import type { PublicSeoPageKey } from './public-seo-pages.paths';
 import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
+import { HEALTH_FEATURE_CONTENT } from './health-feature.content';
+import { TRAINING_PLANS_PAGE_SECTIONS, TRAINING_PLANS_SEO_CONTENT } from './training-plans-page.content';
+import { COROS_SETUP_QUERY_PARAMS, WAHOO_SETUP_QUERY_PARAMS } from '../../helpers/service-setup-redirect.helper';
 
 export {
   PUBLIC_FEATURE_PATHS,
@@ -17,6 +20,7 @@ export interface PublicSeoAction {
   routerLink: string;
   icon?: string;
   fragment?: string;
+  queryParams?: Readonly<Record<string, string>>;
   variant: 'flat' | 'stroked';
 }
 
@@ -47,6 +51,7 @@ export interface PublicSeoPage {
   description: string;
   h1: string;
   intro: string;
+  accessNote?: string;
   chips: readonly string[];
   actions: readonly PublicSeoAction[];
   sections: readonly PublicSeoSection[];
@@ -55,6 +60,10 @@ export interface PublicSeoPage {
   closingCopy: string;
   closingActions: readonly PublicSeoAction[];
   howToSteps?: readonly string[];
+  featureList?: readonly string[];
+  socialImage?: string;
+  socialImageAlt?: string;
+  freeOfferDescription?: string;
 }
 
 export interface PublicSeoRouteData {
@@ -64,9 +73,13 @@ export interface PublicSeoRouteData {
   description: string;
   publicSeoPage: PublicSeoPage;
   jsonLd: Record<string, unknown>;
+  socialImage: string;
+  socialImageAlt: string;
 }
 
 const SITE_ORIGIN = 'https://quantified-self.io';
+const DEFAULT_SOCIAL_IMAGE = `${SITE_ORIGIN}/assets/images/og-image-v4.jpg`;
+const DEFAULT_SOCIAL_IMAGE_ALT = 'Quantified Self training charts and activity analysis';
 const STARTER_ACTIVITY_LIMIT = USAGE_LIMITS.free;
 const STARTER_ROUTE_LIMIT = ROUTE_USAGE_LIMITS.free;
 const FREE_ASSISTANT_REQUEST_LIMIT = ASSISTANT_REQUEST_LIMITS.free;
@@ -86,18 +99,56 @@ function routeAction(
 }
 
 export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
+  health: {
+    key: 'health', path: PUBLIC_FEATURE_PATHS.health, eyebrow: 'Health · Beta',
+    title: 'Sleep, HRV and Health Trends Across Your Devices',
+    description: HEALTH_FEATURE_CONTENT.seo.description,
+    featureList: HEALTH_FEATURE_CONTENT.seo.featureList,
+    h1: HEALTH_FEATURE_CONTENT.title,
+    intro: HEALTH_FEATURE_CONTENT.intro,
+    chips: ['Category overview', 'Sleep stages', 'Resting heart rate', 'HRV personal range', 'Body measurements', 'Manual readings'],
+    actions: [
+      routeAction('Health Guide', '/help', 'flat', 'arrow_forward', 'health'),
+      routeAction('Explore Integrations', '/integrations'),
+    ],
+    sections: [
+      ...HEALTH_FEATURE_CONTENT.rows.map(row => ({
+        eyebrow: 'Health history', title: row.title, copy: row.copy, preview: row.preview, items: [],
+      })),
+      {
+        eyebrow: 'Your sources', title: 'Keep the source behind every reading',
+        copy: 'Browse your history by metric and date, and choose which sources to display. Availability depends on the connected provider, device, and permissions.',
+        items: [
+          { icon: 'hub', title: 'Supported health connections', copy: 'Import supported Health data from Garmin, Suunto, and COROS. Each source keeps its own readings and context.' },
+          { icon: 'edit_note', title: 'Your own measurements', copy: 'Add weight, body composition, blood pressure, blood oxygen, and VO₂ max readings. Manual measurements stay clearly labelled.' },
+          { icon: 'calendar_month', title: 'Daily detail and longer trends', copy: 'Explore Today, 14-day, 30-day, 90-day, and yearly windows, with detailed samples where available.' },
+        ],
+      },
+    ],
+    faqItems: [
+      { question: 'Is Health available to everyone?', answer: 'Health (Beta) is available to all signed-in users from the main navigation. Provider connection and history-import plan requirements still apply. The previews on this page use sample data.' },
+      { question: 'Do all four workout providers supply Health data?', answer: 'Garmin, Suunto, and COROS have supported Health imports. Wahoo is supported for activities, but not currently for Health imports. Metrics vary by provider, device, and permissions.' },
+      { question: 'Are readings from different providers averaged together?', answer: 'No. Each source stays separately labelled. Personal HRV ranges use the history for that source, and missing readings stay missing.' },
+      { question: 'What does the personal HRV range mean?', answer: 'It compares your recent overnight HRV with your own recorded history from the same source. A range appears only after enough nights are available. It provides personal trend context, not a diagnosis or a prescribed workout.' },
+    ],
+    closingTitle: 'Explore the Health beta',
+    closingCopy: 'Learn how the workspace handles sleep, personal ranges, source history, and manual measurements.',
+    closingActions: [routeAction('Read the Health Guide', '/help', 'flat', 'arrow_forward', 'health')],
+  },
   featuresHub: {
     key: 'featuresHub',
     path: PUBLIC_FEATURE_PATHS.hub,
     eyebrow: 'Features',
-    title: 'Features for Endurance Training Data',
-    description: 'Bring Garmin, Suunto, COROS, Wahoo, and workout files together for training analysis, maps, dashboards, comparisons, and AI answers.',
-    h1: 'Features for endurance training data',
+    title: 'Activity, Training & Health Features',
+    description: 'Bring Garmin, Suunto, COROS, Wahoo, and files together for activity analysis, workout planning, health tracking, maps, comparisons, and AI answers.',
+    h1: 'Features for your activities, training, and health',
     intro: 'Use Quantified Self to centralize provider activities, uploaded files, and saved routes, review workout history in an activity calendar, analyze training context, compare recordings, benchmark devices, and ask questions through the built-in Assistant or an MCP client you explicitly authorize.',
-    chips: ['Activity calendar', 'Training analysis', 'Supported activity types', 'Assistant', 'MCP server', 'Workout comparison', 'Route files', 'Benchmarks'],
+    chips: ['Activity calendar', 'Training analysis', 'Training plans', 'Supported activity types', 'Assistant', 'MCP server', 'Workout comparison', 'Route files', 'Benchmarks'],
     actions: [
       routeAction('Training Analysis', '/features/training-analysis', 'flat', 'arrow_forward'),
+      routeAction('Training Plans', '/features/training-plans'),
       routeAction('Training Dashboard', '/features/training-dashboard'),
+      routeAction('Health', '/features/health'),
       routeAction('Activity Map', '/features/activity-map'),
       routeAction('Activity Calendar', '/features/activity-calendar'),
       routeAction('Supported activity types', '/features/supported-activities'),
@@ -124,13 +175,18 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             copy: 'Compare current training with your usual workload, then inspect readiness, load, intensity, durability, sleep context, and selected historical builds.',
           },
           {
+            icon: 'edit_calendar',
+            title: 'Training plans',
+            copy: 'Create plans with named date phases or standalone structured workouts for running, cycling, swimming, and more. See planned work alongside completed activity history.',
+          },
+          {
             icon: 'auto_awesome',
             title: 'Grounded Assistant',
             copy: `Ask follow-up questions about sleep, readiness, Training, measurements, activities, and routes, with the supporting data shown alongside each answer. Free accounts include ${FREE_ASSISTANT_REQUEST_LIMIT} requests per calendar month.`,
           },
           {
             icon: 'devices',
-            title: 'Read-only MCP access',
+            title: 'Permission-scoped MCP access',
             copy: 'Connect ChatGPT, Claude, or another compatible MCP client to analyze your training using only the data categories you approve.',
           },
           {
@@ -185,7 +241,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'What Quantified Self features should I start with?',
-        answer: 'Start with the activity calendar for a visual workout history, integrations for provider sync, workout file comparison for exported files, sports watch benchmarks for device evidence, the Assistant for built-in grounded answers, or the MCP server when you want to use a compatible external client with explicitly approved read-only data.',
+        answer: 'Start with the activity calendar for a visual workout history, integrations for provider sync, workout file comparison for exported files, sports watch benchmarks for device evidence, the Assistant for built-in grounded answers, or the MCP server when you want to use a compatible external client with explicitly approved data and focused changes.',
       },
       {
         question: 'Can I compare custom files and provider data?',
@@ -193,7 +249,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Which features are available on the free plan?',
-        answer: `Manual uploads, core analysis, benchmark comparisons, and ${FREE_ASSISTANT_REQUEST_LIMIT} Assistant requests per calendar month are available on the free plan. Automatic provider sync and higher limits require a paid plan.`,
+        answer: `File uploads, training plans and standalone workouts, core analysis, benchmark comparisons, and ${FREE_ASSISTANT_REQUEST_LIMIT} Assistant requests per calendar month are available on the free plan. Automatic provider sync and higher limits require a paid plan.`,
       },
     ],
     closingTitle: 'Choose what you want to understand next',
@@ -207,14 +263,15 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     key: 'activityCalendar',
     path: PUBLIC_FEATURE_PATHS.activityCalendar,
     eyebrow: 'Activity Calendar',
-    title: 'Activity Calendar for Endurance Training',
-    description: 'Review running, cycling, swimming, skiing, and other workouts in Week, Month, and Year calendar views with duration-scaled circles and period totals.',
-    h1: 'Activity calendar for endurance training',
-    intro: 'Turn Garmin, Suunto, COROS, Wahoo, and uploaded workout history into a visual calendar. Move between Week, Month, and Year views, scan duration-scaled activity groups, and open any active day for its recorded workouts.',
-    chips: ['Week view', 'Month view', 'Year view', 'Duration circles', 'Distance and ascent', 'Account activity data'],
+    title: 'Activity Calendar for Workouts and Plans',
+    description: 'Review completed activities and workouts with separate planned overlays in selectable Week, Month, and Year calendar views.',
+    h1: 'Activity calendar for workouts and plans',
+    intro: 'Turn Garmin, Suunto, COROS, Wahoo, and uploaded workout history into a visual calendar. Move between Week, Month, and Year views, select every day, and keep planned workouts visually separate from recorded activities and completed totals.',
+    chips: ['Week view', 'Month view', 'Year view', 'Every day selectable', 'Planned overlays', 'Completed totals stay separate'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Calendar Help', '/help', 'stroked', undefined, 'activity-calendar'),
+      routeAction('Training Plans', '/features/training-plans'),
     ],
     sections: [
       {
@@ -234,8 +291,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           },
           {
             icon: 'event_note',
-            title: 'Day activity details',
-            copy: 'Select an active day to review its total duration, activity-group totals, and individual workouts without leaving calendar context.',
+            title: 'Every date stays selectable',
+            copy: 'Select an empty, planned, or completed day without leaving calendar context. Recorded activities and planned workouts keep separate rows and actions.',
           },
         ],
       },
@@ -259,13 +316,23 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             title: 'Your week and summary settings',
             copy: 'Weekday order follows the configured start of week, units follow account preferences, and ascent or descent exclusions also apply to calendar summaries.',
           },
+          {
+            icon: 'edit_calendar',
+            title: 'Planned workouts remain an overlay',
+            copy: 'Standalone and active-plan workouts can appear on the calendar, including skipped workouts, but never increase completed distance, duration, ascent, load, or workout totals.',
+          },
+          {
+            icon: 'view_timeline',
+            title: 'See the active plan’s phases',
+            copy: 'Named phase ranges, colors, and boundary labels appear on the active plan’s Calendar days, including dates without workouts. Open a day to see its phase context. Phases are authored planning labels and do not change recorded totals or readiness.',
+          },
         ],
       },
     ],
     faqItems: [
       {
         question: 'Which activities appear in the calendar?',
-        answer: 'The calendar uses normal activity events already imported or uploaded to your Quantified Self account. Merge and benchmark records are excluded so comparison artifacts do not inflate training days or totals.',
+        answer: 'Completed entries come from normal activities already imported or uploaded to your Quantified Self account. Standalone and active-plan workouts can appear as a separate planned overlay. Merge and benchmark records remain excluded from completed totals.',
       },
       {
         question: 'What do the calendar circle colors and sizes mean?',
@@ -285,15 +352,16 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     closingActions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Training Analysis', '/features/training-analysis'),
+      routeAction('Training Plans', '/features/training-plans'),
     ],
   },
   trainingAnalysis: {
     key: 'trainingAnalysis',
     path: PUBLIC_FEATURE_PATHS.trainingAnalysis,
     eyebrow: 'Training Analysis',
-    title: 'Training Analysis for Endurance Athletes',
+    title: 'Training Analysis, Readiness & Recovery',
     description: 'Understand training load, readiness, intensity, durability, sleep, power, and sport-specific trends from your recorded activities.',
-    h1: 'Training analysis for endurance athletes',
+    h1: 'Training analysis, readiness, and recovery',
     intro: 'See how your recent training compares with your usual workload, then explore readiness, load, intensity, durability, sleep, power, and sport-specific trends in one curated workspace.',
     chips: ['Training readiness', 'Sport-aware training mix', 'Gravity MTB', 'Context summaries', 'Durability', 'Best build'],
     actions: [
@@ -325,8 +393,16 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         preview: 'training-snapshot',
       },
       {
+        eyebrow: 'Readiness History',
+        title: 'Follow readiness beyond a single day',
+        copy: 'Explore fourteen days of readiness alongside recorded load and recovery evidence. Each point keeps its score, signal coverage, and confidence; this is context, not a workout prescription.',
+        items: [],
+        preview: 'training-readiness',
+      },
+      {
         eyebrow: 'Discipline Evidence',
         title: 'Keep sport-specific evidence in the right context',
+        preview: 'training-explorer',
         copy: 'Open a focused view for running, cycling, swimming, rowing, walking and hiking, Nordic skiing, strength, paddling, or recorded fitness and other training. Multisport legs stay attributed to their recorded disciplines.',
         items: [
           {
@@ -393,14 +469,97 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     closingActions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Explore Integrations', '/integrations'),
+      routeAction('Plan Future Workouts', '/features/training-plans'),
       routeAction('Training Help', '/help', 'stroked', undefined, 'getting-started'),
+    ],
+  },
+  trainingPlans: {
+    key: 'trainingPlans',
+    path: PUBLIC_FEATURE_PATHS.trainingPlans,
+    eyebrow: 'Training Plans',
+    title: TRAINING_PLANS_SEO_CONTENT.title,
+    description: TRAINING_PLANS_SEO_CONTENT.description,
+    h1: TRAINING_PLANS_SEO_CONTENT.h1,
+    intro: TRAINING_PLANS_SEO_CONTENT.intro,
+    accessNote: TRAINING_PLANS_SEO_CONTENT.accessNote,
+    chips: ['Plans included', 'Standalone workouts', 'Named phases', 'MCP planning', 'Provider delivery for Pro', 'Plan calendar', 'Completed totals stay separate'],
+    actions: [
+      routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
+      routeAction('Training Plans Help', '/help', 'stroked', undefined, 'training-plans'),
+      routeAction('Activity Calendar', '/features/activity-calendar'),
+    ],
+    featureList: TRAINING_PLANS_SEO_CONTENT.featureList,
+    socialImage: `${SITE_ORIGIN}/assets/images/training-plans-social.png`,
+    socialImageAlt: TRAINING_PLANS_SEO_CONTENT.socialImageAlt,
+    freeOfferDescription: TRAINING_PLANS_SEO_CONTENT.freeOfferDescription,
+    sections: [
+      ...TRAINING_PLANS_PAGE_SECTIONS,
+      {
+        eyebrow: 'Connected on Your Terms',
+        title: 'Plan directly, through MCP, or with provider delivery',
+        copy: 'Training Plans works on its own. MCP planning and provider workout delivery are separately permissioned extensions, so you decide when another client or connected service participates.',
+        items: [
+          {
+            icon: 'edit_calendar',
+            title: 'Plan directly in Quantified Self',
+            copy: 'Create, schedule, edit, copy, move, skip, and restore workouts without connecting Garmin, COROS, Wahoo, Suunto, or any other service.',
+          },
+          {
+            icon: 'devices',
+            title: 'Bring an approved MCP client',
+            copy: 'With separate Training permissions, a compatible MCP client can read your schedule and prepare bounded plan, workout, or delivery changes for your approval. Client availability follows the separate MCP release and authorization flow.',
+          },
+          {
+            icon: 'send',
+            title: 'Opt in to provider delivery',
+            copy: 'Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members through explicit Send and plan opt-in actions, compatibility checks, and provider-specific scheduling windows. Pool and open-water swimming map to distinct Suunto Guide activities; Garmin supports compatible target-free pool swims, while Garmin open-water and Wahoo swim delivery are unavailable. New COROS plan sync and standalone Send actions are coming soon in the app. Connecting a provider never sends a workout by itself.',
+          },
+        ],
+      },
+    ],
+    faqItems: [
+      {
+        question: 'Can I add a workout without creating a plan?',
+        answer: 'Yes. Standalone workouts are first-class and free. Give the workout a date and structure now, then keep it standalone or attach it to a plan later.',
+      },
+      {
+        question: 'Which sports and workout steps can I create?',
+        answer: 'The interval editor supports Running, Trail Running, Treadmill, Cycling, Mountain Biking, Indoor Cycling, E-Biking, Hand Cycle, Pool Swimming, Open Water Swimming, Walking, Hiking, Rowing, and Indoor Rowing. It supports time, distance, or lap-button-ended steps, fixed repeats, and one absolute heart-rate, power, or pace target per step. Lap-ended steps wait for a button press with no time or distance limit. Garmin and Suunto support this ending; Wahoo delivery is unsupported and COROS delivery remains Coming soon. Swim and rowing distances use metres; rowing pace is a 500 m split. Pool workouts can save an optional pool length; compatible Garmin lap-swim delivery includes it, while Suunto Guides do not. Set the pool length on the device where needed. Open-water workouts have no pool length. The separate Strength Training editor supports named exercises, rep or timed sets, optional kg/lb external load, and rest.',
+      },
+      {
+        question: 'Do planned workouts change completed activity totals or Training analysis?',
+        answer: 'No. Planned workouts remain separate from completed activities and never increase completed totals. Training analysis continues to use recorded activity evidence.',
+      },
+      {
+        question: 'Does connecting Garmin, COROS, Wahoo, or Suunto send my planned workouts?',
+        answer: 'No. Provider workout delivery is a separate Pro feature with explicit Send or plan opt-in actions. New COROS plan sync and standalone Send actions are coming soon in the app. Connecting a provider never sends a planned workout by itself.',
+      },
+      {
+        question: 'Can I divide a training plan into phases?',
+        answer: 'Yes. Choose Plan actions → Phases to add up to 32 custom names with inclusive date ranges, optional descriptions, and colors. Base, Build, Recovery, and Taper are suggestions. Gaps and single-day phases are allowed; overlaps are not. Confirm any extension of the plan dates and keep current workouts inside the range. Phases move with Shift dates and can be restored through history. They provide context without creating workouts, changing readiness or targets, or sending phase metadata to providers.',
+      },
+      {
+        question: 'Can I use an MCP client with Training Plans?',
+        answer: 'The Training Plans MCP surface rolls out separately. When it is available in your client and you approve the independent Training permissions, the client can read your schedule and prepare bounded changes for a separate approval-gated apply step.',
+      },
+      {
+        question: 'Are Training Plans included on the free tier?',
+        answer: 'Yes. Plans and standalone structured workouts created in Quantified Self are available on the free tier and do not require a provider connection. Provider workout delivery remains a separate Pro capability.',
+      },
+    ],
+    closingTitle: 'Plan the next workout before it becomes history',
+    closingCopy: 'Start with one standalone workout or map out a dated running, cycling, swimming, walking, hiking, or rowing plan. Your completed activity history stays exactly where it belongs.',
+    closingActions: [
+      routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
+      routeAction('Training Plans Help', '/help', 'stroked', undefined, 'training-plans'),
+      routeAction('Training Analysis', '/features/training-analysis'),
     ],
   },
   trainingDashboard: {
     key: 'trainingDashboard',
     path: PUBLIC_FEATURE_PATHS.trainingDashboard,
     eyebrow: 'Training Dashboard',
-    title: 'Custom Training Dashboard for Endurance Athletes',
+    title: 'Custom Activity and Training Dashboard',
     description: 'Build a custom training dashboard with KPI, chart, and map tiles, independent filters, training trends, and flexible layouts.',
     h1: 'Build the training dashboard you need',
     intro: 'Start from a dashboard preset or arrange Curated, KPI, Custom, and Map tiles around the questions you track. Each tile keeps its own filters, while shared chart and map components keep the same interaction and styling used throughout Quantified Self.',
@@ -511,11 +670,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     key: 'mcpServer',
     path: PUBLIC_FEATURE_PATHS.mcpServer,
     eyebrow: 'MCP Server',
-    title: 'Read-only MCP Server for Training Data',
-    description: 'Connect ChatGPT, Claude, or another MCP client to the training, activity, sleep, measurement, and route data you approve.',
+    title: 'MCP Server for Training Data',
+    description: 'Connect ChatGPT, Claude, or another MCP client to approved training, Health, sleep, measurements, routes, Timeline notes, activity tags and descriptions.',
     h1: 'Connect ChatGPT or Claude to your training data',
-    intro: 'Use the read-only Quantified Self MCP server to let ChatGPT, Claude, or another compatible client analyze your training, review your season, or plan your next workout using only the data categories you approve.',
-    chips: ['MCP server', 'ChatGPT', 'Claude', 'Read-only', 'Training', 'Sleep', 'Activities', 'Routes'],
+    intro: 'Use the Quantified Self MCP server to let ChatGPT, Claude, or another compatible client analyze approved data and help plan your next workout. You may separately grant post-workout reflection, manual Health measurement, Timeline note, activity-tag, and bounded Training changes; every write uses the client’s approval controls.',
+    chips: ['MCP server', 'ChatGPT', 'Claude', 'Explicit consent', 'Training', 'Sleep', 'Activities', 'Routes'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Set Up MCP', '/help', 'stroked', undefined, 'data-and-privacy'),
@@ -530,12 +689,17 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'monitoring',
             title: 'Training and measurement trends',
-            copy: 'Review load, readiness, intensity, durability, sport-specific evidence, and body-weight history across the period you ask about.',
+            copy: 'Review load, readiness, intensity, durability, body-weight history and identity-safe TSS-based Training impact. Separately authorize manual Health entry lookup, logging, correction and permanent deletion; imported readings cannot be changed.',
+          },
+          {
+            icon: 'monitor_heart',
+            title: 'Recorded Health metrics',
+            copy: 'Explore all-day heart rate, HRV, stress, Body Battery or resources, movement, energy and blood pressure with separate Health permission. Sources stay separate; Body Battery keeps its Garmin points scale. With Health and Sleep access, compare nightly HRV with the Health chart’s shared personal range. Bounded sample trends include UTC times. Body composition also needs Body measurements access. Authorize an existing client again to grant Health access.',
           },
           {
             icon: 'directions_run',
             title: 'Workout details and charts',
-            copy: 'Find recent activities, compare recorded metrics, and inspect workout summaries, laps, swim lengths, MTB jumps, and chart-ready data.',
+            copy: 'Find recent activities by sport or exact event tag, read their tags, compare recorded metrics, and inspect workout summaries, laps, swim lengths, MTB jumps, chart-ready data, and paginated detailed activity samples.',
           },
           {
             icon: 'bedtime',
@@ -552,23 +716,23 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         eyebrow: 'Access Boundaries',
-        title: 'Read-only by design, with separate permissions',
-        copy: 'Choose which data categories an external client can read, then review or disconnect it from Connections at any time.',
+        title: 'Separate permissions and approval-gated changes',
+        copy: 'Choose which data categories an external client can read and which manual measurement, note, tag, or Training changes it may make, then review or disconnect it from Connections at any time.',
         items: [
           {
             icon: 'fact_check',
             title: 'Separate optional scopes',
-            copy: 'Approve training metrics, measurements, workout details, sleep, routes, or locations separately. Activity locations and saved-route locations remain independent permissions.',
+            copy: 'Approve training metrics, Health metrics, measurements, workout details, activity descriptions, sleep, routes, Timeline notes, locations, or change permissions separately. Every requested permission starts selected, and dependent writes require their matching read access.',
           },
           {
             icon: 'lock',
-            title: 'No settings or data writes',
-            copy: 'MCP clients cannot create, edit, or delete activities, routes, sleep records, dashboard settings, or Training state. Revocation blocks future access.',
+            title: 'Focused, approval-gated writes',
+            copy: 'Separate permissions can replace shared event tags or titles, edit descriptions with an additional description grant, or create, edit, and permanently delete Timeline notes. They cannot change recorded activity data, Health, routes, sleep, measurements, or dashboard settings. Training changes additionally use a bounded preview before a distinct apply call.',
           },
           {
             icon: 'shield',
             title: 'Only the requested data is returned',
-            copy: 'Original files, full-resolution recordings, provider credentials, source keys, and unrequested streams are excluded. Exact coordinates require the matching location permission.',
+            copy: 'Original files, provider credentials, source keys, and unrequested streams are excluded. Selected detailed activity samples are available with Activity details access. Exact coordinates require the matching location permission.',
           },
           {
             icon: 'location_searching',
@@ -581,19 +745,55 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'What does the Quantified Self MCP server do?',
-        answer: 'It lets a compatible external AI client answer questions using the Quantified Self training metrics, body-weight history, workout details, sleep summaries, and saved routes you approve. Access remains read-only.',
+        answer: 'It lets a compatible external AI client answer questions using the Quantified Self data you approve. You can separately allow bounded plan, workout, and provider-delivery proposals; application uses a distinct write tool governed by the client\'s native approval controls.',
       },
       {
         question: 'Can I use the MCP server with ChatGPT or Claude?',
-        answer: 'Yes. Add https://quantified-self.io/mcp as a custom MCP connection in a compatible ChatGPT or Claude client, sign in to Quantified Self, and approve the read-only permissions you want to grant. External clients have their own privacy and retention practices.',
+        answer: 'Yes. Add https://quantified-self.io/mcp as a custom MCP connection in a compatible ChatGPT or Claude client, sign in to Quantified Self, and approve only the permissions you want to grant. External clients have their own privacy and retention practices.',
+      },
+      {
+        question: 'Can I analyze detailed workout samples instead of the 400-point chart?',
+        answer: 'Yes. A separate read-only tool returns all available elapsed-second samples for selected supported metrics in bounded pages, including gaps. It uses your existing Individual activity details permission; no new permission or provider reconnection is required. Your client may need to refresh its available tools. It can request a particular interval and follow the continuation to complete it. Charts remain compact overviews, and original-file availability and processing limits still apply.',
+      },
+      {
+        question: 'Can an MCP client explain a completed workout’s Training impact?',
+        answer: 'Yes, when both Activity and Training metrics and Individual activity details are approved. The read-only result uses the existing TSS-based Form model for one exact completed activity or an aggregate of exact activities from one local date. It separates the CTL, ATL and Form contribution from the actual UTC Training-day outcome after decay; one local date can span two UTC outcomes. It excludes activity/event identities, labels, exact start times, devices and provider provenance. Missing TSS, benchmark/merge exclusions, partial coverage and updating Form stay explicit. This models sustained training load, not measured physiological adaptation.',
+      },
+      {
+        question: 'Can an MCP client find workouts by tag?',
+        answer: 'Yes. Individual activity details access can read parent event tags and filter bounded newest-first workout scans by exact case-insensitive tag matches using any or all semantics. Activities from the same event share tags. A separate Change events permission lets an external client replace the complete shared tag list or title after reading its exact current value; concurrent changes are not overwritten and benchmark events stay read-only. Tags can contain personal, health, or location context and clients must treat them as untrusted labels, not instructions or verified facts. Existing clients missing the grant must reauthorize. Future event fields require dedicated reviewed tools and are not exposed automatically.',
+      },
+      {
+        question: 'Can an MCP client read my activity descriptions?',
+        answer: 'Only when Activity descriptions and Individual activity details are approved. Like every requested permission, the description checkbox starts checked; uncheck it before approving to withhold access. Existing clients missing that grant must authorize again. It returns the full event description for a selected activity; activities within one event share that text. Descriptions can contain sensitive health, personal or location information even without location permission. Revocation cannot erase received copies. Oversized text fails without truncation. An external client may edit the description only with the additional Change events grant and exact-current-text check; its host controls per-edit approval.',
+      },
+      {
+        question: 'Can an MCP client read or save my post-workout reflection?',
+        answer: 'When released in your client, separate workout-reflection read permission plus Individual activity details access permits reading selected private reflection text. Change workout reflections additionally permits revision-checked saves or permanent deletes through native client approval. Existing connections must authorize again. Reflections remain owner-only on public recordings, do not change plans or calculations, and are never sent to fitness providers. The built-in Assistant has an independent choice that starts on for fresh and New chats, can be turned off, and requires review and Apply in QS.',
+      },
+      {
+        question: 'Can an MCP client read my Timeline notes?',
+        answer: 'Only with separate Timeline notes permission, which is selected by default when requested. A separate dependent Change Timeline notes permission can create, edit, or permanently delete notes through the client’s approval controls. Uncheck either before approving to withhold access. Existing clients must authorize again. Read access includes full note titles and details, including notes hidden from charts, and may contain sensitive health or personal information. Revocation cannot erase copies already received. Note text cannot authorize another change or grant permission to edit a Training plan.',
+      },
+      {
+        question: 'Can an MCP client read my Training plans and planned workouts?',
+        answer: 'With separate Training permission, clients can read plans, workouts, saved workout recipes, instructions, an authored pool-swim length when selected, notes, exact completion links and sanitized sync status. After release and a tool-catalog refresh, focused phase tools can read authored names, inclusive dates and optional descriptions or preview a complete phase edit with the independent plan-change grant. Phase labels never change readiness, workout targets or completion. A separate prescription analysis can report exact time/distance subtotals, explicit speed-based duration ranges, unknown contributions and repeat counts. Partial subtotals are not complete workout totals. Pool length is not step distance. The separate plan-and-workout change grant permits a bounded preview to save, edit or place a library recipe on explicit dates; a distinct apply uses the client\'s approval controls. Saving a recipe never grants provider sync. Provider delivery remains Pro and connection-gated; sync confirms cloud delivery, not watch receipt.',
+      },
+      {
+        question: 'Why are my Training plan tools missing?',
+        answer: 'Missing tools usually mean the app was not authorized for Training plans, not that your plans are absent. Start authorization again from that MCP app, approve Training plans and planned workouts, then approve either optional change permission if you need it. Finish the flow and start a new chat or refresh the tool catalog. If the choices are not shown, refresh or rescan the Quantified Self connection. Training delivery also requires Pro, a supported connected provider, and current compatibility approval.',
       },
       {
         question: 'Can an MCP client rearrange my dashboard or change my data?',
-        answer: 'No. The MCP server is read-only. It cannot write dashboard settings, activities, routes, Training state, or sleep records.',
+        answer: 'It cannot change dashboard settings, recorded activity data, routes, Health, measurements, or sleep records. Separate permissions can replace shared event tags or titles, edit descriptions with additional description access, or create, edit, and permanently delete Timeline notes through the client’s approval controls. It can change Training plans, planned workouts, or their delivery only when you grant the matching child permission and the client permits the separate apply call for a bounded proposal. Plan deletion must be reviewed alone, requires your explicit choice for its workouts, and permanently removes the plan and its revision history.',
+      },
+      {
+        question: 'Does deleting a Training workout also remove service copies?',
+        answer: 'Eligible upcoming copies are automatically queued for withdrawal. Once the focused deletion tool is released and available in your client, it can ask whether to also remove older, uncompleted copies from connected services. Both Training change permissions are required, and the choice appears in the preview before approval. Cleanup needs valid service access and provider support; it never deletes recorded activities or guarantees removal from a provider app or watch. Without the optional cleanup, older copies stay.',
       },
       {
         question: 'Does MCP access expose my original activity or route files?',
-        answer: 'No. An activity chart may selectively parse an existing original file in memory, but the file itself, full-resolution recording, absolute sample timestamps, unrequested streams, provider payloads, credentials, and storage paths are not returned or copied into another activity store.',
+        answer: 'No. Activity charts and detailed sample requests selectively parse existing originals in memory. Only requested numeric data are returned: compact chart points or paginated elapsed-second samples. Original files, absolute sample timestamps, unrequested streams, provider payloads, credentials, and storage paths are excluded. Selected detailed samples may be reused in bounded server memory for up to two minutes; no persistent sample store is created.',
       },
       {
         question: 'Can an MCP client see exact locations?',
@@ -636,7 +836,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'monitoring',
             title: 'Training and activity context',
-            copy: 'Compare current load, Form, ramp, volume, intensity, and recent workouts. You can also ask about recorded details such as laps, swim lengths, and MTB jump records.',
+            copy: 'Compare current load, Form, ramp, volume, intensity, and recent workouts. Ask how one completed session or local day contributed to modeled CTL, ATL, and Form, separately from the actual UTC Training-day outcome after decay. You can also ask about recorded details such as laps, swim lengths, and MTB jump records.',
           },
           {
             icon: 'scale',
@@ -682,7 +882,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'What can the Quantified Self Assistant answer?',
-        answer: 'It can answer questions about daily readiness, sleep and recorded vitals, Training metrics, body measurements, recent activities, laps, jumps, swim lengths, workout charts, and saved routes. Exact activity locations, nearby activity search, and activity maps are available only after you enable precise activity locations for a new chat.',
+        answer: 'It can answer questions about daily readiness, sleep and recorded vitals, Training metrics, identity-safe TSS-based Training impact for a completed session or local day, body measurements, recent activities, laps, jumps, swim lengths, workout charts, and saved routes. Training impact is modeled load, not measured physiological adaptation. Exact activity locations, nearby activity search, and activity maps are available only after you enable precise activity locations for a new chat.',
       },
       {
         question: 'Does the Assistant send raw files or route locations to Gemini?',
@@ -930,14 +1130,15 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_GUIDE_PATHS.hub,
     eyebrow: 'Guides',
     title: 'Training Data Sync Guides',
-    description: 'Step-by-step guides to import activities to Suunto or Wahoo, Garmin to Suunto activity sync, COROS to Suunto activity sync, Wahoo to Suunto activity sync, sending Suunto routes to Garmin, and centralizing workout data in one dashboard.',
+    description: 'Step-by-step guides to import activities to Suunto or Wahoo, Garmin to Suunto activity sync, Garmin to Wahoo activity sync, COROS to Suunto activity sync, Wahoo to Suunto activity sync, sending Suunto routes to Garmin, and centralizing workout data in one dashboard.',
     h1: 'Training data sync guides',
-    intro: 'Choose the guide that matches the workflow you need: import activities to Suunto or Wahoo, sync Garmin, COROS, or Wahoo activities to Suunto, send Suunto routes to Garmin courses, or build a centralized multi-provider workout archive.',
-    chips: ['Import to Suunto', 'Import to Wahoo', 'Garmin to Suunto', 'COROS to Suunto', 'Wahoo to Suunto', 'Past activity sync'],
+    intro: 'Choose the guide that matches the workflow you need: import activities to Suunto or Wahoo, sync Garmin activities to Wahoo, sync Garmin, COROS, or Wahoo activities to Suunto, send Suunto routes to Garmin courses, or build a centralized multi-provider workout archive.',
+    chips: ['Import to Suunto', 'Import to Wahoo', 'Garmin to Wahoo', 'Garmin to Suunto', 'COROS to Suunto', 'Wahoo to Suunto', 'Past activity sync'],
     actions: [
       routeAction('Import to Suunto', '/guides/import-activities-to-suunto', 'flat', 'arrow_forward'),
       routeAction('Import to Wahoo', '/guides/import-activities-to-wahoo'),
       routeAction('Garmin to Suunto', '/guides/sync-garmin-to-suunto'),
+      routeAction('Garmin to Wahoo', '/guides/sync-garmin-to-wahoo'),
       routeAction('COROS to Suunto', '/guides/sync-coros-to-suunto'),
       routeAction('Wahoo to Suunto', '/guides/sync-wahoo-to-suunto'),
       routeAction('Suunto Routes to Garmin', '/guides/sync-suunto-routes-to-garmin-courses'),
@@ -1012,7 +1213,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'Which guide should I use first?',
-        answer: 'Use an import-activities guide to send a selected FIT activity or activities from connected providers to Suunto or Wahoo. Use the Garmin to Suunto, COROS to Suunto, or Wahoo to Suunto guide for a source-specific Suunto sync, the Suunto routes to Garmin guide for sending routes to Garmin Connect, and the centralization guide for one dashboard across providers and uploaded files.',
+        answer: 'Use an import-activities guide to send a selected FIT activity or activities from connected providers to Suunto or Wahoo. Use the Garmin to Wahoo guide for Garmin activity delivery to Wahoo. Use the Garmin to Suunto, COROS to Suunto, or Wahoo to Suunto guide for a source-specific Suunto sync, the Suunto routes to Garmin guide for sending routes to Garmin Connect, and the centralization guide for one dashboard across providers and uploaded files.',
       },
       {
         question: 'Does automatic activity sync include old workouts?',
@@ -1035,57 +1236,58 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_GUIDE_PATHS.syncGarminToSuunto,
     eyebrow: 'Garmin to Suunto Guide',
     title: 'How to Sync Garmin Data to Suunto Automatically',
-    description: 'Learn how to sync Garmin activities to Suunto automatically, connect both accounts, and sync past Garmin activities by date with Quantified Self.',
+    description: 'Sync Garmin activities to Suunto with Quantified Self Pro. Connect both accounts for automatic sync, or preview and send saved FIT workouts by date.',
     h1: 'How to sync Garmin data to Suunto automatically',
-    intro: 'Connect Garmin and Suunto, then choose whether new Garmin activities should be sent to Suunto automatically. You can also sync past activities from a date range whenever you need to.',
+    intro: 'Keep your Garmin workouts in Suunto without uploading each file yourself. Connect both accounts in Quantified Self, enable automatic activity sync for new Garmin imports, or choose saved workouts to send by date.',
+    accessNote: 'Garmin and Suunto connections and cross-service sync require Pro. Review current billing options and any eligible trial before checkout. Manual uploads and analysis are available with Starter.',
     chips: ['Garmin', 'Suunto', 'Automatic activity sync', 'Past activity sync', 'Pro'],
     actions: [
-      routeAction('Start Setup', '/login', 'flat', 'arrow_forward'),
-      routeAction('Garmin Integration', '/integrations/garmin'),
+      routeAction('See Pro Options', '/pricing', 'flat', 'arrow_forward'),
+      routeAction('Start Setup', '/services'),
       routeAction('Sync Help', '/help', 'stroked', undefined, 'service-connections'),
     ],
     sections: [
       {
         eyebrow: 'Setup',
         title: 'Choose how Garmin activities are sent to Suunto',
-        copy: 'You decide whether new Garmin activities are sent automatically and when past activities should be synced.',
+        copy: 'Start with a Pro account, then open Services. Automatic sync and one-time sends are separate choices.',
         items: [
           {
             icon: 'login',
             title: 'Connect Garmin and Suunto',
-            copy: 'Sign in, connect Garmin, connect Suunto, and allow Activity Export when Garmin asks for permissions.',
+            copy: 'In Services, connect Garmin and Suunto. Allow Activity Export when Garmin asks for permissions, and check that both connections are active.',
           },
           {
             icon: 'toggle_on',
             title: 'Turn on automatic activity sync',
-            copy: 'Open Garmin Services and turn on automatic activity sync. New Garmin activities will be sent to Suunto after they reach Quantified Self.',
+            copy: 'In Garmin Services, enable Suunto as an automatic activity destination. Newly imported Garmin FIT activities are then queued for Suunto using their saved original files.',
           },
           {
             icon: 'published_with_changes',
-            title: 'Sync past Garmin activities',
-            copy: 'Choose a date range to send Garmin activities that are already stored in Quantified Self to Suunto.',
+            title: 'Preview and send past activities',
+            copy: 'Under Suunto in Services, open Send past activities. Select Garmin imports, choose dates, and run Preview. Review the ready-to-send and skipped counts, then choose Send. Preview sends nothing.',
           },
         ],
       },
       {
         eyebrow: 'Expectations',
         title: 'Know what sync does and does not do',
-        copy: 'Activity sync uses the original files already saved with your activities and requires both provider connections to be active.',
+        copy: 'Automatic sync requires both connections. Sending a saved import only requires the Suunto destination to remain connected.',
         items: [
           {
-            icon: 'schedule',
-            title: 'New imports only',
-            copy: 'Automatic sync handles newly imported Garmin activities. Use Sync past activities for workouts that are already in Quantified Self.',
+            icon: 'history',
+            title: 'Import older Garmin history first',
+            copy: 'For workouts missing from Quantified Self, request Garmin history before sending them to Suunto. Garmin allows the latest rolling five years, with one history request every 30 days. Imports can arrive over hours or days.',
+          },
+          {
+            icon: 'description',
+            title: 'Retained FIT activities only',
+            copy: 'Past sends skip unsupported or missing original files and activities already sent or queued. GPX routes, TCX files, and merged or derived events are not eligible. A queued send still needs Suunto to accept it.',
           },
           {
             icon: 'vpn_key',
             title: 'Reconnect if permissions change',
             copy: 'If Garmin or Suunto revokes access, reconnect the provider and turn automatic activity sync back on.',
-          },
-          {
-            icon: 'workspace_premium',
-            title: 'Paid-plan automation',
-            copy: 'Automatic service connections and cross-service sync require Pro. Manual uploads remain available on the free plan.',
           },
         ],
       },
@@ -1093,28 +1295,96 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'Can I sync Garmin data to Suunto automatically?',
-        answer: 'Yes. Connect Garmin and Suunto in Quantified Self and turn on automatic activity sync. New Garmin activities can then be sent to Suunto automatically.',
+        answer: 'Yes. With Pro, connect Garmin and Suunto in Quantified Self, allow Garmin Activity Export, and enable Suunto as an automatic destination in Garmin Services. Newly imported Garmin FIT activities can then be sent to Suunto.',
       },
       {
         question: 'Does Garmin to Suunto sync include my old Garmin history?',
-        answer: 'Not automatically. Import your Garmin history first, then use Sync past activities to send activities from a selected date range to Suunto.',
+        answer: 'Enabling automatic sync does not send workouts already saved in Quantified Self. Use Send past activities under Suunto in Services for those workouts. If older workouts are missing, import Garmin history first; the available window is the latest rolling five years and imports can take hours or days.',
       },
       {
         question: 'Can I sync past activities while automatic sync is off?',
-        answer: 'Yes. You can send activities from a selected date range without turning on automatic sync for future activities.',
+        answer: 'Yes. Keep Suunto connected, select Garmin imports and dates in Send past activities, then preview and confirm Send. Garmin does not need to remain connected for imports already saved with an eligible original FIT file. This does not enable automatic sync.',
+      },
+      {
+        question: 'Is Garmin to Suunto sync free?',
+        answer: 'Service connections and cross-service sync require Pro. The pricing page shows current monthly and yearly options and any trial offer; eligibility is confirmed after sign-in. Starter includes manual file uploads and analysis.',
+      },
+      {
+        question: 'What if a workout does not appear in Suunto?',
+        answer: 'Check that Suunto is connected and that the workout has a retained original FIT file. For a past send, review the preview exclusions and the Scheduled and Could not schedule counts in Services. Scheduling complete confirms queueing, not delivery; check Suunto for the delivered workout. If access was revoked or a provider was disconnected, reconnect and enable the automatic destination again.',
       },
     ],
-    closingTitle: 'Connect both services, then keep Garmin and Suunto aligned',
-    closingCopy: 'Use automatic sync for new Garmin activities and Sync past activities for workouts already in your Quantified Self archive.',
+    closingTitle: 'Ready to send Garmin workouts to Suunto?',
+    closingCopy: 'Choose Pro for connected services, then set up automatic Garmin imports or preview a one-time send of saved workouts. Review the current price and trial terms before continuing to checkout.',
     closingActions: [
-      routeAction('Garmin Integration', '/integrations/garmin', 'flat', 'arrow_forward'),
-      routeAction('All Integrations', '/integrations'),
+      routeAction('See Pro Options', '/pricing', 'flat', 'arrow_forward'),
+      routeAction('Garmin Integration', '/integrations/garmin'),
     ],
     howToSteps: [
-      'Connect Garmin to Quantified Self.',
-      'Connect Suunto to Quantified Self.',
-      'Turn on automatic activity sync in Garmin Services.',
-      'Use Sync past activities for existing Garmin activities when needed.',
+      'Choose Pro, then connect Garmin and Suunto in Services with Garmin Activity Export permission.',
+      'Enable Suunto as an automatic activity destination in Garmin Services for new Garmin FIT imports.',
+      'If older workouts are missing, request the available Garmin history and wait for the imports to arrive.',
+      'For saved workouts, open Send past activities under Suunto, select Garmin imports and dates, preview, then confirm Send.',
+    ],
+  },
+  syncGarminToWahoo: {
+    key: 'syncGarminToWahoo',
+    path: PUBLIC_GUIDE_PATHS.syncGarminToWahoo,
+    eyebrow: 'Garmin to Wahoo Guide',
+    title: 'How to Sync Garmin Activities to Wahoo Automatically',
+    description: 'Sync Garmin activities to Wahoo with Quantified Self Pro. Connect both accounts for automatic FIT activity sync, or preview and send older workouts by date.',
+    h1: 'Sync Garmin activities to Wahoo',
+    freeOfferDescription: 'Starter includes manual uploads and analysis in Quantified Self. Garmin-to-Wahoo connections and activity sync require Pro.',
+    intro: 'Send recorded Garmin FIT workouts to your Wahoo account. Choose automatic sync for new imports or a one-time transfer of saved activities.',
+    accessNote: 'Garmin and Wahoo connections and activity sync require Pro. Review current prices and any eligible trial before checkout.',
+    chips: ['Garmin', 'Wahoo', 'FIT activities', 'Pro'],
+    actions: [
+      routeAction('See Pro Options', '/pricing', 'flat', 'arrow_forward'),
+      routeAction('Start Setup', '/services'),
+      routeAction('Sync Help', '/help', 'stroked', undefined, 'service-connections'),
+    ],
+    sections: [
+      {
+        eyebrow: 'Choose your workflow',
+        title: 'Automatic sync or a one-time history transfer',
+        copy: 'Connect Garmin and Wahoo in Connections with Pro access. Allow Activity Export for Garmin and workout access for Wahoo. Connecting an account does not turn on automatic sync.',
+        items: [
+          { icon: 'sync_alt', title: 'Send new Garmin activities automatically', copy: 'Under Garmin in Connections, enable Wahoo as an automatic activity destination. Eligible new Garmin imports are queued using their saved original FIT files.' },
+          { icon: 'history', title: 'Preview older Garmin workouts', copy: 'Import missing Garmin history first and wait for the activities to arrive. Under Wahoo in Connections, open Send past activities. Select Garmin imports and your dates, then run Preview. Preview sends nothing.' },
+          { icon: 'published_with_changes', title: 'Review before sending', copy: 'Review the ready-to-send and skipped counts, then choose Send. Scheduling complete confirms queueing, not delivery. Check Wahoo for the delivered workout after processing.' },
+        ],
+      },
+      {
+        eyebrow: 'Transfer limits',
+        title: 'Know what moves to Wahoo',
+        copy: 'This workflow sends recorded FIT activities to your Wahoo account. It keeps activity transfers separate from routes, planned workouts, Sleep, and Health.',
+        items: [
+          { icon: 'description', title: 'Keep the original FIT available', copy: 'Missing or unsupported original files, merged or derived activities, and activities already sent or queued are skipped. A Garmin device name on a manually uploaded file does not make it a Garmin import.' },
+          { icon: 'hourglass_top', title: 'Allow Wahoo to process the activity', copy: 'Wahoo processes FIT uploads asynchronously. Queueing an activity is not a delivery confirmation, and this workflow does not promise a download to an ELEMNT device.' },
+          { icon: 'vpn_key', title: 'Check connection permissions', copy: 'If a connection shows Reconnect required, reconnect before sending. After Garmin or Wahoo access is revoked, reconnect the provider and explicitly turn automatic activity sync back on when needed.' },
+        ],
+      },
+    ],
+    faqItems: [
+      { question: 'Can Garmin activities sync to Wahoo automatically?', answer: 'Yes. With Pro, connect Garmin and Wahoo and explicitly enable Wahoo as a Garmin activity destination. Eligible new Garmin FIT imports can then be sent to your Wahoo account automatically.' },
+      { question: 'Can I send older Garmin workouts to Wahoo?', answer: 'Yes. First import any missing Garmin history into Quantified Self. Under Wahoo in Connections, use Send past activities, choose Garmin imports and a date range, then Preview and review before Send. This one-time send does not enable future automatic sync.' },
+      { question: 'Does Garmin need to stay connected for a saved activity transfer?', answer: 'A saved Garmin import can be sent after Garmin is disconnected if its original FIT remains available. Wahoo must still be connected and you need Pro access. Automatic sync of new Garmin activities requires both connections.' },
+      { question: 'Will these uploads come back as Wahoo-recorded workouts?', answer: 'Wahoo does not expose completed workouts that it identifies as coming from third-party applications through its API. Those uploads are not re-imported as Wahoo-recorded activities.' },
+      { question: 'Does this move Garmin routes, training plans, Sleep, or Health?', answer: 'No. This guide covers recorded FIT activities. GPX and FIT routes, planned workouts, Sleep, and Health use separate workflows and permissions. Sending an activity to your Wahoo account is not a planned-workout or route download to an ELEMNT device.' },
+      { question: 'Can I use Starter for Garmin-to-Wahoo sync?', answer: 'Provider connections and cross-service activity sync require Pro. Starter includes manual uploads and analysis inside Quantified Self. Review current Pro prices and any trial eligibility before checkout.' },
+    ],
+    closingTitle: 'Keep your Garmin workouts in your Wahoo account',
+    closingCopy: 'Review Pro options, then connect the accounts and choose automatic delivery or a one-time history send.',
+    closingActions: [
+      routeAction('See Pro Options', '/pricing', 'flat', 'arrow_forward'),
+      routeAction('Garmin Integration', '/integrations/garmin'),
+      routeAction('Wahoo Integration', '/integrations/wahoo'),
+    ],
+    howToSteps: [
+      'Review Pro options, then connect Garmin and Wahoo in Connections and approve the required activity permissions.',
+      'For future activity sync, enable Wahoo as an automatic activity destination under Garmin in Connections.',
+      'For a one-time history transfer, import missing Garmin activities first, then open Send past activities under Wahoo, select Garmin imports and dates, and run Preview.',
+      'Review the ready-to-send and skipped counts before Send. Scheduling is not delivery; check Wahoo after processing.',
     ],
   },
   syncCorosToSuunto: {
@@ -1122,57 +1392,80 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_GUIDE_PATHS.syncCorosToSuunto,
     eyebrow: 'COROS to Suunto Guide',
     title: 'How to Sync COROS Workouts to Suunto Automatically',
-    description: 'Learn how to sync COROS activities to Suunto automatically, connect both accounts, and sync past COROS activities by date with Quantified Self.',
-    h1: 'How to sync COROS workouts to Suunto automatically',
-    intro: 'Connect COROS and Suunto, then choose whether new COROS activities should be sent to Suunto automatically. You can also sync past activities from a date range.',
-    chips: ['COROS', 'Suunto', 'Automatic sync', 'Recent history', 'Pro'],
+    description: 'Sync COROS FIT activities to Suunto with Quantified Self Pro. Set up automatic sync, import recent COROS history, or preview and send saved workouts by date.',
+    h1: 'Sync COROS activities to Suunto',
+    intro: 'Bring your COROS workouts into Suunto. Set up automatic sync for new eligible FIT imports, or review and send activities already saved in Quantified Self.',
+    accessNote: 'Provider connections and activity sync require Pro. Review current pricing and any eligible trial before checkout.',
+    freeOfferDescription: 'Starter includes manual uploads and analysis in Quantified Self. COROS-to-Suunto connections and activity sync require Pro.',
+    chips: ['COROS', 'Suunto', 'FIT activities', 'Pro'],
     actions: [
-      routeAction('Start Setup', '/login', 'flat', 'arrow_forward'),
-      routeAction('COROS Integration', '/integrations/coros'),
+      { ...routeAction('Get Started', '/services', 'flat', 'arrow_forward'), queryParams: COROS_SETUP_QUERY_PARAMS },
       routeAction('Sync Help', '/help', 'stroked', undefined, 'service-connections'),
     ],
     sections: [
       {
-        eyebrow: 'Setup',
-        title: 'Connect COROS and Suunto before turning on activity sync',
-        copy: 'Both accounts must be connected before Quantified Self can send COROS activities to Suunto.',
+        eyebrow: 'New activities',
+        title: 'Set up automatic COROS to Suunto sync',
+        copy: 'Start with Pro, then open Connections. Connecting accounts imports eligible activities into Quantified Self; sending them to Suunto is a separate opt-in.',
         items: [
           {
             icon: 'login',
-            title: 'Connect both providers',
-            copy: 'Connect COROS and Suunto, then confirm both connections are active before enabling cross-service sync.',
+            title: 'Connect COROS and Suunto',
+            copy: 'Choose COROS and Suunto in Connections and authorize both accounts. Review the optional history-import checkbox and range before connecting.',
           },
           {
             icon: 'toggle_on',
-            title: 'Turn on automatic activity sync',
-            copy: 'Open COROS Services and turn on automatic activity sync so new COROS activities can be sent to Suunto.',
+            title: 'Enable Suunto as the destination',
+            copy: 'Under COROS, open Activity sync settings, choose To Suunto, and enable automatic activity sync. Both connections must stay active for new eligible COROS imports to be sent.',
           },
           {
-            icon: 'history',
-            title: 'Import recent COROS history',
-            copy: 'COROS history import is currently limited to the last 3 months by provider API restrictions.',
+            icon: 'check_circle',
+            title: 'Check the workout in Suunto',
+            copy: 'Allow time for import and delivery, then check Suunto for the workout. Enabling automatic sync does not send activities already saved in Quantified Self.',
           },
         ],
       },
       {
-        eyebrow: 'Past Activities',
-        title: 'Sync existing activities by date',
-        copy: 'Syncing past activities is separate from automatic sync and lets you choose the date range.',
+        eyebrow: 'Past activities',
+        title: 'Preview saved COROS workouts before sending',
+        copy: 'Use a one-time send for eligible activities already saved in Quantified Self. Automatic sync can stay off.',
         items: [
           {
+            icon: 'history',
+            title: 'Import missing recent COROS history first',
+            copy: 'If a recent workout is missing from Quantified Self, use History import under COROS in Connections. COROS API history is limited to the latest rolling 3 months. Choose your dates and wait for the eligible activities to arrive before preparing a send.',
+          },
+          {
+            icon: 'preview',
+            title: 'Choose Suunto, dates and COROS imports',
+            copy: 'Under Suunto in Connections, open Send past activities. In the sending workspace, choose Saved activities, select COROS API in Activity sources, set your dates, and choose Preview saved activities. Preview sends nothing.',
+          },
+          {
             icon: 'published_with_changes',
-            title: 'Sync past COROS activities',
-            copy: 'Choose a date range in COROS Services to send activities already stored in Quantified Self to Suunto.',
+            title: 'Review the results, then confirm Send',
+            copy: 'Review the ready and excluded activities before choosing Send. Follow progress in Recent sends; Queued and Waiting for provider do not mean Delivered. Confirmed sends continue after you leave the page.',
+          },
+        ],
+      },
+      {
+        eyebrow: 'Transfer limits',
+        title: 'Know which activities can reach Suunto',
+        copy: 'This workflow transfers recorded activities using retained original FIT files.',
+        items: [
+          {
+            icon: 'date_range',
+            title: 'Recent imports and older saved workouts',
+            copy: 'The rolling 3-month limit applies to fetching history from COROS. Older activities already saved in Quantified Self can still be selected for a past send when their eligible original FIT files remain available.',
+          },
+          {
+            icon: 'filter_alt',
+            title: 'Keep the original recording available',
+            copy: 'Saved-activity preview excludes unsupported or missing originals, merged or derived activities, and previous deliveries. GPX routes and TCX files are not eligible for this FIT activity transfer.',
           },
           {
             icon: 'sync_problem',
-            title: 'Reconnect when tokens fail',
-            copy: 'If COROS or Suunto shows Reconnect required, reconnect before trying automatic activity sync again.',
-          },
-          {
-            icon: 'dashboard_customize',
-            title: 'Keep analysis centralized',
-            copy: 'Review COROS, Suunto, Garmin, uploaded files, maps, and benchmark reports from the same dashboard.',
+            title: 'Review connection and delivery issues',
+            copy: 'Use Connections if a provider shows Reconnect required. For a past send, review excluded activities and its result in Recent sends. If acceptance is unknown, check Suunto before attempting another transfer.',
           },
         ],
       },
@@ -1180,28 +1473,42 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'Can COROS workouts sync to Suunto automatically?',
-        answer: 'Yes. Connect COROS and Suunto and turn on automatic activity sync. New COROS activities can then be sent to Suunto automatically.',
+        answer: 'Yes. With Pro, connect both accounts in Connections. Under COROS, open Activity sync settings, choose To Suunto, and enable automatic activity sync. Only new eligible COROS FIT imports are sent; connecting the accounts alone does not enable this.',
       },
       {
         question: 'How much COROS history can I import?',
-        answer: 'COROS history import is currently limited to the last 3 months because of provider API restrictions.',
+        answer: 'COROS API history import is limited to the latest rolling 3 months. This limit applies to fetching missing history from COROS, not to selecting older saved activities whose eligible FIT originals are still available in Quantified Self.',
       },
       {
-        question: 'Does syncing past activities turn on automatic COROS sync?',
-        answer: 'No. Sync past activities only sends activities from the date range you choose. It does not turn on automatic sync for future activities.',
+        question: 'Can I send older COROS activities already saved in Quantified Self?',
+        answer: 'Yes. Under Suunto in Connections, open Send past activities, choose Saved activities, select COROS API and your dates, then preview and confirm Send. Preview sends nothing. Older saved workouts remain eligible when their original FIT files are available and the preview checks pass.',
+      },
+      {
+        question: 'Does sending past activities turn on automatic COROS sync?',
+        answer: 'No. Send past activities opens a separate review for your selected saved workouts. Only confirming Send starts that transfer, and it does not enable automatic sync for future imports.',
+      },
+      {
+        question: 'Is COROS to Suunto sync free?',
+        answer: 'Provider connections and activity sync require Pro. Review current pricing and any trial offer before checkout; trial eligibility is checked after sign-in. Starter includes manual file uploads and analysis inside Quantified Self, not delivery to Suunto.',
+      },
+      {
+        question: 'What if my workout does not appear in Suunto?',
+        answer: 'Check the COROS and Suunto connections and confirm that the activity has an eligible retained FIT original. For a past send, review excluded activities and Recent sends. Queued, sending, or waiting for the provider is not confirmed delivery. Use Check status when offered for an accepted operation; if acceptance is unknown, check Suunto before attempting another transfer.',
       },
     ],
-    closingTitle: 'Keep COROS and Suunto connected without losing the archive',
-    closingCopy: 'Use Quantified Self as the integration hub for COROS to Suunto activity sync, recent history imports, and training analysis.',
+    closingTitle: 'Ready to bring your COROS workouts into Suunto?',
+    closingCopy: 'Get started in Connections, review Pro pricing and terms, then choose automatic sync or a reviewed one-time send.',
     closingActions: [
-      routeAction('COROS Integration', '/integrations/coros', 'flat', 'arrow_forward'),
-      routeAction('All Integrations', '/integrations'),
+      { ...routeAction('Get Started', '/services', 'flat', 'arrow_forward'), queryParams: COROS_SETUP_QUERY_PARAMS },
+      routeAction('View Pricing', '/pricing'),
+      routeAction('COROS Integration', '/integrations/coros'),
     ],
     howToSteps: [
-      'Connect COROS to Quantified Self.',
-      'Connect Suunto to Quantified Self.',
-      'Turn on automatic activity sync in COROS Services.',
-      'Use Sync past activities for already imported COROS activities when needed.',
+      'Get Pro, open Connections, and authorize COROS and Suunto. Review any optional history-import checkbox and range before connecting.',
+      'For future eligible COROS imports, open Activity sync settings under COROS, choose To Suunto, and enable automatic activity sync.',
+      'If recent COROS history is missing, import it first using History import under COROS. The provider API limits history imports to the latest rolling 3 months.',
+      'For saved workouts, open Send past activities under Suunto, choose Saved activities, select COROS API and your dates, then choose Preview saved activities.',
+      'Review ready and excluded activities, then confirm Send. Follow Recent sends and check Suunto for delivery; preview and queueing alone do not confirm delivery.',
     ],
   },
   syncWahooToSuunto: {
@@ -1209,57 +1516,80 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_GUIDE_PATHS.syncWahooToSuunto,
     eyebrow: 'Wahoo to Suunto Guide',
     title: 'How to Sync Wahoo Activities to Suunto Automatically',
-    description: 'Learn how to sync Wahoo FIT activities to Suunto automatically, connect both accounts, and sync past retained Wahoo activities by date with Quantified Self.',
-    h1: 'How to sync Wahoo activities to Suunto automatically',
-    intro: 'Connect Wahoo and Suunto, then choose whether new eligible Wahoo activities should be sent to Suunto automatically. You can also sync past retained Wahoo FIT activities from a date range whenever you need to.',
-    chips: ['Wahoo', 'Suunto', 'FIT activities', 'Automatic activity sync', 'Past activity sync', 'Pro'],
+    description: 'Sync Wahoo FIT activities to Suunto with Quantified Self Pro. Set up automatic imports or preview and send saved workouts by date, with clear transfer limits.',
+    h1: 'Sync Wahoo activities to Suunto',
+    intro: 'Bring your Wahoo-recorded workouts into Suunto. Set up automatic sync for new eligible FIT imports, or review and send older activities already saved in Quantified Self.',
+    accessNote: 'Provider connections and activity sync require Pro. Review current pricing and any eligible trial before checkout.',
+    freeOfferDescription: 'Starter includes manual uploads and analysis in Quantified Self. Wahoo-to-Suunto connections and activity sync require Pro.',
+    chips: ['Wahoo', 'Suunto', 'FIT activities', 'Pro'],
     actions: [
-      routeAction('Start Setup', '/login', 'flat', 'arrow_forward'),
-      routeAction('Wahoo Integration', '/integrations/wahoo'),
+      { ...routeAction('Get Started', '/services', 'flat', 'arrow_forward'), queryParams: WAHOO_SETUP_QUERY_PARAMS },
       routeAction('Sync Help', '/help', 'stroked', undefined, 'service-connections'),
     ],
     sections: [
       {
-        eyebrow: 'Setup',
-        title: 'Connect Wahoo and Suunto before turning on activity sync',
-        copy: 'Both accounts must be connected and active before Quantified Self can send eligible Wahoo activities to Suunto.',
+        eyebrow: 'New activities',
+        title: 'Set up automatic Wahoo to Suunto sync',
+        copy: 'Start with Pro, then open Connections. Connecting accounts imports eligible activities into Quantified Self; sending them to Suunto is a separate opt-in.',
         items: [
           {
             icon: 'login',
-            title: 'Connect both providers',
-            copy: 'Connect Wahoo and Suunto in Services, then confirm both connections are active before enabling cross-service sync.',
+            title: 'Connect Wahoo and Suunto',
+            copy: 'Choose Wahoo and Suunto in Connections and authorize both accounts. Review the optional history-import checkbox and range before connecting.',
           },
           {
             icon: 'toggle_on',
-            title: 'Turn on automatic activity sync',
-            copy: 'Open Wahoo Services and turn on automatic activity sync so new imported Wahoo FIT activities can be sent to Suunto.',
+            title: 'Enable Suunto as the destination',
+            copy: 'Under Wahoo, open Activity sync settings, choose To Suunto, and enable automatic activity sync. Both connections must stay active for new eligible Wahoo imports to be sent.',
           },
           {
-            icon: 'history',
-            title: 'Import Wahoo history when needed',
-            copy: 'Choose a date range in Wahoo Services to queue Wahoo history. Only records with an available FIT file are eligible for import and later sync.',
+            icon: 'check_circle',
+            title: 'Check the workout in Suunto',
+            copy: 'Allow time for import and delivery, then check Suunto for the workout. Enabling automatic sync does not send activities already saved in Quantified Self.',
           },
         ],
       },
       {
-        eyebrow: 'Past Activities',
-        title: 'Sync retained Wahoo FIT activities by date',
-        copy: 'Syncing past activities is separate from automatic sync and uses FIT activity files already retained with eligible Wahoo events.',
+        eyebrow: 'Past activities',
+        title: 'Preview older Wahoo workouts before sending',
+        copy: 'Use a one-time send for eligible activities already saved in Quantified Self. Automatic sync can stay off.',
         items: [
           {
-            icon: 'published_with_changes',
-            title: 'Sync past Wahoo activities',
-            copy: 'Choose a date range in Wahoo Services to send retained Wahoo FIT activities already stored in Quantified Self to Suunto.',
+            icon: 'history',
+            title: 'Import missing Wahoo history first',
+            copy: 'If a workout is missing from Quantified Self, use History import under Wahoo in Connections. Choose your dates and wait for the eligible FIT activities to arrive before preparing a send.',
           },
           {
-            icon: 'file_download',
-            title: 'FIT-backed activity requirement',
-            copy: 'Wahoo records without an available FIT file are skipped. Wahoo workouts identified as originating from a third-party fitness application are not imported through this integration.',
+            icon: 'preview',
+            title: 'Choose Suunto, dates and Wahoo imports',
+            copy: 'Under Suunto in Connections, open Send past activities. In the sending workspace, choose Saved activities, select Wahoo API in Activity sources, set your dates, and choose Preview saved activities. Preview sends nothing.',
+          },
+          {
+            icon: 'published_with_changes',
+            title: 'Review the results, then confirm Send',
+            copy: 'Review the ready and excluded activities before choosing Send. Follow progress in Recent sends; Queued and Waiting for provider do not mean Delivered. Confirmed sends continue after you leave the page.',
+          },
+        ],
+      },
+      {
+        eyebrow: 'Transfer limits',
+        title: 'Know which activities can reach Suunto',
+        copy: 'This workflow transfers recorded activities using retained original FIT files.',
+        items: [
+          {
+            icon: 'description',
+            title: 'Eligible Wahoo-recorded workouts',
+            copy: 'The Wahoo integration skips workouts without an available FIT file and workouts identified as coming from a third-party fitness application. An activity being visible in Wahoo does not guarantee it can be imported here.',
+          },
+          {
+            icon: 'filter_alt',
+            title: 'Keep the original recording available',
+            copy: 'Saved-activity preview excludes unsupported or missing originals, merged or derived activities, and previous deliveries. GPX routes and TCX files are not eligible for this FIT activity transfer.',
           },
           {
             icon: 'sync_problem',
-            title: 'Reconnect when access fails',
-            copy: 'If Wahoo or Suunto shows Reconnect required, reconnect before trying automatic activity sync again.',
+            title: 'Review connection and delivery issues',
+            copy: 'Use Connections if a provider shows Reconnect required. For a past send, review its result in Recent sends. If acceptance is unknown, check Suunto before attempting another transfer.',
           },
         ],
       },
@@ -1267,33 +1597,42 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'Can Wahoo activities sync to Suunto automatically?',
-        answer: 'Yes. Connect Wahoo and Suunto, then turn on automatic activity sync in Wahoo Services. New eligible Wahoo FIT activities can then be sent to Suunto automatically.',
+        answer: 'Yes. With Pro, connect both accounts in Connections. Under Wahoo, open Activity sync settings, choose To Suunto, and enable automatic activity sync. Only new eligible Wahoo FIT imports are sent; connecting the accounts alone does not enable this.',
       },
       {
         question: 'Can I sync old Wahoo activities to Suunto?',
-        answer: 'Yes. Import Wahoo history first when needed, then use Sync past activities to choose a date range. Only retained Wahoo activities with their original FIT file can be sent to Suunto.',
+        answer: 'Yes. Import missing Wahoo history first. Under Suunto in Connections, open Send past activities, choose Saved activities, select Wahoo API and your dates, then preview and confirm Send. Eligible originals must still be available. Starting a preview does not send anything.',
       },
       {
         question: 'Does syncing past Wahoo activities turn on automatic sync?',
-        answer: 'No. Sync past activities only sends activities from the date range you choose. It does not turn on automatic sync for future Wahoo imports.',
+        answer: 'No. Send past activities opens a separate review for your selected saved workouts. Only confirming Send starts that transfer, and it does not enable automatic sync for future imports.',
+      },
+      {
+        question: 'Is Wahoo to Suunto sync free?',
+        answer: 'Provider connections and activity sync require Pro. Review current pricing and any trial offer before checkout; trial eligibility is checked after sign-in. Starter includes manual file uploads and analysis inside Quantified Self, not delivery to Suunto.',
       },
       {
         question: 'Will activities sent to Wahoo come back as Wahoo imports?',
-        answer: 'No. Wahoo does not expose completed workouts that it identifies as coming from a third-party fitness application through this integration, preventing that return path from creating a sync loop.',
+        answer: 'No. The Wahoo integration skips workouts identified as coming from a third-party fitness application, so this is not a way to bring those copies back into Quantified Self.',
+      },
+      {
+        question: 'What if my workout does not appear in Suunto?',
+        answer: 'Check the Wahoo and Suunto connections and confirm that the activity has an eligible retained FIT original. For a past send, review excluded activities and Recent sends. Queued, sending, or waiting for the provider is not confirmed delivery. Use Check status when offered for an accepted operation; if acceptance is unknown, check Suunto before attempting another transfer.',
       },
     ],
-    closingTitle: 'Keep Wahoo and Suunto aligned without losing the archive',
-    closingCopy: 'Use automatic sync for new eligible Wahoo FIT activities and Sync past activities for retained Wahoo workouts already in your Quantified Self archive.',
+    closingTitle: 'Ready to bring your Wahoo workouts into Suunto?',
+    closingCopy: 'Get started in Connections, review Pro pricing and terms, then choose automatic sync or a reviewed one-time send. Opening setup does not connect an account or send activities for you.',
     closingActions: [
-      routeAction('Wahoo Integration', '/integrations/wahoo', 'flat', 'arrow_forward'),
-      routeAction('Suunto Integration', '/integrations/suunto'),
-      routeAction('All Integrations', '/integrations'),
+      { ...routeAction('Get Started', '/services', 'flat', 'arrow_forward'), queryParams: WAHOO_SETUP_QUERY_PARAMS },
+      routeAction('View Pricing', '/pricing'),
+      routeAction('Wahoo Integration', '/integrations/wahoo'),
     ],
     howToSteps: [
-      'Connect Wahoo to Quantified Self.',
-      'Connect Suunto to Quantified Self.',
-      'Turn on automatic activity sync in Wahoo Services.',
-      'Use Sync past activities for retained Wahoo FIT activities when needed.',
+      'With Pro, connect Wahoo and Suunto in Connections and review the optional history import.',
+      'For new Wahoo FIT imports, open Activity sync settings under Wahoo, choose To Suunto, and enable automatic sync.',
+      'For older workouts missing from Quantified Self, import Wahoo history and wait for eligible activities to arrive.',
+      'Under Suunto, open Send past activities, select Saved activities, Wahoo API and dates, then preview without sending.',
+      'Review the ready and excluded activities, confirm Send, then check Recent sends and Suunto for the result.',
     ],
   },
   importActivitiesToSuunto: {
@@ -1306,7 +1645,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     intro: 'Use Quantified Self to send a selected FIT activity to Suunto, automatically deliver eligible new Garmin, COROS, or Wahoo activities, or choose a date range for activities already in your account archive.',
     chips: ['Suunto', 'FIT activities', 'Garmin', 'COROS', 'Wahoo', 'Pro'],
     actions: [
-      routeAction('Start Setup', '/login', 'flat', 'arrow_forward'),
+      routeAction('Start Setup', '/services', 'flat', 'arrow_forward'),
       routeAction('Suunto Integration', '/integrations/suunto'),
       routeAction('Sync Help', '/help', 'stroked', undefined, 'service-connections'),
     ],
@@ -1398,7 +1737,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     intro: 'Use Quantified Self to send a selected FIT activity to Wahoo, automatically deliver eligible new Garmin, COROS, or Suunto activities, or choose a date range for FIT-backed activities already in your account archive.',
     chips: ['Wahoo', 'FIT activities', 'Garmin', 'COROS', 'Suunto', 'Pro'],
     actions: [
-      routeAction('Start Setup', '/login', 'flat', 'arrow_forward'),
+      routeAction('Start Setup', '/services', 'flat', 'arrow_forward'),
       routeAction('Wahoo Integration', '/integrations/wahoo'),
       routeAction('Sync Help', '/help', 'stroked', undefined, 'service-connections'),
     ],
@@ -1490,7 +1829,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     intro: 'Quantified Self can send Suunto routes from your Routes library to Garmin Connect as courses after both accounts are connected and Course Import is allowed in Garmin.',
     chips: ['Suunto routes', 'Garmin courses', 'Course Import', 'Automatic route sending', 'Saved routes'],
     actions: [
-      routeAction('Start Setup', '/login', 'flat', 'arrow_forward'),
+      routeAction('Start Setup', '/services', 'flat', 'arrow_forward'),
       routeAction('Suunto Integration', '/integrations/suunto'),
       routeAction('Garmin Integration', '/integrations/garmin'),
       routeAction('Route Files', '/features/fit-gpx-route-files'),
@@ -1694,6 +2033,7 @@ function buildJsonLd(page: PublicSeoPage): Record<string, unknown> {
       applicationCategory: 'HealthApplication',
       operatingSystem: 'Web',
       featureList: [
+        ...(page.featureList ?? []),
         ...page.sections.flatMap(section => section.items.map(item => item.title)),
         ...page.chips,
       ],
@@ -1701,6 +2041,7 @@ function buildJsonLd(page: PublicSeoPage): Record<string, unknown> {
         '@type': 'Offer',
         price: '0',
         priceCurrency: 'USD',
+        ...(page.freeOfferDescription ? { description: page.freeOfferDescription } : {}),
       },
     },
     {
@@ -1758,13 +2099,17 @@ function buildRouteData(page: PublicSeoPage): PublicSeoRouteData {
     description: page.description,
     publicSeoPage: page,
     jsonLd: buildJsonLd(page),
+    socialImage: page.socialImage ?? DEFAULT_SOCIAL_IMAGE,
+    socialImageAlt: page.socialImageAlt ?? DEFAULT_SOCIAL_IMAGE_ALT,
   };
 }
 
 export const PUBLIC_SEO_ROUTE_DATA: Record<PublicSeoPageKey, PublicSeoRouteData> = {
+  health: buildRouteData(PUBLIC_SEO_PAGES.health),
   featuresHub: buildRouteData(PUBLIC_SEO_PAGES.featuresHub),
   activityCalendar: buildRouteData(PUBLIC_SEO_PAGES.activityCalendar),
   trainingAnalysis: buildRouteData(PUBLIC_SEO_PAGES.trainingAnalysis),
+  trainingPlans: buildRouteData(PUBLIC_SEO_PAGES.trainingPlans),
   trainingDashboard: buildRouteData(PUBLIC_SEO_PAGES.trainingDashboard),
   activityMap: buildRouteData(PUBLIC_SEO_PAGES.activityMap),
   mcpServer: buildRouteData(PUBLIC_SEO_PAGES.mcpServer),
@@ -1773,6 +2118,7 @@ export const PUBLIC_SEO_ROUTE_DATA: Record<PublicSeoPageKey, PublicSeoRouteData>
   routeFiles: buildRouteData(PUBLIC_SEO_PAGES.routeFiles),
   guidesHub: buildRouteData(PUBLIC_SEO_PAGES.guidesHub),
   syncGarminToSuunto: buildRouteData(PUBLIC_SEO_PAGES.syncGarminToSuunto),
+  syncGarminToWahoo: buildRouteData(PUBLIC_SEO_PAGES.syncGarminToWahoo),
   syncCorosToSuunto: buildRouteData(PUBLIC_SEO_PAGES.syncCorosToSuunto),
   syncWahooToSuunto: buildRouteData(PUBLIC_SEO_PAGES.syncWahooToSuunto),
   importActivitiesToSuunto: buildRouteData(PUBLIC_SEO_PAGES.importActivitiesToSuunto),

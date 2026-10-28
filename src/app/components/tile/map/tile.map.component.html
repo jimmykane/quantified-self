@@ -18,13 +18,14 @@
       </button>
       }
       <app-tile-map-actions [user]="user" [order]="order" [size]="size" [type]="type"
-        (editInDashboardManager)="onEditInDashboardManager($event)">
+        (editTile)="onEditTile($event)">
       </app-tile-map-actions>
       </div>
       }
     </div>
   </header>
   <div class="tile-map-body">
+    @defer (on viewport) {
     @if (mapSource === 'routes') {
     <app-route-preview-map [routes]="routePreviews" [user]="user" [isLoading]="isLoading" [mapStyle]="mapStyle"
       [showEndpointMarkers]="showRouteEndpointMarkers !== false">
@@ -33,6 +34,12 @@
     <app-events-map [user]="user" [events]="events" [isLoading]="isLoading" [mapStyle]="mapStyle"
       [clusterMarkers]="clusterMarkers">
     </app-events-map>
+    }
+    } @placeholder {
+    <div class="tile-map-placeholder">
+      <mat-icon aria-hidden="true">map</mat-icon>
+      <span>Map loads when visible</span>
+    </div>
     }
   </div>
 </section>

@@ -4,6 +4,10 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SLEEP_PROVIDERS } from '@shared/sleep';
+import { SLEEP_SPORTS_LIB_METRIC_FIELDS } from '@shared/sleep';
+import { formatCanonicalSleepMetricSportsLibValue } from '@shared/sports-lib-health-data';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import { DistanceUnits } from '@sports-alliance/sports-lib';
 import { ChartsSleepTrendComponent } from './charts.sleep-trend.component';
 import type { DashboardSleepTrendPoint } from '../../../helpers/dashboard-sleep-chart.helper';
 import { AppColors } from '../../../services/color/app.colors';
@@ -54,8 +58,7 @@ describe('ChartsSleepTrendComponent', () => {
     };
 
     await TestBed.configureTestingModule({
-      declarations: [ChartsSleepTrendComponent],
-      imports: [MatButtonModule, MatIconModule],
+      imports: [ChartsSleepTrendComponent, MatButtonModule, MatIconModule],
       providers: [
         { provide: EChartsLoaderService, useValue: mockLoader },
         { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn() } },
@@ -75,7 +78,19 @@ describe('ChartsSleepTrendComponent', () => {
     }
   });
 
-  it('reserves bottom grid space for the visible legend below x-axis labels', async () => {
+  it('omits a duplicated title when the Health tile supplies its own header', () => {
+    fixture.componentRef.setInput('hideTitle', true);
+    fixture.componentRef.setInput('overview', true); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.title-row')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.sleep-stats')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.sleep-layout-overview')).not.toBeNull();
+    fixture.componentRef.setInput('overview', false);
+    fixture.componentRef.setInput('hideTitle', false); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.sleep-layout-overview')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.title-row')?.textContent).toContain('Sleep');
+  });
+
+  it('keeps the plot baseline fixed with the visible legend above the plot', async () => {
     const point = buildSleepPoint();
     component.sleepTrend = {
       points: [point],
@@ -93,8 +108,9 @@ describe('ChartsSleepTrendComponent', () => {
     const option = optionCandidate as Record<string, any>;
 
     expect(option?.legend?.show).toBe(true);
-    expect(option?.legend?.bottom).toBe(0);
-    expect(option?.grid?.bottom).toBeGreaterThan(34);
+    expect(option?.legend?.top).toBe(0);
+    expect(option?.grid?.top).toBe(32);
+    expect(option?.grid?.bottom).toBe(24);
   });
 
   it('thins x-axis labels for dense 90-day sleep windows', async () => {
@@ -136,7 +152,7 @@ describe('ChartsSleepTrendComponent', () => {
     expect(visibleLabelCount).toBeLessThanOrEqual(10);
   });
 
-  it('shows a label for every day in the default 14-day sleep window on desktop', async () => {
+  it('offers every day in a wide 14-day sleep window while retaining collision protection on resize', async () => {
     const points = Array.from({ length: 14 }, (_, index) => buildSleepPoint({
       id: `sleep-${index + 1}`,
       sleepDate: `2026-04-${String(index + 1).padStart(2, '0')}`,
@@ -158,7 +174,38 @@ describe('ChartsSleepTrendComponent', () => {
     const option = optionCandidate as Record<string, any>;
 
     expect(option.xAxis.axisLabel.interval).toBe(0);
-    expect(option.xAxis.axisLabel.hideOverlap).toBe(false);
+    expect(option.xAxis.axisLabel.hideOverlap).toBe(true);
+  });
+
+  it('thins the default 14-day sleep labels in a narrow desktop card', async () => {
+    const chartElement = fixture.nativeElement.querySelector('.sleep-chart') as HTMLDivElement;
+    Object.defineProperty(chartElement, 'clientWidth', { configurable: true, value: 440 });
+    const points = Array.from({ length: 14 }, (_, index) => buildSleepPoint({
+      id: `sleep-${index + 1}`,
+      sleepDate: `2026-04-${String(index + 1).padStart(2, '0')}`,
+      categoryLabel: `Apr ${index + 1}`,
+    }));
+    component.sleepTrend = {
+      points,
+      latestPoint: points[points.length - 1],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => {
+      expect(mockLoader.setOption).toHaveBeenCalled();
+    });
+
+    const setOptionCall = mockLoader.setOption.mock.calls.at(-1) || [];
+    const optionCandidate = setOptionCall[1] || setOptionCall[0];
+    const option = optionCandidate as Record<string, any>;
+    const interval = option.xAxis.axisLabel.interval as (index: number) => boolean;
+    const visibleLabelCount = points.filter((_point, index) => interval(index)).length;
+
+    expect(option.xAxis.axisLabel.hideOverlap).toBe(true);
+    expect(interval(0)).toBe(true);
+    expect(interval(points.length - 1)).toBe(true);
+    expect(visibleLabelCount).toBeLessThanOrEqual(6);
   });
 
   it('thins the default 14-day sleep labels on a mobile viewport', async () => {
@@ -394,22 +441,44 @@ describe('ChartsSleepTrendComponent', () => {
         data: [{ name: 'Avg HRV', yAxis: 52 }],
       },
     });
-    expect(hrvSeries.markLine.label.formatter).toBe('Avg HRV 52ms');
-    expect(hrvSeries.markLine.label).toMatchObject({
-      position: 'middle',
-      offset: [0, 0],
-      distance: 8,
-      color: AppColors.Green,
-      borderColor: AppColors.Green,
-      borderWidth: 1,
-      borderRadius: 4,
-      padding: [2, 6],
-    });
+    expect(hrvSeries.markLine.label.show).toBe(false);
+    expect(component.vitalAverages).toContainEqual({ label: 'Avg HRV', color: AppColors.Green, display: '52 ms' });
     expect(hrvSeries.markLine.lineStyle).toMatchObject({
       color: AppColors.Green,
       type: 'dashed',
     });
   });
+
+  it.each([null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })])(
+    'keeps coincident averages readable outside the plot with unit preferences %j', async unitSettings => {
+      const point = buildSleepPoint({ averageHrvMs: 50, averageHeartRateBpm: 50, minimumHeartRateBpm: 50 });
+      fixture.componentRef.setInput('unitSettings', unitSettings);
+      fixture.componentRef.setInput('sleepTrend', { points: [point], latestPoint: point, hasRealPoints: true });
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const rows = [...fixture.nativeElement.querySelectorAll('.sleep-average')] as HTMLElement[];
+      expect(rows).toHaveLength(3);
+      for (const [index, field] of [SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHrv, SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHeartRate, SLEEP_SPORTS_LIB_METRIC_FIELDS.MinimumHeartRate].entries()) {
+        const display = formatCanonicalSleepMetricSportsLibValue(field, 50, unitSettings)!;
+        expect(rows[index].querySelector('dd')?.textContent).toBe(`${display.value} ${display.unit}`);
+      }
+      await vi.waitFor(() => expect(mockLoader.setOption).toHaveBeenCalled());
+      const option = mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
+      const averages = option.series.filter((series: any) => series.markLine);
+      expect(averages).toHaveLength(3);
+      for (const series of averages) {
+        expect(series.markLine.label.show).toBe(false);
+        expect(series.markLine.data[0].yAxis).toBe(50);
+      }
+
+      const missingVitals = buildSleepPoint({ averageHrvMs: null, averageHeartRateBpm: null, minimumHeartRateBpm: null });
+      fixture.componentRef.setInput('sleepTrend', { points: [missingVitals], latestPoint: missingVitals });
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(fixture.nativeElement.querySelector('.sleep-averages')).toBeNull();
+    },
+  );
 
   it('renders sleep heart-rate and SpO2 as secondary-axis lines', async () => {
     const point = buildSleepPoint();
@@ -451,12 +520,11 @@ describe('ChartsSleepTrendComponent', () => {
       connectNulls: false,
       lineStyle: { color: AppColors.Blue },
       itemStyle: { color: AppColors.Blue },
+      emphasis: { focus: 'none' },
       data: [48, null],
       markLine: {
         label: {
-          formatter: 'Avg HR 48bpm',
-          position: 'middle',
-          offset: [0, -14],
+          show: false,
         },
         lineStyle: {
           color: AppColors.Blue,
@@ -475,9 +543,7 @@ describe('ChartsSleepTrendComponent', () => {
       data: [42, 44],
       markLine: {
         label: {
-          formatter: 'Avg Min HR 43bpm',
-          position: 'middle',
-          offset: [0, 14],
+          show: false,
         },
         lineStyle: {
           color: AppColors.Pink,

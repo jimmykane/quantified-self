@@ -4,6 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { PRO_REQUIRED_MESSAGE } from '../utils';
 import { COROS_API_REQUEST_TIMEOUT_MS } from './constants';
+import { createCOROSActivityFITFixture } from '../../test-utils/coros-activity-fit';
+import { prepareCOROSActivityFITUpload } from './activity-fit';
+import { sessionlessFixture } from '../../test-utils/fit-activity-session';
 
 const mocks = vi.hoisted(() => ({
   post: vi.fn(),
@@ -207,6 +210,40 @@ describe('COROS asynchronous activity uploads', () => {
     expect(mocks.post).not.toHaveBeenCalled();
   });
 
+  it.each([[82, true, false], [82, false, false], [32, true, false], [1, true, true]] as const)(
+    'direct sport %i fingerprints and posts the same prepared FIT (GPS=%s, empty fields=%s)', async (sport, withGPS, emptyFields) => {
+      const input = createCOROSActivityFITFixture({ sport, withGPS, emptyNativeFields: emptyFields ? 'zero' : undefined });
+      const original = Buffer.from(input);
+      const converted = prepareCOROSActivityFITUpload(input);
+      await importActivityToCOROSAPI(activityRequest(input));
+      const sent = mocks.recordActivitySyncOutboundFingerprint.mock.calls[0][0].fileBuffer as Buffer;
+      expect(sent).toEqual(converted);
+      expect(sent).not.toEqual(input);
+      expect(mocks.post.mock.calls[0][0].body.includes(sent)).toBe(true);
+      expect(mocks.post.mock.calls[0][0].body.includes(input)).toBe(false);
+      expect(input).toEqual(original);
+      expect(mocks.recordActivitySyncOutboundFingerprint.mock.invocationCallOrder[0])
+        .toBeLessThan(mocks.post.mock.invocationCallOrder[0]);
+    },
+  );
+
+  it('does not send a converted direct FIT when its echo receipt fails', async () => {
+    mocks.recordActivitySyncOutboundFingerprint.mockRejectedValueOnce(new Error('receipt unavailable'));
+    await expect(importActivityToCOROSAPI(activityRequest(createCOROSActivityFITFixture())))
+      .rejects.toBeDefined();
+    expect(mocks.post).not.toHaveBeenCalled();
+  });
+
+  it('fingerprints and sends the shared missing-Session repair in a direct upload', async () => {
+    const input = sessionlessFixture({ bigEndian: true }), original = Buffer.from(input);
+    await importActivityToCOROSAPI(activityRequest(input));
+    const sent = mocks.recordActivitySyncOutboundFingerprint.mock.calls[0][0].fileBuffer as Buffer;
+    expect(sent).toEqual(prepareCOROSActivityFITUpload(input));
+    expect(sent).not.toEqual(input);
+    expect(mocks.post.mock.calls[0][0].body.includes(sent)).toBe(true);
+    expect(input).toEqual(original);
+  });
+
   it('accepts a provider duplicate without starting another operation', async () => {
     mocks.post.mockResolvedValueOnce(JSON.stringify({ result: '5082', message: 'Already uploaded' }));
 
@@ -362,7 +399,7 @@ describe('COROS asynchronous activity uploads', () => {
     });
   });
 
-  it('retains COROS processing failure status for structured diagnostics', async () => {
+  it('classifies confirmed processing failure for a bounded restart with original diagnostics', async () => {
     mocks.get.mockResolvedValueOnce(JSON.stringify({
       result: '0000',
       data: [{ uploadId: '42', status: -1 }],
@@ -374,9 +411,39 @@ describe('COROS asynchronous activity uploads', () => {
       'open-id-1',
     )).rejects.toMatchObject({
       code: 'provider-processing-failed',
+      disposition: 'retryable',
+      retryMode: 'restart',
       providerStatus: -1,
       providerOperationId: '42',
+      providerUserId: 'open-id-1',
+      dlqContext: 'COROS_ACTIVITY_UPLOAD_FAILED',
     });
+    expect(mocks.post).not.toHaveBeenCalled();
+  });
+
+  it.each(['init', 'status'])('keeps explicit unsupported-file result 5096 permanent during %s', async phase => {
+    const response = JSON.stringify({ result: '5096', message: 'Unsupported workout data' });
+    if (phase === 'init') mocks.post.mockResolvedValueOnce(response);
+    else mocks.get.mockResolvedValueOnce(response);
+
+    await expect(phase === 'init'
+      ? uploadActivityFileToCOROS('test-user-id', Buffer.from('fit-data'))
+      : getCOROSActivityUploadStatus('test-user-id', '42', 'open-id-1')).rejects.toMatchObject({
+      disposition: 'permanent',
+      retryMode: 'none',
+      providerCode: '5096',
+      dlqContext: 'COROS_ACTIVITY_UPLOAD_REJECTED',
+    });
+  });
+
+  it('does not restart an upload on a different selected COROS account', async () => {
+    mocks.getActiveCOROSTokenSnapshot.mockResolvedValueOnce(tokenSnapshot('open-id-2'));
+
+    await expect(uploadActivityFileToCOROS('test-user-id', Buffer.from('fit-data'), {
+      expectedProviderUserId: 'open-id-1',
+    })).rejects.toMatchObject({ disposition: 'auth_required', providerUserId: 'open-id-1' });
+    expect(mocks.getActiveCOROSTokenSnapshot).toHaveBeenCalledWith('test-user-id', 'open-id-1');
+    expect(mocks.post).not.toHaveBeenCalled();
   });
 
   it('retains the upload operation when COROS returns an unknown status', async () => {
@@ -393,6 +460,40 @@ describe('COROS asynchronous activity uploads', () => {
         retryMode: 'none',
         resumeUploadId: '42',
       }),
+    });
+  });
+
+  it.each([
+    { label: 'failure array', status: [-1] },
+    { label: 'string failure array', status: ['-1'] },
+    { label: 'success array', status: [2] },
+    { label: 'boolean', status: true },
+  ])('rejects non-scalar status $label without authorizing restart or recording success', async ({ status }) => {
+    mocks.get.mockResolvedValue(JSON.stringify({
+      result: '0000', data: [{ uploadId: '42', status }],
+    }));
+
+    await expect(getCOROSActivityUploadStatus('test-user-id', '42', 'open-id-1')).rejects.toMatchObject({
+      disposition: 'permanent', retryMode: 'none', code: 'unexpected-provider-status',
+      providerOperationId: '42', providerUserId: 'open-id-1',
+    });
+    await expect(getCOROSAPIWorkoutFileUploadStatus(toActivityStatusCallableRequest(createMockRequest({
+      data: { uploadId: '42', providerUserId: 'open-id-1' },
+    })))).rejects.toMatchObject({
+      code: 'failed-precondition',
+      details: expect.objectContaining({ retryMode: 'none', resumeUploadId: '42' }),
+    });
+    expect(mocks.post).not.toHaveBeenCalled();
+    expect(mocks.recordSuccessfulActivityUpload).not.toHaveBeenCalled();
+  });
+
+  it('preserves numeric-string failure status compatibility', async () => {
+    mocks.get.mockResolvedValueOnce(JSON.stringify({
+      result: '0000', data: [{ uploadId: '42', status: '-1' }],
+    }));
+
+    await expect(getCOROSActivityUploadStatus('test-user-id', '42', 'open-id-1')).rejects.toMatchObject({
+      disposition: 'retryable', retryMode: 'restart', providerStatus: -1,
     });
   });
 

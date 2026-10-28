@@ -1,8 +1,9 @@
+import type { EventRead } from '@shared/event-read';
 import { Component, DestroyRef, OnDestroy, OnInit, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AppEventService } from '../../services/app.event.service';
 import { combineLatest, from, merge, of, Subject } from 'rxjs';
-import { EventInterface } from '@sports-alliance/sports-lib';
+
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -16,7 +17,7 @@ import {
 import { DateRanges } from '@sports-alliance/sports-lib';
 import { Search } from '../event-search/event-search.component';
 import { AppUserService } from '../../services/app.user.service';
-import { DaysOfTheWeek } from '@sports-alliance/sports-lib';
+import { DaysOfTheWeek, WeightUnits } from '@sports-alliance/sports-lib';
 import { catchError, distinctUntilChanged, filter, map, switchMap, take, tap } from 'rxjs/operators';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
@@ -53,21 +54,24 @@ import {
   DashboardActionPromptMenuEvent,
   DashboardActionPromptViewModel,
   isDashboardActionPromptDismissed,
+  hasGarminSleepHealthConnectionHistory,
   markDashboardActionPromptDismissed,
   resolveDashboardActivityAutoSyncRouteIds,
 } from '../../helpers/dashboard-action-prompt.helper';
 import { ActivitySyncRouteId } from '@shared/activity-sync-routes';
 import { ActivityServiceConnectionState } from '../../services/app.user.service';
 import { AppWindowService } from '../../services/app.window.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import {
   buildSuuntoServiceConnectionViewModel,
   SuuntoServiceConnectionViewModel,
 } from '../../helpers/suunto-service-connection.helper';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { SLEEP_PROVIDERS, SleepSyncState } from '@shared/sleep';
-import { AppEventInterface } from '@shared/app-event.interface';
+
 import { getEventTags } from '@shared/event-tags';
 import { GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS } from '@shared/sleep-backfill';
+import type { ConnectionHistoryStatusProjection } from '@shared/connection-history';
 
 
 @Component({
@@ -80,7 +84,7 @@ import { GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS } from '@shared/sleep-backfi
 export class DashboardComponent implements OnInit, OnDestroy {
   public user: AppUserInterface;
   public targetUser: AppUserInterface;
-  public events: EventInterface[];
+  public events: EventRead[];
   public searchTerm: string;
   public searchStartDate: Date | null;
   public searchEndDate: Date | null;
@@ -109,6 +113,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   public isDismissingGarminSleepPrompt = false;
   public garminSleepBackfillPromptError: string | null = null;
   public showNoActivityDashboardState = false;
+  public showNoActivityConnectServiceAction = false;
+  public noActivityDashboardDescription = 'Upload an activity file to get started.';
   public readonly noActivityConnectServiceOptions = [
     { serviceName: ServiceNames.GarminAPI, label: 'Garmin' },
     { serviceName: ServiceNames.SuuntoApp, label: 'Suunto' },
@@ -120,7 +126,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private manualSearchTrigger$ = new Subject<{ user: AppUserInterface | null; refreshToken: number }>();
   private manualSearchRefreshToken = 0;
   private initialLiveReconcilePending = false;
-  private initialResolvedEventsForReconcile: EventInterface[] = [];
+  private initialResolvedEventsForReconcile: EventRead[] = [];
+  private initialResolvedEventsKeyForReconcile = '';
   private initialResolvedUserIDForReconcile: string | null = null;
   private eventTableFiltersCacheSignature: string | null = null;
   private eventTableFiltersCache: AppDashboardEventTableFiltersInterface | null = null;
@@ -134,6 +141,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     serviceMeta: null,
   });
   private garminSleepSyncState: SleepSyncState | null = null;
+  private garminConnectionHistory: ConnectionHistoryStatusProjection | null = null;
+  private garminConnectionHistoryLoaded = false;
   private garminSleepSyncStateLoaded = false;
   private garminSleepBackfillPermissionsLoaded = false;
   private hasGarminSleepBackfillPermissions = false;
@@ -141,6 +150,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private logger = inject(LoggerService);
   private destroyRef = inject(DestroyRef);
   private windowService = inject(AppWindowService);
+  private hapticsService = inject(AppHapticsService);
   private sleepService = inject(AppSleepService);
 
 
@@ -166,6 +176,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       // Reconcile is only needed when resolver and first live emission may duplicate the same payload.
       this.initialLiveReconcilePending = !!resolvedData.user && !isEventsPrefetchSkipped;
       this.initialResolvedEventsForReconcile = this.events || [];
+      this.initialResolvedEventsKeyForReconcile = this.buildEventsIdentityKey(this.initialResolvedEventsForReconcile);
       this.initialResolvedUserIDForReconcile = isEventsPrefetchSkipped ? null : (resolvedData.user?.uid || null);
       this.targetUser = resolvedData.targetUser;
       this.hasMergedEvents = resolvedData.hasMergedEvents ?? this.events?.some(event => event.isMerge) ?? false;
@@ -285,10 +296,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
       // Use the live listener but ensure we don't emit redundant data if it matches what we already have
       return this.eventService
-        .getEventsBy(this.targetUser ? this.targetUser : user, where, 'startDate', false, limit)
+        .getEventSummariesBy(this.targetUser ? this.targetUser : user, where, 'startDate', false, limit)
         .pipe(
-          distinctUntilChanged((p: EventInterface[], c: EventInterface[]) => this.areEventsEquivalentByIdentity(p, c)),
-          map((eventsArray: EventInterface[]) => {
+          // Snapshot once: later edits also mutate the objects retained by the previous emission.
+          map((events: EventRead[]) => ({ events, key: this.buildEventsIdentityKey(events) })),
+          distinctUntilChanged((previous, current) => previous.key === current.key),
+          map(({ events: eventsArray, key }) => {
             if (this.initialLiveReconcilePending && this.initialResolvedUserIDForReconcile !== user.uid) {
               this.initialLiveReconcilePending = false;
             }
@@ -299,7 +312,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
             if (shouldAttemptInitialReconcile) {
               this.initialLiveReconcilePending = false;
-              const isDuplicateOfResolvedData = this.areEventsEquivalentByIdentity(this.initialResolvedEventsForReconcile, eventsArray);
+              const isDuplicateOfResolvedData = this.initialResolvedEventsKeyForReconcile === key;
               if (isDuplicateOfResolvedData) {
                 this.logger.info('[perf] dashboard_skip_initial_live_duplicate', {
                   events: eventsArray?.length || 0,
@@ -347,7 +360,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
             });
             return result;
           }),
-          filter((eventsArray: EventInterface[] | null): eventsArray is EventInterface[] => eventsArray !== null),
+          filter((eventsArray: EventRead[] | null): eventsArray is EventRead[] => eventsArray !== null),
           map((events) => {
             return { events: events, user: user }
           }))
@@ -423,9 +436,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   onUnitSetupPresetChange(preset: UnitSetupPreset): void {
+    if (this.isSavingUnitSetup || preset === this.selectedUnitSetupPreset
+      || !this.unitSetupOptions.some(option => option.value === preset)) return;
     this.selectedUnitSetupPreset = preset;
     this.unitSetupError = null;
     this.syncDashboardActionPromptState();
+    this.hapticsService.selection();
   }
 
   onDashboardActionPromptPrimary(event: DashboardActionPromptEvent): void {
@@ -465,11 +481,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   onDashboardActionPromptSecondary(event: DashboardActionPromptEvent): void {
-    if (event.promptId === DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID && event.action.id === 'dismissUnitSetup') {
-      void this.dismissUnitSetupPrompt();
-      return;
-    }
-
     if (
       event.promptId === DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID
       && event.action.id === 'dismissFirstActivityUpload'
@@ -547,76 +558,55 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   async applyUnitSetupPreset(): Promise<void> {
-    if (!this.user) {
+    if (this.isSavingUnitSetup || !shouldShowUnitSetupPrompt(this.user, this.targetUser)) {
       return;
     }
 
+    const user = this.user;
+    const preset = this.selectedUnitSetupPreset;
     this.isSavingUnitSetup = true;
     this.unitSetupError = null;
+    this.syncDashboardActionPromptState();
 
     try {
-      const nextUnitSettings = buildUnitSettingsForUnitSetupPreset(this.selectedUnitSetupPreset);
+      const nextUnitSettings = buildUnitSettingsForUnitSetupPreset(preset);
+      // The distance setup prompt must not overwrite a separately chosen weight unit.
+      nextUnitSettings.weightUnits = user.settings?.unitSettings?.weightUnits === WeightUnits.Pounds
+        ? WeightUnits.Pounds
+        : WeightUnits.Kilograms;
+      nextUnitSettings.startOfTheWeek = user.settings?.unitSettings?.startOfTheWeek ?? nextUnitSettings.startOfTheWeek;
       const unitSetupCompletedAppSettings = {
         unitSetupCompleted: true,
       };
-      const nextAppSettings = {
-        ...(this.user.settings?.appSettings || {}),
-        ...unitSetupCompletedAppSettings,
-      };
-
-      await this.userService.updateUserProperties(this.user, {
+      await this.userService.updateUserProperties(user, {
         settings: {
           unitSettings: nextUnitSettings,
           appSettings: unitSetupCompletedAppSettings,
         },
       });
-      this.user.settings = {
-        ...(this.user.settings || {} as any),
+      if (this.destroyRef.destroyed || this.user?.uid !== user.uid) return;
+      user.settings = {
+        ...user.settings,
         unitSettings: nextUnitSettings,
-        appSettings: nextAppSettings as any,
+        appSettings: { ...user.settings?.appSettings, ...unitSetupCompletedAppSettings },
       };
-      this.syncDashboardActionPromptState();
-      this.snackBar.open('Unit preferences saved', undefined, { duration: 2000 });
-      this.analyticsService.logEvent('unit_setup_complete', { preset: this.selectedUnitSetupPreset });
-    } catch (error) {
-      this.unitSetupError = 'Could not save unit preferences.';
-      this.logger.error('[DashboardComponent] Failed to apply unit setup preset', error);
-    } finally {
-      this.isSavingUnitSetup = false;
-      this.syncDashboardActionPromptState();
-    }
-  }
-
-  async dismissUnitSetupPrompt(): Promise<void> {
-    if (!this.user) {
-      return;
-    }
-
-    this.isSavingUnitSetup = true;
-    this.unitSetupError = null;
-
-    try {
-      const unitSetupCompletedAppSettings = {
-        unitSetupCompleted: true,
-      };
-      const nextAppSettings = {
-        ...(this.user.settings?.appSettings || {}),
-        ...unitSetupCompletedAppSettings,
-      };
-
-      await this.userService.updateUserProperties(this.user, {
+      // A fresh input also updates dashboard chart/table display preferences immediately.
+      this.user = Object.assign(Object.create(Object.getPrototypeOf(this.user)), this.user, {
         settings: {
-          appSettings: unitSetupCompletedAppSettings,
+          ...this.user.settings,
+          unitSettings: nextUnitSettings,
+          appSettings: { ...this.user.settings?.appSettings, ...unitSetupCompletedAppSettings },
         },
       });
-      this.user.settings = this.user.settings || {} as any;
-      this.user.settings.appSettings = nextAppSettings as any;
       this.syncDashboardActionPromptState();
-      this.snackBar.open('You can change units in Settings anytime', undefined, { duration: 2500 });
-      this.analyticsService.logEvent('unit_setup_skip');
+      this.snackBar.open('Unit preferences saved', undefined, { duration: 2000 });
+      this.analyticsService.logEvent('unit_setup_complete', { preset });
+      this.hapticsService.success();
     } catch (error) {
-      this.unitSetupError = 'Could not save this choice.';
-      this.logger.error('[DashboardComponent] Failed to dismiss unit setup prompt', error);
+      if (this.destroyRef.destroyed || this.user?.uid !== user.uid) return;
+      this.unitSetupError = 'Could not save unit preferences.';
+      this.logger.error('[DashboardComponent] Failed to apply unit setup preset', error);
+      this.hapticsService.error();
     } finally {
       this.isSavingUnitSetup = false;
       this.syncDashboardActionPromptState();
@@ -887,12 +877,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.syncDashboardActionPromptState();
 
     try {
-      const tokenAndURI = await this.userService.getCurrentUserServiceTokenAndRedirectURI(ServiceNames.SuuntoApp);
+      await this.router.navigate(['/services'], { queryParams: { serviceName: ServiceNames.SuuntoApp, reconnect: '1' } });
       this.analyticsService.logEvent('dashboard_action_prompt_reconnect_service', {
         prompt_id: DASHBOARD_ACTION_PROMPT_RECONNECT_SUUNTO_SERVICE_ID,
         service_name: ServiceNames.SuuntoApp,
       });
-      this.windowService.windowRef.location.href = tokenAndURI.redirect_uri;
+      this.isReconnectingSuuntoServicePrompt = false;
     } catch (error: any) {
       this.reconnectSuuntoServicePromptError = 'Could not start Suunto reconnect.';
       this.logger.error('[DashboardComponent] Failed to start Suunto reconnect prompt flow', error);
@@ -955,7 +945,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  private trackEventsListenerEmission(eventsArray: EventInterface[]): void {
+  private trackEventsListenerEmission(eventsArray: EventRead[]): void {
     const emitStart = performance.now();
     this.hasMergedEvents = eventsArray.some(event => event.isMerge);
     this.logPerf('events_listener_emit', emitStart, { incomingEvents: eventsArray?.length || 0 });
@@ -1059,7 +1049,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.activityServiceConnectionState = null;
         this.syncDashboardActionPromptState();
 
-        if (!this.shouldEvaluateActivityServicePrompts(user)) {
+        // Empty-state connection actions also need this state, regardless of plan or prompt dismissals.
+        if (!user || !this.isOwnerDashboard(user)) {
           return of(null);
         }
 
@@ -1111,6 +1102,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.authService.user$.pipe(
       switchMap((user: AppUserInterface | null) => {
         this.garminSleepSyncState = null;
+        this.garminConnectionHistory = null;
+        this.garminConnectionHistoryLoaded = false;
         this.garminSleepSyncStateLoaded = false;
         this.garminSleepBackfillPermissionsLoaded = false;
         this.hasGarminSleepBackfillPermissions = false;
@@ -1122,6 +1115,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
             state: null as SleepSyncState | null,
             permissionsLoaded: false,
             hasPermissions: false,
+            historyLoaded: false,
+            history: null as ConnectionHistoryStatusProjection | null,
           });
         }
 
@@ -1143,21 +1138,34 @@ export class DashboardComponent implements OnInit, OnDestroy {
               return of(false);
             }),
           ),
+          this.userService.getUserMetaForService(user, ServiceNames.GarminAPI).pipe(
+            map(meta => ({ loaded: true, history: meta?.connectionHistoryImport || null })),
+            catchError(error => {
+              this.logger.warn('[DashboardComponent] Failed to read Garmin connection history for dashboard prompt', {
+                userID: user.uid,
+              }, error);
+              return of({ loaded: false, history: null as ConnectionHistoryStatusProjection | null });
+            }),
+          ),
         ]).pipe(
-          map(([state, hasPermissions]) => ({
+          map(([state, hasPermissions, connectionHistory]) => ({
             stateLoaded: true,
             state,
             permissionsLoaded: true,
             hasPermissions,
+            historyLoaded: connectionHistory.loaded,
+            history: connectionHistory.history,
           })),
         );
       }),
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe(({ stateLoaded, state, permissionsLoaded, hasPermissions }) => {
+    ).subscribe(({ stateLoaded, state, permissionsLoaded, hasPermissions, historyLoaded, history }) => {
       this.garminSleepSyncStateLoaded = stateLoaded;
       this.garminSleepSyncState = state;
       this.garminSleepBackfillPermissionsLoaded = permissionsLoaded;
       this.hasGarminSleepBackfillPermissions = hasPermissions;
+      this.garminConnectionHistoryLoaded = historyLoaded;
+      this.garminConnectionHistory = history;
       this.syncDashboardActionPromptState();
     });
   }
@@ -1258,6 +1266,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
       || !this.garminSleepSyncStateLoaded
       || !this.garminSleepBackfillPermissionsLoaded
       || !this.hasGarminSleepBackfillPermissions
+      || !this.garminConnectionHistoryLoaded
+      || hasGarminSleepHealthConnectionHistory(this.garminConnectionHistory)
     ) {
       return false;
     }
@@ -1315,17 +1325,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.suuntoConnectionView.reconnectPromptSource;
   }
 
-  private shouldEvaluateActivityServicePrompts(user: AppUserInterface | null | undefined): user is AppUserInterface {
-    return this.shouldEvaluateActivityServiceConnectionPrompt(user)
-      || this.shouldEvaluateActivityAutoSyncPrompt(user)
-      || this.shouldEvaluateGarminSleepBackfillPrompt(user);
-  }
-
   private updateNoActivityDashboardState(): void {
     this.showNoActivityDashboardState = this.isInitialized
       && this.hasAnyActivity === false
       && !!this.user
       && this.isOwnerDashboard(this.user);
+    this.showNoActivityConnectServiceAction = this.showNoActivityDashboardState
+      && this.hasActivityServiceConnection === false;
+    this.noActivityDashboardDescription = this.hasActivityServiceConnection === true
+      ? 'You have a connected service. You can also upload an activity file.'
+      : this.hasActivityServiceConnection === false
+        ? 'Connect a service or upload an activity.'
+        : 'Upload an activity file to get started.';
   }
 
   private markDashboardHasActivity(): void {
@@ -1358,6 +1369,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   private async openUnitSettings(): Promise<void> {
+    if (this.isSavingUnitSetup) return;
+    this.hapticsService.selection();
     await this.router.navigate(['/settings'], {
       queryParams: { section: 'units' },
     });
@@ -1377,23 +1390,19 @@ export class DashboardComponent implements OnInit, OnDestroy {
     await this.router.navigate(['/subscriptions']);
   }
 
-  private areEventsEquivalentByIdentity(previousEvents: EventInterface[] = [], currentEvents: EventInterface[] = []): boolean {
-    if (previousEvents?.length !== currentEvents?.length) {
-      return false;
-    }
-    return previousEvents.every((previousEvent, index) => {
-      const currentEvent = currentEvents[index];
-      return this.getEventStableID(previousEvent) === this.getEventStableID(currentEvent)
-        && previousEvent?.name === currentEvent?.name
-        && this.getEventStableStartDate(previousEvent) === this.getEventStableStartDate(currentEvent)
-        && JSON.stringify(getEventTags(previousEvent as AppEventInterface))
-          === JSON.stringify(getEventTags(currentEvent as AppEventInterface));
-    });
+  private buildEventsIdentityKey(events: EventRead[] = []): string {
+    return JSON.stringify(events.map(event => [
+      this.getEventStableID(event),
+      event?.getReadRevision?.(),
+      event?.name,
+      this.getEventStableStartDate(event),
+      getEventTags(event),
+    ]));
   }
 
   private buildEventsIdentityMismatchSummary(
-    previousEvents: EventInterface[] = [],
-    currentEvents: EventInterface[] = [],
+    previousEvents: EventRead[] = [],
+    currentEvents: EventRead[] = [],
   ): Record<string, unknown> {
     const previousLength = previousEvents?.length || 0;
     const currentLength = currentEvents?.length || 0;
@@ -1451,7 +1460,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     };
   }
 
-  private getEventStableID(event: EventInterface | undefined): string | null {
+  private getEventStableID(event: EventRead | undefined): string | null {
     if (!event) {
       return null;
     }
@@ -1462,7 +1471,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return eventAny.id || null;
   }
 
-  private getEventStableStartDate(event: EventInterface | undefined): number | null {
+  private getEventStableStartDate(event: EventRead | undefined): number | null {
     if (!event) {
       return null;
     }
@@ -1503,6 +1512,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   public get eventTableFilters(): AppDashboardEventTableFiltersInterface {
     return this.getEventTableFilters(this.user);
+  }
+
+  get eventTableEmptyMessage(): string {
+    const filters = this.eventTableFilters;
+    return filters.activityTypes?.length ? 'No activities match your filters'
+      : filters.dateRange === DateRanges.all ? 'No activities to show' : 'No activities in this date range';
+  }
+
+  get eventTableEmptyHint(): string {
+    const filters = this.eventTableFilters;
+    return filters.activityTypes?.length ? 'Change your dates or clear a filter.'
+      : filters.dateRange === DateRanges.all ? '' : 'Try a wider date range.';
   }
 
   private persistDashboardSettings(dashboardSettings: Partial<AppDashboardSettingsInterface>): Promise<void> {

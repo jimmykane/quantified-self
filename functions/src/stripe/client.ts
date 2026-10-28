@@ -28,6 +28,7 @@
  */
 
 import type Stripe from 'stripe';
+import { assertLocalBillingEnvironment } from './billing/model';
 
 const LOCAL_EMULATOR_DISABLED_SECRET = 'LOCAL_EMULATOR_DISABLED';
 
@@ -38,10 +39,11 @@ const LOCAL_EMULATOR_DISABLED_SECRET = 'LOCAL_EMULATOR_DISABLED';
  */
 let stripeInstance: Stripe | undefined;
 let adminBillingStripeInstance: Stripe | undefined;
+let billingStripeInstance: Stripe | undefined;
 
 export const STRIPE_API_VERSION = '2026-07-29.dahlia' as const;
 
-async function createStripeClient(secretName: 'STRIPE_SECRET_KEY' | 'STRIPE_ADMIN_BILLING_KEY'): Promise<Stripe> {
+async function createStripeClient(secretName: 'STRIPE_SECRET_KEY' | 'STRIPE_ADMIN_BILLING_KEY' | 'STRIPE_BILLING_KEY'): Promise<Stripe> {
     const stripeKey = process.env[secretName];
     if (!stripeKey || stripeKey === LOCAL_EMULATOR_DISABLED_SECRET) {
         throw new Error(`${secretName} is unavailable to this Function invocation.`);
@@ -50,6 +52,7 @@ async function createStripeClient(secretName: 'STRIPE_SECRET_KEY' | 'STRIPE_ADMI
     const { default: StripeClient } = await import('stripe');
     return new StripeClient(stripeKey, {
         apiVersion: STRIPE_API_VERSION,
+        ...(secretName === 'STRIPE_BILLING_KEY' ? { timeout: 20_000, maxNetworkRetries: 1 } : {}),
     });
 }
 
@@ -95,6 +98,13 @@ export async function getAdminBillingStripe(): Promise<Stripe> {
         adminBillingStripeInstance = await createStripeClient('STRIPE_ADMIN_BILLING_KEY');
     }
     return adminBillingStripeInstance;
+}
+
+/** Native billing credential; independent of the extension and admin gift key. */
+export async function getBillingStripe(): Promise<Stripe> {
+    assertLocalBillingEnvironment(process.env);
+    if (!billingStripeInstance) billingStripeInstance = await createStripeClient('STRIPE_BILLING_KEY');
+    return billingStripeInstance;
 }
 
 /**

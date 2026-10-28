@@ -23,11 +23,13 @@ import {
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
   DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
 } from './dashboard-special-chart-types';
 import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from './dashboard-form.helper';
 import {
   DASHBOARD_TILE_SECTION_DEFINITIONS,
   DASHBOARD_TILE_SECTION_ORDER,
+  getDashboardTileSectionDefinition,
   orderDashboardTilesByIntentSections,
   resolveDashboardTileLaneKey,
   resolveDashboardTileSection,
@@ -36,11 +38,12 @@ import {
 describe('dashboard tile section metadata', () => {
   it('keeps the fixed section order aligned with section definitions', () => {
     expect(DASHBOARD_TILE_SECTION_ORDER).toEqual([
+      'calendar',
       'trainingState',
+      'health',
       'performancePower',
       'activityOverview',
       'routesMaps',
-      'custom',
     ]);
     expect(DASHBOARD_TILE_SECTION_DEFINITIONS.map(definition => definition.id)).toEqual(DASHBOARD_TILE_SECTION_ORDER);
   });
@@ -48,6 +51,7 @@ describe('dashboard tile section metadata', () => {
 
 describe('resolveDashboardTileSection', () => {
   it('maps curated dashboard chart types to intent sections', () => {
+    expect(resolveDashboardTileSection(createChartTile(DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE))).toBe('calendar');
     expect(resolveDashboardTileSection(createChartTile(DASHBOARD_FORM_CHART_TYPE))).toBe('trainingState');
     expect(resolveDashboardTileSection(createChartTile(DASHBOARD_POWER_CURVE_CHART_TYPE))).toBe('performancePower');
     expect(resolveDashboardTileSection(createChartTile(DASHBOARD_EFFICIENCY_TREND_CHART_TYPE))).toBe('performancePower');
@@ -81,25 +85,28 @@ describe('resolveDashboardTileSection', () => {
     ))).toBe('activityOverview');
   });
 
-  it('maps power and training load custom charts to their intent sections', () => {
-    expect(resolveDashboardTileSection(createChartTile(ChartTypes.LinesVertical, DataPower.type))).toBe('performancePower');
+  it('keeps custom power and training load charts in Activity Overview', () => {
+    expect(resolveDashboardTileSection(createChartTile(ChartTypes.LinesVertical, DataPower.type))).toBe('activityOverview');
     expect(resolveDashboardTileSection(createChartTile(
       ChartTypes.LinesVertical,
       DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
-    ))).toBe('trainingState');
+    ))).toBe('activityOverview');
   });
 
-  it('maps legacy recovery metric tiles to Training State', () => {
-    expect(resolveDashboardTileSection(createChartTile(ChartTypes.Pie, DataRecoveryTime.type))).toBe('trainingState');
+  it('keeps legacy custom recovery metrics in Activity Overview', () => {
+    expect(resolveDashboardTileSection(createChartTile(ChartTypes.Pie, DataRecoveryTime.type))).toBe('activityOverview');
   });
 
-  it('maps unknown custom charts to Custom Charts', () => {
-    expect(resolveDashboardTileSection(createChartTile(ChartTypes.Pie, 'DeviceName'))).toBe('custom');
-    expect(resolveDashboardTileSection(null)).toBe('custom');
+  it('keeps unknown or missing custom metrics in Activity Overview', () => {
+    expect(resolveDashboardTileSection(createChartTile(ChartTypes.Pie, 'DeviceName'))).toBe('activityOverview');
+    expect(resolveDashboardTileSection(createChartTile(ChartTypes.Pie, ''))).toBe('activityOverview');
+    expect(resolveDashboardTileSection(null)).toBe('activityOverview');
+    expect(getDashboardTileSectionDefinition('custom' as never).id).toBe('activityOverview');
   });
 
   it('resolves KPI and section lane keys from the same section rules', () => {
     expect(resolveDashboardTileLaneKey(createChartTile(DASHBOARD_ACWR_KPI_CHART_TYPE))).toBe('kpi');
+    expect(resolveDashboardTileLaneKey(createChartTile(DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE))).toBe('section:calendar');
     expect(resolveDashboardTileLaneKey(createChartTile(DASHBOARD_POWER_CURVE_CHART_TYPE))).toBe('section:performancePower');
     expect(resolveDashboardTileLaneKey({
       type: TileTypes.Map,
@@ -108,7 +115,7 @@ describe('resolveDashboardTileSection', () => {
     } as TileSettingsInterface)).toBe('section:routesMaps');
   });
 
-  it('orders tiles as KPI first then fixed intent sections while preserving order inside each lane', () => {
+  it('orders Calendar before KPIs and the remaining intent sections while preserving each lane', () => {
     const mapTile = {
       type: TileTypes.Map,
       order: 0,
@@ -119,16 +126,18 @@ describe('resolveDashboardTileSection', () => {
     const kpiTile = createChartTile(DASHBOARD_ACWR_KPI_CHART_TYPE, DataDistance.type, ChartDataCategoryTypes.DateType, 'ACWR');
     const powerTile = createChartTile(DASHBOARD_POWER_CURVE_CHART_TYPE, DataPower.type, ChartDataCategoryTypes.DateType, 'Power');
     const firstActivityTile = createChartTile(ChartTypes.ColumnsVertical, DataDistance.type, ChartDataCategoryTypes.DateType, 'Distance');
+    const calendarTile = createChartTile(DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE, DataDuration.type, ChartDataCategoryTypes.DateType, 'Calendar');
 
     const orderedNames = orderDashboardTilesByIntentSections([
       mapTile,
+      calendarTile,
       secondActivityTile,
       kpiTile,
       powerTile,
       firstActivityTile,
     ]).map(tile => (tile as TileSettingsInterface & { name?: string }).name);
 
-    expect(orderedNames).toEqual(['ACWR', 'Power', 'Duration', 'Distance', 'Map']);
+    expect(orderedNames).toEqual(['Calendar', 'ACWR', 'Power', 'Duration', 'Distance', 'Map']);
   });
 });
 

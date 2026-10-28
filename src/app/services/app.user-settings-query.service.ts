@@ -34,6 +34,7 @@ import {
 import { isTrainingDestinationId } from '@shared/training-disciplines';
 
 import { LoggerService } from './logger.service';
+import { normalizeHealthHighlightSources, normalizeHealthMetricSources } from '../helpers/health-highlight-preferences.helper';
 
 @Injectable({
     providedIn: 'root'
@@ -42,6 +43,7 @@ export class AppUserSettingsQueryService {
     private authService = inject(AppAuthService);
     private userService = inject(AppUserService);
     private logger = inject(LoggerService);
+    private plansViewWrites: Promise<void> = Promise.resolve();
 
     /**
      * Base user stream, distinct until the user object identity modification or deep content change.
@@ -153,6 +155,19 @@ export class AppUserSettingsQueryService {
             throw new Error('A signed-in account and Training preference are required.');
         }
         const normalizedPreferences = this.normalizeTrainingWorkspacePreferences(preferences);
+        if (normalizedPreferences.plansView !== undefined) {
+            // Shared across route instances, so a closed page cannot overwrite a newer choice.
+            const write = this.plansViewWrites.then(() => this.writeTrainingWorkspacePreferences(expectedUserUID, normalizedPreferences));
+            this.plansViewWrites = write.catch(() => undefined);
+            return write;
+        }
+        return this.writeTrainingWorkspacePreferences(expectedUserUID, normalizedPreferences);
+    }
+
+    private async writeTrainingWorkspacePreferences(
+        expectedUserUID: string,
+        normalizedPreferences: Partial<TrainingWorkspacePreferences>,
+    ): Promise<void> {
         const user = await this.getCurrentUser();
         if (!user?.uid || user.uid !== expectedUserUID) {
             throw new Error('The signed-in account changed before the Training preference could be saved.');
@@ -187,6 +202,7 @@ export class AppUserSettingsQueryService {
         }
         const supportedKeys = new Set<keyof TrainingWorkspacePreferences>([
             'preferredDestination',
+            'plansView',
             'sportShortcuts',
         ]);
         if (Object.keys(preferences).some(key => !supportedKeys.has(key as keyof TrainingWorkspacePreferences))) {
@@ -194,6 +210,12 @@ export class AppUserSettingsQueryService {
         }
 
         const normalized: Partial<TrainingWorkspacePreferences> = {};
+        if (Object.prototype.hasOwnProperty.call(preferences, 'plansView')) {
+            if (preferences.plansView !== 'plans' && preferences.plansView !== 'standalone') {
+                throw new Error('The Training Plans view is not supported.');
+            }
+            normalized.plansView = preferences.plansView;
+        }
         if (Object.prototype.hasOwnProperty.call(preferences, 'preferredDestination')) {
             if (!isTrainingDestinationId(preferences.preferredDestination)) {
                 throw new Error('The Training destination is not supported.');
@@ -227,7 +249,8 @@ export class AppUserSettingsQueryService {
      */
     public async updateHealthWorkspacePreferences(
         expectedUserUID: string,
-        preferences: Required<Pick<AppHealthWorkspaceSettingsInterface, 'metric' | 'range'>>,
+        preferences: Required<Pick<AppHealthWorkspaceSettingsInterface, 'metric' | 'range'>>
+            & Pick<AppHealthWorkspaceSettingsInterface, 'highlightSources' | 'metricSources'>,
     ): Promise<void> {
         if (
             !expectedUserUID
@@ -236,16 +259,30 @@ export class AppUserSettingsQueryService {
         ) {
             throw new Error('A signed-in account and supported Health metric and range are required.');
         }
+        const highlightSources = normalizeHealthHighlightSources(preferences.highlightSources);
+        if (preferences.highlightSources !== undefined && !equal(highlightSources, preferences.highlightSources)) {
+            throw new Error('Supported opaque Health highlight source selections are required.');
+        }
+        const metricSources = normalizeHealthMetricSources(preferences.metricSources);
+        if (preferences.metricSources !== undefined && !equal(metricSources, preferences.metricSources)) {
+            throw new Error('Supported opaque Health metric source selections are required.');
+        }
+        const normalized = {
+            metric: preferences.metric,
+            range: preferences.range,
+            ...(Object.keys(highlightSources).length ? { highlightSources } : {}),
+            ...(Object.keys(metricSources).length ? { metricSources } : {}),
+        };
         const user = await this.getCurrentUser();
         if (!user?.uid || user.uid !== expectedUserUID) {
             throw new Error('The signed-in account changed before the Health workspace preferences could be saved.');
         }
 
-        this.logger.info('[AppUserSettingsQueryService] Updating Health workspace preferences.', preferences);
+        this.logger.info('[AppUserSettingsQueryService] Updating Health workspace preferences.');
         return this.userService.updateUserProperties(user, {
             settings: {
                 appSettings: {
-                    healthWorkspace: preferences,
+                    healthWorkspace: normalized,
                 },
             },
         }).catch(err => {
@@ -314,7 +351,7 @@ export class AppUserSettingsQueryService {
      */
     public async updateChartSettings(
         settings: Partial<AppChartSettingsInterface>,
-        options: { force?: boolean } = {},
+        options: { force?: boolean; expectedUserID?: string } = {},
     ): Promise<void> {
         if (!options.force) {
             const currentSettings = this.chartSettings();
@@ -334,6 +371,9 @@ export class AppUserSettingsQueryService {
         if (!user) {
             this.logger.warn(`[AppUserSettingsQueryService] Cannot update Chart Settings. No user logged in.`);
             throw new Error('Sign in to save chart settings.');
+        }
+        if (options.expectedUserID !== undefined && user.uid !== options.expectedUserID) {
+            throw new Error('The signed-in account changed before chart settings could be saved.');
         }
 
         const updatedSettings = {

@@ -1,0 +1,423 @@
+# History import on connection
+
+Eligible Pro users can leave **Import history from this service** selected when connecting or reconnecting Garmin, Suunto, COROS, or Wahoo. The adjacent range selector defaults to **30 days** and also offers provider-valid longer ranges:
+
+| Provider | Connection-history choices | Maximum choice |
+| --- | --- | --- |
+| Garmin | 30 days, 90 days, 1 year, 2 years, maximum | Latest rolling 5 years |
+| Suunto | 30 days, 90 days, 1 year, 2 years, maximum | All history the provider makes available |
+| COROS | 30 days, 60 days, maximum | Latest rolling 3 months |
+| Wahoo | 30 days, 90 days, 1 year, 2 years, maximum | All eligible retained FIT-backed workouts |
+
+The 30-day range contains the connection day and preceding 29 UTC calendar dates. Longer fixed-day ranges follow the same inclusive rule; calendar-year and provider-maximum choices preserve calendar boundaries. Every range ends at successful connection time with whole-second precision. The coordinator never continues earlier than the selected boundary, and there is no existing-user rollout. For new Suunto requests that explicitly include routes, the entire saved route library is imported independently of this date range. Outbound delivery settings remain separate.
+
+The checkbox uses the shared capability inventory for its description. Dashboard, Routes, and Wahoo permission shortcuts navigate to Connections with the provider selected and reconnect controls visible. They do not begin OAuth. Omitted history consent from an older client means false. Suunto route inclusion also requires the additive `importRouteHistory` flag; a pre-route client or already-staged run retains its original activities/Sleep/Health scope.
+
+Dashboard setup actions read durable service state on every visit. The empty-activity card offers **Connect service** only after confirming that no activity service is connected, including for accounts with dismissed prompts or without Pro. A saved Garmin connection-history run covering Sleep or Health suppresses the generic history prompt from admission onward, even with zero records or failed/skipped steps; progress and retries remain in Services. Activity-only history does not suppress the Sleep/Health offer. The prompt waits for service metadata and preserves the older manual backfill markers. These frontend decisions change no queue, monitoring, MCP, consent or provider API contract.
+
+## Shared header and Dashboard progress
+
+The authenticated header lazily loads a text action such as **Importing history · 2**. Its Material panel (bottom
+sheet on phones) and the signed-in owner's Dashboard render the same `HistoryImportCardsComponent`. The root
+`HistoryImportProgressService` subscribes once per authenticated session to the four existing owner-readable
+`users/{uid}/meta/{service}` documents. It consumes only `connectionHistoryImport`; Connections and older prompt
+readers retain their existing contracts. There are no private run/queue/token reads, new callable, polling loop or write.
+
+Auth and the verified profile must match before reads begin. Raw sign-out/account changes clear status immediately,
+unsubscribe old metadata, dismiss owned panels silently and reject old results. Profile-only updates do not restart
+listeners. Dashboard progress is omitted when viewing another account. Read failures are unavailable, not zero; an
+explicit **Refresh status** reattaches only these safe reads. Header, panel and Dashboard consume the same live view.
+During that read, the existing cards stay visible and **Checking status** disables repeat refreshes. A provider's fresh
+snapshot updates immediately even if another provider is still loading. Retained results never cross owners or sessions.
+
+The Dashboard group has **Hide from dashboard**. The header panel's **Show on dashboard** switch restores it; the
+panel and header keep their live status while Dashboard cards are hidden. This preference applies to future runs too.
+It is stored as a local boolean for the signed-in account through `APP_STORAGE`, with an in-memory fallback if storage
+is blocked. Each account has its own choice on that browser. It saves no import data, changes no server preference,
+and neither stops nor starts provider work. Stale panels cannot change another session's preference.
+
+The same safe metadata snapshot supplies the current connection state. Pending or completed disconnects hide any
+retained run projection, which the server can leave marked active after invalidating its lifecycle. An active projection
+with `reconnect_required` shows **Reconnect required** and a Connections link instead of stale processing stages or
+an automatic-retry claim. A successful reconnect replaces/clears the old projection through the existing lifecycle;
+this UI performs no recovery action and reads no token or generation fields.
+
+Active work and automatic retries retain their distinct stages. Garmin cards say **Requesting history** or **Waiting
+to retry requests**; a sole Garmin header says **Requesting Garmin history** or **Waiting to retry Garmin requests**.
+Garmin Activities, Sleep and Health counters explicitly describe **requests scheduled**, not records received or
+accepted HTTP calls. Health counts can include planned windows before they are submitted. Garmin sends records
+separately after accepting requests; delivery can take hours or days and completion is not tracked here. Submitted
+requests say **History requested** without an activity spinner. Older processed Garmin projections say **Request
+processing finished**, never that records have finished importing. Requested/processed terminal context
+expires from these prominent surfaces exactly 24 hours after its projection update, using a local display timer that
+does not read or write data. Terminal failed/skipped outcomes say **Finished with issues**, without an active spinner.
+**Dismiss this result** clears that exact provider/run/result timestamp from the header, panel and Dashboard for the
+current account on this browser. One local receipt per provider uses `APP_STORAGE`, with session fallback when storage
+is blocked; no server write or recovery action occurs. New runs and resumed work remain visible, and a new terminal
+timestamp from a retry is a new result. Stale owner/result actions are rejected. Active work, reconnect guidance and
+unavailable status have no result-dismissal action. Connections retains the detailed status and retry controls.
+Until dismissed or superseded, issues remain visible. Counts are per capability's items or requests, never failure totals,
+and are never summed into a percentage,
+unique-record total, ETA or proof of complete coverage. Combined Sleep/Health capabilities keep one count.
+
+This covers coordinator projections, including the manual Suunto/COROS/Wahoo activity path. Legacy manual activity
+leases and independent Sleep/Health tools keep their existing feedback rather than gaining fabricated progress.
+**View details** navigates to the existing provider tab; merely opening these surfaces starts no provider work.
+
+Monitoring is **unchanged**: reviewed the #847 coordinator and #829/#830 ingestion coverage below and their source
+bundles. Workers, queues, dispatchers, leases, retries, outcomes and telemetry remain identical. MCP/Assistant,
+Training, entitlements and consent are unaffected. Only a separately approved frontend release is required;
+no Functions, Rules, indexes, cloud settings or migration are part of this change.
+
+## Requested range versus stored history
+
+The expanded owner-only History import status labels the selected boundary **Requested range**, never delivered
+coverage. It reads the first retained Sleep and Health date for that provider only when opened, on a changed run/resource
+scope, or on **Refresh stored dates**. Progress-counter updates do not repeat these reads. Each query is date/ID ordered
+and limited to one existing owner-readable document. Earlier imports/accounts can contribute retained records; first
+dates do not assert per-metric availability, gap-free coverage, or delivery by this run. Failed reads are unavailable,
+not empty. Closing, teardown or account/provider/run changes discard pending results. No provider request or write occurs.
+
+Garmin's existing `sleepSyncState/GarminAPI.providerMinBackfillStartMs`, when present, is shown separately as **Last
+reported Garmin Sleep history cutoff**. It is a historical provider response, not authority for a new account or request.
+Health families can have independent minima, and none is inferred from Sleep or the first stored Health record.
+No new cutoff projection, queue state, callable, backfill or migration is added.
+
+Release the added collection-scope `sleepSessions(source.provider ASC, sleepDate ASC, __name__ ASC)` index before the
+frontend. Health reuses its existing provider/date index; Rules already allow these bounded owner reads. No Functions
+or Rules deployment is required for this presentation change. Preparing the index is not authorization to deploy it.
+
+Monitoring decision: **unchanged**, after reviewing the recorded-import (#829), Health/Sleep (#830), and connection-history
+(#847) source bundles. No admission, task/worker outcome, ingestion, retry/lease policy, telemetry label or alert condition
+changes. The UI adds only optional bounded SDK reads; existing downstream and coordinator monitoring remain authoritative.
+MCP/Assistant tools, scopes, consent, exposed data and comparison calculations are unchanged.
+
+## Suunto saved-route library
+
+The connection option names saved routes and explains that its date picker applies to activity/Sleep/Health history,
+not the route library. The new frontend binds `importRouteHistory` to that selected Suunto option. OAuth start validates
+and stores the additive flag in the same expiring single-use flow; every claim, cleanup and expired-flow reconciliation
+scrubs it. The callback must retain explicit route consent before the connection transaction can snapshot the Routes
+capability. Missing flags and previously staged runs never gain that capability. No provider or MCP OAuth scope changes.
+
+The Routes step reads only the exact token/account bound to the run, through the existing Suunto listing. Listing requests
+have a 30-second deadline and 4 MiB response limit; at most 10,000 normalized routes are supported by connection import.
+Malformed listing records fail the source before admission; a partial normalized list cannot be recorded as complete.
+Oversized libraries fail visibly with the existing manual catch-up action named, rather than silently truncating. Up to
+100 routes are admitted per dispatch in stable ID order. A private last-route-ID cursor resumes after children finish;
+earlier route deletion cannot shift an offset page. Routes added behind an in-flight cursor continue through ordinary
+Suunto webhooks; the importer does not promise an immutable provider-library snapshot.
+
+Children use the existing `routeSyncQueue`/`processRouteSyncTask`, original-file persistence and route IDs, with an additional
+run-scoped queue identity and immutable queue revision. Interrupted parent checkpoints reuse completed children. Every
+admission, provider request and route/original-file write checks the current connection, exact credentials, Pro access and
+account deletion. The parent retains children written before an immediate dispatch failure and reuses the canonical enqueuer for undispatched or restored route children. Route retries retain their run and cursor; no activity or Sleep cooldown gates route-library work.
+History route tasks bind both their payload and task name to the queue revision. Every 15 minutes, issued children are
+eligible for a task-liveness recheck through the existing revision-bound dispatcher; recently issued children wait.
+A reserved name with no live task gets a recovery task with the configured queue backoff (at least 15 minutes), so
+recovery cannot race the nine-minute worker timeout or accelerate provider retries. Failed task lookups preserve the
+queue state instead of guessing that delivery is safe. Late dispatch markers cannot overwrite completed, restored or
+retried children. Ordinary webhook/manual route dispatch keeps its existing behavior. Task lookup requires the existing
+`cloudtasks.tasks.get` permission used by the shared revision-bound dispatchers.
+An unchanged route is a completed history observation. Routes that disappear after listing are retired without stopping
+later batches, and their explanation is retained in the final progress. Authorization and lifecycle skips still stop that
+capability. Follow-up deliveries inherit the history guard before handoff and inside their queue transaction, including
+unchanged routes that bypass route persistence; existing outbound settings remain required.
+The per-account manual catch-up admission marker is updated through the same transaction fence after the final batch;
+it does not claim that child workers have already saved every route.
+
+**Monitoring: covered.** The existing #847 coordinator and #833 route import filters cover Suunto and this canonical queue.
+The coordinator probe treats Routes independently of Sleep rollout/cooldown. The route probe uses masked, bounded reads of
+the private history identity to exclude superseded or non-Pro history children. Existing ordinary webhook/manual import
+eligibility, metrics, modes, dashboards, retry schedules and alerts remain intact; no cloud configuration was changed.
+
+**MCP impact: no contract change.** Imported routes retain the existing route model and explicit `routes:read`/
+`route-location:read` projections. No fields, tools, scope, consent or provider action are added to MCP or the Assistant.
+The additive consent flag belongs only to provider connection history.
+
+Release the backend before the frontend: the shared OAuth start/callback and expired-flow cleanup consumers, connection
+history worker/retry/recovery, route import worker and route dispatcher must understand this capability and its guards.
+No new Function, secret, index, Rules or queue is needed. Reverting the frontend stops new route-inclusive requests;
+retained runs/children must keep their supported backend adapter until they drain. Deployment requires separate approval.
+
+## Acceptance and ownership
+
+OAuth start validates and persists both consent and the provider-valid range preset alongside the existing server-owned, expiring, single-use flow generation. State claiming and reconciliation scrub both values. Omission from an older client means no consent; a consented request that predates the range field retains the 30-day default. Denial, an expired/replayed state, ordinary refresh, and non-Pro disconnect recovery cannot accept history.
+
+`service-connection-meta.ts` remains the compatibility facade; `service-connection-lifecycle.ts` owns the connected-state transaction and atomically stages the history run with its safe metadata. The connected-state transaction creates a run with a fresh opaque UUID in `connectionHistoryImports`, resolves the selected range from the successful connection time, and projects its safe initial status into the owner's service metadata. Successful OAuth includes a receipt only when automatic admission is enabled and the user requested history.
+
+A retryable Firestore trigger dispatches the durable run; a once-per-minute recovery scan repairs missed dispatch, including a crash between commit and enqueue. Refreshing or closing the browser does not stop the run. Connection success remains independent of import failure.
+
+Runs bind the exact provider account, token document, credential generation, and connection generation. They snapshot capability IDs/versions and Garmin's canonical Health-family inventory. Reconnecting supersedes previous work while preserving its imported records and applicable cooldowns. Disconnect/account cleanup recursively removes operational runs; it retains imported records on disconnect and removes account data through the existing account-deletion path.
+
+Only server code reads runs, receipts, cursors, and leases. Client metadata contains opaque ID, selected range preset, resolved dates, bounded per-type outcomes, counts, safe explanations, and retry availability. The authenticated, App Check-protected `retryConnectionHistoryImport` callable is required because it resumes privileged provider/ingestion work. Browser writes to runs or progress are denied, including admin browsers.
+
+## Shared operations
+
+### Manual activity imports: Garmin, Suunto, COROS and Wahoo
+
+Updated clients send `background: true` to the existing `addSuuntoAppHistoryToQueue`,
+`addCOROSAPIHistoryToQueue`, `addWahooAPIHistoryToQueue` and `backfillGarminAPIActivities` callables. After the existing App Check, authentication, Pro and date validation,
+one transaction captures the current server-owned provider account, token/root credential generation and
+connection generation. It creates an activity-only run, reserves activity history and projects safe progress
+into the existing service metadata. It neither reconnects the account nor changes credentials. The existing
+Firestore trigger and recovery scheduler dispatch it; the callable makes no provider request on this path.
+
+The selected range is stored as `custom`, independently of the OAuth preset registry. Garmin, Suunto and Wahoo retain the
+exact submitted timestamps and display the selected local dates; COROS retains its calendar-date validation/clamping and includes the entire end day.
+Manual window cursors advance by one millisecond, so adjacent windows do not omit the end of a day. Automatic
+snapshots retain their original cursor precision. Only the activity capability is selected: manual activity
+requests never add Sleep, Health or routes. The automatic-admission environment switch does not disable manual
+requests. No existing jobs are converted, reset or replayed.
+
+For Suunto/COROS, the shared coordinator admits at most 100 workouts per window, uses the existing 60-second history
+dispatch spread, waits for committed child outcomes and resumes with the same capacity, retry, deletion and
+connection guards. Wahoo reuses its existing adapter: one descending 100-workout page per step, a checkpointed
+page cursor and the same exact selected range. Its deferred workout dispatch schedule is unchanged, not replaced
+by the Suunto/COROS spread. Workouts without FIT files or identified as third-party imports remain excluded.
+Acceptance is not processing completion. A long manual import can take multiple windows or pages;
+sharing the coordinator is not a promise that every large range completes faster than the old bulk scan.
+The foreground request is now limited to durable admission instead of provider scanning.
+
+Garmin reuses its existing activity adapter and backfill operation, submitting one bounded 30-day window per
+coordinator step. It retains permission checks, exact token/connection fences, provider-minimum clipping and `409`
+already-requested handling. A transient failure resumes the failed window; successful earlier windows are checkpointed.
+Admission reserves the run but does not claim Garmin accepted it. The existing operation records the fixed 30-day
+cooldown after a successful/already-requested window, anchored to run admission; the count-based cooldown used by
+other providers never applies to Garmin. Completion is **requested**, not ingested. Garmin delivers activities through
+its existing webhook/worker path without per-run completion correlation. This route starts no Sleep or Health request.
+
+An active coordinator (including an automatic run not yet holding an activity reservation), manual lease or
+reservation blocks another manual run. Cooldown remains server-authoritative and is rechecked transactionally.
+Retrying an older failed run cannot replace a newer active run's projection, even for a different resource.
+Restored children use `dispatchedToCloudTask: null`, matching all canonical dispatchers' unissued-task state.
+The UI follows the live projection after acceptance, keeps pending state across dialog reopening, and discards
+its optimistic receipt after a connection change. Progress and owner retry reuse the existing Connections panel.
+Background acceptance does not emit the legacy scan-result event or reset live import counts/cooldown metadata.
+The coordinator-active form lock applies to all four providers, alongside existing lease and contention-buffer
+behavior. Garmin's form says **Requesting Garmin history**, then **History requested**, and explains asynchronous delivery.
+
+Compatibility is deliberate: omitted/false `background` retains the old callable contract, and a new client can
+still read an old backend's stats response. For all four providers, background admission repairs a missing
+`providerUserId` on demand when the connection and credential generations already exist and exactly one token
+under that user's provider root matches the active credential generation. The token's provider identity field must
+match its document ID (`userID`, `userName`, `openId`, or `wahooUserID`, respectively). The identifier, run and progress
+projection commit in one transaction with the existing deletion/disconnect/cooldown guards. A transaction retry
+cannot switch that recovery decision to a replacement account or generation. Existing identifiers are never overwritten.
+Suunto OAuth also passes its verified account ID to the guarded connected-state write, as the other providers do,
+so a later reconnect replaces an older recovered ID with the newly authorized account.
+Missing generations, ambiguous or mismatching credentials require reconnecting; background requests do not silently
+fall back to the legacy scan. Admission never invents generations or changes credentials. No bulk migration is needed,
+and already queued legacy imports are neither relinked nor replayed. Garmin's old-client path still returns void;
+new clients accept that response from older backends. All manual Sleep/Health/route imports remain on their existing paths.
+
+Monitoring: **covered/unchanged**, after reviewing `tools/connection-history-monitoring/definitions.mjs` and
+`tools/import-monitoring/definitions.mjs`. New runs use the same collection, workers, fixed provider labels,
+eligible-backlog probe, committed outcome metrics and failure alerts (#847/#829); no new queue, scheduler,
+probe, metric or alert apply is needed. No MCP/Assistant or Training contract changes.
+
+Release the compatible backend first: `addSuuntoAppHistoryToQueue`, `addCOROSAPIHistoryToQueue`,
+`processConnectionHistoryTask`, and `retryConnectionHistoryImport`. The Wahoo follow-up additionally needs
+`addWahooAPIHistoryToQueue`; once that shared coordinator/retry support is deployed, this is the only additional
+backend function required for Wahoo. Garmin additionally needs only `backfillGarminAPIActivities`: its adapter and
+coordinator already support bounded requests and requested completion. Release the frontend afterward. No Rules, indexes,
+secrets or cloud queue configuration changes are needed. Deployment still requires separate approval.
+The on-demand identity repair requires the four admission functions (`addSuuntoAppHistoryToQueue`,
+`addCOROSAPIHistoryToQueue`, `addWahooAPIHistoryToQueue`, `backfillGarminAPIActivities`) once coordinator support is
+deployed. Release `requestAndSetSuuntoAPIAccessToken` before or alongside them so reconnect also updates the saved
+Suunto identity. The existing progress UI needs no behavior change; Help explains verification and reconnect requirements.
+To stop new admissions, roll back the frontend (old request shape); keep the supporting coordinator and
+retry code until accepted runs drain. Do not roll back the manual cursor/retry support underneath active jobs.
+
+### Existing provider operations
+
+| Provider | Shared operations used by manual and connection imports | Completion |
+| --- | --- | --- |
+| Garmin | Activity backfill, Sleep requests, existing all-family Health cursor | Requested; delivery can take hours or days |
+| Suunto | Activity history queue admission, Sleep windows, 24/7 Health windows, explicitly included saved-route library | Processed by existing ingestion workers |
+| COROS | Activity history queue admission, combined daily Sleep/Health requests | Processed by existing ingestion workers |
+| Wahoo | Paginated eligible FIT-backed workout history | Processed by existing ingestion workers |
+
+Manual callables retain their legacy request/response contracts and historical range defaults. Their implementations are shared server functions; the coordinator does not invoke HTTP callables or duplicate parsing/persistence pipelines. Reservations, permission checks, provider cutoffs, queue identities and canonical workers apply to both entrypoints. A multi-window legacy manual activity import holds one reservation across all its windows. In an automatic connection import, a scope already in cooldown is skipped with its next availability, without delaying it until that date. Other scopes continue.
+
+A manual activity-history request blocked by an active manual lease or automatic reservation returns `already-exists` (HTTP 409), not `internal` (HTTP 500). Suunto and Garmin preserve the shared reservation error at their callable boundary and log this expected contention at INFO; COROS and Wahoo already propagate it without an ERROR log. All four providers show **Import already running** in the shared form, retaining its existing short retry buffer and honoring live manual-lease expiry. This neither submits a second import nor reports the first as processed. Automatic reservations remain server-authoritative; their long expiry is not used as a browser lock deadline.
+
+Monitoring coverage is **unchanged**: the fix changes manual callable error presentation only. Coordinator observations (#847), recorded-import outcomes (#829), Health/Sleep coverage (#830), leases, scheduling, retries and terminal transitions remain unchanged. The new fixed INFO messages do not enter versioned coordinator/import metrics. No MCP tools, schemas, scopes, consent or Assistant behavior change. Release the two callable fixes before the frontend; no Rules, indexes, queue settings or monitoring-bundle apply is needed.
+
+Activity admission is bounded to 100 items per step. Suunto/COROS oversized responses subdivide the requested range; irreducible oversized or invalid responses fail visibly instead of truncating. Wahoo advances one provider page at a time. Sleep/Health reuse their existing bounded windows, paging and cursor policies. Garmin Health retains its independent request pacing and family-specific cutoffs. Selecting a long or all-available range changes only the snapshotted boundary: the coordinator still executes one bounded page/window or queue-admission unit per dispatch through these same shared operations.
+
+An unavailable early Garmin Activity or Sleep window does not cancel later windows in a longer selected range. The coordinator continues at the provider's minimum available start when supplied, or at the next bounded window. It never widens the selected range; if no eligible window remains, that scope is skipped with its availability explanation.
+
+## Coordination, persistence, and retries
+
+`processConnectionHistoryTask` has one concurrent dispatch, one dispatch per second, a 300-second timeout, and revision-bound task identity. A transactional lease outlives the worker. Before new admissions, both Firestore backlog and Cloud Tasks depth must be below half the existing 1,000-item capacity threshold. Capacity waits last a minute and spend no retry attempts. Provider failures use the shared retry/backoff policy and honor longer available provider retry hints.
+
+New connection-history Sleep/Health children use the canonical queue's immediate dispatch after durable admission,
+rather than waiting for each half-hour scan. The coordinator still admits only one bounded unit per invocation and
+waits at least a minute before advancing a batch with children; no worker concurrency or provider retry setting changes.
+Deterministic run/window identities and `preserveExisting` keep completed, dispatched, leased and retrying children
+unchanged. An enqueue or marker failure leaves durable work for the existing 30-minute recovery dispatcher; admission
+retries do not reset the child's revision or accelerate its backoff. Already-waiting children can wait for that recovery
+once; subsequent newly admitted batches use immediate dispatch. Manual bulk backfills retain their existing dispatch
+behavior, and Garmin's separate single-task Health request pacing is unchanged.
+
+Suunto/COROS connection-history activity batches likewise dispatch promptly after their queue transaction commits
+and child paths are registered. They reuse the guarded workout dispatcher with exact batch-document reads (at most
+100), the existing capacity limit and a **60-second history-only task spread**; they do not scan or dispatch other users' work. Completed,
+dispatched, retrying, leased, parked and different-run/account/owner rows remain unchanged. Every started enqueue
+settles before checkpointing; failures retain durable undispatched children for the half-hour safety net, without
+resetting retries or repeating admission. A batch already waiting before deployment can still wait for that scan once.
+Legacy manual bulk activity history and scheduled recovery retain the shared 15-minute task spread. Wahoo, Garmin,
+worker concurrency and retry/backoff settings are unchanged. The coordinator still waits for all children in a window
+before admitting the next one; newly dispatched coordinator-owned activity batches get the shorter spread. Existing tasks
+are not rescheduled or replayed, and 60 seconds is a dispatch window, not a processing-completion guarantee.
+Reserved-name recovery still requires the exact explicit queue revision, including Suunto history; a superseded
+attempt cannot advance or dispatch a replacement. Fallback diagnostics are best effort and cannot interrupt the
+wait for started enqueues or invalidate durable admission.
+
+Monitoring is **covered/unchanged** after reviewing #829 and #847: the existing native workout queue, committed
+worker outcomes and scheduled eligible-backlog/recovery observations still own these children. Prompt-dispatch
+fallbacks emit a fixed service-only WARNING; they are not falsely counted as scheduled-dispatch failures or imported
+activities. No monitoring configuration changes. Existing Help's background/large-import guidance remains accurate,
+and MCP/Assistant and Training contracts are unaffected. The history-only pacing change requires separate approval for only
+`processConnectionHistoryTask`; no frontend, Rules, indexes, migration or replay is required. Rollback restores its
+previous revision while the scheduled dispatcher continues recovering durable children.
+
+Each operation retains its original range/cursor and a durable bounded completion receipt. An operation receipt survives a crash before the run advances. Queue admission remains idempotent if a failure occurs before a receipt can be persisted. Provider requests are at-least-once across an ambiguous network/commit failure; Garmin's existing duplicate-request handling is reused. Submission never proves delivery.
+
+Automatic Sleep/Health operations preserve credential-read and queue-admission errors for the coordinator's retry/authorization classification. Failed automatic admission keeps its claimed reservation and cooldown; manual callable error mapping and cooldown recovery retain their existing behavior.
+
+Invocation-local history context travels through the reused HTTP clients and canonical event, Sleep and Health writers. It verifies Pro entitlement, deletion state, exact credentials/connection and, for coordination, lease ownership before requests and transactional persistence. Original files use the canonical staging path. Context is constructed exclusively on the server from the private run, never from a callable payload. Legacy/manual ingestion without history context keeps its existing lifecycle protections.
+
+Frontend retries capture the initiating Firebase user object and the displayed run. Account/view changes cancel delayed dispatch through the existing callable guard and suppress late feedback after a response. Pending controls and retry errors are scoped to that run and provider, so a replacement run can be retried independently. Closing the view does not undo work already accepted by the server.
+
+Queued children from a superseded connection finish through the existing revision-guarded skip transition. Retry and dead-letter paths recheck history ownership before processing and inside their transaction, including when a provider handler has converted the original error to a safe error. Transient guard-read failures remain retryable. An early Sleep skip cannot use lease fields fetched from another worker as proof of ownership, and stale children cannot complete replacement revisions.
+
+Suunto activity history uses the same Firebase-owner-scoped queue identity as webhooks. Existing canonical queue revisions are preserved by automatic admission. A new connection replaces only its owner’s unfinished work from a superseded history run, with a new queue revision; completed records remain intact. Child rows must have explicit terminal outcomes; missing rows never count as success. Failed child items can be restored only from the same run's matching DLQ entry, without overwriting a replacement row. Retry resumes failed steps and preserves completed steps and dates, renewing restored queue rows’ retention. Automatic cooldown timestamps remain anchored to the original connection, including across pages and retries; retry checks reservations again before restoring failed queue work. Lost authorization is explained separately and leads to reconnect options.
+
+## Adding capabilities
+
+1. Register supported history resources and the provider's valid range choices/maximum policy in `shared/connection-history.ts`, or declare an empty capability list for a service that cannot supply history. Both registries are exhaustive over `ServiceNames`.
+2. Implement/reuse the server operation and register each version with its executable handler and downstream queue in `HISTORY_ADAPTERS`. Declare resource scope, shared cooldown group, completion semantics and bounded/resumable execution. Keep incompatible behavior behind a new version; do not reinterpret old snapshots.
+3. Reuse canonical provider-family registries. Garmin's existing Health cursor reads the run snapshot through the history context so newly registered families enter future runs only.
+4. Cover permission/cutoff behavior, provider response bounds, canonical queue identity, retries, disconnect/deletion and secret bindings. Contract tests require every advertised capability/version to have an adapter. A fixture registration test proves future runs discover additions without changing OAuth or frontend orchestration.
+5. Update the provider integration guide and user Help. Never silently add work to already-created runs or already-connected users.
+
+## Release and operations
+
+Prepare and verify these changes locally; merging and production deployment require separate approval.
+
+1. Release the Firestore rules/indexes and compatible backend first, including the four OAuth-start and completion handlers, `onConnectionHistoryImportWritten`, `processConnectionHistoryTask`, `recoverConnectionHistoryImports`, and `retryConnectionHistoryImport`. Release changed canonical workers and cleanup functions with the coordinator.
+2. Verify the dedicated queue limits, task invoker permissions, scheduled recovery, and all secret bindings. The coordinator receives Garmin, Suunto API, COROS and Wahoo API credentials; dispatch/recovery/retry endpoints receive none. Existing ingestion workers retain their bindings.
+3. Release the frontend after the backend can atomically accept jobs. Old clients remain opt-out by omission.
+4. `CONNECTION_HISTORY_IMPORT_ENABLED=false` in the OAuth completion functions' runtime environment stops new automatic admission. This is not a credential; do not create a Functions `.env` file. Existing accepted runs, manual imports and imported data remain intact. Restore the environment setting through the separately approved infrastructure workflow.
+5. Monitor the versioned `[ConnectionHistory]` observations below. Admin queue monitoring includes coordination task depth, pending runs, retained failed runs and **Oldest import age** (time since the oldest unfinished run was created, not time a task has waited). **Finished runs** counts retained `processed=true` coordinators, including failed, skipped and request-only outcomes; it is not successful ingestion and overlaps the retained failed count. Missing completion counts from an older backend and the unsupported dead-letter metric show dashes, not invented zeroes. The card has no fixed 30-day range badge because runs can use different selected ranges. Lifetime age and retained totals are diagnostics, not actionable alert predicates. Investigate private operational records without exporting identities or provider details into alerts.
+
+For the prompt child-dispatch/dashboard correction, monitoring coverage is **covered/unchanged**: reviewed
+`tools/connection-history-monitoring/definitions.mjs` and `tools/health-sleep-monitoring/definitions.mjs`.
+Coordinator operation/admission failures, committed checkpoints and native attempts remain under #847; downstream
+worker failures, retries, terminal commits and undispatched observations remain under #830. The recovery scheduler,
+probe cadence/bounds, queue identities, retry budgets and fixed telemetry labels remain intact. No new queue, Function,
+Rules, index, metric, alert or cloud configuration is introduced. MCP/Assistant and Training contracts are unaffected.
+Help's existing background-import/range/retry guidance remains accurate; no user-facing promise of immediate coverage
+is added. Separately approved release needs only `processConnectionHistoryTask`, `getQueueStats`, and the frontend.
+Rollback restores those previous revisions; no data migration, replay or retained-work reset is required.
+
+Monitoring coverage: downstream recorded-activity and Health/Sleep ingestion remain **covered** by #829/#830. Coordinator coverage was **activated** on 9 October 2026 after separately approved Functions deployment and monitoring-bundle apply, with production configuration, query and positive heartbeat evidence recorded in [#847](https://github.com/jimmykane/quantified-self/issues/847), Project 2. Its independently owned bundle covers the coordinator omitted from those downstream bundles; Admin Queue Monitor and passing offline tests alone do not establish active alert coverage. Future cloud changes still require separate approval.
+
+## Coordinator monitoring (#847)
+
+`tools/connection-history-monitoring/` reuses the shared `tools/monitoring/` provisioner without changing its behavior. Its independent owner is `qs-connection-history-monitoring-v1`, with one **QS Connection history** dashboard, 14 `qs_connection_history_*_v1` log metrics and six policies. The dashboard also consumes native Cloud Tasks depth, attempts and dispatch-delay metrics for exactly `processConnectionHistoryTask`, plus native Cloud Run request counts/latency for all four coordinator endpoints in `europe-west2`. All four are already Gen 2 with isolated owner-module loading; no new Function, scheduler, secret, index, Rules or product gate is introduced. Existing memory, timeout, retry, rate and concurrency settings remain unchanged. Native HTTP/transport series are diagnostic: an accepted enqueue, worker ACK, submitted Garmin request and committed activity/Health/Sleep ingestion are different outcomes. Native Cloud Run metric/resource contracts are documented by [Google](https://docs.cloud.google.com/monitoring/api/metrics_gcp_p_z).
+
+### Fixed signals and privacy
+
+Only `[ConnectionHistory]` with `telemetryVersion=1` enters the new metrics. Labels are fixed `provider=garmin|suunto|coros|wahoo|unknown` and allowlisted outcome. Whole-worker failures before context is available retain `unknown`, rather than trusting task payload labels. No owner/run/account IDs, credential generations, titles, provider payloads, URLs or raw errors enter these signals or email text. Older diagnostic logs and server-only records remain separate.
+
+- `dispatch_attempt`: enqueue `accepted` (including deterministic task deduplication) or `failed`; this is not an ACK.
+- `worker_attempt`: whole-task `acknowledged`, `failed` or `expected_contention`, plus bounded duration. ACK can be a stale revision, active lease or deletion no-op; it is not ingestion success.
+- `checkpoint`: emitted only after a committed transaction, once even if its callback replays. `active`, `requested`, `processed`, `skipped`, `failed` and `expected_contention` describe coordination. `requested` wins when any scope remains request-only; `processed` can include skipped scopes and never claims complete provider coverage, watch receipt or workout completion.
+- `operation_retry`: only a committed increase in real operation retry attempts. Capacity waits and window subdivision do not increment this signal. Recognized credential-refresh/provider-operation contention is excluded without changing existing retry behavior.
+- `recovery_run`: the unchanged once-per-minute recovery's outcome; whole-run and candidate failure observations can overlap.
+- `queue_sample` / `queue_sample_unavailable`: four fixed provider heartbeats on UTC quarter-hour scheduled ticks, including idle observations.
+
+Logger failures cannot turn a committed checkpoint or ACK into another task retry. Observation errors cannot replace recovery's original result/error. No new signal is emitted for a rejected checkpoint write. New terminal failures count committed failure episodes, not retained failed documents or duplicate processed tasks; an explicit owner Retry can create another failure episode.
+
+### Bounded read-only observations
+
+The existing recovery scheduler samples every **15 minutes**, using its scheduled timestamp rather than delayed invocation time. Its dispatch loop still runs every minute, with unchanged limits. There is no additional scheduler or persistent monitoring state.
+
+One masked, oldest-due-first query inspects at most **20 runs plus one truncation sentinel**, using the existing `(processed, nextAttemptAt)` index. Reads exclude token values, provider payloads and operation receipt results; only the receipt's `lastOperation.key` is selected. Each candidate's read-only transaction rechecks exact document update time, owner/tombstone, token/root presence and credential/connection generations. Permission/cooldown/unsupported-capability and Sleep/Health rollout checks match the local admission contract. Pro/grace checks are read-only and cached, at most 20 Auth lookups. Child observations share a **100-row total budget** and read only `processed`, `resultStatus` and `skippedReason`; pending children belong to the downstream bundles. Missing/failed children or an exhausted cursor can leave overdue coordinator finalization, not prove successful ingestion. Successful children with another page remaining still require downstream capacity; ambiguous child state is unknown.
+
+A durable receipt matching the exact current step, capability version, cursor, window and page means the worker only resumes its committed result. That checkpoint recovery stays observable without new provider admission or capacity, permission or cooldown checks. It still requires a current connected account, Pro/grace access and no pending children. Stale receipt keys cannot bypass admission checks. The key never enters telemetry, and observing recovery never claims successful ingestion.
+
+Capacity checks reuse the actual downstream queue/collection mapping, cache each mapping within the observation, and require both native depth and Firestore pending count below the existing half-capacity threshold. No provider API, refresh, queue write, account pinning, dispatch decision or retry change occurs. Capacity reads settle together on ordinary errors. A shared **five-second deadline** stops further reads and suppresses late healthy emissions; already-started requests may finish afterward.
+
+Future retries, active leases, children waiting on live/recent tasks, superseded/disconnected/deleting accounts and non-Pro access are excluded. Unissued or old-issued route children needing coordinator redispatch are eligible; masked ownership/source mismatches are unknown. The probe makes no task or provider API calls. Downstream saturation and expected permission/cooldown skips exclude new admissions, not receipt recovery or finalization. A retry that is already overdue remains eligible; its future backoff window is not mistaken for a stall. Age is the delay since the sampled revision's `nextAttemptAt`, not the lifetime of a years-long import. A same-revision edit racing the sample is unknown, not zero.
+
+Positive count/age values are lower bounds. A global saturated or unknown prefix without a proven eligible count omits count/age, including for unseen providers; it cannot clear backlog as healthy zero. Query/read/capacity failure or timeout emits unavailable for all four groups. A complete idle observation emits real zero. Histogram chart means preserve zero observations without interpolating a false positive age; the backlog policy uses the exact emitted count/age predicate instead.
+
+### Initial alert conditions
+
+| Policy | Condition per fixed provider | Meaning |
+| --- | --- | --- |
+| Sustained eligible backlog | Three positive samples at least 15 minutes overdue in one hour | Eligible coordinator delay, not complete backlog or expected provider waits |
+| Repeated dispatch/recovery failures | Three observations in 15 minutes | Immediate startup/enqueue or recovery failure; candidate/run observations may overlap |
+| Repeated processing failures | Ten observations in 15 minutes | Unexpected failed attempts or committed real retries; ACK/contention/skips excluded |
+| New failed import runs | Three newly committed terminal failure episodes in 30 minutes | Not retained failures, stale tasks or lifecycle skips |
+| Observations unavailable | Two unknown/unavailable samples in one hour | Includes capped prefixes with no proven eligible count |
+| Required heartbeat missing | No sample for one hour, independently for all four providers | Idle emits; no-new-imports is never an outage |
+
+Threshold policies use a 60-second retest window, missing data inactive, and the explicitly selected existing email channel for OPENED/CLOSED notifications. Absence policies require each series to initialize after metric creation. These are initial tunable thresholds, not partner quotas or unique-user counts.
+
+### Approval and operational completion
+
+Offline preview needs no credentials or network:
+
+```bash
+node tools/connection-history-monitoring/cli.mjs --project=quantified-self-io
+```
+
+For future instrumentation releases, after separate approval deploy only the three instrumented endpoints (`processConnectionHistoryTask`, `onConnectionHistoryImportWritten`, `recoverConnectionHistoryImports`). `retryConnectionHistoryImport` has native dashboard coverage but no handler changes. Verify active revisions and unchanged runtime/secret/queue/scheduler configuration. No Hosting, Rules or index release is required by this monitoring change. The initial 9 October deployment created all four coordinator endpoints as part of the separately approved all-Functions deployment.
+
+Apply only after explicit approval for this bundle and selecting the existing Alerts email channel:
+
+```bash
+node tools/connection-history-monitoring/cli.mjs \
+  --project=quantified-self-io \
+  --notification-channel='projects/quantified-self-io/notificationChannels/EXISTING_ALERTS_CHANNEL_ID' \
+  --confirm-project=quantified-self-io --apply
+```
+
+The provisioner validates the enabled email channel and paginated inventories before writes. Owner/name/policy-identity collisions, duplicates, malformed inventories and immutable metric schema drift fail closed. Serial reapply retains condition IDs and dashboard etag, without duplicate resources or DELETE. Other dashboards, metrics, policies and all notification channels remain unchanged. No new mail extension integration is needed; Cloud Monitoring uses its existing notification channel.
+
+Before closing #847, record approval and pinned commit, deploy/apply results, exact API readback of the dashboard/14 metric schemas/six valid enabled policies, all **18 chart and nine condition queries**, native metrics for all four services and the queue, and positive **post-creation** metric points from a natural quarter-hour observation for each of the four heartbeat groups. Earlier logs cannot initialize new metric-absence series. Reuse existing same-channel notification evidence where valid; fault injection, manual scheduler invocation, test email, provider actions or deletion need their own approval. Do not claim operational coverage while activation/readback is pending.
+
+Monitoring adds bounded Firestore/Auth/Cloud Tasks reads (at most 21 queried runs, 20 six-record lifecycle reads plus optional Sleep rows, 100 child rows and cached capacity observations per 15-minute tick), small fixed-category logs, log-metric series and alert evaluations. This is **not guaranteed free**. Idle probes read one bounded query and emit four logs; no provider calls or new scheduler are added. Review current [Observability pricing](https://cloud.google.com/products/observability/pricing) and actual volume before changing thresholds or sample limits.
+
+Help's **Recent history when connecting** was reviewed and remains accurate; observability changes no user-facing behavior. **No MCP wire impact:** no tools, schemas, scopes, consent, exposed athlete data, Assistant actions or bundled skills change. Local verification includes privacy/lifecycle emulator cases, deterministic telemetry/deadline specs, actual log-filter fixtures, provisioning ownership/pagination/reapplication tests and the existing entrypoint/secret checks. The new emulator suite is registered in CI's `mcp-data` group; offline definitions run in the existing unit job.
+
+```bash
+npm run test:connection-history-monitoring
+npm --prefix functions test -- src/connection-history
+npm run test:functions-emulators -- mcp-data
+npm run test:emulator-coverage
+npm run test:delivery-shards
+npm run test:workflows
+npm --prefix functions run entrypoint:check
+npm --prefix functions run deploy:safety:compiled
+git diff --check
+```
+
+### Production activation and readback — 9 October 2026
+
+The separately approved all-Functions deployment from `b588b7896` completed before activation, with all four coordinator endpoints ACTIVE, Gen 2, in `europe-west2`. The unchanged bundle at `ec2f98936` was then applied to `quantified-self-io` using the existing enabled **Alerts** email channel. No notification channel was created or changed; the previously recorded same-channel opening/closing email proof from #655 is reused.
+
+Production API readback confirmed one owned dashboard, all 14 metric definitions and six valid enabled policies with nine conditions. All 18 dashboard queries and nine condition queries passed, including native queue metrics and separate request queries for all four services. Idle endpoints correctly have no request series until invoked. The queue is RUNNING with one dispatch per second and one concurrent dispatch; scheduled recovery is ENABLED on the unchanged once-per-minute UTC schedule.
+
+A second apply retained every dashboard, metric, policy and condition identity without duplicates or DELETE. Before/after configuration fingerprints confirmed that all four notification channels and every unrelated dashboard, metric and policy remained unchanged. All six offline monitoring suites passed: 57 tests.
+
+The natural 13:15 UTC recovery tick emitted complete, untruncated idle observations for Garmin, Suunto, COROS and Wahoo. Monitoring readback at 13:16 UTC confirmed positive post-creation heartbeat points, initialized all four actual absence-condition queries, and recorded real zero-valued count/age samples for every provider. No unavailable, overdue, processing, dispatch or new-terminal-failure points were observed in the post-creation interval. Idle bounded samples do not prove historical coverage or provider receipt; empty failure series are not a fabricated failure exercise.
+
+This completes the deployment, activation and live readback evidence for #847. No manual scheduler invocation, provider call, test email, fault injection, Hosting deployment or data/resource deletion was used. Future tuning, cloud changes and operational tests still require their own explicit approval. Help and MCP/Assistant behavior and wire contracts remain unchanged.
+
+This implements #681 with an explicit selected boundary. Thirty days remains the preselected default; users can choose a longer provider-valid range, including the provider maximum where supported. The run never expands its snapshot or automatically continues earlier than the chosen range.

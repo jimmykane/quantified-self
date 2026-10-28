@@ -31,6 +31,7 @@ import {
 } from '../activity-sync/outbound-fingerprint';
 import { parseCOROSJSON } from './json';
 import { normalizeCOROSInt64Identifier } from './identifier';
+import { prepareCOROSActivityFITUpload } from './activity-fit';
 
 const COROS_SUCCESS_CODE = '0000';
 const COROS_DUPLICATE_CODE = '5082';
@@ -60,6 +61,8 @@ export interface COROSActivityUploadCountOptions {
 }
 
 export interface COROSActivityUploadOptions {
+  /** Keep a queued restart on the account that accepted the failed upload. */
+  expectedProviderUserId?: string;
   beforeProviderRequest?: () => Promise<void>;
 }
 
@@ -341,9 +344,9 @@ export async function uploadActivityFileToCOROS(
     throw new HttpsError('invalid-argument', `Cannot upload activity because the size is greater than ${MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES_LABEL}.`);
   }
 
-  let providerUserId = '';
+  let providerUserId = options.expectedProviderUserId || '';
   try {
-    return await withActiveCOROSToken<COROSActivityUploadResult>(userID, undefined, async (token, selectedProviderUserId) => {
+    return await withActiveCOROSToken<COROSActivityUploadResult>(userID, options.expectedProviderUserId, async (token, selectedProviderUserId) => {
       providerUserId = selectedProviderUserId;
       const openId = getOpenId(token, selectedProviderUserId, 'activity_upload_init');
       const { body, contentType } = buildCOROSActivityMultipartBody(openId, fileBuffer);
@@ -424,7 +427,10 @@ export async function getCOROSActivityUploadStatus(
           dlqContext: 'COROS_ACTIVITY_UPLOAD_INVALID_RESPONSE',
         });
       }
-      const status = Number(data.status);
+      // Structured values can coerce to -1/2 and authorize a resend/false success.
+      const status = typeof data.status === 'number' || typeof data.status === 'string'
+        ? Number(data.status)
+        : Number.NaN;
       if (status === 1) {
         return { status: 'pending', message: 'COROS is processing the activity.', uploadId, providerUserId };
       }
@@ -435,7 +441,8 @@ export async function getCOROSActivityUploadStatus(
         throw new ProviderOperationError({
           serviceName: ServiceNames.COROSAPI,
           operation: 'activity_upload_status',
-          disposition: 'permanent',
+          disposition: 'retryable',
+          retryMode: 'restart',
           code: 'provider-processing-failed',
           message: 'COROS could not process this activity file.',
           providerStatus: status,
@@ -526,6 +533,10 @@ function toCallableError(error: unknown): never {
   };
   if (error.disposition === 'auth_required') throw new HttpsError('unauthenticated', error.message, details);
   if (error.disposition === 'permission_required') throw new HttpsError('permission-denied', error.message, details);
+  // Direct uploads still require the existing explicit failed-file retry action.
+  if (error.operation === 'activity_upload_status' && error.code === 'provider-processing-failed') {
+    throw new HttpsError('failed-precondition', error.message, details);
+  }
   if (error.disposition === 'retryable') {
     throw new HttpsError(error.code === 'resource-exhausted' ? 'resource-exhausted' : 'unavailable', error.message, details);
   }
@@ -541,7 +552,7 @@ export const importActivityToCOROSAPI = onCall({
 }, async (request) => {
   const userID = await requireCOROSActivityUploadAccess(request);
   try {
-    const fileBuffer = decodeActivityUpload(request.data?.file);
+    const fileBuffer = prepareCOROSActivityFITUpload(decodeActivityUpload(request.data?.file));
     return await uploadActivityFileToCOROS(userID, fileBuffer, {
       beforeProviderRequest: async () => {
         await recordActivitySyncOutboundFingerprint({

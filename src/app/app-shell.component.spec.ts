@@ -1,6 +1,8 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { signal } from '@angular/core';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { ActivitySendService } from './services/activity-send.service';
+import { ComponentFixture, DeferBlockBehavior, TestBed } from '@angular/core/testing';
+import { Component, OnDestroy, signal } from '@angular/core';
+import { By } from '@angular/platform-browser';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { APP_SHELL_HEADER_HEIGHT_PX, AppShellComponent } from './app-shell.component';
 import { AppAuthService } from './authentication/app.auth.service';
 import { AppSideNavService } from './services/side-nav/app-side-nav.service';
@@ -10,6 +12,9 @@ import { AppAnalyticsService } from './services/app.analytics.service';
 import { SeoService } from './services/seo.service';
 import { AppIconService } from './services/app.icon.service';
 import { AppThemeService } from './services/app.theme.service';
+import { AppLocaleService } from './services/app.locale.service';
+import { AppWindowService } from './services/app.window.service';
+import { LoggerService } from './services/logger.service';
 import { AppWhatsNewService } from './services/app.whats-new.service';
 import { MatDialog } from '@angular/material/dialog';
 import { AppHapticsService } from './services/app.haptics.service';
@@ -18,14 +23,21 @@ import { Router, ActivatedRoute, NavigationEnd, NavigationStart } from '@angular
 import { DomSanitizer } from '@angular/platform-browser';
 import { of, Subject } from 'rxjs';
 import { MatTabsModule } from '@angular/material/tabs';
-import { MatSidenavModule } from '@angular/material/sidenav';
+import { MatSidenav, MatSidenavModule } from '@angular/material/sidenav';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { RouterTestingModule } from '@angular/router/testing';
 import { AppThemes } from '@sports-alliance/sports-lib';
 
-// ... (existing imports)
+const navigationLifecycle = { created: vi.fn(), destroyed: vi.fn() };
+
+@Component({ selector: 'app-sidenav', template: '<button type="button">Navigation contents</button>', standalone: false })
+class NavigationContentsFixture implements OnDestroy {
+    constructor() { navigationLifecycle.created(); }
+    ngOnDestroy() { navigationLifecycle.destroyed(); }
+}
+
 
 describe('AppShellComponent', () => {
     let component: AppShellComponent;
@@ -87,17 +99,42 @@ describe('AppShellComponent', () => {
     const mockHapticsService = {
         selection: vi.fn()
     };
+    const mockLocaleService = {
+        reconcileAccountPreference: vi.fn()
+    };
 
+
+    const renderShellFixture = () => {
+        fixture = TestBed.createComponent(AppShellComponent);
+        component = fixture.componentInstance;
+        fixture.detectChanges();
+    };
+
+    const holdNavigationIdleWork = () => {
+        let resumeIdle: () => void;
+        vi.stubGlobal('requestIdleCallback', (callback: () => void) => {
+            resumeIdle = callback;
+            return 1;
+        });
+        vi.stubGlobal('cancelIdleCallback', vi.fn());
+        TestBed.configureTestingModule({ deferBlockBehavior: DeferBlockBehavior.Playthrough });
+        return () => resumeIdle();
+    };
+
+    afterEach(() => vi.unstubAllGlobals());
 
     beforeEach(async () => {
+        navigationLifecycle.created.mockClear();
+        navigationLifecycle.destroyed.mockClear();
         window.history.pushState({}, '', '/');
         mockRouter.events = new Subject();
         mockRouter.url = '/';
         mockThemeService.themeChange$ = new Subject();
         mockAppAuthService.user$ = of(null);
+        mockLocaleService.reconcileAccountPreference.mockReset();
 
         await TestBed.configureTestingModule({
-            declarations: [AppShellComponent],
+            declarations: [AppShellComponent, NavigationContentsFixture],
             imports: [
                 MatSidenavModule,
                 MatTabsModule,
@@ -106,6 +143,7 @@ describe('AppShellComponent', () => {
                 RouterTestingModule
             ],
             providers: [
+                { provide: ActivitySendService, useValue: {} },
                 { provide: AppAuthService, useValue: mockAppAuthService },
                 { provide: Router, useValue: mockRouter },
                 { provide: ActivatedRoute, useValue: mockActivatedRoute },
@@ -116,11 +154,13 @@ describe('AppShellComponent', () => {
                 { provide: AppAnalyticsService, useValue: mockAnalyticsService },
                 { provide: SeoService, useValue: mockSeoService },
                 { provide: AppThemeService, useValue: mockThemeService },
+                { provide: AppLocaleService, useValue: mockLocaleService },
                 {
                     provide: AppUserService, useValue: {
                         updateUserProperties: vi.fn().mockReturnValue(Promise.resolve()),
                         getSubscriptionRole: vi.fn().mockReturnValue(Promise.resolve('free')),
                         gracePeriodUntil: signal(null),
+                        profileReadState: signal({ status: 'initializing' }),
                         isAdmin: vi.fn().mockReturnValue(Promise.resolve(false)),
                         hasIncompleteProfileReads: vi.fn().mockReturnValue(false)
                     }
@@ -143,17 +183,152 @@ describe('AppShellComponent', () => {
             schemas: [CUSTOM_ELEMENTS_SCHEMA]
         }).compileComponents();
 
-        fixture = TestBed.createComponent(AppShellComponent);
-        component = fixture.componentInstance;
-        fixture.detectChanges();
+    });
+
+    const createPendingStartup = () => {
+        window.history.pushState({}, '', '/dashboard');
+        mockRouter.url = '/dashboard';
+        const authUser = new Subject<any>();
+        mockAppAuthService.user$ = authUser.asObservable();
+        const pendingFixture = TestBed.createComponent(AppShellComponent);
+        pendingFixture.detectChanges();
+        return { pendingFixture, pendingComponent: pendingFixture.componentInstance, authUser };
+    };
+
+    it('replaces stalled startup with recovery at the deadline and reports it once', async () => {
+        vi.useFakeTimers();
+        const report = vi.spyOn(TestBed.inject(LoggerService), 'captureMessage').mockImplementation(() => {});
+        const { pendingFixture, pendingComponent } = createPendingStartup();
+        try {
+            await vi.advanceTimersByTimeAsync(14_999);
+            expect(pendingComponent.startupStalled()).toBe(false);
+            expect(report).not.toHaveBeenCalled();
+            await vi.advanceTimersByTimeAsync(1);
+            pendingFixture.detectChanges();
+            expect(pendingFixture.nativeElement.querySelector('app-metric-loader')).toBeNull();
+            expect(pendingFixture.nativeElement.querySelector('[role="alert"]').textContent).toContain('Loading is taking longer');
+            expect(report).toHaveBeenCalledExactlyOnceWith('App startup stalled', {
+                level: 'warning', tags: { startup_failure: 'timeout', profile_state: 'initializing' },
+            });
+            expect(pendingComponent.authState).toBeNull();
+            await vi.advanceTimersByTimeAsync(120_000);
+            expect(report).toHaveBeenCalledTimes(1);
+        } finally { pendingFixture.destroy(); vi.useRealTimers(); }
+    });
+
+    it.each(['before', 'after'])('accepts late auth %s the startup deadline without a reload', async timing => {
+        vi.useFakeTimers();
+        const report = vi.spyOn(TestBed.inject(LoggerService), 'captureMessage').mockImplementation(() => {});
+        const { pendingFixture, pendingComponent, authUser } = createPendingStartup();
+        try {
+            await vi.advanceTimersByTimeAsync(timing === 'before' ? 14_999 : 15_000);
+            authUser.next(null);
+            pendingFixture.detectChanges();
+            expect(pendingComponent.startupStalled()).toBe(false);
+            expect(pendingComponent.showInitialLoader).toBe(false);
+            expect(pendingComponent.authState).toBe(false);
+            await vi.advanceTimersByTimeAsync(120_000);
+            expect(report).toHaveBeenCalledTimes(timing === 'before' ? 0 : 1);
+        } finally { pendingFixture.destroy(); vi.useRealTimers(); }
+    });
+
+    it('opens a late authenticated session without discarding it or writing account data', async () => {
+        vi.useFakeTimers();
+        vi.spyOn(TestBed.inject(LoggerService), 'captureMessage').mockImplementation(() => {});
+        const { pendingFixture, pendingComponent, authUser } = createPendingStartup();
+        try {
+            await vi.advanceTimersByTimeAsync(15_000);
+            authUser.next({ uid: 'u1', acceptedPrivacyPolicy: true, acceptedDataPolicy: true,
+                acceptedTos: true, onboardingCompleted: true, hasSubscribedOnce: true });
+            pendingFixture.detectChanges();
+            expect(pendingComponent.startupStalled()).toBe(false);
+            expect(pendingComponent.authState).toBe(true);
+            expect(pendingComponent.currentUser?.uid).toBe('u1');
+            expect(TestBed.inject(AppUserService).updateUserProperties).not.toHaveBeenCalled();
+        } finally { pendingFixture.destroy(); vi.useRealTimers(); }
+    });
+
+    it('keeps public content visible when authentication is pending', async () => {
+        vi.useFakeTimers();
+        const report = vi.spyOn(TestBed.inject(LoggerService), 'captureMessage').mockImplementation(() => {});
+        mockAppAuthService.user$ = new Subject().asObservable();
+        const publicFixture = TestBed.createComponent(AppShellComponent);
+        publicFixture.detectChanges();
+        try {
+            await vi.advanceTimersByTimeAsync(30_000);
+            expect(publicFixture.componentInstance.startupStalled()).toBe(false);
+            expect(publicFixture.componentInstance.showInitialLoader).toBe(false);
+            expect(report).not.toHaveBeenCalled();
+        } finally { publicFixture.destroy(); vi.useRealTimers(); }
+    });
+
+    it.each(['error', 'complete'])('shows startup recovery when the user stream ends with %s before emitting', end => {
+        const report = vi.spyOn(TestBed.inject(LoggerService), 'captureMessage').mockImplementation(() => {});
+        const { pendingFixture, pendingComponent, authUser } = createPendingStartup();
+        try {
+            if (end === 'error') authUser.error(new Error('stream failed'));
+            else authUser.complete();
+            pendingFixture.detectChanges();
+            expect(pendingComponent.startupStalled()).toBe(true);
+            expect(report).toHaveBeenCalledTimes(1);
+        } finally { pendingFixture.destroy(); }
+    });
+
+    it('cancels the startup deadline on destruction', async () => {
+        vi.useFakeTimers();
+        const report = vi.spyOn(TestBed.inject(LoggerService), 'captureMessage').mockImplementation(() => {});
+        const { pendingFixture } = createPendingStartup();
+        pendingFixture.destroy();
+        try {
+            await vi.advanceTimersByTimeAsync(120_000);
+            expect(report).not.toHaveBeenCalled();
+        } finally { vi.useRealTimers(); }
+    });
+
+    it('keeps recovery usable if telemetry throws and guards explicit reload clicks', async () => {
+        vi.useFakeTimers();
+        vi.spyOn(TestBed.inject(LoggerService), 'captureMessage').mockImplementation(() => { throw new Error('telemetry blocked'); });
+        const reload = vi.fn();
+        vi.spyOn(TestBed.inject(AppWindowService), 'windowRef', 'get').mockReturnValue({ location: { reload } } as unknown as Window);
+        const { pendingFixture, pendingComponent } = createPendingStartup();
+        try {
+            await vi.advanceTimersByTimeAsync(15_000);
+            pendingFixture.detectChanges();
+            const button = pendingFixture.nativeElement.querySelector('button');
+            button.click();
+            pendingFixture.detectChanges();
+            button.click();
+            expect(reload).toHaveBeenCalledTimes(1);
+            expect(mockHapticsService.selection).toHaveBeenCalledTimes(1);
+            expect(button.disabled).toBe(true);
+            expect(button.textContent).toContain('Reloading');
+            await vi.advanceTimersByTimeAsync(5_000);
+            pendingFixture.detectChanges();
+            expect(button.disabled).toBe(false);
+            expect(pendingComponent.startupStalled()).toBe(true);
+        } finally { pendingFixture.destroy(); vi.useRealTimers(); }
     });
 
     it('should create', () => {
+        renderShellFixture();
         expect(component).toBeTruthy();
     });
 
     it('should initialize analytics service', () => {
+        renderShellFixture();
         expect(component['analyticsService']).toBeTruthy();
+    });
+
+    it('reconciles the regional format when an authenticated account hydrates', () => {
+        const user = { uid: 'locale-user', settings: { appSettings: { formatLocale: 'fr-FR' } } };
+        mockLocaleService.reconcileAccountPreference.mockReset();
+        mockAppAuthService.user$ = of(user);
+
+        const authenticatedFixture = TestBed.createComponent(AppShellComponent);
+        authenticatedFixture.detectChanges();
+
+        expect(mockLocaleService.reconcileAccountPreference).toHaveBeenCalledWith(user);
+        authenticatedFixture.destroy();
     });
 
     it('should keep prerendered public startup pages visible while browser auth resolves', () => {
@@ -249,6 +424,7 @@ describe('AppShellComponent', () => {
     });
 
     it('should show navigation for free users on subscriptions page', () => {
+        renderShellFixture();
         // Mock user as free
         component['currentUser'] = { stripeRole: undefined };
         component.onboardingCompleted = true;
@@ -260,6 +436,7 @@ describe('AppShellComponent', () => {
     });
 
     it('should show navigation for free users on dashboard', () => {
+        renderShellFixture();
         // Mock user as free
         component['currentUser'] = { stripeRole: undefined };
         component.onboardingCompleted = true;
@@ -271,6 +448,7 @@ describe('AppShellComponent', () => {
     });
 
     it('should show navigation for basic users on subscriptions page', () => {
+        renderShellFixture();
         // Mock user as basic
         component['currentUser'] = { stripeRole: 'basic' };
         component.onboardingCompleted = true;
@@ -282,12 +460,24 @@ describe('AppShellComponent', () => {
     });
 
     it('should include grace period banner component', () => {
+        renderShellFixture();
         fixture.detectChanges();
         const bannerComponent = fixture.nativeElement.querySelector('app-grace-period-banner');
         expect(bannerComponent).toBeTruthy();
     });
 
+    it('keeps workspace offsets below a wrapped header and the existing banner', () => {
+        renderShellFixture(); component.onboardingCompleted = true;
+        component.onBannerHeightChanged(24); component.onHeaderHeightChanged(112); fixture.detectChanges();
+        expect(component.layoutTopOffsetPx).toBe(136);
+        expect(component.visibleTopOffsetPx).toBe(136);
+        component.headerHidden = true; expect(component.visibleTopOffsetPx).toBe(24);
+        component.onHeaderHeightChanged(NaN); component.onHeaderHeightChanged(0);
+        expect(component.layoutTopOffsetPx).toBe(136);
+    });
+
     it('should expose layout css variables based on banner height', () => {
+        renderShellFixture();
         component.onboardingCompleted = true;
         component.onBannerHeightChanged(36);
         fixture.detectChanges();
@@ -308,6 +498,7 @@ describe('AppShellComponent', () => {
     });
 
     it('should expose zero effective top offset when onboarding is not completed', () => {
+        renderShellFixture();
         component.onboardingCompleted = false;
         component.onBannerHeightChanged(36);
         fixture.detectChanges();
@@ -324,6 +515,7 @@ describe('AppShellComponent', () => {
     });
 
     it('should hide header after scrolling beyond threshold', () => {
+        renderShellFixture();
         component.onboardingCompleted = true;
         component.bannerHeight = 24;
         component.headerHidden = false;
@@ -338,6 +530,7 @@ describe('AppShellComponent', () => {
     });
 
     it('should reveal header again near the top of the page', () => {
+        renderShellFixture();
         component.onboardingCompleted = true;
         component.headerHidden = true;
         (component as any).lastShellScrollTop = 90;
@@ -351,6 +544,7 @@ describe('AppShellComponent', () => {
     });
 
     it('should keep the content top offsets stable when the header is hidden', () => {
+        renderShellFixture();
         component.onboardingCompleted = true;
         component.bannerHeight = 18;
         component.headerHidden = false;
@@ -366,6 +560,7 @@ describe('AppShellComponent', () => {
     });
 
     it('should ignore small scroll deltas once threshold is crossed', () => {
+        renderShellFixture();
         component.onboardingCompleted = true;
         component.headerHidden = false;
         (component as any).lastShellScrollTop = 60;
@@ -379,6 +574,7 @@ describe('AppShellComponent', () => {
     });
 
     it('should require sustained upward scrolling before revealing the header again', () => {
+        renderShellFixture();
         component.onboardingCompleted = true;
         component.headerHidden = true;
         (component as any).lastShellScrollTop = 120;
@@ -392,6 +588,7 @@ describe('AppShellComponent', () => {
     });
 
     it('should ignore nested scroll containers when tracking header visibility globally', () => {
+        renderShellFixture();
         component.onboardingCompleted = true;
         component.headerHidden = false;
         (component as any).lastShellScrollTop = 0;
@@ -411,6 +608,7 @@ describe('AppShellComponent', () => {
     });
 
     it('should use window scroll as a fallback when no shell scroller is registered', () => {
+        renderShellFixture();
         const originalScrollY = window.scrollY;
 
         component.onboardingCompleted = true;
@@ -434,6 +632,7 @@ describe('AppShellComponent', () => {
     });
 
     it('should reveal the header when navigating to onboarding even if the shell scroller is still offset', () => {
+        renderShellFixture();
         component['currentUser'] = {
             uid: 'u1',
             acceptedPrivacyPolicy: true,
@@ -461,36 +660,43 @@ describe('AppShellComponent', () => {
     });
 
     it('should return true for isDashboardRoute when url includes dashboard', () => {
+        renderShellFixture();
         syncRoute('/dashboard');
         expect(component.isDashboardRoute).toBe(true);
     });
 
     it('should return true for isLoginRoute when url includes login', () => {
+        renderShellFixture();
         syncRoute('/login');
         expect(component.isLoginRoute).toBe(true);
     });
 
     it('should return true for isAdminRoute when url includes admin', () => {
+        renderShellFixture();
         syncRoute('/admin');
         expect(component.isAdminRoute).toBe(true);
     });
 
     it('should return true for isHomeRoute when url is /', () => {
+        renderShellFixture();
         syncRoute('/');
         expect(component.isHomeRoute).toBe(true);
     });
 
     it('should return true for isHomeRoute when url is /?param=value', () => {
+        renderShellFixture();
         syncRoute('/?param=value');
         expect(component.isHomeRoute).toBe(true);
     });
 
     it('should return false for isHomeRoute when url is /dashboard', () => {
+        renderShellFixture();
         syncRoute('/dashboard');
         expect(component.isHomeRoute).toBe(false);
     });
 
     it('should expose showUploadActivities only on dashboard with user', () => {
+        renderShellFixture();
         syncRoute('/dashboard');
         component['currentUser'] = { uid: 'u1' };
         expect(component.showUploadActivities()).toBe(true);
@@ -500,6 +706,7 @@ describe('AppShellComponent', () => {
     });
 
     it('should place the impersonation banner inside the maintenance branch', () => {
+        renderShellFixture();
         syncRoute('/dashboard');
         mockRemoteConfigService.maintenanceMode.set(true);
         fixture.detectChanges();
@@ -509,22 +716,146 @@ describe('AppShellComponent', () => {
     });
 
     it('should return unread whats-new count from service signal', () => {
+        renderShellFixture();
         expect(component.unreadWhatsNewCount).toBe(0);
     });
 
     it('should navigate to dashboard on logo click when authenticated', () => {
+        renderShellFixture();
         component.authState = true;
         component.onLogoClick();
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
     });
 
     it('should navigate home on logo click when unauthenticated', () => {
+        renderShellFixture();
         component.authState = false;
         component.onLogoClick();
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/']);
     });
 
+    it('leaves closed navigation contents unconstructed during public startup', () => {
+        const resumeIdle = holdNavigationIdleWork();
+        renderShellFixture();
+        expect(fixture.debugElement.query(By.directive(MatSidenav))).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('app-sidenav')).toBeNull();
+        expect(navigationLifecycle.created).not.toHaveBeenCalled();
+        fixture.destroy();
+        resumeIdle();
+        expect(navigationLifecycle.destroyed).not.toHaveBeenCalled();
+        expect(navigationLifecycle.created).not.toHaveBeenCalled();
+    });
+
+    it('constructs navigation on first open and retains the same contents through close/reopen', async () => {
+        holdNavigationIdleWork();
+        renderShellFixture();
+        const drawer = fixture.debugElement.query(By.directive(MatSidenav)).componentInstance as MatSidenav;
+        expect(navigationLifecycle.created).not.toHaveBeenCalled();
+        const open = drawer.open();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        await open;
+        fixture.detectChanges();
+        const contents = fixture.nativeElement.querySelector('app-sidenav');
+        expect(contents?.textContent).toContain('Navigation contents');
+        expect(navigationLifecycle.created).toHaveBeenCalledOnce();
+        const close = drawer.close();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        await close;
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-sidenav')).toBe(contents);
+        expect(navigationLifecycle.destroyed).not.toHaveBeenCalled();
+        const reopen = drawer.open();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        await reopen;
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-sidenav')).toBe(contents);
+        expect(navigationLifecycle.created).toHaveBeenCalledOnce();
+        fixture.destroy();
+        expect(navigationLifecycle.destroyed).toHaveBeenCalledOnce();
+    });
+
+    it('prepares closed navigation during idle time and reuses it when opened', async () => {
+        const resumeIdle = holdNavigationIdleWork();
+        renderShellFixture();
+        const drawer = fixture.debugElement.query(By.directive(MatSidenav)).componentInstance as MatSidenav;
+        expect(navigationLifecycle.created).not.toHaveBeenCalled();
+        resumeIdle();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        const contents = fixture.nativeElement.querySelector('app-sidenav');
+        expect(contents?.textContent).toContain('Navigation contents');
+        expect(drawer.opened).toBe(false);
+        expect(navigationLifecycle.created).toHaveBeenCalledOnce();
+        const open = drawer.open();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        await open;
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-sidenav')).toBe(contents);
+        expect(navigationLifecycle.created).toHaveBeenCalledOnce();
+    });
+
+    it('cancels pending menu preparation when onboarding removes navigation', async () => {
+        const resumeIdle = holdNavigationIdleWork();
+        renderShellFixture();
+        component.onboardingCompleted = false;
+        fixture.detectChanges();
+        resumeIdle();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        expect(fixture.debugElement.query(By.directive(MatSidenav))).toBeNull();
+        expect(fixture.nativeElement.querySelector('app-sidenav')).toBeNull();
+        expect(navigationLifecycle.created).not.toHaveBeenCalled();
+
+        component.onboardingCompleted = true;
+        fixture.detectChanges();
+        const drawer = fixture.debugElement.query(By.directive(MatSidenav)).componentInstance as MatSidenav;
+        expect(mockAppSideNavService.setSidenav).toHaveBeenLastCalledWith(drawer);
+        const open = drawer.open();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        await open;
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-sidenav')).toBeTruthy();
+        expect(navigationLifecycle.created).toHaveBeenCalledOnce();
+    });
+
+    it('replaces a prepared menu after onboarding without retaining its old view', async () => {
+        const resumeIdle = holdNavigationIdleWork();
+        renderShellFixture();
+        resumeIdle();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        const previousContents = fixture.nativeElement.querySelector('app-sidenav');
+        expect(previousContents).toBeTruthy();
+
+        component.onboardingCompleted = false;
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('app-sidenav')).toBeNull();
+        expect(navigationLifecycle.destroyed).toHaveBeenCalledOnce();
+
+        component.onboardingCompleted = true;
+        fixture.detectChanges();
+        const drawer = fixture.debugElement.query(By.directive(MatSidenav)).componentInstance as MatSidenav;
+        expect(mockAppSideNavService.setSidenav).toHaveBeenLastCalledWith(drawer);
+        const open = drawer.open();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        await open;
+        fixture.detectChanges();
+        const currentContents = fixture.nativeElement.querySelector('app-sidenav');
+        expect(currentContents).toBeTruthy();
+        expect(currentContents).not.toBe(previousContents);
+        expect(navigationLifecycle.created).toHaveBeenCalledTimes(2);
+        fixture.destroy();
+        expect(navigationLifecycle.destroyed).toHaveBeenCalledTimes(2);
+    });
+
     it('should toggle sidenav through side nav service', () => {
+        renderShellFixture();
         mockHapticsService.selection.mockClear();
         component.toggleSidenav();
         expect(mockHapticsService.selection).toHaveBeenCalledTimes(1);
@@ -532,21 +863,25 @@ describe('AppShellComponent', () => {
     });
 
     it('should navigate to dashboard', () => {
+        renderShellFixture();
         component.navigateToDashboard();
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
     });
 
     it('should navigate to admin', () => {
+        renderShellFixture();
         component.navigateToAdmin();
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/admin']);
     });
 
     it('should navigate to login', () => {
+        renderShellFixture();
         component.navigateToLogin();
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/login']);
     });
 
     it('should place the impersonation banner inside the main shell content', () => {
+        renderShellFixture();
         mockRemoteConfigService.maintenanceMode.set(false);
         fixture.detectChanges();
 
@@ -556,6 +891,7 @@ describe('AppShellComponent', () => {
     });
 
     it('should no-op banner updates when height and state are unchanged', () => {
+        renderShellFixture();
         component.bannerHeight = 0;
         component.hasBanner = false;
 
@@ -566,6 +902,7 @@ describe('AppShellComponent', () => {
     });
 
     it('should ignore tiny banner height deltas to prevent shell wobble', () => {
+        renderShellFixture();
         component.bannerHeight = 56;
         component.hasBanner = true;
 
@@ -581,6 +918,7 @@ describe('AppShellComponent', () => {
     });
 
     it('should reset banner fields when dismissing grace period banner', () => {
+        renderShellFixture();
         component.bannerHeight = 42;
         component.hasBanner = true;
         component.dismissGracePeriodBanner();
@@ -589,6 +927,7 @@ describe('AppShellComponent', () => {
     });
 
     it('should open whats new dialog with expected config', async () => {
+        renderShellFixture();
         const dialog = TestBed.inject(MatDialog) as any;
         const whatsNewService = TestBed.inject(AppWhatsNewService) as any;
         await component.openWhatsNew();
@@ -607,6 +946,7 @@ describe('AppShellComponent', () => {
     });
 
     it('should apply and clear theme overlay during reveal animation', () => {
+        renderShellFixture();
         vi.useFakeTimers();
         mockThemeService.setAppTheme.mockClear();
 
@@ -660,6 +1000,7 @@ describe('AppShellComponent', () => {
     });
 
     it('does not render a shell overlay while maintenance configuration is still resolving', () => {
+        renderShellFixture();
         mockRemoteConfigService.maintenanceMode.set(false);
         mockRemoteConfigService.isLoading.set(true);
         fixture.detectChanges();
@@ -669,6 +1010,7 @@ describe('AppShellComponent', () => {
     });
 
     it('should no-op when hideInitialLoader is called while already hidden', () => {
+        renderShellFixture();
         component.showInitialLoader = false;
 
         (component as any).hideInitialLoader();
@@ -677,6 +1019,7 @@ describe('AppShellComponent', () => {
     });
 
     it('should reset scroll to top when NavigationEnd changes route', () => {
+        renderShellFixture();
         const scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => { });
         fixture.detectChanges();
         component.headerHidden = true;
@@ -700,6 +1043,7 @@ describe('AppShellComponent', () => {
     });
 
     it('should trigger haptics for imperative navigations after initial navigation', () => {
+        renderShellFixture();
         mockHapticsService.selection.mockClear();
 
         (mockRouter.events as Subject<any>).next(new NavigationEnd(1, '/dashboard', '/dashboard'));
@@ -711,6 +1055,7 @@ describe('AppShellComponent', () => {
     });
 
     it('should not trigger haptics for popstate navigations', () => {
+        renderShellFixture();
         mockHapticsService.selection.mockClear();
 
         (mockRouter.events as Subject<any>).next(new NavigationEnd(1, '/dashboard', '/dashboard'));
@@ -721,6 +1066,7 @@ describe('AppShellComponent', () => {
     });
 
     it('should persist hasSubscribedOnce and onboardingCompleted for paid users with accepted terms', () => {
+        renderShellFixture();
         const appUserService = TestBed.inject(AppUserService) as any;
         appUserService.updateUserProperties.mockClear();
 
@@ -744,6 +1090,7 @@ describe('AppShellComponent', () => {
     });
 
     it('should not persist onboardingCompleted when terms are not accepted', () => {
+        renderShellFixture();
         const appUserService = TestBed.inject(AppUserService) as any;
         appUserService.updateUserProperties.mockClear();
 
@@ -767,6 +1114,7 @@ describe('AppShellComponent', () => {
     });
 
     it('should defer onboarding persistence when profile reads are incomplete', () => {
+        renderShellFixture();
         const appUserService = TestBed.inject(AppUserService) as any;
         appUserService.updateUserProperties.mockClear();
         appUserService.hasIncompleteProfileReads.mockReturnValue(true);

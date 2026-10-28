@@ -1,4 +1,6 @@
-import { ActivityTypes, DateRanges, DaysOfTheWeek, EventInterface } from '@sports-alliance/sports-lib';
+import type { EventRead } from '@shared/event-read';
+import { ActivityTypes, DateRanges, DaysOfTheWeek } from '@sports-alliance/sports-lib';
+import { resolveCompatibleActivityType } from '@shared/activity-type-compatibility';
 import {
   AppDashboardEventTableFiltersInterface,
   AppDashboardTileEventFilterRange,
@@ -29,6 +31,8 @@ export const DASHBOARD_EVENT_TABLE_DEFAULT_DATE_RANGE = DateRanges.thisWeek;
 export const DASHBOARD_TILE_EVENT_RANGE_OPTIONS: ReadonlyArray<DashboardTileEventRangeOption> = [
   { range: 'thisWeek', label: 'This week', buttonLabel: 'Week', shortLabel: 'W' },
   { range: 'thisMonth', label: 'This month', buttonLabel: 'Month', shortLabel: 'M' },
+  { range: 'lastMonth', label: 'Last month', buttonLabel: 'Last month', shortLabel: 'Last mo' },
+  { range: '7d', label: 'Last 7 days', buttonLabel: '7d', shortLabel: '7d', days: 7 },
   { range: '14d', label: '14d', buttonLabel: '14d', shortLabel: '14d', days: 14 },
   { range: '30d', label: '30d', buttonLabel: '30d', shortLabel: '30d', days: 30 },
   { range: '90d', label: '90d', buttonLabel: '90d', shortLabel: '90d', days: 90 },
@@ -44,11 +48,6 @@ const VALID_TILE_EVENT_RANGES = new Set<AppDashboardTileEventFilterRange>(
 );
 const VALID_EVENT_TABLE_DATE_RANGES = new Set<number>(
   Object.values(DateRanges).filter((value): value is number => typeof value === 'number'),
-);
-const VALID_ACTIVITY_TYPES = new Set<string>(
-  Object.values(ActivityTypes)
-    .filter(value => typeof value === 'string')
-    .map(value => `${value}`),
 );
 
 export function normalizeDashboardTileEventFilterRange(
@@ -116,11 +115,13 @@ export function resolveLegacyDashboardTileEventFilterRange(
     case DateRanges.thisMonth:
       return 'thisMonth';
     case DateRanges.lastSevenDays:
+      return '7d';
     case DateRanges.lastWeek:
       return '14d';
     case DateRanges.lastThirtyDays:
-    case DateRanges.lastMonth:
       return '30d';
+    case DateRanges.lastMonth:
+      return 'lastMonth';
     case DateRanges.thisYear:
     case DateRanges.lastYear:
       return '1y';
@@ -152,8 +153,12 @@ export function resolveDashboardTileEventWindow(
     return { range, startMs: null, endMs: null };
   }
 
-  if (range === 'thisWeek' || range === 'thisMonth') {
-    const resolvedDateRange = range === 'thisWeek' ? DateRanges.thisWeek : DateRanges.thisMonth;
+  if (range === 'thisWeek' || range === 'thisMonth' || range === 'lastMonth') {
+    const resolvedDateRange = {
+      thisWeek: DateRanges.thisWeek,
+      thisMonth: DateRanges.thisMonth,
+      lastMonth: DateRanges.lastMonth,
+    }[range];
     const resolved = getDatesForDateRange(resolvedDateRange, startOfTheWeek);
     return {
       range,
@@ -197,9 +202,9 @@ export function navigateDashboardTileEventWindow(
 }
 
 export function filterDashboardTileEventsByActivityTypes(
-  events: EventInterface[],
+  events: EventRead[],
   activityTypes: ActivityTypes[] | null | undefined,
-): EventInterface[] {
+): EventRead[] {
   const normalizedActivityTypes = normalizeActivityTypes(activityTypes, []);
   if (!normalizedActivityTypes.length) {
     return events;
@@ -208,7 +213,7 @@ export function filterDashboardTileEventsByActivityTypes(
 }
 
 export function eventMatchesDashboardActivityTypes(
-  event: EventInterface,
+  event: EventRead,
   activityTypes: ActivityTypes[] | null | undefined,
 ): boolean {
   const normalizedActivityTypes = normalizeActivityTypes(activityTypes, []);
@@ -229,8 +234,8 @@ export function normalizeActivityTypes(
   const values = Array.isArray(activityTypes) ? activityTypes : fallback;
   return values
     .map(activityType => normalizeActivityType(activityType))
-    .filter((activityType, index, normalized) => (
-      VALID_ACTIVITY_TYPES.has(`${activityType}`)
+    .filter((activityType, index, normalized): activityType is ActivityTypes => (
+      activityType !== null
       && normalized.indexOf(activityType) === index
     ));
 }
@@ -255,6 +260,9 @@ function resolveDurationRangeFromCustomDates(
   }
 
   const durationDays = Math.ceil((endMs - startMs) / (24 * 60 * 60 * 1000));
+  if (durationDays <= 7) {
+    return '7d';
+  }
   if (durationDays <= 14) {
     return '14d';
   }
@@ -280,10 +288,10 @@ function finiteNumberOrNull(value: unknown, fallback: number | null): number | n
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
-function normalizeActivityType(value: unknown): ActivityTypes {
+function normalizeActivityType(value: unknown): ActivityTypes | null {
   const keyMappedValue = ActivityTypes[value as keyof typeof ActivityTypes];
   const candidate = typeof keyMappedValue === 'string' ? keyMappedValue : value;
-  return candidate as ActivityTypes;
+  return resolveCompatibleActivityType(candidate);
 }
 
 function resolveDateMs(value: unknown): number | null {

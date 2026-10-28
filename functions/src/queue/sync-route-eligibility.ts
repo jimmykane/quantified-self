@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { ServiceRecoveryDeferredError } from '../shared/service-recovery-deferral';
 
 import {
   isDisconnectPendingServiceConnection,
@@ -67,7 +68,7 @@ const ROUTE_RESTORE_RELEASE_CONCURRENCY = 10;
  * The route-restore marker remains durable when a release reaches its bounded
  * page budget, so the lifecycle repair scheduler can resume remaining rows.
  */
-export class RouteRestoreQueueReleaseIncompleteError extends Error {
+export class RouteRestoreQueueReleaseIncompleteError extends ServiceRecoveryDeferredError {
   constructor(serviceName: ServiceNames) {
     super(`Route-restore queue release for ${serviceName} reached its bounded page limit.`);
     this.name = 'RouteRestoreQueueReleaseIncompleteError';

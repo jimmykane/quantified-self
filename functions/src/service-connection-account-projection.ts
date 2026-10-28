@@ -15,6 +15,7 @@ const MAX_PROJECTED_ACCOUNTS = 32;
 const MAX_PROVIDER_USER_ID_LENGTH = 512;
 const MAX_PROJECTED_PERMISSIONS = 64;
 const MAX_PERMISSION_LENGTH = 128;
+const TOKEN_PROJECTION_MEMORY = '512MiB';
 
 export type ProjectedServiceName =
   | ServiceNames.GarminAPI
@@ -240,7 +241,7 @@ function tokenProjectionTrigger(
   return onDocumentWritten({
     document,
     region: 'europe-west2',
-    memory: '256MiB',
+    memory: TOKEN_PROJECTION_MEMORY,
     maxInstances: 20,
     concurrency: 10,
     retry: true,
@@ -267,3 +268,7 @@ export const projectCOROSConnectionOnTokenWrite = tokenProjectionTrigger(
   ServiceNames.COROSAPI,
   'COROSAPIAccessTokens/{userID}/tokens/{tokenID}',
 );
+
+export const serviceConnectionAccountProjectionTestInternals = {
+  tokenProjectionMemory: TOKEN_PROJECTION_MEMORY,
+};

@@ -1,5 +1,3 @@
-@use '../../../../styles/breakpoints' as bp;
-
 mat-dialog-content {
   display: flex;
   flex-direction: column;
@@ -9,7 +7,6 @@ mat-dialog-content {
 .dialog-intro {
   margin: 0;
   color: var(--mat-sys-on-surface-variant);
-  line-height: 1.5;
 }
 
 .merge-options {
@@ -17,166 +14,53 @@ mat-dialog-content {
   gap: 16px;
 }
 
-.option-card {
-  --option-accent: var(--mat-sys-primary);
-  --option-accent-container: var(--mat-sys-primary-container);
-  --qs-overlay-section-bg: var(--mat-sys-surface-container-high);
-  --qs-overlay-section-border: color-mix(in srgb, var(--mat-sys-outline-variant) 90%, transparent);
-  --qs-overlay-section-radius: 12px;
-  --qs-overlay-section-shadow: none;
+.merge-option {
+  display: block;
+  min-inline-size: 0;
+}
 
-  position: relative;
-  overflow: hidden;
-  padding: 18px;
-  cursor: pointer;
+.option-copy {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  transition:
-    border-color 0.2s ease,
-    background 0.2s ease;
-}
-
-.option-card::before {
-  content: '';
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 4px;
-  opacity: 0;
-  background: var(--option-accent);
-  transition: opacity 0.2s ease;
-}
-
-.option-card:not(.disabled):hover {
-  --qs-overlay-section-bg: color-mix(in srgb, var(--option-accent-container) 22%, var(--mat-sys-surface-container-high));
-  --qs-overlay-section-border: color-mix(in srgb, var(--option-accent) 34%, var(--mat-sys-outline-variant));
-}
-
-.option-card:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--option-accent) 58%, transparent);
-  outline-offset: 2px;
-}
-
-.option-card.disabled {
-  pointer-events: none;
-  opacity: 0.7;
-}
-
-.option-card.option-card-benchmark {
-  --option-accent: var(--mat-sys-secondary);
-  --option-accent-container: var(--mat-sys-secondary-container);
-}
-
-.option-card.option-card-multi {
-  --option-accent: var(--mat-sys-primary);
-  --option-accent-container: var(--mat-sys-primary-container);
-}
-
-.option-card.option-card-benchmark.selected,
-.option-card.option-card-multi.selected {
-  --qs-overlay-section-bg: color-mix(in srgb, var(--option-accent-container) 38%, var(--mat-sys-surface-container-high));
-  --qs-overlay-section-border: var(--option-accent);
-}
-
-.option-card.selected::before {
-  opacity: 1;
-}
-
-.option-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.option-eyebrow {
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  line-height: 1.2;
-  margin-bottom: 4px;
-  text-transform: uppercase;
-  color: var(--option-accent);
-}
-
-.option-indicator {
-  color: var(--mat-sys-outline);
-  flex-shrink: 0;
-  transition: color 0.2s ease;
-}
-
-.option-card.selected .option-indicator {
-  color: var(--option-accent);
+  gap: 4px;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .option-title {
-  font-size: 1rem;
   font-weight: 600;
-  line-height: 1.3;
 }
 
-.option-summary {
-  font-size: 0.875rem;
+.option-summary,
+.option-effects {
   color: var(--mat-sys-on-surface-variant);
-  line-height: 1.45;
-}
-
-.option-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.option-chip {
-  pointer-events: none;
-}
-
-.option-chip-primary {
-  --mdc-chip-elevated-container-color: var(--mat-sys-primary-container);
-  --mdc-chip-label-text-color: var(--mat-sys-on-primary-container);
-}
-
-.option-chip-secondary {
-  --mdc-chip-elevated-container-color: var(--mat-sys-secondary-container);
-  --mdc-chip-label-text-color: var(--mat-sys-on-secondary-container);
-}
-
-.option-detail {
-  display: grid;
-  gap: 4px;
-  color: var(--mat-sys-on-surface-variant);
-  font-size: 0.85rem;
-  line-height: 1.4;
-}
-
-.option-detail-title {
-  color: var(--mat-sys-on-surface);
-  font-size: 0.78rem;
-  font-weight: 700;
-  line-height: 1.2;
+  font-size: var(--mat-sys-body-small-size);
+  line-height: var(--mat-sys-body-small-line-height);
 }
 
 .merge-button-content {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
 }
 
 .merge-submit-button {
-  min-inline-size: 14rem;
+  min-inline-size: min(100%, 14rem);
+  min-height: 48px;
+  height: auto;
+  white-space: normal;
 }
 
-.merge-spinner {
+.merge-spinner,
+.merge-icon {
+  flex: 0 0 18px;
   width: 18px;
   height: 18px;
+  font-size: 18px;
 }
 
-@include bp.xsmall {
-  .option-card {
-    padding: 14px;
-  }
-
-  .option-header {
-    gap: 8px;
-  }
+mat-dialog-actions {
+  flex-wrap: wrap;
+  gap: 8px;
 }

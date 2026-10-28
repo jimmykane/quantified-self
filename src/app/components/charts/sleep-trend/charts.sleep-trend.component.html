@@ -1,7 +1,8 @@
 <app-loading-overlay [isLoading]="isLoading" [hasError]="showNoDataError" [allowErrorPassthrough]="true" [errorMessage]="noDataErrorMessage"
   [errorHint]="noDataErrorHint" [errorIcon]="noDataErrorIcon" [showSkeleton]="false" height="100%" [style.height.%]="100">
-  <section class="sleep-layout">
+  <section class="sleep-layout" [class.sleep-layout-embedded]="hideTitle" [class.sleep-layout-overview]="overview">
     <header class="sleep-header" [class.sleep-header-reserve-actions]="reserveTitleActionSpace">
+      @if (!hideTitle) {
       <div class="title-row">
         <div class="sleep-title-group">
           <div class="sleep-title qs-dashboard-chart-title">Sleep</div>
@@ -13,6 +14,7 @@
           }
         </div>
       </div>
+      }
       <div class="sleep-stats">
         <div class="sleep-stat">
           <div class="sleep-stat-value">{{ latestDurationText }}</div>
@@ -29,6 +31,16 @@
       </div>
       <div class="sleep-context-label">{{ sleepWindowLabel || 'Sleep window' }} · {{ latestContextText }}</div>
     </header>
-    <div #chartDiv class="sleep-chart"></div>
+    @if (vitalAverages.length) {
+      <dl class="sleep-averages" aria-label="Window averages">
+        @for (average of vitalAverages; track average.label) {
+          <div class="sleep-average">
+            <dt><span class="sleep-average-marker" [style.background-color]="average.color" aria-hidden="true"></span>{{ average.label }}</dt>
+            <dd>{{ average.display }}</dd>
+          </div>
+        }
+      </dl>
+    }
+    <div #chartDiv data-dashboard-chart-plot class="sleep-chart"></div>
   </section>
 </app-loading-overlay>

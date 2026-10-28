@@ -1,4 +1,6 @@
 import { inject, Injectable } from '@angular/core';
+import { getEventTags } from '@shared/event-tags';
+import type { AppEventInterface } from '@shared/app-event.interface';
 import {
   ActivityTypesHelper,
   DataActivityTypes,
@@ -10,17 +12,40 @@ import {
   type EventInterface,
   type User,
 } from '@sports-alliance/sports-lib';
-import { map, Observable, of, startWith, tap } from 'rxjs';
+import { map, Observable, of, startWith, tap, timeout } from 'rxjs';
 import type { ActivityCalendarQueryWindow } from '../helpers/activity-calendar.helper';
+import {
+  DASHBOARD_FORM_LEGACY_TRAINING_STRESS_SCORE_TYPE,
+  DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
+} from '../helpers/dashboard-form.helper';
 import { isNormalActivityEvent } from '../helpers/normal-activity-event.helper';
 import { AppEventService, type EventDocumentData } from './app.event.service';
 
 @Injectable({ providedIn: 'root' })
 export class ActivityCalendarService {
+  static readonly SUMMARY_EVENT_LIMIT = 1000;
+  static readonly SUMMARY_READ_TIMEOUT_MS = 30_000;
   private static readonly CACHE_TTL_MS = 5 * 60 * 1000;
   private static readonly CACHE_MAX_ENTRIES = 12;
   private readonly eventService = inject(AppEventService);
   private readonly eventCache = new Map<string, { events: EventInterface[]; expiresAt: number }>();
+
+  /** One lookahead record distinguishes a complete calendar period from an observed subtotal. */
+  watchSummaryEvents(user: User, window: ActivityCalendarQueryWindow): Observable<{ events: EventInterface[]; complete: boolean }> {
+    if (!user?.uid || !Number.isFinite(window?.startMs) || !Number.isFinite(window?.endExclusiveMs)
+      || window.endExclusiveMs <= window.startMs) throw new Error('A valid owner and calendar range are required.');
+    return this.eventService.watchEventDocumentsBy(user, [
+      { fieldPath: 'startDate', opStr: '>=', value: window.startMs },
+      { fieldPath: 'startDate', opStr: '<', value: window.endExclusiveMs },
+    ], 'startDate', true, ActivityCalendarService.SUMMARY_EVENT_LIMIT + 1, { waitForServer: true }).pipe(
+      timeout({ first: ActivityCalendarService.SUMMARY_READ_TIMEOUT_MS }),
+      map(documents => {
+        const normal = documents.slice(0, ActivityCalendarService.SUMMARY_EVENT_LIMIT).filter(isNormalActivityEvent);
+        const events = normal.map(toActivityCalendarEvent).filter((event): event is EventInterface => !!event);
+        return { events, complete: documents.length <= ActivityCalendarService.SUMMARY_EVENT_LIMIT && events.length === normal.length };
+      }),
+    );
+  }
 
   watchEvents(
     user: User | null | undefined,
@@ -101,23 +126,36 @@ function toActivityCalendarEvent(document: EventDocumentData): EventInterface | 
     [DataDistance.type]: resolveNonNegativeStatValue(stats[DataDistance.type]),
     [DataAscent.type]: resolveNonNegativeStatValue(stats[DataAscent.type]),
     [DataDescent.type]: resolveNonNegativeStatValue(stats[DataDescent.type]),
+    [DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE]: resolveNonNegativeStatValue(
+      stats[DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE],
+    ),
+    [DASHBOARD_FORM_LEGACY_TRAINING_STRESS_SCORE_TYPE]: resolveNonNegativeStatValue(
+      stats[DASHBOARD_FORM_LEGACY_TRAINING_STRESS_SCORE_TYPE],
+    ),
   };
   const activityTypes = resolveActivityTypes(stats[DataActivityTypes.type]);
   const name = typeof document.name === 'string' ? document.name : '';
   const description = typeof document.description === 'string' ? document.description : null;
 
+  // The Calendar API historically returns this read-only projection as EventInterface;
+  // it deliberately omits mutation/serialization methods and rich Sports Lib hydration.
   return {
     name,
     description,
+    tags: getEventTags({ tags: document.tags, benchmarkReviewTags: document.benchmarkReviewTags }),
     startDate,
     getID: () => id,
+    // Summary events are not serializable Sports Lib events. Retain source fields for load validation.
+    endDate: resolveDate(document.endDate) ?? undefined,
+    stats,
+    getActivities: () => [],
     getStat: (type) => {
       const value = statValues[type];
       return value === null || value === undefined ? null : { getValue: () => value };
     },
     getActivityTypesAsArray: () => activityTypes,
     getActivityTypesAsString: () => activityTypes.join(', '),
-  } as EventInterface;
+  } as unknown as AppEventInterface;
 }
 
 function resolveDate(value: unknown): Date | null {
@@ -136,10 +174,15 @@ function resolveDate(value: unknown): Date | null {
 }
 
 function resolveNonNegativeStatValue(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') {
+  const candidate = value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>).value
+      ?? (value as Record<string, unknown>).rawValue
+      ?? (value as Record<string, unknown>)._value
+    : value;
+  if (candidate === null || candidate === undefined || candidate === '') {
     return null;
   }
-  const numericValue = Number(value);
+  const numericValue = Number(candidate);
   return Number.isFinite(numericValue) && numericValue >= 0 ? numericValue : null;
 }
 

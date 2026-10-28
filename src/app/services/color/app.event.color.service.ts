@@ -1,8 +1,8 @@
 import { Injectable } from '@angular/core';
 import { AppDeviceColors } from './app.device.colors';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
-import { ActivityTypeGroups, ActivityTypes, ActivityTypesHelper, type ActivityTypeGroup } from '@sports-alliance/sports-lib';
-import { AppActivityTypeGroupColors } from './app.activity-type-group.colors';
+import { ActivityTypes, type ActivityTypeGroup } from '@sports-alliance/sports-lib';
+import { AppActivityTypeGroupColors, resolveActivityTypeVisualGroup } from './app.activity-type-group.colors';
 import { AppActivityTypeGroupGradients } from './app.activity-type-group.gradients';
 import { AppColors } from './app.colors';
 import { LoggerService } from '../logger.service';
@@ -40,7 +40,7 @@ export class AppEventColorService {
 
   public getColorByNumber(number: number): string {
     // Return fixed random
-    return '#' + Math.floor((Math.abs(Math.sin(number) * 16777215)) % 16777215).toString(16);
+    return '#' + Math.floor((Math.abs(Math.sin(number) * 16777215)) % 16777215).toString(16).padStart(6, '0');
   }
 
   /**
@@ -58,7 +58,7 @@ export class AppEventColorService {
 
   public getAutomaticActivityColor(activities: ActivityInterface[], activity: ActivityInterface): string {
     const activityID = activity.getID();
-    const creatorName = activity.creator.name || 'Unknown';
+    const creatorName = activity.creator?.name || 'Unknown';
 
     // Get the index of the requested activity among all activities
     // Prefer reference matching first to avoid collisions with duplicate IDs.
@@ -95,7 +95,7 @@ export class AppEventColorService {
     }
 
     // Find the activities that have the same creator
-    const sameCreatorActivities = activities.filter(eventActivity => eventActivity.creator.name === creatorName);
+    const sameCreatorActivities = activities.filter(eventActivity => eventActivity.creator?.name === creatorName);
     // Get the index on the same creator activities
     let sameCreatorActivitiesActivityIndex = sameCreatorActivities.indexOf(activity);
     if (sameCreatorActivitiesActivityIndex === -1 && activityID) {
@@ -168,12 +168,7 @@ export class AppEventColorService {
   }
 
   private getVisualActivityTypeGroup(activityType: ActivityTypes): ActivityTypeGroup {
-    switch (activityType) {
-      case ActivityTypes.Trekking:
-        return ActivityTypeGroups.OutdoorAdventuresGroup;
-      default:
-        return ActivityTypesHelper.getActivityGroupForActivityType(activityType);
-    }
+    return resolveActivityTypeVisualGroup(activityType);
   }
 
   getColorForZoneHex(zone: string): string {

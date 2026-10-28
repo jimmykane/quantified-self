@@ -1,0 +1,43 @@
+<main class="qs-workspace-page" aria-labelledby="note-comparisons-title">
+  <app-page-header titleId="note-comparisons-title" title="Note comparisons" leadingIcon="compare_arrows"
+    subtitle="Choose a saved note to compare your recorded sleep, nightly HRV and resting heart rate.">
+    <div pageHeaderActions>
+      <button mat-button type="button" [disabled]="!ownerAvailable() || managerOpening() || managerOpen()" (click)="manageNotes()">
+        <mat-icon aria-hidden="true">edit_note</mat-icon>{{ managerOpening() ? 'Opening notes…' : 'Manage notes' }}
+      </button>
+    </div>
+  </app-page-header>
+  @if (managerError()) { <p class="notes-error" role="alert">{{ managerError() }}</p> }
+  <section class="comparison-notes" aria-labelledby="saved-comparison-notes-title" [attr.aria-busy]="loading()">
+    <h2 id="saved-comparison-notes-title">Choose a note</h2>
+    <p class="notes-meta">Each comparison uses matching before-and-after windows and keeps sources separate. Observed differences do not prove cause and effect.</p>
+    <p class="notes-meta">Ongoing notes work too. We compare 7, 14 or 28 days before the note’s start with the first days after it—not the latest days of an ongoing note. You need recorded readings on both sides; connecting a device later may not provide that older history.</p>
+    @if (loading()) {
+      <mat-progress-bar mode="indeterminate" aria-label="Loading saved notes" />
+      <p class="notes-meta" role="status">Loading saved notes…</p>
+    } @else if (error()) {
+      <p class="notes-error" role="alert">{{ error() }}</p>
+      <button mat-button type="button" appHapticTap (click)="retry()">Retry</button>
+    } @else if (rows().length) {
+      <mat-nav-list aria-label="Saved notes to compare">
+        @for (row of rows(); track row.note.id) {
+          <a mat-list-item class="comparison-note" [routerLink]="['/health/compare', row.note.id]">
+            <mat-icon matListItemIcon [style.color]="row.color" aria-hidden="true">{{ row.icon }}</mat-icon>
+            <span matListItemTitle class="comparison-note-title">{{ row.note.title }}</span>
+            <span matListItemLine class="comparison-note-meta">{{ row.dates }} · {{ row.category }}{{ row.hidden ? ' · Hidden on charts' : '' }}</span>
+            <mat-icon matListItemMeta aria-hidden="true">chevron_right</mat-icon>
+          </a>
+        }
+      </mat-nav-list>
+    } @else if (ownerAvailable()) {
+      <p class="notes-meta" role="status">No saved notes yet. Use Manage notes to add a dated change, then choose it here to compare your readings.</p>
+    }
+    @if (pageNumber() > 0 || hasOlder()) {
+      <nav class="notes-pagination" aria-label="Saved notes pages">
+        <button mat-button type="button" appHapticTap [disabled]="loading() || pageNumber() === 0" (click)="newer()">Newer</button>
+        <span class="notes-meta">Page {{ pageNumber() + 1 }}</span>
+        <button mat-button type="button" appHapticTap [disabled]="loading() || !hasOlder()" (click)="older()">Older</button>
+      </nav>
+    }
+  </section>
+</main>

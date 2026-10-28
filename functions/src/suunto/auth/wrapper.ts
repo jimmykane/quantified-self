@@ -16,11 +16,16 @@ import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import { hasServiceOAuthConnectAccess } from '../../service-oauth-access';
 import { extractRefreshFailureDetails } from '../../service-auth-lifecycle';
 import { FUNCTION_SECRET_BINDINGS } from '../../secrets';
+import type { ServiceOAuthCompletionResult } from '../../../../shared/service-connection';
+import type { ConnectionHistoryRangePreset } from '../../../../shared/connection-history';
 
 const SERVICE_NAME = ServiceNames.SuuntoApp;
 
 
 interface GetAuthRedirectURIRequest {
+  importRecentHistory?: boolean;
+  importRouteHistory?: boolean;
+  importHistoryRange?: ConnectionHistoryRangePreset;
   redirectUri: string;
 }
 
@@ -32,7 +37,7 @@ export const getSuuntoAPIAuthRequestTokenRedirectURI = onCall({
   region: FUNCTIONS_MANIFEST.getSuuntoAPIAuthRequestTokenRedirectURI.region,
   secrets: FUNCTION_SECRET_BINDINGS.getSuuntoAPIAuthRequestTokenRedirectURI,
   cors: ALLOWED_CORS_ORIGINS,
-  memory: '256MiB',
+  memory: '512MiB',
   maxInstances: 10
 }, async (request): Promise<GetAuthRedirectURIResponse> => {
   // App Check verification
@@ -58,7 +63,14 @@ export const getSuuntoAPIAuthRequestTokenRedirectURI = onCall({
 
   try {
     return {
-      redirect_uri: await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, SERVICE_NAME, redirectUri),
+      redirect_uri: await getServiceOAuth2CodeRedirectAndSaveStateToUser(
+        userID,
+        SERVICE_NAME,
+        redirectUri,
+        request.data?.importRecentHistory,
+        request.data?.importHistoryRange,
+        request.data?.importRouteHistory,
+      ),
     };
   } catch (error) {
     if (isServiceDisconnectInProgressError(error)) {
@@ -83,9 +95,9 @@ export const requestAndSetSuuntoAPIAccessToken = onCall({
   region: FUNCTIONS_MANIFEST.requestAndSetSuuntoAPIAccessToken.region,
   secrets: FUNCTION_SECRET_BINDINGS.requestAndSetSuuntoAPIAccessToken,
   cors: ALLOWED_CORS_ORIGINS,
-  memory: '256MiB',
+  memory: '512MiB',
   maxInstances: 10
-}, async (request): Promise<void> => {
+}, async (request): Promise<ServiceOAuthCompletionResult> => {
   // App Check verification
   enforceAppCheck(request);
 
@@ -114,7 +126,7 @@ export const requestAndSetSuuntoAPIAccessToken = onCall({
   }
 
   try {
-    await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code, state);
+    return await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code, state);
   } catch (e: any) {
     const failure = extractRefreshFailureDetails(e);
     const status = failure.statusCode || 500;

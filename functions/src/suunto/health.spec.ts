@@ -16,12 +16,35 @@ import {
   SUUNTO_HEALTH_MAX_DAILY_SOURCE_RECORDS,
   SUUNTO_HEALTH_MAX_SERIES_SOURCE_RECORDS,
   SuuntoHealthValidationError,
+  SUUNTO_HEALTH_MAX_RAW_SAMPLE_ROWS,
 } from './health';
 
 const ACCOUNT_ID = 'private-suunto-account';
 const RECEIVED_AT_MS = Date.parse('2026-08-27T12:00:00.000Z');
 
 describe('Suunto activity Health mapping', () => {
+  it.each(['activity', 'recovery'])('bounds normalized %s samples independently of duplicate raw rows', feed => {
+    const parse = feed === 'activity' ? parseSuuntoActivitySamples : parseSuuntoRecoverySamples;
+    const rows = Array.from({ length: 10_664 }, (_, index) => ({
+      timestamp: new Date(RECEIVED_AT_MS + (index % 1_226) * 60_000).toISOString(),
+      entryData: feed === 'activity'
+        ? (index < 1_226 ? { HR: 60, HRV: 42 } : { HR: 61 })
+        : (index < 1_226 ? { Balance: 0.9, StressState: 3 } : { Balance: 0.8 }),
+    }));
+    const parsed = parse(rows);
+    expect(parsed).toHaveLength(1_226);
+    expect(parsed[0]).toMatchObject(feed === 'activity'
+      ? { heartRateBpm: 61, heartRateVariabilityMs: 42 }
+      : { balanceRatio: 0.8, stressState: 3 });
+    expect(() => parse([...rows, { timestamp: rows[0].timestamp, entryData: { HR: -1, Balance: 2 } }]))
+      .toThrow('numeric range');
+    expect(() => parse(Array.from({ length: 10_001 }, (_, index) => ({
+      timestamp: new Date(RECEIVED_AT_MS + index * 60_000).toISOString(), entryData: {},
+    })))).toThrow('bounded item count');
+    expect(() => parse(Array(SUUNTO_HEALTH_MAX_RAW_SAMPLE_ROWS + 1).fill(null)))
+      .toThrow('bounded item count');
+  });
+
   it('maps all documented measurements with provider-local day boundaries and canonical units', () => {
     const samples = parseSuuntoActivitySamples([
       {

@@ -67,7 +67,7 @@
 }
 
 .dashboard-action-prompt__button-content {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
@@ -84,16 +84,16 @@
 .dashboard-action-prompt__button-content mat-icon,
 .dashboard-action-prompt__button-content mat-progress-spinner {
   flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
 }
 
 .dashboard-action-prompt__button-content mat-icon {
   align-items: center;
   display: inline-flex;
   font-size: 1.1rem;
-  height: 1.1rem;
   justify-content: center;
   line-height: 1.1rem;
-  width: 1.1rem;
 }
 
 @media (max-width: 640px) {

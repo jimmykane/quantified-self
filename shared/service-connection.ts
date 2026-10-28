@@ -1,3 +1,4 @@
+import type { ConnectionHistoryStatusProjection } from './connection-history';
 export const SERVICE_CONNECTION_STATES = {
   Connected: 'connected',
   ReconnectRequired: 'reconnect_required',
@@ -6,6 +7,27 @@ export const SERVICE_CONNECTION_STATES = {
 
 export type ServiceConnectionState = typeof SERVICE_CONNECTION_STATES[keyof typeof SERVICE_CONNECTION_STATES];
 export type ProviderBindingState = 'bound' | 'unbound';
+
+export const SERVICE_OAUTH_COMPLETION_OUTCOMES = {
+  Connected: 'connected',
+  DisconnectRecoveryCompleted: 'disconnect_recovery_completed',
+  DisconnectRecoveryPending: 'disconnect_recovery_pending',
+} as const;
+
+export type ServiceOAuthCompletionResult =
+  | {
+    connected: true;
+    historyImport?: { runId: string };
+    outcome: typeof SERVICE_OAUTH_COMPLETION_OUTCOMES.Connected;
+  }
+  | {
+    connected: false;
+    outcome: typeof SERVICE_OAUTH_COMPLETION_OUTCOMES.DisconnectRecoveryCompleted;
+  }
+  | {
+    connected: false;
+    outcome: typeof SERVICE_OAUTH_COMPLETION_OUTCOMES.DisconnectRecoveryPending;
+  };
 
 /**
  * Browser-safe account information derived by the backend from an OAuth token
@@ -37,6 +59,7 @@ export interface ServiceDisconnectRetryDetails {
 }
 
 export interface ServiceConnectionMetaFields {
+  connectionHistoryImport?: ConnectionHistoryStatusProjection;
   connectionState?: ServiceConnectionState | null;
   /**
    * A display-only stable identifier supplied by the connected provider.

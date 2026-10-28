@@ -1,7 +1,18 @@
-import { AppEventInterface } from '@shared/app-event.interface';
+import type { AppEventInterface } from '@shared/app-event.interface';
+import { readActivitySourceIdentity } from '@shared/activity-source-identity';
 import { hasActivityDiveSourceRecords } from '../helpers/event-dive-source-records.helper';
 
 type EventActivity = NonNullable<ReturnType<AppEventInterface['getActivities']>>[number];
+
+/** Bounded stream-source inputs omitted by Sports Lib JSON; shared with live emission deduplication. */
+export function eventSourceVersion(event: AppEventInterface): string {
+  const files = event.originalFiles?.length ? event.originalFiles : event.originalFile ? [event.originalFile] : [];
+  const identities = (event.getActivities() || []).map(activity => [activity.getID(), readActivitySourceIdentity(
+    (activity as EventActivity & { sourceIdentity?: unknown }).sourceIdentity, activity.getID(),
+  )] as const).sort(([left], [right]) => `${left}` < `${right}` ? -1 : `${left}` > `${right}` ? 1 : 0);
+  return JSON.stringify([event.benchmarkSourceRevision ?? 0,
+    files.map(file => [file.path, file.bucket ?? null, file.generation ?? null]), identities]);
+}
 
 export interface EventLiveReconcileResult {
   reconciledEvent: AppEventInterface;
@@ -18,6 +29,12 @@ function filterSelectedIDsByAvailableActivities(activities: EventActivity[], sel
 }
 
 function preserveActivitySourceHydrationData(sourceActivity: EventActivity, targetActivity: EventActivity): void {
+  // Metadata-only live emissions reuse activity instances. Clearing the target
+  // would also clear the source and discard its hydrated GPS/chart streams.
+  if (sourceActivity === targetActivity) {
+    return;
+  }
+
   targetActivity.clearStreams();
   targetActivity.addStreams(sourceActivity.getAllStreams());
 
@@ -52,7 +69,10 @@ export function reconcileEventDetailsLiveUpdate(
   const haveSameActivitySet = currentActivityIDs.length === incomingActivityIDs.length
     && incomingActivityIDs.every((activityID) => currentActivitiesByID.has(activityID));
 
-  if (!haveSameActivitySet) {
+  // Stable IDs identify legs, not their current samples. Never attach cached streams to a newer source.
+  const haveSameSource = eventSourceVersion(currentEvent) === eventSourceVersion(incomingEvent);
+
+  if (!haveSameActivitySet || !haveSameSource) {
     return {
       reconciledEvent: incomingEvent,
       selectedActivityIDs: filterSelectedIDsByAvailableActivities(incomingActivities, selectedActivityIDs),

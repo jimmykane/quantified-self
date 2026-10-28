@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { HEALTH_FEATURE_CONTENT } from './health-feature.content';
+import { TRAINING_PLANS_HOME_CONTENT } from './training-plans-home.content';
+import { TRAINING_PLANS_PAGE_SECTIONS, TRAINING_PLANS_SEO_CONTENT } from './training-plans-page.content';
 import {
   PUBLIC_FEATURE_PATHS,
   PUBLIC_GUIDE_PATHS,
@@ -7,11 +10,117 @@ import {
 } from './public-seo-pages.content';
 
 describe('public-seo-pages.content', () => {
+  it('keeps Wahoo-to-Suunto access, setup and search offers consistent', () => {
+    const page = PUBLIC_SEO_PAGES.syncWahooToSuunto;
+    expect(page.actions[0]).toMatchObject({ label: 'Get Started', routerLink: '/services', variant: 'flat' });
+    expect(page.closingActions[0]).toMatchObject({ label: 'Get Started', routerLink: '/services', variant: 'flat' });
+    expect(page.accessNote).toContain('activity sync require Pro');
+    const entities = PUBLIC_SEO_ROUTE_DATA.syncWahooToSuunto.jsonLd['mainEntity'] as Record<string, unknown>[];
+    const application = entities.find(entity => entity['@type'] === 'SoftwareApplication');
+    expect(application?.['offers']).toMatchObject({ description: page.freeOfferDescription });
+    expect(page.freeOfferDescription).toContain('activity sync require Pro');
+    const history = page.sections.find(section => section.eyebrow === 'Past activities')!;
+    expect(history.items[1].copy).toContain('Under Suunto in Connections');
+    expect(history.items[1].copy).toContain('Wahoo API in Activity sources');
+    expect(history.items[1].copy).toContain('Preview sends nothing');
+    expect(history.items[2].copy).toContain('do not mean Delivered');
+  });
+  it('keeps Garmin-to-Wahoo pricing and setup actions explicit in page and search metadata', () => {
+    const page = PUBLIC_SEO_PAGES.syncGarminToWahoo;
+    expect(page.actions[0]).toMatchObject({ routerLink: '/pricing', variant: 'flat' });
+    expect(page.actions.find(action => action.label === 'Start Setup')?.routerLink).toBe('/services');
+    expect(page.closingActions[0].routerLink).toBe('/pricing');
+    expect(page.accessNote).toContain('require Pro');
+    expect(page.howToSteps).toHaveLength(4);
+    const entities = PUBLIC_SEO_ROUTE_DATA.syncGarminToWahoo.jsonLd['mainEntity'] as Record<string, unknown>[];
+    const application = entities.find(entity => entity['@type'] === 'SoftwareApplication');
+    expect(application?.['offers']).toMatchObject({ description: page.freeOfferDescription });
+    expect(page.freeOfferDescription).toContain('activity sync require Pro');
+    expect(PUBLIC_SEO_PAGES.guidesHub.actions.some(action => action.routerLink === `/${page.path}`)).toBe(true);
+  });
+  it('shares Health copy and preview selection with home and explains signed-in availability', () => {
+    const page = PUBLIC_SEO_PAGES.health;
+    expect(page.h1).toBe(HEALTH_FEATURE_CONTENT.title);
+    expect(page.intro).toBe(HEALTH_FEATURE_CONTENT.intro);
+    expect(page.description).toBe(HEALTH_FEATURE_CONTENT.seo.description);
+    const schema = PUBLIC_SEO_ROUTE_DATA.health.jsonLd;
+    expect(schema['description']).toBe(page.description);
+    const entities = schema['mainEntity'] as Record<string, unknown>[];
+    expect(entities.find(entity => entity['@type'] === 'SoftwareApplication')?.['featureList'])
+      .toEqual(expect.arrayContaining([...HEALTH_FEATURE_CONTENT.seo.featureList]));
+    expect(page.sections.slice(0, HEALTH_FEATURE_CONTENT.rows.length)).toEqual(HEALTH_FEATURE_CONTENT.rows.map(row => ({
+      eyebrow: 'Health history', title: row.title, copy: row.copy, preview: row.preview, items: [],
+    })));
+    expect(page.faqItems[0].answer).toContain('Health (Beta) is available to all signed-in users');
+    expect(page.faqItems[0].answer).toContain('Provider connection and history-import plan requirements still apply');
+    expect(page.faqItems[1].answer).toContain('not currently for Health imports');
+    expect(PUBLIC_SEO_PAGES.featuresHub.actions.some(action => action.routerLink === '/features/health')).toBe(true);
+  });
+  it('makes manual measurement logging explicit in the shared Health preview copy', () => {
+    const row = HEALTH_FEATURE_CONTENT.rows.find(row => row.preview === 'health-weight')!;
+    expect(row.title).toBe('Log Your Measurements');
+    for (const measurement of ['blood pressure', 'weight', 'body composition', 'blood oxygen', 'VO₂ max']) {
+      expect(row.copy).toContain(measurement);
+    }
+    expect(row.copy).toContain('manual entries clearly labelled');
+    expect(PUBLIC_SEO_PAGES.health.sections.find(section => section.preview === 'health-weight')?.copy).toBe(row.copy);
+  });
+  it('centralizes Training Plans homepage, SEO metadata, and route-only sections', () => {
+    const page = PUBLIC_SEO_PAGES.trainingPlans;
+
+    expect(page.title).toBe(TRAINING_PLANS_SEO_CONTENT.title);
+    expect(page.h1).toBe(TRAINING_PLANS_SEO_CONTENT.h1);
+    expect(page.intro).toBe(TRAINING_PLANS_SEO_CONTENT.intro);
+    expect(page.description).toBe(TRAINING_PLANS_SEO_CONTENT.description);
+    expect(page.featureList).toBe(TRAINING_PLANS_SEO_CONTENT.featureList);
+    expect(page.socialImageAlt).toBe(TRAINING_PLANS_SEO_CONTENT.socialImageAlt);
+    expect(page.freeOfferDescription).toBe(TRAINING_PLANS_SEO_CONTENT.freeOfferDescription);
+    expect(page.sections.slice(0, TRAINING_PLANS_PAGE_SECTIONS.length)).toEqual(TRAINING_PLANS_PAGE_SECTIONS);
+    expect(TRAINING_PLANS_HOME_CONTENT.cta.routerLink).toBe(`/${page.path}`);
+    expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('workout for today');
+    expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('readiness');
+    expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('HRV');
+    expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('sleep');
+    expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('training load');
+    expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('planned workouts');
+    expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('without duplicating training');
+  });
+
+  it('advertises lap-ended steps without promising unsupported provider delivery', () => {
+    const copy = TRAINING_PLANS_PAGE_SECTIONS.find(section => section.title === 'Build the workout you mean')!.copy;
+    expect(copy).toContain('time, distance, or lap-button-ended steps');
+    expect(copy).toContain('without a time or distance limit');
+    expect(copy).toContain('Garmin and Suunto support this ending');
+    expect(copy).toContain('Wahoo delivery is unsupported');
+    expect(copy).toContain('COROS delivery remains Coming soon');
+    const faq = PUBLIC_SEO_PAGES.trainingPlans.faqItems.find(item => item.question === 'Which sports and workout steps can I create?')!.answer;
+    expect(faq).toContain('time, distance, or lap-button-ended steps');
+    expect(faq).toContain('Wahoo delivery is unsupported');
+  });
+  it('keeps detailed Garmin limitations on the feature page while the homepage introduces workout sync', () => {
+    const home = JSON.stringify(TRAINING_PLANS_HOME_CONTENT);
+    const page = JSON.stringify(TRAINING_PLANS_PAGE_SECTIONS);
+    expect(home).toContain('Send compatible workouts to Garmin, Suunto, or Wahoo with Pro');
+    expect(home).not.toContain('Connecting an account alone won’t send planned workouts');
+    expect(home).not.toContain('Support varies by sport and device');
+    expect(home).not.toContain('COROS is coming soon');
+    expect(home).not.toContain('Generic');
+    expect(home).not.toContain('verification pending');
+    expect(page).toContain('Generic');
+    expect(page).toContain('only on some devices');
+    expect(page).toContain('QS keeps your authored sport');
+    expect(page).not.toContain('Garmin open-water delivery remains unavailable');
+    expect(page).not.toContain('Garmin and COROS delivery for these sports remain unsupported');
+    expect(page).toContain('not a native swim profile');
+    expect(page).toContain('COROS delivery for these sports remains unsupported');
+  });
   it('defines distinct public feature and guide paths', () => {
     expect(PUBLIC_FEATURE_PATHS).toEqual({
       hub: 'features',
+      health: 'features/health',
       activityCalendar: 'features/activity-calendar',
       trainingAnalysis: 'features/training-analysis',
+      trainingPlans: 'features/training-plans',
       trainingDashboard: 'features/training-dashboard',
       activityMap: 'features/activity-map',
       mcpServer: 'features/mcp-server',
@@ -22,6 +131,7 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_GUIDE_PATHS).toEqual({
       hub: 'guides',
       syncGarminToSuunto: 'guides/sync-garmin-to-suunto',
+      syncGarminToWahoo: 'guides/sync-garmin-to-wahoo',
       syncCorosToSuunto: 'guides/sync-coros-to-suunto',
       syncWahooToSuunto: 'guides/sync-wahoo-to-suunto',
       importActivitiesToSuunto: 'guides/import-activities-to-suunto',
@@ -43,6 +153,8 @@ describe('public-seo-pages.content', () => {
       expect(routeData.title).toBe(page.title);
       expect(routeData.description).toBe(page.description);
       expect(routeData.publicSeoPage).toBe(page);
+      expect(routeData.socialImage).toMatch(/^https:\/\/quantified-self\.io\/assets\/images\//);
+      expect(routeData.socialImageAlt.trim().length).toBeGreaterThan(0);
       expect(routeData).not.toHaveProperty('keywords');
       expect(routeData.jsonLd).toMatchObject({
         '@context': 'https://schema.org',
@@ -53,16 +165,42 @@ describe('public-seo-pages.content', () => {
       });
     }
 
-    expect(JSON.stringify(PUBLIC_SEO_PAGES)).not.toMatch(/\bprivate(?:ly)?\b/i);
+  });
+
+  it('keeps generic privacy boilerplate out of public copy', () => {
+    const copy = Object.values(PUBLIC_SEO_PAGES).map(page => ({
+      ...page,
+      // Reflection access needs a concrete privacy explanation, including on public recordings.
+      faqItems: page.faqItems.filter(item => !(
+        page.key === 'mcpServer'
+        && item.question === 'Can an MCP client read or save my post-workout reflection?'
+      )),
+    }));
+
+    expect(JSON.stringify(copy)).not.toMatch(/\bprivate(?:ly)?\b/i);
+  });
+
+  it('explains reflection privacy and independent access permissions', () => {
+    const answer = PUBLIC_SEO_PAGES.mcpServer.faqItems.find(item => (
+      item.question === 'Can an MCP client read or save my post-workout reflection?'
+    ))?.answer;
+
+    expect(answer).toContain('separate workout-reflection read permission plus Individual activity details access');
+    expect(answer).toContain('Change workout reflections additionally permits revision-checked saves or permanent deletes through native client approval');
+    expect(answer).toContain('Existing connections must authorize again');
+    expect(answer).toContain('owner-only on public recordings');
+    expect(answer).toContain('never sent to fitness providers');
+    expect(answer).toContain('Assistant has an independent choice that starts on for fresh and New chats, can be turned off');
+    expect(answer).toContain('requires review and Apply in QS');
   });
 
   it('keeps the new pages focused on separate search intents', () => {
-    expect(PUBLIC_SEO_PAGES.featuresHub.h1).toBe('Features for endurance training data');
+    expect(PUBLIC_SEO_PAGES.featuresHub.h1).toBe('Features for your activities, training, and health');
     expect(PUBLIC_SEO_PAGES.featuresHub.intro).toContain('compare recordings');
     expect(PUBLIC_SEO_PAGES.featuresHub.description).toContain('Garmin, Suunto, COROS, Wahoo');
     expect(PUBLIC_SEO_PAGES.featuresHub.description).toContain('AI answers');
 
-    expect(PUBLIC_SEO_PAGES.activityCalendar.h1).toBe('Activity calendar for endurance training');
+    expect(PUBLIC_SEO_PAGES.activityCalendar.h1).toBe('Activity calendar for workouts and plans');
     expect(PUBLIC_SEO_PAGES.activityCalendar.description).toContain('Week, Month, and Year calendar views');
     expect(PUBLIC_SEO_PAGES.activityCalendar.intro).toContain('Garmin, Suunto, COROS, Wahoo');
     expect(PUBLIC_SEO_PAGES.activityCalendar.sections.some(section => (
@@ -75,7 +213,7 @@ describe('public-seo-pages.content', () => {
       item.question === 'Does the activity calendar follow the dashboard event search?'
     ))).toBe(true);
 
-    expect(PUBLIC_SEO_PAGES.trainingAnalysis.h1).toBe('Training analysis for endurance athletes');
+    expect(PUBLIC_SEO_PAGES.trainingAnalysis.h1).toBe('Training analysis, readiness, and recovery');
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.description).toContain('training load, readiness, intensity, durability');
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.description).toContain('sport-specific trends');
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.intro).toContain('recent training compares with your usual workload');
@@ -88,6 +226,49 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.faqItems.some(item => item.question === 'How is Training different from the Dashboard?')).toBe(true);
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.sections.map(section => section.preview)).toContain('training-snapshot');
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.sections.map(section => section.preview)).toContain('training-signals');
+    expect(PUBLIC_SEO_PAGES.trainingAnalysis.sections.map(section => section.preview)).toContain('training-readiness');
+    expect(PUBLIC_SEO_PAGES.trainingAnalysis.sections.map(section => section.preview)).toContain('training-explorer');
+
+    const trainingPlans = PUBLIC_SEO_PAGES.trainingPlans;
+    expect(trainingPlans.title).toBe('Training Plans for Running, Cycling & More');
+    expect(trainingPlans.h1).toBe('Plan workouts for running, cycling, swimming and more');
+    expect(trainingPlans.description).toBe(TRAINING_PLANS_SEO_CONTENT.description);
+    expect(trainingPlans.sections.some(section => section.preview === 'training-plans')).toBe(true);
+    expect(trainingPlans.sections.some(section => section.copy.includes('one active at a time'))).toBe(true);
+    expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('Trail Running')))).toBe(true);
+    expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('Hand Cycle')))).toBe(true);
+    expect(trainingPlans.sections.some(section => section.items.some(item => item.title === 'Pool and open-water swimming'))).toBe(true);
+    const supportedWorkoutFaq = trainingPlans.faqItems.find(item => item.question === 'Which sports and workout steps can I create?')?.answer;
+    expect(supportedWorkoutFaq).toContain('Open Water Swimming');
+    expect(supportedWorkoutFaq).toContain('Indoor Rowing');
+    expect(supportedWorkoutFaq).toContain('separate Strength Training editor');
+    expect(supportedWorkoutFaq).toContain('kg/lb external load');
+    expect(supportedWorkoutFaq).toContain('compatible Garmin lap-swim delivery includes it');
+    expect(supportedWorkoutFaq).toContain('Suunto Guides do not');
+    expect(supportedWorkoutFaq).toContain('Open-water workouts have no pool length');
+    expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('up to 100 total nodes')))).toBe(true);
+    expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('never adds distance')))).toBe(true);
+    expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('explicit Send and plan opt-in actions')))).toBe(true);
+    expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('Garmin supports compatible target-free pool swims')))).toBe(true);
+    expect(trainingPlans.sections.some(section => section.items.some(item => item.copy.includes('compatible MCP client')))).toBe(true);
+    expect(trainingPlans.faqItems.some(item => item.question === 'Can I add a workout without creating a plan?')).toBe(true);
+    expect(trainingPlans.faqItems.some(item => item.question === 'Can I use an MCP client with Training Plans?')).toBe(true);
+    expect(JSON.stringify(trainingPlans)).toContain('Wahoo supports timed strength sets and rests as Gym workouts');
+    expect(JSON.stringify(trainingPlans)).toContain('Wahoo supports outdoor Walking/Hiking with timed steps and no intensity targets');
+    expect(JSON.stringify(trainingPlans)).toContain('Wahoo supports timed, untargeted outdoor and indoor rowing');
+    expect(JSON.stringify(trainingPlans)).toContain('Distance endings and intensity targets remain unsupported');
+    expect(JSON.stringify(trainingPlans)).not.toContain('validation candidate');
+    expect(JSON.stringify(trainingPlans)).toContain('does not send the selected pool length');
+    expect(JSON.stringify(trainingPlans)).toContain('repetition sets remain unsupported');
+    expect(JSON.stringify(trainingPlans)).toContain('exercise/load instructions are not native tracking');
+    expect(trainingPlans.socialImage).toBe('https://quantified-self.io/assets/images/training-plans-social.png');
+    expect(trainingPlans.freeOfferDescription).toBe('Training plans and standalone structured workouts created in Quantified Self');
+    const trainingPlanEntities = PUBLIC_SEO_ROUTE_DATA.trainingPlans.jsonLd['mainEntity'] as Record<string, unknown>[];
+    const trainingPlanApplication = trainingPlanEntities.find(entity => entity['@type'] === 'SoftwareApplication');
+    const trainingPlanOffer = trainingPlanApplication?.['offers'] as Record<string, unknown>;
+    expect(trainingPlanOffer['price']).toBe('0');
+    expect(trainingPlanOffer['description']).toBe(trainingPlans.freeOfferDescription);
+    expect(trainingPlanEntities.find(entity => entity['@type'] === 'FAQPage')).toBeTruthy();
 
     expect(PUBLIC_SEO_PAGES.trainingDashboard.h1).toBe('Build the training dashboard you need');
     expect(PUBLIC_SEO_PAGES.trainingDashboard.sections.some(section => section.preview === 'dashboard')).toBe(true);
@@ -116,7 +297,21 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => (
       section.items?.some(item => item.copy.includes('recent training trends'))
     ))).toBe(true);
-    expect(PUBLIC_SEO_PAGES.mcpServer.description).toContain('measurement, and route data you approve');
+    expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => (
+      section.items?.some(item => item.copy.includes('identity-safe TSS-based Training impact'))
+    ))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.find(item => (
+      item.question.includes('Training impact')
+    ))?.answer).toContain('one local date can span two UTC outcomes');
+    expect(PUBLIC_SEO_PAGES.mcpServer.description).toContain('measurements, routes, Timeline notes, activity tags and descriptions');
+    expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.find(item => item.question.includes('read my activity descriptions'))?.answer)
+      .toContain('description checkbox starts checked; uncheck it before approving to withhold access');
+    expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.find(item => item.question.includes('read my Timeline notes'))?.answer)
+      .toContain('sensitive health or personal information');
+    expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.find(item => item.question.includes('read my Timeline notes'))?.answer)
+      .toContain('selected by default when requested. A separate dependent Change Timeline notes permission');
+    expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.find(item => item.question === 'Can an MCP client read my Training plans and planned workouts?')?.answer)
+      .toContain('an authored pool-swim length when selected');
     expect(PUBLIC_SEO_PAGES.mcpServer.intro).toContain('plan your next workout');
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.title === 'Ask about training, workouts, sleep, measurements, and routes')).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.copy.includes('disconnect it from Connections'))).toBe(true);
@@ -124,6 +319,13 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.items.some(item => item.copy.includes('Find recent activities')))).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.items.some(item => item.copy.includes('saved routes by sport, name, or recency')))).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.question === 'Can an MCP client rearrange my dashboard or change my data?')).toBe(true);
+    expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.find(item => item.question === 'Can an MCP client rearrange my dashboard or change my data?')?.answer)
+      .toContain('Plan deletion must be reviewed alone');
+    const deletion = PUBLIC_SEO_PAGES.mcpServer.faqItems.find(item => item.question === 'Does deleting a Training workout also remove service copies?')?.answer;
+    expect(deletion).toContain('older, uncompleted copies');
+    expect(deletion).toContain('Both Training change permissions');
+    expect(deletion).toContain('never deletes recorded activities');
+    expect(deletion).toContain('Once the focused deletion tool is released');
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.question === 'Can I use the MCP server with ChatGPT or Claude?')).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.answer.includes('Granting one never exposes the other'))).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.preview === 'mcp-flow')).toBe(true);
@@ -132,6 +334,9 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.assistant.h1).not.toContain('complete training history');
     expect(PUBLIC_SEO_PAGES.assistant.description).toContain('sleep, readiness, training, measurements, activities, and routes');
     expect(PUBLIC_SEO_PAGES.assistant.description).toContain('answers grounded in your recorded data');
+    expect(PUBLIC_SEO_PAGES.assistant.faqItems.find(item => (
+      item.question === 'What can the Quantified Self Assistant answer?'
+    ))?.answer).toContain('identity-safe TSS-based Training impact');
     expect(PUBLIC_SEO_PAGES.assistant.sections.some(section => (
       section.items.some(item => item.title === 'Grounded every turn')
     ))).toBe(true);
@@ -207,10 +412,37 @@ describe('public-seo-pages.content', () => {
 
     expect(PUBLIC_SEO_PAGES.syncGarminToSuunto.h1).toBe('How to sync Garmin data to Suunto automatically');
     expect(PUBLIC_SEO_PAGES.syncGarminToSuunto.howToSteps).toHaveLength(4);
+    const garminGuide = PUBLIC_SEO_PAGES.syncGarminToSuunto;
+    expect(garminGuide.actions[0]).toMatchObject({ routerLink: '/pricing', variant: 'flat' });
+    expect(garminGuide.closingActions[0]).toMatchObject({ routerLink: '/pricing', variant: 'flat' });
+    expect(garminGuide.accessNote).toContain('require Pro');
+    expect(garminGuide.accessNote).toContain('eligible trial before checkout');
+    const garminGuideCopy = JSON.stringify(garminGuide);
+    expect(garminGuideCopy).toContain('Send past activities');
+    expect(garminGuideCopy).toContain('Preview sends nothing');
+    expect(garminGuideCopy).toContain('latest rolling five years');
+    expect(garminGuideCopy).toContain('Retained FIT activities only');
+    expect(garminGuideCopy).toContain('Scheduling complete confirms queueing, not delivery');
+    expect(garminGuideCopy).toContain('Scheduled and Could not schedule');
+    expect(garminGuideCopy).toContain('check Suunto for the delivered workout');
+    expect(garminGuideCopy).not.toContain('delivery result in Services');
+    expect(garminGuideCopy).toContain('Garmin does not need to remain connected');
+    expect(garminGuideCopy).not.toContain('Sync past activities');
 
-    expect(PUBLIC_SEO_PAGES.syncWahooToSuunto.h1).toBe('How to sync Wahoo activities to Suunto automatically');
+    const corosGuide = PUBLIC_SEO_PAGES.syncCorosToSuunto;
+    expect(corosGuide.h1).toBe('Sync COROS activities to Suunto');
+    expect(corosGuide.howToSteps).toHaveLength(5);
+    expect(corosGuide.freeOfferDescription).toContain('require Pro');
+    const corosGuideCopy = JSON.stringify(corosGuide);
+    expect(corosGuideCopy).toContain('latest rolling 3 months');
+    expect(corosGuideCopy).toContain('Older activities already saved');
+    expect(corosGuideCopy).toContain('Under Suunto in Connections, open Send past activities');
+    expect(corosGuideCopy).toContain('Preview sends nothing');
+    expect(corosGuideCopy).not.toContain('date range in COROS Services');
+
+    expect(PUBLIC_SEO_PAGES.syncWahooToSuunto.h1).toBe('Sync Wahoo activities to Suunto');
     expect(PUBLIC_SEO_PAGES.syncWahooToSuunto.description).toContain('Wahoo FIT activities');
-    expect(PUBLIC_SEO_PAGES.syncWahooToSuunto.howToSteps).toHaveLength(4);
+    expect(PUBLIC_SEO_PAGES.syncWahooToSuunto.howToSteps).toHaveLength(5);
     expect(PUBLIC_SEO_PAGES.syncWahooToSuunto.faqItems.some(item => item.question === 'Will activities sent to Wahoo come back as Wahoo imports?')).toBe(true);
 
     expect(PUBLIC_SEO_PAGES.importActivitiesToSuunto.h1).toBe('How to import activities to Suunto');
@@ -246,6 +478,7 @@ describe('public-seo-pages.content', () => {
     expect(featureHubLinks).toContain('/features/activity-calendar');
     expect(featureHubLinks).toContain('/features/supported-activities');
     expect(featureHubLinks).toContain('/features/training-analysis');
+    expect(featureHubLinks).toContain('/features/training-plans');
     expect(featureHubLinks).toContain('/features/training-dashboard');
     expect(featureHubLinks).toContain('/features/activity-map');
     expect(featureHubLinks).toContain('/features/mcp-server');
@@ -273,7 +506,9 @@ describe('public-seo-pages.content', () => {
       PUBLIC_SEO_PAGES.featuresHub,
       PUBLIC_SEO_PAGES.activityCalendar,
       PUBLIC_SEO_PAGES.trainingAnalysis,
+      PUBLIC_SEO_PAGES.trainingPlans,
       PUBLIC_SEO_PAGES.trainingDashboard,
+      PUBLIC_SEO_PAGES.health,
       PUBLIC_SEO_PAGES.activityMap,
       PUBLIC_SEO_PAGES.mcpServer,
       PUBLIC_SEO_PAGES.assistant,
@@ -294,7 +529,9 @@ describe('public-seo-pages.content', () => {
       PUBLIC_SEO_PAGES.featuresHub,
       PUBLIC_SEO_PAGES.activityCalendar,
       PUBLIC_SEO_PAGES.trainingAnalysis,
+      PUBLIC_SEO_PAGES.trainingPlans,
       PUBLIC_SEO_PAGES.trainingDashboard,
+      PUBLIC_SEO_PAGES.health,
       PUBLIC_SEO_PAGES.activityMap,
       PUBLIC_SEO_PAGES.mcpServer,
       PUBLIC_SEO_PAGES.assistant,

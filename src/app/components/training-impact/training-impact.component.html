@@ -1,0 +1,98 @@
+@if (impact().availability !== 'private' && variant() === 'compact') {
+  <span class="training-impact-compact" [class.training-impact-compact--unavailable]="!isReady()"
+    [attr.aria-label]="compactAriaLabel()"
+    [attr.aria-busy]="impact().availability === 'updating'"
+    [attr.role]="impact().availability === 'error' ? 'alert' : !isReady() ? 'status' : 'group'">
+    @if (impact().headline) { <span>{{ impact().headline }}</span> }
+    <strong>{{ compactText() }}</strong>
+    @if (isDayImpact() && outcomes().length > 1) {
+      <span class="training-impact-compact-outcomes" aria-label="Training-day outcomes">
+        @for (outcome of outcomes(); track outcome.dayMs) {
+          <span>{{ outcome.date }} · {{ outcome.headline }} · {{ outcome.ctlChange }} CTL</span>
+        }
+      </span>
+    }
+  </span>
+} @else if (impact().availability !== 'private') {
+  <section class="training-impact" [class.training-impact--summary]="variant() === 'summary'"
+    [class.training-impact--strip]="variant() === 'strip'"
+    [class.training-impact--session]="isSessionStrip()"
+    [attr.aria-label]="title()" [attr.aria-busy]="impact().availability === 'updating'">
+    <header>
+      @if (!isSessionStrip()) {
+        <span class="training-impact-icon" aria-hidden="true"><mat-icon>monitoring</mat-icon></span>
+      }
+      <div>
+        <h3>{{ title() }}</h3>
+        @if (!isSessionStrip() && impact().headline) { <strong>{{ impact().headline }}</strong> }
+      </div>
+      @if (isSessionStrip() && isReady()) {
+        <button mat-icon-button type="button" class="training-impact-calculation-info" appHapticTap
+          [id]="calculationToggleId"
+          aria-label="How Training impact is calculated"
+          matTooltip="How Training impact is calculated" matTooltipPosition="above" matTooltipTouchGestures="off"
+          [attr.aria-expanded]="calculationExpanded()" [attr.aria-controls]="calculationDetailsId"
+          (click)="toggleCalculation()">
+          <mat-icon aria-hidden="true">info_outline</mat-icon>
+        </button>
+      }
+      @if (isSessionStrip()) {
+        <mat-divider class="training-impact-heading-divider" aria-hidden="true"></mat-divider>
+      }
+    </header>
+
+    @if (isReady()) {
+      <ng-template #contributionMetrics>
+        <div class="training-impact-metrics" role="group"
+          [attr.aria-label]="isSessionStrip() ? 'This workout’s contribution' : 'Training impact contributions'">
+          <div><span>Fitness load (CTL)</span><strong>{{ values().ctl }}</strong></div>
+          <div><span>Fatigue load (ATL)</span><strong>{{ values().atl }}</strong></div>
+          <div><span>Freshness (Form)</span><strong>{{ values().form }}</strong></div>
+          <div><span>Training Stress Score</span><strong>{{ values().tss }}</strong></div>
+        </div>
+      </ng-template>
+      @if (variant() === 'strip' && !isSessionStrip()) {
+        <button mat-icon-button type="button" class="training-impact-info" aria-label="About Training impact"
+          appHapticTap appTooltipTap [appTooltipTapHideDelayMs]="6000"
+          [matTooltip]="modelExplanation" matTooltipPosition="below">
+          <mat-icon aria-hidden="true">info_outline</mat-icon>
+        </button>
+      }
+      @if (isSessionStrip()) {
+        <div class="training-impact-session-metrics" role="group" aria-label="Workout contribution and whole-day net fitness">
+          <div role="group" [attr.aria-label]="'Modeled Training Stress Score ' + values().tss"><strong>{{ values().tss }}</strong><span>TSS</span></div>
+          <div role="group" [attr.aria-label]="'This workout’s fitness load contribution (CTL) ' + values().ctl"><strong>{{ values().ctl }}</strong><span>Workout CTL</span></div>
+          <div role="group" [attr.aria-label]="'Whole-day net fitness load change (CTL) ' + sessionDayCtl()"><strong>{{ sessionDayCtl() }}</strong><span>Day CTL</span></div>
+        </div>
+        <div class="training-impact-calculation" [id]="calculationDetailsId" role="region"
+          [attr.aria-labelledby]="calculationToggleId" [hidden]="!calculationExpanded()">
+          <ng-container [ngTemplateOutlet]="contributionMetrics"></ng-container>
+          <div class="training-impact-result-line"><span>Day result</span><strong>{{ sessionDayResult() }}</strong></div>
+          <p>The contribution uses this workout’s {{ values().tss }} modeled TSS (which can differ from recorded statistics): fitness load is TSS ÷ 42, fatigue load is TSS ÷ 7, and freshness is fitness load minus fatigue load.</p>
+          <p>The day result includes all training counted for that day and the gradual fade of previous training load. The model uses a fixed daily cutoff, which may differ from local midnight.</p>
+          <p>{{ modelExplanation }}</p>
+        </div>
+      } @else {
+        <ng-container [ngTemplateOutlet]="contributionMetrics"></ng-container>
+        @if (outcomes().length) {
+        <div class="training-impact-outcomes" aria-label="Training-day outcomes">
+          @for (outcome of outcomes(); track outcome.dayMs) {
+            <div>
+              <span>{{ outcomes().length > 1 ? outcome.date : 'Training-day outcome' }}</span>
+              <strong>{{ outcome.headline }} · {{ outcome.ctlChange }} CTL</strong>
+            </div>
+          }
+        </div>
+        }
+      }
+      @if (impact().message) { <p class="training-impact-note">{{ impact().message }}</p> }
+      @if (variant() !== 'strip') {
+        <p class="training-impact-disclaimer">{{ modelExplanation }}</p>
+      }
+    } @else {
+      <p class="training-impact-state" [attr.role]="impact().availability === 'error' ? 'alert' : 'status'">
+        {{ impact().message }}
+      </p>
+    }
+  </section>
+}

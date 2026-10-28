@@ -5,6 +5,7 @@ import { environment as betaEnvironment } from './environment.beta';
 import { environment as localEnvironment } from './environment.local';
 import { environment as hostedLocalEnvironment } from './environment.local.prod-functions';
 import { environment as productionEnvironment } from './environment.prod';
+import { environment as billingTestEnvironment } from './environment.billing-test';
 
 function buildEnvironment(overrides: Partial<AppEnvironment> = {}): AppEnvironment {
   return {
@@ -45,6 +46,11 @@ function buildEnvironment(overrides: Partial<AppEnvironment> = {}): AppEnvironme
 }
 
 describe('assertEnvironmentSafety', () => {
+  it('preserves the separate Stripe-test profile without enabling billing in the contributor demo', () => {
+    expect(() => assertEnvironmentSafety(billingTestEnvironment)).not.toThrow();
+    expect(() => assertEnvironmentSafety({ ...localEnvironment, billingMode: 'stripe' })).toThrow(/Billing must be disabled/);
+  });
+
   it('accepts every committed environment and keeps the default local one isolated', () => {
     expect(localEnvironment.backendMode).toBe('emulator');
     expect(localEnvironment.firebase.projectId).toBe('demo-quantified-self-local');

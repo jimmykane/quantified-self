@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+    SPORTS_LIB_ROUTE_REPARSE_RUNTIME_DEFAULTS,
     resolveSportsLibReparseRuntimeSettings,
     validateSportsLibReparseTargetUid,
 } from './sports-lib-reparse.config';
@@ -10,6 +11,8 @@ describe('sports-lib reparse runtime settings', () => {
 
         expect(settings).toEqual(expect.objectContaining({
             enabled: false,
+            scanLimit: 1800,
+            enqueueLimit: 1800,
             targetUid: null,
             uidAllowlist: null,
             source: 'defaults',
@@ -28,6 +31,8 @@ describe('sports-lib reparse runtime settings', () => {
         });
 
         expect(settings.enabled).toBe(true);
+        expect(settings.scanLimit).toBe(1800);
+        expect(settings.enqueueLimit).toBe(1800);
         expect(settings.targetUid).toBe('user-123');
         expect(Array.from(settings.uidAllowlist || [])).toEqual(['user-123']);
         expect(settings.source).toBe('firestore');
@@ -42,6 +47,8 @@ describe('sports-lib reparse runtime settings', () => {
         });
 
         expect(settings.enabled).toBe(true);
+        expect(settings.scanLimit).toBe(1800);
+        expect(settings.enqueueLimit).toBe(1800);
         expect(settings.targetUid).toBeNull();
         expect(settings.uidAllowlist).toBeNull();
         expect(settings.configurationValid).toBe(true);
@@ -79,5 +86,13 @@ describe('sports-lib reparse runtime settings', () => {
         expect(validateSportsLibReparseTargetUid('a'.repeat(129)).valid).toBe(false);
         expect(validateSportsLibReparseTargetUid('users/example').valid).toBe(false);
         expect(validateSportsLibReparseTargetUid('user\u0000id').valid).toBe(false);
+    });
+
+    it('keeps route discovery disabled by default with independent 1200-item limits', () => {
+        expect(SPORTS_LIB_ROUTE_REPARSE_RUNTIME_DEFAULTS).toEqual(expect.objectContaining({
+            enabled: false,
+            scanLimit: 1200,
+            enqueueLimit: 1200,
+        }));
     });
 });

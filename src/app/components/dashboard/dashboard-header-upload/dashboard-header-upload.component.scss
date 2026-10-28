@@ -3,3 +3,7 @@
   align-items: center;
   margin-left: 12px;
 }
+
+@media (max-width: 480px) {
+  :host { margin-left: 4px; }
+}

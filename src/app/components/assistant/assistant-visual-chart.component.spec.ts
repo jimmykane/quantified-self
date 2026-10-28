@@ -4,6 +4,7 @@ import {
   AppThemes,
   DataDistance,
   DistanceUnits,
+  DynamicDataLoader,
 } from '@sports-alliance/sports-lib';
 import type { EChartsType } from 'echarts/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -67,8 +68,8 @@ describe('AssistantVisualChartComponent', () => {
   it('renders through the shared ECharts host and keeps nulls as gaps', async () => {
     fixture.detectChanges();
     await fixture.whenStable();
-    await fixture.componentInstance.ngAfterViewInit();
-    expect(loader.setOption).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledOnce());
+    expect(loader.init).toHaveBeenCalledOnce();
 
     expect(loader.init).toHaveBeenCalledWith(
       expect.any(HTMLElement),
@@ -96,7 +97,7 @@ describe('AssistantVisualChartComponent', () => {
   it('disposes the shared chart host on teardown', async () => {
     fixture.detectChanges();
     await fixture.whenStable();
-    await fixture.componentInstance.ngAfterViewInit();
+    await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledOnce());
     fixture.destroy();
 
     expect(loader.dispose).toHaveBeenCalledWith(chart);
@@ -161,6 +162,29 @@ describe('AssistantVisualChartComponent', () => {
     option = buildOption();
     expect(option.yAxis[0].name).toBe('m');
     expect(option.yAxis[0].axisLabel.formatter(700)).toBe('700');
+  });
+
+  it('keeps endurance percentage and sustainable distance on separate axes with canonical unit formatting', () => {
+    try { DynamicDataLoader.getDataClassFromDataType('Estimated Sustainable Distance'); } catch { return; }
+    fixture.componentInstance.visual = {
+      kind: 'chart', title: 'Endurance estimates', chartType: 'line',
+      xAxis: { type: 'linear', label: 'Elapsed time', unit: 's', timeZone: null },
+      series: [
+        {label: 'Stamina', unit: '%', dataType: 'Stamina', points: [{x: 0, y: 80}, {x: 1, y: 0}]},
+        {label: 'Estimated Sustainable Distance', unit: 'm', dataType: 'Estimated Sustainable Distance', points: [{x: 0, y: 10000}, {x: 1, y: 0}]},
+      ],
+    };
+    for (const distanceUnits of [DistanceUnits.Kilometers, DistanceUnits.Miles]) {
+      unitSettings.set(normalizeUserUnitSettings({distanceUnits}));
+      const option = (fixture.componentInstance as any).buildOption(false);
+      expect(option.yAxis.map((axis: any) => axis.name)).toEqual(['%', distanceUnits === DistanceUnits.Miles ? 'mi' : 'km']);
+      expect(option.series.map((series: any) => series.yAxisIndex)).toEqual([0, 1]);
+      expect(option.yAxis[1].axisLabel.formatter(10000)).toBe(distanceUnits === DistanceUnits.Miles ? '6.22' : '10');
+      expect(option.yAxis[1].axisLabel.formatter(0)).toBe('0');
+      expect(option.tooltip.formatter({seriesName: 'Estimated Sustainable Distance', value: [0, 10000]}))
+        .toContain(distanceUnits === DistanceUnits.Miles ? '6.22 mi' : '10.00 km');
+      expect(option.series[1].data).toEqual([[0, 10000], [1, 0]]);
+    }
   });
 
   it('formats a canonical distance X axis and its tooltip title', () => {

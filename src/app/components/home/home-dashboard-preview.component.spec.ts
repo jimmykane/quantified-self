@@ -82,9 +82,10 @@ describe('HomeDashboardPreviewComponent', () => {
     expect(fixture.nativeElement.querySelector('.dashboard-preview__tiles').hasAttribute('inert')).toBe(false);
     const options = loader.setOption.mock.calls.map(call => call[1] as {
       tooltip?: { show?: boolean };
-      series?: Array<{ silent?: boolean }>;
+      series?: Array<{ type?: string; silent?: boolean }>;
     });
     expect(options.every(option => option.tooltip?.show === true)).toBe(true);
+    expect(options.every(option => option.series?.[0]?.type === 'bar')).toBe(true);
     expect(options.every(option => option.series?.every(series => series.silent === false))).toBe(true);
     expect(loader.attachMobileSeriesTapFeedback.mock.calls.filter(
       call => call[1] === DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS,

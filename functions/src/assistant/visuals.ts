@@ -28,7 +28,7 @@ import {
   TRAINING_LOAD_DAY_MS,
   buildTrainingLoadPoints,
 } from '../../../shared/training-load';
-import { MCP_ACTIVITY_CHART_METRICS } from '../mcp/activity-chart.service';
+import { MCP_ACTIVITY_STREAM_METRICS } from '../mcp/activity-chart.service';
 import { MCP_SLEEP_VITAL_DESCRIPTORS } from '../mcp/sleep-vitals';
 import { getMcpTrainingMetricDescriptors } from '../mcp/training-metric-catalog';
 import type { AssistantMcpToolName } from './mcp-session';
@@ -54,9 +54,9 @@ const JUMP_RANKING_FIELD_BY_METRIC = new Map<string, AssistantJumpMetricField>([
 ]);
 const ACTIVITY_CHART_METRIC_BY_ID: ReadonlyMap<
   string,
-  typeof MCP_ACTIVITY_CHART_METRICS[number]
+  typeof MCP_ACTIVITY_STREAM_METRICS[number]
 > = new Map(
-  MCP_ACTIVITY_CHART_METRICS.map(metric => [metric.id, metric]),
+  MCP_ACTIVITY_STREAM_METRICS.map(metric => [metric.id, metric]),
 );
 const SLEEP_VITAL_BY_TYPE = new Map(
   MCP_SLEEP_VITAL_DESCRIPTORS.map(descriptor => [descriptor.type, descriptor]),
@@ -986,6 +986,7 @@ function buildCandidates(
     case 'rank_activities_by_metric':
       return { chart: buildRankingChart(output, timeZone), map: null };
     case 'get_activity_chart_data':
+    case 'get_activity_chart_data_v2':
       return { chart: buildActivityChart(output), map: buildChartLocationMap(output) };
     case 'list_activity_jumps':
       return { chart: buildJumpChart(output), map: buildJumpMap(output, toolInput) };

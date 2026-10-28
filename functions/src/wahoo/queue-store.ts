@@ -1,11 +1,17 @@
+import { randomUUID } from 'node:crypto';
+import { isActivityIdentityConflict } from '../shared/activity-identity-conflict';
+import { replacesSupersededHistoryWork } from '../connection-history/queue-replacement';
+import { assertHistoryWrite, currentHistoryExecution } from '../connection-history/context';
+import { HistoryLifecycleChangedError } from '../connection-history/execution';
 import * as admin from 'firebase-admin';
+import { recordImportCommit, recordImportCompletion } from '../queue/import-monitoring';
 import * as logger from 'firebase-functions/logger';
 import {
   enqueueWorkoutTaskWithDispatchRecovery,
   markWorkoutTaskDispatchedWithRetry,
 } from '../shared/cloud-tasks';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
-import { MAX_RETRY_COUNT } from '../shared/queue-config';
+import { PROVIDER_MAX_RETRY_COUNT } from '../shared/queue-config';
 import { getUserDeletionGuardStateInTransaction, UserDeletionGuardReadError } from '../shared/user-deletion-guard';
 import {
   markQueueItemDeletedForUserCleanup,
@@ -35,10 +41,12 @@ function revisionTime(value: unknown): number {
 
 function hasSameRevision(
   current: Partial<WahooAPIWorkoutQueueItemInterface>,
-  queueItem: Pick<WahooAPIWorkoutQueueItemInterface, 'workoutSummaryID' | 'summaryUpdatedAt'>,
+  queueItem: Pick<WahooAPIWorkoutQueueItemInterface, 'workoutSummaryID' | 'summaryUpdatedAt' | 'connectionHistoryRunId' | 'queueRevision'>,
 ): boolean {
   return current.workoutSummaryID === queueItem.workoutSummaryID
-    && current.summaryUpdatedAt === queueItem.summaryUpdatedAt;
+    && current.summaryUpdatedAt === queueItem.summaryUpdatedAt
+    && current.connectionHistoryRunId === queueItem.connectionHistoryRunId
+    && current.queueRevision === queueItem.queueRevision;
 }
 
 function isNewerRevision(
@@ -145,6 +153,7 @@ export async function upsertWahooWorkoutQueueItem(
   const db = admin.firestore();
   const ref = db.collection(WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME).doc(input.id);
   const now = Date.now();
+  const historyRevision = input.connectionHistoryRunId ? { queueRevision: input.queueRevision || randomUUID() } : {};
   const result = await db.runTransaction(async (transaction) => {
     let deletionGuard;
     try {
@@ -159,9 +168,16 @@ export async function upsertWahooWorkoutQueueItem(
 
     const existingSnapshot = await transaction.get(ref);
     const existing = existingSnapshot.exists ? existingSnapshot.data() as Partial<WahooAPIWorkoutQueueItemInterface> : null;
-    if (existing && !isNewerRevision(existing, input)) {
-      if ((existing as Record<string, unknown>).processed !== true && existing.FITFileURI !== input.FITFileURI) {
-        transaction.update(ref, { FITFileURI: input.FITFileURI });
+    if (existing?.firebaseUserID && existing.firebaseUserID !== input.firebaseUserID) {
+      throw new Error('Wahoo queue ownership is still changing. Retry after connection cleanup.');
+    }
+    if (existing && !isNewerRevision(existing, input) && !replacesSupersededHistoryWork(existing, input)) {
+      if ((existing as Record<string, unknown>).processed !== true) {
+        const refreshed: Partial<WahooAPIWorkoutQueueItemInterface> = {};
+        if (existing.FITFileURI !== input.FITFileURI) refreshed.FITFileURI = input.FITFileURI;
+        if (input.workoutToken && existing.workoutToken !== input.workoutToken) refreshed.workoutToken = input.workoutToken;
+        if (input.planID && existing.planID !== input.planID) refreshed.planID = input.planID;
+        if (Object.keys(refreshed).length) transaction.update(ref, refreshed);
       }
       return { queued: false, dateCreated: Number(existing.dateCreated || now) };
     }
@@ -172,6 +188,7 @@ export async function upsertWahooWorkoutQueueItem(
     // revision becomes dispatchable.
     transaction.set(ref, {
       ...input,
+      ...historyRevision,
       dateCreated: now,
       processed: false,
       retryCount: 0,
@@ -187,6 +204,7 @@ export async function upsertWahooWorkoutQueueItem(
 
   const queueItemForDispatch = {
     ...input,
+    ...historyRevision,
     ref,
     dateCreated: result.dateCreated,
     processed: false,
@@ -272,21 +290,22 @@ export async function completeWahooWorkoutQueueRevision(
   queueItem: WahooAPIWorkoutQueueItemInterface,
   processingOwner: string,
   additionalData: Record<string, unknown> = {},
+  importPersisted = false,
 ): Promise<QueueResult.Processed> {
   if (!queueItem.ref) throw new Error(`No document reference supplied for Wahoo queue item ${queueItem.id}`);
   const now = Date.now();
-  await admin.firestore().runTransaction(async (transaction) => {
+  const completed = await admin.firestore().runTransaction(async (transaction) => {
     const deletionGuard = await getUserDeletionGuardStateInTransaction(
       admin.firestore(),
       transaction,
       queueItem.firebaseUserID!,
       now,
     );
-    if (deletionGuard.shouldSkip) return;
+    if (deletionGuard.shouldSkip) return false;
     const snapshot = await transaction.get(queueItem.ref!);
-    if (!snapshot.exists) return;
+    if (!snapshot.exists) return false;
     const current = snapshot.data() as Partial<WahooAPIWorkoutQueueItemInterface>;
-    if (current.processingOwner !== processingOwner) return;
+    if (current.processingOwner !== processingOwner) return false;
 
     if (hasSameRevision(current, queueItem)) {
       transaction.update(queueItem.ref!, {
@@ -295,7 +314,7 @@ export async function completeWahooWorkoutQueueRevision(
         ...additionalData,
         ...clearRevisionProcessingLeaseUpdate(),
       });
-      return;
+      return true;
     }
 
     // A newer summary arrived while this worker held the lease. Release it and
@@ -305,7 +324,13 @@ export async function completeWahooWorkoutQueueRevision(
       dispatchedToCloudTask: null,
       ...clearRevisionProcessingLeaseUpdate(),
     });
+    return false;
   });
+  // This helper also releases pre-persistence stale/expired claims. A committed
+  // processed flag alone is not proof that an event was imported.
+  if (completed === true && (importPersisted || additionalData.resultStatus === 'skipped')) {
+    recordImportCompletion(queueItem.ref.parent?.id, additionalData);
+  }
   return QueueResult.Processed;
 }
 
@@ -314,9 +339,11 @@ export async function failWahooWorkoutQueueRevision(
   processingOwner: string,
   error: Error,
 ): Promise<QueueResult.Processed | QueueResult.RetryIncremented | QueueResult.MovedToDLQ | QueueResult.Failed> {
+  await currentHistoryExecution()?.beforeRequest();
   if (!queueItem.ref) throw new Error(`No document reference supplied for Wahoo queue item ${queueItem.id}`);
   try {
-    return await admin.firestore().runTransaction(async (transaction) => {
+    const result = await admin.firestore().runTransaction(async (transaction) => {
+      await assertHistoryWrite(transaction);
       const deletionGuard = await getUserDeletionGuardStateInTransaction(
         admin.firestore(),
         transaction,
@@ -344,14 +371,14 @@ export async function failWahooWorkoutQueueRevision(
         atRetryCount: totalRetryCount,
         date: Date.now(),
       }];
-      if (retryCount >= MAX_RETRY_COUNT) {
+      if (isActivityIdentityConflict(error) || retryCount >= PROVIDER_MAX_RETRY_COUNT) {
         const failedItem: Record<string, unknown> = {
           ...current,
           error: error.message,
           errors,
           failedAt: Date.now(),
           originalCollection: WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME,
-          context: 'MAX_RETRY_REACHED',
+          context: isActivityIdentityConflict(error) ? error.code : 'MAX_RETRY_REACHED',
           expireAt: getExpireAtTimestamp(TTL_CONFIG.FAILED_JOBS_IN_DAYS),
         };
         delete failedItem.processingOwner;
@@ -371,7 +398,10 @@ export async function failWahooWorkoutQueueRevision(
       });
       return QueueResult.RetryIncremented;
     });
+    if (result === QueueResult.MovedToDLQ) recordImportCommit(queueItem.ref.parent?.id, 'dead_lettered');
+    return result;
   } catch (transactionError) {
+    if (transactionError instanceof HistoryLifecycleChangedError) throw transactionError;
     logger.error(`Could not update Wahoo retry state for ${queueItem.id}`, transactionError);
     return QueueResult.Failed;
   }

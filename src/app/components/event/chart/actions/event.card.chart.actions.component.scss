@@ -110,6 +110,36 @@ section.container {
   font-family: 'Barlow Condensed', sans-serif;
 }
 
+.chart-options-menu__pattern-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  mat-slide-toggle {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}
+
+.chart-options-menu__pattern-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+}
+
+.chart-options-menu__continuity {
+  display: grid;
+  gap: 8px;
+  padding: 8px 16px 12px;
+  min-width: 0;
+  mat-form-field { width: 100%; min-width: 0; }
+  p { margin: 0; font-size: 0.875rem; color: var(--mat-sys-on-surface-variant); }
+  [role='alert'] { color: var(--mat-sys-error); }
+}
+
 @include xsmall {
   section.container {
     justify-content: flex-end;

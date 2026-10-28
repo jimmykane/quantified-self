@@ -1,14 +1,21 @@
+import { currentHistoryExecution } from '../connection-history/context';
 import {
   GARMIN_HEALTH_SUMMARY_TYPES,
   GARMIN_HEALTH_SUMMARY_ENDPOINT_PATHS,
   type GarminHealthSummaryType,
 } from './health-summary-types';
 
+/** Automatic runs retain their original family inventory across subsequent deployments. */
+export function getGarminHistorySummaryTypes(): readonly GarminHealthSummaryType[] {
+  return currentHistoryExecution()?.garminHealthSummaryTypes ?? GARMIN_HEALTH_SUMMARY_TYPES;
+}
+
 export const GARMIN_HEALTH_BACKFILL_ENDPOINTS: Readonly<Record<GarminHealthSummaryType, string>>
   = GARMIN_HEALTH_SUMMARY_ENDPOINT_PATHS;
 
 export const GARMIN_HEALTH_BACKFILL_SECOND_MS = 1_000;
 export const GARMIN_HEALTH_BACKFILL_MAX_INCLUSIVE_DAYS = 90;
+const GARMIN_HEALTH_BACKFILL_MINIMUM_HEADROOM_MS = 30_000;
 const GARMIN_HEALTH_BACKFILL_WINDOW_MS = GARMIN_HEALTH_BACKFILL_MAX_INCLUSIVE_DAYS
   * 24 * 60 * 60 * 1_000;
 
@@ -56,7 +63,7 @@ export function countGarminHealthBackfillWindows(startMs: number, endMs: number)
 }
 
 export function countGarminHealthBackfillRequests(startMs: number, endMs: number): number {
-  return countGarminHealthBackfillWindows(startMs, endMs) * GARMIN_HEALTH_SUMMARY_TYPES.length;
+  return countGarminHealthBackfillWindows(startMs, endMs) * getGarminHistorySummaryTypes().length;
 }
 
 export function getGarminHealthBackfillWindow(
@@ -67,15 +74,15 @@ export function getGarminHealthBackfillWindow(
   assertSecondAlignedTimestamp(rangeEndMs, 'rangeEndMs');
   if (!Number.isInteger(cursor.summaryIndex)
     || cursor.summaryIndex < 0
-    || cursor.summaryIndex > GARMIN_HEALTH_SUMMARY_TYPES.length) {
+    || cursor.summaryIndex > getGarminHistorySummaryTypes().length) {
     throw new Error('Garmin Health backfill summary cursor is invalid.');
   }
-  if (cursor.summaryIndex === GARMIN_HEALTH_SUMMARY_TYPES.length) return null;
+  if (cursor.summaryIndex === getGarminHistorySummaryTypes().length) return null;
   if (cursor.nextStartMs > rangeEndMs) {
     throw new Error('Garmin Health backfill time cursor is outside the active family.');
   }
   return {
-    summaryType: GARMIN_HEALTH_SUMMARY_TYPES[cursor.summaryIndex],
+    summaryType: getGarminHistorySummaryTypes()[cursor.summaryIndex],
     summaryIndex: cursor.summaryIndex,
     startMs: cursor.nextStartMs,
     endMs: Math.min(
@@ -114,11 +121,15 @@ export function clipGarminHealthBackfillCursorToMinimum(
   minimumStartMs: number,
 ): GarminHealthBackfillCursor {
   // A provider can echo a minimum equal to (or behind) the attempted start.
-  // Move at least one whole second so a malformed/repeated 400 cannot loop forever.
-  const clippedStartMs = Math.max(
+  // Always move forward, with headroom for pacing and provider/state-write latency.
+  const earliestStartMs = Math.max(
     cursor.nextStartMs + GARMIN_HEALTH_BACKFILL_SECOND_MS,
     ceilToGarminBackfillSecond(minimumStartMs),
   );
+  // The endpoint is inclusive: retain its last valid second when headroom is tight.
+  // A minimum beyond the range must still advance to the next family.
+  const headroomMs = Math.min(GARMIN_HEALTH_BACKFILL_MINIMUM_HEADROOM_MS, Math.max(0, rangeEndMs - earliestStartMs));
+  const clippedStartMs = earliestStartMs + headroomMs;
   const skippedWindows = countGarminHealthBackfillWindows(cursor.nextStartMs, rangeEndMs)
     - countGarminHealthBackfillWindows(clippedStartMs, rangeEndMs);
   if (clippedStartMs > rangeEndMs) {
@@ -136,5 +147,5 @@ export function clipGarminHealthBackfillCursorToMinimum(
 }
 
 export function isCompleteGarminHealthBackfillCursor(cursor: GarminHealthBackfillCursor): boolean {
-  return cursor.summaryIndex >= GARMIN_HEALTH_SUMMARY_TYPES.length;
+  return cursor.summaryIndex >= getGarminHistorySummaryTypes().length;
 }

@@ -5,6 +5,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
 import { getProviderIntegrationPage } from './integration-pages.content';
+import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
 
 @Component({
   selector: 'app-provider-integration-page',
@@ -15,6 +16,7 @@ import { getProviderIntegrationPage } from './integration-pages.content';
     MatCardModule,
     MatIconModule,
     ServiceSourceIconComponent,
+    AppChartSharedModule,
   ],
   templateUrl: './provider-integration-page.component.html',
   styleUrls: ['./provider-integration-page.component.scss'],

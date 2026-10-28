@@ -85,33 +85,11 @@ export class EChartsLoaderService {
 
     if (!this.loader) {
       this.loader = (async () => {
-        const [core, charts, components, renderers] = await Promise.all([
+        const [core, { registerEChartsModules }] = await Promise.all([
           import('echarts/core'),
-          import('echarts/charts'),
-          import('echarts/components'),
-          import('echarts/renderers')
+          import('../helpers/echarts-registrations.helper'),
         ]);
-
-        core.use([
-            charts.BarChart,
-            charts.PictorialBarChart,
-            charts.CustomChart,
-            charts.PieChart,
-            charts.LineChart,
-            charts.ScatterChart,
-          components.GraphicComponent,
-          components.GridComponent,
-          components.TooltipComponent,
-          components.LegendComponent,
-          components.TitleComponent,
-          components.AxisPointerComponent,
-          components.MarkLineComponent,
-          components.VisualMapComponent,
-          components.ToolboxComponent,
-          components.DataZoomComponent,
-          components.BrushComponent,
-          renderers.CanvasRenderer
-        ]);
+        registerEChartsModules(core);
 
         this.cachedCore = core;
         return core;
@@ -326,6 +304,12 @@ export class EChartsLoaderService {
       armAxisPointerHaptics();
       armClickHaptics();
     };
+    const onLegendScroll = (params: unknown) => {
+      if (this.isSuppressedHapticSource(params) || !params || typeof params !== 'object') return;
+      const index = (params as { scrollDataIndex?: unknown }).scrollDataIndex;
+      if (typeof index !== 'number' || !Number.isInteger(index) || index < 0) return;
+      this.hapticsService.selection();
+    };
     const onBrushEnd = (params: unknown) => {
       if (!this.isHapticEligibleBrushEndEvent(params)) {
         return;
@@ -414,6 +398,7 @@ export class EChartsLoaderService {
     this.zone.runOutsideAngular(() => {
       chart.on('click', onChartClick as never);
       chart.on('datazoom', onDataZoom as never);
+      if (options.legendScrollFeedback) chart.on('legendscroll', onLegendScroll as never);
       chart.on('brushEnd', onBrushEnd as never);
       chart.on('updateAxisPointer', onAxisPointerUpdate as never);
       zRender?.on('mousedown', onSurfacePointerDown);
@@ -427,6 +412,7 @@ export class EChartsLoaderService {
       this.zone.runOutsideAngular(() => {
         chart.off('click', onChartClick as never);
         chart.off('datazoom', onDataZoom as never);
+        if (options.legendScrollFeedback) chart.off('legendscroll', onLegendScroll as never);
         chart.off('brushEnd', onBrushEnd as never);
         chart.off('updateAxisPointer', onAxisPointerUpdate as never);
         zRender?.off('mousedown', onSurfacePointerDown);

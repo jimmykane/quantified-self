@@ -98,10 +98,197 @@ import {
   DataVerticalOscillationMin
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
+import * as SportsLib from '@sports-alliance/sports-lib';
+import * as RRMetrics from '@sports-alliance/sports-lib/metrics';
+import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
+import { MatTooltip } from '@angular/material/tooltip';
 import { EVENT_SUMMARY_METRIC_GROUPS } from '../../constants/event-summary-metric-groups';
 import { DataTypeIconComponent } from './data-type-icon.component';
+import { RR_METRICS, RR_STAT_TOOLTIPS } from '../../constants/rr-metrics';
+import { HeaderStatsComponent } from '../header-stats/header-stats.component';
+import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 
 describe('DataTypeIconComponent', () => {
+  const familyIcons = [
+    ['DataSpeed', 'speed'],
+    ['DataGradeAdjustedSpeed', 'speed'],
+    ['DataPace', 'steps'],
+    ['DataGradeAdjustedPace', 'steps'],
+    ['DataEffortPace', 'steps'],
+    ['DataSwimPace', 'pool'],
+    ['DataGNSSDistance', 'satellite_alt'],
+  ];
+  const familyVariants = familyIcons.flatMap(([prefix, icon]) => Object.entries(SportsLib).flatMap(([name, candidate]) =>
+    name.startsWith(prefix) && !name.startsWith(`${prefix}Zone`) && typeof candidate === 'function'
+      && 'type' in candidate && typeof candidate.type === 'string' ? [[candidate.type, icon]] : []));
+
+  it.each(familyVariants)('uses the family icon for %s', (type, icon) => {
+    expect(new DataTypeIconComponent().getColumnHeaderIcon(type)).toBe(icon);
+  });
+
+  const convertedSummaryCases = [
+    [SportsLib.DataSpeedMin.type, 'speed'],
+    [SportsLib.DataSpeedMax.type, 'speed'],
+    [SportsLib.DataGradeAdjustedSpeedMin.type, 'speed'],
+    [SportsLib.DataGradeAdjustedSpeedMax.type, 'speed'],
+    [SportsLib.DataPaceMin.type, 'steps'],
+    [SportsLib.DataPaceMax.type, 'steps'],
+    [SportsLib.DataGradeAdjustedPaceMin.type, 'steps'],
+    [SportsLib.DataGradeAdjustedPaceMax.type, 'steps'],
+    [SportsLib.DataEffortPace.type, 'steps'],
+    [SportsLib.DataSwimPace.type, 'pool'],
+    [SportsLib.DataSwimPaceMin.type, 'pool'],
+    [SportsLib.DataSwimPaceMax.type, 'pool'],
+    [SportsLib.DataGNSSDistance.type, 'satellite_alt'],
+    [SportsLib.DataVerticalSpeedMin.type, 'unfold_more_double'],
+  ];
+  const unitPreferences = [
+    ['default', getDefaultUserUnitSettings()],
+    ['all supported units', {
+      ...getDefaultUserUnitSettings(),
+      speedUnits: Object.values(SportsLib.SpeedUnits),
+      gradeAdjustedSpeedUnits: Object.values(SportsLib.GradeAdjustedSpeedUnits),
+      paceUnits: Object.values(SportsLib.PaceUnits),
+      gradeAdjustedPaceUnits: Object.values(SportsLib.GradeAdjustedPaceUnits),
+      swimPaceUnits: Object.values(SportsLib.SwimPaceUnits),
+      verticalSpeedUnits: Object.values(SportsLib.VerticalSpeedUnits),
+      distanceUnits: SportsLib.DistanceUnits.Miles,
+    }],
+  ] as const;
+
+  describe.each(unitPreferences)('summary cards using %s', (_name, unitSettings) => {
+    it.each(convertedSummaryCases)('keeps an icon for %s when no average is present', (type, expectedIcon) => {
+      const summary = new HeaderStatsComponent();
+      const stat = SportsLib.DynamicDataLoader.getDataInstanceFromDataType(type, 1);
+      expect(stat).toBeDefined();
+      summary.stats = [stat!];
+      summary.statsToShow = [type];
+      summary.unitSettings = unitSettings;
+      summary.activityTypes = [SportsLib.ActivityTypes.Running];
+      summary.ngOnChanges({});
+
+      expect(summary.displayedStatCards.length).toBeGreaterThan(0);
+      summary.displayedStatCards.forEach(card => {
+        expect(new DataTypeIconComponent().getColumnHeaderIcon(card.iconType), card.iconType).toBe(expectedIcon);
+      });
+    });
+  });
+
+  it('does not mistake unrelated or unregistered metrics for a supported family', () => {
+    const component = new DataTypeIconComponent();
+    [SportsLib.DataSpeedZoneOneDuration.type, SportsLib.DataWheelchairPushDistance.type,
+      'Minimum speed in an unknown unit', 'Custom Grade Adjusted Pace'].forEach(type => {
+      expect(component.getColumnHeaderIcon(type)).toBeNull();
+    });
+    expect(component.getColumnHeaderIcon('Average Flow')).toBe('automation');
+    expect(component.getColumnHeaderIcon('Flow')).toBe('water');
+    expect(component.getColumnHeaderSVGIcon(SportsLib.DataPeakEPOC.type)).toBe('epoc');
+  });
+
+  const rrIconCases = [
+    [RRMetrics.DataRRCoverage.type, 'data_usage'],
+    [RRMetrics.DataRRArtifactPercentage.type, 'filter_alt'],
+    [RRMetrics.DataRRSuspectedEctopicPairCount.type, 'join_inner'],
+    [RRMetrics.DataRRRMSSD.type, 'ssid_chart'],
+    [RRMetrics.DataRRSDNN.type, 'scatter_plot'],
+    [RRMetrics.DataRRPNN50.type, 'percent'],
+    [RRMetrics.DataRRDFAAlpha1Median.type, 'timeline'],
+    [RRMetrics.DataRRArtifactCount.type, 'filter_alt'],
+    [RRMetrics.DataRRSuspectedEctopicPairRate.type, 'join_inner'],
+    [RRMetrics.DataRRIntervalCount.type, 'format_list_numbered'],
+    [RRMetrics.DataRRInvalidIntervalCount.type, 'rule'],
+    [RRMetrics.DataRRGapCount.type, 'pause_circle'],
+    [RRMetrics.DataRRLongestGap.type, 'timer_off'],
+    [RRMetrics.DataRRMeanInterval.type, 'straighten'],
+    [RRMetrics.DataRRHeartRateAvg.type, 'ecg_heart'],
+    [RRMetrics.DataRRHeartRateMin.type, 'ecg_heart'],
+    [RRMetrics.DataRRHeartRateMax.type, 'ecg_heart'],
+    [RRMetrics.DataRRDFAAlpha1Min.type, 'timeline'],
+    [RRMetrics.DataRRDFAAlpha1Max.type, 'timeline'],
+    [RRMetrics.DataRRDFAWindowCount.type, 'view_module'],
+  ] as const;
+
+  it.each(rrIconCases)('uses the metric-specific R–R icon for %s', (type, icon) => {
+    expect(new DataTypeIconComponent().getColumnHeaderIcon(type)).toBe(icon);
+  });
+
+  it('covers every primary and extra R–R statistic with an icon', () => {
+    expect(rrIconCases.map(([type]) => type)).toEqual(RR_METRICS.map(metric => metric.type));
+  });
+  const verticalSpeedTypes = Object.entries(SportsLib).flatMap(([name, candidate]) =>
+    name.startsWith('DataVerticalSpeed') && typeof candidate === 'function'
+      && 'type' in candidate && typeof candidate.type === 'string' ? [candidate.type] : []);
+
+  it.each(verticalSpeedTypes)('uses the vertical-speed icon for %s', type => {
+    expect(new DataTypeIconComponent().getColumnHeaderIcon(type)).toBe('unfold_more_double');
+  });
+
+  it.each([
+    ['Minimum vertical speed in feet per hour', 'MV'],
+    ['  Unknown\tprovider   metric  ', 'UP'],
+    ['Custom', 'C'],
+    ['', ''],
+    [undefined, ''],
+  ])('keeps fallback initials within two characters for %s', (type, initials) => {
+    expect(new DataTypeIconComponent().getColumnHeaderTextInitials(type)).toBe(initials);
+  });
+
+  it('renders a real icon for the reported unit variant and retains the full label on unknown fallbacks', async () => {
+    await TestBed.configureTestingModule({ imports: [DataTypeIconComponent] }).compileComponents();
+    const fixture = TestBed.createComponent(DataTypeIconComponent);
+    fixture.componentRef.setInput('dataType', 'Minimum vertical speed in feet per hour');
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('mat-icon')?.textContent?.trim()).toBe('unfold_more_double');
+    expect(host.querySelector('[data-letters]')).toBeNull();
+    fixture.componentRef.setInput('dataType', 'Unknown provider metric with a long name');
+    fixture.detectChanges();
+    expect(host.querySelector('[data-letters]')?.getAttribute('data-letters')).toBe('UP');
+    expect(fixture.debugElement.query(By.directive(MatTooltip)).injector.get(MatTooltip).message)
+      .toBe('Unknown provider metric with a long name');
+  });
+
+  it('supports a focusable, labelled column explanation for icons and text fallbacks', async () => {
+    await TestBed.configureTestingModule({ imports: [DataTypeIconComponent] }).compileComponents();
+    const fixture = TestBed.createComponent(DataTypeIconComponent);
+    fixture.componentRef.setInput('focusable', true);
+    fixture.componentRef.setInput('tooltip', 'Total strokes across the active lengths; excludes rest.');
+    for (const type of ['Total strokes', 'Unknown provider field']) {
+      fixture.componentRef.setInput('dataType', type);
+      fixture.detectChanges();
+      const target = fixture.debugElement.query(By.directive(MatTooltip));
+      expect(target.injector.get(MatTooltip).message).toBe('Total strokes across the active lengths; excludes rest.');
+      expect(target.nativeElement.getAttribute('tabindex')).toBe('0');
+      expect(target.nativeElement.getAttribute('aria-hidden')).toBe('false');
+      expect(target.nativeElement.getAttribute('aria-label')).toBe(target.injector.get(MatTooltip).message);
+    }
+    fixture.componentRef.setInput('tooltip', undefined);
+    fixture.componentRef.setInput('focusable', false);
+    fixture.detectChanges();
+    expect(fixture.debugElement.query(By.directive(MatTooltip)).nativeElement.hasAttribute('tabindex')).toBe(false);
+    fixture.componentRef.setInput('dataType', 'Total strokes');
+    fixture.detectChanges();
+    expect(fixture.debugElement.query(By.directive(MatTooltip)).nativeElement.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('explains both artifact metrics in their icon tooltip and restores ordinary metric labels', async () => {
+    await TestBed.configureTestingModule({ imports: [DataTypeIconComponent] }).compileComponents();
+    const fixture = TestBed.createComponent(DataTypeIconComponent);
+    for (const type of [RRMetrics.DataRRArtifactPercentage.type, RRMetrics.DataRRArtifactCount.type]) {
+      fixture.componentRef.setInput('dataType', type); fixture.detectChanges();
+      const message = fixture.debugElement.query(By.directive(MatTooltip)).injector.get(MatTooltip).message;
+      expect(message).toBe(RR_STAT_TOOLTIPS[type]);
+      expect(message).toContain('comparisons within QS');
+      expect(message).toContain('aren’t directly comparable with other apps');
+      expect(message).toContain('aren’t confirmed strap errors');
+    }
+    for (const type of [RRMetrics.DataRRRMSSD.type, 'constructor', 'toString']) {
+      fixture.componentRef.setInput('dataType', type); fixture.detectChanges();
+      expect(fixture.debugElement.query(By.directive(MatTooltip)).injector.get(MatTooltip).message).toBe(type);
+    }
+  });
+
   it('should return icons for newly surfaced max/min metrics', () => {
     const component = new DataTypeIconComponent();
 

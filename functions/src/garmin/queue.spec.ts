@@ -1,6 +1,8 @@
+import { ActivityIdentityConflictError } from '../shared/activity-identity-conflict';
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { UsageLimitExceededError } from '../utils';
+import { HttpsError } from 'firebase-functions/v2/https';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import type * as admin from 'firebase-admin';
 
@@ -13,6 +15,7 @@ const {
     mockCollectionGroup,
     mockRequestGet,
     mockDeferQueueItemForPendingDisconnect,
+    mockDeferWorkoutQueueItemForTokenRefreshContention,
     mockIncreaseRetryCountForQueueItem,
     mockMarkQueueItemSkipped,
     mockMoveToDeadLetterQueue,
@@ -25,7 +28,12 @@ const {
     mockResolveProviderImportEventID,
     MockTerminalServiceAuthError,
     MockTokenRefreshSkippedForDeletedUserError,
+    MockTokenRefreshInProgressError,
     mockShouldSkipQueueWorkForDeletedUser,
+    mockRetainGarminFITWorkoutReferences,
+    mockGetServiceConnectionMeta,
+    mockUpdateQueueItemIfUserActive,
+    mockRecordImportCompletion,
 } = vi.hoisted(() => {
     class MockTerminalServiceAuthError extends Error {
         readonly name = 'TerminalServiceAuthError';
@@ -36,6 +44,9 @@ const {
     class MockTokenRefreshSkippedForDeletedUserError extends Error {
         readonly name = 'TokenRefreshSkippedForDeletedUserError';
     }
+    class MockTokenRefreshInProgressError extends Error {
+        readonly name = 'TokenRefreshInProgressError';
+    }
 
     return {
         mockSetEvent: vi.fn(),
@@ -45,6 +56,7 @@ const {
         mockCollectionGroup: vi.fn(),
         mockRequestGet: vi.fn(),
         mockDeferQueueItemForPendingDisconnect: vi.fn(),
+        mockDeferWorkoutQueueItemForTokenRefreshContention: vi.fn(),
         mockIncreaseRetryCountForQueueItem: vi.fn(),
         mockMarkQueueItemSkipped: vi.fn(),
         mockMoveToDeadLetterQueue: vi.fn(),
@@ -57,14 +69,39 @@ const {
         mockResolveProviderImportEventID: vi.fn(),
         MockTerminalServiceAuthError,
         MockTokenRefreshSkippedForDeletedUserError,
+        MockTokenRefreshInProgressError,
         mockShouldSkipQueueWorkForDeletedUser: vi.fn().mockResolvedValue(false),
+        mockRetainGarminFITWorkoutReferences: vi.fn().mockResolvedValue(true),
+        mockGetServiceConnectionMeta: vi.fn(),
+        mockUpdateQueueItemIfUserActive: vi.fn(),
+        mockRecordImportCompletion: vi.fn(),
     };
 });
+
+vi.mock('../service-connection-meta', async importOriginal => ({
+    ...await importOriginal<typeof import('../service-connection-meta')>(),
+    getServiceConnectionMeta: mockGetServiceConnectionMeta,
+}));
+
+vi.mock('../queue/dispatch-marker', async importOriginal => ({
+    ...await importOriginal<typeof import('../queue/dispatch-marker')>(),
+    updateQueueItemIfUserActive: mockUpdateQueueItemIfUserActive,
+}));
+
+vi.mock('../queue/import-monitoring', async importOriginal => ({
+    ...await importOriginal<typeof import('../queue/import-monitoring')>(),
+    recordImportCompletion: mockRecordImportCompletion,
+}));
 
 vi.mock('../tokens', () => ({
     getTokenData: mockGetTokenData,
     TerminalServiceAuthError: MockTerminalServiceAuthError,
     TokenRefreshSkippedForDeletedUserError: MockTokenRefreshSkippedForDeletedUserError,
+    TokenRefreshInProgressError: MockTokenRefreshInProgressError,
+}));
+
+vi.mock('../queue/token-refresh-contention', () => ({
+    deferWorkoutQueueItemForTokenRefreshContention: mockDeferWorkoutQueueItemForTokenRefreshContention,
 }));
 
 vi.mock('../queue/user-deletion-skip', () => ({
@@ -105,7 +142,8 @@ vi.mock('../utils', async (importOriginal) => {
     };
 });
 
-vi.mock('../request-helper', () => ({
+vi.mock('../request-helper', async (importOriginal) => ({
+    ...await importOriginal<typeof import('../request-helper')>(),
     get: mockRequestGet,
 }));
 
@@ -132,6 +170,10 @@ vi.mock('../queue/provider-event-id', () => ({
     resolveProviderImportEventID: mockResolveProviderImportEventID,
 }));
 
+vi.mock('../training-plans/completion/fit-workout-evidence', () => ({
+    retainGarminFITWorkoutReferences: mockRetainGarminFITWorkoutReferences,
+}));
+
 // Mock queue utilities
 vi.mock('../queue-utils', () => ({
     deferQueueItemForPendingDisconnect: mockDeferQueueItemForPendingDisconnect,
@@ -146,6 +188,7 @@ vi.mock('../queue-utils', () => ({
         Processed: 'PROCESSED',
         Skipped: 'SKIPPED',
         Deferred: 'DEFERRED',
+        TokenRefreshDeferred: 'TOKEN_REFRESH_DEFERRED',
         MovedToDLQ: 'MOVED_TO_DLQ',
         RetryIncremented: 'RETRY_INCREMENTED',
         Failed: 'FAILED',
@@ -182,9 +225,13 @@ vi.mock('firebase-admin', () => ({
 // Import SUT
 import { processGarminAPIActivityQueueItem, insertGarminAPIActivityFileToQueue } from './queue';
 import { addToQueueForGarmin } from '../queue';
-import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
+import { getTokenData, TerminalServiceAuthError, TokenRefreshInProgressError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
 import { updateToProcessed } from '../queue-utils';
 import { EventWriteSkippedForDeletedUserError } from '../utils';
+import { ResponseBodyTooLargeError } from '../request-helper';
+import { EventImporterGPX } from '@sports-alliance/sports-lib';
+import * as logger from 'firebase-functions/logger';
+import { GARMIN_ACTIVITY_MAX_RESPONSE_BYTES, GARMIN_ACTIVITY_DOWNLOAD_TIMEOUT_MS, GARMIN_ACTIVITY_WEBHOOK_MAX_FILES, GARMIN_ACTIVITY_WEBHOOK_MAX_BYTES } from './queue';
 
 describe('Garmin Queue', () => { // Grouping for cleaner output
 
@@ -193,6 +240,8 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
         // Reset call history but keep implementations if needed, OR re-implement
         vi.clearAllMocks();
         mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
+        mockGetServiceConnectionMeta.mockResolvedValue(null);
+        mockUpdateQueueItemIfUserActive.mockResolvedValue('updated');
 
         // Default: Mock Where returning Get
         mockWhere.mockReturnValue({ get: mockGet, limit: vi.fn().mockReturnValue({ get: mockGet }) });
@@ -215,6 +264,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
         mockWhereReturn.where.mockReturnValue(mockWhereReturn);
 
         mockCollectionGroup.mockReturnValue({ where: vi.fn().mockReturnValue(mockWhereReturn) });
+        mockSubCollection.mockReturnValue({ where: vi.fn().mockReturnValue(mockWhereReturn) });
 
         mockRequestGet.mockResolvedValue(new ArrayBuffer(8));
         mockResolveFirebaseUserIDForGarminUserID.mockResolvedValue('firebase-user-id');
@@ -230,13 +280,16 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
 
         beforeEach(() => {
             setupMocks();
+            process.env.GARMINAPI_WEBHOOK_SECRET = 'a'.repeat(64);
             req = {
+                method: 'POST',
+                path: `/${'a'.repeat(64)}/API`,
                 body: {
                     activityFiles: [{
                         userId: 'garmin-user-id',
                         userAccessToken: 'garmin-access-token',
                         fileType: 'FIT',
-                        callbackURL: 'https://callback?id=123&token=abc',
+                        callbackURL: 'https://apis.garmin.com/wellness-api/rest/activityFile?id=123&token=abc',
                         startTimeInSeconds: 1000,
                         manual: false,
                     }]
@@ -246,6 +299,52 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 status: vi.fn().mockReturnThis(),
                 send: vi.fn().mockReturnThis(),
             };
+        });
+
+        it.each(['/', '/wrong/API'])('rejects forged activity ingress before payload access or account lookup: %s', async path => {
+            req.path = path;
+            Object.defineProperty(req, 'body', { get() { throw new Error('body accessed'); } });
+            await insertGarminAPIActivityFileToQueue(req, res);
+            expect(res.status).toHaveBeenCalledWith(403);
+            expect(mockResolveFirebaseUserIDForGarminUserID).not.toHaveBeenCalled();
+            expect(addToQueueForGarmin).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            'https://evil.example/file?id=123',
+            'https://apis.garmin.com.evil.example/wellness-api/rest/activityFile?id=123',
+            'https://apis.garmin.com/wellness-api/rest/user/id?id=123',
+            'http://apis.garmin.com/wellness-api/rest/activityFile?id=123',
+        ])('rejects hostile callback destinations before durable admission: %s', async callbackURL => {
+            req.body.activityFiles[0].callbackURL = callbackURL;
+            await insertGarminAPIActivityFileToQueue(req, res);
+            expect(res.status).toHaveBeenCalledWith(200);
+            expect(mockResolveFirebaseUserIDForGarminUserID).not.toHaveBeenCalled();
+            expect(addToQueueForGarmin).not.toHaveBeenCalled();
+        });
+
+        it('bounds descriptor count before doing any account or queue work', async () => {
+            req.body.activityFiles = Array(GARMIN_ACTIVITY_WEBHOOK_MAX_FILES + 1).fill(req.body.activityFiles[0]);
+            await insertGarminAPIActivityFileToQueue(req, res);
+            expect(res.status).toHaveBeenCalledWith(200);
+            expect(mockResolveFirebaseUserIDForGarminUserID).not.toHaveBeenCalled();
+            expect(addToQueueForGarmin).not.toHaveBeenCalled();
+        });
+
+        it('bounds payload bytes before doing any account or queue work', async () => {
+            req.rawBody = Buffer.alloc(GARMIN_ACTIVITY_WEBHOOK_MAX_BYTES + 1);
+            await insertGarminAPIActivityFileToQueue(req, res);
+            expect(res.status).toHaveBeenCalledWith(200);
+            expect(mockResolveFirebaseUserIDForGarminUserID).not.toHaveBeenCalled();
+            expect(addToQueueForGarmin).not.toHaveBeenCalled();
+        });
+
+        it('retains large string summary IDs and supports OAuth2 callbacks without a user access token', async () => {
+            req.body.activityFiles[0].summaryId = '9007199254740993123';
+            delete req.body.activityFiles[0].userAccessToken;
+            await insertGarminAPIActivityFileToQueue(req, res);
+            expect(addToQueueForGarmin).toHaveBeenCalledWith(expect.objectContaining({ activityFileID: '9007199254740993123' }));
+            expect(res.status).toHaveBeenCalledWith(200);
         });
 
         it('should correctly extract metadata and call addToQueueForGarmin', async () => {
@@ -259,7 +358,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 activityFileType: 'FIT',
                 token: 'abc',
                 userAccessToken: 'garmin-access-token',
-                callbackURL: 'https://callback?id=123&token=abc',
+                callbackURL: 'https://apis.garmin.com/wellness-api/rest/activityFile?id=123&token=abc',
                 firebaseUserID: 'firebase-user-id',
             });
             expect(mockResolveFirebaseUserIDForGarminUserID).toHaveBeenCalledWith('garmin-user-id');
@@ -267,7 +366,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
         });
 
         it('should handle missing token in callbackURL and use "No token" default', async () => {
-            req.body.activityFiles[0].callbackURL = 'https://callback?id=123'; // No token
+            req.body.activityFiles[0].callbackURL = 'https://apis.garmin.com/wellness-api/rest/activityFile?id=123'; // No token
             await insertGarminAPIActivityFileToQueue(req, res);
             expect(addToQueueForGarmin).toHaveBeenCalledWith(expect.objectContaining({
                 token: 'No token'
@@ -275,10 +374,10 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             expect(res.status).toHaveBeenCalledWith(200);
         });
 
-        it('should return 500 if activityFileID is missing in the callbackURL', async () => {
-            req.body.activityFiles[0].callbackURL = 'https://callback?token=abc'; // No id
+        it('acknowledges an invalid callback without looking up an account', async () => {
+            req.body.activityFiles[0].callbackURL = 'https://apis.garmin.com/wellness-api/rest/activityFile?token=abc'; // No id
             await insertGarminAPIActivityFileToQueue(req, res);
-            expect(res.status).toHaveBeenCalledWith(500);
+            expect(res.status).toHaveBeenCalledWith(200);
             expect(addToQueueForGarmin).not.toHaveBeenCalled();
         });
 
@@ -315,7 +414,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                     userId: 'garmin-user-id',
                     userAccessToken: 'garmin-access-token',
                     fileType: 'FIT',
-                    callbackURL: 'https://callback?id=123&token=abc',
+                    callbackURL: 'https://apis.garmin.com/wellness-api/rest/activityFile?id=123&token=abc',
                     startTimeInSeconds: 1000,
                     manual: false,
                 },
@@ -323,7 +422,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                     userId: 'garmin-user-id',
                     userAccessToken: 'garmin-access-token',
                     fileType: 'FIT',
-                    callbackURL: 'https://callback?id=456&token=def',
+                    callbackURL: 'https://apis.garmin.com/wellness-api/rest/activityFile?id=456&token=def',
                     startTimeInSeconds: 2000,
                     manual: false,
                 },
@@ -351,7 +450,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                     userId: 'garmin-user-1',
                     userAccessToken: 'garmin-access-token-1',
                     fileType: 'FIT',
-                    callbackURL: 'https://callback?id=123&token=abc',
+                    callbackURL: 'https://apis.garmin.com/wellness-api/rest/activityFile?id=123&token=abc',
                     startTimeInSeconds: 1000,
                     manual: false,
                 },
@@ -359,7 +458,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                     userId: 'garmin-user-2',
                     userAccessToken: 'garmin-access-token-2',
                     fileType: 'FIT',
-                    callbackURL: 'https://callback?id=456&token=def',
+                    callbackURL: 'https://apis.garmin.com/wellness-api/rest/activityFile?id=456&token=def',
                     startTimeInSeconds: 2000,
                     manual: false,
                 },
@@ -367,7 +466,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                     userId: 'garmin-user-1',
                     userAccessToken: 'garmin-access-token-1',
                     fileType: 'FIT',
-                    callbackURL: 'https://callback?id=789&token=ghi',
+                    callbackURL: 'https://apis.garmin.com/wellness-api/rest/activityFile?id=789&token=ghi',
                     startTimeInSeconds: 3000,
                     manual: false,
                 },
@@ -419,7 +518,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 userId: 'garmin-user-id',
                 userAccessToken: 'garmin-access-token',
                 fileType: 'FIT',
-                callbackURL: `https://callback?id=${index}&token=token-${index}`,
+                callbackURL: `https://apis.garmin.com/wellness-api/rest/activityFile?id=${index}&token=token-${index}`,
                 startTimeInSeconds: 1000 + index,
                 manual: false,
             }));
@@ -458,7 +557,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 retryCount: 0,
                 manual: false,
                 startTimeInSeconds: 12345,
-                callbackURL: 'https://test-url'
+                callbackURL: 'https://apis.garmin.com/wellness-api/rest/activityFile?id=file-id&token=token'
             };
 
             // Mock successful token retrieval with proper parent path for Firebase User ID extraction
@@ -490,13 +589,100 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 savedOriginalFiles: [{ path: 'users/firebase-user-id/events/saved-event-id/original.fit' }],
             });
             mockDeferQueueItemForPendingDisconnect.mockResolvedValue('DEFERRED');
+            mockDeferWorkoutQueueItemForTokenRefreshContention.mockResolvedValue('TOKEN_REFRESH_DEFERRED');
             mockIncreaseRetryCountForQueueItem.mockResolvedValue('RETRY_INCREMENTED');
             mockMarkQueueItemSkipped.mockResolvedValue('PROCESSED');
             mockMoveToDeadLetterQueue.mockResolvedValue('MOVED_TO_DLQ');
             vi.mocked(updateToProcessed).mockResolvedValue('PROCESSED' as any);
         });
 
+        it.each([
+            'https://evil.example/file?id=1',
+            'https://apis.garmin.com@evil.example/file?id=1',
+            'https://apis.garmin.com/wellness-api/rest/user/id?id=1',
+            'https://apis.garmin.com/wellness-api/rest/activityFile?id=1&id=2',
+        ])('blocks hostile stored queue URLs before token refresh or download: %s', async callbackURL => {
+            queueItem.callbackURL = callbackURL;
+            await expect(processGarminAPIActivityQueueItem(queueItem)).resolves.toBe('MOVED_TO_DLQ');
+            expect(getTokenData).not.toHaveBeenCalled();
+            expect(mockRequestGet).not.toHaveBeenCalled();
+            expect(mockSetEvent).not.toHaveBeenCalled();
+            expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(queueItem, expect.any(Error), undefined, 'GARMIN_ACTIVITY_INVALID_CALLBACK_URL');
+        });
+
+        it('captures the checked URL before asynchronous token work', async () => {
+            const checkedURL = queueItem.callbackURL;
+            mockGetTokenData.mockImplementationOnce(async () => {
+                queueItem.callbackURL = 'https://evil.example/file';
+                return { accessToken: 'fresh-token', userID: 'garmin-user-id' };
+            });
+            await processGarminAPIActivityQueueItem(queueItem);
+            expect(mockRequestGet).toHaveBeenCalledWith(expect.objectContaining({ url: checkedURL, redirect: 'error' }));
+        });
+
+        it('applies the deadline, byte limit and redirect refusal to both GPX downloads', async () => {
+            queueItem.activityFileType = 'GPX';
+            vi.mocked(EventImporterGPX.getFromString).mockRejectedValueOnce(new Error('try FIT'));
+            await processGarminAPIActivityQueueItem(queueItem);
+            expect(mockRequestGet).toHaveBeenCalledTimes(2);
+            for (const [options] of mockRequestGet.mock.calls) {
+                expect(options).toEqual(expect.objectContaining({
+                    url: queueItem.callbackURL, redirect: 'error', timeout: GARMIN_ACTIVITY_DOWNLOAD_TIMEOUT_MS,
+                    maxResponseBytes: GARMIN_ACTIVITY_MAX_RESPONSE_BYTES,
+                }));
+            }
+        });
+
+        it.each(['FIT', 'GPX'])('stops oversized %s downloads without retrying or writing events', async fileType => {
+            queueItem.activityFileType = fileType;
+            if (fileType === 'GPX') {
+                mockRequestGet.mockResolvedValueOnce('initial');
+                vi.mocked(EventImporterGPX.getFromString).mockRejectedValueOnce(new Error('try FIT'));
+            }
+            mockRequestGet.mockRejectedValueOnce(new ResponseBodyTooLargeError(GARMIN_ACTIVITY_MAX_RESPONSE_BYTES, GARMIN_ACTIVITY_MAX_RESPONSE_BYTES + 1));
+            await expect(processGarminAPIActivityQueueItem(queueItem)).resolves.toBe('MOVED_TO_DLQ');
+            expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(queueItem, expect.any(Error), undefined, 'GARMIN_ACTIVITY_FILE_TOO_LARGE');
+            expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+            expect(mockSetEvent).not.toHaveBeenCalled();
+        });
+
+        it('sanitizes download failures without logging or retaining signed URLs or provider bodies', async () => {
+            const sensitive = 'private-response-and-pull-token';
+            mockRequestGet.mockRejectedValueOnce(Object.assign(new Error(sensitive), { statusCode: 400, error: sensitive }));
+            await processGarminAPIActivityQueueItem(queueItem);
+            const retainedError = mockIncreaseRetryCountForQueueItem.mock.calls[0][1];
+            expect(retainedError.message).toBe('Garmin activity download failed.');
+            expect(retainedError.error).toBeUndefined();
+            expect(JSON.stringify([vi.mocked(logger.info).mock.calls, vi.mocked(logger.warn).mock.calls, vi.mocked(logger.error).mock.calls])).not.toContain(sensitive);
+        });
+
+        it('should schedule recovery without consuming retry budget when token refresh is already in progress', async () => {
+            vi.mocked(getTokenData).mockRejectedValue(new TokenRefreshInProgressError(
+                ServiceNames.GarminAPI,
+                'garmin-user-id',
+            ));
+
+            const result = await processGarminAPIActivityQueueItem(queueItem);
+
+            expect(result).toBe('TOKEN_REFRESH_DEFERRED');
+            expect(mockDeferWorkoutQueueItemForTokenRefreshContention).toHaveBeenCalledWith(expect.objectContaining({
+                serviceName: ServiceNames.GarminAPI,
+                queueItem,
+                userID: firebaseUserID,
+            }));
+            expect(mockRequestGet).not.toHaveBeenCalled();
+            expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+            expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+        });
+
         it('should successfully process a FIT file and use the correct Firebase User ID', async () => {
+            const { EventImporterFIT } = await import('@sports-alliance/sports-lib');
+            vi.mocked(EventImporterFIT.getFromArrayBuffer).mockResolvedValueOnce({
+                getID: () => 'event-id', name: 'test-event', startDate: new Date('2026-09-17T07:00:00Z'),
+                setID: function () { return this; }, toJSON: () => ({}),
+                getActivities: () => [{ getID: () => 'activity-id', startDate: new Date('2026-09-17T07:00:00Z') }],
+                clearActivities: () => {}, addActivities: () => {},
+            } as unknown as Awaited<ReturnType<typeof EventImporterFIT.getFromArrayBuffer>>);
             const result = await processGarminAPIActivityQueueItem(queueItem);
 
             expect(result).toBe('PROCESSED');
@@ -530,6 +716,11 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 sourceServiceName: ServiceNames.GarminAPI,
                 sourceActivityID: queueItem.activityFileID,
             }));
+            expect(mockRetainGarminFITWorkoutReferences).toHaveBeenCalledWith(
+                expect.anything(), firebaseUserID, 'event-id', 'garmin-user-id', '',
+                { activityFileID: queueItem.activityFileID, activityFileType: queueItem.activityFileType }, expect.any(Buffer),
+                [{ id: 'activity-id', startTimeMs: Date.parse('2026-09-17T07:00:00Z') }],
+            );
             expect(updateToProcessed).toHaveBeenCalledWith(queueItem, undefined);
         });
 
@@ -597,6 +788,11 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             // Second download attempt
             expect(mockRequestGet).toHaveBeenCalledTimes(2);
             expect(mockCreateParsingOptions).toHaveBeenCalledTimes(2);
+            expect(mockRetainGarminFITWorkoutReferences).toHaveBeenCalledOnce();
+            expect(mockRetainGarminFITWorkoutReferences).toHaveBeenCalledWith(
+                expect.anything(), firebaseUserID, 'event-id', 'garmin-user-id', '',
+                { activityFileID: queueItem.activityFileID, activityFileType: 'GPX' }, expect.any(Buffer), [],
+            );
         });
 
         it('should successfully process a TCX file', async () => {
@@ -613,6 +809,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             expect(result).toBe('PROCESSED');
             expect(EventImporterTCX.getFromXML).toHaveBeenCalled();
             expect(mockCreateParsingOptions).toHaveBeenCalledTimes(1);
+            expect(mockRetainGarminFITWorkoutReferences).not.toHaveBeenCalled();
         });
 
         it('should move to DLQ if no token is found', async () => {
@@ -627,6 +824,169 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 undefined,
                 'NO_TOKEN_FOUND'
             );
+            expect(mockGetServiceConnectionMeta).not.toHaveBeenCalled();
+        });
+
+        it.each([false, true])('still imports from the recorded owner when credentials exist (cached: %s)', async cached => {
+            queueItem.firebaseUserID = firebaseUserID;
+            const cache = cached ? new Map<string, Promise<admin.firestore.QuerySnapshot>>() : undefined;
+            await expect(processGarminAPIActivityQueueItem(queueItem, undefined, cache)).resolves.toBe('PROCESSED');
+            expect(mockCollection).toHaveBeenCalledWith('garminAPITokens');
+            expect(mockCollection.mock.results[0].value.doc).toHaveBeenCalledWith(firebaseUserID);
+            expect(mockCollectionGroup).not.toHaveBeenCalled();
+            expect(mockGetTokenData).toHaveBeenCalledOnce();
+            expect(mockSetEvent).toHaveBeenCalledOnce();
+            expect(mockSetEvent.mock.calls[0][0]).toBe(firebaseUserID);
+            expect(mockGetServiceConnectionMeta).not.toHaveBeenCalled();
+            expect(mockUpdateQueueItemIfUserActive).not.toHaveBeenCalled();
+            if (cache) expect(cache.has(`GarminAPI:${queueItem.userID}:${firebaseUserID}`)).toBe(true);
+        });
+
+        describe('owned imports after disconnect', () => {
+            const disconnectedMeta = {
+                connectionStateGeneration: 'cleared-generation',
+                connectionAccountsRevisionKey: 'confirmed-empty-accounts',
+                connectionAccounts: [],
+            };
+
+            beforeEach(() => {
+                queueItem.firebaseUserID = firebaseUserID;
+                queueItem.dateCreated = 1234;
+                queueItem.ref = { parent: { id: 'garminAPIActivityQueue' } };
+                mockGet.mockResolvedValue({ size: 0, docs: [] });
+                mockGetServiceConnectionMeta.mockResolvedValue(disconnectedMeta);
+            });
+
+            it.each([false, true])('commits an info-only skip without retry or DLQ (cached: %s)', async cached => {
+                const cache = cached ? new Map() : undefined;
+                await expect(processGarminAPIActivityQueueItem(queueItem, undefined, cache)).resolves.toBe('PROCESSED');
+                expect(mockGetServiceConnectionMeta).toHaveBeenCalledWith(firebaseUserID, ServiceNames.GarminAPI);
+                expect(mockCollection).toHaveBeenCalledWith('garminAPITokens');
+                expect(mockCollection.mock.results[0].value.doc).toHaveBeenCalledWith(firebaseUserID);
+                expect(mockCollectionGroup).not.toHaveBeenCalled();
+                expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+                    queueItemDocument: queueItem.ref,
+                    userID: firebaseUserID,
+                    updateData: expect.objectContaining({
+                        processed: true, resultStatus: 'skipped', skippedReason: 'service_disconnected',
+                        callbackURL: expect.anything(),
+                    }),
+                }));
+                expect(mockRecordImportCompletion).toHaveBeenCalledWith('garminAPIActivityQueue', expect.objectContaining({ resultStatus: 'skipped' }));
+                expect(logger.info).toHaveBeenCalledWith('[GarminWorkoutQueue] Import skipped after disconnect.', {
+                    queueItemId: queueItem.id, reason: 'service_disconnected',
+                });
+                expect(logger.warn).not.toHaveBeenCalled();
+                expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+                expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+                expect(mockGetTokenData).not.toHaveBeenCalled();
+                expect(mockRequestGet).not.toHaveBeenCalled();
+                expect(mockSetEvent).not.toHaveBeenCalled();
+            });
+
+            it.each([
+                null,
+                {},
+                { ...disconnectedMeta, connectionState: 'connected' },
+                { ...disconnectedMeta, connectionState: 'reconnect_required' },
+                { ...disconnectedMeta, connectionState: 'disconnect_pending' },
+                { ...disconnectedMeta, connectionStateGeneration: undefined },
+                { ...disconnectedMeta, connectionStateGeneration: 42 },
+                { ...disconnectedMeta, connectionStateGeneration: ' ' },
+                { ...disconnectedMeta, connectionAccountsRevisionKey: undefined },
+                { ...disconnectedMeta, connectionAccountsRevisionKey: 42 },
+                { ...disconnectedMeta, connectionAccountsRevisionKey: ' ' },
+                { ...disconnectedMeta, connectionAccounts: [{ providerUserId: 'garmin-user-id' }] },
+                { ...disconnectedMeta, connectionAccounts: undefined },
+            ])('preserves missing-token failure handling without confirmed disconnect: %j', async meta => {
+                mockGetServiceConnectionMeta.mockResolvedValue(meta);
+                await expect(processGarminAPIActivityQueueItem(queueItem)).resolves.toBe('MOVED_TO_DLQ');
+                expect(mockUpdateQueueItemIfUserActive).not.toHaveBeenCalled();
+                expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(queueItem, expect.any(Error), undefined, 'NO_TOKEN_FOUND');
+                expect(mockRecordImportCompletion).not.toHaveBeenCalled();
+            });
+
+            it('does not borrow a cached credential from an earlier owner', async () => {
+                const cache = new Map<string, Promise<admin.firestore.QuerySnapshot>>([
+                    ['GarminAPI:garmin-user-id:another-owner', Promise.resolve({ size: 1, docs: [] } as unknown as admin.firestore.QuerySnapshot)],
+                ]);
+                await expect(processGarminAPIActivityQueueItem(queueItem, undefined, cache)).resolves.toBe('PROCESSED');
+                expect(mockGet).toHaveBeenCalledOnce();
+                expect(mockGetTokenData).not.toHaveBeenCalled();
+                expect(mockCollectionGroup).not.toHaveBeenCalled();
+            });
+
+            it('guards completion against replaced, completed or removed queue rows', async () => {
+                await processGarminAPIActivityQueueItem(queueItem);
+                const { isCurrent } = mockUpdateQueueItemIfUserActive.mock.calls[0][0];
+                expect(isCurrent({ ...queueItem, processed: false })).toBe(true);
+                for (const replacement of [
+                    { processed: true }, { firebaseUserID: 'replacement-owner' }, { userID: 'replacement-provider' },
+                    { dateCreated: 5678 }, { queueRevision: 'replacement-revision' },
+                ]) expect(isCurrent({ ...queueItem, ...replacement })).toBe(false);
+                for (const refresh of [
+                    { callbackURL: 'https://apis.garmin.com/wellness-api/rest/activityFile?id=file-id&token=fresh' },
+                    { token: 'fresh-pull-token' }, { userAccessToken: 'fresh-access-token' },
+                    { activityFileType: 'GPX' }, { startTimeInSeconds: 67890 },
+                ]) expect(() => isCurrent({ ...queueItem, ...refresh })).toThrow('Garmin queue payload changed during disconnect check.');
+            });
+
+            it('does not close a duplicate webhook payload refreshed while reading disconnect state', async () => {
+                const current = { ...queueItem };
+                mockGetServiceConnectionMeta.mockImplementationOnce(async () => {
+                    current.callbackURL = `${current.callbackURL}-fresh`;
+                    return disconnectedMeta;
+                });
+                mockUpdateQueueItemIfUserActive.mockImplementationOnce(async ({ isCurrent }) =>
+                    isCurrent(current) ? 'updated' : 'not_current');
+
+                await expect(processGarminAPIActivityQueueItem(queueItem)).rejects.toThrow('Garmin queue payload changed during disconnect check.');
+
+                expect(mockRecordImportCompletion).not.toHaveBeenCalled();
+                expect(logger.info).not.toHaveBeenCalledWith('[GarminWorkoutQueue] Import skipped after disconnect.', expect.anything());
+                expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+
+                // The same Cloud Task can retry the still-dispatched row, now
+                // with the refreshed payload and its owner's available credential.
+                mockGet.mockResolvedValue({
+                    size: 1,
+                    docs: [{ ref: { parent: { parent: { id: firebaseUserID } } }, data: () => ({}) }],
+                });
+                await expect(processGarminAPIActivityQueueItem(current)).resolves.toBe('PROCESSED');
+                expect(mockRequestGet).toHaveBeenCalledWith(expect.objectContaining({ url: current.callbackURL }));
+                expect(mockSetEvent).toHaveBeenCalledOnce();
+            });
+
+            it('captures the attempted payload before asynchronous disconnect reads', async () => {
+                mockGetServiceConnectionMeta.mockImplementationOnce(async () => {
+                    queueItem.callbackURL = `${queueItem.callbackURL}-fresh`;
+                    return disconnectedMeta;
+                });
+                mockUpdateQueueItemIfUserActive.mockImplementationOnce(async ({ isCurrent }) =>
+                    isCurrent(queueItem) ? 'updated' : 'not_current');
+
+                await expect(processGarminAPIActivityQueueItem(queueItem)).rejects.toThrow('Garmin queue payload changed during disconnect check.');
+                expect(mockRecordImportCompletion).not.toHaveBeenCalled();
+            });
+
+            it.each(['not_current', 'skipped_deleted_user'])('does not claim a committed skip after %s', async result => {
+                mockUpdateQueueItemIfUserActive.mockResolvedValue(result);
+                await expect(processGarminAPIActivityQueueItem(queueItem)).resolves.toBe('PROCESSED');
+                expect(mockRecordImportCompletion).not.toHaveBeenCalled();
+                expect(logger.info).not.toHaveBeenCalledWith('[GarminWorkoutQueue] Import skipped after disconnect.', expect.anything());
+                expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+            });
+
+            it.each(['token_query', 'connection_read', 'completion'])('keeps %s failures retryable instead of claiming a disconnect skip', async stage => {
+                const error = new Error('temporary Firestore failure');
+                if (stage === 'token_query') mockGet.mockRejectedValueOnce(error);
+                if (stage === 'connection_read') mockGetServiceConnectionMeta.mockRejectedValueOnce(error);
+                if (stage === 'completion') mockUpdateQueueItemIfUserActive.mockRejectedValueOnce(error);
+                await expect(processGarminAPIActivityQueueItem(queueItem)).rejects.toBe(error);
+                expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+                expect(mockRecordImportCompletion).not.toHaveBeenCalled();
+                expect(mockRequestGet).not.toHaveBeenCalled();
+            });
         });
 
         it('should retry if getTokenData fails', async () => {
@@ -873,6 +1233,23 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             );
         });
 
+        it('retries an unavailable subscription lookup without terminal rejection and can complete on redelivery', async () => {
+            const error = new HttpsError('unavailable', 'Could not verify subscription access. Please try again.');
+            mockSetEvent.mockRejectedValueOnce(error);
+
+            await expect(processGarminAPIActivityQueueItem(queueItem)).resolves.toBe('RETRY_INCREMENTED');
+
+            expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledExactlyOnceWith(queueItem, error, 1, undefined);
+            expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+            expect(mockUpdateToProcessed).not.toHaveBeenCalled();
+            expect(mockEnqueueActivitySyncJobsForImportedEvent).not.toHaveBeenCalled();
+
+            await expect(processGarminAPIActivityQueueItem({ ...queueItem, retryCount: 1 })).resolves.toBe('PROCESSED');
+            expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledTimes(1);
+            expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+            expect(mockUpdateToProcessed).toHaveBeenCalledTimes(1);
+        });
+
         it('should increment retry count by 1 for generic download errors', async () => {
             mockRequestGet.mockRejectedValue({ statusCode: 503, message: 'Service Unavailable' });
 
@@ -954,6 +1331,22 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 1,
                 undefined
             );
+        });
+
+        it('dead-letters a permanent source identity conflict without retrying or labelling it a parse failure', async () => {
+            const error = new ActivityIdentityConflictError();
+            mockSetEvent.mockRejectedValueOnce(error);
+            await expect(processGarminAPIActivityQueueItem(queueItem)).resolves.toBe('MOVED_TO_DLQ');
+            expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(queueItem, error, undefined, 'ACTIVITY_IDENTITY_CONFLICT');
+            expect(mockUploadDebugFile).not.toHaveBeenCalled();
+            expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+        });
+
+        it('returns a lifecycle skip when the guarded conflict move was superseded', async () => {
+            mockSetEvent.mockRejectedValueOnce(new ActivityIdentityConflictError());
+            mockMoveToDeadLetterQueue.mockResolvedValueOnce('PROCESSED');
+            await expect(processGarminAPIActivityQueueItem(queueItem)).resolves.toBe('PROCESSED');
+            expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
         });
 
         it('should handle uploadDebugFile failure gracefully and still increment retry count', async () => {

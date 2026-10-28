@@ -1,3 +1,4 @@
+import { TrainingLoadSourceWrite } from '../training-load/training-load-source-write';
 import { onRequest } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
@@ -17,6 +18,7 @@ import {
   shouldEnforceAppCheck,
 } from '../utils';
 import { EventWriter, FirestoreAdapter, StorageAdapter, OriginalFile } from '../shared/event-writer';
+import { getContentAddressedOriginalPath, saveChecksummedStorageFile } from '../shared/storage-file-save';
 import { generateActivityID } from '../shared/id-generator';
 import { EVENT_PROCESSING_ENTITY, ProcessingMetaData } from '../shared/processing-metadata.interface';
 import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
@@ -31,8 +33,13 @@ import {
   MAX_ACTIVITY_UPLOAD_BYTES_LABEL,
 } from '../shared/activity-processing-config';
 import { parseActivityFilePayload } from '../shared/activity-file-parser';
+import type { JsonParserFailures } from '../shared/activity-file-parser';
+import { getActivityParserDiagnostics } from '../shared/activity-parser-diagnostics';
+import { inspectFitPayload } from '../shared/fit-payload';
+import { uploadDebugFile } from '../debug-utils';
 import { isSupportedActivityFileBaseExtension } from '../../../shared/activity-file-formats';
-import { preserveEventTagsOnRewrite } from '../../../shared/event-tags';
+import { prepareImportedEventWrite, preserveImportedActivityEdits, preserveImportedEventEdits } from '../shared/import-preservation';
+import { ACTIVITY_IDENTITY_CONFLICT_MESSAGE, isActivityIdentityConflict } from '../shared/activity-identity-conflict';
 
 const ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE = 'This file looks like a route/course, not a workout activity. Use route upload for routes.';
 const ACCOUNT_DELETION_UPLOAD_ERROR_MESSAGE = 'Account deletion is in progress. Please sign in again.';
@@ -40,7 +47,7 @@ const ROUTE_ONLY_PARSER_ERROR_PATTERN = /no activities found in gpx.*importroute
 const ROUTE_OR_COURSE_ACTIVITY_TYPES = new Set(['route', 'course']);
 
 class HttpStatusError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(public readonly status: number, message: string, public readonly code?: string) {
     super(message);
     this.name = 'HttpStatusError';
   }
@@ -91,7 +98,7 @@ function isRouteOrCourseActivity(activity: unknown): boolean {
 
 function assertUploadedActivitiesAreWorkouts(activities: readonly unknown[]): void {
   if (activities.some(isRouteOrCourseActivity)) {
-    throw new HttpStatusError(400, ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE);
+    throw new HttpStatusError(400, ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE, 'route_file_in_activity_upload');
   }
 }
 
@@ -120,6 +127,18 @@ function normalizeExtension(extension: string): string {
 
 function getBaseExtension(extension: string): string {
   return extension.endsWith('.gz') ? extension.slice(0, -3) : extension;
+}
+
+function getRejectedUploadContext(userID: string, payload: Buffer, extension: string) {
+  return {
+    userID,
+    // A content digest links exact parser inputs and their debug captures across re-uploads,
+    // including after account recreation, without logging potentially private filenames.
+    payloadSha256: createHash('sha256').update(payload).digest('hex'),
+    ...(getBaseExtension(extension) === 'fit'
+      ? { fitEnvelopeReason: inspectFitPayload(payload).reason }
+      : {}),
+  };
 }
 
 function resolveExtensionFromFilename(filename?: string): string | null {
@@ -321,19 +340,22 @@ function generateUploadEventID(userID: string, payload: Buffer, resolvedExtensio
     .digest('hex');
 }
 
-function getFirestoreAdapter(userID: string): FirestoreAdapter {
+function getFirestoreAdapter(userID: string, sourceWrite: TrainingLoadSourceWrite): FirestoreAdapter {
   return {
+    prepareTrainingLoad: sourceWrite.prepareTrainingLoad,
     setDoc: async (path: string[], data: unknown) => {
       const documentPath = path.join('/');
       const documentRef = admin.firestore().doc(documentPath);
       const isEventDocument = path.length === 4 && path[0] === 'users' && path[2] === 'events';
+      const isActivityDocument = path.length === 4 && path[0] === 'users' && path[2] === 'activities';
       await setEventDocumentIfUserActive(
         userID,
         `activity_upload_writer:${documentPath}`,
         documentRef,
         data,
         undefined,
-        isEventDocument ? preserveEventTagsOnRewrite : undefined,
+        isEventDocument ? preserveImportedEventEdits : isActivityDocument ? preserveImportedActivityEdits : undefined,
+        sourceWrite.assertCurrent,
       );
     },
     createBlob: (data: Uint8Array) => Buffer.from(data),
@@ -345,16 +367,17 @@ function getStorageAdapter(userID: string): StorageAdapter {
   return {
     uploadFile: async (path: string, data: unknown) => {
       await assertEventWriteUserActive(userID, `activity_upload_original_file:${path}`);
-      const file = admin.storage().bucket().file(path);
-      await file.save(data as Buffer);
+      const targetPath = getContentAddressedOriginalPath(path, data as Buffer);
+      const file = admin.storage().bucket().file(targetPath);
+      await saveChecksummedStorageFile(file, data as Buffer);
       const [metadata] = await file.getMetadata();
-      return { generation: metadata.generation };
+      return { path: targetPath, generation: metadata.generation };
     },
     getBucketName: () => admin.storage().bucket().name,
   };
 }
 
-async function persistProcessingMetadata(userID: string, eventID: string): Promise<void> {
+async function persistProcessingMetadata(userID: string, eventID: string, sourceWrite: TrainingLoadSourceWrite): Promise<void> {
   const processingPayload: ProcessingMetaData = {
     processingEntity: EVENT_PROCESSING_ENTITY,
     sportsLibVersion: SPORTS_LIB_VERSION,
@@ -370,6 +393,20 @@ async function persistProcessingMetadata(userID: string, eventID: string): Promi
     processingRef,
     processingPayload,
     { merge: true },
+    undefined,
+    sourceWrite.assertCurrent,
+  );
+}
+
+async function persistManualUploadOrigin(userID: string, eventID: string, sourceWrite: TrainingLoadSourceWrite): Promise<void> {
+  await setEventDocumentIfUserActive(
+    userID,
+    'activity_upload_origin_metadata',
+    admin.firestore().doc(`users/${userID}/events/${eventID}/metaData/manualUploadOrigin`),
+    { kind: 'manualUpload', version: 1 },
+    { merge: true },
+    undefined,
+    sourceWrite.assertCurrent,
   );
 }
 
@@ -416,20 +453,42 @@ export const uploadActivity = onRequest({
     }
 
     let event: EventInterface;
+    let jsonParserFailures: JsonParserFailures | undefined;
     try {
-      event = await parseActivityFilePayload(payloadForParsing, resolvedExtension);
+      event = await parseActivityFilePayload(payloadForParsing, resolvedExtension, undefined, failures => {
+        jsonParserFailures = failures;
+      });
     } catch (error) {
       if (error instanceof HttpStatusError) {
         throw error;
       }
       if (isRouteOnlyParserError(error)) {
         logger.warn('[uploadActivity] Rejected route/course file submitted to activity upload', {
+          ...getRejectedUploadContext(userID, payloadForParsing, resolvedExtension),
           resolvedExtension,
-          error: getErrorMessage(error),
+          reason: 'route_only',
         });
-        throw new HttpStatusError(400, ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE);
+        throw new HttpStatusError(400, ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE, 'route_file_in_activity_upload');
       }
-      logger.warn('[uploadActivity] Activity parsing failed', error);
+      const rejectedUploadContext = getRejectedUploadContext(userID, payloadForParsing, resolvedExtension);
+      logger.warn('[uploadActivity] Activity parsing failed', {
+        ...getActivityParserDiagnostics(error, payloadForParsing, resolvedExtension, jsonParserFailures),
+        ...rejectedUploadContext,
+      });
+      try {
+        await assertEventWriteUserActive(userID, 'activity_upload_debug_file');
+        // Retain bounded original bytes (including gzip), keyed by the logged parser-payload digest.
+        await uploadDebugFile(
+          rawBody,
+          resolveStoredExtension(resolvedExtension, rawBody),
+          rejectedUploadContext.payloadSha256,
+          'manualUpload',
+          userID,
+        );
+      } catch {
+        // Diagnostic storage or a failed deletion check must not replace the parser's HTTP 400.
+        logger.warn('[uploadActivity] Could not retain rejected upload for debugging', rejectedUploadContext);
+      }
       throw new HttpStatusError(400, 'Could not parse uploaded payload.');
     }
 
@@ -456,9 +515,11 @@ export const uploadActivity = onRequest({
       originalFilename,
     };
 
-    const writer = new EventWriter(getFirestoreAdapter(userID), getStorageAdapter(userID));
+    const sourceWrite = new TrainingLoadSourceWrite(userID, event => prepareImportedEventWrite(userID, event));
+    const writer = new EventWriter(getFirestoreAdapter(userID, sourceWrite), getStorageAdapter(userID));
     await writer.writeAllEventData(userID, event, originalFile);
-    await persistProcessingMetadata(userID, eventID);
+    await persistProcessingMetadata(userID, eventID, sourceWrite);
+    await persistManualUploadOrigin(userID, eventID, sourceWrite);
 
     response.status(200).json({
       eventId: eventID,
@@ -467,6 +528,10 @@ export const uploadActivity = onRequest({
       uploadCountAfterWrite: eventAlreadyExists ? currentCount : (currentCount + 1),
     });
   } catch (error) {
+    if (isActivityIdentityConflict(error)) {
+      response.status(409).json({ error: ACTIVITY_IDENTITY_CONFLICT_MESSAGE, code: error.code });
+      return;
+    }
     if (error instanceof EventWriteSkippedForDeletedUserError) {
       response.status(409).json({
         error: ACCOUNT_DELETION_UPLOAD_ERROR_MESSAGE,
@@ -476,7 +541,7 @@ export const uploadActivity = onRequest({
     }
 
     if (error instanceof HttpStatusError) {
-      response.status(error.status).json({ error: error.message });
+      response.status(error.status).json({ error: error.message, ...(error.code ? { code: error.code } : {}) });
       return;
     }
 

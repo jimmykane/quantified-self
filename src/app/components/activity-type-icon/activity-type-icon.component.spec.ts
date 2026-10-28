@@ -1,5 +1,6 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it, vi } from 'vitest';
+import { resolveActivityTypeIconColor } from '../../helpers/activity-type-presentation.helper';
 import { ActivityTypeIconComponent } from './activity-type-icon.component';
 
 describe('ActivityTypeIconComponent', () => {
@@ -27,6 +28,11 @@ describe('ActivityTypeIconComponent', () => {
       component.activityType = activityType;
       expect(component.getIcon()).toBe(expectedIcon);
     }
+  });
+
+  it('exposes the matching activity-family color for native Material option icons', () => {
+    expect(resolveActivityTypeIconColor('Cycling')).toBe('#FF7C3B');
+    expect(resolveActivityTypeIconColor('Swimming')).toBe('#40C4FF');
   });
 
   it('uses the Diving icon for snorkeling and mermaiding aliases', () => {
@@ -83,6 +89,35 @@ describe('ActivityTypeIconComponent', () => {
 
     component.activityType = 'Downhill Cycling';
     expect(component.getIcon()).toBe('terrain');
+  });
+
+  it.each([
+    ['Road Running', 'directions_run'],
+    ['Indoor Track Running', 'directions_run'],
+    ['Vertical Running', 'directions_run'],
+    ['Road Cycling', 'directions_bike'],
+    ['Gravel Cycling', 'directions_bike'],
+    ['Indoor Walking', 'directions_walk'],
+    ['Speed Walking', 'directions_walk'],
+    ['Mountain Bike Orienteering', 'terrain'],
+    ['E-Mountain Biking', 'electric_bike'],
+    ['E-Enduro MTB', 'electric_bike'],
+    ['Stretching', 'self_improvement'],
+    ['Meditation', 'self_improvement'],
+    ['Breathwork', 'self_improvement'],
+    ['Table Tennis', 'sports'],
+    ['American Football', 'sports_football'],
+    ['Virtual Rowing', 'rowing'],
+    ['Whitewater Kayaking', 'kayaking'],
+    ['Sail Racing', 'sailing'],
+    ['Skateboarding', 'skateboarding'],
+    ['Video Gaming', 'sports_esports'],
+    ['Soccer', 'sports_soccer'],
+    ['Fitness Boxing', 'sports_mma'],
+  ])('uses approved bundled icons for %s', (type, icon) => {
+    const component = new ActivityTypeIconComponent();
+    component.activityType = type;
+    expect(component.getIcon()).toBe(icon);
   });
 
   it('falls back safely for numeric activity type values', () => {

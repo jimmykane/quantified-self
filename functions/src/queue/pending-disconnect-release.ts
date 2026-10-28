@@ -2,6 +2,7 @@ import * as admin from 'firebase-admin';
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { ServiceRecoveryDeferredError } from '../shared/service-recovery-deferral';
 import { SERVICE_CONNECTION_STATES } from '../../../shared/service-connection';
 import { SLEEP_PROVIDERS, type SleepProvider } from '../../../shared/sleep';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../activity-sync/constants';
@@ -15,6 +16,7 @@ import {
 } from '../queue-utils';
 import { getServiceWorkoutQueueName } from '../shared/queue-names';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
+import { isSendWindowOpen } from '../activity-send/policy';
 import {
     getServiceDisconnectOperationGeneration,
     getServiceTokenCollectionRef,
@@ -49,7 +51,7 @@ const DEFERRED_QUEUE_RELEASE_CONCURRENCY = 10;
  * Callers must retain their repair marker and retry, not restore a completed
  * disconnect lifecycle.
  */
-export class DeferredQueueReleaseIncompleteError extends Error {
+export class DeferredQueueReleaseIncompleteError extends ServiceRecoveryDeferredError {
     constructor(serviceName: ServiceNames, deferredReason: QueueDeferredReason) {
         super(`Deferred ${serviceName} queue release for ${deferredReason} reached its bounded page limit; retrying the remaining items.`);
         this.name = 'DeferredQueueReleaseIncompleteError';
@@ -342,7 +344,15 @@ async function releaseDeferredQueueDocument(
             if (!isQueueItemDeferredForReason(currentData, deferredReason) || !matchesService(currentData)) {
                 return false;
             }
-            transaction.update(doc.ref, updateData);
+            if (typeof currentData.sendBatchID === 'string') {
+                // Reconnection cannot reopen expired/stopped workspace authority.
+                // Accepted operations retain their independent status continuation.
+                if (!currentData.destinationUploadID && !currentData.providerOperationStartedAt) {
+                    const operation = await transaction.get(db.collection('users').doc(userID).collection('activitySendOperations').doc(currentData.sendBatchID));
+                    if (!isSendWindowOpen(operation.data())) return false;
+                }
+                transaction.update(doc.ref, { ...updateData, ...(currentData.expireAt ? { expireAt: currentData.expireAt } : {}) });
+            } else transaction.update(doc.ref, updateData);
             return true;
         });
         if (released) {

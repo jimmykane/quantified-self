@@ -21,6 +21,15 @@ import {
 } from '@sports-alliance/sports-lib';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HeaderStatsComponent } from './header-stats.component';
+import { MatTooltip, MatTooltipModule } from '@angular/material/tooltip';
+import { MatChipsModule } from '@angular/material/chips';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { By } from '@angular/platform-browser';
+import { DataRRArtifactCount, DataRRArtifactPercentage } from '@sports-alliance/sports-lib/metrics';
+import { RR_STAT_TOOLTIPS } from '../../constants/rr-metrics';
+import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { of } from 'rxjs';
 
 const createStat = (type: string, displayType: string, displayValue: string, displayUnit = '') => {
   return {
@@ -182,6 +191,22 @@ describe('HeaderStatsComponent', () => {
     expect(component.getNormalizedStatLabel(nonDerived)).toBe('Average Power');
   });
 
+  it('updates optional context labels without changing values or the default label', () => {
+    const stat = createStat(DataPowerAvg.type, 'Average Power', '250', 'W');
+    component.statsToShow = [DataPowerAvg.type]; component.stats = [stat];
+    component.singleValueTypes = [DataPowerAvg.type];
+    applyChanges(component);
+    expect(component.displayedStatCards[0].label).toBe('Average Power');
+    component.statLabels = { [DataPowerAvg.type]: 'Recorded power' };
+    component.ngOnChanges({ statLabels: new SimpleChange(undefined, component.statLabels, false) });
+    expect(component.displayedStatCards[0].label).toBe('Recorded power');
+    expect(component.getNormalizedStatLabel(stat)).toBe('Recorded power');
+    expect(component.displayedStatCards[0].valueItems[0].displayValue).toBe('250');
+    component.statLabels = undefined;
+    component.ngOnChanges({ statLabels: new SimpleChange({}, undefined, false) });
+    expect(component.displayedStatCards[0].label).toBe('Average Power');
+  });
+
   it('should hide NaN values from cards and remove single-value cards that only contain NaN', () => {
     component.layout = 'grid';
     component.statsToShow = [DataPowerAvg.type, DataHeartRateAvg.type];
@@ -225,6 +250,16 @@ describe('HeaderStatsComponent', () => {
     expect(component.getCompositeDeltaDisplay('10 W', 'W')).toBe('10');
     expect(component.getCompositeDeltaDisplay('10w', 'W')).toBe('10');
     expect(component.getCompositeDeltaDisplay('10', 'W')).toBe('10');
+  });
+
+  it('shows swimming header cards in yards with the first swim-pace preference', () => {
+    component.layout = 'grid';
+    component.activityTypes = [ActivityTypes.Swimming];
+    component.unitSettings = { swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] } as any;
+    component.statsToShow = [DataDistance.type];
+    component.stats = [new DataDistance(91.44)];
+    applyChanges(component);
+    expect(component.displayedStatCards[0].valueItems[0]).toMatchObject({ displayValue: '100', displayUnit: 'yd' });
   });
 
   it('should keep swimming distance summary cards in meters with miles distance preference', () => {
@@ -275,4 +310,25 @@ describe('HeaderStatsComponent', () => {
     );
   });
 
+});
+
+describe('condensed artifact tooltips', () => {
+  it('uses the artifact explanation on chips while retaining ordinary labels and canonical zero values', async () => {
+    await TestBed.configureTestingModule({
+      declarations: [HeaderStatsComponent], imports: [MatTooltipModule, MatChipsModule, NoopAnimationsModule], schemas: [NO_ERRORS_SCHEMA],
+      providers: [{ provide: BreakpointObserver, useValue: { observe: () => of({ matches: false, breakpoints: {} }), isMatched: () => false } }],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(HeaderStatsComponent);
+    fixture.componentRef.setInput('layout', 'condensed');
+    fixture.componentRef.setInput('unitSettings', getDefaultUserUnitSettings());
+    fixture.componentRef.setInput('statsToShow', [DataRRArtifactPercentage.type, DataRRArtifactCount.type, DataHeartRateAvg.type]);
+    fixture.componentRef.setInput('stats', [new DataRRArtifactPercentage(0), new DataRRArtifactCount(0), new DataHeartRateAvg(100)]);
+    fixture.detectChanges();
+    const chips = fixture.debugElement.queryAll(By.directive(MatTooltip));
+    expect(chips.map(chip => chip.injector.get(MatTooltip).message)).toEqual([
+      RR_STAT_TOOLTIPS[DataRRArtifactPercentage.type], RR_STAT_TOOLTIPS[DataRRArtifactCount.type], 'Average Heart Rate',
+    ]);
+    expect(chips[0].nativeElement.textContent).toContain('0.0 %');
+    expect(chips[1].nativeElement.textContent).toContain('0');
+  });
 });

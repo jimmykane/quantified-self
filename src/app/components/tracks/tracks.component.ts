@@ -7,7 +7,7 @@ import { take, filter } from 'rxjs/operators';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { Subject, Subscription, firstValueFrom } from 'rxjs';
 import { DateRanges, ActivityTypes, DataPaceAvg, DataSpeedAvg, DataSwimPaceAvg, DaysOfTheWeek } from '@sports-alliance/sports-lib';
-import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
+import { resolveCompatibleActivityType } from '@shared/activity-type-compatibility';
 import { DataStartPosition } from '@sports-alliance/sports-lib';
 import { DataPositionInterface } from '@sports-alliance/sports-lib';
 import { DataJumpEvent } from '@sports-alliance/sports-lib';
@@ -42,7 +42,7 @@ import {
 } from '../../services/map/mapbox-layers-control.service';
 import { Search } from '../event-search/event-search.component';
 import { MyTracksTripDetectionService } from '../../services/my-tracks-trip-detection.service';
-import { TripDetectionInput } from '../../services/my-tracks-trip-detection.service';
+import { TripDetectionInput, projectTripDetectionInput } from '../../services/my-tracks-trip-detection.service';
 import { DetectedTrip } from '../../services/my-tracks-trip-detection.service';
 import { DetectedHomeArea } from '../../services/my-tracks-trip-detection.service';
 import {
@@ -621,12 +621,15 @@ export class TracksComponent implements OnInit, OnDestroy {
     user: AppUserInterface,
     where: { fieldPath: string | any, opStr: WhereFilterOp, value: any }[],
     promiseTime: number
-  ): Promise<any[]> {
+  ): Promise<TripDetectionInput[]> {
     const events = await firstValueFrom(
-      this.eventService.getEventsOnceBy(user, where, 'startDate', true, 0, { preferCache: false })
+      this.eventService.getEventDocumentsOnceBy(user, where, 'startDate', true, 0)
     );
     this.logger.log(`[TracksComponent] Home inference event query returned ${events?.length || 0} events for promiseTime: ${promiseTime}`);
-    return events || [];
+    return (events || []).flatMap(document => {
+      const input = projectTripDetectionInput(document);
+      return input ? [input] : [];
+    });
   }
 
   private async loadTracksMapForUserByDateRange(
@@ -1596,13 +1599,7 @@ export class TracksComponent implements OnInit, OnDestroy {
       return null;
     }
 
-    const resolvedActivityType = ActivityTypesHelper.resolveActivityType(candidate);
-    if (resolvedActivityType) {
-      return resolvedActivityType;
-    }
-
-    const enumActivityType = Object.values(ActivityTypes).find((activityType) => activityType === candidate);
-    return typeof enumActivityType === 'string' ? enumActivityType as ActivityTypes : null;
+    return resolveCompatibleActivityType(candidate);
   }
 
   private matchesRequestedActivityTypes(
@@ -2146,7 +2143,7 @@ export class TracksComponent implements OnInit, OnDestroy {
       promiseTime,
     );
 
-    return this.collectTripDetectionInputsFromEvents(historyEvents);
+    return historyEvents;
   }
 
   private collectTripDetectionInputsFromEvents(events: any[]): TripDetectionInput[] {

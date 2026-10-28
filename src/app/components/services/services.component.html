@@ -3,15 +3,132 @@
     <main class="settings-content services-content">
         <header class="services-page-header">
           <h1>Connections</h1>
-          <p>MCP access is free. Provider connections, imports, and sync are available with Pro.</p>
+          <p>{{ hasProAccess ? 'Manage provider connections, imports and sync. MCP access is free.' : 'Choose a provider to see what Pro adds. MCP access is free.' }}</p>
         </header>
 
+        @if (hasProAccess) { <ng-container *ngTemplateOutlet="providerDataFlow"></ng-container> }
+
+
+        <nav mat-tab-nav-bar class="provider-selector" [tabPanel]="providerPanel" [mat-stretch-tabs]="false" aria-label="Connection categories">
+          @for (section of serviceSectionOptions; track section.id) {
+          <a mat-tab-link [active]="activeSection === section.id"
+            [href]="section.href"
+            [attr.aria-label]="section.label + (!hasProAccess ? (section.requiresPro ? ', Pro feature' : ', Free') : '')"
+            (click)="onProviderTabClick($event, section.id)">
+            <span class="provider-selector__option">
+              <span class="provider-selector__name">{{ section.label }}</span>
+              @if (!hasProAccess) {
+              <mat-chip-set class="provider-selector__entitlement" aria-hidden="true"><mat-chip disableRipple [highlighted]="section.requiresPro">{{ section.requiresPro ? 'PRO' : 'FREE' }}</mat-chip></mat-chip-set>
+              }
+              @if (section.providerId; as providerId) {
+                @if (serviceConnectionState[providerId]) {
+                <span class="provider-selector__connection-state"><span class="provider-selector__connection-dot"></span>Connected</span>
+                }
+              }
+            </span>
+          </a>
+          }
+        </nav>
+        <mat-tab-nav-panel #providerPanel>
+        <section
+          class="services-workspace-main"
+          [class.services-workspace-main--mcp]="activeSection === 'mcp'">
+          @if (activeSection !== 'mcp') {
+          <section
+            class="service-detail"
+            [hidden]="activeSection !== 'garmin'"
+            aria-label="Garmin Connect">
+            <app-services-garmin
+              [user]="user"
+              [hasProAccess]="hasProAccess"
+              [proOffer]="proOffer()"
+              [isAdmin]="isAdmin"
+              [showAdvancedTools]="false"
+              (connectionStateChanged)="setServiceConnectionState('garmin', $event)">
+            </app-services-garmin>
+            <ng-container
+              *ngTemplateOutlet="automaticSyncSummary; context: { $implicit: 'garmin' }">
+            </ng-container>
+            <ng-container
+              *ngTemplateOutlet="serviceOverview; context: { $implicit: 'garmin' }">
+            </ng-container>
+          </section>
+
+          <section
+            class="service-detail"
+            [hidden]="activeSection !== 'suunto'"
+            aria-label="Suunto App">
+            <app-services-suunto
+              [user]="user"
+              [hasProAccess]="hasProAccess"
+              [proOffer]="proOffer()"
+              [showAdvancedTools]="false"
+              (connectionStateChanged)="setServiceConnectionState('suunto', $event)">
+            </app-services-suunto>
+            <ng-container
+              *ngTemplateOutlet="automaticSyncSummary; context: { $implicit: 'suunto' }">
+            </ng-container>
+            <ng-container
+              *ngTemplateOutlet="serviceOverview; context: { $implicit: 'suunto' }">
+            </ng-container>
+          </section>
+
+          <section
+            class="service-detail"
+            [hidden]="activeSection !== 'coros'"
+            aria-label="COROS">
+            <app-services-coros
+              [user]="user"
+              [hasProAccess]="hasProAccess"
+              [proOffer]="proOffer()"
+              [showAdvancedTools]="false"
+              (connectionStateChanged)="setServiceConnectionState('coros', $event)">
+            </app-services-coros>
+            <ng-container
+              *ngTemplateOutlet="automaticSyncSummary; context: { $implicit: 'coros' }">
+            </ng-container>
+            <ng-container
+              *ngTemplateOutlet="serviceOverview; context: { $implicit: 'coros' }">
+            </ng-container>
+          </section>
+          <section
+            class="service-detail"
+            [hidden]="activeSection !== 'wahoo'"
+            aria-label="Wahoo">
+            <app-services-wahoo
+              [user]="user"
+              [hasProAccess]="hasProAccess"
+              [proOffer]="proOffer()"
+              [showAdvancedTools]="false"
+              (connectionStateChanged)="setServiceConnectionState('wahoo', $event)">
+            </app-services-wahoo>
+            <ng-container
+              *ngTemplateOutlet="automaticSyncSummary; context: { $implicit: 'wahoo' }">
+            </ng-container>
+            <ng-container
+              *ngTemplateOutlet="serviceOverview; context: { $implicit: 'wahoo' }">
+            </ng-container>
+          </section>
+          }
+          <section
+            class="service-detail service-detail--mcp"
+            [hidden]="activeSection !== 'mcp'"
+            aria-label="MCP">
+            @if (activeSection === 'mcp') {
+              <app-mcp-connections></app-mcp-connections>
+            }
+          </section>
+        </section>
+
+        </mat-tab-nav-panel>
+        @if (!hasProAccess) { <ng-container *ngTemplateOutlet="providerDataFlow"></ng-container> }
+        <ng-template #providerDataFlow>
         <mat-expansion-panel
           class="service-data-flow"
           [hidden]="activeSection === 'mcp'"
           [expanded]="isDataFlowExpanded"
-          (opened)="isDataFlowExpanded = true"
-          (closed)="isDataFlowExpanded = false">
+          (opened)="onDataFlowToggle(true)"
+          (closed)="onDataFlowToggle(false)">
           <mat-expansion-panel-header collapsedHeight="64px" expandedHeight="64px">
             <mat-panel-title class="service-data-flow__panel-title">
               <mat-icon aria-hidden="true">account_tree</mat-icon>
@@ -57,7 +174,7 @@
             } @else {
             <p class="service-data-flow__intro">
               <mat-icon aria-hidden="true">download</mat-icon>
-              Connected services import new activities into Quantified Self. Each matrix route is delivered through Quantified Self; select a path to open its source settings.
+              Choose how activities and routes in Quantified Self are sent to your other services. Select a path to enable automatic delivery or send saved data now.
             </p>
             <app-provider-data-flow-matrix
               [rows]="dataFlowSummary.matrixRows"
@@ -66,161 +183,7 @@
             }
           </div>
         </mat-expansion-panel>
-
-        <mat-button-toggle-group
-          class="provider-selector provider-selector--desktop"
-          [value]="activeSection"
-          hideSingleSelectionIndicator
-          aria-label="Connection categories"
-          (change)="selectService($event.value)">
-          @for (section of serviceSectionOptions; track section.id) {
-          <mat-button-toggle
-            [value]="section.id"
-            [aria-label]="section.label + (!hasProAccess ? (section.requiresPro ? ', Pro feature' : ', Free') : '')">
-            <span class="provider-selector__option">
-              @if (section.serviceName; as serviceName) {
-                <app-service-source-icon
-                  [sourceServiceName]="serviceName"
-                  [iconWidth]="72"
-                  [iconHeight]="24"
-                  [showTooltip]="false">
-                </app-service-source-icon>
-              } @else {
-                <span class="provider-selector__mcp-brand" aria-hidden="true">
-                  <mat-icon>devices</mat-icon>
-                  <span>MCP</span>
-                </span>
-              }
-              <span class="provider-selector__name">{{ section.label }}</span>
-              @if (!hasProAccess) {
-              <mat-chip-set class="provider-selector__entitlement" aria-hidden="true">
-                <mat-chip disableRipple [highlighted]="section.requiresPro">
-                  {{ section.requiresPro ? 'PRO' : 'FREE' }}
-                </mat-chip>
-              </mat-chip-set>
-              }
-              @if (section.providerId; as providerId) {
-                @if (serviceConnectionState[providerId]) {
-                  <span class="provider-selector__connection-state">
-                    <span class="provider-selector__connection-dot"></span>
-                    Connected
-                  </span>
-                }
-              }
-            </span>
-          </mat-button-toggle>
-          }
-        </mat-button-toggle-group>
-
-        <mat-button-toggle-group
-          class="provider-selector provider-selector--mobile"
-          [value]="activeSection"
-          hideSingleSelectionIndicator
-          aria-label="Connection categories"
-          (change)="selectService($event.value)">
-          @for (section of serviceSectionOptions; track section.id) {
-          <mat-button-toggle
-            [value]="section.id"
-            [aria-label]="section.label + (!hasProAccess ? (section.requiresPro ? ', Pro feature' : ', Free') : '')">
-            <span class="provider-selector__mobile-option">
-              <span>{{ section.label }}</span>
-              @if (!hasProAccess) {
-              <mat-chip-set class="provider-selector__entitlement" aria-hidden="true">
-                <mat-chip disableRipple [highlighted]="section.requiresPro">
-                  {{ section.requiresPro ? 'PRO' : 'FREE' }}
-                </mat-chip>
-              </mat-chip-set>
-              }
-            </span>
-          </mat-button-toggle>
-          }
-        </mat-button-toggle-group>
-
-        <section
-          class="services-workspace-main"
-          [class.services-workspace-main--mcp]="activeSection === 'mcp'">
-          @if (activeSection !== 'mcp') {
-          <section
-            class="service-detail"
-            [hidden]="activeSection !== 'garmin'"
-            aria-label="Garmin Connect">
-            <app-services-garmin
-              [user]="user"
-              [hasProAccess]="hasProAccess"
-              [isAdmin]="isAdmin"
-              [showAdvancedTools]="false"
-              (connectionStateChanged)="setServiceConnectionState('garmin', $event)">
-            </app-services-garmin>
-            <ng-container
-              *ngTemplateOutlet="automaticSyncSummary; context: { $implicit: 'garmin' }">
-            </ng-container>
-            <ng-container
-              *ngTemplateOutlet="serviceOverview; context: { $implicit: 'garmin' }">
-            </ng-container>
-          </section>
-
-          <section
-            class="service-detail"
-            [hidden]="activeSection !== 'suunto'"
-            aria-label="Suunto App">
-            <app-services-suunto
-              [user]="user"
-              [hasProAccess]="hasProAccess"
-              [showAdvancedTools]="false"
-              (connectionStateChanged)="setServiceConnectionState('suunto', $event)">
-            </app-services-suunto>
-            <ng-container
-              *ngTemplateOutlet="automaticSyncSummary; context: { $implicit: 'suunto' }">
-            </ng-container>
-            <ng-container
-              *ngTemplateOutlet="serviceOverview; context: { $implicit: 'suunto' }">
-            </ng-container>
-          </section>
-
-          <section
-            class="service-detail"
-            [hidden]="activeSection !== 'coros'"
-            aria-label="COROS">
-            <app-services-coros
-              [user]="user"
-              [hasProAccess]="hasProAccess"
-              [showAdvancedTools]="false"
-              (connectionStateChanged)="setServiceConnectionState('coros', $event)">
-            </app-services-coros>
-            <ng-container
-              *ngTemplateOutlet="automaticSyncSummary; context: { $implicit: 'coros' }">
-            </ng-container>
-            <ng-container
-              *ngTemplateOutlet="serviceOverview; context: { $implicit: 'coros' }">
-            </ng-container>
-          </section>
-          <section
-            class="service-detail"
-            [hidden]="activeSection !== 'wahoo'"
-            aria-label="Wahoo">
-            <app-services-wahoo
-              [user]="user"
-              [hasProAccess]="hasProAccess"
-              [showAdvancedTools]="false"
-              (connectionStateChanged)="setServiceConnectionState('wahoo', $event)">
-            </app-services-wahoo>
-            <ng-container
-              *ngTemplateOutlet="automaticSyncSummary; context: { $implicit: 'wahoo' }">
-            </ng-container>
-            <ng-container
-              *ngTemplateOutlet="serviceOverview; context: { $implicit: 'wahoo' }">
-            </ng-container>
-          </section>
-          }
-          <section
-            class="service-detail service-detail--mcp"
-            [hidden]="activeSection !== 'mcp'"
-            aria-label="MCP">
-            @if (activeSection === 'mcp') {
-              <app-mcp-connections></app-mcp-connections>
-            }
-          </section>
-        </section>
+        </ng-template>
 
         <ng-template #automaticSyncSummary let-section>
           <mat-card appearance="outlined" class="service-sync-summary qs-card-plain" [attr.aria-label]="serviceLabelBySection[section] + ' automatic sync'">
@@ -276,10 +239,6 @@
                 <div class="service-overview-card__copy">
                   <h2>{{ card.title }}</h2>
                   <p>{{ card.description }}</p>
-                  <span class="service-overview-card__detail">
-                    <mat-icon>check_circle</mat-icon>
-                    {{ card.detail }}
-                  </span>
                 </div>
                 <button
                   mat-stroked-button
@@ -312,6 +271,14 @@
     </button>
   </div>
   <mat-dialog-content class="service-tools-dialog__content qs-scrollbar">
+    @if (managedTool === 'historical-send') {
+      <app-historical-activity-send
+        [user]="user"
+        [destinationServiceName]="serviceNameByProviderSection[service]"
+        [destinationConnected]="serviceConnectionState[service]"
+        [hasProAccess]="hasProAccess">
+      </app-historical-activity-send>
+    } @else {
     @switch (service) {
       @case ('garmin') {
       <app-services-garmin
@@ -362,6 +329,7 @@
         (connectionStateChanged)="setServiceConnectionState('wahoo', $event)">
       </app-services-wahoo>
       }
+    }
     }
   </mat-dialog-content>
   }

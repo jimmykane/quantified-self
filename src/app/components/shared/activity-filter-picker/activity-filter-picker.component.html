@@ -1,0 +1,58 @@
+@if (compact()) {
+  <button mat-icon-button type="button" class="activity-picker-compact-trigger" [class.is-active]="selectedValues().length > 0"
+    [disabled]="disabled()" aria-haspopup="dialog" [attr.aria-label]="accessibleTriggerLabel()" [attr.aria-expanded]="pickerOpen()"
+    [attr.aria-controls]="pickerOpen() ? dialogId : null" (click)="openPicker()"><mat-icon>filter_list</mat-icon></button>
+} @else {
+<mat-form-field class="activity-picker-field" appearance="outline" subscriptSizing="dynamic" (click)="openPicker()">
+  <mat-label>{{ label() }}</mat-label>
+  <input matInput readonly [disabled]="disabled()" role="combobox" aria-haspopup="dialog" [attr.aria-label]="label()"
+    [attr.aria-expanded]="pickerOpen()" [attr.aria-controls]="pickerOpen() ? dialogId : null" [value]="summary()"
+    [matTooltip]="selectedLabels()" [matTooltipDisabled]="selectedValues().length < 2"
+    (keydown.enter)="openPicker($event)" (keydown.space)="openPicker($event)" (keydown.arrowdown)="openPicker($event)">
+  <mat-icon matIconSuffix>expand_more</mat-icon>
+  @if (hint()) { <mat-hint>{{ hint() }}</mat-hint> }
+</mat-form-field>
+}
+
+<ng-template #picker>
+  <h2 mat-dialog-title>{{ label() }}</h2>
+  <mat-dialog-content class="activity-picker-content">
+    <div class="activity-picker-body">
+      <mat-form-field class="activity-picker-search" appearance="outline" subscriptSizing="dynamic">
+        <mat-label>{{ searchLabel() }}</mat-label>
+        <input #searchInput matInput [attr.aria-label]="searchLabel()" [value]="search()" (input)="search.set($any($event.target).value)" autocomplete="off">
+        @if (search()) {
+          <button mat-icon-button matIconSuffix type="button" aria-label="Clear search" (click)="clearSearch(searchInput)"><mat-icon>close</mat-icon></button>
+        } @else { <mat-icon matIconSuffix>search</mat-icon> }
+      </mat-form-field>
+      <div class="activity-picker-summary">
+        <span>{{ selectedValues().length ? selectedValues().length + ' selected' : allLabel() }}</span>
+        <button mat-button type="button" [disabled]="disabled() || !canClear()" (click)="clearSelection()">Clear selection</button>
+      </div>
+      @if (visibleShortcuts().length) {
+        <div class="activity-picker-shortcuts" aria-label="Sport families" role="group">
+          @for (shortcut of visibleShortcuts(); track shortcut.label) {
+            <mat-checkbox [checked]="shortcut.selected" [indeterminate]="shortcut.partial" [disabled]="disabled() || shortcut.disabled"
+              (change)="toggleShortcut(shortcut, $event.checked)">{{ shortcut.label }}</mat-checkbox>
+          }
+        </div>
+        <mat-divider></mat-divider>
+      }
+      @if (loading()) { <p role="status">Loading choices…</p> }
+      <mat-selection-list [multiple]="true" [aria-label]="label()" (selectionChange)="changeSelection($event)">
+        @for (option of visibleOptions(); track option.value) {
+          <mat-list-option class="activity-picker-option" [value]="option.value" [selected]="option.selected" [disabled]="disabled() || option.disabled" [attr.aria-label]="option.label"
+            [attr.aria-describedby]="option.description ? dialogId + '-option-description-' + $index : null">
+            @if (option.activityType) {
+              <app-activity-type-icon matListItemIcon [activityType]="option.activityType" size="20px"></app-activity-type-icon>
+            } @else if (option.icon) { <mat-icon matListItemIcon>{{ option.icon }}</mat-icon> }
+            <span matListItemTitle class="activity-picker-option-label">{{ option.label }}</span>
+            @if (option.description) { <span matListItemLine class="activity-picker-option-label" [id]="dialogId + '-option-description-' + $index">{{ option.description }}</span> }
+          </mat-list-option>
+        }
+      </mat-selection-list>
+      @if (!visibleOptions().length && !loading()) { <p role="status">No matching {{ label().toLowerCase() }}.</p> }
+    </div>
+  </mat-dialog-content>
+  <mat-dialog-actions align="end"><button mat-button type="button" (click)="closePicker()">Done</button></mat-dialog-actions>
+</ng-template>

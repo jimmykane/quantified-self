@@ -405,6 +405,8 @@ export type HealthSyncStatus = typeof HEALTH_SYNC_STATUSES[keyof typeof HEALTH_S
 export interface HealthSyncState {
   provider: HealthProvider;
   status: HealthSyncStatus;
+  /** A failed attempt still has automatic retries; absent keeps the legacy failure display. */
+  retryPending?: boolean;
   lastWebhookAtMs?: number | null;
   lastPollAtMs?: number | null;
   lastSyncedAtMs?: number | null;
@@ -445,6 +447,8 @@ export interface NormalizedHealthRangeQuery extends HealthRangeQuery {
 export interface HealthObservation {
   id: string;
   sourceRecordId: string;
+  /** Monotonic source revision used by owner-scoped optimistic mutations. */
+  sourceRevisionOrder: number;
   provider: HealthProvider;
   accountKey: string;
   calendarDate: string;

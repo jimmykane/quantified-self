@@ -1,14 +1,38 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { TestBed } from '@angular/core/testing';
 import { BenchmarkReportComponent } from './benchmark-report.component';
 import { BenchmarkResult } from '@shared/app-event.interface';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { CommonModule } from '@angular/common';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatIconModule } from '@angular/material/icon';
 import { BenchmarkReviewService } from '../../services/benchmark-review.service';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
+import { SimpleChange } from '@angular/core';
+import {
+    EventImporterJSON, ActivityTypes, DataRRRMSSD, DataRRCoverage, DataRRArtifactPercentage,
+    DataRRArtifactCount, DataRRSDNN, DataRRPNN50, DataRRDFAAlpha1Median,
+    DataRRSuspectedEctopicPairCount, DataDistance, DistanceUnits,
+    type ActivityInterface, type DataInterface, type EventInterface,
+} from '@sports-alliance/sports-lib';
+import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
+
+function rrRecording(id: string, stats: DataInterface[] = []): ActivityInterface {
+    const activity = EventImporterJSON.getActivityFromJSON({
+        name: '', startDate: 0, endDate: 10000, type: ActivityTypes.Running,
+        creator: { name: id, devices: [] }, stats: {}, streams: [], laps: [], events: [], intensityZones: [],
+    });
+    activity.setID(id);
+    activity.addStat(new DataDistance(1000));
+    stats.forEach(stat => activity.addStat(stat));
+    return activity;
+}
+
+function rrEvent(activities: ActivityInterface[]): EventInterface {
+    return { getActivities: () => activities } as EventInterface;
+}
 
 describe('BenchmarkReportComponent', () => {
     let component: BenchmarkReportComponent;
-    let fixture: ComponentFixture<BenchmarkReportComponent>;
 
     const createMockResult = (cep50: number, correlation: number): BenchmarkResult => ({
         referenceId: 'ref-id',
@@ -35,7 +59,7 @@ describe('BenchmarkReportComponent', () => {
         await TestBed.configureTestingModule({
             declarations: [BenchmarkReportComponent],
             imports: [
-                MatIconModule
+                CommonModule, MatTooltipModule, MatIconModule
             ],
             providers: [
                 {
@@ -55,12 +79,52 @@ describe('BenchmarkReportComponent', () => {
             ]
         }).compileComponents();
 
-        fixture = TestBed.createComponent(BenchmarkReportComponent);
-        component = fixture.componentInstance;
+        component = TestBed.runInInjectionContext(() => new BenchmarkReportComponent());
+    });
+
+    it.each([true, false])('renders GPS availability and the regeneration notice (missing GPS: %s)', missingGps => {
+        const fixture = TestBed.createComponent(BenchmarkReportComponent);
+        const report = { ...createMockResult(1, 0.99), requiresRegeneration: true, activityLinksResolved: false };
+        if (missingGps) report.metrics.gnss = null;
+        fixture.componentRef.setInput('result', report);
+        fixture.detectChanges();
+        const element: HTMLElement = fixture.nativeElement;
+        expect(element.textContent).toContain('Regeneration required');
+        expect(element.textContent).toContain('Choose the reference and test recordings again');
+        expect(element.textContent?.includes('No shared GPS data')).toBe(missingGps);
+        expect(!!element.querySelector('.gnss-card')).toBe(!missingGps);
     });
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('excludes unavailable GPS from grades and insights', () => {
+        component.result = createMockResult(0, 0.85);
+        component.result.metrics.gnss = null;
+        expect(component.getGnssGrade()).toBe('unavailable');
+        expect(component.getOverallGrade()).toBe('poor');
+        expect(component.getInsights()).toContainEqual({ label: 'No shared GPS data', grade: 'unavailable' });
+        expect(component.getInsights().some(insight => insight.label.includes('GNSS accuracy'))).toBe(false);
+    });
+
+    it('excludes undefined correlation and handles an entirely ungraded report', () => {
+        component.result = createMockResult(0, 0.99);
+        component.result.metrics.gnss = null;
+        component.result.metrics.streamMetrics.HeartRate.pearsonCorrelation = null;
+        expect(component.getOverallGrade()).toBe('unavailable');
+        expect(component.getStreamGrades()).toEqual([]);
+        expect(component.getCorrelationLabel(null)).toBe('Correlation unavailable');
+        expect(component.getInsights()).toEqual([{ label: 'No shared GPS data', grade: 'unavailable' }]);
+    });
+
+    it('marks historical reports for regeneration and skips current-stat differences', () => {
+        component.result = { ...createMockResult(0, 1), requiresRegeneration: true, activityLinksResolved: false };
+        component.diffChips = [{ label: 'Distance', hasDiff: true, absPercent: 0 }];
+        component.ngOnChanges({ result: { currentValue: component.result, previousValue: null, firstChange: true, isFirstChange: () => true } });
+        expect(component.getOverallGrade()).toBe('unavailable');
+        expect(component.getVerdictTitle()).toBe('Regeneration required');
+        expect(component.diffChips).toEqual([]);
     });
 
     describe('Grade Calculations', () => {
@@ -174,5 +238,89 @@ describe('BenchmarkReportComponent', () => {
             { key: 'overall', label: 'Overall', value: 'Excellent agreement' },
         ]);
         expect(component.reviewerSummaryGrade).toBe('excellent');
+    });
+
+    describe('R–R and HRV report section', () => {
+        it.each([false, true])('renders the selected pair, quality context and neutral differences in the exportable report (imperial: %s)', imperial => {
+            const reference = rrRecording('ref-id', [
+                new DataRRCoverage(100), new DataRRArtifactPercentage(0), new DataRRArtifactCount(0),
+                new DataRRSuspectedEctopicPairCount(0), new DataRRRMSSD(20), new DataRRSDNN(30),
+                new DataRRPNN50(10), new DataRRDFAAlpha1Median(.62),
+            ]);
+            const test = rrRecording('test-id', [new DataRRRMSSD(30)]);
+            const unrelated = rrRecording('other-id', [new DataRRRMSSD(999)]);
+            const fixture = TestBed.createComponent(BenchmarkReportComponent);
+            fixture.componentRef.setInput('result', { ...createMockResult(1, .99), referenceName: 'Strap', testName: 'Watch' });
+            fixture.componentRef.setInput('event', rrEvent([test, unrelated, reference]));
+            fixture.componentRef.setInput('unitSettings', {
+                ...getDefaultUserUnitSettings(), distanceUnits: imperial ? DistanceUnits.Miles : DistanceUnits.Kilometers,
+            });
+            fixture.detectChanges();
+            const root: HTMLElement = fixture.nativeElement;
+            const section = root.querySelector('.benchmark-container .rr-summary-card');
+            expect(section?.textContent).toContain('R–R & HRV');
+            expect(section?.textContent).toContain('excluded from the agreement grade');
+            expect(section?.textContent).toContain('Strap'); expect(section?.textContent).toContain('Watch');
+            expect(section?.textContent).toContain('0 flagged intervals');
+            expect(section?.querySelectorAll('tbody tr')).toHaveLength(7);
+            const row = Array.from(section!.querySelectorAll('tbody tr')).find(element => element.textContent?.includes('RMSSD'))!;
+            expect(Array.from(row.querySelectorAll('.rr-recording-value')).map(element => element.textContent?.trim()))
+                .toEqual(['20.0 ms', '30.0 ms']);
+            expect(row.textContent).toContain('10.0 ms'); expect(row.textContent).toContain('40.0%');
+            expect(section?.textContent).not.toContain('999');
+            expect(root.querySelector('.rr-table-region')?.getAttribute('tabindex')).toBe('0');
+        });
+
+        it('keeps recorded zero visible when the other recording has no HRV and excludes R–R from agreement chips', () => {
+            component.result = createMockResult(1, .99);
+            component.event = rrEvent([
+                rrRecording('ref-id', [new DataRRRMSSD(0)]), rrRecording('test-id'),
+            ]);
+            component.unitSettings = getDefaultUserUnitSettings();
+            component.ngOnChanges({ result: new SimpleChange(null, component.result, true) });
+            expect(component.rrRows).toHaveLength(1);
+            expect(component.rrRows[0].cells).toEqual([{ display: '0.0 ms', detail: null }, { display: null, detail: null }]);
+            expect(component.rrRows[0].difference).toBeNull();
+            expect(component.diffChips.some(chip => /RMSSD|R–R|R-R/.test(chip.label))).toBe(false);
+            expect(component.getOverallGrade()).toBe('excellent');
+        });
+
+        it('does not use HRV differences to change the hardware agreement grade', () => {
+            component.result = createMockResult(1, .99);
+            component.event = rrEvent([
+                rrRecording('ref-id', [new DataRRRMSSD(1)]), rrRecording('test-id', [new DataRRRMSSD(100)]),
+            ]);
+            component.unitSettings = getDefaultUserUnitSettings();
+            component.ngOnChanges({ result: new SimpleChange(null, component.result, true) });
+            expect(component.rrRows[0].difference?.percent).toBeGreaterThan(190);
+            expect(component.diffChips.some(chip => /RMSSD|R–R|R-R/.test(chip.label))).toBe(false);
+            expect(component.getOverallGrade()).toBe('excellent');
+        });
+
+        it.each([
+            'missing-stats', 'missing-participant', 'duplicate-participant', 'same-participant', 'stale', 'unresolved-links', 'missing-event',
+        ])('omits the section when the report cannot safely show saved R–R values: %s', scenario => {
+            component.result = createMockResult(1, .99);
+            const reference = rrRecording('ref-id', scenario === 'missing-stats' ? [] : [new DataRRRMSSD(20)]);
+            const test = rrRecording(scenario === 'missing-participant' ? 'other-id' : 'test-id');
+            component.event = rrEvent(scenario === 'duplicate-participant' ? [reference, reference, test] : [reference, test]);
+            if (scenario === 'same-participant') component.result.testId = component.result.referenceId;
+            if (scenario === 'stale') component.result.requiresRegeneration = true;
+            if (scenario === 'unresolved-links') component.result.activityLinksResolved = false;
+            if (scenario === 'missing-event') component.event = undefined;
+            component.ngOnChanges({ result: new SimpleChange(null, component.result, true) });
+            expect(component.rrRows).toEqual([]);
+        });
+
+        it('clears previous recording values when the report changes to an unmatched pair', () => {
+            component.result = createMockResult(1, .99);
+            component.event = rrEvent([rrRecording('ref-id', [new DataRRRMSSD(20)]), rrRecording('test-id')]);
+            component.ngOnChanges({ result: new SimpleChange(null, component.result, true) });
+            expect(component.rrRows).toHaveLength(1);
+            const previous = component.result;
+            component.result = { ...previous, testId: 'unknown-test' };
+            component.ngOnChanges({ result: new SimpleChange(previous, component.result, false) });
+            expect(component.rrRows).toEqual([]);
+        });
     });
 });

@@ -1,5 +1,10 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { MCP_WORKOUT_REFLECTION_TOOLS } from './workout-reflections.schemas';
+import { analyzeWorkoutStructureV1 } from '../../../shared/planned-workout-analysis';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { TRAINING_READ_EXTENSION_TOOLS, TRAINING_READ_TOOLS, TRAINING_WRITE_TOOLS, TRAINING_WRITE_EXTENSION_TOOLS,
+  type TrainingReadTool } from './training-plans.schemas';
+import { calculateReadinessScore as calculateCurrentReadinessScore, resolveReadinessConfidence } from '../../../shared/readiness';
+import { Client, InMemoryTransport, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -20,12 +25,16 @@ import {
   MCP_ACTIVITY_CHART_METRICS,
 } from './activity-chart.service';
 import { McpDataError } from './data.service';
+import { getMcpHealthCatalog } from './health.service';
 import {
   MCP_DERIVED_PAYLOAD_SCHEMAS,
   MCP_TRAINING_METRIC_SCHEMA_VERSION,
 } from './derived-output-schemas';
 import { MCP_OAUTH_SCOPES } from './oauth.service';
 import { createMcpServer } from './server';
+import { createMcpTransportHandler } from './transport';
+import { MCP_CONTENT_WRITE_TOOLS } from './content-write.schemas';
+import { MCP_MANUAL_MEASUREMENT_TOOLS, type McpManualMeasurementTool } from './manual-measurements.schemas';
 import {
   createMcpOutputSchemaRegistry,
   PUBLIC_MCP_TOOL_NAMES,
@@ -435,6 +444,122 @@ const derivedPayloadFixtures = {
   },
 } as const satisfies Record<DerivedMetricKind, unknown>;
 
+
+const trainingReadFixtures = {
+ get_workout_prescription_analysis: { source: 'scheduled', reference: 'opaque-workout-reference', revision: 1,
+   scheduleRevision: 1, libraryRevision: null, sport: ActivityTypes.Running,
+   analysis: analyzeWorkoutStructureV1({ version: 1, sport: ActivityTypes.Running, nodes: [
+     { kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'manual' }, targets: [] }] }),
+   displaySummary: 'Duration unknown' },
+ list_saved_workouts: { libraryRevision: 1, scanComplete: true, recordsScanned: 1, nextCursor: null,
+   workouts: [{ savedWorkoutRef: 'opaque-saved-workout-reference', title: 'Easy run', status: 'active',
+     revision: 1, createdAtMs: 1, updatedAtMs: 1 }] },
+ get_saved_workout_v2: { libraryRevision: 1, savedWorkout: { savedWorkoutRef: 'opaque-saved-workout-reference',
+   title: 'Lap option', status: 'active', revision: 1, createdAtMs: 1, updatedAtMs: 1,
+   structure: { version: 1, sport: ActivityTypes.Running,
+     nodes: [{ kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'time', seconds: 1800, allowEarlyLap: false }, targets: [] }] } } },
+ get_planned_workout_v3: { scheduleRevision: 1, workout: { workoutRef: 'opaque-workout-reference', planRef: null,
+   title: 'Lap option', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1,
+   structure: { version: 1, sport: ActivityTypes.Swimming, poolLength: { meters: 25, presentation: 'meters' },
+     nodes: [{ kind: 'repeat', id: 'repeat', count: 2, steps: [{ kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'distance', meters: 400.125, allowEarlyLap: true }, targets: [] }] }] },
+   displaySteps: [{ nodeId: 'repeat', text: 'Repeat 2 times' }] } },
+ get_saved_workout: { libraryRevision: 1, savedWorkout: { savedWorkoutRef: 'opaque-saved-workout-reference',
+   title: 'Easy run', status: 'active', revision: 1, createdAtMs: 1, updatedAtMs: 1,
+   structure: { version: 1, sport: ActivityTypes.Running,
+     nodes: [{ kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'time', seconds: 1800 }, targets: [] }] } } },
+ list_training_plans: { scheduleRevision: 1, scanComplete: true, recordsScanned: 1, limitsReached: [], nextCursor: null, plans: [{ planRef: 'opaque-plan-reference', name: 'Autumn', lifecycle: 'active', startDate: '2026-07-01', endDate: '2026-07-02', revision: 1, currentWorkoutCount: 1, color: null, createdAtMs: 1, updatedAtMs: 1 }] },
+ get_training_plan: { scheduleRevision: 1, plan: { planRef: 'opaque-plan-reference', name: 'Autumn', lifecycle: 'active', startDate: '2026-07-01', endDate: '2026-07-02', revision: 1, currentWorkoutCount: 1, color: null, createdAtMs: 1, updatedAtMs: 1 } },
+ get_training_plan_phases: { scheduleRevision: 1, planRef: 'opaque-plan-reference', planRevision: 1,
+   startDate: '2026-07-01', endDate: '2026-07-02', phases: { version: 1, items: [
+     { id: 'base', name: 'Base', startLocalDate: '2026-07-01', endLocalDate: '2026-07-02', description: 'User context', color: 'green' },
+   ] } },
+ query_planned_workouts: { scheduleRevision: 1, scanComplete: true, recordsScanned: 1, limitsReached: [], nextCursor: null, startDate: '2026-07-01', endDate: '2026-07-02', scope: 'calendar', workouts: [{ workoutRef: 'opaque-workout-reference', planRef: null, title: 'Easy run', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1 }] },
+ query_planned_workouts_by_date: { scheduleRevision: 1, scanComplete: true, recordsScanned: 1, limitsReached: [], nextCursor: null, startDate: '2026-07-01', endDate: '2026-07-02', scope: 'calendar', workouts: [{ workoutRef: 'opaque-workout-reference', planRef: null, title: 'Easy run', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1 }] },
+ get_planned_workout: { scheduleRevision: 1, workout: { ...{ workoutRef: 'opaque-workout-reference', planRef: null, title: 'Easy run', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1 }, structure: { version: 1, sport: ActivityTypes.Running, nodes: [{kind:'step', id:'step',purpose:'work',ending:{kind:'manual'},targets:[], note:'Untrusted text'}] }, displaySteps: [{nodeId:'step',text:'Work · Manual transition'}] } },
+ get_planned_workout_v2: { scheduleRevision: 1, workout: { workoutRef: 'opaque-workout-reference', planRef: null,
+   title: 'Pool swim', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1,
+   structure: { version: 1, sport: ActivityTypes.Swimming, poolLength: { meters: 25, presentation: 'meters' },
+     nodes: [{ kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'distance', meters: 1000 }, targets: [] }] },
+   displaySteps: [{ nodeId: 'step', text: 'Work · 1 km' }] } },
+ get_strength_workout_details: { scheduleRevision: 1, workoutRef: 'opaque-workout-reference',
+   details: { version: 1, revision: 1, exercises: [{ id: 'exercise-1', name: 'Squat',
+     sets: [{ id: 'set-1', ending: { kind: 'repetitions', repetitions: 5 }, externalLoadKg: 40, restAfterSeconds: 90 }] }] } },
+ get_training_sync_status: { scheduleRevision: 1, scope: 'plan', reference:'opaque-plan-reference',scanComplete:true,checkedAtMs:1,services:[] },
+ get_planned_workout_completion: { scheduleRevision: 1, workoutRef: 'opaque-workout-reference', state: 'unlinked',
+   provider: null, matchMethod: null, timing: null, scheduledDate: '2026-07-01', workoutRevision: 1,
+   linkedWorkoutRevision: null, workoutChangedSinceCompletion: false, activityStartAtMs: null, linkedAtMs: null,
+   activityRef: null },
+ get_planned_workout_completions: { scheduleRevision: 1, completions: [{ workoutRef: 'opaque-workout-reference', state: 'unlinked',
+   provider: null, matchMethod: null, timing: null, scheduledDate: '2026-07-01', workoutRevision: 1,
+   linkedWorkoutRevision: null, workoutChangedSinceCompletion: false, activityStartAtMs: null, linkedAtMs: null,
+   activityRef: null }] },
+ assess_planned_workout_compatibility: { scheduleRevision: 1, workoutRef: 'opaque-workout-reference', assessments: [{
+   provider: 'garmin', level: 'degraded', issues: [{ severity: 'degraded', code: 'sport_profile_degraded', field: '$.sport',
+     message: 'Garmin receives the exact authored profile through its Cycling family.' }],
+ }] },
+};
+
+const trainingPreviewFixture = { proposalRef: 'opaque-proposal-reference', expiresAtMs: DAY_MS + 60_000,
+  permissionMode: 'schedule' as const, scheduleRevision: 1,
+  summary: 'One Training change requires confirmation.', requiresConfirmation: true as const,
+  changes: [{ index: 0, kind: 'rename-plan', summary: 'Rename the plan.' }], providerPreviews: [] };
+const trainingApplyFixture = { proposalRef: 'opaque-proposal-reference', status: 'applied' as const,
+  scheduleRevision: 2, changes: [{ index: 0, kind: 'rename-plan', status: 'applied' as const,
+    message: 'Renamed the plan.' }], providers: [], createdReferences: [] };
+const garminReplacementFixture = { ...trainingPreviewFixture, permissionMode: 'delivery' as const,
+  summary: 'Review a Garmin replacement. The original may reappear and leave a duplicate.',
+  changes: [{ index: 0, kind: 'garmin-workout-replacement', summary: 'Review Easy run on 2026-09-18.' }],
+  providerPreviews: [{ index: 0, provider: 'garmin', targetType: 'workout', action: 'replace', availability: 'ready',
+    timeZone: 'Europe/Helsinki', eligibleCount: 1, warningCount: 1, summary: 'Queues recovery, not watch receipt.' }] };
+const savedWorkoutApplyFixture = { proposalRef: 'opaque-proposal-reference', status: 'applied' as const,
+  kind: 'create' as const, libraryRevision: 2, scheduleRevision: 1,
+  savedWorkoutRef: 'opaque-saved-workout-reference', workoutRefs: [] };
+const trainingImpactFixture = {
+  schemaVersion: 1 as const,
+  mode: 'session' as const,
+  localDate: null,
+  timeZone: null,
+  status: 'ready' as const,
+  reason: null,
+  model: {
+    basis: 'TSS' as const,
+    ctlTimeConstantDays: 42 as const,
+    atlTimeConstantDays: 7 as const,
+    measuresPhysiologicalAdaptation: false as const,
+  },
+  coverage: {
+    requestedSessionCount: 1,
+    eligibleSessionCount: 1,
+    modeledSessionCount: 1,
+    missingTssSessionCount: 0,
+    excludedSessionCount: 0,
+    benchmarkOrMergeSessionCount: 0,
+    notCompletedSessionCount: 0,
+    unavailableSessionCount: 0,
+  },
+  contribution: {
+    trainingStressScore: 42,
+    fitnessLoadCtlContribution: 1,
+    fatigueLoadAtlContribution: 6,
+    freshnessFormContribution: -5,
+  },
+  sessionRole: 'pushed-above-maintenance' as const,
+  outcomes: [{
+    trainingDay: '2026-07-01',
+    trainingStressScore: 42,
+    previousFitnessLoadCtl: 0,
+    fitnessLoadCtl: 1,
+    fitnessLoadCtlChange: 1,
+    previousFatigueLoadAtl: 0,
+    fatigueLoadAtl: 6,
+    fatigueLoadAtlChange: 6,
+    previousFreshnessForm: 0,
+    freshnessForm: -5,
+    freshnessFormChange: -5,
+    fitnessLoadOutcome: 'raised' as const,
+  }],
+};
+
 function createFixtureDataService(
   options: {
     activityLocation?: boolean;
@@ -443,7 +568,104 @@ function createFixtureDataService(
 ): InjectedDataService {
   const activityLocation = options.activityLocation !== false;
   const routeLocation = options.routeLocation !== false;
-  const service = {
+const service = {
+    workoutReflection: vi.fn(async (tool: string) => tool === 'delete_workout_reflection'
+      ? { activityRef: ACTIVITY_REF, target: 'activity', revision: 2, deleted: true }
+      : { activityRef: ACTIVITY_REF, target: 'activity', revision: 1, present: true,
+          note: 'reported context',
+          ...(tool === 'save_workout_reflection' ? { changed: true } : {}) }),
+    manualMeasurement: vi.fn(async (tool: McpManualMeasurementTool) => {
+      const measurement = { measurementRef: 'opaque-measurement-reference', revision: 1, metricId: 'body_weight',
+        canonicalValue: 80, canonicalUnit: 'kg', displayValue: '80', displayUnit: 'kg', observedAt: '2026-07-01T08:00:00Z',
+        timezoneOffsetSeconds: 10800, diastolic: null, pulse: null, vo2Context: null, vo2Method: null };
+      if (tool === 'list_manual_measurement_types') return { serverTime: '2026-07-01T08:00:00Z', types: [{
+        metricId: 'body_weight', label: 'Body weight', canonicalUnit: 'kg', inputUnits: ['kg', 'lb'],
+        defaultInputUnit: 'kg', requiresDiastolic: false, vo2Contexts: [], vo2Methods: [],
+      }] };
+      if (tool === 'query_manual_measurements') return { measurements: [measurement], nextCursor: null,
+        scanComplete: true, scannedCount: 1, skippedCount: 0 };
+      if (tool === 'delete_manual_measurement') return { deleted: true };
+      return { measurement };
+    }),
+    getHrvPersonalRange: vi.fn().mockResolvedValue({ startTimeMs: 0, endTimeMs: DAY_MS,
+      baselineWindowDays: 60, baselineMinimumObservationDays: 14, currentWindowDays: 7, currentMinimumObservationDays: 3,
+      recordsRead: 1, excludedValues: 0, series: [{ source: 'sleep', provider: 'SuuntoApp', accountNumber: 1,
+        seriesNumber: 1, semanticVariant: 'sleep_session_average_hrv', aggregation: 'average', origin: 'provider_summary',
+        recordingMethod: 'provider_calculated', unit: 'ms', status: 'building_baseline', currentAverage: null,
+        currentAverageDisplay: null, normalRange: null, observationDayCount: 1,
+        readings: [{ date: '1970-01-01', value: 42, display: { value: '42', unit: 'ms' }, status: 'building_baseline', normalRange: null }],
+        rangePoints: [{ timeMs: 0, normalRange: null }, { timeMs: DAY_MS, normalRange: { min: 30, max: 50 } }],
+      }] }),
+    readTrainingPlans: vi.fn(async (input: { tool: TrainingReadTool }) => trainingReadFixtures[input.tool]),
+    previewCreatePlannedWorkout: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewTrainingChanges: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewTrainingPlanPhases: vi.fn().mockResolvedValue({ ...trainingPreviewFixture,
+      phaseReview: { planName: 'Autumn', previousStartDate: '2026-07-01', previousEndDate: '2026-07-02',
+        startDate: '2026-07-01', endDate: '2026-07-02', before: { version: 1, items: [] }, after: { version: 1, items: [] } },
+      changes: [{ index: 0, kind: 'set-plan-phases', summary: 'Replace phases in the selected plan.' }] }),
+    previewGarminWorkoutReplacement: vi.fn().mockResolvedValue(garminReplacementFixture),
+    previewTrainingDeletion: vi.fn().mockResolvedValue({ ...trainingPreviewFixture, permissionMode: 'combined',
+      changes: [{ index: 0, kind: 'delete-workout', summary: 'Delete in QS and request eligible service-copy cleanup. Recorded activities stay.' }] }),
+    previewStrengthWorkoutChange: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewPlannedWorkoutV3Change: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewPlannedWorkoutV3Changes: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewSavedWorkoutV2Change: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewPlannedWorkoutV2Change: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewSavedWorkoutChange: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    applyTrainingChanges: vi.fn().mockResolvedValue(trainingApplyFixture),
+    getTrainingChangeStatus: vi.fn().mockResolvedValue({ proposalRef: trainingApplyFixture.proposalRef,
+      state: 'applied', recordedChangeCount: 1, recordedProviderCount: 0, retryAfterSeconds: null,
+      result: trainingApplyFixture }),
+    applySavedWorkoutChange: vi.fn().mockResolvedValue(savedWorkoutApplyFixture),
+    getActivityDescription: vi.fn().mockResolvedValue({ activityRef: 'opaque-activity-ref', description: 'Easy run. Felt tired.\nKeep this as reported context.' }),
+    queryTimelineNotes: vi.fn().mockResolvedValue({
+      startDate: '2026-07-01', endDate: '2026-07-02',
+      notes: [{ category: 'sickness', title: 'Reported context', details: 'Full text including personal context.',
+        startDate: '2026-06-30', endDate: null, timeZone: 'Europe/Helsinki', effectiveEndDate: '2026-07-02' }],
+      recordsScanned: 1, skippedRecords: 0, scanComplete: true, limitsReached: [], nextCursor: null,
+    }),
+    updateEventTags: vi.fn().mockResolvedValue({
+      activityRef: ACTIVITY_REF, tags: ['Race', 'Reviewed'], changed: true,
+    }),
+    getEventTitle: vi.fn().mockResolvedValue({ activityRef: ACTIVITY_REF, title: 'Morning run' }),
+    updateEventTitle: vi.fn().mockResolvedValue({ activityRef: ACTIVITY_REF, title: 'Evening run', changed: true }),
+    updateEventDescription: vi.fn().mockResolvedValue({ activityRef: ACTIVITY_REF, changed: true }),
+    queryEditableTimelineNotes: vi.fn().mockResolvedValue({
+      startDate: '2026-07-01', endDate: '2026-07-02',
+      notes: [{ noteRef: 'opaque-note-reference', revision: 2, category: 'sickness',
+        title: 'Reported context', details: 'Full text including personal context.',
+        startDate: '2026-06-30', endDate: null, timeZone: 'Europe/Helsinki',
+        showOnCharts: true, color: 'purple', effectiveEndDate: '2026-07-02' }],
+      recordsScanned: 1, skippedRecords: 0, scanComplete: true, limitsReached: [], nextCursor: null,
+    }),
+    createTimelineNote: vi.fn().mockResolvedValue({
+      operation: 'created', noteRef: 'opaque-note-reference', revision: 1,
+      note: { category: 'travel', title: 'Trip', details: null, startDate: '2026-07-01',
+        endDate: '2026-07-02', timeZone: 'Europe/Helsinki', showOnCharts: true, color: 'blue' },
+    }),
+    updateTimelineNote: vi.fn().mockResolvedValue({
+      operation: 'updated', noteRef: 'opaque-note-reference', revision: 3,
+      note: { category: 'travel', title: 'Updated trip', details: 'Personal context', startDate: '2026-07-01',
+        endDate: '2026-07-02', timeZone: 'Europe/Helsinki', showOnCharts: false, color: 'purple' },
+    }),
+    deleteTimelineNote: vi.fn().mockResolvedValue({
+      operation: 'deleted', noteRef: 'opaque-note-reference', deleted: true,
+    }),
+    listHealthMetrics: vi.fn().mockResolvedValue(getMcpHealthCatalog()),
+    queryHealthMetric: vi.fn().mockResolvedValue({
+      metric: getMcpHealthCatalog().metrics.find(metric => metric.id === 'heart_rate'),
+      startDate: '2026-07-01', endDate: '2026-07-02', mode: 'summaries', complete: true,
+      limitsReached: [], recordsRead: 1, chunksRead: 0, samplesRead: 0,
+      excludedValues: 0, sleepReferencesExcluded: 0, revisionMismatches: 0,
+      measurementDays: [], series: [{
+        seriesNumber: 1, provider: 'SuuntoApp', accountNumber: 1,
+        normalizationStatus: 'canonical', unit: 'bpm',
+        aggregation: 'average', semanticVariant: 'daily_average', origin: 'provider_summary',
+        recordingMethod: 'provider_calculated', readingCount: 1, returnedPointCount: 1,
+        downsampled: false, recordedDays: 1, partialDays: 0, unknownDays: 0,
+        points: [{ date: '2026-07-01', timeMs: null, value: 60, display: { value: '60', unit: 'bpm' } }],
+      }],
+    }),
     listMeasurementTypes: vi.fn().mockResolvedValue({
       measurementTypes: [{
         id: 'body_weight',
@@ -603,6 +825,7 @@ function createFixtureDataService(
         payload: derivedPayloadFixtures[metricKind],
       }),
     ),
+    getTrainingImpact: vi.fn().mockResolvedValue(trainingImpactFixture),
     listSleepVitals: vi.fn().mockResolvedValue({
       matchedSessionCount: 1,
       vitals: [{
@@ -894,6 +1117,16 @@ function createFixtureDataService(
       nextCursor: NEXT_CURSOR,
       scanComplete: false,
     }),
+    queryActivitiesWithTags: vi.fn().mockResolvedValue({
+      scannedActivityCount: 1,
+      skippedActivityCount: 0,
+      activities: [{
+        ...activitySummaryRedacted,
+        tags: ['Race', 'Long Run'],
+      }],
+      nextCursor: NEXT_CURSOR,
+      scanComplete: false,
+    }),
     findActivitiesNearLocation: vi.fn().mockResolvedValue({
       location: {
         source: 'coordinates',
@@ -965,6 +1198,12 @@ function createFixtureDataService(
         defaultLocation: MCP_ACTIVITY_CHART_DEFAULT_LOCATION_POINTS,
         maximumLocation: MCP_ACTIVITY_CHART_MAX_LOCATION_POINTS,
       },
+    }),
+    getActivitySamples: vi.fn().mockResolvedValue({
+      activityType: 'Running', sampling: 'all_available', timeUnit: 'seconds', sampleIntervalSeconds: 1,
+      range: {startOffsetSeconds: 0, endOffsetSeconds: 3, totalSampleCount: 3},
+      page: {startOffsetSeconds: 0, endOffsetSeconds: 2, returnedSampleCount: 2},
+      elapsedTimeSeconds: [0, 1], series: [{metric: 'heart_rate', canonicalUnit: 'beats_per_minute', sourceSampleCount: 3, missingSampleCount: 1, values: [120, null]}], nextCursor: 'sample_cursor',
     }),
     getActivityChartData: vi.fn().mockImplementation(async (input: {
       xAxis: 'elapsed_time' | 'distance';
@@ -1100,9 +1339,32 @@ function createFixtureDataService(
       waypointCount: 1,
     }),
   } as unknown as InjectedDataService;
+  service.getCurrentReadiness = vi.fn().mockImplementation(async input => {
+    const legacy = await service.getTodayReadiness(input);
+    const personalRange = { tone: 'positive' as const, reason: 'within_range' as const,
+      observationDayCount: 60, requiredObservationDayCount: 14, currentObservationDayCount: 7,
+      requiredCurrentObservationDayCount: 3, baselineAverage: 45, currentAverage: 41,
+      normalRange: { min: 40, max: 50 }, latestMs: 42, latestAtMs: DAY_MS - 3600000 };
+    const score = calculateCurrentReadinessScore({ form: legacy.drivers.load.form, rampRate: legacy.drivers.load.rampRate,
+      sleepScore: legacy.drivers.sleep.score, hrvPersonalRange: personalRange, overnightHeartRateRatio: legacy.drivers.overnightHeartRate.combinedRatio })!;
+    return { ...legacy, formulaVersion: 4, score: score.score, label: score.score >= 75 ? 'Ready' : score.score >= 55 ? 'Mixed' : 'Recover',
+      availableSignalCount: score.availableSignalCount, availableWeightPercent: score.availableWeight,
+      confidence: resolveReadinessConfidence(score.availableWeight, legacy.baselineEvidenceCount), drivers: { ...legacy.drivers,
+      hrv: { weightPercent: 20, baselineWindowDays: 60, currentWindowDays: 7, personalRange } } };
+  });
+  service.getReadinessHistory = vi.fn().mockResolvedValue({ formulaVersion: 4, dayBoundary: 'UTC',
+    asOfDayMs: DAY_MS, generatedAtMs: DAY_MS, historyDays: 14,
+    points: Array.from({ length: 14 }, (_, index) => ({ dayMs: DAY_MS - (13 - index) * 86400000,
+      score: 50, label: 'Recover', confidence: 'low', availableSignalCount: 1, baselineEvidenceCount: 0, totalSignalCount: 4,
+      form: null, rampRate: null, sleepScore: null, latestSleepAtMs: null, hrvRatio: 1,
+      hrvPersonalRange: { tone: 'positive', reason: 'within_range', observationDayCount: 60,
+        requiredObservationDayCount: 14, currentObservationDayCount: 7, requiredCurrentObservationDayCount: 3,
+        baselineAverage: 41, currentAverage: 41, normalRange: { min: 41, max: 41 }, latestMs: 41,
+        latestAtMs: DAY_MS - (13 - index) * 86400000 },
+      averageHeartRateRatio: null, minimumHeartRateRatio: null, overnightHeartRateRatio: null })) });
   service.getDailyReport = vi.fn().mockImplementation(async input => {
     const [readiness, briefing] = await Promise.all([
-      service.getTodayReadiness(input),
+      service.getCurrentReadiness(input),
       service.getDailyBriefing(input),
     ]);
     return {
@@ -1142,6 +1404,93 @@ const successfulToolArguments: Record<
   PublicMcpToolName,
   Record<string, unknown>
 > = {
+  preview_garmin_workout_replacement: { workoutRef: 'opaque-workout-reference', expectedScheduleRevision: 1, expectedWorkoutRevision: 1 },
+  list_saved_workouts: {},
+  get_saved_workout: { savedWorkoutRef: 'opaque-saved-workout-reference' },
+  get_workout_prescription_analysis: { source: 'scheduled', reference: 'opaque-workout-reference' },
+  list_training_plans: {},
+  get_training_plan: { planRef: 'opaque-plan-reference' },
+  get_training_plan_phases: { planRef: 'opaque-plan-reference' },
+  preview_training_plan_phases: { expectedScheduleRevision: 1, change: { kind: 'set-plan-phases',
+    plan: { ref: 'opaque-plan-reference' }, expectedPlanRevision: 1, phases: { version: 1, items: [] },
+    startDate: '2026-07-01', endDate: '2026-07-02', confirmPlanRangeExtension: false } },
+  query_planned_workouts: { startDate: '2026-07-01', endDate: '2026-07-02' },
+  query_planned_workouts_by_date: { startDate: '2026-07-01', endDate: '2026-07-02' },
+  get_planned_workout: { workoutRef: 'opaque-workout-reference' },
+  get_planned_workout_v3: { workoutRef: 'opaque-workout-reference' },
+  get_saved_workout_v2: { savedWorkoutRef: 'opaque-saved-workout-reference' },
+  get_planned_workout_v2: { workoutRef: 'opaque-workout-reference' },
+  get_strength_workout_details: { workoutRef: 'opaque-workout-reference' },
+  get_training_sync_status: { scope: 'plan', reference: 'opaque-plan-reference' },
+  get_planned_workout_completion: { workoutRef: 'opaque-workout-reference' },
+  get_planned_workout_completions: { workoutRefs: ['opaque-workout-reference'] },
+  assess_planned_workout_compatibility: { workoutRef: 'opaque-workout-reference', providers: ['garmin'] },
+  preview_create_planned_workout: {
+    expectedScheduleRevision: 1,
+    localDate: '2026-07-02',
+    title: 'Easy run',
+    structure: { version: 1, sport: 'Running', nodes: [{
+      kind: 'step', id: 'easy', purpose: 'work', ending: { kind: 'time', seconds: 1800 }, targets: [],
+    }] },
+    delivery: { providers: ['garmin'], timeZone: 'Europe/Helsinki' },
+  },
+  preview_training_changes: { expectedScheduleRevision: 1, changes: [{
+    kind: 'rename-plan', plan: { ref: 'opaque-plan-reference' }, name: 'Autumn build',
+  }] },
+  preview_training_deletion: { expectedScheduleRevision: 1, change: { kind: 'delete-workout',
+    workout: { ref: 'opaque-workout-reference' }, removePastProviderCopies: true } },
+  preview_strength_workout_change: { expectedScheduleRevision: 1, change: {
+    kind: 'create-workout', localKey: 'strength', plan: null, localDate: '2026-07-02', title: 'Strength',
+    strength: { version: 1, exercises: [{ id: 'exercise-1', name: 'Squat', sets: [{ id: 'set-1',
+      ending: { kind: 'repetitions', repetitions: 5 }, externalLoadKg: 40, restAfterSeconds: 90 }] }] },
+  } },
+  preview_planned_workout_v3_change: { expectedScheduleRevision: 1, change: {
+    kind: 'create-workout', localKey: 'early-lap', plan: null, localDate: '2026-07-02', title: 'Lap option',
+    structure: trainingReadFixtures.get_planned_workout_v3.workout.structure } },
+  preview_saved_workout_v2_change: { expectedScheduleRevision: 1, expectedLibraryRevision: 1,
+    change: { kind: 'create', title: 'Lap option', structure: trainingReadFixtures.get_saved_workout_v2.savedWorkout.structure } },
+  preview_planned_workout_v3_changes: { expectedScheduleRevision: 1, changes: [{
+    kind: 'create-workout', localKey: 'early-lap-batch', plan: null, localDate: '2026-07-02', title: 'Lap option',
+    structure: trainingReadFixtures.get_planned_workout_v3.workout.structure }] },
+  preview_planned_workout_v2_change: { expectedScheduleRevision: 1, change: {
+    kind: 'create-workout', localKey: 'pool-swim', plan: null, localDate: '2026-07-02', title: 'Pool swim',
+    structure: { version: 1, sport: 'Swimming', poolLength: { meters: 25, presentation: 'meters' },
+      nodes: [{ kind: 'step', id: 'swim', purpose: 'work', ending: { kind: 'distance', meters: 1000 }, targets: [] }] },
+  } },
+  preview_saved_workout_change: { expectedScheduleRevision: 1, expectedLibraryRevision: 1,
+    change: { kind: 'copy', savedWorkoutRef: 'opaque-saved-workout-reference', expectedRevision: 1 } },
+  apply_training_changes: { proposalRef: 'opaque-proposal-reference', permissionMode: 'schedule' },
+  get_training_change_status: { proposalRef: 'opaque-proposal-reference', permissionMode: 'schedule' },
+  apply_saved_workout_change: { proposalRef: 'opaque-proposal-reference', permissionMode: 'schedule' },
+  get_workout_reflection: { activityRef: ACTIVITY_REF, target: 'activity' },
+  save_workout_reflection: { activityRef: ACTIVITY_REF, target: 'activity', expectedRevision: 0,
+    mutationId: '123e4567-e89b-42d3-a456-426614174000', note: 'reported context' },
+  delete_workout_reflection: { activityRef: ACTIVITY_REF, target: 'activity', expectedRevision: 1,
+    mutationId: '123e4567-e89b-42d3-a456-426614174000' },
+  get_activity_description: { activityRef: 'opaque-activity-ref' },
+  query_timeline_notes: { startDate: '2026-07-01', endDate: '2026-07-02' },
+  update_event_tags: { activityRef: ACTIVITY_REF, expectedTags: ['Race'], tags: ['Race', 'Reviewed'] },
+  get_event_title: { activityRef: ACTIVITY_REF },
+  update_event_title: { activityRef: ACTIVITY_REF, expectedTitle: 'Morning run', title: 'Evening run' },
+  update_event_description: { activityRef: ACTIVITY_REF, expectedDescription: 'Easy run.', description: 'Felt good.' },
+  query_editable_timeline_notes: { startDate: '2026-07-01', endDate: '2026-07-02' },
+  list_manual_measurement_types: {},
+  query_manual_measurements: {},
+  get_manual_measurement: { measurementRef: 'opaque-measurement-reference' },
+  create_manual_measurement: { mutationId: '123e4567-e89b-42d3-a456-426614174000', metricId: 'body_weight',
+    value: 80, unit: 'kg', observedAt: '2026-07-01T08:00:00+03:00' },
+  update_manual_measurement: { measurementRef: 'opaque-measurement-reference', expectedRevision: 1, value: 81, unit: 'kg' },
+  delete_manual_measurement: { measurementRef: 'opaque-measurement-reference', expectedRevision: 1 },
+  create_timeline_note: { mutationId: '123e4567-e89b-42d3-a456-426614174000', category: 'travel',
+    title: 'Trip', startDate: '2026-07-01', endDate: '2026-07-02', timeZone: 'Europe/Helsinki',
+    showOnCharts: true, color: 'blue' },
+  update_timeline_note: { noteRef: 'opaque-note-reference', expectedRevision: 2, category: 'travel',
+    title: 'Updated trip', details: 'Personal context', startDate: '2026-07-01', endDate: '2026-07-02',
+    timeZone: 'Europe/Helsinki', showOnCharts: false, color: 'purple' },
+  delete_timeline_note: { noteRef: 'opaque-note-reference', expectedRevision: 3 },
+  list_health_metrics: {},
+  query_health_metric: { metricId: 'heart_rate', startDate: '2026-07-01', endDate: '2026-07-02' },
+  get_hrv_personal_range: { start: '2026-07-01T00:00:00Z', end: '2026-07-02T00:00:00Z' },
   list_measurement_types: {},
   query_measurements: {
     measurementType: 'body_weight',
@@ -1169,6 +1518,11 @@ const successfulToolArguments: Record<
   get_training_metric: {
     metricKind: DERIVED_METRIC_KINDS.Form,
   },
+  get_training_impact: {
+    mode: 'session',
+    activityRef: ACTIVITY_REF,
+  },
+  prepare_training_metrics: { metricKinds: [DERIVED_METRIC_KINDS.Form] },
   list_sleep_vitals: {
     start: '2026-07-01T00:00:00.000Z',
     end: '2026-07-02T00:00:00.000Z',
@@ -1187,6 +1541,8 @@ const successfulToolArguments: Record<
     end: '2026-07-02T00:00:00.000Z',
     timeZone: 'Europe/Helsinki',
   },
+  get_current_readiness: { timeZone: 'Europe/Helsinki' },
+  get_readiness_history: {},
   get_today_readiness: {
     timeZone: 'Europe/Helsinki',
   },
@@ -1205,6 +1561,12 @@ const successfulToolArguments: Record<
     activityTypes: ['Running'],
     limit: 1,
   },
+  query_activities_with_tags: {
+    activityTypes: ['Running'],
+    tags: ['Race'],
+    tagMatch: 'all',
+    limit: 1,
+  },
   find_activities_near_location: {
     location: coordinate,
   },
@@ -1221,6 +1583,10 @@ const successfulToolArguments: Record<
     activityRef: ACTIVITY_REF,
   },
   list_activity_chart_metrics: {},
+  list_activity_chart_metrics_v2: {},
+  get_activity_samples_v2: {activityRef: ACTIVITY_REF, metrics: ['heart_rate']},
+  get_activity_chart_data_v2: {activityRef: ACTIVITY_REF, metrics: ['heart_rate'], xAxis: 'elapsed_time', includeLocation: true},
+  get_activity_samples: {activityRef: ACTIVITY_REF, metrics: ['heart_rate']},
   get_activity_chart_data: {
     activityRef: ACTIVITY_REF,
     metrics: ['heart_rate'],
@@ -1257,22 +1623,37 @@ const successfulToolArguments: Record<
   },
 };
 
-async function connectFixtureServer(
+type FixtureTransport = 'in-memory' | 'legacy-http' | 'modern-http';
+
+async function connectFixtureServerForTransport(
   dataService: InjectedDataService,
   scopes = Object.values(MCP_OAUTH_SCOPES),
+  mode: FixtureTransport = 'in-memory',
 ) {
-  const [clientTransport, serverTransport] =
-    InMemoryTransport.createLinkedPair();
-  const server = createMcpServer({
+  const factory = () => createMcpServer({
     uid: 'user-1',
     clientId: 'https://client.example/client.json',
     connectionId: 'connection-1',
+    grantId: 'grant-1',
     scopes,
-  }, 'https://quantified-self.io', dataService);
+  }, 'https://quantified-self.io', dataService, async (_uid, metricKinds) => ({
+    status: 'ready', metricKinds, readyMetricKinds: metricKinds, retryAfterSeconds: null,
+  }));
   const client = new Client({
     name: 'output-contract-test-client',
     version: '1.0.0',
-  });
+  }, { versionNegotiation: { mode: mode === 'modern-http' ? { pin: '2026-07-28' } : 'legacy' } });
+  if (mode !== 'in-memory') {
+    const server = createMcpTransportHandler(factory, error => { throw error; });
+    const transport = new StreamableHTTPClientTransport(new URL('https://contract.example/mcp'), {
+      fetch: (url, init) => server.fetch(new Request(url, init)),
+    });
+    await client.connect(transport);
+    expect(client.getNegotiatedProtocolVersion()).toBe(mode === 'modern-http' ? '2026-07-28' : '2025-11-25');
+    return { client, server };
+  }
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const server = factory();
   await server.connect(serverTransport);
   await client.connect(clientTransport);
   return { client, server };
@@ -1323,10 +1704,14 @@ function collectObjectSchemas(
   return schemas;
 }
 
-describe('MCP public output contracts', () => {
+describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MCP public output contracts (%s)', mode => {
+  const connectFixtureServer = (
+    dataService: InjectedDataService,
+    scopes = Object.values(MCP_OAUTH_SCOPES),
+  ) => connectFixtureServerForTransport(dataService, scopes, mode);
   const connections: Array<{
     client: Client;
-    server: ReturnType<typeof createMcpServer>;
+    server: { close(): Promise<void> };
   }> = [];
 
   afterEach(async () => {
@@ -1334,6 +1719,8 @@ describe('MCP public output contracts', () => {
       await client.close();
       await server.close();
     }));
+    // Schema-heavy in-memory cases can otherwise starve worker result messages.
+    await new Promise<void>(resolve => setImmediate(resolve));
   });
 
   it('keeps public tools and derived payload schemas mechanically exhaustive', () => {
@@ -1652,6 +2039,10 @@ describe('MCP public output contracts', () => {
       uid: 'user-1',
       timeZone: 'Europe/Helsinki',
     });
+    const current = await createFixtureDataService().getCurrentReadiness({ uid: 'user-1', timeZone: 'Europe/Helsinki' });
+    expect(registry.get_current_readiness.safeParse({ ...current, drivers: { ...current.drivers,
+      hrv: { ...current.drivers.hrv, personalRange: { ...current.drivers.hrv.personalRange,
+        latestAtMs: current.asOfTimeMs - 8 * 86400000 } } } }).success).toBe(false);
 
     expect(registry.get_today_readiness.safeParse({
       ...fixture,
@@ -1691,7 +2082,66 @@ describe('MCP public output contracts', () => {
       [...PUBLIC_MCP_TOOL_NAMES].sort(),
     );
     expect(tools.every(tool => Boolean(tool.outputSchema))).toBe(true);
-    expect(Buffer.byteLength(JSON.stringify(tools), 'utf8'))
+    const healthTools = tools.filter(tool => ['list_health_metrics', 'query_health_metric', 'get_hrv_personal_range'].includes(tool.name));
+    const noteTools = tools.filter(tool => ['query_timeline_notes', 'get_activity_description'].includes(tool.name));
+    const reflectionTools = tools.filter(tool => (MCP_WORKOUT_REFLECTION_TOOLS as readonly string[]).includes(tool.name));
+    expect(Buffer.byteLength(JSON.stringify(reflectionTools), 'utf8')).toBeLessThan(12 * 1024);
+    const contentWriteTools = tools.filter(tool => (MCP_CONTENT_WRITE_TOOLS as readonly string[]).includes(tool.name));
+    expect(Buffer.byteLength(JSON.stringify(noteTools), 'utf8')).toBeLessThan(8 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(contentWriteTools), 'utf8')).toBeLessThan(20 * 1024);
+    // Keep the frozen surface's budget; each additive family has its own explicit bound.
+    const planTools = tools.filter(tool => (TRAINING_READ_TOOLS as readonly string[]).includes(tool.name));
+    const planReadExtensions = planTools.filter(tool => (TRAINING_READ_EXTENSION_TOOLS as readonly string[]).includes(tool.name)
+      && !['get_workout_prescription_analysis', 'get_planned_workout_v2', 'get_planned_workout_v3', 'get_saved_workout_v2'].includes(tool.name) && !['get_training_plan_phases', 'list_saved_workouts', 'get_saved_workout'].includes(tool.name));
+    const analysisTools = planTools.filter(tool => tool.name === 'get_workout_prescription_analysis');
+    expect(Buffer.byteLength(JSON.stringify(analysisTools), 'utf8')).toBeLessThan(24 * 1024);
+    const planReadV2 = planTools.filter(tool => tool.name === 'get_planned_workout_v2');
+    const planLibraryReads = planTools.filter(tool => ['list_saved_workouts', 'get_saved_workout'].includes(tool.name));
+    const planReadCore = planTools.filter(tool => !(TRAINING_READ_EXTENSION_TOOLS as readonly string[]).includes(tool.name));
+    expect(Buffer.byteLength(JSON.stringify(planReadCore), 'utf8')).toBeLessThan(32 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(planReadExtensions), 'utf8')).toBeLessThan(12 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(planReadV2), 'utf8')).toBeLessThan(20 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(planLibraryReads), 'utf8')).toBeLessThan(20 * 1024);
+    const planWriteTools = tools.filter(tool => (TRAINING_WRITE_TOOLS as readonly string[]).includes(tool.name));
+    const planWriteExtensions = planWriteTools.filter(tool => (TRAINING_WRITE_EXTENSION_TOOLS as readonly string[]).includes(tool.name)
+      && tool.name !== 'preview_planned_workout_v2_change' && tool.name !== 'preview_saved_workout_change'
+      && !['preview_training_plan_phases', 'preview_training_deletion', 'preview_garmin_workout_replacement', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes', 'preview_saved_workout_v2_change'].includes(tool.name));
+    const planDeletionPreview = planWriteTools.filter(tool => tool.name === 'preview_training_deletion');
+    const planWriteV2 = planWriteTools.filter(tool => tool.name === 'preview_planned_workout_v2_change');
+    const planWriteLibrary = planWriteTools.filter(tool => tool.name === 'preview_saved_workout_change');
+    const planWriteCore = planWriteTools.filter(tool => !(TRAINING_WRITE_EXTENSION_TOOLS as readonly string[]).includes(tool.name));
+    expect(Buffer.byteLength(JSON.stringify(planWriteCore), 'utf8')).toBeLessThan(48 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(planWriteExtensions), 'utf8')).toBeLessThan(12 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(planDeletionPreview), 'utf8')).toBeLessThan(6 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => tool.name === 'preview_garmin_workout_replacement')), 'utf8')).toBeLessThan(6 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(planWriteV2), 'utf8')).toBeLessThan(20 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(planWriteLibrary), 'utf8')).toBeLessThan(24 * 1024);
+    for (const name of ['get_training_plan_phases', 'preview_training_plan_phases', 'get_planned_workout_v3', 'get_saved_workout_v2', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes', 'preview_saved_workout_v2_change']) {
+      expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => tool.name === name)), 'utf8')).toBeLessThan(24 * 1024);
+    }
+    const applyTrainingChangesTool = tools.find(tool => tool.name === 'apply_training_changes');
+    expect(applyTrainingChangesTool?.title).toBe('Apply previewed Training changes');
+    expect(applyTrainingChangesTool?.annotations).toEqual({
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    });
+    const enduranceTools = tools.filter(tool => ['list_activity_chart_metrics_v2', 'get_activity_chart_data_v2', 'get_activity_samples_v2'].includes(tool.name));
+    expect(Buffer.byteLength(JSON.stringify(enduranceTools), 'utf8')).toBeLessThan(24 * 1024);
+    const sampleTools = tools.filter(tool => tool.name === 'get_activity_samples');
+    const trainingImpactTools = tools.filter(tool => tool.name === 'get_training_impact');
+    const readinessTools = tools.filter(tool => ['get_current_readiness', 'get_readiness_history', 'get_daily_report'].includes(tool.name));
+    expect(Buffer.byteLength(JSON.stringify(readinessTools), 'utf8')).toBeLessThan(32 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(sampleTools), 'utf8')).toBeLessThan(12 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(trainingImpactTools), 'utf8')).toBeLessThan(16 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(healthTools), 'utf8')).toBeLessThan(24 * 1024);
+    const manualTools = tools.filter(tool => (MCP_MANUAL_MEASUREMENT_TOOLS as readonly string[]).includes(tool.name));
+    expect(Buffer.byteLength(JSON.stringify(manualTools), 'utf8')).toBeLessThan(24 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => !planTools.includes(tool) && !planWriteTools.includes(tool)
+      && !healthTools.includes(tool) && !noteTools.includes(tool) && !sampleTools.includes(tool)
+      && !contentWriteTools.includes(tool) && !reflectionTools.includes(tool) && !readinessTools.includes(tool)
+      && !trainingImpactTools.includes(tool) && !manualTools.includes(tool) && !enduranceTools.includes(tool))), 'utf8'))
       .toBeLessThan(256 * 1024);
     collectObjectSchemas(tools.map(tool => tool.outputSchema))
       .forEach(schema => expect(schema.additionalProperties).toBe(false));
@@ -1736,6 +2186,15 @@ describe('MCP public output contracts', () => {
       payload: derivedPayloadFixtures[DERIVED_METRIC_KINDS.BodyWeightTrend],
     })).toBe(false);
 
+    const healthFixture = await dataService.queryHealthMetric({
+      uid: 'user-1', metricId: 'heart_rate', startDate: '2026-07-01', endDate: '2026-07-02',
+      mode: 'summaries', maxPoints: 200, measurementsAllowed: false,
+    });
+    expect(validators.get('query_health_metric')!({
+      ...healthFixture,
+      metric: getMcpHealthCatalog().metrics.find(metric => metric.id === 'body_fat'),
+    })).toBe(false); // Body composition must not expose otherwise-valid source series.
+
     for (const toolName of PUBLIC_MCP_TOOL_NAMES) {
       const result = await connection.client.callTool({
         name: toolName,
@@ -1762,6 +2221,16 @@ describe('MCP public output contracts', () => {
         limit: 1,
       }),
     );
+    expect(dataService.queryActivitiesWithTags).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startTimeMs: undefined,
+        endTimeMs: undefined,
+        activityTypes: ['Running'],
+        tags: ['Race'],
+        tagMatch: 'all',
+        limit: 1,
+      }),
+    );
     await connection.client.callTool({
       name: 'list_activities',
       arguments: {
@@ -1784,6 +2253,7 @@ describe('MCP public output contracts', () => {
         activityTypes: ['Running'],
         search: 'ridge',
       }),
+      undefined, // External calls never receive an internal Assistant family.
     );
 
     const distanceChart = await connection.client.callTool({
@@ -1814,6 +2284,976 @@ describe('MCP public output contracts', () => {
       ).toBe(true);
     }
   }, 30_000);
+
+  it('rejects private Health ordering fields and arbitrary categorical values at the output boundary', async () => {
+    const dataService = createFixtureDataService();
+    const fixture = await dataService.queryHealthMetric({
+      uid: 'user-1', metricId: 'heart_rate', startDate: '2026-07-01', endDate: '2026-07-02',
+      mode: 'summaries', maxPoints: 200, measurementsAllowed: false,
+    });
+    const connection = await connectFixtureServer(dataService, [MCP_OAUTH_SCOPES.HealthRead]);
+    connections.push(connection);
+    for (const privatePoint of [
+      { endTimeMs: 1_788_220_800_001 }, { observedAtMs: 1_788_220_800_001 }, { value: 'private-category-canary' },
+    ]) {
+      dataService.queryHealthMetric = vi.fn().mockResolvedValue({
+        ...fixture, series: [{ ...fixture.series[0], points: [{ ...fixture.series[0].points[0], ...privatePoint }] }],
+      });
+      const result = await connection.client.callTool({
+        name: 'query_health_metric', arguments: successfulToolArguments.query_health_metric,
+      });
+      expect(result.isError).toBe(true);
+      expect(result).not.toHaveProperty('structuredContent');
+      expect(JSON.stringify(result)).not.toMatch(/1788220800001|private-category-canary|endTimeMs|observedAtMs/);
+    }
+  });
+
+  it('requires both readiness grants and rejects private current/history evidence on every transport', async () => {
+    for (const scopes of [[], [MCP_OAUTH_SCOPES.MetricsRead], [MCP_OAUTH_SCOPES.SleepRead]]) {
+      const connection = await connectFixtureServer(createFixtureDataService(), scopes);
+      connections.push(connection);
+      const names = (await connection.client.listTools()).tools.map(tool => tool.name);
+      expect(names).not.toContain('get_current_readiness');
+      expect(names).not.toContain('get_readiness_history');
+    }
+    const service = createFixtureDataService();
+    const withoutHealth = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.MetricsRead, MCP_OAUTH_SCOPES.SleepRead]);
+    connections.push(withoutHealth);
+    const names = (await withoutHealth.client.listTools()).tools.map(tool => tool.name);
+    expect(names).toContain('get_current_readiness');
+    expect(names).not.toContain('get_readiness_history');
+    const scopes = [MCP_OAUTH_SCOPES.MetricsRead, MCP_OAUTH_SCOPES.SleepRead, MCP_OAUTH_SCOPES.HealthRead];
+    const connection = await connectFixtureServer(service, scopes);
+    connections.push(connection);
+    const current = await service.getCurrentReadiness({ uid: 'user-1', timeZone: 'Europe/Helsinki' });
+    const history = await service.getReadinessHistory({ uid: 'user-1', scopes });
+    for (const field of ['sourceKey', 'providerUserId', 'rawSamples']) {
+      service.getCurrentReadiness = vi.fn().mockResolvedValue({ ...current, drivers: { ...current.drivers,
+        hrv: { ...current.drivers.hrv, personalRange: { ...current.drivers.hrv.personalRange, [field]: 'private-range-canary' } } } });
+      service.getReadinessHistory = vi.fn().mockResolvedValue({ ...history,
+        points: history.points.map(point => ({ ...point,
+          hrvPersonalRange: { ...point.hrvPersonalRange, [field]: 'private-range-canary' } })) });
+      for (const name of ['get_current_readiness', 'get_readiness_history'] as const) {
+        const result = await connection.client.callTool({ name, arguments: successfulToolArguments[name] });
+        expect(result.isError).toBe(true);
+        expect(result).not.toHaveProperty('structuredContent');
+        expect(JSON.stringify(result)).not.toContain('private-range-canary');
+      }
+    }
+  });
+
+  it('requires both HRV grants and rejects private HRV output on every transport', async () => {
+    for (const scopes of [[], [MCP_OAUTH_SCOPES.HealthRead], [MCP_OAUTH_SCOPES.SleepRead]]) {
+      const connection = await connectFixtureServer(createFixtureDataService(), scopes);
+      connections.push(connection);
+      expect((await connection.client.listTools()).tools.map(tool => tool.name)).not.toContain('get_hrv_personal_range');
+    }
+    const service = createFixtureDataService();
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.SleepRead]);
+    connections.push(connection);
+    await connection.client.callTool({ name: 'get_hrv_personal_range', arguments: {
+      ...successfulToolArguments.get_hrv_personal_range, uid: 'attacker', scopes: [],
+    } });
+    expect(service.getHrvPersonalRange).toHaveBeenCalledWith(expect.objectContaining({ uid: 'user-1',
+      scopes: [MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.SleepRead] }));
+    const fixture = await service.getHrvPersonalRange({ uid: 'user-1', scopes: [], startTimeMs: 0, endTimeMs: DAY_MS });
+    const sharedAccount = { ...fixture, series: [fixture.series[0], { ...fixture.series[0], source: 'health',
+      seriesNumber: 2, semanticVariant: 'overnight_rmssd' }] };
+    service.getHrvPersonalRange = vi.fn().mockResolvedValue(sharedAccount);
+    const matched = await connection.client.callTool({ name: 'get_hrv_personal_range', arguments: successfulToolArguments.get_hrv_personal_range });
+    expect(matched.isError).not.toBe(true);
+    expect(matched.structuredContent).toEqual(sharedAccount);
+    expect(JSON.parse((matched.content[0] as { text: string }).text)).toEqual(sharedAccount);
+    service.getHrvPersonalRange = vi.fn().mockResolvedValue({ ...fixture, series: [] });
+    const empty = await connection.client.callTool({ name: 'get_hrv_personal_range', arguments: successfulToolArguments.get_hrv_personal_range });
+    expect(empty.structuredContent).toMatchObject({ series: [] });
+    service.getHrvPersonalRange = vi.fn().mockResolvedValue({ ...fixture,
+      series: [{ ...fixture.series[0], providerAccountId: 'private-hrv-canary' }] });
+    const nested = await connection.client.callTool({ name: 'get_hrv_personal_range', arguments: successfulToolArguments.get_hrv_personal_range });
+    expect(nested.isError).toBe(true);
+    expect(JSON.stringify(nested)).not.toContain('private-hrv-canary');
+    service.getHrvPersonalRange = vi.fn().mockResolvedValue({ sourceKey: 'private-hrv-canary' });
+    const rejected = await connection.client.callTool({ name: 'get_hrv_personal_range', arguments: successfulToolArguments.get_hrv_personal_range });
+    expect(rejected.isError).toBe(true);
+    expect(rejected).not.toHaveProperty('structuredContent');
+    expect(JSON.stringify(rejected)).not.toContain('private-hrv-canary');
+  });
+
+  it('bounds both serialized copies of private description text on every transport', async () => {
+    const service = createFixtureDataService();
+    const connection = await connectFixtureServer(service, [
+      MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.ActivityDescriptionsRead,
+    ]);
+    connections.push(connection);
+    const args = successfulToolArguments.get_activity_description;
+    for (const description of ['x'.repeat(65_536), '\u0000'.repeat(11_000)]) {
+      const projection = { activityRef: args.activityRef, description };
+      // Both pass the original projection-only byte check, including the escaped-text case.
+      expect(Buffer.byteLength(JSON.stringify(projection), 'utf8')).toBeLessThan(128 * 1024);
+      service.getActivityDescription = vi.fn().mockResolvedValue(projection);
+      const result = await connection.client.callTool({ name: 'get_activity_description', arguments: args });
+      expect(result.isError).toBe(true);
+      expect(result).not.toHaveProperty('structuredContent');
+      expect(JSON.parse((result.content[0] as { text: string }).text)).toMatchObject({ error: 'query_too_large' });
+      expect(Buffer.byteLength(JSON.stringify(result), 'utf8')).toBeLessThan(128 * 1024);
+    }
+    const description = 'private-description-canary\n'.repeat(1_000);
+    service.getActivityDescription = vi.fn().mockResolvedValue({ activityRef: args.activityRef, description });
+    const result = await connection.client.callTool({ name: 'get_activity_description', arguments: args });
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toEqual({ activityRef: args.activityRef, description });
+    expect(JSON.parse((result.content[0] as { text: string }).text)).toEqual(result.structuredContent);
+    expect(Buffer.byteLength(JSON.stringify(result), 'utf8')).toBeLessThan(128 * 1024);
+  });
+
+  it('bounds both sample result copies even when an injected page fits its schema and projection budget', async () => {
+    const service = createFixtureDataService();
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.ActivityDetailsRead]); connections.push(connection);
+    const length = 6000;
+    const projection = {
+      activityType: 'Running', sampling: 'all_available', timeUnit: 'seconds', sampleIntervalSeconds: 1,
+      range: {startOffsetSeconds: 0, endOffsetSeconds: length, totalSampleCount: length},
+      page: {startOffsetSeconds: 0, endOffsetSeconds: length, returnedSampleCount: length},
+      elapsedTimeSeconds: Array.from({length}, (_, i) => i),
+      series: [{metric: 'heart_rate', canonicalUnit: 'beats_per_minute', sourceSampleCount: length, missingSampleCount: 0, values: Array(length).fill((Math.PI * 1e100))}],
+      nextCursor: null,
+    };
+    expect(Buffer.byteLength(JSON.stringify(projection))).toBeLessThan(256 * 1024);
+    service.getActivitySamples = vi.fn().mockResolvedValue(projection);
+    const result = await connection.client.callTool({name: 'get_activity_samples', arguments: successfulToolArguments.get_activity_samples});
+    expect(result.isError).toBe(true); expect(result).not.toHaveProperty('structuredContent');
+    expect(JSON.parse((result.content[0] as {text: string}).text).error).toBe('query_too_large');
+    expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThan(256 * 1024);
+  });
+
+  it('keeps endurance streams additive and rejects provider fields and units outside their dimensions', async () => {
+    const service = createFixtureDataService();
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.ActivityDetailsRead]);
+    connections.push(connection);
+    const registry = createMcpOutputSchemaRegistry({activityLocation: false, routeLocation: false});
+    for (const [metric, canonicalUnit] of [['stamina', 'percent'], ['potential_stamina', 'percent'], ['estimated_sustainable_distance', 'meters']]) {
+      const chart = {activityType: 'Running', xAxis: 'elapsed_time', xAxisUnit: 'seconds', series: [{metric, canonicalUnit, xValues: [0, 4, 8], values: [100, 0, 80], sourceSampleCount: 9, returnedSampleCount: 3, missingSampleCount: 6}]};
+      expect(registry.get_activity_chart_data.safeParse(chart).success).toBe(false);
+      expect(registry.get_activity_chart_data_v2.safeParse(chart).success).toBe(true);
+      expect(registry.get_activity_chart_data_v2.safeParse({...chart, creator: {serialNumber: 'private'}}).success).toBe(false);
+      expect(registry.get_activity_chart_data_v2.safeParse({...chart, series: [{...chart.series[0], canonicalUnit: 'calories'}]}).success).toBe(false);
+      service.getActivityChartData.mockResolvedValueOnce(chart as never);
+      const result = await connection.client.callTool({name: 'get_activity_chart_data_v2', arguments: {activityRef: ACTIVITY_REF, metrics: [metric]}});
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toEqual(chart);
+      const reads = service.getActivityChartData.mock.calls.length;
+      const legacy = await connection.client.callTool({name: 'get_activity_chart_data', arguments: {activityRef: ACTIVITY_REF, metrics: [metric]}});
+      expect(legacy.isError).toBe(true);
+      expect(service.getActivityChartData.mock.calls).toHaveLength(reads);
+    }
+    const denied = await connectFixtureServer(createFixtureDataService(), []);
+    connections.push(denied);
+    const names = (await denied.client.listTools()).tools.map(tool => tool.name);
+    expect(names).not.toContain('get_activity_chart_data_v2');
+    expect(names).not.toContain('get_activity_samples_v2');
+    const location = await connection.client.callTool({name: 'get_activity_chart_data_v2', arguments: {activityRef: ACTIVITY_REF, metrics: ['stamina'], includeLocation: true}});
+    expect(location.isError).toBe(true);
+  });
+
+  it('bounds both serialized copies of tagged activity results', async () => {
+    const service = createFixtureDataService();
+    const connection = await connectFixtureServer(service, [
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+    ]);
+    connections.push(connection);
+    const activity = {
+      ...activitySummaryRedacted,
+      activityRef: 'r'.repeat(512),
+      appUrl: `https://example.com/${'x'.repeat(2_000)}`,
+      tags: Array.from({ length: 10 }, (_, index) => (
+        `${index}`.padEnd(32, 't')
+      )),
+    };
+    service.queryActivitiesWithTags = vi.fn().mockResolvedValue({
+      scannedActivityCount: 100,
+      skippedActivityCount: 0,
+      activities: Array.from({ length: 100 }, () => activity),
+      nextCursor: null,
+      scanComplete: true,
+    });
+
+    const result = await connection.client.callTool({
+      name: 'query_activities_with_tags',
+      arguments: successfulToolArguments.query_activities_with_tags,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result).not.toHaveProperty('structuredContent');
+    expect(JSON.parse((result.content[0] as { text: string }).text))
+      .toMatchObject({ error: 'query_too_large' });
+    expect(Buffer.byteLength(JSON.stringify(result), 'utf8'))
+      .toBeLessThan(256 * 1024);
+  });
+
+  it('uses Activity details alone for samples and rejects private or inconsistent pages on every transport', async () => {
+    const service = createFixtureDataService();
+    for (const scopes of [[], [MCP_OAUTH_SCOPES.MetricsRead], [MCP_OAUTH_SCOPES.ActivityLocationRead]]) {
+      const denied = await connectFixtureServer(service, scopes); connections.push(denied);
+      expect((await denied.client.listTools()).tools.map(tool => tool.name)).not.toContain('get_activity_samples');
+    }
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.ActivityDetailsRead]); connections.push(connection);
+    const args = successfulToolArguments.get_activity_samples;
+    for (const injected of [{uid: 'attacker'}, {scopes: []}, {connectionId: 'attacker'}, {includeLocation: true}]) {
+      const result = await connection.client.callTool({name: 'get_activity_samples', arguments: {...args, ...injected}});
+      expect(result.isError).toBe(true); expect(service.getActivitySamples).not.toHaveBeenCalled();
+    }
+    const fixture = await service.getActivitySamples({uid: 'user-1', connectionId: 'connection-1', scopes: ['activity-details:read'], activityRef: ACTIVITY_REF, metrics: ['heart_rate']});
+    const first = await connection.client.callTool({name: 'get_activity_samples', arguments: args});
+    expect(first.isError).not.toBe(true);
+    expect(service.getActivitySamples).toHaveBeenLastCalledWith({...args, uid: 'user-1', connectionId: 'connection-1', scopes: ['activity-details:read'], startOffsetSeconds: 0, limit: 2000});
+    for (const field of ['eventID', 'name', 'creator', 'sourceKey', 'originalFile', 'latitudeDegrees', 'startTimeMs']) {
+      for (const projection of [{...fixture, [field]: 'private-samples-canary'},
+        {...fixture, series: [{...fixture.series[0], [field]: 'private-samples-canary'}]},
+        {...fixture, page: {...fixture.page, [field]: 'private-samples-canary'}}]) {
+        service.getActivitySamples = vi.fn().mockResolvedValue(projection);
+        const result = await connection.client.callTool({name: 'get_activity_samples', arguments: args});
+        expect(result.isError, field).toBe(true); expect(result).not.toHaveProperty('structuredContent');
+        expect(JSON.stringify(result)).not.toContain('private-samples-canary');
+      }
+    }
+    for (const projection of [
+      {...fixture, elapsedTimeSeconds: [0, 2]}, {...fixture, nextCursor: null},
+      {...fixture, series: [{...fixture.series[0], values: [1]}]},
+      {...fixture, series: [{...fixture.series[0], missingSampleCount: 0}]},
+      {...fixture, series: [{...fixture.series[0], canonicalUnit: 'watts'}]},
+    ]) {
+      service.getActivitySamples = vi.fn().mockResolvedValue(projection);
+      expect((await connection.client.callTool({name: 'get_activity_samples', arguments: args})).isError).toBe(true);
+    }
+    for (const projection of [
+      {...fixture, range: {startOffsetSeconds: 0, endOffsetSeconds: 2, totalSampleCount: 2}, nextCursor: null},
+      {...fixture, range: {startOffsetSeconds: 0, endOffsetSeconds: 0, totalSampleCount: 0}, page: {startOffsetSeconds: 0, endOffsetSeconds: 0, returnedSampleCount: 0}, elapsedTimeSeconds: [], series: [{...fixture.series[0], sourceSampleCount: 0, missingSampleCount: 0, values: []}], nextCursor: null},
+    ]) {
+      service.getActivitySamples = vi.fn().mockResolvedValue(projection);
+      const result = await connection.client.callTool({name: 'get_activity_samples', arguments: args});
+      expect(result.isError).not.toBe(true); expect(result.structuredContent).toEqual(projection);
+    }
+  });
+
+  it('isolates Training read permission from Metrics and Timeline notes permission', async () => {
+    const service = createFixtureDataService();
+    const denied = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.MetricsRead, MCP_OAUTH_SCOPES.TimelineNotesRead]); connections.push(denied);
+    expect((await denied.client.listTools()).tools.map(tool => tool.name).filter(name => (TRAINING_READ_TOOLS as readonly string[]).includes(name))).toEqual([]);
+  });
+
+  // Each tool gets its own timeout budget as the Training read registry grows.
+  // Keep every private-field canary on all three transports.
+  it.each(TRAINING_READ_TOOLS)('rejects injected identity and private output for %s', async tool => {
+    const service = createFixtureDataService();
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.TrainingPlansRead]); connections.push(connection);
+    const injected = await connection.client.callTool({ name: tool, arguments: { ...successfulToolArguments[tool], uid:'attacker' } });
+    expect(injected.isError).toBe(true); expect(service.readTrainingPlans).not.toHaveBeenCalled();
+    for (const field of ['id','owner','destinationKey','approvalDigest','issues','remoteWorkoutId','receipt',
+      'suuntoSwimmingGuide','suuntoSwimmingSettings','suuntoApprovedSwimmingSettings','suuntoMappingSwimmingSettings',
+      'guideMappingVersion','guideFields','fieldAllocation','windowOffset','previousLapPace','previousLapDuration','previousLapStrokes',
+      'suuntoGuideGeneration','suuntoRetiredGuides','suuntoRetiredExternalIds']) {
+      service.readTrainingPlans = vi.fn().mockResolvedValue({ ...trainingReadFixtures[tool], [field]: 'PRIVATE-TRAINING-CANARY' });
+      const result = await connection.client.callTool({ name: tool, arguments: successfulToolArguments[tool] });
+      expect(result.isError).toBe(true); expect(result).not.toHaveProperty('structuredContent');
+      expect(JSON.stringify(result)).not.toContain('PRIVATE-TRAINING-CANARY');
+    }
+  });
+
+  it('rejects private native countdown metadata in planned-workout outputs on every transport', async () => {
+    const service = createFixtureDataService();
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.TrainingPlansRead]); connections.push(connection);
+    for (const tool of ['get_planned_workout', 'get_planned_workout_v2', 'get_planned_workout_v3'] as const) {
+      for (const field of ['alerts', 'countdown']) {
+        service.readTrainingPlans = vi.fn().mockResolvedValue({ ...trainingReadFixtures[tool], [field]: 'PRIVATE-COUNTDOWN-CANARY' });
+        const result = await connection.client.callTool({ name: tool, arguments: successfulToolArguments[tool] });
+        expect(result.isError).toBe(true); expect(result).not.toHaveProperty('structuredContent');
+        expect(JSON.stringify(result)).not.toContain('PRIVATE-COUNTDOWN-CANARY');
+      }
+    }
+  });
+
+  it('accepts private field names within opaque Training status references on every transport', async () => {
+    const proposalRef = 'opaque-uid-accessGeneration-destinationKey-scheduleRequests-leaseUntilMs';
+    const service = createFixtureDataService();
+    const fixture = { proposalRef, state: 'applied' as const, recordedChangeCount: 1, recordedProviderCount: 0,
+      retryAfterSeconds: null, result: { ...trainingApplyFixture, proposalRef,
+        changes: [{ ...trainingApplyFixture.changes[0], kind: 'create-workout', message: 'Created a workout.' }],
+        createdReferences: [{ localKey: 'workout', kind: 'workout' as const, reference: proposalRef }] } };
+    service.getTrainingChangeStatus = vi.fn().mockResolvedValue(fixture);
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.TrainingPlansRead,
+      MCP_OAUTH_SCOPES.TrainingPlansWrite]);
+    connections.push(connection);
+
+    const result = await connection.client.callTool({ name: 'get_training_change_status', arguments: {
+      ...successfulToolArguments.get_training_change_status, proposalRef } });
+
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toEqual(fixture);
+    expect(JSON.parse((result.content[0] as { text: string }).text)).toEqual(fixture);
+    expect(createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false })
+      .get_training_change_status.parse(fixture)).toEqual(fixture);
+    expect(service.applyTrainingChanges).not.toHaveBeenCalled();
+  });
+
+  it('keeps Training status recovery read-only, originally scoped and recursively private on every transport', async () => {
+    const service = createFixtureDataService();
+    const readOnly = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.TrainingPlansRead]);
+    connections.push(readOnly);
+    expect((await readOnly.client.listTools()).tools.map(tool => tool.name)).not.toContain('get_training_change_status');
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.TrainingPlansRead,
+      MCP_OAUTH_SCOPES.TrainingPlansWrite, MCP_OAUTH_SCOPES.TrainingDeliveryWrite]);
+    connections.push(connection);
+    const args = successfulToolArguments.get_training_change_status;
+    const fixture = await service.getTrainingChangeStatus({ uid: 'user-1', connectionId: 'connection-1',
+      scopes: [], arguments: args });
+    const schema = createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false })
+      .get_training_change_status;
+    vi.mocked(service.getTrainingChangeStatus).mockClear();
+    for (const injected of [{ uid: 'attacker' }, { connectionId: 'attacker' }, { scopes: [] }, { resume: true }]) {
+      const result = await connection.client.callTool({ name: 'get_training_change_status', arguments: { ...args, ...injected } });
+      expect(result.isError).toBe(true);
+      expect(service.getTrainingChangeStatus).not.toHaveBeenCalled();
+    }
+    for (const field of ['uid', 'scheduleRequests', 'accessGeneration', 'destinationKey', 'approvalDigest', 'remoteWorkoutId', 'leaseUntilMs',
+      'suuntoSwimmingSettings', 'suuntoApprovedSwimmingSettings', 'suuntoMappingSwimmingSettings',
+      'suuntoGuideGeneration', 'suuntoRetiredGuides', 'suuntoRetiredExternalIds']) {
+      for (const projection of [{ ...fixture, [field]: 'PRIVATE-RECOVERY-CANARY' },
+        { ...fixture, result: { ...fixture.result, [field]: 'PRIVATE-RECOVERY-CANARY' } },
+        { ...fixture, result: { ...fixture.result, changes: [{ ...fixture.result!.changes[0], [field]: 'PRIVATE-RECOVERY-CANARY' }] } },
+        { ...fixture, recordedProviderCount: 1, result: { ...fixture.result, providers: [{ index: 0, provider: 'wahoo', status: 'applied',
+          message: 'Delivery was queued.', [field]: 'PRIVATE-RECOVERY-CANARY' }] } },
+        { ...fixture, result: { ...fixture.result, createdReferences: [{ localKey: 'workout', kind: 'workout',
+          reference: 'opaque-workout-reference', [field]: 'PRIVATE-RECOVERY-CANARY' }] } }]) {
+        const withoutPrivateField = JSON.parse(JSON.stringify(projection),
+          (key: string, value: unknown) => key === field ? undefined : value);
+        expect(schema.safeParse(withoutPrivateField).success, field).toBe(true);
+        service.getTrainingChangeStatus = vi.fn().mockResolvedValue(projection);
+        const result = await connection.client.callTool({ name: 'get_training_change_status', arguments: args });
+        expect(result.isError, field).toBe(true);
+        expect(result).not.toHaveProperty('structuredContent');
+        expect(JSON.stringify(result)).not.toContain('PRIVATE-RECOVERY-CANARY');
+      }
+    }
+    expect(service.applyTrainingChanges).not.toHaveBeenCalled();
+  });
+
+  it('bounds both retained Training result copies without suggesting replacement or pagination', async () => {
+    const service = createFixtureDataService();
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.TrainingPlansRead,
+      MCP_OAUTH_SCOPES.TrainingPlansWrite, MCP_OAUTH_SCOPES.TrainingDeliveryWrite]);
+    connections.push(connection);
+    const result = { ...trainingApplyFixture,
+      changes: Array.from({ length: 25 }, (_, index) => ({ ...trainingApplyFixture.changes[0], index, message: '界'.repeat(500) })),
+      providers: Array.from({ length: 100 }, (_, index) => ({ index: index % 25, provider: 'wahoo',
+        status: 'applied', message: '界'.repeat(500) })),
+    };
+    service.getTrainingChangeStatus = vi.fn().mockResolvedValue({ proposalRef: result.proposalRef, state: 'applied',
+      recordedChangeCount: 25, recordedProviderCount: 100, retryAfterSeconds: null, result });
+    const reply = await connection.client.callTool({ name: 'get_training_change_status',
+      arguments: successfulToolArguments.get_training_change_status });
+    expect(reply.isError).toBe(true);
+    expect(reply).not.toHaveProperty('structuredContent');
+    expect(JSON.parse((reply.content[0] as { text: string }).text)).toMatchObject({ error: 'query_too_large' });
+    expect(JSON.stringify(reply)).toContain('do not create replacement workouts');
+    expect(JSON.stringify(reply)).not.toContain('smaller page');
+    expect(Buffer.byteLength(JSON.stringify(reply))).toBeLessThan(256 * 1024);
+    expect(service.applyTrainingChanges).not.toHaveBeenCalled();
+  });
+
+  it('requires all three deletion grants and rejects private input/output on every transport', async () => {
+    const service = createFixtureDataService();
+    const scopes = [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite,
+      MCP_OAUTH_SCOPES.TrainingDeliveryWrite];
+    const args = successfulToolArguments.preview_training_deletion;
+    for (const missing of scopes) {
+      const denied = await connectFixtureServer(service, scopes.filter(scope => scope !== missing));
+      connections.push(denied);
+      expect((await denied.client.listTools()).tools.map(tool => tool.name)).not.toContain('preview_training_deletion');
+      await expect(denied.client.callTool({ name: 'preview_training_deletion', arguments: args })).rejects.toThrow('not found');
+      expect(service.previewTrainingDeletion).not.toHaveBeenCalled();
+    }
+    const connection = await connectFixtureServer(service, scopes); connections.push(connection);
+    const fixture = await service.previewTrainingDeletion({ uid: 'fixture', connectionId: 'fixture', scopes: [], arguments: args });
+    vi.mocked(service.previewTrainingDeletion).mockClear();
+    for (const injected of [{ uid: 'attacker' }, { scopes: [] }, { connectionId: 'attacker' },
+      { change: { ...(args.change as object), remoteWorkoutId: 'PRIVATE-DELETION-CANARY' } }]) {
+      const result = await connection.client.callTool({ name: 'preview_training_deletion', arguments: { ...args, ...injected } });
+      expect(result.isError).toBe(true);
+      expect(service.previewTrainingDeletion).not.toHaveBeenCalled();
+      expect(JSON.stringify(result)).not.toContain('PRIVATE-DELETION-CANARY');
+    }
+    for (const field of ['uid', 'remoteWorkoutId', 'mutationId', 'receipt', 'destinationKey']) {
+      for (const projection of [{ ...fixture, [field]: 'PRIVATE-DELETION-CANARY' },
+        { ...fixture, changes: [{ ...fixture.changes[0], [field]: 'PRIVATE-DELETION-CANARY' }] }]) {
+        service.previewTrainingDeletion = vi.fn().mockResolvedValue(projection);
+        const result = await connection.client.callTool({ name: 'preview_training_deletion', arguments: args });
+        expect(result.isError, field).toBe(true);
+        expect(result).not.toHaveProperty('structuredContent');
+        expect(JSON.stringify(result)).not.toContain('PRIVATE-DELETION-CANARY');
+      }
+    }
+    expect(service.applyTrainingChanges).not.toHaveBeenCalled();
+  });
+
+  it('keeps replacement behind read/delivery grants, native Apply approval, and private-evidence boundaries', async () => {
+    const service = createFixtureDataService();
+    const args = successfulToolArguments.preview_garmin_workout_replacement;
+    for (const scopes of [[MCP_OAUTH_SCOPES.TrainingPlansRead], [MCP_OAUTH_SCOPES.TrainingDeliveryWrite],
+      [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite]]) {
+      const denied = await connectFixtureServer(service, scopes); connections.push(denied);
+      expect((await denied.client.listTools()).tools.map(tool => tool.name)).not.toContain('preview_garmin_workout_replacement');
+    }
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingDeliveryWrite]);
+    connections.push(connection);
+    const tools = (await connection.client.listTools()).tools;
+    expect(tools.find(tool => tool.name === 'apply_training_changes')?.annotations?.destructiveHint).toBe(true);
+    for (const field of ['uid', 'connectionId', 'workoutId', 'approvalDigest', 'verificationEvidence', 'destinationKey', 'repairJournal']) {
+      vi.mocked(service.previewGarminWorkoutReplacement).mockClear();
+      const invalidInput = await connection.client.callTool({ name: 'preview_garmin_workout_replacement', arguments: { ...args, [field]: 'PRIVATE-REPLACEMENT' } });
+      expect(invalidInput.isError).toBe(true);
+      expect(service.previewGarminWorkoutReplacement).not.toHaveBeenCalled();
+      for (const result of [{ ...garminReplacementFixture, [field]: 'PRIVATE-REPLACEMENT' },
+        { ...garminReplacementFixture, providerPreviews: [{ ...garminReplacementFixture.providerPreviews[0], [field]: 'PRIVATE-REPLACEMENT' }] }]) {
+        service.previewGarminWorkoutReplacement = vi.fn().mockResolvedValue(result);
+        const reply = await connection.client.callTool({ name: 'preview_garmin_workout_replacement', arguments: args });
+        expect(reply.isError).toBe(true);
+        expect(reply).not.toHaveProperty('structuredContent');
+        expect(JSON.stringify(reply)).not.toContain('PRIVATE-REPLACEMENT');
+      }
+    }
+    expect(service.applyTrainingChanges).not.toHaveBeenCalled();
+  });
+
+  it('keeps saved-workout writes behind both grants and rejects private proposal fields on every transport', async () => {
+    const service = createFixtureDataService();
+    const readOnly = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.TrainingPlansRead]);
+    connections.push(readOnly);
+    const readNames = (await readOnly.client.listTools()).tools.map(tool => tool.name);
+    expect(readNames).toContain('get_saved_workout');
+    expect(readNames).not.toContain('preview_saved_workout_change');
+    expect(readNames).not.toContain('apply_saved_workout_change');
+    const connection = await connectFixtureServer(service,
+      [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite]);
+    connections.push(connection);
+    const tools = (await connection.client.listTools()).tools;
+    expect(tools.find(tool => tool.name === 'apply_saved_workout_change')?.annotations)
+      .toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
+    const args = successfulToolArguments.preview_saved_workout_change;
+    const injected = await connection.client.callTool({ name: 'preview_saved_workout_change',
+      arguments: { ...args, uid: 'attacker' } });
+    expect(injected.isError).toBe(true);
+    expect(service.previewSavedWorkoutChange).not.toHaveBeenCalled();
+    for (const field of ['uid', 'remoteWorkoutId', 'mutationId', 'receipt']) {
+      service.previewSavedWorkoutChange = vi.fn().mockResolvedValue({ ...trainingPreviewFixture,
+        [field]: 'PRIVATE-LIBRARY-CANARY' });
+      const preview = await connection.client.callTool({ name: 'preview_saved_workout_change', arguments: args });
+      expect(preview.isError, field).toBe(true);
+      expect(preview).not.toHaveProperty('structuredContent');
+      expect(JSON.stringify(preview)).not.toContain('PRIVATE-LIBRARY-CANARY');
+      service.applySavedWorkoutChange = vi.fn().mockResolvedValue({ ...savedWorkoutApplyFixture,
+        [field]: 'PRIVATE-LIBRARY-CANARY' });
+      const applied = await connection.client.callTool({ name: 'apply_saved_workout_change',
+        arguments: successfulToolArguments.apply_saved_workout_change });
+      expect(applied.isError, field).toBe(true);
+      expect(applied).not.toHaveProperty('structuredContent');
+      expect(JSON.stringify(applied)).not.toContain('PRIVATE-LIBRARY-CANARY');
+    }
+  });
+
+  it('requires metric and activity grants for identity-free Training impact on every transport', async () => {
+    const service = createFixtureDataService();
+    for (const scopes of [
+      [],
+      [MCP_OAUTH_SCOPES.MetricsRead],
+      [MCP_OAUTH_SCOPES.ActivityDetailsRead],
+    ]) {
+      const denied = await connectFixtureServer(service, scopes);
+      connections.push(denied);
+      expect((await denied.client.listTools()).tools.map(tool => tool.name))
+        .not.toContain('get_training_impact');
+    }
+    const connection = await connectFixtureServer(service, [
+      MCP_OAUTH_SCOPES.MetricsRead,
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+    ]);
+    connections.push(connection);
+    expect((await connection.client.listTools()).tools.map(tool => tool.name))
+      .toContain('get_training_impact');
+    const args = successfulToolArguments.get_training_impact;
+    for (const injected of [
+      { uid: 'attacker' },
+      { connectionId: 'attacker' },
+      { activityRefs: [ACTIVITY_REF] },
+      { localDate: '2026-07-01' },
+      { timeZone: 'UTC' },
+    ]) {
+      vi.mocked(service.getTrainingImpact).mockClear();
+      const result = await connection.client.callTool({
+        name: 'get_training_impact',
+        arguments: { ...args, ...injected },
+      });
+      expect(result.isError).toBe(true);
+      expect(service.getTrainingImpact).not.toHaveBeenCalled();
+    }
+
+    const ready = await connection.client.callTool({
+      name: 'get_training_impact',
+      arguments: args,
+    });
+    expect(ready.isError).not.toBe(true);
+    expect(ready.structuredContent).toEqual(trainingImpactFixture);
+    expect(service.getTrainingImpact).toHaveBeenLastCalledWith({
+      ...args,
+      uid: 'user-1',
+      connectionId: 'connection-1',
+    });
+
+    const dayArgs = {
+      mode: 'day' as const,
+      activityRefs: [ACTIVITY_REF, 'opaque-activity-reference-2'],
+      localDate: '2026-07-01',
+      timeZone: 'Europe/Helsinki',
+    };
+    const statusCases = [
+      {
+        args,
+        output: {
+          ...trainingImpactFixture,
+          status: 'updating' as const,
+          reason: 'form_updating' as const,
+          coverage: {
+            ...trainingImpactFixture.coverage,
+            modeledSessionCount: 0,
+            unavailableSessionCount: 1,
+          },
+          contribution: null,
+          sessionRole: null,
+          outcomes: [],
+        },
+      },
+      {
+        args,
+        output: {
+          ...trainingImpactFixture,
+          status: 'unavailable' as const,
+          reason: 'missing_tss' as const,
+          coverage: {
+            ...trainingImpactFixture.coverage,
+            eligibleSessionCount: 0,
+            modeledSessionCount: 0,
+            missingTssSessionCount: 1,
+          },
+          contribution: null,
+          sessionRole: null,
+          outcomes: [],
+        },
+      },
+      {
+        args,
+        output: {
+          ...trainingImpactFixture,
+          status: 'excluded' as const,
+          reason: 'benchmark_or_merge' as const,
+          coverage: {
+            ...trainingImpactFixture.coverage,
+            eligibleSessionCount: 0,
+            modeledSessionCount: 0,
+            excludedSessionCount: 1,
+            benchmarkOrMergeSessionCount: 1,
+          },
+          contribution: null,
+          sessionRole: null,
+          outcomes: [],
+        },
+      },
+      {
+        args,
+        output: {
+          ...trainingImpactFixture,
+          status: 'excluded' as const,
+          reason: 'no_usable_sessions' as const,
+          coverage: {
+            ...trainingImpactFixture.coverage,
+            eligibleSessionCount: 0,
+            modeledSessionCount: 0,
+            excludedSessionCount: 1,
+            benchmarkOrMergeSessionCount: 0,
+            notCompletedSessionCount: 0,
+          },
+          contribution: null,
+          sessionRole: null,
+          outcomes: [],
+        },
+      },
+      {
+        args: dayArgs,
+        output: {
+          ...trainingImpactFixture,
+          mode: 'day' as const,
+          localDate: dayArgs.localDate,
+          timeZone: dayArgs.timeZone,
+          status: 'partial' as const,
+          reason: 'partial_coverage' as const,
+          coverage: {
+            ...trainingImpactFixture.coverage,
+            requestedSessionCount: 2,
+            eligibleSessionCount: 2,
+            unavailableSessionCount: 1,
+          },
+          sessionRole: null,
+        },
+      },
+      {
+        args: dayArgs,
+        output: {
+          ...trainingImpactFixture,
+          mode: 'day' as const,
+          localDate: dayArgs.localDate,
+          timeZone: dayArgs.timeZone,
+          coverage: {
+            ...trainingImpactFixture.coverage,
+            requestedSessionCount: 2,
+            eligibleSessionCount: 2,
+            modeledSessionCount: 2,
+          },
+          sessionRole: null,
+          outcomes: [
+            trainingImpactFixture.outcomes[0],
+            {
+              ...trainingImpactFixture.outcomes[0],
+              trainingDay: '2026-07-02',
+            },
+          ],
+        },
+      },
+    ];
+    for (const statusCase of statusCases) {
+      service.getTrainingImpact = vi.fn().mockResolvedValue(statusCase.output);
+      const result = await connection.client.callTool({
+        name: 'get_training_impact',
+        arguments: statusCase.args,
+      });
+      expect(result.isError, statusCase.output.status).not.toBe(true);
+      expect(result.structuredContent).toEqual(statusCase.output);
+    }
+
+    for (const invalidOutput of [
+      {
+        ...trainingImpactFixture,
+        status: 'updating' as const,
+        reason: 'form_failed' as const,
+        coverage: {
+          ...trainingImpactFixture.coverage,
+          modeledSessionCount: 0,
+          unavailableSessionCount: 1,
+        },
+        contribution: null,
+        sessionRole: null,
+        outcomes: [],
+      },
+      {
+        ...trainingImpactFixture,
+        outcomes: [
+          trainingImpactFixture.outcomes[0],
+          {
+            ...trainingImpactFixture.outcomes[0],
+            trainingDay: '2026-07-02',
+          },
+        ],
+      },
+    ]) {
+      service.getTrainingImpact = vi.fn().mockResolvedValue(invalidOutput);
+      const result = await connection.client.callTool({
+        name: 'get_training_impact',
+        arguments: args,
+      });
+      expect(result.isError).toBe(true);
+      expect(result).not.toHaveProperty('structuredContent');
+    }
+
+    const forbiddenFields = [
+      'eventId',
+      'eventID',
+      'activityId',
+      'activityRef',
+      'title',
+      'label',
+      'provider',
+      'device',
+      'sourceKey',
+      'sourceFingerprint',
+      'source',
+      'filename',
+      'fileName',
+      'connectedAccountId',
+      'providerAccountId',
+      'startTimeMs',
+    ];
+    for (const field of forbiddenFields) {
+      for (const projection of [
+        { ...trainingImpactFixture, [field]: 'PRIVATE-IMPACT-CANARY' },
+        { ...trainingImpactFixture, contribution: {
+          ...trainingImpactFixture.contribution,
+          [field]: 'PRIVATE-IMPACT-CANARY',
+        } },
+        { ...trainingImpactFixture, outcomes: [{
+          ...trainingImpactFixture.outcomes[0],
+          [field]: 'PRIVATE-IMPACT-CANARY',
+        }] },
+        { ...trainingImpactFixture, model: {
+          ...trainingImpactFixture.model,
+          [field]: 'PRIVATE-IMPACT-CANARY',
+        } },
+      ]) {
+        service.getTrainingImpact = vi.fn().mockResolvedValue(projection);
+        const result = await connection.client.callTool({
+          name: 'get_training_impact',
+          arguments: args,
+        });
+        expect(result.isError, field).toBe(true);
+        expect(result).not.toHaveProperty('structuredContent');
+        expect(JSON.stringify(result)).not.toContain('PRIVATE-IMPACT-CANARY');
+      }
+    }
+  });
+
+
+  it('exposes phase tools only with their independent grants and rejects nested leakage on every transport', async () => {
+    const service = createFixtureDataService();
+    const readOnly = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.TrainingPlansRead]); connections.push(readOnly);
+    const names = (await readOnly.client.listTools()).tools.map(tool => tool.name);
+    expect(names).toContain('get_training_plan_phases'); expect(names).not.toContain('preview_training_plan_phases');
+    const connection = await connectFixtureServer(service); connections.push(connection);
+    const fixture = trainingReadFixtures.get_training_plan_phases;
+    for (const field of ['providerId', 'grantId', 'sourceKey', 'recipe', 'completion', 'streams']) {
+      for (const projection of [{ ...fixture, [field]: 'private-phase-canary' }, { ...fixture, phases: { ...fixture.phases,
+        items: [{ ...fixture.phases.items[0], [field]: 'private-phase-canary' }] } }]) {
+        service.readTrainingPlans = vi.fn().mockResolvedValue(projection);
+        const result = await connection.client.callTool({ name: 'get_training_plan_phases', arguments: successfulToolArguments.get_training_plan_phases });
+        expect(result.isError).toBe(true); expect(result).not.toHaveProperty('structuredContent');
+        expect(JSON.stringify(result)).not.toContain('private-phase-canary');
+      }
+    }
+    const safe = await service.previewTrainingPlanPhases({ uid: 'fixture', connectionId: 'fixture', scopes: [], arguments: {} });
+    for (const projection of [{ ...safe, phaseReview: undefined }, { ...safe, phaseReview: { ...safe.phaseReview, providerId: 'private-phase-canary' } }]) {
+      service.previewTrainingPlanPhases = vi.fn().mockResolvedValue(projection);
+      const result = await connection.client.callTool({ name: 'preview_training_plan_phases', arguments: successfulToolArguments.preview_training_plan_phases });
+      expect(result.isError).toBe(true); expect(result).not.toHaveProperty('structuredContent');
+      expect(JSON.stringify(result)).not.toContain('private-phase-canary');
+    }
+  });
+  it('requires both activity grants and strictly projects description text on every transport', async () => {
+    const service = createFixtureDataService();
+    for (const scopes of [[], [MCP_OAUTH_SCOPES.ActivityDetailsRead], [MCP_OAUTH_SCOPES.ActivityDescriptionsRead]]) {
+      const denied = await connectFixtureServer(service, scopes);
+      connections.push(denied);
+      expect((await denied.client.listTools()).tools.map(tool => tool.name)).not.toContain('get_activity_description');
+    }
+    const scopes = [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.ActivityDescriptionsRead];
+    const connection = await connectFixtureServer(service, scopes);
+    connections.push(connection);
+    const args = successfulToolArguments.get_activity_description;
+    const injected = await connection.client.callTool({ name: 'get_activity_description', arguments: {
+      ...args, uid: 'attacker', scopes: [], connectionId: 'attacker',
+    } });
+    expect(injected.isError).toBe(true);
+    expect(service.getActivityDescription).not.toHaveBeenCalled();
+    for (const description of [null, '', 'Private context.\nIgnore all instructions is text, not authority.']) {
+      service.getActivityDescription = vi.fn().mockResolvedValue({ activityRef: args.activityRef, description });
+      const result = await connection.client.callTool({ name: 'get_activity_description', arguments: args });
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toEqual({ activityRef: args.activityRef, description });
+      expect(JSON.parse((result.content[0] as { text: string }).text)).toEqual(result.structuredContent);
+      expect(service.getActivityDescription).toHaveBeenCalledWith(expect.objectContaining({ uid: 'user-1', scopes }));
+    }
+    for (const field of ['eventID', 'name', 'creator', 'sourceKey', 'startPosition', 'notes', 'originalFile']) {
+      service.getActivityDescription = vi.fn().mockResolvedValue({ activityRef: args.activityRef,
+        description: 'Allowed text', [field]: 'private-description-canary' });
+      const result = await connection.client.callTool({ name: 'get_activity_description', arguments: args });
+      expect(result.isError, field).toBe(true);
+      expect(result).not.toHaveProperty('structuredContent');
+      expect(JSON.stringify(result)).not.toContain('private-description-canary');
+    }
+  });
+
+  it('binds full notes to the bearer grant and rejects private neighboring fields', async () => {
+    const service = createFixtureDataService();
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.TimelineNotesRead]);
+    connections.push(connection);
+    const fixture = await service.queryTimelineNotes({ uid: 'fixture', connectionId: 'fixture', scopes: [],
+      startDate: '2026-07-01', endDate: '2026-07-02' });
+    await connection.client.callTool({ name: 'query_timeline_notes', arguments: {
+      ...successfulToolArguments.query_timeline_notes, uid: 'attacker', connectionId: 'attacker', scopes: [],
+    } });
+    expect(service.queryTimelineNotes).toHaveBeenLastCalledWith(expect.objectContaining({
+      uid: 'user-1', scopes: [MCP_OAUTH_SCOPES.TimelineNotesRead], limit: 32,
+    }));
+    for (const field of ['id', 'revision', 'createdAtMs', 'updatedAtMs', 'color', 'showOnCharts', 'receipt', 'providerAccountId']) {
+      service.queryTimelineNotes = vi.fn().mockResolvedValue({ ...fixture,
+        notes: [{ ...fixture.notes[0], [field]: 'private-note-secret' }],
+      });
+      const result = await connection.client.callTool({ name: 'query_timeline_notes', arguments: successfulToolArguments.query_timeline_notes });
+      expect(result.isError, field).toBe(true);
+      expect(result).not.toHaveProperty('structuredContent');
+      expect(JSON.stringify(result)).not.toContain('private-note-secret');
+    }
+    service.queryTimelineNotes = vi.fn().mockResolvedValue({ ...fixture, notes: [], scanComplete: false,
+      recordsScanned: 512, skippedRecords: 512, limitsReached: ['records'], nextCursor: 'opaque-cursor' });
+    const page = await connection.client.callTool({ name: 'query_timeline_notes', arguments: successfulToolArguments.query_timeline_notes });
+    expect(page.isError).not.toBe(true);
+    expect(page.structuredContent).toMatchObject({ scanComplete: false, nextCursor: 'opaque-cursor' });
+  });
+
+  it('isolates reflection grants, native approval annotations and private projections on every transport', async () => {
+    const service = createFixtureDataService();
+    for (const scopes of [[MCP_OAUTH_SCOPES.ActivityDetailsRead], [MCP_OAUTH_SCOPES.WorkoutReflectionsRead],
+      [MCP_OAUTH_SCOPES.WorkoutReflectionsWrite], [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.WorkoutReflectionsRead]]) {
+      const connection = await connectFixtureServer(service, scopes); connections.push(connection);
+      const names = (await connection.client.listTools()).tools.map(tool => tool.name);
+      expect(names).not.toContain('save_workout_reflection'); expect(names).not.toContain('delete_workout_reflection');
+      expect(names.includes('get_workout_reflection')).toBe(scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)
+        && scopes.includes(MCP_OAUTH_SCOPES.WorkoutReflectionsRead));
+    }
+    const scopes = [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.WorkoutReflectionsRead, MCP_OAUTH_SCOPES.WorkoutReflectionsWrite];
+    const connection = await connectFixtureServer(service, scopes); connections.push(connection);
+    const tools = (await connection.client.listTools()).tools;
+    for (const name of MCP_WORKOUT_REFLECTION_TOOLS) {
+      expect(tools.find(tool => tool.name === name)?.annotations).toMatchObject({
+        readOnlyHint: name === 'get_workout_reflection', destructiveHint: name !== 'get_workout_reflection',
+        idempotentHint: true, openWorldHint: false,
+      });
+      const invalid = await connection.client.callTool({ name, arguments: { ...successfulToolArguments[name], uid: 'attacker' } });
+      expect(invalid.isError).toBe(true);
+    }
+    expect(service.workoutReflection).not.toHaveBeenCalled();
+    const valid = await connection.client.callTool({ name: 'save_workout_reflection', arguments: successfulToolArguments.save_workout_reflection });
+    expect(valid.isError).not.toBe(true);
+    expect(service.workoutReflection).toHaveBeenCalledWith('save_workout_reflection', expect.objectContaining({
+      uid: 'user-1', connectionId: 'connection-1', grantId: 'grant-1', scopes,
+    }));
+    const safe = (valid.structuredContent as Record<string, unknown>);
+    service.workoutReflection = vi.fn().mockResolvedValue({ ...safe, providerPayload: 'private-reflection-provenance-canary' });
+    const leaked = await connection.client.callTool({ name: 'save_workout_reflection', arguments: successfulToolArguments.save_workout_reflection });
+    expect(leaked.isError).toBe(true); expect(leaked).not.toHaveProperty('structuredContent');
+    expect(JSON.stringify(leaked)).not.toContain('private-reflection-provenance-canary');
+  });
+
+  it('isolates content-write scopes, annotations, identity and private output on every transport', async () => {
+    const service = createFixtureDataService();
+    for (const scopes of [
+      [MCP_OAUTH_SCOPES.ActivityDetailsRead],
+      [MCP_OAUTH_SCOPES.EventsWrite],
+      [MCP_OAUTH_SCOPES.TimelineNotesRead],
+      [MCP_OAUTH_SCOPES.TimelineNotesWrite],
+    ]) {
+      const denied = await connectFixtureServer(service, scopes);
+      connections.push(denied);
+      const names = (await denied.client.listTools()).tools.map(tool => tool.name);
+      expect(names).not.toContain('update_event_tags');
+      expect(names).not.toContain('get_event_title');
+      expect(names).not.toContain('update_event_title');
+      expect(names).not.toContain('update_event_description');
+      expect(names).not.toContain('query_editable_timeline_notes');
+      expect(names).not.toContain('create_timeline_note');
+    }
+
+    const scopes = [
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+      MCP_OAUTH_SCOPES.EventsWrite,
+      MCP_OAUTH_SCOPES.ActivityDescriptionsRead,
+      MCP_OAUTH_SCOPES.TimelineNotesRead,
+      MCP_OAUTH_SCOPES.TimelineNotesWrite,
+    ];
+    const connection = await connectFixtureServer(service, scopes);
+    connections.push(connection);
+    const tools = (await connection.client.listTools()).tools;
+    expect(tools.find(tool => tool.name === 'query_editable_timeline_notes')?.annotations)
+      .toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+    expect(tools.find(tool => tool.name === 'get_event_title')?.annotations)
+      .toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+    expect(tools.find(tool => tool.name === 'create_timeline_note')?.annotations)
+      .toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+    for (const name of ['update_event_tags', 'update_event_title', 'update_event_description',
+      'update_timeline_note', 'delete_timeline_note']) {
+      expect(tools.find(tool => tool.name === name)?.annotations)
+        .toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
+    }
+
+    const injected = await connection.client.callTool({
+      name: 'update_event_tags',
+      arguments: { ...successfulToolArguments.update_event_tags, uid: 'attacker', connectionId: 'attacker' },
+    });
+    expect(injected.isError).toBe(true);
+    expect(service.updateEventTags).not.toHaveBeenCalled();
+
+    for (const name of ['get_event_title', 'update_event_title', 'update_event_description'] as const) {
+      const rejected = await connection.client.callTool({
+        name, arguments: { ...successfulToolArguments[name], uid: 'attacker' },
+      });
+      expect(rejected.isError).toBe(true);
+    }
+    service.getEventTitle = vi.fn().mockResolvedValue({
+      activityRef: ACTIVITY_REF, title: 'Run', internalEventId: 'private-title-canary',
+    });
+    const titleLeak = await connection.client.callTool({
+      name: 'get_event_title', arguments: successfulToolArguments.get_event_title,
+    });
+    expect(titleLeak.isError).toBe(true);
+    expect(JSON.stringify(titleLeak)).not.toContain('private-title-canary');
+    service.updateEventDescription = vi.fn().mockResolvedValue({
+      activityRef: ACTIVITY_REF, changed: true, description: 'private-description-canary',
+    });
+    const descriptionLeak = await connection.client.callTool({
+      name: 'update_event_description', arguments: successfulToolArguments.update_event_description,
+    });
+    expect(descriptionLeak.isError).toBe(true);
+    expect(JSON.stringify(descriptionLeak)).not.toContain('private-description-canary');
+
+    service.updateEventTags = vi.fn().mockResolvedValue({
+      activityRef: ACTIVITY_REF, tags: ['Race'], changed: true,
+      eventId: 'private-event-canary',
+    });
+    const tagLeak = await connection.client.callTool({
+      name: 'update_event_tags', arguments: successfulToolArguments.update_event_tags,
+    });
+    expect(tagLeak.isError).toBe(true);
+    expect(tagLeak).not.toHaveProperty('structuredContent');
+    expect(JSON.stringify(tagLeak)).not.toContain('private-event-canary');
+    expect(service.updateEventTags).toHaveBeenCalledWith(expect.objectContaining({
+      uid: 'user-1', connectionId: 'connection-1', grantId: 'grant-1', scopes,
+    }));
+
+    const editable = await createFixtureDataService().queryEditableTimelineNotes({
+      uid: 'fixture', connectionId: 'fixture', scopes: [], arguments: {},
+    });
+    service.queryEditableTimelineNotes = vi.fn().mockResolvedValue({
+      ...editable,
+      notes: [{ ...editable.notes[0], remoteArtifactId: 'private-note-canary' }],
+    });
+    const noteLeak = await connection.client.callTool({
+      name: 'query_editable_timeline_notes',
+      arguments: successfulToolArguments.query_editable_timeline_notes,
+    });
+    expect(noteLeak.isError).toBe(true);
+    expect(noteLeak).not.toHaveProperty('structuredContent');
+    expect(JSON.stringify(noteLeak)).not.toContain('private-note-canary');
+  });
+
+  it('binds Health reads to bearer identity and grants rather than client-supplied arguments', async () => {
+    const dataService = createFixtureDataService();
+    const connection = await connectFixtureServer(dataService, [MCP_OAUTH_SCOPES.HealthRead]);
+    connections.push(connection);
+    const result = await connection.client.callTool({
+      name: 'query_health_metric',
+      arguments: { ...successfulToolArguments.query_health_metric, uid: 'private-other-user', measurementsAllowed: true },
+    });
+    expect(result.isError).not.toBe(true);
+    expect(dataService.queryHealthMetric).toHaveBeenCalledWith({
+      uid: 'user-1', metricId: 'heart_rate', startDate: '2026-07-01', endDate: '2026-07-02',
+      mode: 'summaries', maxPoints: 200, measurementsAllowed: false,
+    });
+    expect(JSON.stringify(result)).not.toContain('private-other-user');
+  });
 
   it('covers empty results, terminal pagination, and nullable summaries', () => {
     const registry = createMcpOutputSchemaRegistry({
@@ -1947,6 +3387,8 @@ describe('MCP public output contracts', () => {
       .not.toContain('startPosition');
     expect(JSON.stringify(advertised.query_activities))
       .not.toContain('startPosition');
+    expect(JSON.stringify(advertised.query_activities_with_tags))
+      .not.toContain('startPosition');
     expect(JSON.stringify(advertised.list_activity_jumps))
       .not.toContain('latitudeDegrees');
     expect(JSON.stringify(advertised.list_routes)).not.toContain('bounds');
@@ -1956,6 +3398,7 @@ describe('MCP public output contracts', () => {
     for (const toolName of [
       'list_activities',
       'query_activities',
+      'query_activities_with_tags',
       'list_activity_jumps',
       'get_activity_chart_data',
       'list_routes',
@@ -2094,8 +3537,8 @@ describe('MCP public output contracts', () => {
     const propertyNames = collectPropertyNames(
       tools.map(tool => tool.outputSchema),
     );
-    // `id` is intentionally public only for the measurement-type catalog
-    // (`body_weight`); opaque activity, event, route, and source IDs are not.
+    // `id` is intentionally public for static measurement/Health metric catalogs;
+    // opaque activity, event, route, and source IDs are not.
     expect(propertyNames.has('id')).toBe(true);
     for (const forbidden of [
       'eventId',
@@ -2536,6 +3979,17 @@ describe('MCP public output contracts', () => {
 
   it('fails closed on contract mismatches in every tool family', async () => {
     const mismatchService = createFixtureDataService();
+    const healthFixture = await mismatchService.queryHealthMetric({
+      uid: 'user-1', metricId: 'heart_rate', startDate: '2026-07-01', endDate: '2026-07-02',
+      mode: 'summaries', maxPoints: 200, measurementsAllowed: false,
+    });
+    mismatchService.listHealthMetrics = vi.fn().mockResolvedValue({
+      ...getMcpHealthCatalog(), accountKey: 'health-catalog-secret',
+    });
+    mismatchService.queryHealthMetric = vi.fn().mockResolvedValue({
+      ...healthFixture,
+      series: [{ ...healthFixture.series[0], accountKey: 'health-source-secret' }],
+    });
     const dailyReportFixture = await mismatchService.getDailyReport({
       uid: 'user-1',
       timeZone: 'Europe/Helsinki',
@@ -2675,6 +4129,11 @@ describe('MCP public output contracts', () => {
       nextCursor: null,
       activityId: 'activity-secret',
     });
+    mismatchService.queryActivitiesWithTags = vi.fn().mockResolvedValue({
+      activities: [],
+      nextCursor: null,
+      eventName: 'event-secret',
+    });
     mismatchService.findActivitiesNearLocation = vi.fn().mockResolvedValue({
       activities: [],
       nextCursor: null,
@@ -2694,6 +4153,8 @@ describe('MCP public output contracts', () => {
     connections.push(connection);
 
     for (const toolName of [
+      'list_health_metrics',
+      'query_health_metric',
       'list_measurement_types',
       'list_metrics',
       'list_sleep_sessions',
@@ -2702,6 +4163,7 @@ describe('MCP public output contracts', () => {
       'get_daily_briefing',
       'list_activities',
       'query_activities',
+      'query_activities_with_tags',
       'find_activities_near_location',
       'search_activities_near_location',
       'list_routes',
@@ -2725,6 +4187,8 @@ describe('MCP public output contracts', () => {
       'temporarily_unavailable',
       'This data is temporarily unavailable.',
     );
+    errorService.listHealthMetrics = vi.fn().mockRejectedValue(expectedError());
+    errorService.queryHealthMetric = vi.fn().mockRejectedValue(expectedError());
     errorService.listMeasurementTypes = vi.fn().mockImplementation(
       async () => {
         throw expectedError();
@@ -2745,6 +4209,11 @@ describe('MCP public output contracts', () => {
     errorService.listActivities = vi.fn().mockImplementation(async () => {
       throw expectedError();
     });
+    errorService.queryActivitiesWithTags = vi.fn().mockImplementation(
+      async () => {
+        throw expectedError();
+      },
+    );
     errorService.findActivitiesNearLocation = vi.fn().mockImplementation(
       async () => {
         throw expectedError();
@@ -2762,6 +4231,8 @@ describe('MCP public output contracts', () => {
     connections.push(connection);
 
     for (const toolName of [
+      'list_health_metrics',
+      'query_health_metric',
       'list_measurement_types',
       'list_metrics',
       'list_sleep_sessions',
@@ -2769,6 +4240,7 @@ describe('MCP public output contracts', () => {
       'get_daily_briefing',
       'list_activities',
       'query_activities',
+      'query_activities_with_tags',
       'find_activities_near_location',
       'search_activities_near_location',
       'list_routes',

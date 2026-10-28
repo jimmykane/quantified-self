@@ -1,0 +1,19 @@
+<div class="health-overview-preview" aria-label="Health category overview with sample data">
+  <p class="sample-caption">Sample data · Explore categories and open a reading’s history. Nothing is saved.</p>
+  <app-health-category-overview [hidden]="selectedMetric() !== null" [user]="user()" [groups]="groups" [showSleep]="true"
+    [exampleOnly]="true" [darkTheme]="darkTheme()" [referenceDate]="referenceDate" (metricSelected)="viewHistory($event)" />
+  @if (history(); as view) {
+    <section class="sample-history" aria-labelledby="health-sample-history-title">
+      <button mat-button type="button" (click)="showOverview()"><mat-icon aria-hidden="true">arrow_back</mat-icon>Health overview</button>
+      <h3 id="health-sample-history-title" tabindex="-1">{{ selectedLabel() }} · Sample history</h3>
+      @if (view.selected; as chart) {
+        <p>{{ chart.latestValueText }}</p>
+        <app-health-metric-series-chart [model]="chart.model" [startTimeMs]="view.window.startTimeMs" [endTimeMs]="view.window.endTimeMs"
+          [darkTheme]="darkTheme()" [unitSettings]="unitSettings()" [statusOverlay]="chart.statusOverlay" [statusDescription]="chart.statusDescription" />
+      } @else if (selectedMetric() === 'sleep') {
+        <app-sleep-trend-chart [sleepTrend]="view.sleep" sleepRange="30d" [sleepWindowLabel]="view.window.label"
+          [darkTheme]="darkTheme()" [unitSettings]="unitSettings()" />
+      }
+    </section>
+  }
+</div>
