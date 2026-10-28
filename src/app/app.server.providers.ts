@@ -1,4 +1,6 @@
-import { Injectable, Signal, signal } from '@angular/core';
+import { Injectable, Signal, signal, TransferState, inject } from '@angular/core';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { Observable, of } from 'rxjs';
 import { AppAuthService } from './authentication/app.auth.service';
@@ -10,6 +12,13 @@ import { AppThemeService } from './services/app.theme.service';
 import { AppUserService, type AppUserProfileReadState } from './services/app.user.service';
 import { AppWhatsNewService, type ChangelogPost } from './services/app.whats-new.service';
 import { AppPaymentService, type StripeProduct, type StripeSubscription } from './services/app.payment.service';
+import {
+  parsePublicPricingSnapshot,
+  PUBLIC_PRICING_SNAPSHOT_FILE_PATH,
+  PUBLIC_PRICING_TRANSFER_STATE_KEY,
+} from './services/public-pricing-snapshot';
+import { transformProductsForPricing } from './services/pricing-product-catalog';
+import { PublicPricingCatalogService } from './services/public-pricing-catalog.service';
 
 @Injectable()
 class ServerAuthService {
@@ -152,6 +161,31 @@ class ServerPaymentService {
 }
 
 @Injectable()
+class ServerPublicPricingCatalogService {
+  private readonly transferState = inject(TransferState);
+  private readonly products = transformProductsForPricing(loadPublicPricingProducts());
+
+  getProducts(): Observable<StripeProduct[]> {
+    this.transferState.set(PUBLIC_PRICING_TRANSFER_STATE_KEY, this.products);
+    return of(this.products);
+  }
+}
+
+function loadPublicPricingProducts(): StripeProduct[] {
+  try {
+    const snapshotPath = resolve(process.cwd(), PUBLIC_PRICING_SNAPSHOT_FILE_PATH);
+    const snapshot = parsePublicPricingSnapshot(JSON.parse(readFileSync(snapshotPath, 'utf8')));
+    return snapshot.products;
+  } catch (error) {
+    if (process.env['QS_REQUIRE_PUBLIC_PRICING_SNAPSHOT'] === 'true') {
+      throw new Error('Could not load the required public pricing snapshot for prerendering.', { cause: error });
+    }
+
+    return [];
+  }
+}
+
+@Injectable()
 class ServerAnalyticsService {
   logEvent(): void {
     return undefined;
@@ -194,4 +228,5 @@ export const SERVER_APP_PROVIDERS = [
   { provide: AppThemeService, useClass: ServerThemeService },
   { provide: AppWhatsNewService, useClass: ServerWhatsNewService },
   { provide: AppPaymentService, useClass: ServerPaymentService },
+  { provide: PublicPricingCatalogService, useClass: ServerPublicPricingCatalogService },
 ];

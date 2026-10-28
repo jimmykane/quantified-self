@@ -13,7 +13,7 @@
   },
   "src/app/components/benchmark/benchmark-rr.component.spec.ts": {
     "environment": "angular",
-    "reason": "Compiles the benchmark R–R panel and Material controls in TestBed to verify per-source summary bindings, lazy component-scoped analysis, chart host lifecycle, source changes, linked zoom and single-owner haptics."
+    "reason": "Compiles the benchmark R\u2013R panel and Material controls in TestBed to verify per-source summary bindings, lazy component-scoped analysis, chart host lifecycle, source changes, linked zoom and single-owner haptics."
   },
   "src/app/components/event/laps/event.card.laps.picker.spec.ts": {
     "environment": "angular",
@@ -91,6 +91,10 @@
     "environment": "angular",
     "reason": "Uses TestBed injection context for component-owned services and reactive forms, exercising account changes, lifecycle teardown, saved-policy subscriptions and asynchronous haptic outcomes."
   },
+  "src/app/resolvers/public-pricing-json-ld.resolver.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection to verify the route resolver produces structured pricing data from the injected public catalog service."
+  },
   "src/app/services/activity-ascent.service.spec.ts": {
     "environment": "angular",
     "reason": "Uses TestBed to verify the injected Firebase Auth owner and callable service boundary, including account changes and the exact app-only ascent request."
@@ -105,11 +109,15 @@
   },
   "src/app/services/benchmark-rr-analysis.service.spec.ts": {
     "environment": "angular",
-    "reason": "Exercises worker completion, cancellation, timeout and provider teardown through the browser compatibility service, whose runtime dependency graph imports Angular Material dialog components. Component-scoped injection and destruction are covered in the R–R panel fixture suite."
+    "reason": "Exercises worker completion, cancellation, timeout and provider teardown through the browser compatibility service, whose runtime dependency graph imports Angular Material dialog components. Component-scoped injection and destruction are covered in the R\u2013R panel fixture suite."
   },
   "src/app/services/history-import-progress.service.spec.ts": {
     "environment": "angular",
     "reason": "Uses TestBed injection, toSignal teardown and Angular effects to verify one shared owner subscription, raw sign-out, A/B/A isolation, read-error recovery and expiry timer cleanup."
+  },
+  "src/app/services/public-pricing-catalog.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection to verify the catalog service consumes Angular TransferState without a duplicate Firestore read."
   },
   "src/app/services/recorded-history-start.service.spec.ts": {
     "environment": "angular",

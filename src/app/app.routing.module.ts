@@ -19,7 +19,7 @@ import {
   PUBLIC_GUIDE_PATHS,
 } from './components/public-seo/public-seo-pages.paths';
 import type { PublicSeoPageKey } from './components/public-seo/public-seo-pages.paths';
-import { lazyRouteResolver } from './resolvers/lazy-route.resolver';
+import { lazyPublicPricingJsonLdResolver, lazyRouteResolver } from './resolvers/lazy-route.resolver';
 import { PublicLayoutComponent } from './components/public-layout/public-layout.component';
 import { HOME_SEO_DESCRIPTION, HOME_SEO_JSON_LD } from './shared/home-seo';
 import { PUBLIC_ENTRY_REDIRECTS } from './shared/public-entry-redirects';
@@ -176,11 +176,13 @@ const topLevelRoutes: Routes = [
     loadComponent: () => import('./components/public-pricing/public-pricing.component').then(m => m.PublicPricingComponent),
     // Public route
     canMatch: [pricingRedirectGuard],
+    resolve: {
+      jsonLd: lazyPublicPricingJsonLdResolver,
+    },
     data: {
       title: 'Membership',
       preload: true,
       description: 'Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Garmin, Suunto, COROS, and Wahoo while helping keep the project independent.',
-      robots: 'noindex, nofollow',
     }
   },
   {

@@ -390,6 +390,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-10-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-10-09');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-10-28');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-10-07');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations`)).toBe('2026-09-02');
@@ -466,7 +467,6 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/mcp</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/mcp/authorize</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/login</loc>');
-    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/pricing</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/releases</loc>');
     expect(robotsTxt).toContain('Disallow: /mcp');
     expect(robotsTxt).toContain('Allow: /mcp/authorize');

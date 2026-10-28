@@ -49,6 +49,7 @@ export const PRERENDERED_GUIDE_ROUTES = [
 ] as const;
 
 export const PRERENDERED_STATIC_PUBLIC_ROUTES = [
+  'pricing',
   'help',
   'policies',
   'privacy',
@@ -87,7 +88,6 @@ export const CLIENT_RENDERED_APP_ROUTES = [
   'admin/queues/reparse',
   'admin/queues/route-reparse',
   'admin/queues/derived-metrics',
-  'pricing',
   'subscriptions',
   'payment/success',
   'payment/cancel',
