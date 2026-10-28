@@ -1,4 +1,4 @@
-import { Component, LOCALE_ID, Input, OnChanges, OnDestroy, computed, inject, signal } from '@angular/core';
+import { Component, LOCALE_ID, Input, Output, EventEmitter, OnChanges, OnDestroy, computed, inject, signal } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { TileSettingsInterface, TileTypes } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../../../models/app-user.interface';
@@ -16,6 +16,12 @@ export class DashboardChartPreviewComponent implements OnChanges, OnDestroy {
   @Input() seed: DashboardPreviewInput = { tiles: [] };
   @Input() thumbnail = false;
   @Input() darkTheme = false;
+  @Input() disabled = false;
+  @Output() performanceContextChange = new EventEmitter<string>();
+  readonly performanceStatus = computed(() => {
+    const model = this.preview();
+    return model?.availability?.state === 'error' ? 'failed' as const : model?.loading ? 'building' as const : 'ready' as const;
+  });
   readonly preview = signal<DashboardChartPreview | null>(null);
   readonly sourceLabel = computed(() => this.preview() ? dashboardPreviewSourceLabel(this.preview()!) : '');
   readonly chart = computed(() => this.preview()?.tile.type === TileTypes.Chart ? this.preview()!.tile as DashboardChartTileViewModel : null);

@@ -3,9 +3,8 @@ import { APPROVED_WATER_TEAM_SPORT_CASES } from '@shared/testing/training-water-
 import { describe, expect, it } from 'vitest';
 import { HELP_ACTIONS, HELP_SECTIONS, HelpSectionId } from './help.content';
 import { searchHelpSections } from '../helpers/help-search.helper';
-import { CONNECTED_SERVICES_POLICY_SECTION } from './policies.content';
-import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 import {
+  CONNECTED_SERVICES_POLICY_SECTION,
   POLICIES_AI_AND_PROCESSORS_FRAGMENT,
   POLICIES_CONNECTED_SERVICES_FRAGMENT,
   POLICIES_COROS_DATA_FRAGMENT,
@@ -14,6 +13,8 @@ import {
   POLICIES_SUUNTO_DATA_FRAGMENT,
   POLICIES_WAHOO_DATA_FRAGMENT,
 } from './policies.content';
+import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
+
 
 describe('help.content', () => {
   it('distinguishes scheduled history and cooldowns from completion estimates', () => {
@@ -2960,5 +2961,15 @@ describe('nightly HRV history help', () => {
     for (const phrase of ['**HRV history** opens one **Overnight HRV** source', '**Latest night**',
       '**60-day personal range**', '**Learning your range**', 'Spot check: overall variation',
       'These are different measurements with separate histories', 'accounts and baselines separate']) expect(health).toContain(phrase);
+  });
+});
+
+
+describe('dashboard performance history guidance', () => {
+  it('documents reused history, context isolation and recorded VO2 semantics', () => {
+    const content = JSON.stringify(HELP_SECTIONS);
+    expect(content).toContain('preceding 42 completed UTC days');
+    expect(content).toContain('A saved context is retained when its evidence disappears');
+    expect(content).toContain('provider estimates and manually recorded tests retain their separate meanings');
   });
 });

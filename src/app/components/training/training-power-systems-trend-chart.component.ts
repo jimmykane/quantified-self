@@ -1,3 +1,7 @@
+import { dashboardChartFrameGrid } from '../../helpers/dashboard-chart-layout.helper';
+import { formatTrainingPowerSystemsTrendValue } from '../../helpers/training-power-systems.helper';
+import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import type { EChartsMobileTapFeedbackOptions } from '../../helpers/echarts-tooltip-interaction.helper';
 import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
 import {
   AfterViewInit,
@@ -66,7 +70,7 @@ export class TrainingPowerSystemsTrendChartComponent implements AfterViewInit, O
     const readyPointText = `${readyPoints.length} ready ${readyPoints.length === 1 ? 'value' : 'values'}`;
     const currentText = currentPoint?.value === null || !currentPoint
       ? 'current value unavailable'
-      : `current value ${formatTrendValue(currentPoint.value, value.unit)} ${value.unit}`;
+      : `current value ${this.dashboardMode ? formatTrainingPowerSystemsTrendValue(value, currentPoint.value, this.unitSettings).text : `${formatTrendValue(currentPoint.value, value.unit)} ${value.unit}`}`;
     this.chartAriaLabel = `${value.label} from ${this.rangeStartLabel} to ${this.rangeEndLabel}; ${
       this.hasReadyValues ? readyPointText : '0 ready values'
     }; ${currentText}`;
@@ -74,6 +78,9 @@ export class TrainingPowerSystemsTrendChartComponent implements AfterViewInit, O
   public get trend(): TrainingPowerSystemsTrendViewModel | null {
     return this.trendValue;
   }
+  @Input() dashboardMode = false;
+  @Input() unitSettings: UserUnitSettingsInterface | null = null;
+  @Input() mobileTapFeedbackOptions: EChartsMobileTapFeedbackOptions | null = null;
   @Input() darkTheme = false;
   @Input() timelineNotes: TimelineNoteChartContext | null = null;
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
@@ -93,6 +100,7 @@ export class TrainingPowerSystemsTrendChartComponent implements AfterViewInit, O
       eChartsLoader,
       logger,
       logPrefix: '[TrainingPowerSystemsTrendChartComponent]',
+      mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
     });
   }
 
@@ -106,7 +114,7 @@ export class TrainingPowerSystemsTrendChartComponent implements AfterViewInit, O
       this.chartHost.updateTimelineNotes(this.timelineNotes);
       return;
     }
-    if (this.viewInitialized && (changes.trend || changes.darkTheme || changes.timelineNotes)) {
+    if (this.viewInitialized && (changes.trend || changes.darkTheme || changes.timelineNotes || changes.dashboardMode || changes.unitSettings)) {
       void this.refresh();
     }
   }
@@ -161,6 +169,7 @@ export class TrainingPowerSystemsTrendChartComponent implements AfterViewInit, O
         bottom: 6,
         outerBoundsMode: 'same',
         outerBoundsContain: 'axisLabel',
+        ...dashboardChartFrameGrid(this.chartDiv.nativeElement),
       },
       tooltip: {
         trigger: 'axis',
@@ -181,7 +190,7 @@ export class TrainingPowerSystemsTrendChartComponent implements AfterViewInit, O
               label: trend.label,
               value: point.value === null
                 ? `Unavailable · ${point.statusText}`
-                : `${formatTrendValue(point.value, trend.unit)} ${trend.unit}`,
+                : this.dashboardMode ? formatTrainingPowerSystemsTrendValue(trend, point.value, this.unitSettings).text : `${formatTrendValue(point.value, trend.unit)} ${trend.unit}`,
               markerColor: style.trendLineColor,
             }],
           });
@@ -199,6 +208,7 @@ export class TrainingPowerSystemsTrendChartComponent implements AfterViewInit, O
       },
       yAxis: {
         type: 'value',
+        name: this.dashboardMode ? formatTrainingPowerSystemsTrendValue(trend, 0, this.unitSettings).unit : undefined,
         min: 0,
         minInterval: trend.unit === 'W' ? 1 : undefined,
         axisLine: { show: false },
@@ -207,7 +217,7 @@ export class TrainingPowerSystemsTrendChartComponent implements AfterViewInit, O
         splitLine: { lineStyle: { color: style.gridColor } },
         axisLabel: {
           color: style.secondaryTextColor,
-          formatter: (value: number) => formatTrendValue(value, trend.unit),
+          formatter: (value: number) => this.dashboardMode ? formatTrainingPowerSystemsTrendValue(trend, value, this.unitSettings).value : formatTrendValue(value, trend.unit),
         },
       },
       series: [{

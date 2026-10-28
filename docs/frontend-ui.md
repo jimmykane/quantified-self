@@ -1759,3 +1759,23 @@ and calendar focus return on the stable date field. The notice wraps its action 
 
 MCP impact review: completed-activity presentation only; readers, canonical metrics, stored data, Training plan/workout
 contracts, consent and provider actions are unchanged.
+
+### Performance & Power history tiles
+
+The chart library offers Critical power, W′ capacity, Maximum power and Durability as curated presets, plus the
+existing `health:vo2_max` preset in Performance & Power. Catalog revision 3 announces these choices without
+automatically adding tiles. VO₂ max keeps its Health source/reading identity, privacy and independent date navigation;
+there is no duplicate renderer or preset. Existing saved VO₂ max tiles resolve to the performance section.
+
+`dashboard-performance-trend.helper.ts` adapts the existing Training view models. Three capacity tiles share one
+`training_power_systems` subscription; Durability shares `training_durability`. The manager uses the same read-only
+preview dependencies and deterministic Training examples, with user/example and refresh/error status kept explicit.
+`displaySettings.performanceContext` saves an exact capacity activity type or durability context key, independently
+per tile. Missing saved contexts stay unavailable instead of silently changing sport. Library edits stage that setting
+until Save; card selectors use the existing dashboard configuration persistence and rollback path.
+
+The dashboard wrapper owns titles, accessible Material context menus and accepted-action haptics. Existing Training
+renderers opt into the shared dashboard plot sizing/alignment contract; their normal Training and public-preview
+layouts retain their defaults. Durability fits the tile width, with compact weekly labels on narrow plots. Full manager
+previews grow with evidence text rather than clipping it. No raw streams, new calculations or per-tile snapshot
+listeners are introduced.

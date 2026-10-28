@@ -1,3 +1,5 @@
+import { DataCriticalPower, DataPowerMax, DataPowerWork, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib/metrics';
+import { resolveUnitAwareDisplayStat, type UnitAwareStatDisplay } from '@shared/unit-aware-display';
 import {
   THREE_DIMENSIONAL_CAPACITY_CRITICAL_POWER_ANCHORS_SECONDS,
   THREE_DIMENSIONAL_CAPACITY_MAXIMUM_POWER_ANCHORS_SECONDS,
@@ -936,4 +938,13 @@ export function buildTrainingPowerSystemsActivityTypeViewModels(
       ],
     };
   });
+}
+
+/** The trend stores W′ in kJ. Power Work is the canonical work display in kJ;
+ * DataWPrime inherits calorie units and must not receive the model’s joules. */
+export function formatTrainingPowerSystemsTrendValue(trend: TrainingPowerSystemsTrendViewModel, value: number,
+  units?: UserUnitSettingsInterface | null): UnitAwareStatDisplay {
+  const stat = trend.key === 'wPrimeJoules' ? new DataPowerWork(value)
+    : trend.key === 'criticalPowerWatts' ? new DataCriticalPower(value) : new DataPowerMax(value);
+  return resolveUnitAwareDisplayStat(stat, units);
 }

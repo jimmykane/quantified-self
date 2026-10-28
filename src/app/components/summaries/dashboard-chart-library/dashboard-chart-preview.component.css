@@ -15,3 +15,7 @@ mat-progress-bar { position: absolute; inset: 0 0 auto; z-index: 1; }
 
 .chart-preview-availability { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); margin-block: 0 8px; }
 .chart-preview-availability[data-state="error"] { color: var(--mat-sys-error); }
+
+/* Training’s evidence and exclusions retain their natural height in full previews. */
+.chart-preview-performance .chart-preview-renderer { height: auto; min-height: 400px; }
+.chart-preview-performance .chart-preview-renderer > app-tile-chart { height: auto; }

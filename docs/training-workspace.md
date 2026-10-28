@@ -5352,6 +5352,24 @@ profile Weight as fallback context.
 
 ### Shared Dashboard and Training insight reuse
 
+Dashboard Performance & Power can add separate Critical power, W′ capacity and Maximum power tiles, and a Durability
+trajectory tile. They reuse the existing `training_power_systems` and `training_durability` snapshots, shared Training
+view-model builders and the same chart components. The three capacity tiles share one snapshot dependency; picker
+reads never request a rebuild. The adapter does not fit models, aggregate sports, read streams or change Training
+visibility preferences. Each tile saves its exact activity-type or durability context selector separately. A saved
+context that loses evidence stays explicit and unavailable. Current unavailable fits never borrow historical values.
+The existing Health VO₂ max history preset is placed alongside them, retaining its source, reading and date controls.
+
+The chart components have a dashboard presentation opt-in for plot-height alignment, narrow-width labels and chart-tap
+feedback. Training/public preview defaults, UTC cutoffs, 42-day fitting windows, 84-day capacity history, weekly durability
+protocols and eligibility/gap semantics are unchanged. Canonical capacity values use Sports Lib display classes; W′
+trend values are already kJ, so the work display class is used rather than calorie-based `DataWPrime`.
+
+MCP impact review: none. This is a dashboard presentation and settings integration over existing snapshots and Health
+reads. No metric kind, backend payload, model, tool, strict projection/schema, scope, consent, planning capability or
+provider action changes. No reparse, migration, registered-client refresh or backend deployment is required.
+
+
 #### Dashboard daily briefing
 
 **Currently hidden:** Dashboard does not mount At a glance or start its additional listeners. Today and saved charts

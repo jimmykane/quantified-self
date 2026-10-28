@@ -33,6 +33,11 @@ export function dashboardChartHasRecordedData(tile: DashboardTileViewModel, inpu
   const range = normalizeDashboardDerivedChartRange(chart.displaySettings?.derivedChartRange);
   const intensity = () => filterDashboardDerivedWeeklyRange(chart.intensityDistribution?.weeks || [], range)
     .some(week => [week.easySeconds, week.moderateSeconds, week.hardSeconds].some(value => finite(value) && value > 0));
+  if (C.isDashboardPerformanceChartType(type)) {
+    const context = chart.performanceTrend;
+    return context?.powerTrend?.points.some(point => finite(point.value)) === true
+      || context?.trajectory?.points.some(point => finite(point.value) || point.candidateActivityCount > 0) === true;
+  }
   switch (type) {
     case C.DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE: {
       const now = new Date();

@@ -4,14 +4,25 @@ import { getDashboardChartCatalog, getAvailableDashboardCharts, matchesDashboard
 describe('dashboard chart catalog', () => {
   it('gives every existing preset one destination, default size and stable identity', () => {
     const entries = getDashboardChartCatalog();
-    expect(entries).toHaveLength(70);
-    expect(new Set(entries.map(entry => entry.definition.id)).size).toBe(70);
+    expect(entries).toHaveLength(74);
+    expect(new Set(entries.map(entry => entry.definition.id)).size).toBe(74);
     for (const entry of entries) {
       expect(entry.tile.size.columns).toBeGreaterThan(0);
       expect(matchesDashboardPreset(entry.tile, entry.tile)).toBe(true);
       expect(getAvailableDashboardCharts(entry.lane, []).some(item => item.definition.id === entry.definition.id)).toBe(true);
       expect(getAvailableDashboardCharts(entry.lane, [entry.tile]).some(item => item.definition.id === entry.definition.id)).toBe(false);
     }
+  });
+  it('offers all five evidence-backed performance additions and removes them independently', () => {
+    const ids = ['curated-critical-power', 'curated-w-prime', 'curated-maximum-power', 'curated-durability', 'health:vo2_max'];
+    const entries = getAvailableDashboardCharts('section:performancePower', []);
+    for (const id of ids) {
+      const entry = entries.find(item => item.definition.id === id)!;
+      expect(entry, id).toBeDefined();
+      expect(entry.definition.introducedIn).toBe(3);
+      expect(getAvailableDashboardCharts('section:performancePower', [entry.tile]).some(item => item.definition.id === id)).toBe(false);
+    }
+    expect(getAvailableDashboardCharts('section:health', []).some(item => item.definition.id === 'health:vo2_max')).toBe(false);
   });
   it('offers HRV beside Sleep and keeps both charts independently available', () => {
     const catalog = getDashboardChartCatalog();

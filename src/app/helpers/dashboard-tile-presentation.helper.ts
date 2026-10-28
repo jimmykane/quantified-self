@@ -1,5 +1,5 @@
 import { ChartTypes, TileTypes } from '@sports-alliance/sports-lib';
-import { DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE, isDashboardKpiChartType } from './dashboard-special-chart-types';
+import { DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE, isDashboardKpiChartType, isDashboardPerformanceChartType } from './dashboard-special-chart-types';
 
 export type DashboardTileKind = 'chart' | 'kpi' | 'map' | 'calendar' | 'tile';
 
@@ -47,5 +47,5 @@ export function resolveDashboardTileCollectionPresentation(tiles: readonly TileP
 /** Settings exist for metric charts and maps; curated tiles use their inline controls. */
 export function hasDashboardTileSettings(tile: TilePresentationInput | null | undefined): boolean {
   return tile?.type === TileTypes.Map || tile?.type === TileTypes.Chart
-    && (['HealthMetric','SleepTrend','HrvTrend'].includes(tile.chartType) || Object.values(ChartTypes).some(chartType => chartType === tile.chartType));
+    && (isDashboardPerformanceChartType(tile.chartType) || ['HealthMetric','SleepTrend','HrvTrend'].includes(tile.chartType) || Object.values(ChartTypes).some(chartType => chartType === tile.chartType));
 }

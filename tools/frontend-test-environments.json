@@ -67,6 +67,7 @@
     "src/app/helpers/dashboard-hrv-context.helper.spec.ts",
     "src/app/helpers/dashboard-kpi-explanation.helper.spec.ts",
     "src/app/helpers/dashboard-manager-presets.helper.spec.ts",
+    "src/app/helpers/dashboard-performance-trend.helper.spec.ts",
     "src/app/helpers/dashboard-pie-chart-data.helper.spec.ts",
     "src/app/helpers/dashboard-power-curve-scope.helper.spec.ts",
     "src/app/helpers/dashboard-power-curve.helper.spec.ts",

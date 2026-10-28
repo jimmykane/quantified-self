@@ -1,3 +1,5 @@
+import { dashboardChartFrameGrid } from '../../helpers/dashboard-chart-layout.helper';
+import type { EChartsMobileTapFeedbackOptions } from '../../helpers/echarts-tooltip-interaction.helper';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { TrainingMetricTextComponent } from './training-metric-text.component';
 import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
@@ -56,6 +58,8 @@ interface TrajectoryTooltipParam {
 export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() trajectory: TrainingDurabilityTrajectoryViewModel | null = null;
   @Input() status: DashboardDerivedMetricStatus = 'missing';
+  @Input() dashboardMode = false;
+  @Input() mobileTapFeedbackOptions: EChartsMobileTapFeedbackOptions | null = null;
   @Input() darkTheme = false;
   @Input() timelineNotes: TimelineNoteChartContext | null = null;
   public chartDiv: ElementRef<HTMLDivElement> | null = null;
@@ -90,6 +94,7 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
       eChartsLoader,
       logger,
       logPrefix: '[TrainingDurabilityTrajectoryChartComponent]',
+      mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
     });
   }
 
@@ -103,7 +108,7 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
       this.chartHost.updateTimelineNotes(this.timelineNotes);
       return;
     }
-    if (changes.trajectory || changes.status || changes.darkTheme || changes.timelineNotes) {
+    if (changes.trajectory || changes.status || changes.darkTheme || changes.timelineNotes || changes.dashboardMode) {
       void this.refresh();
     }
   }
@@ -172,8 +177,12 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
       animation: false,
       backgroundColor: 'transparent',
       textStyle: { color: style.textColor, fontFamily: ECHARTS_GLOBAL_FONT_FAMILY },
-      grid: { left: 12, right: 18, top: 38, bottom: 34, containLabel: true },
+      grid: { left: 12, right: 18, top: 38, bottom: 34, containLabel: true,
+        ...dashboardChartFrameGrid(this.chartDiv.nativeElement, { legendTop: 28 }),
+      },
       legend: {
+        type: this.dashboardMode ? 'scroll' : 'plain',
+        left: this.dashboardMode ? 4 : undefined,
         top: 0,
         right: 4,
         data: [trajectory.metricLabel, trajectory.sourceActivityLabel],
@@ -236,10 +245,11 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
         splitLine: { show: false },
         axisLabel: {
           color: style.textColor,
-          interval: 0,
+          interval: this.dashboardMode ? 'auto' : 0,
+          hideOverlap: this.dashboardMode,
           formatter: (value: number | string) => formatDashboardWeeklyAxisLabel(
             Number(value),
-            isEChartsMobileTooltipViewport(),
+            this.dashboardMode ? style.isCompactLayout : isEChartsMobileTooltipViewport(),
             undefined,
             'UTC',
           ),
