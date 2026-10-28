@@ -33,7 +33,8 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { HistoryImportStateService, HistoryImportRequestState, historyImportCooldownAt } from '../../services/history-import-state.service';
-import type { ConnectionHistoryStatusProjection } from '@shared/connection-history';
+import { historyRangeOptions, type ConnectionHistoryStatusProjection, type ConnectionHistoryRangeOption, type HistoryImportRange } from '@shared/connection-history';
+import { activityHistoryRange } from '../../helpers/activity-history-range.helper';
 
 
 /** Response from COROS/Suunto/Wahoo history import */
@@ -76,6 +77,11 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
 
   public formGroup: UntypedFormGroup;
+  public historyRangeOptions: readonly ConnectionHistoryRangeOption[] = [];
+  public selectedHistoryRange: HistoryImportRange = 'custom';
+  private selectedHistoryDates = '';
+  private historyRangeService: ServiceNames | undefined;
+
   public isAllowedToDoHistoryImport = false;
   public nextImportAvailableDate: Date;
   public isSubmitting = false;
@@ -157,6 +163,10 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       ]),
     }, { validators: this.dateRangeValidator });
 
+    this.historyRangeOptions = historyRangeOptions(this.serviceName);
+    this.historyRangeService = this.serviceName;
+    this.selectedHistoryRange = this.serviceName === ServiceNames.COROSAPI ? 'maximum' : '2_years';
+    this.selectedHistoryDates = this.historyDatesKey();
     this.formGroup.disable();
 
     const user = await this.authService.getUser();
@@ -181,6 +191,52 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     const providerMinimum = this.minDate ? dayjs(this.minDate).startOf('day') : null;
 
     return providerMinimum?.isAfter(requestedStart) ? providerMinimum : requestedStart;
+  }
+
+  get usesAllAvailableHistory(): boolean {
+    return this.selectedHistoryRange === 'maximum' && !this.minDate
+      && (this.serviceName === ServiceNames.SuuntoApp || this.serviceName === ServiceNames.WahooAPI);
+  }
+
+  get selectedHistoryRangeLabel(): string {
+    if (this.selectedHistoryRange === 'custom') return 'Custom dates';
+    if (this.selectedHistoryRange === 'maximum'
+      && (this.serviceName === ServiceNames.GarminAPI || this.serviceName === ServiceNames.COROSAPI)) return 'Maximum available';
+    return this.historyRangeOptions.find(option => option.value === this.selectedHistoryRange)?.label ?? 'Custom dates';
+  }
+
+  onHistoryRangeChange(preset: HistoryImportRange): void {
+    if (this.formGroup.disabled || preset === this.selectedHistoryRange
+      || (preset !== 'custom' && !this.historyRangeOptions.some(option => option.value === preset))) return;
+    if (preset !== 'custom') {
+      const range = activityHistoryRange(this.serviceName, preset, new Date(), this.minDate);
+      this.formGroup.patchValue({ startDate: dayjs(range.startDate), endDate: dayjs(range.endDate), accepted: false });
+    } else this.formGroup.get('accepted')?.setValue(false);
+    this.selectedHistoryRange = preset;
+    this.selectedHistoryDates = this.historyDatesKey();
+    this.hapticsService.selection();
+  }
+
+  onHistoryDatesChange(fromCalendar = false): void {
+    const dates = this.historyDatesKey();
+    if (this.formGroup.disabled || dates === this.selectedHistoryDates) return;
+    this.selectedHistoryDates = dates;
+    this.selectedHistoryRange = 'custom';
+    this.formGroup.get('accepted')?.setValue(false);
+    if (fromCalendar && this.formGroup.get('startDate')?.valid && this.formGroup.get('endDate')?.valid) {
+      this.hapticsService.selection();
+    }
+  }
+
+  onHistoryConfirmationChange(): void {
+    if (!this.formGroup.disabled) this.hapticsService.selection();
+  }
+
+  private historyDatesKey(): string {
+    return ['startDate', 'endDate'].map(name => {
+      const value = this.formGroup.get(name)?.value;
+      return value && dayjs(value).isValid() ? dayjs(value).format('YYYY-MM-DD') : '';
+    }).join('/');
   }
 
   dateRangeValidator: ValidatorFn = (group: AbstractControl): ValidationErrors | null => {
@@ -232,6 +288,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     if (this.isDestroyed) return;
     this.isPro = AppUserUtilities.hasProAccess(this.currentUser);
     this.today = dayjs().endOf('day');
+    this.historyRangeOptions = historyRangeOptions(this.serviceName);
     this.syncSharedImportState();
     this.isSubmitting = this.activityState.status === 'pending';
     const receipt = this.activityState.result;
@@ -252,6 +309,12 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.updateSleepAndHealthBackfillAvailability();
     this.syncSleepBackfillStateSubscription();
     this.updateProviderHistoryMinimumDate();
+    if (this.historyRangeService !== this.serviceName) {
+      this.historyRangeService = this.serviceName;
+      this.selectedHistoryRange = 'custom';
+      this.formGroup.get('accepted')?.setValue(false, { emitEvent: false });
+      this.selectedHistoryDates = this.historyDatesKey();
+    }
 
     if (!this.userMetaForService || !this.userMetaForService.didLastHistoryImport) {
       this.isAllowedToDoHistoryImport = true;

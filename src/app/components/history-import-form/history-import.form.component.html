@@ -135,11 +135,23 @@
     {{ corosHistoryLimitMonths }} months are selected by default, which is the full available range.
   </app-status-info>
   }
+  <mat-form-field appearance="outline" class="history-range-field">
+    <mat-label>Activity history range</mat-label>
+    <mat-select [value]="selectedHistoryRange" [disabled]="formGroup.disabled"
+      (selectionChange)="onHistoryRangeChange($event.value)">
+      <mat-select-trigger>{{ selectedHistoryRangeLabel }}</mat-select-trigger>
+      @for (option of historyRangeOptions; track option.value) {
+      <mat-option [value]="option.value">{{ option.label }}</mat-option>
+      }
+      <mat-option value="custom">Custom dates</mat-option>
+    </mat-select>
+  </mat-form-field>
+  @if (!usesAllAvailableHistory) {
   <div class="date-fields">
     <mat-form-field appearance="outline">
       <mat-label>Start Date</mat-label>
       <input matInput [matDatepicker]="startDate" [min]="minDate" [max]="formGroup.get('endDate')?.value || today"
-        formControlName="startDate" (click)="startDate.open()">
+        formControlName="startDate" (dateInput)="onHistoryDatesChange(startDate.opened)" (click)="startDate.open()">
       <mat-datepicker-toggle matSuffix [for]="startDate"></mat-datepicker-toggle>
       <mat-datepicker #startDate></mat-datepicker>
       <mat-error *ngIf="formGroup.get('startDate')?.hasError('required')">Start date is required</mat-error>
@@ -151,7 +163,7 @@
     <mat-form-field appearance="outline">
       <mat-label>End Date</mat-label>
       <input matInput [matDatepicker]="endDate" [min]="formGroup.get('startDate')?.value || minDate" [max]="today"
-        formControlName="endDate" (click)="endDate.open()">
+        formControlName="endDate" (dateInput)="onHistoryDatesChange(endDate.opened)" (click)="endDate.open()">
       <mat-datepicker-toggle matSuffix [for]="endDate"></mat-datepicker-toggle>
       <mat-datepicker #endDate></mat-datepicker>
       <mat-error *ngIf="formGroup.get('endDate')?.hasError('required')">End date is required</mat-error>
@@ -165,8 +177,31 @@
         date</mat-error>
     </mat-form-field>
   </div>
+  }
+  <div class="history-range-review" role="status" aria-live="polite">
+    @if (usesAllAvailableHistory) {
+    <p><strong>Selected range:</strong> All available history through
+      {{ formGroup.get('endDate')?.value | date:'mediumDate' }} (your local time).</p>
+    <p>Choose Custom dates to set a start and end date.</p>
+    } @else if (formGroup.get('startDate')?.valid && formGroup.get('endDate')?.valid) {
+    <p><strong>Selected dates:</strong> {{ formGroup.get('startDate')?.value | date:'mediumDate' }} –
+      {{ formGroup.get('endDate')?.value | date:'mediumDate' }} (your local time).</p>
+    }
+    <p>This imports activities only. Sleep, Health and saved routes have separate controls.
+      Providers may supply less history than the selected range.</p>
+    @if (serviceName === serviceNames.GarminAPI) {
+    <p>After Garmin accepts a request, another activity-history import is available after {{ garminCooldownDays }} days.
+      Garmin delivers activities separately; requests do not confirm that all activities have arrived.</p>
+    } @else {
+    <p>The waiting period before another import depends on the activity count:
+      one day per {{ activitiesPerDayLimit | number }} activities scheduled. This is not a completion estimate.</p>
+    }
+    @if (serviceName === serviceNames.WahooAPI) {
+    <p>Only eligible FIT-backed workouts are included. Workouts from third-party fitness apps are excluded.</p>
+    }
+  </div>
   <div class="confirmation-section">
-    <mat-checkbox formControlName="accepted" class="qs-checkbox-primary">
+    <mat-checkbox formControlName="accepted" class="qs-checkbox-primary" (change)="onHistoryConfirmationChange()">
       <span class="checkbox-label">
         @if (serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI || serviceName === serviceNames.WahooAPI) {
         I understand this may take hours to days.
