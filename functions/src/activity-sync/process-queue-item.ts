@@ -68,6 +68,7 @@ import {
 } from '../../../shared/wahoo-activity-types';
 import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../wahoo/constants';
 import { isWahooReconnectRequiredError } from '../wahoo/refresh-recovery';
+import { WAHOO_RATE_LIMIT_MAX_RESET_SECONDS } from '../wahoo/rate-limit';
 import { getCOROSActivityUploadStatus, uploadActivityFileToCOROS } from '../coros/activities';
 import { prepareCOROSActivityFITUpload } from '../coros/activity-fit';
 import { getActiveCOROSTokenSnapshot } from '../coros/account';
@@ -131,6 +132,18 @@ function asErrorLike(error: unknown): ErrorLike {
     }
 
     return error as ErrorLike;
+}
+
+function getWahooRateLimitRetryAtMs(error: unknown): number | null {
+    const errorLike = asErrorLike(error);
+    if (errorLike.code !== 'resource-exhausted' && errorLike.statusCode !== 429) return null;
+    const details = errorLike.details as { retryAfterSeconds?: unknown } | undefined;
+    const delay = Number(isProviderOperationError(error) ? error.retryAfterSeconds : details?.retryAfterSeconds);
+    const delaySeconds = Number.isFinite(delay) && delay > 0
+        ? Math.min(delay, WAHOO_RATE_LIMIT_MAX_RESET_SECONDS + 5)
+        : 300;
+    // Spread the release of waiting jobs without resending accepted uploads.
+    return Date.now() + (Math.ceil(delaySeconds) + 1 + Math.floor(Math.random() * 30)) * 1000;
 }
 
 const TRANSIENT_ACTIVITY_SYNC_ERROR_CODES = new Set([
@@ -1039,8 +1052,10 @@ async function increaseActivitySyncRetryCountIfCurrent(
         recordActivityDeliveryCommit(queueItem, 'dead_lettered');
         if (manualReconciliation) recordActivityDeliveryCommit(queueItem, 'manual_reconciliation');
     } else if (result === QueueResult.RetryIncremented) {
+        const quotaWait = queueItem.destinationServiceName === ServiceNames.WahooAPI && !!retryDispatchMarkerAtMs
+            && (asErrorLike(error).code === 'resource-exhausted' || asErrorLike(error).statusCode === 429);
         recordActivityDeliveryCommit(queueItem, observedProviderPending || error instanceof ProviderOperationError && isExpectedActivityUploadPending(error) ? 'provider_pending'
-            : activityDeliveryFailureOutcome(error) === 'expected_contention' ? 'expected_contention' : 'retry');
+            : quotaWait || activityDeliveryFailureOutcome(error) === 'expected_contention' ? 'expected_contention' : 'retry');
     }
     return result;
 }
@@ -2230,6 +2245,9 @@ export async function processActivitySyncQueueItem(
         const actionableError = providerOperationError || error;
         const normalizedError = toError(actionableError);
         const metadataError = toActivitySyncMetadataError(normalizedError);
+        const wahooRateLimitRetryAtMs = duringDestinationUpload && queueItem.destinationServiceName === ServiceNames.WahooAPI
+            ? getWahooRateLimitRetryAtMs(actionableError) : null;
+        const retryDispatchMarkerAtMs = wahooRateLimitRetryAtMs !== null ? () => wahooRateLimitRetryAtMs : undefined;
 
         if (duringDestinationUpload && isProviderOperationError(actionableError) && actionableError.disposition === 'retryable') {
             if (actionableError.retryMode === 'resume') {
@@ -2339,7 +2357,7 @@ export async function processActivitySyncQueueItem(
                 normalizedError,
                 bulkWriter,
                 actionableError.dlqContext || 'DESTINATION_PROVIDER_RETRY_EXHAUSTED',
-                undefined,
+                retryDispatchMarkerAtMs,
                 observedProviderPending,
             );
             if (retryResult === QueueResult.MovedToDLQ) {
@@ -2348,7 +2366,7 @@ export async function processActivitySyncQueueItem(
                     error: metadataError,
                 }));
                 logProviderFailureDecision(queueItem, actionableError, 'dlq');
-            } else {
+            } else if (wahooRateLimitRetryAtMs === null) {
                 logProviderFailureDecision(queueItem, actionableError, 'retry');
             }
             return retryResult;
@@ -2365,6 +2383,8 @@ export async function processActivitySyncQueueItem(
                 queueItem,
                 normalizedError,
                 bulkWriter,
+                undefined,
+                retryDispatchMarkerAtMs,
             );
         }
 

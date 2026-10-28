@@ -64,7 +64,7 @@ function isFutureScheduledProviderStatusPoll(
         && scheduledAtMs > nowMs
         && scheduledAtMs !== PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER
         && scheduledAtMs !== PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER
-        && hasExpectedProviderStatusPollResumeState(queueItem);
+        && (hasExpectedProviderStatusPollResumeState(queueItem) || queueItem.destinationServiceName === ServiceNames.WahooAPI);
 }
 
 async function deleteActivitySyncCandidateBeforeDispatch(
@@ -168,7 +168,7 @@ export async function reconcileActivitySyncQueueDispatches(nowMs = Date.now(), r
             const data = doc.data() as Partial<ActivitySyncQueueItemInterface>;
             return !isFutureScheduledProviderStatusPoll(data, nowMs);
         });
-        // A future provider status-only poll is already backed by a delayed Cloud
+        // A future provider poll or Wahoo quota retry is backed by a delayed Cloud
         // Task. It must not consume this reconciliation pass's finite
         // candidate budget, otherwise enough old polls hide newer work.
         skippedScheduledProviderPolls += pageSnapshot.docs.length - nonScheduledPollDocs.length;

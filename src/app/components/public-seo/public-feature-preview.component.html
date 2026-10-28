@@ -1,21 +1,21 @@
 <!-- Google supports data-nosnippet on native div/span/section, not Angular custom elements. -->
 <div class="preview-content" data-nosnippet>
 @if (previewKey() === 'health-note-comparison') {
-  @defer (on viewport) {
+  @defer (on viewport; when previewReady()) {
     <app-health-note-comparison-preview></app-health-note-comparison-preview>
   } @placeholder {
     <div class="preview-placeholder preview-placeholder--note-comparison" aria-hidden="true"></div>
   }
 }
 @if (previewKey() === 'health-overview') {
-  @defer (on viewport) {
+  @defer (on viewport; when previewReady()) {
     <app-health-overview-preview></app-health-overview-preview>
   } @placeholder {
     <div class="preview-placeholder preview-placeholder--health-overview" aria-hidden="true"></div>
   }
 }
 @if (previewKey() === 'training-plans') {
-  @defer (on viewport) {
+  @defer (on viewport; when previewReady()) {
     <app-training-plans-preview></app-training-plans-preview>
   } @placeholder {
     <div class="preview-placeholder preview-placeholder--training-plans" aria-hidden="true"></div>
@@ -23,7 +23,7 @@
 }
 
 @if (previewKey() === 'training-readiness' || previewKey() === 'training-explorer') {
-  @defer (on viewport) {
+  @defer (on viewport; when previewReady()) {
     <app-training-explorer-preview [kind]="previewKey() === 'training-readiness' ? 'readiness' : 'explorer'"></app-training-explorer-preview>
   } @placeholder {
     <div class="preview-placeholder" [class.preview-placeholder--readiness]="previewKey() === 'training-readiness'"
@@ -32,7 +32,7 @@
 }
 
 @if (previewKey() === 'health-sleep' || previewKey() === 'health-hrv' || previewKey() === 'health-weight') {
-  @defer (on viewport) {
+  @defer (on viewport; when previewReady()) {
     <app-health-preview [kind]="previewKey() === 'health-sleep' ? 'sleep' : previewKey() === 'health-hrv' ? 'hrv' : 'weight'"></app-health-preview>
   } @placeholder {
     <div class="preview-placeholder preview-placeholder--health" [class.preview-placeholder--health-sleep]="previewKey() === 'health-sleep'" aria-hidden="true"></div>
@@ -40,7 +40,7 @@
 }
 
 @if (previewKey() === 'training-snapshot') {
-  @defer (on viewport) {
+  @defer (on viewport; when previewReady()) {
     <app-training-snapshot-preview></app-training-snapshot-preview>
   } @placeholder {
     <div class="preview-placeholder preview-placeholder--training" aria-hidden="true"></div>
@@ -48,7 +48,7 @@
 }
 
 @if (previewKey() === 'training-signals') {
-  @defer (on viewport) {
+  @defer (on viewport; when previewReady()) {
     <app-home-signal-charts-preview></app-home-signal-charts-preview>
   } @placeholder {
     <div class="preview-placeholder preview-placeholder--signals" aria-hidden="true"></div>
@@ -56,7 +56,7 @@
 }
 
 @if (previewKey() === 'dashboard') {
-  @defer (on viewport) {
+  @defer (on viewport; when previewReady()) {
     <app-home-dashboard-preview></app-home-dashboard-preview>
   } @placeholder {
     <div class="preview-placeholder preview-placeholder--dashboard" aria-hidden="true"></div>
@@ -64,7 +64,7 @@
 }
 
 @if (previewKey() === 'workout-analysis') {
-  @defer (on viewport) {
+  @defer (on viewport; when previewReady()) {
     <app-home-workout-preview></app-home-workout-preview>
   } @placeholder {
     <div class="preview-placeholder preview-placeholder--workout" aria-hidden="true"></div>
@@ -73,7 +73,7 @@
 
 @if (previewKey() === 'activity-map') {
   <div class="map-stage">
-    @defer (on viewport) {
+    @defer (on viewport; when previewReady()) {
       <app-home-my-tracks-preview></app-home-my-tracks-preview>
     } @placeholder {
       <div class="preview-placeholder preview-placeholder--map" aria-hidden="true"></div>
@@ -82,7 +82,7 @@
 }
 
 @if (previewKey() === 'provider-flow') {
-  @defer (on viewport) {
+  @defer (on viewport; when previewReady()) {
     <app-provider-data-flow-matrix
       caption="Supported provider paths"
       [rows]="providerDataFlowRows"
@@ -96,7 +96,7 @@
 }
 
 @if (previewKey() === 'reviewer-benchmark') {
-  @defer (on viewport) {
+  @defer (on viewport; when previewReady()) {
     <app-reviewer-benchmark-preview></app-reviewer-benchmark-preview>
   } @placeholder {
     <div class="preview-placeholder preview-placeholder--reviewer" aria-hidden="true"></div>
@@ -104,7 +104,7 @@
 }
 
 @if (previewKey() === 'assistant-example') {
-  @defer (on viewport) {
+  @defer (on viewport; when previewReady()) {
     <app-assistant-example-preview></app-assistant-example-preview>
   } @placeholder {
     <div class="preview-placeholder preview-placeholder--assistant" aria-hidden="true"></div>
@@ -112,7 +112,7 @@
 }
 
 @if (previewKey() === 'mcp-flow') {
-  @defer (on viewport) {
+  @defer (on viewport; when previewReady()) {
     <app-mcp-read-only-flow-preview></app-mcp-read-only-flow-preview>
   } @placeholder {
     <div class="preview-placeholder preview-placeholder--mcp" aria-hidden="true"></div>

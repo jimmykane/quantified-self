@@ -72,10 +72,14 @@ export async function requireDraft(uid: string, batchId: string, allowClosed = f
   return data;
 }
 export async function describeFIT(fit: Buffer, name: string, provider: ActivitySendProvider): Promise<Pick<ActivitySendRow, 'name' | 'sport' | 'startDate' | 'warnings'>> {
+  let sourceSport: number | undefined;
   try {
-    const parsed = readFitMessages(fit, { messageNumbers: [0], maxInputBytes: ACTIVITY_SEND_LIMITS.fileBytes });
+    const parsed = readFitMessages(fit, { messageNumbers: [0, 18], maxInputBytes: ACTIVITY_SEND_LIMITS.fileBytes });
     const fileIds = parsed.messages.filter(message => message.globalMessageNumber === 0);
     if (parsed.issues.length || fileIds.length !== 1 || readFitUnsignedField(fileIds[0].fields.find(field => field.fieldNumber === 0), 0, 1, fileIds[0].littleEndian) !== 4) throw new Error('Recording required.');
+    const sessions = parsed.messages.filter(message => message.globalMessageNumber === 18);
+    const sport = sessions.length === 1 ? sessions[0].fields.find(field => field.fieldNumber === 5) : undefined;
+    if (sport?.baseType === 0 && sport.size === 1) sourceSport = sport.bytes[0];
   } catch { throw new HttpsError('invalid-argument', 'Choose a recorded activity FIT. Send course files from Routes.'); }
   let event;
   try { event = await EventImporterFIT.getFromArrayBuffer(fit.buffer.slice(fit.byteOffset, fit.byteOffset + fit.length) as ArrayBuffer, createParsingOptions()); }
@@ -86,6 +90,8 @@ export async function describeFIT(fit: Buffer, name: string, provider: ActivityS
   if (provider === 'coros') {
     if (types.some(type => /snorkel/i.test(type))) warnings.push('COROS receives Snorkeling as Open Water Swim.');
     if (types.some(type => /sailing/i.test(type))) warnings.push('COROS receives eligible GPS Sailing as GPS Cardio.');
+    if (sourceSport === 29) warnings.push('COROS receives eligible GPS Fishing as GPS Cardio.');
+    if (sourceSport === 53) warnings.push('COROS receives eligible Diving as Generic, with or without GPS. Depth stays in the FIT, but COROS may not display it or a dive profile.');
   }
   if (provider === 'wahoo') {
     const mapped = resolveWahooWorkoutType(types);

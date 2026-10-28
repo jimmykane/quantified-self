@@ -224,10 +224,9 @@ describe('Garmin Backfill', () => {
         expect(setMock).not.toHaveBeenCalled();
     });
 
-    it.each([undefined, false, true])('preserves the legacy void response when background=%s has no versioned admission', async background => {
-        vi.mocked(startManualActivityHistory).mockResolvedValue(null);
+    it.each([undefined, false])('preserves the legacy void response for older clients with background=%s', async background => {
         await expect((backfillGarminAPIActivities as any)({ startDate: '2026-08-01', endDate: '2026-08-11', background }, context)).resolves.toBeUndefined();
-        expect(startManualActivityHistory).toHaveBeenCalledTimes(background === true ? 1 : 0);
+        expect(startManualActivityHistory).not.toHaveBeenCalled();
         expect(requestHelper.get).toHaveBeenCalledTimes(1);
     });
 

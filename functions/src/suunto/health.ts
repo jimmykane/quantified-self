@@ -17,6 +17,9 @@ import {
 } from '../../../shared/health';
 import { HealthSampleSeriesInput, HealthSourceRecordInput } from '../health/validation';
 
+import { SUUNTO_HEALTH_MAX_WINDOW_DAYS } from './health-window';
+export { SUUNTO_HEALTH_MAX_WINDOW_DAYS } from './health-window';
+
 type ExternalRecord = Record<string, unknown>;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -38,7 +41,6 @@ export const SUUNTO_HEALTH_MAX_STATISTIC_SOURCES = 64;
 export const SUUNTO_HEALTH_MAX_STATISTIC_SAMPLES_PER_SOURCE = 64;
 export const SUUNTO_HEALTH_MAX_SERIES_SOURCE_RECORDS = 256;
 export const SUUNTO_HEALTH_MAX_DAILY_SOURCE_RECORDS = 256;
-export const SUUNTO_HEALTH_MAX_WINDOW_DAYS = 28;
 export const SUUNTO_HEALTH_REQUEST_TIMEOUT_MS = 30_000;
 export const SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH = 512;
 export const SUUNTO_HEALTH_BACKFILL_MAX_ACCOUNTS = 8;

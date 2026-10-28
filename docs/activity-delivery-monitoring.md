@@ -38,7 +38,7 @@ untrusted label. All twelve current automatic/manual route contracts are tested.
 | Committed `skipped` | An explicit terminal skip, not delivered |
 | `provider_pending` | Accepted Wahoo/COROS status-only polling or recognized Suunto `NEW`/`PROCESSING` wait, not delivered or a failure |
 | `retry` | A real committed retry, excluding normal pending polls and expected contention |
-| `expected_contention` | A known provider-operation/token-refresh wait, not an outage |
+| `expected_contention` | A known provider-operation/token-refresh or Wahoo application-quota wait, not an outage |
 | `dead_lettered` | A newly committed guarded DLQ transition, not retained failed-job totals |
 | `manual_reconciliation` | A newly durable unresolved-provider outcome; automatic upload replay is unsafe |
 | Worker `acknowledged` | The task returned normally; it does **not** prove delivery |
@@ -65,10 +65,11 @@ existing committed `retry` outcome and bounded retry budget, with the provider-s
 at exhaustion. A diagnostic HTTP 200 is neither initialization validity nor delivery success. Already accepted uploads
 keep their continuation/status-only guards; no monitoring resources, thresholds or labels change.
 
-COROS's #600 upload-copy mappings (Snorkeling → Open Water Swim; Sailing → GPS
-Cardio) use these same workers, destination labels and committed outcomes. Coverage
-is unchanged when Snorkeling also permits GPS-less files; Sailing retains its GPS
-requirement. A mapping INFO is not provider acceptance or delivery. Confirm
+COROS's #600 upload-copy mappings (Snorkeling → Open Water Swim; Sailing and
+Fishing → GPS Cardio; Diving → Generic) use these same workers, destination labels
+and committed outcomes. Coverage is unchanged when Snorkeling and Diving permit
+GPS-less files and Fishing uses the existing GPS Cardio conversion; Sailing and
+Fishing retain their GPS requirement. A mapping INFO is not provider acceptance or delivery. Confirm
 status `2` and the guarded success write, not the preparation log or task ACK.
 Already accepted uploads remain status-only; this change adds no probe, metric or
 alert-policy dimension and does not authorize replaying old failed records.
@@ -125,6 +126,13 @@ also requires its saved provider-account resume ID. Already accepted polls do no
 require renewed new-upload entitlement, new-send allowlisting or the automatic route
 setting. They are observed, never reset or resent. Missing native depth/resume
 information is unknown.
+
+Wahoo application-quota cooldowns are **covered/unchanged**: their guarded retry commits reuse
+`expected_contention`, scheduled workers emit `deferred` (or `provider_pending` for an existing accepted poll), and
+future dispatch markers stay outside actionable backlog samples. The dispatcher pages past these waits even before
+an upload ID exists. Existing failure filters exclude these outcomes; exhausted budgets still commit new-DLQ or
+manual-reconciliation failures, and enqueue/storage failures remain visible. Actual upstream 429s retain numeric-only
+WARNING diagnostics. No metric/filter/label, dashboard, alert threshold or production Monitoring apply changes.
 
 Each eligible row is re-read in a read-only transaction with owner, deletion,
 settings and connection snapshots; a changed queue revision is excluded. Token

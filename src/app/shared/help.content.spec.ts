@@ -16,6 +16,13 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('distinguishes scheduled history and cooldowns from completion estimates', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
+    expect(copy).toContain('Scheduled activity counts confirm queued work, not completed imports');
+    expect(copy).toContain('QS does not promise a completion time from those counts');
+    expect(copy).toContain('not an expected finish date');
+  });
+
   it('explains shared provider import progress and distinguishes requests from delivery', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
     for (const phrase of ['**Importing history**', 'update together with the header', '**View details**',
@@ -36,7 +43,9 @@ describe('help.content', () => {
       '**Requesting Garmin history**', 'temporary failures retry from the unfinished batch',
       '**History requested** means submission finished', 'Garmin delivers activities separately',
       'does not confirm that every activity has arrived', '**30-day cooldown**',
+      'Existing connections are verified automatically', 'reconnect before importing history; no import starts from that request',
       'Sleep, Health and saved routes keep their separate controls']) expect(copy).toContain(phrase);
+    expect(copy).not.toContain('Older connections may retain the previous import flow');
   });
   it('explains Pro trial payment, cancellation and the unchanged free and existing-trial choices', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'plans-and-billing')!.content;
@@ -55,6 +64,16 @@ describe('help.content', () => {
     expect(copy).toContain('Opening Connections does not connect an account automatically');
     expect(copy).toContain('**Membership still syncing**');
     expect(copy).toContain('do not start another checkout while the result is unconfirmed');
+  });
+  it('makes billing access discoverable without a Quantified Self sign-in', () => {
+    const billing = HELP_SECTIONS.find(section => section.id === 'plans-and-billing')!;
+    const troubleshooting = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!;
+    expect(billing.content).toContain('[open the Stripe billing portal](https://billing.stripe.com/p/login/3cI7sLf5ObXy84o8OqcIE00)');
+    expect(billing.content).toContain('email address used for your subscription');
+    expect(billing.content).toContain('Stripe emails you a login link');
+    expect(billing.content).toContain('usual billing button in [Membership](/subscriptions)');
+    expect(troubleshooting.content).toContain('[billing access without signing in](/help#plans-and-billing)');
+    expect(searchHelpSections(HELP_SECTIONS, "billing can't sign in").map(section => section.id)).toContain('plans-and-billing');
   });
   it('links membership and shareable getting-started and billing guides to their supported public URLs', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
@@ -117,6 +136,16 @@ describe('help.content', () => {
       expect(copy).toContain(phrase);
     }
   });
+  it('explains reconstructed swim intervals, original lap triggers and header meanings', () => {
+    const copy = HELP_SECTIONS.map(section => section.content).join('\n');
+    for (const phrase of ['**Intervals**', '**Original laps**', '**Fitness equipment** is a recorded lap trigger',
+      'without reimporting them', '**Total strokes** is the count for an interval',
+      '**Average Stroke Count** is a recorded per-length average', 'focus it with the keyboard',
+      'including when no separate original laps are available', '**Lap** column retains the original lap numbers']) {
+      expect(copy).toContain(phrase);
+    }
+  });
+
   it('explains pool-swimming axis choices and preserves distance preferences for other sports', () => {
     const copy = HELP_SECTIONS.map(section => section.content).join('\n');
     for (const phrase of ['**Pool swimming** defaults to **Duration**, with **Time** also available',
@@ -750,7 +779,9 @@ describe('help.content', () => {
     for (const phrase of ['**Rest 1/10**', 'without using a metric slot', 'one compact planned-distance text field',
       '**Show field availability for this workout**', '**Included**, **Heading** or **Omitted**',
       'not guaranteed visible or measured', 'new scheduled copy from your workout library',
-      'does not unlock its protected completed Guide', 'never automatically recreates hidden Guides']) expect(content).toContain(phrase);
+      'does not unlock its protected completed Guide', 'never automatically recreates hidden Guides', 'without opening the detailed report',
+      'leaving two for extras before instructions', 'Move your most important fields earlier',
+      'Warnings for unsupported recipes, compact screens and file-size fallback also stay visible']) expect(content).toContain(phrase);
     for (const phrase of ['**Duplicate to…** in its sync details or workout actions', '**Send a fresh Guide**', '**same QS workout**',
       'earlier Guide untouched', 'duplicates are possible', 'At most eight fresh copies', 'Stop sync affects the current Guide']) expect(content).toContain(phrase);
     expect(content).not.toContain('Repeat on another date');
@@ -982,6 +1013,13 @@ describe('help.content', () => {
     expect(content).not.toMatch(/Workout Import|WORKOUT_IMPORT/);
     expect(content).toContain('Retry may still require support');
   });
+  it('explains manual activity range presets, local dates and confirmation', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
+    for (const phrase of ['**Activity history range**', '**All available history**', '**Custom dates**',
+      'your local calendar days', 'confirm again after changing them', 'one day per 500 activities scheduled',
+      'not a processing-time estimate']) expect(copy).toContain(phrase);
+  });
+
   it('explains the category overview, recorded source choices and manual history actions', () => {
     const health = HELP_SECTIONS.find(section => section.id === 'health')!.content;
     for (const phrase of ['**Category overview**', 'last 30 days', '**Body**', '**Vitals**', '**Movement & energy**',
@@ -1709,6 +1747,9 @@ describe('help.content', () => {
   it('should provide a dedicated Training analysis guide with evidence and missing-data rules', () => {
     const trainingSection = HELP_SECTIONS.find(section => section.id === 'training-analysis');
 
+    expect(trainingSection?.content).toContain('including weekly tooltip distances and the pool-length label beside SWOLF');
+    expect(trainingSection?.content).toContain('general kilometres/miles setting does not override swimming units');
+    expect(trainingSection?.content).toContain('does not change the physical pool or SWOLF comparison');
     expect(trainingSection?.content).toContain('What drove this');
     expect(trainingSection?.content).toContain('**Training impact** appears for completed activities');
     expect(trainingSection?.content).toContain('TSS divided by 42');
@@ -1931,6 +1972,10 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Missing active-length distance can use its recorded pool length');
     expect(gettingStartedSection?.content).toContain('Rest lengths never gain distance from pool size');
     expect(gettingStartedSection?.content).toContain('Set pace and calculated SWOLF require complete active time and distance');
+    expect(gettingStartedSection?.content).toContain('the set header shows **Distance unavailable**');
+    expect(gettingStartedSection?.content).toContain('An invalid recorded distance is never replaced with pool length');
+    expect(gettingStartedSection?.content).toContain('later cumulative splits show **Unavailable** until the next set');
+    expect(gettingStartedSection?.content).toContain('Known individual length distances stay visible');
     expect(gettingStartedSection?.content).toContain('Event swim length tables');
     expect(gettingStartedSection?.content).toContain('**Swim Lengths** table');
     expect(gettingStartedSection?.content).toContain('per-length pool data');
@@ -2095,11 +2140,21 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('including across missing data');
     expect(gettingStartedSection?.content).toContain('**Detect gaps** estimates breaks');
     expect(gettingStartedSection?.content).toContain('**Custom gap limit**');
+    expect(gettingStartedSection?.content).toContain('**X axis** choices; open either submenu to change it.');
     expect(gettingStartedSection?.content).toContain('**Settings → Charts → Event chart line continuity**');
     expect(gettingStartedSection?.content).toContain('missing measurements stay missing in tooltips and statistics');
     expect(gettingStartedSection?.content).toContain('Power **3s** still requires complete sample windows');
     expect(gettingStartedSection?.content).toContain('Right-clicking an event chart copies a themed image of the full chart panel');
     expect(gettingStartedSection?.content).toContain('**Show Swim Lengths** chart option');
+    expect(gettingStartedSection?.content).toContain('**Swim / rest timeline**');
+    expect(gettingStartedSection?.content).toContain('**Show in charts**');
+    expect(gettingStartedSection?.content).toContain('**All intervals**');
+    expect(gettingStartedSection?.content).toContain('**data coverage**');
+    expect(gettingStartedSection?.content).toContain('**Show affected lengths**');
+    expect(gettingStartedSection?.content).toContain('Independent watch totals may still be available');
+    expect(gettingStartedSection?.content).toContain('Gaps are not assumed to be rest');
+    expect(gettingStartedSection?.content).toContain('Swim length chart tooltips use the same distance and pace rules as the length table');
+    expect(gettingStartedSection?.content).toContain('Swim lap tooltips show **Avg Swim Pace**');
     expect(gettingStartedSection?.content).toContain('swim length end boundaries');
     expect(gettingStartedSection?.content).toContain('active and idle/rest lengths are both included');
     expect(gettingStartedSection?.content).toContain('shared y-axis');
@@ -2483,8 +2538,11 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('your retained original FIT and activity type in Quantified Self stay unchanged');
     expect(serviceConnectionsSection?.content).toContain('**Snorkeling as Open Water Swim** with or without recorded GPS');
     expect(serviceConnectionsSection?.content).toContain('**Sailing as GPS Cardio** only with recorded GPS');
+    expect(serviceConnectionsSection?.content).toContain('**Fishing as GPS Cardio** only with recorded GPS');
+    expect(serviceConnectionsSection?.content).toContain('**Diving as Generic** with or without recorded GPS');
+    expect(serviceConnectionsSection?.content).toContain('COROS may not display every field or a dive profile');
     expect(serviceConnectionsSection?.content).toContain('missing GPS is not added');
-    expect(serviceConnectionsSection?.content).toContain('GPS-less Sailing, mixed/multi-session, malformed and other activity types');
+    expect(serviceConnectionsSection?.content).toContain('GPS-less Sailing or Fishing, mixed/multi-session, malformed and other activity types');
     expect(serviceConnectionsSection?.content).toContain('COROS currently reports these processing failures only as a generic failed status');
     expect(serviceConnectionsSection?.content).toContain('https://support.coros.com/hc/en-us/articles/360040256971-How-to-Import-Activities-to-Your-COROS-Account');
     expect(serviceConnectionsSection?.content).toContain('uploading selected GPX or FIT routes to COROS');

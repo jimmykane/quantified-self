@@ -3,6 +3,11 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
+  ElementRef,
+  viewChild,
+  afterNextRender,
+  Injector,
   DestroyRef,
   inject,
   OnInit,
@@ -43,6 +48,7 @@ import { resolveEventChartXAxisType } from '../../helpers/event-echarts-xaxis.he
 import { hasVisibleEventLaps } from '../../helpers/event-lap-type.helper';
 import { hasVisibleEventJumps } from '../../helpers/event-jump-type.helper';
 import { hasVisibleSwimLengths } from '../../helpers/event-swim-length.helper';
+import { getSwimIntervalActivity } from '../../helpers/event-swim-interval.helper';
 import { getBenchmarkRRIntervalSource, hasBenchmarkRRStats } from '../../helpers/benchmark-rr.helper';
 import { getAppNonUnitBasedChartDataTypes } from '../../helpers/app-chart-data-types.helper';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
@@ -55,6 +61,7 @@ import {
 } from '../../helpers/event-dive-profile.helper';
 import { TrainingImpactService, type TrainingImpactSnapshotState } from '../../services/training-impact.service';
 import { buildTrainingSessionImpactView } from '../../helpers/training-impact.helper';
+import type { SwimChartFocus } from '../../helpers/event-swim-chart-focus.helper';
 import { isBenchmarkEvent, isBenchmarkEventForTrainingMetrics } from '@shared/event-classification';
 
 @Component({
@@ -103,6 +110,7 @@ export class EventCardComponent implements OnInit {
   // Computed signals for template - replaces method calls
   public hasLapsFlag = computed(() =>
     hasVisibleEventLaps(this.selectedActivitiesInstant())
+      || this.selectedActivitiesInstant().some(activity => !!getSwimIntervalActivity(activity))
   );
 
   public hasJumpsFlag = computed(() =>
@@ -182,6 +190,40 @@ export class EventCardComponent implements OnInit {
 
     return hasEventChartableData(selectedActivities, xAxisType);
   });
+
+  private readonly eventChartElement = viewChild<unknown, ElementRef<HTMLElement>>('eventChart', { read: ElementRef });
+  private readonly focusInjector = inject(Injector);
+  private readonly swimChartFocusRequest = signal<{ event: AppEventInterface; focus: SwimChartFocus } | null>(null);
+  public readonly canFocusSwimCharts = computed(() => this.hasChartDataFlag()
+    && this.selectedActivitiesInstant().length === this.selectedActivitiesDebounced().length
+    && this.selectedActivitiesInstant().every(activity => this.selectedActivitiesDebounced().includes(activity))
+    && resolveEventChartXAxisType(this.event(), this.userSettingsQuery.chartSettings()?.xAxisType ?? XAxisTypes.Duration,
+      this.selectedActivitiesDebounced()) !== XAxisTypes.Distance);
+  public readonly swimChartFocus = computed(() => {
+    const request = this.swimChartFocusRequest();
+    return request && request.event === this.event() && this.canFocusSwimCharts()
+      && this.selectedActivitiesInstant().includes(request.focus.activity)
+      && this.selectedActivitiesDebounced().includes(request.focus.activity) ? request.focus : null;
+  });
+
+  private readonly clearInvalidSwimFocus = effect(() => {
+    if (this.swimChartFocusRequest() && !this.swimChartFocus()) this.swimChartFocusRequest.set(null);
+  });
+
+  public onSwimIntervalFocus(focus: SwimChartFocus): void {
+    if (!this.canFocusSwimCharts() || !this.selectedActivitiesInstant().includes(focus.activity)) return;
+    this.swimChartFocusRequest.set({ event: this.event(), focus });
+    afterNextRender(() => {
+      if (this.swimChartFocus() !== focus) return;
+      const element = this.eventChartElement()?.nativeElement;
+      element?.scrollIntoView?.({ block: 'start' });
+      element?.focus({ preventScroll: true });
+    }, { injector: this.focusInjector });
+  }
+
+  public onSwimIntervalFocusCleared(focus: SwimChartFocus): void {
+    if (this.swimChartFocusRequest()?.focus === focus) this.swimChartFocusRequest.set(null);
+  }
 
   // Computed ownership check
   public isOwner = computed(() => {

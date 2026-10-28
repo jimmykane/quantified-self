@@ -1,4 +1,6 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, PLATFORM_ID, afterNextRender, inject, input, signal } from '@angular/core';
+import { chartViewportQueue } from '../../helpers/chart-viewport-queue';
 import { HomeDashboardPreviewComponent } from '../home/home-dashboard-preview.component';
 import { HomeMyTracksPreviewComponent } from '../home/home-my-tracks-preview.component';
 import { HomeSignalChartsPreviewComponent } from '../home/home-signal-charts-preview.component';
@@ -38,8 +40,26 @@ import { TrainingPlansPreviewComponent } from './training-plans-preview.componen
   templateUrl: './public-feature-preview.component.html',
   styleUrls: ['./public-feature-preview.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[class.preview-prepares-ahead]': 'prepareAhead()' },
 })
 export class PublicFeaturePreviewComponent {
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   readonly previewKey = input.required<PublicFeaturePreviewKey>();
+  readonly prepareAhead = input(false);
+  readonly previewReady = signal(false);
   readonly providerDataFlowRows = buildPublicProviderDataFlowRows();
+
+  constructor() {
+    afterNextRender(() => {
+      if (!this.isBrowser || !this.prepareAhead()) return;
+      // Share the plots' scroll root, 600px lookahead and one-per-frame scheduling.
+      const pending = chartViewportQueue.wait(this.host.nativeElement);
+      this.destroyRef.onDestroy(pending.cancel);
+      void pending.ready.then(ready => {
+        if (ready && !this.destroyRef.destroyed) this.previewReady.set(true);
+      });
+    });
+  }
 }

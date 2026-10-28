@@ -390,6 +390,44 @@ describe('backfillSuuntoAppSleep', () => {
             .toBeLessThan(hoisted.addSleepSyncQueueItem.mock.invocationCallOrder[0]);
     });
 
+    it.each([
+        { resource: 'sleep' as const, failedIndex: 0 }, { resource: 'sleep' as const, failedIndex: 3 },
+        { resource: 'health' as const, failedIndex: 0 }, { resource: 'health' as const, failedIndex: 3 },
+    ])('admits four bounded $resource targets after child $failedIndex fails without resetting retained children', async ({ resource, failedIndex }) => {
+        seedSuuntoToken();
+        const width = (resource === 'health' ? 26 : 28) * 86400000;
+        const execution = { runId: 'run', tokenPath: 'suuntoAppAccessTokens/user-1/tokens/suunto-token-1', providerUserId: 'suunto-user-1',
+            cooldownStartedAtMs: nowMs, requiredDocumentFieldValues: [], beforeRequest: vi.fn(), inTransaction: vi.fn(), onQueued: vi.fn() };
+        const options = { execution, startMs: nowMs - 4 * width, endMs: nowMs, resources: [resource], suuntoWindowBatchVersion: 1 as const };
+        const retained = new Map<string, unknown>();
+        let fail = true;
+        hoisted.addSleepSyncQueueItem.mockImplementation(async input => {
+            // Fail by range identity, independent of concurrent admission order.
+            const index = (input.rangeStartMs - options.startMs) / width;
+            for (let delay = index; delay > 0; delay--) await Promise.resolve();
+            if (fail && index === failedIndex) throw new Error('Interrupted queue write');
+            if (!retained.has(input.dedupeKey)) retained.set(input.dedupeKey, { revision: 'original', processed: true });
+            return { path: input.dedupeKey };
+        });
+        await expect(queueSuuntoSleepHealthHistory('user-1', options)).rejects.toThrow('Interrupted queue write');
+        const previous = new Map(retained);
+        expect(previous.size).toBe(3); // All other started writes drained, even when the first child failed.
+        expect(hoisted.updateSleepSyncState).not.toHaveBeenCalled();
+        fail = false;
+        const result = await queueSuuntoSleepHealthHistory('user-1', options);
+        expect(result).toMatchObject({ queued: 4, sleepQueued: resource === 'sleep' ? 4 : 0, healthQueued: resource === 'health' ? 4 : 0 });
+        expect(retained.size).toBe(4);
+        for (const [key, value] of previous) expect(retained.get(key)).toBe(value);
+        const inputs = hoisted.addSleepSyncQueueItem.mock.calls.map(([input]) => input);
+        for (const input of inputs) {
+            expect(input.rangeEndMs - input.rangeStartMs).toBe(width);
+            expect(input).toMatchObject({ preserveExisting: true, dispatchImmediately: true, connectionHistoryRunId: 'run',
+                providerUserId: 'suunto-user-1', requiredDocumentFieldValues: [] });
+        }
+        expect(execution.onQueued).toHaveBeenCalledTimes(inputs.length - 1);
+        await expect(queueSuuntoSleepHealthHistory('user-1', { ...options, endMs: nowMs + 1 })).rejects.toThrow('batch bound');
+    });
+
     it.each(['Suunto', 'COROS'])('preserves automatic %s token-read failures for the coordinator to classify', async provider => {
         if (provider === 'Suunto') seedSuuntoToken(); else seedCorosToken();
         const error = Object.assign(new Error('Temporary credential read failure'), { retryAt: nowMs + 120000 });

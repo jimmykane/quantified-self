@@ -112,7 +112,7 @@ describe('Suunto swimming screen preferences', () => {
     component.choose('restFields', 3, 'previousLapStrokes');
     fixture.detectChanges();
     const rows = component.availability()!.rows;
-    expect(fixture.nativeElement.textContent).toContain('large Guides may omit interval headings, planned distances and Last Work lap readings to fit the file-size limit');
+    expect(fixture.nativeElement.textContent).toContain('Large Guides may omit interval headings, planned distances and Last Work lap readings to fit the file-size limit');
     expect(rows[0].fields[0].type).toBe('stepDurationCountdown');
     expect(rows[0].choices.filter(choice => choice.state === 'included')).toHaveLength(3);
     expect(rows[1].choices.filter(choice => choice.field.startsWith('previousLap'))
@@ -161,6 +161,87 @@ describe('Suunto swimming screen preferences', () => {
     expect(fixture.nativeElement.querySelector(`[id="${component.availabilityRegionId}"]`)).toBeNull();
     expect(save).not.toHaveBeenCalled();
   });
+  it('shows omissions beside choices with the detailed report closed and updates after reordering', () => {
+    const fixture = render(); const component = fixture.componentInstance;
+    const structure: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Swimming, nodes: [
+      { kind: 'repeat', id: 'set', count: 10, steps: [
+        { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'distance', meters: 100 },
+          targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 120, maximumBpm: 150 }] },
+        { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 },
+          targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 80, maximumBpm: 120 }] },
+      ] },
+    ] };
+    fixture.componentRef.setInput('structure', structure);
+    component.add('workFields'); component.choose('workFields', 4, 'workoutDistance');
+    component.toggle(); fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    const total = component.sections()[0].fields.find(row => row.field === 'workoutDistance')!;
+    expect(total.allocation).toMatchObject({ omitted: true, summary: 'Omitted on 10 of 10 Work steps.' });
+    expect(total.allocation?.reasons).toHaveLength(1);
+    const description = element.querySelector(`[id="${total.descriptionId}"]`)!;
+    expect(description.textContent).toContain('No space after');
+    expect(description.closest('[hidden]')).toBeNull();
+    expect(element.querySelector(`mat-select[aria-describedby="${total.descriptionId}"]`)).not.toBeNull();
+    expect(component.availabilityExpanded()).toBe(false);
+    expect(element.textContent).toContain('That leaves two for extras before instructions');
+    component.move('workFields', 4, -1); component.move('workFields', 3, -1); component.move('workFields', 2, -1);
+    fixture.detectChanges();
+    expect(component.sections()[0].fields.find(row => row.field === 'workoutDistance')?.allocation)
+      .toMatchObject({ omitted: false, summary: 'Included on all 10 Work steps.' });
+    expect(component.sections()[0].fields.find(row => row.field === 'pace')?.allocation?.omitted).toBe(true);
+    expect(save).not.toHaveBeenCalled();
+  });
+  it('distinguishes mixed target steps and missing planned context without duplicating repeated reasons', () => {
+    const fixture = render(); const component = fixture.componentInstance;
+    fixture.componentRef.setInput('structure', { version: 1, sport: ActivityTypes.OpenWaterSwimming, nodes: [
+      { kind: 'step', id: 'targeted', purpose: 'work', ending: { kind: 'distance', meters: 100 },
+        targets: [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: 120, maximumBpm: 150 }] },
+      { kind: 'step', id: 'untargeted', purpose: 'work', ending: { kind: 'manual' }, targets: [] },
+      { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] },
+    ] } satisfies WorkoutStructureV1);
+    component.add('workFields'); component.choose('workFields', 4, 'workoutDistance'); fixture.detectChanges();
+    expect(component.sections()[0].fields.find(row => row.field === 'workoutDistance')?.allocation)
+      .toMatchObject({ summary: 'Omitted on 1 of 2 Work steps.' });
+    expect(component.sections()[0].fields.find(row => row.field === 'interval')?.allocation?.summary)
+      .toBe('In the heading on all 2 Work steps.');
+    expect(component.sections()[1].fields.find(row => row.field === 'previousPlannedDistance')?.allocation)
+      .toEqual({ omitted: true, summary: 'Omitted on 1 of 1 Rest step.',
+        reasons: ['The adjacent Work step has no prescribed distance.'] });
+    fixture.componentRef.setInput('structure', null); fixture.detectChanges();
+    expect(component.sections().flatMap(section => section.fields).every(row => row.allocation === null)).toBe(true);
+  });
+  it('keeps size fallback and unsupported-layout warnings visible while the detailed report is closed', () => {
+    const fixture = render(); const component = fixture.componentInstance;
+    const work: WorkoutStepV1 = { kind: 'step', id: 'work', purpose: 'work',
+      ending: { kind: 'manual' }, targets: [] };
+    const rest: WorkoutStepV1 = { kind: 'step', id: 'rest', purpose: 'rest',
+      ending: { kind: 'time', seconds: 15 }, targets: [] };
+    const structure: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Swimming, nodes: [work, rest] };
+    component.toggle(); fixture.componentRef.setInput('structure', structure); fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    const summary = () => element.querySelector('.allocation-summary');
+    expect(summary()?.textContent).toContain('Large Guides may omit');
+    expect(summary()?.closest('[hidden]')).toBeNull();
+    expect(component.availabilityExpanded()).toBe(false);
+    fixture.componentRef.setInput('structure', { ...structure, nodes: Array.from({ length: 6 }, (_, index) => ({
+      kind: 'repeat', id: `set-${index}`, count: 100,
+      steps: [{ ...work, id: `work-${index}` }, { ...rest, id: `rest-${index}` }],
+    })) } satisfies WorkoutStructureV1); fixture.detectChanges();
+    expect(component.availability()?.compact).toBe(true);
+    expect(summary()?.textContent).toContain('compact screens');
+    expect(summary()?.closest('[hidden]')).toBeNull();
+    expect(component.sections().flatMap(section => section.fields).every(row => row.allocation === null)).toBe(true);
+    fixture.componentRef.setInput('structure', { ...structure, nodes: [
+      { ...work, ending: { kind: 'repetitions', repetitions: 10 } }, rest,
+    ] } satisfies WorkoutStructureV1); fixture.detectChanges();
+    expect(component.availability()?.blocked).toBe(true);
+    expect(summary()?.textContent).toContain('cannot currently be sent');
+    expect(summary()?.closest('[hidden]')).toBeNull();
+    expect(summary()?.textContent).not.toContain('Included');
+    expect(component.availabilityExpanded()).toBe(false);
+    expect(save).not.toHaveBeenCalled();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+  });
   it('bounds availability rendering and silently resets paging when the recipe changes', () => {
     const fixture = render(); const component = fixture.componentInstance;
     const structure: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.OpenWaterSwimming, nodes: [
@@ -185,6 +266,7 @@ describe('Suunto swimming screen preferences', () => {
     ] } satisfies WorkoutStructureV1);
     component.toggleAvailability(); fixture.detectChanges();
     expect(component.availability()).toMatchObject({ blocked: true, rows: [] });
+    expect(component.sections().flatMap(section => section.fields).every(row => row.allocation === null)).toBe(true);
     expect(fixture.nativeElement.textContent).toContain('cannot currently be sent as a Suunto Guide');
     expect(save).not.toHaveBeenCalled();
   });

@@ -206,6 +206,19 @@ describe('TileChartActionsComponent', () => {
     expect(hapticsMock.success).toHaveBeenCalledOnce();
   });
 
+  it('opens with one feedback and no temporary global overflow override', async () => {
+    const trigger = fixture.nativeElement.querySelector('.tile-actions-trigger') as HTMLButtonElement;
+    trigger.click();
+    fixture.detectChanges();
+    expect(document.getElementById('panel-fix')).toBeNull();
+    expect(hapticsMock.selection).toHaveBeenCalledOnce();
+    await fixture.whenStable();
+    trigger.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(hapticsMock.selection).toHaveBeenCalledOnce();
+  });
+
   it('should create', () => {
     expect(component).toBeTruthy();
   });

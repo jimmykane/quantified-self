@@ -3434,6 +3434,17 @@ step numbers preserve prescription order and six rows load at a time. It is the 
 current draft preferences, not a renderer/readback of an already delivered Guide. Native readings need watch data;
 included fields are not guaranteed visible. Plan-level settings do not invent a representative workout. The report
 is cleared when the same-account schedule is unavailable; no new query, provider read, persistence or mutation is added.
+Each Work/Rest selector also shows its allocation across **all** matching steps, independently of the detailed
+report's disclosure/pagination. Omitted choices show the affected step count and deduplicated allocator reasons;
+included readings and heading-only counters remain distinct. Reordering updates this feedback before Save.
+Mixed targeted/untargeted steps are counted separately rather than claiming one layout for the whole workout.
+A countdown plus an HR target/current-HR pair reserves three fields, leaving two before instructions. The UI explains
+this budget and moving important fields earlier without dropping prescribed targets. Missing/unsupported/compact
+recipes show no invented inline allocation. Unsupported/compact status and the enriched-file-size fallback warning
+stay visible outside the detailed report; inline Included counts must never imply that a large-Guide fallback preserves
+all fields. The per-step disclosure is absent when no supported expanded rows exist.
+These are frontend explanations using the existing allocator only;
+Guide fields/digests, queue monitoring, consent, storage and MCP read/write contracts are unchanged (no wire impact).
 Disclosure targets use per-instance IDs so stacked plan/workout dialogs cannot control another dialog's region.
 Accepted draft edits clear old save success/error messages; unchanged or rejected selections remain silent and
 never imply that a later draft was saved. Both behaviors have focused Angular regression coverage.
@@ -7537,7 +7548,15 @@ it shows the reference without a numerical comparison. Neither value is averaged
 - CSS is not inferred from ordinary workouts.
 
 The chart has a full-height layout and an inverted pace axis, because lower seconds per 100 m/yd means faster swimming.
-Units follow the user's swim pace settings.
+Units follow the user's first valid swim pace preference, defaulting to metres. Weekly pool/open-water tooltip
+distances and the comparable SWOLF pool-length label use `createSwimDistanceDisplayStat` and
+`resolveUnitAwareDisplayStat`, so their values and units come from the same Sports Lib display instance.
+The general kilometres/miles preference does not override swimming. A recorded 22.86 m pool displays as 25 yd;
+an actual 25 m pool displays as 27.34 yd, without inventing a nominal yard pool. Missing/invalid distance stays
+unavailable and explicit zero stays zero. Unit changes rebuild the display model without changing canonical metres,
+pace inputs, weekly aggregation, SWOLF values or the selected physical stroke/pool comparison context.
+MCP impact: none. This frontend formatting correction changes no Training snapshot/read projection, planning recipe,
+tool, schema, consent, mutation or provider action; no additional planning read coverage or deferral is needed.
 
 Its header states whether pool and open-water pace are both available or only one environment has evidence, then states
 the number of explicit-pace weeks. The x-axis uses the shared compact `W35` marker convention; the visible key defines

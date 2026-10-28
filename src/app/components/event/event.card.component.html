@@ -77,9 +77,10 @@
           <span>Please select at least one activity to view the chart.</span>
         </div>
         } @else if (hasChartDataFlag()) {
-        <app-event-card-chart [selectedActivities]="selectedActivitiesDebounced()" [targetUserID]="targetUserID()"
+        <app-event-card-chart #eventChart tabindex="-1" aria-label="Event charts" [selectedActivities]="selectedActivitiesDebounced()" [targetUserID]="targetUserID()"
           [user]="activeUser" [waterMark]="activeUser.brandText ?? null" [event]="activeEvent"
-          [darkTheme]="darkTheme()"
+          [darkTheme]="darkTheme()" [swimIntervalFocus]="swimChartFocus()"
+          (swimIntervalFocusCleared)="onSwimIntervalFocusCleared($event)"
           [automaticExcludedDataTypes]="hasDiveProfileFlag() ? diveProfileChartDataTypes : []">
         </app-event-card-chart>
         }
@@ -96,7 +97,9 @@
         <!-- Laps Section -->
         @if (hasLapsFlag()) {
         <app-event-card-laps [selectedActivities]="selectedActivitiesInstant()" [unitSettings]="userUnitSettings()"
-          [event]="activeEvent" [canCustomize]="isOwner()">
+          [event]="activeEvent" [canCustomize]="isOwner()" [canFocusCharts]="canFocusSwimCharts()"
+          [focusedSwimInterval]="swimChartFocus()" (swimIntervalFocus)="onSwimIntervalFocus($event)"
+          (swimIntervalFocusCleared)="onSwimIntervalFocusCleared($event)">
         </app-event-card-laps>
         }
 

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { HttpsError } from 'firebase-functions/v2/https';
 
 const mocks = vi.hoisted(() => {
   const requestWahooAPI = vi.fn();
@@ -341,6 +342,23 @@ describe('Wahoo activity uploads', () => {
     expect(mocks.requestWahooAPI.mock.calls.map(([, , request]) => request?.method || 'GET'))
       .toEqual(['POST', 'PUT', 'PUT']);
     expect(mocks.getTokenData.mock.calls.map((call) => call[2])).toEqual([false, false, true]);
+  });
+
+  it('retains the quota deadline and accepted upload ID when a type correction is rate limited', async () => {
+    mocks.requestWahooAPI
+      .mockResolvedValueOnce({ data: { token: 'accepted-1', status: 'complete', workout_id: 42 } })
+      .mockRejectedValueOnce(new HttpsError('resource-exhausted', 'Rate limited.', { retryAfterSeconds: 3605 }));
+    await expect(uploadActivityFileToWahoo('user-1', Buffer.from('FIT'), {
+      expectedWorkoutTypeId: 9,
+    })).rejects.toMatchObject({
+      code: 'resource-exhausted', retryMode: 'resume', providerOperationId: 'accepted-1', retryAfterSeconds: 3605,
+    });
+    expect(mocks.requestWahooAPI.mock.calls.map(([, , request]) => request?.method || 'GET')).toEqual(['POST', 'PUT']);
+  });
+
+  it('keeps an unstarted upload retryable if the shared cooldown check fails', async () => {
+    mocks.requestWahooAPI.mockRejectedValueOnce(Object.assign(new WahooAPITransportError('Cooldown unavailable.'), { requestStarted: false }));
+    await expect(uploadActivityFileToWahoo('user-1', Buffer.from('FIT'))).rejects.toMatchObject({ code: 'unavailable' });
   });
 
   it('rejects client-supplied unknown workout type IDs before calling Wahoo', async () => {

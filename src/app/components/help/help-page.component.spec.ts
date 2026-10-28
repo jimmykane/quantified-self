@@ -52,6 +52,25 @@ describe('HelpPageComponent', () => {
     expect(haptics.selection).toHaveBeenCalledTimes(1);
   });
 
+  it('renders the public billing login link with feedback only for an ordinary link activation', async () => {
+    component.openSection('plans-and-billing');
+    await vi.waitFor(() => expect(component.renderedSectionContent()['plans-and-billing']).toBeTruthy());
+    fixture.detectChanges();
+    haptics.selection.mockClear();
+    const copy = fixture.nativeElement.querySelector('.section-copy') as HTMLElement;
+    const link = copy.querySelector('a[href="https://billing.stripe.com/p/login/3cI7sLf5ObXy84o8OqcIE00"]') as HTMLAnchorElement;
+    expect(link?.textContent).toBe('open the Stripe billing portal');
+    expect(copy.querySelector('a[href="/subscriptions"]')).toBeTruthy();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    // Cancel navigation after the article's click handler, without opening Stripe.
+    fixture.nativeElement.addEventListener('click', (event: MouseEvent) => event.preventDefault());
+    copy.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true }));
+    expect(haptics.selection).not.toHaveBeenCalled();
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps public article HTML and navigation stable through a change-detection pass', async () => {
     await vi.waitFor(() => expect(component.renderedSectionContent()['activity-calendar']).toBeTruthy());
     component.openSection('activity-calendar'); fixture.detectChanges();
