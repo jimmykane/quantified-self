@@ -41,6 +41,12 @@
 </app-event-section-header>
 
 <mat-card-content class="event-chart-content">
+  @if (swimIntervalFocusLabel(); as label) {
+  <div class="swim-interval-focus mat-body-small">
+    <span aria-live="polite">Showing {{ label }}</span>
+    <button mat-button type="button" (click)="resetSwimIntervalFocus()">All intervals</button>
+  </div>
+  }
   <app-loading-overlay [isLoading]="isLoading" [showSkeleton]="true" height="auto">
     <section class="event-chart-shell" [class.event-chart-shell--loading]="isLoading">
       @if (chartPanels.length > 0) {

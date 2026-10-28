@@ -47,22 +47,22 @@
     <div class="training-overview compact-row-stack">
       <app-compact-row appHomeReveal layout="stacked" icon="monitor_heart" iconTone="secondary" title="Your Training Snapshot"
         summary="Sample data · Current state, readiness, recent volume, and exact load-model values in the same hierarchy used by Training." [showDivider]="false">
-        <app-public-feature-preview previewKey="training-snapshot"></app-public-feature-preview>
-        <app-public-feature-preview previewKey="training-readiness"></app-public-feature-preview>
+        <app-public-feature-preview [prepareAhead]="true" previewKey="training-snapshot"></app-public-feature-preview>
+        <app-public-feature-preview [prepareAhead]="true" previewKey="training-readiness"></app-public-feature-preview>
       </app-compact-row>
     </div>
     <div class="feature-visuals compact-row-stack">
       <app-compact-row appHomeReveal layout="stacked" icon="query_stats" title="Charts Behind Every Signal"
         summary="See how Form, freshness, intensity, efficiency, and power change over time, with readiness, recovery, and sleep views available in Training.">
-        <app-public-feature-preview previewKey="training-signals"></app-public-feature-preview>
+        <app-public-feature-preview [prepareAhead]="true" previewKey="training-signals"></app-public-feature-preview>
       </app-compact-row>
       <app-compact-row appHomeReveal layout="stacked" icon="compare_arrows" title="See How Your Training Evolves"
         summary="Explore your sport's training mix, compare matching builds, and follow power capacity and long-session durability with the evidence behind each result.">
-        <app-public-feature-preview previewKey="training-explorer"></app-public-feature-preview>
+        <app-public-feature-preview [prepareAhead]="true" previewKey="training-explorer"></app-public-feature-preview>
       </app-compact-row>
       <app-compact-row appHomeReveal layout="stacked" icon="dashboard_customize" title="Build the Dashboard You Need" [showDivider]="false"
         summary="Start from a preset or arrange Curated, KPI, Custom, and Map tiles yourself. Each tile keeps its own filters; maps add style and marker-clustering controls.">
-        <app-public-feature-preview previewKey="dashboard"></app-public-feature-preview>
+        <app-public-feature-preview [prepareAhead]="true" previewKey="dashboard"></app-public-feature-preview>
       </app-compact-row>
     </div>
   </section>
@@ -75,7 +75,7 @@
       <p>Compare heart rate, power, altitude, depth, pace, and more in synchronized charts. Inspect intensity zones, grade-colored elevation, inverse depth, aerobic durability, and cadence versus power. Switch between distance, duration, or time where supported, then select a range for stats or zoom in.</p>
       <a mat-button routerLink="/features/training-analysis">Explore Training Analysis <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
     </header>
-    <app-public-feature-preview appHomeReveal class="feature-visuals" previewKey="workout-analysis"></app-public-feature-preview>
+    <app-public-feature-preview [prepareAhead]="true" appHomeReveal class="feature-visuals" previewKey="workout-analysis"></app-public-feature-preview>
   </section>
 
   <section id="home-plans" class="feature-section training-plans-section" aria-labelledby="home-plans-title">
@@ -92,7 +92,7 @@
           [title]="row.title" [summary]="row.copy" [showDivider]="!last"></app-compact-row>
       }
     </div>
-    <app-public-feature-preview appHomeReveal [previewKey]="trainingPlansFeature.preview"></app-public-feature-preview>
+    <app-public-feature-preview [prepareAhead]="true" appHomeReveal [previewKey]="trainingPlansFeature.preview"></app-public-feature-preview>
     <aside class="feature-visuals planning-context" aria-labelledby="home-plans-example-title">
       <mat-icon aria-hidden="true">auto_awesome</mat-icon>
       <div>
@@ -111,7 +111,7 @@
     <div class="feature-visuals compact-row-stack">
       @for (row of healthFeature.rows; track row.preview; let last = $last) {
         <app-compact-row appHomeReveal layout="stacked" [icon]="row.icon" [title]="row.title" [summary]="row.copy" [showDivider]="!last">
-          <app-public-feature-preview [previewKey]="row.preview"></app-public-feature-preview>
+          <app-public-feature-preview [prepareAhead]="true" [previewKey]="row.preview"></app-public-feature-preview>
         </app-compact-row>
       }
     </div>
@@ -133,11 +133,11 @@
       <app-compact-row appHomeReveal layout="stacked" density="compact" icon="fact_check" title="Check the Evidence" [showDivider]="false"
         summary="Each answer shows the data behind it, so you can see exactly what supports it."></app-compact-row>
     </div>
-    <app-public-feature-preview appHomeReveal previewKey="assistant-example"></app-public-feature-preview>
+    <app-public-feature-preview [prepareAhead]="true" appHomeReveal previewKey="assistant-example"></app-public-feature-preview>
     <app-compact-row appHomeReveal class="feature-visuals" layout="stacked" icon="devices" title="Analyze with ChatGPT or Claude" [showDivider]="false"
       summary="Connect ChatGPT or Claude through permission-scoped MCP. Ask them to analyze your training or prepare a bounded Training-plan proposal grounded in your approved data. Timeline note, activity-tag, and Training changes each require separate access and your client’s approval; location access remains separate.">
       <a mat-button routerLink="/features/mcp-server">Connect ChatGPT or Claude <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
-      <app-public-feature-preview previewKey="mcp-flow"></app-public-feature-preview>
+      <app-public-feature-preview [prepareAhead]="true" previewKey="mcp-flow"></app-public-feature-preview>
     </app-compact-row>
   </section>
 
@@ -149,7 +149,7 @@
       <p class="sample-caption" data-nosnippet>Real activity traces · open-water swimming, trail running, and mountain biking.</p>
       <a mat-button routerLink="/features/activity-map">Explore Activity Map <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
     </div>
-    <app-public-feature-preview appHomeReveal class="feature-visuals" previewKey="activity-map"></app-public-feature-preview>
+    <app-public-feature-preview [prepareAhead]="true" appHomeReveal class="feature-visuals" previewKey="activity-map"></app-public-feature-preview>
   </section>
 
   <section id="home-comparisons" class="feature-section analysis-section" aria-labelledby="home-comparison-title">
@@ -160,7 +160,7 @@
       <p>Compare R–R intervals and heart rate variability (HRV) when beat-to-beat data is recorded.</p>
       <a mat-button routerLink="/features/workout-data-comparison">Compare Workouts and Devices <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
     </header>
-    <app-public-feature-preview appHomeReveal class="feature-visuals" previewKey="reviewer-benchmark"></app-public-feature-preview>
+    <app-public-feature-preview [prepareAhead]="true" appHomeReveal class="feature-visuals" previewKey="reviewer-benchmark"></app-public-feature-preview>
   </section>
 
   <section id="home-integrations" class="integrations-section" aria-labelledby="home-integration-details-title">
@@ -174,7 +174,7 @@
         summary="Connect Garmin, Suunto, COROS, and Wahoo. New activities arrive automatically, and you can import the activity history already stored with each provider."></app-compact-row>
       <app-compact-row appHomeReveal layout="stacked" icon="published_with_changes" iconTone="secondary" title="Move Workouts and Routes"
         summary="Choose automatic delivery between supported providers. You can also send past activities by date range without enabling future sync.">
-        <app-public-feature-preview previewKey="provider-flow"></app-public-feature-preview>
+        <app-public-feature-preview [prepareAhead]="true" previewKey="provider-flow"></app-public-feature-preview>
         <p><strong>Activity paths:</strong> Automatically deliver new workouts or backfill past activities by date range.</p>
         <p><strong>Route paths:</strong> Deliver imported Suunto routes automatically or on demand. Saved FIT/GPX routes can also be sent manually to Garmin, Suunto, COROS, or Wahoo.</p>
       </app-compact-row>

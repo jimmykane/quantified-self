@@ -99,6 +99,23 @@
         }
       </div>
       }
+      @if (swimTimelineLanes().length > 0) {
+      <div class="event-chart-panel__swim-timeline-legend" aria-label="Swim and rest timeline legend">
+        @for (lane of swimTimelineLanes(); track lane.activityID; let laneIndex = $index) {
+        <span class="event-chart-panel__series-legend-item">
+          @if (swimTimelineLanes().length > 1) {
+          <span>{{ laneIndex + 1 }}. {{ lane.activityName }}</span>
+          }
+          <span class="event-chart-panel__swim-timeline-swatch" [style.color]="lane.color" aria-hidden="true"></span>
+          <span>Swim</span>
+          <span class="event-chart-panel__swim-timeline-swatch event-chart-panel__swim-timeline-swatch--rest"
+            [style.color]="lane.color" aria-hidden="true"></span>
+          <span>Rest</span>
+        </span>
+        }
+        <span class="event-chart-panel__series-legend-item">Gaps: unavailable</span>
+      </div>
+      }
     </div>
   </header>
   }

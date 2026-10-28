@@ -385,7 +385,7 @@ export const backfillGarminAPIActivities = functions.region(FUNCTIONS_MANIFEST.b
   if (data.background === true) {
     const { startManualActivityHistory } = await import('../connection-history/manual-activity');
     const historyImport = await startManualActivityHistory(userID, ServiceNames.GarminAPI, startDate, endDate);
-    if (historyImport) return { result: 'History import accepted', historyImport };
+    return { result: 'History import accepted', historyImport };
   }
 
   try {

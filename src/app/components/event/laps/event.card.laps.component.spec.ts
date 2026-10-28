@@ -4,6 +4,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatDialogModule } from '@angular/material/dialog';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatTableModule } from '@angular/material/table';
 import { MatSelectionListChange } from '@angular/material/list';
 import {
@@ -23,6 +24,7 @@ import {
     DataSpeedAvg,
     DataSpeedMax,
     DataSpeedMin,
+    DataStrokeRate,
     DataSwimPaceAvg,
     DataTotalCycles,
     DistanceUnits,
@@ -50,6 +52,8 @@ import { getDefaultUserUnitSettings } from '../../../../../shared/unit-aware-dis
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { HapticTapDirective } from '../../../directives/haptic-tap.directive';
 import { EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN } from '../../../helpers/event-swim-analytics.helper';
+import { createSwimIntervalFixture } from '../../../helpers/event-swim-interval.test-fixtures';
+import { getSwimLapLengths } from '../../../helpers/event-swim-length.helper';
 import { createNominalYardPoolFixture } from '../../../helpers/event-swim-distance-display.test-fixtures';
 
 function createActivity(laps: LapInterface[]): ActivityInterface {
@@ -132,7 +136,7 @@ describe('EventCardLapsComponent', () => {
         snackBar = { open: vi.fn() };
         haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
         await TestBed.configureTestingModule({
-            imports: [CommonModule, MatCheckboxModule, MatMenuModule, MatDialogModule, MatTableModule],
+            imports: [CommonModule, MatCheckboxModule, MatMenuModule, MatDialogModule, MatTableModule, MatButtonToggleModule],
             declarations: [EventCardLapsComponent, HapticTapDirective],
             providers: [
                 { provide: AppEventColorService, useValue: {} },
@@ -153,6 +157,244 @@ describe('EventCardLapsComponent', () => {
         component.unitSettings = {} as UserUnitSettingsInterface;
         component.event = { getActivities: () => [] } as EventInterface;
         fixture.detectChanges();
+    });
+
+    it('defaults overlapping swim laps to one complete interval table and switches back through the real control', () => {
+        const activity = createSwimIntervalFixture();
+        activity.setID('synthetic-swim');
+        const source = JSON.stringify(activity.toJSON());
+        component.selectedActivities = [activity];
+        component.event = { getActivities: () => [activity] } as EventInterface;
+        component.ngOnChanges();
+        fixture.detectChanges();
+        expect(component.hasSwimIntervals).toBe(true);
+        expect(component.availableLapTypes).toEqual([LapTypes.Interval]);
+        expect(fixture.nativeElement.querySelector('.lap-type-tabs')).toBeNull();
+        const table = component.lapTableGroups[0].tables[0];
+        const rows = table.dataSource.data.filter(row => !row.isLapAverage);
+        expect(rows.map(row => row[EVENT_LAP_STROKES_COLUMN])).toEqual(['53', '', '8', '', '28']);
+        expect(rows.map(row => row[EVENT_LAP_STROKE_COLUMN])).toEqual(['Freestyle', '', 'Butterfly', '', 'Mixed']);
+        expect(rows.map(row => row.isRest)).toEqual([false, true, false, true, false]);
+        expect(haptics.selection).not.toHaveBeenCalled();
+        expect(fixture.nativeElement.querySelector('.swim-swolf-heading').getAttribute('aria-label')).toContain('SWOLF (25 m).');
+        component.toggleLapLengths(rows[0]);
+        component.toggleLapSelection(table, rows[0]);
+        component.unitSettings = { ...getDefaultUserUnitSettings(), swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] };
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const refreshed = component.lapTableGroups[0].tables[0];
+        const first = refreshed.dataSource.data.find(row => !row.isLapAverage)!;
+        expect(first.lengthsExpanded).toBe(true);
+        expect(fixture.nativeElement.querySelector('.swim-swolf-heading').getAttribute('aria-label')).toContain('SWOLF (25 yd).');
+        expect(refreshed.selectedCount).toBe(1);
+        expect(getSwimLapLengths(refreshed.activity).get(first.lap)?.map(length => length.index)).toEqual([1, 2, 3, 4]);
+        haptics.selection.mockClear();
+        fixture.nativeElement.querySelectorAll('mat-button-toggle button')[1].click();
+        fixture.detectChanges();
+        expect(component.showOriginalLaps()).toBe(true);
+        expect(component.availableLapTypes).toEqual([LapTypes.FitnessEquipment, LapTypes.Manual]);
+        expect(component.lapTableGroups.every(group => group.tables[0].selectedCount === 0)).toBe(true);
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        component.setOriginalLaps(true);
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        fixture.nativeElement.querySelectorAll('mat-button-toggle button')[0].click();
+        fixture.detectChanges();
+        expect(component.availableLapTypes).toEqual([LapTypes.Interval]);
+        expect(JSON.stringify(activity.toJSON())).toBe(source);
+    });
+
+    it('focuses swim/rest intervals through chart buttons without changing row selection or feedback on a no-op', () => {
+        const activity = createSwimIntervalFixture(); activity.setID('focus-swim');
+        component.selectedActivities = [activity];
+        component.event = { getActivities: () => [activity] } as EventInterface;
+        component.canFocusCharts = true; component.ngOnChanges(); fixture.detectChanges();
+        const emit = vi.spyOn(component.swimIntervalFocus, 'emit');
+        const table = component.lapTableGroups[0].tables[0];
+        const rows = table.dataSource.data.filter(row => !row.isLapAverage);
+        const buttons = fixture.nativeElement.querySelectorAll('button[aria-pressed]');
+        expect(buttons.length).toBe(rows.length);
+        expect(haptics.selection).not.toHaveBeenCalled();
+        buttons[1].click(); fixture.detectChanges();
+        expect(emit).toHaveBeenCalledWith(expect.objectContaining({ activity, startTime: 120000, endTime: 180000 }));
+        expect(table.selectedCount).toBe(0);
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        component.focusedSwimInterval = rows[1].chartFocus; component.ngOnChanges(); fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.lap-chart-focused button[aria-pressed]').getAttribute('aria-pressed')).toBe('true');
+        component.focusSwimInterval(rows[1]);
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        const clear = vi.spyOn(component.swimIntervalFocusCleared, 'emit');
+        component.setOriginalLaps(true);
+        expect(clear).toHaveBeenCalledWith(rows[1].chartFocus);
+        component.canFocusCharts = false; component.ngOnChanges(); fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('button[aria-pressed]')).toBeNull();
+    });
+
+    it('renders corroborated whole yards in an unassigned swim interval and its selected summary', () => {
+        const { activity, rawLengths } = createNominalYardPoolFixture();
+        rawLengths.forEach(length => length.lapIndex = null);
+        component.selectedActivities = [activity];
+        component.unitSettings = { ...getDefaultUserUnitSettings(), swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] };
+        component.ngOnChanges();
+        const table = component.lapTableGroups[0].tables[0];
+        const row = table.dataSource.data.find(row => !row.isLapAverage)!;
+        expect(row[DataDistance.type]).toBe('100 yd');
+        expect(row[EVENT_LAP_STROKES_COLUMN]).toBe('40');
+        component.toggleLapSelection(table, row);
+        expect(table.selectedSummary[DataDistance.type]).toBe('100 yd · 1/1');
+        component.unitSettings = getDefaultUserUnitSettings();
+        component.ngOnChanges();
+        expect(component.lapTableGroups[0].tables[0].dataSource.data[0][DataDistance.type]).toBe('91.59 m');
+    });
+
+    it.each([false, true])('keeps row state on unchanged intervals after length regrouping (in-place update: %s)', inPlace => {
+        const source = createSwimIntervalFixture();
+        source.setID('live-swim');
+        component.selectedActivities = [source];
+        component.event = { getActivities: () => component.selectedActivities } as EventInterface;
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const originalTable = component.lapTableGroups[0].tables[0];
+        const originalRows = originalTable.dataSource.data.filter(row => !row.isLapAverage);
+        for (const row of [originalRows[0], originalRows.at(-1)!]) {
+            component.toggleLapSelection(originalTable, row);
+            component.toggleLapLengths(row);
+        }
+        haptics.selection.mockClear();
+        const updated = inPlace ? source : createSwimIntervalFixture();
+        updated.setID('live-swim');
+        const firstLength = updated.getSwimLengths()[0];
+        firstLength.type = 'idle';
+        firstLength.stroke = null;
+        firstLength.strokes = 0;
+        firstLength.distance = new DataDistance(0);
+        updated.addStat(new DataActiveLengths(6));
+        updated.addStat(new DataDistance(150));
+        component.selectedActivities = [updated];
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const table = component.lapTableGroups[0].tables[0];
+        const rows = table.dataSource.data.filter(row => !row.isLapAverage);
+        expect(rows).toHaveLength(6);
+        expect(rows.filter(row => row.isRest).every(row => !row.isSelected && !row.lengthsExpanded)).toBe(true);
+        expect(table.selectedCount).toBe(1);
+        expect(rows.at(-1)).toMatchObject({ isSelected: true, lengthsExpanded: true });
+        expect(table.selectedSummary[EVENT_LAP_STROKES_COLUMN]).toBe('28 · 1/1');
+        expect(haptics.selection).not.toHaveBeenCalled();
+    });
+
+    it('keeps comparison headers bound to original activities across interval refreshes', () => {
+        const sources = [createSwimIntervalFixture(), createSwimIntervalFixture()];
+        sources.forEach((activity, index) => activity.setID(`source-${index}`));
+        component.selectedActivities = sources;
+        component.event = { getActivities: () => sources, isMerge: true } as EventInterface;
+        for (const unit of [SwimPaceUnits.MinutesPer100Meter, SwimPaceUnits.MinutesPer100Yard, SwimPaceUnits.MinutesPer100Meter]) {
+            component.unitSettings = { ...getDefaultUserUnitSettings(), swimPaceUnits: [unit] };
+            component.ngOnChanges();
+            fixture.detectChanges();
+            const headers = fixture.nativeElement.querySelectorAll('app-activity-toggle');
+            expect(headers).toHaveLength(2);
+            sources.forEach((source, index) => {
+                expect(headers[index].activity).toBe(source);
+                expect(component.lapTableGroups[0].tables[index].activity).not.toBe(source);
+            });
+        }
+    });
+
+    it('keeps the final derived interval local when its length clock rounds into a following sport', () => {
+        const source = createSwimIntervalFixture();
+        source.getSwimLengths().at(-1)!.endDate = new Date(300500);
+        const next = { ...createActivity([]), type: ActivityTypes.Cycling,
+            startDate: new Date(300000), endDate: new Date(600000) } as ActivityInterface;
+        component.selectedActivities = [source];
+        component.event = { getActivities: () => [source, next] } as EventInterface;
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const table = component.lapTableGroups[0].tables[0];
+        const last = table.dataSource.data.at(-1)!;
+        expect(last.contextLabel).toBe('');
+        expect(last[EVENT_LAP_STROKE_COLUMN]).toBe('Mixed');
+        expect(last[DataSwimPaceAvg.type]).toBe('02:00 min/100m');
+        component.toggleLapSelection(table, last);
+        expect(table.selectedSummary[EVENT_LAP_STROKES_COLUMN]).toBe('28 · 1/1');
+    });
+
+    it('uses original lap ownership in other legs while switching the swim display and selected activities', () => {
+        const swim = createSwimIntervalFixture();
+        swim.setID('multisport-swim');
+        const cycling = createHydratedActivity([
+            swim.getLaps()[1].toJSON(),
+            { lapId: 2, type: LapTypes.Manual, startDate: 300000, endDate: 600000,
+                startIndex: null, endIndex: null,
+                stats: { [DataDuration.type]: 300, [DataDistance.type]: 2000 } },
+        ]);
+        cycling.setID('multisport-cycling');
+        cycling.startDate = new Date(300000);
+        cycling.addStat(new DataDuration(300));
+        const sources = [swim, cycling];
+        const before = JSON.stringify(sources.map(activity => activity.toJSON()));
+        component.event = { getActivities: () => sources } as EventInterface;
+        component.selectedActivities = sources;
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const assertCyclingRows = () => {
+            const tables = component.lapTableGroups.flatMap(group => group.tables)
+                .filter(table => table.activity === cycling);
+            expect(tables).toHaveLength(1);
+            expect(tables[0].dataSource.data.filter(row => !row.isLapAverage).map(row => row.lap))
+                .toEqual([cycling.getLaps()[1]]);
+        };
+        assertCyclingRows();
+        for (const original of [true, false]) {
+            component.setOriginalLaps(original);
+            fixture.detectChanges();
+            assertCyclingRows();
+        }
+        for (const selected of [[cycling], sources]) {
+            component.selectedActivities = selected;
+            component.ngOnChanges();
+            fixture.detectChanges();
+            assertCyclingRows();
+        }
+        expect(JSON.stringify(sources.map(activity => activity.toJSON()))).toBe(before);
+    });
+
+    it('keeps incomplete derived SWOLF out of rows and summaries while retaining its available metrics', () => {
+        const activity = createSwimIntervalFixture();
+        activity.getSwimLengths()[0].strokes = null;
+        activity.getSwimLengths()[0].avgCadence = new DataStrokeRate(20);
+        component.selectedActivities = [activity];
+        component.event = { getActivities: () => [activity] } as EventInterface;
+        component.ngOnChanges();
+        fixture.detectChanges();
+        const table = component.lapTableGroups[0].tables[0];
+        const first = table.dataSource.data.find(row => !row.isLapAverage)!;
+        expect(first[EVENT_LAP_STROKES_COLUMN]).toBe('');
+        expect(first[EVENT_LAP_SWOLF_COLUMN]).toBe('');
+        expect(first[DataSwimPaceAvg.type]).toBe('02:00 min/100m');
+        expect(table.dataSource.data.find(row => row.isLapAverage)?.[EVENT_LAP_SWOLF_COLUMN]).toBe('42');
+        component.toggleLapSelection(table, first);
+        fixture.detectChanges();
+        expect(table.selectedSummary[EVENT_LAP_SWOLF_COLUMN]).toBe('— · 0/1');
+        expect(fixture.nativeElement.querySelector('mat-footer-cell.mat-column-Normalized-SWOLF').textContent).toContain('— · 0/1');
+    });
+
+    it.each(['none', 'whole-activity'])('can return to intervals when original laps are %s', kind => {
+        const activity = createSwimIntervalFixture();
+        activity.getLaps().splice(0, kind === 'none' ? 2 : 1);
+        component.selectedActivities = [activity];
+        component.event = { getActivities: () => [activity] } as EventInterface;
+        component.ngOnChanges();
+        fixture.detectChanges();
+        expect(component.availableLapTypes).toEqual([LapTypes.Interval]);
+        fixture.nativeElement.querySelectorAll('mat-button-toggle button')[1].click();
+        fixture.detectChanges();
+        expect(component.availableLapTypes).toEqual([]);
+        expect(fixture.nativeElement.textContent).toContain('No separate original laps to display.');
+        expect(fixture.nativeElement.querySelector('.lap-type-tabs')).toBeNull();
+        fixture.nativeElement.querySelectorAll('mat-button-toggle button')[0].click();
+        fixture.detectChanges();
+        expect(component.availableLapTypes).toEqual([LapTypes.Interval]);
+        expect(haptics.selection).toHaveBeenCalledTimes(2);
     });
 
     it('explains rejected lap timing while retaining lap distance and identity', () => {
@@ -1975,15 +2217,15 @@ describe('EventCardLapsComponent source contracts', () => {
         );
 
         expect(template).toContain("column === 'selection' || column === '#'");
-        expect(template).toContain('Select all laps in this table');
-        expect(template).toContain("[aria-label]=\"(row.members ? 'Select laps ' : 'Select lap ') + row['#']\"");
+        expect(template).toContain("[aria-label]=\"'Select all ' + lapTable.rowNoun + 's in this table'\"");
+        expect(template).toContain("[aria-label]=\"(row.members ? 'Select laps ' : 'Select ' + lapTable.rowNoun + ' ') + row['#']\"");
         expect(template).toContain("column === 'selection' && !row.isLapAverage");
         expect(template).toContain('toggleAllLapSelections(lapTable)');
         expect(template).toContain('toggleLapSelection(lapTable, row)');
         expect(template).toContain('lapTable.selectedSummaryLabel');
         expect(template).toContain('*matFooterRowDef="lapTable.columns; sticky: true"');
         expect(template).toContain('lap-selected-summary-row');
-        expect(template).toContain('<app-data-type-icon [dataType]="column"></app-data-type-icon>');
+        expect(template).toContain('<app-data-type-icon [dataType]="column" [tooltip]="lapTable.columnTooltips[column]" [focusable]="true"></app-data-type-icon>');
         expect(template).toContain("[class.lap-index-cell]=\"column === '#'");
         expect(template).toContain("[class.lap-duration-cell]=\"column === 'Duration'");
         expect(template).toContain('lapColumnsDialog');

@@ -1,4 +1,5 @@
 import { getUserChartDataTypesToUse } from '../../helpers/app-chart-data-types.helper';
+import { createSwimIntervalFixture } from '../../helpers/event-swim-interval.test-fixtures';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { EventCardComponent } from './event.card.component';
@@ -274,6 +275,24 @@ describe('EventCardComponent', () => {
         fixture = TestBed.createComponent(EventCardComponent);
         component = fixture.componentInstance;
         fixture.detectChanges();
+    });
+
+    it('invalidates interval focus when watches or events change, without reviving old selections', () => {
+        vi.spyOn(component, 'canFocusSwimCharts').mockReturnValue(true);
+        const activity = component.event()!.getActivities()[0];
+        component.selectedActivitiesInstant.set([activity]); component.selectedActivitiesDebounced.set([activity]);
+        const focus = { key: '1', label: 'Interval 1', activity, startTime: 0, endTime: 1000 };
+        component.onSwimIntervalFocus(focus); fixture.detectChanges();
+        expect(component.swimChartFocus()).toBe(focus);
+        component.onSwimIntervalFocusCleared({ ...focus });
+        expect(component.swimChartFocus()).toBe(focus);
+        component.selectedActivitiesInstant.set([]); fixture.detectChanges();
+        expect(component.swimChartFocus()).toBeNull();
+        component.selectedActivitiesInstant.set([activity]); fixture.detectChanges();
+        expect(component.swimChartFocus()).toBeNull();
+        component.onSwimIntervalFocus(focus); fixture.detectChanges();
+        component.event.set({ ...component.event()!, getID: () => 'new-event' }); fixture.detectChanges();
+        expect(component.swimChartFocus()).toBeNull();
     });
 
     it('should create', () => {
@@ -1153,6 +1172,17 @@ describe('EventCardComponent', () => {
             component = fixture.componentInstance;
             fixture.detectChanges();
 
+            expect(component.hasLapsFlag()).toBe(false);
+        });
+
+        it.each(['none', 'whole-activity'])('shows swim intervals when original laps are %s', kind => {
+            const activity = createSwimIntervalFixture();
+            activity.getLaps().splice(0, kind === 'none' ? 2 : 1);
+            component.selectedActivitiesInstant.set([activity]);
+            fixture.detectChanges();
+            expect(component.hasLapsFlag()).toBe(true);
+            expect(fixture.nativeElement.querySelector('app-event-card-laps')).not.toBeNull();
+            component.selectedActivitiesInstant.set([]);
             expect(component.hasLapsFlag()).toBe(false);
         });
 

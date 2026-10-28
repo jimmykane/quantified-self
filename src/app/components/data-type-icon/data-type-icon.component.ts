@@ -150,6 +150,8 @@ const RR_METRIC_ICONS = new Map<string, string>(RR_METRICS.map(metric => [metric
 export class DataTypeIconComponent {
   readonly statTooltips = RR_STAT_TOOLTIPS;
   @Input() dataType: string;
+  @Input() tooltip?: string;
+  @Input() focusable = false;
   @Input() size: string;
   @Input() vAlign: string;
 

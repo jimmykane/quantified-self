@@ -88,6 +88,8 @@ import { resolveEventChartPanRange } from '../../../../helpers/event-chart-pan-r
 import { AppHapticsService } from '../../../../services/app.haptics.service';
 import { buildEventPowerDisplay, buildEventPowerWhiskers, buildEventPowerWhiskerOption,
   type EventPowerDisplayMode, type EventPowerDisplayProjection } from '../../../../helpers/event-power-display.helper';
+import { buildSwimTimelineLanes, buildSwimTimelineSeries, SWIM_TIMELINE_LANE_HEIGHT, SWIM_TIMELINE_SERIES_ID,
+  type SwimTimelineLane } from '../../../../helpers/event-swim-timeline.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartAction = Parameters<EChartsType['dispatchAction']>[0];
@@ -299,6 +301,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @ViewChild('panelRoot', { static: true }) panelRoot!: ElementRef<HTMLElement>;
 
   public rangeStats: EventPanelRangeStat[] = [];
+  public readonly swimTimelineLanes = signal<SwimTimelineLane[]>([]);
   public isFullscreen = false;
   public readonly zoomCursorBehaviour = ChartCursorBehaviours.ZoomX;
   public readonly powerView = signal<EventPowerDisplayMode>('raw');
@@ -791,6 +794,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.hideTooltipBeforeStructuralRefresh(chart);
 
     if (!this.panel) {
+      this.swimTimelineLanes.set([]);
       this.seriesByID.clear();
       this.renderedZoneColoredSeriesKey = '[]';
       this.rangeStats = [];
@@ -814,6 +818,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     if (!this.panel.series.length) {
+      this.swimTimelineLanes.set([]);
       this.seriesByID.clear();
       this.renderedZoneColoredSeriesKey = '[]';
       this.rangeStats = [];
@@ -893,6 +898,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       : this.areaFillOrigin;
     const tooltipSurfaceConfig = this.buildTooltipSurfaceConfig();
     const tooltipTriggerOn = resolveEChartsTooltipTriggerOn(hoverTooltipEnabled && interactionEnabled, this.isMobile);
+    const activityIDs = new Set(panel.series.map(series => series.activityID));
+    const swimTimelineLanes = this.showSwimLengths && this.xAxisType !== XAxisTypes.Distance
+      ? buildSwimTimelineLanes(this.swimLengthMarkers.filter(marker => activityIDs.has(marker.activityID)), this.darkTheme) : [];
+    this.swimTimelineLanes.set(swimTimelineLanes);
+    const timelineHeight = swimTimelineLanes.length * SWIM_TIMELINE_LANE_HEIGHT;
 
     const seriesOptions: Array<ChartLineSeriesOption | CustomSeriesOption> = [];
     const seriesVisualMaps: Record<string, unknown>[] = [];
@@ -968,6 +978,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       ));
     }
 
+    if (swimTimelineLanes.length) {
+      seriesOptions.push({
+        ...buildSwimTimelineSeries(swimTimelineLanes, interactionEnabled),
+        tooltip: { trigger: 'item', show: false },
+      });
+    }
+
     const primaryYAxisOption = this.buildValueYAxisOption(panel, yAxisConfig, {
       axisColor,
       axisLabelColor,
@@ -1001,7 +1018,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       grid: {
         left: 0,
         right: 0,
-        top: 8,
+        top: 8 + timelineHeight,
         bottom: 16,
         outerBoundsMode: 'same',
         outerBoundsContain: 'axisLabel',
@@ -1066,7 +1083,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         }
       },
       yAxis: yAxisOption,
-      graphic: this.buildWatermarkGraphic(chartStyle),
+      graphic: this.buildWatermarkGraphic(chartStyle, timelineHeight),
       dataZoom: [
         {
           type: 'inside',
@@ -1417,7 +1434,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }));
   }
 
-  private buildWatermarkGraphic(chartStyle: ReturnType<typeof buildEventEChartsVisualTokens>): Record<string, unknown>[] {
+  private buildWatermarkGraphic(chartStyle: ReturnType<typeof buildEventEChartsVisualTokens>, topOffset = 0): Record<string, unknown>[] {
     const waterMarkText = `${this.waterMark || ''}`.trim();
     if (!waterMarkText || this.showZoomBar) {
       return [];
@@ -1427,7 +1444,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       {
         type: 'text',
         right: 8,
-        top: 10,
+        top: 10 + topOffset,
         silent: true,
         z: 0,
         style: {
@@ -1522,12 +1539,22 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     if (this.panel) {
       chart.on('mousemove', (params: ECElementEvent) => {
+        if (params?.componentType === 'series' && params.seriesId === SWIM_TIMELINE_SERIES_ID) {
+          if (!this.isMobile) this.showLocalLapTooltip(params);
+          return;
+        }
         if (params?.componentType === 'markLine') {
           this.showLocalLapTooltip(params);
           return;
         }
 
         this.hideLocalLapTooltip();
+      });
+
+      chart.on('click', { seriesId: SWIM_TIMELINE_SERIES_ID }, (params: ECElementEvent) => {
+        // Keep item tooltips local to this panel; ECharts connect would replay series indices
+        // in other panels. The existing shared chart feedback owns accepted taps.
+        this.showLocalLapTooltip(params);
       });
 
       chart.on('globalout', () => {

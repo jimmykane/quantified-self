@@ -249,6 +249,29 @@ describe('DataTypeIconComponent', () => {
       .toBe('Unknown provider metric with a long name');
   });
 
+  it('supports a focusable, labelled column explanation for icons and text fallbacks', async () => {
+    await TestBed.configureTestingModule({ imports: [DataTypeIconComponent] }).compileComponents();
+    const fixture = TestBed.createComponent(DataTypeIconComponent);
+    fixture.componentRef.setInput('focusable', true);
+    fixture.componentRef.setInput('tooltip', 'Total strokes across the active lengths; excludes rest.');
+    for (const type of ['Total strokes', 'Unknown provider field']) {
+      fixture.componentRef.setInput('dataType', type);
+      fixture.detectChanges();
+      const target = fixture.debugElement.query(By.directive(MatTooltip));
+      expect(target.injector.get(MatTooltip).message).toBe('Total strokes across the active lengths; excludes rest.');
+      expect(target.nativeElement.getAttribute('tabindex')).toBe('0');
+      expect(target.nativeElement.getAttribute('aria-hidden')).toBe('false');
+      expect(target.nativeElement.getAttribute('aria-label')).toBe(target.injector.get(MatTooltip).message);
+    }
+    fixture.componentRef.setInput('tooltip', undefined);
+    fixture.componentRef.setInput('focusable', false);
+    fixture.detectChanges();
+    expect(fixture.debugElement.query(By.directive(MatTooltip)).nativeElement.hasAttribute('tabindex')).toBe(false);
+    fixture.componentRef.setInput('dataType', 'Total strokes');
+    fixture.detectChanges();
+    expect(fixture.debugElement.query(By.directive(MatTooltip)).nativeElement.getAttribute('aria-hidden')).toBe('true');
+  });
+
   it('explains both artifact metrics in their icon tooltip and restores ordinary metric labels', async () => {
     await TestBed.configureTestingModule({ imports: [DataTypeIconComponent] }).compileComponents();
     const fixture = TestBed.createComponent(DataTypeIconComponent);

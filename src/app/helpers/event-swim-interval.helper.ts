@@ -1,0 +1,102 @@
+import {
+  ActivityInterface, ActivityTypes, ActivityTypesHelper, DataActiveLap, DataActiveLengths,
+  DataDistance, DataDuration, DataElapsedTime, DataEnergy, DataHeartRateAvg, DataHeartRateMax,
+  DataInterface, DataTotalCycles, EventImporterJSON, LapInterface, LapTypes,
+} from '@sports-alliance/sports-lib';
+import { getRejectedSwimTiming, resolveSwimTiming } from '@shared/swim-timing';
+import { AppSwimLength, getActivitySwimLengths, isRestSwimLength } from './event-swim-length.helper';
+import { getCompleteSwimLengthSum, getSwimLengthDistance, getSwimLengthDuration, getSwimLengthHeartRateAverage } from './event-swim-analytics.helper';
+import { setDerivedSwimIntervalLengths } from './event-swim-interval-metadata.helper';
+
+function value(stat: DataInterface | void | null): number | null {
+  const number = stat ? stat.getValue() : null;
+  return typeof number === 'number' && Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+/**
+ * A table-only projection for pool recordings with ambiguous or missing lap membership.
+ * Consecutive active lengths form a swim interval; consecutive idle lengths form a rest.
+ * Never infer ownership from overlapping provider lap clocks, or rewrite source laps/lengths.
+ * Complete, chronological length evidence is required; ordinary Garmin lap sequences stay native.
+ */
+export function getSwimIntervalActivity(activity: ActivityInterface): ActivityInterface | null {
+  if (ActivityTypesHelper.resolveActivityType(activity.type) !== ActivityTypes.Swimming
+    || !Number.isFinite(+activity.startDate) || !Number.isFinite(+activity.endDate)
+    || +activity.endDate <= +activity.startDate) return null;
+  const rawLengths = activity.getSwimLengths?.();
+  const lengths = getActivitySwimLengths(activity);
+  const activeCount = lengths.filter(length => !isRestSwimLength(length)).length;
+  const recordedCount = value(activity.getStat?.(DataActiveLengths.type));
+  if (!Array.isArray(rawLengths) || rawLengths.length !== lengths.length || !activeCount
+    || recordedCount !== activeCount
+    || lengths.some((length, index) => length.index !== index + 1
+      || (length.type.toLowerCase() !== 'active' && !isRestSwimLength(length))
+      || +length.endDate <= +length.startDate
+      || +length.startDate < +activity.startDate || +length.startDate >= +activity.endDate
+      || +length.endDate > +activity.endDate + 1000
+      || (index > 0 && (+length.startDate <= +lengths[index - 1].startDate
+        || Math.abs(+lengths[index - 1].endDate - +length.startDate) > 1000))
+      || (isRestSwimLength(length) && (length.distanceIsInvalid || (length.distance && value(length.distance) !== 0))))) return null;
+
+  const nativeLaps = activity.getLaps?.() || [];
+  // Missing rest membership does not invalidate the watch's active set boundaries.
+  // A session-end record is a terminal segment/summary, not a parallel lap scheme.
+  const hasUnassignedActiveLengths = lengths.some(length => !isRestSwimLength(length)
+    && (!Number.isInteger(length.lapIndex) || length.lapIndex < 1 || length.lapIndex > nativeLaps.length));
+  const schemeLaps = nativeLaps.filter(lap => lap.type !== LapTypes.session_end);
+  const hasParallelLaps = schemeLaps.some((lap, index) => schemeLaps.slice(index + 1).some(other =>
+    lap.type !== other.type && Math.min(+lap.endDate, +other.endDate) - Math.max(+lap.startDate, +other.startDate) > 1000));
+  if (!hasUnassignedActiveLengths && !hasParallelLaps) return null;
+
+  const groups: AppSwimLength[][] = [];
+  for (const length of lengths) {
+    const group = groups[groups.length - 1];
+    if (group && isRestSwimLength(group[0]) === isRestSwimLength(length)) group.push(length);
+    else groups.push([length]);
+  }
+  const laps: LapInterface[] = [];
+  const intervalLengths: AppSwimLength[] = [];
+  groups.forEach((group, index) => {
+    const rest = isRestSwimLength(group[0]);
+    const lap = EventImporterJSON.getLapFromJSON({
+      // The accepted end-rounding allowance must not turn this table interval into
+      // a cross-leg lap. Keep source length clocks and summed timer values intact.
+      startDate: +group[0].startDate, endDate: Math.min(+group[group.length - 1].endDate, +activity.endDate),
+      lapId: index + 1, type: LapTypes.Interval, stats: {}, startIndex: null, endIndex: null,
+    }, index);
+    setDerivedSwimIntervalLengths(lap, group);
+    lap.addStat(new DataActiveLap(!rest));
+    lap.addStat(new DataActiveLengths(rest ? 0 : group.length));
+    const duration = getCompleteSwimLengthSum(group, getSwimLengthDuration);
+    const elapsed = getCompleteSwimLengthSum(group, length => resolveSwimTiming(length).elapsedTime);
+    const distance = rest ? 0 : getCompleteSwimLengthSum(group, getSwimLengthDistance);
+    const strokes = rest ? null : getCompleteSwimLengthSum(group, length => length.strokes);
+    const energy = getCompleteSwimLengthSum(group, length => value(length.calories));
+    if (duration !== null) lap.addStat(new DataDuration(duration));
+    if (elapsed !== null) lap.addStat(new DataElapsedTime(elapsed));
+    if (distance !== null) lap.addStat(new DataDistance(distance));
+    if (strokes !== null) lap.addStat(new DataTotalCycles(strokes));
+    if (energy !== null) lap.addStat(new DataEnergy(energy));
+    const rejected = group.map(getRejectedSwimTiming).find(Boolean);
+    if (rejected) lap.timingValidity = rejected;
+    const heartRate = getSwimLengthHeartRateAverage(group);
+    if (heartRate !== null) lap.addStat(new DataHeartRateAvg(heartRate));
+    const maxima = group.map(length => value(length.maxHeartRate));
+    if (maxima.every(number => number !== null)) lap.addStat(new DataHeartRateMax(Math.max(...maxima)));
+    laps.push(lap);
+    intervalLengths.push(...group.map(length => ({ ...length, lapIndex: index + 1 })));
+  });
+
+  // Read-only view adapter: preserve session stats/streams for the existing whole-session
+  // peak calculation. Only table consumers receive it; persistence and chart markers use source.
+  const sourceMaxima = [activity, ...nativeLaps.filter(lap => +lap.startDate >= +activity.startDate
+    && +lap.endDate <= +activity.endDate)].map(record => value(record.getStat?.(DataHeartRateMax.type)))
+    .filter((maximum): maximum is number => maximum !== null);
+  const sourceMaximum = sourceMaxima.length ? new DataHeartRateMax(Math.max(...sourceMaxima)) : null;
+  return Object.create(activity, {
+    getStat: { value: (type: string) => type === DataHeartRateMax.type && sourceMaximum
+      ? sourceMaximum : activity.getStat(type) },
+    getLaps: { value: () => laps },
+    getSwimLengths: { value: () => intervalLengths },
+  }) as ActivityInterface;
+}

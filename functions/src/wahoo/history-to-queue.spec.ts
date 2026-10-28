@@ -338,13 +338,12 @@ describe('importWahooHistory account fencing', () => {
       expect(historyMocks.upsertWahooWorkoutQueueItem).not.toHaveBeenCalled();
     });
 
-    it.each([undefined, false, true])('preserves legacy stats for background=%s when no coordinator is admitted', async background => {
-      vi.mocked(startManualActivityHistory).mockResolvedValue(null);
+    it.each([undefined, false])('preserves legacy stats for older clients with background=%s', async background => {
       const input = { ...request(), data: { ...data, background } };
       await expect(invoke(input)).resolves.toMatchObject({
         result: 'Wahoo history items added to queue', stats: { successCount: 1, pagesFetched: 1 },
       });
-      expect(startManualActivityHistory).toHaveBeenCalledTimes(background === true ? 1 : 0);
+      expect(startManualActivityHistory).not.toHaveBeenCalled();
       expect(getNextAllowedHistoryImportDate).toHaveBeenCalledWith('user-1', SERVICE_NAME);
       expect(historyMocks.requestWahooAPI).toHaveBeenCalledOnce();
     });
