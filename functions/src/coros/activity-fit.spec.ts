@@ -195,7 +195,7 @@ describe('COROS production FIT preparation', () => {
   });
 
   it.each([[82, ActivityTypes.OpenWaterSwimming, true], [82, ActivityTypes.OpenWaterSwimming, false],
-    [32, ActivityTypes.Generic, true]] as const)(
+    [32, ActivityTypes.Generic, true], [29, ActivityTypes.Generic, true]] as const)(
     'sport %i parses as %s with original metrics (GPS=%s)', async (sport, expectedType, withGPS) => {
       const input = fixture({ sport, withGPS });
       const output = prepareCOROSActivityFITUpload(input);
@@ -224,7 +224,36 @@ describe('COROS production FIT preparation', () => {
     expect(prepareCOROSActivityFITUpload(output)).toBe(output);
   });
 
-  it.each([0, 1, 2, 5, 81, 83])('passes unrelated sport %i through byte-for-byte', sport => {
+  it.each([[false, false], [false, true], [true, false], [true, true]])(
+    'converts fishing while preserving all unrelated fields (big endian=%s, sub-sport present=%s)', (bigEndian, withSubSport) => {
+      const input = fixture({ sport: 29, bigEndian, withSubSport, developer: true, compressed: true, compressedLap: true });
+      const original = Buffer.from(input), output = prepareCOROSActivityFITUpload(input);
+      expect(input).toEqual(original);
+      expect(output).not.toEqual(input);
+      const before = readFitMessages(input), after = readFitMessages(output);
+      const categoryFields = new Map([[12, [0, 1]], [18, [5, 6]], [19, [25, 39]]]);
+      const withoutCategory = (message: typeof before.messages[number]) => ({ ...message,
+        fields: message.fields.filter(field => !(categoryFields.get(message.globalMessageNumber) ?? []).includes(field.fieldNumber)) });
+      expect(after.issues).toEqual([]);
+      expect(after.messages.map(withoutCategory)).toEqual(before.messages.map(withoutCategory));
+      for (const message of after.messages) {
+        for (const field of categoryFields.get(message.globalMessageNumber) ?? []) {
+          expect(message.fields.find(value => value.fieldNumber === field)!.bytes).toEqual(Buffer.from([0]));
+        }
+      }
+      expect(prepareCOROSActivityFITUpload(output)).toBe(output);
+    },
+  );
+
+  it('logs only the fixed fishing mapping label', () => {
+    vi.mocked(logger.info).mockClear();
+    prepareCOROSActivityFITUpload(fixture({ sport: 29 }));
+    expect(logger.info).toHaveBeenCalledExactlyOnceWith('[COROS] Applied activity FIT category fallback.', {
+      mapping: 'fishing_to_gps_cardio',
+    });
+  });
+
+  it.each([0, 1, 2, 5, 53, 81, 83])('passes unrelated sport %i through byte-for-byte', sport => {
     const input = fixture({ sport });
     expect(prepareCOROSActivityFITUpload(input)).toBe(input);
   });
@@ -245,12 +274,12 @@ describe('COROS production FIT preparation', () => {
     expect(prepareCOROSActivityFITUpload(output)).toBe(output);
   });
 
-  it('keeps GPS-less sailing unchanged', () => {
-    const input = fixture({ sport: 32, withGPS: false });
+  it.each([32, 29])('keeps GPS-less outdoor sport %i unchanged', sport => {
+    const input = fixture({ sport, withGPS: false });
     expect(prepareCOROSActivityFITUpload(input)).toBe(input);
   });
 
-  it.each([82, 32])('leaves multisession and malformed sport %i unchanged', sport => {
+  it.each([82, 32, 29])('leaves multisession and malformed sport %i unchanged', sport => {
     const corrupt = fixture({ sport }); corrupt[corrupt.length - 1] ^= 1;
     for (const input of [fixture({ sport, sessionCount: 2 }),
       fixture({ sport, malformedSport: true }), fixture({ sport, fullSessionDefinition: true }), corrupt]) {
@@ -260,12 +289,12 @@ describe('COROS production FIT preparation', () => {
     }
   });
 
-  it.each([[0x7fffffff, 1234], [1234, 0x7fffffff], [0x50000000, 1234]])(
-    'keeps sailing with invalid coordinates %s/%s unchanged', (latitude, longitude) => {
-      const input = fixture({ sport: 32, coordinates: [latitude, longitude] });
+  it.each([32, 29])('keeps outdoor sport %i with invalid coordinates unchanged', sport => {
+    for (const coordinates of [[0x7fffffff, 1234], [1234, 0x7fffffff], [0x50000000, 1234]] as [number, number][]) {
+      const input = fixture({ sport, coordinates });
       expect(prepareCOROSActivityFITUpload(input)).toBe(input);
-    },
-  );
+    }
+  });
 
   it('converts snorkeling with unavailable GPS without inventing coordinates', () => {
     const input = fixture({ coordinates: [0x7fffffff, 0x7fffffff] });
@@ -284,9 +313,9 @@ describe('COROS production FIT preparation', () => {
       .toEqual(readFitMessages(input, { messageNumbers: [20] }).messages);
   });
 
-  it('leaves a conflicting lap classification on the existing provider path', () => {
-    const input = fixture();
-    const index = input.indexOf(Buffer.from([0, 0xe8, 3, 0, 0, 82, 7]));
+  it.each([82, 32, 29])('leaves sport %i with a conflicting lap on the existing provider path', sport => {
+    const input = fixture({ sport });
+    const index = input.indexOf(Buffer.from([0, 0xe8, 3, 0, 0, sport, 7]));
     expect(index).toBeGreaterThan(0);
     input[index + 5] = 1; repairCRC(input);
     expect(prepareCOROSActivityFITUpload(input)).toBe(input);
@@ -396,7 +425,7 @@ describe('COROS empty native field compatibility', () => {
     }
   });
 
-  it.each([82, 32])('repairs before applying the existing sport %i mapping', sport => {
+  it.each([82, 32, 29])('repairs before applying the existing sport %i mapping', sport => {
     const input = fixture({ sport, emptyNativeFields: 'zero' });
     const clean = fixture({ sport, emptyNativeFields: 'omitted' });
     expect(prepareCOROSActivityFITUpload(input)).toEqual(prepareCOROSActivityFITUpload(clean));

@@ -2484,8 +2484,9 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('your retained original FIT and activity type in Quantified Self stay unchanged');
     expect(serviceConnectionsSection?.content).toContain('**Snorkeling as Open Water Swim** with or without recorded GPS');
     expect(serviceConnectionsSection?.content).toContain('**Sailing as GPS Cardio** only with recorded GPS');
+    expect(serviceConnectionsSection?.content).toContain('**Fishing as GPS Cardio** only with recorded GPS');
     expect(serviceConnectionsSection?.content).toContain('missing GPS is not added');
-    expect(serviceConnectionsSection?.content).toContain('GPS-less Sailing, mixed/multi-session, malformed and other activity types');
+    expect(serviceConnectionsSection?.content).toContain('GPS-less Sailing or Fishing, mixed/multi-session, malformed and other activity types');
     expect(serviceConnectionsSection?.content).toContain('COROS currently reports these processing failures only as a generic failed status');
     expect(serviceConnectionsSection?.content).toContain('https://support.coros.com/hc/en-us/articles/360040256971-How-to-Import-Activities-to-Your-COROS-Account');
     expect(serviceConnectionsSection?.content).toContain('uploading selected GPX or FIT routes to COROS');

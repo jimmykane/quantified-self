@@ -258,11 +258,12 @@ sending the file. The fixed mappings are:
 | --- | --- | --- |
 | Snorkeling (`82`) | Swimming / Open Water (`5` / `18`) | Open Water Swim |
 | Sailing (`32`) | Generic / Generic (`0` / `0`) | GPS Cardio |
+| Fishing (`29`) | Generic / Generic (`0` / `0`) | GPS Cardio |
 
 The adapter only converts structurally valid, single-session activity FITs with
 consistent category fields. Snorkeling converts with or without recorded GPS;
-Sailing still requires at least one valid recorded latitude/longitude pair.
-Apart from the empty-field repair above, GPS-less Sailing, mixed/multi-session,
+Sailing and Fishing require at least one valid recorded latitude/longitude pair.
+Apart from the empty-field repair above, GPS-less Sailing or Fishing, mixed/multi-session,
 malformed and unrelated files pass through unchanged for the existing provider
 inference/rejection behavior; no support for those cases is claimed.
 FIT sub_sport `17` is pool swimming, not open water.
@@ -290,6 +291,14 @@ Snorkeling copy reached terminal status `2`. Its sport/sub_sport were changed to
 swimming/open-water without adding GPS or changing timing, duration, distance or
 the retained original. This extends the tested mapping to GPS-less Snorkeling,
 not Sailing or universal acceptance; app category confirmation is separate.
+
+On 28 October 2026, a separately authorized controlled Fishing copy reached
+terminal status `2` after changing only its outgoing category to generic/generic.
+All non-category native/developer fields, timing, distance and recorded GPS were
+verified unchanged, as were the saved QS event and activity. This proves the tested
+file, not universal acceptance; its visible app category has not yet been confirmed.
+Fishing uses the existing helper and GPS requirement, with a fixed
+`fishing_to_gps_cardio` INFO label. Diving remains outside these mappings.
 
 Fingerprint receipts are computed from the actual sent copy. A converted fresh
 send/restart replaces a legacy original-file queue fingerprint marker through the
