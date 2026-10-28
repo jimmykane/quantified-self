@@ -7,7 +7,7 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
-### Swimming CSS policy adoption
+### Sports Lib 23.8.0 swimming CSS policy adoption
 
 CSS applies through the existing immutable policy for each leg's recorded start time. Reparse refreshes the additive
 swim-pace candidate using that saved policy, including absence of CSS; it never adopts current CSS settings.
@@ -16,12 +16,14 @@ Existing evaluations are not rewritten on read. An original-file reparse refresh
 previously calculated swim scores; imported scores remain authoritative. The existing invalidation rebuilds modeled load.
 No historical or route reparse campaign is required. Preserve reservations, strict identities, controls, retry and
 deletion guards. Explicit reassociation of a different CSS policy requires source-backed reparse before modeled load
-can use it. Root and Functions must adopt the same published companion library version before merge/deployment;
-a local packed library is for verification only. Scanner settings and version-mismatch checks remain unchanged.
+can use it. Root and Functions pin the same published 23.8.0 artifact; runtime version detection and activity/route
+reparse targets follow the installed package. A local packed library is for verification only. Scanner settings and
+strict version-mismatch checks remain unchanged. Review already-enabled scanners before any separately approved
+deployment; this dependency update does not enable or launch a production reparse.
 
 ### Sports Lib 23.7.1 GPX timestamp compatibility adoption
 
-Root and Functions pin the same published 23.7.1 artifact. GPX activity imports accept exactly 13 decimal digits as
+The 23.8.0 adoption retains the GPX correction introduced in 23.7.1. GPX activity imports accept exactly 13 decimal digits as
 Unix milliseconds alongside existing date-time text, preserving instants and sample placement. Invalid point times
 fail with a typed parsing error before stream allocation. Other numeric units are not guessed; configured duration
 limits, untimed-track rejection and saved-route parsing are unchanged.

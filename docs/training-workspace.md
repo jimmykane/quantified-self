@@ -6298,8 +6298,9 @@ Ambiguous legs retain the existing review requirement.
 MCP impact review: existing recorded-stat queries keep their meaning; Training and impact use the shared modeled-load
 resolver. CSS, policy history and candidates stay owner-only and absent from MCP output. No new metric token, schema,
 permission, consent, planning mutation, provider action or bundled-skill change is introduced. Existing strict output
-contracts remain frozen. The companion Sports Lib change must be published and both root/Functions dependencies
-updated to the same released artifact before this QS change is merged or deployed; local packed builds are validation
+contracts remain frozen. Root and Functions pin the same published Sports Lib 23.8.0 artifact, which supplies the
+CSS evaluation API and swimming selection order. Runtime version detection and activity/route reparse targets follow
+that installed version; strict mismatch checks and scanner settings stay unchanged. Local packed builds are validation
 only. No deployment or historical reparse is authorized by this feature.
 
 ### File-only TSS evaluation and owner load controls
