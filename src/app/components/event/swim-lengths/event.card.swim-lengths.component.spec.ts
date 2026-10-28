@@ -210,6 +210,79 @@ describe('EventCardSwimLengthsComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('weights the active-length heart-rate summary by duration and excludes rest', () => {
+    component.selectedActivities = [createActivity([
+      createSwimLength({ index: 1, timerTime: 30, avgHeartRate: 100 }),
+      createSwimLength({ index: 2, timerTime: 90, avgHeartRate: 160 }),
+      createSwimLength({ index: 3, type: 'idle', timerTime: 60, distance: 0, avgHeartRate: 200 }),
+    ])];
+    component.ngOnChanges();
+    const group = component.swimLengthViews[0].groups[0];
+    expect(group.summaryRow['Average Heart Rate']).toBe('145 bpm');
+    expect(group.rows.map(row => row['Average Heart Rate'])).toEqual(['100 bpm', '160 bpm', '200 bpm']);
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { avgHeartRate: null }, { timerTime: null, elapsedTime: null }, { timerTime: -1 },
+  ])('does not substitute a partial heart-rate summary when an active length has %j', missing => {
+    component.selectedActivities = [createActivity([
+      createSwimLength({ index: 1, timerTime: 30, avgHeartRate: 100 }),
+      createSwimLength({ index: 2, timerTime: 90, avgHeartRate: 160, ...missing }),
+    ])];
+    component.ngOnChanges();
+    expect(component.swimLengthViews[0].groups[0].summaryRow['Average Heart Rate']).toBe('');
+  });
+
+  it.each([
+    { unit: SwimPaceUnits.MinutesPer100Meter, pool: 25, distance: '25 m' },
+    { unit: SwimPaceUnits.MinutesPer100Yard, pool: 22.86, distance: '25 yd' },
+  ])('explains incomplete set distance and carries unknown split totals until the next set in $unit', example => {
+    const source = createActivity([
+      createSwimLength({ index: 1, distance: example.pool, poolLength: example.pool }),
+      createSwimLength({ index: 2, distance: null, poolLength: null }),
+      createSwimLength({ index: 3, distance: example.pool, poolLength: example.pool }),
+      createSwimLength({ index: 4, type: 'idle', distance: 0 }),
+      createSwimLength({ index: 5, distance: example.pool, poolLength: example.pool }),
+    ]);
+    const before = JSON.stringify(source.getSwimLengths());
+    component.selectedActivities = [source];
+    component.unitSettings = { swimPaceUnits: [example.unit] } as UserUnitSettingsInterface;
+    component.ngOnChanges();
+    const [incomplete, complete] = component.swimLengthViews[0].groups;
+    expect(incomplete.summaryRow.Distance).toBe('Distance unavailable');
+    expect(incomplete.rows.map(row => row.Split)).toEqual([example.distance, 'Unavailable', 'Unavailable', 'Rest']);
+    expect(incomplete.rows.map(row => row.Distance)).toEqual([example.distance, '', example.distance, '0 ' + (example.pool === 25 ? 'm' : 'yd')]);
+    expect(complete.summaryRow.Distance).toBe(example.distance);
+    expect(complete.rows[0].Split).toBe(example.distance);
+    incomplete.expanded = true;
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.swim-length-group-header').textContent).toContain('Distance unavailable');
+    expect(fixture.nativeElement.textContent).toContain('Cumulative distance is unavailable from this length onward');
+    expect(JSON.stringify(source.getSwimLengths())).toBe(before);
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { missingIndex: 1, complete: '4 KCal', rows: ['4 KCal', '', '0 KCal'] },
+    { missingIndex: 2, complete: '9 KCal', rows: ['4 KCal', '5 KCal', ''] },
+  ])('requires energy from active and rest lengths and preserves explicit zero: $missingIndex', example => {
+    const lengths = [
+      createSwimLength({ index: 1, calories: 4 }),
+      createSwimLength({ index: 2, calories: 5 }),
+      createSwimLength({ index: 3, type: 'idle', distance: 0, calories: 0 }),
+    ];
+    lengths[example.missingIndex].calories = null;
+    component.selectedActivities = [createActivity(lengths)];
+    component.ngOnChanges();
+    const group = component.swimLengthViews[0].groups[0];
+    expect(group.summaryRow.Energy).toBe('');
+    expect(group.rows.map(row => row.Energy)).toEqual(example.rows);
+    lengths[example.missingIndex].calories = 0;
+    component.ngOnChanges();
+    expect(component.swimLengthViews[0].groups[0].summaryRow.Energy).toBe(example.complete);
+  });
+
   it('should render rows for activities with swim lengths', () => {
     const activity = createActivity([
       createSwimLength(),
@@ -284,7 +357,9 @@ describe('EventCardSwimLengthsComponent', () => {
     expect(groups[0].summaryRow['Average Stroke Rate']).toBe('22 spm');
     expect(groups[0].summaryRow['Average Heart Rate']).toContain('110');
     expect(groups[0].summaryRow.SWOLF).toBe('34');
-    expect(groups[0].summaryRow.Energy).toContain('9');
+    // The rest has no recorded energy, so the available 9 KCal is not a complete set total.
+    expect(groups[0].summaryRow.Energy).toBe('');
+    expect(groups[0].rows.map(row => row.Energy)).toEqual(['4 KCal', '5 KCal', '']);
     expect(groups[0].restDuration).toContain('10');
     expect(groups[0].expanded).toBe(false);
     expect(groups[1].label).toBe('Length 4');

@@ -1943,6 +1943,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Missing active-length distance can use its recorded pool length');
     expect(gettingStartedSection?.content).toContain('Rest lengths never gain distance from pool size');
     expect(gettingStartedSection?.content).toContain('Set pace and calculated SWOLF require complete active time and distance');
+    expect(gettingStartedSection?.content).toContain('the set header shows **Distance unavailable**');
+    expect(gettingStartedSection?.content).toContain('later cumulative splits show **Unavailable** until the next set');
+    expect(gettingStartedSection?.content).toContain('Known individual length distances stay visible');
     expect(gettingStartedSection?.content).toContain('Event swim length tables');
     expect(gettingStartedSection?.content).toContain('**Swim Lengths** table');
     expect(gettingStartedSection?.content).toContain('per-length pool data');

@@ -78,7 +78,8 @@ export function sumSwimValues(values: readonly number[]): number {
   return total;
 }
 
-function completeSum(lengths: readonly AppSwimLength[], getValue: (length: AppSwimLength) => number | null): number | null {
+/** Never present the sum of available samples as a complete length-group total. */
+export function getCompleteSwimLengthSum(lengths: readonly AppSwimLength[], getValue: (length: AppSwimLength) => number | null): number | null {
   if (!lengths.length) {
     return null;
   }
@@ -93,6 +94,17 @@ export function getSwimLengthDuration(length: AppSwimLength): number | null {
 
 export function getSwimLengthDistance(length: AppSwimLength): number | null {
   return finite(length.distance ?? length.poolLength);
+}
+
+/** Duration-weighted estimate for the supplied lengths; requires complete HR and timing. */
+export function getSwimLengthHeartRateAverage(lengths: readonly AppSwimLength[]): number | null {
+  const duration = getCompleteSwimLengthSum(lengths, getSwimLengthDuration);
+  const weightedHeartRate = getCompleteSwimLengthSum(lengths, length => {
+    const heartRate = finite(length.avgHeartRate);
+    const seconds = getSwimLengthDuration(length);
+    return heartRate !== null && seconds !== null ? heartRate * seconds : null;
+  });
+  return duration > 0 && weightedHeartRate !== null ? weightedHeartRate / duration : null;
 }
 
 export function getNormalizedSwolf(
@@ -163,12 +175,12 @@ export function getSwimLapAnalytics(
     const nativeFallback = !getDerivedSwimIntervalLengths(lap) && active.length === lengths.length;
     const validTiming = !getRejectedSwimTiming(lap) && !active.some(length => getRejectedSwimTiming(length));
     const nativeTimingFallback = nativeFallback && validTiming;
-    const lengthDuration = completeLengths ? completeSum(active, getSwimLengthDuration) : null;
-    const lengthDistance = completeLengths ? completeSum(active, getSwimLengthDistance) : null;
+    const lengthDuration = completeLengths ? getCompleteSwimLengthSum(active, getSwimLengthDuration) : null;
+    const lengthDistance = completeLengths ? getCompleteSwimLengthSum(active, getSwimLengthDistance) : null;
     const duration = lengthDuration ?? (nativeTimingFallback ? finite(lap.getDuration?.()) : null);
     const distance = lengthDistance ?? (nativeFallback ? finite(lap.getDistance?.()) : null);
     const recordedStrokes = finite(lap.getStat?.(DataTotalCycles.type));
-    const strokes = (completeLengths ? completeSum(active, length => length.strokes) : null)
+    const strokes = (completeLengths ? getCompleteSwimLengthSum(active, length => length.strokes) : null)
       ?? (nativeFallback ? recordedStrokes : null);
     const recordedPace = finite(lap.getStat?.(DataSwimPaceAvg.type));
     const pace = lengthDuration > 0 && lengthDistance > 0 ? 100 * lengthDuration / lengthDistance

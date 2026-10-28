@@ -365,13 +365,25 @@ Recorded swim sets retain their existing boundaries (through the following idle/
 length row. Headers label active length timing as **Swim**, idle/rest timing as **Rest**, and preserve the previous
 combined duration as **Total** when both are present. Rest-only groups show Rest without an invented active duration.
 Each duration prefers the source `timerTime`, falling back to `elapsedTime` only when timer time is absent; explicit
-zeroes remain zero, missing values remain blank, and sums retain the existing finite-value behavior. Unknown rest or
+zeroes remain zero, missing values remain blank, and combined times require complete contributing length timing. Unknown rest or
 paused gaps are not inferred from timestamps. The shared display resolver's `durationMilliseconds` option preserves
 Sports Lib's existing fractional length formatting. Set pace now uses non-rest distance/time, while row durations,
-distances, pace and other detail metrics and aggregate totals retain their existing source values. Stable group keys
+distances, pace and other detail metrics retain their recorded values. Stable group keys
 preserve disclosure state across unit refreshes. Header timings wrap at phone widths, and user disclosure clicks and
 Enter/Space toggles use app haptics without feedback for initialization or unit refreshes. This is a frontend display
 change; import/storage, event/lap totals, chart markers, Training and MCP contracts are unchanged.
+
+Swim Lengths and derived Intervals share `getCompleteSwimLengthSum` and `getSwimLengthHeartRateAverage`.
+Totals require complete nonnegative inputs. Set distance requires every active length's distance or its recorded
+pool-length fallback; a rest without distance adds no movement, while an explicit rest distance is retained.
+An unknown active distance produces **Distance unavailable** in the set header and **Unavailable** in that and later
+cumulative splits within the set. Expanding the set explains the missing/invalid length, and the next set starts its
+own cumulative total. Known individual distances stay visible, including inside expanded interval details.
+The computed HR summary weights complete active-length HR by recorded duration, excluding rest, with elapsed time
+used only when timer time is absent. Missing HR/timing or zero total time makes that summary unavailable. Computed
+energy totals require all contributing active and rest values; an omitted calorie value is not an explicit zero.
+These HR/energy summary fields are internal to the Swim Lengths view model; this change does not add them to the
+collapsed set header. Recorded per-length HR/energy rows and native watch-lap statistics remain unchanged.
 
 Swimming lap defaults also include the categorical **Stroke** column, selectable through the existing per-sport
 Laps column picker. Explicit saved lists, including empty lists, take precedence over the defaults. Stroke labels
