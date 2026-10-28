@@ -319,6 +319,14 @@ are unchanged. INFO `[COROS] Applied activity FIT category fallback.` logs only 
 fixed mapping label, never files, coordinates or account identifiers. App Help
 discloses the category change and unsupported cases.
 
+Send previews expose the Fishing and Diving category changes through the existing
+row `warnings` field for both saved activities and local files. Fishing names the
+GPS eligibility requirement; Diving names the Generic fallback, optional GPS and
+unverified COROS depth/profile display. Notices use the single FIT Session's sport
+code, leaving the original preview sport and file unchanged. No frontend release
+or new response field is needed; monitoring coverage remains **unchanged** because
+these are preview descriptions, not queue transitions or provider outcomes.
+
 Monitoring coverage is **unchanged**: the #832 bundle/runbook already includes
 COROS, committed delivery/pending/retry/DLQ outcomes and overdue status-only polls.
 No metric dimensions, scheduler, queue policy, Rules, indexes, secrets, persistent
