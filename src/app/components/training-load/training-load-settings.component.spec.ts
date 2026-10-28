@@ -95,6 +95,58 @@ describe('dated Training load settings', () => {
 
 
 describe('CSS input and units', () => {
+  it.each([
+    ['1:53', 113, '02:04', '01:53'],
+    ['1:54', 114, '02:05', '01:54'],
+  ] as const)('preserves CSS entered as %s per 100 yards through saving and reopening', async (input, seconds, metricLabel, yardLabel) => {
+    const policies$ = new BehaviorSubject<TrainingLoadPolicyHead[]>([]);
+    const savePolicy = vi.fn().mockImplementation(async (_uid, id, revision, policy) => {
+      policies$.next([{ ...policy, id, revision: revision + 1 }]);
+    });
+    const selection = vi.fn();
+    TestBed.configureTestingModule({ providers: [
+      { provide: TrainingLoadService, useValue: { savePolicy, watchPolicies: () => policies$ } },
+      { provide: AppHapticsService, useValue: { success: vi.fn(), error: vi.fn(), selection } },
+    ] });
+    const open = () => {
+      const fixture = TestBed.createComponent(TrainingLoadSettingsComponent);
+      fixture.componentRef.setInput('uid', 'owner'); fixture.detectChanges();
+      return fixture;
+    };
+    const fixture = open();
+    const row = fixture.componentInstance.rows.find(row => row.id === 'swimming')!;
+    const swimming = fixture.debugElement.query(By.css('section[aria-label="Swimming"]'));
+    const unit = swimming.queryAll(By.directive(MatSelect))[1].componentInstance as MatSelect;
+    expect(selection).not.toHaveBeenCalled();
+    unit.selectionChange.emit({ source: unit, value: 'yd' }); fixture.detectChanges();
+    expect(swimming.nativeElement.textContent).toContain('mm:ss per 100 yd');
+    const pace = swimming.query(By.css('input')).nativeElement as HTMLInputElement;
+    pace.value = input; pace.dispatchEvent(new Event('input'));
+    expect(row.form.dirty).toBe(true);
+    await fixture.componentInstance.save(row);
+    // 100 yards is exactly 91.44 metres. The same time in metres would be a different CSS.
+    const speed = 91.44 / seconds;
+    expect(savePolicy).toHaveBeenLastCalledWith('owner', 'swimming', 0,
+      { method: 'AUTOMATIC', included: true, swimThresholdSpeed: speed });
+    expect(selection).toHaveBeenCalledOnce();
+    fixture.destroy();
+
+    const reopened = open();
+    const saved = reopened.componentInstance.rows.find(row => row.id === 'swimming')!;
+    expect(saved.form.controls.cssPace.value).toBe(metricLabel);
+    for (let i = 0; i < 10; i++) {
+      reopened.componentInstance.changeCssUnit(saved, 'yd');
+      expect(saved.form.controls.cssPace.value).toBe(yardLabel);
+      reopened.componentInstance.changeCssUnit(saved, 'm');
+      expect(saved.form.controls.cssPace.value).toBe(metricLabel);
+    }
+    expect(saved.form.pristine).toBe(true);
+    saved.form.controls.included.setValue(false); saved.form.markAsDirty();
+    await reopened.componentInstance.save(saved);
+    expect(savePolicy).toHaveBeenLastCalledWith('owner', 'swimming', 1,
+      { method: 'AUTOMATIC', included: false, swimThresholdSpeed: speed });
+    reopened.destroy();
+  });
   it('renders CSS inputs and the pace choice only in the Swimming family', () => {
     TestBed.configureTestingModule({ providers: [
       { provide: TrainingLoadService, useValue: { watchPolicies: () => new BehaviorSubject([]), savePolicy: vi.fn() } },
