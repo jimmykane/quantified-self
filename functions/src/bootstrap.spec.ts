@@ -105,7 +105,7 @@ describe('initializeFirebase', () => {
     vi.stubEnv('CLOUD_TASKS_EMULATOR_HOST', '127.0.0.1:9499');
     vi.stubEnv('FIRESTORE_EMULATOR_HOST', 'remote.example.test:8081');
     const { initializeFirebase } = await import('./bootstrap');
-    expect(() => initializeFirebase()).toThrow(/FIRESTORE_EMULATOR_HOST/);
+    expect(() => initializeFirebase()).toThrow(/FIRESTORE.*must point to a loopback emulator/);
     expect(mocks.initializeApp).not.toHaveBeenCalled();
     vi.stubEnv('FIRESTORE_EMULATOR_HOST', '127.0.0.1:8081');
     initializeFirebase();
