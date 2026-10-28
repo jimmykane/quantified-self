@@ -1,10 +1,12 @@
-import { ChangeDetectionStrategy, Component, effect, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatIconModule } from '@angular/material/icon';
+import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type { ErrorStateMatcher } from '@angular/material/core';
 import {
-  formatWorkoutEditorPace, parseWorkoutEditorPace, splitWorkoutEditorMinutes,
+  formatWorkoutEditorDuration, formatWorkoutEditorPace, parseWorkoutEditorPace, splitWorkoutEditorMinutes,
   workoutDurationPartsToSeconds, type WorkoutDurationParts,
 } from '../../helpers/workout-time-input.helper';
 
@@ -13,7 +15,7 @@ let nextDurationErrorId = 0;
 @Component({
   selector: 'app-workout-time-input',
   standalone: true,
-  imports: [FormsModule, MatFormFieldModule, MatInputModule],
+  imports: [FormsModule, MatFormFieldModule, MatInputModule, MatIconModule],
   templateUrl: './workout-time-input.component.html',
   styleUrls: ['./workout-time-input.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -24,12 +26,24 @@ export class WorkoutTimeInputComponent {
   readonly mode = input<'duration' | 'pace'>('duration');
   readonly label = input('Duration');
   readonly disabled = input(false);
+  readonly summaryPrefix = input<string | null>(null);
+  readonly previousRestSeconds = input<number | null>(null);
+  readonly nextStepLabel = input<string | null>(null);
+  readonly unitSettings = input<UserUnitSettingsInterface | null>(null);
   readonly valueChange = output<number | null>();
   /** Preserve authored seconds without a lossy seconds → editor minutes → seconds round trip. */
   readonly durationChange = output<{ minutes: number; seconds: number }>();
   readonly parts = signal<WorkoutDurationParts>({ hours: 0, minutes: 0, seconds: 0 });
   readonly paceText = signal('');
   readonly error = signal<string | null>(null);
+  readonly durationSummary = computed(() => formatWorkoutEditorDuration(workoutDurationPartsToSeconds(this.parts()), this.unitSettings()));
+  readonly previousRestSummary = computed(() => formatWorkoutEditorDuration(this.previousRestSeconds(), this.unitSettings()));
+  readonly longRestWarning = computed(() => {
+    const seconds = workoutDurationPartsToSeconds(this.parts());
+    const previous = this.previousRestSeconds();
+    return this.durationSummary() && this.previousRestSummary() && seconds >= 300 && seconds >= previous * 5
+      ? `This rest is ${this.durationSummary()}. The previous rest is ${this.previousRestSummary()}.` : null;
+  });
   readonly errorId = `workout-duration-error-${nextDurationErrorId++}`;
   readonly errorMatcher: ErrorStateMatcher = { isErrorState: () => this.error() !== null };
   private echo: { value: number | null; mode: string; label: string } | null = null;

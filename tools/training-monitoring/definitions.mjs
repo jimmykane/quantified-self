@@ -58,6 +58,8 @@ export function buildTrainingMonitoring(project, channel) {
   metric('queue_probe_failures', `${delivery} jsonPayload.telemetryVersion=1 (jsonPayload.event="queue_health_unavailable" OR (jsonPayload.event="queue_health" AND jsonPayload.immediateAgeKnown=false))`,
     'Unavailable or incomplete queue observations; never interpreted as an empty queue.');
   metric('dispatch_failures', `${delivery} jsonPayload.event="dispatch_failure"`, 'Failed enqueue reservations.');
+  metric('lifecycle_failures', `${base} jsonPayload.message="[TrainingDeliveryLifecycle]" jsonPayload.event="failed" jsonPayload.trigger=("connection" OR "entitlement" OR "guide-settings")`,
+    'Failed reconciliation wake-ups; successful lifecycle skips are excluded.', ['trigger']);
   // Firebase logger.error adds an Error stack to message; substring matching
   // preserves sweep_failed detection without extracting the stack into labels.
   metric('cleanup_failures', `${base} ((jsonPayload.message:"[TrainingCleanup]" AND jsonPayload.event="cleanup_retry_failed") OR (jsonPayload.message:"[TrainingWorkoutExpiry]" AND (jsonPayload.event=("sweep_failed" OR "checkpoint_release_failed" OR "backlog_check_failed") OR (NOT jsonPayload.event:* AND jsonPayload.failed>0))))`,
@@ -89,8 +91,10 @@ export function buildTrainingMonitoring(project, channel) {
   policy('backlog', 'Sustained dispatch backlog', 'ERROR', [
     threshold('queue_overdue_samples', 'At least four overdue samples per 5 minutes, sustained 10 minutes', 3, '300s', '600s'),
   ], 'Due work has a dispatch-delay lower bound of at least 15 minutes. Check dispatcher invocations, Cloud Tasks capacity and the due-job count. Future horizon work and provider receipt are not measured here.');
-  policy('dispatch', 'Repeated dispatch failures', 'ERROR', [threshold('dispatch_failures', 'At least three failures in 10 minutes', 2)],
-    'Check Cloud Tasks queue/IAM/dispatch reservation failures. Do not blindly resend or change provider entitlement.');
+  policy('dispatch', 'Repeated wake-up or dispatch failures', 'ERROR', [
+    threshold('dispatch_failures', 'At least three failures in 10 minutes', 2),
+    threshold('lifecycle_failures', 'At least three failed wake-ups in 10 minutes', 2),
+  ], 'Check Cloud Tasks queue/IAM/dispatch reservation failures and TrainingDeliveryLifecycle transaction stages. Failed settings wake-ups can delay automatic updates until periodic reconciliation. Do not blindly resend, create replacement Guides or change provider entitlement.');
   policy('provider-failures', 'Provider failure surge', 'ERROR', [
     threshold('delivery_failures', 'At least ten delivery failures in 10 minutes', 9, '600s', '60s',
       `${activeProviders} AND metric.labels.category=one_of("retryable","terminal","uncertain")`),
@@ -135,6 +139,7 @@ export function buildTrainingMonitoring(project, channel) {
     chart('Queue-health samples / 10 minutes', 'queue_samples'),
     chart('Probe failures / 10 minutes', 'queue_probe_failures'),
     chart('Dispatch failures / 10 minutes', 'dispatch_failures'),
+    chart('Reconciliation wake-up failures / 10 minutes', 'lifecycle_failures', { groups: ['metric.label.trigger'] }),
     chart('Cleanup failures / 10 minutes', 'cleanup_failures'),
     chart('Cloud Tasks HTTP attempts / 10 minutes (not provider acceptance)', 'task_attempt_count', { native: true, groups: ['metric.label.response_code'] }),
     chart('Cloud Tasks dispatch delay (maximum service p95)', 'task_attempt_delays', { native: true, distribution: true, unit: 'ms' }),

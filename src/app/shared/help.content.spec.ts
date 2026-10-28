@@ -635,6 +635,12 @@ describe('help.content', () => {
       'including inside repeats and in the Workout library', '**m:ss**', '**4:30**',
       'decimal minutes such as 4.5 still work', 'provider-specific delivery limits still apply']) expect(copy).toContain(phrase);
   });
+  it('explains Rest duration summaries and limits defaults to untouched new steps', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['**Rest for 15 seconds**', '**Rest for 15 minutes**', 'untouched new step',
+      'preceding timed Rest duration', 'QS does not invent one', 'Existing, duplicated and manually edited durations stay unchanged',
+      'you can still save it', 'first pass through repeat blocks', 'Strength uses its separate editor']) expect(copy).toContain(phrase);
+  });
   it('explains Wahoo re-sending after confirmed withdrawal without promising blind recreation or recording deletion', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     expect(copy).toContain('After Wahoo confirms withdrawal of an upcoming copy');
@@ -776,13 +782,14 @@ describe('help.content', () => {
   });
   it('explains truthful swim field availability, compact headings and safe completed/hidden Guide reuse', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
-    for (const phrase of ['**Rest 1/10**', 'without using a metric slot', 'one compact planned-distance text field',
-      '**Show field availability for this workout**', '**Included**, **Heading** or **Omitted**',
+    for (const phrase of ['**Rest 1/10**', 'without using a metric slot', 'one compact planned-distance text field', 'at most two numeric readings', 'visibility warning stays beside the choice',
+      'saving starts an automatic update check', 'using the existing Guide identity',
+      '**Show field availability for this workout**', '**Included**, **Text**, **Heading** or **Omitted**',
       'not guaranteed visible or measured', 'new scheduled copy from your workout library',
       'does not unlock its protected completed Guide', 'never automatically recreates hidden Guides', 'without opening the detailed report',
       'leaving two for extras before instructions', 'Move your most important fields earlier',
       'Warnings for unsupported recipes, compact screens and file-size fallback also stay visible']) expect(content).toContain(phrase);
-    for (const phrase of ['**Duplicate to…** in its sync details or workout actions', '**Send a fresh Guide**', '**same QS workout**',
+    for (const phrase of ['**Duplicate to…** in its sync details or workout actions', '**Create another Guide**', '**same QS workout**',
       'earlier Guide untouched', 'duplicates are possible', 'At most eight fresh copies', 'Stop sync affects the current Guide']) expect(content).toContain(phrase);
     expect(content).not.toContain('Repeat on another date');
   });

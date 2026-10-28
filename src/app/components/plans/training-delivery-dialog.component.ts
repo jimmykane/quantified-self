@@ -174,7 +174,7 @@ export class TrainingDeliveryDialogComponent {
       case 'approve': return `Review ${this.draftLabel()} differences`;
       case 'retry': return this.data.scope === 'plan' ? 'Retry plan sync' : 'Retry workout sync';
       case 'replace': return 'Create replacement Garmin copy?';
-      case 'fresh-guide': return 'Send a fresh Suunto Guide?';
+      case 'fresh-guide': return 'Create another Suunto Guide?';
       default: {
         const provider = this.providerDetailVisible() ? this.activeRow()?.displayLabel : null;
         if (this.data.scope === 'history') return provider ? `${provider} sync history` : 'Workout sync history';
@@ -194,7 +194,7 @@ export class TrainingDeliveryDialogComponent {
       case 'stop': return this.stopLabel();
       case 'retry': return 'Request recovery';
       case 'replace': return 'Create replacement Garmin copy';
-      case 'fresh-guide': return 'Send a fresh Guide';
+      case 'fresh-guide': return 'Create another Guide';
       case 'approve': return 'Approve differences';
       case 'resume': return 'Resume workout sync';
       case 'configure': return 'Enable plan sync';
@@ -453,7 +453,7 @@ export class TrainingDeliveryDialogComponent {
       await this.delivery.mutate(preview.command, current);
       if (!current()) return;
       this.notice.set(preview.command.action === 'stop' ? `${this.stopLabel()} saved. Eligible copies will be removed in the background.`
-        : preview.command.action === 'fresh-guide' ? 'Fresh Guide requested. The earlier Guide is unchanged; delivery continues in the background. Sync the Suunto app and check your watch afterwards.'
+        : preview.command.action === 'fresh-guide' ? 'Another Guide requested. The earlier Guide is unchanged; delivery continues in the background. Sync the Suunto app and check your watch afterwards.'
         : preview.command.action === 'replace' ? 'Garmin replacement requested. Status will update after the recheck and delivery.'
         : preview.command.action === 'retry' ? 'Recovery requested. Service retry limits still apply.'
           : 'Sync settings saved. Workout delivery continues in the background.');

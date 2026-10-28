@@ -20,9 +20,9 @@ const collection = (path: string): any => ({ path, doc: (id: string) => referenc
 const snapshot = (path: string, data: unknown): any => ({ id: path.split('/').pop(), exists: data !== undefined,
   data: () => data, updateTime: { seconds: 100, nanoseconds: 0 } });
 
-function source(id: string, score = 100, method = 'POWER') {
+function source(id: string, score = 100, method = 'POWER', type = 'Cycling') {
   const event = EventImporterJSON.getEventFromJSON({ name: 'Source', startDate: 1000, endDate: 3601000,
-    activities: [{ startDate: 1000, endDate: 3601000, type: 'Cycling', creator: { name: 'Test' },
+    activities: [{ startDate: 1000, endDate: 3601000, type, creator: { name: 'Test' },
       laps: [], intensityZones: [], streams: [], stats: { Duration: 3600, [DataPause.type]: 0, Distance: 10000, Energy: 210, Weight: 70,
         'Training Stress Score': score, 'Training Stress Score Method': method } }] } as any).setID(id);
   event.getFirstActivity().setID('leg');
@@ -32,9 +32,9 @@ function source(id: string, score = 100, method = 'POWER') {
   const result = { score, method: method as any, estimated: false, reasons: [], provenance: method === 'IMPORTED' ? 'imported' : 'calculated' };
   const metadata: TrainingLoadMetadata = { version: 1, revision: 7, excluded: false, controls: {},
     parentFingerprint: trainingLoadSourceFingerprint(item.parent), legs: { old: { activityId: 'leg',
-      identity: { startMs: 1000, endMs: 3601000, type: 'Cycling', duration: 3600, distance: 10000 },
+      identity: { startMs: 1000, endMs: 3601000, type, duration: 3600, distance: 10000 },
       recordedTss: score, evaluations: { automatic: result, hr: result, met: result } as any,
-      policy: { ...defaultAppliedTrainingLoadPolicy('Cycling'), revision: 4, effectiveAtMs: 500, method: 'HR' },
+      policy: { ...defaultAppliedTrainingLoadPolicy(type), revision: 4, effectiveAtMs: 500, method: 'HR' },
       sourceFingerprint: trainingLoadSourceFingerprint(data) } } };
   return { event, item, metadata };
 }
@@ -113,6 +113,27 @@ describe('merge Training load snapshots', () => {
     metadata.controls = {};
     expect(resolveEffectiveTrainingLoad({}, metadata).score).toBe(7.6);
   });
+  it('requires a reassociated CSS candidate to be refreshed before merging, except imported scores', () => {
+    const a = source('a', 100, 'SWIM_PACE', 'Swimming');
+    const original = a.metadata.legs!.old;
+    original.policy = { ...original.policy, family: 'swimming', method: 'SWIM_PACE', swimThresholdSpeed: 1 };
+    a.metadata.legs!.current = { ...original, policy: { ...original.policy, swimThresholdSpeed: 2 } };
+    a.metadata.legs!.old = { ...original, activityId: null };
+    a.metadata.controls.old = { activityId: 'leg', override: 0 };
+    expect(() => mergedTrainingLoadLegs('merged', [{ ...a.item, metadata: a.metadata }])).toThrow(/review/);
+    // Once source reparse refreshes the candidate for the retained policy, merge is valid.
+    a.metadata.legs!.current.policy.swimThresholdSpeed = 1;
+    expect(mergedTrainingLoadLegs('merged', [{ ...a.item, metadata: a.metadata }]).legs![mergedActivityId('merged', 'a', 'leg')].policy.swimThresholdSpeed).toBe(1);
+    a.metadata.legs!.current.policy.swimThresholdSpeed = 2;
+    const imported = { preference: 'AUTOMATIC' as const, score: 0, method: 'IMPORTED' as const,
+      provenance: 'imported' as const, estimated: false, reasons: ['imported-score' as const] };
+    a.metadata.legs!.current.evaluations = { version: 1, automatic: imported, hr: { ...imported, preference: 'HR' },
+      met: { ...imported, preference: 'MET' }, swimPace: { ...imported, preference: 'SWIM_PACE' } };
+    delete a.metadata.controls.old.override;
+    expect(resolveEffectiveTrainingLoad({}, a.metadata).score).toBe(0);
+    const copied = mergedTrainingLoadLegs('merged', [{ ...a.item, metadata: a.metadata }]);
+    expect(resolveEffectiveTrainingLoad({}, { version: 1, revision: 1, excluded: false, ...copied }).score).toBe(0);
+  });
   it('refuses legacy controls with no corresponding source activity instead of dropping them', () => {
     const a = source('a'); delete a.metadata.legs;
     a.metadata.controls = { gone: { override: 0 } };
@@ -174,6 +195,38 @@ describe('merge metadata coordination', () => {
     expect(state.docs.get(metadataPath).legs[id].policy.revision).toBe(4);
     expect(state.docs.get(metadataPath).controls[id]).toEqual({ override: 0 });
     expect(resolveEffectiveTrainingLoad(merged, state.docs.get(metadataPath)).score).toBe(100);
+  });
+  it('keeps frozen CSS and its candidates together when the source calibration changes before a merge retry', async () => {
+    const a = source('a', 100, 'SWIM_PACE', 'Swimming'), b = source('b');
+    a.metadata.legs!.old.policy = { ...a.metadata.legs!.old.policy, family: 'swimming', swimThresholdSpeed: 1 };
+    putSource(a); putSource(b);
+    const merged = mergeRecordedEvents([a.event, b.event], 'merged');
+    await prepareMergedTrainingLoad('u', merged, [a.item, b.item]);
+    const id = mergedActivityId('merged', 'a', 'a-leg');
+    const frozen = structuredClone(state.docs.get(metadataPath).legs[id]);
+    a.metadata.legs!.old.policy.swimThresholdSpeed = 2;
+    for (const candidate of Object.values(a.metadata.legs!.old.evaluations!)) {
+      if (candidate && typeof candidate === 'object' && 'score' in candidate) candidate.score = 12.5;
+    }
+    const finish = await prepareMergedTrainingLoad('u', merged, [a.item, b.item]);
+    persist(merged); await finish();
+    const retained = state.docs.get(metadataPath).legs[id];
+    expect(retained.policy).toEqual(frozen.policy);
+    expect(retained.evaluations).toEqual(frozen.evaluations);
+    expect(resolveEffectiveTrainingLoad(merged, state.docs.get(metadataPath)).score).toBe(200);
+  });
+  it('does not reuse frozen CSS candidates for different source data after a preparation-only failure', async () => {
+    const a = source('a', 100, 'SWIM_PACE', 'Swimming'), b = source('b');
+    a.metadata.legs!.old.policy.swimThresholdSpeed = 1;
+    putSource(a); putSource(b);
+    await prepareMergedTrainingLoad('u', mergeRecordedEvents([a.event, b.event], 'merged'), [a.item, b.item]);
+    const before = structuredClone(state.docs.get(metadataPath));
+    const updated = source('a', 200, 'SWIM_PACE', 'Swimming');
+    updated.metadata.legs!.old.policy.swimThresholdSpeed = 2;
+    putSource(updated);
+    await expect(prepareMergedTrainingLoad('u', mergeRecordedEvents([updated.event, b.event], 'merged'),
+      [updated.item, b.item])).rejects.toThrow(/changed|review/);
+    expect(state.docs.get(metadataPath)).toEqual(before);
   });
   it.each(['source-parent', 'source-child', 'extra-child', 'missing-parent'])('fails before preparation writes after %s changes', async mode => {
     const a = source('a'), b = source('b'); putSource(a); putSource(b);

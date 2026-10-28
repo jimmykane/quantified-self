@@ -11,14 +11,14 @@ const bundle = () => buildTrainingMonitoring(project, channel);
 
 test('definitions use valid counter/distribution kinds and bounded, non-private labels', () => {
   const config = bundle();
-  assert.equal(config.metrics.length, 14);
+  assert.equal(config.metrics.length, 15);
   assert.equal(new Set(config.metrics.map(metric => metric.name)).size, config.metrics.length);
   for (const metric of config.metrics) {
     assert.equal(metric.metricDescriptor.metricKind, 'DELTA');
     assert.ok(['INT64', 'DISTRIBUTION'].includes(metric.metricDescriptor.valueType));
     assert.ok(metric.filter.includes(`resource.labels.project_id="${project}"`));
     assert.deepEqual(Object.keys(metric.labelExtractors), metric.metricDescriptor.labels.map(label => label.key));
-    assert.ok(metric.metricDescriptor.labels.every(label => ['provider', 'category', 'event'].includes(label.key)));
+    assert.ok(metric.metricDescriptor.labels.every(label => ['provider', 'category', 'event', 'trigger'].includes(label.key)));
     if (metric.valueExtractor) {
       assert.equal(metric.metricDescriptor.valueType, 'DISTRIBUTION');
       assert.ok(metric.bucketOptions.explicitBuckets.bounds.every((value, i, values) => i === 0 || value > values[i - 1]));
@@ -169,7 +169,7 @@ function transport({ existing = false, collision = false, duplicate = false, cha
 test('provisioning creates only owned resources and reuses the existing email channel', async () => {
   const { request, calls } = transport();
   await applyTrainingMonitoring(bundle(), request);
-  assert.equal(calls.filter(call => call.method === 'PUT').length, 14);
+  assert.equal(calls.filter(call => call.method === 'PUT').length, 15);
   assert.equal(calls.filter(call => call.method === 'POST').length, 7);
   assert.ok(!calls.some(call => call.method === 'DELETE' || call.url.includes('/unrelated')));
   assert.ok(!calls.some(call => call.method !== 'GET' && call.url.includes('/notificationChannels')));
@@ -224,4 +224,18 @@ test('failed metric creation prevents policies referring to uncreated metrics', 
   const { request, calls } = transport({ fail: true });
   await assert.rejects(applyTrainingMonitoring(bundle(), request), /Synthetic API failure/);
   assert.ok(!calls.some(call => call.method === 'POST' || call.method === 'PATCH'));
+});
+
+test('settings wake-up failures are monitored before a queue job exists, excluding normal skips', () => {
+  const config = bundle();
+  const metric = config.metrics.find(item => item.name === 'qs_training_lifecycle_failures_v1');
+  assert.ok(metric.filter.includes('jsonPayload.message="[TrainingDeliveryLifecycle]"'));
+  assert.ok(metric.filter.includes('jsonPayload.event="failed"'));
+  assert.ok(metric.filter.includes('jsonPayload.trigger=("connection" OR "entitlement" OR "guide-settings")'));
+  assert.deepEqual(Object.keys(metric.labelExtractors), ['trigger']);
+  assert.doesNotMatch(metric.filter, /completed|deletion_guard_skipped|no_delivery_state/);
+  const policy = config.policies.find(item => item.userLabels.policy_id === 'dispatch');
+  assert.equal(policy.conditions.length, 2);
+  assert.ok(policy.conditions[1].conditionThreshold.filter.includes(metricType('lifecycle_failures')));
+  assert.equal(policy.conditions[1].conditionThreshold.thresholdValue, 2);
 });

@@ -210,6 +210,32 @@ describe('Suunto swimming screen preferences', () => {
     fixture.componentRef.setInput('structure', null); fixture.detectChanges();
     expect(component.sections().flatMap(section => section.fields).every(row => row.allocation === null)).toBe(true);
   });
+  it('explains planned text inline and protects it from a lower-priority fifth choice', async () => {
+    user.set({ uid: 'owner', settings: { suuntoSwimmingGuide: { version: 1,
+      workFields: ['distance'], restFields: ['interval', 'previousPlannedDistance', 'nextPlannedDistance', 'previousLapPace', 'workoutDistance'] } } });
+    const fixture = render(); const component = fixture.componentInstance;
+    const work: WorkoutStepV1 = { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'distance', meters: 50 }, targets: [] };
+    fixture.componentRef.setInput('structure', { version: 1, sport: ActivityTypes.Swimming, nodes: [work,
+      { kind: 'step', id: 'rest', purpose: 'rest', ending: { kind: 'time', seconds: 15 }, targets: [] },
+      { ...work, id: 'next', ending: { kind: 'distance', meters: 100 } },
+    ] } satisfies WorkoutStructureV1);
+    component.toggle(); fixture.detectChanges();
+    const rest = () => component.sections()[1];
+    const planned = rest().fields.find(row => row.field === 'nextPlannedDistance')!;
+    expect(planned.allocation?.summary).toBe('Requested as text on all 1 Rest step.');
+    const inline = fixture.nativeElement.querySelector(`[id="${planned.descriptionId}"]`);
+    expect(inline.textContent).toContain('may crop');
+    expect(inline.closest('[hidden]')).toBeNull();
+    expect(component.availabilityExpanded()).toBe(false);
+    expect(component.availability()!.rows[0].fields.find(field => field.type === 'text')?.value).toBe('Next 100.0 m\nLast 50.0 m');
+    expect(rest().fields.find(row => row.field === 'workoutDistance')?.allocation?.summary).toContain('Omitted');
+    component.remove('restFields', 4); fixture.detectChanges();
+    expect(component.availability()!.rows[0].fields.find(field => field.type === 'text')?.value).toBe('Next 100.0 m\nLast 50.0 m');
+    await component.save();
+    expect(component.notice()).toContain('checked for updates automatically');
+    expect(component.notice()).toContain('reuse the existing Guide');
+    expect(haptics.success).toHaveBeenCalledOnce();
+  });
   it('keeps size fallback and unsupported-layout warnings visible while the detailed report is closed', () => {
     const fixture = render(); const component = fixture.componentInstance;
     const work: WorkoutStepV1 = { kind: 'step', id: 'work', purpose: 'work',

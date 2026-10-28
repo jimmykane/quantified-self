@@ -13,11 +13,28 @@
           <mat-select formControlName="method" (selectionChange)="selection()">
             <mat-option value="AUTOMATIC">Automatic</mat-option>
             <mat-option value="HR">Heart rate</mat-option>
+            @if (row.id === 'swimming') { <mat-option value="SWIM_PACE">Swim pace (CSS)</mat-option> }
             <mat-option value="MET">Calories (MET estimate)</mat-option>
           </mat-select>
         </mat-form-field>
+        @if (row.id === 'swimming') {
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Critical swim speed (optional)</mat-label>
+            <input matInput formControlName="cssPace" placeholder="1:53" inputmode="text" aria-describedby="css-help">
+            <mat-hint>mm:ss per 100 {{ row.cssUnit }}</mat-hint>
+          </mat-form-field>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>CSS pace unit</mat-label>
+            <mat-select [value]="row.cssUnit" [disabled]="!!busy() || !validCss(row)" (selectionChange)="changeCssUnit(row, $event.value)">
+              <mat-option value="m">Per 100 metres</mat-option>
+              <mat-option value="yd">Per 100 yards</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <p id="css-help">Use your independently measured CSS. Applies to pool and open-water swims starting after you save. Automatic prefers CSS pace, then calibrated HR, then MET. Power is not used for swimming TSS. Imported scores take precedence. Clearing CSS affects future swims only.</p>
+          @if (!validCss(row)) { <p role="alert">Enter a positive pace as mm:ss, for example 1:53, or leave blank.</p> }
+        }
         <mat-slide-toggle formControlName="included" (change)="selection()">Include in modeled load</mat-slide-toggle>
-        <button mat-stroked-button type="button" [disabled]="!!busy() || !row.form.dirty" (click)="save(row)">Save {{ row.label }} preferences</button>
+        <button mat-stroked-button type="button" [disabled]="!!busy() || !row.form.dirty || !validCss(row)" (click)="save(row)">Save {{ row.label }} preferences</button>
       </section>
     }
   </div>

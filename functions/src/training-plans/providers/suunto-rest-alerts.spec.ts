@@ -45,8 +45,17 @@ describe('Suunto native timed Rest countdown alerts',()=>{
       for (const step of fields.filter(step=>!step.title.startsWith('Rest'))) expect(step.alerts).toBeUndefined();
       const withoutAlerts=structuredClone(mapped);
       screens(withoutAlerts.steps).forEach(step=>delete step.alerts);
-      expect(withoutAlerts).toEqual(frozen(value));
-      expect(assessSuuntoGuide(value,'destination','Europe/Helsinki',owner).mappingVersion).toBe('suunto-guides-v16');
+      const prior = frozen(value);
+      const swimming = [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(sport);
+      if (swimming) {
+        // V18 changes only this fixture's planned text; execution and alert policy stay intact.
+        for (const step of screens(prior.steps)) for (const field of step.fields) {
+          if (field.type === 'text' && field.value === 'Plan Prev: 100.0 m') field.value = 'Last 100.0 m';
+        }
+      }
+      expect(withoutAlerts).toEqual(prior);
+      expect(assessSuuntoGuide(value,'destination','Europe/Helsinki',owner).mappingVersion)
+        .toBe(swimming ? 'suunto-guides-v18' : 'suunto-guides-v16');
       expect(value).toEqual(before);
     });
 

@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSelect } from '@angular/material/select';
+import { MatCheckbox } from '@angular/material/checkbox';
 import { By } from '@angular/platform-browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { webcrypto } from 'node:crypto';
@@ -8,10 +9,12 @@ import { of, Subject, throwError } from 'rxjs';
 import { TrainingLoadDialogComponent } from './training-load-dialog.component';
 import { TrainingLoadService } from '../../services/training-load.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
-import { defaultAppliedTrainingLoadPolicy } from '@shared/training-load-policy';
+import { defaultAppliedTrainingLoadPolicy, type TrainingLoadLeg } from '@shared/training-load-policy';
 import { browserTrainingLoadSourceFingerprint } from '@shared/training-load-source';
 import * as trainingLoadSource from '@shared/training-load-source';
-import { ActivityTypes, DataTrainingStressScore, EventImporterJSON, TrainingStressScoreMethod } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataTrainingStressScore, EventImporterJSON, TrainingStressScoreMethod, SwimPaceUnits,
+  convertSwimPaceToSpeed, convertSwimPaceToSwimPacePer100Yard } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 
 describe('Training load editor', () => {
   const save = vi.fn(); const selection = vi.fn(); const success = vi.fn(); const error = vi.fn();
@@ -62,6 +65,8 @@ describe('Training load editor', () => {
     expect(element.textContent).toContain('Save activity');
     expect(element.textContent).toContain('Reset activity');
     expect([...element.querySelectorAll('dt')].map(label => label.textContent)).not.toContain('Modeled activity TSS');
+    const select = fixture.debugElement.query(By.directive(MatSelect)).componentInstance as MatSelect;
+    expect(select.options.some(option => option.value === 'SWIM_PACE')).toBe(false);
     expect(selection).not.toHaveBeenCalled(); expect(save).not.toHaveBeenCalled();
   });
   it('keeps differing legacy workout and activity scores explicitly labelled', async () => {
@@ -265,6 +270,86 @@ describe('Training load editor', () => {
         policy: defaultAppliedTrainingLoadPolicy('Walking'), recordedTss: 87.3,
         evaluations: { version: 1, automatic: result, hr: { ...result, preference: 'HR' }, met: { ...result, preference: 'MET' } } } } });
     expect(component.automatic).toBeNull(); expect(component.recorded).toBe(87.3);
+  });
+  it('shows saved CSS and the explicit swim method without claiming the current settings were used', () => {
+    component.activities[0].type = ActivityTypes.Swimming;
+    const candidate = { preference: 'AUTOMATIC' as const, score: 60, method: 'HR' as const,
+      estimated: false, provenance: 'calculated' as const, reasons: [] };
+    component.metadata.set({ version: 1, revision: 1, excluded: false, controls: {}, legs: { walk: {
+      activityId: 'walk', identity: { startMs: 1000, endMs: 3601000, type: ActivityTypes.Swimming, duration: 3600, distance: null },
+      policy: { ...defaultAppliedTrainingLoadPolicy(ActivityTypes.Swimming), method: 'SWIM_PACE', swimThresholdSpeed: 100 / 113 },
+      recordedTss: 60, evaluations: { version: 1, automatic: candidate,
+        hr: { ...candidate, preference: 'HR' }, met: { ...candidate, preference: 'MET' },
+        swimPace: { ...candidate, preference: 'SWIM_PACE', method: 'SWIM_PACE', score: 100 } },
+    } } });
+    expect(component.savedCssLabel).toContain('01:53');
+    expect(component.actualMethodLabel).toBe('Swim pace (CSS)');
+    expect(component.explanation).toContain('CSS saved with this workout');
+    expect(component.automatic).toBe(60);
+    component.data.unitSettings = normalizeUserUnitSettings({ swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] });
+    component.metadata()!.legs!.walk.policy.swimThresholdSpeed = convertSwimPaceToSpeed(114 / convertSwimPaceToSwimPacePer100Yard(1));
+    expect(component.savedCssLabel).toBe('01:54 min/100yd');
+  });
+  it('keeps a saved swim preference visible after reparse corrects the sport, with its actual fallback', async () => {
+    const candidate = { preference: 'AUTOMATIC' as const, score: 60, method: 'HR' as const,
+      estimated: false, provenance: 'calculated' as const, reasons: [] };
+    watch.mockReturnValue(of({ version: 1, revision: 1, excluded: false, controls: {}, legs: { walk: {
+      activityId: 'walk', identity: { startMs: 1000, endMs: 3601000, type: ActivityTypes.Walking, duration: 3600, distance: null },
+      policy: { ...defaultAppliedTrainingLoadPolicy(ActivityTypes.Swimming), method: 'SWIM_PACE', swimThresholdSpeed: 100 / 113 },
+      recordedTss: 87.3, evaluations: { version: 1, automatic: candidate,
+        hr: { ...candidate, preference: 'HR' }, met: { ...candidate, preference: 'MET' },
+        swimPace: { ...candidate, preference: 'SWIM_PACE', reasons: ['unsupported-sport'] } },
+    } } }));
+    const fixture = TestBed.createComponent(TrainingLoadDialogComponent);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.loaded(), fixture.componentInstance.error()).toBe(true));
+    fixture.detectChanges();
+    const select = fixture.debugElement.query(By.directive(MatSelect)).componentInstance as MatSelect;
+    await vi.waitFor(() => expect(select.triggerValue).toBe('Swim pace (CSS)'));
+    expect(select.value).toBe('SWIM_PACE');
+    expect(select.options.find(option => option.value === 'SWIM_PACE')?.disabled).toBe(true);
+    expect(fixture.componentInstance.legModel).toMatchObject({ score: 60, method: 'HR', reasons: ['unsupported-sport'] });
+    expect(fixture.nativeElement.textContent).toContain('This calculation is not supported for this sport.');
+    expect(fixture.debugElement.query(By.directive(MatCheckbox))).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Choose a method supported by this sport before copying preferences');
+    expect(selection).not.toHaveBeenCalled(); expect(save).not.toHaveBeenCalled();
+    fixture.componentInstance.form.controls.method.setValue('HR');
+    fixture.changeDetectorRef.markForCheck(); fixture.detectChanges();
+    const future = fixture.debugElement.query(By.directive(MatCheckbox)).componentInstance as MatCheckbox;
+    expect(future.disabled).toBe(false);
+    expect(select.options.some(option => option.value === 'SWIM_PACE')).toBe(false);
+    expect(fixture.componentInstance.policy.method).toBe('SWIM_PACE');
+    expect(fixture.componentInstance.legModel.score).toBe(60);
+  });
+  it('hides an Automatic comparison calculated with different CSS, including while overridden or excluded', () => {
+    component.activities[0].type = ActivityTypes.Swimming;
+    const candidate = { preference: 'AUTOMATIC' as const, score: 12.5, method: 'SWIM_PACE' as const,
+      estimated: false, provenance: 'calculated' as const, reasons: [] };
+    const current: TrainingLoadLeg = { activityId: 'walk', identity: { startMs: 1000, endMs: 3601000,
+      type: ActivityTypes.Swimming, duration: 3600, distance: null },
+      policy: { ...defaultAppliedTrainingLoadPolicy(ActivityTypes.Swimming), swimThresholdSpeed: 2 },
+      recordedTss: 87.3, evaluations: { version: 1 as const, automatic: candidate,
+        hr: { ...candidate, preference: 'HR' as const }, met: { ...candidate, preference: 'MET' as const },
+        swimPace: { ...candidate, preference: 'SWIM_PACE' as const } } };
+    const metadata = { version: 1 as const, revision: 1, excluded: false,
+      controls: { retained: { activityId: 'walk', override: 0, included: true } },
+      legs: { walk: current, retained: { ...current, activityId: null,
+        policy: { ...current.policy, swimThresholdSpeed: 1 } } } };
+    component.metadata.set(metadata);
+    expect(component.savedCssLabel).toContain('01:40');
+    expect(component.legModel.score).toBe(0);
+    expect(component.automatic).toBeNull();
+    expect(component.recorded).toBe(87.3);
+    metadata.controls.retained.included = false;
+    expect(component.legModel.status).toBe('excluded');
+    expect(component.automatic).toBeNull();
+    current.policy.swimThresholdSpeed = 1;
+    current.evaluations = { ...current.evaluations!, automatic: { ...candidate, score: 100 } };
+    expect(component.automatic).toBe(100);
+    current.policy.swimThresholdSpeed = 2;
+    current.evaluations = { ...current.evaluations!, automatic: { ...candidate,
+      score: 0, method: 'IMPORTED', provenance: 'imported' } };
+    expect(component.automatic).toBe(0);
   });
   it.each([ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming])('explains the missing threshold for %s with an unavailable or estimated fallback', async type => {
     component.activities[0].type = type;

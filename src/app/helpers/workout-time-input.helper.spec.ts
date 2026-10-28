@@ -1,7 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { formatWorkoutEditorPace, parseWorkoutEditorPace, splitWorkoutEditorMinutes, workoutDurationPartsToMinutes, workoutDurationPartsToSeconds } from './workout-time-input.helper';
+import { formatWorkoutEditorDuration, formatWorkoutEditorPace, parseWorkoutEditorPace, splitWorkoutEditorMinutes, workoutDurationPartsToMinutes, workoutDurationPartsToSeconds } from './workout-time-input.helper';
+import { DistanceUnits, PaceUnits } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 
 describe('workout time entry', () => {
+  it('spells out Sports Lib duration units in either unit system without confusing seconds and minutes', () => {
+    for (const units of [undefined, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles, paceUnits: [PaceUnits.MinutesPerMile] })]) {
+      expect(formatWorkoutEditorDuration(15, units)).toBe('15 seconds');
+      expect(formatWorkoutEditorDuration(900, units)).toBe('15 minutes');
+      expect(formatWorkoutEditorDuration(75, units)).toBe('1 minute 15 seconds');
+      expect(formatWorkoutEditorDuration(3723, units)).toBe('1 hour 2 minutes 3 seconds');
+      expect(formatWorkoutEditorDuration(0.5, units)).toBe('0.5 seconds');
+      expect(formatWorkoutEditorDuration(0.001, units)).toBe('less than 1 second');
+      expect(formatWorkoutEditorDuration(0, units)).toBeNull();
+      expect(formatWorkoutEditorDuration(NaN, units)).toBeNull();
+    }
+  });
   it.each([60, 75, 90, 15, 3723, 90000, 0.5])('splits and recombines %s seconds', seconds => {
     const parts = splitWorkoutEditorMinutes(seconds / 60);
     expect(workoutDurationPartsToMinutes(parts) * 60).toBeCloseTo(seconds, 9);

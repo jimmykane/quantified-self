@@ -264,6 +264,16 @@ On 2026-10-09, three fresh Node 22.23.3 imports per target on the rebased PR mea
 Other local verification was running concurrently, so these timings are a startup sanity check rather than a
 controlled performance comparison. Keep runtime limits unchanged and verify production memory/startup separately.
 
+## Guide preference wake-up (2026-10-28)
+
+`onTrainingDeliveryGuideSettingsChanged` loads directly from `training-plans/delivery/lifecycle` and watches
+`users/{uid}/config/settings` (Gen 2, `europe-west2`, 512 MiB, retries, no secrets). It only stages existing delivery
+reconciliation when normalized swimming preferences change. The full export/isolated loader inventory is now 189.
+The compiled entrypoint check verifies the original handler identity, event path and resource options.
+Three fresh local Node 22 imports measured a median 384 ms / 136 MiB RSS for the new target (one export),
+versus 995 ms / 250 MiB for full discovery (189 exports). These are local startup observations, not a production
+memory guarantee. The complete 189-endpoint loading check passes.
+
 ## Complete runtime coverage (2026-10-26)
 
 The remaining 73 Functions now load directly from their existing owner modules. Together with the prior billing
@@ -294,7 +304,7 @@ existing Gen 1 receivers, dispatchers and Auth cleanup. The welcome-mail trigger
 secrets and IAM declarations continue to come from the unchanged owner handlers.
 
 Every isolated runtime's complete endpoint and trigger descriptors are captured before importing the full registry,
-then compared with a separate fresh discovery process. This covers all 188 Functions, rather than a selected subset.
+then compared with a separate fresh discovery process. This covers all 189 Functions, rather than a selected subset.
 The check also validates handler identity, one exported target, import boundaries, both discovery overrides and
 standalone secret validation with inherited runtime targets, including all four public aliases.
 
@@ -317,7 +327,7 @@ npm --prefix functions run entrypoint:check
 
 The check builds the Functions package and verifies:
 
-- discovery exposes all 188 application exports and every export has a loader;
+- discovery exposes all 189 application exports and every export has a loader;
 - both Firebase discovery modes ignore an inherited optimized `FUNCTION_TARGET`;
 - standalone secret-binding validation forces complete discovery even with an inherited ingestion `FUNCTION_TARGET`;
 - an unknown target exposes the same complete export set;
