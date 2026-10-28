@@ -151,7 +151,7 @@
     <mat-form-field appearance="outline">
       <mat-label>Start Date</mat-label>
       <input matInput [matDatepicker]="startDate" [min]="minDate" [max]="formGroup.get('endDate')?.value || today"
-        formControlName="startDate" (dateChange)="onHistoryDatesChange()" (click)="startDate.open()">
+        formControlName="startDate" (dateInput)="onHistoryDatesChange(startDate.opened)" (click)="startDate.open()">
       <mat-datepicker-toggle matSuffix [for]="startDate"></mat-datepicker-toggle>
       <mat-datepicker #startDate></mat-datepicker>
       <mat-error *ngIf="formGroup.get('startDate')?.hasError('required')">Start date is required</mat-error>
@@ -163,7 +163,7 @@
     <mat-form-field appearance="outline">
       <mat-label>End Date</mat-label>
       <input matInput [matDatepicker]="endDate" [min]="formGroup.get('startDate')?.value || minDate" [max]="today"
-        formControlName="endDate" (dateChange)="onHistoryDatesChange()" (click)="endDate.open()">
+        formControlName="endDate" (dateInput)="onHistoryDatesChange(endDate.opened)" (click)="endDate.open()">
       <mat-datepicker-toggle matSuffix [for]="endDate"></mat-datepicker-toggle>
       <mat-datepicker #endDate></mat-datepicker>
       <mat-error *ngIf="formGroup.get('endDate')?.hasError('required')">End date is required</mat-error>

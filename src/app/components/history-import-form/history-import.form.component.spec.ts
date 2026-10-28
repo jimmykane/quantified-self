@@ -1,7 +1,7 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HistoryImportFormComponent } from './history-import.form.component';
-import { MatDatepickerInput, MatDatepickerModule } from '@angular/material/datepicker';
+import { MatDatepicker, MatDatepickerInput, MatDatepickerModule } from '@angular/material/datepicker';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule, MatSelect } from '@angular/material/select';
 import { By } from '@angular/platform-browser';
@@ -187,11 +187,11 @@ describe('HistoryImportFormComponent', () => {
         component.onHistoryDatesChange();
         expect(component.selectedHistoryRange).toBe('custom');
         expect(component.formGroup.get('accepted')!.value).toBe(false);
-        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        expect(haptics.selection).not.toHaveBeenCalled();
         component.formGroup.disable();
         component.onHistoryRangeChange('60_days');
         expect(component.selectedHistoryRange).toBe('custom');
-        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        expect(haptics.selection).not.toHaveBeenCalled();
     });
 
     it.each([ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.WahooAPI])('keeps the two-year default and submits only the explicitly selected dates for %s', async provider => {
@@ -220,15 +220,41 @@ describe('HistoryImportFormComponent', () => {
         expect(mockUserService.importServiceHistoryForCurrentUser).toHaveBeenCalledWith(provider, expectedStart, dayjs().endOf('day').toDate(), '123');
     });
 
-    it('wires date and confirmation events without starting an import', async () => {
+    it.each(['startDate', 'endDate'])('clears confirmation immediately when %s is typed, before blur or submission', async field => {
         await fixture.whenStable();
         fixture.detectChanges();
-        const input = fixture.debugElement.query(By.directive(MatDatepickerInput));
         component.formGroup.get('accepted')!.setValue(true);
-        component.formGroup.get('startDate')!.setValue(dayjs().subtract(10, 'day'));
-        input.triggerEventHandler('dateChange', {});
+        const input = fixture.debugElement.query(By.css(`input[formControlName="${field}"]`)).nativeElement as HTMLInputElement;
+        const date = dayjs().subtract(field === 'startDate' ? 10 : 2, 'day');
+        input.value = date.format('MM/DD/YYYY');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        fixture.detectChanges();
+        expect(dayjs(component.formGroup.get(field)!.value).format('YYYY-MM-DD')).toBe(date.format('YYYY-MM-DD'));
+        expect(component.formGroup.get('accepted')!.value).toBe(false);
+        expect(component.selectedHistoryRange).toBe('custom');
+        expect(haptics.selection).not.toHaveBeenCalled();
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        expect(haptics.selection).not.toHaveBeenCalled();
+        await component.onSubmit({ preventDefault: vi.fn() } as unknown as Event);
+        expect(mockUserService.importServiceHistoryForCurrentUser).not.toHaveBeenCalled();
+    });
+
+    it('clears confirmation and gives one selection feedback for a calendar choice', async () => {
+        await fixture.whenStable();
+        fixture.detectChanges();
+        component.formGroup.get('accepted')!.setValue(true);
+        const picker = fixture.debugElement.query(By.directive(MatDatepicker)).componentInstance as MatDatepicker<dayjs.Dayjs>;
+        picker.open();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        const choice = [...document.querySelectorAll<HTMLButtonElement>('mat-calendar button.mat-calendar-body-cell:not([disabled])')]
+            .find(button => button.getAttribute('aria-disabled') !== 'true' && !button.querySelector('.mat-calendar-body-selected'))!;
+        expect(choice).toBeDefined();
+        choice.click();
+        fixture.detectChanges();
         expect(component.selectedHistoryRange).toBe('custom');
         expect(component.formGroup.get('accepted')!.value).toBe(false);
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
         const checkbox = fixture.debugElement.query(By.directive(MatCheckbox)).componentInstance as MatCheckbox;
         checkbox.change.emit({ source: checkbox, checked: true });
         expect(haptics.selection).toHaveBeenCalledTimes(2);

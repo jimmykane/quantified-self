@@ -220,13 +220,15 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.hapticsService.selection();
   }
 
-  onHistoryDatesChange(): void {
+  onHistoryDatesChange(fromCalendar = false): void {
     const dates = this.historyDatesKey();
     if (this.formGroup.disabled || dates === this.selectedHistoryDates) return;
     this.selectedHistoryDates = dates;
     this.selectedHistoryRange = 'custom';
     this.formGroup.get('accepted')?.setValue(false);
-    if (this.formGroup.get('startDate')?.valid && this.formGroup.get('endDate')?.valid) this.hapticsService.selection();
+    if (fromCalendar && this.formGroup.get('startDate')?.valid && this.formGroup.get('endDate')?.valid) {
+      this.hapticsService.selection();
+    }
   }
 
   onHistoryConfirmationChange(): void {
