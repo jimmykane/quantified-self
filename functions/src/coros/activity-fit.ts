@@ -8,6 +8,7 @@ import { FitActivitySessionRepair } from '../shared/fit-activity-session-repair'
 const SNORKELING = 82;
 const SAILING = 32;
 const FISHING = 29;
+const DIVING = 53;
 const SWIMMING = 5;
 const OPEN_WATER = 18; // FIT sub_sport; 17 is lap_swimming, not open water.
 const MAX_BYTES = MAX_ACTIVITY_CALLABLE_UPLOAD_BYTES;
@@ -46,7 +47,7 @@ export function createCOROSSailingFIT(input: Buffer, requireGPS = false): Buffer
 
 /**
  * Recover an evidenced missing Session, repair reproduced empty definitions, then adapt the
- * verified mappings. Snorkeling needs no GPS; sailing and fishing require GPS.
+ * verified mappings. Snorkeling and diving need no GPS; sailing and fishing require GPS.
  * No original is mutated or retained. Fingerprint and send the returned buffer.
  */
 export function prepareCOROSActivityFITUpload(input: Buffer): Buffer {
@@ -82,6 +83,7 @@ export function prepareCOROSActivityFITUpload(input: Buffer): Buffer {
     if (sourceSport === SNORKELING) output = createCOROSSnorkelingFIT(prepared);
     else if (sourceSport === SAILING) output = createCOROSSailingFIT(prepared, true);
     else if (sourceSport === FISHING) output = createCategoryCopy(prepared, FISHING, 0, 0, 'fishing', true);
+    else if (sourceSport === DIVING) output = createCategoryCopy(prepared, DIVING, 0, 0, 'diving', false);
     else return prepared;
   } catch {
     // A fallback must not reject files the existing upload path might accept.
@@ -89,7 +91,8 @@ export function prepareCOROSActivityFITUpload(input: Buffer): Buffer {
   }
   logger.info('[COROS] Applied activity FIT category fallback.', {
     mapping: sourceSport === SNORKELING ? 'snorkeling_to_open_water_swim'
-      : sourceSport === SAILING ? 'sailing_to_gps_cardio' : 'fishing_to_gps_cardio',
+      : sourceSport === SAILING ? 'sailing_to_gps_cardio'
+        : sourceSport === FISHING ? 'fishing_to_gps_cardio' : 'diving_to_generic',
   });
   return output;
 }

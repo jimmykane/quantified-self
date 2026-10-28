@@ -2485,6 +2485,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('**Snorkeling as Open Water Swim** with or without recorded GPS');
     expect(serviceConnectionsSection?.content).toContain('**Sailing as GPS Cardio** only with recorded GPS');
     expect(serviceConnectionsSection?.content).toContain('**Fishing as GPS Cardio** only with recorded GPS');
+    expect(serviceConnectionsSection?.content).toContain('**Diving as Generic** with or without recorded GPS');
+    expect(serviceConnectionsSection?.content).toContain('COROS may not display every field or a dive profile');
     expect(serviceConnectionsSection?.content).toContain('missing GPS is not added');
     expect(serviceConnectionsSection?.content).toContain('GPS-less Sailing or Fishing, mixed/multi-session, malformed and other activity types');
     expect(serviceConnectionsSection?.content).toContain('COROS currently reports these processing failures only as a generic failed status');

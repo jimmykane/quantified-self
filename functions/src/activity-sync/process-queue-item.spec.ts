@@ -1875,6 +1875,7 @@ describe('activity-sync/process-queue-item', () => {
 
   it.each([[82, true, false, true], [82, false, false, true], [32, true, false, true],
     [29, true, false, true], [29, true, false, false],
+    [53, false, false, true], [53, false, false, false],
     [1, true, true, true], [1, true, true, false]] as const)(
     'queued sport %i refreshes the prepared receipt and then only polls (GPS=%s, empty fields=%s, restart=%s)', async (sport, withGPS, emptyFields, restart) => {
       const input = createCOROSActivityFITFixture({ sport, withGPS, emptyNativeFields: emptyFields ? 'zero' : undefined });
@@ -1907,7 +1908,7 @@ describe('activity-sync/process-queue-item', () => {
     },
   );
 
-  it.each([[82, false], [29, false], [1, true]] as const)(
+  it.each([[82, false], [29, false], [53, false], [1, true]] as const)(
     'does not prepare an accepted COROS sport %i upload while repairing its receipt (empty fields=%s)', async (sport, emptyFields) => {
       const input = createCOROSActivityFITFixture({ sport, emptyNativeFields: emptyFields ? 'zero' : undefined });
       mockDownload.mockResolvedValue([input]);

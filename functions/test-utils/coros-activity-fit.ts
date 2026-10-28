@@ -5,7 +5,7 @@ type Field = [number, number, Buffer];
 // Entirely synthetic FIT structures: no production files, identifiers or samples.
 export function createCOROSActivityFITFixture(options: {
   headerSize?: 12 | 14; bigEndian?: boolean; sport?: number; sessionCount?: number;
-  withSubSport?: boolean; developer?: boolean; compressed?: boolean; withGPS?: boolean;
+  withSubSport?: boolean; developer?: boolean; compressed?: boolean; withGPS?: boolean; withDepth?: boolean;
   coordinates?: [number, number]; compressedLap?: boolean; fullSessionDefinition?: boolean; malformedSport?: boolean;
   emptyNativeFields?: 'zero' | 'omitted' | 'populated'; eventCount?: number;
   localMessageNumber?: 0 | 1 | 2 | 3 | 7 | 15;
@@ -35,6 +35,7 @@ export function createCOROSActivityFITFixture(options: {
   const category: Field[] = options.withSubSport ? [[6, 0, Buffer.from([0])]] : [];
   message(0, [[0, 0, Buffer.from([4])], [1, 0x84, u16(23)]]);
   message(20, [[253, 0x86, u32(1000)], [3, 2, Buffer.from([120])],
+    ...(options.withDepth ? [[92, 0x86, u32(12000)]] as Field[] : []),
     ...(options.withGPS === false ? [] : [[0, 0x85, u32(options.coordinates?.[0] ?? 1234)], [1, 0x85, u32(options.coordinates?.[1] ?? 5678)]] as Field[])], false, options.compressed);
   // Same local slot is redefined repeatedly, including an opaque vendor message.
   message(65280, [[9, 13, Buffer.from([11, 22, 33, 44])]], options.developer);

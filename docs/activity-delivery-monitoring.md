@@ -66,10 +66,10 @@ at exhaustion. A diagnostic HTTP 200 is neither initialization validity nor deli
 keep their continuation/status-only guards; no monitoring resources, thresholds or labels change.
 
 COROS's #600 upload-copy mappings (Snorkeling → Open Water Swim; Sailing and
-Fishing → GPS Cardio) use these same workers, destination labels and committed
-outcomes. Coverage is unchanged when Snorkeling also permits GPS-less files and
-Fishing uses the existing GPS Cardio conversion; Sailing and Fishing retain their
-GPS requirement. A mapping INFO is not provider acceptance or delivery. Confirm
+Fishing → GPS Cardio; Diving → Generic) use these same workers, destination labels
+and committed outcomes. Coverage is unchanged when Snorkeling and Diving permit
+GPS-less files and Fishing uses the existing GPS Cardio conversion; Sailing and
+Fishing retain their GPS requirement. A mapping INFO is not provider acceptance or delivery. Confirm
 status `2` and the guarded success write, not the preparation log or task ACK.
 Already accepted uploads remain status-only; this change adds no probe, metric or
 alert-policy dimension and does not authorize replaying old failed records.

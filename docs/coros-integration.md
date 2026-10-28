@@ -259,9 +259,10 @@ sending the file. The fixed mappings are:
 | Snorkeling (`82`) | Swimming / Open Water (`5` / `18`) | Open Water Swim |
 | Sailing (`32`) | Generic / Generic (`0` / `0`) | GPS Cardio |
 | Fishing (`29`) | Generic / Generic (`0` / `0`) | GPS Cardio |
+| Diving (`53`) | Generic / Generic (`0` / `0`) | Generic workout; app label unverified |
 
 The adapter only converts structurally valid, single-session activity FITs with
-consistent category fields. Snorkeling converts with or without recorded GPS;
+consistent category fields. Snorkeling and Diving convert with or without recorded GPS;
 Sailing and Fishing require at least one valid recorded latitude/longitude pair.
 Apart from the empty-field repair above, GPS-less Sailing or Fishing, mixed/multi-session,
 malformed and unrelated files pass through unchanged for the existing provider
@@ -298,7 +299,16 @@ All non-category native/developer fields, timing, distance and recorded GPS were
 verified unchanged, as were the saved QS event and activity. This proves the tested
 file, not universal acceptance; its visible app category has not yet been confirmed.
 Fishing uses the existing helper and GPS requirement, with a fixed
-`fishing_to_gps_cardio` INFO label. Diving remains outside these mappings.
+`fishing_to_gps_cardio` INFO label.
+
+Separate controlled Diving copies, including recorded depth without GPS, also
+reached terminal status `2`. A matched control with explicit sub_sport and unchanged
+Diving sport `53` failed with status `-1`; the same-sized generic copy succeeded.
+The matched pair differed only in the sport field and file CRC. This supports the
+explicit Diving-to-Generic fallback without requiring GPS, not other sports or
+universal acceptance. Depth, sensor and developer fields remain in the outgoing
+file; COROS app category and dive-profile/depth display are not established by
+terminal success. The fixed INFO label is `diving_to_generic`.
 
 Fingerprint receipts are computed from the actual sent copy. A converted fresh
 send/restart replaces a legacy original-file queue fingerprint marker through the
