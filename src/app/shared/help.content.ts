@@ -1135,7 +1135,15 @@ In the built-in Assistant, **Private workout reflections** in **Examples & data 
     icon: 'card_membership',
     title: 'Plans & Billing',
     summary: 'Understand activity limits, Pro features, and what happens when a plan changes.',
-    content: `## Current plan structure
+    content: `## Can I manage billing if I can't sign in?
+
+If you can't sign in to Quantified Self, [open the Stripe billing portal](https://billing.stripe.com/p/login/3cI7sLf5ObXy84o8OqcIE00). Enter the email address used for your subscription. Stripe emails you a login link so you can manage your subscription, payment details, and invoices without signing in to Quantified Self.
+
+If the email does not arrive, check spam or junk and confirm you used your billing email address. Contact [support](${SUPPORT_MAILTO}) if you still cannot access billing or no longer have access to that email address.
+
+If you are already signed in, use the usual billing button in [Membership](/subscriptions).
+
+## Current plan structure
 
 ### Starter (Free)
 
@@ -1841,6 +1849,7 @@ Some older email delivery records may remain after account deletion. Those with 
 - Check spam or junk if the magic link email does not arrive.
 - Make sure you are opening the link for the same email address you entered.
 - If one sign-in method does not match your existing account, try the provider you originally used.
+- To manage or cancel your subscription when you can't sign in, see [billing access without signing in](/help#plans-and-billing).
 - If you see **We couldn't load your account** or **We can't reach your account data**, check your connection and select **Retry**. This keeps you signed in while your account data is verified again; it does not reset your account or require you to repeat onboarding. If your sign-in session has actually expired, sign in again.
 
 ### App stays on the loading screen

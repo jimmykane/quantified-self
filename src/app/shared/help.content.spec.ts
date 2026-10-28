@@ -56,6 +56,16 @@ describe('help.content', () => {
     expect(copy).toContain('**Membership still syncing**');
     expect(copy).toContain('do not start another checkout while the result is unconfirmed');
   });
+  it('makes billing access discoverable without a Quantified Self sign-in', () => {
+    const billing = HELP_SECTIONS.find(section => section.id === 'plans-and-billing')!;
+    const troubleshooting = HELP_SECTIONS.find(section => section.id === 'troubleshooting')!;
+    expect(billing.content).toContain('[open the Stripe billing portal](https://billing.stripe.com/p/login/3cI7sLf5ObXy84o8OqcIE00)');
+    expect(billing.content).toContain('email address used for your subscription');
+    expect(billing.content).toContain('Stripe emails you a login link');
+    expect(billing.content).toContain('usual billing button in [Membership](/subscriptions)');
+    expect(troubleshooting.content).toContain('[billing access without signing in](/help#plans-and-billing)');
+    expect(searchHelpSections(HELP_SECTIONS, "billing can't sign in").map(section => section.id)).toContain('plans-and-billing');
+  });
   it('links membership and shareable getting-started and billing guides to their supported public URLs', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'getting-started')!.content;
     expect(copy).toContain('[Membership](/pricing)');

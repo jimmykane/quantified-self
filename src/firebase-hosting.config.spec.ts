@@ -257,6 +257,7 @@ describe('Firebase Hosting configuration', () => {
     // Includes contextual provider offers, trial review and paginated Connections navigation.
     // Includes shared history-progress lifecycle/refresh guidance and local Dashboard visibility controls (26 October).
     // Includes the Pro trial payment-method and cancellation terms refreshed today.
+    // Includes public Stripe billing access for members who cannot sign in to QS (28 October).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-28');
   });
 
