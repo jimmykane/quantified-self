@@ -3,8 +3,12 @@
 <section [id]="fieldsRegionId" [hidden]="!expanded()" aria-label="Suunto swimming Guide screens">
   <p>Choose extra fields for future pool/open-water Guides. Order matters; Suunto adapts the watch layout.</p>
   <p>Countdown, targets and instructions take priority. Target readings stay together; extra fields fill remaining space, up to five fields.</p>
+  <p>An HR target with a countdown uses three fields: countdown, current HR and target HR. That leaves two for extras before instructions or additional targets. Move the fields you need most earlier.</p>
   <p>Counters use the heading (<strong>Rest 1/10</strong>), not a metric slot. Previous/next distances share one short text field that Suunto may crop. Choices are priorities, not guaranteed watch cells.</p>
   @if (availability(); as allocation) {
+    @if (!allocation.blocked && !allocation.compact) {
+  <p class="limitations">Availability below follows your current choices for this workout. Included means requested from Suunto, not guaranteed visible or measured. It does not describe an older Guide already on your watch.</p>
+    }
     <button mat-button type="button" [attr.aria-expanded]="availabilityExpanded()" [attr.aria-controls]="availabilityRegionId"
       (click)="toggleAvailability()">{{ availabilityExpanded() ? 'Hide' : 'Show' }} field availability for this workout</button>
     <div [id]="availabilityRegionId" [hidden]="!availabilityExpanded()">
@@ -40,12 +44,21 @@
     <ol>
       @for (row of section.fields; track row.index) {
         <li>
-          <mat-form-field>
-            <mat-label>{{ section.label }} extra field {{ row.index + 1 }}</mat-label>
-            <mat-select [value]="row.field" [disabled]="saving()" (selectionChange)="choose(section.key, row.index, $event.value)">
-              @for (choice of row.choices; track choice.value) { <mat-option [value]="choice.value" [disabled]="choice.disabled">{{ choice.label }}</mat-option> }
-            </mat-select>
-          </mat-form-field>
+          <div class="field-choice">
+            <mat-form-field>
+              <mat-label>{{ section.label }} extra field {{ row.index + 1 }}</mat-label>
+              <mat-select [value]="row.field" [disabled]="saving()" [attr.aria-describedby]="row.allocation ? row.descriptionId : null"
+                (selectionChange)="choose(section.key, row.index, $event.value)">
+                @for (choice of row.choices; track choice.value) { <mat-option [value]="choice.value" [disabled]="choice.disabled">{{ choice.label }}</mat-option> }
+              </mat-select>
+            </mat-form-field>
+            @if (row.allocation; as allocation) {
+              <div class="field-availability" [id]="row.descriptionId" [class.has-omissions]="allocation.omitted">
+                <p><strong>{{ allocation.summary }}</strong></p>
+                @for (reason of allocation.reasons; track reason) { <p>{{ reason }}</p> }
+              </div>
+            }
+          </div>
           <div class="field-actions">
             <button mat-icon-button type="button" [disabled]="saving() || row.index === 0" (click)="move(section.key, row.index, -1)"
               [attr.aria-label]="'Move ' + section.label + ' ' + row.label + ' earlier'"><mat-icon>arrow_upward</mat-icon></button>

@@ -3434,6 +3434,14 @@ step numbers preserve prescription order and six rows load at a time. It is the 
 current draft preferences, not a renderer/readback of an already delivered Guide. Native readings need watch data;
 included fields are not guaranteed visible. Plan-level settings do not invent a representative workout. The report
 is cleared when the same-account schedule is unavailable; no new query, provider read, persistence or mutation is added.
+Each Work/Rest selector also shows its allocation across **all** matching steps, independently of the detailed
+report's disclosure/pagination. Omitted choices show the affected step count and deduplicated allocator reasons;
+included readings and heading-only counters remain distinct. Reordering updates this feedback before Save.
+Mixed targeted/untargeted steps are counted separately rather than claiming one layout for the whole workout.
+A countdown plus an HR target/current-HR pair reserves three fields, leaving two before instructions. The UI explains
+this budget and moving important fields earlier without dropping prescribed targets. Missing/unsupported/compact
+recipes show no invented inline allocation. These are frontend explanations using the existing allocator only;
+Guide fields/digests, queue monitoring, consent, storage and MCP read/write contracts are unchanged (no wire impact).
 Disclosure targets use per-instance IDs so stacked plan/workout dialogs cannot control another dialog's region.
 Accepted draft edits clear old save success/error messages; unchanged or rejected selections remain silent and
 never imply that a later draft was saved. Both behaviors have focused Angular regression coverage.

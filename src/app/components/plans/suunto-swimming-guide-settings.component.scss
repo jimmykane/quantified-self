@@ -4,7 +4,11 @@ p { font: var(--mat-sys-body-small); overflow-wrap: anywhere; }
 h4 { font: var(--mat-sys-title-small); margin-block: 0.75rem 0.25rem; }
 ol { padding-inline-start: 1.25rem; margin-block: 0.25rem; }
 li { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0.25rem; }
-mat-form-field { flex: 1 1 14rem; min-width: 0; }
+.field-choice { flex: 1 1 14rem; min-width: 0; }
+mat-form-field { width: 100%; }
+.field-availability { color: var(--mat-sys-on-surface-variant); margin-block-end: 0.5rem; }
+.field-availability.has-omissions { color: var(--mat-sys-on-surface); }
+.field-availability p { margin-block: 0 0.25rem; }
 .field-actions, .save-actions { display: flex; flex-wrap: wrap; align-items: center; }
 .limitations { color: var(--mat-sys-on-surface-variant); }
 .availability-step { margin-block: 0.75rem; }
