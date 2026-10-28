@@ -451,7 +451,7 @@ describe('OAuth2', () => {
             connection.replaceProviderToken('token-doc-id', { accessToken: 'mock-access', refreshToken: undefined, expiresAt: 0 });
             await deauthorizeServiceForUser(userID, serviceName);
 
-            expect(connection.root.set).toHaveBeenCalledWith(expect.objectContaining({
+            expect(connection.root.writes.set).toHaveBeenCalledWith(expect.objectContaining({
                 oauthFlowGeneration: expect.any(String),
                 state: 'delete-sentinel',
                 codeVerifier: 'delete-sentinel',
@@ -484,7 +484,7 @@ describe('OAuth2', () => {
             });
 
             expect(getTokenData).not.toHaveBeenCalled();
-            expect(connection.root.set).not.toHaveBeenCalled();
+            expect(connection.root.writes.set).not.toHaveBeenCalled();
         });
 
         it('does not replace an explicit disconnect operation already in progress', async () => {
@@ -510,7 +510,7 @@ describe('OAuth2', () => {
             });
 
             expect(getTokenData).not.toHaveBeenCalled();
-            expect(connection.root.set).not.toHaveBeenCalled();
+            expect(connection.root.writes.set).not.toHaveBeenCalled();
             expect(connection.readRoot()).toMatchObject({
                 disconnectOperationGeneration: 'disconnect-operation-1',
             });
@@ -531,7 +531,7 @@ describe('OAuth2', () => {
             );
 
             expect(getTokenData).toHaveBeenCalled();
-            expect(connection.root.set).toHaveBeenCalledWith(expect.objectContaining({
+            expect(connection.root.writes.set).toHaveBeenCalledWith(expect.objectContaining({
                 disconnectOperationGeneration: expect.any(String),
                 disconnectOperationLeaseExpiresAt: expect.any(Number),
             }), { merge: true });
@@ -947,7 +947,7 @@ describe('OAuth2', () => {
             expect(result).toContain('https://mock-auth-url.com');
             expect(firestore.db.collection).toHaveBeenCalledWith('suuntoAppAccessTokens');
             expect(connection.root.id).toBe(userID);
-            expect(connection.root.set).toHaveBeenCalled();
+            expect(connection.root.writes.set).toHaveBeenCalled();
             expect(connection.readRoot()).toEqual(expect.objectContaining({
                 oauthFlowCreatedAt: expect.any(Number),
                 oauthFlowExpiresAt: expect.any(Number),
@@ -996,7 +996,7 @@ describe('OAuth2', () => {
                 serviceName: ServiceNames.SuuntoApp,
             });
 
-            expect(connection.root.set).not.toHaveBeenCalled();
+            expect(connection.root.writes.set).not.toHaveBeenCalled();
         });
 
         it('starts OAuth after reclaiming an expired explicit disconnect operation lease', async () => {
@@ -1228,7 +1228,7 @@ describe('OAuth2', () => {
             expect(firestore.db.collection).toHaveBeenCalledWith('garminAPITokens');
 
             // Verify state and codeVerifier were saved
-            const setCall = (connection.root.set as any).mock.calls[0][0];
+            const setCall = connection.root.writes.set.mock.calls[0][0];
             expect(setCall.state).toBeDefined();
             expect(setCall.codeVerifier).toBeDefined();
         });
@@ -1557,7 +1557,7 @@ describe('OAuth2', () => {
 
             await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.GarminAPI, redirectUri, code, 'some-state');
 
-            expect(connection.root.update).toHaveBeenCalledWith(expect.objectContaining({
+            expect(connection.root.writes.update).toHaveBeenCalledWith(expect.objectContaining({
                 state: 'delete-sentinel',
                 codeVerifier: 'delete-sentinel',
             }));
@@ -1614,7 +1614,7 @@ describe('OAuth2', () => {
                     expect(result.historyImport?.runId).toBe(mockMarkServiceConnected.mock.calls[0][5].runId);
                 }
                 else expect(result).not.toHaveProperty('historyImport');
-                expect(connection.root.update).toHaveBeenCalledWith(expect.objectContaining({
+                expect(connection.root.writes.update).toHaveBeenCalledWith(expect.objectContaining({
                     oauthImportRecentHistory: 'delete-sentinel',
                     oauthImportHistoryRange: 'delete-sentinel',
                     oauthImportRouteHistory: 'delete-sentinel',
@@ -1777,11 +1777,11 @@ describe('OAuth2', () => {
                 outcome: 'connected',
             });
 
-            expect(connection.token('test-external-user').set).toHaveBeenCalledWith(expect.objectContaining({
+            expect(connection.token('test-external-user').writes.set).toHaveBeenCalledWith(expect.objectContaining({
                 accessToken: 'mock-token',
                 tokenCredentialGeneration: expect.any(String),
             }), undefined);
-            expect(connection.root.set).toHaveBeenCalledWith(expect.objectContaining({
+            expect(connection.root.writes.set).toHaveBeenCalledWith(expect.objectContaining({
                 activeOAuthCredentialGeneration: expect.any(String),
             }), { merge: true });
             expect(firestore.setDocument).toHaveBeenCalledWith(expect.objectContaining({ path: expect.stringContaining('suuntoHealthWebhookAccountBindings/') }), {
@@ -2045,7 +2045,7 @@ describe('OAuth2', () => {
                     },
                 },
             );
-            expect(connection.root.update).toHaveBeenCalledWith(expect.objectContaining({
+            expect(connection.root.writes.update).toHaveBeenCalledWith(expect.objectContaining({
                 state: 'delete-sentinel',
                 codeVerifier: 'delete-sentinel',
             }));
@@ -2061,7 +2061,7 @@ describe('OAuth2', () => {
             await expect(getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.GarminAPI, redirectUri, code, 'some-state'))
                 .rejects.toThrow('Exchange failed');
 
-            expect(connection.root.update).toHaveBeenCalledWith(expect.objectContaining({
+            expect(connection.root.writes.update).toHaveBeenCalledWith(expect.objectContaining({
                 state: 'delete-sentinel',
                 codeVerifier: 'delete-sentinel',
             }));
@@ -2088,7 +2088,7 @@ describe('OAuth2', () => {
             )).rejects.toMatchObject({ name: 'OAuthFlowContextMismatchError' });
 
             expect(getTokenSpy).not.toHaveBeenCalled();
-            expect(connection.root.update).not.toHaveBeenCalled();
+            expect(connection.root.writes.update).not.toHaveBeenCalled();
         });
 
         it('rejects an expired OAuth callback before exchanging its authorization code', async () => {
@@ -2115,7 +2115,7 @@ describe('OAuth2', () => {
             )).rejects.toMatchObject({ name: 'OAuthFlowContextMismatchError' });
 
             expect(getTokenSpy).not.toHaveBeenCalled();
-            expect(connection.root.update).not.toHaveBeenCalled();
+            expect(connection.root.writes.update).not.toHaveBeenCalled();
         });
 
         it.each([
@@ -2147,7 +2147,7 @@ describe('OAuth2', () => {
             )).rejects.toMatchObject({ name: 'OAuthFlowContextMismatchError' });
 
             expect(getTokenSpy).not.toHaveBeenCalled();
-            expect(connection.root.update).not.toHaveBeenCalled();
+            expect(connection.root.writes.update).not.toHaveBeenCalled();
         });
 
         it('rejects a claimed callback when disconnect invalidates its OAuth generation during exchange', async () => {
@@ -2220,8 +2220,8 @@ describe('OAuth2', () => {
                 });
 
             expect(getTokenSpy).not.toHaveBeenCalled();
-            expect(connection.root.set).not.toHaveBeenCalled();
-            expect(connection.root.update).toHaveBeenCalledWith(expect.objectContaining({
+            expect(connection.root.writes.set).not.toHaveBeenCalled();
+            expect(connection.root.writes.update).toHaveBeenCalledWith(expect.objectContaining({
                 state: 'delete-sentinel',
                 codeVerifier: 'delete-sentinel',
             }));
@@ -2258,9 +2258,9 @@ describe('OAuth2', () => {
                 });
 
             expect(getTokenSpy).not.toHaveBeenCalled();
-            expect(connection.root.set).not.toHaveBeenCalled();
+            expect(connection.root.writes.set).not.toHaveBeenCalled();
             expect(firestore.db.recursiveDelete).not.toHaveBeenCalled();
-            expect(connection.root.update).toHaveBeenCalledWith(expect.objectContaining({
+            expect(connection.root.writes.update).toHaveBeenCalledWith(expect.objectContaining({
                 state: 'delete-sentinel',
                 codeVerifier: 'delete-sentinel',
             }));
@@ -2298,7 +2298,7 @@ describe('OAuth2', () => {
 
             expect(getTokenSpy).not.toHaveBeenCalled();
             expect(firestore.db.recursiveDelete).not.toHaveBeenCalled();
-            expect(connection.root.update).toHaveBeenCalledWith(expect.objectContaining({
+            expect(connection.root.writes.update).toHaveBeenCalledWith(expect.objectContaining({
                 state: 'delete-sentinel',
                 codeVerifier: 'delete-sentinel',
             }));
@@ -2348,8 +2348,8 @@ describe('OAuth2', () => {
                     serviceName: ServiceNames.SuuntoApp,
                 });
 
-            expect(connection.root.set).not.toHaveBeenCalled();
-            expect(connection.root.update).toHaveBeenCalled();
+            expect(connection.root.writes.set).not.toHaveBeenCalled();
+            expect(connection.root.writes.update).toHaveBeenCalled();
             expect(requestPromise.get).toHaveBeenCalledWith(expect.objectContaining({
                 headers: expect.objectContaining({
                     Authorization: 'Bearer mock-token',
@@ -2404,8 +2404,8 @@ describe('OAuth2', () => {
                     serviceName: ServiceNames.SuuntoApp,
                 });
 
-            expect(connection.root.set).not.toHaveBeenCalled();
-            expect(connection.root.update).toHaveBeenCalled();
+            expect(connection.root.writes.set).not.toHaveBeenCalled();
+            expect(connection.root.writes.update).toHaveBeenCalled();
             expect(firestore.db.recursiveDelete).not.toHaveBeenCalled();
             expect(requestPromise.get).toHaveBeenCalledWith(expect.objectContaining({
                 headers: expect.objectContaining({
@@ -2510,10 +2510,10 @@ describe('OAuth2', () => {
 
             await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code, 'some-state');
 
-            expect(connection.root.set).toHaveBeenCalled();
-            expect(connection.token('test-external-user').set).toHaveBeenCalled();
+            expect(connection.root.writes.set).toHaveBeenCalled();
+            expect(connection.token('test-external-user').writes.set).toHaveBeenCalled();
             expect(firestore.db.recursiveDelete).not.toHaveBeenCalled();
-            expect(connection.root.update).toHaveBeenCalledTimes(1);
+            expect(connection.root.writes.update).toHaveBeenCalledTimes(1);
         });
 
         it('should not remove duplicate connections if account deletion blocks connected-state write after token persistence', async () => {
@@ -2551,11 +2551,11 @@ describe('OAuth2', () => {
                     phase: `oauth_mark_connected:${ServiceNames.SuuntoApp}`,
                 });
 
-            expect(connection.root.set).toHaveBeenCalled();
-            expect(connection.token('test-external-user').set).toHaveBeenCalled();
+            expect(connection.root.writes.set).toHaveBeenCalled();
+            expect(connection.token('test-external-user').writes.set).toHaveBeenCalled();
             expect(firestore.where).not.toHaveBeenCalled();
             expect(firestore.db.recursiveDelete).not.toHaveBeenCalled();
-            expect(connection.root.update).toHaveBeenCalledTimes(1);
+            expect(connection.root.writes.update).toHaveBeenCalledTimes(1);
         });
     });
 

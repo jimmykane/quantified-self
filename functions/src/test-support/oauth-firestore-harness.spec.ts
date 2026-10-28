@@ -58,7 +58,9 @@ describe('OAuth Firestore fixture', () => {
     const fixture = createOAuthFirestoreHarness();
     const connection = fixture.connection('providerTokens', 'owner');
     connection.seedRoot({ state: 'before' });
-    connection.token('account').set.mockRejectedValueOnce(new Error('write failed'));
+    fixture.setDocument.mockImplementation(async ref => {
+      if (ref === connection.token('account')) throw new Error('write failed');
+    });
     await expect(fixture.db.runTransaction(async transaction => {
       transaction.set(connection.root, { state: 'after' });
       transaction.set(connection.token('account'), { accessToken: 'synthetic' });
@@ -70,6 +72,101 @@ describe('OAuth Firestore fixture', () => {
       transaction.set(connection.root, { state: 'last' });
     });
     expect(connection.readRoot()).toEqual({ state: 'last' });
+  });
+
+  it('publishes every transaction write together after all write hooks succeed', async () => {
+    const fixture = createOAuthFirestoreHarness();
+    const connection = fixture.connection('providerTokens', 'owner');
+    connection.persistCredentials('account', { accessToken: 'old', tokenCredentialGeneration: 'old-generation' });
+    let started!: () => void;
+    let release!: () => void;
+    const tokenWriteStarted = new Promise<void>(resolve => { started = resolve; });
+    const tokenWriteGate = new Promise<void>(resolve => { release = resolve; });
+    fixture.setDocument.mockImplementation(async ref => {
+      if (ref === connection.token('account')) {
+        started();
+        await tokenWriteGate;
+      }
+    });
+
+    const commit = fixture.db.runTransaction(async transaction => {
+      transaction.set(connection.root, { activeOAuthCredentialGeneration: 'new-generation' });
+      transaction.set(connection.token('account'), { accessToken: 'new', tokenCredentialGeneration: 'new-generation' });
+    });
+    await tokenWriteStarted;
+    try {
+      expect(connection.readRoot()).toEqual({ activeOAuthCredentialGeneration: 'old-generation' });
+      expect(connection.readToken('account')).toEqual({ accessToken: 'old', tokenCredentialGeneration: 'old-generation' });
+    } finally {
+      release();
+      await commit;
+    }
+    expect(connection.readRoot()).toEqual({ activeOAuthCredentialGeneration: 'new-generation' });
+    expect(connection.readToken('account')).toEqual({ accessToken: 'new', tokenCredentialGeneration: 'new-generation' });
+  });
+
+  it('discards failed transaction writes without erasing a competing disconnect', async () => {
+    const fixture = createOAuthFirestoreHarness();
+    const connection = fixture.connection('providerTokens', 'owner');
+    connection.seedRoot({ state: 'before' });
+    fixture.setDocument.mockImplementation(async ref => {
+      if (ref === connection.token('account')) {
+        connection.setDisconnectGeneration({ disconnectOperationGeneration: 'winning-disconnect' });
+        throw new Error('write failed');
+      }
+    });
+    await expect(fixture.db.runTransaction(async transaction => {
+      transaction.set(connection.root, { state: 'losing-state' });
+      transaction.set(connection.token('account'), { accessToken: 'losing-token' });
+    })).rejects.toThrow('write failed');
+    expect(connection.readRoot()).toEqual({ state: 'before', disconnectOperationGeneration: 'winning-disconnect' });
+    expect(connection.readToken('account')).toBeUndefined();
+  });
+
+  it('captures transaction payloads when writes are staged', async () => {
+    const fixture = createOAuthFirestoreHarness();
+    const connection = fixture.connection('providerTokens', 'owner');
+    await fixture.db.runTransaction(async transaction => {
+      const values = { state: 'staged', nested: { generation: 'staged' } };
+      transaction.set(connection.root, values);
+      values.state = 'mutated';
+      values.nested.generation = 'mutated';
+    });
+    expect(connection.readRoot()).toEqual({ state: 'staged', nested: { generation: 'staged' } });
+  });
+
+  it.each(['set', 'update'] as const)('captures direct %s payloads before awaiting write hooks', async method => {
+    const connection = createOAuthFirestoreHarness().connection('providerTokens', 'owner');
+    connection.seedRoot({ state: 'before' });
+    const values = { state: 'staged', nested: { generation: 'staged' } };
+    const write = connection.root[method](values);
+    values.state = 'mutated';
+    values.nested.generation = 'mutated';
+    await write;
+    expect(connection.readRoot()).toEqual({ state: 'staged', nested: { generation: 'staged' } });
+  });
+
+  it('does not recreate a root deleted while a direct update waits', async () => {
+    const fixture = createOAuthFirestoreHarness();
+    const connection = fixture.connection('providerTokens', 'owner');
+    connection.seedRoot({ state: 'before' });
+    fixture.updateDocument.mockImplementationOnce(async () => { connection.removeRoot(); });
+    await expect(connection.root.update({ state: 'after' })).rejects.toThrow('missing fixture document');
+    expect(connection.readRoot()).toBeUndefined();
+  });
+
+  it.each(['callback', 'write hook'])('rejects concurrent mutation in the %s without overwriting it', async phase => {
+    const fixture = createOAuthFirestoreHarness();
+    const connection = fixture.connection('providerTokens', 'owner');
+    connection.seedRoot({ state: 'before' });
+    const compete = () => connection.setDisconnectGeneration({ disconnectOperationGeneration: 'winning-disconnect' });
+    if (phase === 'write hook') fixture.setDocument.mockImplementation(async () => { compete(); });
+    await expect(fixture.db.runTransaction(async transaction => {
+      await transaction.get(connection.root);
+      transaction.set(connection.root, { state: 'losing-state' });
+      if (phase === 'callback') compete();
+    })).rejects.toThrow('transaction conflicted');
+    expect(connection.readRoot()).toEqual({ state: 'before', disconnectOperationGeneration: 'winning-disconnect' });
   });
 
   it('applies named competing transitions without overwriting unrelated root state', () => {

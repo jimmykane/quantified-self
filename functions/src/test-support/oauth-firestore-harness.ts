@@ -16,14 +16,19 @@ interface QuerySnapshot {
   size: number;
 }
 
-interface Document {
+interface WriteHooks {
+  set: Mock<(values: Data, options?: SetOptions) => Promise<void>>;
+  update: Mock<(values: Data) => Promise<void>>;
+  delete: Mock<() => Promise<void>>;
+}
+
+interface Document extends WriteHooks {
   id: string;
   path: string;
   parent: Collection;
   get: Mock<() => Promise<Snapshot>>;
-  set: Mock<(values: Data, options?: SetOptions) => Promise<void>>;
-  update: Mock<(values: Data) => Promise<void>>;
-  delete: Mock<() => Promise<void>>;
+  /** Observe or fail direct and transaction write attempts without replacing persistence. */
+  writes: WriteHooks;
   collection: Mock<(name: string) => Collection>;
 }
 
@@ -44,6 +49,10 @@ interface Transaction {
   delete: (ref: Document) => number;
 }
 
+type Write = { kind: 'set'; ref: Document; values: Data; options?: SetOptions }
+  | { kind: 'update'; ref: Document; values: Data }
+  | { kind: 'delete'; ref: Document };
+
 function copy<T>(value: T): T {
   if (Array.isArray(value)) return value.map(copy) as T;
   if (value && typeof value === 'object') {
@@ -55,7 +64,8 @@ function copy<T>(value: T): T {
 /**
  * Per-test OAuth fixture, not a Firestore emulator: no network, contention retry,
  * indexes or security rules. Paths have independent state; snapshots are copies.
- * Transactions stage writes, preserve their order, and discard failed commits.
+ * Transactions capture staged values and publish every write atomically. A
+ * competing fixture mutation aborts the transaction instead of retrying it.
  * Only plain fixture data, the delete-field sentinel, and the equality queries
  * used by OAuth duplicate-account cleanup are supported. External auth/lifecycle
  * services remain mocks; use the named connection operations for competing writes.
@@ -68,15 +78,24 @@ export function createOAuthFirestoreHarness() {
   const updateDocument = vi.fn().mockResolvedValue(undefined);
   const deleteDocument = vi.fn().mockResolvedValue(undefined);
   const where = vi.fn();
+  let revision = 0;
 
   const read = (path: string) => copy(data.get(path));
-  const write = (path: string, values: Data, merge = false) => {
-    const next = merge ? read(path) || {} : {};
+  const writeTo = (store: Map<string, Data>, path: string, values: Data, merge = false) => {
+    const next = merge ? copy(store.get(path)) || {} : {};
     for (const [key, value] of Object.entries(values)) {
       if (value === 'delete-sentinel') delete next[key];
       else next[key] = copy(value);
     }
-    data.set(path, next);
+    store.set(path, next);
+  };
+  const write = (path: string, values: Data, merge = false) => {
+    writeTo(data, path, values, merge);
+    revision++;
+  };
+  const remove = (path: string) => {
+    data.delete(path);
+    revision++;
   };
   const snapshot = (ref: Document) => {
     const value = read(ref.path);
@@ -90,18 +109,26 @@ export function createOAuthFirestoreHarness() {
         id: parts[parts.length - 1], path,
         get parent() { return collection(parts.slice(0, -1).join('/')); },
         get: vi.fn(async () => snapshot(ref)),
+        writes: {
+          set: vi.fn(async (values, options) => { await setDocument(ref, values, options); }),
+          update: vi.fn(async values => { await updateDocument(ref, values); }),
+          delete: vi.fn(async () => { await deleteDocument(ref); }),
+        },
         set: vi.fn(async (values: Data, options?: SetOptions) => {
-          await setDocument(ref, values, options);
-          write(path, values, options?.merge);
+          const capturedValues = copy(values);
+          const capturedOptions = copy(options);
+          await ref.writes.set(capturedValues, capturedOptions);
+          write(path, capturedValues, capturedOptions?.merge);
         }),
         update: vi.fn(async (values: Data) => {
+          const capturedValues = copy(values);
+          await ref.writes.update(capturedValues);
           if (!data.has(path)) throw new Error(`Cannot update missing fixture document: ${path}`);
-          await updateDocument(ref, values);
-          write(path, values, true);
+          write(path, capturedValues, true);
         }),
         delete: vi.fn(async () => {
-          await deleteDocument(ref);
-          data.delete(path);
+          await ref.writes.delete();
+          remove(path);
         }),
         collection: vi.fn((name: string) => collection(`${path}/${name}`)),
       };
@@ -139,24 +166,43 @@ export function createOAuthFirestoreHarness() {
   }
 
   const runTransaction = vi.fn(async (callback: (transaction: Transaction) => Promise<unknown>) => {
-    const writes: Array<() => Promise<unknown>> = [];
+    const startingRevision = revision;
+    const assertUnchanged = () => {
+      if (revision !== startingRevision) {
+        throw new Error('OAuth fixture transaction conflicted; automatic retries are not modeled');
+      }
+    };
+    const writes: Write[] = [];
     const result = await callback({
       get: async <T>(target: { get: () => Promise<T> }) => {
         if (writes.length) throw new Error('Fixture transaction reads must precede writes');
         if (target.get) return target.get();
         throw new Error('Unknown fixture transaction read');
       },
-      set: (ref, values, options) => writes.push(() => ref.set(values, options)),
-      update: (ref, values) => writes.push(() => ref.update(values)),
-      delete: ref => writes.push(() => ref.delete()),
+      set: (ref, values, options) => writes.push({ kind: 'set', ref, values: copy(values), options: copy(options) }),
+      update: (ref, values) => writes.push({ kind: 'update', ref, values: copy(values) }),
+      delete: ref => writes.push({ kind: 'delete', ref }),
     });
-    const beforeCommit = new Map(data);
-    try {
-      for (const commit of writes) await commit();
-    } catch (error) {
+    assertUnchanged();
+    const pending = new Map(data);
+    for (const write of writes) {
+      if (write.kind === 'set') {
+        await write.ref.writes.set(write.values, write.options);
+        writeTo(pending, write.ref.path, write.values, write.options?.merge);
+      } else if (write.kind === 'update') {
+        if (!pending.has(write.ref.path)) throw new Error(`Cannot update missing fixture document: ${write.ref.path}`);
+        await write.ref.writes.update(write.values);
+        writeTo(pending, write.ref.path, write.values, true);
+      } else {
+        await write.ref.writes.delete();
+        pending.delete(write.ref.path);
+      }
+    }
+    assertUnchanged();
+    if (writes.length) {
       data.clear();
-      for (const [path, value] of beforeCommit) data.set(path, value);
-      throw error;
+      for (const [path, value] of pending) data.set(path, value);
+      revision++;
     }
     return result;
   });
@@ -183,7 +229,7 @@ export function createOAuthFirestoreHarness() {
         seedRoot: (values: Data) => write(root.path, values),
         patchRoot: (values: Data) => write(root.path, values, true),
         readRoot: () => read(root.path),
-        removeRoot: () => data.delete(root.path),
+        removeRoot: () => remove(root.path),
         setOAuthFlow: (values: Data) => write(root.path, values, true),
         setDisconnectGeneration: (values: Data) => write(root.path, values, true),
         persistCredentials: (id: string, values: Data & { tokenCredentialGeneration: string }) => {
