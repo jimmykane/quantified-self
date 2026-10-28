@@ -20,7 +20,6 @@ import {
   formatTrainingSwimPace,
   type TrainingSwimPerformanceViewModel,
 } from '../../helpers/training-swim-performance.helper';
-import { getNumberFormatter } from '../../helpers/number-format.helper';
 import {
   ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
   EChartsHostController,
@@ -176,7 +175,7 @@ export class TrainingSwimPerformanceChartComponent implements AfterViewInit, OnC
             }
             return [{
               label: row.label,
-              value: `${formatTrainingSwimPace(row.point.paceSeconds, this.view.usesYards)} · ${getNumberFormatter(undefined, { maximumFractionDigits: 0 }).format(row.point.distanceMeters)} m · ${row.point.activityCount} swim ${row.point.activityCount === 1 ? 'workout' : 'workouts'}`,
+              value: `${formatTrainingSwimPace(row.point.paceSeconds, this.view.usesYards)} · ${row.point.distanceText} · ${row.point.activityCount} swim ${row.point.activityCount === 1 ? 'workout' : 'workouts'}`,
             }];
           });
           return renderDashboardEChartsTooltipCard(style, {

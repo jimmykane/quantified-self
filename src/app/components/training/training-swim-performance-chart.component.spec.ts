@@ -1,5 +1,6 @@
 import { ElementRef, SimpleChange } from '@angular/core';
 import { SwimPaceUnits } from '@sports-alliance/sports-lib';
+import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 import { describe, expect, it, vi } from 'vitest';
 import type { DashboardTrainingSwimPerformanceContext } from '../../helpers/dashboard-derived-metrics.helper';
 import { formatDashboardWeeklyAxisLabel } from '../../helpers/dashboard-chart-data.helper';
@@ -28,7 +29,7 @@ function performance(pace: number | null = 100): DashboardTrainingSwimPerformanc
 
 function createComponent(): TrainingSwimPerformanceChartComponent {
   return new TrainingSwimPerformanceChartComponent(
-    { init: vi.fn() } as any,
+    { init: vi.fn(), dispose: vi.fn() } as any,
     { error: vi.fn() } as any,
   );
 }
@@ -87,6 +88,41 @@ describe('TrainingSwimPerformanceChartComponent', () => {
     } finally {
       window.matchMedia = originalMatchMedia;
     }
+  });
+
+  it('refreshes both tooltip distances and the pool label when only swim units change', async () => {
+    const component = createComponent();
+    component.performance = performance();
+    component.performance.swolfContext.poolLengthMeters = 22.86;
+    component.performance.weeks[0].distanceMeters = 457.2;
+    component.performance.weeks[1].distanceMeters = 1828.8;
+    const before = structuredClone(component.performance);
+    component.status = 'ready';
+    component.unitSettings = getDefaultUserUnitSettings();
+    component.chartDiv = new ElementRef(document.createElement('div'));
+    await refresh(component);
+    const tooltip = () => {
+      const option = component['buildOption']();
+      const formatter = (option.tooltip as { formatter: (params: Array<{ data: [number, number] }>) => string }).formatter;
+      return formatter([{ data: [Date.UTC(2026, 6, 6), 100] }]);
+    };
+    expect(tooltip()).toContain('457.2 m');
+    expect(tooltip()).toContain('1.829 m');
+    expect(component.view.swolfContextText).toBe('Freestyle · 22.86 m pool');
+
+    const previousUnits = component.unitSettings;
+    component.unitSettings = { ...previousUnits, swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] };
+    component.ngOnChanges({ unitSettings: new SimpleChange(previousUnits, component.unitSettings, false) });
+    await Promise.resolve();
+    const yardsTooltip = tooltip();
+    expect(yardsTooltip).toContain('1:31 /100yd');
+    expect(yardsTooltip).toContain('500 yd');
+    expect(yardsTooltip).toContain('2.000 yd');
+    expect(yardsTooltip).not.toContain('457.2 m');
+    expect(component.view.swolfContextText).toBe('Freestyle · 25 yd pool');
+    expect(component.view.latestSwolfText).toBe('42');
+    expect(component.performance).toEqual(before);
+    component.ngOnDestroy();
   });
 
   it('distinguishes loading, failed, no-session, and no-explicit-pace states', async () => {

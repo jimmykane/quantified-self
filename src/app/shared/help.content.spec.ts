@@ -1721,6 +1721,9 @@ describe('help.content', () => {
   it('should provide a dedicated Training analysis guide with evidence and missing-data rules', () => {
     const trainingSection = HELP_SECTIONS.find(section => section.id === 'training-analysis');
 
+    expect(trainingSection?.content).toContain('including weekly tooltip distances and the pool-length label beside SWOLF');
+    expect(trainingSection?.content).toContain('general kilometres/miles setting does not override swimming units');
+    expect(trainingSection?.content).toContain('does not change the physical pool or SWOLF comparison');
     expect(trainingSection?.content).toContain('What drove this');
     expect(trainingSection?.content).toContain('**Training impact** appears for completed activities');
     expect(trainingSection?.content).toContain('TSS divided by 42');
