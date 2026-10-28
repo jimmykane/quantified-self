@@ -183,10 +183,11 @@ describe('Wahoo active account resolution', () => {
 
   describe.each(['provider I/O', 'caller-owned transaction'] as const)('%s checkpoint', checkpoint => {
     let guard: WahooActiveAccountGuard;
+    let checkpointReads: MockTransaction['get'];
     const assertCurrent = () => checkpoint === 'provider I/O'
       ? assertWahooActiveAccountGuardCurrent('user-1', guard)
       : assertWahooActiveAccountGuardCurrentInTransaction({
-        get: vi.fn(async (target: { get: () => Promise<unknown> }) => target.get()),
+        get: checkpointReads,
       } as unknown as firestore.Transaction, 'user-1', guard);
 
     beforeEach(async () => {
@@ -202,11 +203,20 @@ describe('Wahoo active account resolution', () => {
       }));
       guard = await captureWahooActiveAccountGuard('user-1', 'account-a', 'access-a');
       mocks.runTransaction.mockClear();
+      checkpointReads = vi.fn(async (target: { get: () => Promise<unknown> }) => target.get());
+      mocks.runTransaction.mockImplementation(async (callback: (transaction: MockTransaction) => unknown) => callback({
+        get: checkpointReads,
+      }));
     });
 
     it('preserves the read transaction boundary for an unchanged guard', async () => {
       await expect(assertCurrent()).resolves.toBeUndefined();
       expect(mocks.runTransaction).toHaveBeenCalledTimes(checkpoint === 'provider I/O' ? 1 : 0);
+      expect(checkpointReads.mock.calls.map(([reference]) => reference.path)).toEqual([
+        'users/user-1/meta/wahooAPI',
+        'wahooAPIAccessTokens/user-1',
+        'wahooAPIAccessTokens/user-1/tokens/account-a',
+      ]);
     });
 
     it.each(['providerUserId', 'connectionStateGeneration'] as const)('rejects changed %s', async field => {
