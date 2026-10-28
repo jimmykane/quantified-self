@@ -2660,14 +2660,18 @@ describe('OAuth2', () => {
         });
         it('should handle doc with null parent.parent', async () => {
             const { COROSAuthAdapter } = await import('./coros/auth/adapter');
-            vi.spyOn(COROSAuthAdapter.prototype, 'getDuplicateConnectionQuery').mockReturnValue({
+            const querySpy = vi.spyOn(COROSAuthAdapter.prototype, 'getDuplicateConnectionQuery').mockReturnValue({
                 get: vi.fn().mockResolvedValue({ docs: [{
                     id: 'token-id', ref: { parent: { parent: null } },
                     data: () => ({ serviceName: ServiceNames.COROSAPI }),
                 }] }),
             } as any);
-            await removeDuplicateConnections(currentUserID, ServiceNames.COROSAPI, externalUserId);
-            expect(firestore.deleteDocument).not.toHaveBeenCalled();
+            try {
+                await removeDuplicateConnections(currentUserID, ServiceNames.COROSAPI, externalUserId);
+                expect(firestore.deleteDocument).not.toHaveBeenCalled();
+            } finally {
+                querySpy.mockRestore();
+            }
         });
     });
 
