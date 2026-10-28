@@ -21,7 +21,7 @@ import { isMergeOrBenchmarkEvent } from '../../../helpers/event-visibility.helpe
 import { createSwimDistanceDisplayStat, resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import {
   SWIM_TABLE_HEADER_TOOLTIPS, getActiveSwimLengthCadence, getCompleteSwimLengthSum, getNormalizedSwolf,
-  getSwimLengthDistance, getSwimLengthDuration, getSwimLengthHeartRateAverage, getSwolfColumnLabel, sumSwimValues,
+  getSwimLengthDistance, getSwimLengthDuration, getSwimLengthHeartRateAverage, getSwimLengthPace, getSwolfColumnLabel, sumSwimValues,
 } from '../../../helpers/event-swim-analytics.helper';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { getDerivedSwimIntervalLengths } from '../../../helpers/event-swim-interval-metadata.helper';
@@ -208,14 +208,12 @@ export class EventCardSwimLengthsComponent implements OnChanges {
       Split: '',
       Duration: this.formatDuration(swimLength),
       timingExplanation: getRejectedSwimTiming(swimLength) ? SWIM_TIMING_UNAVAILABLE_REASON : undefined,
-      Distance: this.formatSwimDistanceValue(isRestSwimLength(swimLength)
-        ? this.getFiniteDataValue(swimLength.distance) : getSwimLengthDistance(swimLength),
+      Distance: this.formatSwimDistanceValue(getSwimLengthDistance(swimLength),
         getNominalSwimLengthsDisplayMeters(displayContext, [swimLength])),
       Type: this.formatLabel(swimLength.type),
       Stroke: this.formatLabel(swimLength.stroke),
       Strokes: this.formatOptionalInteger(swimLength.strokes),
-      'Swim Pace': getRejectedSwimTiming(swimLength) ? '' : this.formatSwimPace(swimLength.avgSpeed)
-        || (!isRestSwimLength(swimLength) ? this.formatGroupSwimPace(getSwimLengthDuration(swimLength), getSwimLengthDistance(swimLength)) : ''),
+      'Swim Pace': this.formatOptionalStat(getSwimLengthPace(swimLength)),
       'Average Stroke Rate': this.formatStrokeRate(swimLength.avgCadence),
       'Average Heart Rate': this.formatHeartRate(swimLength.avgHeartRate),
       SWOLF: this.formatDecimal(swimLength.swolf),
@@ -394,15 +392,6 @@ export class EventCardSwimLengthsComponent implements OnChanges {
 
   private formatEnergy(calories: AppSwimLength['calories']): string {
     return calories === null ? '' : this.formatUnitAwareStat(calories);
-  }
-
-  private formatSwimPace(avgSpeed: AppSwimLength['avgSpeed']): string {
-    const speed = avgSpeed?.getValue();
-    if (typeof speed !== 'number' || speed <= 0) {
-      return '';
-    }
-
-    return this.formatUnitAwareStat(new DataSwimPace(convertSpeedToSwimPace(speed)));
   }
 
   private formatGroupSwimPace(totalDuration: number | null, totalDistance: number | null): string {

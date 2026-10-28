@@ -388,6 +388,14 @@ energy totals require all contributing active and rest values; an omitted calori
 These HR/energy summary fields are internal to the Swim Lengths view model; this change does not add them to the
 collapsed set header. Recorded per-length HR/energy rows and native watch-lap statistics remain unchanged.
 
+Chart length tooltips share `getSwimLengthDistance` and `getSwimLengthPace` with the length table. A missing active
+distance may use its recorded pool length; invalid distances remain unavailable and rests never gain pool distance.
+Valid recorded speed has precedence over time/distance pace inference. The fallback requires positive usable active
+timing and distance, and rejected timing suppresses pace. Swim lap tooltips use the table's `getSwimLapAnalytics`
+pace in the user's swim units, omitting pace for rest or unavailable timing instead of substituting generic pace/speed.
+Chart boundaries and lap identities remain recorded; shared multisport/across-leg laps retain generic metrics.
+This changes frontend tooltip content only, with no new controls, event writes, Training or MCP changes.
+
 Swimming lap defaults also include the categorical **Stroke** column, selectable through the existing per-sport
 Laps column picker. Explicit saved lists, including empty lists, take precedence over the defaults. Stroke labels
 come from recorded non-rest swim lengths using their one-based `lapIndex` in the complete activity lap list, before

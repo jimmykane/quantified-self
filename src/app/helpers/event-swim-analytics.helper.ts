@@ -1,7 +1,7 @@
 import { getRejectedSwimTiming, resolveSwimTiming } from '@shared/swim-timing';
 import {
-  ActivityInterface, ActivityUtilities, DataActiveLengths, DataCadenceAvg,
-  DataInterface, DataNumber, DataStrokeRateAvg, DataSwimPaceAvg, DataTotalCycles,
+  ActivityInterface, ActivityUtilities, convertSpeedToSwimPace, DataActiveLengths, DataCadenceAvg,
+  DataInterface, DataNumber, DataStrokeRateAvg, DataSwimPace, DataSwimPaceAvg, DataTotalCycles,
   LapInterface, SwimPaceUnits, UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib/metrics';
 import {
@@ -93,7 +93,18 @@ export function getSwimLengthDuration(length: AppSwimLength): number | null {
 }
 
 export function getSwimLengthDistance(length: AppSwimLength): number | null {
-  return length.distanceIsInvalid ? null : finite(length.distance ?? length.poolLength);
+  return length.distanceIsInvalid ? null : finite(length.distance ?? (isRestSwimLength(length) ? null : length.poolLength));
+}
+
+/** Recorded speed wins; only active lengths may derive pace from usable time and distance. */
+export function getSwimLengthPace(length: AppSwimLength): DataSwimPace | null {
+  if (getRejectedSwimTiming(length)) return null;
+  const speed = finite(length.avgSpeed);
+  if (speed > 0) return new DataSwimPace(convertSpeedToSwimPace(speed));
+  if (isRestSwimLength(length)) return null;
+  const duration = getSwimLengthDuration(length);
+  const distance = getSwimLengthDistance(length);
+  return duration > 0 && distance > 0 ? new DataSwimPace(convertSpeedToSwimPace(distance / duration)) : null;
 }
 
 /** Duration-weighted estimate for the supplied lengths; requires complete HR and timing. */

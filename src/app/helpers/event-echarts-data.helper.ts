@@ -6,7 +6,6 @@ import {
   ActivityTypeGroups,
   ActivityTypesHelper,
   ActivityUtilities,
-  convertSpeedToSwimPace,
   DataAltitude,
   DataAscent,
   DataCadenceAvg,
@@ -33,7 +32,6 @@ import {
   DataStrydDistance,
   DataStrydAltitude,
   DataSwimPace,
-  DataSwimDistance,
   DynamicDataLoader,
   LapTypes,
   LapInterface,
@@ -54,8 +52,9 @@ import { EventChartRange, normalizeEventRange } from './event-chart-range.helper
 import { normalizeUnitDerivedTypeLabel } from './stat-label.helper';
 import { getEnduranceMetricLabel } from '@shared/endurance-metrics';
 import { createSwimDistanceDisplayStat, resolveUnitAwareDisplayStat, resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
-import { resolveSummaryDisplayStat } from './summary-display.helper';
+import { isSwimmingActivityType, resolveSummaryDisplayStat } from './summary-display.helper';
 import { AppSwimLength, getActivitySwimLengths } from './event-swim-length.helper';
+import { getSwimLapAnalytics, getSwimLengthDistance, getSwimLengthPace, type SwimLapAnalytics } from './event-swim-analytics.helper';
 import { getNominalSwimDistanceDisplayContext, getNominalSwimLengthsDisplayMeters } from './event-swim-distance-display.helper';
 import { getAppCanonicalChartDataTypes } from './app-chart-data-types.helper';
 import type {
@@ -1123,6 +1122,7 @@ export function buildEventLapMarkers(input: {
     if (!laps.length) {
       return;
     }
+    const swimAnalytics = isSwimmingActivityType(activity.type) ? getSwimLapAnalytics(activity, input.userUnitSettings) : null;
 
     laps.forEach((lap, index) => {
       const contextLabel = getEventLapContextLabel(activity, lap, input.allActivities);
@@ -1150,7 +1150,8 @@ export function buildEventLapMarkers(input: {
         activityID: activity.getID() || '',
         activityName: activity.creator?.name || 'Activity',
         tooltipTitle: `${contextLabel || 'Lap'} ${index + 1}`,
-        tooltipDetails: buildLapTooltipDetails(lap, input.userUnitSettings, contextLabel ? 'Other' : activity.type, contextLabel ? undefined : nominalDistanceDisplay?.lapMeters.get(lap)),
+        tooltipDetails: buildLapTooltipDetails(lap, input.userUnitSettings, contextLabel ? 'Other' : activity.type,
+          contextLabel ? undefined : nominalDistanceDisplay?.lapMeters.get(lap), contextLabel ? undefined : swimAnalytics?.get(lap)),
       });
     });
   });
@@ -1920,6 +1921,7 @@ function buildLapTooltipDetails(
   unitSettings?: UserUnitSettingsInterface | null,
   activityType?: unknown,
   nominalDistanceDisplayMeters?: number,
+  swimAnalytics?: SwimLapAnalytics,
 ): EventChartMarkerTooltipDetail[] {
   const details: EventChartMarkerTooltipDetail[] = [];
 
@@ -1940,8 +1942,9 @@ function buildLapTooltipDetails(
     details.push({ label: 'Distance', value: distanceValue });
   }
 
-  const averagePaceOrSpeed = lap.getStat(DataPaceAvg.type) || lap.getStat(DataSpeedAvg.type);
-  const averagePaceOrSpeedLabel = averagePaceOrSpeed && averagePaceOrSpeed.getType() === DataPaceAvg.type
+  const swimming = isSwimmingActivityType(activityType);
+  const averagePaceOrSpeed = swimming ? swimAnalytics?.pace : lap.getStat(DataPaceAvg.type) || lap.getStat(DataSpeedAvg.type);
+  const averagePaceOrSpeedLabel = swimming ? 'Avg Swim Pace' : averagePaceOrSpeed && averagePaceOrSpeed.getType() === DataPaceAvg.type
     ? 'Avg Pace'
     : 'Avg Speed';
   const averagePaceOrSpeedValue = formatLapDataValue(averagePaceOrSpeed, undefined, unitSettings);
@@ -1974,7 +1977,9 @@ function buildSwimLengthTooltipDetails(
   const seconds = resolveSwimTiming(swimLength).duration;
   if (getRejectedSwimTiming(swimLength)) appendTextDetail(details, 'Timing', SWIM_TIMING_UNAVAILABLE_REASON);
   appendLapDetail(details, 'Duration', seconds === null ? null : new DataDuration(seconds), unitSettings, { compactDuration: true });
-  appendLapDetail(details, 'Distance', getSwimLengthDistance(swimLength, unitSettings, nominalDistanceDisplayMeters), unitSettings);
+  const distance = getSwimLengthDistance(swimLength);
+  appendLapDetail(details, 'Distance', distance === null ? null
+    : createSwimDistanceDisplayStat(distance, unitSettings, nominalDistanceDisplayMeters), unitSettings);
   appendTextDetail(details, 'Type', formatSwimLengthLabel(swimLength.type));
   appendTextDetail(details, 'Stroke', formatSwimLengthLabel(swimLength.stroke));
   appendTextDetail(details, 'Strokes', formatNullableInteger(swimLength.strokes));
@@ -2061,27 +2066,6 @@ function normalizeDisplayUnitText(value: string): string {
     .replace(/\/100\s*yards?/gi, '/100yd')
     .replace(/\/100yrd/gi, '/100yd')
     .replace(/\byrds?\b/gi, 'yd');
-}
-
-function getSwimLengthPace(swimLength: AppSwimLength): DataSwimPace | null {
-  if (getRejectedSwimTiming(swimLength)) return null;
-  const speedValue = swimLength.avgSpeed?.getValue?.();
-  if (typeof speedValue !== 'number' || !Number.isFinite(speedValue) || speedValue <= 0) {
-    return null;
-  }
-
-  return new DataSwimPace(convertSpeedToSwimPace(speedValue));
-}
-
-function getSwimLengthDistance(
-  swimLength: AppSwimLength, unitSettings?: UserUnitSettingsInterface | null, nominalDistanceDisplayMeters?: number,
-): DataSwimDistance | null {
-  const distanceValue = swimLength.distance?.getValue?.();
-  if (typeof distanceValue !== 'number' || !Number.isFinite(distanceValue)) {
-    return null;
-  }
-
-  return createSwimDistanceDisplayStat(distanceValue, unitSettings, nominalDistanceDisplayMeters);
 }
 
 function formatNullableInteger(value: number | null | undefined): string {
