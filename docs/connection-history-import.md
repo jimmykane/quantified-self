@@ -329,9 +329,14 @@ import takes 669 -> 1,809 simulated seconds at four slots, 249 -> 489 at sixteen
 The shared-queue dense case also increases maximum foreground wait from 220 to 938 seconds at four slots.
 Reducing batches to two alone did not eliminate the contention tradeoff. These counterexamples are retained in the
 benchmark output; adding `--require-no-slowdown` checks each individual import across every multi-import scenario
-and fails on these counterexamples. Do not claim the no-slowdown requirement is satisfied from aggregate completion
+and fails on these counterexamples. An additional 60 scenarios cover staggered arrivals, mixed request lengths,
+different work densities and short-only contention. In the four-slot case with three bulk imports already running,
+a thirty-day import arriving at second 30 takes 122 -> 602 simulated seconds. Checking for contention only when
+the bulk run starts would not protect this later arrival. Per-import latency excludes the arrival delay, and both
+the normalized baseline and candidate must cover each requested Sleep/Health interval exactly once, including
+adaptive continuations and retries. Do not claim the no-slowdown requirement is satisfied from aggregate completion
 alone. `node --test tools/benchmarks/suunto-history-windows.test.mjs` verifies the acceptance gate, request/continuation
-accounting and millisecond boundary coverage independently of the production tests.
+accounting, delayed arrivals and millisecond boundary coverage independently of the production tests.
 Keep the change in draft pending resolution or explicit acceptance of that tradeoff. No real provider traffic is
 part of this verification. Post-release assessment must compare per-import completion/short-import latency,
 normal webhook lag, request counts, failures, queue age and billed runtime separately.

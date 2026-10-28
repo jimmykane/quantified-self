@@ -42,3 +42,29 @@ test('the candidate model includes the final millisecond and fractional-day tail
     }
   }
 });
+
+test('arrival delay is not counted as import latency and coverage survives adaptive retries', () => {
+  const options = { days: 30.001, batchSize: 4, adaptiveDays: 6.5, retry: true, density: 1 };
+  const immediate = simulate(options);
+  const delayed = simulate({ ...options, arrivalSeconds: [600] });
+  assert.deepEqual(delayed.perImportSeconds, immediate.perImportSeconds);
+  assert.equal(delayed.completionSeconds, immediate.completionSeconds + 600);
+  for (const result of [immediate, delayed]) {
+    assert.equal(result.coverage[0].sleepMs, result.coverage[0].requestedMs);
+    assert.equal(result.coverage[0].healthMs, result.coverage[0].requestedMs);
+  }
+  assert.throws(() => simulate({ ...options, arrivalSeconds: [-1] }), /arrival time/);
+});
+
+test('a short import arriving after bulk work starts remains part of the latency gate', () => {
+  const options = { days: 365, imports: 4, importDays: [365, 365, 365, 30], slots: 4,
+    arrivalSeconds: [0, 0, 0, 30], importDensities: [4, 1, 4, 1], foreground: true };
+  const before = simulate({ ...options, batchSize: 0 });
+  const after = simulate({ ...options, batchSize: 4 });
+  assert.ok(after.perImportSeconds[3] > before.perImportSeconds[3]);
+  assert.equal(satisfiesNoSlowdown([{ before, after }]), false);
+  for (const result of [before, after]) for (const range of result.coverage) {
+    assert.equal(range.sleepMs, range.requestedMs);
+    assert.equal(range.healthMs, range.requestedMs);
+  }
+});

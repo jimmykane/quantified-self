@@ -25,12 +25,18 @@ export function planBatch(start, endExclusive, kind, batchSize) {
   }
   return { children: children.reverse(), next: parentEnd };
 }
-export function simulate({ days, batchSize, slots = 8, imports = 1, importDays, initialBacklog = 0, density = 0,
+export function simulate({ days, batchSize, slots = 8, imports = 1, importDays, arrivalSeconds, importDensities, initialBacklog = 0, density = 0,
   adaptiveDays = 26, retry = false, foreground = false }) {
   let now = 0, sequence = 0, coordinatorFree = 0;
   const events = [], pending = [], running = new Set();
   const metrics = { parents: 0, admissions: 0, jobs: 0, attempts: 0, calls: 0, maxChildren: 0, foregroundMaxWait: 0 };
-  const runs = Array.from({ length: imports }, (_, index) => ({ days: importDays?.[index] ?? days, cursor: 0, kind: 'sleep', children: [], done: false, retried: false, completed: 0, coverage: { sleep: [], health: [] } }));
+  const runs = Array.from({ length: imports }, (_, index) => ({ days: importDays?.[index] ?? days,
+    arrival: arrivalSeconds?.[index] ?? 0, density: importDensities?.[index] ?? density,
+    cursor: 0, kind: 'sleep', children: [], done: false, retried: false, completed: 0, coverage: { sleep: [], health: [] } }));
+  for (const run of runs) {
+    assert.ok(Number.isFinite(run.arrival) && run.arrival >= 0, 'bounded nonnegative arrival time');
+    assert.ok(Number.isFinite(run.density) && run.density >= 0, 'bounded nonnegative work density');
+  }
   const schedule = (at, work) => { events.push({ at, work, sequence: sequence++ }); };
   const enqueue = job => { pending.push({ ...job, queuedAt: now }); };
   for (let i = 0; i < initialBacklog; i++) enqueue({ background: true, duration: 10 });
@@ -48,7 +54,7 @@ export function simulate({ days, batchSize, slots = 8, imports = 1, importDays, 
       if (failed) job.run.retried = true;
       const calls = job.kind === 'health' ? (failed ? 1 : 3) + splits : 1;
       metrics.calls += calls;
-      const duration = 1 + calls * 0.5 + (width / DAY) * density;
+      const duration = 1 + calls * 0.5 + (width / DAY) * job.run.density;
       schedule(now + duration, () => {
         running.delete(job);
         if (failed) { schedule(now + 900, () => enqueue(job)); return; }
@@ -82,7 +88,7 @@ export function simulate({ days, batchSize, slots = 8, imports = 1, importDays, 
     run.cursor = batch.next;
     schedule(now + 60, () => parent(run));
   };
-  runs.forEach(run => schedule(0, () => parent(run)));
+  runs.forEach(run => schedule(run.arrival, () => parent(run)));
   const addForeground = () => {
     if (runs.every(run => run.done)) return;
     enqueue({ background: true, foreground: true, duration: 3 });
@@ -97,13 +103,17 @@ export function simulate({ days, batchSize, slots = 8, imports = 1, importDays, 
     const event = events.shift(); assert.ok(event, 'unfinished imports must stay reachable');
     now = event.at; event.work(); dispatch();
   }
-  if (batchSize) for (const run of runs) for (const kind of ['sleep', 'health']) {
+  for (const run of runs) for (const kind of ['sleep', 'health']) {
     const intervals = run.coverage[kind].sort((a, b) => a[0] - b[0]);
     let cursor = 0;
     for (const [start, end] of intervals) { assert.equal(start, cursor, 'no missing or repeated target interval'); cursor = end; }
     assert.equal(cursor, run.days * DAY, 'complete inclusive selected range');
   }
-  return { ...metrics, completionSeconds: Math.max(...runs.map(run => run.completed)), perImportSeconds: runs.map(run => run.completed) };
+  return { ...metrics, completionSeconds: Math.max(...runs.map(run => run.completed)),
+    perImportSeconds: runs.map(run => run.completed - run.arrival),
+    coverage: runs.map(run => ({ requestedMs: run.days * DAY,
+      sleepMs: run.coverage.sleep.reduce((total, [start, end]) => total + end - start, 0),
+      healthMs: run.coverage.health.reduce((total, [start, end]) => total + end - start, 0) })) };
 }
 export function countSlowerImports(before, after) {
   assert.equal(after.perImportSeconds.length, before.perImportSeconds.length, 'compare the same imports');
@@ -145,7 +155,21 @@ export function stress() {
     const after = simulate({ ...options, batchSize: 4 });
     return { slots, before, after, slowerImports: countSlowerImports(before, after) };
   });
-  return { noSlowdownSatisfied: satisfiesNoSlowdown([...rows, ...contentionChecks]), contentionChecks, assumptions: 'Virtual time; FIFO fixed worker slots; 1s serialized coordinator; 60s child polling; all Health feeds; response splits; 900s transient backoff. Equal coverage (legacy sub-second gaps normalized); no live speed or euro-cost claim.', comparisons, rows };
+  // Do not validate a contention policy using only simultaneous, equal-density starts.
+  // Include short arrivals after bulk work has already occupied the workers, mixed
+  // lengths, and short-only contention; moving the bottleneck is not a latency fix.
+  const arrivalChecks = [];
+  for (const slots of [1, 2, 4, 16, 80]) for (const arrival of [0, 30, 120, 600]) {
+    for (const importDays of [[365, 365, 365, 30], [730, 90, 60, 1], [30, 30, 30, 30]]) {
+      const options = { days: 365, imports: 4, importDays, slots, foreground: true,
+        arrivalSeconds: [0, 0, 0, arrival], importDensities: [4, 1, 4, 1] };
+      const before = simulate({ ...options, batchSize: 0 });
+      const after = simulate({ ...options, batchSize: 4 });
+      arrivalChecks.push({ slots, arrival, importDays, before, after, slowerImports: countSlowerImports(before, after) });
+    }
+  }
+  return { noSlowdownSatisfied: satisfiesNoSlowdown([...rows, ...contentionChecks, ...arrivalChecks]), contentionChecks, arrivalChecks,
+    assumptions: 'Virtual time; FIFO fixed worker slots; 1s serialized coordinator; 60s child polling; all Health feeds; response splits; 900s transient backoff. Equal coverage (legacy sub-second gaps normalized); per-import duration excludes arrival delay; no live speed or euro-cost claim.', comparisons, rows };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const result = stress();
