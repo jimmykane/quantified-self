@@ -452,6 +452,7 @@ describe('Firebase Hosting configuration', () => {
     // Strength-name previews disclose interval-only summaries and point to Edit for saved lifting loads.
     // Swimming Guide help explains inline omissions, visible layout-limit warnings and the HR-target field budget.
     // Form/TSS axes fit the displayed period without changing training values or hiding the neutral baseline.
+    // Swimming Automatic prioritizes CSS before HR/MET and excludes calculated power TSS.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-28');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');

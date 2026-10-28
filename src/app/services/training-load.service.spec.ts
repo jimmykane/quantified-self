@@ -195,6 +195,18 @@ describe('TrainingLoadService', () => {
     await expect(service.save('u', 'e', 4, { excluded: true })).rejects.toThrow('no longer exists');
     expect(update).not.toHaveBeenCalled();
   });
+  it('copies method/inclusion without replacing the current CSS or copying a workout override', async () => {
+    records['users/u/trainingLoadPolicies/swimming'] = { revision: 3, swimThresholdSpeed: 0.91 };
+    await service.save('u', 'e', 4, { key: 'leg', control: { override: 0 } },
+      { family: 'swimming', expectedRevision: 3, policy: { method: 'SWIM_PACE', included: true, swimThresholdSpeed: 0.5 } });
+    for (const [, policy] of set.mock.calls) {
+      expect(policy).toMatchObject({ method: 'SWIM_PACE', included: true, swimThresholdSpeed: 0.91, revision: 4 });
+      expect(policy).not.toHaveProperty('override');
+    }
+    await expect(service.savePolicy('u', 'cycling', 0, { method: 'SWIM_PACE', included: true })).rejects.toThrow();
+    await expect(service.savePolicy('u', 'cycling', 0, { method: 'HR', included: true, swimThresholdSpeed: 1 })).rejects.toThrow();
+    await expect(service.savePolicy('u', 'swimming', 0, { method: 'SWIM_PACE', included: true, swimThresholdSpeed: Infinity })).rejects.toThrow();
+  });
   it('accepts a zero override, rejects out-of-range scores, and copies only the supplied future preferences', async () => {
     await service.save('u', 'e', 4, { key: 'leg', control: { override: 0, method: 'HR', included: true } },
       { family: 'walking-hiking', expectedRevision: 0, policy: { method: 'HR', included: true } });

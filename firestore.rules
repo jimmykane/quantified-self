@@ -115,10 +115,13 @@ service cloud.firestore {
           let data = request.resource.data;
           return family in ['running', 'cycling', 'swimming', 'rowing', 'walking-hiking', 'nordic-skiing',
             'strength', 'fitness-gym', 'paddling', 'other-training']
-            && data.keys().hasOnly(['revision', 'revisionId', 'method', 'included', 'effectiveAt'])
+            && data.keys().hasOnly(['revision', 'revisionId', 'method', 'included', 'effectiveAt', 'swimThresholdSpeed'])
             && data.revision is int && data.revision > 0
             && data.revisionId is string && data.revisionId.matches('^[a-zA-Z0-9-]{1,64}$')
-            && data.method in ['AUTOMATIC', 'HR', 'MET'] && data.included is bool
+            && data.method in ['AUTOMATIC', 'HR', 'MET', 'SWIM_PACE'] && data.included is bool
+            && (data.method != 'SWIM_PACE' || family == 'swimming')
+            && (!('swimThresholdSpeed' in data) || (family == 'swimming'
+              && data.swimThresholdSpeed is number && data.swimThresholdSpeed > 0 && data.swimThresholdSpeed <= 100))
             && data.effectiveAt == request.time;
         }
         function matchingRevision() {
@@ -285,7 +288,7 @@ service cloud.firestore {
                 return key is string && key.matches('^[a-zA-Z0-9_-]{1,128}$')
                   && (key in legs || (legacy && exists(ownedActivity) && get(ownedActivity).data.eventID == eventID))
                   && control is map && control.keys().hasOnly(['method', 'included', 'override', 'activityId', 'dismissed'])
-                  && control.get('method', 'AUTOMATIC') in ['AUTOMATIC', 'HR', 'MET']
+                  && control.get('method', 'AUTOMATIC') in ['AUTOMATIC', 'HR', 'MET', 'SWIM_PACE']
                   && control.get('included', true) is bool
                   && (!('override' in control) || (control.override is number && control.override >= 0 && control.override <= 9999))
                   && (!('activityId' in control) || (key in legs && legs[key].activityId == null

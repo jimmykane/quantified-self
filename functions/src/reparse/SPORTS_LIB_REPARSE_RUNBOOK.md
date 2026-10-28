@@ -7,9 +7,23 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 23.8.0 swimming CSS policy adoption
+
+CSS applies through the existing immutable policy for each leg's recorded start time. Reparse refreshes the additive
+swim-pace candidate using that saved policy, including absence of CSS; it never adopts current CSS settings.
+Swimming Automatic now prefers imported TSS, CSS pace, calibrated HR, then MET; calculated power TSS is excluded.
+Existing evaluations are not rewritten on read. An original-file reparse refreshes that order and can change
+previously calculated swim scores; imported scores remain authoritative. The existing invalidation rebuilds modeled load.
+No historical or route reparse campaign is required. Preserve reservations, strict identities, controls, retry and
+deletion guards. Explicit reassociation of a different CSS policy requires source-backed reparse before modeled load
+can use it. Root and Functions pin the same published 23.8.0 artifact; runtime version detection and activity/route
+reparse targets follow the installed package. A local packed library is for verification only. Scanner settings and
+strict version-mismatch checks remain unchanged. Review already-enabled scanners before any separately approved
+deployment; this dependency update does not enable or launch a production reparse.
+
 ### Sports Lib 23.7.1 GPX timestamp compatibility adoption
 
-Root and Functions pin the same published 23.7.1 artifact. GPX activity imports accept exactly 13 decimal digits as
+The 23.8.0 adoption retains the GPX correction introduced in 23.7.1. GPX activity imports accept exactly 13 decimal digits as
 Unix milliseconds alongside existing date-time text, preserving instants and sample placement. Invalid point times
 fail with a typed parsing error before stream allocation. Other numeric units are not guessed; configured duration
 limits, untimed-track rejection and saved-route parsing are unchanged.
@@ -429,10 +443,12 @@ requires original-file reparse, the same parsed instances through candidate prep
 reconciliation and ordinary derived refresh. Root and Functions now use the same published 23.0.0 package, retaining that correction.
 Source evidence remains private; this introduces no metric/schema/MCP change or production campaign.
 
-New provider imports and manual uploads cache Automatic/HR/MET evaluations in owner-only event metadata. Walking,
+New provider imports and manual uploads cache Automatic/HR/MET/Swim pace evaluations in owner-only event metadata. Walking,
 Indoor Walking, Nordic Walking, Speed Walking, Hiking and Trekking skip running pace; Automatic first considers
-usable power with an independent FTP before HR and MET. HR requires file-supplied resting, threshold and
-maximum HR; missing calibration can fall back to the calorie-derived MET estimate when its file inputs exist.
+usable power with an independent FTP before HR and MET. Swimming prefers independent CSS pace before HR and MET,
+excluding calculated power TSS. HR uses Banister with full valid calibration, or the threshold-only estimate when
+resting or maximum HR is missing and the file supplies a valid threshold. Missing calibration can fall back to the
+calorie-derived MET estimate when its file inputs exist.
 Valid imported TSS retains precedence. See `docs/training-workspace.md` for the exact calculation and policy contract.
 
 Regenerate mode keeps the freshly parsed FTP, timing and HR/MET inputs available before rebuilding derived statistics
