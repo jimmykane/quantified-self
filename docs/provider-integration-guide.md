@@ -953,6 +953,12 @@ Monitoring coverage is **unchanged**: reviewed the recorded-import, activity-del
 
 ### Shared history progress surfaces
 
+Legacy manual activity responses retain their scheduled counts and cooldown dates without a fixed-throughput ETA.
+Processing time depends on provider delivery and queued work; the next allowed import date is not a finish date.
+The frontend no longer schedules an estimate-expiry refresh. Real cooldown, grace-period and daily-boundary refreshes
+remain intact. Monitoring is **unchanged**: #847/#829 workers, queues, retries and outcome metrics are unaffected.
+Only a separately approved frontend release is needed; MCP/Training and provider contracts are unchanged.
+
 The authenticated header's **Importing history** text action and the owner's Dashboard share one safe-metadata
 subscription set and the same provider-card component. Each provider keeps its latest coordinator projection;
 capability counts remain items or requests, with no percentage, ETA or complete-delivery claim. Garmin cards use

@@ -19,7 +19,7 @@ import { User } from '@sports-alliance/sports-lib';
 import { AppUserServiceMetaInterface } from '../../models/app-user.interface';
 import { Subscription, timeout } from 'rxjs';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { COROS_HISTORY_IMPORT_LIMIT_MONTHS, GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS, GARMIN_HISTORY_IMPORT_LIMIT_YEARS, HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT, HISTORY_IMPORT_DEFAULT_RANGE_YEARS, HISTORY_IMPORT_PROCESSING_CAPACITY_PER_DAY_PER_USER_ESTIMATE } from '@shared/history-import.constants';
+import { COROS_HISTORY_IMPORT_LIMIT_MONTHS, GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS, GARMIN_HISTORY_IMPORT_LIMIT_YEARS, HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT, HISTORY_IMPORT_DEFAULT_RANGE_YEARS } from '@shared/history-import.constants';
 import {
   getHealthBackfillStartMs,
   GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS,
@@ -29,14 +29,12 @@ import {
 } from '@shared/sleep-backfill';
 import { SLEEP_PROVIDERS, SleepProvider, SleepSyncState } from '@shared/sleep';
 import dayjs from 'dayjs';
-import relativeTime from 'dayjs/plugin/relativeTime';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { HistoryImportStateService, HistoryImportRequestState, historyImportCooldownAt } from '../../services/history-import-state.service';
 import type { ConnectionHistoryStatusProjection } from '@shared/connection-history';
 
-dayjs.extend(relativeTime);
 
 /** Response from COROS/Suunto/Wahoo history import */
 export interface HistoryImportResult {
@@ -86,7 +84,6 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public corosHistoryLimitMonths = COROS_HISTORY_IMPORT_LIMIT_MONTHS;
   public activitiesPerDayLimit = HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT;
   public historyImportDefaultRangeYears = HISTORY_IMPORT_DEFAULT_RANGE_YEARS;
-  public processingCapacityPerDay = HISTORY_IMPORT_PROCESSING_CAPACITY_PER_DAY_PER_USER_ESTIMATE;
   public garminCooldownDays = GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS;
   public garminHistoryLimitYears = GARMIN_HISTORY_IMPORT_LIMIT_YEARS;
   /** Optimistic UI flag - blocks re-submission immediately after success */
@@ -350,7 +347,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     const graceExpiryMs = AppUserUtilities.isProUser(this.currentUser)
       ? null : AppUserUtilities.getGracePeriodExpiryMs(this.currentUser);
     const futureDates = [this.activityState.nextAllowedAtMs, this.nextImportAvailableDate?.getTime(), this.sleepBackfillNextAllowedAtMs,
-      this.activityEstimatedCompletionAtMs, graceExpiryMs, dayjs().add(1, 'day').startOf('day').valueOf()]
+      graceExpiryMs, dayjs().add(1, 'day').startOf('day').valueOf()]
       .filter((value): value is number => typeof value === 'number' && value > Date.now());
     if (!futureDates.length || this.isDestroyed) return;
     this.cooldownTimer = this.ngZone.runOutsideAngular(() => globalThis.setTimeout(() => {
@@ -584,45 +581,6 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     return this.userMetaForService;
   }
 
-  get estimatedCompletionVerbal(): string {
-    const stats = this.pendingImportResult();
-    const completionAtMs = this.activityEstimatedCompletionAtMs;
-    if (!stats || completionAtMs === null) {
-      return '';
-    }
-
-    if (completionAtMs <= Date.now()) {
-      return 'The initial processing estimate has passed. Activities may still be arriving.';
-    }
-
-    const count = stats.successCount;
-    // Calculate total days (decimals allowed)
-    // e.g. 500 / 24000 = 0.02 days
-    const totalDays = count / this.processingCapacityPerDay;
-    const totalHours = totalDays * 24;
-
-    if (totalHours < 1) {
-      return 'Should be done very soon! 🚀';
-    }
-
-    if (totalHours < 24) {
-      // "Estimated to finish by 4:00 PM today/tomorrow"
-      const completionDate = dayjs(completionAtMs);
-      return `Estimated to finish by ${completionDate.format('h:mm A')} ${completionDate.fromNow()}.`;
-    }
-
-    // > 1 day
-    const completionDate = dayjs(completionAtMs);
-    return `Estimated to finish ${completionDate.fromNow()} (${completionDate.format('dddd [at] h:mm A')}).`;
-  }
-
-  private get activityEstimatedCompletionAtMs(): number | null {
-    const count = this.pendingImportResult()?.successCount;
-    const acceptedAtMs = this.activityState.acceptedAtMs;
-    return typeof count === 'number' && count > 0 && typeof acceptedAtMs === 'number'
-      ? acceptedAtMs + count / this.processingCapacityPerDay * 86_400_000
-      : null;
-  }
 
   get sleepBackfillProvider(): SleepProvider | null {
     if (this.serviceName === ServiceNames.SuuntoApp) {
