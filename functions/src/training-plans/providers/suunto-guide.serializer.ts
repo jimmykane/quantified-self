@@ -20,7 +20,7 @@ import { presentSuuntoSwimmingScreens } from './suunto-swimming-presentation';
 import { presentSuuntoSwimmingScreensV15 } from './suunto-swimming-presentation-v15';
 import { addSuuntoRestCountdownAlerts } from './suunto-rest-alerts';
 import { suuntoSwimmingOccurrences, type SuuntoSwimmingField } from '../../../../shared/suunto-swimming-screen';
-import type { SuuntoSwimmingGuideSettings } from '../../../../shared/suunto-swimming-guide-settings';
+import { normalizeSuuntoSwimmingGuideSettings, isSuuntoPreviousLapField, type SuuntoSwimmingGuideSettings } from '../../../../shared/suunto-swimming-guide-settings';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
     createStableProviderExternalId,
@@ -643,9 +643,16 @@ export function serializeSuuntoPreviousLapGuideV17(structureValue: unknown, opti
     return serializeSuuntoAlertGuide(structureValue, options, settings, units, true);
 }
 
+/** V18 reserves Rest space for compact next/last planned context. Prior versions stay frozen. */
+export function serializeSuuntoSwimmingGuideV18(structureValue: unknown, options: SerializeSuuntoGuideOptionsV1,
+    settings?: SuuntoSwimmingGuideSettings, units?: UserUnitSettingsInterface): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
+    const previous = normalizeSuuntoSwimmingGuideSettings(settings).restFields.some(isSuuntoPreviousLapField);
+    return serializeSuuntoAlertGuide(structureValue, options, settings, units, previous, true);
+}
+
 function serializeSuuntoAlertGuide(structureValue: unknown, options: SerializeSuuntoGuideOptionsV1,
     settings: SuuntoSwimmingGuideSettings | undefined, units: UserUnitSettingsInterface | undefined,
-    previousLapReadings: boolean): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
+    previousLapReadings: boolean, readableRestContext = false): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
     const structure = parseWorkoutStructureV1(structureValue);
     const frozen = previousLapReadings && [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(structure.sport)
         ? serializeGuide(structure, options, 'manual-instructions-v11', true)
@@ -653,7 +660,7 @@ function serializeSuuntoAlertGuide(structureValue: unknown, options: SerializeSu
     const alerted = addSuuntoRestCountdownAlerts(frozen.artifact.steps);
     const jsonBytes = (steps: SuuntoGuideStepV1[]) => Buffer.byteLength(JSON.stringify({ ...frozen.artifact, steps }), 'utf8');
     const steps = [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(structure.sport)
-        ? presentSuuntoSwimmingScreensV15(structure, alerted, settings, units, jsonBytes, previousLapReadings)
+        ? presentSuuntoSwimmingScreensV15(structure, alerted, settings, units, jsonBytes, previousLapReadings, readableRestContext)
         : presentSuuntoRestScreens(structure, alerted, jsonBytes);
     const enriched = (values: SuuntoGuideStepV1[]) => values.map(node => node.type === 'repeat'
         ? { ...node, steps: node.steps.map(screen => ({ ...screen,

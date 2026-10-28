@@ -184,6 +184,7 @@ const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
   dispatchTrainingDelivery: loadTrainingDeliveryTasks,
   onTrainingDeliveryConnectionChanged: loadTrainingDeliveryLifecycle,
   onTrainingDeliveryEntitlementChanged: loadTrainingDeliveryLifecycle,
+  onTrainingDeliveryGuideSettingsChanged: loadTrainingDeliveryLifecycle,
   onDashboardDerivedMetricsActivityWrite: loadDashboardDerivedMetricsTriggers,
   onDashboardDerivedMetricsEventWrite: loadDashboardDerivedMetricsTriggers,
   onDashboardDerivedMetricsSleepWrite: loadDashboardDerivedMetricsTriggers,

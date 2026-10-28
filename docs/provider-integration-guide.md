@@ -836,6 +836,13 @@ or infer entitlement from reuse. See [Suunto delivery](training-workspace.md#suu
 seven-day window, absence limitations, FIT retention and deployment boundaries. No assumed Suunto quotas, evaluation
 budgets, new project or setup wizard are added.
 
+Swimming Guide screen saves wake the existing Training reconciliation queue through
+`onTrainingDeliveryGuideSettingsChanged`; effective preference changes use the same deletion/state guards as other
+lifecycle events. Eligible updates retain the Suunto identity. **Create another Guide** remains an explicit,
+reviewed recovery action with a duplicate warning. See the [v18 allocation and update boundary](training-workspace.md#rest-planned-text-allocation-and-prompt-preference-updates-v18).
+Provider/queue monitoring is retained, with failed lifecycle wake-ups additionally covered by the Training bundle's
+new bounded counter and existing dispatch policy. Local definitions need separately approved activation.
+
 Fixture compatibility is not delivery readiness. Ordinary adapter tests cover create, update, reschedule, delete,
 exact duplicate, ambiguous retry, reconnect and provider-specific horizon behavior. Record actual live results only
 when separately authorized; do not introduce a separate certification process. The

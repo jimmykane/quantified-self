@@ -3592,8 +3592,8 @@ compatible MCP contract pass. No deployment, provider call, public contract or m
 
 An owner can explicitly select `previousLapPace`, `previousLapDuration` and `previousLapStrokes` in the existing
 swimming Rest-screen settings. Their labels are **Last Work lap: average pace**, **Last Work lap: elapsed time** and
-**Last Work lap: stroke count**. Defaults remain unchanged. Only pool/open-water swimming with at least one selected
-new choice uses private `suunto-guides-v17`; otherwise the exact v16/v15/v13 mappings remain current. These choices
+**Last Work lap: stroke count**. Defaults remain unchanged. The v17 release selected private `suunto-guides-v17` only for pool/open-water swimming
+with at least one new choice; otherwise it retained v16/v15/v13. V18 below now owns new swimming payloads. These choices
 are account display preferences, not canonical prescription fields or new sending authority.
 
 Suunto supplied and tested a partner example using `window: manualLap`, `windowOffset: -1`, and `aggregate: average`
@@ -3668,6 +3668,65 @@ Functions/MCP tests, all 191 Suunto lifecycle emulator cases and 157 frontend/se
 An additional 8,192-case synthetic matrix checks target/note/ending combinations, automatic Work-lap closure,
 field budgets and preservation of already-existing execution graphs. Functions and beta frontend builds pass.
 
+##### Rest planned-text allocation and prompt preference updates (v18)
+
+New pool/open-water payloads use `suunto-guides-v18`. The shared allocator keeps the planned Next/Last distances
+in one short text field with Next first, one line per value, using canonical owner-unit formatting. When selected
+before competing readings, planned text reserves space beside at most two numeric readings, including the required
+Rest countdown. Later numeric choices are omitted with a reason instead of crowding out the text. Numeric choices
+placed earlier can instead omit the text. Required targets and authored notes are never displaced: three required
+numeric readings or an authored text field prevent inserting planned context. No static-number field, calculated
+watch measurement or font-size control is invented. This conservative QS allocation follows watch feedback; it is
+not a claimed Suunto field limit or proof of physical rendering. Suunto still controls text size/cropping.
+
+The inline settings report distinguishes requested text from native readings and headings, and includes its caveat
+even when allocated. The final Rest reports that no next Work exists; a manual-only adjacent Work has no prescribed
+distance. Existing previous-lap, graph, early-Lap, countdown-alert, target and file-size fallback semantics are kept.
+V14–V17 payloads remain frozen for exact recovery; only after proving a started payload can reconciliation update
+an eligible current Guide under its existing identity. Running, cycling and other non-swim serializers are unchanged.
+
+`onTrainingDeliveryGuideSettingsChanged` watches `users/{uid}/config/settings` in `europe-west2` (512 MiB, retries).
+Only effective normalized `suuntoSwimmingGuide` changes wake reconciliation; unrelated/equivalent writes, default-only
+creation and document deletion do not. The existing transaction requires an extant, non-deleting account and positive
+delivery-state revision, then merges the existing per-owner queue marker. The worker reads current preferences,
+not the event snapshot, and retains entitlement, consent, horizon, completion, retry and uncertain-attempt fences.
+This creates no new sending authority, replacement identity or direct provider request. Periodic reconciliation
+remains the fallback. The settings save message promises an automatic check, not completed delivery or watch receipt.
+The explicit duplicate-producing action is now **Create another Guide**, with a review explaining that ordinary edits
+and screen saves already update the existing Guide. Its `fresh-guide` command, receipt and consent contract are unchanged.
+
+MCP impact: **no wire impact**. This is private provider presentation and settings-trigger scheduling, not new canonical
+recipe fields, metrics, read data, mutation kinds or consent. Existing strict read/proposal/confirmation projections
+remain authoritative; private screen settings, offsets and mapping identities remain excluded. No read deferral or
+contract promotion is needed. No Rules/index/schema migration is required.
+
+Monitoring: existing provider outcomes, queue age, dispatch, unknown telemetry and retry coverage remains applicable.
+The source-controlled Training bundle adds a bounded `lifecycle_failures` counter/chart for failed connection,
+entitlement and Guide-settings wake-ups, plus a condition on the existing dispatch policy (three failures/10 minutes).
+Successful deletion/no-state skips are excluded. No private event hashes/UIDs enter metric labels. Monitoring activation
+and the new Function require separately authorized deployment; local checks do not claim live alert coverage.
+
+V18 verification (2026-10-28): 3,932 provider/delivery/MCP unit tests, 10 loader tests, 336 frontend/Help/hosting
+checks and 14 offline monitoring tests pass. The Suunto demo-Firestore suite covers 191 lifecycle cases. Functions
+and beta frontend builds pass, as do frontend environment policy and the 189-endpoint loading contract. The compiled
+MCP contract is compatible with its existing developer-refresh advisory; this change adds no public contract fields.
+Review caught and fixed the v18 approval-snapshot allowlist so repeated presentation changes keep proved approval.
+No deployment or live provider send was performed. Rest text rendering still needs a physical watch check.
+
+After explicit release approval, build Functions and deploy the affected targets first:
+
+```bash
+npm --prefix functions run build
+firebase deploy --project quantified-self-io --only functions:previewTrainingProviderDelivery,functions:mutateTrainingProviderDelivery,functions:processTrainingDeliveryTask,functions:onTrainingDeliveryGuideSettingsChanged
+```
+
+Release the frontend through its normal approved production build/Hosting process (no Rules/index change), then apply
+the approved Training monitoring bundle using the existing channel as described in the production-monitoring runbook.
+For watch verification, use an eligible existing pyramid Guide, save Next/Last before competing readings, and confirm
+one same-ID update with retained pinning. Verify Next/Last text remains present when a lower-priority fifth choice is
+added, the UI explains its omission, the final Rest reports no next Work, and retry does not create a second copy.
+Do not infer font-size control or remove existing duplicates as part of this check.
+
 ##### Explicit fresh Suunto Guide and completed-workout reuse
 
 Workout sync details expose **Duplicate to…** when completion is known, for every provider, matching workout actions
@@ -3677,7 +3736,7 @@ The copy has a new QS identity, no completion link and no standalone consent. Pl
 plan's sending policy; range extension still needs its existing confirmation. The original prescription, recordings,
 completion and protected provider copies are unchanged. Editing an old date still never unlocks those copies.
 
-For Suunto only, an upcoming uncompleted workout with confirmed earlier acceptance offers **Send a fresh Guide**.
+For Suunto only, an upcoming uncompleted workout with confirmed earlier acceptance offers **Create another Guide**.
 The app-only `fresh-guide` command uses the existing preview/mutate callable and receipt, not a new endpoint or
 automatic absence repair. Preview is provider-I/O-free; confirmation binds schedule/scope/settings revisions, the
 old artifact, current destination/epoch/scope generation and exact new mapping digest. Current Pro, sending consent,
@@ -8479,7 +8538,7 @@ user-visible delivery projections or provider actions.
 
 ### Training delivery production monitoring
 
-Connection and entitlement lifecycle triggers emit `[TrainingDeliveryLifecycle]` diagnostics: a SHA-256 hash of the
+Connection, entitlement and Guide-settings lifecycle triggers emit `[TrainingDeliveryLifecycle]` diagnostics: a SHA-256 hash of the
 CloudEvent ID (stable across redelivery), fixed trigger/stage labels, transaction-attempt count and elapsed times.
 DEBUG checkpoints precede runtime setup, the transaction, deletion-guard reads, delivery-state reads and commit;
 INFO completion is emitted only after the transaction resolves, with the committed staging/skip outcome. WARN failure
@@ -8488,14 +8547,19 @@ payload, provider identity or raw exception is logged. The last checkpoint can l
 of completion does not prove that a commit failed or that a later retry recovered. Correlate the event hash and later
 completion logs; `reconciliation_staged` means only that reconciliation was staged, not that a workout was delivered.
 Stage times measure wall-clock waits, not individual RPC duration; the commit wait can include SDK retry backoff.
-Monitoring coverage: **unchanged**—the separate log prefix does not match the existing Training delivery metrics.
-These diagnostics do not change reads/writes, retry/timeout/resource options, queue lifecycle, metrics or alerts.
-MCP/read projections, consent and user-facing behavior are unchanged; no Help or MCP contract change is needed.
+The original stage diagnostics did not match delivery outcome metrics. The v18 Guide-settings change adds a
+dedicated failed-wake-up counter and dispatch-policy condition below; successful/skipped lifecycle events remain
+outside failure alerts. MCP/read projections and consent are unchanged. Stage logs do not grant delivery authority.
 
 Production activation and email-delivery verification were completed on 6 October 2026 under #655. Repository
 definitions live in `tools/training-monitoring/definitions.mjs`; this is operational configuration, not a second Training architecture
 or a replacement for `/admin/queues/training-delivery`. No product enablement, UID gate, provider behavior, retention
 limit, schedule or rollback switch changes. Garmin/Wahoo/Suunto remain live; COROS new sends remain Coming soon.
+
+The `lifecycle_failures` metric additionally observes failed connection, entitlement and Guide-settings reconciliation
+wake-ups before a queue job exists. It excludes successful account-deletion/no-state skips; the fixed `trigger` label
+identifies the source. Check `[TrainingDeliveryLifecycle]` transaction stages when a settings edit is slow to update.
+Do not use **Create another Guide** as an update retry. This added metric/condition needs explicit monitoring activation.
 
 The existing **512 MiB** `dispatchTrainingDelivery` minute scheduler emits a versioned aggregate `queue_health`
 log before checking Cloud Tasks capacity, including on idle or saturated runs. It executes one Firestore index-count
@@ -8538,7 +8602,7 @@ Initial alert thresholds (tune after observing actual volume):
 | Policy | Condition | Severity |
 | --- | --- | --- |
 | Sustained dispatch backlog | At least four samples per 5 minutes with due work delayed ≥15 minutes, sustained for 10 minutes | Error |
-| Repeated dispatch failures | At least three dispatch failures in 10 minutes | Error |
+| Repeated wake-up or dispatch failures | At least three dispatch failures or three failed lifecycle wake-ups in 10 minutes | Error |
 | Provider failure surge | At least ten retryable/terminal/uncertain failures in 10 minutes across live providers | Error |
 | Provider access or scope failures | At least five permission/provider-access failures in 10 minutes across live providers | Warning |
 | Training cleanup failures | At least one cleanup failure observation in 10 minutes | Warning |

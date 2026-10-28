@@ -260,7 +260,8 @@ describe('Firebase Hosting configuration', () => {
     // Includes public Stripe billing access for members who cannot sign in to QS (28 October).
     // Manual-history help now explains existing-account verification and reconnect requirements.
     // Pool-swim help covers interval chart focus, data coverage, recorded membership and keyboard header explanations.
-    // Training swim help also applies swim units to weekly distances and the SWOLF pool-length label.
+    // Training swim help also covers Rest text priority, automatic same-Guide updates and explicit additional copies.
+    // It applies swim units to weekly distances and the SWOLF pool-length label.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-28');
   });
 

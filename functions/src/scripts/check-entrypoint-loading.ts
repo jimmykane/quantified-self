@@ -12,7 +12,7 @@ const NO_TARGET = '__NO_TARGET__';
 // Exercise a property inherited from Object.prototype so the fallback check
 // also guards against accidental prototype-based routing.
 const UNKNOWN_TARGET = 'toString';
-const EXPECTED_FULL_EXPORT_COUNT = 188;
+const EXPECTED_FULL_EXPORT_COUNT = 189;
 const BILLING_TARGETS = ["createStripeCheckoutSession", "createStripePortalLink", "ext-firestore-stripe-payments-createPortalLink", "stripeBillingWebhook", "dispatchStripeBillingJob", "recoverStripeBillingJobs", "processStripeBillingTask", "deleteStripeCustomerOnDocumentDeleted"];
 const ACCOUNT_CLEANUP_SECRETS = [
   'COROSAPI_CLIENT_ID', 'COROSAPI_CLIENT_SECRET', 'GARMINAPI_CLIENT_ID', 'GARMINAPI_CLIENT_SECRET',
@@ -295,6 +295,7 @@ const TRAINING_TARGET_METADATA: Readonly<Record<string, {
   dispatchTrainingDelivery: { memoryMb: 512, timeoutSeconds: 120, trigger: 'schedule', schedule: '* * * * *' },
   onTrainingDeliveryConnectionChanged: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/meta/{service}' },
   onTrainingDeliveryEntitlementChanged: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/system/status' },
+  onTrainingDeliveryGuideSettingsChanged: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/config/settings' },
   onDashboardDerivedMetricsActivityWrite: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/activities/{activityId}', concurrency: 1, maxInstances: 50 },
   onDashboardDerivedMetricsEventWrite: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/events/{eventId}', concurrency: 1, maxInstances: 50 },
   onDashboardDerivedMetricsSleepWrite: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/sleepSessions/{sleepSessionId}', concurrency: 1, maxInstances: 50 },

@@ -18,15 +18,23 @@ vi.mock('./contracts', () => ({ DELIVERY_STATE: 'trainingDeliveryState' }));
 import { getUserDeletionGuardStateInTransaction } from '../../shared/user-deletion-guard';
 import { stageTrainingDeliveryReconciliation } from './marker';
 import { productionDeliveryRuntime } from './runtime';
-import { onTrainingDeliveryConnectionChanged, onTrainingDeliveryEntitlementChanged } from './lifecycle';
+import { onTrainingDeliveryConnectionChanged, onTrainingDeliveryEntitlementChanged, onTrainingDeliveryGuideSettingsChanged } from './lifecycle';
+import { defaultSuuntoSwimmingGuideSettings } from '../../../../shared/suunto-swimming-guide-settings';
 
 type TestEvent = { id: string; params: { uid: string; service: string }; data?: unknown };
 type TestTrigger = { options: Record<string, unknown>; handler: (event: TestEvent) => Promise<void> };
 const connection = onTrainingDeliveryConnectionChanged as unknown as TestTrigger;
 const entitlement = onTrainingDeliveryEntitlementChanged as unknown as TestTrigger;
+const guideSettings = onTrainingDeliveryGuideSettingsChanged as unknown as TestTrigger;
 const event: TestEvent = { id: 'private-cloud-event', params: { uid: 'private-user-uid', service: 'suuntoApp' },
   data: { private: 'private-connection-payload' } };
 const eventHash = createHash('sha256').update(event.id).digest('hex');
+const settingsEvent = (before: unknown, after: unknown): TestEvent => ({ ...event, data: {
+  before: { exists: before !== undefined, data: () => before },
+  after: { exists: after !== undefined, data: () => after },
+} });
+const changedSettings = { suuntoSwimmingGuide: { ...defaultSuuntoSwimmingGuideSettings(),
+  restFields: ['interval', 'nextPlannedDistance', 'previousLapPace'] } };
 const stateRef = { path: 'private-document-path' };
 const stateCollection = { doc: vi.fn(() => stateRef) };
 const userRef = { collection: vi.fn(() => stateCollection) };
@@ -67,6 +75,40 @@ describe('Training delivery lifecycle triggers', () => {
       memory: '512MiB',
       retry: true,
     });
+    expect(guideSettings.options).toEqual({ document: 'users/{uid}/config/settings',
+      region: 'europe-west2', memory: '512MiB', retry: true });
+  });
+
+  it('wakes same-identity reconciliation on changed Guide preferences, including their first save', async () => {
+    await guideSettings.handler(settingsEvent(undefined, changedSettings));
+    await guideSettings.handler(settingsEvent(changedSettings, { suuntoSwimmingGuide: defaultSuuntoSwimmingGuideSettings() }));
+    expect(stageTrainingDeliveryReconciliation).toHaveBeenCalledTimes(2);
+    expect(stageTrainingDeliveryReconciliation).toHaveBeenLastCalledWith(tx, db, event.params.uid);
+    expect(logger.info).toHaveBeenLastCalledWith('[TrainingDeliveryLifecycle]', expect.objectContaining({
+      event: 'completed', trigger: 'guide-settings', eventHash, outcome: 'reconciliation_staged',
+    }));
+    expect(JSON.stringify(logFields())).not.toMatch(/private-|suuntoSwimmingGuide|nextPlannedDistance/);
+  });
+
+  it('ignores unrelated, equivalent/default, missing and deleted settings events', async () => {
+    for (const input of [{ ...event, data: undefined }, settingsEvent(changedSettings, undefined),
+      settingsEvent({}, { suuntoSwimmingGuide: defaultSuuntoSwimmingGuideSettings(), theme: 'dark' }),
+      settingsEvent(changedSettings, { ...changedSettings, theme: 'dark' }), settingsEvent(undefined, {})]) {
+      await guideSettings.handler(input);
+    }
+    expect(productionDeliveryRuntime).not.toHaveBeenCalled();
+    expect(logFields()).toEqual([]);
+  });
+
+  it('keeps settings wake-ups behind account deletion and existing delivery-state guards', async () => {
+    const input = settingsEvent({}, changedSettings);
+    vi.mocked(getUserDeletionGuardStateInTransaction).mockResolvedValueOnce({ userExists: false,
+      deletionInProgress: false, shouldSkip: true });
+    await guideSettings.handler(input);
+    expect(tx.get).not.toHaveBeenCalled();
+    tx.get.mockResolvedValueOnce({ data: () => undefined });
+    await guideSettings.handler(input);
+    expect(stageTrainingDeliveryReconciliation).not.toHaveBeenCalled();
   });
 
   it.each([['connection', connection], ['entitlement', entitlement]] as const)(
