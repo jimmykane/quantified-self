@@ -359,3 +359,16 @@ mat-checkbox {
   border-color: var(--mat-sys-primary, #90caf9) !important;
   background-color: var(--mat-sys-primary, #90caf9) !important;
 }
+
+.history-range-field { width: 100%; min-width: 0; }
+.history-range-review {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+  overflow-wrap: anywhere;
+}
+.history-range-review p { margin: 0 0 8px; }
+
+@media (max-width: 480px) {
+  .date-fields { flex-direction: column; }
+  .date-fields mat-form-field { min-width: 0; width: 100%; }
+}
