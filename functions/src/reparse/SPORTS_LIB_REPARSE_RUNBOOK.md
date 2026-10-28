@@ -11,6 +11,9 @@ Target version source of truth:
 
 CSS applies through the existing immutable policy for each leg's recorded start time. Reparse refreshes the additive
 swim-pace candidate using that saved policy, including absence of CSS; it never adopts current CSS settings.
+Swimming Automatic now prefers imported TSS, CSS pace, calibrated HR, then MET; calculated power TSS is excluded.
+Existing evaluations are not rewritten on read. An original-file reparse refreshes that order and can change
+previously calculated swim scores; imported scores remain authoritative. The existing invalidation rebuilds modeled load.
 No historical or route reparse campaign is required. Preserve reservations, strict identities, controls, retry and
 deletion guards. Explicit reassociation of a different CSS policy requires source-backed reparse before modeled load
 can use it. Root and Functions must adopt the same published companion library version before merge/deployment;
@@ -438,10 +441,12 @@ requires original-file reparse, the same parsed instances through candidate prep
 reconciliation and ordinary derived refresh. Root and Functions now use the same published 23.0.0 package, retaining that correction.
 Source evidence remains private; this introduces no metric/schema/MCP change or production campaign.
 
-New provider imports and manual uploads cache Automatic/HR/MET evaluations in owner-only event metadata. Walking,
+New provider imports and manual uploads cache Automatic/HR/MET/Swim pace evaluations in owner-only event metadata. Walking,
 Indoor Walking, Nordic Walking, Speed Walking, Hiking and Trekking skip running pace; Automatic first considers
-usable power with an independent FTP before HR and MET. HR requires file-supplied resting, threshold and
-maximum HR; missing calibration can fall back to the calorie-derived MET estimate when its file inputs exist.
+usable power with an independent FTP before HR and MET. Swimming prefers independent CSS pace before HR and MET,
+excluding calculated power TSS. HR uses Banister with full valid calibration, or the threshold-only estimate when
+resting or maximum HR is missing and the file supplies a valid threshold. Missing calibration can fall back to the
+calorie-derived MET estimate when its file inputs exist.
 Valid imported TSS retains precedence. See `docs/training-workspace.md` for the exact calculation and policy contract.
 
 Regenerate mode keeps the freshly parsed FTP, timing and HR/MET inputs available before rebuilding derived statistics

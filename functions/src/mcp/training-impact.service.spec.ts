@@ -95,11 +95,11 @@ function sessionInput(overrides: Partial<McpTrainingImpactInput> = {}): McpTrain
 }
 
 describe('MCP Training impact service', () => {
-  it.each([null, 9])('projects swimming load %s without exposing its private missing-threshold reason', async score => {
+  it.each([null, 9, 100])('projects Automatic swimming load %s without exposing private CSS or evaluation details', async score => {
     const loadReads = reads({ snapshot: formSnapshot([{ dayMs: DAY_ONE, load: score ?? 0 }]) });
-    const evaluation = { preference: 'AUTOMATIC', method: score === null ? null : 'MET', score,
-      estimated: score !== null, provenance: score === null ? null : 'calculated',
-      reasons: ['missing-hr-calibration', 'missing-swim-threshold', ...(score === null ? ['missing-met-inputs'] : [])] };
+    const evaluation = { preference: 'AUTOMATIC', method: score === null ? null : score === 100 ? 'SWIM_PACE' : 'MET', score,
+      estimated: score === 9, provenance: score === null ? null : 'calculated',
+      reasons: score === 100 ? [] : ['missing-pace-inputs', 'missing-hr-calibration', ...(score === null ? ['missing-met-inputs'] : [])] };
     loadReads.fetchLoadMetadata = vi.fn().mockResolvedValue(new Map([['event-1', {
       version: 1, revision: 1, excluded: false, controls: {}, legs: { swim: {
         activityId: 'activity-1', policy: { ...defaultAppliedTrainingLoadPolicy('Swimming'), swimThresholdSpeed: 0.8849557522 }, recordedTss: 42,
@@ -117,7 +117,7 @@ describe('MCP Training impact service', () => {
         coverage: { modeledSessionCount: 1, unavailableSessionCount: 0 } });
     }
     expect(createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false }).get_training_impact.safeParse(result).success).toBe(true);
-    expect(JSON.stringify(result)).not.toMatch(/missing-swim-threshold|missing-hr-calibration|evaluations|swimThresholdSpeed|policy|activity-1|event-1/);
+    expect(JSON.stringify(result)).not.toMatch(/missing-pace-inputs|missing-hr-calibration|evaluations|swimThresholdSpeed|policy|activity-1|event-1/);
   });
   it('projects threshold HR load through the frozen public schema without exposing private calibration diagnostics', async () => {
     const loadReads = reads({ snapshot: formSnapshot([{ dayMs: DAY_ONE, load: 70 }]) });

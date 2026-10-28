@@ -30,7 +30,7 @@
               <mat-option value="yd">Per 100 yards</mat-option>
             </mat-select>
           </mat-form-field>
-          <p id="css-help">Use your independently measured CSS. Applies to pool and open-water swims starting after you save. Automatic still prefers power and HR; choose Swim pace (CSS) to prefer pace. Imported scores take precedence. Clearing CSS affects future swims only.</p>
+          <p id="css-help">Use your independently measured CSS. Applies to pool and open-water swims starting after you save. Automatic prefers CSS pace, then calibrated HR, then MET. Power is not used for swimming TSS. Imported scores take precedence. Clearing CSS affects future swims only.</p>
           @if (!validCss(row)) { <p role="alert">Enter a positive pace as mm:ss, for example 1:53, or leave blank.</p> }
         }
         <mat-slide-toggle formControlName="included" (change)="selection()">Include in modeled load</mat-slide-toggle>

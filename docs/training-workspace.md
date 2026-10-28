@@ -6260,8 +6260,10 @@ Blank removes CSS from the new revision. CSS is not inferred from
 ordinary swim speed, guessed Garmin fields, or the workout's average pace.
 
 `SWIM_PACE` is an explicit preferred method for pool and open-water swimming. Imported valid scores, including zero,
-still win. Automatic retains power → HR → swim pace → MET priority; choosing Swim pace selects an available pace
-candidate before those calculated fallbacks. The existing Sports Lib swim formula is
+still win. Swimming Automatic uses imported → CSS pace → calibrated HR → MET → unavailable. Calculated power TSS
+is ineligible for swimming; recorded power data and ordinary power statistics remain intact. Explicit Swim pace
+also prefers CSS, while explicit HR/MET selects its available candidate first. Other sports keep their existing
+Automatic order. The existing Sports Lib swim formula is
 `100 × activeHours × (averageSwimSpeed / CSS)^3`. Missing speed/duration or rejected calculations fall back with reasons.
 The preference and CSS do not change recorded TSS, activity statistics, source fingerprints or original files.
 
@@ -6272,6 +6274,10 @@ file-only evaluations. Matched legs reuse the saved policy during duplicate uplo
 Legacy policies without CSS stay without CSS. New settings cannot retroactively calibrate old or delayed swims.
 No historical correction editor, migration, bulk reparse, new collection, trigger, index or policy-history read is added.
 Saved routes and planned-workout relative targets are outside this feature.
+Stored evaluations keep their saved values until reparse. Reparse refreshes swimming Automatic with the new order
+using the saved policy and source calibration; it never borrows today's CSS. File-calculated swim TSS may also change
+when an independent file threshold now wins over HR, or previously selected calculated power is no longer eligible.
+Imported scores remain unchanged. Normal source/metadata invalidation refreshes modeled Training summaries.
 
 The owner event editor offers Swim pace only for Swimming legs, and only when that evaluation exists. If reparse
 corrects a swim to another sport, the saved Swim pace choice remains visible but disabled, with the actual fallback

@@ -256,7 +256,7 @@ describe('Firebase Hosting configuration', () => {
     ]);
     // Includes contextual provider offers, trial review and paginated Connections navigation.
     // Includes the Pro trial payment-method and cancellation terms refreshed today.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-26');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-28');
   });
 
   it('rewrites only known CSR app routes so unknown URLs can fall through to 404.html', () => {
@@ -380,7 +380,7 @@ describe('Firebase Hosting configuration', () => {
     // MCP signup help also covers returning to explicit consent, denial and request expiry after free setup.
     // Startup recovery help covers the 15-second deadline and reload without clearing browser storage.
     // Checkout help covers the 20-second access check, confirmed Pro setup and recovery before another payment.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-26');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-28');
     // Homepage makes automatic imports, supported activity sync and the signup/free starting points explicit.
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
@@ -442,7 +442,8 @@ describe('Firebase Hosting configuration', () => {
     // Pool swims default to Duration and disable the Distance chart axis.
     // Strength-name previews disclose interval-only summaries and point to Edit for saved lifting loads.
     // Form/TSS axes fit the displayed period without changing training values or hiding the neutral baseline.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-26');
+    // Swimming Automatic prioritizes CSS before HR/MET and excludes calculated power TSS.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-28');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');

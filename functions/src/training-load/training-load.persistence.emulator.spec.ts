@@ -7,7 +7,7 @@ vi.unmock('firebase-admin');
 vi.unmock('@sports-alliance/sports-lib');
 import * as admin from 'firebase-admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
-import { ActivityParsingOptions, ActivityTypes, ServiceNames, ActivityUtilities, DataDistance, DataEnergy, EventImporterFIT, EventImporterJSON, type EventInterface } from '@sports-alliance/sports-lib';
+import { ActivityParsingOptions, ActivityTypes, ServiceNames, ActivityUtilities, DataDistance, DataEnergy, DataHeartRate, EventImporterFIT, EventImporterJSON, type EventInterface } from '@sports-alliance/sports-lib';
 import { prepareTrainingLoadMetadata } from './training-load-metadata';
 import { completeTrainingLoadCacheWarmup, prepareTrainingLoadCacheWrite, readTrainingLoadSummaries, refreshTrainingLoadSummary, splitTrainingLoadBucket, summarizeTrainingLoad, trainingLoadCacheKey } from './training-load-cache';
 import { attachEventTrainingLoads } from './training-load-reader';
@@ -92,10 +92,10 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     event.getActivities()[0].addStat(new DataAscent(ascent)); event.addStat(new DataAscent(ascent));
     return event;
   }
-  it('freezes dated CSS through delayed imports, retries and renamed legs without changing recorded statistics', async () => {
+  it.each([false, true])('freezes Automatic CSS through delayed imports, retries and renamed legs without changing recorded statistics (HR=%s)', async hasHr => {
     const uid = setup();
     const head = db.doc(`users/${uid}/trainingLoadPolicies/swimming`);
-    await head.collection('revisions').doc('old').set({ method: 'SWIM_PACE', included: true,
+    await head.collection('revisions').doc('old').set({ method: 'AUTOMATIC', included: true,
       revision: 1, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 1)), swimThresholdSpeed: 1 });
     await head.collection('revisions').doc('new').set({ method: 'HR', included: true,
       revision: 2, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 3)), swimThresholdSpeed: 2 });
@@ -105,14 +105,24 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
           creator: { name: 'Test' }, laps: [], intensityZones: [], streams: [],
           stats: { 'Average Speed': 1, 'Timer time': 3600, Energy: 210, Weight: 70 } }] } as any);
       event.setID('workout'); event.getActivities()[0].setID(id);
+      if (hasHr) {
+        const activity = event.getActivities()[0];
+        activity.parseOptions = new ActivityParsingOptions({ tss: { overrides: {
+          maxHeartRate: 190, restingHeartRate: 55, lactateThresholdHR: 165,
+        } } });
+        const stream = activity.createStream(DataHeartRate.type);
+        stream.setData(Array(3601).fill(120)); activity.addStream(stream);
+      }
       ActivityUtilities.generateMissingStreamsAndStatsForActivity(event.getActivities()[0]);
       return event;
     };
     const original = swim(); const before = JSON.stringify(original.toJSON());
+    const recorded = ActivityUtilities.getTrainingStressScoreEvaluations(original.getActivities()[0]).automatic;
+    expect(recorded.method).toBe(hasHr ? 'HR' : 'MET');
     const finish = await importWorkout(uid, original); await finish();
     expect(JSON.stringify(original.toJSON())).toBe(before);
     let saved = (await db.doc(metadataPath(uid)).get()).data() as TrainingLoadMetadata;
-    expect(saved.legs!.leg).toMatchObject({ recordedTss: 9, policy: { revision: 1, swimThresholdSpeed: 1 },
+    expect(saved.legs!.leg).toMatchObject({ recordedTss: recorded.score, policy: { revision: 1, method: 'AUTOMATIC', swimThresholdSpeed: 1 },
       evaluations: { swimPace: { method: 'SWIM_PACE', score: 100 }, automatic: { score: 100 } } });
     await head.collection('revisions').doc('later').set({ method: 'MET', included: false,
       revision: 3, effectiveAt: Timestamp.fromMillis(Date.UTC(2026, 0, 4)) });
@@ -127,7 +137,7 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     await importWorkout(earlyUid, swim());
     const early = (await db.doc(metadataPath(earlyUid)).get()).data() as TrainingLoadMetadata;
     expect(early.legs!.leg.policy).not.toHaveProperty('swimThresholdSpeed');
-    expect(resolveEffectiveTrainingLoad({}, early).score).toBe(9);
+    expect(resolveEffectiveTrainingLoad({}, early).score).toBe(recorded.score);
     await importWorkout(earlyUid, swim());
     expect(((await db.doc(metadataPath(earlyUid)).get()).data() as TrainingLoadMetadata).legs!.leg.policy).toEqual(early.legs!.leg.policy);
   });

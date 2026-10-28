@@ -157,6 +157,8 @@ describe('CSS input and units', () => {
     expect(fixture.nativeElement.querySelectorAll('input[formControlName="cssPace"]').length).toBe(1);
     const swimming = fixture.nativeElement.querySelector('section[aria-label="Swimming"]');
     expect(swimming.textContent).toContain('Critical swim speed');
+    expect(swimming.textContent).toContain('Automatic prefers CSS pace, then calibrated HR, then MET.');
+    expect(swimming.textContent).toContain('Power is not used for swimming TSS.');
     const choices = fixture.debugElement.queryAll(By.directive(MatSelect))
       .flatMap(element => (element.componentInstance as MatSelect).options.toArray().map(option => option.value));
     expect(choices.filter(value => value === 'SWIM_PACE')).toHaveLength(1);
