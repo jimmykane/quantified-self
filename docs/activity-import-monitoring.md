@@ -108,10 +108,12 @@ BulkWriter submissions are not counted before their commit. Logs are best effort
 so an invocation crash between commit and emission can undercount. Logger failure
 must never undo an import or cause provider work to replay.
 
-Verified Suunto copies of retained Garmin indoor activities use that same committed `skipped` outcome with the
+Verified Suunto copies of retained Garmin activities use that same committed `skipped` outcome with the
 fixed queue reason `cross_provider_duplicate`. They preserve the saved recording and create no outbound send.
 Monitoring coverage is **covered/unchanged**: existing Suunto skip, worker-attempt and newly committed dead-letter
-signals apply; the saved-event reference stays outside telemetry labels. See the provider guide's identity rules.
+signals apply; the saved-event reference stays outside telemetry labels. The explicit Running/Trail Running and
+Virtual Running/Running copy checks reuse these outcomes and the existing bounded metadata reads. No worker, queue,
+retry budget, metric/filter, dashboard or alert threshold changes. See the provider guide's identity rules.
 
 Garmin activity jobs skipped after a confirmed completed disconnect use the existing committed `skipped` outcome,
 not `imported` or `dead_lettered`. Their INFO diagnostic contains the opaque queue ID and fixed

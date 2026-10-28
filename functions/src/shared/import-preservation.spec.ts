@@ -66,10 +66,19 @@ describe('shared import preservation', () => {
       sourceIdentity: { version: 1, activityId: 'saved-id', startMs, endMs: startMs + 3_652_000, importedType: type } });
     state.garminProvider = { serviceName: ServiceNames.GarminAPI, serviceUserID: 'garmin-account',
       serviceActivityFileID: 'garmin-file', serviceActivityFileType: 'FIT' };
+    if (type === 'Running') {
+      incoming.endDate = new Date(startMs + 3_652_000);
+      incoming.getStat = type => ({ getValue: () => type === 'Duration' ? 3599.5 : 10_000 });
+    }
+    if (type === 'Virtual Running') {
+      state.activities.get('saved-id')!.sourceIdentity = {
+        version: 1, activityId: 'saved-id', startMs, endMs: startMs + 3_601_000, importedType: type,
+      };
+    }
     return { incoming, provider: { serviceName: ServiceNames.SuuntoApp, serviceUserName: 'suunto-account', serviceWorkoutID: 'workout' } };
   }
 
-  it.each([['Treadmill', 'Running'], ['Indoor Rowing', 'Rowing']])(
+  it.each([['Treadmill', 'Running'], ['Indoor Rowing', 'Rowing'], ['Running', 'Trail Running'], ['Virtual Running', 'Running']])(
     'skips a verified Garmin %s copy from Suunto %s before reserving or changing any source', async (type, generic) => {
       const { incoming, provider } = garminCopy(type, generic);
       state.parent = { ...state.parent, name: 'Owner title', notes: 'Owner note' };
@@ -83,11 +92,13 @@ describe('shared import preservation', () => {
       expect(state.get.mock.calls.filter(([ref]) => ref.path?.endsWith(`/${ServiceNames.GarminAPI}`))).toHaveLength(1);
     });
 
-  it.each(['manual', 'same-provider', 'multisport', 'merged-files', 'missing-original', 'malformed-original',
+  const unverifiedScenarios = ['manual', 'same-provider', 'multisport', 'merged-files', 'missing-original', 'malformed-original',
     'foreign-original', 'different-event-original', 'non-fit-original', 'pending', 'pending-parent', 'first-import', 'different-distance',
-    'missing-provenance', 'wrong-provenance', 'non-fit', 'incomplete-provenance'])(
-    'retains identity conflict protection for an unverified copy: %s', async scenario => {
-      const { incoming, provider } = garminCopy();
+    'missing-provenance', 'wrong-provenance', 'non-fit', 'incomplete-provenance', 'sml-original'];
+  it.each(['Treadmill', 'Running', 'Virtual Running'].flatMap(type => unverifiedScenarios
+    .filter(scenario => type !== 'Running' || scenario !== 'same-provider').map(scenario => ({ type, scenario }))))(
+    'retains identity conflict protection for an unverified $type copy: $scenario', async ({ type, scenario }) => {
+      const { incoming, provider } = garminCopy(type, type === 'Running' ? 'Trail Running' : 'Running');
       if (scenario === 'same-provider') state.provider = provider;
       if (scenario === 'pending') state.metadata = { sourceWritePending: true };
       if (scenario === 'pending-parent') state.parent.benchmarkSourceWritePending = true;
@@ -97,6 +108,7 @@ describe('shared import preservation', () => {
       if (scenario === 'foreign-original') state.parent.originalFiles = [{ path: 'users/other/events/event/original.fit' }];
       if (scenario === 'different-event-original') state.parent.originalFiles = [{ path: 'users/owner/events/other/original.fit' }];
       if (scenario === 'non-fit-original') state.parent.originalFiles = [{ path: 'users/owner/events/event/original.gpx' }];
+      if (scenario === 'sml-original') state.parent.originalFiles = [{ path: 'users/owner/events/event/original.json' }];
       if (scenario === 'first-import') state.metadata = { sourceFirstImport: true };
       if (scenario === 'different-distance') state.activities.get('saved-id')!.stats = { Duration: 3600, Distance: 9999 };
       if (scenario === 'missing-provenance') state.garminProvider = {};
@@ -110,6 +122,15 @@ describe('shared import preservation', () => {
       expect(state.get.mock.calls.filter(([ref]) => ref.path?.endsWith(`/${ServiceNames.GarminAPI}`)))
         .toHaveLength(needsProvenance ? 1 : 0);
     });
+
+  it('keeps a verified same-provider sport revision on the ordinary preservation path', async () => {
+    const { incoming, provider } = garminCopy('Running', 'Trail Running');
+    state.provider = provider;
+    await expect(prepareImportedEventWrite('owner', event([incoming]), authorize, provider)).resolves.toBeTypeOf('function');
+    expect(state.commit).toHaveBeenCalledOnce();
+    expect(incoming.getID()).toBe('saved-id');
+    expect(state.get.mock.calls.filter(([ref]) => ref.path?.endsWith(`/${ServiceNames.GarminAPI}`))).toHaveLength(0);
+  });
 
   it('recognizes a valid legacy original-file reference without requiring a generation', async () => {
     const { incoming, provider } = garminCopy();

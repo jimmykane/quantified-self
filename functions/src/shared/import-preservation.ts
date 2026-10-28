@@ -9,7 +9,7 @@ import { prepareActivitySourceBindings, savedActivityIdentity, type SavedActivit
 import { ActivityIdentityConflictError } from './activity-identity-conflict';
 import { isSameProviderRecording, providerRecordingService } from './provider-recording-identity';
 import { retainedSourceReferences, retainedSourceRevision } from './retained-activity-source';
-import { isGarminIndoorActivityCopy, ProviderImportDuplicateError } from './provider-import-duplicate';
+import { isGarminActivityCopy, ProviderImportDuplicateError } from './provider-import-duplicate';
 import { prepareTrainingLoadMetadata } from '../training-load/training-load-metadata';
 import { EventWriteSkippedForDeletedEventError, type PreparedTrainingLoadWrite } from '../training-load/training-load-source-write';
 import type { TrainingLoadMetadata } from '../../../shared/training-load-policy';
@@ -189,7 +189,7 @@ async function prepareImportedActivityIdentities(
     && service === ServiceNames.SuuntoApp && !provider?.exists && documents.length === 1 && event.getActivities().length === 1
     && typeof original?.path === 'string' && original.path.startsWith(`users/${uid}/events/${eventId}/`)
     && /\.fit$/i.test(original.path)
-    && isGarminIndoorActivityCopy(savedActivityIdentity(documents[0]), event.getActivities()[0] as ActivityIdentityLike)) {
+    && isGarminActivityCopy(savedActivityIdentity(documents[0]), event.getActivities()[0] as ActivityIdentityLike)) {
     // Only likely duplicates incur this one extra, owner-scoped provenance read.
     const garmin = (await transaction.get(db.doc(`users/${uid}/events/${eventId}/metaData/${ServiceNames.GarminAPI}`))).data();
     if (`${garmin?.serviceActivityFileType || ''}`.toLowerCase() === 'fit'

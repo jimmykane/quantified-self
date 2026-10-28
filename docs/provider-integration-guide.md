@@ -1017,10 +1017,15 @@ source reservation. Existing provider dead-letter handling commits the terminal 
 revision/lease fences. Strict elevation-correction matches must agree with the selected saved-ID pairing and the
 file's sport eligibility. No automatic reassociation or deletion is performed.
 
-Suunto's single-activity generic `Running`/`Rowing` copies can instead finish as `cross_provider_duplicate` skips
-when the saved Garmin FIT has the corresponding `Treadmill`/`Indoor Rowing` source identity, identical start time,
-positive active duration and identical nonnegative distance. The incoming end must match active duration within
-one second and cannot exceed Garmin's elapsed window. The existing reservation reuses its event/activity/metadata
+Verified single-activity Suunto copies can instead finish as `cross_provider_duplicate` skips when the saved Garmin
+FIT has an explicitly recognized source sport, identical start time, positive active durations and identical
+nonnegative distance. `Treadmill` → `Running` and `Indoor Rowing` → `Rowing` retain exact active-duration matching;
+the incoming end must match active duration within one second and cannot exceed Garmin's elapsed window.
+`Running` → `Trail Running` permits at most one second of active-duration drift with an identical, positive elapsed
+window, including retained pauses. `Virtual Running` → `Running` permits at most one second of active-duration drift,
+an incoming end no more than one second earlier, and an elapsed/active difference of at most one second. These are
+provider-copy checks, not general sport aliases or fuzzy identity matching. Legacy JSON/SML originals remain outside
+this rule and require case-specific review. The existing reservation reuses its event/activity/metadata
 reads; the sole retained original must reference a FIT inside that owner's event storage prefix. Only candidates
 read one additional owner-scoped Garmin metadata document. First/unfinished imports,
 multiple activities/originals, existing Suunto provenance and insufficient evidence retain their normal handling.
@@ -1028,7 +1033,8 @@ This aborts preparation before any source/load/original-file write, preserving t
 The existing queue completion records `processed=true`, `resultStatus=skipped` and the saved `duplicateEventID`,
 without another outbound send. No provider association is added to the retained recording. Monitoring is
 **covered/unchanged** by #829's existing committed `skipped` outcome; no new worker, retry, metric, Help, MCP or
-Training contract is introduced. Existing failed jobs require separately approved targeted replay after deployment.
+Training contract is introduced. Existing Help remains accurate: this changes internal copy recognition, not a user
+workflow or import capability. Existing failed jobs require separately approved targeted replay after deployment.
 
 Verified assignments pass only in memory from the committed reservation to Training finalization, preserving zero
 overrides, exclusions and dated policies without trusting arbitrary reused IDs. Guarded source transactions preserve
