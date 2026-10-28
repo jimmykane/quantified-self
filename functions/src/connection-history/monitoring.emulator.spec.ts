@@ -134,6 +134,25 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('connection history bounde
     expect((await ref.get()).updateTime!.isEqual(before.updateTime!)).toBe(true);
     expect(JSON.stringify(logs())).not.toContain('PRIVATE');
   });
+  it.each(['explicit', 'default', 'smaller', 'legacy'] as const)('recognizes only a matching persisted Suunto batch receipt (%s)', async policy => {
+    const { ref, run } = await seed(ServiceNames.SuuntoApp);
+    run.steps = [run.steps.find(step => step.id === 'health')!];
+    const step = run.steps[0];
+    const receiptStep = { ...step };
+    const matching = policy === 'explicit' || policy === 'default';
+    if (policy === 'default' || policy === 'smaller') delete step.windowDays;
+    if (policy === 'smaller') receiptStep.windowDays = 30;
+    if (policy === 'legacy') delete receiptStep.suuntoWindowBatchVersion;
+    await ref.update({ steps: run.steps, lastOperation: { key: historyOperationKey(receiptStep),
+      result: { count: 4, nextStartMs: run.endMs + 1, nextPage: 1, childPaths: ['sleepSyncQueue/PRIVATE_CHILD'] } } });
+    expect((await ref.get()).data()!.steps[0]).toEqual(step);
+    const before = await ref.get(); const depth = vi.fn(async () => 500);
+    await observe(async () => true, depth);
+    expect(sample('suunto')).toMatchObject({ dueSample: matching ? 1 : 0, unknownSample: 0 });
+    expect(depth.mock.calls.length).toBe(matching ? 0 : 1);
+    expect((await ref.get()).updateTime!.isEqual(before.updateTime!)).toBe(true);
+    expect(JSON.stringify(logs())).not.toContain('PRIVATE');
+  });
   it.each(['cursor', 'page', 'window', 'capability', 'step'])('does not reuse a receipt from another %s', async changed => {
     const { ref, run } = await seed(); const step = run.steps[0];
     const stale = { ...step, capability: { ...step.capability } };

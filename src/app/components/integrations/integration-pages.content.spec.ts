@@ -105,6 +105,9 @@ describe('integration-pages.content', () => {
     expect(corosFIT).toContain('Snorkeling FITs with or without recorded GPS are sent as Open Water Swim');
     expect(corosFIT).toContain('Missing GPS is not added');
     expect(corosFIT).toContain('Sailing FITs with recorded GPS as GPS Cardio');
+    expect(corosFIT).toContain('Fishing FITs with recorded GPS as GPS Cardio');
+    expect(corosFIT).toContain('Diving FITs with or without recorded GPS are sent as Generic');
+    expect(corosFIT).toContain('Recorded depth stays in the file, but COROS may not display it or a dive profile');
     expect(corosFIT).toContain('Direct uploads and activity sync change only the outgoing copy');
     expect(corosFIT).toContain('keeping your QS activity type and retained original unchanged');
     expect(corosFIT).toContain('Other files keep their original classification');

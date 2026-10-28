@@ -35,7 +35,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppHapticsService } from './services/app.haptics.service';
 import { AppUserInterface } from './models/app-user.interface';
-import { AppUserUtilities } from './utils/app.user.utilities';
+import { AppUserAccess } from './helpers/user-access.helper';
 import { ShellNavigationEffectsService } from './services/shell-navigation-effects.service';
 import {
   hasAngularServerContext,
@@ -85,6 +85,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     }
   }
   private readonly bannerHeightSignal = signal(0);
+  private readonly headerHeightSignal = signal(APP_SHELL_HEADER_HEIGHT_PX);
   private readonly hasBannerSignal = signal(false);
   public authState: boolean | null = null;
   private readonly showInitialLoaderSignal = signal(true);
@@ -240,7 +241,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
       return 0;
     }
 
-    return this.bannerHeight + APP_SHELL_HEADER_HEIGHT_PX;
+    return this.bannerHeight + this.headerHeightSignal();
   }
 
   get effectiveTopOffsetPx(): number {
@@ -252,7 +253,11 @@ export class AppShellComponent implements OnInit, OnDestroy {
       return 0;
     }
 
-    return this.bannerHeight + (this.headerHidden ? 0 : APP_SHELL_HEADER_HEIGHT_PX);
+    return this.bannerHeight + (this.headerHidden ? 0 : this.headerHeightSignal());
+  }
+
+  onHeaderHeightChanged(height: number): void {
+    if (Number.isFinite(height) && height >= APP_SHELL_HEADER_HEIGHT_PX) this.headerHeightSignal.set(Math.ceil(height));
   }
 
   constructor() {
@@ -380,7 +385,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
           user.acceptedTos === true;
 
         const hasSubscribedOnce = user.hasSubscribedOnce === true;
-        const hasPaidAccess = AppUserUtilities.hasPaidAccessUser(user);
+        const hasPaidAccess = AppUserAccess.hasPaidAccessUser(user);
 
         const explicitOnboardingComplete = user.onboardingCompleted === true;
         this.onboardingCompleted = termsAccepted && (hasPaidAccess || hasSubscribedOnce || explicitOnboardingComplete);

@@ -70,6 +70,7 @@ import {
   SuuntoHealthRequestError,
 } from './health-sync';
 import { SuuntoHealthValidationError, SuuntoHealthResponseLimitError, SUUNTO_HEALTH_MAX_RAW_SAMPLE_ROWS } from './health';
+import { suuntoHistoryWindowDays } from './history-windows';
 import { ResponseBodyTooLargeError } from '../request-helper';
 import type { SuuntoWebhookWriteLifecycleGuards } from './health-webhook-binding-lifecycle';
 
@@ -415,6 +416,32 @@ describe('Suunto Health provider sync', () => {
     expect(windows.every(window => (
       window.requestEndMs - window.requestStartMs <= 28 * 24 * 60 * 60 * 1000
     ))).toBe(true);
+  });
+
+  it('processes adjacent history targets without continuations and retains the complete boundary day in both padded pulls', async () => {
+    const day = 86400000;
+    const width = suuntoHistoryWindowDays('health') * day;
+    const start = START_MS + day / 2;
+    const boundary = start + width;
+    const samples = [boundary - day / 4, boundary + day / 4].map((timestamp, index) => ({
+      timestamp: new Date(timestamp).toISOString(), entryData: { HR: 50 + index * 10 },
+    }));
+    hoisted.requestGet.mockReset().mockImplementation(async ({ url }) => url.includes('/activity?') ? samples : []);
+    const snapshot = tokenSnapshot();
+    for (const rangeStartMs of [start, boundary]) {
+      const result = await processSuuntoHealthQueueItem({ ...queueItem(), rangeStartMs, rangeEndMs: rangeStartMs + width },
+        snapshot, 'staged-user', currentAuthorityGuards(snapshot));
+      expect(result.continuation).toBeNull();
+      expect(result.healthResults).toHaveLength(1);
+      expect(result.healthResults[0].input.sampleSeries[0].nativeValues).toEqual([50, 60]);
+    }
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(6);
+    for (const [options] of hoisted.requestGet.mock.calls) {
+      const query = new URL(options.url).searchParams;
+      const from = query.has('from') ? Number(query.get('from')) : Date.parse(query.get('startdate')!);
+      const to = query.has('to') ? Number(query.get('to')) : Date.parse(query.get('enddate')!);
+      expect(to - from + 1).toBe(28 * day);
+    }
   });
 
   it('retains a complete local-day record when the target starts mid-day', async () => {

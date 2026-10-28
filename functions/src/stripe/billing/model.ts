@@ -17,7 +17,7 @@ export const BILLING_LEASE_MS = 360_000; // Greater than the 300-second worker.
 
 export type BillingErrorCode = 'invalid_request' | 'maintenance' | 'account_unavailable'
   | 'customer_conflict' | 'subscription_exists' | 'trial_ineligible' | 'checkout_terms_changed' | 'checkout_offer_pending'
-  | 'operation_uncertain' | 'provider_unavailable' | 'retry_exhausted' | 'checkout_rejected';
+  | 'checkout_completed' | 'checkout_expired' | 'checkout_replaced' | 'operation_uncertain' | 'provider_unavailable' | 'retry_exhausted' | 'checkout_rejected';
 const MESSAGES: Record<BillingErrorCode, string> = {
   invalid_request: 'This checkout request is not supported. Please refresh and try again.',
   maintenance: 'Billing is temporarily unavailable. Your existing subscription continues normally.',
@@ -27,6 +27,9 @@ const MESSAGES: Record<BillingErrorCode, string> = {
   trial_ineligible: 'This trial is no longer available. Please refresh the pricing page.',
   checkout_terms_changed: 'New Pro trials require a payment method. Refresh the app and review the updated trial terms before continuing.',
   checkout_offer_pending: 'An earlier checkout is still open under different terms. Let it expire before starting a new checkout, or contact support.',
+  checkout_completed: 'Your earlier checkout completed. Refresh Membership to see your subscription or payment before starting another checkout.',
+  checkout_expired: 'This checkout expired. Choose a plan again to start a new checkout.',
+  checkout_replaced: 'You selected another checkout. Continue with your latest selection, or choose a plan again.',
   operation_uncertain: 'Your previous billing request needs review. Please contact support before trying again.',
   provider_unavailable: 'Billing is taking longer than expected. Your request is retained; please try checking it again later.',
   retry_exhausted: 'We could not complete your billing request. Please contact support.',

@@ -1,3 +1,5 @@
+import { resolveSwimChartFocusRange, SwimChartFocus } from '../../../helpers/event-swim-chart-focus.helper';
+import { getUserChartDataTypesToUse } from '../../../helpers/app-chart-data-types.helper';
 import { resolveEventLineContinuity, equalEventLineContinuity, type EventLineContinuitySettings } from '../../../helpers/event-chart-line-continuity.helper';
 import {
   ChangeDetectorRef,
@@ -36,7 +38,6 @@ import { AppEventColorService } from '../../../services/color/app.event.color.se
 import { AppDeviceColorPreferenceService } from '../../../services/color/app-device-color-preference.service';
 import { applyComparisonDeviceAppearance } from '../../../helpers/device-chart-appearance.helper';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
-import { AppUserService } from '../../../services/app.user.service';
 import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
 import {
   AppChartSettingsLocalStorageService,
@@ -117,6 +118,11 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   @Input() isVisible!: boolean;
   @Input() waterMark?: string;
   @Input() darkTheme = false;
+  @Input() swimIntervalFocus: SwimChartFocus | null = null;
+  @Output() swimIntervalFocusCleared = new EventEmitter<SwimChartFocus>();
+  public readonly swimIntervalFocusLabel = signal('');
+  private appliedSwimIntervalFocus: SwimChartFocus | null = null;
+  private dismissedSwimIntervalFocus: SwimChartFocus | null = null;
 
   @Output() loadingStatus = new EventEmitter<boolean>();
 
@@ -359,11 +365,10 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   public get dataTypesToUse(): string[] {
-    return this.user ? this.userService.getUserChartDataTypesToUse(this.user) : [];
+    return this.user ? getUserChartDataTypesToUse(this.user) : [];
   }
 
   private userSettingsQuery = inject(AppUserSettingsQueryService);
-  private userService = inject(AppUserService);
   private activityCursorService = inject(AppActivityCursorService);
   private chartSettingsLocalStorageService = inject(AppChartSettingsLocalStorageService);
   private eventColorService = inject(AppEventColorService);
@@ -504,7 +509,8 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
   ngOnChanges(simpleChanges: SimpleChanges): void {
     if (
-      simpleChanges.event
+      simpleChanges.swimIntervalFocus
+      || simpleChanges.event
       || simpleChanges.selectedActivities
       || simpleChanges.automaticExcludedDataTypes
       || simpleChanges.targetUserID
@@ -784,19 +790,57 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       return;
     }
 
+    this.dismissSwimIntervalFocus();
     this.zoomRange = nextRange;
     this.cdr.markForCheck();
   }
 
   public onResetChartStateRequested(): void {
-    if (this.zoomRange === null && this.previewSelectedRange === null && this.selectedRange === null) {
+    if (this.zoomRange === null && this.previewSelectedRange === null && this.selectedRange === null && !this.appliedSwimIntervalFocus) {
       return;
     }
 
+    this.dismissSwimIntervalFocus();
     this.zoomRange = null;
     this.previewSelectedRange = null;
     this.selectedRange = null;
     this.cdr.markForCheck();
+  }
+
+  public resetSwimIntervalFocus(): void {
+    if (!this.appliedSwimIntervalFocus) return;
+    this.hapticsService.selection();
+    this.dismissSwimIntervalFocus();
+    this.zoomRange = null;
+  }
+
+  private dismissSwimIntervalFocus(focus = this.appliedSwimIntervalFocus): void {
+    this.appliedSwimIntervalFocus = null;
+    this.swimIntervalFocusLabel.set('');
+    if (focus && focus !== this.dismissedSwimIntervalFocus) {
+      this.dismissedSwimIntervalFocus = focus;
+      this.swimIntervalFocusCleared.emit(focus);
+    }
+  }
+
+  private applySwimIntervalFocus(): void {
+    const focus = this.swimIntervalFocus;
+    if (!focus || focus === this.dismissedSwimIntervalFocus) {
+      if (this.appliedSwimIntervalFocus) this.zoomRange = null;
+      this.appliedSwimIntervalFocus = null;
+      this.swimIntervalFocusLabel.set('');
+      return;
+    }
+    const range = this.selectedActivities.includes(focus.activity)
+      ? resolveSwimChartFocusRange(focus, this.renderedXAxisType, this.xDomain) : null;
+    if (!range) {
+      if (this.appliedSwimIntervalFocus) this.zoomRange = null;
+      this.dismissSwimIntervalFocus(focus);
+      return;
+    }
+    this.appliedSwimIntervalFocus = focus;
+    this.swimIntervalFocusLabel.set(focus.label);
+    this.zoomRange = this.normalizeZoomRange(range, this.xDomain);
   }
 
   private scheduleFillOpacityPersist(value: number): void {
@@ -863,6 +907,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     }
 
     if (!shouldRebuildPanels && !shouldRebuildLaps && !shouldRebuildSwimLengths) {
+      this.applySwimIntervalFocus();
       if (this.isLoading) {
         this.loaded();
       }
@@ -934,6 +979,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       this.zoomRange = previousZoomRangeOwnerEventID !== this.zoomRangeOwnerEventID
         ? null
         : this.normalizeZoomRange(this.zoomRange, globalDomain);
+      this.applySwimIntervalFocus();
       this.updateZoomBarOverviewData(globalDomain);
       this.showDateOnTimeAxis = this.resolveShowDateOnTimeAxis(globalDomain, effectiveXAxisType);
     } catch (error) {
@@ -941,6 +987,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
         return;
       }
 
+      this.dismissSwimIntervalFocus(this.swimIntervalFocus);
       this.logger.error('[EventCardChart] Failed to rebuild chart panels', error);
       this.allChartPanels = [];
       this.chartPanels = [];

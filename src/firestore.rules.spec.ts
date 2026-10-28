@@ -681,6 +681,7 @@ describe('Firestore Security Rules', () => {
         it.each([
             { customer: 'cus_forged' }, { price: 'price_unknown' }, { trial_period_days: 730 },
             { sessionId: 'cs_forged' }, { url: 'https://attacker.example' }, { mode: 'payment' },
+            { status: 'updating' }, { replacement: { sessionId: 'cs_forged' } },
             { metadata: { firebaseUID: 'other' } }, { automatic_tax: { enabled: false } },
             { success_url: 'https://attacker.example/' }, { error: { message: 'forged' } },
             { checkout_terms_version: 'future' }, { checkout_terms_version: null }, { payment_method_collection: 'always' }
@@ -691,6 +692,14 @@ describe('Firestore Security Rules', () => {
             const ref = testEnv.authenticatedContext(uid).firestore().doc(path);
             await assertSucceeds(ref.set({ ...payload, checkout_terms_version: 'pro-trial-payment-method-v1' }));
             await assertFails(ref.update({ checkout_terms_version: 'future' }));
+        });
+        it('lets the owner observe server progress without changing it or the selection', async () => {
+            const owner = testEnv.authenticatedContext(uid).firestore().doc(path);
+            await assertSucceeds(owner.set(payload));
+            await testEnv.withSecurityRulesDisabled(async c => { await c.firestore().doc(path).update({ status: 'updating' }); });
+            expect((await assertSucceeds(owner.get())).get('status')).toBe('updating');
+            await assertFails(owner.update({ status: 'ready' }));
+            await assertFails(owner.update({ price: 'price_other' }));
         });
         it('blocks cached clients during maintenance and account deletion', async () => {
             const ref = testEnv.authenticatedContext(uid).firestore().doc(path);

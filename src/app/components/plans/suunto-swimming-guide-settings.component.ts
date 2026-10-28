@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { parseWorkoutStructureV1, type WorkoutStructureV1 } from '@shared/planned-workout';
+import { allowsEarlyLapV1, parseWorkoutStructureV1, type WorkoutStructureV1 } from '@shared/planned-workout';
 import { assessPlannedWorkoutProviderMappingV1 } from '@shared/planned-workout-providers';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { planSuuntoSwimmingScreen, suuntoSwimmingOccurrences, suuntoSwimmingRequiredShapes } from '@shared/suunto-swimming-screen';
@@ -8,7 +8,7 @@ import { SharedModule } from '../../modules/shared.module';
 import { AppUserService } from '../../services/app.user.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { defaultSuuntoSwimmingGuideSettings, normalizeSuuntoSwimmingGuideSettings, parseSuuntoSwimmingGuideSettings,
-  SUUNTO_SWIM_WORK_FIELDS, SUUNTO_SWIM_REST_FIELDS, SUUNTO_SWIM_FIELD_LABELS } from '@shared/suunto-swimming-guide-settings';
+  isSuuntoPreviousLapField, SUUNTO_SWIM_WORK_FIELDS, SUUNTO_SWIM_REST_FIELDS, SUUNTO_SWIM_FIELD_LABELS } from '@shared/suunto-swimming-guide-settings';
 type Phase = 'workFields' | 'restFields';
 let nextSwimmingGuideSettingsId = 0;
 @Component({ selector: 'app-suunto-swimming-guide-settings', standalone: true, imports: [SharedModule],
@@ -32,10 +32,28 @@ export class SuuntoSwimmingGuideSettingsComponent {
   private observedPreferences = '';
   readonly changed = computed(() => JSON.stringify(this.draft()) !== this.baseline());
   readonly sections = computed(() => ([{ key: 'workFields' as const, label: 'Work', allowed: SUUNTO_SWIM_WORK_FIELDS },
-    { key: 'restFields' as const, label: 'Rest', allowed: SUUNTO_SWIM_REST_FIELDS }]).map(section => ({ ...section,
-      fields: this.draft()[section.key].map((field, index) => ({ field, index, label: SUUNTO_SWIM_FIELD_LABELS[field],
-        choices: section.allowed.map(value => ({ value, label: SUUNTO_SWIM_FIELD_LABELS[value],
-          disabled: value !== field && this.draft()[section.key].some(selected => selected === value) })) })) })));
+    { key: 'restFields' as const, label: 'Rest', allowed: SUUNTO_SWIM_REST_FIELDS }]).map(section => {
+      const steps = this.availability()?.rows.filter(row => row.rest === (section.key === 'restFields')) ?? [];
+      return { ...section, fields: this.draft()[section.key].map((field, index) => {
+        const results = steps.flatMap(step => step.choices.filter(choice => choice.field === field));
+        const omitted = results.filter(result => result.state === 'omitted');
+        const textField = field === 'previousPlannedDistance' || field === 'nextPlannedDistance';
+        const phase = `${section.label} ${results.length === 1 ? 'step' : 'steps'}`;
+        const allocation = results.length ? {
+          omitted: omitted.length > 0,
+          summary: omitted.length ? `Omitted on ${omitted.length} of ${results.length} ${phase}.`
+            : results.every(result => result.state === 'heading') ? `In the heading on all ${results.length} ${phase}.`
+              : textField ? `Requested as text on all ${results.length} ${phase}.`
+              : `Included on all ${results.length} ${phase}.`,
+          reasons: [...new Set(results.filter(result => result.state === 'omitted' || textField)
+            .map(result => result.reason))],
+        } : null;
+        return { field, index, label: SUUNTO_SWIM_FIELD_LABELS[field], allocation,
+          descriptionId: `${this.fieldsRegionId}-${section.key}-${field}`,
+          choices: section.allowed.map(value => ({ value, label: SUUNTO_SWIM_FIELD_LABELS[value],
+            disabled: value !== field && this.draft()[section.key].some(selected => selected === value) })) };
+      }) };
+    }));
   readonly canSave = computed(() => !this.saving() && this.changed() && !!this.owner() && this.users.user()?.uid === this.owner());
   readonly availability = computed(() => {
     const value = this.structure();
@@ -45,18 +63,25 @@ export class SuuntoSwimmingGuideSettingsComponent {
       if (assessPlannedWorkoutProviderMappingV1('suunto', structure).level === 'unsupported') {
         return { compact: false, blocked: true, rows: [] };
       }
-      const occurrences = suuntoSwimmingOccurrences(structure);
-      if (!occurrences) return { compact: true, blocked: false, rows: [] };
+      const previousLapReadings = this.draft().restFields.some(isSuuntoPreviousLapField);
+      const occurrences = suuntoSwimmingOccurrences(structure, previousLapReadings);
+      if (!occurrences) {
+        const blocked = previousLapReadings && structure.nodes.some(node => (node.kind === 'step' ? [node] : node.steps)
+          .some(step => allowsEarlyLapV1(step.ending)));
+        return { compact: !blocked, blocked, rows: [] };
+      }
       const units = normalizeUserUnitSettings(this.users.user()?.settings?.unitSettings);
       const rows = occurrences.flatMap((occurrence, index) => {
         if (!['work', 'rest'].includes(occurrence.step.purpose)) return [];
         const result = planSuuntoSwimmingScreen(occurrence.step.purpose === 'rest' ? 'Rest' : 'Work',
           suuntoSwimmingRequiredShapes(occurrence.step), structure.sport, this.draft(), occurrence,
-          occurrences[index - 1], occurrences[index + 1], units);
+          occurrences[index - 1], occurrences[index + 1], units, true, true);
         return [{ ...result, index, rest: occurrence.step.purpose === 'rest',
           requiredCount: result.fields.length, choices: result.choices.map(choice => ({ ...choice,
             label: SUUNTO_SWIM_FIELD_LABELS[choice.field],
-            status: choice.state === 'heading' ? 'Heading' : choice.state === 'included' ? 'Included' : 'Omitted' })) }];
+            status: choice.state === 'heading' ? 'Heading' : choice.state === 'included'
+              ? ['previousPlannedDistance', 'nextPlannedDistance'].includes(choice.field) ? 'Text' : 'Included'
+              : 'Omitted' })) }];
       }).sort((left, right) => Number(right.rest) - Number(left.rest) || left.index - right.index);
       return { compact: false, blocked: false, rows };
     } catch { return null; }
@@ -129,7 +154,7 @@ export class SuuntoSwimmingGuideSettingsComponent {
       await this.users.updateUserProperties(user, { settings: { suuntoSwimmingGuide: settings } });
       if (this.users.user()?.uid !== uid) return;
       this.baseline.set(JSON.stringify(settings));
-      this.notice.set('Saved. Eligible swimming Guides already opted into sync update on the next automatic check. Past and completed copies stay unchanged.');
+      this.notice.set('Saved. Eligible swimming Guides already opted into sync will be checked for updates automatically. Updates reuse the existing Guide; you do not need to create another one. Past and completed copies stay unchanged.');
       this.haptics.success();
     } catch {
       if (this.users.user()?.uid !== uid) return;

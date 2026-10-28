@@ -412,7 +412,7 @@ describe('processActivitySyncTask', () => {
       'before_activity_sync_pending_status_poll_enqueue',
     );
     expect(mockLoggerInfo).toHaveBeenCalledWith(
-      '[ActivitySyncTaskWorker] Wahoo activity upload is still processing; status poll is scheduled.',
+      '[ActivitySyncTaskWorker] Wahoo activity work is deferred; retry is scheduled.',
       expect.objectContaining({
         queueItemId: 'queue-item-1',
         providerState: 'pending',
@@ -423,6 +423,48 @@ describe('processActivitySyncTask', () => {
     );
     expect(mockLoggerWarn).not.toHaveBeenCalled();
     expect(mockLoggerError).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('schedules a Wahoo quota wait without a failed HTTP response (accepted: %s)', async accepted => {
+    const nowMs = Date.now();
+    const scheduledAtMs = nowMs + 8 * 60 * 60 * 1000;
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true, id: 'queue-item-1', ref: { path: 'activitySyncQueue/queue-item-1' },
+      data: () => ({ processed: false, userID: 'user-1', destinationServiceName: 'wahooAPI',
+        ...(accepted ? { destinationUploadID: 'accepted-1' } : {}) }),
+    });
+    mockProcessActivitySyncQueueItem.mockImplementationOnce(async queueItem => {
+      queueItem.dispatchedToCloudTask = scheduledAtMs;
+      return 'RETRY_INCREMENTED';
+    });
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).resolves.toBeUndefined();
+    expect(mockEnqueueActivitySyncTask).toHaveBeenCalledWith('queue-item-1', scheduledAtMs, 28800);
+    expect(mockLoggerInfo).toHaveBeenCalledWith('[ActivityDelivery]', expect.objectContaining({ outcome: 'deferred' }));
+    expect(mockLoggerWarn).not.toHaveBeenCalled();
+    expect(mockLoggerError).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('honors an existing Wahoo daily-quota wait without early processing (accepted: %s)', async accepted => {
+    const scheduledAtMs = Date.now() + 20 * 60 * 60 * 1000;
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true, id: 'queue-item-1', ref: { path: 'activitySyncQueue/queue-item-1' },
+      data: () => ({ processed: false, userID: 'user-1', destinationServiceName: 'wahooAPI',
+        dispatchedToCloudTask: scheduledAtMs, ...(accepted ? { destinationUploadID: 'accepted-1' } : {}) }),
+    });
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).resolves.toBeUndefined();
+    expect(mockProcessActivitySyncQueueItem).not.toHaveBeenCalled();
+    expect(mockEnqueueActivitySyncTask).toHaveBeenCalledWith('queue-item-1', scheduledAtMs, 72000);
+  });
+
+  it('fails for transport recovery when enqueueing a committed Wahoo quota wait fails', async () => {
+    mockQueueGet.mockResolvedValueOnce({ exists: true, id: 'queue-item-1',
+      data: () => ({ processed: false, userID: 'user-1', destinationServiceName: 'wahooAPI' }) });
+    mockProcessActivitySyncQueueItem.mockImplementationOnce(async queueItem => {
+      queueItem.dispatchedToCloudTask = Date.now() + 3600_000;
+      return 'RETRY_INCREMENTED';
+    });
+    mockEnqueueActivitySyncTask.mockRejectedValueOnce(new Error('enqueue unavailable'));
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).rejects.toThrow('enqueue unavailable');
   });
 
   it('re-enqueues an already planned COROS status poll without polling early', async () => {
@@ -499,7 +541,7 @@ describe('processActivitySyncTask', () => {
       900,
     );
     expect(mockLoggerInfo).toHaveBeenCalledWith(
-      '[ActivitySyncTaskWorker] Wahoo activity upload is still processing; status poll is scheduled.',
+      '[ActivitySyncTaskWorker] Wahoo activity work is deferred; retry is scheduled.',
       expect.objectContaining({
         providerState: 'pending',
         taskEnqueued: false,

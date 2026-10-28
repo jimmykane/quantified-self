@@ -26,6 +26,8 @@ import { vi } from 'vitest';
 import { EventCardSwimLengthsComponent } from './event.card.swim-lengths.component';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { HapticTapDirective } from '../../../directives/haptic-tap.directive';
+import { getSwimIntervalActivity } from '../../../helpers/event-swim-interval.helper';
+import { createSwimIntervalFixture } from '../../../helpers/event-swim-interval.test-fixtures';
 
 function createActivity(swimLengths: unknown[]): ActivityInterface {
   return {
@@ -111,6 +113,21 @@ describe('EventCardSwimLengthsComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('mat-row')).toHaveLength(3);
   });
 
+  it.each([null, 2])('retains original lap membership %s in expanded derived intervals', lapIndex => {
+    const source = createSwimIntervalFixture();
+    source.getSwimLengths().forEach(length => length.lapIndex = lapIndex);
+    const before = JSON.stringify(source.toJSON());
+    const display = getSwimIntervalActivity(source)!;
+    component.selectedActivities = [display];
+    component.lap = display.getLaps()[0];
+    component.ngOnChanges();
+    fixture.detectChanges();
+    expect(component.lapLengthTable?.rows.map(row => row.Lap)).toEqual(Array(4).fill(lapIndex === null ? '' : '2'));
+    expect(component.lapLengthTable?.columnNames.includes('Lap')).toBe(lapIndex !== null);
+    expect(component.lapLengthTable?.rows.map(row => row.Strokes)).toEqual(['13', '13', '13', '14']);
+    expect(JSON.stringify(source.toJSON())).toBe(before);
+  });
+
   it.each([6, 10])('renders each recorded 25-yard length of a %s-length interval inline without duplicating set headers', count => {
     const laps = [{}, {}] as LapInterface[];
     const activity = { ...createActivity(Array.from({ length: count }, (_, index) => createSwimLength({
@@ -126,10 +143,13 @@ describe('EventCardSwimLengthsComponent', () => {
     expect(component.lapLengthTable?.rows[0]).toMatchObject({ Duration: '30s', Distance: '25 yd', Strokes: '10', 'Swim Pace': '02:00 min/100yd', 'Normalized SWOLF': '40', SWOLF: '39' });
     expect(fixture.nativeElement.querySelectorAll('mat-row')).toHaveLength(count);
     expect(fixture.nativeElement.querySelector('mat-accordion')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.swim-swolf-heading').getAttribute('aria-label')).toContain('SWOLF (25 yd).');
     expect(haptics.selection).not.toHaveBeenCalled();
     component.unitSettings = { swimPaceUnits: [SwimPaceUnits.MinutesPer100Meter] } as UserUnitSettingsInterface;
     component.ngOnChanges();
     expect(component.lapLengthTable?.rows[0]['Normalized SWOLF']).toBe('43.7');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.swim-swolf-heading').getAttribute('aria-label')).toContain('SWOLF (25 m).');
   });
 
   it('excludes rest from group cadence, strokes, and efficiency while retaining recorded length values', () => {
@@ -142,6 +162,7 @@ describe('EventCardSwimLengthsComponent', () => {
     const group = component.swimLengthViews[0].groups[0];
     expect(group.summaryRow).toMatchObject({ 'Average Stroke Rate': '33 spm', Strokes: '40', SWOLF: '65', 'Normalized SWOLF': '65' });
     expect(group.rows[2]).toMatchObject({ isRest: true, Split: 'Rest', Strokes: '200', SWOLF: '200', 'Normalized SWOLF': '' });
+    expect(component.columnTooltips['Average Stroke Rate']).toBe('Recorded stroke rate for this length, in strokes per minute.');
     group.expanded = true;
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelectorAll('.swim-length-rest-row')).toHaveLength(1);
@@ -187,6 +208,108 @@ describe('EventCardSwimLengthsComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('weights the active-length heart-rate summary by duration and excludes rest', () => {
+    component.selectedActivities = [createActivity([
+      createSwimLength({ index: 1, timerTime: 30, avgHeartRate: 100 }),
+      createSwimLength({ index: 2, timerTime: 90, avgHeartRate: 160 }),
+      createSwimLength({ index: 3, type: 'idle', timerTime: 60, distance: 0, avgHeartRate: 200 }),
+    ])];
+    component.ngOnChanges();
+    const group = component.swimLengthViews[0].groups[0];
+    expect(group.summaryRow['Average Heart Rate']).toBe('145 bpm');
+    expect(group.rows.map(row => row['Average Heart Rate'])).toEqual(['100 bpm', '160 bpm', '200 bpm']);
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { avgHeartRate: null }, { timerTime: null, elapsedTime: null }, { timerTime: -1 },
+  ])('does not substitute a partial heart-rate summary when an active length has %j', missing => {
+    component.selectedActivities = [createActivity([
+      createSwimLength({ index: 1, timerTime: 30, avgHeartRate: 100 }),
+      createSwimLength({ index: 2, timerTime: 90, avgHeartRate: 160, ...missing }),
+    ])];
+    component.ngOnChanges();
+    expect(component.swimLengthViews[0].groups[0].summaryRow['Average Heart Rate']).toBe('');
+  });
+
+  it.each([
+    { unit: SwimPaceUnits.MinutesPer100Meter, pool: 25, distance: '25 m' },
+    { unit: SwimPaceUnits.MinutesPer100Yard, pool: 22.86, distance: '25 yd' },
+  ])('explains incomplete set distance and carries unknown split totals until the next set in $unit', example => {
+    const source = createActivity([
+      createSwimLength({ index: 1, distance: example.pool, poolLength: example.pool }),
+      createSwimLength({ index: 2, distance: null, poolLength: null }),
+      createSwimLength({ index: 3, distance: example.pool, poolLength: example.pool }),
+      createSwimLength({ index: 4, type: 'idle', distance: 0 }),
+      createSwimLength({ index: 5, distance: example.pool, poolLength: example.pool }),
+    ]);
+    const before = JSON.stringify(source.getSwimLengths());
+    component.selectedActivities = [source];
+    component.unitSettings = { swimPaceUnits: [example.unit] } as UserUnitSettingsInterface;
+    component.ngOnChanges();
+    const [incomplete, complete] = component.swimLengthViews[0].groups;
+    expect(incomplete.summaryRow.Distance).toBe('Distance unavailable');
+    expect(incomplete.rows.map(row => row.Split)).toEqual([example.distance, 'Unavailable', 'Unavailable', 'Rest']);
+    expect(incomplete.rows.map(row => row.Distance)).toEqual([example.distance, '', example.distance, '0 ' + (example.pool === 25 ? 'm' : 'yd')]);
+    expect(complete.summaryRow.Distance).toBe(example.distance);
+    expect(complete.rows[0].Split).toBe(example.distance);
+    incomplete.expanded = true;
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.swim-length-group-header').textContent).toContain('Distance unavailable');
+    expect(fixture.nativeElement.textContent).toContain('Cumulative distance is unavailable from this length onward');
+    expect(JSON.stringify(source.getSwimLengths())).toBe(before);
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it.each([SwimPaceUnits.MinutesPer100Meter, SwimPaceUnits.MinutesPer100Yard])(
+    'does not replace an explicitly invalid distance with pool length in %s', unit => {
+      component.unitSettings = { swimPaceUnits: [unit] } as UserUnitSettingsInterface;
+      for (const distance of [Number.NaN, Number.POSITIVE_INFINITY, -1, 'invalid']) {
+        const lengths = [createSwimLength(), createSwimLength({ index: 2, distance }), createSwimLength({ index: 3 })];
+        component.selectedActivities = [createActivity(lengths)];
+        component.ngOnChanges();
+        const group = component.swimLengthViews[0].groups[0];
+        expect(group.summaryRow).toMatchObject({ Distance: 'Distance unavailable', 'Swim Pace': '', 'Normalized SWOLF': '' });
+        expect(group.rows[1]).toMatchObject({ Distance: '', Split: 'Unavailable' });
+        expect(group.rows[2].Split).toBe('Unavailable');
+        expect(group.rows[1].distanceExplanation).toContain('missing or invalid');
+        expect(lengths[1].distance).toBe(distance);
+      }
+    },
+  );
+
+  it('does not count an invalid rest distance as an omitted zero-distance rest', () => {
+    component.selectedActivities = [createActivity([
+      createSwimLength(), createSwimLength({ index: 2, type: 'idle', distance: Number.NaN }),
+    ])];
+    component.ngOnChanges();
+    const group = component.swimLengthViews[0].groups[0];
+    expect(group.summaryRow.Distance).toBe('Distance unavailable');
+    group.expanded = true;
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('this rest length has an invalid recorded distance');
+  });
+
+  it.each([
+    { missingIndex: 1, complete: '4 KCal', rows: ['4 KCal', '', '0 KCal'] },
+    { missingIndex: 2, complete: '9 KCal', rows: ['4 KCal', '5 KCal', ''] },
+  ])('requires energy from active and rest lengths and preserves explicit zero: $missingIndex', example => {
+    const lengths = [
+      createSwimLength({ index: 1, calories: 4 }),
+      createSwimLength({ index: 2, calories: 5 }),
+      createSwimLength({ index: 3, type: 'idle', distance: 0, calories: 0 }),
+    ];
+    lengths[example.missingIndex].calories = null;
+    component.selectedActivities = [createActivity(lengths)];
+    component.ngOnChanges();
+    const group = component.swimLengthViews[0].groups[0];
+    expect(group.summaryRow.Energy).toBe('');
+    expect(group.rows.map(row => row.Energy)).toEqual(example.rows);
+    lengths[example.missingIndex].calories = 0;
+    component.ngOnChanges();
+    expect(component.swimLengthViews[0].groups[0].summaryRow.Energy).toBe(example.complete);
   });
 
   it('should render rows for activities with swim lengths', () => {
@@ -263,7 +386,9 @@ describe('EventCardSwimLengthsComponent', () => {
     expect(groups[0].summaryRow['Average Stroke Rate']).toBe('22 spm');
     expect(groups[0].summaryRow['Average Heart Rate']).toContain('110');
     expect(groups[0].summaryRow.SWOLF).toBe('34');
-    expect(groups[0].summaryRow.Energy).toContain('9');
+    // The rest has no recorded energy, so the available 9 KCal is not a complete set total.
+    expect(groups[0].summaryRow.Energy).toBe('');
+    expect(groups[0].rows.map(row => row.Energy)).toEqual(['4 KCal', '5 KCal', '']);
     expect(groups[0].restDuration).toContain('10');
     expect(groups[0].expanded).toBe(false);
     expect(groups[1].label).toBe('Length 4');
@@ -613,4 +738,28 @@ describe('EventCardSwimLengthsComponent', () => {
     expect(template).not.toContain('getActivityTabLabel(');
     expect(template).not.toContain('isSticky(');
   });
+  it('renders coverage details and affected lengths, with one haptic per disclosure and none on hydration', () => {
+    component.selectedActivities = [createActivity([createSwimLength({ index: 6, strokes: null }),
+      createSwimLength({ index: 7, distance: null, poolLength: null })])];
+    component.ngOnChanges();
+    fixture.detectChanges();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    const summary = fixture.nativeElement.querySelector('.swim-coverage-summary');
+    expect(summary.textContent).toContain('2 of 2 recorded active lengths');
+    summary.querySelector('button').click(); fixture.detectChanges();
+    expect(summary.querySelector('button').getAttribute('aria-expanded')).toBe('true');
+    const details = fixture.nativeElement.querySelector('.swim-coverage-details');
+    expect(details.hidden).toBe(false);
+    expect(details.textContent).toContain('Stroke counts · 1 of 2');
+    expect(details.textContent).toContain('Independent totals recorded by the watch');
+    details.querySelector('button').click(); fixture.detectChanges();
+    expect(details.querySelector('.swim-coverage-affected').textContent).toContain('Length 6');
+    expect(details.querySelector('.swim-coverage-affected').textContent).toContain('Length 7');
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    component.selectedActivities = [createActivity([createSwimLength()])]; component.ngOnChanges();
+    fixture.changeDetectorRef.markForCheck(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.swim-coverage')).toBeNull();
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+  });
+
 });

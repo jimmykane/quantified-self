@@ -785,15 +785,22 @@ tr.mat-row:focus,
   --mat-menu-container-color: var(--qs-overlay-surface);
   background: var(--qs-overlay-surface) !important;
   box-shadow: var(--qs-overlay-shadow) !important;
-  min-width: 180px !important;
+  min-width: min(180px, calc(100vw - 24px)) !important;
   max-width: min(360px, calc(100vw - 24px)) !important;
-  overflow: hidden !important;
+  // Keep Material's panel as the single scroll owner. An unbounded inner
+  // content region cannot scroll when this panel clips it (especially on phones).
+  max-height: calc(100vh - 16px);
+  max-height: calc(100dvh - 16px);
+  min-height: 0;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  overscroll-behavior-y: contain;
 }
 
 /* Form-heavy menu panels */
 .mat-mdc-menu-panel.qs-menu-panel-form,
 .mat-mdc-menu-panel.qs-config-menu {
-  min-width: 280px !important;
+  min-width: min(280px, calc(100vw - 24px)) !important;
   max-width: min(380px, calc(100vw - 24px)) !important;
 }
 
@@ -803,14 +810,13 @@ tr.mat-row:focus,
 
 /* Tile action menus use concise labels and do not need the wider config width. */
 .mat-mdc-menu-panel.qs-tile-actions-menu {
-  min-width: 228px !important;
+  min-width: min(228px, calc(100vw - 24px)) !important;
   max-width: min(320px, calc(100vw - 24px)) !important;
 }
 
 .mat-mdc-menu-panel.qs-menu-panel .mat-mdc-menu-content {
-  overflow: auto;
-  max-height: inherit;
-  border-radius: inherit;
+  overflow: visible;
+  max-height: none;
   padding: 6px 0;
 }
 

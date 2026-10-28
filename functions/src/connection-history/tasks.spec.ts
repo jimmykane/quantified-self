@@ -151,6 +151,37 @@ describe('durable history coordinator', () => {
     mocks.rows.set('queue/item', { processed: true, resultStatus });
     expect(await observeHistoryChildren(['queue/item'])).toBe('skipped');
   });
+  it('continues Suunto history past a completed batch containing a verified Garmin copy', async () => {
+    run = createHistoryRun('owner', ServiceNames.SuuntoApp, { requested: true, rangePreset: '30_days', runId,
+      tokenPath: 'suuntoAppAccessTokens/owner/tokens/account', rootPath: 'suuntoAppAccessTokens/owner',
+      providerUserId: 'account', credentialGeneration: 'credential' }, 'connection', now);
+    run.steps = run.steps.filter(step => step.id === 'activities');
+    run.steps[0].childPaths = ['suuntoAppWorkoutQueue/copy', 'suuntoAppWorkoutQueue/import'];
+    mocks.rows.set(path(), run); mocks.rows.set(run.rootPath, { activeOAuthCredentialGeneration: 'credential' });
+    mocks.rows.set(run.tokenPath, { tokenCredentialGeneration: 'credential' });
+    mocks.rows.set(`users/owner/meta/${run.serviceName}`, { connectionState: 'connected', connectionStateGeneration: 'connection' });
+    mocks.rows.set('suuntoAppWorkoutQueue/copy', { processed: true, resultStatus: 'skipped', skippedReason: 'cross_provider_duplicate' });
+    mocks.rows.set('suuntoAppWorkoutQueue/import', { processed: true });
+    mocks.execute.mockResolvedValueOnce({ count: 1, nextStartMs: run.startMs + 30000, nextPage: 2 });
+
+    await processConnectionHistoryRun(run.id, '0');
+
+    expect(mocks.execute).toHaveBeenCalledTimes(1);
+    expect(saved()).toMatchObject({ processed: false, steps: [{ status: 'queued', done: false,
+      count: 1, nextStartMs: run.startMs + 30000, page: 2, childPaths: [] }] });
+  });
+  it.each(['sleepSyncQueue', 'activitySyncQueue', 'wahooAPIWorkoutQueue'])('does not broaden duplicate completion to %s', async collection => {
+    const child = `${collection}/copy`;
+    mocks.rows.set(child, { processed: true, resultStatus: 'skipped', skippedReason: 'cross_provider_duplicate' });
+    expect(await observeHistoryChildren([child])).toBe('skipped');
+  });
+  it('still waits for unfinished children when another Suunto child is a verified copy', async () => {
+    mocks.rows.set('suuntoAppWorkoutQueue/copy', { processed: true, resultStatus: 'skipped', skippedReason: 'cross_provider_duplicate' });
+    mocks.rows.set('suuntoAppWorkoutQueue/pending', { processed: false });
+    expect(await observeHistoryChildren(['suuntoAppWorkoutQueue/copy', 'suuntoAppWorkoutQueue/pending'])).toBe('pending');
+    mocks.rows.set('suuntoAppWorkoutQueue/pending', { processed: true, resultStatus: 'skipped', skippedReason: 'connection_history_superseded' });
+    expect(await observeHistoryChildren(['suuntoAppWorkoutQueue/copy', 'suuntoAppWorkoutQueue/pending'])).toBe('skipped');
+  });
   it.each(['PERMISSION_MISSING', 'GARMIN_HEALTH_BACKFILL_PERMISSION_MISSING', 'GARMIN_HEALTH_BACKFILL_AUTH_REQUIRED'])('recognizes only the current run’s matching %s failure without exposing DLQ details', async context => {
     mocks.rows.set('failed_jobs/missing', { connectionHistoryRunId: run.id, originalCollection: 'queue', context, error: 'private provider details' });
     expect(await observeHistoryChildren(['queue/missing'], run.id)).toBe('authorization');

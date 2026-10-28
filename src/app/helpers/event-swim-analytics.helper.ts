@@ -1,13 +1,14 @@
 import { getRejectedSwimTiming, resolveSwimTiming } from '@shared/swim-timing';
 import {
-  ActivityInterface, ActivityUtilities, DataActiveLengths, DataCadenceAvg,
-  DataInterface, DataNumber, DataStrokeRateAvg, DataSwimPaceAvg, DataTotalCycles,
+  ActivityInterface, ActivityUtilities, convertSpeedToSwimPace, DataActiveLengths, DataCadenceAvg,
+  DataInterface, DataNumber, DataStrokeRateAvg, DataSwimPace, DataSwimPaceAvg, DataTotalCycles,
   LapInterface, SwimPaceUnits, UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib/metrics';
 import {
   createSwimDistanceDisplayStat, normalizeUserUnitSettings, resolveUnitAwareDisplayStat,
 } from '@shared/unit-aware-display';
 import { AppSwimLength, getRecordedLapActive, getSwimLapLengths, isRestSwimLength } from './event-swim-length.helper';
+import { getDerivedSwimIntervalLengths } from './event-swim-interval-metadata.helper';
 
 export const EVENT_LAP_STROKES_COLUMN = 'Total strokes';
 /** Display-only calculation; does not replace the recorded provider SWOLF. */
@@ -18,6 +19,22 @@ export class DataNormalizedSwolf extends DataNumber {
   }
 }
 export const EVENT_LAP_SWOLF_COLUMN = DataNormalizedSwolf.type;
+
+/** Column meaning is separate from the data class's canonical value/unit formatting. */
+export const SWIM_TABLE_HEADER_TOOLTIPS: Readonly<Record<string, string>> = Object.freeze(Object.assign(Object.create(null), {
+  'Total strokes': 'Total strokes across the active lengths in this interval; excludes rest.',
+  Strokes: 'Recorded stroke count for this individual length.',
+  Lap: 'Original lap number for this recorded length, when available.',
+  'Average Stroke Count': 'Recorded average strokes per length, rather than the total for an interval.',
+  Stroke: 'Stroke recorded for the active lengths. Mixed means more than one stroke type.',
+  'Average Stroke Rate': 'Average active swimming stroke rate, in strokes per minute; excludes rest.',
+  'Average Cadence': 'Average recorded cadence. For swimming, this is the stroke rate per minute.',
+  'Normalized SWOLF': 'Active swim time plus strokes, normalized to the reference distance shown; excludes rest.',
+  SWOLF: 'Original SWOLF recorded by the watch for this length.',
+  Duration: 'Recorded timer duration, falling back to elapsed duration only when timer time was not recorded.',
+  'Swim Pace': 'Average active swim pace; excludes rest.',
+  [DataSwimPaceAvg.type]: 'Average active swim pace; excludes rest.',
+}));
 
 export interface SwimLapAnalytics {
   lengths: AppSwimLength[];
@@ -61,7 +78,8 @@ export function sumSwimValues(values: readonly number[]): number {
   return total;
 }
 
-function completeSum(lengths: readonly AppSwimLength[], getValue: (length: AppSwimLength) => number | null): number | null {
+/** Never present the sum of available samples as a complete length-group total. */
+export function getCompleteSwimLengthSum(lengths: readonly AppSwimLength[], getValue: (length: AppSwimLength) => number | null): number | null {
   if (!lengths.length) {
     return null;
   }
@@ -75,7 +93,29 @@ export function getSwimLengthDuration(length: AppSwimLength): number | null {
 }
 
 export function getSwimLengthDistance(length: AppSwimLength): number | null {
-  return finite(length.distance ?? length.poolLength);
+  return length.distanceIsInvalid ? null : finite(length.distance ?? (isRestSwimLength(length) ? null : length.poolLength));
+}
+
+/** Recorded speed wins; only active lengths may derive pace from usable time and distance. */
+export function getSwimLengthPace(length: AppSwimLength): DataSwimPace | null {
+  if (getRejectedSwimTiming(length)) return null;
+  const speed = finite(length.avgSpeed);
+  if (speed > 0) return new DataSwimPace(convertSpeedToSwimPace(speed));
+  if (isRestSwimLength(length)) return null;
+  const duration = getSwimLengthDuration(length);
+  const distance = getSwimLengthDistance(length);
+  return duration > 0 && distance > 0 ? new DataSwimPace(convertSpeedToSwimPace(distance / duration)) : null;
+}
+
+/** Duration-weighted estimate for the supplied lengths; requires complete HR and timing. */
+export function getSwimLengthHeartRateAverage(lengths: readonly AppSwimLength[]): number | null {
+  const duration = getCompleteSwimLengthSum(lengths, getSwimLengthDuration);
+  const weightedHeartRate = getCompleteSwimLengthSum(lengths, length => {
+    const heartRate = finite(length.avgHeartRate);
+    const seconds = getSwimLengthDuration(length);
+    return heartRate !== null && seconds !== null ? heartRate * seconds : null;
+  });
+  return duration > 0 && weightedHeartRate !== null ? weightedHeartRate / duration : null;
 }
 
 export function getNormalizedSwolf(
@@ -141,15 +181,17 @@ export function getSwimLapAnalytics(
     // collection of lengths as the full interval's totals or average weights.
     const completeLengths = lengths.length > 0
       && (!Number.isInteger(recordedActiveCount) || recordedActiveCount === active.length);
-    const nativeFallback = active.length === lengths.length;
+    // A constructed interval has no independent watch summary to fall back to.
+    // In particular, available rate samples cannot replace its missing stroke total for SWOLF.
+    const nativeFallback = !getDerivedSwimIntervalLengths(lap) && active.length === lengths.length;
     const validTiming = !getRejectedSwimTiming(lap) && !active.some(length => getRejectedSwimTiming(length));
     const nativeTimingFallback = nativeFallback && validTiming;
-    const lengthDuration = completeLengths ? completeSum(active, getSwimLengthDuration) : null;
-    const lengthDistance = completeLengths ? completeSum(active, getSwimLengthDistance) : null;
+    const lengthDuration = completeLengths ? getCompleteSwimLengthSum(active, getSwimLengthDuration) : null;
+    const lengthDistance = completeLengths ? getCompleteSwimLengthSum(active, getSwimLengthDistance) : null;
     const duration = lengthDuration ?? (nativeTimingFallback ? finite(lap.getDuration?.()) : null);
     const distance = lengthDistance ?? (nativeFallback ? finite(lap.getDistance?.()) : null);
     const recordedStrokes = finite(lap.getStat?.(DataTotalCycles.type));
-    const strokes = (completeLengths ? completeSum(active, length => length.strokes) : null)
+    const strokes = (completeLengths ? getCompleteSwimLengthSum(active, length => length.strokes) : null)
       ?? (nativeFallback ? recordedStrokes : null);
     const recordedPace = finite(lap.getStat?.(DataSwimPaceAvg.type));
     const pace = lengthDuration > 0 && lengthDistance > 0 ? 100 * lengthDuration / lengthDistance

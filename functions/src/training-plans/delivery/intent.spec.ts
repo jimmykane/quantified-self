@@ -270,22 +270,31 @@ describe('delivery intent', () => {
       ledger = { ...ledger, acceptedDigest: current.digest, mappingApprovalProof: current.mappingApprovalProof };
     }
   });
-  it('carries only proved unchanged losses across swimming display choices, never granting new authority', () => {
+  it.each([false, true])('carries only proved unchanged losses across swimming display choices (initial previous lap=%s)', previousLap => {
     const transport = new SuuntoGuideTransport(async () => { throw Error('No HTTP during assessment'); }, 'Quantified Self');
     const workout = { ...base.workout!, structure: { ...base.workout!.structure, sport: ActivityTypes.Swimming, nodes: [
       { kind: 'step' as const, id: 'work', purpose: 'work' as const, ending: { kind: 'time' as const, seconds: 90 }, targets: [], note: 'A'.repeat(45) }] } };
     const initial = defaultSuuntoSwimmingGuideSettings();
+    if (previousLap) initial.restFields = ['previousLapPace', 'previousLapDuration', 'previousLapStrokes'];
     const approval = transport.assess(workout, 'account-a', 'Europe/Helsinki', undefined, undefined, undefined, undefined, initial).digest;
     const context: DeliveryContext = { ...base, workout, transport, suuntoSwimmingSettings: initial,
       setting: { ...base.setting!, provider: 'suunto', approvedDigest: approval } };
     let current = resolveDeliveryIntent(context);
     let ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: current.digest,
       acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki'), mappingApprovalProof: current.mappingApprovalProof } as DeliveryLedgerV1;
-    for (const workFields of [['strokes'], ['duration'], ['distance', 'pace']] as const) {
-      const changed = { ...context, suuntoSwimmingSettings: { ...initial, workFields: [...workFields] } };
+    for (const preferences of [
+      { ...initial, workFields: ['strokes'] as const }, { ...initial, workFields: ['duration'] as const },
+      { ...initial, workFields: ['distance', 'pace'] as const },
+      { ...initial, restFields: ['previousLapPace', 'previousLapDuration', 'previousLapStrokes'] as const },
+      { ...initial, restFields: ['previousLapDuration'] as const }, initial,
+    ]) {
+      const settings = { ...preferences, workFields: [...preferences.workFields], restFields: [...preferences.restFields] };
+      const changed = { ...context, suuntoSwimmingSettings: settings };
       current = resolveDeliveryIntent(changed, ledger);
-      expect(current).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });
+      expect(current).toMatchObject({ desired: 'present',
+        status: current.digest === ledger.acceptedDigest ? 'delivered' : 'pending', approvalDigest: null });
       expect(current.mappingApprovalProof!.suuntoApprovedSwimmingSettings).toEqual(initial);
+      expect(current.mappingApprovalProof!.suuntoMappingSwimmingSettings).toEqual(settings);
       expect(resolveDeliveryIntent({ ...changed, workout: { ...workout, title: 'Changed' } }, ledger).status).toBe('approval_required');
       expect(resolveDeliveryIntent({ ...changed, connection: { ...context.connection, epoch: 1 } }, ledger).status).toBe('fresh_consent_required');
       expect(resolveDeliveryIntent({ ...changed, hasPro: false }, ledger).status).toBe('paused_pro');
@@ -400,8 +409,8 @@ describe('delivery intent', () => {
     const ledger = { connectionEpoch: 0, destinationKey: 'account-a', acceptedDigest: prior.digest,
       acceptedContentDigest: deliveryContentDigest(workout, 'Europe/Helsinki') } as DeliveryLedgerV1;
     expect(transport.assess(workout, 'account-a', 'Europe/Helsinki')).toMatchObject({
-      mappingVersion: restPresentation ? 'suunto-guides-v16'
-        : [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(sport) ? 'suunto-guides-v15' : 'suunto-guides-v13',
+      mappingVersion: [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(sport) ? 'suunto-guides-v18'
+        : restPresentation ? 'suunto-guides-v16' : 'suunto-guides-v13',
       compatibleApprovalDigests: expect.arrayContaining([prior.digest]),
     });
     expect(resolveDeliveryIntent(context, ledger)).toMatchObject({ desired: 'present', status: 'pending', approvalDigest: null });

@@ -1,0 +1,10 @@
+:host { display: flex; flex-direction: column; min-height: 0; max-height: 100%; padding: 24px; background: var(--mat-sys-surface); color: var(--mat-sys-on-surface); box-sizing: border-box; }
+.panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; margin-bottom: 16px; }
+h2, p { margin: 0; }
+h2 { font: var(--mat-sys-title-large); font-weight: 600; }
+.panel-heading p, .empty-status { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
+.panel-heading p { margin-top: 5px; }
+.panel-content { overflow-y: auto; min-height: 0; max-height: 65dvh; padding: 1px; }
+.panel-preference { flex-shrink: 0; padding-top: 16px; }
+:host(.history-bottom-sheet) { padding: 8px 0; }
+:host(.history-bottom-sheet) .panel-content { max-height: calc(80dvh - 192px); }

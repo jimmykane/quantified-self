@@ -171,6 +171,40 @@ Wahoo requires six composite indexes: one `tokens` collection-group index on `wa
 - Pro access is required to connect, receive new imports, and run history. Disconnect remains available after Pro access ends.
 - User deletion guards run before queue insertion, worker processing, and event persistence. Local cleanup remains authoritative if provider deauthorization is temporarily unavailable.
 
+### Application API cooldown
+
+Wahoo's [rate-limit headers](https://cloud-api.wahooligan.com/#rate-limiting) describe application-wide quotas.
+`X-RateLimit-Reset` is seconds until reset, not an epoch timestamp. The shared JSON API helper records a 429's
+deadline in the existing server-only `trainingProviderCapacity/wahoo_86400000_app.notBeforeMs`. Its transaction
+only extends that deadline and merges the field, preserving Training's rolling counters. Training already consults
+this application record; activity, route, history and profile calls now check it before sending a request. This adds
+one document read per shared JSON API call, not a new quota counter, queue, scheduler or account record. OAuth token
+exchange/refresh and CDN downloads retain their separate transports. Training's own request counting is unchanged.
+
+Valid reset delays are bounded to one day, with a five-second grace; absent, zero or invalid reset values use five
+minutes. Activity delivery persists the due time through its existing guarded retry transition, adds 1–30 seconds
+of jitter, and acknowledges only after scheduling the delayed task. Early redeliveries reuse that durable schedule.
+Both unaccepted sends and accepted status/type-correction work wait; accepted upload IDs and the pinned type survive,
+so recovery checks the original upload instead of reposting its FIT. Future Wahoo waits do not consume the dispatcher's
+candidate budget. The existing retry budget, expiry, deletion/disconnect guards and uncertain-upload policy remain.
+If the cooldown cannot be read, no provider request starts and the failure remains retryable. A failed cooldown write
+does not erase a definitive 429 rejection. No manual replay or retry-count reset is part of this change.
+
+Actual upstream 429s log WARNING with numeric quota limits, remaining counts and retry delay only. Local waits log
+INFO and use existing deferred/expected-contention observations; new DLQ/manual-reconciliation outcomes remain failures.
+No raw headers, URLs, identities, payloads or credentials are added. Monitoring is **covered/unchanged** by the existing
+activity-delivery outcome filters and future-work exclusions; no monitoring resource apply is needed. Existing Help's
+background-send/status-only recovery explanation remains accurate. No frontend, MCP/Assistant or Training planning
+contract, consent, Rules, index, TTL or migration change is required. Function deployment requires separate approval.
+
+After that approval, the recorded-delivery worker and reconciliation rollout is:
+
+```sh
+firebase deploy --only functions:processActivitySyncTask,functions:dispatchActivitySyncQueue --project quantified-self-io --non-interactive
+```
+
+Other shared Wahoo API consumers receive the cooldown helper through their separately approved function deployments.
+
 ### FIT download diagnostics
 
 `[WahooFITDownload] Request diagnostic.` records each started download request at INFO for a validated FIT

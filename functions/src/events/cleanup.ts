@@ -43,7 +43,24 @@ interface GuardedCleanupResult {
     deletedCount: number;
 }
 
-async function deleteLinkedActivitiesIfEventStillMissing(userId: string, eventId: string): Promise<GuardedCleanupResult> {
+/** Reimports reserve/write children before recreating the parent. An old delete
+ * must also stop at newer children; no additional query or import lease is needed. */
+function hasPostDeletionWrites(
+    documents: readonly admin.firestore.QueryDocumentSnapshot[],
+    deletedEventBoundaryMillis: number | null,
+): boolean {
+    return documents.some(document => {
+        const updatedAtMillis = normalizeTimestampMillis(document.updateTime);
+        // Preserve ambiguous versions too. CloudEvent time is millisecond-normalized,
+        // so writes in the same millisecond cannot safely be assigned to this delete.
+        return deletedEventBoundaryMillis === null || updatedAtMillis === null
+            || updatedAtMillis >= deletedEventBoundaryMillis;
+    });
+}
+
+async function deleteLinkedActivitiesIfEventStillMissing(
+    userId: string, eventId: string, deletedEventBoundaryMillis: number | null,
+): Promise<GuardedCleanupResult> {
     const db = admin.firestore();
     const eventRef = db.doc(`users/${userId}/events/${eventId}`);
     const activitiesQuery = db.collection(`users/${userId}/activities`).where('eventID', '==', eventId);
@@ -59,6 +76,10 @@ async function deleteLinkedActivitiesIfEventStillMissing(userId: string, eventId
             return { skipped: false, deletedCount: 0 };
         }
 
+        if (hasPostDeletionWrites(activitySnapshot.docs, deletedEventBoundaryMillis)) {
+            return { skipped: true, deletedCount: 0 };
+        }
+
         activitySnapshot.docs.forEach((doc) => {
             // Flat activity documents do not own cleanup-managed subcollections.
             transaction.delete(doc.ref);
@@ -68,7 +89,7 @@ async function deleteLinkedActivitiesIfEventStillMissing(userId: string, eventId
     });
 
     if (result.skipped) {
-        logger.warn('[Cleanup] stale_delete_trigger_skipped: event exists again, skipping destructive cleanup.', {
+        logger.warn('[Cleanup] stale_delete_trigger_skipped: event was recreated or child records cannot be attributed to this deletion; skipping destructive cleanup.', {
             userId,
             eventId,
             phase: 'activity_transaction',
@@ -102,7 +123,9 @@ async function deleteReflectionsIfEventStillMissing(userId: string, eventId: str
     }
 }
 
-async function deleteMetadataIfEventStillMissing(userId: string, eventId: string): Promise<GuardedCleanupResult> {
+async function deleteMetadataIfEventStillMissing(
+    userId: string, eventId: string, deletedEventBoundaryMillis: number | null,
+): Promise<GuardedCleanupResult> {
     const db = admin.firestore();
     const eventRef = db.doc(`users/${userId}/events/${eventId}`);
     const metadataRef = db.collection(`users/${userId}/events/${eventId}/metaData`);
@@ -121,6 +144,9 @@ async function deleteMetadataIfEventStillMissing(userId: string, eventId: string
             transaction.get(reverseLinksQuery),
             transaction.get(db.collection('userDeletionTombstones').doc(userId)),
         ]);
+        if (hasPostDeletionWrites(metadataSnapshot.docs || [], deletedEventBoundaryMillis)) {
+            return { skipped: true, deletedCount: 0 };
+        }
         const completionBindings = (reverseLinksSnapshot.docs || []).flatMap((document) => {
             const data = document.data?.() as Record<string, unknown> | undefined;
             return data?.schemaVersion === 1 && typeof data.deliveryId === 'string' && data.deliveryId.length > 0
@@ -180,7 +206,7 @@ async function deleteMetadataIfEventStillMissing(userId: string, eventId: string
     }
 
     if (result.skipped) {
-        logger.warn('[Cleanup] stale_delete_trigger_skipped: event exists again, skipping destructive cleanup.', {
+        logger.warn('[Cleanup] stale_delete_trigger_skipped: event was recreated or child records cannot be attributed to this deletion; skipping destructive cleanup.', {
             userId,
             eventId,
             phase: 'metadata_transaction',
@@ -544,10 +570,12 @@ export const cleanupEventFile = onDocumentDeleted({
 
     logger.info(`[Cleanup] Event ${eventId} for user ${userId} deleted. Checking for original file.`);
     const cleanupFailures: string[] = [];
+    const deletedEventBoundaryMillis = normalizeTimestampMillis((event as { time?: unknown }).time)
+        ?? normalizeTimestampMillis(snap.updateTime);
 
     // Delete linked activities (Flat structure)
     try {
-        const activityCleanup = await deleteLinkedActivitiesIfEventStillMissing(userId, eventId);
+        const activityCleanup = await deleteLinkedActivitiesIfEventStillMissing(userId, eventId, deletedEventBoundaryMillis);
         if (activityCleanup.skipped) {
             return;
         }
@@ -558,7 +586,7 @@ export const cleanupEventFile = onDocumentDeleted({
 
     // Delete linked metaData (Subcollection)
     try {
-        const metadataCleanup = await deleteMetadataIfEventStillMissing(userId, eventId);
+        const metadataCleanup = await deleteMetadataIfEventStillMissing(userId, eventId, deletedEventBoundaryMillis);
         if (metadataCleanup.skipped) {
             return;
         }
@@ -575,8 +603,6 @@ export const cleanupEventFile = onDocumentDeleted({
         if (cleanupDecision === 'guard_failed') {
             cleanupFailures.push('storage_guard');
         } else {
-            const deletedEventBoundaryMillis = normalizeTimestampMillis((event as { time?: unknown }).time)
-                ?? normalizeTimestampMillis(snap.updateTime);
             await deleteSourceFilesForDeletedEventSnapshot(
                 userId,
                 eventId,

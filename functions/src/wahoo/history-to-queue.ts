@@ -353,7 +353,7 @@ export const addWahooAPIHistoryToQueue = onCall({
   if (background === true) {
     const { startManualActivityHistory } = await import('../connection-history/manual-activity');
     const historyImport = await startManualActivityHistory(request.auth.uid, SERVICE_NAME, startDate, endDate);
-    if (historyImport) return { result: 'History import accepted', historyImport };
+    return { result: 'History import accepted', historyImport };
   }
   const nextAllowedDate = await getNextAllowedHistoryImportDate(request.auth.uid, SERVICE_NAME);
   if (nextAllowedDate && nextAllowedDate > new Date()) {

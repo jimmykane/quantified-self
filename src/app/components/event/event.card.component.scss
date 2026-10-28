@@ -117,3 +117,7 @@ mat-card-header mat-icon {
 .event-jumps-divider {
   margin: 16px 0 8px;
 }
+
+app-event-card-chart {
+  scroll-margin-block-start: calc(var(--qs-visible-top-offset, 64px) + 16px);
+}

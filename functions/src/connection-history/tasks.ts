@@ -14,6 +14,7 @@ import { config } from '../config';
 import { enqueueRouteSyncQueueItem } from '../routes/route-sync-queue';
 import type { HistoryExecution } from './execution';
 import { ROUTE_SYNC_QUEUE_COLLECTION_NAME, isRouteHistoryDispatchDue } from '../routes/route-sync.constants';
+import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../suunto/constants';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck, hasProAccess, getUserRoleAndGracePeriod, isGracePeriodActive } from '../utils';
 import { PROVIDER_CLOUD_TASK_RETRY_CONFIG, MAX_PENDING_TASKS } from '../shared/queue-config';
@@ -88,6 +89,10 @@ export async function observeHistoryChildren(paths: string[], runId?: string, ex
   if (liveFailure) return 'failed';
   if (live.some(row => {
     const data = row.data();
+    // A verified Garmin copy already satisfies this Suunto import. Other skips
+    // still stop the scope when authorization or its connection changed.
+    if (row.ref.parent.id === SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME
+      && data?.resultStatus === 'skipped' && data.skippedReason === 'cross_provider_duplicate') return false;
     if (row.ref.parent.id === ROUTE_SYNC_QUEUE_COLLECTION_NAME
       && data?.resultStatus === 'skipped'
       && ['provider_route_up_to_date', 'provider_route_content_unchanged', 'provider_route_not_found'].includes(data.skippedReason)) return false;

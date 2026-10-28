@@ -67,10 +67,11 @@ describe('Suunto History to Queue', () => {
             expect(startManualActivityHistory).toHaveBeenCalledWith('testUserID', SERVICE_NAME, new Date(request.data.startDate), new Date(request.data.endDate));
             expect(history.addHistoryToQueue).not.toHaveBeenCalled();
         });
-        it('retains legacy admission when the connection cannot be safely bound to a coordinator', async () => {
-            vi.mocked(startManualActivityHistory).mockResolvedValue(null);
-            await addSuuntoAppHistoryToQueue(createMockRequest({ data: { startDate: '2026-10-01', endDate: '2026-10-02', background: true } }) as any);
-            expect(history.addHistoryToQueue).toHaveBeenCalledOnce();
+        it('requires reconnect without a legacy scan when the current account cannot be verified', async () => {
+            const error = new HttpsError('failed-precondition', 'Reconnect before importing history.');
+            vi.mocked(startManualActivityHistory).mockRejectedValue(error);
+            await expect(addSuuntoAppHistoryToQueue(createMockRequest({ data: { startDate: '2026-10-01', endDate: '2026-10-02', background: true } }) as any)).rejects.toBe(error);
+            expect(history.addHistoryToQueue).not.toHaveBeenCalled();
         });
         it('preserves a background admission cooldown error without falling back to a provider scan', async () => {
             const error = new HttpsError('permission-denied', 'History import is not allowed until 2026-11-01T00:00:00.000Z');

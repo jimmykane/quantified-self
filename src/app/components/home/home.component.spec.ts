@@ -46,11 +46,15 @@ describe('HomeComponent', () => {
     router = TestBed.inject(Router);
     location = TestBed.inject(Location) as SpyLocation;
     vi.spyOn(router, 'navigate').mockResolvedValue(true);
-    fixture = TestBed.createComponent(HomeComponent);
-    fixture.detectChanges();
   });
 
+  function renderHome(): void {
+    fixture = TestBed.createComponent(HomeComponent);
+    fixture.detectChanges();
+  }
+
   it('keeps anonymous visitors on home and redirects authenticated users to Dashboard', () => {
+    renderHome();
     expect(router.navigate).not.toHaveBeenCalled();
     userSubject.next({ uid: 'test-user' });
     expect(router.navigate).toHaveBeenCalledWith(['/dashboard']);
@@ -61,6 +65,7 @@ describe('HomeComponent', () => {
   });
 
   it('restores the branded hero and keeps the shared Training overview in its feature section', async () => {
+    renderHome();
     const hero = fixture.nativeElement.querySelector('.hero-section') as HTMLElement;
     expect(hero.querySelector('h1')?.textContent).toBe('Your Training Data, Connected. One Dashboard. Every Activity in Context.');
     expect(hero.querySelector('.brand-name')?.textContent).toBe('Quantified Self.io');
@@ -69,8 +74,8 @@ describe('HomeComponent', () => {
     expect(training.textContent).toContain('Sample data');
     expect(training.querySelector('.preview-placeholder--training')).toBeTruthy();
     expect(training.querySelector('app-training-summary-cards')).toBeNull();
-    const [providerBlock, trainingBlock] = await fixture.getDeferBlocks();
-    expect(providerBlock).toBeTruthy();
+    const [trainingBlock] = await fixture.getDeferBlocks();
+    expect(trainingBlock).toBeTruthy();
     await trainingBlock.render(DeferBlockState.Complete);
     fixture.detectChanges();
     expect(training.querySelector('app-training-summary-cards')).toBeTruthy();
@@ -84,6 +89,7 @@ describe('HomeComponent', () => {
   });
 
   it('links only to existing public discovery, membership and onboarding destinations', () => {
+    renderHome();
     const paths = Array.from(fixture.nativeElement.querySelectorAll('a[href]'))
       .map((link: Element) => link.getAttribute('href')!);
     expect(paths.every(path => path === '/login' || path === '/integrations' || path === '/pricing'
@@ -94,20 +100,32 @@ describe('HomeComponent', () => {
     expect(fixture.nativeElement.querySelector('nav[aria-label="Homepage features"]')).toBeTruthy();
   });
 
+  it('prepares homepage examples ahead of scrolling instead of presenting gray blocks', () => {
+    renderHome();
+    const previews = Array.from(fixture.nativeElement.querySelectorAll('app-public-feature-preview')) as HTMLElement[];
+    expect(previews.length).toBeGreaterThan(0);
+    expect(previews.every(preview => preview.classList.contains('preview-prepares-ahead'))).toBe(true);
+  });
+
   it('exposes every supported provider logo and its name to assistive technology', () => {
-    const logos = Array.from(fixture.nativeElement.querySelectorAll('.logos-container [role="img"]')) as HTMLElement[];
+    renderHome();
+    const providerIntro = fixture.nativeElement.querySelector('.hero-section .provider-compatibility') as HTMLElement;
+    expect(providerIntro.querySelector('h2')?.textContent).toBe('Bring It In. Keep It Moving.');
+    expect(providerIntro.querySelector('.provider-compatibility__copy')?.textContent)
+      .toBe('Pro brings new activities into one history automatically and lets you send them along supported sync paths. Connect Garmin, Suunto, COROS, or Wahoo; you choose which services exchange activities.');
+    const logos = Array.from(providerIntro.querySelectorAll('.logos-container [role="img"]')) as HTMLElement[];
     expect(logos.map(logo => logo.getAttribute('aria-label'))).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo']);
     expect(logos.every(logo => logo.getAttribute('aria-hidden') === 'false')).toBe(true);
   });
 
   it('leads with signup, keeps Starter access explicit and leaves pricing in membership', () => {
+    renderHome();
     const hero = fixture.nativeElement.querySelector('.hero-section') as HTMLElement;
-    expect(hero.querySelector('.hero-subtitle')?.textContent).toContain('Pro imports new activities automatically');
-    expect(hero.querySelector('.hero-subtitle')?.textContent).toContain('supported recordings along the paths you choose');
+    expect(hero.querySelector('.hero-subtitle')?.textContent).toBe('Bring your activities, sleep and health data together. See how your training is changing and plan what comes next.');
     expect(hero.querySelector('.hero-access-note')?.textContent).toContain('manual uploads and training analysis on free Starter');
     expect(hero.querySelector('.hero-access-note')?.textContent).toContain('Provider connections and automatic sync require Pro');
     const integrations = fixture.nativeElement.querySelector('#home-integrations') as HTMLElement;
-    expect(integrations.textContent).toContain('you choose which services exchange activities');
+    expect(hero.textContent).toContain('you choose which services exchange activities');
     expect(integrations.querySelector('.integration-actions a[href="/login"]')?.textContent).toContain('Get Started');
     expect(integrations.querySelector('a[href="/pricing"]')).toBeNull();
     expect(integrations.querySelector('.integration-actions a[href="/integrations"]')).toBeTruthy();
@@ -121,6 +139,7 @@ describe('HomeComponent', () => {
     { selector: '.membership-grid mat-card:last-child a', destination: '/pricing' },
     { selector: '.hero-actions a[href="/features/training-analysis"]', destination: '/features/training-analysis' },
   ])('opens $destination from $selector with one shell-owned haptic', async ({ selector, destination }) => {
+    renderHome();
     router.resetConfig(['', 'pricing', 'integrations', 'login', 'features/training-analysis'].map(path => ({ path, component: HomeDestinationStub })));
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     TestBed.inject(ShellNavigationEffectsService);
@@ -139,6 +158,7 @@ describe('HomeComponent', () => {
     { selector: '.integration-actions a[href="/login"]', destination: 'login' },
     { selector: '.membership-grid mat-card:last-child a', destination: 'pricing' },
   ])('keeps canceled navigation from $selector silent', async ({ selector, destination }) => {
+    renderHome();
     router.resetConfig([
       { path: '', component: HomeDestinationStub },
       { path: destination, component: HomeDestinationStub, canActivate: [() => false] },
@@ -155,18 +175,19 @@ describe('HomeComponent', () => {
   });
 
   it('retains every shared product visual and detailed feature section', () => {
+    renderHome();
     const sections = Array.from(fixture.nativeElement.querySelectorAll('.landing-page > section'))
       .map((section: Element) => section.className);
-    expect(sections).toEqual(['hero-section', 'integrations-section', 'feature-section training-section',
+    expect(sections).toEqual(['hero-section', 'feature-section training-section',
       'feature-section workouts-section', 'feature-section training-plans-section', 'feature-section health-section',
       'feature-section ai-insights-section', 'feature-section footprint-section', 'feature-section analysis-section',
-      'getting-started-section', 'membership-section', 'sovereignty-section', 'faq-section', 'final-cta-section']);
+      'integrations-section', 'getting-started-section', 'membership-section', 'sovereignty-section', 'faq-section', 'final-cta-section']);
     const previews = fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent));
     expect(previews.map(preview => preview.componentInstance.previewKey()))
-      .toEqual(['provider-flow', 'training-snapshot', 'training-readiness', 'training-signals',
+      .toEqual(['training-snapshot', 'training-readiness', 'training-signals',
         'training-explorer', 'dashboard', 'workout-analysis', 'training-plans',
         'health-overview', 'health-sleep', 'health-hrv', 'health-note-comparison', 'health-weight', 'assistant-example', 'mcp-flow',
-        'activity-map', 'reviewer-benchmark']);
+        'activity-map', 'reviewer-benchmark', 'provider-flow']);
     expect(previews.every(preview => !!preview.nativeElement.querySelector(':scope > div[data-nosnippet]'))).toBe(true);
     expect(fixture.nativeElement.querySelector('app-training-explorer-preview')).toBeNull();
     expect(fixture.nativeElement.querySelector('app-workout-profile')).toBeNull();
@@ -195,6 +216,7 @@ describe('HomeComponent', () => {
   });
 
   it('uses shared tier limits and clearly distinguishes free uploads from Pro connections', () => {
+    renderHome();
     const memberships = fixture.componentInstance.memberships;
     expect(memberships[0].features).toContain(`Up to ${USAGE_LIMITS.free} activities`);
     expect(memberships[0].features).toContain(`Up to ${ROUTE_USAGE_LIMITS.free} saved routes`);
@@ -213,6 +235,7 @@ describe('HomeComponent', () => {
   });
 
   it('opens and closes FAQ answers with one feedback owner and valid control targets', () => {
+    renderHome();
     const buttons = Array.from(fixture.nativeElement.querySelectorAll('.faq-row button')) as HTMLButtonElement[];
     expect(buttons.every(button => button.getAttribute('aria-expanded') === 'false')).toBe(true);
     expect(buttons.every(button => !!fixture.nativeElement.querySelector('#' + button.getAttribute('aria-controls')))).toBe(true);
@@ -234,6 +257,7 @@ describe('HomeComponent', () => {
   });
 
   it('keeps every feature visible with direct jump links rather than selection controls', () => {
+    renderHome();
     const links = Array.from(fixture.nativeElement.querySelectorAll('.home-navigation a')) as HTMLAnchorElement[];
     expect(links.map(link => link.getAttribute('href')))
       .toEqual(fixture.componentInstance.features.map(feature => '#home-' + feature.id));
@@ -249,11 +273,13 @@ describe('HomeComponent', () => {
 
   it.each(['training', 'workouts', 'plans', 'health', 'assistant', 'maps', 'comparisons', 'integrations'])(
     'jumps directly to %s without hiding or replacing any shared preview', async id => {
+      renderHome();
       const previews = Array.from(fixture.nativeElement.querySelectorAll('app-public-feature-preview'));
       const target = fixture.nativeElement.querySelector('#home-' + id) as HTMLElement;
       const scrollIntoView = vi.fn();
       target.scrollIntoView = scrollIntoView;
       const heading = fixture.nativeElement.querySelector('#' + target.getAttribute('aria-labelledby')) as HTMLElement;
+      expect(target.contains(heading)).toBe(true);
       const focus = vi.spyOn(heading, 'focus');
       fixture.nativeElement.querySelector(`.home-navigation a[href="#home-${id}"]`).click();
       fixture.detectChanges();
@@ -269,6 +295,7 @@ describe('HomeComponent', () => {
   );
 
   it('restores direct section links, query parameters and browser history silently', () => {
+    renderHome();
     fixture.destroy();
     location.go('/?source=homepage#home-plans');
     fixture = TestBed.createComponent(HomeComponent);
@@ -292,6 +319,7 @@ describe('HomeComponent', () => {
   });
 
   it('moves focus into the chosen feature so keyboard navigation continues from that section', async () => {
+    renderHome();
     document.body.appendChild(fixture.nativeElement);
     const link = fixture.nativeElement.querySelector('.home-navigation a[href="#home-health"]') as HTMLAnchorElement;
     const heading = fixture.nativeElement.querySelector('#home-health-title') as HTMLElement;
@@ -314,6 +342,7 @@ describe('HomeComponent', () => {
   });
 
   it('keeps focus unchanged during browser history restoration', () => {
+    renderHome();
     const focus = vi.spyOn(HTMLElement.prototype, 'focus');
     location.simulateUrlPop('/#home-health');
     fixture.detectChanges();
@@ -322,6 +351,7 @@ describe('HomeComponent', () => {
   });
 
   it('returns Back to the exact unanchored view and Forward to the point left within a feature', () => {
+    renderHome();
     const shell = document.createElement('mat-sidenav-content');
     document.body.appendChild(shell);
     shell.appendChild(fixture.nativeElement);
@@ -354,6 +384,7 @@ describe('HomeComponent', () => {
   });
 
   it('keeps separate reading positions for repeated visits to the same feature URL', () => {
+    renderHome();
     const shell = document.createElement('mat-sidenav-content');
     document.body.appendChild(shell);
     shell.appendChild(fixture.nativeElement);
@@ -387,6 +418,7 @@ describe('HomeComponent', () => {
   });
 
   it('preserves existing query/history state and restores a saved view after recreating the homepage', () => {
+    renderHome();
     const shell = document.createElement('mat-sidenav-content');
     document.body.appendChild(shell);
     shell.appendChild(fixture.nativeElement);
@@ -413,6 +445,7 @@ describe('HomeComponent', () => {
   });
 
   it('keeps initialization, invalid and unchanged destinations silent and cleans up history listeners', () => {
+    renderHome();
     const component = fixture.componentInstance;
     component.jumpToFeature('invalid');
     expect(location.path(true)).toBe('');
@@ -432,6 +465,7 @@ describe('HomeComponent', () => {
   });
 
   it('preserves modified section links and leaves public-route haptics to the shell', () => {
+    renderHome();
     const event = new MouseEvent('click', { ctrlKey: true, cancelable: true });
     fixture.componentInstance.jumpToFeature('health', event);
     expect(event.defaultPrevented).toBe(false);

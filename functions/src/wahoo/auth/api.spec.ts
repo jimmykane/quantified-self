@@ -1,10 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const fetchMock = vi.fn();
+const cooldownMock = vi.fn();
+const extendCooldownMock = vi.fn();
 vi.mock('node-fetch', () => ({ default: (...args: unknown[]) => fetchMock(...args) }));
+vi.mock('../rate-limit', async importOriginal => ({
+  ...await importOriginal<typeof import('../rate-limit')>(),
+  getWahooRateLimitCooldownSeconds: (...args: unknown[]) => cooldownMock(...args),
+  extendWahooRateLimitCooldown: (...args: unknown[]) => extendCooldownMock(...args),
+}));
 
 import { deauthorizeWahooUser, getWahooUserID, requestWahooAPI, WahooAPIRequestError } from './api';
 import { WAHOO_API_REQUEST_TIMEOUT_MS } from '../constants';
+import * as logger from 'firebase-functions/logger';
 
 function response(status: number, body: unknown, headers: Record<string, string> = {}) {
   return {
@@ -19,6 +27,8 @@ describe('Wahoo auth API helpers', () => {
   beforeEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
+    cooldownMock.mockResolvedValue(0);
+    extendCooldownMock.mockImplementation(async (seconds: number) => seconds + 5);
   });
 
   it('gets the stable Wahoo user id with a bearer token', async () => {
@@ -76,8 +86,49 @@ describe('Wahoo auth API helpers', () => {
     fetchMock.mockResolvedValue(response(429, { error: 'rate limited' }, { 'x-ratelimit-reset': '300' }));
     await expect(requestWahooAPI('access', '/v1/workouts')).rejects.toMatchObject<WahooAPIRequestError>({
       statusCode: 429,
-      resetAfterSeconds: 300,
+      resetAfterSeconds: 305,
     });
+    expect(extendCooldownMock).toHaveBeenCalledExactlyOnceWith(300);
+  });
+
+  it('prevents requests for another account and endpoint during the shared cooldown', async () => {
+    cooldownMock.mockResolvedValue(1800);
+    await expect(requestWahooAPI('other-access', '/v1/workout_file_uploads', 'POST')).rejects.toMatchObject({
+      statusCode: 429, resetAfterSeconds: 1800,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(extendCooldownMock).not.toHaveBeenCalled();
+  });
+
+  it('fails before provider work when the shared deadline cannot be read', async () => {
+    cooldownMock.mockRejectedValueOnce(new Error('database unavailable'));
+    await expect(requestWahooAPI('access', '/v1/workouts')).rejects.toMatchObject({ requestStarted: false });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('logs only numeric quota diagnostics, never headers, paths, credentials or provider bodies', async () => {
+    fetchMock.mockResolvedValue(response(429, { error: 'PRIVATE' }, {
+      'x-ratelimit-reset': '3600', 'x-ratelimit-limit': '5000,1000,200', 'x-ratelimit-remaining': '3,0,0',
+    }));
+    await expect(requestWahooAPI('PRIVATE', '/v1/workouts/PRIVATE')).rejects.toMatchObject({ resetAfterSeconds: 3605 });
+    expect(logger.warn).toHaveBeenCalledWith('[WahooAPI] Application API quota exceeded; shared cooldown requested.', {
+      retryAfterSeconds: 3605, quotaLimits: [5000, 1000, 200], quotaRemaining: [3, 0, 0],
+    });
+    expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain('PRIVATE');
+  });
+
+  it('keeps a rejected upload retryable if persisting the cooldown fails', async () => {
+    fetchMock.mockResolvedValue(response(429, null));
+    extendCooldownMock.mockRejectedValueOnce(new Error('database unavailable'));
+    await expect(requestWahooAPI('access', '/v1/workout_file_uploads', 'POST')).rejects.toMatchObject({
+      statusCode: 429, resetAfterSeconds: 300,
+    });
+  });
+
+  it('does not let diagnostic failures change a definitive quota rejection', async () => {
+    fetchMock.mockResolvedValue(response(429, null));
+    vi.mocked(logger.warn).mockImplementationOnce(() => { throw new Error('logger unavailable'); });
+    await expect(requestWahooAPI('access', '/v1/workout_file_uploads', 'POST')).rejects.toMatchObject({ statusCode: 429 });
   });
 
   it('retains the parsed provider error body for safe caller diagnostics', async () => {

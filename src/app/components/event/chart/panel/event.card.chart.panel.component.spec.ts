@@ -3551,6 +3551,84 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.series?.[0]?.markLine?.tooltip).toEqual({ show: false });
   });
 
+  it('renders a zoom-aligned swim/rest strip without changing metric data or its y axis, and removes it when disabled', async () => {
+    component.showZoomBar = false;
+    await renderComponent();
+    const originalOption = getRenderedOption();
+    const marker = { markerType: 'swimLength' as const, timelineStartXValue: 0, xValue: 30,
+      label: 'Length 1', color: '#2656a8', swimLengthIndex: 1, swimLengthType: 'active', isIdle: false,
+      activityID: 'a1', activityName: 'Garmin', tooltipTitle: 'Length 1 (Active)',
+      tooltipDetails: [{ label: 'Swim Pace', value: '02:00 min/100m' }] };
+    fixture.componentRef.setInput('swimLengthMarkers', [marker,
+      { ...marker, timelineStartXValue: 30, xValue: 50, swimLengthIndex: 2, swimLengthType: 'idle', isIdle: true,
+        tooltipTitle: 'Length 2 (Idle)', tooltipDetails: [{ label: 'Duration', value: '00:20' }] },
+      { ...marker, timelineStartXValue: 60, xValue: 90, swimLengthIndex: 3 }]);
+    await renderComponent();
+    const option = getRenderedOption();
+    const strip = option.series.find(series => series.id === 'swim-rest-timeline');
+    expect(strip.data.map(item => item.value)).toEqual([[0, 30, 0], [30, 50, 0], [60, 90, 0]]);
+    expect(option.grid.top).toBe(originalOption.grid.top + 22);
+    expect([option.yAxis.min, option.yAxis.max, option.yAxis.inverse, option.yAxis.type])
+      .toEqual([originalOption.yAxis.min, originalOption.yAxis.max, originalOption.yAxis.inverse, originalOption.yAxis.type]);
+    expect(option.series[0].data).toEqual(originalOption.series[0].data);
+    expect(strip.tooltip.trigger).toBe('item');
+    expect(strip.tooltip.show).toBe(false);
+    expect(chart.on).toHaveBeenCalledWith('click', { seriesId: 'swim-rest-timeline' }, expect.any(Function));
+    const click = chart.on.mock.calls.find(([name]) => name === 'click')?.[2];
+    expect(click).toBeTypeOf('function');
+    click({ componentType: 'series', seriesId: 'swim-rest-timeline', data: strip.data[1], event: { offsetX: 100, offsetY: 15 } });
+    const showTip = chart.dispatchAction.mock.calls.at(-1)[0];
+    expect(showTip).toMatchObject({ type: 'showTip', escapeConnect: true });
+    expect(showTip.tooltip.formatter()).toContain('Duration: 00:20');
+    expect(strip.silent).toBe(false);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[aria-label="Swim and rest timeline legend"]').textContent).toContain('Gaps: unavailable');
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+    expect(eChartsLoaderMock.attachMobileSeriesTapFeedback).toHaveBeenCalled();
+
+    const canvasContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    const rendered = init(null, undefined, { renderer: 'svg', ssr: true, width: 640, height: 320 });
+    const apply = () => rendered.setOption(getRenderedOption(), {
+      notMerge: false, replaceMerge: ['series', 'xAxis', 'yAxis', 'dataZoom'], lazyUpdate: false,
+    });
+    try {
+      apply();
+      expect(rendered.renderToSVGString()).toContain('stroke-dasharray="3,2"');
+      rendered.dispatchAction({ type: 'dataZoom', startValue: 20, endValue: 70 });
+      expect(rendered.renderToSVGString()).toContain('stroke-dasharray="3,2"');
+      fixture.componentRef.setInput('showSwimLengths', false);
+      await renderComponent();
+      apply();
+      expect(rendered.getOption().series).toHaveLength(originalOption.series.length);
+      expect(getRenderedOption().grid.top).toBe(originalOption.grid.top);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('[aria-label="Swim and rest timeline legend"]')).toBeNull();
+    } finally {
+      rendered.dispose();
+      canvasContext.mockRestore();
+    }
+  });
+
+  it('keeps comparison timelines separate, hides the strip on distance axes, and disables preview interaction', async () => {
+    const base = component.panel!.series[0];
+    fixture.componentRef.setInput('panel', { ...component.panel!, series: [base,
+      { ...base, id: 'second', activityID: 'second', activityName: 'Suunto' }] });
+    fixture.componentRef.setInput('swimLengthMarkers', ['a1', 'second', 'unselected'].map(activityID => ({
+      markerType: 'swimLength', timelineStartXValue: 0, xValue: 30, label: 'Length 1', color: '#2656a8',
+      swimLengthIndex: 1, swimLengthType: 'active', isIdle: false, activityID, activityName: activityID,
+      tooltipTitle: 'Length 1', tooltipDetails: [],
+    })));
+    fixture.componentRef.setInput('previewMode', true);
+    await renderComponent();
+    expect(component.swimTimelineLanes().map(lane => lane.activityID)).toEqual(['a1', 'second']);
+    expect(getRenderedOption().series.find(series => series.id === 'swim-rest-timeline').silent).toBe(true);
+    expect(getRenderedOption().grid.top).toBe(52);
+    fixture.componentRef.setInput('xAxisType', XAxisTypes.Distance);
+    await renderComponent();
+    expect(getRenderedOption().series.some(series => series.id === 'swim-rest-timeline')).toBe(false);
+    expect(component.swimTimelineLanes()).toEqual([]);
+  });
+
   it('renders lap and swim length markers together with swim idle styling', async () => {
     component.showZoomBar = false;
     component.showLaps = true;

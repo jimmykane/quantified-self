@@ -3,7 +3,7 @@ import {
   ActivityInterface, DataActiveLap, DataActiveLengths, DataCadenceAvg, DataDistance, DataDuration, DataInterface, DataStrokeRateAvg,
   DataSwimPaceAvg, DataTotalCycles, LapInterface, SwimPaceUnits,
 } from '@sports-alliance/sports-lib';
-import { getSwimLapAnalytics, getSwimLapDisplayMetric, getNormalizedSwolf, getSwolfColumnLabel, isRestSwimLap } from './event-swim-analytics.helper';
+import { getCompleteSwimLengthSum, getSwimLengthHeartRateAverage, getSwimLapAnalytics, getSwimLapDisplayMetric, getNormalizedSwolf, getSwolfColumnLabel, isRestSwimLap } from './event-swim-analytics.helper';
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 import { getEventLapMetricStat, formatEventLapMetric, getAverageEventLapMetrics, getSelectedEventLapSummaryMetrics, getDefaultEventLapMetricTypes, getSelectedEventLapMetricTypes, getEventLapMetricOptionGroups, EVENT_LAP_STROKE_COLUMN } from './event-lap-table-columns.helper';
 import { EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN } from './event-swim-analytics.helper';
@@ -27,6 +27,43 @@ function activity(laps: LapInterface[], lengths: unknown[]): ActivityInterface {
 }
 
 describe('swim interval analytics', () => {
+  it('uses complete duration-weighted HR and the recorded elapsed fallback without changing lengths', () => {
+    const lengths = [normalizeSwimLength(length(1, { timerTime: 30, avgHeartRate: 100 }))!,
+      normalizeSwimLength(length(2, { timerTime: null, elapsedTime: 90, avgHeartRate: 160 }))!];
+    const before = JSON.stringify(lengths);
+    expect(getSwimLengthHeartRateAverage(lengths)).toBe(145);
+    expect(JSON.stringify(lengths)).toBe(before);
+  });
+
+  it.each([
+    { avgHeartRate: null }, { avgHeartRate: -1 }, { timerTime: -1 },
+    { timerTime: null, elapsedTime: null },
+    { timingValidity: { version: 1, reason: 'exceeds-workout-envelope', timerTime: 4000000 } },
+  ])('requires complete usable HR and timing for the weighted mean: %j', invalid => {
+    const lengths = [normalizeSwimLength(length(1, { avgHeartRate: 100 }))!,
+      normalizeSwimLength(length(2, { avgHeartRate: 160, ...invalid }))!];
+    expect(getSwimLengthHeartRateAverage(lengths)).toBeNull();
+  });
+
+  it('respects explicit zero timing and never produces a weighted HR for zero total time', () => {
+    const stopped = normalizeSwimLength(length(1, { timerTime: 0, avgHeartRate: 200 }))!;
+    const active = normalizeSwimLength(length(2, { timerTime: 30, avgHeartRate: 100 }))!;
+    expect(getSwimLengthHeartRateAverage([stopped, active])).toBe(100);
+    expect(getSwimLengthHeartRateAverage([stopped])).toBeNull();
+    expect(getSwimLengthHeartRateAverage([])).toBeNull();
+  });
+
+  it('requires complete nonnegative contributing totals while retaining recorded zeros', () => {
+    const lengths = [normalizeSwimLength(length(1, { strokes: 0 }))!,
+      normalizeSwimLength(length(2, { strokes: 10 }))!];
+    expect(getCompleteSwimLengthSum(lengths, item => item.strokes)).toBe(10);
+    for (const missing of [null, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      lengths[1].strokes = missing;
+      expect(getCompleteSwimLengthSum(lengths, item => item.strokes)).toBeNull();
+    }
+    expect(getCompleteSwimLengthSum([], item => item.strokes)).toBeNull();
+  });
+
   it('retains distance, strokes and rests without elapsed/native fallback for rejected active timing', () => {
     const timingValidity = { version: 1, reason: 'exceeds-workout-envelope', timerTime: 4000000 };
     const native = Object.assign(lap(50, 4000000), { timingValidity });
@@ -144,6 +181,15 @@ describe('swim interval analytics', () => {
     expect(result?.swolf?.getValue()).toBe(40);
     expect(getAverageEventLapMetrics(laps, [DataStrokeRateAvg.type, DataSwimPaceAvg.type], units, 'Swimming', swim))
       .toEqual([{ type: DataStrokeRateAvg.type, display: '20 spm' }, { type: DataSwimPaceAvg.type, display: '02:00 min/100m' }]);
+  });
+
+  it('retains the recorded pace/rate fallback for native laps without lengths or stroke counts', () => {
+    const native = lap(25, 30, 20, true);
+    const result = getSwimLapAnalytics(activity([native], [])).get(native);
+    expect(result?.strokes).toBeNull();
+    expect(result?.swolf?.getValue()).toBe(40);
+    expect(result?.pace?.getValue()).toBe(120);
+    expect(result?.cadence?.getValue()).toBe(20);
   });
   it('does not substitute partial lengths for whole interval metrics when the recorded active count differs', () => {
     const laps = [lap(150, 180, 20, true, {

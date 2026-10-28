@@ -4,6 +4,11 @@ import { NgComponentOutlet } from '@angular/common';
 import { describe, beforeEach, it, expect, vi } from 'vitest';
 import { AppShellHeaderComponent } from './app-shell-header.component';
 import { DashboardHeaderUploadComponent } from '../dashboard/dashboard-header-upload/dashboard-header-upload.component';
+import { HistoryImportProgressService } from '../../services/history-import-progress.service';
+import { computed, signal } from '@angular/core';
+import { buildHistoryImportProgress } from '../../helpers/history-import-progress.helper';
+import { MatDialog } from '@angular/material/dialog';
+import { MatBottomSheet } from '@angular/material/bottom-sheet';
 
 describe('AppShellHeaderComponent', () => {
   let component: AppShellHeaderComponent;
@@ -19,6 +24,10 @@ describe('AppShellHeaderComponent', () => {
     await TestBed.configureTestingModule({
       declarations: [AppShellHeaderComponent],
       imports: [NgComponentOutlet],
+      providers: [
+        {provide: HistoryImportProgressService, useValue: {owner: signal(null), view: computed(() => buildHistoryImportProgress([], Date.now())), refreshing: signal(false)}},
+        {provide: MatDialog, useValue: {}}, {provide: MatBottomSheet, useValue: {}},
+      ],
       schemas: [NO_ERRORS_SCHEMA]
     }).compileComponents();
 
@@ -86,5 +95,24 @@ describe('AppShellHeaderComponent', () => {
 
     expect(component.dashboardHeaderUploadComponent()).not.toBeNull();
     expect(fixture.nativeElement.querySelector('app-dashboard-header-upload')).toBeTruthy();
+  });
+
+  it('only loads history status for authenticated chrome and clears it on sign-out', async () => {
+    fixture.detectChanges(); expect(component.historyImportComponent()).toBeNull();
+    component.authState = true;
+    await component['historyImportLoad']; fixture.detectChanges();
+    expect(component.historyImportComponent()).not.toBeNull();
+    component.authState = false; fixture.detectChanges();
+    expect(component.historyImportComponent()).toBeNull();
+    expect(fixture.nativeElement.querySelector('app-history-import-indicator')).toBeNull();
+  });
+
+  it('does not install a delayed status component after sign-out or teardown', async () => {
+    component.authState = true; component.authState = false;
+    await component['historyImportLoad'];
+    expect(component.historyImportComponent()).toBeNull();
+    component.authState = true; fixture.destroy();
+    await component['historyImportLoad'];
+    expect(fixture.nativeElement.querySelector('app-history-import-indicator')).toBeNull();
   });
 });

@@ -109,10 +109,12 @@ describe('COROS History to Queue', () => {
             expect(history.addHistoryToQueue).not.toHaveBeenCalled();
             expect(accountMocks.getActiveCOROSTokenSnapshot).not.toHaveBeenCalled();
         });
-        it('retains the manual path for legacy connections', async () => {
-            vi.mocked(startManualActivityHistory).mockResolvedValue(null);
-            await addCOROSAPIHistoryToQueue({ ...data, background: true }, context);
-            expect(history.addHistoryToQueue).toHaveBeenCalled();
+        it('requires reconnect without a legacy scan when the current account cannot be verified', async () => {
+            const error = new https.HttpsError('failed-precondition', 'Reconnect before importing history.');
+            vi.mocked(startManualActivityHistory).mockRejectedValue(error);
+            await expect(addCOROSAPIHistoryToQueue({ ...data, background: true }, context)).rejects.toBe(error);
+            expect(history.addHistoryToQueue).not.toHaveBeenCalled();
+            expect(accountMocks.getActiveCOROSTokenSnapshot).not.toHaveBeenCalled();
         });
         it('preserves a busy reservation before importing any window', async () => {
             const error = new https.HttpsError('already-exists', 'A recent-history import is already running. Please wait for it to finish.');

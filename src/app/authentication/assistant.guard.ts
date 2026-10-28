@@ -5,7 +5,7 @@ import { filter, startWith, take } from 'rxjs/operators';
 import { AppAuthService } from './app.auth.service';
 import { AppUserService, isActionableProfileReadState } from '../services/app.user.service';
 import { LoggerService } from '../services/logger.service';
-import { AppUserUtilities } from '../utils/app.user.utilities';
+import { AppUserAccess } from '../helpers/user-access.helper';
 import { getAssistantRequestLimitForRole } from '@shared/limits';
 
 @Injectable({
@@ -67,7 +67,7 @@ class AssistantPermissionsService {
       const explicitlyCompleted = (user as any).onboardingCompleted === true;
       const onboardingCompleted = termsAccepted && (hasSubscribedOnce || explicitlyCompleted);
       const isAdmin = (user as any).admin === true;
-      const hasPaidAssistantAccess = AppUserUtilities.hasPaidAccessUser(user, isAdmin);
+      const hasPaidAssistantAccess = AppUserAccess.hasPaidAccessUser(user, isAdmin);
       const stripeRole = `${(user as any).stripeRole || 'free'}`;
       let hasConfiguredAssistantAccess = false;
       try {

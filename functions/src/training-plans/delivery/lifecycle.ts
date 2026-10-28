@@ -5,8 +5,9 @@ import { getUserDeletionGuardStateInTransaction } from '../../shared/user-deleti
 import { stageTrainingDeliveryReconciliation } from './marker';
 import { DELIVERY_SERVICES, productionDeliveryRuntime } from './runtime';
 import { DELIVERY_STATE } from './contracts';
+import { normalizeSuuntoSwimmingGuideSettings } from '../../../../shared/suunto-swimming-guide-settings';
 
-type LifecycleEvent = { id: string; trigger: 'connection' | 'entitlement' };
+type LifecycleEvent = { id: string; trigger: 'connection' | 'entitlement' | 'guide-settings' };
 type LifecycleStage = 'runtime' | 'transaction' | 'deletion_guard' | 'delivery_state' | 'commit';
 type LifecycleOutcome = 'reconciliation_staged' | 'deletion_guard_skipped' | 'no_delivery_state';
 
@@ -79,3 +80,15 @@ export const onTrainingDeliveryConnectionChanged = onDocumentWritten({
 export const onTrainingDeliveryEntitlementChanged = onDocumentWritten({
   document: 'users/{uid}/system/status', region: 'europe-west2', memory: '512MiB', retry: true,
 }, async event => { await reconcileTrainingDeliveryLifecycle(event.params.uid, { id: event.id, trigger: 'entitlement' }); });
+
+// Only wake existing delivery consent; the worker rereads current settings and retains Guide identities.
+// Never process deletion or use the event's preference snapshot to upload a stale Guide.
+export const onTrainingDeliveryGuideSettingsChanged = onDocumentWritten({
+  document: 'users/{uid}/config/settings', region: 'europe-west2', memory: '512MiB', retry: true,
+}, async event => {
+  if (!event.data?.after.exists) return;
+  const before = normalizeSuuntoSwimmingGuideSettings(event.data.before.data()?.suuntoSwimmingGuide);
+  const after = normalizeSuuntoSwimmingGuideSettings(event.data.after.data()?.suuntoSwimmingGuide);
+  if (JSON.stringify(before) === JSON.stringify(after)) return;
+  await reconcileTrainingDeliveryLifecycle(event.params.uid, { id: event.id, trigger: 'guide-settings' });
+});

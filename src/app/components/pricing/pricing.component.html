@@ -253,6 +253,9 @@
               }
             </span>
           </button>
+          @if (isPriceLoading) {
+          <p class="trial-cta-note" role="status" aria-live="polite">{{ checkoutProgress() }}</p>
+          }
           }
           }
 

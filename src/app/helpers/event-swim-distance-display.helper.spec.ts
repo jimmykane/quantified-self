@@ -96,6 +96,12 @@ describe('nominal yard-pool distance display evidence', () => {
     expect(getNominalSwimDistanceDisplayContext(activity)).toBeNull();
   });
 
+  it('rejects nominal pool evidence when a rest has an invalid recorded distance', () => {
+    const { activity, rawLengths } = fixture();
+    rawLengths.push({ ...rawLengths[0], index: 5, startDate: 120000, endDate: 150000, type: 'idle', distance: Number.NaN });
+    expect(getNominalSwimDistanceDisplayContext(activity)).toBeNull();
+  });
+
   it('rejects a contradictory activity total and declines unknown source context', () => {
     expect(getNominalSwimDistanceDisplayContext(fixture(4, 25, { total: 110 }).activity)).toBeNull();
     const { activity } = fixture();
@@ -176,5 +182,22 @@ describe('nominal yard-pool distance display evidence', () => {
     const context = getNominalSwimDistanceDisplayContext(activity);
     expect(context?.poolMeters).toBe(22.86);
     expect(context?.lapMeters.size).toBe(0);
+  });
+});
+
+describe('length-derived interval distance display', () => {
+  it('uses the same corroborated yardage for intervals, lengths and summaries without changing values', async () => {
+    const { getSwimIntervalActivity } = await import('./event-swim-interval.helper');
+    const { activity, rawLengths } = fixture();
+    rawLengths.forEach(length => length.lapIndex = null);
+    const intervalActivity = getSwimIntervalActivity(activity)!;
+    const interval = intervalActivity.getLaps()[0];
+    const context = getNominalSwimDistanceDisplayContext(intervalActivity);
+    const raw = interval.getDistance().getValue();
+    expect(context?.lapMeters.get(interval)).toBe(100 * 0.9144);
+    expect(resolveUnitAwareDisplayStat(createSwimDistanceDisplayStat(raw, yards, context?.lapMeters.get(interval)), yards)?.text).toBe('100 yd');
+    expect(resolveUnitAwareDisplayStat(createSwimDistanceDisplayStat(raw, meters, context?.lapMeters.get(interval)), meters)?.text).toBe('91.59 m');
+    expect(raw).toBeCloseTo(4 * 25.04 * 0.9144);
+    expect(rawLengths.every(length => length.lapIndex === null)).toBe(true);
   });
 });

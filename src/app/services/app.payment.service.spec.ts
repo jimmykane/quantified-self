@@ -848,6 +848,45 @@ describe('AppPaymentService', () => {
             await expect(portalPromise).rejects.toThrow('Authenticated user changed while checkout was being prepared.');
         });
 
+        it('reports replacement progress once and still waits for the checkout URL', async () => {
+            const updates = new Subject<unknown>(); mockDocData.mockReturnValueOnce(updates.asObservable());
+            const progress = vi.fn();
+            const checkout = service.appendCheckoutSession('price_123', undefined, undefined, () => false, progress);
+            await vi.waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1));
+            updates.next({ status: 'updating' });
+            expect(progress).not.toHaveBeenCalled(); // A destroyed view receives no progress.
+            updates.next({ url: 'https://checkout.stripe.com/synthetic' });
+            await checkout;
+        });
+        it('shows updating progress without logging a normal superseded selection as an error', async () => {
+            const updates = new Subject<unknown>(); mockDocData.mockReturnValueOnce(updates.asObservable());
+            const progress = vi.fn(), errors = vi.spyOn(TestBed.inject(LoggerService), 'error');
+            const checkout = service.appendCheckoutSession('price_123', undefined, undefined, () => true, progress);
+            const rejected = expect(checkout).rejects.toThrow('Continue with your latest selection');
+            await vi.waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1));
+            updates.next({ status: 'updating' }); updates.next({ status: 'updating' });
+            expect(progress).toHaveBeenCalledExactlyOnceWith('updating');
+            updates.next({ error: { code: 'checkout_replaced', message: 'Continue with your latest selection' } });
+            await rejected; expect(errors).not.toHaveBeenCalled();
+        });
+        it('refreshes subscription recovery when the original checkout completes during switching', async () => {
+            mockDocData.mockReturnValueOnce(of({ error: { code: 'checkout_completed', message: 'Refresh Membership' } }));
+            mockFunctionsService.call.mockResolvedValueOnce({ data: { linked: false } })
+                .mockResolvedValueOnce({ data: { linked: true, role: 'pro' } });
+            await expect(service.appendCheckoutSession('price_123')).rejects.toThrow('SUBSCRIPTION_RESTORED:pro');
+            expect(mockFunctionsService.call).toHaveBeenCalledTimes(2);
+            expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledWith(true);
+            expect(mockSetDoc).toHaveBeenCalledTimes(1);
+        });
+        it('reports an expired checkout without an error log, recovery call, or automatic replacement', async () => {
+            const errors = vi.spyOn(TestBed.inject(LoggerService), 'error');
+            mockDocData.mockReturnValueOnce(of({ error: { code: 'checkout_expired', message: 'Choose a plan again' } }));
+            await expect(service.appendCheckoutSession('price_123')).rejects.toThrow('Choose a plan again');
+            expect(errors).not.toHaveBeenCalled();
+            expect(mockFunctionsService.call).toHaveBeenCalledExactlyOnceWith('linkExistingStripeCustomer');
+            expect(mockSetDoc).toHaveBeenCalledTimes(1);
+        });
+
         it('should retry checkout once after stale customer error and then continue', async () => {
             mockDocData
                 .mockReturnValueOnce(of({ error: { message: 'No such customer: cus_123' } }))

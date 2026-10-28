@@ -19,8 +19,8 @@ import { presentSuuntoRestScreens } from './suunto-rest-presentation';
 import { presentSuuntoSwimmingScreens } from './suunto-swimming-presentation';
 import { presentSuuntoSwimmingScreensV15 } from './suunto-swimming-presentation-v15';
 import { addSuuntoRestCountdownAlerts } from './suunto-rest-alerts';
-import type { SuuntoSwimmingField } from '../../../../shared/suunto-swimming-screen';
-import type { SuuntoSwimmingGuideSettings } from '../../../../shared/suunto-swimming-guide-settings';
+import { suuntoSwimmingOccurrences, type SuuntoSwimmingField } from '../../../../shared/suunto-swimming-screen';
+import { normalizeSuuntoSwimmingGuideSettings, isSuuntoPreviousLapField, type SuuntoSwimmingGuideSettings } from '../../../../shared/suunto-swimming-guide-settings';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
     createStableProviderExternalId,
@@ -469,7 +469,8 @@ function stepToSuunto(step: WorkoutStepV1, sport: ActivityTypes, presentation: G
     };
 }
 
-function structureToSteps(structure: WorkoutStructureV1, presentation: GuidePresentation): SuuntoGuideStepV1[] {
+function structureToSteps(structure: WorkoutStructureV1, presentation: GuidePresentation,
+    forceManualLapBoundaries = false): SuuntoGuideStepV1[] {
     const steps: SuuntoGuideStepV1[] = structure.nodes.map(node => {
         if (node.kind === 'step') return stepToSuunto(node, structure.sport, presentation);
         return {
@@ -501,7 +502,7 @@ function structureToSteps(structure: WorkoutStructureV1, presentation: GuidePres
         (node.type === 'repeat' ? node.steps : [node]).some(step =>
             step.fields.some(field => 'window' in field && field.window === 'manualLap')));
     if (!['block-pace-v4', 'sport-screens-v5', 'early-lap-v6', 'pool-swolf-v7', 'pool-screens-v9', 'swim-rest-v10', 'manual-instructions-v11'].includes(presentation)
-        || !usesLapAverages) return steps;
+        || (!usesLapAverages && !forceManualLapBoundaries)) return steps;
 
     if (supportsEarlyLap(presentation) && structure.nodes.some(node =>
         (node.kind === 'step' ? [node] : node.steps).some(step => allowsEarlyLapV1(step.ending)))) {
@@ -633,12 +634,33 @@ export function serializeSuuntoSwimmingGuideV15(structureValue: unknown, options
  * budgets their bytes. V15 and earlier serializers stay frozen for recovery. */
 export function serializeSuuntoRestAlertGuideV16(structureValue: unknown, options: SerializeSuuntoGuideOptionsV1,
     settings?: SuuntoSwimmingGuideSettings, units?: UserUnitSettingsInterface): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
+    return serializeSuuntoAlertGuide(structureValue, options, settings, units, false);
+}
+
+/** Partner-confirmed negative offsets on manual-lap windows. V16 recovery stays frozen. */
+export function serializeSuuntoPreviousLapGuideV17(structureValue: unknown, options: SerializeSuuntoGuideOptionsV1,
+    settings?: SuuntoSwimmingGuideSettings, units?: UserUnitSettingsInterface): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
+    return serializeSuuntoAlertGuide(structureValue, options, settings, units, true);
+}
+
+/** V18 reserves Rest space for compact next/last planned context. Prior versions stay frozen. */
+export function serializeSuuntoSwimmingGuideV18(structureValue: unknown, options: SerializeSuuntoGuideOptionsV1,
+    settings?: SuuntoSwimmingGuideSettings, units?: UserUnitSettingsInterface): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
+    const previous = normalizeSuuntoSwimmingGuideSettings(settings).restFields.some(isSuuntoPreviousLapField);
+    return serializeSuuntoAlertGuide(structureValue, options, settings, units, previous, true);
+}
+
+function serializeSuuntoAlertGuide(structureValue: unknown, options: SerializeSuuntoGuideOptionsV1,
+    settings: SuuntoSwimmingGuideSettings | undefined, units: UserUnitSettingsInterface | undefined,
+    previousLapReadings: boolean, readableRestContext = false): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
     const structure = parseWorkoutStructureV1(structureValue);
-    const frozen = serializeSuuntoGuideV11ForRecovery(structure, options);
+    const frozen = previousLapReadings && [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(structure.sport)
+        ? serializeGuide(structure, options, 'manual-instructions-v11', true)
+        : serializeSuuntoGuideV11ForRecovery(structure, options);
     const alerted = addSuuntoRestCountdownAlerts(frozen.artifact.steps);
     const jsonBytes = (steps: SuuntoGuideStepV1[]) => Buffer.byteLength(JSON.stringify({ ...frozen.artifact, steps }), 'utf8');
     const steps = [ActivityTypes.Swimming, ActivityTypes.OpenWaterSwimming].includes(structure.sport)
-        ? presentSuuntoSwimmingScreensV15(structure, alerted, settings, units, jsonBytes)
+        ? presentSuuntoSwimmingScreensV15(structure, alerted, settings, units, jsonBytes, previousLapReadings, readableRestContext)
         : presentSuuntoRestScreens(structure, alerted, jsonBytes);
     const enriched = (values: SuuntoGuideStepV1[]) => values.map(node => node.type === 'repeat'
         ? { ...node, steps: node.steps.map(screen => ({ ...screen,
@@ -689,7 +711,7 @@ export function serializeSuuntoGuideV2ForRecovery(
 }
 
 function serializeGuide(structureValue: unknown, options: SerializeSuuntoGuideOptionsV1,
-    presentation: GuidePresentation): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
+    presentation: GuidePresentation, forceManualLapBoundaries = false): ProviderSerializationResultV1<SuuntoGuideJsonV1> {
     const structure = parseWorkoutStructureV1(structureValue);
     // Select after strict parsing, once. V9 is pool-only; v10 affects both swim
     // profiles. V11 changes only non-swim manual wording, keeping v7 readings.
@@ -718,6 +740,10 @@ function serializeGuide(structureValue: unknown, options: SerializeSuuntoGuideOp
     if (externalId.length > 64) throw new Error('Suunto Guide external ID must not exceed 64 characters.');
 
     const additionalIssues: ProviderSerializationIssueV1[] = [];
+    if (forceManualLapBoundaries && early && !suuntoSwimmingOccurrences(structure, true)) additionalIssues.push({
+        severity: 'unsupported', code: 'unsupported_ending', path: '$.nodes',
+        message: 'Early Lap boundary paths exceed the Suunto Guide 1000-screen limit. Reduce repeat passes or steps.',
+    });
     if (codePointLength(name) > 60) addTruncationIssue(additionalIssues, '$.name', 'Suunto Guide name', 60);
     if (codePointLength(rawDescription) > 256) {
         addTruncationIssue(additionalIssues, '$.description', 'Suunto Guide description', 256);
@@ -751,7 +777,7 @@ function serializeGuide(structureValue: unknown, options: SerializeSuuntoGuideOp
         usage: 'workout',
         localDate,
         externalId,
-        steps: structureToSteps({ ...structure, sport: plannedWorkoutSportAliasV1('suunto', structure.sport) }, presentation),
+        steps: structureToSteps({ ...structure, sport: plannedWorkoutSportAliasV1('suunto', structure.sport) }, presentation, forceManualLapBoundaries),
     };
 
     return { ...resolved, artifact };

@@ -1,5 +1,182 @@
 # Frontend UI Composition
 
+## App header progress
+
+Provider history uses a lazy authenticated text action and the same live cards on the owner's Dashboard and in its
+Material panel/bottom sheet. The status uses a compact 40 px action, a 12 px icon and a single-line label. Under crowding,
+only its label truncates; the provider count remains visible and hover/focus reveals the full status. Phone action gaps
+are tighter so import status, local processing and account actions share one row at 320 px. `AppShellHeaderComponent`
+reports the measured header height so shell content,
+navigation offsets and scroll hiding remain aligned. The default remains 64 px. No additional provider work starts
+when the header, cards or details panel render. See [history progress](connection-history-import.md#shared-header-and-dashboard-progress).
+
+## Homepage example loading
+
+Home opts its shared public examples into `PublicFeaturePreviewComponent.prepareAhead`. After the view attaches,
+the existing `chartViewportQueue` uses the shell's scroll root and 600px lookahead to release nearby examples one
+per frame. Their Angular defer blocks can start before they enter the visible viewport; their original viewport
+trigger remains available. Far-away examples stay deferred, and teardown cancels pending queue work and ignores
+late readiness results. Other public pages keep the default viewport-only behavior. Server rendering preserves
+placeholders without starting browser work. Already-started module downloads can finish after navigation.
+
+Homepage placeholders retain their dimensions but have transparent fill/borders, avoiding a gray panel flashing
+before the example. A slow download still needs time and can leave reserved space. Keep actual chart renderers,
+themes, sample fixtures, canonical displays, reduced-motion behavior and interactions unchanged. This scheduling
+does not introduce account-data reads. Review Help for changed user workflows; none are introduced here.
+
+Verify normal scrolling and direct section links on phones and desktop, both themes, delayed chunks and navigation
+away during preparation. Record whether the actual example is prepared below the visible viewport, as well as
+whether a visible placeholder still paints a fill. Keep the production startup/combined-preview budgets and SSR
+snippet exclusions intact; these visual checks do not establish field INP, Search Console recovery or growth lift.
+
+## Public hero font loading
+
+The homepage hero keeps Inter as its first-choice font. Its heading and paragraphs use the local
+`QS Home Inter Fallback` face while the bundled web fonts load. Regular Arial and Arial Bold have separate
+width and vertical metric adjustments; a browser without those local faces retains its normal sans-serif fallback.
+The hero fallback adds no font download, script, preload or hidden text and does not change Material Symbols,
+button or numeric font families. Once Inter loads, the final typography and layout are unchanged.
+
+The homepage section shortcuts are a separate font-loading boundary. Their `QS Home Navigation` face reuses the
+bundled Inter 500 asset with `font-display: optional`. If it arrives too late, those links retain the normal system
+sans-serif for that navigation instead of swapping and potentially gaining a flex row. Cached or early Inter remains
+eligible for the initial layout. This intentionally permits fallback typography on a slow visit; it does not constrain
+row heights, clip links, preload another font or change Material typography elsewhere. See
+[Google's font-loading guidance](https://web.dev/learn/performance/optimize-web-fonts#optional).
+
+The adjustments in `home.component.scss` were measured against the bundled Fontsource Inter 400/800 faces:
+2048 units per em, 1984 ascent, 494 descent and zero line gap. The width scales use representative homepage
+paragraphs (106.99%) and its bold heading (104.28%); divide Inter's vertical ratios by each width scale for the
+fallback ascent/descent overrides. Recheck these values after a font or substantial hero-copy change.
+
+Verify with the production-prerendered homepage, a cold font cache and deliberately delayed Inter responses.
+Record layout-shift entries and the hero/action positions before and after `document.fonts.ready`, at 320, 360,
+390 and 414 px plus desktop. Also check normal fonts, light/dark themes and browsers without metric overrides.
+Include 744, 757 and 768 px: the shortcut row can wrap near these tablet widths even when the hero remains stable.
+Record the actual viewport width and shortcut/integrations positions, rather than relying on an emulation preset.
+These controlled measurements isolate font swaps: they do not establish a new Search Console result or explain
+every shift over a real visit. Keep Search Console's dated URL-group data, PageSpeed's URL/origin field data,
+and initial-load lab data separate; see [Google's report guidance](https://support.google.com/webmasters/answer/9205520)
+and [CLS diagnostics](https://web.dev/articles/optimize-cls).
+
+## Homepage feature order
+
+The hero keeps the original provider heading, logos and introduction together in a compact block. Training, Workouts,
+Plans, Health, Assistant, Maps and Comparisons follow; detailed integration rows and their existing actions remain after
+those product sections. Copy and shared previews stay unchanged. `#home-integrations` targets the moved detail section,
+with a local visually hidden heading so jump-link focus and subsequent keyboard navigation remain in that section.
+
+## Navigation startup rendering
+
+Keep the Material sidenav container mounted so the existing navigation service can open it. Its contents use
+`@defer (on idle; when sidenav.opened)`: construction leaves the bootstrap task, the browser can prepare the closed
+menu during idle time, and an early opening also triggers rendering. Once rendered, closing and reopening retain
+the same view. Destruction cancels pending idle work. The menu continues to read the current account and theme;
+sign-out must remove private navigation even when the view was prepared earlier. No account initialization, access
+checks, required consent, provider subscriptions or recovery work moves behind this boundary.
+
+### Navigation CPU verification (27 October 2026)
+
+Source-mapped Chrome traces found approximately 101 ms of sidenav-template samples inside a 683 ms bootstrap task
+under **6× CPU slowdown**. Equivalent optimized full-app builds used the existing `demo-stripe-billing` environment,
+isolated synthetic services, no service worker, a visible 390×844 viewport, unthrottled loopback HTTP and
+`Cache-Control: no-store`. Both builds included identical local-only observation scripts, excluded from the release.
+The runtime baseline is `4417e3b94d8e03d9d79cf055b49f20e9a5e3eac4`; the subsequent base budget-only update does not
+change these runtime assets. Profiler-start overhead is excluded from application tasks.
+
+| Local measurement | Before | After |
+| --- | ---: | ---: |
+| Bootstrap task, separately profiled reload | 683 ms | 460 ms |
+| Largest task before Home ready, three reloads: median (range) | 284 ms (261–738) | 234 ms (231–454) |
+| Home ready, same three reloads: median (range) | 1,900 ms (1,568–2,758) | 1,845 ms (1,683–2,386) |
+| First menu click Event Timing, three unthrottled loads: median (range) | 64 ms (56–88) | 56 ms (56–64) |
+
+The repeated CPU recordings use three before loads followed by three after loads in one trace per build; warming,
+order and shared-machine noise limit the comparison. The menu interactions alternate before/after builds and use
+normal CPU speed, so they are separate from the throttled startup figures. An initial first-open-only experiment
+added about 39 ms of click-handler work; idle preparation avoids that common-path tradeoff. An opening before idle
+still has to construct the view, covered by a deterministic regression test rather than a field-latency claim.
+This change splits startup work; it does not remove the menu's CPU cost or demonstrate improved field INP or a
+resolved Search Console report. Home-ready timing ranges overlap substantially.
+
+Retain real Material drawer tests for the early-opening path, idle preparation, view reuse, teardown and feedback.
+Cover onboarding removing both pending and prepared menus, then re-registering a fresh drawer on completion.
+The retained menu's identity, role badges and private actions must follow sign-in, account changes and sign-out.
+Review user-facing Help when changing navigation; this scheduling-only change preserves its labels and actions.
+
+## Sign-in route loading
+
+Account access checks use `AppUserAccess`, which has only type imports and stays synchronous. `AppUserUtilities`
+inherits that policy for existing private callers, while retaining the original settings defaults and migrations.
+Public shell/guards must import the access helper rather than the settings class. Profile merging and claim merging
+load the settings utilities through `loadUserSettingsUtilities` only when an authenticated profile needs normalization;
+an anonymous visit does not request that module. Normalize before publishing a ready profile. Keep `switchMap` around
+asynchronous snapshot merges, the account-identity check after server verification/normalization, existing generation
+guards, complete-profile requirements and read deadlines. A failed download propagates into the existing blocked
+profile recovery flow. A module import failure uses `account/settings-load-failed` and the existing explicit
+page-reload action: browsers may retain a failed native import for the document lifetime, so a same-page profile retry
+is insufficient. Keep the account blocked, preserve the signed-in session and use download-specific guidance.
+Authentication, App Check, consent and entitlement rules keep their existing lifecycle. Event-detail chart selection stays synchronous in the chart helper, where its
+canonical catalog is needed, rather than pulling that catalog into `AppUserService`.
+
+The production output check rejects the settings class and chart catalog in homepage startup. An authenticated tool
+such as Compare Files can still need those modules. Moving account initialization off startup also moves some shared
+code into deferred chart previews: the preview-only raw static limit is 192 KiB, with a separate 3,050 KiB cap for
+homepage startup plus that preview. The latter was about 3,042 KiB before this split. Report both loads and benchmark
+first chart use as well as startup; do not satisfy a startup budget by silently moving an equivalent stall onto a click.
+Use production source maps only for dependency attribution, not proof that every source listed in a map executes.
+
+`LoginModule` imports its forms, loading/haptic primitives and required Material modules directly. Keep activity-data
+services and broad `SharedModule`/`MaterialModule` dependencies out of this route: merely entering sign-in should not
+construct the activity workspace. The production-output check follows the sign-in module's static dependency graph
+and rejects those dependencies; the component regression uses a throwing activity-service provider to catch eager
+injection. Keep rendered forms, account-linking, error/recovery dialogs and selected-plan navigation covered when
+changing these imports.
+
+Profile Get Started from the hydrated homepage using equivalent production-mode builds and isolated anonymous local
+services. Separate click Event Timing from the asynchronous wait for sign-in to render, and report cold/warm conditions,
+CPU throttling and source-map exclusions. A smaller lazy payload or a fast local click does not establish field INP;
+Search Console and CrUX need their own post-release observations.
+
+### Account utilities verification (27 October 2026)
+
+Compared with base `59e2a73ba95f1fe46d1fb82f408e57a50e5b16d8`, the production build's raw static dependency graphs are:
+
+| Graph | Before | After |
+| --- | ---: | ---: |
+| Home startup | 2,911.4 KiB / 95 assets | 2,674.3 KiB / 90 assets |
+| Deferred signal preview, incremental | 130.7 KiB | 188.6 KiB |
+| Home plus signal preview | 3,042.1 KiB | 2,862.9 KiB |
+| All public startup graphs, union | 4,112.2 KiB | 4,113.2 KiB |
+
+Code moved off anonymous startup; it was not removed from the entire app. The chart/catalog normalizer remains available
+on account and feature paths. The preview budget change above exposes the 57.9 KiB incremental first-use tradeoff.
+
+Local browser checks used equivalent optimized full-app builds with the existing `demo-stripe-billing` environment,
+synthetic Auth/Firestore/Storage data, no service worker, a 390×844 visible viewport, Chrome's **6× CPU slowdown** and
+unthrottled loopback HTTP with `Cache-Control: no-store`. Both builds had the same local-only observation script.
+After warming both journeys, three runs per build per journey alternated before/after order. The observer records
+DOM readiness followed by two animation frames; it does not establish network/CDN or field performance.
+
+| Local timing | Before median (range) | After median (range) |
+| --- | ---: | ---: |
+| Home ready, six loads | 2,299 ms (2,176–2,350) | 2,239 ms (2,204–2,311) |
+| Get Started click → sign-in ready, three runs | 526 ms (508–543) | 542 ms (502–546) |
+| Signal placeholder enters viewport → preview ready, three runs | 570 ms (566–597) | 589 ms (561–623) |
+| Long-task time before Home ready, six loads | 1,487 ms | 1,444 ms |
+
+The reproducible result is an **8.1% smaller Home graph** and a **5.9% smaller Home-plus-preview graph**. The short local
+run shows overlapping timing ranges and slightly slower sign-in/preview medians. It does not demonstrate an INP win or
+resolve Search Console's field report. The largest startup task remains about 420 ms under this artificial slowdown.
+
+Functional checks cover anonymous/sign-in startup, returning Basic/Pro and legacy settings, direct Dashboard/Training/
+workout links, saved miles and dark theme, required consent, selected yearly Pro handoff, free completion, sign-out and
+account changes. Delayed/failed normalization and timeouts retain the profile gate; obsolete async results cannot publish
+access. A real local 503 reproduces browser import caching and the explicit reload recovery restores the same session.
+An old open document with removed assets follows the existing bounded chunk-reload recovery, after which Get Started
+works. These local checks do not exercise a real service-worker release, live App Check attestation, Stripe Checkout,
+provider delivery or server-computed Training data. Those contracts were not changed.
+
 ## Route headers
 
 Authenticated product routes use the shared `app-page-header` primitive from
@@ -233,13 +410,71 @@ Recorded swim sets retain their existing boundaries (through the following idle/
 length row. Headers label active length timing as **Swim**, idle/rest timing as **Rest**, and preserve the previous
 combined duration as **Total** when both are present. Rest-only groups show Rest without an invented active duration.
 Each duration prefers the source `timerTime`, falling back to `elapsedTime` only when timer time is absent; explicit
-zeroes remain zero, missing values remain blank, and sums retain the existing finite-value behavior. Unknown rest or
+zeroes remain zero, missing values remain blank, and combined times require complete contributing length timing. Unknown rest or
 paused gaps are not inferred from timestamps. The shared display resolver's `durationMilliseconds` option preserves
 Sports Lib's existing fractional length formatting. Set pace now uses non-rest distance/time, while row durations,
-distances, pace and other detail metrics and aggregate totals retain their existing source values. Stable group keys
+distances, pace and other detail metrics retain their recorded values. Stable group keys
 preserve disclosure state across unit refreshes. Header timings wrap at phone widths, and user disclosure clicks and
 Enter/Space toggles use app haptics without feedback for initialization or unit refreshes. This is a frontend display
 change; import/storage, event/lap totals, chart markers, Training and MCP contracts are unchanged.
+
+Swim Lengths and derived Intervals share `getCompleteSwimLengthSum` and `getSwimLengthHeartRateAverage`.
+Totals require complete nonnegative inputs. Set distance requires every active length's distance or its recorded
+pool-length fallback; a rest without distance adds no movement, while an explicit rest distance is retained.
+The frontend normalizer retains a `distanceIsInvalid` marker when it rejects an explicit distance. The marker
+survives interval-adapter normalization: invalid distances cannot become pool-length fallbacks or omitted rest
+zeroes, and invalid rest distance disqualifies derived interval/nominal-pool projection. Source records are untouched.
+An unknown active distance produces **Distance unavailable** in the set header and **Unavailable** in that and later
+cumulative splits within the set. Expanding the set explains the missing/invalid length, and the next set starts its
+own cumulative total. Known individual distances stay visible, including inside expanded interval details.
+The computed HR summary weights complete active-length HR by recorded duration, excluding rest, with elapsed time
+used only when timer time is absent. Missing HR/timing or zero total time makes that summary unavailable. Computed
+energy totals require all contributing active and rest values; an omitted calorie value is not an explicit zero.
+These HR/energy summary fields are internal to the Swim Lengths view model; this change does not add them to the
+collapsed set header. Recorded per-length HR/energy rows and native watch-lap statistics remain unchanged.
+
+Chart length tooltips share `getSwimLengthDistance` and `getSwimLengthPace` with the length table. A missing active
+distance may use its recorded pool length; invalid distances remain unavailable and rests never gain pool distance.
+Valid recorded speed has precedence over time/distance pace inference. The fallback requires positive usable active
+timing and distance, and rejected timing suppresses pace. Swim lap tooltips use the table's `getSwimLapAnalytics`
+pace in the user's swim units, omitting pace for rest or unavailable timing instead of substituting generic pace/speed.
+Chart boundaries and lap identities remain recorded; shared multisport/across-leg laps retain generic metrics.
+This changes frontend tooltip content only, with no new controls, event writes, Training or MCP changes.
+
+Swim tables expose **Show in charts** for activity-local, positive, unrejected lap/interval windows when event
+charts are available on a duration/time axis. Grouped rest windows must remain contiguous. `event-swim-chart-focus.helper.ts`
+uses each source activity's start for elapsed coordinates, absolute timestamps for Time, and intersects with the chart
+domain. The event card owns the temporary request and invalidates it on event/watch changes; the chart uses existing
+`sharedZoomRange` inputs for every panel and the zoom bar, including cached/asynchronous rebuilds. Manual zoom or reset
+clears the row highlight. **All intervals** resets only zoom, leaving checkbox/brush selections and saved chart settings
+unchanged. The row action scrolls to and focuses the chart region for keyboard users. Invalid/unsupported windows have
+no action. Table-view changes invalidate a request whose row no longer exists. Feedback belongs to accepted table and
+reset actions; hydration, shared-zoom propagation and no-op actions are silent.
+
+`event-swim-coverage.helper.ts` counts usable stroke-count, distance and timing inputs across recorded active lengths.
+It reuses the analytics fallback/rejection rules, preserves explicit zero and counts a multi-field gap once in the
+headline. It also reports a mismatch with an available valid integer session active-length count without inferring
+which unrecorded lengths are absent. Each watch's standalone Swim Lengths view displays one surface-free disclosure,
+with per-field coverage and a bounded, scrollable affected-length list. Original length and lap numbers are retained.
+Nested lap details do not repeat the notice. Independent recorded lap summaries can remain usable; the copy describes
+length-derived requirements rather than asserting every native total is missing. No metric, persistence or MCP contract
+changes are introduced.
+
+The **Show Swim Lengths** setting also controls the swim/rest strip above each metric plot on duration/time axes.
+`buildEventSwimLengthMarkers` supplies an optional recorded start coordinate only for positive, unrejected spans
+contained by the activity's timestamps. `buildSwimTimelineLanes` groups by activity, orders each lane, and excludes
+overlapping clusters and unknown states. It never fills gaps, infers rest from zero cadence, or substitutes timer
+duration for recorded start/end boundaries. Distance axes retain boundary markers but omit the strip, since rest
+has no distance width. Only activities represented by that metric panel receive lanes.
+
+`buildSwimTimelineSeries` uses the existing lazy-registered ECharts custom series and the metric's x axis. The
+plot reserves space for each lane; native zoom/resize transforms its x coordinates, with horizontal clipping and
+no contribution to the metric y axis or range statistics. Filled active blocks and dashed hollow rest blocks match
+the accessible legend, with separate numbered lanes for compared watches. Hollow blocks retain an invisible filled
+hit target. Local hover/click tooltips reuse the length formatter and `escapeConnect`, preventing ECharts from
+replaying series indices in another panel. The existing shared chart feedback owns tap haptics; no feedback is
+emitted by timeline hydration, and non-interactive previews stay silent. This adds no stored metric, setting,
+Training behavior, MCP contract, import change or provider action.
 
 Swimming lap defaults also include the categorical **Stroke** column, selectable through the existing per-sport
 Laps column picker. Explicit saved lists, including empty lists, take precedence over the defaults. Stroke labels
@@ -281,6 +516,51 @@ Average HR is an estimate weighted by each available original lap's duration; mi
 Partial HR coverage is visible, and unsupported aggregate metrics remain blank while their original rows are available.
 This is a presentation-only projection: stored laps, source files, chart boundaries, Training and MCP read contracts
 remain unchanged. It requires no Sports Lib change, source reparse or historical-data transition.
+
+Pool swims with overlapping lap schemes or unassigned active lengths use a separate table-only Intervals projection
+(`event-swim-interval.helper.ts`). It requires the complete recorded active-length count, valid ordered length indices,
+known active/rest types and chronological coverage (allowing one second of FIT timestamp quantization). Missing,
+malformed or incomplete evidence keeps the original lap view. Consecutive active lengths form one interval;
+consecutive idle lengths form a separate rest. Recorded leading/trailing rests and the final active set are retained;
+unrecorded time before/after the lengths is not turned into an invented rest. Native Garmin-style single sequences
+with valid active membership keep their existing rows and metrics, including when only rest membership is missing.
+A Session end segment or summary is not considered a competing lap scheme.
+Every length must start inside its activity. Accepted end-time roundoff is bounded to the activity end only on the
+synthetic lap, so a following activity cannot turn it into a cross-leg row. Recorded length clocks, timer sums,
+source laps and chart/map boundaries are unchanged.
+
+Derived intervals reuse the swim analytics, summaries, column settings and expandable length table. Strokes and
+distance require complete contributing fields; timer time respects explicit zero and rejected timing.
+SWOLF also requires complete contributing stroke counts: constructed intervals never use the native-lap pace/rate
+fallback to estimate missing stroke totals. Such rows are excluded from SWOLF averages and selection coverage.
+Heart-rate averages are duration-weighted from complete length coverage, while maxima require complete length maxima. The
+persistent summary also preserves the whole-session peak from original lap/session/stream evidence. No unmatched
+native lap metrics are copied into intervals. Corroborated nominal yard display uses the same independent length
+evidence as Swim Lengths; the original canonical distance remains in pace/SWOLF calculations and storage.
+The importer-dependent interval constructor is separate from `event-swim-interval-metadata.helper.ts`. Shared
+distance formatters and the chart worker read only that lightweight metadata registry; file importers/parsers must
+remain outside the worker bundle. Expanded interval lengths use the original membership stored in that registry,
+so their Lap column never exposes synthetic interval indexes as recorded lap numbers.
+
+An Intervals / Original laps Material toggle defaults to intervals and emits one selection haptic for an accepted
+change. Original laps retain their provider types and remain available for inspection. View-specific row identities
+prevent selection/disclosure state from leaking between the two representations; ordinary unit/column refreshes
+preserve it within the current view. Derived row state follows its time window and swim/rest kind, so live length
+regrouping cannot move selection or expansion onto a different interval with a reused row number. Comparison headers
+receive the original activity object, keeping temporary projections out of shared selection and color-cache state.
+Cross-leg lap ownership also reads original event activities, so a swim display change cannot restore duplicate
+source laps in another activity's table.
+Column headers expose keyboard-focusable, accessible tooltips distinguishing
+interval stroke totals, individual-length counts, recorded per-length averages, stroke rate and normalized SWOLF.
+The event section also appears when lengths support intervals but no original laps are visible. Switching to an
+empty Original laps view keeps the view toggle available, with an explicit empty message.
+
+This fixes the UI consequence of Sports Lib 21.6.8 refusing ambiguous length-to-lap ownership. The earlier first-match
+assignment could attach the next set's lengths to a preceding lap, so it must not be restored. The projection works
+with saved length records regardless of null or older arbitrary lap indices. No parser/library upgrade, historical
+reparse, source rewrite, Training/CSS/TSS change or migration is required. MCP impact: **no wire impact**; explicit
+activity-lap and swim-length projections continue returning source records, including nullable source membership.
+No public schema, scope, consent, plugin or backend read/write path changes.
 
 Event lap tables use `getEventLapTableGroups` to append one Session end segment to a single unambiguous sequence.
 Its positive recorded interval must follow non-overlapping laps inside the activity and end at the activity boundary
@@ -581,6 +861,17 @@ For changes, run `src/styles/scrollbars.spec.ts` and the affected component suit
 QA must include genuinely overflowing content in dialogs, sheets and nested panels, horizontal tables, long textareas,
 and light/dark desktop/320px views. Check computed styles, wheel/keyboard scrollability, no-overflow states and the
 existing hidden navigation exceptions; JSDOM alone cannot prove painted scrollbar size or platform touch behavior.
+
+Shared `qs-menu-panel` menus keep the Material panel itself as their single scroll owner, bounded by the dynamic
+viewport minus 16px; CDK owns placement relative to the trigger. The inner menu content keeps its natural height; it must not inherit a
+height limit or become another scroller. Form and tile menu minimum widths stay inside narrow viewports too.
+This covers action, configuration, map-layer, chart-overlay, source and range menus without per-menu observers or
+touch handlers. Event chart options use submenus for Line continuity and X axis, retaining their current choices
+in the main menu. Visible charts uses the same panel scrolling instead of adding a nested list scroller.
+Dashboard tile menus no longer inject a temporary global `overflow: visible` style on opening. Material owns
+overlay layout throughout; the menu-open event owns one selection feedback and restores normal focus return.
+Submenu choices must be `mat-menu-item` controls in the same view as their `mat-menu`. Wrapping them in a child
+component hides them from Material's content query, breaking initial focus and arrow-key navigation.
 
 ## Dashboard activity query sharing
 

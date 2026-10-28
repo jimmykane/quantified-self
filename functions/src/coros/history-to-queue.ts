@@ -145,7 +145,7 @@ export const addCOROSAPIHistoryToQueue = functions
       // COROS accepts inclusive calendar dates, including the entire end day.
       const historyImport = await startManualActivityHistory(userID, SERVICE_NAME, startDate,
         new Date(addUTCCalendarDays(endDate, 1).getTime() - 1));
-      if (historyImport) return { result: 'History import accepted', historyImport };
+      return { result: 'History import accepted', historyImport };
     }
 
     const dateWindows = chunkCOROSInclusiveDateRange(startDate, endDate);

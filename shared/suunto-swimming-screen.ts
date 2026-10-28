@@ -1,11 +1,13 @@
 import { ActivityTypes, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { allowsEarlyLapV1, formatWorkoutEndingV1, type WorkoutStepV1, type WorkoutStructureV1 } from './planned-workout';
 import { isSuuntoGuideManualLapAverageV1, suuntoGuideOptionalReadingsV1, suuntoGuideWatchTextV1 } from './suunto-guide-presentation';
-import { normalizeSuuntoSwimmingGuideSettings, type SuuntoSwimWorkField,
+import { normalizeSuuntoSwimmingGuideSettings, normalizeSuuntoSwimmingGuideSettingsForRecovery, isSuuntoPreviousLapField, type SuuntoSwimWorkField,
   type SuuntoSwimRestField } from './suunto-swimming-guide-settings';
 
 /** Private Guide presentation only. Not a canonical recipe or MCP field. */
 export type SuuntoSwimmingField =
+  | { type: 'pace'; title: string; window: 'manualLap'; aggregate: 'average'; windowOffset: -1 }
+  | { type: 'duration' | 'strokes'; title: string; window: 'manualLap'; windowOffset: -1 }
   | { type: 'heartRate' | 'power' | 'pace' | 'speed' | 'cadence'; title: string }
   | { type: 'pace' | 'power' | 'strokeRate' | 'swolf'; title: string; window: 'manualLap'; aggregate: 'average' }
   | { type: 'distance'; title: string; window: 'step' | 'workout' | 'manualLap' }
@@ -29,14 +31,14 @@ export interface SuuntoSwimmingScreen {
 export const SUUNTO_SWIMMING_EXPANDED_SCREEN_LIMIT = 1000;
 
 /** Bound before expanding. Work occurrences, not recorded laps or pool lengths. */
-export function suuntoSwimmingOccurrences(structure: WorkoutStructureV1): SuuntoSwimmingOccurrence[] | null {
+export function suuntoSwimmingOccurrences(structure: WorkoutStructureV1, forceManualLapBoundaries = false): SuuntoSwimmingOccurrence[] | null {
   const count = structure.nodes.reduce((sum, node) => sum + (node.kind === 'step' ? 1 : node.count * node.steps.length), 0);
   if (count > SUUNTO_SWIMMING_EXPANDED_SCREEN_LIMIT) return null;
-  // Match the frozen v11 graph: Complete consumes one screen; an early-Lap
-  // boundary has a second incoming branch only when that graph uses averages.
-  const usesAverages = structure.nodes.some(node => (node.kind === 'step' ? [node] : node.steps).some(step =>
+  // Complete consumes one screen. V17 previous-lap choices require boundaries
+  // even when the frozen graph had no visible manual-lap averages.
+  const needsBoundaries = forceManualLapBoundaries || structure.nodes.some(node => (node.kind === 'step' ? [node] : node.steps).some(step =>
     suuntoGuideOptionalReadingsV1(step, structure.sport).some(type => isSuuntoGuideManualLapAverageV1(type, structure.sport))));
-  const branches = usesAverages ? structure.nodes.reduce((sum, node) => sum + (node.kind === 'step'
+  const branches = needsBoundaries ? structure.nodes.reduce((sum, node) => sum + (node.kind === 'step'
     ? Number(allowsEarlyLapV1(node.ending)) : node.count * node.steps.filter(step => allowsEarlyLapV1(step.ending)).length), 0) : 0;
   if (count + 1 + branches > SUUNTO_SWIMMING_EXPANDED_SCREEN_LIMIT) return null;
   const steps = structure.nodes.flatMap(node => node.kind === 'step' ? [node]
@@ -62,8 +64,9 @@ function plannedDistance(occurrence: SuuntoSwimmingOccurrence | undefined, units
  * required fields: allocation depends on types/text, never target values. */
 export function planSuuntoSwimmingScreen(title: string, baseFields: readonly SuuntoSwimmingField[], sport: ActivityTypes,
   rawSettings: unknown, occurrence?: SuuntoSwimmingOccurrence, previous?: SuuntoSwimmingOccurrence,
-  next?: SuuntoSwimmingOccurrence, units?: UserUnitSettingsInterface): SuuntoSwimmingScreen {
-  const settings = normalizeSuuntoSwimmingGuideSettings(rawSettings);
+  next?: SuuntoSwimmingOccurrence, units?: UserUnitSettingsInterface, previousLapReadings = false, readableRestContext = false): SuuntoSwimmingScreen {
+  const settings = previousLapReadings ? normalizeSuuntoSwimmingGuideSettings(rawSettings)
+    : normalizeSuuntoSwimmingGuideSettingsForRecovery(rawSettings);
   const rest = occurrence?.step.purpose === 'rest' || title === 'Rest';
   const choices: SuuntoSwimmingChoiceResult[] = [];
   const selections = rest ? settings.restFields : settings.workFields;
@@ -77,7 +80,7 @@ export function planSuuntoSwimmingScreen(title: string, baseFields: readonly Suu
   const fields: SuuntoSwimmingField[] = required.filter(field => field.type.endsWith('Countdown')).map(field => ({ ...field,
     title: rest ? 'Rest rem' : field.type === 'stepDistanceCountdown' ? 'Dist rem' : 'Time rem' }));
   const key = (field: SuuntoSwimmingField): string => field.type === 'text' ? `text:${field.value}`
-    : `${field.type}:${'window' in field ? field.window : ''}:${'aggregate' in field ? field.aggregate : ''}`;
+    : `${field.type}:${'window' in field ? field.window : ''}:${'aggregate' in field ? field.aggregate : ''}:${'windowOffset' in field ? field.windowOffset : ''}`;
   const counterparts = { targetHeartRate: 'heartRate', targetPace: 'pace', targetSpeed: 'speed' } as const;
   let reserved = required.length;
   for (const target of required.filter(field => field.type.startsWith('target'))) {
@@ -94,6 +97,8 @@ export function planSuuntoSwimmingScreen(title: string, baseFields: readonly Suu
   // Planned contexts share one compact text cell, leaving native numeric fields
   // available. Never truncate an instruction or number to make it fit.
   const contexts: string[] = [];
+  const plannedContexts: { selection: string; distance: string }[] = [];
+  const readableRest = readableRestContext && rest;
   let contextIndex = -1;
   for (const selection of selections) {
     const report = (state: SuuntoSwimmingChoiceResult['state'], reason: string) => choices.push({ field: selection, state, reason });
@@ -106,15 +111,30 @@ export function planSuuntoSwimmingScreen(title: string, baseFields: readonly Suu
       report('omitted', 'SWOLF is available only for pool swimming.'); continue;
     }
     let field: SuuntoSwimmingField | null = null;
-    if (selection === 'previousPlannedDistance' || selection === 'nextPlannedDistance') {
+    if (isSuuntoPreviousLapField(selection)) {
+      if (!rest || previous?.step.purpose !== 'work') {
+        report('omitted', 'Available only on Rest immediately after Work; no earlier phase is substituted.'); continue;
+      }
+      field = selection === 'previousLapPace'
+        ? { type: 'pace', title: 'PrevPace', window: 'manualLap', aggregate: 'average', windowOffset: -1 }
+        : { type: selection === 'previousLapDuration' ? 'duration' : 'strokes',
+          title: selection === 'previousLapDuration' ? 'PrevTime' : 'PrevStrk', window: 'manualLap', windowOffset: -1 };
+    } else if (selection === 'previousPlannedDistance' || selection === 'nextPlannedDistance') {
       const distance = plannedDistance(selection === 'previousPlannedDistance' ? previous : next, units);
-      if (!distance) { report('omitted', 'The adjacent Work step has no prescribed distance.'); continue; }
+      if (!distance) {
+        report('omitted', readableRest && selection === 'nextPlannedDistance' && !next
+          ? 'Workout finished; no next Work block.' : 'The adjacent Work step has no prescribed distance.'); continue;
+      }
       const context = `${selection === 'previousPlannedDistance' ? 'Prev' : 'Next'}: ${distance}`;
-      const combined = [...contexts, context].join(' / ');
-      if (Array.from(`Plan ${combined}`).length > 40) { report('omitted', 'Planned distance text would exceed the short-text limit.'); continue; }
-      field = { type: 'text', value: `Plan ${combined}` };
+      const candidateContexts = [...plannedContexts, { selection, distance }];
+      const combined = readableRest ? [...candidateContexts]
+        .sort((a, b) => Number(b.selection === 'nextPlannedDistance') - Number(a.selection === 'nextPlannedDistance'))
+        .map(item => `${item.selection === 'nextPlannedDistance' ? 'Next' : 'Last'} ${item.distance}`).join('\n')
+        : `Plan ${[...contexts, context].join(' / ')}`;
+      if (Array.from(combined).length > 40) { report('omitted', 'Planned distance text would exceed the short-text limit.'); continue; }
+      field = { type: 'text', value: combined };
       if (contextIndex >= 0) {
-        fields[contextIndex] = field; contexts.push(context);
+        fields[contextIndex] = field; contexts.push(context); plannedContexts.push({ selection, distance });
         report('included', 'Included as planned text; Suunto may crop text beside numeric fields.'); continue;
       }
     } else {
@@ -137,15 +157,31 @@ export function planSuuntoSwimmingScreen(title: string, baseFields: readonly Suu
     if (field && fields.some(existing => key(existing) === key(field!))) {
       report('included', 'Already included in this screen.'); continue;
     }
+    // Watch evidence: a third numeric reading can displace planned text. This
+    // is QS's conservative Rest layout, not a claimed device-wide field limit.
+    if (readableRest && field && (field.type === 'text'
+      ? fields.some(existing => existing.type === 'text') || fields.filter(existing => existing.type !== 'text').length > 2
+      : contextIndex >= 0 && fields.filter(existing => existing.type !== 'text').length >= 2)) {
+      report('omitted', field.type === 'text'
+        ? 'Planned text needs room beside at most two numeric readings and no other text. Move it earlier or remove another choice; targets and instructions keep priority.'
+        : 'Rest reserves room for planned text beside two numeric readings. Move this reading earlier to prioritise it instead.');
+      continue;
+    }
     if (longNote || fields.length >= 5) {
       report('omitted', longNote ? 'The authored instruction uses the text-only layout.'
         : 'No space after the ending, targets, instructions and higher-priority fields.'); continue;
     }
     if (field) {
-      if (field.type === 'text') { contextIndex = fields.length; contexts.push(field.value.slice('Plan '.length)); }
+      if (field.type === 'text') {
+        contextIndex = fields.length; contexts.push(field.value.slice('Plan '.length));
+        const distance = plannedDistance(selection === 'previousPlannedDistance' ? previous : next, units);
+        if (distance) plannedContexts.push({ selection, distance });
+      }
       fields.push(field);
-      report('included', field.type === 'text' ? 'Included as planned text; Suunto may crop text beside numeric fields.'
-        : 'Included as a native reading; it needs data from the watch.');
+      report('included', isSuuntoPreviousLapField(selection)
+        ? 'Previous closed manual lap. An extra Lap press during Work limits this to its final segment; another Lap recorded without ending Rest changes which lap is shown. Swim readings need watch data.'
+        : field.type === 'text' ? 'Included as planned text; Suunto may crop text beside numeric fields.'
+          : 'Included as a native reading; it needs data from the watch.');
     }
   }
   return { title: heading, choices, fields: fields.length ? fields : [{ type: 'text', value: 'Lap to finish' }] };

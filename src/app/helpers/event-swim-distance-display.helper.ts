@@ -3,6 +3,7 @@ import {
 } from '@sports-alliance/sports-lib/metrics';
 import { AppSwimLength, getActivitySwimLengths, getRecordedLapActive, isRestSwimLength } from './event-swim-length.helper';
 import { sumSwimValues } from './event-swim-analytics.helper';
+import { getDerivedSwimIntervalLengths } from './event-swim-interval-metadata.helper';
 
 interface DistanceBounds { lower: number; upper: number; }
 interface LengthEvidence { length: AppSwimLength; bounds: DistanceBounds; }
@@ -81,7 +82,7 @@ export function getNominalSwimDistanceDisplayContext(
   if (!Array.isArray(rawLengths) || rawLengths.length !== lengths.length
     || recordedPool === null || recordedPool <= 0 || recordedTotal === null || recordedTotal <= 0
     || !Number.isInteger(recordedCount) || recordedCount !== active.length || active.length < 2
-    || lengths.some((length, index) => length.index !== index + 1
+    || lengths.some((length, index) => length.distanceIsInvalid || length.index !== index + 1
       || (length.type.trim().toLowerCase() !== 'active' && !isRestSwimLength(length))
       || (index > 0 && length.startDate.getTime() <= lengths[index - 1].startDate.getTime())
       || length.endDate < length.startDate
@@ -107,7 +108,14 @@ export function getNominalSwimDistanceDisplayContext(
   }
   const poolMeters = candidates[0];
   const byIndex = new Map(lengths.map(length => [length.index, length]));
-  return { poolMeters, lengths: byIndex, lapMeters: corroboratedLapDistances(activity, lengths, evidence, poolMeters) };
+  const lapMeters = corroboratedLapDistances(activity, lengths, evidence, poolMeters);
+  const context = { poolMeters, lengths: byIndex, lapMeters };
+  for (const lap of activity.getLaps?.() || []) {
+    const members = getDerivedSwimIntervalLengths(lap);
+    const displayMeters = members ? getNominalSwimLengthsDisplayMeters(context, members) : undefined;
+    if (displayMeters !== undefined) lapMeters.set(lap, displayMeters);
+  }
+  return context;
 }
 
 function corroboratedLapDistances(
