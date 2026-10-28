@@ -951,7 +951,28 @@ New Pro trial offers disclose that a payment method is required and direct the m
 
 Monitoring coverage is **unchanged**: reviewed the recorded-import, activity-delivery and route bundles and the recorded-import runbook. This presentation/read-only catalog change adds no provider API call, worker, queue, schedule, retry, lease, revision, terminal state or telemetry label. Existing backlog-age, dispatch/processing failure, committed-DLQ and unavailable-observation coverage remains authoritative. MCP/Training scopes, metrics, consent and provider capabilities are unchanged. Presentation-only provider changes release through the frontend after separate deployment approval; trial-policy changes follow the coordinated Rules/worker/frontend procedure in the billing runbook. Do not restore a no-card prompt independently of the serving Checkout policy.
 
+### Manual activity range selection
+
+The activity picker reuses the provider range registry for recent presets and maximum/all-available choices, plus
+Custom dates. Its defaults remain two calendar years for Garmin/Suunto/Wahoo and three months for COROS. Shared UTC
+calendar policy is translated to local picker dates, including month-end/DST boundaries, then clipped to any supplied
+provider minimum. Unbounded Suunto/Wahoo maximum selections show all available history through the end date;
+the internal scan floor is not presented as actual provider availability. Custom dates restores editable boundaries.
+Submissions keep the existing whole-local-day timestamps and `custom` activity-only request.
+Changing the range clears confirmation; metadata refreshes do not select a new range or start provider work.
+Review copy names activities-only scope, possible shorter availability and the existing new-request cooldown.
+Sleep, Health and route controls remain independent. Help and its sitemap date accompany this frontend-only change.
+Monitoring is **unchanged**: the reviewed #847/#829 bundles still cover the same providers, queues, retries,
+backlog and committed outcomes. No provider API, worker, consent, MCP or Training contract changes. Release only the
+frontend with separate deployment approval; accepted background runs need no migration or replay.
+
 ### Shared history progress surfaces
+
+Legacy manual activity responses retain their scheduled counts and cooldown dates without a fixed-throughput ETA.
+Processing time depends on provider delivery and queued work; the next allowed import date is not a finish date.
+The frontend no longer schedules an estimate-expiry refresh. Real cooldown, grace-period and daily-boundary refreshes
+remain intact. Monitoring is **unchanged**: #847/#829 workers, queues, retries and outcome metrics are unaffected.
+Only a separately approved frontend release is needed; MCP/Training and provider contracts are unchanged.
 
 The authenticated header's **Importing history** text action and the owner's Dashboard share one safe-metadata
 subscription set and the same provider-card component. Each provider keeps its latest coordinator projection;

@@ -19,6 +19,48 @@
 }
 
 <ng-template #swimLengthGroups let-view>
+  @if (view.coverage; as coverage) {
+  <div class="swim-coverage">
+    <div class="swim-coverage-summary mat-body-small">
+      <mat-icon aria-hidden="true">info</mat-icon>
+      <span>@if (coverage.incomplete) {
+        {{ coverage.incomplete }} of {{ coverage.total }} recorded active lengths have missing or invalid fields.
+        } @else { Length count differs from the watch summary. }</span>
+      <button mat-button type="button" (click)="toggleCoverage(view)" [attr.aria-expanded]="view.coverageExpanded"
+        [attr.aria-controls]="view.coverageId">{{ view.coverageExpanded ? 'Hide details' : 'Show details' }}</button>
+    </div>
+    <div [id]="view.coverageId" [hidden]="!view.coverageExpanded" class="swim-coverage-details mat-body-small">
+      @if (coverage.countMismatch) {
+      <p>{{ coverage.total }} active lengths are available; the watch summary reports {{ coverage.recordedActiveCount }}.
+        Length-derived totals may be incomplete.</p>
+      }
+      @for (field of coverage.fields; track field.key) {
+      <div class="swim-coverage-field">
+        <strong>{{ field.label }} · {{ field.available }} of {{ coverage.total }} lengths</strong>
+        <span>{{ field.explanation }}</span>
+      </div>
+      }
+      <p>Independent totals recorded by the watch may still be available in Original laps.</p>
+      @if (coverage.fields.length) {
+      <button mat-button type="button" (click)="toggleAffectedLengths(view)" [attr.aria-expanded]="view.affectedLengthsExpanded"
+        [attr.aria-controls]="view.coverageId + '-lengths'">{{ view.affectedLengthsExpanded ? 'Hide affected lengths' : 'Show affected lengths' }}</button>
+      <div [id]="view.coverageId + '-lengths'" [hidden]="!view.affectedLengthsExpanded"
+        class="swim-coverage-affected" tabindex="0" role="region" aria-label="Lengths with missing or invalid fields">
+        @if (view.affectedLengthsExpanded) {
+        @for (field of coverage.fields; track field.key) {
+        <p class="mat-label-medium">{{ field.label }}</p>
+        <ul>
+          @for (length of field.affected; track $index) {
+          <li>Length {{ length.index }}@if (length.lapIndex !== null) { · Original lap {{ length.lapIndex }} }</li>
+          }
+        </ul>
+        }
+        }
+      </div>
+      }
+    </div>
+  </div>
+  }
   <mat-accordion class="swim-length-groups" displayMode="flat" multi>
     @for (group of view.groups; track group.key) {
     <mat-expansion-panel class="swim-length-group-panel mat-elevation-z0 qs-overlay-flat"

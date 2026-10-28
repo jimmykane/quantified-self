@@ -203,7 +203,7 @@
           <mat-header-cell *matHeaderCellDef [class.lap-selection-cell]="column === 'selection'"
             [class.lap-index-cell]="column === '#'"
             [class.lap-duration-cell]="column === 'Duration'"
-            [class.lap-length-toggle-cell]="column === 'lengths'"
+            [class.lap-length-toggle-cell]="column === 'lengths' || column === 'charts'"
             [class.lap-swolf-cell]="column === swolfColumn">
             @if (column === 'selection' && !nested) {
             <mat-checkbox [checked]="lapTable.allLapRowsSelected"
@@ -211,6 +211,9 @@
               (change)="toggleAllLapSelections(lapTable)"
               [aria-label]="'Select all ' + lapTable.rowNoun + 's in this table'">
             </mat-checkbox>
+            } @else if (column === 'charts') {
+            <mat-icon aria-hidden="true" matTooltip="Show interval in charts">query_stats</mat-icon>
+            <span class="cdk-visually-hidden">Charts</span>
             } @else if (column === 'lengths') {
             <mat-icon aria-hidden="true" matTooltip="Recorded lap details">linear_scale</mat-icon>
             <span class="cdk-visually-hidden">Lap details</span>
@@ -225,7 +228,7 @@
             [class.lap-average-label]="row.isLapAverage && column === 'selection'"
             [class.lap-average-index-spacer]="row.isLapAverage && column === '#'"
             [class.lap-duration-cell]="column === 'Duration'"
-            [class.lap-length-toggle-cell]="column === 'lengths'"
+            [class.lap-length-toggle-cell]="column === 'lengths' || column === 'charts'"
             [class.lap-swolf-cell]="column === swolfColumn"
             [class.lap-average-cell]="row.isLapAverage" [matTooltip]="row.metricNotes?.[column] || ''">
             @if (column === 'selection' && row.isLapAverage) {
@@ -235,6 +238,15 @@
               (change)="toggleLapSelection(lapTable, row)"
               [aria-label]="(row.members ? 'Select laps ' : 'Select ' + lapTable.rowNoun + ' ') + row['#']">
             </mat-checkbox>
+            } @else if (column === 'charts') {
+            @if (row.chartFocus) {
+            <button mat-icon-button type="button" (click)="focusSwimInterval(row)"
+              [attr.aria-label]="'Show ' + row.chartFocus.label + ' in charts'"
+              [attr.aria-pressed]="focusedSwimInterval?.key === row.chartFocus.key"
+              [matTooltip]="focusedSwimInterval?.key === row.chartFocus.key ? 'Showing this interval' : 'Show in charts'">
+              <mat-icon>{{ focusedSwimInterval?.key === row.chartFocus.key ? 'check_circle' : 'query_stats' }}</mat-icon>
+            </button>
+            }
             } @else if (column === 'lengths') {
             @if (row.hasLengths || row.members) {
             <button mat-icon-button (click)="toggleLapLengths(row)"
@@ -257,14 +269,14 @@
           <mat-footer-cell *matFooterCellDef [class.lap-selection-cell]="column === 'selection'"
             [class.lap-index-cell]="column === '#'"
             [class.lap-duration-cell]="column === 'Duration'"
-            [class.lap-length-toggle-cell]="column === 'lengths'"
+            [class.lap-length-toggle-cell]="column === 'lengths' || column === 'charts'"
             [class.lap-swolf-cell]="column === swolfColumn"
             [class.lap-selected-summary-label]="column === 'selection'"
             [class.lap-selected-summary-index-spacer]="column === '#'"
             [matTooltip]="column === maximumHeartRateType ? 'Peak of the selected row maxima, including rest. Coverage counts contributing rows.' : ''">
             @if (column === 'selection') {
             {{ lapTable.selectedSummaryLabel }}
-            } @else if (column !== '#' && column !== 'lengths') {
+            } @else if (column !== '#' && column !== 'lengths' && column !== 'charts') {
             {{ lapTable.selectedSummary[column] }}
             }
           </mat-footer-cell>
@@ -288,7 +300,7 @@
         <!-- CDK measures sticky offsets per row definition. Summary labels span both pinned
              identifiers, so they must not supply the widths for ordinary lap rows. -->
         <mat-row *matRowDef="let row; columns: lapTable.columns; when: isLapAverageRow" class="lap-average-row"></mat-row>
-        <mat-row *matRowDef="let row; columns: lapTable.columns; when: isLapDataRow" [class.lap-rest-row]="row.isRest"></mat-row>
+        <mat-row *matRowDef="let row; columns: lapTable.columns; when: isLapDataRow" [class.lap-rest-row]="row.isRest" [class.lap-chart-focused]="row.chartFocus && focusedSwimInterval?.key === row.chartFocus.key"></mat-row>
         <mat-row *matRowDef="let row; columns: ['lengthDetails']; when: hasRecordedLengths" class="lap-length-detail-row"
           [attr.hidden]="row.lengthsExpanded ? null : ''"></mat-row>
         @if (!nested) {

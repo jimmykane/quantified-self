@@ -16,6 +16,13 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('distinguishes scheduled history and cooldowns from completion estimates', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
+    expect(copy).toContain('Scheduled activity counts confirm queued work, not completed imports');
+    expect(copy).toContain('QS does not promise a completion time from those counts');
+    expect(copy).toContain('not an expected finish date');
+  });
+
   it('explains shared provider import progress and distinguishes requests from delivery', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
     for (const phrase of ['**Importing history**', 'update together with the header', '**View details**',
@@ -994,6 +1001,13 @@ describe('help.content', () => {
     expect(content).not.toMatch(/Workout Import|WORKOUT_IMPORT/);
     expect(content).toContain('Retry may still require support');
   });
+  it('explains manual activity range presets, local dates and confirmation', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
+    for (const phrase of ['**Activity history range**', '**All available history**', '**Custom dates**',
+      'your local calendar days', 'confirm again after changing them', 'one day per 500 activities scheduled',
+      'not a processing-time estimate']) expect(copy).toContain(phrase);
+  });
+
   it('explains the category overview, recorded source choices and manual history actions', () => {
     const health = HELP_SECTIONS.find(section => section.id === 'health')!.content;
     for (const phrase of ['**Category overview**', 'last 30 days', '**Body**', '**Vitals**', '**Movement & energy**',
@@ -2120,6 +2134,11 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Right-clicking an event chart copies a themed image of the full chart panel');
     expect(gettingStartedSection?.content).toContain('**Show Swim Lengths** chart option');
     expect(gettingStartedSection?.content).toContain('**Swim / rest timeline**');
+    expect(gettingStartedSection?.content).toContain('**Show in charts**');
+    expect(gettingStartedSection?.content).toContain('**All intervals**');
+    expect(gettingStartedSection?.content).toContain('**data coverage**');
+    expect(gettingStartedSection?.content).toContain('**Show affected lengths**');
+    expect(gettingStartedSection?.content).toContain('Independent watch totals may still be available');
     expect(gettingStartedSection?.content).toContain('Gaps are not assumed to be rest');
     expect(gettingStartedSection?.content).toContain('Swim length chart tooltips use the same distance and pace rules as the length table');
     expect(gettingStartedSection?.content).toContain('Swim lap tooltips show **Avg Swim Pace**');

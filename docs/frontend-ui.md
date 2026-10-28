@@ -434,6 +434,25 @@ pace in the user's swim units, omitting pace for rest or unavailable timing inst
 Chart boundaries and lap identities remain recorded; shared multisport/across-leg laps retain generic metrics.
 This changes frontend tooltip content only, with no new controls, event writes, Training or MCP changes.
 
+Swim tables expose **Show in charts** for activity-local, positive, unrejected lap/interval windows when event
+charts are available on a duration/time axis. Grouped rest windows must remain contiguous. `event-swim-chart-focus.helper.ts`
+uses each source activity's start for elapsed coordinates, absolute timestamps for Time, and intersects with the chart
+domain. The event card owns the temporary request and invalidates it on event/watch changes; the chart uses existing
+`sharedZoomRange` inputs for every panel and the zoom bar, including cached/asynchronous rebuilds. Manual zoom or reset
+clears the row highlight. **All intervals** resets only zoom, leaving checkbox/brush selections and saved chart settings
+unchanged. The row action scrolls to and focuses the chart region for keyboard users. Invalid/unsupported windows have
+no action. Table-view changes invalidate a request whose row no longer exists. Feedback belongs to accepted table and
+reset actions; hydration, shared-zoom propagation and no-op actions are silent.
+
+`event-swim-coverage.helper.ts` counts usable stroke-count, distance and timing inputs across recorded active lengths.
+It reuses the analytics fallback/rejection rules, preserves explicit zero and counts a multi-field gap once in the
+headline. It also reports a mismatch with an available valid integer session active-length count without inferring
+which unrecorded lengths are absent. Each watch's standalone Swim Lengths view displays one surface-free disclosure,
+with per-field coverage and a bounded, scrollable affected-length list. Original length and lap numbers are retained.
+Nested lap details do not repeat the notice. Independent recorded lap summaries can remain usable; the copy describes
+length-derived requirements rather than asserting every native total is missing. No metric, persistence or MCP contract
+changes are introduced.
+
 The **Show Swim Lengths** setting also controls the swim/rest strip above each metric plot on duration/time axes.
 `buildEventSwimLengthMarkers` supplies an optional recorded start coordinate only for positive, unrejected spans
 contained by the activity's timestamps. `buildSwimTimelineLanes` groups by activity, orders each lane, and excludes

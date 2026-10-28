@@ -19,7 +19,7 @@ import { User } from '@sports-alliance/sports-lib';
 import { AppUserServiceMetaInterface } from '../../models/app-user.interface';
 import { Subscription, timeout } from 'rxjs';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { COROS_HISTORY_IMPORT_LIMIT_MONTHS, GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS, GARMIN_HISTORY_IMPORT_LIMIT_YEARS, HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT, HISTORY_IMPORT_DEFAULT_RANGE_YEARS, HISTORY_IMPORT_PROCESSING_CAPACITY_PER_DAY_PER_USER_ESTIMATE } from '@shared/history-import.constants';
+import { COROS_HISTORY_IMPORT_LIMIT_MONTHS, GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS, GARMIN_HISTORY_IMPORT_LIMIT_YEARS, HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT, HISTORY_IMPORT_DEFAULT_RANGE_YEARS } from '@shared/history-import.constants';
 import {
   getHealthBackfillStartMs,
   GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS,
@@ -29,14 +29,13 @@ import {
 } from '@shared/sleep-backfill';
 import { SLEEP_PROVIDERS, SleepProvider, SleepSyncState } from '@shared/sleep';
 import dayjs from 'dayjs';
-import relativeTime from 'dayjs/plugin/relativeTime';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { HistoryImportStateService, HistoryImportRequestState, historyImportCooldownAt } from '../../services/history-import-state.service';
-import type { ConnectionHistoryStatusProjection } from '@shared/connection-history';
+import { historyRangeOptions, type ConnectionHistoryStatusProjection, type ConnectionHistoryRangeOption, type HistoryImportRange } from '@shared/connection-history';
+import { activityHistoryRange } from '../../helpers/activity-history-range.helper';
 
-dayjs.extend(relativeTime);
 
 /** Response from COROS/Suunto/Wahoo history import */
 export interface HistoryImportResult {
@@ -78,6 +77,11 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
 
   public formGroup: UntypedFormGroup;
+  public historyRangeOptions: readonly ConnectionHistoryRangeOption[] = [];
+  public selectedHistoryRange: HistoryImportRange = 'custom';
+  private selectedHistoryDates = '';
+  private historyRangeService: ServiceNames | undefined;
+
   public isAllowedToDoHistoryImport = false;
   public nextImportAvailableDate: Date;
   public isSubmitting = false;
@@ -86,7 +90,6 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public corosHistoryLimitMonths = COROS_HISTORY_IMPORT_LIMIT_MONTHS;
   public activitiesPerDayLimit = HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT;
   public historyImportDefaultRangeYears = HISTORY_IMPORT_DEFAULT_RANGE_YEARS;
-  public processingCapacityPerDay = HISTORY_IMPORT_PROCESSING_CAPACITY_PER_DAY_PER_USER_ESTIMATE;
   public garminCooldownDays = GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS;
   public garminHistoryLimitYears = GARMIN_HISTORY_IMPORT_LIMIT_YEARS;
   /** Optimistic UI flag - blocks re-submission immediately after success */
@@ -160,6 +163,10 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       ]),
     }, { validators: this.dateRangeValidator });
 
+    this.historyRangeOptions = historyRangeOptions(this.serviceName);
+    this.historyRangeService = this.serviceName;
+    this.selectedHistoryRange = this.serviceName === ServiceNames.COROSAPI ? 'maximum' : '2_years';
+    this.selectedHistoryDates = this.historyDatesKey();
     this.formGroup.disable();
 
     const user = await this.authService.getUser();
@@ -184,6 +191,52 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     const providerMinimum = this.minDate ? dayjs(this.minDate).startOf('day') : null;
 
     return providerMinimum?.isAfter(requestedStart) ? providerMinimum : requestedStart;
+  }
+
+  get usesAllAvailableHistory(): boolean {
+    return this.selectedHistoryRange === 'maximum' && !this.minDate
+      && (this.serviceName === ServiceNames.SuuntoApp || this.serviceName === ServiceNames.WahooAPI);
+  }
+
+  get selectedHistoryRangeLabel(): string {
+    if (this.selectedHistoryRange === 'custom') return 'Custom dates';
+    if (this.selectedHistoryRange === 'maximum'
+      && (this.serviceName === ServiceNames.GarminAPI || this.serviceName === ServiceNames.COROSAPI)) return 'Maximum available';
+    return this.historyRangeOptions.find(option => option.value === this.selectedHistoryRange)?.label ?? 'Custom dates';
+  }
+
+  onHistoryRangeChange(preset: HistoryImportRange): void {
+    if (this.formGroup.disabled || preset === this.selectedHistoryRange
+      || (preset !== 'custom' && !this.historyRangeOptions.some(option => option.value === preset))) return;
+    if (preset !== 'custom') {
+      const range = activityHistoryRange(this.serviceName, preset, new Date(), this.minDate);
+      this.formGroup.patchValue({ startDate: dayjs(range.startDate), endDate: dayjs(range.endDate), accepted: false });
+    } else this.formGroup.get('accepted')?.setValue(false);
+    this.selectedHistoryRange = preset;
+    this.selectedHistoryDates = this.historyDatesKey();
+    this.hapticsService.selection();
+  }
+
+  onHistoryDatesChange(fromCalendar = false): void {
+    const dates = this.historyDatesKey();
+    if (this.formGroup.disabled || dates === this.selectedHistoryDates) return;
+    this.selectedHistoryDates = dates;
+    this.selectedHistoryRange = 'custom';
+    this.formGroup.get('accepted')?.setValue(false);
+    if (fromCalendar && this.formGroup.get('startDate')?.valid && this.formGroup.get('endDate')?.valid) {
+      this.hapticsService.selection();
+    }
+  }
+
+  onHistoryConfirmationChange(): void {
+    if (!this.formGroup.disabled) this.hapticsService.selection();
+  }
+
+  private historyDatesKey(): string {
+    return ['startDate', 'endDate'].map(name => {
+      const value = this.formGroup.get(name)?.value;
+      return value && dayjs(value).isValid() ? dayjs(value).format('YYYY-MM-DD') : '';
+    }).join('/');
   }
 
   dateRangeValidator: ValidatorFn = (group: AbstractControl): ValidationErrors | null => {
@@ -235,6 +288,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     if (this.isDestroyed) return;
     this.isPro = AppUserUtilities.hasProAccess(this.currentUser);
     this.today = dayjs().endOf('day');
+    this.historyRangeOptions = historyRangeOptions(this.serviceName);
     this.syncSharedImportState();
     this.isSubmitting = this.activityState.status === 'pending';
     const receipt = this.activityState.result;
@@ -255,6 +309,12 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.updateSleepAndHealthBackfillAvailability();
     this.syncSleepBackfillStateSubscription();
     this.updateProviderHistoryMinimumDate();
+    if (this.historyRangeService !== this.serviceName) {
+      this.historyRangeService = this.serviceName;
+      this.selectedHistoryRange = 'custom';
+      this.formGroup.get('accepted')?.setValue(false, { emitEvent: false });
+      this.selectedHistoryDates = this.historyDatesKey();
+    }
 
     if (!this.userMetaForService || !this.userMetaForService.didLastHistoryImport) {
       this.isAllowedToDoHistoryImport = true;
@@ -350,7 +410,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     const graceExpiryMs = AppUserUtilities.isProUser(this.currentUser)
       ? null : AppUserUtilities.getGracePeriodExpiryMs(this.currentUser);
     const futureDates = [this.activityState.nextAllowedAtMs, this.nextImportAvailableDate?.getTime(), this.sleepBackfillNextAllowedAtMs,
-      this.activityEstimatedCompletionAtMs, graceExpiryMs, dayjs().add(1, 'day').startOf('day').valueOf()]
+      graceExpiryMs, dayjs().add(1, 'day').startOf('day').valueOf()]
       .filter((value): value is number => typeof value === 'number' && value > Date.now());
     if (!futureDates.length || this.isDestroyed) return;
     this.cooldownTimer = this.ngZone.runOutsideAngular(() => globalThis.setTimeout(() => {
@@ -584,45 +644,6 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     return this.userMetaForService;
   }
 
-  get estimatedCompletionVerbal(): string {
-    const stats = this.pendingImportResult();
-    const completionAtMs = this.activityEstimatedCompletionAtMs;
-    if (!stats || completionAtMs === null) {
-      return '';
-    }
-
-    if (completionAtMs <= Date.now()) {
-      return 'The initial processing estimate has passed. Activities may still be arriving.';
-    }
-
-    const count = stats.successCount;
-    // Calculate total days (decimals allowed)
-    // e.g. 500 / 24000 = 0.02 days
-    const totalDays = count / this.processingCapacityPerDay;
-    const totalHours = totalDays * 24;
-
-    if (totalHours < 1) {
-      return 'Should be done very soon! 🚀';
-    }
-
-    if (totalHours < 24) {
-      // "Estimated to finish by 4:00 PM today/tomorrow"
-      const completionDate = dayjs(completionAtMs);
-      return `Estimated to finish by ${completionDate.format('h:mm A')} ${completionDate.fromNow()}.`;
-    }
-
-    // > 1 day
-    const completionDate = dayjs(completionAtMs);
-    return `Estimated to finish ${completionDate.fromNow()} (${completionDate.format('dddd [at] h:mm A')}).`;
-  }
-
-  private get activityEstimatedCompletionAtMs(): number | null {
-    const count = this.pendingImportResult()?.successCount;
-    const acceptedAtMs = this.activityState.acceptedAtMs;
-    return typeof count === 'number' && count > 0 && typeof acceptedAtMs === 'number'
-      ? acceptedAtMs + count / this.processingCapacityPerDay * 86_400_000
-      : null;
-  }
 
   get sleepBackfillProvider(): SleepProvider | null {
     if (this.serviceName === ServiceNames.SuuntoApp) {

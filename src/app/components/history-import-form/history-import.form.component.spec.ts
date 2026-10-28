@@ -1,10 +1,12 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HistoryImportFormComponent } from './history-import.form.component';
-import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatDatepicker, MatDatepickerInput, MatDatepickerModule } from '@angular/material/datepicker';
 import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatSelectModule, MatSelect } from '@angular/material/select';
+import { By } from '@angular/platform-browser';
 import { MatInputModule } from '@angular/material/input';
-import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatCheckbox, MatCheckboxModule } from '@angular/material/checkbox';
 import { ReactiveFormsModule } from '@angular/forms';
 import { MatDayjsDateModule } from '../../shared/adapters/mat-dayjs-date.module';
 import { MatIconModule } from '@angular/material/icon';
@@ -114,6 +116,7 @@ describe('HistoryImportFormComponent', () => {
                 MatDatepickerModule,
                 MatFormFieldModule,
                 MatInputModule,
+                MatSelectModule,
                 MatCheckboxModule,
                 ReactiveFormsModule,
                 MatDayjsDateModule,
@@ -147,6 +150,117 @@ describe('HistoryImportFormComponent', () => {
         // These tests verify feedback requests; real snackbar dismissal timers delay fixture stability.
         vi.spyOn(snackBar, 'open').mockReturnValue(null);
         fixture.detectChanges();
+    });
+
+    it('renders provider presets, applies local dates, and clears confirmation after a range change', async () => {
+        await fixture.whenStable();
+        fixture.detectChanges();
+        const select = fixture.debugElement.query(By.directive(MatSelect)).componentInstance as MatSelect;
+        expect(select.options.map(option => option.value)).toEqual(['30_days', '60_days', 'maximum', 'custom']);
+        expect(select.value).toBe('maximum');
+        await fixture.whenStable();
+        fixture.detectChanges();
+        expect(fixture.debugElement.query(By.css('mat-select-trigger')).nativeElement.textContent).toBe('Maximum available');
+        expect(haptics.selection).not.toHaveBeenCalled();
+        component.formGroup.get('accepted')!.setValue(true);
+        select.selectionChange.emit({ source: select, value: '30_days' });
+        fixture.detectChanges();
+        expect(dayjs(component.formGroup.get('startDate')!.value).format('YYYY-MM-DD'))
+            .toBe(dayjs().startOf('day').subtract(29, 'day').format('YYYY-MM-DD'));
+        expect(component.formGroup.get('accepted')!.value).toBe(false);
+        expect(fixture.nativeElement.textContent).toContain('Selected dates:');
+        expect(fixture.nativeElement.textContent).toContain('This imports activities only.');
+        expect(fixture.nativeElement.textContent).toContain('This is not a completion estimate.');
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        component.onHistoryRangeChange('30_days');
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        expect(mockUserService.importServiceHistoryForCurrentUser).not.toHaveBeenCalled();
+    });
+
+    it('returns edited dates to Custom and requires confirmation again without feedback for unchanged dates', async () => {
+        await fixture.whenStable();
+        component.formGroup.get('accepted')!.setValue(true);
+        component.onHistoryDatesChange();
+        expect(component.formGroup.get('accepted')!.value).toBe(true);
+        expect(haptics.selection).not.toHaveBeenCalled();
+        component.formGroup.get('startDate')!.setValue(dayjs().subtract(7, 'day'));
+        component.onHistoryDatesChange();
+        expect(component.selectedHistoryRange).toBe('custom');
+        expect(component.formGroup.get('accepted')!.value).toBe(false);
+        expect(haptics.selection).not.toHaveBeenCalled();
+        component.formGroup.disable();
+        component.onHistoryRangeChange('60_days');
+        expect(component.selectedHistoryRange).toBe('custom');
+        expect(haptics.selection).not.toHaveBeenCalled();
+    });
+
+    it.each([ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.WahooAPI])('keeps the two-year default and submits only the explicitly selected dates for %s', async provider => {
+        fixture.destroy();
+        fixture = TestBed.createComponent(HistoryImportFormComponent);
+        component = fixture.componentInstance;
+        component.serviceName = provider;
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        const select = fixture.debugElement.query(By.directive(MatSelect)).componentInstance as MatSelect;
+        expect(select.value).toBe('2_years');
+        expect(select.options.map(option => option.value)).toEqual(['30_days', '90_days', '1_year', '2_years', 'maximum', 'custom']);
+        expect(dayjs(component.formGroup.get('startDate')!.value).format('YYYY-MM-DD')).toBe(dayjs().subtract(2, 'year').format('YYYY-MM-DD'));
+        select.selectionChange.emit({ source: select, value: 'maximum' });
+        fixture.detectChanges();
+        expect(mockUserService.importServiceHistoryForCurrentUser).not.toHaveBeenCalled();
+        if (provider !== ServiceNames.GarminAPI) {
+            expect(fixture.nativeElement.textContent).toContain('All available history through');
+            expect(fixture.nativeElement.textContent).not.toMatch(/1970|Jan 1, 2000/);
+            expect(fixture.debugElement.query(By.directive(MatDatepickerInput))).toBeNull();
+        }
+        const expectedStart = dayjs(component.formGroup.get('startDate')!.value).startOf('day').toDate();
+        component.formGroup.get('accepted')!.setValue(true);
+        await component.onSubmit({ preventDefault: vi.fn() } as unknown as Event);
+        expect(mockUserService.importServiceHistoryForCurrentUser).toHaveBeenCalledWith(provider, expectedStart, dayjs().endOf('day').toDate(), '123');
+    });
+
+    it.each(['startDate', 'endDate'])('clears confirmation immediately when %s is typed, before blur or submission', async field => {
+        await fixture.whenStable();
+        fixture.detectChanges();
+        component.formGroup.get('accepted')!.setValue(true);
+        const input = fixture.debugElement.query(By.css(`input[formControlName="${field}"]`)).nativeElement as HTMLInputElement;
+        const date = dayjs().subtract(field === 'startDate' ? 10 : 2, 'day');
+        input.value = date.format('MM/DD/YYYY');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        fixture.detectChanges();
+        expect(dayjs(component.formGroup.get(field)!.value).format('YYYY-MM-DD')).toBe(date.format('YYYY-MM-DD'));
+        expect(component.formGroup.get('accepted')!.value).toBe(false);
+        expect(component.selectedHistoryRange).toBe('custom');
+        expect(haptics.selection).not.toHaveBeenCalled();
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        expect(haptics.selection).not.toHaveBeenCalled();
+        await component.onSubmit({ preventDefault: vi.fn() } as unknown as Event);
+        expect(mockUserService.importServiceHistoryForCurrentUser).not.toHaveBeenCalled();
+    });
+
+    it('clears confirmation and gives one selection feedback for a calendar choice', async () => {
+        await fixture.whenStable();
+        fixture.detectChanges();
+        component.formGroup.get('accepted')!.setValue(true);
+        const picker = fixture.debugElement.query(By.directive(MatDatepicker)).componentInstance as MatDatepicker<dayjs.Dayjs>;
+        // Avoid a provider-minimum month with only one enabled day at month end.
+        picker.startAt = dayjs().subtract(10, 'day');
+        picker.open();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        const choice = [...document.querySelectorAll<HTMLButtonElement>('mat-calendar button.mat-calendar-body-cell:not([disabled])')]
+            .find(button => button.getAttribute('aria-disabled') !== 'true' && !button.querySelector('.mat-calendar-body-selected'))!;
+        expect(choice).toBeDefined();
+        choice.click();
+        fixture.detectChanges();
+        expect(component.selectedHistoryRange).toBe('custom');
+        expect(component.formGroup.get('accepted')!.value).toBe(false);
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        const checkbox = fixture.debugElement.query(By.directive(MatCheckbox)).componentInstance as MatCheckbox;
+        checkbox.change.emit({ source: checkbox, checked: true });
+        expect(haptics.selection).toHaveBeenCalledTimes(2);
+        expect(mockUserService.importServiceHistoryForCurrentUser).not.toHaveBeenCalled();
     });
 
     it('should create', () => {
@@ -1071,20 +1185,17 @@ describe('HistoryImportFormComponent', () => {
             expect(component.formGroup.enabled).toBe(true);
         });
 
-        it.each([0.25, 1.25])('keeps the %.2f-day completion estimate anchored to acceptance across reopening', async days => {
+        it.each([1250, 6250])('keeps queued feedback honest after reopening and elapsed time for %i activities', async count => {
             await reopen();
             vi.useFakeTimers();
-            const acceptedAtMs = Date.now();
-            const durationMs = days * 86_400_000;
-            const expectedTime = dayjs(acceptedAtMs + durationMs).format('h:mm A');
-            mockUserService.importServiceHistoryForCurrentUser.mockResolvedValueOnce({ stats: { successCount: component.processingCapacityPerDay * days } });
+            mockUserService.importServiceHistoryForCurrentUser.mockResolvedValueOnce({ stats: { successCount: count } });
             await submit('activity');
-            await vi.advanceTimersByTimeAsync(3_600_000);
+            await vi.advanceTimersByTimeAsync(2 * 86_400_000);
             await reopen();
-            expect(component.estimatedCompletionVerbal).toContain(expectedTime);
-            await vi.advanceTimersByTimeAsync(durationMs - 3_600_000);
-            fixture.detectChanges();
-            expect(fixture.nativeElement.textContent).toContain('The initial processing estimate has passed');
+            const copy = fixture.nativeElement.textContent;
+            expect(copy).toContain(`${count} activities scheduled.`);
+            expect(copy).toContain('Timing depends on the provider and queued work.');
+            expect(copy).not.toMatch(/Estimated to finish|estimate has passed|very soon|day capacity/);
             expect(component.formGroup.disabled).toBe(true);
         });
 
@@ -1383,10 +1494,6 @@ describe('HistoryImportFormComponent', () => {
         } finally {
             clock.mockRestore();
         }
-    });
-
-    it('should have correct processing capacity constant', () => {
-        expect(component.processingCapacityPerDay).toBe(5000);
     });
 
     it('should render Suunto sleep backfill button for connected Pro users', async () => {
@@ -1927,13 +2034,11 @@ describe('HistoryImportFormComponent', () => {
             await component.onSubmit(mockEvent);
 
             expect(component.pendingImportResult()).toEqual(mockStats);
-            // We now check for the verbal estimation
-            // 150 / 24000 = very small fraction of a day -> very soon
-            expect(component.estimatedCompletionVerbal).toContain('Should be done very soon! 🚀');
-
-            // Should also display the capacity
-            const compiled = fixture.nativeElement;
-            expect(compiled.textContent).toContain('5,000 / day capacity');
+            fixture.detectChanges();
+            const copy = fixture.nativeElement.textContent;
+            expect(copy).toContain('150 activities scheduled.');
+            expect(copy).toContain('Timing depends on the provider and queued work.');
+            expect(copy).not.toMatch(/very soon|day capacity|Estimated to finish/);
         });
 
         it('should show "No new activities" snackbar when successCount is 0', async () => {
@@ -2213,7 +2318,7 @@ describe('HistoryImportFormComponent', () => {
 
             expect(component.isHistoryImportPending()).toBe(true);
             expect(fixture.nativeElement.textContent).toContain('42 activities scheduled.');
-            expect(fixture.nativeElement.textContent).toContain('5,000 / day capacity');
+            expect(fixture.nativeElement.textContent).toContain('Timing depends on the provider and queued work.');
         });
     });
 });
