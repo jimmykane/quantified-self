@@ -263,6 +263,35 @@ describe('EventCardSwimLengthsComponent', () => {
     expect(haptics.selection).not.toHaveBeenCalled();
   });
 
+  it.each([SwimPaceUnits.MinutesPer100Meter, SwimPaceUnits.MinutesPer100Yard])(
+    'does not replace an explicitly invalid distance with pool length in %s', unit => {
+      component.unitSettings = { swimPaceUnits: [unit] } as UserUnitSettingsInterface;
+      for (const distance of [Number.NaN, Number.POSITIVE_INFINITY, -1, 'invalid']) {
+        const lengths = [createSwimLength(), createSwimLength({ index: 2, distance }), createSwimLength({ index: 3 })];
+        component.selectedActivities = [createActivity(lengths)];
+        component.ngOnChanges();
+        const group = component.swimLengthViews[0].groups[0];
+        expect(group.summaryRow).toMatchObject({ Distance: 'Distance unavailable', 'Swim Pace': '', 'Normalized SWOLF': '' });
+        expect(group.rows[1]).toMatchObject({ Distance: '', Split: 'Unavailable' });
+        expect(group.rows[2].Split).toBe('Unavailable');
+        expect(group.rows[1].distanceExplanation).toContain('missing or invalid');
+        expect(lengths[1].distance).toBe(distance);
+      }
+    },
+  );
+
+  it('does not count an invalid rest distance as an omitted zero-distance rest', () => {
+    component.selectedActivities = [createActivity([
+      createSwimLength(), createSwimLength({ index: 2, type: 'idle', distance: Number.NaN }),
+    ])];
+    component.ngOnChanges();
+    const group = component.swimLengthViews[0].groups[0];
+    expect(group.summaryRow.Distance).toBe('Distance unavailable');
+    group.expanded = true;
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('this rest length has an invalid recorded distance');
+  });
+
   it.each([
     { missingIndex: 1, complete: '4 KCal', rows: ['4 KCal', '', '0 KCal'] },
     { missingIndex: 2, complete: '9 KCal', rows: ['4 KCal', '5 KCal', ''] },

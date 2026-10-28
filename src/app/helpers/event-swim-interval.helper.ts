@@ -36,7 +36,7 @@ export function getSwimIntervalActivity(activity: ActivityInterface): ActivityIn
       || +length.endDate > +activity.endDate + 1000
       || (index > 0 && (+length.startDate <= +lengths[index - 1].startDate
         || Math.abs(+lengths[index - 1].endDate - +length.startDate) > 1000))
-      || (isRestSwimLength(length) && length.distance && value(length.distance) !== 0))) return null;
+      || (isRestSwimLength(length) && (length.distanceIsInvalid || (length.distance && value(length.distance) !== 0))))) return null;
 
   const nativeLaps = activity.getLaps?.() || [];
   // Missing rest membership does not invalidate the watch's active set boundaries.

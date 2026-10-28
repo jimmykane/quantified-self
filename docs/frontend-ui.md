@@ -376,6 +376,9 @@ change; import/storage, event/lap totals, chart markers, Training and MCP contra
 Swim Lengths and derived Intervals share `getCompleteSwimLengthSum` and `getSwimLengthHeartRateAverage`.
 Totals require complete nonnegative inputs. Set distance requires every active length's distance or its recorded
 pool-length fallback; a rest without distance adds no movement, while an explicit rest distance is retained.
+The frontend normalizer retains a `distanceIsInvalid` marker when it rejects an explicit distance. The marker
+survives interval-adapter normalization: invalid distances cannot become pool-length fallbacks or omitted rest
+zeroes, and invalid rest distance disqualifies derived interval/nominal-pool projection. Source records are untouched.
 An unknown active distance produces **Distance unavailable** in the set header and **Unavailable** in that and later
 cumulative splits within the set. Expanding the set explains the missing/invalid length, and the next set starts its
 own cumulative total. Known individual distances stay visible, including inside expanded interval details.

@@ -93,7 +93,7 @@ export function getSwimLengthDuration(length: AppSwimLength): number | null {
 }
 
 export function getSwimLengthDistance(length: AppSwimLength): number | null {
-  return finite(length.distance ?? length.poolLength);
+  return length.distanceIsInvalid ? null : finite(length.distance ?? length.poolLength);
 }
 
 /** Duration-weighted estimate for the supplied lengths; requires complete HR and timing. */

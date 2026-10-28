@@ -285,6 +285,9 @@ export class EventCardSwimLengthsComponent implements OnChanges {
 
       if (this.isIdleOrRestSwimLength(swimLength)) {
         row.Split = 'Rest';
+        if (swimLength.distanceIsInvalid) {
+          row.distanceExplanation = 'Set distance is unavailable because this rest length has an invalid recorded distance.';
+        }
         return row;
       }
 
@@ -316,9 +319,11 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     const totalDuration = this.completeDuration(swimLengths);
     // An idle length with no distance adds no movement to an active set. Preserve
     // explicit rest distances, and never fill missing active distance with zero.
-    const totalDistance = getCompleteSwimLengthSum(swimLengths, length => isRestSwimLength(length)
-      ? length.distance === null && activeSwimLengths.length > 0 ? 0 : this.getFiniteDataValue(length.distance)
-      : getSwimLengthDistance(length));
+    const totalDistance = getCompleteSwimLengthSum(swimLengths, length => {
+      if (length.distanceIsInvalid) return null;
+      if (!isRestSwimLength(length)) return getSwimLengthDistance(length);
+      return length.distance === null && activeSwimLengths.length > 0 ? 0 : this.getFiniteDataValue(length.distance);
+    });
     const activeDuration = getCompleteSwimLengthSum(activeSwimLengths, getSwimLengthDuration);
     const activeDistance = getCompleteSwimLengthSum(activeSwimLengths, getSwimLengthDistance);
     const totalEnergy = getCompleteSwimLengthSum(swimLengths, length => this.getFiniteDataValue(length.calories));
