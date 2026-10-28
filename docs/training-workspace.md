@@ -741,7 +741,8 @@ are required. A private adapter reads date-bounded summaries within seven days o
 Optional previous-weight context reads up to five recent full strength companions in the existing 28-day window,
 validates companion revision/projection, and matches normalized exercise names plus the complete set/rest
 prescription. Equipment words remain significant. Only a unique most recent date match can supply stored loads;
-zero and fractional kilograms survive, while every model-invented load is removed. The review labels the source
+zero and fractional kilograms survive, while every model-invented load is removed. Bodyweight-only selections
+never inherit positive external weights, even for ambiguous exercise names; explicit zero remains valid. The review labels the source
 as previously planned with its date, never performed or progressed. Optional missing/truncated evidence is
 disclosed; incomplete required schedule reads block generation.
 

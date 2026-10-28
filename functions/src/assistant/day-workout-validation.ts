@@ -15,7 +15,7 @@ export function normalizedExerciseName(name: string): string {
 function prescription(exercise: StrengthExerciseV1): string {
   return JSON.stringify(exercise.sets.map(set => ({ ending: set.ending, rest: set.restAfterSeconds ?? null })));
 }
-export function reusePlannedLoads(draft: StrengthWorkoutDraftV1, history: readonly PreviousStrengthPrescription[]): DayWorkoutLoadSource[] {
+export function reusePlannedLoads(draft: StrengthWorkoutDraftV1, history: readonly PreviousStrengthPrescription[], allowExternalLoads = true): DayWorkoutLoadSource[] {
   const sources: DayWorkoutLoadSource[] = [];
   for (const exercise of draft.exercises) {
     for (const set of exercise.sets) delete set.externalLoadKg;
@@ -29,7 +29,7 @@ export function reusePlannedLoads(draft: StrengthWorkoutDraftV1, history: readon
     let used = false;
     exercise.sets.forEach((set, index) => {
       const load = match.exercise.sets[index].externalLoadKg;
-      if (load !== undefined) { set.externalLoadKg = load; used = true; }
+      if (load !== undefined && (allowExternalLoads || load === 0)) { set.externalLoadKg = load; used = true; }
     });
     if (used) sources.push({ exerciseId: exercise.id, localDate: match.localDate });
   }
@@ -51,7 +51,8 @@ export function validateDayWorkoutSuggestion(value: unknown, controls: DayWorkou
   if (isStrengthWorkoutSportV1(controls.sport)) {
     if (row.structure !== undefined) throw new Error('Supply the full strength prescription only; its structure is derived.');
     strength = parseStrengthWorkoutDraftV1(row.strength);
-    previousLoads = reusePlannedLoads(strength, controls.trainingContext && controls.usePreviousWeights ? history : []);
+    previousLoads = reusePlannedLoads(strength, controls.trainingContext && controls.usePreviousWeights ? history : [],
+      controls.equipment.some(equipment => equipment !== 'bodyweight'));
   } else if (row.strength !== undefined || row.estimatedMinutes !== undefined) throw new Error('Strength fields require a strength sport.');
   const structure = strength ? projectStrengthWorkoutToV1({ ...strength, workoutId: 'draft', revision: 1 }, controls.sport)
     : parseWorkoutStructureV1(row.structure);

@@ -46,7 +46,7 @@ describe('day workout contract and prescription validation', () => {
   });
   it.each([0, 12.5])('reuses exact planned load %s only for matching names and prescriptions', load => {
     const previous = strength(); previous.exercises[0].sets[0].externalLoadKg = load;
-    const options = { ...controls, sport: ActivityTypes.StrengthTraining, target: 'none' as const, trainingContext: true };
+    const options = { ...controls, sport: ActivityTypes.StrengthTraining, target: 'none' as const, trainingContext: true, equipment: ['dumbbells' as const] };
     const value = { kind: 'workout', title: 'Strength', rationale: 'General strength.', strength: strength() };
     const history = [{ localDate: '2026-10-25', strength: previous }];
     const result = validateDayWorkoutSuggestion(value, options, history);
@@ -58,5 +58,17 @@ describe('day workout contract and prescription validation', () => {
     expect(validateDayWorkoutSuggestion(value, options, [...history, ...history]).previousLoads).toEqual([]);
     previous.exercises[0].sets[0].ending.repetitions = 10;
     expect(validateDayWorkoutSuggestion(value, options, history).previousLoads).toEqual([]);
+  });
+  it('does not add a previous positive weight to a bodyweight-only request, while preserving explicit zero', () => {
+    const options = { ...controls, sport: ActivityTypes.StrengthTraining, target: 'none' as const, trainingContext: true };
+    const previous = strength(); previous.exercises[0].name = 'Squat'; previous.exercises[0].sets[0].externalLoadKg = 12.5;
+    const suggested = strength(); suggested.exercises[0].name = 'Squat';
+    const value = { kind: 'workout', title: 'Bodyweight', rationale: 'No equipment required.', strength: suggested };
+    const history = [{ localDate: '2026-10-25', strength: previous }];
+    const result = validateDayWorkoutSuggestion(value, options, history);
+    expect(result.draft?.strength?.exercises[0].sets[0].externalLoadKg).toBeUndefined();
+    expect(result.previousLoads).toEqual([]);
+    previous.exercises[0].sets[0].externalLoadKg = 0;
+    expect(validateDayWorkoutSuggestion(value, options, history).draft?.strength?.exercises[0].sets[0].externalLoadKg).toBe(0);
   });
 });
