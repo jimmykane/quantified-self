@@ -3440,7 +3440,10 @@ included readings and heading-only counters remain distinct. Reordering updates 
 Mixed targeted/untargeted steps are counted separately rather than claiming one layout for the whole workout.
 A countdown plus an HR target/current-HR pair reserves three fields, leaving two before instructions. The UI explains
 this budget and moving important fields earlier without dropping prescribed targets. Missing/unsupported/compact
-recipes show no invented inline allocation. These are frontend explanations using the existing allocator only;
+recipes show no invented inline allocation. Unsupported/compact status and the enriched-file-size fallback warning
+stay visible outside the detailed report; inline Included counts must never imply that a large-Guide fallback preserves
+all fields. The per-step disclosure is absent when no supported expanded rows exist.
+These are frontend explanations using the existing allocator only;
 Guide fields/digests, queue monitoring, consent, storage and MCP read/write contracts are unchanged (no wire impact).
 Disclosure targets use per-instance IDs so stacked plan/workout dialogs cannot control another dialog's region.
 Accepted draft edits clear old save success/error messages; unchanged or rejected selections remain silent and

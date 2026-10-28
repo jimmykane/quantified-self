@@ -112,7 +112,7 @@ describe('Suunto swimming screen preferences', () => {
     component.choose('restFields', 3, 'previousLapStrokes');
     fixture.detectChanges();
     const rows = component.availability()!.rows;
-    expect(fixture.nativeElement.textContent).toContain('large Guides may omit interval headings, planned distances and Last Work lap readings to fit the file-size limit');
+    expect(fixture.nativeElement.textContent).toContain('Large Guides may omit interval headings, planned distances and Last Work lap readings to fit the file-size limit');
     expect(rows[0].fields[0].type).toBe('stepDurationCountdown');
     expect(rows[0].choices.filter(choice => choice.state === 'included')).toHaveLength(3);
     expect(rows[1].choices.filter(choice => choice.field.startsWith('previousLap'))
@@ -209,6 +209,38 @@ describe('Suunto swimming screen preferences', () => {
         reasons: ['The adjacent Work step has no prescribed distance.'] });
     fixture.componentRef.setInput('structure', null); fixture.detectChanges();
     expect(component.sections().flatMap(section => section.fields).every(row => row.allocation === null)).toBe(true);
+  });
+  it('keeps size fallback and unsupported-layout warnings visible while the detailed report is closed', () => {
+    const fixture = render(); const component = fixture.componentInstance;
+    const work: WorkoutStepV1 = { kind: 'step', id: 'work', purpose: 'work',
+      ending: { kind: 'manual' }, targets: [] };
+    const rest: WorkoutStepV1 = { kind: 'step', id: 'rest', purpose: 'rest',
+      ending: { kind: 'time', seconds: 15 }, targets: [] };
+    const structure: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Swimming, nodes: [work, rest] };
+    component.toggle(); fixture.componentRef.setInput('structure', structure); fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    const summary = () => element.querySelector('.allocation-summary');
+    expect(summary()?.textContent).toContain('Large Guides may omit');
+    expect(summary()?.closest('[hidden]')).toBeNull();
+    expect(component.availabilityExpanded()).toBe(false);
+    fixture.componentRef.setInput('structure', { ...structure, nodes: Array.from({ length: 6 }, (_, index) => ({
+      kind: 'repeat', id: `set-${index}`, count: 100,
+      steps: [{ ...work, id: `work-${index}` }, { ...rest, id: `rest-${index}` }],
+    })) } satisfies WorkoutStructureV1); fixture.detectChanges();
+    expect(component.availability()?.compact).toBe(true);
+    expect(summary()?.textContent).toContain('compact screens');
+    expect(summary()?.closest('[hidden]')).toBeNull();
+    expect(component.sections().flatMap(section => section.fields).every(row => row.allocation === null)).toBe(true);
+    fixture.componentRef.setInput('structure', { ...structure, nodes: [
+      { ...work, ending: { kind: 'repetitions', repetitions: 10 } }, rest,
+    ] } satisfies WorkoutStructureV1); fixture.detectChanges();
+    expect(component.availability()?.blocked).toBe(true);
+    expect(summary()?.textContent).toContain('cannot currently be sent');
+    expect(summary()?.closest('[hidden]')).toBeNull();
+    expect(summary()?.textContent).not.toContain('Included');
+    expect(component.availabilityExpanded()).toBe(false);
+    expect(save).not.toHaveBeenCalled();
+    expect(haptics.selection).toHaveBeenCalledOnce();
   });
   it('bounds availability rendering and silently resets paging when the recipe changes', () => {
     const fixture = render(); const component = fixture.componentInstance;

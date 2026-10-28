@@ -761,7 +761,8 @@ describe('help.content', () => {
       '**Show field availability for this workout**', '**Included**, **Heading** or **Omitted**',
       'not guaranteed visible or measured', 'new scheduled copy from your workout library',
       'does not unlock its protected completed Guide', 'never automatically recreates hidden Guides', 'without opening the detailed report',
-      'leaving two for extras before instructions', 'Move your most important fields earlier']) expect(content).toContain(phrase);
+      'leaving two for extras before instructions', 'Move your most important fields earlier',
+      'Warnings for unsupported recipes, compact screens and file-size fallback also stay visible']) expect(content).toContain(phrase);
     for (const phrase of ['**Duplicate to…** in its sync details or workout actions', '**Send a fresh Guide**', '**same QS workout**',
       'earlier Guide untouched', 'duplicates are possible', 'At most eight fresh copies', 'Stop sync affects the current Guide']) expect(content).toContain(phrase);
     expect(content).not.toContain('Repeat on another date');

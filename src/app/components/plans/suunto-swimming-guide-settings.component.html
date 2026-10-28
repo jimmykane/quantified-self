@@ -6,18 +6,20 @@
   <p>An HR target with a countdown uses three fields: countdown, current HR and target HR. That leaves two for extras before instructions or additional targets. Move the fields you need most earlier.</p>
   <p>Counters use the heading (<strong>Rest 1/10</strong>), not a metric slot. Previous/next distances share one short text field that Suunto may crop. Choices are priorities, not guaranteed watch cells.</p>
   @if (availability(); as allocation) {
-    @if (!allocation.blocked && !allocation.compact) {
-  <p class="limitations">Availability below follows your current choices for this workout. Included means requested from Suunto, not guaranteed visible or measured. It does not describe an older Guide already on your watch.</p>
-    }
-    <button mat-button type="button" [attr.aria-expanded]="availabilityExpanded()" [attr.aria-controls]="availabilityRegionId"
-      (click)="toggleAvailability()">{{ availabilityExpanded() ? 'Hide' : 'Show' }} field availability for this workout</button>
-    <div [id]="availabilityRegionId" [hidden]="!availabilityExpanded()">
-      <p>This shows the new normal layout, not the Guide on your watch. Included means requested from Suunto, not guaranteed visible or measured. Targets/notes reduce slots; large Guides may omit interval headings, planned distances and Last Work lap readings to fit the file-size limit.</p>
+    <div class="allocation-summary limitations">
       @if (allocation.blocked) {
         <p>This recipe cannot currently be sent as a Suunto Guide. Review its compatibility before relying on a field allocation.</p>
       } @else if (allocation.compact) {
         <p>This workout exceeds the expanded-screen limit. It uses compact screens without individual interval headings, adjacent planned-distance context or Last Work lap readings.</p>
       } @else {
+        <p>Availability below follows the normal layout for your current choices. Included means requested from Suunto, not guaranteed visible or measured. It does not describe an older Guide already on your watch.</p>
+        <p>Large Guides may omit interval headings, planned distances and Last Work lap readings to fit the file-size limit, even when the normal layout includes them.</p>
+      }
+    </div>
+    @if (!allocation.blocked && !allocation.compact) {
+      <button mat-button type="button" [attr.aria-expanded]="availabilityExpanded()" [attr.aria-controls]="availabilityRegionId"
+        (click)="toggleAvailability()">{{ availabilityExpanded() ? 'Hide' : 'Show' }} field availability for this workout</button>
+      <div [id]="availabilityRegionId" [hidden]="!availabilityExpanded()">
         @for (row of visibleAvailabilityRows(); track row.index) {
           <div class="availability-step">
             <h4>{{ row.title }} <span class="limitations">· Step {{ row.index + 1 }} · {{ row.requiredCount }} fields</span></h4>
@@ -31,8 +33,8 @@
         @if (availabilityLimit() < allocation.rows.length) {
           <button mat-button type="button" (click)="showMoreAvailability()">Show more steps</button>
         }
-      }
-    </div>
+      </div>
+    }
   } @else {
     <p class="limitations">Open a swimming workout's Suunto sync details to inspect which choices fit each Work and Rest step.</p>
   }
