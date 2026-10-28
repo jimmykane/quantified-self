@@ -1071,20 +1071,17 @@ describe('HistoryImportFormComponent', () => {
             expect(component.formGroup.enabled).toBe(true);
         });
 
-        it.each([0.25, 1.25])('keeps the %.2f-day completion estimate anchored to acceptance across reopening', async days => {
+        it.each([1250, 6250])('keeps queued feedback honest after reopening and elapsed time for %i activities', async count => {
             await reopen();
             vi.useFakeTimers();
-            const acceptedAtMs = Date.now();
-            const durationMs = days * 86_400_000;
-            const expectedTime = dayjs(acceptedAtMs + durationMs).format('h:mm A');
-            mockUserService.importServiceHistoryForCurrentUser.mockResolvedValueOnce({ stats: { successCount: component.processingCapacityPerDay * days } });
+            mockUserService.importServiceHistoryForCurrentUser.mockResolvedValueOnce({ stats: { successCount: count } });
             await submit('activity');
-            await vi.advanceTimersByTimeAsync(3_600_000);
+            await vi.advanceTimersByTimeAsync(2 * 86_400_000);
             await reopen();
-            expect(component.estimatedCompletionVerbal).toContain(expectedTime);
-            await vi.advanceTimersByTimeAsync(durationMs - 3_600_000);
-            fixture.detectChanges();
-            expect(fixture.nativeElement.textContent).toContain('The initial processing estimate has passed');
+            const copy = fixture.nativeElement.textContent;
+            expect(copy).toContain(`${count} activities scheduled.`);
+            expect(copy).toContain('Timing depends on the provider and queued work.');
+            expect(copy).not.toMatch(/Estimated to finish|estimate has passed|very soon|day capacity/);
             expect(component.formGroup.disabled).toBe(true);
         });
 
@@ -1383,10 +1380,6 @@ describe('HistoryImportFormComponent', () => {
         } finally {
             clock.mockRestore();
         }
-    });
-
-    it('should have correct processing capacity constant', () => {
-        expect(component.processingCapacityPerDay).toBe(5000);
     });
 
     it('should render Suunto sleep backfill button for connected Pro users', async () => {
@@ -1927,13 +1920,11 @@ describe('HistoryImportFormComponent', () => {
             await component.onSubmit(mockEvent);
 
             expect(component.pendingImportResult()).toEqual(mockStats);
-            // We now check for the verbal estimation
-            // 150 / 24000 = very small fraction of a day -> very soon
-            expect(component.estimatedCompletionVerbal).toContain('Should be done very soon! 🚀');
-
-            // Should also display the capacity
-            const compiled = fixture.nativeElement;
-            expect(compiled.textContent).toContain('5,000 / day capacity');
+            fixture.detectChanges();
+            const copy = fixture.nativeElement.textContent;
+            expect(copy).toContain('150 activities scheduled.');
+            expect(copy).toContain('Timing depends on the provider and queued work.');
+            expect(copy).not.toMatch(/very soon|day capacity|Estimated to finish/);
         });
 
         it('should show "No new activities" snackbar when successCount is 0', async () => {
@@ -2213,7 +2204,7 @@ describe('HistoryImportFormComponent', () => {
 
             expect(component.isHistoryImportPending()).toBe(true);
             expect(fixture.nativeElement.textContent).toContain('42 activities scheduled.');
-            expect(fixture.nativeElement.textContent).toContain('5,000 / day capacity');
+            expect(fixture.nativeElement.textContent).toContain('Timing depends on the provider and queued work.');
         });
     });
 });

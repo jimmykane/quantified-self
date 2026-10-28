@@ -42,9 +42,9 @@
   @if (pendingImportResult()) {
   <app-status-info type="success" title="Import started">
     {{ pendingImportResult()?.successCount ?? 0 }} activities scheduled.
-    {{ estimatedCompletionVerbal }}
-    <div style="font-size: 0.9em; opacity: 0.8; margin-top: 4px;">(~{{ processingCapacityPerDay | number }} / day
-      capacity)</div>
+    @if (pendingImportResult()?.successCount > 0) {
+    <p>Activities are processed in the background. Timing depends on the provider and queued work.</p>
+    }
     @if (activityRequestRange) {
     <div style="margin-top: 8px; opacity: 0.8; font-size: 0.9em;">
       Last import range: {{ activityRequestRange.startDate | date: 'mediumDate' }} - {{

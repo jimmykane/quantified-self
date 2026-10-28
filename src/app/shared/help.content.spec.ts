@@ -16,6 +16,13 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('distinguishes scheduled history and cooldowns from completion estimates', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
+    expect(copy).toContain('Scheduled activity counts confirm queued work, not completed imports');
+    expect(copy).toContain('QS does not promise a completion time from those counts');
+    expect(copy).toContain('not an expected finish date');
+  });
+
   it('explains shared provider import progress and distinguishes requests from delivery', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
     for (const phrase of ['**Importing history**', 'update together with the header', '**View details**',
