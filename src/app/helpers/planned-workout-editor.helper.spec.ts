@@ -292,10 +292,12 @@ describe('manual planned-workout editor conversion', () => {
 
   it.each([ActivityTypes.Running, ActivityTypes.Cycling])('saves and reopens %s miles as the same canonical metres', sport => {
     const units = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    const mileStep = createManualWorkoutEditorStep('mile');
+    delete mileStep.untouchedDuration;
     const value: ManualWorkoutEditorValue = {
       title: 'Mile repeats', localDate: '2026-09-03', sport,
       nodes: [{ kind: 'repeat', id: 'repeats', count: 2, steps: [{
-        ...createManualWorkoutEditorStep('mile'), endingKind: 'distance', endingValue: 1,
+        ...mileStep, endingKind: 'distance', endingValue: 1,
       }] }],
     };
     const structure = manualWorkoutEditorToStructure(value, units);

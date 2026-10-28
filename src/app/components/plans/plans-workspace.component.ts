@@ -33,6 +33,7 @@ import {
   isRowingWorkoutSportV1,
   isSwimmingWorkoutSportV1,
   WORKOUT_STRUCTURE_MAX_NODES,
+  type WorkoutStepPurposeV1,
 } from '@shared/planned-workout';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import dayjs, { type Dayjs } from 'dayjs';
@@ -88,6 +89,8 @@ import {
   manualWorkoutEditorNodeCount,
   manualWorkoutEditorSiblings,
   moveManualWorkoutEditorNode,
+  changeManualWorkoutEditorStepPurpose,
+  manualWorkoutEditorTimeContexts,
 } from '../../helpers/planned-workout-editor-actions.helper';
 import {
   DELETED_WORKOUT_RECOVERY_DAYS,
@@ -462,6 +465,10 @@ export class PlansWorkspaceComponent {
   readonly deleteDisposition = signal<DeleteTrainingPlanRequestV1['workoutDisposition']>('convert-to-standalone');
   readonly removePastProviderCopies = signal(false);
   readonly editor = signal<WorkoutEditorSession | null>(null);
+  readonly editorTimeContexts = computed(() => {
+    const session = this.editor();
+    return session ? manualWorkoutEditorTimeContexts(session.value, session.unitSettings, this.locale) : {};
+  });
   readonly editorProfileSelection = signal<WorkoutProfileSelection | null>(null);
   readonly editorProfileContext = computed(() => this.editor()
     ? `${this.currentUser()?.uid}/${this.editorGeneration}` : '');
@@ -1509,6 +1516,7 @@ export class PlansWorkspaceComponent {
 
   updateStep(nodeIndex: number, stepIndex: number | null, field: string, value: unknown, durationSeconds?: number): void {
     if (this.busyAction()) return;
+    const contexts = field === 'purpose' ? this.editorTimeContexts() : {};
     const sourceDuration = typeof value === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 0
       && durationSeconds / 60 === value ? { editorValue: value, seconds: durationSeconds } : undefined;
     this.editor.update(session => {
@@ -1521,7 +1529,11 @@ export class PlansWorkspaceComponent {
           if (field === 'endingKind') {
             return changeManualWorkoutEditorStepEnding(node, value as ManualWorkoutEnding, session.value.sport, session.unitSettings);
           }
+          if (field === 'purpose') {
+            return changeManualWorkoutEditorStepPurpose(node, value as WorkoutStepPurposeV1, contexts[node.id]?.previousRestSeconds ?? null);
+          }
           return { ...node, [field]: value,
+            ...(field === 'endingValue' ? { untouchedDuration: undefined } : {}),
             ...(field === 'endingValue' && value !== node[field]
               ? { sourceDistance: undefined, sourceDuration: node.endingKind === 'time' ? sourceDuration : undefined } : {}),
           } as ManualWorkoutEditorStep;
@@ -1535,7 +1547,11 @@ export class PlansWorkspaceComponent {
               if (field === 'endingKind') {
                 return changeManualWorkoutEditorStepEnding(step, value as ManualWorkoutEnding, session.value.sport, session.unitSettings);
               }
+              if (field === 'purpose') {
+                return changeManualWorkoutEditorStepPurpose(step, value as WorkoutStepPurposeV1, contexts[step.id]?.previousRestSeconds ?? null);
+              }
               return { ...step, [field]: value,
+                ...(field === 'endingValue' ? { untouchedDuration: undefined } : {}),
                 ...(field === 'endingValue' && value !== step[field]
                   ? { sourceDistance: undefined, sourceDuration: step.endingKind === 'time' ? sourceDuration : undefined } : {}),
               } as ManualWorkoutEditorStep;

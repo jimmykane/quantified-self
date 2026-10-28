@@ -1138,6 +1138,31 @@ MCP impact: presentation only. Existing strict recipe reads and approval-gated p
 no tool, field, schema, consent, provider action, Assistant permission, skill, Sports Lib type or migration changes.
 Provider serializers, scheduling/history and completed-activity totals are unchanged. Verification covers real input
 events, plan/standalone/library saves, repeat children, exact reopen/resave, invalid drafts, units and pending controls.
+
+Timed-step review also spells out Sports Lib duration display tokens (for example, `Rest for 15 seconds` versus
+`Rest for 15 minutes`) in a live summary. Rest shows the preceding Rest duration and, where unambiguous, the next
+step's ending in the athlete's units. A Rest of at least 300 seconds and at least five times the previous timed Rest
+shows a non-blocking informational comparison; it is not a prescription limit and does not change the saved time.
+Invalid drafts show `Set a duration` rather than stale values. Pace-target inputs and Strength's separate editor
+do not gain this summary or default behavior.
+
+Only a newly added, untouched Time step may replace its generic initial duration when its Purpose becomes Rest.
+It adopts the exact seconds of the preceding valid timed Rest, or requires an explicit duration when none exists.
+Context follows recipe order through the first pass of repeat blocks without expanding them. A manual or invalid
+Rest clears the duration reference; active Recovery is not substituted for Rest. Repeat exits with different next
+steps on later passes omit the next-step label. Reopened recipes, duplicated steps, edited durations and changed
+ending types are never silently defaulted. The editor-only `untouchedDuration` marker is consumed on adoption,
+duration entry, ending-type change or duplication and is excluded by the existing save conversion. Choosing Rest
+uses the existing single selection haptic; typing, initialization, unchanged choices and busy actions stay silent.
+
+MCP impact review: no wire or consent change. The new default is a local draft proposal that still requires the
+existing explicit editor save. Canonical recipes retain exact seconds; existing complete-recipe MCP/Assistant
+proposal and confirmation contracts already represent those values. Focused v1/v2/v3 read fixtures distinguish
+15-second and 900-second Rest steps, preserve fractional seconds and reject editor-only fields. No new tool,
+registered digest, plugin rebuild, backend deployment, historical rewrite or provider action is needed.
+Verification covers native duration inputs and Material purpose selections, first-Rest validation, draft preservation,
+repeat children, plan/standalone/library saves, helper unit preferences and non-blocking longer-Rest warnings.
+
 MCP impact: #734 adds `get_planned_workout_v2` and `preview_planned_workout_v2_change` while preserving registered v1
 schemas. The read uses existing Training plans consent and includes only an authored pool length in canonical metres
 plus its metre/yard presentation; a distance step never implies pool size. The focused create/update preview uses

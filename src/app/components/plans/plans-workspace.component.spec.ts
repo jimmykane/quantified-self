@@ -801,6 +801,56 @@ describe('PlansWorkspaceComponent', () => {
     expect(mutate).not.toHaveBeenCalled();
   });
 
+  it.each(['plans', 'standalone', 'library'] as const)('defaults only untouched new Rest steps and saves explicit durations in %s', async scope => {
+    libraryMutate.mockResolvedValue({ mutationId: 'mutation-1', item: null });
+    setRouteState({ mode: scope === 'library' ? 'library-create' : 'create', scope: scope === 'standalone' ? 'standalone' : 'plans', date: '2026-09-09' });
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance;
+    component.updateEditorField('title', 'Rest duration review');
+    component.updateEditorField('sport', ActivityTypes.Swimming);
+    component.updateStep(0, null, 'purpose', 'rest');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.duration-summary').textContent).toContain('Set a duration');
+    const seconds: HTMLInputElement = fixture.nativeElement.querySelector('[data-duration-part="seconds"]');
+    haptics.selection.mockClear();
+    seconds.value = '15'; seconds.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(component.editorProfile().nodes[0]).toMatchObject({ ending: { seconds: 15 } });
+
+    component.addEditorStep();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const purposes = fixture.debugElement.queryAll(By.directive(MatSelect))
+      .map(element => element.componentInstance as MatSelect).filter(select => select.options.some(option => option.value === 'rest'));
+    purposes[1].selectionChange.emit({ source: purposes[1], value: 'rest' });
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.editorProfile().nodes[1]).toMatchObject({ ending: { seconds: 15 } });
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    component.updateStep(1, null, 'purpose', 'rest');
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    component.addEditorRepeat(); component.updateStep(2, 1, 'purpose', 'rest');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.editorProfile().nodes[2]).toMatchObject({ steps: [{}, { ending: { seconds: 15 } }] });
+    if (scope === 'standalone') exportLibraryQa(fixture, 'rest-seconds-editor', '.workout-editor');
+
+    const inputs: HTMLElement = fixture.nativeElement.querySelectorAll('app-workout-time-input')[1];
+    for (const [part, value] of [['minutes', '15'], ['seconds', '0']]) {
+      const input: HTMLInputElement = inputs.querySelector(`[data-duration-part="${part}"]`)!;
+      input.value = value; input.dispatchEvent(new Event('input', { bubbles: true }));
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    }
+    component.updateStep(1, null, 'purpose', 'work'); component.updateStep(1, null, 'purpose', 'rest');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(inputs.querySelector('.duration-warning')?.textContent).toContain('previous rest is 15 seconds');
+    expect(inputs.querySelector('.duration-summary')?.textContent).toContain('Rest for 15 minutes');
+    if (scope === 'standalone') exportLibraryQa(fixture, 'rest-minutes-editor', '.workout-editor');
+    await component.saveWorkout();
+    const operation = (scope === 'library' ? libraryMutate : mutate).mock.calls[0][0].operation;
+    expect(operation.structure.nodes[1].ending.seconds).toBe(900);
+    expect(operation.structure.nodes[2].steps[1].ending.seconds).toBe(15);
+    expect(JSON.stringify(operation.structure)).not.toMatch(/untouchedDuration|sourceDuration|previousRestSeconds/);
+  });
+
   it('exports the real timing editor for optional isolated visual QA', async () => {
     if (!process.env.TRAINING_DELIVERY_QA_DIR) return;
     TestBed.overrideProvider(MAT_FORM_FIELD_DEFAULT_OPTIONS, { useValue: { appearance: 'outline' } });
@@ -3848,6 +3898,8 @@ describe('PlansWorkspaceComponent', () => {
       ['app-plans-workspace', 'src/app/components/plans/plans-workspace.component.scss'],
       ['app-compact-row', 'src/app/components/shared/compact-row/compact-row.component.scss'],
       ['app-training-delivery-button', 'src/app/components/plans/training-delivery-button.component.scss'],
+      ['app-workout-time-input', 'src/app/components/plans/workout-time-input.component.scss'],
+      ['app-workout-profile', 'src/app/components/plans/workout-profile.component.scss'],
     ].map(([host, file]) => sass.compileString(host + ' {' + readFileSync(file, 'utf8')
       .replace(/:host\(([^)]+)\)/g, '&$1').replace(/:host/g, '&') + '}').css).join('\n');
     const source = fixture.nativeElement.querySelector(selector) as HTMLElement;

@@ -882,6 +882,11 @@
         @if (step.endingKind === 'time') {
           <app-workout-time-input class="workout-duration-input" [value]="step.endingValue"
             [disabled]="busyAction() !== null"
+            [label]="step.purpose === 'rest' ? 'Rest duration' : 'Duration'"
+            [summaryPrefix]="step.purpose === 'rest' ? 'Rest for' : 'Duration:'"
+            [previousRestSeconds]="step.purpose === 'rest' ? editorTimeContexts()[step.id]?.previousRestSeconds ?? null : null"
+            [nextStepLabel]="editorTimeContexts()[step.id]?.nextStepLabel ?? null"
+            [unitSettings]="editor().unitSettings"
             (durationChange)="updateStep(nodeIndex, stepIndex, 'endingValue', $event.minutes, $event.seconds)"></app-workout-time-input>
         } @else if (step.endingKind === 'distance') {
           <mat-form-field subscriptSizing="dynamic">

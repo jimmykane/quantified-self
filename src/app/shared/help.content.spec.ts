@@ -635,6 +635,12 @@ describe('help.content', () => {
       'including inside repeats and in the Workout library', '**m:ss**', '**4:30**',
       'decimal minutes such as 4.5 still work', 'provider-specific delivery limits still apply']) expect(copy).toContain(phrase);
   });
+  it('explains Rest duration summaries and limits defaults to untouched new steps', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    for (const phrase of ['**Rest for 15 seconds**', '**Rest for 15 minutes**', 'untouched new step',
+      'preceding timed Rest duration', 'QS does not invent one', 'Existing, duplicated and manually edited durations stay unchanged',
+      'you can still save it', 'first pass through repeat blocks', 'Strength uses its separate editor']) expect(copy).toContain(phrase);
+  });
   it('explains Wahoo re-sending after confirmed withdrawal without promising blind recreation or recording deletion', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     expect(copy).toContain('After Wahoo confirms withdrawal of an upcoming copy');

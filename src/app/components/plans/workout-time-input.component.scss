@@ -15,3 +15,10 @@ mat-form-field { width: 100%; min-width: 0; }
   color: var(--mat-sys-error);
   font: var(--mat-sys-body-small);
 }
+
+.duration-context { margin: 8px 0 0; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+.duration-summary { display: grid; gap: 4px; margin-top: 12px; overflow-wrap: anywhere; }
+.duration-summary strong { color: var(--mat-sys-on-surface); font: var(--mat-sys-title-medium); }
+.duration-summary span { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-medium); }
+.duration-warning { display: flex; align-items: flex-start; gap: 8px; margin: 12px 0 0; font: var(--mat-sys-body-medium); overflow-wrap: anywhere; }
+.duration-warning mat-icon { flex: 0 0 24px; color: var(--mat-sys-on-surface-variant); }

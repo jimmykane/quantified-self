@@ -58,6 +58,26 @@ function fixture(weightUnits?: WeightUnits) {
 }
 
 describe('Training plan MCP reads', () => {
+  it('keeps seconds and minutes distinct in timed Rest recipes without exposing editor defaults or warnings', async () => {
+    const f = fixture();
+    const recipe: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Swimming, nodes: [15, 900, 15.123456789].map((seconds, index) => ({
+      kind: 'step', id: `rest-${index}`, purpose: 'rest', ending: { kind: 'time', seconds }, targets: [],
+    })) };
+    f.structures.w1 = recipe;
+    const workoutRef = f.codec.encode({ kind: 'workout', id: 'w1', createdAtMs: 1 }, 'owner', 'connection');
+    for (const tool of ['get_planned_workout', 'get_planned_workout_v2', 'get_planned_workout_v3'] as const) {
+      const result = TRAINING_READ_OUTPUTS[tool].parse(await f.run(tool, { workoutRef }));
+      expect(result.workout.structure).toEqual(recipe);
+      expect(result.workout.displaySteps[0].text).toContain('15s');
+      expect(result.workout.displaySteps[1].text).toContain('15m 00s');
+      expect(JSON.stringify(result)).not.toMatch(/untouchedDuration|previousRestSeconds|restDurationWarning|private-editor-canary/);
+    }
+    Object.assign(f.collections.scheduledWorkouts.w1, { untouchedDuration: true, previousRestSeconds: 15, restDurationWarning: 'private-editor-canary' });
+    for (const tool of ['get_planned_workout', 'get_planned_workout_v2', 'get_planned_workout_v3'] as const) {
+      await expect(f.run(tool, { workoutRef })).rejects.toThrow();
+    }
+  });
+
   it.each([ActivityTypes.Yoga, ActivityTypes.Pilates, ActivityTypes.CardioTraining])(
     'reads %s unchanged and exposes its native Garmin compatibility', async sport => {
       const f = fixture();

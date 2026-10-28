@@ -261,6 +261,7 @@ describe('Firebase Hosting configuration', () => {
     // Manual-history help now explains existing-account verification and reconnect requirements.
     // Pool-swim help covers interval chart focus, data coverage, recorded membership and keyboard header explanations.
     // Training swim help also covers Rest text priority, automatic same-Guide updates and explicit additional copies.
+    // Training editor help covers explicit duration summaries, new-Rest defaults and non-blocking duration comparisons.
     // It applies swim units to weekly distances and the SWOLF pool-length label.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-28');
   });

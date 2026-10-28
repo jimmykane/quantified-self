@@ -5,12 +5,16 @@ import { WorkoutTimeInputComponent } from './workout-time-input.component';
 
 @Component({ standalone: true, imports: [WorkoutTimeInputComponent], template: `
   <app-workout-time-input [value]="value()" [mode]="mode()" [label]="label()" [disabled]="disabled()"
+    [summaryPrefix]="summaryPrefix()" [previousRestSeconds]="previousRestSeconds()" [nextStepLabel]="nextStepLabel()"
     (valueChange)="value.set($event)"></app-workout-time-input>` })
 class Host {
   readonly value = signal<number | null>(1.25);
   readonly mode = signal<'duration' | 'pace'>('duration');
   readonly label = signal('Duration');
   readonly disabled = signal(false);
+  readonly summaryPrefix = signal<string | null>(null);
+  readonly previousRestSeconds = signal<number | null>(null);
+  readonly nextStepLabel = signal<string | null>(null);
 }
 
 describe('WorkoutTimeInputComponent', () => {
@@ -32,6 +36,36 @@ describe('WorkoutTimeInputComponent', () => {
     expect(fixture.componentInstance.value()).toBe(62.05);
     expect(child.parts()).toEqual({ hours: 1, minutes: 2, seconds: 3 });
     expect(fixture.nativeElement.querySelector('[data-duration-part="seconds"]').getAttribute('aria-label')).toBe('Duration seconds');
+  });
+
+  it('shows explicit seconds, then a non-blocking minutes warning through real inputs', async () => {
+    const fixture = await render();
+    fixture.componentInstance.value.set(0.25);
+    fixture.componentInstance.summaryPrefix.set('Rest for');
+    fixture.componentInstance.previousRestSeconds.set(15);
+    fixture.componentInstance.nextStepLabel.set('Next: Work · 50 m');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.duration-summary').textContent).toContain('Rest for 15 seconds');
+    expect(fixture.nativeElement.querySelector('.duration-summary').textContent).toContain('Next: Work · 50 m');
+    for (const [part, value] of [['minutes', '15'], ['seconds', '0']]) {
+      const input: HTMLInputElement = fixture.nativeElement.querySelector(`[data-duration-part="${part}"]`);
+      input.value = value; input.dispatchEvent(new Event('input', { bubbles: true }));
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    }
+    expect(fixture.componentInstance.value()).toBe(15);
+    expect(fixture.nativeElement.querySelector('.duration-summary').textContent).toContain('Rest for 15 minutes');
+    expect(fixture.nativeElement.querySelector('.duration-warning').textContent).toContain('previous rest is 15 seconds');
+    expect(fixture.nativeElement.querySelector('[role="alert"]')).toBeNull();
+    fixture.componentInstance.previousRestSeconds.set(600);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.duration-warning')).toBeNull();
+    fixture.componentInstance.value.set(NaN);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.duration-summary').textContent).toContain('Set a duration');
+    expect(fixture.nativeElement.querySelector('.duration-warning')).toBeNull();
+    fixture.componentInstance.mode.set('pace');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.duration-summary')).toBeNull();
   });
 
   it('keeps cleared/invalid typing on the parent echo instead of resetting it to zero', async () => {
