@@ -40,6 +40,13 @@ every shift over a real visit. Keep Search Console's dated URL-group data, PageS
 and initial-load lab data separate; see [Google's report guidance](https://support.google.com/webmasters/answer/9205520)
 and [CLS diagnostics](https://web.dev/articles/optimize-cls).
 
+## Homepage feature order
+
+The hero keeps the original provider heading, logos and introduction together in a compact block. Training, Workouts,
+Plans, Health, Assistant, Maps and Comparisons follow; detailed integration rows and their existing actions remain after
+those product sections. Copy and shared previews stay unchanged. `#home-integrations` targets the moved detail section,
+with a local visually hidden heading so jump-link focus and subsequent keyboard navigation remain in that section.
+
 ## Sign-in route loading
 
 Account access checks use `AppUserAccess`, which has only type imports and stays synchronous. `AppUserUtilities`

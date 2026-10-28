@@ -383,7 +383,7 @@ describe('Firebase Hosting configuration', () => {
     // Checkout help covers the 20-second access check, confirmed Pro setup and recovery before another payment.
     // Event chart help covers compact option submenus and scrolling to reach every menu setting.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-27');
-    // Homepage makes automatic imports, supported activity sync and the signup/free starting points explicit.
+    // Homepage keeps the provider introduction near the hero and moves integration details after the product features.
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-28');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-10-09');

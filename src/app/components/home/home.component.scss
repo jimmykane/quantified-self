@@ -60,6 +60,10 @@
 .logos-container { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 1.5rem 2.5rem; margin-block: 1.25rem; }
 .partner-logo { width: 76px; height: 28px; color: var(--mat-sys-on-surface); }
 .partner-logo.wide { width: 84px; }
+.provider-compatibility { max-width: 38rem; margin: 1.25rem auto 0; padding-top: 1.25rem; border-top: 1px solid var(--mat-sys-outline-variant); }
+.provider-compatibility h2 { margin: 0; }
+.provider-compatibility .logos-container { margin-block: 1rem; }
+.provider-compatibility__copy { margin: 0; font: var(--mat-sys-body-small); line-height: 1.65; }
 .feature-section { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; padding-block: 2rem; border-bottom: 1px solid var(--mat-sys-outline-variant); }
 .feature-section, .integrations-section { scroll-margin-top: calc(var(--qs-visible-top-offset, 64px) + 16px); }
 .feature-copy > p:not(.eyebrow) { margin: 0 0 1rem; }
@@ -127,4 +131,7 @@
   .getting-started-section, .membership-section, .faq-section, .final-cta-section { padding-block: 1.25rem; }
   .getting-started-steps { gap: 0.5rem; }
   .logos-container { gap: 1rem 1.5rem; }
+  .provider-compatibility .logos-container { gap: 0.75rem; }
+  .provider-compatibility .partner-logo { width: 56px; height: 24px; }
+  .provider-compatibility .partner-logo.wide { width: 62px; }
 }

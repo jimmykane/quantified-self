@@ -18,6 +18,16 @@
         <li><mat-icon aria-hidden="true">verified_user</mat-icon> Your connections</li>
       </ul>
     </div>
+    <div class="provider-compatibility">
+      <h2 appHomeReveal id="home-integrations-title" tabindex="-1">Bring It In. Keep It Moving.</h2>
+      <div appHomeReveal class="logos-container" aria-label="Supported providers">
+        <mat-icon svgIcon="garmin" class="partner-logo" matTooltip="Garmin Connect" role="img" aria-label="Garmin" aria-hidden="false"></mat-icon>
+        <mat-icon svgIcon="suunto" class="partner-logo" matTooltip="Suunto App" role="img" aria-label="Suunto" aria-hidden="false"></mat-icon>
+        <mat-icon svgIcon="coros" class="partner-logo wide" matTooltip="COROS" role="img" aria-label="COROS" aria-hidden="false"></mat-icon>
+        <mat-icon svgIcon="wahoo" class="partner-logo wide" matTooltip="Wahoo" role="img" aria-label="Wahoo" aria-hidden="false"></mat-icon>
+      </div>
+      <p class="provider-compatibility__copy">Pro brings new activities into one history automatically and lets you send them along supported sync paths. Connect Garmin, Suunto, COROS, or Wahoo; you choose which services exchange activities.</p>
+    </div>
   </section>
 
   <nav class="home-navigation" aria-label="Homepage features">
@@ -25,33 +35,6 @@
       <a mat-button [href]="'#home-' + feature.id" (click)="jumpToFeature(feature.id, $event)">{{ feature.label }}</a>
     }
   </nav>
-
-  <section id="home-integrations" class="integrations-section" aria-labelledby="home-integrations-title">
-    <h2 appHomeReveal id="home-integrations-title" tabindex="-1">Bring It In. Keep It Moving.</h2>
-    <div appHomeReveal class="logos-container" aria-label="Supported providers">
-      <mat-icon svgIcon="garmin" class="partner-logo" matTooltip="Garmin Connect" role="img" aria-label="Garmin" aria-hidden="false"></mat-icon>
-      <mat-icon svgIcon="suunto" class="partner-logo" matTooltip="Suunto App" role="img" aria-label="Suunto" aria-hidden="false"></mat-icon>
-      <mat-icon svgIcon="coros" class="partner-logo wide" matTooltip="COROS" role="img" aria-label="COROS" aria-hidden="false"></mat-icon>
-      <mat-icon svgIcon="wahoo" class="partner-logo wide" matTooltip="Wahoo" role="img" aria-label="Wahoo" aria-hidden="false"></mat-icon>
-    </div>
-    <p>Pro brings new activities into one history automatically and lets you send them along supported sync paths. Connect Garmin, Suunto, COROS, or Wahoo; you choose which services exchange activities.</p>
-    <div class="integration-actions" data-nosnippet>
-      <a mat-flat-button class="qs-mat-primary" routerLink="/login">Get Started <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
-      <a mat-stroked-button routerLink="/integrations">Explore integrations <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
-    </div>
-    <div class="compact-row-stack integration-details">
-      <app-compact-row appHomeReveal layout="stacked" icon="history" iconTone="secondary" title="Sync Your History"
-        summary="Connect Garmin, Suunto, COROS, and Wahoo. New activities arrive automatically, and you can import the activity history already stored with each provider."></app-compact-row>
-      <app-compact-row appHomeReveal layout="stacked" icon="published_with_changes" iconTone="secondary" title="Move Workouts and Routes"
-        summary="Choose automatic delivery between supported providers. You can also send past activities by date range without enabling future sync.">
-        <app-public-feature-preview previewKey="provider-flow"></app-public-feature-preview>
-        <p><strong>Activity paths:</strong> Automatically deliver new workouts or backfill past activities by date range.</p>
-        <p><strong>Route paths:</strong> Deliver imported Suunto routes automatically or on demand. Saved FIT/GPX routes can also be sent manually to Garmin, Suunto, COROS, or Wahoo.</p>
-      </app-compact-row>
-      <app-compact-row appHomeReveal layout="stacked" icon="upload_file" title="Upload Your Own Files" [showDivider]="false"
-        summary="Import FIT, TCX, GPX, JSON, and SML activity files into Quantified Self. You can also send FIT activities directly to Suunto, COROS, or Wahoo for one-off transfers."></app-compact-row>
-    </div>
-  </section>
 
   <section id="home-training" class="feature-section training-section" aria-labelledby="home-training-title">
     <div appHomeReveal class="feature-copy section-heading">
@@ -178,6 +161,26 @@
       <a mat-button routerLink="/features/workout-data-comparison">Compare Workouts and Devices <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
     </header>
     <app-public-feature-preview appHomeReveal class="feature-visuals" previewKey="reviewer-benchmark"></app-public-feature-preview>
+  </section>
+
+  <section id="home-integrations" class="integrations-section" aria-labelledby="home-integration-details-title">
+    <h2 id="home-integration-details-title" class="cdk-visually-hidden" tabindex="-1">Integrations</h2>
+    <div class="integration-actions" data-nosnippet>
+      <a mat-flat-button class="qs-mat-primary" routerLink="/login">Get Started <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
+      <a mat-stroked-button routerLink="/integrations">Explore integrations <mat-icon iconPositionEnd>arrow_forward</mat-icon></a>
+    </div>
+    <div class="compact-row-stack integration-details">
+      <app-compact-row appHomeReveal layout="stacked" icon="history" iconTone="secondary" title="Sync Your History"
+        summary="Connect Garmin, Suunto, COROS, and Wahoo. New activities arrive automatically, and you can import the activity history already stored with each provider."></app-compact-row>
+      <app-compact-row appHomeReveal layout="stacked" icon="published_with_changes" iconTone="secondary" title="Move Workouts and Routes"
+        summary="Choose automatic delivery between supported providers. You can also send past activities by date range without enabling future sync.">
+        <app-public-feature-preview previewKey="provider-flow"></app-public-feature-preview>
+        <p><strong>Activity paths:</strong> Automatically deliver new workouts or backfill past activities by date range.</p>
+        <p><strong>Route paths:</strong> Deliver imported Suunto routes automatically or on demand. Saved FIT/GPX routes can also be sent manually to Garmin, Suunto, COROS, or Wahoo.</p>
+      </app-compact-row>
+      <app-compact-row appHomeReveal layout="stacked" icon="upload_file" title="Upload Your Own Files" [showDivider]="false"
+        summary="Import FIT, TCX, GPX, JSON, and SML activity files into Quantified Self. You can also send FIT activities directly to Suunto, COROS, or Wahoo for one-off transfers."></app-compact-row>
+    </div>
   </section>
 
   <section class="getting-started-section" aria-labelledby="home-start-title">

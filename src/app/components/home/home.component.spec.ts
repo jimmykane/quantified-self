@@ -69,8 +69,8 @@ describe('HomeComponent', () => {
     expect(training.textContent).toContain('Sample data');
     expect(training.querySelector('.preview-placeholder--training')).toBeTruthy();
     expect(training.querySelector('app-training-summary-cards')).toBeNull();
-    const [providerBlock, trainingBlock] = await fixture.getDeferBlocks();
-    expect(providerBlock).toBeTruthy();
+    const [trainingBlock] = await fixture.getDeferBlocks();
+    expect(trainingBlock).toBeTruthy();
     await trainingBlock.render(DeferBlockState.Complete);
     fixture.detectChanges();
     expect(training.querySelector('app-training-summary-cards')).toBeTruthy();
@@ -95,7 +95,11 @@ describe('HomeComponent', () => {
   });
 
   it('exposes every supported provider logo and its name to assistive technology', () => {
-    const logos = Array.from(fixture.nativeElement.querySelectorAll('.logos-container [role="img"]')) as HTMLElement[];
+    const providerIntro = fixture.nativeElement.querySelector('.hero-section .provider-compatibility') as HTMLElement;
+    expect(providerIntro.querySelector('h2')?.textContent).toBe('Bring It In. Keep It Moving.');
+    expect(providerIntro.querySelector('.provider-compatibility__copy')?.textContent)
+      .toBe('Pro brings new activities into one history automatically and lets you send them along supported sync paths. Connect Garmin, Suunto, COROS, or Wahoo; you choose which services exchange activities.');
+    const logos = Array.from(providerIntro.querySelectorAll('.logos-container [role="img"]')) as HTMLElement[];
     expect(logos.map(logo => logo.getAttribute('aria-label'))).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo']);
     expect(logos.every(logo => logo.getAttribute('aria-hidden') === 'false')).toBe(true);
   });
@@ -106,7 +110,7 @@ describe('HomeComponent', () => {
     expect(hero.querySelector('.hero-access-note')?.textContent).toContain('manual uploads and training analysis on free Starter');
     expect(hero.querySelector('.hero-access-note')?.textContent).toContain('Provider connections and automatic sync require Pro');
     const integrations = fixture.nativeElement.querySelector('#home-integrations') as HTMLElement;
-    expect(integrations.textContent).toContain('you choose which services exchange activities');
+    expect(hero.textContent).toContain('you choose which services exchange activities');
     expect(integrations.querySelector('.integration-actions a[href="/login"]')?.textContent).toContain('Get Started');
     expect(integrations.querySelector('a[href="/pricing"]')).toBeNull();
     expect(integrations.querySelector('.integration-actions a[href="/integrations"]')).toBeTruthy();
@@ -156,16 +160,16 @@ describe('HomeComponent', () => {
   it('retains every shared product visual and detailed feature section', () => {
     const sections = Array.from(fixture.nativeElement.querySelectorAll('.landing-page > section'))
       .map((section: Element) => section.className);
-    expect(sections).toEqual(['hero-section', 'integrations-section', 'feature-section training-section',
+    expect(sections).toEqual(['hero-section', 'feature-section training-section',
       'feature-section workouts-section', 'feature-section training-plans-section', 'feature-section health-section',
       'feature-section ai-insights-section', 'feature-section footprint-section', 'feature-section analysis-section',
-      'getting-started-section', 'membership-section', 'sovereignty-section', 'faq-section', 'final-cta-section']);
+      'integrations-section', 'getting-started-section', 'membership-section', 'sovereignty-section', 'faq-section', 'final-cta-section']);
     const previews = fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent));
     expect(previews.map(preview => preview.componentInstance.previewKey()))
-      .toEqual(['provider-flow', 'training-snapshot', 'training-readiness', 'training-signals',
+      .toEqual(['training-snapshot', 'training-readiness', 'training-signals',
         'training-explorer', 'dashboard', 'workout-analysis', 'training-plans',
         'health-overview', 'health-sleep', 'health-hrv', 'health-note-comparison', 'health-weight', 'assistant-example', 'mcp-flow',
-        'activity-map', 'reviewer-benchmark']);
+        'activity-map', 'reviewer-benchmark', 'provider-flow']);
     expect(previews.every(preview => !!preview.nativeElement.querySelector(':scope > div[data-nosnippet]'))).toBe(true);
     expect(fixture.nativeElement.querySelector('app-training-explorer-preview')).toBeNull();
     expect(fixture.nativeElement.querySelector('app-workout-profile')).toBeNull();
@@ -253,6 +257,7 @@ describe('HomeComponent', () => {
       const scrollIntoView = vi.fn();
       target.scrollIntoView = scrollIntoView;
       const heading = fixture.nativeElement.querySelector('#' + target.getAttribute('aria-labelledby')) as HTMLElement;
+      expect(target.contains(heading)).toBe(true);
       const focus = vi.spyOn(heading, 'focus');
       fixture.nativeElement.querySelector(`.home-navigation a[href="#home-${id}"]`).click();
       fixture.detectChanges();
