@@ -2,6 +2,7 @@ import { getRejectedSwimTiming, SWIM_TIMING_UNAVAILABLE_REASON } from '@shared/s
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges, inject } from '@angular/core';
 import {
   ActivityInterface,
+  DataActiveLengths,
   convertSpeedToSwimPace,
   DataStrokeRate,
   DataDuration,
@@ -23,6 +24,7 @@ import {
   SWIM_TABLE_HEADER_TOOLTIPS, getActiveSwimLengthCadence, getCompleteSwimLengthSum, getNormalizedSwolf,
   getSwimLengthDistance, getSwimLengthDuration, getSwimLengthHeartRateAverage, getSwimLengthPace, getSwolfColumnLabel, sumSwimValues,
 } from '../../../helpers/event-swim-analytics.helper';
+import { getSwimCoverage, SwimCoverage } from '../../../helpers/event-swim-coverage.helper';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { getDerivedSwimIntervalLengths } from '../../../helpers/event-swim-interval-metadata.helper';
 import {
@@ -77,6 +79,10 @@ interface SwimLengthActivityView {
   activity: ActivityInterface;
   label: string;
   groups: SwimLengthGroupView[];
+  coverage: SwimCoverage | null;
+  coverageExpanded: boolean;
+  affectedLengthsExpanded: boolean;
+  coverageId: string;
 }
 
 interface PendingSwimLengthActivityView extends Omit<SwimLengthActivityView, 'label'> {
@@ -124,7 +130,20 @@ export class EventCardSwimLengthsComponent implements OnChanges {
     this.hapticsService.selection();
   }
 
+  public toggleCoverage(view: SwimLengthActivityView): void {
+    if (!view.coverage) return;
+    view.coverageExpanded = !view.coverageExpanded;
+    this.hapticsService.selection();
+  }
+
+  public toggleAffectedLengths(view: SwimLengthActivityView): void {
+    if (!view.coverage || !view.coverageExpanded) return;
+    view.affectedLengthsExpanded = !view.affectedLengthsExpanded;
+    this.hapticsService.selection();
+  }
+
   private updateData(): void {
+    const previousViews = this.swimLengthViews;
     const expandedGroupKeys = new Set(this.swimLengthViews.flatMap(view => view.groups)
       .filter(group => group.expanded).map(group => group.key));
     this.swolfColumnLabel = getSwolfColumnLabel(this.unitSettings);
@@ -164,10 +183,15 @@ export class EventCardSwimLengthsComponent implements OnChanges {
 
       const key = this.buildActivityKey(activity, index);
       this.activitiesWithSwimLengths.push(activity);
+      const recordedActiveLengths = activity.getStat?.(DataActiveLengths.type);
       pendingViews.push({
         key,
         activity,
         baseLabel: this.resolveActivityLabel(activity),
+        coverage: getSwimCoverage(rowViews.map(row => row.swimLength), recordedActiveLengths ? recordedActiveLengths.getValue() : undefined),
+        coverageId: `swim-coverage-${encodeURIComponent(key)}`,
+        coverageExpanded: previousViews.find(view => view.activity === activity)?.coverageExpanded ?? false,
+        affectedLengthsExpanded: previousViews.find(view => view.activity === activity)?.affectedLengthsExpanded ?? false,
         groups: this.buildSwimLengthGroups(key, rowViews, displayContext),
       });
     });

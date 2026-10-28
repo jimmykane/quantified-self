@@ -203,6 +203,32 @@ describe('EventCardLapsComponent', () => {
         expect(JSON.stringify(activity.toJSON())).toBe(source);
     });
 
+    it('focuses swim/rest intervals through chart buttons without changing row selection or feedback on a no-op', () => {
+        const activity = createSwimIntervalFixture(); activity.setID('focus-swim');
+        component.selectedActivities = [activity];
+        component.event = { getActivities: () => [activity] } as EventInterface;
+        component.canFocusCharts = true; component.ngOnChanges(); fixture.detectChanges();
+        const emit = vi.spyOn(component.swimIntervalFocus, 'emit');
+        const table = component.lapTableGroups[0].tables[0];
+        const rows = table.dataSource.data.filter(row => !row.isLapAverage);
+        const buttons = fixture.nativeElement.querySelectorAll('button[aria-pressed]');
+        expect(buttons.length).toBe(rows.length);
+        expect(haptics.selection).not.toHaveBeenCalled();
+        buttons[1].click(); fixture.detectChanges();
+        expect(emit).toHaveBeenCalledWith(expect.objectContaining({ activity, startTime: 120000, endTime: 180000 }));
+        expect(table.selectedCount).toBe(0);
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        component.focusedSwimInterval = rows[1].chartFocus; component.ngOnChanges(); fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.lap-chart-focused button[aria-pressed]').getAttribute('aria-pressed')).toBe('true');
+        component.focusSwimInterval(rows[1]);
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        const clear = vi.spyOn(component.swimIntervalFocusCleared, 'emit');
+        component.setOriginalLaps(true);
+        expect(clear).toHaveBeenCalledWith(rows[1].chartFocus);
+        component.canFocusCharts = false; component.ngOnChanges(); fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('button[aria-pressed]')).toBeNull();
+    });
+
     it('renders corroborated whole yards in an unassigned swim interval and its selected summary', () => {
         const { activity, rawLengths } = createNominalYardPoolFixture();
         rawLengths.forEach(length => length.lapIndex = null);

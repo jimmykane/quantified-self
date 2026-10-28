@@ -297,3 +297,9 @@
   margin-block: 8px 0;
   color: var(--mat-sys-on-surface-variant);
 }
+
+.table-container .lap-chart-focused mat-cell,
+.table-container .lap-chart-focused:hover mat-cell {
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}

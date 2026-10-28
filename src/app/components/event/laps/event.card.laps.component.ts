@@ -4,6 +4,8 @@ import {
   ChangeDetectorRef,
   Component,
   Input,
+  Output,
+  EventEmitter,
   Injector,
   OnChanges,
   OnDestroy,
@@ -60,6 +62,7 @@ import {
 import { getSwimLapLengths, getSwimLapStrokeLabels } from '../../../helpers/event-swim-length.helper';
 import { getSwimRestBlockMetric, groupSwimRestLaps } from '../../../helpers/event-swim-rest-block.helper';
 import { EVENT_LAP_SWOLF_COLUMN, SWIM_TABLE_HEADER_TOOLTIPS, getSwimLapAnalytics, getSwimLapDisplayMetric, getSwolfColumnLabel } from '../../../helpers/event-swim-analytics.helper';
+import { getSwimLapFocusWindow, SwimChartFocus } from '../../../helpers/event-swim-chart-focus.helper';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 
 interface LapTableRow extends Record<string, unknown> {
@@ -78,6 +81,7 @@ interface LapTableRow extends Record<string, unknown> {
   detailId?: string;
   lap?: LapInterface;
   selectionKey?: string;
+  chartFocus?: SwimChartFocus;
 }
 
 interface LapColumnMenuGroup {
@@ -170,6 +174,10 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   @Input() selectedActivities: ActivityInterface[];
   @Input() unitSettings: UserUnitSettingsInterface;
   @Input() canCustomize = false;
+  @Input() canFocusCharts = false;
+  @Input() focusedSwimInterval: SwimChartFocus | null = null;
+  @Output() swimIntervalFocusCleared = new EventEmitter<SwimChartFocus>();
+  @Output() swimIntervalFocus = new EventEmitter<SwimChartFocus>();
 
   public readonly swolfColumn = EVENT_LAP_SWOLF_COLUMN;
   public readonly maximumHeartRateType = DataHeartRateMax.type;
@@ -255,6 +263,12 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     });
   }
 
+  public focusSwimInterval(row: LapTableRow): void {
+    if (!this.canFocusCharts || !row.chartFocus || this.focusedSwimInterval?.key === row.chartFocus.key) return;
+    this.hapticsService.selection();
+    this.swimIntervalFocus.emit(row.chartFocus);
+  }
+
   public setOriginalLaps(showOriginal: boolean): void {
     if (!this.hasSwimIntervals || this.showOriginalLaps() === showOriginal) return;
     this.showOriginalLaps.set(showOriginal);
@@ -303,7 +317,20 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
           lapTypesWithData.add(lapType);
           const dataSource = new MatTableDataSource(data);
           this.dataSourcesMap.set(key, dataSource);
-          const columns = this.calculateColumns(dataSource, activity.type);
+          if (resolveEventLapSportFamily(activity.type) === 'swimming') {
+          const sourceActivity = this.selectedActivities[activityIndex];
+          const noun = this.intervalActivities.has(activity) ? 'Interval' : 'Lap';
+          for (const row of data.flatMap(row => [row, ...(row.members || [])])) {
+            if (row.isLapAverage || row.contextLabel) continue;
+            const laps = row.members?.map(member => member.lap) || (row.lap ? [row.lap] : []);
+            const window = getSwimLapFocusWindow(sourceActivity, laps);
+            if (window) Object.defineProperty(row, 'chartFocus', { enumerable: false, value: {
+              ...window, activity: sourceActivity, key: row.selectionKey,
+              label: `${sourceActivity.creator?.name || 'Swim'} · ${noun} ${row['#']}${row.isRest ? ' · Rest' : ''}`,
+            } satisfies SwimChartFocus });
+          }
+        }
+        const columns = this.calculateColumns(dataSource, activity.type);
           this.columnsMap.set(key, columns);
           const selection = new SelectionModel<LapTableRow>(true);
           const selectableRows = this.getSelectableRows(data);
@@ -348,6 +375,14 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         })
         .filter((table): table is LapTableView => !!table),
     })).filter((group) => group.tables.length > 0);
+    if (this.focusedSwimInterval && !this.lapTableGroups.flatMap(group => group.tables)
+      .flatMap(table => table.dataSource.data.flatMap(row => [row, ...(row.members || [])]))
+      .some(row => row.chartFocus?.key === this.focusedSwimInterval.key
+        && row.chartFocus.activity === this.focusedSwimInterval.activity
+        && row.chartFocus.startTime === this.focusedSwimInterval.startTime
+        && row.chartFocus.endTime === this.focusedSwimInterval.endTime)) {
+      this.swimIntervalFocusCleared.emit(this.focusedSwimInterval);
+    }
     this.updateLapColumnMenuGroups();
     const currentLapKeys = new Set(this.lapTableGroups.flatMap(group => group.tables)
       .flatMap(table => table.dataSource.data.flatMap(row => [row, ...(row.members || [])])).map(row => row.selectionKey));
@@ -482,9 +517,10 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
 
   private calculateColumns(dataSource: MatTableDataSource<LapTableRow>, activityType: unknown): string[] {
     return [LAP_TABLE_SELECTION_COLUMN, '#',
+      ...(this.canFocusCharts && dataSource.data.some(row => row.chartFocus) ? ['charts'] : []),
       ...(dataSource.data.some(row => row.hasLengths || row.members?.length) ? ['lengths'] : []),
       ...this.getColumnsToDisplay(activityType).filter(column => column !== '#')].filter(column => {
-      if (column === LAP_TABLE_SELECTION_COLUMN || column === '#' || column === 'lengths') {
+      if (column === LAP_TABLE_SELECTION_COLUMN || column === '#' || column === 'lengths' || column === 'charts') {
         return true;
       }
       return dataSource.data.flatMap(row => [row, ...(row.members || [])]).some(row => {

@@ -277,6 +277,24 @@ describe('EventCardComponent', () => {
         fixture.detectChanges();
     });
 
+    it('invalidates interval focus when watches or events change, without reviving old selections', () => {
+        vi.spyOn(component, 'canFocusSwimCharts').mockReturnValue(true);
+        const activity = component.event()!.getActivities()[0];
+        component.selectedActivitiesInstant.set([activity]); component.selectedActivitiesDebounced.set([activity]);
+        const focus = { key: '1', label: 'Interval 1', activity, startTime: 0, endTime: 1000 };
+        component.onSwimIntervalFocus(focus); fixture.detectChanges();
+        expect(component.swimChartFocus()).toBe(focus);
+        component.onSwimIntervalFocusCleared({ ...focus });
+        expect(component.swimChartFocus()).toBe(focus);
+        component.selectedActivitiesInstant.set([]); fixture.detectChanges();
+        expect(component.swimChartFocus()).toBeNull();
+        component.selectedActivitiesInstant.set([activity]); fixture.detectChanges();
+        expect(component.swimChartFocus()).toBeNull();
+        component.onSwimIntervalFocus(focus); fixture.detectChanges();
+        component.event.set({ ...component.event()!, getID: () => 'new-event' }); fixture.detectChanges();
+        expect(component.swimChartFocus()).toBeNull();
+    });
+
     it('should create', () => {
         expect(component).toBeTruthy();
     });

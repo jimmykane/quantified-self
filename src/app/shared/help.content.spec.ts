@@ -2134,6 +2134,11 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Right-clicking an event chart copies a themed image of the full chart panel');
     expect(gettingStartedSection?.content).toContain('**Show Swim Lengths** chart option');
     expect(gettingStartedSection?.content).toContain('**Swim / rest timeline**');
+    expect(gettingStartedSection?.content).toContain('**Show in charts**');
+    expect(gettingStartedSection?.content).toContain('**All intervals**');
+    expect(gettingStartedSection?.content).toContain('**data coverage**');
+    expect(gettingStartedSection?.content).toContain('**Show affected lengths**');
+    expect(gettingStartedSection?.content).toContain('Independent watch totals may still be available');
     expect(gettingStartedSection?.content).toContain('Gaps are not assumed to be rest');
     expect(gettingStartedSection?.content).toContain('Swim length chart tooltips use the same distance and pace rules as the length table');
     expect(gettingStartedSection?.content).toContain('Swim lap tooltips show **Avg Swim Pace**');
