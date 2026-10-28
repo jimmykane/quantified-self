@@ -1,3 +1,9 @@
+import { AppHapticsService } from '../../services/app.haptics.service';
+import { SharedModule } from '../../modules/shared.module';
+import { By } from '@angular/platform-browser';
+import { MatTooltip } from '@angular/material/tooltip';
+import { MatSlideToggle } from '@angular/material/slide-toggle';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ReactiveFormsModule } from '@angular/forms';
@@ -14,13 +20,22 @@ import {
   ActivityTypes,
   DataActivityTypes,
   DataDistance,
+  DataDuration,
   DataSpeed,
   DataSpeedAvg,
+  DataPaceAvg,
+  DataPaceAvgMinutesPerMile,
+  PaceUnits,
   DataSwimPace,
   DataSwimPaceMinutesPer100Yard,
   DistanceUnits,
+  EventImporterJSON,
+  FileType,
+  Privacy,
   SwimPaceUnits
 } from '@sports-alliance/sports-lib';
+
+const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
 
 describe('EventsExportFormComponent', () => {
   let fixture: ComponentFixture<EventsExportFormComponent>;
@@ -39,6 +54,7 @@ describe('EventsExportFormComponent', () => {
   });
 
   beforeEach(async () => {
+    vi.clearAllMocks();
     mockUserService = {
       updateUserProperties: vi.fn().mockResolvedValue(undefined),
     };
@@ -57,8 +73,9 @@ describe('EventsExportFormComponent', () => {
 
     await TestBed.configureTestingModule({
       declarations: [EventsExportFormComponent],
-      imports: [ReactiveFormsModule],
+      imports: [ReactiveFormsModule, SharedModule, NoopAnimationsModule],
       providers: [
+        { provide: AppHapticsService, useValue: haptics },
         { provide: MatDialogRef, useValue: mockDialogRef },
         {
           provide: MAT_DIALOG_DATA,
@@ -117,6 +134,35 @@ describe('EventsExportFormComponent', () => {
     component = fixture.componentInstance;
   });
 
+  it('keeps initialization and blocked exports silent', async () => {
+    fixture.detectChanges();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    const tooltips = fixture.debugElement.queryAll(By.directive(MatTooltip));
+    expect(tooltips).toHaveLength(0);
+    component.exportFromGroup.controls.startDate.setValue(null);
+    await component.onSubmit({ preventDefault: vi.fn() });
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(mockFileService.downloadFile).not.toHaveBeenCalled();
+    component.exportFromGroup.controls.startDate.setValue(true);
+    component.isLoading = true;
+    await component.onSubmit({ preventDefault: vi.fn() });
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('gives one feedback per checkbox change, Cancel and accepted submit', async () => {
+    fixture.detectChanges();
+    fixture.debugElement.query(By.directive(MatSlideToggle)).triggerEventHandler('change', { checked: true });
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    fixture.nativeElement.querySelector('button[type=button]').click();
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    haptics.selection.mockClear();
+    const form = fixture.nativeElement.querySelector('form') as HTMLFormElement;
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await fixture.whenStable();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(mockFileService.downloadFile).toHaveBeenCalledOnce();
+  });
+
   it('logs and swallows export settings persistence failures after download', async () => {
     mockUserService.updateUserProperties.mockRejectedValueOnce(new Error('write failed'));
 
@@ -161,6 +207,48 @@ describe('EventsExportFormComponent', () => {
     await expect(readBlobText(blob)).resolves.toContain('"6.22 mi"');
   });
 
+  it.each([DistanceUnits.Kilometers, DistanceUnits.Miles])(
+    'exports unavailable duration as an empty cell while keeping zero and canonical durations (%s)', async distanceUnits => {
+      component.user.settings.unitSettings = { ...component.user.settings.unitSettings, distanceUnits };
+      component.exportFromGroup.get('name')?.setValue(true);
+      component.exportFromGroup.get('duration')?.setValue(true);
+      component.events = [undefined, 0, 600, 90000].map((seconds, index) => {
+        const event = EventImporterJSON.getEventFromJSON({
+          name: `Duration-${index}`, startDate: 0, endDate: 90000000, srcFileType: FileType.FIT,
+          description: null, isMerge: false, privacy: Privacy.Private, stats: {}, activities: [],
+        });
+        if (seconds !== undefined) event.setDuration(new DataDuration(seconds));
+        return EventImporterJSON.getEventFromJSON(event.toJSON());
+      });
+
+      await component.onSubmit({ preventDefault: vi.fn(), stopPropagation: vi.fn() });
+
+      const blob = mockFileService.downloadFile.mock.calls[0][0] as Blob;
+      await expect(readBlobText(blob)).resolves.toBe([
+        'Name,Duration',
+        '"Duration-0",""',
+        `"Duration-1","${new DataDuration(0).getDisplayValue()}"`,
+        `"Duration-2","${new DataDuration(600).getDisplayValue()}"`,
+        `"Duration-3","${new DataDuration(90000).getDisplayValue(true, false).trim()}"`,
+        '',
+      ].join('\r\n'));
+    });
+
+  it('uses unambiguous local date keys for CSV dates and the filename', async () => {
+    component.exportFromGroup.get('startDate')?.setValue(true);
+
+    await component.onSubmit({
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    });
+
+    const [blob, filename] = mockFileService.downloadFile.mock.calls[0] as [Blob, string];
+    const csv = await readBlobText(blob);
+    expect(csv).toContain('"2024-01-01"');
+    expect(filename).toMatch(/^\d{4}-\d{2}-\d{2}-\d{4}-\d{2}-\d{2}$/);
+    expect(filename).not.toMatch(/[\\/]/);
+  });
+
   it('exports swim pace fallback with 100-yard units through sports-lib speed conversion', async () => {
     const speedGetValueSpy = vi.spyOn(DataSpeed.prototype, 'getValue');
     const activityTypes = new DataActivityTypes([ActivityTypes.swimming]);
@@ -201,4 +289,31 @@ describe('EventsExportFormComponent', () => {
     expect(speedGetValueSpy).not.toHaveBeenCalledWith(DataSwimPace.type);
     speedGetValueSpy.mockRestore();
   });
+  it.each(['Running', 'Trail Running', 'Treadmill', 'Indoor Running', 'Virtual Running', 'Road Running', 'Indoor Track Running', 'Vertical Running', 'Track Running', 'Ultra Running', 'Crosscountry Running', 'Obstacle Racing'])('exports the selected average pace for %s', async activityType => {
+    component.user.settings.unitSettings = { paceUnits: [PaceUnits.MinutesPerKilometer] } as any;
+    component.exportFromGroup.get('averagePace')?.setValue(true);
+    component.events = [{
+      getStat: (type: string) => type === DataActivityTypes.type ? new DataActivityTypes([activityType as ActivityTypes])
+        : type === DataPaceAvg.type ? new DataPaceAvg(300) : null,
+      getID: () => 'pace-event',
+    } as any];
+    await component.onSubmit({ preventDefault: vi.fn(), stopPropagation: vi.fn() });
+    const csv = await readBlobText(mockFileService.downloadFile.mock.calls[0][0]);
+    expect(csv).toContain('5:00');
+  });
+
+  it('exports running pace in the requested mile units through Sports Lib', async () => {
+    component.user.settings.unitSettings = { paceUnits: [PaceUnits.MinutesPerMile] } as any;
+    component.exportFromGroup.get('averagePace')?.setValue(true);
+    component.events = [{
+      getStat: (type: string) => type === DataActivityTypes.type ? new DataActivityTypes(['Road Running' as ActivityTypes])
+        : type === DataSpeedAvg.type ? new DataSpeedAvg(1000 / 300) : null,
+      getID: () => 'pace-miles-event',
+    } as any];
+    await component.onSubmit({ preventDefault: vi.fn(), stopPropagation: vi.fn() });
+    const csv = await readBlobText(mockFileService.downloadFile.mock.calls[0][0]);
+    expect(csv).toContain('8:02');
+    expect(csv).toContain(new DataPaceAvgMinutesPerMile(300).getDisplayUnit());
+  });
+
 });

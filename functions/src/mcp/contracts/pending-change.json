@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "25448e1a84ddb0b2486baceb75bf8e4445d7c77df463fb35b23cb8f35783ffed",
+  "candidateSha256": "88029cf32adfb125637df385dfdfa7833c55f3c6430df105bdff22239aa741d3",
   "lifecycleAction": "developer-refresh",
-  "summary": "Add the daily report and contract-safe activity and nearby-search replacements, bounded multi-metric queries, Training capability discovery, activity overviews, all-history activity ranking with explicit ISO record times, deterministic MTB jump-superlative routing, explicit recent-jump record discovery, clearer sleep-vital routing, and RS256 private_key_jwt client authentication alongside public PKCE clients.",
+  "summary": "Adopt Sports Lib 23.0.0's 284-sport catalog, strict enums and 16 KiB previews. Retain pending replacement, analysis, reflections, phases, recipe/title checks, HR previews, sync, v2 endurance, EnergySense and Garmin sleep HR changes. Clarify complete strength-alias reads/updates and canonical strength creates. Registered schemas/history, grants and approvals stay unchanged; RPE stays in Edit details. Deployment, app rescan and plugin refresh remain separate.",
   "rescanRequired": true
 }

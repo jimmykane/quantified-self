@@ -52,13 +52,13 @@ describe('authGuard', () => {
         router = TestBed.inject(Router);
     });
 
-    const runGuard = async (user: any) => {
+    const runGuard = async (user: any, path = 'test') => {
         authServiceStub.authState$ = of(user ? { uid: user.uid } : null);
         authServiceStub.user$ = of(user);
         profileReadStateSubject.next(user
             ? { status: 'ready', uid: user.uid, profileExists: true }
             : { status: 'signed-out' });
-        const result = TestBed.runInInjectionContext(() => authGuard({} as any, [{ path: 'test' }] as any) as Observable<boolean>);
+        const result = TestBed.runInInjectionContext(() => authGuard({} as any, [{ path }] as any) as Observable<boolean>);
         return await firstValueFrom(result);
     };
 
@@ -100,6 +100,28 @@ describe('authGuard', () => {
         expect(authServiceStub.redirectUrl).toBe('/mcp/authorize?request_id=request-1');
         expect(router.createUrlTree).toHaveBeenCalledWith(['/login'], {
             queryParams: { returnUrl: '/mcp/authorize?request_id=request-1' },
+        });
+    });
+
+    it('keeps service setup as the destination when sign-in is required', async () => {
+        const result = await runGuard(null, 'services');
+
+        expect(result).not.toBe(true);
+        expect(authServiceStub.redirectUrl).toBe('/services');
+        expect(router.createUrlTree).toHaveBeenCalledWith(['/login'], {
+            queryParams: { returnUrl: '/services' },
+        });
+    });
+
+    it.each(['Wahoo%20API', 'COROS%20API'])('preserves the %s setup tab through sign-in', async service => {
+        vi.mocked(router.getCurrentNavigation).mockReturnValue({
+            extractedUrl: { toString: () => `/services?serviceName=${service}` },
+        } as any);
+        const result = await runGuard(null, 'services');
+        expect(result).not.toBe(true);
+        expect(authServiceStub.redirectUrl).toBe(`/services?serviceName=${service}`);
+        expect(router.createUrlTree).toHaveBeenCalledWith(['/login'], {
+            queryParams: { returnUrl: `/services?serviceName=${service}` },
         });
     });
 

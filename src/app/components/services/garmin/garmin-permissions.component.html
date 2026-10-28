@@ -1,0 +1,28 @@
+<section aria-label="Garmin permissions" class="garmin-permissions">
+  <h3>Permissions</h3>
+  <p>Last reported by Garmin, not a live permission check. A granted permission does not mean every related feature is available in Quantified Self.</p>
+  @if (loading()) {
+    <p role="status">Loading permission details…</p>
+  } @else {
+    @for (account of permissionAccounts(); track $index) {
+      <section [attr.aria-label]="'Permissions for Garmin account ' + account.providerUserId">
+        <p class="garmin-permissions__account">Garmin account: {{ account.providerUserId }}</p>
+        @if (!account.permissionsKnown) {
+          <p>Garmin has not reported permissions for this saved connection; this does not mean access was denied. Check access in Garmin Connect or contact support if details remain unavailable.</p>
+        }
+        <div role="list" aria-label="Permission grants">
+          @for (permission of account.permissions; track permission.id; let last = $last) {
+            <div role="listitem">
+              <app-compact-row [title]="permission.label" [headingLevel]="4" [summary]="permission.description"
+                [icon]="permission.icon" iconTone="neutral" density="compact" [showDivider]="!last">
+                <span compactRowAction class="garmin-permissions__status">{{ permission.status }}</span>
+              </app-compact-row>
+            </div>
+          }
+        </div>
+      </section>
+    } @empty {
+      <p>No permission details have been reported for this connection.</p>
+    }
+  }
+</section>

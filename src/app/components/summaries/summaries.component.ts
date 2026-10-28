@@ -1,20 +1,49 @@
+import type { EventRead } from '@shared/event-read';
+import { AppHapticsService } from '../../services/app.haptics.service';
+import { CoalescedFrameTask } from '../../helpers/coalesced-frame-task';
+import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { dashboardHealthMetric, dashboardHealthSettings, isPrivateDashboardHealthTile } from '../../helpers/dashboard-health-tile.helper';
+import type { AppDashboardHealthMetricSettings } from '../../models/app-user.interface';
+import { buildReadinessHrvDisplay } from '../../helpers/readiness-hrv-display.helper';
+import { personalRangeChangeState, resolveHealthChangeSourceLabel, type HealthChangeSignal } from '../../helpers/health-change-summary.helper';
+import { buildDashboardGlanceSignals } from '../../helpers/dashboard-glance.helper';
+import { dashboardAcwrComparison } from '../../helpers/dashboard-derived-metrics.helper';
+import { dashboardBriefingSleepDuration, type DashboardBriefingLoadComparison } from '../../helpers/dashboard-daily-briefing.helper';
+import { isDerivedMetricPendingStatus } from '../../helpers/derived-metric-status.helper';
+import { localCalendarDate } from '../../helpers/health-workspace.helper';
+import { DashboardHrvService } from '../../services/dashboard-hrv.service';
+import { dashboardHrvWindows, type DashboardHrvContext } from '../../helpers/dashboard-hrv-context.helper';
+import { DashboardConfigurationService, cloneDashboardSettings } from '../../services/dashboard-configuration.service';
+import { migrateDashboardCalendarDayContextLayout } from '../../helpers/dashboard-calendar-layout.helper';
+import { DashboardChartLibraryComponent } from './dashboard-chart-library/dashboard-chart-library.component';
+import { DashboardChartLibraryState } from './dashboard-chart-library/dashboard-chart-library-state.service';
+import { isDashboardActivityCalendarTile } from '../../helpers/dashboard-auto-tile.helper';
+import type { DashboardPreviewInput } from '../../helpers/dashboard-chart-preview.helper';
+import { TimelineNotesWorkspaceComponent } from '../timeline-notes/timeline-notes-workspace.component';
+import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
 import { DOCUMENT } from '@angular/common';
+import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
+import { getNumberFormatter } from '../../helpers/number-format.helper';
 import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
+  computed,
   DoCheck,
   HostListener,
   Inject,
+  inject,
   Input,
   LOCALE_ID,
   OnChanges,
   OnDestroy,
   OnInit,
   SimpleChanges,
+  viewChild,
 } from '@angular/core';
-import { firstValueFrom, Subscription, take } from 'rxjs';
-import { EventInterface } from '@sports-alliance/sports-lib';
+import { defer, filter, firstValueFrom, map, Observable, ReplaySubject, share, Subscription, take } from 'rxjs';
+
 import { User } from '@sports-alliance/sports-lib';
 import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
 import { AppThemeService } from '../../services/app.theme.service';
@@ -30,7 +59,6 @@ import {
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 import equal from 'fast-deep-equal';
 import type { EventStatAggregationPreferences } from '@shared/event-stat-aggregation.types';
-import { isHealthWorkspaceNavigationUIDAllowed } from '@shared/health-workspace-rollout';
 import {
   buildDashboardTileViewModels,
   type DashboardChartTileViewModel,
@@ -40,7 +68,6 @@ import {
 } from '../../helpers/dashboard-tile-view-model.helper';
 import {
   buildDashboardSleepTrendContext,
-  formatSleepDuration,
   type DashboardSleepTrendWindow,
 } from '../../helpers/dashboard-sleep-chart.helper';
 import {
@@ -48,9 +75,18 @@ import {
   buildDashboardReadinessSignalsContext,
   resolveDashboardReadinessSleepRefreshAtMs,
 } from '../../helpers/dashboard-training-insights.helper';
-import { formatDashboardRelativeDay } from '../../helpers/dashboard-relative-date.helper';
+import { buildDashboardTodaySleepStatus } from '../../helpers/dashboard-relative-date.helper';
 import { buildCurrentTrainingStateContext } from '../../helpers/current-training-state.helper';
+import {
+  buildDashboardTodayLoadBars,
+  buildDashboardTodayHrvRangeIndicator,
+  buildDashboardTodayOvernightHeartRateBars,
+  resolveDashboardTodayTrainingStateScale,
+  type DashboardTodayHistoryBar,
+  type DashboardTodayRangeIndicator,
+} from '../../helpers/dashboard-today-visuals.helper';
 import { AppUserService } from '../../services/app.user.service';
+import { CalendarDayDetailsNavigationService } from '../../services/calendar-day-details-navigation.service';
 import {
   DashboardDerivedMetricsService,
   getDefaultDashboardDerivedMetricKinds,
@@ -58,8 +94,8 @@ import {
 import { AppSleepService } from '../../services/app.sleep.service';
 import type { DashboardFormPoint } from '../../helpers/dashboard-form.helper';
 import {
+  buildDashboardRecoveryPresentation,
   RECOVERY_NOW_REFRESH_INTERVAL_MS,
-  resolveRecoveryFinishTimeMs,
   resolveRemainingRecoverySeconds,
   type DashboardRecoveryNowContext,
 } from '../../helpers/dashboard-recovery-now.helper';
@@ -111,13 +147,13 @@ import {
 } from '../../helpers/dashboard-special-chart-types';
 import { MatDialog } from '@angular/material/dialog';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
-import { DashboardManagerDialogComponent } from './dashboard-manager-dialog/dashboard-manager-dialog.component';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import {
   CalendarMonthPickerBottomSheetComponent,
   type CalendarMonthPickerBottomSheetData,
 } from '../calendar/calendar-month-picker-bottom-sheet/calendar-month-picker-bottom-sheet.component';
 import type { SleepSession } from '@shared/sleep';
+import { readinessHrvObservations, resolveReadinessHrvRecentTrend } from '@shared/readiness';
 import {
   DERIVED_METRIC_KINDS,
   type DerivedMetricKind,
@@ -181,7 +217,6 @@ import {
 } from '../../helpers/dashboard-tile-section.helper';
 import { AppEventService } from '../../services/app.event.service';
 import { AppRouteService } from '../../services/app.route.service';
-import { DashboardAutoTileService } from '../../services/dashboard-auto-tile.service';
 import { WhereFilterOp } from 'firebase/firestore';
 
 interface DashboardDerivedMetricsBanner {
@@ -194,6 +229,10 @@ interface DashboardDerivedMetricsBanner {
 type DashboardTodayReadinessTone = 'positive' | 'negative' | 'neutral';
 
 interface DashboardTodayReadinessViewModel {
+  changeSignals: HealthChangeSignal[];
+  loading: boolean;
+  awaitingSleep: boolean;
+  warningText: string;
   label: string;
   score: number | null;
   scoreText: string;
@@ -205,40 +244,66 @@ interface DashboardTodayReadinessViewModel {
   sleepScore: number | null;
   sleepContextText: string;
   hrvText: string;
-  hrvDeviationPercent: number | null;
+  hrvStatusText: string;
+  hrvRangeText: string;
+  hrvLatestText: string;
   hrvTone: DashboardTodayReadinessTone;
+  hrvRangeIndicator: DashboardTodayRangeIndicator | null;
   overnightHeartRateText: string;
   overnightHeartRateDeviationPercent: number | null;
   overnightHeartRateTone: DashboardTodayReadinessTone;
+  overnightHeartRateContextText: string;
   recoveryText: string;
+  recoveryRemainingPercent: number | null;
   recoveryFinishTimeMs: number | null;
+  recoveryFinishText: string;
+  loadBars: DashboardTodayHistoryBar[];
+  overnightHeartRateBars: DashboardTodayHistoryBar[];
 }
 
 interface DashboardTodayTrainingStateViewModel {
   label: string;
   caption: string;
+  scalePosition: number | null;
+  scaleTone: DashboardTodayReadinessTone;
+  contextText?: string;
 }
 
-function createEmptyDashboardTodayReadinessViewModel(): DashboardTodayReadinessViewModel {
+function createEmptyDashboardTodayReadinessViewModel(loading = false): DashboardTodayReadinessViewModel {
   return {
-    label: 'Awaiting data',
+    changeSignals: ['Sleep', 'HRV'].map(label => ({ id: label.toLowerCase(), label,
+      sourceLabel: loading ? 'Source loading' : 'No eligible source', state: loading ? 'loading' : 'insufficient',
+      statusText: loading ? 'Loading evidence' : 'Not enough comparable evidence',
+      detailText: loading ? 'Waiting for the existing source reads to finish.' : 'No eligible current sleep evidence.' })),
+    loading,
+    awaitingSleep: !loading,
+    warningText: '',
+    label: loading ? 'Loading readiness…' : 'Awaiting data',
     score: null,
-    scoreText: '--',
+    scoreText: loading ? '' : '--',
     confidenceText: 'No confidence level',
     evidenceText: '0/4 signals',
     availableSignalCount: 0,
     loadText: '-- / --',
     sleepText: '--',
     sleepScore: null,
-    sleepContextText: 'No eligible night',
+    sleepContextText: loading ? 'Loading sleep…' : 'No eligible night',
     hrvText: '--',
-    hrvDeviationPercent: null,
+    hrvStatusText: 'No current HRV',
+    hrvRangeText: '60-day personal range',
+    hrvLatestText: '',
     hrvTone: 'neutral',
+    hrvRangeIndicator: null,
     overnightHeartRateText: '--',
     overnightHeartRateDeviationPercent: null,
     overnightHeartRateTone: 'neutral',
+    overnightHeartRateContextText: '',
     recoveryText: '--',
+    recoveryRemainingPercent: null,
     recoveryFinishTimeMs: null,
+    recoveryFinishText: '',
+    loadBars: [],
+    overnightHeartRateBars: [],
   };
 }
 
@@ -246,6 +311,8 @@ function createEmptyDashboardTodayTrainingStateViewModel(): DashboardTodayTraini
   return {
     label: 'Awaiting data',
     caption: 'TSS-derived state is preparing',
+    scalePosition: null,
+    scaleTone: 'neutral',
   };
 }
 
@@ -255,6 +322,7 @@ interface DashboardTileSectionViewModel {
   icon: string;
   columns: number;
   hasActivityCalendar: boolean;
+  hasHealthCharts: boolean;
   tiles: DashboardTileViewModel[];
   cells: DashboardTileSectionCellViewModel[];
   trailingPlaceholders: number[];
@@ -274,7 +342,8 @@ interface DashboardTileEventSubscriptionState {
   templateUrl: './summaries.component.html',
   styleUrls: ['./summaries.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: false
+  standalone: false,
+  providers: [DashboardChartLibraryState],
 })
 
 export class SummariesComponent extends LoadingAbstractDirective implements OnInit, OnDestroy, OnChanges, DoCheck {
@@ -293,38 +362,92 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public kpiLaneTiles: DashboardChartTileViewModel[] = [];
   public mainGridTiles: DashboardTileViewModel[] = [];
   public mainGridSections: DashboardTileSectionViewModel[] = [];
+  public calendarGridSection: DashboardTileSectionViewModel | null = null;
+  public otherGridSections: DashboardTileSectionViewModel[] = [];
+
+  get showCalendar(): boolean {
+    return (this.user?.settings?.dashboardSettings?.tiles || []).some(isDashboardActivityCalendarTile);
+  }
 
   public tileTypes = TileTypes;
+  public readonly isDashboardActivityCalendarChartType = isDashboardActivityCalendarChartType;
   public desktopTileDragEnabled = false;
-  public isDashboardManagerOpen = false;
+  private readonly configuration = inject(DashboardConfigurationService);
+  private readonly healthSnack = inject(MatSnackBar);
+  private readonly healthRoute = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly dayDetailsNavigation = inject(CalendarDayDetailsNavigationService);
+  private calendarReturnSubscription?: Subscription;
+  private healthTileRevealed = false;
+  private revealRequestedHealthTile(): void {
+    const metric=this.healthRoute.snapshot.queryParamMap.get('healthMetric');
+    if(this.healthTileRevealed || !metric || !this.isOwnerDashboard) return;
+    const tile=this.tiles.find(item=>dashboardHealthMetric(item)===metric);
+    if(!tile) return;
+    this.healthTileRevealed=true;
+    requestAnimationFrame(()=>{
+      const target=this.documentRef.querySelector<HTMLElement>(`[data-dashboard-tile-order="${tile.order}"]`);
+      target?.focus({preventScroll:true});target?.scrollIntoView({block:'center'});
+      void this.router.navigate([], {relativeTo:this.healthRoute,queryParams:{healthMetric:null},queryParamsHandling:'merge',replaceUrl:true});
+    });
+  }
+  private readonly healthHaptics = inject(AppHapticsService);
+  readonly calendarSavingOrders = new Set<number>();
+  private readonly calendarSaveRequests = new Map<number, object>();
+  public calendarNavigationState: { view: 'month' | '30d'; anchor: string; date: string } | null = null;
+  readonly healthSavingOrders = new Set<number>();
+  readonly library = inject(DashboardChartLibraryState);
+  readonly dashboardPicker = viewChild(DashboardChartLibraryComponent);
+  private readonly notesWorkspace = viewChild(TimelineNotesWorkspaceComponent);
+  /** One live, owner-fenced source shared by tiles and calendar sheets. */
+  readonly timelineNotes = computed<TimelineNoteChartContext | null>(() => this.notesWorkspace()?.context() ?? null);
+  readonly timelineNotesStatus = computed<'loading' | 'ready' | 'error'>(() => {
+    const workspace = this.notesWorkspace();
+    if (!workspace || workspace.service.uid() !== this.user?.uid || workspace.loading()) return 'loading';
+    return workspace.error() ? 'error' : 'ready';
+  });
+  public previewInput: DashboardPreviewInput = { tiles: [] };
+  private librarySubscription?: Subscription;
+  private libraryRefresh = Promise.resolve();
+  private libraryFocusOrder: number | null = null;
   public showTodaySummary = true;
+  // Temporarily unmount At a glance, including its additional data listeners.
+  public showDailyBriefing = false;
   public sleepTrendRange: AppDashboardSleepTrendRange = DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
+  public hrvTrendRange: AppDashboardSleepTrendRange = DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
+  public hrvTrendCanNavigateNewer = false;
+  private hrvTrendAnchorEndMs: number | null = null;
+  private hrvOwnerUID: string | null = null;
   public sleepTrendWindowLabel = 'Last 14 days';
   public sleepTrendCanNavigateOlder = true;
   public sleepTrendCanNavigateNewer = false;
   public todayDateSubtitle = '';
   public todayGreeting = '';
   public isOwnerDashboard = false;
-  public hasHealthWorkspaceNavigationAccess = false;
+  public calendarSelectedDateKey: string | null = null;
 
   private appThemeSubscription: Subscription | null = null;
   private todayHeaderRefreshTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
   private derivedMetricsSubscription: Subscription | null = null;
   private derivedMetricsUserUID: string | null = null;
+  private readonly hrvService = inject(DashboardHrvService);
+  private hrvSubscription: Subscription | null = null;
+  private hrvListenerKey: string | null = null;
+  private hrvDisplayKey: string | null = null;
+  private hrvTrend: DashboardHrvContext | null = null;
   private sleepSubscription: Subscription | null = null;
   private sleepListenerKey: string | null = null;
   private readinessSleepSubscription: Subscription | null = null;
   private readinessSleepListenerKey: string | null = null;
   private readinessSleepRefreshTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
-  private dashboardAutoTileSubscription: Subscription | null = null;
-  private dashboardAutoTileListenerKey: string | null = null;
-  private dashboardAutoTileUser: AppUserInterface | null = null;
   private sleepTrendAnchorEndMs: number | null = null;
   private tileEventSubscriptions = new Map<number, Subscription>();
   private tileEventSubscriptionStates = new Map<number, DashboardTileEventSubscriptionState>();
   private tileEventListenerKeys = new Map<number, string>();
+  private tileEventQueries = new Map<string, Observable<EventRead[]>>();
+  private tileEventUserUID: string | null = null;
   private tileEventAnchorEndMsByOrder = new Map<number, number | null>();
-  private tileEventsByOrder: Record<number, EventInterface[]> = {};
+  private tileEventsByOrder: Record<number, EventRead[]> = {};
   public tileEventLoadingByOrder: Record<number, boolean> = {};
   private routePreviewSubscription: Subscription | null = null;
   private routePreviewListenerKey: string | null = null;
@@ -333,8 +456,13 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public darkTheme = false;
   private logger: LoggerService;
   private dashboardTileSettingsSnapshot: TileSettingsInterface[] = [];
+  private readonly tileRebuild = new CoalescedFrameTask(() => {
+    void this.rebuildTilesFromCurrentState();
+    this.changeDetector.markForCheck();
+  });
   private sleepSessions: SleepSession[] = [];
   private readinessSleepSessions: SleepSession[] = [];
+  private readinessSleepStatus: 'loading' | 'ready' | 'error' = 'loading';
   private sleepTrendWindow: DashboardSleepTrendWindow | null = null;
   private derivedFormPoints: DashboardFormPoint[] | null = null;
   private derivedRecoveryNowContext: DashboardRecoveryNowContext | null = null;
@@ -371,8 +499,13 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private derivedMetricsHydrated = false;
   private recoveryRefreshIntervalHandle: ReturnType<typeof setInterval> | null = null;
   public derivedMetricsBanner: DashboardDerivedMetricsBanner | null = null;
-  public dashboardTodayReadiness = createEmptyDashboardTodayReadinessViewModel();
+  public dashboardTodayReadiness = createEmptyDashboardTodayReadinessViewModel(true);
   public dashboardTodayTrainingState = createEmptyDashboardTodayTrainingStateViewModel();
+  public dashboardGlanceSignals = buildDashboardGlanceSignals(
+    createEmptyDashboardTodayReadinessViewModel(true), createEmptyDashboardTodayTrainingStateViewModel(), 'loading');
+  public dashboardBriefingSleepText = '';
+  public dashboardBriefingLoadComparison: DashboardBriefingLoadComparison | null = null;
+  public readonly dashboardTodayTrainingStateScaleSegments = [0, 1, 2, 3, 4, 5];
 
   private readonly onDocumentVisibilityChange = (): void => {
     if (this.documentRef.visibilityState !== 'visible') {
@@ -389,7 +522,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     private sleepService: AppSleepService,
     private eventService: AppEventService,
     private routeService: AppRouteService,
-    private dashboardAutoTileService: DashboardAutoTileService,
     private dialog: MatDialog,
     private bottomSheet: MatBottomSheet,
     changeDetector: ChangeDetectorRef,
@@ -407,21 +539,42 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   @HostListener('window:resize', ['$event'])
   @HostListener('window:orientationchange', ['$event'])
   resizeOROrientationChange() {
-    this.numberOfCols = this.getNumberOfColumns();
-    this.rowHeight = this.getRowHeight();
-    this.refreshMainGridSectionLayout();
+    const columns = this.getNumberOfColumns();
+    const rowHeight = this.getRowHeight();
+    if (columns !== this.numberOfCols || rowHeight !== this.rowHeight) {
+      this.numberOfCols = columns;
+      this.rowHeight = rowHeight;
+      this.refreshMainGridSectionLayout();
+    }
     this.updateDesktopTileDragCapability();
   }
 
   ngOnInit() {
+    this.calendarReturnSubscription = this.router.events.pipe(
+      filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+    ).subscribe(() => this.restoreTodayCalendarDay());
+    this.restoreTodayCalendarDay();
+    this.librarySubscription = this.library.changed$.subscribe(order => {
+      this.libraryFocusOrder = order;
+      this.libraryRefresh = this.unsubscribeAndCreateCharts().then(() => this.changeDetector.markForCheck());
+    });
     this.updateDesktopTileDragCapability();
     this.documentRef.addEventListener('visibilitychange', this.onDocumentVisibilityChange);
     this.refreshTodayHeaderAndSchedule();
   }
 
   async ngOnChanges(simpleChanges: SimpleChanges) {
+    if (['user', 'eventUser'].some(key => simpleChanges[key] && simpleChanges[key].previousValue?.uid !== simpleChanges[key].currentValue?.uid)) {
+      this.library.resetContext();
+      this.calendarSelectedDateKey = null;
+      this.calendarNavigationState = null;
+      this.calendarSavingOrders.clear();
+      this.calendarSaveRequests.clear();
+    }
     if (simpleChanges.user || simpleChanges.eventUser) {
       this.refreshTodayHeader(new Date());
+      this.migrateCalendarLayoutForOwner();
+      this.restoreTodayCalendarDay();
     }
     this.syncTodaySummaryVisibility();
     this.updateDesktopTileDragCapability();
@@ -443,14 +596,33 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         && equal(previousDependencySnapshot, currentDependencySnapshot)
         && equal(this.dashboardTileSettingsSnapshot, nextTileSettingsSnapshot)
       ) {
-        this.syncDashboardAutoTileSubscription();
         return;
       }
       return this.unsubscribeAndCreateCharts();
     }
-    if (simpleChanges.showActions) {
-      this.syncDashboardAutoTileSubscription();
-    }
+  }
+
+  private migrateCalendarLayoutForOwner(): void {
+    const uid = this.resolveOwnDashboardUID();
+    if (!uid) return;
+    const settings = this.user.settings.dashboardSettings;
+    const migration = migrateDashboardCalendarDayContextLayout(settings);
+    if (!migration) return;
+    const baseline = cloneDashboardSettings(settings);
+    const migrated = { ...settings, ...migration };
+    this.user.settings.dashboardSettings = migrated;
+    void this.configuration.save(uid, baseline, migration).catch(error => {
+      // An edit made while the migration was saving is newer than this draft.
+      const current = this.user.settings.dashboardSettings as AppDashboardSettingsInterface;
+      if (this.resolveOwnDashboardUID() !== uid
+        || current.calendarDayContextLayoutVersion !== migration.calendarDayContextLayoutVersion
+        || !equal(current.tiles, migration.tiles)) return;
+      const restored: AppDashboardSettingsInterface = { ...current, tiles: baseline.tiles,
+        calendarDayContextLayoutVersion: baseline.calendarDayContextLayoutVersion };
+      this.user.settings.dashboardSettings = restored;
+      void this.unsubscribeAndCreateCharts();
+      this.healthSnack.open(error instanceof Error ? error.message : 'Could not update calendar layout.', 'Dismiss', { duration: 6000 });
+    });
   }
 
   ngDoCheck(): void {
@@ -465,6 +637,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   ngOnDestroy(): void {
+    this.calendarReturnSubscription?.unsubscribe();
+    this.tileRebuild.dispose();
+    this.librarySubscription?.unsubscribe();
     this.documentRef.removeEventListener('visibilitychange', this.onDocumentVisibilityChange);
     this.clearTodayHeaderRefreshTimer();
     this.unsubscribeFromAll();
@@ -488,14 +663,14 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   private formatTodayDateSubtitle(date: Date): string {
     try {
-      return new Intl.DateTimeFormat(this.locale || undefined, {
+      return getDateTimeFormatter(this.locale || undefined, {
         weekday: 'long',
         year: 'numeric',
         month: 'long',
         day: 'numeric',
       }).format(date);
     } catch {
-      return new Intl.DateTimeFormat(undefined, {
+      return getDateTimeFormatter(undefined, {
         weekday: 'long',
         year: 'numeric',
         month: 'long',
@@ -506,7 +681,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   private refreshTodayHeader(date: Date): void {
     this.isOwnerDashboard = this.resolveDashboardOwnerUID() !== null;
-    this.hasHealthWorkspaceNavigationAccess = isHealthWorkspaceNavigationUIDAllowed(this.user?.uid);
     this.todayDateSubtitle = this.formatTodayDateSubtitle(date);
     this.todayGreeting = formatDashboardGreeting(
       date,
@@ -573,78 +747,42 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     await this.persistLaneOrder();
   }
 
-  public async openDashboardManagerDialog(): Promise<void> {
-    return this.openDashboardManagerDialogWithState();
+  private restoreTodayCalendarDay(): void {
+    const restoration = this.dayDetailsNavigation.restorationFor(this.router.url);
+    if (restoration?.surface !== 'today-sheet' || !this.user?.uid || !this.showActions || !this.isOwnerDashboard) return;
+    if (!this.dayDetailsNavigation.consumeRestoration(restoration)) return;
+    this.openDashboardCalendar(restoration.dateKey, restoration.calendarReturn);
   }
 
-  public openDashboardCalendar(): void {
+  public openDashboardCalendar(initialDateKey?: string, initialPeriodContext?: CalendarMonthPickerBottomSheetData['initialPeriodContext']): void {
     if (!this.user?.uid) {
       return;
     }
     this.bottomSheet.open<CalendarMonthPickerBottomSheetComponent, CalendarMonthPickerBottomSheetData>(
       CalendarMonthPickerBottomSheetComponent,
       {
-        data: { user: this.user },
+        data: { user: this.user, timelineNotes: this.timelineNotes, privateHealthEnabled: this.showActions && this.isOwnerDashboard, initialDateKey,
+          ...(initialPeriodContext ? { initialPeriodContext } : {}) },
         panelClass: ['qs-bottom-sheet-container', 'qs-calendar-month-picker-sheet'],
       },
     );
   }
 
-  public async openDashboardManagerForTileOrder(order: number): Promise<void> {
-    await this.openDashboardManagerDialogWithState({
-      initialMode: 'edit',
-      initialEditTileOrder: Number(order),
+  public async openTileEditor(order: number): Promise<void> {
+    if (!this.showActions || !this.resolveOwnDashboardUID()) return;
+    await this.library.edit(this.user as AppUserInterface, order);
+
+  }
+
+  public async onChartPickerClosed(): Promise<void> {
+    await this.libraryRefresh;
+    const order = this.libraryFocusOrder;
+    this.libraryFocusOrder = null;
+    if (order === null) return;
+    requestAnimationFrame(() => {
+      const target = this.documentRef.querySelector<HTMLElement>(`[data-dashboard-tile-order="${order}"]`);
+      target?.focus({ preventScroll: true }); target?.scrollIntoView({ block: 'nearest' });
     });
-  }
-
-  private async openDashboardManagerDialogWithState(
-    initialState?: { initialMode?: 'add' | 'edit'; initialEditTileOrder?: number | null },
-  ): Promise<void> {
-    if (!this.showActions || !this.user || this.isDashboardManagerOpen) {
-      return;
-    }
-
-    this.setDashboardManagerOpenState(true);
-
-    try {
-      const dialogRef = this.dialog.open(DashboardManagerDialogComponent, {
-        data: {
-          user: this.user,
-          initialMode: initialState?.initialMode,
-          initialEditTileOrder: initialState?.initialEditTileOrder ?? null,
-          previewTodaySummaryVisibility: (showTodaySummary: boolean) => {
-            this.previewTodaySummaryVisibility(showTodaySummary);
-          },
-        },
-        width: '680px',
-        maxWidth: '95vw',
-      });
-      dialogRef.beforeClosed?.().pipe(take(1)).subscribe(() => {
-        this.setDashboardManagerOpenState(false);
-      });
-      const result = await firstValueFrom(dialogRef.afterClosed().pipe(take(1)));
-      if (result?.saved === true) {
-        await this.unsubscribeAndCreateCharts();
-      }
-    } finally {
-      this.setDashboardManagerOpenState(false);
-    }
-  }
-
-  private setDashboardManagerOpenState(isOpen: boolean): void {
-    if (this.isDashboardManagerOpen === isOpen) {
-      return;
-    }
-    this.isDashboardManagerOpen = isOpen;
-    this.changeDetector.markForCheck();
-  }
-
-  private previewTodaySummaryVisibility(showTodaySummary: boolean): void {
-    this.showTodaySummary = showTodaySummary;
-    this.syncReadinessSleepSubscription();
-    this.refreshDashboardTodaySignals();
-    this.refreshDerivedMetricsBannerState();
-    this.changeDetector.markForCheck();
   }
 
   private async unsubscribeAndCreateCharts() {
@@ -662,27 +800,49 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     });
     this.syncDerivedMetricsSubscription();
     this.syncSleepSubscription();
+    this.syncHrvSubscription();
     this.syncReadinessSleepSubscription();
-    this.syncDashboardAutoTileSubscription();
     this.syncTileEventSubscriptions();
     this.syncRoutePreviewSubscription();
     await this.rebuildTilesFromCurrentState();
   }
 
   private async rebuildTilesFromCurrentState(): Promise<void> {
+    this.tileRebuild.cancel();
     const buildStart = performance.now();
     this.refreshDashboardTodaySignals();
     this.refreshDerivedMetricsBannerState();
-    const newTiles = buildDashboardTileViewModels({
-      tiles: this.user?.settings?.dashboardSettings?.tiles ?? [],
+    this.previewInput = {
+      tiles: (this.user?.settings?.dashboardSettings?.tiles ?? []).filter(tile => this.isOwnerDashboard || !isPrivateDashboardHealthTile(tile)),
       events: [],
       tileEventsByOrder: this.tileEventsByOrder,
+      tileEventAnchorsByOrder: Object.fromEntries(this.tileEventAnchorEndMsByOrder),
       routePreviews: this.routePreviewRoutes,
+      hrvTrend: this.hrvTrend,
+      hrvPreferredSource: (this.user as AppUserInterface)?.settings?.appSettings?.healthWorkspace?.highlightSources?.heart_rate_variability ?? null,
       sleepSessions: this.sleepSessions,
       sleepTrendWindow: this.sleepTrendWindow,
       preferences: this.getAggregationPreferences(),
       logger: this.logger,
       startOfWeek: this.user?.settings?.unitSettings?.startOfTheWeek ?? null,
+      previewMetricStatuses: {
+        form: this.derivedFormStatus,
+        recovery_now: this.derivedRecoveryNowStatus,
+        acwr: this.derivedAcwrStatus,
+        ramp_rate: this.derivedRampRateStatus,
+        monotony_strain: this.derivedMonotonyStrainStatus,
+        form_now: this.derivedFormNowStatus,
+        form_plus_7d: this.derivedFormPlus7dStatus,
+        easy_percent: this.derivedEasyPercentStatus,
+        hard_percent: this.derivedHardPercentStatus,
+        efficiency_delta_4w: this.derivedEfficiencyDelta4wStatus,
+        freshness_forecast: this.derivedFreshnessForecastStatus,
+        intensity_distribution: this.derivedIntensityDistributionStatus,
+        efficiency_trend: this.derivedEfficiencyTrendStatus,
+        power_curve: this.derivedPowerCurveStatus,
+        training_capacity: this.derivedTrainingCapacityStatus,
+        training_durability: this.derivedTrainingDurabilityStatus,
+      },
       derivedMetrics: {
         formPoints: this.derivedFormPoints,
         recoveryNow: this.derivedRecoveryNowContext,
@@ -701,7 +861,13 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         trainingCapacity: this.derivedTrainingCapacityContext,
         trainingDurability: this.derivedTrainingDurabilityPayload,
       },
-    });
+    };
+    this.library.invalidateUndo(this.user?.settings?.dashboardSettings);
+    const newTiles = buildDashboardTileViewModels(this.previewInput);
+    if (this.isOwnerDashboard) for (const tile of newTiles) {
+      const settings = dashboardHealthSettings(tile, this.user.settings.dashboardSettings);
+      if (settings) (tile as AppDashboardChartTileSettingsInterface).healthMetric = settings;
+    }
     this.dashboardTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
     this.logger.log('[perf] summaries_build_tiles', {
       durationMs: Number((performance.now() - buildStart).toFixed(2)),
@@ -714,6 +880,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.refreshTileLanes();
       this.updateDesktopTileDragCapability();
       this.loaded();
+      this.revealRequestedHealthTile();
       this.logger.log('[perf] summaries_commit_tiles', {
         durationMs: Number((performance.now() - buildStart).toFixed(2)),
         finalTiles: this.tiles.length,
@@ -735,6 +902,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.refreshTileLanes();
     this.updateDesktopTileDragCapability();
     this.loaded();
+    this.revealRequestedHealthTile();
     this.logger.log('[perf] summaries_commit_tiles', {
       durationMs: Number((performance.now() - buildStart).toFixed(2)),
       finalTiles: this.tiles.length,
@@ -844,6 +1012,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       }
 
       if (!hasTileDataChanged && !hasBannerStateChanged && !wasHydrated) {
+        this.refreshDashboardTodaySignals();
         this.refreshDerivedMetricsBannerState();
         this.changeDetector.markForCheck();
         return;
@@ -881,15 +1050,16 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.derivedPowerCurveStatus = state.powerCurveStatus;
       this.derivedTrainingCapacityStatus = state.trainingCapacityStatus;
       this.derivedTrainingDurabilityStatus = state.trainingDurabilityStatus;
-      this.refreshDashboardTodaySignals();
       this.updateRecoveryRefreshTimer();
-      this.refreshDerivedMetricsBannerState();
 
       if (hasTileDataChanged) {
-        void this.rebuildTilesFromCurrentState();
+        // The shared rebuild also refreshes Today and the banner once with the latest evidence.
+        this.tileRebuild.request();
         return;
       }
 
+      this.refreshDashboardTodaySignals();
+      this.refreshDerivedMetricsBannerState();
       this.changeDetector.markForCheck();
     });
   }
@@ -918,6 +1088,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private syncSleepSubscription(): void {
     const uid = `${this.user?.uid || ''}`.trim();
     if (!uid) {
+      this.unsubscribeHrv();
       this.sleepSessions = [];
       this.sleepListenerKey = null;
       this.sleepTrendRange = DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
@@ -962,8 +1133,51 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
           this.sleepSessions = sessions;
         }
         shouldRebuildForWindowChange = false;
-        void this.rebuildTilesFromCurrentState();
+        this.tileRebuild.request();
       });
+  }
+
+  private syncHrvSubscription(): void {
+    if (this.isOwnerDashboard) { this.unsubscribeHrv(); return; }
+    const uid = `${this.user?.uid || ''}`.trim();
+    const range = normalizeDashboardSleepTrendRange((this.user as AppUserInterface)?.settings?.dashboardSettings?.hrvTrend?.range);
+    if (this.hrvOwnerUID !== uid || range !== this.hrvTrendRange) this.hrvTrendAnchorEndMs = null;
+    this.hrvOwnerUID = uid;
+    this.hrvTrendRange = range;
+    this.hrvTrendCanNavigateNewer = this.hrvTrendAnchorEndMs !== null;
+    if (!uid) { this.unsubscribeHrv(); return; }
+    const endMs = this.hrvTrendAnchorEndMs ?? Date.now();
+    const units = this.user?.settings?.unitSettings;
+    const visible = dashboardHrvWindows(this.hrvTrendRange, endMs).visible;
+    const key = JSON.stringify([uid, visible.startDate, visible.endDate, units]);
+    if (key === this.hrvListenerKey) return;
+    const displayKey = JSON.stringify([uid, units]);
+    const previous = this.hrvDisplayKey === displayKey && this.hrvTrend?.charts.length ? this.hrvTrend : null;
+    this.unsubscribeHrv();
+    this.hrvListenerKey = key;
+    this.hrvDisplayKey = displayKey;
+    this.hrvTrend = previous
+      ? { ...previous, requestedWindow: visible, loading: true, error: false }
+      : { window: visible, charts: [], loading: true, error: false };
+    this.hrvSubscription = this.hrvService.watch(uid, this.hrvTrendRange, endMs, units).subscribe({
+      next: context => { this.hrvTrend = context; this.tileRebuild.request(); },
+      error: () => {
+        this.hrvListenerKey = null;
+        const retained = this.hrvTrend?.charts.length ? this.hrvTrend : previous;
+        this.hrvTrend = retained
+          ? { ...retained, requestedWindow: visible, loading: false, error: true }
+          : { window: visible, charts: [], loading: false, error: true };
+        this.tileRebuild.request();
+      },
+    });
+  }
+
+  private unsubscribeHrv(): void {
+    this.hrvSubscription?.unsubscribe();
+    this.hrvSubscription = null;
+    this.hrvListenerKey = null;
+    this.hrvDisplayKey = null;
+    this.hrvTrend = null;
   }
 
   private syncReadinessSleepSubscription(): void {
@@ -987,20 +1201,22 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       window.endMs,
     ).subscribe({
       next: (sessions) => {
-        if (equal(this.readinessSleepSessions, sessions)) {
+        const wasReady = this.readinessSleepStatus === 'ready';
+        this.readinessSleepStatus = 'ready';
+        if (wasReady && equal(this.readinessSleepSessions, sessions)) {
           return;
         }
         this.readinessSleepSessions = sessions;
         this.updateReadinessSleepRefreshTimer();
-        void this.rebuildTilesFromCurrentState();
+        this.tileRebuild.request();
       },
       error: () => {
-        if (!this.readinessSleepSessions.length) {
-          return;
-        }
+        // A failed current read invalidates the in-memory Today evidence. Never
+        // carry a previously loaded night forward as if it were still current.
         this.readinessSleepSessions = [];
+        this.readinessSleepStatus = 'error';
         this.updateReadinessSleepRefreshTimer();
-        void this.rebuildTilesFromCurrentState();
+        this.tileRebuild.request();
       },
     });
   }
@@ -1012,19 +1228,21 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
     this.readinessSleepListenerKey = null;
     this.readinessSleepSessions = [];
+    this.readinessSleepStatus = 'loading';
     this.clearReadinessSleepRefreshTimer();
   }
 
   private updateReadinessSleepRefreshTimer(): void {
     this.clearReadinessSleepRefreshTimer();
     const nowMs = Date.now();
-    const refreshAtMs = resolveDashboardReadinessSleepRefreshAtMs(
+    const evidenceRefreshAtMs = resolveDashboardReadinessSleepRefreshAtMs(
       buildDashboardSleepTrendContext(this.readinessSleepSessions),
       nowMs,
     );
-    if (refreshAtMs === null) {
-      return;
-    }
+    const refreshAtMs = Math.min(
+      evidenceRefreshAtMs ?? Infinity,
+      buildDashboardTodaySleepStatus(null, { nowMs }).refreshAtMs,
+    );
     const delayMs = refreshAtMs - nowMs;
     if (delayMs <= 0) {
       return;
@@ -1032,7 +1250,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.readinessSleepRefreshTimeoutHandle = setTimeout(() => {
       this.readinessSleepRefreshTimeoutHandle = null;
       this.updateReadinessSleepRefreshTimer();
-      void this.rebuildTilesFromCurrentState();
+      this.tileRebuild.request();
     }, delayMs);
   }
 
@@ -1042,32 +1260,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
     clearTimeout(this.readinessSleepRefreshTimeoutHandle);
     this.readinessSleepRefreshTimeoutHandle = null;
-  }
-
-  private syncDashboardAutoTileSubscription(): void {
-    const listenerKey = this.resolveDashboardAutoTileListenerKey();
-    if (!listenerKey) {
-      this.unsubscribeDashboardAutoTileSubscription();
-      return;
-    }
-
-    const user = this.user as AppUserInterface;
-    if (
-      this.dashboardAutoTileListenerKey === listenerKey
-      && this.dashboardAutoTileSubscription
-      && this.dashboardAutoTileUser === user
-    ) {
-      return;
-    }
-
-    this.unsubscribeDashboardAutoTileSubscription();
-    this.dashboardAutoTileListenerKey = listenerKey;
-    this.dashboardAutoTileUser = user;
-    this.dashboardAutoTileSubscription = this.dashboardAutoTileService.watchForDashboard(user);
-  }
-
-  private resolveDashboardAutoTileListenerKey(): string | null {
-    return this.resolveOwnDashboardUID();
   }
 
   private resolveOwnDashboardUID(): string | null {
@@ -1092,23 +1284,103 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     return uid;
   }
 
-  private unsubscribeDashboardAutoTileSubscription(): void {
-    if (this.dashboardAutoTileSubscription) {
-      this.dashboardAutoTileSubscription.unsubscribe();
-      this.dashboardAutoTileSubscription = null;
-    }
-    this.dashboardAutoTileListenerKey = null;
-    this.dashboardAutoTileUser = null;
-  }
-
-  private persistDashboardSettings(dashboardSettings: Partial<AppDashboardSettingsInterface>): Promise<void> {
+  private persistDashboardSettings(dashboardSettings: Partial<AppDashboardSettingsInterface>, expected: AppDashboardSettingsInterface): Promise<void> {
     if (!this.user) {
       return Promise.resolve();
     }
 
-    return this.userService.updateUserProperties(this.user as AppUserInterface, {
-      settings: { dashboardSettings },
-    });
+    if (!this.resolveOwnDashboardUID()) return Promise.resolve();
+    return this.configuration.save(this.user.uid, expected, dashboardSettings);
+  }
+
+  public onCalendarStateChange(state: NonNullable<SummariesComponent['calendarNavigationState']>): void {
+    this.calendarNavigationState = state;
+    // Hydration and return restoration emit from a signal effect, outside a user action.
+    this.changeDetector.markForCheck();
+  }
+
+  public async onCalendarViewChange(order: number, view: 'month' | '30d'): Promise<void> {
+    const uid = this.resolveOwnDashboardUID();
+    if (!uid || this.calendarSavingOrders.has(order)) return;
+    const baseline = cloneDashboardSettings(this.user.settings.dashboardSettings);
+    const tiles = cloneDashboardSettings(baseline).tiles;
+    const tile = tiles.find(item => item.order === order) as AppDashboardChartTileSettingsInterface;
+    if (!tile || !isDashboardActivityCalendarTile(tile)) return;
+    const next = view === '30d' ? '30d' : 'month';
+    const previousMode = tile.displaySettings?.calendarView || 'month';
+    if (previousMode === next) return;
+    tile.displaySettings = { ...tile.displaySettings, calendarView: next };
+    const request = {};
+    this.calendarSavingOrders.add(order);
+    this.calendarSaveRequests.set(order, request);
+    this.tiles = this.tiles.map(item => item.order === order ? { ...item, displaySettings: tile.displaySettings } : item);
+    this.refreshTileLanes();
+    try {
+      await this.configuration.save(uid, baseline, { tiles });
+      if (this.resolveOwnDashboardUID() !== uid || this.calendarSaveRequests.get(order) !== request) return;
+      this.user.settings.dashboardSettings = { ...this.user.settings.dashboardSettings, tiles };
+      this.healthHaptics.success();
+    } catch (error) {
+      if (this.resolveOwnDashboardUID() !== uid || this.calendarSaveRequests.get(order) !== request) return;
+      this.tiles = this.tiles.map(item => item.order === order && isDashboardChartTileViewModel(item)
+        ? { ...item, displaySettings: { ...item.displaySettings, calendarView: previousMode } } : item);
+      this.refreshTileLanes();
+      this.healthHaptics.error();
+      this.healthSnack.open(error instanceof Error ? error.message : 'Could not save calendar view.', 'Dismiss', { duration: 6000 });
+    } finally {
+      if (this.calendarSaveRequests.get(order) === request) {
+        this.calendarSaveRequests.delete(order);
+        this.calendarSavingOrders.delete(order);
+        this.changeDetector.markForCheck();
+      }
+    }
+  }
+
+  public async onHealthMetricChange(order: number, change: { settings: AppDashboardHealthMetricSettings; initial: boolean }): Promise<void> {
+    const uid = this.resolveOwnDashboardUID();
+    if (change.initial || !uid || this.healthSavingOrders.has(order)) return;
+    const baseline = cloneDashboardSettings(this.user.settings.dashboardSettings);
+    const tiles = cloneDashboardSettings(baseline).tiles;
+    const tile = tiles.find(item => item.order === order) as AppDashboardChartTileSettingsInterface;
+    if (!tile || dashboardHealthMetric(tile) !== change.settings.metric) return;
+    tile.healthMetric = { ...change.settings };
+    this.healthSavingOrders.add(order);
+    const previousViews = this.tiles;
+    // Reflect controlled selects immediately, then restore them if persistence fails.
+    this.tiles = this.tiles.map(view => view.order === order ? { ...view, healthMetric: tile.healthMetric } : view);
+    this.refreshTileLanes();
+    try {
+      await this.configuration.save(uid, baseline, { tiles });
+      if (this.resolveOwnDashboardUID() !== uid) return;
+      this.user.settings.dashboardSettings = { ...this.user.settings.dashboardSettings, tiles };
+      await this.rebuildTilesFromCurrentState();
+      this.healthHaptics.success();
+    } catch (error) {
+      if (this.resolveOwnDashboardUID() !== uid) return;
+      this.tiles = this.tiles.map(view => view.order === order ? previousViews.find(previous => previous.order === order) || view : view);
+      this.refreshTileLanes();
+      this.healthHaptics.error();
+      this.healthSnack.open(error instanceof Error ? error.message : 'Could not save chart settings.', 'Dismiss', { duration: 6000 });
+    } finally {
+      this.healthSavingOrders.delete(order);
+      this.changeDetector.markForCheck();
+    }
+  }
+
+  public async undoDashboardChange(): Promise<void> {
+    if (!this.resolveOwnDashboardUID()) return;
+    await this.library.undo(this.user as AppUserInterface);
+    if (this.library.error()) this.healthSnack.open(this.library.error(), 'Dismiss', { duration: 6000 });
+  }
+
+  public async moveHealthTile(order:number, destination:'health'|'trainingState'): Promise<void> {
+    if (!this.resolveOwnDashboardUID()) return;
+    await this.library.moveHealthTile(this.user as AppUserInterface, order, destination);
+    if (this.library.error()) this.healthSnack.open(this.library.error(), 'Dismiss', {duration:6000});
+    else if (this.library.undoAvailable()) {
+      this.healthSnack.open(`Chart moved to ${destination === 'health' ? 'Health' : 'Training State'}.`, 'Undo', {duration:7000}).onAction().subscribe(() => this.undoDashboardChange());
+      await this.onChartPickerClosed();
+    }
   }
 
   public async onSleepTrendRangeChange(range: AppDashboardSleepTrendRange): Promise<void> {
@@ -1124,6 +1396,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     userWithSettings.settings = userWithSettings.settings || {};
     const dashboardSettings = (userWithSettings.settings.dashboardSettings || {}) as AppDashboardSettingsInterface;
     userWithSettings.settings.dashboardSettings = dashboardSettings;
+    const expectedSettings = cloneDashboardSettings(dashboardSettings);
     const previousSleepTrend = { ...(dashboardSettings.sleepTrend || {}) };
 
     dashboardSettings.sleepTrend = {
@@ -1138,7 +1411,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     try {
       await this.persistDashboardSettings({
         sleepTrend: dashboardSettings.sleepTrend,
-      });
+      }, expectedSettings);
     } catch (error) {
       dashboardSettings.sleepTrend = previousSleepTrend;
       this.sleepTrendRange = normalizeDashboardSleepTrendRange(previousSleepTrend.range);
@@ -1162,6 +1435,61 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
 
     this.syncSleepSubscription();
+    this.changeDetector.markForCheck();
+  }
+
+  public async onHrvTrendRangeChange(range: AppDashboardSleepTrendRange): Promise<void> {
+    const nextRange = normalizeDashboardSleepTrendRange(range);
+    if (nextRange === this.getHrvTrendRange()) {
+      return;
+    }
+    if (!this.user) {
+      return;
+    }
+
+    const userWithSettings = this.user as AppUserInterface;
+    userWithSettings.settings = userWithSettings.settings || {};
+    const dashboardSettings = (userWithSettings.settings.dashboardSettings || {}) as AppDashboardSettingsInterface;
+    userWithSettings.settings.dashboardSettings = dashboardSettings;
+    const expectedSettings = cloneDashboardSettings(dashboardSettings);
+    const previousHrvTrend = { ...(dashboardSettings.hrvTrend || {}) };
+
+    dashboardSettings.hrvTrend = {
+      ...previousHrvTrend,
+      range: nextRange,
+    };
+    this.hrvTrendRange = nextRange;
+    this.hrvTrendAnchorEndMs = null;
+    this.syncHrvSubscription();
+    this.changeDetector.markForCheck();
+
+    try {
+      await this.persistDashboardSettings({
+        hrvTrend: dashboardSettings.hrvTrend,
+      }, expectedSettings);
+    } catch (error) {
+      dashboardSettings.hrvTrend = previousHrvTrend;
+      this.hrvTrendRange = normalizeDashboardSleepTrendRange(previousHrvTrend.range);
+      this.hrvTrendAnchorEndMs = null;
+      this.syncHrvSubscription();
+      this.changeDetector.markForCheck();
+      this.logger.error('[SummariesComponent] Failed to persist HRV trend range update', error);
+    }
+  }
+
+  public onHrvTrendNavigate(direction: DashboardSleepTrendNavigationDirection): void {
+    const days = dashboardSleepTrendRangeDays(this.hrvTrendRange);
+    const nowMs = Date.now();
+    const windowMs = days * 24 * 60 * 60 * 1000;
+    const currentWindow = { endMs: this.hrvTrendAnchorEndMs ?? nowMs };
+    if (direction === 'older') {
+      this.hrvTrendAnchorEndMs = Math.max(windowMs, currentWindow.endMs - windowMs);
+    } else {
+      const nextEndMs = currentWindow.endMs + windowMs;
+      this.hrvTrendAnchorEndMs = localCalendarDate(nextEndMs) >= localCalendarDate(nowMs) ? null : nextEndMs;
+    }
+
+    this.syncHrvSubscription();
     this.changeDetector.markForCheck();
   }
 
@@ -1270,60 +1598,89 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.unsubscribeTileEventSubscriptions();
       return;
     }
+    if (this.tileEventUserUID !== uid) {
+      this.unsubscribeTileEventSubscriptions();
+      this.tileEventUserUID = uid;
+    }
 
-    const eventDataTiles = this.getOrderedDashboardSettingsTiles().filter(tile => this.isEventDataSettingsTile(tile));
-    const activeOrders = new Set(eventDataTiles.map(tile => tile.order));
-    for (const order of Array.from(this.tileEventSubscriptions.keys())) {
-      if (!activeOrders.has(order)) {
-        this.tileEventSubscriptions.get(order)?.unsubscribe();
-        this.tileEventSubscriptions.delete(order);
-        this.tileEventSubscriptionStates.delete(order);
-        this.tileEventListenerKeys.delete(order);
+    const nowMs = Date.now();
+    const requestedQueries = this.getOrderedDashboardSettingsTiles()
+      .filter(tile => this.isEventDataSettingsTile(tile))
+      .map(tile => {
+        const filters = this.getSettingsTileEventFilters(tile);
+        const window = resolveDashboardTileEventWindow(
+          filters,
+          this.user?.settings?.unitSettings?.startOfTheWeek,
+          this.tileEventAnchorEndMsByOrder.get(tile.order) ?? null,
+          nowMs,
+        );
+        return { order: tile.order, window, listenerKey: this.buildTileEventListenerKey(uid, tile.order, filters, window) };
+      });
+    const requestedKeysByOrder = new Map(requestedQueries.map(({ order, listenerKey }) => [order, listenerKey]));
+
+    // Release departing consumers before adding any replacements. A query without a live
+    // consumer must get a fresh clock window, regardless of the replacement tile's order.
+    for (const [order, subscription] of this.tileEventSubscriptions) {
+      if (!subscription.closed && this.tileEventListenerKeys.get(order) === requestedKeysByOrder.get(order)) {
+        continue;
+      }
+      subscription.unsubscribe();
+      this.tileEventSubscriptions.delete(order);
+      this.tileEventSubscriptionStates.delete(order);
+      this.tileEventListenerKeys.delete(order);
+      if (!requestedKeysByOrder.has(order)) {
         this.tileEventAnchorEndMsByOrder.delete(order);
         delete this.tileEventsByOrder[order];
         delete this.tileEventLoadingByOrder[order];
       }
     }
+    const liveQueryKeys = new Set(this.tileEventListenerKeys.values());
+    for (const key of this.tileEventQueries.keys()) {
+      if (!liveQueryKeys.has(key)) this.tileEventQueries.delete(key);
+    }
 
-    eventDataTiles.forEach((tile) => {
-      const filters = this.getSettingsTileEventFilters(tile);
-      const window = resolveDashboardTileEventWindow(
-        filters,
-        this.user?.settings?.unitSettings?.startOfTheWeek,
-        this.tileEventAnchorEndMsByOrder.get(tile.order) ?? null,
-      );
-      const listenerKey = this.buildTileEventListenerKey(uid, tile.order, filters, window);
-      if (this.tileEventListenerKeys.get(tile.order) === listenerKey && this.tileEventSubscriptions.has(tile.order)) {
-        return;
+    requestedQueries.forEach(({ order, window, listenerKey }) => {
+      if (this.tileEventSubscriptions.has(order)) return;
+
+      this.tileEventListenerKeys.set(order, listenerKey);
+      this.tileEventLoadingByOrder[order] = true;
+      delete this.tileEventsByOrder[order];
+      const subscriptionState: DashboardTileEventSubscriptionState = { order };
+      this.tileEventSubscriptionStates.set(order, subscriptionState);
+
+      let events$ = this.tileEventQueries.get(listenerKey);
+      if (!events$) {
+        const where = this.buildTileEventWhereClauses(window);
+        // Matching tiles share hydration as well as the listener. Keep the first latest-window
+        // anchor while it has consumers, so tiles added later can reuse the same live query.
+        events$ = defer(() => this.eventService.getEventSummariesBy(eventUser, where, 'startDate', false, 0)).pipe(
+          map(events => (events || []).filter(event => !event.isMerge)),
+          share({
+            connector: () => new ReplaySubject<EventRead[]>(1),
+            // Replay terminal failures to all matching tiles in this synchronization.
+            // The next synchronization evicts the entry once all consumers are closed.
+            resetOnError: false,
+            resetOnComplete: false,
+            resetOnRefCountZero: true,
+          }),
+        );
+        this.tileEventQueries.set(listenerKey, events$);
       }
-
-      this.tileEventSubscriptions.get(tile.order)?.unsubscribe();
-      this.tileEventSubscriptionStates.delete(tile.order);
-      this.tileEventListenerKeys.set(tile.order, listenerKey);
-      this.tileEventLoadingByOrder[tile.order] = true;
-      const subscriptionState: DashboardTileEventSubscriptionState = { order: tile.order };
-      this.tileEventSubscriptionStates.set(tile.order, subscriptionState);
-
-      const where = this.buildTileEventWhereClauses(window);
-      this.tileEventSubscriptions.set(tile.order, this.eventService
-        .getEventsBy(eventUser, where, 'startDate', false, 0)
-        .subscribe({
-          next: (events) => {
-            const currentOrder = subscriptionState.order;
-            this.tileEventsByOrder[currentOrder] = (events || []).filter(event => !event.isMerge);
-            this.tileEventLoadingByOrder[currentOrder] = false;
-            void this.rebuildTilesFromCurrentState();
-            this.changeDetector.markForCheck();
-          },
-          error: (error) => {
-            const currentOrder = subscriptionState.order;
-            this.tileEventsByOrder[currentOrder] = [];
-            this.tileEventLoadingByOrder[currentOrder] = false;
-            this.logger.error('[SummariesComponent] Failed to load dashboard tile events', error);
-            void this.rebuildTilesFromCurrentState();
-            this.changeDetector.markForCheck();
-          },
-        }));
+      this.tileEventSubscriptions.set(order, events$.subscribe({
+        next: (events) => {
+          const currentOrder = subscriptionState.order;
+          this.tileEventsByOrder[currentOrder] = events;
+          this.tileEventLoadingByOrder[currentOrder] = false;
+          this.tileRebuild.request();
+        },
+        error: (error) => {
+          const currentOrder = subscriptionState.order;
+          this.tileEventsByOrder[currentOrder] = [];
+          this.tileEventLoadingByOrder[currentOrder] = false;
+          this.logger.error('[SummariesComponent] Failed to load dashboard tile events', error);
+          this.tileRebuild.request();
+        },
+      }));
     });
   }
 
@@ -1348,15 +1705,13 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       next: (routes) => {
         this.routePreviewRoutes = routes || [];
         this.routePreviewLoading = false;
-        void this.rebuildTilesFromCurrentState();
-        this.changeDetector.markForCheck();
+        this.tileRebuild.request();
       },
       error: (error) => {
         this.routePreviewRoutes = [];
         this.routePreviewLoading = false;
         this.logger.error('[SummariesComponent] Failed to load dashboard route previews', error);
-        void this.rebuildTilesFromCurrentState();
-        this.changeDetector.markForCheck();
+        this.tileRebuild.request();
       },
     });
   }
@@ -1399,7 +1754,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       : `${window.startMs}:${window.endMs}`;
     return JSON.stringify({
       uid,
-      order,
       range,
       windowKey,
     });
@@ -1412,6 +1766,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
     const nextSubscriptions = new Map<number, Subscription>();
     const nextSubscriptionStates = new Map<number, DashboardTileEventSubscriptionState>();
+    const nextListenerKeys = new Map<number, string>();
     this.tileEventSubscriptions.forEach((subscription, previousOrder) => {
       const nextOrder = orderRemap.get(previousOrder);
       if (nextOrder === undefined) {
@@ -1419,6 +1774,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         return;
       }
       nextSubscriptions.set(nextOrder, subscription);
+      // Query keys describe the live source, independent of tile order. Recomputing a
+      // calendar window here would label an old listener with a new date window.
+      const listenerKey = this.tileEventListenerKeys.get(previousOrder);
+      if (listenerKey !== undefined) nextListenerKeys.set(nextOrder, listenerKey);
       const subscriptionState = this.tileEventSubscriptionStates.get(previousOrder);
       if (subscriptionState) {
         subscriptionState.order = nextOrder;
@@ -1434,7 +1793,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       }
     });
 
-    const nextEventsByOrder: Record<number, EventInterface[]> = {};
+    const nextEventsByOrder: Record<number, EventRead[]> = {};
     Object.entries(this.tileEventsByOrder).forEach(([previousOrderKey, events]) => {
       const nextOrder = orderRemap.get(Number(previousOrderKey));
       if (nextOrder !== undefined) {
@@ -1452,37 +1811,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
     this.tileEventSubscriptions = nextSubscriptions;
     this.tileEventSubscriptionStates = nextSubscriptionStates;
+    this.tileEventListenerKeys = nextListenerKeys;
     this.tileEventAnchorEndMsByOrder = nextAnchorEndMsByOrder;
     this.tileEventsByOrder = nextEventsByOrder;
     this.tileEventLoadingByOrder = nextLoadingByOrder;
-    this.refreshTileEventListenerKeysForCurrentSettings();
-  }
-
-  private refreshTileEventListenerKeysForCurrentSettings(): void {
-    const eventUser = (this.eventUser || this.user) as User | null;
-    const uid = `${eventUser?.uid || ''}`.trim();
-    if (!uid) {
-      this.tileEventListenerKeys.clear();
-      return;
-    }
-
-    const nextListenerKeys = new Map<number, string>();
-    this.getOrderedDashboardSettingsTiles()
-      .filter(tile => this.isEventDataSettingsTile(tile))
-      .forEach((tile) => {
-        if (!this.tileEventSubscriptions.has(tile.order)) {
-          return;
-        }
-        const filters = this.getSettingsTileEventFilters(tile);
-        const window = resolveDashboardTileEventWindow(
-          filters,
-          this.user?.settings?.unitSettings?.startOfTheWeek,
-          this.tileEventAnchorEndMsByOrder.get(tile.order) ?? null,
-        );
-        nextListenerKeys.set(tile.order, this.buildTileEventListenerKey(uid, tile.order, filters, window));
-      });
-
-    this.tileEventListenerKeys = nextListenerKeys;
   }
 
   private async updateTileEventFilters(
@@ -1494,6 +1826,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
 
     const dashboardSettings = (this.user as AppUserInterface).settings.dashboardSettings as AppDashboardSettingsInterface;
+    const expectedSettings = cloneDashboardSettings(dashboardSettings);
     const previousTiles = this.cloneDashboardTiles(dashboardSettings.tiles);
     const tile = dashboardSettings.tiles.find(candidate => candidate.order === order);
     const isPowerCurveTile = tile?.type === TileTypes.Chart
@@ -1516,7 +1849,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     try {
       await this.persistDashboardSettings({
         tiles: dashboardSettings.tiles,
-      });
+      }, expectedSettings);
     } catch (error) {
       dashboardSettings.tiles = previousTiles;
       this.tileEventAnchorEndMsByOrder.delete(order);
@@ -1536,6 +1869,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
 
     const dashboardSettings = (this.user as AppUserInterface).settings.dashboardSettings as AppDashboardSettingsInterface;
+    const expectedSettings = cloneDashboardSettings(dashboardSettings);
     const previousTiles = this.cloneDashboardTiles(dashboardSettings.tiles);
     const tile = dashboardSettings.tiles.find(candidate => candidate.order === order);
     if (!tile || !this.isDisplaySettingsChartTile(tile)) {
@@ -1558,7 +1892,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     try {
       await this.persistDashboardSettings({
         tiles: dashboardSettings.tiles,
-      });
+      }, expectedSettings);
     } catch (error) {
       dashboardSettings.tiles = previousTiles;
       await this.rebuildTilesFromCurrentState();
@@ -1642,6 +1976,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     return `${uid}:${window.range}:${anchorKey}`;
   }
 
+  private getHrvTrendRange(): AppDashboardSleepTrendRange {
+    return normalizeDashboardSleepTrendRange((this.user as AppUserInterface)?.settings?.dashboardSettings?.hrvTrend?.range);
+  }
+
   private getSleepTrendRange(): AppDashboardSleepTrendRange {
     return normalizeDashboardSleepTrendRange((this.user as AppUserInterface)?.settings?.dashboardSettings?.sleepTrend?.range);
   }
@@ -1684,7 +2022,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private formatSleepTrendWindowDate(timestampMs: number): string {
-    return new Intl.DateTimeFormat(undefined, {
+    return getDateTimeFormatter(undefined, {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -1726,71 +2064,191 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.derivedPowerCurveStatus = 'missing';
     this.derivedTrainingCapacityStatus = 'missing';
     this.derivedTrainingDurabilityStatus = 'missing';
-    this.dashboardTodayReadiness = createEmptyDashboardTodayReadinessViewModel();
+    this.dashboardTodayReadiness = createEmptyDashboardTodayReadinessViewModel(true);
+    this.dashboardBriefingSleepText = '';
+    this.dashboardBriefingLoadComparison = null;
     this.dashboardTodayTrainingState = createEmptyDashboardTodayTrainingStateViewModel();
+    this.dashboardGlanceSignals = buildDashboardGlanceSignals(this.dashboardTodayReadiness, this.dashboardTodayTrainingState, 'loading');
     this.refreshDerivedMetricsBannerState();
   }
 
   private buildDashboardTodayReadiness(): DashboardTodayReadinessViewModel {
+    const uid = `${this.user?.uid || ''}`.trim();
+    // The derived stream emits after every requested snapshot has answered. Wait
+    // for Sleep too; an uninitialized empty list is not confirmed missing data.
+    if (uid && (!this.derivedMetricsHydrated
+      || !this.derivedMetricsUserUID?.startsWith(`${uid}:`)
+      || this.readinessSleepListenerKey !== `${uid}:current-readiness`
+      || this.readinessSleepStatus === 'loading')) {
+      return createEmptyDashboardTodayReadinessViewModel(true);
+    }
+    const warningText = this.readinessSleepStatus === 'error'
+      ? 'Sleep could not be loaded. Showing available current signals.'
+      : '';
     const nowMs = Date.now();
-    const formNow = resolveDashboardFormNowContextFromPoints(this.derivedFormPoints, nowMs)
-      || this.derivedFormNowContext;
-    const rampRate = resolveDashboardRampRateContextFromPoints(this.derivedFormPoints, nowMs)
-      || this.derivedRampRateContext;
+    const formNowFromSeries = this.derivedFormStatus === 'ready'
+      ? resolveDashboardFormNowContextFromPoints(this.derivedFormPoints, nowMs)
+      : null;
+    const rampRateFromSeries = this.derivedFormStatus === 'ready'
+      ? resolveDashboardRampRateContextFromPoints(this.derivedFormPoints, nowMs)
+      : null;
+    const formNow = formNowFromSeries
+      || (this.derivedFormNowStatus === 'ready' ? this.derivedFormNowContext : null);
+    const rampRate = rampRateFromSeries
+      || (this.derivedRampRateStatus === 'ready' ? this.derivedRampRateContext : null);
+    const sleepTrend = buildDashboardSleepTrendContext(this.readinessSleepSessions);
     const context = buildDashboardReadinessSignalsContext({
       formNow,
       rampRate,
-      sleepTrend: buildDashboardSleepTrendContext(this.readinessSleepSessions),
+      sleepTrend,
       nowMs,
     });
-    const recoveryText = formatSleepDuration(resolveRemainingRecoverySeconds(this.derivedRecoveryNowContext, nowMs));
-    const recoveryFinishTimeMs = resolveRecoveryFinishTimeMs(this.derivedRecoveryNowContext, nowMs);
+    const sleepStatus = buildDashboardTodaySleepStatus(context?.latestSleepAtMs, { nowMs, locale: this.locale });
+    const awaitingSleep = !warningText && sleepStatus.awaitingSleep;
+    if (!awaitingSleep && !warningText) {
+      this.dashboardBriefingSleepText = dashboardBriefingSleepDuration(sleepTrend.points, context?.latestSleepAtMs, this.user?.settings?.unitSettings);
+    }
+    const recovery = buildDashboardRecoveryPresentation(
+      this.derivedRecoveryNowStatus === 'ready' ? this.derivedRecoveryNowContext : null, {
+      locale: this.locale,
+      nowMs,
+      unitSettings: this.user?.settings?.unitSettings,
+    });
+    const recoveryText = recovery?.remainingText ?? '--';
+    const recoveryRemainingPercent = recovery?.remainingPercent ?? null;
+    const recoveryFinishTimeMs = recovery?.finishTimeMs ?? null;
+    const recoveryFinishText = recovery?.finishText ?? '';
+    const loadBars = buildDashboardTodayLoadBars(
+      this.derivedFormStatus === 'ready' ? this.derivedFormPoints : null,
+      this.dashboardTodayTrainingState.label,
+      nowMs,
+    );
     if (!context) {
       return {
         ...createEmptyDashboardTodayReadinessViewModel(),
+        ...(warningText ? { changeSignals: ['Sleep', 'HRV'].map(label => ({ id: label.toLowerCase(), label,
+          sourceLabel: 'Source unavailable', state: 'unavailable' as const, statusText: 'Evidence unavailable', detailText: warningText })) } : {}),
+        awaitingSleep,
+        label: warningText ? 'Readiness unavailable' : 'Awaiting today’s sleep',
+        scoreText: '',
+        warningText,
+        sleepContextText: warningText ? 'Sleep unavailable' : sleepStatus.contextText,
         recoveryText,
+        recoveryRemainingPercent,
         recoveryFinishTimeMs,
+        recoveryFinishText,
+        loadBars,
       };
     }
+    const hrv = buildReadinessHrvDisplay(
+      context.hrvPersonalRange,
+      this.user?.settings?.unitSettings,
+      resolveReadinessHrvRecentTrend(sleepTrend.points, nowMs),
+      { latestSleepAtMs: context.latestSleepAtMs, locale: this.locale, nowMs },
+    );
+    const overnightHeartRateTone = this.resolveDashboardTodayRatioTone(context.overnightHeartRateRatio, true);
+    const matchingNights = sleepTrend.points.filter(point => !point.isPlaceholder && !point.isNap
+      && (point.endTimeMs ?? point.startTimeMs) === context.latestSleepAtMs);
+    const sourceLabel = resolveHealthChangeSourceLabel(matchingNights, context.latestSleepAtMs !== null);
+    const hrvRange = context.hrvPersonalRange;
+    const matchingHrvNights = hrvRange ? sleepTrend.points.filter(point => !point.isPlaceholder && !point.isNap && point.provider !== null
+      && readinessHrvObservations(point).some(observation => observation.timestampMs === hrvRange.latestAtMs
+        && observation.value === hrvRange.latestMs)) : [];
+    const hrvSourceLabel = resolveHealthChangeSourceLabel(matchingHrvNights, !!hrvRange);
+    const recordedText = context.latestSleepAtMs === null ? 'No eligible current night.'
+      : `Night ended ${getDateTimeFormatter(this.locale, { dateStyle: 'medium', timeStyle: 'short' }).format(context.latestSleepAtMs)}.`;
     return {
-      label: context.label,
-      score: context.score,
-      scoreText: `${this.formatDashboardTodayMetric(context.score)}/100`,
+      changeSignals: [
+        { id: 'hrv', label: 'HRV · 7-day average', sourceLabel: `${hrvSourceLabel} · Sleep HRV`,
+          state: warningText ? 'unavailable' : personalRangeChangeState(context.hrvPersonalRange),
+          statusText: warningText ? 'Evidence unavailable' : hrv.statusText,
+          detailText: warningText || [hrv.valueText !== '—' ? `7-day average ${hrv.valueText}` : '',
+            hrv.rangeText, hrv.latestText || recordedText].filter(Boolean).join(' · ') },
+        { id: 'sleep', label: 'Sleep', sourceLabel,
+          state: warningText ? 'unavailable' : context.latestSleepAtMs === null ? 'insufficient' : 'recorded',
+          statusText: warningText ? 'Evidence unavailable' : context.latestSleepAtMs === null ? 'No eligible current night' : 'Recorded context',
+          detailText: warningText || recordedText },
+      ],
+      loading: false,
+      awaitingSleep,
+      warningText,
+      label: warningText ? 'Readiness unavailable' : awaitingSleep ? 'Awaiting today’s sleep' : context.label,
+      score: awaitingSleep || warningText ? null : context.score,
+      scoreText: awaitingSleep || warningText ? '' : `${this.formatDashboardTodayMetric(context.score)}/100`,
       confidenceText: `${context.confidence.charAt(0).toUpperCase()}${context.confidence.slice(1)} confidence`,
       evidenceText: `${context.availableSignalCount}/${context.totalSignalCount} signals`,
       availableSignalCount: context.availableSignalCount,
       loadText: `${this.formatDashboardTodayMetric(context.form, true)} / ${this.formatDashboardTodayMetric(context.rampRate, true)}`,
       sleepText: context.sleepScore === null ? '--' : `${this.formatDashboardTodayMetric(context.sleepScore)}/100`,
       sleepScore: context.sleepScore,
-      sleepContextText: formatDashboardRelativeDay(context.latestSleepAtMs, { nowMs, locale: this.locale }),
-      hrvText: this.formatDashboardTodayRatio(context.hrvRatio),
-      hrvDeviationPercent: context.hrvRatio === null ? null : (context.hrvRatio - 1) * 100,
-      hrvTone: this.resolveDashboardTodayRatioTone(context.hrvRatio, false),
+      sleepContextText: warningText && context.latestSleepAtMs === null
+        ? 'Sleep unavailable'
+        : sleepStatus.contextText,
+      hrvText: hrv.valueText,
+      hrvStatusText: hrv.statusText,
+      hrvRangeText: hrv.rangeText,
+      hrvLatestText: hrv.latestText,
+      hrvTone: hrv.tone,
+      hrvRangeIndicator: buildDashboardTodayHrvRangeIndicator(context.hrvPersonalRange),
       overnightHeartRateText: this.formatDashboardTodayRatio(context.overnightHeartRateRatio),
       overnightHeartRateDeviationPercent: context.overnightHeartRateRatio === null
         ? null
         : (context.overnightHeartRateRatio - 1) * 100,
-      overnightHeartRateTone: this.resolveDashboardTodayRatioTone(context.overnightHeartRateRatio, true),
+      overnightHeartRateTone,
+      overnightHeartRateContextText: context.overnightHeartRateRatio !== null
+        ? [context.overnightHeartRateCalculatedByQs ? 'Calculated by QS from Garmin samples' : '', sleepStatus.contextText].filter(Boolean).join(' · ') : '',
       recoveryText,
+      recoveryRemainingPercent,
       recoveryFinishTimeMs,
+      recoveryFinishText,
+      loadBars,
+      overnightHeartRateBars: buildDashboardTodayOvernightHeartRateBars(
+        sleepTrend,
+        overnightHeartRateTone,
+        nowMs,
+      ),
     };
   }
 
   private buildDashboardTodayTrainingState(): DashboardTodayTrainingStateViewModel {
-    const state = buildCurrentTrainingStateContext({
-      formPoints: this.derivedFormPoints,
-      fallbackFormNow: this.derivedFormNowContext,
-      fallbackRampRate: this.derivedRampRateContext,
-    }).state;
+    const context = buildCurrentTrainingStateContext({
+      formPoints: this.derivedFormStatus === 'ready' ? this.derivedFormPoints : null,
+      fallbackFormNow: this.derivedFormNowStatus === 'ready' ? this.derivedFormNowContext : null,
+      fallbackRampRate: this.derivedRampRateStatus === 'ready' ? this.derivedRampRateContext : null,
+    });
+    const state = context.state;
+    const loadDates = [context.formNow?.latestDayMs, context.rampRate?.latestDayMs]
+      .filter((value): value is number => value != null && Number.isFinite(value));
+    const label = state.label || 'Awaiting data';
+    const scale = resolveDashboardTodayTrainingStateScale(label);
     return {
-      label: state.label || 'Awaiting data',
+      label,
       caption: state.caption || 'TSS-derived state is preparing',
+      scalePosition: scale.position,
+      scaleTone: scale.tone,
+      contextText: loadDates.length ? `Derived load through ${getDateTimeFormatter(this.locale, {
+        dateStyle: 'medium', timeZone: 'UTC',
+      }).format(Math.min(...loadDates))}.` : '',
     };
   }
 
   private refreshDashboardTodaySignals(): void {
-    this.dashboardTodayReadiness = this.buildDashboardTodayReadiness();
+    this.dashboardBriefingSleepText = '';
+    this.dashboardBriefingLoadComparison = null;
     this.dashboardTodayTrainingState = this.buildDashboardTodayTrainingState();
+    this.dashboardTodayReadiness = this.buildDashboardTodayReadiness();
+    const uid = `${this.user?.uid || ''}`.trim();
+    const loadHydrated = this.derivedMetricsHydrated && !!uid && this.derivedMetricsUserUID?.startsWith(`${uid}:`);
+    const loadStatuses = [this.derivedFormStatus, this.derivedFormNowStatus, this.derivedRampRateStatus];
+    const loadAvailability = !loadHydrated ? 'loading' : this.dashboardTodayTrainingState.scalePosition !== null ? 'available'
+      : loadStatuses.includes('failed') ? 'unavailable' : loadStatuses.some(isDerivedMetricPendingStatus) ? 'loading' : 'insufficient';
+    this.dashboardGlanceSignals = buildDashboardGlanceSignals(this.dashboardTodayReadiness, this.dashboardTodayTrainingState, loadAvailability);
+    const now = new Date();
+    const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    if (loadHydrated && this.derivedAcwrStatus === 'ready' && this.derivedAcwrContext?.latestDayMs === todayUtc) {
+      const direction = dashboardAcwrComparison(this.derivedAcwrContext.ratio);
+      this.dashboardBriefingLoadComparison = direction ? { direction, utcDayMs: this.derivedAcwrContext.latestDayMs } : null;
+    }
   }
 
   private formatDashboardTodayMetric(value: number | null | undefined, signed = false): string {
@@ -1798,7 +2256,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return '--';
     }
     const prefix = signed && value > 0 ? '+' : '';
-    return `${prefix}${new Intl.NumberFormat(this.locale, { maximumFractionDigits: 1 }).format(value)}`;
+    return `${prefix}${getNumberFormatter(this.locale, { maximumFractionDigits: 1 }).format(value)}`;
   }
 
   private formatDashboardTodayRatio(ratio: number | null | undefined): string {
@@ -2023,12 +2481,14 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
           ...definition,
           columns: sectionColumns,
           hasActivityCalendar: this.hasActivityCalendarTile(sectionTiles),
+          hasHealthCharts: sectionTiles.some(tile => !!dashboardHealthMetric(tile)),
           tiles: sectionTiles,
           cells: sectionCells,
           trailingPlaceholders: this.buildMainGridTrailingPlaceholders(sectionCells, sectionColumns),
         };
       })
       .filter(section => section.tiles.length > 0);
+    this.splitCalendarSection();
   }
 
   private refreshMainGridSectionLayout(): void {
@@ -2039,10 +2499,17 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         ...section,
         columns: sectionColumns,
         hasActivityCalendar: this.hasActivityCalendarTile(section.tiles),
+        hasHealthCharts: section.tiles.some(tile => !!dashboardHealthMetric(tile)),
         cells: sectionCells,
         trailingPlaceholders: this.buildMainGridTrailingPlaceholders(sectionCells, sectionColumns),
       };
     });
+    this.splitCalendarSection();
+  }
+
+  private splitCalendarSection(): void {
+    this.calendarGridSection = this.mainGridSections.find(section => section.id === 'calendar') || null;
+    this.otherGridSections = this.mainGridSections.filter(section => section.id !== 'calendar');
   }
 
   private buildMainGridSectionCells(
@@ -2316,6 +2783,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return;
     }
 
+    const expectedSettings = cloneDashboardSettings(dashboardSettings);
     const previousSettingsTiles = this.cloneTileSettings(dashboardSettings.tiles);
     const previousRenderedTiles = this.cloneDashboardViewModels(this.tiles);
     const previousRenderedTilesByPersistedOrder = [...previousRenderedTiles]
@@ -2336,7 +2804,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     try {
       await this.persistDashboardSettings({
         tiles: dashboardSettings.tiles,
-      });
+      }, expectedSettings);
       this.updateDesktopTileDragCapability();
     } catch (error) {
       dashboardSettings.tiles = this.cloneTileSettings(previousSettingsTiles);
@@ -2356,6 +2824,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private unsubscribeFromAll() {
+    this.unsubscribeHrv();
     this.unsubscribeThemeSubscription();
     this.clearRecoveryRefreshTimer();
     if (this.derivedMetricsSubscription) {
@@ -2369,7 +2838,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.sleepListenerKey = null;
     }
     this.unsubscribeReadinessSleepSubscription();
-    this.unsubscribeDashboardAutoTileSubscription();
     this.unsubscribeTileEventSubscriptions();
     this.unsubscribeRoutePreviewSubscription();
   }
@@ -2379,6 +2847,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.tileEventSubscriptions.clear();
     this.tileEventSubscriptionStates.clear();
     this.tileEventListenerKeys.clear();
+    this.tileEventQueries.clear();
+    this.tileEventUserUID = null;
     this.tileEventAnchorEndMsByOrder.clear();
     this.tileEventsByOrder = {};
     this.tileEventLoadingByOrder = {};
@@ -2469,20 +2939,27 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     if (refreshPhase === 'failed') {
       this.derivedMetricsBanner = {
         type: 'warning',
-        title: 'Derived metrics update failed',
-        description: 'Some dashboard values may be out of date. Retry the update.',
+        title: 'Couldn’t update your dashboard',
+        description: 'Try again in a moment. Some values may be out of date.',
         showRetry: true,
       };
       return;
     }
 
     if (refreshPhase === 'refreshing' || refreshPhase === 'building') {
+      // Once Today has settled, unfinished tiles report their own loading state.
+      // Keeping their work in this page-level status hides the greeting and makes
+      // a mostly rendered dashboard look blocked by its slowest chart.
+      if (this.showTodaySummary && !this.dashboardTodayReadiness.loading) {
+        this.derivedMetricsBanner = null;
+        return;
+      }
       this.derivedMetricsBanner = {
         type: 'pending',
-        title: refreshPhase === 'refreshing' ? 'Refreshing derived metrics' : 'Building derived metrics',
+        title: refreshPhase === 'refreshing' ? 'Updating your dashboard…' : 'Preparing your dashboard…',
         description: refreshPhase === 'refreshing'
-          ? 'Available last completed values stay visible while the update finishes.'
-          : 'Some dashboard insights are still being prepared.',
+          ? 'You can keep browsing while your latest data is added.'
+          : 'Your charts and stats will appear as they’re ready.',
         showRetry: false,
       };
       return;
@@ -2508,6 +2985,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       userUID: `${user?.uid || ''}`.trim(),
       eventUserUID: `${eventUser?.uid || user?.uid || ''}`.trim(),
       startOfTheWeek: appUser?.settings?.unitSettings?.startOfTheWeek ?? null,
+      hrvTrendRange: normalizeDashboardSleepTrendRange(appUser?.settings?.dashboardSettings?.hrvTrend?.range),
       sleepTrendRange: normalizeDashboardSleepTrendRange(appUser?.settings?.dashboardSettings?.sleepTrend?.range),
       showTodaySummary: appUser?.settings?.dashboardSettings?.showTodaySummary !== false,
       removeAscentForEventTypes: summariesSettings?.removeAscentForEventTypes ?? null,

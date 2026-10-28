@@ -1,3 +1,4 @@
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { BenchmarkSelectionDialogComponent, BenchmarkSelectionData } from './benchmark-selection-dialog.component';
@@ -11,6 +12,8 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { AppDeviceColorPreferenceService } from '../../services/color/app-device-color-preference.service';
+
+const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
 
 describe('BenchmarkSelectionDialogComponent', () => {
     let component: BenchmarkSelectionDialogComponent;
@@ -34,6 +37,7 @@ describe('BenchmarkSelectionDialogComponent', () => {
     };
 
     beforeEach(async () => {
+        vi.clearAllMocks();
         mockDialogRef = { close: vi.fn() };
 
         await TestBed.configureTestingModule({
@@ -47,6 +51,7 @@ describe('BenchmarkSelectionDialogComponent', () => {
                 NoopAnimationsModule,
             ],
             providers: [
+                { provide: AppHapticsService, useValue: haptics },
                 { provide: MatDialogRef, useValue: mockDialogRef },
                 { provide: MAT_DIALOG_DATA, useValue: mockData },
                 { provide: AppDeviceColorPreferenceService, useValue: { getPreferredDeviceColor: vi.fn(() => null) } },
@@ -59,8 +64,36 @@ describe('BenchmarkSelectionDialogComponent', () => {
         fixture.detectChanges();
     });
 
-    it('should create', () => {
+    it('only gives feedback for changed list selection and alignment choices', () => {
+        const selection = { source: { selectedOptions: { selected: [{ value: mockData.activities[0] }] } } };
+        component.onSelectionChange(selection as never);
+        component.onSelectionChange(selection as never);
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        component.setAutoAlignTime(true);
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        component.setAutoAlignTime(false);
+        expect(haptics.selection).toHaveBeenCalledTimes(2);
+        component.isLoading = true;
+        component.setAutoAlignTime(true); component.swapActivities(); component.confirm();
+        expect(haptics.selection).toHaveBeenCalledTimes(2);
+        expect(mockDialogRef.close).not.toHaveBeenCalled();
+    });
+
+    it('gives one feedback for swapping a valid pair and cancelling', () => {
+        component.swapActivities();
+        expect(haptics.selection).not.toHaveBeenCalled();
+        component.selectedActivities = [mockData.activities[0], mockData.activities[1]];
+        component.swapActivities();
+        expect(component.selectedActivities).toEqual([mockData.activities[1], mockData.activities[0]]);
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        component.cancel();
+        expect(haptics.selection).toHaveBeenCalledTimes(2);
+        expect(mockDialogRef.close).toHaveBeenCalledOnce();
+    });
+
+    it('should create' , () => {
         expect(component).toBeTruthy();
+        expect(haptics.selection).not.toHaveBeenCalled();
     });
 
     it('should not allow confirmation with fewer than 2 selections', () => {
@@ -69,6 +102,7 @@ describe('BenchmarkSelectionDialogComponent', () => {
         component.confirm();
 
         expect(mockDialogRef.close).not.toHaveBeenCalled();
+        expect(haptics.selection).not.toHaveBeenCalled();
     });
 
     it('should close dialog with selected activities when confirmed', () => {
@@ -76,6 +110,8 @@ describe('BenchmarkSelectionDialogComponent', () => {
 
         component.confirm();
 
+        expect(haptics.selection).toHaveBeenCalledOnce();
+        expect(haptics.success).not.toHaveBeenCalled();
         expect(mockDialogRef.close).toHaveBeenCalledWith({
             activities: [mockData.activities[0], mockData.activities[1]],
             options: { autoAlignTime: true }
@@ -100,6 +136,7 @@ describe('BenchmarkSelectionDialogComponent', () => {
                 NoopAnimationsModule,
             ],
             providers: [
+                { provide: AppHapticsService, useValue: haptics },
                 { provide: MatDialogRef, useValue: mockDialogRef },
                 { provide: MAT_DIALOG_DATA, useValue: dataWithInitial },
                 { provide: AppDeviceColorPreferenceService, useValue: { getPreferredDeviceColor: vi.fn(() => null) } },

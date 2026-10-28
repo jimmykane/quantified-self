@@ -40,65 +40,96 @@
   }
 
   @if (user) {
-  <mat-list-item routerLinkActive="active" routerLink="/dashboard" (click)="closeSideNav()">
-    <mat-icon>dashboard</mat-icon>
-    <span>Dashboard</span>
-  </mat-list-item>
+  <div role="group" aria-labelledby="sidenav-overview-heading">
+    <div id="sidenav-overview-heading" class="sidenav-section-header">Overview</div>
+    <mat-list-item routerLinkActive="active" routerLink="/dashboard" (click)="closeSideNav()">
+      <mat-icon>dashboard</mat-icon>
+      <span>Dashboard</span>
+    </mat-list-item>
 
-  @if (hasHealthWorkspaceNavigationAccess()) {
-    <mat-list-item routerLinkActive="active" routerLink="/health" (click)="closeSideNav()">
+    <mat-list-item routerLinkActive="active" routerLink="/calendar" (click)="closeSideNav()">
+      <mat-icon>calendar_month</mat-icon>
+      <span>Calendar</span>
+    </mat-list-item>
+
+    <a mat-list-item class="sidenav-route-link" routerLinkActive="active" ariaCurrentWhenActive="page" routerLink="/activities"
+      (click)="sideNav.close()">
+      <mat-icon matListItemIcon aria-hidden="true">list_alt</mat-icon>
+      <span matListItemTitle>Activities</span>
+    </a>
+  </div>
+
+  <div role="group" aria-labelledby="sidenav-training-health-heading">
+    <div id="sidenav-training-health-heading" class="sidenav-section-header">Training &amp; health</div>
+    <mat-list-item routerLinkActive="active"
+      [routerLinkActiveOptions]="{ paths: 'exact', queryParams: 'ignored', matrixParams: 'ignored', fragment: 'ignored' }"
+      routerLink="/training" (click)="closeSideNav()">
+      <mat-icon>monitoring</mat-icon>
+      <span>Training</span>
+    </mat-list-item>
+
+    @if (hasTrainingPlanningNavigationAccess()) {
+      <mat-list-item routerLinkActive="active" routerLink="/training/plans" (click)="closeSideNav()">
+        <mat-icon>event_note</mat-icon>
+        <span>Plans</span>
+      </mat-list-item>
+    }
+
+    <mat-list-item routerLinkActive="active" routerLink="/health"
+      [routerLinkActiveOptions]="{ paths: 'exact', queryParams: 'ignored', matrixParams: 'ignored', fragment: 'ignored' }"
+      (click)="closeSideNav()">
       <mat-icon>cardiology</mat-icon>
       <span>Health</span>
-      <span class="fill-space"></span>
-      <span class="pro-badge">BETA</span>
     </mat-list-item>
+    <a mat-list-item class="sidenav-route-link sidenav-notes-item" routerLink="/health/compare"
+      routerLinkActive="active" ariaCurrentWhenActive="page" (click)="sideNav.close()">
+      <mat-icon matListItemIcon aria-hidden="true">edit_note</mat-icon>
+      <span matListItemTitle>Timeline notes</span>
+    </a>
+
+    <mat-list-item [routerLinkActive]="hasAssistantAccess ? 'active' : ''" [routerLinkActiveOptions]="{exact: true}" [routerLink]="assistantRoute"
+      (click)="closeSideNav()">
+      <mat-icon>auto_awesome</mat-icon>
+      <span>Assistant</span>
+      <span class="fill-space"></span>
+      @if (!hasAssistantAccess) {
+      <mat-icon class="lock-icon">lock</mat-icon>
+      <span class="pro-badge">PAID</span>
+      }
+    </mat-list-item>
+  </div>
+
+  <div role="group" aria-labelledby="sidenav-explore-heading">
+    <div id="sidenav-explore-heading" class="sidenav-section-header">Explore</div>
+    <mat-list-item routerLinkActive="active" routerLink="/routes" (click)="closeSideNav()">
+      <mat-icon>route</mat-icon>
+      <span>Routes</span>
+      <span class="fill-space"></span>
+    </mat-list-item>
+
+    <mat-list-item routerLinkActive="active" routerLink="/mytracks" (click)="closeSideNav()">
+      <mat-icon>layers</mat-icon>
+      <span>My Tracks</span>
+      <span class="fill-space"></span>
+    </mat-list-item>
+  </div>
   }
 
-  <mat-list-item routerLinkActive="active" routerLink="/calendar" (click)="closeSideNav()">
-    <mat-icon>calendar_month</mat-icon>
-    <span>Calendar</span>
-  </mat-list-item>
+  <div role="group" aria-labelledby="sidenav-tools-heading">
+    <div id="sidenav-tools-heading" class="sidenav-section-header">Tools</div>
 
-  <mat-list-item routerLinkActive="active" routerLink="/training" (click)="closeSideNav()">
-    <mat-icon>monitoring</mat-icon>
-    <span>Training</span>
-  </mat-list-item>
+    <mat-list-item routerLinkActive="active" routerLink="/tools/compare" (click)="openCompareFilesFromNav()">
+      <mat-icon>compare_arrows</mat-icon>
+      <span>Compare Files</span>
+    </mat-list-item>
 
-  <mat-list-item routerLinkActive="active" routerLink="/routes" (click)="closeSideNav()">
-    <mat-icon>route</mat-icon>
-    <span>Routes</span>
-    <span class="fill-space"></span>
-  </mat-list-item>
-
-  <mat-list-item routerLinkActive="active" routerLink="/mytracks" (click)="closeSideNav()">
-    <mat-icon>layers</mat-icon>
-    <span>My Tracks</span>
-    <span class="fill-space"></span>
-  </mat-list-item>
-
-  <mat-list-item routerLinkActive="active" routerLink="/tools/compare" (click)="openCompareFilesFromNav()">
-    <mat-icon>compare_arrows</mat-icon>
-    <span>Compare Files</span>
-  </mat-list-item>
-
-  <mat-list-item [routerLinkActive]="hasAssistantAccess ? 'active' : ''" [routerLinkActiveOptions]="{exact: true}" [routerLink]="assistantRoute"
-    (click)="closeSideNav()">
-    <mat-icon>auto_awesome</mat-icon>
-    <span>Assistant</span>
-    <span class="fill-space"></span>
-    @if (!hasAssistantAccess) {
-    <mat-icon class="lock-icon">lock</mat-icon>
-    <span class="pro-badge">PAID</span>
+    @if (user) {
+    <mat-list-item routerLinkActive="active" routerLink="/send-activities" (click)="closeSideNav()">
+      <mat-icon>send</mat-icon>
+      <span>Send activities</span>
+    </mat-list-item>
     }
-  </mat-list-item>
-  }
-
-  @if (!user) {
-  <mat-list-item routerLinkActive="active" routerLink="/tools/compare" (click)="openCompareFilesFromNav()">
-    <mat-icon>compare_arrows</mat-icon>
-    <span>Compare Files</span>
-  </mat-list-item>
-  }
+  </div>
 
   @if (!user) {
   <mat-list-item routerLinkActive="active" routerLink="/pricing" (click)="closeSideNav()">
@@ -186,11 +217,6 @@
       <mat-icon>help</mat-icon>
       <span>Help &amp; Support</span>
     </button>
-    <a mat-stroked-button class="sidenav-cta-button source-code-cta" [href]="sourceCodeUrl" target="_blank"
-      rel="noopener noreferrer">
-      <mat-icon>code</mat-icon>
-      <span>Source code</span>
-    </a>
 
     <div class="sidenav-footer-links">
       <button mat-icon-button matTooltip="Release Notes" routerLink="/releases" (click)="closeSideNav()">
@@ -209,9 +235,6 @@
       </button>
       <button mat-icon-button matTooltip="Policies" routerLink="/policies" (click)="closeSideNav()">
         <mat-icon>policy</mat-icon>
-      </button>
-      <button mat-icon-button matTooltip="Facebook Group" (click)="facebookGroup()">
-        <mat-icon>groups</mat-icon>
       </button>
     </div>
   </div>

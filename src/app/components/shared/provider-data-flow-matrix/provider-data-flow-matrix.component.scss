@@ -1,12 +1,30 @@
 :host {
   display: block;
+  width: 100%;
   min-width: 0;
+  max-width: 100%;
+}
+
+.provider-data-flow-matrix {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .provider-data-flow-matrix__scroll {
+  box-sizing: border-box;
   width: 100%;
+  max-width: 100%;
   margin-top: 16px;
   overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+.provider-data-flow-matrix__scroll:focus-visible {
+  outline: 2px solid var(--mat-sys-primary);
+  outline-offset: 2px;
 }
 
 .provider-data-flow-matrix__mobile {

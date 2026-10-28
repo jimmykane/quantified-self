@@ -1,0 +1,333 @@
+<h2 #dialogTitleElement mat-dialog-title class="delivery-dialog-title" tabindex="-1">{{ dialogTitle() }}</h2>
+<mat-dialog-content>
+  @if (data.returnTo && !draft()) {
+    <button mat-button appHapticTap type="button" (click)="backToOverview()" [disabled]="busy()">
+      <mat-icon aria-hidden="true">arrow_back</mat-icon>{{ data.returnTo.scope === 'plan' ? 'Back to plan sync' : 'Back to sync history' }}
+    </button>
+  }
+  <div class="delivery-context">
+    <div class="delivery-context-copy">
+      <p class="delivery-subtitle">{{ scopeTitle() }}</p>
+      @if (workout(); as workout) {
+        <p class="delivery-caption">
+          <time [attr.datetime]="workout.localDate">{{ workout.localDate | date:'EEE, MMM d, y' }}</time>
+          · {{ workout.planId ? 'Plan: ' + (parentPlan()?.name ?? 'Unavailable plan') : 'Standalone workout' }}
+        </p>
+      }
+    </div>
+    @if (workoutRoute() && !draft()) {
+      <a mat-button class="delivery-edit-workout" [routerLink]="workoutRoute()" appHapticTap (click)="dialogRef.close()">
+        <mat-icon aria-hidden="true">edit</mat-icon>Edit workout
+      </a>
+    }
+  </div>
+  @if (canRepeatWorkout() && !draft()) {
+    <p class="delivery-caption">This workout has been completed. Changing its date does not resend its protected provider copy. Duplicate it as a new scheduled workout; the original recording and completion stay unchanged.</p>
+    <button mat-button appHapticTap type="button" [disabled]="busy() || !canReview()" (click)="repeatWorkout()">{{ phase() === 'copying' ? 'Duplicating workout…' : 'Duplicate to…' }}</button>
+  }
+  @if (data.scope === 'history') { <p class="delivery-caption">Individual workouts across your plans and standalone workouts. Select a workout for sync details.</p> }
+  @if (notice()) { <p role="status">{{ notice() }}</p> }
+  @if (view().error || error()) { <p role="alert">{{ error() || 'Unable to load sync settings. Close and reopen this dialog to try again.' }}</p> }
+  @if (scheduleView().error) { <p role="alert">Unable to load the training schedule. Close and reopen this dialog to try again.</p> }
+  @if (schedule()?.restoreUnavailable) { <p role="status">The schedule is being restored. Sync controls will be available when restoration finishes.</p> }
+  @if (!view().loaded) { <mat-spinner diameter="24" aria-label="Loading sync settings"></mat-spinner> }
+  @if (draft(); as draft) {
+    <section aria-label="Review sync change" class="delivery-review" [attr.aria-busy]="busy()">
+      @if (draft.action === 'stop') {
+        <p>{{ data.scope === 'plan' ? 'Stop syncing this plan’s workouts to ' + draftLabel() + ' and remove eligible future copies.' : planBound() && canSend() ? 'Exclude this workout from the plan’s sync with ' + draftLabel() + '. It stays in your QS plan. If an upcoming copy exists, QS will request its removal. Other workouts are not affected.' : 'Stop syncing only this workout to ' + draftLabel() + ' and remove its eligible future copy. Other workouts are not affected.' }} Workouts already sent for past dates or completed workouts are kept.</p>
+      } @else if (draft.action === 'retry') {
+        <p>Check unfinished sync work and try again. Retry does not resume stopped sync or grant new consent.</p>
+      } @else if (draft.action === 'replace') {
+        <p>Create one new Garmin copy of this workout after rechecking the earlier copy. Check Garmin Connect first: a not-found response is not proof of deletion, so a duplicate is possible if the old copy reappears. If QS finds the old copy again before sending, it reuses that copy and applies the workout and date you reviewed.</p>
+        <p>Your QS workout, other providers and completed activities stay unchanged. If Garmin may have accepted a send but its response was lost, QS stops for attention instead of blindly sending again.</p>
+      } @else if (draft.action === 'fresh-guide') {
+        <p>Use this only if the earlier Guide is missing from your Suunto app. QS cannot detect whether you hid or removed it. This sends one fresh Guide with a new identity for the same QS workout.</p>
+        <p>The earlier Guide is left untouched and may still be visible, so a duplicate is possible. Other providers, recordings and completion links are unchanged. An unfinished send must be resolved first; retrying this confirmation does not request another fresh identity.</p>
+      } @else if (editingSettings()) {
+        <p>Sync with {{ draftLabel() }} is already enabled. Change the time zone used for scheduled workout dates.</p>
+      } @else if (draft.action !== 'approve') {
+        <p>{{ data.scope === 'plan' ? 'Automatically send upcoming workouts while this plan is active. New workouts and edits sync automatically.' : 'Send this workout and automatically sync future edits to the same workout in the connected app.' }}</p>
+      }
+      @if (canChangeTimeZone()) {
+        <div class="delivery-zone" [hidden]="editingTimeZone()">
+          <span class="delivery-caption">Time zone: {{ preview()?.result?.timeZone ?? draft.timeZone }}</span>
+          <button mat-button appHapticTap type="button" (click)="toggleTimeZone()" [disabled]="busy() || editingTimeZone()"
+            [attr.aria-expanded]="editingTimeZone()" aria-controls="delivery-time-zone">Change</button>
+        </div>
+        <form id="delivery-time-zone" [hidden]="!editingTimeZone()" (ngSubmit)="review()" class="delivery-zone-form">
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>Workout time zone</mat-label>
+            <input matInput name="timeZone" [ngModel]="draft.timeZone" (ngModelChange)="updateTimeZone($event)" [disabled]="phase() === 'saving'" placeholder="Europe/Helsinki" [attr.aria-invalid]="!normalizedTimeZone()">
+            <mat-hint>@if (normalizedTimeZone()) { Workout dates use this time zone, even when you travel. } @else { <span role="alert">Enter a valid time zone, such as Europe/Helsinki.</span> }</mat-hint>
+          </mat-form-field>
+        </form>
+      }
+      @if (previewChangedElsewhere() && !busy()) {
+        <p role="status">The schedule or sync settings changed. Cancel and review the latest version.</p>
+      } @else if (editingSettings() && settingsChangedElsewhere() && !busy()) {
+        <p role="status">{{ error() && preview() ? 'Your save may already have been applied. Select Save changes again to check the result.' : 'Sync settings changed in another window. Cancel and reopen this view to see the latest settings.' }}</p>
+      }
+      @if (busy()) {
+        <div class="delivery-progress" role="status">
+          <mat-spinner diameter="20" aria-hidden="true"></mat-spinner>
+          <span>{{ phase() === 'preview' ? 'Checking availability and workout compatibility…' : draft.action === 'fresh-guide' ? 'Requesting the reviewed fresh Guide…' : draft.action === 'replace' ? 'Requesting the reviewed Garmin replacement…' : 'Saving your sync settings…' }}</span>
+        </div>
+        <p class="delivery-caption">{{ phase() === 'preview' ? 'Nothing is sent until you confirm.' : 'You can close this dialog. Sync status will update in the background.' }}</p>
+      }
+      @if (preview(); as preview) {
+        @if (!canChangeTimeZone()) { <p class="delivery-caption">Time zone: {{ preview.result.timeZone }}</p> }
+        @if (draft.action === 'stop') {
+          @if (!preview.result.available || preview.result.connection !== 'connected') {
+            <p>Removal must wait until this service is available and the same account is connected. Copies left after disconnect may need removing in the connected app.</p>
+          }
+        } @else {
+          @if (draft.action !== 'retry' && draft.action !== 'approve' && draft.action !== 'replace' && draft.action !== 'fresh-guide') {
+            <p class="delivery-caption">{{ preview.result.eligibleCount }} {{ preview.result.eligibleCount === 1 ? 'workout' : 'workouts' }} in the scheduling window. Workouts already sent for past dates or completed workouts are kept.</p>
+          }
+          @if (!preview.result.hasPro) { <p>Pro is required for creates and updates. Removal and recovery remain available. <a routerLink="/subscriptions" (click)="dialogRef.close()" appHapticTap>View Pro</a></p> }
+          @if (!preview.result.available) { <p>Workout sync is not available for this service yet.</p> }
+          @if (wahooPreviewReconnect()) {
+            <button mat-button type="button" [disabled]="busy()" (click)="reconnectWahooTraining()">Reconnect Wahoo</button>
+          } @else if (preview.result.connection !== 'connected') { <p>Check access in <a routerLink="/services" (click)="dialogRef.close()" appHapticTap>Connectivity</a>.</p> }
+          @if (preview.result.workoutCompatibility === 'unsupported' && (draft.action === 'send' || draft.action === 'resume')) {
+            <p role="alert">{{ draftLabel() }} cannot receive this workout. Review the reasons below, then edit the workout before trying again. This action will not send an update; an earlier copy may remain unchanged.</p>
+          } @else if (preview.result.warningCount) {
+            @if (mappingApprovalCount()) {
+              <p>{{ mappingApprovalCount() }} {{ mappingApprovalCount() === 1 ? 'workout needs' : 'workouts need' }} review of mapping differences before delivery. Unsupported workouts cannot be sent.</p>
+            } @else {
+              <p>Provider limitations are explained below. No separate mapping approval is needed for these limitations. Unsupported workouts cannot be sent.</p>
+            }
+          }
+        }
+        @if (preview.result.issues.length) {
+          <ul>@for (issue of preview.result.issues; track $index) { <li>{{ issue }}</li> }</ul>
+        }
+      }
+    </section>
+  } @else {
+    @if (providerOverviewVisible()) {
+      <section class="delivery-provider-overview" [attr.aria-label]="dialogTitle() + ' services'">
+        <p class="delivery-caption">Select a service to manage its sync settings and see individual workout status.</p>
+        @for (row of rows(); track row.provider) {
+          <app-compact-row class="delivery-provider-row" [title]="row.displayLabel" layout="columns" density="compact" [mobileActionFullWidth]="true">
+            <app-service-source-icon compactRowTitlePrefix class="delivery-provider-logo" [presentation]="row.presentation"
+              [showTooltip]="false" [iconWidth]="48" [iconHeight]="16" aria-hidden="true"></app-service-source-icon>
+            <div class="delivery-provider-overview-copy">
+              <p class="delivery-provider-state" [class.delivery-provider-state--enabled]="row.overviewEnabled">
+                <mat-icon aria-hidden="true">{{ row.overviewIcon }}</mat-icon>
+                <span>{{ row.overviewState }}</span>
+              </p>
+              <p class="delivery-caption">{{ row.overviewDetail }}</p>
+            </div>
+            <button #providerManage compactRowAction mat-button appHapticTap type="button" class="delivery-provider-manage"
+              [disabled]="busy()" (click)="showProvider(row.provider)" [attr.data-delivery-provider]="row.provider"
+              [attr.aria-label]="'Manage ' + row.displayLabel + ' sync'">
+              Manage
+            </button>
+          </app-compact-row>
+        }
+      </section>
+    } @else if (activeRow(); as row) {
+      @if (rows().length > 1 && !data.returnTo) {
+        <button mat-button appHapticTap type="button" class="delivery-provider-back" (click)="backToProviders()" [disabled]="busy()">
+          <mat-icon aria-hidden="true">arrow_back</mat-icon>All services
+        </button>
+      }
+      <app-compact-row class="delivery-provider-row" [title]="row.displayLabel" layout="stacked" density="compact" [showDivider]="false">
+        <app-service-source-icon compactRowTitlePrefix class="delivery-provider-logo" [presentation]="row.presentation"
+          [showTooltip]="false" [iconWidth]="64" [iconHeight]="20" aria-hidden="true"></app-service-source-icon>
+        <ng-container *ngTemplateOutlet="providerDetails; context: { $implicit: row }"></ng-container>
+      </app-compact-row>
+    } @else if (view().loaded) {
+      <p>No connected services are available for workout sync yet.</p>
+    }
+    <ng-template #providerDetails let-row>
+        <div class="delivery-provider-settings">
+          @if (row.provider === 'suunto' && row.setupAvailable && swimmingGuideStructure(); as structure) {
+            <app-suunto-swimming-guide-settings [structure]="structure"></app-suunto-swimming-guide-settings>
+          }
+          @if (data.scope !== 'history') {
+            <p class="delivery-setting-label">{{ row.settingLabel }}</p>
+            @if (data.scope === 'plan') {
+              <p class="delivery-caption">Upcoming workouts are sent individually. New workouts and edits sync while this plan is active.</p>
+              @if (scopeRecord() && scopeRecord()?.lifecycle !== 'active') { <p class="delivery-caption">{{ row.setting?.enabled ? 'This plan is inactive. Future copies are withdrawn; syncing resumes only after activation.' : 'This plan is inactive. Activate it and enable plan sync to send workouts.' }}</p> }
+            } @else if (planBound()) { <p class="delivery-caption">These controls affect only this workout, not the rest of the plan.</p> }
+            @if (!planBound() && row.setting) { <p class="delivery-caption">Time zone: {{ row.setting.timeZone }}</p> }
+          }
+          @if (!row.setupAvailable) {
+            <p>Workout sync unavailable. Existing copies and problems remain visible.</p>
+          }
+          @if (row.provider === 'suunto' && data.scope !== 'workout') {
+            <p class="delivery-caption">Workouts for today and the next six days are sent as SuuntoPlus Guides. Later workouts are sent automatically as their dates approach.</p>
+            <p class="delivery-caption">Sent means Suunto accepted the Guide for your account. QS cannot verify whether it is visible in the Suunto app, selected or pinned, or available on your watch.</p>
+            <p class="delivery-caption">Hiding or removing a Guide in Suunto can leave its cloud record visible to partners, so QS never recreates it automatically from a cloud-presence check.</p>
+          }
+          @if (row.provider === 'coros' && data.scope !== 'workout') {
+            @if (row.setupAvailable) {
+              <p class="delivery-caption">Upcoming workouts are sent individually to your COROS training calendar. Sent does not confirm that a watch received them.</p>
+            } @else {
+              <p class="delivery-caption">COROS plan delivery uses individual workouts rather than a QS-owned COROS plan.</p>
+            }
+          }
+          @if (row.provider === 'wahoo' && data.scope !== 'workout') {
+            <p class="delivery-caption">Time-based running and cycling workouts for today and the next six days are sent to Wahoo. Later workouts wait until their dates approach. Sent confirms cloud delivery, not receipt on a device.</p>
+          }
+          @if (data.scope !== 'history') {
+            @if (data.scope === 'workout' && row.statuses.length === 1) {
+              <p class="delivery-status-label">{{ row.statuses[0].label }}</p>
+            }
+            <div class="delivery-actions">
+              @if (row.ready) {
+                @if (row.canCheck && canSend()) {
+                  <button mat-button type="button" appHapticTap [disabled]="busy() || !canReview()" (click)="checkProvider(row.provider)">
+                    {{ checkingProvider() === row.provider ? 'Queuing check…' : 'Check ' + row.label }}
+                  </button>
+                }
+                @if (row.setupAvailable && canSend() && (!planBound() || row.canResume) && (!canRepeatWorkout() || (!planBound() && row.setting?.enabled))) {
+                  <button mat-button type="button" appHapticTap [disabled]="busy() || !canReview()" (click)="begin(row.provider, data.scope === 'plan' ? 'configure' : planBound() ? 'resume' : 'send')">
+                    {{ planBound() ? 'Resume workout sync' : row.setting?.enabled ? data.scope === 'plan' ? 'Plan sync settings' : 'Workout sync settings' : data.scope === 'plan' ? 'Sync plan with ' + row.label : 'Send to ' + row.label }}
+                  </button>
+                }
+                @if (row.setupAvailable && canSend() && !planBound() && row.setting?.enabled && row.needsFreshConsent && !canRepeatWorkout()) {
+                  <button mat-button type="button" appHapticTap [disabled]="busy() || !canReview()" (click)="begin(row.provider, data.scope === 'plan' ? 'configure' : 'send', undefined, true)">Review sync setup</button>
+                }
+                @if (row.canRetry) { <button mat-button appHapticTap type="button" [disabled]="busy() || !canReview()" (click)="begin(row.provider, 'retry')">{{ data.scope === 'plan' ? 'Retry plan sync' : 'Retry workout sync' }}</button> }
+                @if (row.canReplace) {
+                  <button mat-button appHapticTap type="button" [disabled]="busy() || !canReview()" (click)="begin(row.provider, 'replace')">Create replacement Garmin copy</button>
+                }
+                @if (row.canFreshGuide && row.setupAvailable && canSend()) {
+                  <button mat-button appHapticTap type="button" [disabled]="busy() || !canReview()" (click)="begin(row.provider, 'fresh-guide')">Send a fresh Guide</button>
+                }
+                @if (row.approvalDigest && data.scope === 'workout' && canSend()) {
+                  <button mat-flat-button appHapticTap type="button" [attr.aria-label]="'Review workout changes for ' + row.label" [disabled]="busy() || !canReview()" (click)="begin(row.provider, 'approve', row.approvalDigest)">Review</button>
+                }
+              }
+              @if (row.wahooReconnect) {
+                <button mat-button type="button" [disabled]="busy()" (click)="reconnectWahooTraining()">Reconnect Wahoo</button>
+              } @else if (row.reconnect) { <a mat-button routerLink="/services" appHapticTap (click)="dialogRef.close()">Check connection</a> }
+              @if (row.canStop) {
+                @if (planBound() && canSend()) {
+                  <button mat-icon-button appHapticTap type="button" [matMenuTriggerFor]="workoutSyncActions"
+                    [attr.aria-label]="'More ' + row.label + ' workout sync actions'" [disabled]="busy() || !canReview()">
+                    <mat-icon aria-hidden="true">more_vert</mat-icon>
+                  </button>
+                  <mat-menu #workoutSyncActions="matMenu" class="qs-menu-panel">
+                    <button mat-menu-item appHapticTap type="button" [disabled]="busy() || !canReview()" (click)="begin(row.provider, 'stop')">Exclude from plan sync</button>
+                  </mat-menu>
+                } @else {
+                  <button mat-button appHapticTap type="button" [disabled]="busy() || !canReview()" (click)="begin(row.provider, 'stop')">{{ stopLabel() }}</button>
+                }
+              }
+            </div>
+          }
+        </div>
+        <section class="delivery-workouts" [attr.aria-label]="row.label + ' workout sync status'">
+          @if (data.scope !== 'workout') {
+            <h4>Workout sync status</h4>
+            @if (!row.statuses.length) { <p class="delivery-caption">No workout sync status yet. Workouts appear here after their first sync check.</p> }
+          }
+          <ul class="delivery-list" [attr.aria-label]="row.label + ' workout delivery records'">
+            @for (status of row.statuses; track status.id) {
+              <li class="delivery-status" [class.delivery-status--summary]="data.scope !== 'workout'">
+                @if (data.scope !== 'workout') {
+                  <button mat-button type="button" class="delivery-workout-button" appHapticTap (click)="inspectWorkout(status)" [attr.aria-label]="'Sync details for workout: ' + status.title"
+                    [attr.aria-describedby]="'workout-summary-' + status.id" [disabled]="busy()">
+                    <span class="delivery-status-summary">
+                      <span class="delivery-workout-title">{{ status.title }}</span>
+                      <span class="delivery-workout-meta" [id]="'workout-summary-' + status.id">
+                        <span class="delivery-caption">
+                          @if (status.localDate) { <time [attr.datetime]="status.localDate">{{ status.localDate | date:'EEE, MMM d, y' }}</time> · }
+                          {{ status.label }}
+                        </span>
+                        @if ((data.scope === 'history' || status.moved) && status.scopeLabel) { <span class="delivery-caption">{{ status.scopeLabel }}</span> }
+                      </span>
+                    </span>
+                    <mat-icon iconPositionEnd aria-hidden="true">chevron_right</mat-icon>
+                  </button>
+                } @else {
+                  @if (row.statuses.length !== 1) { <p class="delivery-status-label">{{ status.label }}</p> }
+                  <p class="delivery-caption">{{ status.showLastSent ? 'Last sent' : status.timestampLabel }}: <time>{{ status.showLastSent ? (status.lastAcceptedAtMs | date:'medium') : (status.timestamp | date:'medium') }}</time></p>
+                  @if (row.provider !== 'suunto' && status.verification?.lastCheckedAtMs !== null && status.verification?.lastCheckedAtMs !== undefined) {
+                    <p class="delivery-caption">Last checked: {{ status.verification.lastCheckedAtMs | date:'medium' }}</p>
+                  }
+                  @if (row.provider !== 'suunto' && status.verification?.state === 'deferred' && status.verification?.nextCheckAtMs) {
+                    <p class="delivery-caption">Next check: {{ status.verification.nextCheckAtMs | date:'medium' }}</p>
+                  }
+                  @if (status.hasRemoteCopy && row.provider === 'suunto') {
+                    <p class="delivery-caption">A retained Suunto cloud record does not confirm that the Guide is visible in the Suunto app, selected or pinned, or available on your watch.</p>
+                  } @else if (status.hasRemoteCopy) {
+                    <p class="delivery-caption">Device availability is managed by {{ row.label }}. A cloud check does not confirm a device download.</p>
+                  }
+                  @if (status.copyMessage) { <p>{{ status.copyMessage }}</p> }
+                  @if (status.nextRetryAtMs !== null) { <p class="delivery-caption">Next automatic check: {{ status.nextRetryAtMs | date:'medium' }}</p> }
+                  @if (status.status === 'needs_attention') { <p>Retry inspects the earlier operation first. It will not blindly create another copy.</p> }
+                  @for (issue of status.issues; track $index) { <p>{{ issue }}</p> }
+                  @if (status.lastAttemptAtMs !== null || status.lastAcceptedAtMs !== null || status.retryCount) {
+                    <button mat-button type="button" appHapticTap (click)="toggleAttempts(status.id)"
+                      [attr.aria-expanded]="attemptsExpanded() === status.id" [attr.aria-controls]="'delivery-attempt-' + status.id">
+                      <mat-icon aria-hidden="true">{{ attemptsExpanded() === status.id ? 'expand_less' : 'expand_more' }}</mat-icon>{{ attemptsExpanded() === status.id ? 'Hide' : 'Show' }} attempt details
+                    </button>
+                    <dl class="delivery-attempts delivery-caption" [id]="'delivery-attempt-' + status.id" [hidden]="attemptsExpanded() !== status.id">
+                      @if (status.lastAttemptAtMs !== null) { <div><dt>Last attempt</dt><dd>{{ status.lastAttemptAtMs | date:'medium' }}</dd></div> }
+                      @if (status.lastAcceptedAtMs !== null) { <div><dt>Last accepted</dt><dd>{{ status.lastAcceptedAtMs | date:'medium' }}</dd></div> }
+                      @if (status.retryCount) { <div><dt>Failed attempts</dt><dd>{{ status.retryCount }}</dd></div> }
+                    </dl>
+                  }
+                }
+              </li>
+            }
+          </ul>
+        </section>
+    </ng-template>
+    @if (canLoadMore()) { <button mat-button appHapticTap type="button" (click)="loadMore()" [disabled]="busy()">Show more workout statuses</button> }
+  }
+  <div class="delivery-guidance">
+    <button mat-button appHapticTap type="button" (click)="guidanceExpanded.set(!guidanceExpanded())"
+      [attr.aria-expanded]="guidanceExpanded()" aria-controls="delivery-guidance-details">
+      <mat-icon aria-hidden="true">{{ guidanceExpanded() ? 'expand_less' : 'expand_more' }}</mat-icon>How sync works
+    </button>
+    <div id="delivery-guidance-details" [hidden]="!guidanceExpanded()" class="delivery-caption">
+      @if (data.scope === 'workout' && showsSuuntoGuidance()) {
+        <p>Workouts for today and the next six days are sent as SuuntoPlus Guides. Later workouts are sent automatically as their dates approach.</p>
+        <p>Sent means Suunto accepted the Guide for your account. QS cannot verify whether it is visible in the Suunto app, selected or pinned, or available on your watch.</p>
+        <p>Hiding or removing a Guide in Suunto can leave its cloud record visible to partners, so QS never recreates it automatically from a cloud-presence check.</p>
+      }
+      @if (activeRow()?.provider === 'garmin') {
+        <p>Found in connected app means Garmin returned the exact Workout and dated Schedule for your connected account. It does not confirm a watch download.</p>
+        <p>Could not check workout means the latest check did not confirm both records. Not found in Garmin means a complete check returned a missing earlier Workout; this is not proof of deletion. Last sent records earlier acceptance. QS never replaces that Workout automatically: when both the earlier workout and calendar entry were not found, check Garmin Connect, then explicitly review Create replacement Garmin copy. A remaining calendar entry blocks replacement. A confirmed missing calendar entry can be restored using the original Workout.</p>
+      }
+      @if (showsCorosGuidance()) {
+        <p>QS sends each upcoming workout to your COROS training calendar. The COROS app manages watch synchronization; Sent does not confirm that your watch received it.</p>
+        <p>COROS documents a two-week watch window and one training plan synced to a watch at a time. QS does not claim or replace a native plan object, and automatic checking is unavailable.</p>
+      }
+      @if (showsWahooGuidance()) {
+        <p>Wahoo sync maps time-based running/cycling subprofiles, timed Walking/Hiking without intensity targets, and timed-strength Gym workouts for today and the next six days in the saved time zone. Distance-based steps are not sent because Wahoo requires a total duration. Strength repetition sets are unsupported; exercise names and kilogram loads are instructions, not native rep/load tracking. Rounded load instructions need mapping approval.</p>
+        <p>Wahoo supports timed, untargeted pool/open-water swimming and outdoor/indoor rowing. Native profiles and timed intervals have been account/device-tested; distance endings and intensity targets remain unsupported. Selected pool length is not sent to Wahoo; set it there where needed. Running/cycling profile substitutions are disclosed and never change your saved QS sport.</p>
+        <p>QS sends a Plan and a dated Workout together. Found in connected app means both records and their association were checked, not that your ELEMNT or watch received them. Automatic restoration is unavailable.</p>
+        <p>Bike computers use only the first target in an interval. Review any target limitations before approving a changed workout.</p>
+      }
+      <p>Sync requires Pro and starts only when you enable it. Manual planning is free.</p>
+      <p>Stop sync turns off updates and asks the connected app to remove upcoming synced workouts. Your plans and workouts stay in Quantified Self. Your connected account stays connected.</p>
+      <p>For a single workout in a plan, choose Exclude from plan sync in its more-actions menu. The rest of the plan keeps syncing.</p>
+      <p>Plan workouts sync only while their plan is active. Pausing a plan also requests removal of upcoming synced workouts. Workouts already sent for past dates or completed workouts are kept.</p>
+      <p>If your Pro subscription ends, sync pauses. Workouts already sent stay in the connected app.</p>
+      <p>Where automatic checking and repair are supported, active sync checks upcoming workouts daily and restores workouts confirmed missing from the connected app. Service limits can delay checks. Stop sync prevents restoration.</p>
+    </div>
+  </div>
+</mat-dialog-content>
+<mat-dialog-actions align="end" class="delivery-review-actions">
+  @if (draft()) {
+    @if (phase() === 'saving') {
+      <button mat-button appHapticTap mat-dialog-close type="button">Close</button>
+    } @else {
+      <button mat-button appHapticTap type="button" (click)="cancelReview()">Cancel</button>
+    }
+    @if (error() && !preview()) {
+      <button mat-flat-button appHapticTap type="button" (click)="review()" [disabled]="busy() || !canReview() || (canChangeTimeZone() && !normalizedTimeZone()) || settingsChangedElsewhere()">Try again</button>
+    } @else {
+      <button mat-flat-button appHapticTap type="button" (click)="confirm()" [disabled]="busy() || !canConfirm()">{{ phase() === 'saving' ? 'Saving…' : confirmLabel() }}</button>
+    }
+  } @else {
+    <button mat-button appHapticTap mat-dialog-close type="button">Close</button>
+  }
+</mat-dialog-actions>

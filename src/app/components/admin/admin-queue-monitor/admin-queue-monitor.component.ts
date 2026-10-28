@@ -9,6 +9,7 @@ import { takeUntil } from 'rxjs/operators';
 import { AdminService, QueueStats } from '../../../services/admin.service';
 import { LoggerService } from '../../../services/logger.service';
 import { AdminQueueStatsComponent, AdminQueueStatsView } from '../admin-queue-stats/admin-queue-stats.component';
+import { AppChartSharedModule } from '../../../modules/app-chart-shared.module';
 
 @Component({
     selector: 'app-admin-queue-monitor',
@@ -20,6 +21,7 @@ import { AdminQueueStatsComponent, AdminQueueStatsView } from '../admin-queue-st
         RouterModule,
         MatButtonModule,
         MatIconModule,
+        AppChartSharedModule,
         AdminQueueStatsComponent
     ]
 })
@@ -29,7 +31,7 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
     queueStatsLoadFailed = false;
     queueView: AdminQueueStatsView = 'all';
     pageTitle = 'Queue Monitoring';
-    pageSubtitle = 'Operational health for ingestion, route delivery sync, route import sync, activity sync, sleep sync, reparse, and derived metrics pipelines';
+    pageSubtitle = 'Operational health for ingestion, Training delivery, route delivery, imports, reparse, and derived metrics';
 
     private readonly destroy$ = new Subject<void>();
     private queueStatsRequestSequence = 0;
@@ -55,6 +57,7 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
         if (
             rawView === 'workout' ||
             rawView === 'activity-sync' ||
+            rawView === 'training-delivery' ||
             rawView === 'route-delivery-sync' ||
             rawView === 'route-sync' ||
             rawView === 'sleep-sync' ||
@@ -91,6 +94,12 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
             return;
         }
 
+        if (this.queueView === 'training-delivery') {
+            this.pageTitle = 'Training Delivery Queue';
+            this.pageSubtitle = 'Monitor planned-workout delivery jobs, retries, failures, and remote-check work';
+            return;
+        }
+
         if (this.queueView === 'route-delivery-sync') {
             this.pageTitle = 'Route Delivery Sync Queue';
             this.pageSubtitle = 'Monitor saved route delivery sync from Quantified Self to destination providers';
@@ -116,7 +125,7 @@ export class AdminQueueMonitorComponent implements OnInit, OnDestroy {
         }
 
         this.pageTitle = 'Queue Monitoring';
-        this.pageSubtitle = 'Operational health for ingestion, route delivery sync, route import sync, activity sync, sleep sync, reparse, and derived metrics pipelines';
+        this.pageSubtitle = 'Operational health for ingestion, Training delivery, route delivery, imports, reparse, and derived metrics';
     }
 
     fetchQueueStats(): void {

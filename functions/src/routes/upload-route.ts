@@ -1,6 +1,7 @@
 import { onRequest } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
+import { saveChecksummedStorageFile } from '../shared/storage-file-save';
 import { FieldValue } from 'firebase-admin/firestore';
 import { randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
@@ -277,7 +278,7 @@ async function uploadOriginalRouteFile(
 ): Promise<OriginalRouteFileMetaData> {
   const bucket = admin.storage().bucket();
   const metadata = buildOriginalRouteFileMetadata(userID, routeID, originalFile, bucket.name);
-  await bucket.file(metadata.path).save(originalFile.data as Buffer);
+  await saveChecksummedStorageFile(bucket.file(metadata.path), originalFile.data as Buffer);
   return metadata;
 }
 

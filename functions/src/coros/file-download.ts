@@ -12,7 +12,6 @@ import {
 } from './constants';
 
 const MAX_REDIRECTS = 3;
-const COROS_FIT_PATH_PATTERN = /^\/fit\/[A-Za-z0-9_-]{1,128}\/[A-Za-z0-9_-]{1,256}\.fit$/i;
 
 export class PermanentCOROSFITDownloadError extends Error {
   constructor(message: string) {
@@ -53,9 +52,7 @@ function assertAllowedUrl(rawUrl: string): URL {
   if (url.username || url.password || url.port) {
     throw new UnsafeCOROSFileUrlError('COROS FIT URL must not contain credentials or a custom port.');
   }
-  if (!COROS_FIT_PATH_PATTERN.test(url.pathname)) {
-    throw new UnsafeCOROSFileUrlError('COROS FIT URL path is invalid.');
-  }
+  // Provider-returned paths are opaque; folder depth and filenames are not an origin check.
   return url;
 }
 

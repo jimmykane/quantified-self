@@ -4,7 +4,7 @@
       <h2 class="public-footer__wordmark">
         <a id="footer-brand-title" routerLink="/">{{ operator.brandName }}</a>
       </h2>
-      <p>Training analysis for athletes who want their activity data in one place.</p>
+      <p>Your activities, training, and health data in one place.</p>
       <a mat-stroked-button routerLink="/pricing">Explore membership</a>
     </section>
 
@@ -13,7 +13,9 @@
       <ul>
         <li><a routerLink="/features/activity-calendar">Activity calendar</a></li>
         <li><a routerLink="/features/training-analysis">Training analysis</a></li>
+        <li><a routerLink="/features/training-plans">Training plans</a></li>
         <li><a routerLink="/features/training-dashboard">Training dashboard</a></li>
+        <li><a routerLink="/features/health">Health</a></li>
         <li><a routerLink="/features/activity-map">Activity map</a></li>
         <li><a routerLink="/features/supported-activities">Supported activity types</a></li>
         <li><a routerLink="/features/mcp-server">MCP server</a></li>
@@ -30,6 +32,7 @@
         <li><a routerLink="/help">Help &amp; support</a></li>
         <li><a [href]="supportMailtoHref">{{ supportEmail }}</a></li>
         <li><a routerLink="/releases">Release notes</a></li>
+        <li><a [href]="statusPageUrl" target="_blank" rel="noopener noreferrer">System status</a></li>
       </ul>
     </nav>
 

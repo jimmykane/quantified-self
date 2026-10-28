@@ -1,3 +1,4 @@
+import { isEventLapEndpointInActivity } from '../../../helpers/event-lap-type.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -645,7 +646,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
           lap,
           lapPositionData,
           indexedLapPosition,
-          allowed: isEventLapTypeAllowed(lap.type, this.lapTypes),
+          allowed: isEventLapEndpointInActivity(activity, lap) && isEventLapTypeAllowed(lap.type, this.lapTypes),
         };
       });
 

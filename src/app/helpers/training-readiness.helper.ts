@@ -1,5 +1,10 @@
+import { getDateTimeFormatter } from './date-time-format.helper';
+import { getNumberFormatter } from './number-format.helper';
+import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { buildReadinessHrvDisplay } from './readiness-hrv-display.helper';
 import type { DerivedTrainingReadinessMetricPayload } from '@shared/derived-metrics';
 import type { DashboardReadinessSignalsContext } from './dashboard-training-insights.helper';
+import type { ReadinessHrvRecentTrend } from '@shared/readiness';
 
 export type TrainingReadinessViewState = 'preparing' | 'empty' | 'ready' | 'unavailable';
 export type TrainingReadinessHistoryState = 'preparing' | 'updating' | 'empty' | 'ready' | 'unavailable';
@@ -51,6 +56,7 @@ export interface TrainingReadinessViewModel {
 export function buildTrainingReadinessViewModel(
   context: DashboardReadinessSignalsContext | null | undefined,
   options: {
+    unitSettings?: UserUnitSettingsInterface | null;
     isPreparing?: boolean;
     isUpdating?: boolean;
     locale?: string;
@@ -59,10 +65,11 @@ export function buildTrainingReadinessViewModel(
     loadEvidenceFailed?: boolean;
     history?: DerivedTrainingReadinessMetricPayload | null;
     historyStatus?: string | null;
+    hrvRecentTrend?: ReadinessHrvRecentTrend | null;
   } = {},
 ): TrainingReadinessViewModel {
   const sourceText = 'The current score and backend-derived 14-day history use the same readiness formula. '
-    + 'History reads a Form snapshot seed and a bounded sleep envelope, with the same 30-day window applied at each daily cutoff; the browser does not load workout history. '
+    + 'History reads a Form snapshot seed and a bounded sleep envelope, with the same 60-day HRV window applied at each daily cutoff; the browser does not load workout history. '
     + 'This is training context, not a medical score or workout prescription.';
   const history = buildTrainingReadinessHistoryViewModel(context, options);
   if (!context) {
@@ -101,6 +108,11 @@ export function buildTrainingReadinessViewModel(
   }
 
   const locale = options.locale;
+  const hrv = buildReadinessHrvDisplay(context.hrvPersonalRange, options.unitSettings, options.hrvRecentTrend, {
+    latestSleepAtMs: context.latestSleepAtMs,
+    locale,
+    nowMs: options.calculatedAtMs ?? Date.now(),
+  });
   const loadParts = [
     context.form === null ? null : `Form ${formatSignedNumber(context.form, locale, 1)}`,
     context.rampRate === null ? null : `Ramp ${formatSignedNumber(context.rampRate, locale, 1)}`,
@@ -114,15 +126,12 @@ export function buildTrainingReadinessViewModel(
   const implication = buildTrainingImplication(context.label);
   const sleepEvidenceFailed = options.sleepEvidenceFailed === true;
   const loadEvidenceFailed = options.loadEvidenceFailed === true;
-  const hasRetainedSleepEvidence = sleepEvidenceFailed && context.latestSleepAtMs !== null;
   const evidenceWarnings = [
     loadEvidenceFailed
       ? 'One or more current load snapshots could not be loaded.'
       : null,
     sleepEvidenceFailed
-      ? hasRetainedSleepEvidence
-        ? 'Sleep updates failed; showing the last loaded evidence while it remains eligible.'
-        : 'Recorded sleep evidence could not be loaded; showing available load signals only.'
+      ? 'Recorded sleep evidence could not be loaded; showing available load signals only.'
       : null,
   ].filter((warning): warning is string => warning !== null);
 
@@ -165,26 +174,24 @@ export function buildTrainingReadinessViewModel(
           ? 'Unavailable'
           : `${formatNumber(context.sleepScore, locale, 0)}/100`,
         detailText: sleepEvidenceFailed
-          ? hasRetainedSleepEvidence
-            ? `Sleep updates failed. ${latestSleepText}`
-            : 'Recorded sleep evidence could not be loaded.'
+          ? 'Recorded sleep evidence could not be loaded.'
           : latestSleepText,
         indicatorVariant: 'score',
         indicatorValue: context.sleepScore,
         indicatorTone: 'neutral',
       },
       {
-        label: 'HRV vs baseline',
-        valueText: formatRatio(context.hrvRatio, locale),
-        detailText: 'Same-provider median; at least 3 prior nights required.',
-        indicatorVariant: 'deviation',
-        indicatorValue: context.hrvRatio === null ? null : (context.hrvRatio - 1) * 100,
-        indicatorTone: resolveRatioTone(context.hrvRatio, false),
+        label: 'HRV · 7-day average',
+        valueText: hrv.valueText,
+        detailText: [hrv.statusText, hrv.rangeText, hrv.latestText].filter(Boolean).join(' · '),
+        indicatorVariant: null,
+        indicatorValue: null,
+        indicatorTone: hrv.tone,
       },
       {
         label: 'Overnight HR vs baseline',
         valueText: formatRatio(context.overnightHeartRateRatio, locale),
-        detailText: 'Average sleep HR leads the bounded driver; minimum HR supports it when both are available. Same-provider median; at least 3 prior nights required.',
+        detailText: `${context.overnightHeartRateCalculatedByQs ? 'Calculated by QS from Garmin’s recorded 15-second samples within sleep; the minimum is the lowest recorded sample. ' : ''}Average sleep HR leads the bounded driver; minimum HR supports it when both are available. Same-provider median; at least 3 prior nights required.`,
         indicatorVariant: 'deviation',
         indicatorValue: context.overnightHeartRateRatio === null ? null : (context.overnightHeartRateRatio - 1) * 100,
         indicatorTone: resolveRatioTone(context.overnightHeartRateRatio, true),
@@ -330,14 +337,14 @@ function formatSignedNumber(value: number, locale?: string, maximumFractionDigit
 }
 
 function formatNumber(value: number, locale?: string, maximumFractionDigits = 1): string {
-  return new Intl.NumberFormat(locale, {
+  return getNumberFormatter(locale, {
     maximumFractionDigits,
     minimumFractionDigits: 0,
   }).format(value);
 }
 
 function formatDateTime(value: number, locale?: string): string {
-  return new Intl.DateTimeFormat(locale, {
+  return getDateTimeFormatter(locale, {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
@@ -349,7 +356,7 @@ function formatUtcDate(value: number | null | undefined, locale?: string): strin
   if (!Number.isFinite(value)) {
     return '';
   }
-  return new Intl.DateTimeFormat(locale, {
+  return getDateTimeFormatter(locale, {
     month: 'short',
     day: 'numeric',
     timeZone: 'UTC',

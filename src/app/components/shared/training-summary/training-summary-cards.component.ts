@@ -15,9 +15,12 @@ export class TrainingSummaryCardsComponent {
   readonly cards = input<readonly TrainingSummaryCard[]>([]);
   readonly mode = input<'workspace' | 'preview'>('workspace');
   readonly ariaLabel = input('Current Training overview');
+  /** Optional presentation context; never changes the state or comparison metrics. */
+  readonly stateCaptionOverride = input<string | null>(null);
 
   protected readonly presentedCards = computed(() => this.cards().map(card => ({
     ...card,
+    captionText: card.kind === 'state' ? (this.stateCaptionOverride() ?? card.captionText) : card.captionText,
     valueSegments: segmentTrainingMetricText(card.valueText),
   })));
 }

@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EChartsHostController } from './echarts-host-controller';
+import { chartViewportQueue } from './chart-viewport-queue';
+import { buildDashboardEChartsStyleTokens, buildDashboardEChartsTooltipChrome } from './dashboard-echarts-style.helper';
 
 type ResizeObserverRecord = {
   observe: ReturnType<typeof vi.fn>;
@@ -265,8 +267,242 @@ describe('EChartsHostController', () => {
     expect(loader.setOption).toHaveBeenCalledTimes(1);
     expect(loader.resize).toHaveBeenCalledTimes(1);
     expect(loader.resize).toHaveBeenCalledWith(chartMock, {
+      width: 320,
+      height: 180,
       silent: true,
     });
+  });
+
+  it('releases fixed initialization dimensions when a preview grows to its live container', async () => {
+    const frames: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = vi.fn(callback => { frames.push(callback); return frames.length; });
+    const loader = buildLoaderMock();
+    const controller = new EChartsHostController({
+      eChartsLoader: loader as any,
+      initOptions: { width: 96, height: 38 },
+    });
+    const container = document.createElement('div');
+    Object.defineProperty(container, 'clientWidth', { configurable: true, value: 540 });
+    Object.defineProperty(container, 'clientHeight', { configurable: true, value: 100 });
+    await controller.init(container);
+    controller.scheduleResize();
+    frames.shift()!(0);
+    expect(loader.resize).toHaveBeenLastCalledWith(chartMock, { width: 540, height: 100, silent: true });
+    Object.defineProperty(container, 'clientWidth', { configurable: true, value: 280 });
+    resizeObserverRecords[0].trigger();
+    frames.shift()!(0);
+    expect(loader.resize).toHaveBeenCalledTimes(2);
+    expect(loader.resize).toHaveBeenLastCalledWith(chartMock, { width: 280, height: 100, silent: true });
+  });
+
+  it('uses the measured content box when range controls appear or disappear, without auto-measurement reflow', async () => {
+    const frames: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = vi.fn(callback => { frames.push(callback); return frames.length; });
+    const loader = buildLoaderMock();
+    const onContainerResize = vi.fn();
+    const controller = new EChartsHostController({ eChartsLoader: loader as any, onContainerResize });
+    const container = document.createElement('div');
+    container.style.padding = '8px 12px';
+    let height = 314;
+    Object.defineProperty(container, 'clientWidth', { get: () => 361 });
+    Object.defineProperty(container, 'clientHeight', { get: () => height });
+    await controller.init(container);
+
+    for (const contentHeight of [298, 252, 298]) {
+      height = contentHeight + 16;
+      resizeObserverRecords[0].trigger(); frames.shift()!(0);
+      expect(loader.resize).toHaveBeenLastCalledWith(chartMock, { width: 337, height: contentHeight, silent: true });
+      expect(onContainerResize).toHaveBeenLastCalledWith({ width: 337, height: contentHeight });
+      // A settled observer notification must not resize or rebuild the chart again.
+      resizeObserverRecords[0].trigger(); frames.shift()!(0);
+    }
+    expect(loader.resize).toHaveBeenCalledTimes(3);
+    expect(loader.init).toHaveBeenCalledOnce();
+    expect(loader.setOption).not.toHaveBeenCalled();
+    controller.dispose();
+  });
+
+  it('ignores repeated viewport-height events when the chart size is unchanged', async () => {
+    const frames: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = vi.fn(callback => { frames.push(callback); return frames.length; });
+    const loader = buildLoaderMock();
+    const controller = new EChartsHostController({ eChartsLoader: loader as any });
+    const container = document.createElement('div');
+    Object.defineProperty(container, 'clientWidth', { configurable: true, value: 360 });
+    Object.defineProperty(container, 'clientHeight', { configurable: true, value: 240 });
+    await controller.init(container);
+    for (let frame = 0; frame < 30; frame++) {
+      controller.scheduleResize(); frames.shift()!(frame * 16);
+    }
+    expect(loader.resize).toHaveBeenCalledTimes(1);
+    Object.defineProperty(container, 'clientWidth', { configurable: true, value: 600 });
+    controller.scheduleResize(); frames.shift()!(500);
+    expect(loader.resize).toHaveBeenCalledTimes(2);
+    controller.dispose();
+  });
+
+  it('settles a late dashboard alignment even when the observer reports no further size change', async () => {
+    const frames: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = vi.fn(callback => { frames.push(callback); return frames.length; });
+    const loader = buildLoaderMock();
+    const controller = new EChartsHostController({ eChartsLoader: loader as any });
+    const container = document.createElement('div');
+    let height = 252;
+    Object.defineProperty(container, 'clientWidth', { get: () => 337 });
+    Object.defineProperty(container, 'clientHeight', { get: () => height });
+    await controller.init(container);
+    controller.scheduleResize(); frames.shift()!(0);
+    frames.shift()!(16);
+
+    // A source selector disappears, then the board aligns summaries later in
+    // the same frame. The final 252px is what ResizeObserver already reported.
+    height = 298;
+    controller.scheduleResize(); frames.shift()!(32);
+    height = 252;
+    frames.shift()!(48);
+    expect(loader.resize).toHaveBeenLastCalledWith(chartMock, { width: 337, height: 252, silent: true });
+    frames.shift()!(64);
+    expect(frames).toHaveLength(0);
+    expect(loader.resize).toHaveBeenCalledTimes(3);
+    expect(loader.init).toHaveBeenCalledOnce();
+    expect(loader.setOption).not.toHaveBeenCalled();
+    controller.dispose();
+  });
+
+  it('updates only note layout after a real resize and leaves unchanged sizes alone', async () => {
+    const frames: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = vi.fn(callback => { frames.push(callback); return frames.length; });
+    const container = document.createElement('div');
+    let width = 800;
+    Object.defineProperty(container, 'clientWidth', { get: () => width });
+    Object.defineProperty(container, 'clientHeight', { value: 300 });
+    const loader = buildLoaderMock();
+    loader.init.mockResolvedValue({ ...chartMock, getWidth: () => width });
+    const controller = new EChartsHostController({ eChartsLoader: loader as any });
+    await controller.init(container);
+    controller.setTimelineNotes({ notes: [{ id: 'edge', category: 'travel', title: 'Right edge note',
+      startDate: '2026-09-10', endDate: '2026-09-10', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 }],
+      select: vi.fn(), reportRange: vi.fn() });
+    controller.setOption({ xAxis: { type: 'time', min: Date.UTC(2026, 8, 1), max: Date.UTC(2026, 8, 10) },
+      yAxis: {}, series: [{ type: 'line', data: [] }] });
+    loader.setOption.mockClear();
+    width = 160;
+    controller.scheduleResize(); frames.shift()!(0);
+    const patch = loader.setOption.mock.calls[0][1] as any;
+    expect(Object.keys(patch)).toEqual(['series']);
+    expect(patch.series[0].markLine.data[0].label).toMatchObject({ align: 'right', width: 100 });
+    expect(loader.setOption).toHaveBeenCalledOnce();
+    controller.scheduleResize(); frames.shift()!(16);
+    expect(loader.setOption).toHaveBeenCalledOnce();
+    controller.dispose();
+  });
+
+  it('refines native marker positions once, then ignores unchanged layouts and queued work after disposal', async () => {
+    let finished: () => void;
+    const chart = { ...chartMock, getWidth: () => 320, convertToPixel: () => 278,
+      on: vi.fn((_event, handler) => { finished = handler; }), off: vi.fn() };
+    const loader = buildLoaderMock(); loader.init.mockResolvedValue(chart);
+    const controller = new EChartsHostController({ eChartsLoader: loader as any });
+    await controller.init(document.createElement('div'));
+    controller.setTimelineNotes({ notes: [{ id: 'edge', category: 'travel', title: 'Right edge note',
+      startDate: '2026-09-06', endDate: '2026-09-06', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 }],
+      select: vi.fn(), reportRange: vi.fn() });
+    controller.setOption({ xAxis: { type: 'time', min: Date.UTC(2026, 8, 1), max: Date.UTC(2026, 8, 10) },
+      yAxis: {}, series: [{ type: 'line', data: [] }] });
+    loader.setOption.mockClear();
+    finished!(); await Promise.resolve();
+    const patch = loader.setOption.mock.calls[0][1] as any;
+    expect(Object.keys(patch)).toEqual(['series']);
+    expect(patch.series[0].markLine.data[0].label.align).toBe('right');
+    finished!(); await Promise.resolve();
+    expect(loader.setOption).toHaveBeenCalledOnce();
+    finished!(); controller.dispose(); await Promise.resolve();
+    expect(loader.setOption).toHaveBeenCalledOnce();
+    expect(chart.off).toHaveBeenCalledWith('finished', finished!);
+  });
+
+  it('keeps chart reuse and size callbacks working without ResizeObserver', async () => {
+    delete (globalThis as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
+    const frames: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = vi.fn(callback => { frames.push(callback); return frames.length; });
+    const loader = buildLoaderMock();
+    const onContainerResize = vi.fn();
+    const controller = new EChartsHostController({ eChartsLoader: loader as any, onContainerResize });
+    const container = document.createElement('div');
+    Object.defineProperty(container, 'clientWidth', { configurable: true, value: 800 });
+    Object.defineProperty(container, 'clientHeight', { configurable: true, value: 400 });
+    await controller.init(container); await controller.init(container);
+    expect(loader.init).toHaveBeenCalledOnce();
+    expect(resizeObserverRecords).toHaveLength(0);
+    const viewportChanged = loader.subscribeToViewportResize.mock.calls[0][0] as () => void;
+    viewportChanged(); frames.shift()!(0);
+    viewportChanged(); frames.shift()!(16);
+    expect(onContainerResize).toHaveBeenCalledExactlyOnceWith({ width: 800, height: 400 });
+    Object.defineProperty(container, 'clientWidth', { configurable: true, value: 280 });
+    viewportChanged(); frames.shift()!(32);
+    expect(onContainerResize).toHaveBeenLastCalledWith({ width: 280, height: 400 });
+    expect(loader.resize).toHaveBeenCalledTimes(2);
+    expect(frames).toHaveLength(1);
+    const pendingCheck = frames.shift()!;
+    controller.dispose();
+    expect(cancelAnimationFrame).toHaveBeenCalledOnce();
+    pendingCheck(48);
+    expect(loader.resize).toHaveBeenCalledTimes(2);
+    expect(frames).toHaveLength(0);
+  });
+
+  it('waits for the viewport and only lets the newest pending refresh apply its data', async () => {
+    let show: (ready: boolean) => void;
+    const ready = new Promise<boolean>(resolve => { show = resolve; });
+    const wait = vi.spyOn(chartViewportQueue, 'wait').mockReturnValue({ ready, cancel: vi.fn() });
+    const loader = buildLoaderMock();
+    const controller = new EChartsHostController({ eChartsLoader: loader as any, deferUntilNearViewport: true });
+    const container = document.createElement('div');
+    const old = controller.init(container);
+    const latest = controller.init(container);
+    expect(loader.init).not.toHaveBeenCalled();
+    show!(true);
+    await expect(old).resolves.toBeNull();
+    await expect(latest).resolves.toBe(chartMock);
+    expect(loader.init).toHaveBeenCalledOnce();
+    await expect(controller.init(container)).resolves.toBe(chartMock);
+    expect(wait).toHaveBeenCalledOnce();
+    controller.dispose(); wait.mockRestore();
+  });
+
+  it('cancels an off-screen chart without mounting it after disposal', async () => {
+    let finish: (ready: boolean) => void;
+    const ready = new Promise<boolean>(resolve => { finish = resolve; });
+    const cancel = vi.fn(() => finish!(false));
+    const wait = vi.spyOn(chartViewportQueue, 'wait').mockReturnValue({ ready, cancel });
+    const loader = buildLoaderMock();
+    const controller = new EChartsHostController({ eChartsLoader: loader as any, deferUntilNearViewport: true });
+    const pending = controller.init(document.createElement('div'));
+    controller.dispose();
+    await expect(pending).resolves.toBeNull();
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(loader.init).not.toHaveBeenCalled();
+    wait.mockRestore();
+  });
+
+  it.each(['container', 'theme'])('replaces an off-screen pending %s without waiting for its old intersection', async change => {
+    const firstContainer = document.createElement('div');
+    const replacementContainer = change === 'container' ? document.createElement('div') : firstContainer;
+    let finish: (ready: boolean) => void;
+    const ready = new Promise<boolean>(resolve => { finish = resolve; });
+    const cancel = vi.fn(() => finish!(false));
+    const wait = vi.spyOn(chartViewportQueue, 'wait')
+      .mockReturnValueOnce({ ready, cancel })
+      .mockReturnValue({ ready: Promise.resolve(true), cancel: vi.fn() });
+    const loader = buildLoaderMock();
+    const controller = new EChartsHostController({ eChartsLoader: loader as any, deferUntilNearViewport: true });
+    const first = controller.init(firstContainer, 'light');
+    const latest = controller.init(replacementContainer, change === 'theme' ? 'dark' : 'light');
+    await expect(first).resolves.toBeNull();
+    await expect(latest).resolves.toBe(chartMock);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(loader.init).toHaveBeenCalledExactlyOnceWith(replacementContainer, change === 'theme' ? 'dark' : 'light', undefined);
+    controller.dispose(); wait.mockRestore();
   });
 
   it('should hide the active tooltip after initialization', async () => {
@@ -281,6 +517,61 @@ describe('EChartsHostController', () => {
 
     expect(didHide).toBe(true);
     expect(chartMock.dispatchAction).toHaveBeenCalledWith({ type: 'hideTip' });
+  });
+
+  it.each(['light', 'dark'])('styles note tooltips with the initialized %s theme and chart width', async (theme) => {
+    const loader = buildLoaderMock();
+    const chart = { ...chartMock, on: vi.fn(), off: vi.fn(), getWidth: () => 320 };
+    loader.init.mockResolvedValue(chart);
+    const controller = new EChartsHostController({ eChartsLoader: loader as any });
+    await controller.init(document.createElement('div'), theme);
+    controller.setTimelineNotes({
+      notes: [{ id: 'a'.repeat(64), category: 'travel', title: 'Trip', startDate: '2026-09-02', endDate: '2026-09-04',
+        timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 }], select: vi.fn(), reportRange: vi.fn(),
+    });
+    controller.setOption({ xAxis: { type: 'time', min: Date.UTC(2026, 8, 1), max: Date.UTC(2026, 8, 10) },
+      yAxis: {}, series: [{ type: 'line', data: [] }] });
+    const rendered = loader.setOption.mock.calls[0][1] as any;
+    expect(rendered.series[1].markLine.data[0].tooltip).toMatchObject(
+      buildDashboardEChartsTooltipChrome(buildDashboardEChartsStyleTokens(theme === 'dark', 320)));
+    controller.dispose();
+  });
+
+  it('keeps note-only updates local to the current chart and preserves category hints', async () => {
+    const loader = buildLoaderMock();
+    const chart = { ...chartMock, getWidth: () => 320 };
+    loader.init.mockResolvedValue(chart);
+    const controller = new EChartsHostController({ eChartsLoader: loader as any });
+    const context = { notes: [{ id: 'sample', category: 'travel' as const, title: 'Trip', startDate: '2026-09-02',
+      endDate: '2026-09-04', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 }],
+      select: vi.fn(), reportRange: vi.fn() };
+    controller.setTimelineNotes({ ...context, notes: [] }, { categoryDates: ['2026-09-02', '2026-09-04'] });
+    controller.updateTimelineNotes(context);
+    expect(loader.init).not.toHaveBeenCalled();
+    expect(loader.setOption).not.toHaveBeenCalled();
+    expect(context.reportRange).not.toHaveBeenCalled();
+    await controller.init(document.createElement('div'), 'dark');
+    controller.setOption({ xAxis: { type: 'category', data: ['Tue', 'Thu'] }, series: [{ type: 'line', data: [7, 8] }] });
+    const initial = loader.setOption.mock.calls.at(-1)![1] as any;
+    expect(initial.series[1].markArea.data[0].map((edge: any) => edge.xAxis)).toEqual([0, 1]);
+    loader.setOption.mockClear(); loader.resize.mockClear(); chart.dispatchAction.mockClear();
+    controller.updateTimelineNotes({ ...context, notes: [{ ...context.notes[0], title: 'Updated' }] });
+    const patch = loader.setOption.mock.calls[0][1] as any;
+    expect(Object.keys(patch)).toEqual(['series']);
+    expect(patch.series).toHaveLength(1);
+    expect(patch.series[0].markLine.data[0].tooltip.formatter()).toContain('Updated');
+    expect(patch.series[0].markLine.data[0].tooltip).toMatchObject(
+      buildDashboardEChartsTooltipChrome(buildDashboardEChartsStyleTokens(true, 320)));
+    expect(loader.setOption.mock.calls[0][2]).toEqual({ notMerge: false, lazyUpdate: false });
+    expect(loader.init).toHaveBeenCalledOnce();
+    expect(loader.resize).not.toHaveBeenCalled();
+    expect(chart.dispatchAction).toHaveBeenCalledExactlyOnceWith({ type: 'hideTip' });
+    expect(context.reportRange).toHaveBeenCalledOnce();
+    controller.dispose();
+    loader.setOption.mockClear();
+    controller.updateTimelineNotes(null);
+    expect(loader.setOption).not.toHaveBeenCalled();
+    expect(context.reportRange).toHaveBeenLastCalledWith(expect.anything(), null);
   });
 
   it('should resize from resize observer callback using raf throttling', async () => {

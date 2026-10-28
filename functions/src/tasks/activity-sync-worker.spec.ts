@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
 
 interface TaskRequestMock {
   data: {
@@ -71,6 +72,7 @@ vi.mock('../queue/user-deletion-skip', () => ({
 vi.mock('../queue-utils', () => ({
   QueueResult: {
     Processed: 'PROCESSED',
+    AcknowledgedStale: 'ACKNOWLEDGED_STALE',
     Skipped: 'SKIPPED',
     Deferred: 'DEFERRED',
     ProviderStatusPending: 'PROVIDER_STATUS_PENDING',
@@ -98,12 +100,36 @@ describe('processActivitySyncTask', () => {
     mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
   });
 
-  it('registers half-size Cloud Tasks rate limits for activity sync', () => {
+  it.each([
+    ['PROCESSED', 'acknowledged'], ['ACKNOWLEDGED_STALE', 'stale'], ['SKIPPED', 'manual_reconciliation'],
+    ['MOVED_TO_DLQ', 'dead_lettered'], ['DEFERRED', 'deferred'], ['RETRY_INCREMENTED', 'retry'], ['FAILED', 'failed'],
+  ])('records %s as an attempt, never as confirmed provider delivery', async (result, outcome) => {
+    mockQueueGet.mockResolvedValueOnce({ exists: true, id: 'PRIVATE', ref: { path: 'activitySyncQueue/PRIVATE' }, data: () => ({ processed: false, userID: 'PRIVATE' }) });
+    mockProcessActivitySyncQueueItem.mockResolvedValueOnce(result);
+    await invokeWorker({ data: { queueItemId: 'PRIVATE' } }).catch(() => undefined);
+    const calls = mockLoggerInfo.mock.calls.filter(([message]) => message === '[ActivityDelivery]');
+    expect(calls).toHaveLength(1);
+    expect(calls[0][1]).toMatchObject({ event: 'worker_attempt', outcome, durationMs: expect.any(Number) });
+    expect(JSON.stringify(calls)).not.toContain('PRIVATE');
+  });
+
+  it('records an initial queue read failure and expected provider claim contention separately', async () => {
+    mockQueueGet.mockRejectedValueOnce(new Error('PRIVATE'));
+    await expect(invokeWorker({ data: { queueItemId: 'PRIVATE' } })).rejects.toThrow();
+    expect(mockLoggerInfo).toHaveBeenCalledWith('[ActivityDelivery]', expect.objectContaining({ outcome: 'failed' }));
+    mockQueueGet.mockResolvedValueOnce({ exists: true, data: () => ({ processed: false }) });
+    mockProcessActivitySyncQueueItem.mockRejectedValueOnce(Object.assign(new Error('PRIVATE'), { name: 'ProviderOperationStillInFlightError' }));
+    await expect(invokeWorker({ data: { queueItemId: 'PRIVATE' } })).rejects.toThrow();
+    expect(mockLoggerInfo).toHaveBeenCalledWith('[ActivityDelivery]', expect.objectContaining({ outcome: 'expected_contention' }));
+  });
+
+  it('caps concurrent activity uploads without changing the dispatch rate or retry backoff', () => {
     expect(capturedTaskOptions[0]).toMatchObject({
       rateLimits: {
-        maxConcurrentDispatches: 500,
+        maxConcurrentDispatches: 10,
         maxDispatchesPerSecond: 250,
       },
+      retryConfig: { maxAttempts: 20, minBackoffSeconds: 900, maxBackoffSeconds: 14400, maxDoublings: 4 },
     });
   });
 
@@ -126,6 +152,25 @@ describe('processActivitySyncTask', () => {
       processed: false,
       userID: 'user-1',
     }));
+  });
+
+  it('acknowledges a stale delivery without claiming it was processed', async () => {
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'queue-item-1',
+      ref: { path: 'activitySyncQueue/queue-item-1' },
+      data: () => ({ processed: false, userID: 'user-1' }),
+    });
+    mockProcessActivitySyncQueueItem.mockResolvedValueOnce('ACKNOWLEDGED_STALE');
+
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).resolves.toBeUndefined();
+
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      '[ActivitySyncTaskWorker] Acknowledged stale delivery for item queue-item-1; this worker did not mark it processed.',
+    );
+    expect(mockLoggerInfo).not.toHaveBeenCalledWith(
+      '[ActivitySyncTaskWorker] Successfully processed item queue-item-1',
+    );
   });
 
   it('returns without processing when queue item is already processed', async () => {
@@ -196,21 +241,21 @@ describe('processActivitySyncTask', () => {
       .toThrow('Item queue-item-1 failed and was scheduled for retry.');
   });
 
-  it('surfaces a redacted retry reason in Cloud Task errors', async () => {
+  it('redacts the current retry reason in logs and Cloud Task errors', async () => {
     mockQueueGet.mockResolvedValueOnce({
       exists: true,
       id: 'queue-item-1',
       ref: { path: 'activitySyncQueue/queue-item-1' },
-      data: () => ({
-        processed: false,
-        errors: [{
-          error: 'Provider request failed. Bearer sensitive-token token=another-secret https://api.example.test/status?x-sig=secret',
-          atRetryCount: 1,
-          date: 1,
-        }],
-      }),
+      data: () => ({ processed: false }),
     });
-    mockProcessActivitySyncQueueItem.mockResolvedValueOnce('RETRY_INCREMENTED');
+    mockProcessActivitySyncQueueItem.mockImplementationOnce(async (processingQueueItem: ActivitySyncQueueItemInterface) => {
+      processingQueueItem.errors = [{
+        error: 'Provider request failed. Bearer sensitive-token token=another-secret https://api.example.test/status?x-sig=secret',
+        atRetryCount: 1,
+        date: 1,
+      }];
+      return 'RETRY_INCREMENTED';
+    });
 
     const error = await invokeWorker({ data: { queueItemId: 'queue-item-1' } }).catch((caughtError) => caughtError as Error);
 
@@ -218,7 +263,46 @@ describe('processActivitySyncTask', () => {
     expect(error.message).toBe(
       'Item queue-item-1 failed and was scheduled for retry: Provider request failed. Bearer [redacted] token=[redacted] [url]',
     );
+    expect(mockLoggerWarn).toHaveBeenCalledWith(
+      '[ActivitySyncTaskWorker] Item queue-item-1 failed and retry count was incremented.',
+      { retryReason: 'Provider request failed. Bearer [redacted] token=[redacted] [url]' },
+    );
   });
+
+  it.each([undefined, 'COROS is processing the activity.'])(
+    'reports the current retry failure rather than the original snapshot (%s)',
+    async (previousError) => {
+      const originalErrors = previousError
+        ? [{ error: previousError, atRetryCount: 8, date: 1 }]
+        : undefined;
+      const queueItem = { processed: false, errors: originalErrors };
+      mockQueueGet.mockResolvedValueOnce({
+        exists: true,
+        id: 'queue-item-1',
+        ref: { path: 'activitySyncQueue/queue-item-1' },
+        data: () => queueItem,
+      });
+      mockProcessActivitySyncQueueItem.mockImplementationOnce(async (processingQueueItem: ActivitySyncQueueItemInterface) => {
+        // The guarded retry transition replaces the processor's error array.
+        processingQueueItem.errors = [
+          ...(processingQueueItem.errors || []),
+          { error: 'COROS could not process this activity file.', atRetryCount: 9, date: 2 },
+        ];
+        return 'RETRY_INCREMENTED';
+      });
+
+      await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).rejects.toThrow(
+        'Item queue-item-1 failed and was scheduled for retry: COROS could not process this activity file.',
+      );
+      expect(mockLoggerWarn).toHaveBeenCalledWith(
+        '[ActivitySyncTaskWorker] Item queue-item-1 failed and retry count was incremented.',
+        { retryReason: 'COROS could not process this activity file.' },
+      );
+      expect(queueItem.errors).toBe(originalErrors);
+      expect(mockQueueGet).toHaveBeenCalledTimes(1);
+      expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
+    },
+  );
 
   it('stops Cloud Task retries when processing defers the queue item', async () => {
     mockQueueGet.mockResolvedValueOnce({

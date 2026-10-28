@@ -74,7 +74,7 @@ export const setMaintenanceMode = onAdminCall<SetMaintenanceModeRequest, SetMain
  */
 export const getMaintenanceStatus = onAdminCall<void, MaintenanceStatusResponse>({
     region: FUNCTIONS_MANIFEST.getMaintenanceStatus.region,
-    memory: '256MiB',
+    memory: '512MiB',
 }, async () => {
     try {
         const rc = admin.remoteConfig();

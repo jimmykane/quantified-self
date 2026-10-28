@@ -5,6 +5,8 @@ import type {
 } from '@shared/derived-metrics';
 import { getTrainingSportDefinition, isTrainingDiscipline } from '@shared/training-disciplines';
 import { isGenericTrainingEventLabel } from './training-event-label.helper';
+import { getDateTimeFormatter } from './date-time-format.helper';
+import { getNumberFormatter } from './number-format.helper';
 
 export type TrainingExplanationTone = 'positive' | 'negative' | 'neutral';
 export interface TrainingExplanationCardViewModel {
@@ -207,9 +209,9 @@ function formatRhythmOutcome(activeDayDelta: number): string {
   return activeDayDelta > 0 ? 'More active days' : 'Fewer active days';
 }
 function formatCoverage(loaded: number, total: number): string { return `${loaded}/${total}`; }
-function formatNumber(value: number): string { return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value); }
+function formatNumber(value: number): string { return getNumberFormatter(undefined, { maximumFractionDigits: 0 }).format(value); }
 function formatDiscipline(value: string): string { return `${value.charAt(0).toUpperCase()}${value.slice(1)}`; }
 function formatDayCount(value: number): string { return `${formatNumber(value)} ${value === 1 ? 'day' : 'days'}`; }
 function formatShortUtcDate(value: number): string {
-  return new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(value));
+  return getDateTimeFormatter(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(value));
 }

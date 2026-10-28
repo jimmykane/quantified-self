@@ -1,0 +1,19 @@
+# Direct Functions-only deploys must never upload local exports or credentials.
+.gcloudignore
+.git/
+.DS_Store
+node_modules/
+.env*
+.secret*
+.runtimeconfig.json
+**/*service-account*.json
+**/*service_account*.json
+**/*serviceAccount*.json
+**/*firebase-adminsdk*.json
+*.csv
+**/*.csv
+**/*.log
+coverage/
+tmp/
+emulator-export/
+firestore_export/

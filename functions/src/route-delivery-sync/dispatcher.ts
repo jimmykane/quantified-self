@@ -16,6 +16,8 @@ import {
     markQueueItemDeletedForUserCleanup,
     QUEUE_CLEANUP_TOMBSTONE_REASONS,
 } from '../queue/cleanup-tombstone';
+import { recordRouteDispatchFailure, recordRouteQueueDispatch } from '../routes/monitoring';
+import { observeRouteQueues, recordRouteQueuesUnavailable } from '../routes/monitoring-probe';
 
 const ROUTE_DELIVERY_SYNC_REDISPATCH_STALE_MS = 2 * 60 * 60 * 1000;
 const MAX_ROUTE_DELIVERY_SYNC_QUEUE_SCAN = 500;
@@ -47,12 +49,14 @@ async function deleteRouteDeliverySyncCandidateBeforeDispatch(
             QUEUE_CLEANUP_TOMBSTONE_REASONS.DispatcherCleanup,
         );
         if (!tombstoneWritten) {
+            recordRouteDispatchFailure('delivery', doc.data(), 'reconciliation', 'cleanup');
             logger.error(`[RouteDeliverySyncDispatcher] Failed to write cleanup tombstone for ${doc.id}; leaving queue item in place to avoid missing-doc Cloud Task retries.`);
             return;
         }
         await admin.firestore().recursiveDelete(doc.ref);
         logger.info(`[RouteDeliverySyncDispatcher] Deleted queue item ${doc.id} instead of dispatching: ${reason}.`);
     } catch (error) {
+        recordRouteDispatchFailure('delivery', doc.data(), 'reconciliation', 'cleanup');
         logger.error(`[RouteDeliverySyncDispatcher] Failed to delete queue item ${doc.id} before dispatch after ${reason}`, error);
     }
 }
@@ -75,6 +79,7 @@ async function shouldDispatchRouteDeliverySyncCandidate(
         await deleteRouteDeliverySyncCandidateBeforeDispatch(doc, `user ${userID} is missing or deletion is in progress`);
         return false;
     } catch (error) {
+        recordRouteDispatchFailure('delivery', doc.data(), 'reconciliation', 'guard');
         logger.error(`[RouteDeliverySyncDispatcher] Failed to check deletion guard for queue item ${doc.id} and user ${userID}; leaving item undispatched for a future run.`, error);
         return false;
     }
@@ -194,6 +199,7 @@ export async function reconcileRouteDeliverySyncQueueDispatches(nowMs = Date.now
             continue;
         }
 
+        let phase: 'enqueue' | 'marker' = 'enqueue';
         try {
             if (!(await shouldDispatchRouteDeliverySyncCandidate(candidate.doc, candidate.userID))) {
                 continue;
@@ -214,6 +220,7 @@ export async function reconcileRouteDeliverySyncQueueDispatches(nowMs = Date.now
                 dispatched += 1;
                 continue;
             }
+            phase = 'marker';
             const markerResult = await markQueueItemDispatchedIfUserActive({
                 queueItemDocument: candidate.doc.ref,
                 queueItemId: candidate.doc.id,
@@ -230,6 +237,7 @@ export async function reconcileRouteDeliverySyncQueueDispatches(nowMs = Date.now
             }
             dispatched += 1;
         } catch (error) {
+            recordRouteDispatchFailure('delivery', candidate.doc.data(), 'reconciliation', phase);
             logger.error(`[RouteDeliverySyncDispatcher] Failed to dispatch queue item ${candidate.doc.id}`, error);
         }
     }
@@ -246,6 +254,24 @@ export const dispatchRouteDeliverySyncQueue = functions.region('europe-west2').r
     memory: '256MB',
     maxInstances: 1,
 }).pubsub.schedule(QUEUE_SCHEDULE).onRun(async () => {
-    const result = await reconcileRouteDeliverySyncQueueDispatches();
-    logger.info('[RouteDeliverySyncDispatcher] Reconciliation completed', result);
+    try {
+        const result = await reconcileRouteDeliverySyncQueueDispatches();
+        recordRouteQueueDispatch('delivery', 'completed');
+        logger.info('[RouteDeliverySyncDispatcher] Reconciliation completed', result);
+    } catch (error) {
+        recordRouteQueueDispatch('delivery', 'failed');
+        throw error;
+    } finally {
+        try {
+            await observeRouteQueues(admin.firestore(), async uid => {
+                try {
+                    const claims = (await admin.auth().getUser(uid)).customClaims;
+                    return claims?.stripeRole === 'pro' || typeof claims?.gracePeriodUntil === 'number' && claims.gracePeriodUntil > Date.now();
+                } catch (error) {
+                    if ((error as { code?: string }).code === 'auth/user-not-found') return false;
+                    throw error;
+                }
+            });
+        } catch { recordRouteQueuesUnavailable(); }
+    }
 });

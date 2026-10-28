@@ -29,6 +29,7 @@ export const SPORTS_LIB_REPARSE_HEAVY_REASONS = {
 export type SportsLibReparseHeavyReason = typeof SPORTS_LIB_REPARSE_HEAVY_REASONS[keyof typeof SPORTS_LIB_REPARSE_HEAVY_REASONS];
 
 export const SPORTS_LIB_REPARSE_FAILURE_REASONS = {
+    IdentityConflict: 'ACTIVITY_IDENTITY_CONFLICT',
     ReparseFailed: 'REPARSE_FAILED',
     TooHeavyForAutoReparse: 'TOO_HEAVY_FOR_AUTO_REPARSE',
 } as const;
@@ -38,8 +39,8 @@ export type SportsLibReparseFailureReason = typeof SPORTS_LIB_REPARSE_FAILURE_RE
 export const SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS = {
     enabled: false,
     // Higher defaults improve migration throughput while still allowing bounded scans.
-    scanLimit: 1200,
-    enqueueLimit: 1200,
+    scanLimit: 1800,
+    enqueueLimit: 1800,
     uidAllowlist: [],
 } as const;
 
@@ -130,7 +131,8 @@ export function resolveSportsLibReparseRuntimeSettings(
 
 export const SPORTS_LIB_ROUTE_REPARSE_RUNTIME_DEFAULTS = {
     enabled: false,
-    scanLimit: SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.scanLimit,
-    enqueueLimit: SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.enqueueLimit,
+    // Keep route discovery independent of activity reparse throughput tuning.
+    scanLimit: 1200,
+    enqueueLimit: 1200,
     uidAllowlist: [],
 } as const;

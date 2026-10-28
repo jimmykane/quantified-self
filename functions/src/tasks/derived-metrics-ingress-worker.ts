@@ -2,25 +2,28 @@ import { onTaskDispatched } from 'firebase-functions/v2/tasks';
 import * as logger from 'firebase-functions/logger';
 import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
-import { normalizeDerivedMetricKindsStrict } from '../../../shared/derived-metrics';
+import { DERIVED_METRIC_KINDS, normalizeDerivedMetricKindsStrict } from '../../../shared/derived-metrics';
 import { getDefaultDerivedMetricKindsForDashboard, markDerivedMetricsDirtyAndMaybeQueue } from '../derived-metrics/derived-metrics.service';
+import { observeDerivedMetricAttempt, recordDerivedIngress } from '../derived-metrics/monitoring';
 
 interface DerivedMetricsIngressTaskPayload {
     uid?: string;
     bucketStartEpochSec?: number;
     metricKinds?: unknown;
     incrementEventMutationVersion?: unknown;
+    immediate?: unknown;
 }
 
 export const processDerivedMetricsIngressTask = onTaskDispatched({
     retryConfig: CLOUD_TASK_RETRY_CONFIG,
-    memory: '256MiB',
+    memory: '512MiB',
     timeoutSeconds: 120,
     region: FUNCTIONS_MANIFEST.ensureDerivedMetrics.region,
-}, async (request) => {
+}, async (request) => observeDerivedMetricAttempt('ingress', async () => {
     const payload = (request.data || {}) as DerivedMetricsIngressTaskPayload;
     const uid = `${payload.uid || ''}`.trim();
     if (!uid) {
+        recordDerivedIngress('invalid');
         logger.warn('[derived-metrics-ingress] Missing uid in task payload.', {
             bucketStartEpochSec: payload.bucketStartEpochSec ?? null,
         });
@@ -32,6 +35,7 @@ export const processDerivedMetricsIngressTask = onTaskDispatched({
         ? normalizeDerivedMetricKindsStrict(Array.isArray(payload.metricKinds) ? payload.metricKinds : [])
         : getDefaultDerivedMetricKindsForDashboard();
     if (!metricKinds.length) {
+        recordDerivedIngress('invalid');
         logger.warn('[derived-metrics-ingress] Invalid targeted metric kinds in task payload.', {
             uid,
             bucketStartEpochSec: payload.bucketStartEpochSec ?? null,
@@ -39,9 +43,22 @@ export const processDerivedMetricsIngressTask = onTaskDispatched({
         return;
     }
     const incrementEventMutationVersion = payload.incrementEventMutationVersion !== false;
+    const preserveWorkoutInputs = hasTargetedMetricKinds && !incrementEventMutationVersion
+        && metricKinds.every(kind => kind === DERIVED_METRIC_KINDS.TrainingBuildComparison
+            || kind === DERIVED_METRIC_KINDS.TrainingReadiness);
     const queueResult = await markDerivedMetricsDirtyAndMaybeQueue(uid, metricKinds, {
         incrementEventMutationVersion,
+        background: payload.immediate !== true,
+        ...(preserveWorkoutInputs ? { preserveWorkoutInputs: true } : {}),
     });
+    // accepted:false also covers enqueue errors, not just expected lifecycle skips.
+    // Only the separate guarded enqueue-failure commit establishes that failure.
+    recordDerivedIngress(!queueResult.accepted ? 'not_admitted' : queueResult.queued ? 'queued' : 'coalesced');
+    // A generation means the dirty write committed but task creation failed.
+    // Deletion/rollout skips have no generation and must still be acknowledged.
+    if (!queueResult.accepted && queueResult.generation !== null) {
+        throw new Error('derived_metrics_ingress_enqueue_failed');
+    }
     logger.info('[derived-metrics-ingress] Processed ingress task.', {
         uid,
         bucketStartEpochSec: payload.bucketStartEpochSec ?? null,
@@ -51,4 +68,4 @@ export const processDerivedMetricsIngressTask = onTaskDispatched({
         metricKinds: queueResult.metricKinds,
         incrementEventMutationVersion,
     });
-});
+}));

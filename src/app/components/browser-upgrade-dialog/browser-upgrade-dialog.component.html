@@ -1,0 +1,10 @@
+<h2 mat-dialog-title>Update your browser</h2>
+<mat-dialog-content>
+  <p>Your browser does not support the compression features needed for this action.</p>
+  <p>Update Chrome, Firefox, Safari or Edge to continue.</p>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="haptics.selection(); dialogRef.close()">Close</button>
+  <a mat-button class="qs-mat-primary" href="https://browsehappy.com/" target="_blank" rel="noopener noreferrer"
+    (click)="haptics.selection()">Learn more</a>
+</mat-dialog-actions>

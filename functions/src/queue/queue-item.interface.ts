@@ -1,13 +1,14 @@
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { ActivitySyncRouteId } from '../../../shared/activity-sync-routes';
+import { ActivityDeliveryRouteId, ActivityDeliverySource } from '../../../shared/activity-sync-routes';
 import { RouteDeliverySyncRouteId } from '../../../shared/route-delivery-sync-routes';
 import { SleepProvider } from '../../../shared/sleep';
 import type { GarminSupportedSummaryType } from '../garmin/health-summary-types';
 import DocumentReference = admin.firestore.DocumentReference;
 
 export interface QueueItemInterface {
+  connectionHistoryRunId?: string;
   id: string,
   ref?: DocumentReference
   dateCreated: number,
@@ -59,6 +60,9 @@ export interface COROSAPIWorkoutQueueItemInterface extends QueueItemInterface {
 export interface WahooAPIWorkoutQueueItemInterface extends QueueItemInterface {
   wahooUserID: string;
   workoutID: string;
+  /** Exact app-supplied identifiers retained for Training completion correlation. */
+  workoutToken?: string;
+  planID?: string;
   workoutSummaryID: string;
   summaryUpdatedAt: string;
   FITFileURI: string;
@@ -86,6 +90,7 @@ export interface ActivitySyncOriginalFileMetadata {
   startDate?: number;
   originalFilename?: string;
   extension?: string;
+  generation?: string;
 }
 
 export interface ActivitySyncUploadContinuation {
@@ -95,17 +100,25 @@ export interface ActivitySyncUploadContinuation {
 }
 
 export interface ActivitySyncQueueItemInterface extends QueueItemInterface {
-  routeId: ActivitySyncRouteId;
-  sourceServiceName: ServiceNames;
+  routeId: ActivityDeliveryRouteId;
+  sourceServiceName: ActivityDeliverySource;
   destinationServiceName: ServiceNames;
   userID: string;
   eventID: string;
   sourceActivityID?: string;
   originalFile: ActivitySyncOriginalFileMetadata;
   manual: boolean;
+  /** Historical requests are independent of the source provider's current connection. */
+  deliveryMode?: 'automatic' | 'historical' | 'direct';
+  sendBatchID?: string;
+  sendRowID?: string;
+  destinationPinnedProviderUserID?: string;
+  sendConfirmedFailure?: boolean;
   successProcessedAt?: number;
   destinationUploadID?: string | null;
   destinationProviderUserID?: string | null;
+  /** Original COROS account retained across confirmed processing-failure restarts. */
+  destinationRestartProviderUserID?: string;
   destinationWorkoutKey?: string | null;
   destinationInfoCode?: string | null;
   /** Wahoo type selected before upload and reused for every status/correction retry. */
@@ -169,13 +182,15 @@ export type SleepSyncQueueItemType =
   | 'coros_poll';
 
 export interface SleepSyncQueueItemInterface extends QueueItemInterface {
+  /** Server-only cursor on the existing queue row, after a fully written Suunto window. */
+  suuntoHealthProgress?: import('../suunto/health-progress').SuuntoHealthProgress;
   type: SleepSyncQueueItemType;
   provider: SleepProvider;
   userID?: string;
   providerUserId: string;
   payload?: unknown;
   callbackURL?: string;
-  /** Bounded live-only callback credentials on a compact Garmin ingress batch. */
+  /** Bounded Garmin ingress callbacks, retained in admin-only failed jobs for recovery. */
   garminCallbackURLs?: string[];
   /** Garmin Ping/Pull family; absent legacy rows are Sleep. */
   garminSummaryType?: GarminSupportedSummaryType;
@@ -201,6 +216,10 @@ export interface SleepSyncQueueItemInterface extends QueueItemInterface {
   rangeStartMs?: number;
   rangeEndMs?: number;
   healthTrigger?: 'poll' | 'webhook' | 'backfill';
+  /** Activity (1), Recovery (2), or both (3) notifications coalesced into a webhook refetch. */
+  suuntoHealthWebhookFeedMask?: 1 | 2 | 3;
+  /** Earliest dispatch for a coalesced Suunto Health webhook refetch. */
+  dispatchAfterMs?: number;
   /** Webhook-only fence captured from the server-owned Suunto account binding. */
   suuntoHealthTokenCredentialGeneration?: string | null;
   /** Webhook-only fence captured from the current Suunto token-root OAuth revision. */

@@ -12,6 +12,9 @@ import type {
   AssistantMcpToolName,
 } from './mcp-session';
 import { isFunctionsEmulator } from '../utils';
+import { TRAINING_READ_TOOLS, TRAINING_READ_OUTPUTS } from '../mcp/training-plans.schemas';
+import { MCP_MANUAL_MEASUREMENT_SCHEMA } from '../mcp/manual-measurements.schemas';
+import { HEALTH_METRIC_CATALOG } from '../../../shared/health';
 
 const MAX_FACTS = 6;
 const MAX_LINKS = 3;
@@ -231,6 +234,91 @@ function buildRankingFacts(
   return facts.slice(0, MAX_FACTS);
 }
 
+function buildTrainingImpactEvidence(
+  tool: Pick<AssistantMcpToolDefinition, 'name' | 'title'>,
+  structuredContent: Record<string, unknown>,
+): AssistantEvidence {
+  const status = typeof structuredContent.status === 'string'
+    ? structuredContent.status
+    : 'unavailable';
+  const contribution = isRecord(structuredContent.contribution)
+    ? structuredContent.contribution
+    : null;
+  const outcomes = Array.isArray(structuredContent.outcomes)
+    ? structuredContent.outcomes.filter(isRecord)
+    : [];
+  const calculated = status === 'ready' || status === 'partial';
+  const facts: AssistantEvidenceFact[] = calculated ? [] : [
+    normalizeAssistantEvidenceFact({
+      label: 'Status',
+      value: humanizeFieldName(status),
+    }),
+  ];
+  if (!calculated && typeof structuredContent.reason === 'string') {
+    facts.push(normalizeAssistantEvidenceFact({
+      label: 'Reason',
+      value: humanizeFieldName(structuredContent.reason),
+    }));
+  }
+  const addMetric = (label: string, key: string, suffix = ''): void => {
+    const value = contribution?.[key];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      facts.push(normalizeAssistantEvidenceFact({
+        label,
+        value: `${formatFactValue(key, value)}${suffix}`,
+      }));
+    }
+  };
+  addMetric('Training stress score', 'trainingStressScore', ' TSS');
+  addMetric('Fitness load (CTL)', 'fitnessLoadCtlContribution');
+  addMetric('Fatigue load (ATL)', 'fatigueLoadAtlContribution');
+  addMetric('Freshness (Form)', 'freshnessFormContribution');
+  if (calculated && typeof structuredContent.sessionRole === 'string') {
+    const sessionRole = ({
+      'pushed-above-maintenance': 'Helped push the day above maintenance',
+      'added-to-building-day': 'Added to a fitness-building day',
+      'offset-fitness-decay': 'Offset normal fitness-load decay',
+      'no-load': 'No modeled load contribution',
+    } as Record<string, string>)[structuredContent.sessionRole]
+      || humanizeFieldName(structuredContent.sessionRole);
+    facts.push(normalizeAssistantEvidenceFact({
+      label: 'Session role',
+      value: sessionRole,
+    }));
+  }
+  for (const outcome of outcomes) {
+    if (facts.length >= MAX_FACTS) break;
+    const day = typeof outcome.trainingDay === 'string'
+      ? outcome.trainingDay
+      : 'UTC Training day';
+    const rawDirection = typeof outcome.fitnessLoadOutcome === 'string'
+      ? outcome.fitnessLoadOutcome
+      : 'unavailable';
+    const direction = rawDirection === 'raised'
+      ? 'rose'
+      : rawDirection === 'held'
+        ? 'held steady'
+        : rawDirection;
+    const change = typeof outcome.fitnessLoadCtlChange === 'number'
+      && Number.isFinite(outcome.fitnessLoadCtlChange)
+      ? ` (${formatFactValue('fitnessLoadCtlChange', outcome.fitnessLoadCtlChange)} CTL)`
+      : '';
+    facts.push(normalizeAssistantEvidenceFact({
+      label: day,
+      value: `Fitness load ${direction}${change}`,
+    }));
+  }
+  return {
+    toolName: tool.name,
+    title: truncate(tool.title, 160),
+    summary: calculated
+      ? `TSS-based Training impact is ${status}; it does not measure physiological adaptation.`
+      : `TSS-based Training impact is ${status}.`,
+    facts: facts.slice(0, MAX_FACTS),
+    links: [],
+  };
+}
+
 function parseSafeAppUrl(value: unknown): string | null {
   if (typeof value !== 'string' || value.length > 500) {
     return null;
@@ -314,6 +402,107 @@ export function buildAssistantEvidence(
   tool: Pick<AssistantMcpToolDefinition, 'name' | 'title'>,
   structuredContent: Record<string, unknown>,
 ): AssistantEvidence {
+  if (tool.name === 'get_workout_reflection') {
+    const textLength = typeof structuredContent.note === 'string' ? structuredContent.note.length : 0;
+    return { toolName: tool.name, title: tool.title,
+      summary: 'Athlete-reported context; no Training calculations or plans changed.',
+      facts: [{ label: 'Target', value: structuredContent.target === 'recording' ? 'Whole recording' : 'Selected activity' },
+        { label: 'Reflection text', value: textLength ? `${textLength} characters of private context` : 'None' }], links: [] };
+  }
+  if (tool.name === 'get_manual_measurement' || tool.name === 'query_manual_measurements') {
+    const raw = tool.name === 'get_manual_measurement' ? [structuredContent.measurement] : structuredContent.measurements;
+    const rows = Array.isArray(raw) ? raw.flatMap(item => {
+      const parsed = MCP_MANUAL_MEASUREMENT_SCHEMA.safeParse(item);
+      return parsed.success ? [parsed.data] : [];
+    }) : [];
+    return { toolName: tool.name, title: truncate(tool.title, 160),
+      summary: `${rows.length} current manual entr${rows.length === 1 ? 'y' : 'ies'}.${structuredContent.scanComplete === false ? ' More entries may remain.' : ''}`,
+      facts: rows.slice(0, 3).flatMap(row => [
+        { label: HEALTH_METRIC_CATALOG[row.metricId].label,
+          value: `${row.displayValue}${row.diastolic ? ` / ${row.diastolic.displayValue}` : ''} ${row.displayUnit}`.trim() },
+        { label: 'Observed', value: row.observedAt },
+      ]), links: [] };
+  }
+  if (tool.name === 'get_training_impact') {
+    return buildTrainingImpactEvidence(tool, structuredContent);
+  }
+  if (tool.name === 'get_workout_prescription_analysis') {
+    const parsed = TRAINING_READ_OUTPUTS.get_workout_prescription_analysis.safeParse(structuredContent);
+    if (!parsed.success) return { toolName: tool.name, title: truncate(tool.title, 160),
+      summary: 'Prescription analysis unavailable.', facts: [], links: [] };
+    const result = parsed.data;
+    return { toolName: tool.name, title: truncate(tool.title, 160), summary: truncate(result.displaySummary, 240),
+      facts: [{ label: 'Step definitions', value: String(result.analysis.counts.definedSteps) },
+        { label: 'Executed steps', value: String(result.analysis.counts.executedSteps) },
+        { label: 'Duration coverage', value: result.analysis.summary.duration.coverage },
+        ...(result.analysis.summary.earlyLapSteps > 0
+          ? [{ label: 'Steps allowing early Lap', value: String(result.analysis.summary.earlyLapSteps) }] : [])], links: [] };
+  }
+  if ((TRAINING_READ_TOOLS as readonly string[]).includes(tool.name)) {
+    if (tool.name === 'get_training_plan_phases') {
+      const result = TRAINING_READ_OUTPUTS.get_training_plan_phases.parse(structuredContent);
+      return { toolName: tool.name, title: 'Plan phases', summary: `${result.phases.items.length} authored plan phases; gaps are allowed.`,
+        facts: result.phases.items.slice(0, MAX_FACTS).map(phase => ({ label: truncate(phase.name, 80),
+          value: `${phase.startLocalDate} – ${phase.endLocalDate}` })), links: [] };
+    }
+    if (tool.name === 'get_planned_workout_completion' || tool.name === 'get_planned_workout_completions') {
+      const raw = tool.name === 'get_planned_workout_completions'
+        ? structuredContent.completions : [structuredContent];
+      const completions = Array.isArray(raw) ? raw.filter(isRecord) : [];
+      const linked = completions.filter(completion => completion.state === 'linked').length;
+      return { toolName: tool.name, title: truncate(tool.title, 160),
+        summary: `${linked} of ${completions.length} planned workout${completions.length === 1 ? '' : 's'} have an exact stored completion link.`,
+        facts: completions.slice(0, MAX_FACTS).map(completion => ({
+          label: truncate(String(completion.scheduledDate ?? 'Planned workout'), 80),
+          value: completion.state === 'linked'
+            ? truncate(`Linked${completion.provider ? ` via ${completion.provider}` : ''}${completion.timing ? `; ${String(completion.timing).replace(/_/g, ' ')}` : ''}${completion.workoutChangedSinceCompletion ? '; workout changed afterward' : ''}`, 160)
+            : 'No exact stored completion link',
+        })), links: [],
+      };
+    }
+    if (tool.name === 'assess_planned_workout_compatibility') {
+      const assessments = Array.isArray(structuredContent.assessments)
+        ? structuredContent.assessments.filter(isRecord) : [];
+      const counts = { exact: 0, degraded: 0, unsupported: 0 };
+      assessments.forEach(assessment => {
+        if (assessment.level === 'exact' || assessment.level === 'degraded' || assessment.level === 'unsupported') {
+          counts[assessment.level]++;
+        }
+      });
+      return { toolName: tool.name, title: truncate(tool.title, 160),
+        summary: `${counts.exact} exact, ${counts.degraded} degraded, ${counts.unsupported} unsupported local provider mappings; not a live provider check.`,
+        facts: assessments.slice(0, MAX_FACTS).map(assessment => {
+          const issues = Array.isArray(assessment.issues) ? assessment.issues.filter(isRecord) : [];
+          const firstMessage = issues.length && typeof issues[0].message === 'string' ? issues[0].message : null;
+          return { label: truncate(String(assessment.provider ?? 'Provider'), 80),
+            value: truncate(`${String(assessment.level ?? 'unknown')}${firstMessage ? `: ${firstMessage}` : ''}`, 160) };
+        }), links: [],
+      };
+    }
+    const raw = structuredContent.plans ?? structuredContent.workouts ?? structuredContent.services
+      ?? [structuredContent.plan ?? structuredContent.workout];
+    const rows = Array.isArray(raw) ? raw.filter(isRecord) : [];
+    return { toolName: tool.name, title: truncate(tool.title, 160),
+      summary: `${rows.length} ${tool.name === 'get_training_sync_status' ? 'service summaries from existing delivery evidence' : 'current authored records'}.${structuredContent.scanComplete === false ? ' Incomplete read; more records may remain.' : ''}`,
+      facts: rows.slice(0, MAX_FACTS).map(row => ({
+        label: truncate(String(row.name ?? row.title ?? row.provider ?? 'Training'), 80),
+        value: truncate(row.provider ? row.provider === 'suunto'
+          ? `${row.state}; ${row.syncedWorkouts ?? 'unknown'} of ${row.totalWorkouts ?? 'unknown'} workouts sent; Suunto app/watch visibility unknown`
+          : `${row.state}; ${row.syncedWorkouts ?? 'unknown'} of ${row.totalWorkouts ?? 'unknown'} workouts confirmed; not watch receipt`
+          : `${row.lifecycle}: ${row.localDate ?? `${row.startDate} – ${row.endDate}`}`, 160),
+      })), links: [],
+    };
+  }
+  if (tool.name === 'query_timeline_notes') {
+    const notes = Array.isArray(structuredContent.notes) ? structuredContent.notes.filter(isRecord) : [];
+    // Persist compact context and dates, never raw tool results or the full private details field.
+    return { toolName: tool.name, title: 'Timeline notes',
+      summary: `${notes.length} user-reported note${notes.length === 1 ? '' : 's'} in this page.${structuredContent.scanComplete === false ? ' More context may remain.' : ''}`,
+      facts: notes.slice(0, MAX_FACTS).map(note => ({ label: truncate(String(note.title), 80),
+        value: truncate(`${note.category}: ${note.startDate} – ${note.endDate ?? `ongoing (through ${note.effectiveEndDate})`}`, 160),
+      })), links: [],
+    };
+  }
   const facts = tool.name === 'rank_activities_by_metric'
     ? buildRankingFacts(structuredContent) || []
     : [];

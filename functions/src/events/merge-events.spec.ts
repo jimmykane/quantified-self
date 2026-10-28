@@ -25,6 +25,8 @@ const hoisted = vi.hoisted(() => {
   const mockDocSet = vi.fn();
   const mockOperationSet = vi.fn();
   const mockWriteAllEventData = vi.fn();
+  const mockFinishTrainingLoad = vi.fn();
+  const mockPrepareTrainingLoad = vi.fn(async () => mockFinishTrainingLoad);
   const mockGenerateMergeEventID = vi.fn(() => 'merged-event-id');
   const mockSportsLibVersionToCode = vi.fn(() => 9001004);
   const mockServerTimestamp = vi.fn(() => 'SERVER_TIMESTAMP');
@@ -105,6 +107,8 @@ const hoisted = vi.hoisted(() => {
       mockDocSet,
       mockOperationSet,
       mockWriteAllEventData,
+      mockPrepareTrainingLoad,
+      mockFinishTrainingLoad,
       mockGenerateMergeEventID,
       mockSportsLibVersionToCode,
       mockServerTimestamp,
@@ -248,6 +252,9 @@ vi.mock('@sports-alliance/sports-lib', () => ({
   },
 }));
 
+vi.mock('./merge-recorded-events', () => ({ mergeRecordedEvents: (...args: unknown[]) => hoisted.mockMergeEvents(...args) }));
+vi.mock('./merge-training-load', () => ({ prepareMergedTrainingLoad: (...args: unknown[]) => hoisted.mockPrepareTrainingLoad(...args) }));
+
 vi.mock('../utils', () => ({
   ALLOWED_CORS_ORIGINS: [],
   assertEventWriteUserActive: (...args: unknown[]) => hoisted.mockAssertEventWriteUserActive(...args),
@@ -267,9 +274,21 @@ vi.mock('../shared/event-writer', () => ({
       if (hoisted.state.exerciseWriterAdaptersOnce) {
         hoisted.state.exerciseWriterAdaptersOnce = false;
         await firestoreAdapter.setDoc(['users', `${args[0]}`, 'events', 'adapter-probe'], { probe: true });
-        await storageAdapter.uploadFile('users/probe/events/adapter-probe/original.fit', Buffer.from([0x09]));
+        await expect(storageAdapter.uploadFile('users/probe/events/adapter-probe/original.fit', Buffer.from([0x09])))
+          .resolves.toEqual({
+            path: expect.stringMatching(/^users\/probe\/events\/adapter-probe\/sources\/[a-f0-9]{64}\/original\.fit$/),
+            generation: 'storage-generation-1',
+          });
       }
-      return hoisted.mockWriteAllEventData(...args);
+      try {
+        const finish = await firestoreAdapter.prepareTrainingLoad(args[1]);
+        const result = await hoisted.mockWriteAllEventData(...args);
+        await finish();
+        return result;
+      } catch (error) {
+        // Match EventWriter's ordinary error wrapping; merge-local handling restores only its own safe errors.
+        throw new Error(`Could not write event data: ${(error as Error).message}`);
+      }
     },
   })),
 }));
@@ -285,6 +304,8 @@ vi.mock('../../../shared/functions-manifest', () => ({
 }));
 
 import { mergeEvents } from './merge-events';
+import { EventWriter } from '../shared/event-writer';
+import { HttpsError } from 'firebase-functions/v2/https';
 
 function hasNestedStreamsKey(value: unknown, isRoot: boolean = true): boolean {
   if (value === null || value === undefined) {
@@ -379,6 +400,8 @@ describe('mergeEvents', () => {
     hoisted.mockHasBasicAccess.mockResolvedValue(false);
     hoisted.mockAssertEventWriteUserActive.mockResolvedValue(undefined);
     hoisted.mockDocSet.mockResolvedValue(undefined);
+    hoisted.mockFinishTrainingLoad.mockResolvedValue(undefined);
+    hoisted.mockPrepareTrainingLoad.mockImplementation(async () => hoisted.mockFinishTrainingLoad);
     hoisted.mockOperationSet.mockResolvedValue(undefined);
     hoisted.mockGenerateMergeEventID.mockReturnValue('merged-event-id');
     hoisted.mockSetEventDocumentIfUserActive.mockImplementation(
@@ -647,6 +670,51 @@ describe('mergeEvents', () => {
       uploadLimit: USAGE_LIMITS.free,
       uploadCountAfterWrite: 1,
     });
+  });
+
+  it('prepares and finalizes Training load through EventWriter with source activity identities', async () => {
+    await mergeEvents({ auth: { uid: 'u1' }, app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'multi' } } as any);
+    expect(hoisted.mockPrepareTrainingLoad).toHaveBeenCalledWith('u1', expect.anything(), [
+      expect.objectContaining({ eventId: 'e1', activities: [expect.objectContaining({ id: 'a1' })] }),
+      expect.objectContaining({ eventId: 'e2', activities: [expect.objectContaining({ id: 'a2' })] }),
+    ]);
+    expect(hoisted.mockFinishTrainingLoad).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves a source-review code/message through the real EventWriter preparation wrapper', async () => {
+    const actual = await vi.importActual<typeof import('../shared/event-writer')>('../shared/event-writer');
+    vi.mocked(EventWriter).mockImplementationOnce((adapter, storage) => new actual.EventWriter(adapter, storage, undefined,
+      { info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
+    const message = 'A selected workout changed or its Training load needs review. Refresh or reparse it before merging.';
+    hoisted.mockPrepareTrainingLoad.mockRejectedValueOnce(new HttpsError('failed-precondition', message));
+    const request = { auth: { uid: 'u1' }, app: { appId: 'app-id' }, data: { eventIds: ['e1', 'e2'], mergeType: 'multi' } };
+    await expect(mergeEvents(request as any)).rejects.toMatchObject({ code: 'failed-precondition', message });
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+    expect(hoisted.mockFinishTrainingLoad).not.toHaveBeenCalled();
+    expect([...hoisted.state.eventDocs].find(([path]) => path.includes('/eventMergeOperations/'))?.[1])
+      .toMatchObject({ status: 'retryable', resultEventId: 'merged-event-id' });
+    await expect(mergeEvents(request as any)).resolves.toMatchObject({ eventId: 'merged-event-id' });
+  });
+
+  it('preserves a completion precondition through wrapping and keeps the same retryable result', async () => {
+    const message = 'Account deletion blocks merging.';
+    hoisted.mockFinishTrainingLoad.mockRejectedValueOnce(new HttpsError('failed-precondition', message));
+    const request = { auth: { uid: 'u1' }, app: { appId: 'app-id' }, data: { eventIds: ['e1', 'e2'], mergeType: 'multi' } };
+    await expect(mergeEvents(request as any)).rejects.toMatchObject({ code: 'failed-precondition', message });
+    expect([...hoisted.state.eventDocs].find(([path]) => path.includes('/eventMergeOperations/'))?.[1])
+      .toMatchObject({ status: 'retryable', resultEventId: 'merged-event-id' });
+  });
+
+  it('retries preparation and finalization failures on the same claimed result', async () => {
+    const request = { auth: { uid: 'u1' }, app: { appId: 'app-id' }, data: { eventIds: ['e1', 'e2'], mergeType: 'multi' } };
+    hoisted.mockPrepareTrainingLoad.mockRejectedValueOnce(new Error('prepare failed'));
+    await expect(mergeEvents(request as any)).rejects.toMatchObject({ code: 'internal' });
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+    hoisted.mockFinishTrainingLoad.mockRejectedValueOnce(new Error('finish failed'));
+    await expect(mergeEvents(request as any)).rejects.toMatchObject({ code: 'internal' });
+    await expect(mergeEvents(request as any)).resolves.toMatchObject({ eventId: 'merged-event-id' });
+    expect(hoisted.mockWriteAllEventData.mock.calls.map(call => (call[1] as any).getID())).toEqual(['merged-event-id', 'merged-event-id']);
   });
 
   it('should replay the completed response for the same semantic request', async () => {
@@ -1074,6 +1142,8 @@ describe('mergeEvents', () => {
       expect.anything(),
       { isMerge: false, mergeType: 'multi' },
       { merge: true },
+      undefined,
+      expect.any(Function),
     );
     expect(hoisted.mockSetEventDocumentIfUserActive).toHaveBeenCalledWith(
       'u1',
@@ -1081,6 +1151,8 @@ describe('mergeEvents', () => {
       expect.anything(),
       expect.objectContaining({ processingEntity: 'event' }),
       { merge: true },
+      undefined,
+      expect.any(Function),
     );
   });
 
@@ -1283,12 +1355,18 @@ describe('mergeEvents', () => {
       'merge_event_writer:users/u1/events/adapter-probe',
       expect.anything(),
       { probe: true },
+      undefined,
+      undefined,
+      expect.any(Function),
     );
     expect(hoisted.mockDocSet).toHaveBeenCalledWith({ probe: true }, undefined);
     expect(hoisted.mockAssertEventWriteUserActive).toHaveBeenCalledWith(
       'u1',
       'merge_event_original_file_upload:users/probe/events/adapter-probe/original.fit',
     );
-    expect(hoisted.mockStorageSave).toHaveBeenCalled();
+    expect(hoisted.mockStorageSave).toHaveBeenCalledWith(Buffer.from([0x09]), {
+      validation: 'crc32c',
+      metadata: { crc32c: expect.any(String) },
+    });
   });
 });

@@ -24,6 +24,7 @@ export const PLUGIN_LICENSE = 'AGPL-3.0-only';
 export const BUNDLED_SKILL_NAMES = Object.freeze([
   'analyze-quantified-self',
   'analyze-quantified-self-activity',
+  'analyze-quantified-self-health',
   'analyze-quantified-self-measurements',
   'analyze-quantified-self-sleep',
   'analyze-quantified-self-training',

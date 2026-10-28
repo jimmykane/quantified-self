@@ -1,0 +1,14 @@
+:host { display: block; min-width: 0; grid-column: 1 / -1; }
+.targets-heading, .target-heading, .target-actions { display: flex; align-items: center; gap: 8px; }
+.targets-heading, .target-heading { justify-content: space-between; }
+.targets-heading { flex-wrap: wrap; }
+.target-actions { padding-inline: 4px; } // Reserve the public icon button touch target beyond its visible box.
+.target-editor { border-top: 1px solid var(--mat-sys-outline-variant); padding-block: 8px; }
+.target-heading { margin-bottom: 8px; }
+.target-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; gap: 16px 12px; }
+mat-form-field, app-workout-time-input { min-width: 0; width: 100%; }
+.target-hint, .target-preview { margin: 8px 0; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.target-hint { color: var(--mat-sys-on-surface-variant); }
+.target-preview { color: var(--mat-sys-on-surface); }
+@media (max-width: 840px) { .target-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .target-fields { grid-template-columns: minmax(0, 1fr); } }

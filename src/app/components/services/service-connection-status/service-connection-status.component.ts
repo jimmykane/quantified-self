@@ -1,5 +1,8 @@
-import { Component, Input } from '@angular/core';
-import { ProviderIconKey } from '@shared/provider-presentation';
+import { Component, Input, computed, inject, input } from '@angular/core';
+import { ProviderIconKey, getProviderDisplayName } from '@shared/provider-presentation';
+import { ServiceNames } from '@sports-alliance/sports-lib';
+import { AppUserService } from '../../../services/app.user.service';
+import type { ProMembershipOffer } from '../../../helpers/membership-selection.helper';
 
 @Component({
     selector: 'app-service-connection-status',
@@ -8,6 +11,19 @@ import { ProviderIconKey } from '@shared/provider-presentation';
     standalone: false
 })
 export class ServiceConnectionStatusComponent {
+    readonly proOffer = input<ProMembershipOffer | null>(null);
+    readonly offerServices: Record<ProviderIconKey, ServiceNames> = {
+        garmin: ServiceNames.GarminAPI, suunto: ServiceNames.SuuntoApp,
+        coros: ServiceNames.COROSAPI, wahoo: ServiceNames.WahooAPI,
+    };
+    readonly offerProviderNames = Object.fromEntries(Object.entries(this.offerServices)
+        .map(([key, service]) => [key, getProviderDisplayName(service, 'source')]));
+    private readonly users = inject(AppUserService);
+    readonly hasTrainingPlanningUIAccess = computed(() => !!this.users.user()?.uid);
+    readonly keepPlanLabel = computed(() => {
+        const role = this.users.user()?.stripeRole;
+        return role && role !== 'free' ? 'Keep current plan' : 'Keep using Starter';
+    });
     @Input() serviceLabel = '';
     @Input() description = '';
     @Input() connected = false;

@@ -1,11 +1,12 @@
-import { Component, inject, signal } from '@angular/core';
+import { Router } from '@angular/router';
+import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import { MatDialogModule } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef, MatDialogState } from '@angular/material/dialog';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppUserService } from '../../services/app.user.service';
-import { AppWindowService } from '../../services/app.window.service';
 import { LoggerService } from '../../services/logger.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 
@@ -17,31 +18,48 @@ import { MatSnackBar } from '@angular/material/snack-bar';
   styleUrls: ['./wahoo-route-access-reconnect-dialog.component.scss'],
 })
 export class WahooRouteAccessReconnectDialogComponent {
+  private router = inject(Router);
   private userService = inject(AppUserService);
-  private windowService = inject(AppWindowService);
   private analyticsService = inject(AppAnalyticsService);
   private snackBar = inject(MatSnackBar);
   private logger = inject(LoggerService);
+  private destroyRef = inject(DestroyRef);
+  private dialogRef = inject<MatDialogRef<WahooRouteAccessReconnectDialogComponent>>(MatDialogRef, { optional: true });
+  readonly haptics = inject(AppHapticsService);
+  private readonly data = inject<{ purpose?: 'routes' | 'training' }>(MAT_DIALOG_DATA, { optional: true });
+  private readonly initialUid = this.userService.user()?.uid;
+  readonly training = this.data?.purpose === 'training';
+  readonly title = this.training ? 'Reconnect Wahoo to send workouts' : 'Reconnect Wahoo to send routes';
 
   readonly reconnecting = signal(false);
 
   async reconnect(): Promise<void> {
-    if (this.reconnecting()) {
+    if (this.reconnecting() || !this.isActive()) {
       return;
     }
 
     this.reconnecting.set(true);
+    this.haptics.selection();
     try {
       this.analyticsService.logEvent('service_reconnect_start', {
         service_name: ServiceNames.WahooAPI,
-        source: 'route_access_dialog',
+        source: this.training ? 'training_access_dialog' : 'route_access_dialog',
       });
-      const tokenAndURI = await this.userService.getCurrentUserServiceTokenAndRedirectURI(ServiceNames.WahooAPI);
-      this.windowService.windowRef.location.href = tokenAndURI.redirect_uri;
+      await this.router.navigate(['/services'], { queryParams: { serviceName: ServiceNames.WahooAPI, reconnect: '1' } });
+      if (this.isActive()) this.dialogRef?.close();
     } catch (error) {
       this.reconnecting.set(false);
       this.logger.error('[WahooRouteAccessReconnectDialogComponent] Failed to start Wahoo reconnect', error);
-      this.snackBar.open('Could not start Wahoo reconnect. Please try again.', undefined, { duration: 5000 });
+      if (this.isActive()) {
+        this.haptics.error();
+        this.snackBar.open('Could not start Wahoo reconnect. Please try again.', undefined, { duration: 5000 });
+      }
     }
+  }
+
+  private isActive(): boolean {
+    return !this.destroyRef.destroyed
+      && !!this.initialUid && this.userService.user()?.uid === this.initialUid
+      && (!this.dialogRef || this.dialogRef.getState() === MatDialogState.OPEN);
   }
 }

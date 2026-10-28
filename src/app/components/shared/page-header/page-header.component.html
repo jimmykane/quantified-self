@@ -29,6 +29,9 @@
         } @else {
           <h1 class="qs-page-header__title" [id]="titleId() || null">{{ title() }}</h1>
         }
+        <div class="qs-page-header__title-actions">
+          <ng-content select="[pageHeaderTitleActions]"></ng-content>
+        </div>
       </div>
     }
 

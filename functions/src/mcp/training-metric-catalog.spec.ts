@@ -22,6 +22,18 @@ describe('MCP Training metric catalog', () => {
     ))).toBe(true);
   });
 
+  it('explains source-specific intensity while retaining the existing catalog kinds', () => {
+    const descriptors = getMcpTrainingMetricDescriptors();
+    for (const kind of [DERIVED_METRIC_KINDS.IntensityDistribution, DERIVED_METRIC_KINDS.TrainingSummary,
+      DERIVED_METRIC_KINDS.TrainingBuildComparison]) {
+      const description = descriptors.find(entry => entry.metricKind === kind)?.description;
+      expect(description).toContain('HR');
+      expect(description).toContain('Z4–Z5');
+      expect(description).toContain('Z5–Z7');
+      expect(description).toContain('per activity');
+    }
+  });
+
   it('searches presentation text without creating another validity registry', () => {
     expect(getMcpTrainingMetricDescriptors('readiness').map(
       descriptor => descriptor.metricKind,

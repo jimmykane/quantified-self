@@ -1,0 +1,411 @@
+# Recorded-activity delivery monitoring (#832)
+
+This bundle monitors **outbound recorded activities** in `activitySyncQueue`,
+`processActivitySyncTask` and `dispatchActivitySyncQueue`. Automatic cross-provider
+routes, historical sends, retained manual FIT uploads and private temporary direct-file sends are included. Suunto, Wahoo
+and COROS are delivery destinations; Garmin is a source, not a recorded-activity
+upload destination. This is neither inbound import monitoring (#829), Health/Sleep
+ingestion (#830), route delivery (#833), nor Training planned-workout delivery (#655).
+
+The two affected Functions were deployed with separate approval on 8 October 2026.
+The twelve log metrics, dashboard and seven enabled alert policies were subsequently
+activated with separate approval using the existing Alerts email channel. Configuration
+readback and positive post-creation heartbeat time series for all three destinations
+passed. This completes #832's operational activation evidence, distinct from the
+successful deployment/apply alone.
+The durable-workspace extension was applied with owner approval on 15 October 2026,
+expanding this same bundle to fourteen metrics and nine enabled policies. Configuration,
+query and serial-reapplication checks passed. The first natural hourly cleanup and
+positive post-creation heartbeat/sample series were verified, satisfying #876's
+operational activation requirements.
+Monitoring adds no scheduler, paid warm instance or email Function. The workspace's
+existing hourly source cleanup is observed without invoking an extra cleanup run. Cloud
+Monitoring sends opening/closing notifications to the existing enabled Alerts email
+channel, independently of the Firebase mail extension.
+
+## Outcome semantics and privacy
+
+The versioned `[ActivityDelivery]` structured events contain fixed source,
+destination, mode and outcome categories only. They never include user/account/event
+IDs, titles, original files, provider upload IDs, signed continuation URLs,
+credentials or raw exceptions. Unknown/contradictory routes use `unknown`, not an
+untrusted label. All twelve current automatic/manual route contracts are tested.
+
+| Observation | Meaning |
+| --- | --- |
+| Committed `delivered` | Guarded queue finalization persisted explicit `resultStatus: success` |
+| Committed `processing_failed` | Guarded workspace terminal result confirms provider processing failed; not a pending poll or acceptance uncertainty |
+| Committed `skipped` | An explicit terminal skip, not delivered |
+| `provider_pending` | Accepted Wahoo/COROS status-only polling or recognized Suunto `NEW`/`PROCESSING` wait, not delivered or a failure |
+| `retry` | A real committed retry, excluding normal pending polls and expected contention |
+| `expected_contention` | A known provider-operation/token-refresh wait, not an outage |
+| `dead_lettered` | A newly committed guarded DLQ transition, not retained failed-job totals |
+| `manual_reconciliation` | A newly durable unresolved-provider outcome; automatic upload replay is unsafe |
+| Worker `acknowledged` | The task returned normally; it does **not** prove delivery |
+
+DLQ and manual-reconciliation observations may overlap for the same transition.
+Stale writes, deleted-user refusals and failed persistence emit no successful commit.
+A failed finalization can resume the accepted provider operation without uploading
+again. Normal retries are counted once via the committed transition, not again by
+the worker's intentionally thrown retry response. Queue polling latency and native
+HTTP attempts include expected waits and are diagnostic rather than success rates.
+Suunto retains its existing Cloud Task retry/backoff flow and resume identifiers;
+its explicit `NEW`/`PROCESSING` results emit pending instead of failure telemetry.
+Unknown/malformed status, transport failures and exhausted retries still emit actual
+failure/DLQ observations. This classification does not change polling or retry budgets.
+
+Confirmed COROS processing-failure restarts are covered by the existing committed
+`retry` outcome and per-destination processing-failure policy. Pending status checks
+remain `provider_pending`; budget exhaustion retains the failed upload identifiers
+and emits the existing DLQ/manual-reconciliation outcomes only after commit.
+Monitoring definitions, labels, thresholds and native queue scope are unchanged.
+
+Malformed successful Suunto initialization replies are also **covered/unchanged**: before FIT delivery they use the
+existing committed `retry` outcome and bounded retry budget, with the provider-specific invalid-response DLQ context
+at exhaustion. A diagnostic HTTP 200 is neither initialization validity nor delivery success. Already accepted uploads
+keep their continuation/status-only guards; no monitoring resources, thresholds or labels change.
+
+COROS's #600 upload-copy mappings (Snorkeling → Open Water Swim; Sailing → GPS
+Cardio) use these same workers, destination labels and committed outcomes. Coverage
+is unchanged when Snorkeling also permits GPS-less files; Sailing retains its GPS
+requirement. A mapping INFO is not provider acceptance or delivery. Confirm
+status `2` and the guarded success write, not the preparation log or task ACK.
+Already accepted uploads remain status-only; this change adds no probe, metric or
+alert-policy dimension and does not authorize replaying old failed records.
+
+COROS's outgoing zero-byte Event `data` / Lap `total_cycles` definition repair has
+the same **covered/unchanged** monitoring scope. Its count-only INFO log describes
+file preparation, not delivery. Existing COROS failure, pending, DLQ and committed
+success observations remain authoritative; no new labels or thresholds are added.
+
+The shared missing-Session upload-copy repair has the same **covered/unchanged**
+scope: only COROS's existing direct and fresh/restarted sends opt in, before the
+existing fingerprint/transport boundary. Its count-only preparation INFO is not
+delivery. Accepted uploads still poll their retained ID; worker, scheduler, retry,
+DLQ, metrics, dashboard and policy contracts are unchanged. Confirm final provider
+status and guarded queue success separately; an operator's own-account test does
+not complete another user's queued job.
+
+Telemetry is best-effort after existing commits, not an audit ledger or an exactly-once
+counter: logging can fail, and a committed write followed by container loss can omit
+an observation. Logging failures never change delivery/acknowledgement behavior.
+Existing private operational logs and retained jobs remain the investigation source;
+do not copy their sensitive contents into issues, email or metric labels.
+
+The 28 approved expanded sport-name aliases for recorded Wahoo uploads retain the existing type-correction and
+status-only resume flow. Monitoring coverage is **unchanged**: Wahoo destination/worker/outcome filters already
+cover these sends, and sport names are not labels. Accepted uploads retain their durable selected ID; this table
+change does not authorize historical replay, new telemetry or production monitoring changes.
+
+## Bounded read-only observation
+
+Historical-send preview performance has **unchanged** delivery coverage. Its existing callable batches bounded exact
+Firestore reads and emits `[HistoricalActivitySend] Preview page checked.` with only fixed destination, source count,
+checked/failure counts, continuation presence and elapsed milliseconds. These diagnostics describe read-only eligibility
+checks, not queue admission or provider success; they intentionally do not match this bundle's `[ActivityDelivery]`
+metric filters. Workers, dispatchers, retry/lease policy and committed outcome signals remain unchanged.
+
+The existing **30-minute** dispatcher emits three destination observations, even when
+idle. Its probe reads at most **20 unprocessed records plus one look-ahead**, ordered
+by creation time, with a field mask. It does not read original files, errors, secrets
+or continuation payloads, write records, or call providers.
+
+New undispatched candidates require zero retries, no active operation/lease, current
+Pro access (cached per user for this invocation), an existing non-deleting user,
+connected token roots/token presence and the applicable enabled automatic route.
+Historical/manual/direct sends need only their destination connection and do not require
+an automatic-route setting or the source connection. These are conservative lifecycle
+checks, not proof that a token is refreshable or a provider will accept the file.
+
+Ordinary retries/backoff, future dates, parked disconnect/reconnect work, active
+claims and lifecycle skips are excluded. Accepted Wahoo/COROS status polls qualify
+only when their saved due marker is **at least two hours overdue**, the dispatcher
+successfully observed **zero native tasks**, and no active operation remains. COROS
+also requires its saved provider-account resume ID. Already accepted polls do not
+require renewed new-upload entitlement, new-send allowlisting or the automatic route
+setting. They are observed, never reset or resent. Missing native depth/resume
+information is unknown.
+
+Each eligible row is re-read in a read-only transaction with owner, deletion,
+settings and connection snapshots; a changed queue revision is excluded. Token
+subqueries select only service metadata. Age is measured from the later of the
+queue's last write and creation/due time, not the source recording's date. Unknown
+data/read failure emits unknown/unavailable, never healthy zero. A five-second probe
+deadline prevents further iterations or late healthy samples; an already-started
+Firestore read cannot be cancelled and may finish after the deadline.
+
+The shared oldest-prefix sample is a **lower bound**, not a complete count or global
+health guarantee. A saturated prefix (including intentionally excluded rows) can
+hide later destinations/work. `truncated`, unknown/excluded counts and native queue
+charts expose this limitation; inspect Queue Monitor privately when diagnosing.
+Legacy records without the ordered field cannot appear in this query. No new index
+is required: the existing `processed`/`dateCreated` query is reused.
+
+## Dashboard and nine initial policies
+
+`tools/activity-delivery-monitoring/definitions.mjs` owns fourteen log metrics, the
+**QS Activity Delivery** dashboard and nine enabled-policy definitions. The native
+charts select only `processActivitySyncTask` in `europe-west2`: depth, HTTP attempts
+and dispatch delay. Other charts distinguish fixed source/destination/mode outcomes,
+whole-worker latency, actual failures, new DLQ/manual cases and bounded observations.
+The sample distributions are presented as hourly means of lower-bound observations,
+not sums of a backlog. Distribution alignment/reduction follows the
+[Cloud Monitoring aggregation contract](https://docs.cloud.google.com/monitoring/api/ref_v3/rest/v3/projects.alertPolicies#Aggregation).
+
+| Policy | Initial condition, per destination unless noted |
+| --- | --- |
+| Sustained eligible work | Two samples with eligible work at least one hour old within 90 minutes |
+| Repeated dispatch failures | Three dispatch/deletion-guard read failures within 90 minutes, globally |
+| Repeated processing failures | Ten failed attempts/actual committed retries within 15 minutes |
+| New permanent failures | Three new DLQ commits within 30 minutes |
+| New unresolved provider outcomes | Three new durable manual-reconciliation cases within 30 minutes |
+| Observations unavailable | Two unknown/unavailable observations within 90 minutes |
+| Required observation heartbeat missing | No observation for two hours, independently for each destination |
+| Temporary source cleanup failures | Two failed hourly cleanup observations within three hours, globally |
+| Temporary source cleanup heartbeat missing | No hourly cleanup observation for three hours, including idle runs |
+
+Threshold violations require 60 seconds of persistence and treat missing data as
+inactive. The separate absence policy detects operational observation loss, never
+the absence of athlete uploads. Absence detection requires an initial series, so
+positive heartbeat proof is part of activation. Thresholds are starting values to
+tune against volume; an existing backlog alone does not emit new-failure metrics.
+The enqueue helper returns `false` only for deterministic-name deduplication;
+actual transport failures throw. Deduplication and stale marker refusals do not
+feed the dispatch-failure metric, nor do normal worker poll acknowledgements.
+Correlate dispatch errors with native transport and persisted markers before
+taking action; a dispatch failure is not a provider rejection.
+
+Incident response: inspect the aggregate dashboard/native task transport, then the
+affected persisted job privately. Pending processing, ambiguous acceptance and DLQ
+are different states. Do not blindly replay an upload, clear a claim, purge a queue,
+change retries/concurrency or grant credentials to make an alert disappear. Any such
+mutation needs its own authorization and the existing lifecycle-safe workflow.
+
+## Workspace contention and initialization retries
+
+Recorded-provider retry budgets now allow 20 application failures and 20 native task attempts, with the same
+15-minute-to-four-hour backoff. See [provider retry budgets](provider-integration-guide.md#provider-retry-budgets)
+for scope, independent counters and rollout. Monitoring remains **covered/unchanged**: short processing-failure
+windows, native queue charts and all alert thresholds stay as defined above, without waiting for exhaustion.
+Only the point at which retryable work exhausts its budget moves later. Accepted/uncertain upload identities,
+terminal classifications, Stop and the sending window remain protected; no automatic replay is added.
+The admin Queue Monitor now counts retries 10-19 as pending, rather than stuck, and includes a separate histogram
+bucket for them. This aligns the existing admin view with the budget; Cloud Monitoring policies remain unchanged.
+
+Coverage decision: **covered/unchanged**. The existing bundle's fixed route/mode filters include workspace sends.
+Suunto initialization-only failures now emit committed `retry` observations while the existing budget permits,
+instead of immediately becoming manual-review cases. Exhausted workspace attempts retain terminal review; accepted
+uploads and ambiguous blob outcomes remain protected. Native queue depth/delay show the effect of the conservative
+ten-task global concurrency cap; the 250-starts/second ceiling, 15-minute-to-four-hour task backoff, dispatcher cadence
+and alert thresholds are unchanged. This cap covers all destinations/accounts, not ten per account or a partner quota.
+
+Admission ignores operation writes changing only delivery progress. Projection suppresses unchanged row/aggregate
+writes without suppressing source-cleanup retries. Diagnose admission/projection failures through their native
+Function errors/latency, not delivery ACK metrics. Compare their invocation/error volume against actual worker
+attempts and committed outcomes after deployment; fewer retries must not be interpreted as additional deliveries.
+Existing monitoring definitions, low-cardinality labels and policies need no reapply. Local tests do not prove live
+recovery. Separately approve deployment of `admitActivitySend`, `projectActivitySendDelivery` and
+`processActivitySyncTask`, then read back task concurrency and natural outcomes. No Rules/index/Hosting change or
+provider replay is required for the backend fix. Previously terminal review items remain unchanged and require
+separate reconciliation/replay authorization.
+
+## Cost bounds and verification
+
+No new recurring invocation is added. Idle observation costs one query and three
+logs every 30 minutes (48 times/day). A busy probe reads at most 21 queue snapshots,
+then up to 20 read-only transactions (at most eight guarded documents plus two
+single-token subqueries each) and 20 cached Auth lookups per run. Transaction retries
+can add reads. This is bounded, but not free: ordinary Firestore reads, extra runtime,
+structured logs and user-defined Monitoring metric ingestion/time-series costs apply.
+Fixed dimensions avoid per-user cardinality; keep provider payloads out of labels.
+The existing task-depth lookup is reused, not fetched a second time by the probe.
+Source-cleanup monitoring adds one fixed outcome log to the workspace's existing
+hourly run; it does not schedule another run or introduce monitoring reads/writes.
+
+Local checks:
+
+```sh
+npm run test:activity-delivery-monitoring
+npm run test:emulator-coverage
+npm run test:workflows
+npm --prefix functions test -- src/activity-sync src/tasks/activity-sync-worker.spec.ts src/queue-utils.spec.ts src/function-target-loader.spec.ts
+npm run test:functions-emulators -- mcp-data
+npm --prefix functions run entrypoint:check
+npm --prefix functions run secrets:check
+npm --prefix functions run deploy:safety:compiled
+git diff --check
+```
+
+The isolated demo Firestore suite covers idle samples, all three destinations,
+historical/manual routes, entitlement, deletion/disconnect/route exclusion, pending
+polls, overdue polls after new-send allowlist changes, malformed scheduling metadata,
+changed revisions, field masking and twenty-row saturation.
+Unit tests protect post-commit success/manual/DLQ semantics, failure/no-replay paths,
+expected task deduplication, timeouts and logging isolation. Offline provisioning tests exercise create/reapply,
+ownership/immutable-schema rejection and preservation of all other monitoring bundles.
+These tests run in CI; no production fault injection or test upload is required.
+
+## Approved deployment and activation steps
+
+The original #832 runtime rollout affected the two handlers below. For the workspace
+extension, first confirm its separately approved Functions, Rules and cleanup-index
+release described in [Activity sending workspace](activity-sending-workspace.md).
+Applying monitoring does not itself authorize deploying or invoking those Functions.
+Future deployment of the original two handlers still requires separate approval:
+
+```sh
+npm --prefix functions run build
+firebase deploy --only functions:processActivitySyncTask,functions:dispatchActivitySyncQueue --project quantified-self-io
+```
+
+Both use direct owner-module target loading. The worker retains Gen 2, 1 GiB, 540
+seconds, its existing secrets/retries/rate limits; the dispatcher retains Gen 1,
+256 MiB, 300 seconds, maximum one instance, no secrets and its 30-minute schedule.
+See [entrypoint verification](functions-entrypoint-loading.md#recorded-activity-delivery-dispatcher-isolation).
+The original #832 change introduced no generation migration, schema/Rules/TTL change
+or new deployment export. The separately deployed workspace has its own release scope.
+
+The approved deployment from commit `66bc89cb2` completed on 8 October 2026 at
+06:29 UTC. Readback confirmed both Functions active on Node.js 22 with the above
+resources, the worker's latest Cloud Run revision ready, and unchanged task-queue
+retry/rate limits. The existing enabled scheduler remains every 30 minutes with
+its `America/Los_Angeles` time zone; its job is in `europe-west3`, while the Function
+and Pub/Sub topic remain in `europe-west2`. No manual invocation, direct provider QA request,
+test email or monitoring-bundle apply was performed. This is deployment/configuration
+evidence, not post-creation metric-series or provider-delivery proof.
+
+Preview is offline and needs no credentials or network:
+
+```sh
+node tools/activity-delivery-monitoring/cli.mjs --project=quantified-self-io
+```
+
+After separate approval to apply the fourteen metrics, one dashboard and nine
+policies using the existing enabled email channel, supply its exact resource name:
+
+```sh
+node tools/activity-delivery-monitoring/cli.mjs --project=quantified-self-io --notification-channel=projects/quantified-self-io/notificationChannels/EXISTING_CHANNEL_ID --apply --confirm-project=quantified-self-io
+```
+
+The shared provisioner checks inventories and ownership before writes, refuses
+title-only adoption or incompatible metric schemas, preserves condition IDs and
+dashboard etags, updates serially, and never deletes resources or creates email
+channels. It preserves the Training, import and Health/Sleep bundles. Reapplying
+does not duplicate this bundle. Private API errors/channel labels are not printed.
+
+After activation, read back exactly one owned dashboard, fourteen log metrics and nine
+enabled policies, their conditions and the unchanged email channel. Check policy
+validity and each dashboard query through the API. After the next normal dispatcher
+run, verify a post-metric-creation heartbeat **time series** for Suunto, Wahoo and COROS;
+also verify a positive `send_cleanup_runs` series from the next natural hourly cleanup.
+Pre-creation raw logs are not enough. Record aggregate-only dated extension evidence in
+#876 before closing it; completed #832 retains its historical evidence below. Alert
+email exercises, manual invocations or production data changes need separate approval.
+
+### Production activation readback — 8 October 2026
+
+The approved apply completed at approximately 06:49 UTC. Readback at 06:49:54 UTC
+confirmed exactly one owned dashboard, twelve owned log metrics and seven enabled,
+valid policies, matching the source-controlled definitions. API default omission of
+zero tile positions and default STRING label types, and label-descriptor ordering,
+were normalized for comparison; no semantic configuration difference was accepted.
+All fourteen dashboard time-series queries passed API validation. Baseline hashes
+confirmed that all four notification channels and the unrelated four dashboards,
+nineteen policies and thirty-six log metrics remained unchanged. No channel was
+created, no resource deleted, and no test email, provider request or manual dispatcher
+invocation was performed.
+
+The dashboard is [QS Activity Delivery](https://console.cloud.google.com/monitoring/dashboards/builder/0511b72f-0b84-4d20-9daf-022f6f354eae?project=quantified-self-io).
+It uses the existing enabled **Alerts** email channel, whose prior opening/closing
+notification proof from completed #655 is reused rather than sending a new test email.
+
+The deployed dispatcher naturally completed at 06:30 UTC and emitted idle observations
+for all three destinations, with no unknown or truncated sample. Those logs preceded
+the heartbeat metric's creation at 06:48:09 UTC and are **not** post-creation time-series
+proof. At the initial configuration readback, the new heartbeat metric had no series yet.
+
+The next normal run completed at 07:00:07 UTC (10:00 Helsinki). Read-only Monitoring
+API verification at 07:01:16 UTC confirmed one positive heartbeat count for each of
+Suunto, Wahoo and COROS, in the 07:00:16–07:01:16 UTC interval, after metric creation.
+The corresponding logs reported an idle bounded sample with no unknown, excluded or
+truncated records for every destination. These are genuine metric series, not inferred
+from raw logs or synthesized zeroes. A natural automatic Garmin-to-Suunto delivery also
+produced a positive committed `delivered` series after activation, separately from the
+worker acknowledgement and latency series. No production fault or manual upload was
+introduced to obtain this evidence.
+
+The deployment, configuration/query readback, live heartbeat and reused same-channel
+email proof complete #832. Idle lower-bound samples do not establish global backlog
+coverage or receipt on a provider's app/watch, and absence of failure series is not a
+fabricated failure test. Future tuning, cloud changes, email exercises and queue/data
+mutations continue to require their own authorization.
+
+## MCP, Assistant and Help impact
+
+This is operational-only telemetry: no MCP tools, metrics exposed to athlete-data
+reads, schemas, scopes, consent, Assistant permissions, provider actions, activity
+data projections or bundled skills change. Training planning is untouched. Existing
+Activity sync Help/status explanations were reviewed and remain accurate; an admin
+Cloud Monitoring dashboard changes no user action or public provider capability.
+
+## Activity workspace extension
+
+Deletion-surviving temporary upload reservations are **covered/unchanged** by this extension: the existing hourly cleanup job reconciles them in bounded pages and includes retained Storage/Firestore failures in the same fixed `send_cleanup` failure/heartbeat observation. Account-prefix cleanup also invokes the same reconciler, with native retry-enabled trigger errors for failures. Active upload/cleanup leases and resumable previews are expected waits, not processing failures. No new scheduler, metric, label, dashboard or threshold is required; #876 records deployment/apply/readback evidence. Exact paths and digests remain backend-only and never enter telemetry.
+
+The fixed mode allowlist includes `direct` only for `manualUpload` routes. This labels private staged recordings without identifying their owners or objects. Confirmed workspace processing failures emit `processing_failed` after a guarded terminal write and contribute to processing-failure alerts; uncertain acceptance contributes to unresolved-outcome alerts and cannot authorize replay. The existing bounded probe treats direct files as destination-only manual sends.
+
+The hourly cleanup function emits a fixed `send_cleanup` completion/failure observation. `qs_activity_delivery_send_cleanup_failures_v1` alerts on two failed runs in three hours, avoiding the delivery-attempt threshold designed for higher volume. The fixed hourly `send_cleanup_runs` heartbeat also alerts after three hours without a sample, including idle runs; activation requires proof of its first positive series. The expanded bundle has 14 metrics and nine policies, with idempotent ownership-preserving application. Retention/source expiry is covered by isolated emulator tests and the private account/generation guards.
+These are emitted outcome observations, not an audit ledger of every invocation.
+A query/runtime failure before outcome emission is diagnosed through native Function
+errors and the missing-heartbeat policy after its initial series exists.
+
+Activation requires separately approved runtime deployment and monitoring reapplication/readback. Offline definition/provisioning tests prove filtering, ownership, thresholds and no duplicate writes; they do not establish live coverage. Activation is tracked in [#876](https://github.com/jimmykane/quantified-self/issues/876), linked from the feature PR. No provider calls, emails, queue replays, data purges or production configuration changes are part of local verification.
+
+### Extension activation readback — 15 October 2026
+
+The owner confirmed the merged workspace release and deployment. Read-only cloud
+verification found all six workspace Functions and both existing delivery handlers
+ACTIVE, the `activitySendOperations.cleanupAfter` collection-group index READY, and
+the enabled hourly cleanup scheduler unchanged. Deployed Firestore Rules matched the
+repository. Rules API reads require the explicit `quantified-self-io` quota-project
+header with the operator's gcloud credentials; a default-client SERVICE_DISABLED
+response does not establish that the project Rules deployment is missing.
+
+The approved monitoring apply updated the existing dashboard and twelve metrics,
+added two cleanup metrics and two policies, and retained all seven pre-existing
+policy/condition identities. Readback verified fourteen owned metrics, nine enabled
+policies/eleven conditions, the same independent Alerts channel, and matching source
+filters, thresholds and severities. All sixteen chart and eleven condition queries
+were accepted. Serial reapplication preserved every owned identity with no duplicates;
+the unrelated 78 metrics, 40 policies, seven dashboards and all four channels were
+unchanged. No Function, Rules, index or Hosting deployment was performed by this
+monitoring activation, and no provider upload, replay, test email, manual job run or
+data/resource deletion was initiated.
+
+PR #877's successful build, unit, Rules, emulator and CodeQL checks supply the merged
+feature evidence. Fresh focused telemetry tests and all seven offline monitoring
+bundles passed. Direct manual-upload dimensions and committed processing failures
+are covered by fixture/unit evidence, not a fabricated production upload or outage.
+Existing same-channel opened/closed email evidence from #655 is reused.
+
+The first natural cleanup completed at 09:23:07 UTC (12:23 Helsinki) on 15 October.
+The approved read-only follow-up at approximately 09:31 UTC verified a positive
+`qs_activity_delivery_send_cleanup_runs_v1` count in the 09:22:52–09:23:52 UTC
+interval, after metric creation. The unchanged hourly scheduler recorded its natural
+09:23 attempt successfully; no manual invocation was used.
+
+Suunto, Wahoo and COROS each had a positive post-creation queue-heartbeat count and
+real due/age distribution observations in the 08:59:52–09:00:52 UTC interval. Each
+distribution had one observation with mean zero, rather than an inferred empty series.
+The corresponding 09:00 logs and next natural 09:30 samples reported zero due, age,
+unknown and excluded values without truncation. No cleanup-failure or probe-failure
+series appeared in the checked window; this is not production failure-injection proof
+or a complete global-backlog guarantee.
+
+Final readback retained the same dashboard, fourteen metrics, nine enabled policies
+and all eleven condition identities; all twenty-seven chart/condition queries passed.
+Every metric, policy, dashboard and notification-channel configuration hash was
+unchanged from the successful serial reapplication. Combined with the separately
+verified runtime, Rules/index release and reused email evidence above, these live
+observations complete #876's activation verification without another deployment,
+configuration apply, provider call, replay, test email or operator-initiated deletion.

@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { observeReparseQueue } from '../reparse/monitoring-probe';
+vi.mock('../reparse/monitoring-probe', async importOriginal => ({
+    ...await importOriginal<typeof import('../reparse/monitoring-probe')>(), observeReparseQueue: vi.fn().mockResolvedValue(undefined),
+}));
 
 const hoisted = vi.hoisted(() => {
     const mockRuntimeDefaults = {
@@ -282,6 +286,29 @@ describe('scheduleSportsLibRouteReparseScan', () => {
         expect(hoisted.mockProcessingQueryGet).not.toHaveBeenCalled();
         expect(hoisted.mockRouteQueryGet).not.toHaveBeenCalled();
         expect(hoisted.mockEnqueueRouteTask).not.toHaveBeenCalled();
+    });
+
+    it('passes scheduled time through and observes hourly even with discovery disabled', async () => {
+        const handler = scheduleSportsLibRouteReparseScan as unknown as (event: { scheduleTime: string }) => Promise<void>;
+        // Production's interval job is offset to :06, not aligned with the activity job's :00.
+        for (let minute = 6; minute < 60; minute += 10) {
+            await handler({ scheduleTime: `2026-10-19T09:${String(minute).padStart(2, '0')}:00Z` });
+        }
+        expect(hoisted.mockProcessingQueryGet).not.toHaveBeenCalled();
+        expect(hoisted.mockEnqueueRouteTask).not.toHaveBeenCalled();
+        expect(observeReparseQueue).toHaveBeenCalledExactlyOnceWith(expect.anything(), expect.objectContaining({
+            collection: 'sportsLibRouteReparseJobs',
+        }));
+    });
+
+    it('observes the hourly route queue before enabled discovery reads its checkpoint', async () => {
+        hoisted.mockRuntimeDefaults.enabled = true;
+        const handler = scheduleSportsLibRouteReparseScan as unknown as (event: { scheduleTime: string }) => Promise<void>;
+        await handler({ scheduleTime: '2026-10-19T09:06:02Z' });
+        expect(observeReparseQueue).toHaveBeenCalledOnce();
+        expect(hoisted.mockCheckpointGet).toHaveBeenCalledOnce();
+        expect(vi.mocked(observeReparseQueue).mock.invocationCallOrder[0])
+            .toBeLessThan(hoisted.mockCheckpointGet.mock.invocationCallOrder[0]);
     });
 
     it('enqueues stale route processing metadata when enabled', async () => {

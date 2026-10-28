@@ -20,11 +20,16 @@ import {
 } from '../../service-auth-lifecycle';
 import { hasServiceOAuthConnectAccess } from '../../service-oauth-access';
 import { FUNCTION_SECRET_BINDINGS } from '../../secrets';
+import { authenticateGarminWebhook } from '../webhook-auth';
+import type { ServiceOAuthCompletionResult } from '../../../../shared/service-connection';
+import type { ConnectionHistoryRangePreset } from '../../../../shared/connection-history';
 
 const SERVICE_NAME = ServiceNames.GarminAPI;
 
 // Define Interfaces for Type Safety
 interface GetAuthRedirectURIRequest {
+  importRecentHistory?: boolean;
+  importHistoryRange?: ConnectionHistoryRangePreset;
   redirectUri: string;
 }
 
@@ -35,7 +40,7 @@ interface SetAccessTokenRequest {
 }
 
 export const getGarminAPIAuthRequestTokenRedirectURI = functions
-  .runWith({ secrets: FUNCTION_SECRET_BINDINGS.getGarminAPIAuthRequestTokenRedirectURI })
+  .runWith({ memory: '512MB', secrets: FUNCTION_SECRET_BINDINGS.getGarminAPIAuthRequestTokenRedirectURI })
   .region(FUNCTIONS_MANIFEST.getGarminAPIAuthRequestTokenRedirectURI.region)
   .https.onCall(async (data: GetAuthRedirectURIRequest, context) => {
   // 1. App Check Verification
@@ -71,7 +76,13 @@ export const getGarminAPIAuthRequestTokenRedirectURI = functions
   }
 
   try {
-    const url = await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, SERVICE_NAME, redirectURI);
+    const url = await getServiceOAuth2CodeRedirectAndSaveStateToUser(
+      userID,
+      SERVICE_NAME,
+      redirectURI,
+      data.importRecentHistory,
+      data.importHistoryRange,
+    );
     return {
       redirect_uri: url,
     };
@@ -93,9 +104,9 @@ export const getGarminAPIAuthRequestTokenRedirectURI = functions
 });
 
 export const requestAndSetGarminAPIAccessToken = functions
-  .runWith({ secrets: FUNCTION_SECRET_BINDINGS.requestAndSetGarminAPIAccessToken })
+  .runWith({ memory: '512MB', secrets: FUNCTION_SECRET_BINDINGS.requestAndSetGarminAPIAccessToken })
   .region(FUNCTIONS_MANIFEST.requestAndSetGarminAPIAccessToken.region)
-  .https.onCall(async (data: SetAccessTokenRequest, context) => {
+  .https.onCall(async (data: SetAccessTokenRequest, context): Promise<ServiceOAuthCompletionResult> => {
   // 1. App Check Verification
   if (context.app == undefined) {
     throw new functions.https.HttpsError(
@@ -128,16 +139,20 @@ export const requestAndSetGarminAPIAccessToken = functions
   }
 
   if (!await validateOAuth2State(userID, SERVICE_NAME, state)) {
-    logger.error(`Invalid state ${state} for user ${userID}`);
+    logger.warn('Rejected Garmin OAuth callback because state validation failed.', {
+      serviceName: SERVICE_NAME,
+    });
     throw new functions.https.HttpsError('permission-denied', 'Invalid state');
   }
 
   try {
-    await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code, state);
-    return; // Success (return void/empty)
+    return await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code, state);
   } catch (e: any) {
-    logger.error('Error exchanging Garmin token:', e);
     const status = e.statusCode || 500;
+    logger.error('Garmin authorization code flow failed.', {
+      serviceName: SERVICE_NAME,
+      providerStatus: status,
+    });
     if (isOAuthFlowContextMismatchError(e)) {
       throw new functions.https.HttpsError('permission-denied', 'Invalid OAuth state');
     }
@@ -154,6 +169,7 @@ export const requestAndSetGarminAPIAccessToken = functions
 
 export const deauthorizeGarminAPI = functions
   .runWith({
+    memory: '512MB',
     timeoutSeconds: 120,
     secrets: FUNCTION_SECRET_BINDINGS.deauthorizeGarminAPI,
   })
@@ -191,11 +207,11 @@ export const deauthorizeGarminAPI = functions
 });
 
 // Webhook for Garmin Deregistration
-export const receiveGarminAPIDeregistration = functions.region(FUNCTIONS_MANIFEST.receiveGarminAPIDeregistration.region).https.onRequest(async (req, res) => {
-  if (req.method !== 'POST') {
-    res.status(405).send('Method Not Allowed');
-    return;
-  }
+export const receiveGarminAPIDeregistration = functions
+  .runWith({ memory: '512MB', secrets: FUNCTION_SECRET_BINDINGS.deauthorizeGarminAPIUsers })
+  .region(FUNCTIONS_MANIFEST.receiveGarminAPIDeregistration.region)
+  .https.onRequest(async (req, res) => {
+  if (!authenticateGarminWebhook(req, res, 'deauthorizeGarminAPIUsers')) return;
 
   // Validate payload (Garmin sends { deregistrations: [{ userId: '...' }] })
   if (!req.body.deregistrations || !Array.isArray(req.body.deregistrations)) {
@@ -267,11 +283,10 @@ export const receiveGarminAPIDeregistration = functions.region(FUNCTIONS_MANIFES
 // Webhook for Garmin User Permission Changes
 // Per Section 2.6.3: Users can opt out of data sharing by turning off certain permissions.
 // This webhook notifies us if those permissions change post-connection.
-export const receiveGarminAPIUserPermissions = functions.region(FUNCTIONS_MANIFEST.receiveGarminAPIUserPermissions.region).https.onRequest(async (req, res) => {
-  if (req.method !== 'POST') {
-    res.status(405).send('Method Not Allowed');
-    return;
-  }
+export const receiveGarminAPIUserPermissions = functions
+  .runWith({ secrets: FUNCTION_SECRET_BINDINGS.receiveGarminAPIUserPermissions })
+  .region(FUNCTIONS_MANIFEST.receiveGarminAPIUserPermissions.region).https.onRequest(async (req, res) => {
+  if (!authenticateGarminWebhook(req, res, 'receiveGarminAPIUserPermissions')) return;
 
   // Validate payload (Garmin sends { userPermissionsChange: [{ userId: '...', permissions: [...], ... }] })
   if (!req.body.userPermissionsChange || !Array.isArray(req.body.userPermissionsChange)) {

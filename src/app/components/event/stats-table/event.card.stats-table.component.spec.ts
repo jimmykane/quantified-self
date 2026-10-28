@@ -7,12 +7,18 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import {
     ActivityInterface,
+    ActivityTypes,
     DataBeginningPotentialStamina,
+    DataDistance,
+    DistanceUnits,
+    DynamicDataLoader,
+    SwimPaceUnits,
     DataPace,
     DataPaceAvg,
     DataPaceMax,
     DataPaceMin,
     DataPotentialStaminaAvg,
+    DataStamina,
     DataSpeedAvgKilometersPerHour,
     DataSpeedAvgMilesPerHour,
     DataStaminaMin,
@@ -99,6 +105,52 @@ describe('EventCardStatsTableComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('shows swimming distances in yards in detailed statistics and copied rows', () => {
+        const distance = new DataDistance(22.86);
+        component.userUnitSettings = { ...mockUserUnitSettings, swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard] };
+        component.selectedActivities = [{
+            ...mockActivity,
+            type: 'Swimming',
+            getStatsAsArray: () => [distance],
+            getStat: (type: string) => type === DataDistance.type ? distance : undefined,
+        } as ActivityInterface];
+        component.ngOnChanges({});
+        const row = component.data.data.find(item => item.Name === DataDistance.type);
+        expect(row[component.columns[1]]).toBe('25 yd');
+        component.selection.select(row);
+        component.copyToSheets();
+        expect(mockDataExportService.copyToSheets).toHaveBeenCalledWith([row], component.columns, undefined);
+        expect(distance.getValue()).toBe(22.86);
+    });
+
+    it('uses the same swim units for both compared distances and their copied difference', () => {
+        component.userUnitSettings = {
+            ...mockUserUnitSettings,
+            distanceUnits: DistanceUnits.Miles,
+            swimPaceUnits: [SwimPaceUnits.MinutesPer100Yard],
+        };
+        component.selectedActivities = [91.44, 68.58].map((meters, index) => {
+            const distance = new DataDistance(meters);
+            return {
+                ...mockActivity,
+                creator: { name: `Swim ${index + 1}` },
+                type: ActivityTypes.Swimming,
+                getID: () => `swim-${index + 1}`,
+                getStatsAsArray: () => [distance],
+                getStat: (type: string) => type === DataDistance.type ? distance : undefined,
+            } as ActivityInterface;
+        });
+        component.ngOnChanges({});
+        const row = component.data.data.find(item => item.Name === DataDistance.type);
+        expect(row[component.columns[1]]).toBe('100 yd');
+        expect(row[component.columns[2]]).toBe('75 yd');
+        expect(row.Difference.display).toBe('25 yd');
+        expect(row.Difference.percent).toBeCloseTo(28.5714);
+        component.selection.select(row);
+        component.copyToSheets();
+        expect(mockDataExportService.copyToSheets).toHaveBeenCalledWith([row], component.columns, undefined);
     });
 
     it('should toggle row selection', () => {
@@ -525,6 +577,49 @@ describe('EventCardStatsTableComponent', () => {
         expect(rowTypes).toContain(DataPaceAvg.type);
         expect(rowTypes).toContain(DataPaceMin.type);
         expect(rowTypes).toContain(DataPaceMax.type);
+    });
+
+    it('shows one source-aware row per sustainable-distance stat and follows distance preferences', () => {
+        let distance;
+        try { distance = DynamicDataLoader.getDataInstanceFromDataType('Estimated Sustainable Distance', 1609); } catch { return; }
+        const activity = { ...mockActivity, creator: { name: 'Custom', manufacturer: 'Suunto' },
+            getStatsAsArray: () => [distance], getStat: (type: string) => type === distance.getType() ? distance : null,
+        } as unknown as ActivityInterface;
+        component.event = { ...mockEvent, isMerge: false } as EventInterface;
+        component.selectedActivities = [activity];
+        component.userUnitSettings = { ...mockUserUnitSettings, distanceUnits: DistanceUnits.Miles };
+        component.ngOnChanges({});
+        expect(component.data.data).toHaveLength(1);
+        expect(component.data.data[0]).toMatchObject({ '__statType': 'Estimated Sustainable Distance', Name: 'Ending EnergySense Sustainable Distance' });
+        expect(JSON.stringify(component.data.data)).toContain('1.00');
+        expect(JSON.stringify(component.data.data)).toContain('mi');
+    });
+
+    it.each(['Suunto', 'Garmin', undefined])('retains zero stamina in one canonical row and copied output for %s', manufacturer => {
+        const stamina = new DataStamina(0);
+        const minimum = new DataStaminaMin(0);
+        const potential = new DataPotentialStaminaAvg(0);
+        const stats = [stamina, minimum, potential];
+        const savedStats = stats.map(stat => stat.toJSON());
+        component.event = { ...mockEvent, isMerge: false } as EventInterface;
+        component.selectedActivities = [{
+            ...mockActivity,
+            creator: { name: 'Custom name', manufacturer },
+            getStatsAsArray: () => stats,
+            getStat: (type: string) => stats.find(stat => stat.getType() === type),
+        } as unknown as ActivityInterface];
+        for (let pass = 0; pass < 2; pass++) {
+            component.ngOnChanges({});
+            expect(component.data.data).toHaveLength(3);
+            expect(component.data.data.map(row => row.__statType).sort()).toEqual(stats.map(stat => stat.getType()).sort());
+            for (const row of component.data.data) expect(row[component.columns[1]]).toBe('0 %');
+        }
+        const staminaRow = component.data.data.find(row => row.__statType === DataStamina.type);
+        expect(staminaRow.Name).toBe(manufacturer === 'Suunto' ? 'EnergySense Endurance' : 'Stamina');
+        component.selection.select(staminaRow);
+        component.copyToSheets();
+        expect(mockDataExportService.copyToSheets).toHaveBeenCalledWith([staminaRow], component.columns, undefined);
+        expect(stats.map(stat => stat.toJSON())).toEqual(savedStats);
     });
 
     it('should include Garmin stamina stats in detailed statistics', () => {

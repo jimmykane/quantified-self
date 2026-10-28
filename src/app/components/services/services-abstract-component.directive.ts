@@ -1,26 +1,20 @@
 import {
   ChangeDetectorRef,
-  Component,
   Directive,
-  HostListener,
   inject,
   Input,
   Output,
   EventEmitter,
   OnChanges,
-  OnDestroy,
-  OnInit,
-  ViewEncapsulation
+  OnDestroy, OnInit,
 } from '@angular/core';
-import { FormControl, FormGroup, Validators } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { MatDialog } from '@angular/material/dialog';
+import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { LoggerService } from '../../services/logger.service';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { combineLatest, firstValueFrom, of, Subscription } from 'rxjs';
-import { EventImporterFIT } from '@sports-alliance/sports-lib';
+import { HttpClient } from '@angular/common/http';
+import { combineLatest, firstValueFrom, Subscription } from 'rxjs';
 import { ActivatedRoute, ParamMap, Router } from '@angular/router';
-import { distinctUntilChanged, switchMap, take, tap } from 'rxjs/operators';
+import { distinctUntilChanged, tap } from 'rxjs/operators';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AppFileService } from '../../services/app.file.service';
 import { AppWindowService } from '../../services/app.window.service';
@@ -35,12 +29,18 @@ import { ROUTE_DELIVERY_SYNC_ROUTES, RouteDeliverySyncRoute } from '@shared/rout
 import { getProviderDisplayName } from '@shared/provider-presentation';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import equal from 'fast-deep-equal';
-import { ServiceConnectionAccountProjection } from '@shared/service-connection';
+import {
+  SERVICE_OAUTH_COMPLETION_OUTCOMES,
+  ServiceConnectionAccountProjection,
+  ServiceOAuthCompletionResult,
+} from '@shared/service-connection';
+import { CONNECTION_HISTORY_DEFAULT_RANGE, type ConnectionHistoryRangePreset } from '@shared/connection-history';
+import type { ProMembershipOffer } from '../../helpers/membership-selection.helper';
 
 type ServiceSyncRouteImpact = ActivitySyncRoute | RouteDeliverySyncRoute;
 
 @Directive()
-export abstract class ServicesAbstractComponentDirective implements OnInit, OnDestroy, OnChanges {
+export abstract class ServicesAbstractComponentDirective implements OnDestroy, OnChanges, OnInit {
   public abstract serviceName: ServiceNames;
 
   @Input() user!: AppUserInterface;
@@ -49,6 +49,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   @Input() isAdmin: boolean = false;
   @Input() showAdvancedTools = true;
   @Input() showConnectionSummary = true;
+  @Input() proOffer: ProMembershipOffer | null = null;
   @Input() activeProviderTool = 'history';
   @Input() showOnlyActiveProviderTool = false;
   @Output() connectionStateChanged = new EventEmitter<boolean>();
@@ -59,12 +60,20 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   public selectedTabIndex = 0;
   public serviceNames = ServiceNames;
   public isConnecting = false;
+  public importRecentHistory = true;
+  public importHistoryRange: ConnectionHistoryRangePreset = CONNECTION_HISTORY_DEFAULT_RANGE;
+  public reconnectRequested = false;
   public isDisconnecting = false;
   public forceConnected = false;
   public isConnected = false;
 
+  private connectionViewRevision = 0;
+  private connectionViewUserId: string | undefined;
+  protected connectionViewDestroyed = false;
+  private disconnectConfirmation: MatDialogRef<ConfirmationDialogComponent, boolean> | undefined;
 
   protected serviceDataSubscription!: Subscription;
+  private reconnectRouteSubscription?: Subscription;
 
   protected router = inject(Router);
   protected changeDetectorRef = inject(ChangeDetectorRef);
@@ -84,6 +93,23 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   }
 
   async ngOnChanges() {
+    if (this.connectionViewDestroyed) return;
+    if (this.connectionViewUserId !== this.user?.uid) {
+      this.connectionViewUserId = this.user?.uid;
+      this.connectionViewRevision++;
+      this.importRecentHistory = true;
+      this.importHistoryRange = CONNECTION_HISTORY_DEFAULT_RANGE;
+      this.disconnectConfirmation?.close(false);
+      this.disconnectConfirmation = undefined;
+      this.serviceTokens = undefined;
+      this.serviceMeta = undefined;
+      this.forceConnected = false;
+      this.isConnected = false;
+      this.isConnecting = false;
+      this.isDisconnecting = false;
+      this.onServiceDataChanged();
+      this.emitConnectionState();
+    }
     this.isLoading = false;
 
     // Only user can change
@@ -95,6 +121,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       return;
     }
     this.isLoading = true;
+    const isCurrentView = this.captureConnectionView();
     this.serviceDataSubscription = combineLatest([
       this.userService.getServiceToken(this.user, this.serviceName),
       this.userService
@@ -102,6 +129,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
     ]).pipe(
       distinctUntilChanged((previous, current) => equal(previous, current)),
       tap((results) => {
+        if (!isCurrentView()) return;
         if (!results) {
           this.serviceTokens = undefined;
           this.serviceMeta = undefined;
@@ -114,7 +142,8 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
         this.onServiceDataChanged();
         this.emitConnectionState();
       }),
-    ).subscribe(async (results) => {
+    ).subscribe(async () => {
+      if (!isCurrentView()) return;
       const serviceName = this.route.snapshot.queryParamMap.get('serviceName');
       const shouldConnect = this.route.snapshot.queryParamMap.get('connect');
       const authorizationCode = this.route.snapshot.queryParamMap.get('code');
@@ -136,23 +165,62 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       }
       this.isConnecting = true;
       try {
-        await this.requestAndSetToken(this.route.snapshot.queryParamMap)
+        const completion = await this.requestAndSetToken(this.route.snapshot.queryParamMap);
+        if (!isCurrentView()) return;
+        if (
+          completion?.connected !== true
+          || completion.outcome !== SERVICE_OAUTH_COMPLETION_OUTCOMES.Connected
+        ) {
+          if (completion?.outcome === SERVICE_OAUTH_COMPLETION_OUTCOMES.DisconnectRecoveryCompleted) {
+            this.forceConnected = false;
+            this.connectionStateChanged.emit(false);
+            this.snackBar.open(
+              `The previous ${this.getPartnerDisplayName()} connection was removed. A Pro subscription is required to connect again.`,
+              undefined,
+              { duration: 10000 },
+            );
+            this.hapticsService.success();
+            return;
+          }
+          if (completion?.outcome === SERVICE_OAUTH_COMPLETION_OUTCOMES.DisconnectRecoveryPending) {
+            this.forceConnected = false;
+            this.connectionStateChanged.emit(false);
+            this.snackBar.open(
+              `The previous ${this.getPartnerDisplayName()} connection could not be fully removed yet. Please try again later.`,
+              undefined,
+              { duration: 10000 },
+            );
+            this.hapticsService.error();
+            return;
+          }
+          throw new Error(`${this.getPartnerDisplayName()} did not confirm that the connection was saved.`);
+        }
         this.analyticsService.logEvent('connected_to_service', { serviceName: this.serviceName });
         this.forceConnected = true;
         this.emitConnectionState();
-        this.snackBar.open(`Successfully connected to ${this.getPartnerDisplayName()}`, undefined, {
+        this.snackBar.open(completion.historyImport
+          ? 'Connected! Sit back while we bring in your selected history. You can keep using the app or close this page.'
+          : `Successfully connected to ${this.getPartnerDisplayName()}`, undefined, {
           duration: 10000,
         });
         this.hapticsService.success();
       } catch (e: any) {
+        if (!isCurrentView()) return;
         this.logger.error(e);
         const status = e?.status;
+        const code = `${e?.code || ''}`;
+        const errorText = [e?.error, e?.message, e?.details]
+          .filter(value => typeof value === 'string')
+          .join(' ');
         let message: string;
 
-        if (status === 502) {
+        if (status === 502 || code === 'functions/unavailable' || code === 'unavailable') {
           const partnerName = this.getPartnerDisplayName();
           message = `${partnerName} is temporarily unavailable. Please try again later.`;
-        } else if (status === 403 && e?.error?.includes?.('Pro')) {
+        } else if (
+          (status === 403 || code === 'functions/permission-denied' || code === 'permission-denied')
+          && /\bpro\b/i.test(errorText)
+        ) {
           message = 'This feature requires a Pro subscription.';
         } else {
           message = `Could not connect due to ${e.message || 'Unknown error'}`;
@@ -163,14 +231,22 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
         });
         this.hapticsService.error();
       } finally {
-        this.isLoading = false;
-        this.isConnecting = false;
-        await this.router.navigate(['services'], { queryParams: { serviceName: serviceName }, queryParamsHandling: '' });
+        if (isCurrentView()) {
+          this.isLoading = false;
+          this.isConnecting = false;
+          await this.router.navigate(['services'], { queryParams: { serviceName: serviceName }, queryParamsHandling: '' });
+          // Metadata may already have arrived while the OAuth action was locked.
+          if (isCurrentView()) this.onServiceDataChanged();
+        }
       }
     });
   }
 
   async ngOnInit() {
+    this.reconnectRouteSubscription = this.route.queryParamMap.subscribe(params => {
+      this.reconnectRequested = params.get('serviceName') === this.serviceName && params.get('reconnect') === '1';
+      this.changeDetectorRef.markForCheck();
+    });
   }
 
   protected onServiceDataChanged(): void {
@@ -192,8 +268,8 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
     this.activeProviderTool = tool;
   }
 
-  async connectWithService(event) {
-    if (this.isConnecting) {
+  async connectWithService(_event) {
+    if (this.connectionViewDestroyed || this.isConnecting || this.isDisconnecting || this.isLoading) {
       return;
     }
     if (!this.canConnectServiceWithCurrentAccess) {
@@ -202,12 +278,20 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
     }
     this.hapticsService.selection();
     this.isConnecting = true;
+    const isCurrentView = this.captureConnectionView();
     try {
       this.analyticsService.logEvent('service_connect_start', { service_name: this.serviceName });
-      const tokenAndURI = await this.userService.getCurrentUserServiceTokenAndRedirectURI(this.serviceName);
+      const tokenAndURI = await this.userService.getCurrentUserServiceTokenAndRedirectURI(
+        this.serviceName,
+        this.importRecentHistory,
+        this.importHistoryRange,
+        isCurrentView,
+      );
+      if (!isCurrentView()) return;
       // Get the redirect url for the unsigned token created with the post
       this.windowService.windowRef.location.href = this.buildRedirectURIFromServiceToken(tokenAndURI);
     } catch (e: any) {
+      if (!isCurrentView()) return;
       this.isConnecting = false;
       this.logger.error(e);
       const status = e?.status;
@@ -230,25 +314,31 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
     }
   }
 
-  async deauthorizeService(event) {
+  async deauthorizeService(_event): Promise<boolean> {
+    if (this.connectionViewDestroyed || this.isConnecting || this.isDisconnecting || this.isLoading) return false;
     if (!this.hasProAccess && !this.canDisconnectWithoutProAccess) {
       this.triggerUpsell();
-      return;
+      return false;
     }
     this.hapticsService.selection();
-    const shouldContinue = await this.confirmDisconnectWithRouteImpact();
-    if (!shouldContinue) {
-      return;
-    }
+    const isCurrentView = this.captureConnectionView();
+    // Lock before opening the dialog so duplicate clicks and reconnect cannot overlap confirmation.
     this.isDisconnecting = true;
     try {
-      await this.userService.deauthorizeService(this.serviceName);
+      const shouldContinue = await this.confirmDisconnectWithRouteImpact();
+      if (!isCurrentView() || !shouldContinue) return false;
+      await this.userService.deauthorizeService(this.serviceName, isCurrentView);
+      if (!isCurrentView()) return false;
+      this.forceConnected = false;
+      this.emitConnectionState();
       this.snackBar.open(`Disconnected successfully`, undefined, {
         duration: 2000,
       });
       this.hapticsService.success();
       this.analyticsService.logEvent('disconnected_from_service', { serviceName: this.serviceName });
+      return true;
     } catch (e: any) {
+      if (!isCurrentView()) return false;
       this.logger.error(e);
       const status = e?.status;
       let message: string;
@@ -264,10 +354,19 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
         duration: 2000,
       });
       this.hapticsService.error();
+      return false;
+    } finally {
+      if (isCurrentView()) this.isDisconnecting = false;
     }
-    this.isDisconnecting = false;
-    this.forceConnected = false;
-    this.emitConnectionState();
+  }
+
+  /** Discard late UI effects, not server work already authorized for the originating account. */
+  private captureConnectionView(): () => boolean {
+    const revision = this.connectionViewRevision;
+    const userId = this.user?.uid;
+    return () => !this.connectionViewDestroyed
+      && revision === this.connectionViewRevision
+      && userId === this.user?.uid;
   }
 
   get hasActiveSyncRoutesUsingService(): boolean {
@@ -292,6 +391,21 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
 
   protected getPartnerDisplayName(): string {
     return this.getServiceDisplayName(this.serviceName);
+  }
+
+  protected getOAuthCallbackParameters(params: ParamMap): { state: string; code: string } {
+    const partnerName = this.getPartnerDisplayName();
+    if (params.get('error')) {
+      throw new Error(`${partnerName} authorization was not completed.`);
+    }
+
+    const state = params.get('state');
+    const code = params.get('code');
+    if (!state || !code) {
+      throw new Error(`${partnerName} authorization callback is missing state or code.`);
+    }
+
+    return { state, code };
   }
 
   private getServiceDisplayName(serviceName: ServiceNames): string {
@@ -364,11 +478,20 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       } as ConfirmationDialogData,
     });
 
-    const confirmed = await firstValueFrom(dialogRef.afterClosed());
-    return confirmed === true;
+    this.disconnectConfirmation = dialogRef;
+    try {
+      return await firstValueFrom(dialogRef.afterClosed()) === true;
+    } finally {
+      if (this.disconnectConfirmation === dialogRef) this.disconnectConfirmation = undefined;
+    }
   }
 
   ngOnDestroy(): void {
+    this.connectionViewDestroyed = true;
+    this.connectionViewRevision++;
+    this.disconnectConfirmation?.close(false);
+    this.disconnectConfirmation = undefined;
+    this.reconnectRouteSubscription?.unsubscribe();
     if (this.serviceDataSubscription) {
       this.serviceDataSubscription.unsubscribe();
     }
@@ -378,7 +501,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
 
   abstract buildRedirectURIFromServiceToken(redirectUri: { redirect_uri: string } | { redirect_uri: string, state: string, oauthToken: string }): string
 
-  abstract requestAndSetToken(params: ParamMap)
+  abstract requestAndSetToken(params: ParamMap): Promise<ServiceOAuthCompletionResult>
 
   onHistoryImportInitiated(stats?: any) {
     this.serviceMeta = {

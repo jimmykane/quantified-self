@@ -134,6 +134,9 @@ h2 {
 .workspace-header-actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .workspace-panel {
@@ -345,7 +348,7 @@ h2 {
   min-height: 5rem;
 }
 
-@include tableControls.comparisonTableControlsLayout($includeDeviceColorsButton: true);
+@include tableControls.comparisonTableControlsLayout();
 
 .comparison-table-controls {
   margin-bottom: 0.75rem;
@@ -504,6 +507,11 @@ h2 {
 }
 
 .comparison-table .mat-column-gnss {
+  width: 10rem;
+  min-width: 10rem;
+}
+
+.comparison-table .mat-column-rr {
   width: 10rem;
   min-width: 10rem;
 }
@@ -1097,4 +1105,69 @@ mat-paginator {
   .comparison-selection-actions {
     justify-content: flex-start;
   }
+}
+
+.rr-summary-button {
+  justify-content: flex-start;
+  width: 100%;
+  height: auto;
+  min-height: 44px;
+  padding: 0;
+  text-align: left;
+}
+
+.rr-summary-stack {
+  font-variant-numeric: tabular-nums;
+}
+
+.rr-summary-stack .summary-line,
+.rr-dialog-metrics dd {
+  font-family: 'Barlow Condensed', sans-serif;
+}
+
+.rr-dialog-context {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+
+.rr-dialog-source {
+  margin-block: 16px;
+}
+
+.rr-dialog-device {
+  border-left: 3px solid;
+  padding-left: 8px;
+  overflow-wrap: anywhere;
+  font: var(--mat-sys-title-small);
+}
+
+.rr-dialog-metrics {
+  margin: 0;
+}
+
+.rr-dialog-metric {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 16px;
+  padding-block: 4px;
+}
+
+.rr-dialog-metrics dt {
+  font: var(--mat-sys-body-small);
+  overflow-wrap: anywhere;
+}
+
+.rr-dialog-metrics dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rr-column-label {
+  display: grid;
+}
+
+.rr-column-hint {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
 }

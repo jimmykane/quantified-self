@@ -14,6 +14,12 @@ import {
 } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { init, use } from 'echarts/core';
+import { BarChart, CustomChart, LineChart } from 'echarts/charts';
+import {
+  AxisPointerComponent, GraphicComponent, GridComponent, LegendComponent, TooltipComponent
+} from 'echarts/components';
+import { SVGRenderer } from 'echarts/renderers';
 import { ChartsColumnsComponent } from './charts.columns.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
@@ -34,6 +40,11 @@ type ResizeObserverRecord = {
   observe: ReturnType<typeof vi.fn>;
   disconnect: ReturnType<typeof vi.fn>;
 };
+
+use([
+  BarChart, CustomChart, LineChart, AxisPointerComponent, GraphicComponent,
+  GridComponent, LegendComponent, TooltipComponent, SVGRenderer
+]);
 
 describe('ChartsColumnsComponent', () => {
   let fixture: ComponentFixture<ChartsColumnsComponent>;
@@ -190,6 +201,34 @@ describe('ChartsColumnsComponent', () => {
     expect(option.yAxis.axisLabel.hideOverlap).toBe(false);
     expect(option.grid.left).toBe(0);
     expect(option.grid.right).toBe(12);
+  });
+
+  it.each([false, true])('renders horizontal date activity columns through ECharts with lazyUpdate=%s', async (lazyUpdate) => {
+    component.vertical = false;
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.data = [
+      { time: Date.UTC(2024, 0, 1), [ChartDataValueTypes.Total]: 100, count: 2, Running: 80, Cycling: 20 },
+      { time: Date.UTC(2024, 0, 2), [ChartDataValueTypes.Total]: 50, count: 1, Running: 10, Cycling: 40 },
+    ];
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    // Exercise ECharts' real axis-pointer models; mocked setOption cannot detect this failure.
+    // Use its headless text fallback; a fake context is cached even after getContext is restored.
+    const canvasContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    let chart: ReturnType<typeof init> | undefined;
+    try {
+      chart = init(null, undefined, { renderer: 'svg', ssr: true, width: 640, height: 320 });
+      const option = getLastOption();
+      expect(option.tooltip.trigger).toBe('axis');
+      const settings = mockLoader.setOption.mock.calls.at(-1)?.[2];
+      expect(() => chart.setOption(option, { ...settings, lazyUpdate })).not.toThrow();
+      expect(() => chart.resize({ width: 480, height: 240 })).not.toThrow();
+      expect(chart.renderToSVGString()).toMatch(/<path[^>]*fill="#16B4EA"/i);
+    } finally {
+      chart?.dispose();
+      canvasContext.mockRestore();
+    }
   });
 
   it('should snap value axis max to a logical grid boundary', async () => {
@@ -873,6 +912,32 @@ describe('ChartsColumnsComponent', () => {
     expect(tooltipText).toContain('170');
     expect(tooltipText).not.toContain('47.5%');
     expect(tooltipText).toContain('Maximum');
+  });
+
+  it('keeps sport duration separate from its percentage and activity count in narrow tooltips', () => {
+    component.chartDataType = DataDuration.type;
+    component.chartDataValueType = ChartDataValueTypes.Total;
+    const container = document.createElement('div');
+    container.innerHTML = component['formatDateActivityTooltip']([
+      {
+        index: 0, label: 'Week 28 06 Jul 2026', time: Date.UTC(2026, 6, 6),
+        total: 36000, count: 6, rawItem: null,
+        segments: [
+          { activityKey: 'MountainBiking', activityType: ActivityTypes.MountainBiking, label: 'Mountain Biking', colorKey: ActivityTypes.MountainBiking, rawValue: 28800, value: 28800, percent: 80, count: 5 },
+          { activityKey: 'Cycling', activityType: ActivityTypes.Cycling, label: 'Cycling', colorKey: ActivityTypes.Cycling, rawValue: 7200, value: 7200, percent: 20, count: 1 },
+        ],
+      },
+    ], [{ dataIndex: 0 }], new Map([['MountainBiking', '#42a5f5'], ['Cycling', '#16B4EA']]));
+
+    const rows = Array.from(container.querySelectorAll('[aria-label]')).slice(2);
+    expect(rows).toHaveLength(2);
+    rows.forEach((row, index) => {
+      const value = formatDashboardNumericValue(DataDuration.type, index === 0 ? 28800 : 7200);
+      expect(row.children[0].lastElementChild?.textContent).toBe(value);
+      expect(row.children[0].textContent).not.toContain('%');
+      expect(row.children[1].textContent).toBe(index === 0 ? '80.0% of total · 5 activities' : '20.0% of total · 1 activity');
+      expect(row.getAttribute('aria-label')).toContain(value);
+    });
   });
 
   it('should enable segmented stacked date rendering for non-total metrics only when explicitly preferred', async () => {

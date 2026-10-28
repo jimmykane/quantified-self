@@ -6,6 +6,7 @@
   <app-service-connection-status
     serviceLabel="Wahoo"
     providerIcon="wahoo"
+    [proOffer]="proOffer"
     [description]="connectionDescription"
     [connected]="isConnectedToService()"
     [loading]="isLoading"
@@ -31,7 +32,7 @@
         <mat-icon>sync_problem</mat-icon>
         <div class="reconnect-required-banner__copy">
           <div class="reconnect-required-banner__title">Reconnect Wahoo</div>
-          <div class="reconnect-required-banner__message">Wahoo rejected repeated token refreshes. Reconnect to resume activity sync and route delivery; queued deliveries will continue safely after reconnecting.</div>
+          <div class="reconnect-required-banner__message">Wahoo rejected repeated token refreshes. Reconnect to resume planned-workout delivery, activity sync, and route delivery; queued deliveries will continue safely after reconnecting.</div>
         </div>
       </div>
       }
@@ -70,8 +71,11 @@
       }
     </div>
 
-    <div connection-actions class="tool-actions">
+    <div connection-actions class="tool-actions connection-history-actions">
       @if (shouldShowConnectAction) {
+      <app-connection-history-option [service]="serviceName" [checked]="importRecentHistory" [range]="importHistoryRange"
+        [disabled]="!user || isLoading || isConnecting || !hasProAccess"
+        (checkedChange)="importRecentHistory = $event" (rangeChange)="importHistoryRange = $event"></app-connection-history-option>
       <button mat-flat-button class="qs-mat-primary"
         [disabled]="!user || isLoading || isConnecting"
         (click)="connectWithService($event)">
@@ -90,6 +94,9 @@
       }
     </div>
   </app-service-connection-status>
+  <app-connection-history-status [service]="serviceName" [status]="serviceMeta?.connectionHistoryImport || null"
+    [disabled]="!hasProAccess || isConnecting || isDisconnecting"
+    (reconnect)="reconnectRequested = true"></app-connection-history-status>
   }
 
   @if (showAdvancedTools) {
@@ -137,7 +144,7 @@
         <span>Sending activities to Wahoo is a Pro feature.</span>
       </div>
       } @else if (isConnectedToService()) {
-      <app-upload-activity-to-service [user]="user" [hasProAccess]="hasProAccess" [serviceName]="serviceName"></app-upload-activity-to-service>
+      <a mat-stroked-button routerLink="/send-activities/wahoo" appHapticTap>Open activity sending workspace</a>
       <app-status-info type="info" title="Wahoo access">
         If Wahoo was connected before activity sending was available, reconnect it once to grant workout write access.
       </app-status-info>

@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
     loggerInfo: vi.fn(),
     loggerWarn: vi.fn(),
     loggerError: vi.fn(),
+    adminCallOptions: [] as unknown[],
     scheduleOptions: null as Record<string, unknown> | null,
     onSchedule: vi.fn((options: Record<string, unknown>, handler: unknown) => {
         mocks.scheduleOptions = options;
@@ -51,7 +52,10 @@ vi.mock('firebase-functions/v2/scheduler', () => ({
 }));
 
 vi.mock('../shared/auth', () => ({
-    onAdminCall: vi.fn((_options: unknown, handler: unknown) => handler),
+    onAdminCall: vi.fn((options: unknown, handler: unknown) => {
+        mocks.adminCallOptions.push(options);
+        return handler;
+    }),
 }));
 
 vi.mock('./shared/user-metrics', () => ({
@@ -59,6 +63,7 @@ vi.mock('./shared/user-metrics', () => ({
 }));
 
 import {
+    adminDashboardHistoryTestInternals,
     getAdminDashboardHistory,
     scheduleAdminDashboardSnapshot,
 } from './handlers/dashboard-history.handlers';
@@ -96,6 +101,7 @@ function metrics(overrides: Partial<UserPlanActivityMetrics> = {}): UserPlanActi
             },
         },
         eligibleAccounts: 9,
+        eligibleAccountsByPlan: { free: 5, basic: 2, pro: 2 },
         providers: { 'google.com': 6 },
         ...overrides,
     };
@@ -104,7 +110,7 @@ function metrics(overrides: Partial<UserPlanActivityMetrics> = {}): UserPlanActi
 function storedDocument(
     date: string,
     overrides: Record<string, unknown> = {},
-    version: 1 | 2 = 1,
+    version: 1 | 2 | 3 = 1,
 ) {
     const computedAt = new Date(`${date}T00:12:00.000Z`);
     return {
@@ -125,10 +131,11 @@ function storedDocument(
             },
             authActivity: {
                 eligibleAccounts: 9,
+                ...(version === 3 ? { eligibleByPlan: { free: 5, basic: 2, pro: 2 } } : {}),
                 last24Hours: 2,
                 last7Days: 5,
                 last30Days: 8,
-                ...(version === 2 ? {
+                ...(version >= 2 ? {
                     byPlan: {
                         free: { last24Hours: 1, last7Days: 3, last30Days: 5 },
                         basic: { last24Hours: 1, last7Days: 1, last30Days: 2 },
@@ -164,6 +171,13 @@ describe('admin dashboard history', () => {
         vi.useRealTimers();
     });
 
+    it('uses 512 MiB for the bounded dashboard-history read', () => {
+        expect(mocks.adminCallOptions).toContainEqual(expect.objectContaining({
+            region: 'europe-west2',
+            memory: '512MiB',
+        }));
+    });
+
     it('pins the daily UTC schedule and bounded retry policy', () => {
         expect(mocks.scheduleOptions).toMatchObject({
             region: 'europe-west2',
@@ -188,8 +202,8 @@ describe('admin dashboard history', () => {
         expect(set).toHaveBeenCalledTimes(1);
         const payload = set.mock.calls[0][0];
         expect(payload).toMatchObject({
-            schemaVersion: 2,
-            metricDefinitionVersion: 2,
+            schemaVersion: 3,
+            metricDefinitionVersion: 3,
             snapshotDate: '2026-08-27',
             scheduledFor: new Date('2026-08-27T00:10:00.000Z'),
             computedAt: new Date('2026-08-27T00:12:00.000Z'),
@@ -206,6 +220,7 @@ describe('admin dashboard history', () => {
                 },
             },
         });
+        expect(payload.authActivity.eligibleByPlan).toEqual({ free: 5, basic: 2, pro: 2 });
         expect(payload.expireAt.getTime() - payload.computedAt.getTime()).toBe(730 * 24 * 60 * 60 * 1000);
         expect(payload).not.toHaveProperty('providers');
         expect(JSON.stringify(payload)).not.toMatch(/uid|email/i);
@@ -337,6 +352,33 @@ describe('admin dashboard history', () => {
 
         await expect(invokeHistory(historyRequest(365))).resolves.toMatchObject({ snapshots: [] });
         expect(mocks.loggerWarn).toHaveBeenCalledTimes(4);
+    });
+
+    it('reads eligible plan totals only from version 3 and preserves legacy counts', () => {
+        const parse = adminDashboardHistoryTestInternals.parseStoredSnapshot;
+        expect(parse(storedDocument('2026-08-27', {}, 3))?.authActivity.eligibleByPlan)
+            .toEqual({ free: 5, basic: 2, pro: 2 });
+        for (const version of [1, 2] as const) {
+            const point = parse(storedDocument('2026-08-27', {}, version));
+            expect(point?.authActivity.eligibleByPlan).toBeNull();
+            expect(point?.users.total).toBe(10);
+        }
+    });
+
+    it.each([
+        undefined, null, { free: 5, basic: 2 }, { free: -1, basic: 8, pro: 2 },
+        { free: 5.5, basic: 1.5, pro: 2 }, { free: 5, basic: 2, pro: 1 },
+        { free: 4, basic: 3, pro: 2 }, { free: 5, basic: 1, pro: 3 },
+    ])('rejects invalid eligible plan denominators %j on read and write', eligibleByPlan => {
+        const document = storedDocument('2026-08-27', {}, 3);
+        const data = document.data();
+        expect(adminDashboardHistoryTestInternals.parseStoredSnapshot({
+            id: document.id, data: () => ({ ...data, authActivity: { ...data.authActivity, eligibleByPlan } }),
+        })).toBeNull();
+        expect(() => adminDashboardHistoryTestInternals.buildStoredSnapshot(
+            metrics({ eligibleAccountsByPlan: eligibleByPlan as never }), '2026-08-27',
+            new Date('2026-08-27T00:10:00Z'), new Date('2026-08-27T00:12:00Z'),
+        )).toThrow();
     });
 
     it('defaults to 90 days and rejects unsupported ranges', async () => {

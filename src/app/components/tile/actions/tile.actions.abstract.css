@@ -1,58 +1,7 @@
-mat-select {}
-
 .tile-actions-menu-shell {
   box-sizing: border-box;
   min-width: 0;
   padding: 6px;
-}
-
-.tile-actions-section {
-  padding: 8px 10px 10px;
-}
-
-.tile-section-heading {
-  align-items: center;
-  color: var(--mat-sys-on-surface-variant);
-  display: flex;
-  font-size: 0.72rem;
-  font-weight: 700;
-  gap: 6px;
-  letter-spacing: 0.04em;
-  line-height: 1;
-  margin-bottom: 8px;
-  text-transform: uppercase;
-}
-
-.tile-section-heading mat-icon {
-  color: var(--mat-sys-primary);
-  font-size: 17px;
-  height: 17px;
-  line-height: 17px;
-  width: 17px;
-}
-
-.tile-size-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-start;
-}
-
-.tile-size-fields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  width: 100%;
-}
-
-.tile-size-field {
-  width: 100%;
-  min-width: 0;
-  --mat-form-field-container-height: 42px;
-  --mat-form-field-container-vertical-padding: 9px;
-  --mat-form-field-container-text-size: 0.95rem;
-  --mat-select-trigger-text-size: 0.95rem;
-  --mdc-outlined-text-field-container-shape: 6px;
 }
 
 .tile-actions-divider {

@@ -7,6 +7,27 @@ export interface TrainingDailyLoad {
   load: number;
 }
 
+/** Canonical rolling seven-day mean / population standard deviation and its load-weighted strain. */
+export function resolveTrainingMonotonyStrain(
+  points: readonly Pick<TrainingDailyLoad, 'load'>[],
+  index: number,
+): { weeklyLoad7: number; monotony: number | null; strain: number | null } {
+  const startIndex = Math.max(0, index - 6);
+  const windowLoads = points.slice(startIndex, index + 1).map(point => point.load);
+  const weeklyLoad7 = windowLoads.reduce((sum, value) => sum + value, 0);
+  const mean = windowLoads.length ? weeklyLoad7 / windowLoads.length : 0;
+  const variance = windowLoads.length
+    ? windowLoads.reduce((sum, value) => sum + Math.pow(value - mean, 2), 0) / windowLoads.length
+    : 0;
+  const stddev = Math.sqrt(variance);
+  const monotony = stddev > 0 ? mean / stddev : null;
+  return {
+    weeklyLoad7,
+    monotony,
+    strain: monotony === null ? null : weeklyLoad7 * monotony,
+  };
+}
+
 export interface TrainingLoadPoint {
   dayMs: number;
   load: number;
@@ -14,6 +35,49 @@ export interface TrainingLoadPoint {
   atl: number;
   formSameDay: number;
   formPriorDay: number | null;
+}
+
+export type TrainingLoadDayOutcome = 'raised' | 'held' | 'declined';
+
+export type TrainingSessionLoadRole =
+  | 'pushed-above-maintenance'
+  | 'added-to-building-day'
+  | 'offset-fitness-decay'
+  | 'no-load';
+
+export interface TrainingLoadContribution {
+  trainingStressScore: number;
+  ctlContribution: number;
+  atlContribution: number;
+  formContribution: number;
+}
+
+export interface TrainingLoadDayImpact {
+  dayMs: number;
+  trainingStressScore: number;
+  previousCtl: number;
+  previousAtl: number;
+  ctl: number;
+  atl: number;
+  formPriorDay: number;
+  formSameDay: number;
+  ctlChange: number;
+  atlChange: number;
+  formChange: number;
+  outcome: TrainingLoadDayOutcome;
+}
+
+export interface TrainingSessionLoadImpact extends TrainingLoadContribution {
+  role: TrainingSessionLoadRole;
+  day: TrainingLoadDayImpact;
+}
+
+/** Compare a selected load with its saved total, allowing only floating-point summation error. */
+export function isTrainingLoadWithinTotal(selected: number, total: number, termCount = 1): boolean {
+  if (!Number.isFinite(selected) || selected < 0 || !Number.isFinite(total) || total < 0
+    || !Number.isSafeInteger(termCount) || termCount < 1) return false;
+  const tolerance = Number.EPSILON * Math.max(1, selected, total) * termCount;
+  return selected <= total + tolerance;
 }
 
 /**
@@ -78,6 +142,93 @@ export function buildTrainingLoadPoints(
   }
 
   return points;
+}
+
+/**
+ * Resolves the linear contribution one TSS load makes to the canonical CTL/ATL model.
+ * This is a model contribution, not a direct measurement of physiological adaptation.
+ */
+export function buildTrainingLoadContribution(
+  trainingStressScore: number,
+): TrainingLoadContribution | null {
+  if (!Number.isFinite(trainingStressScore) || trainingStressScore < 0) {
+    return null;
+  }
+  const ctlContribution = trainingStressScore / TRAINING_LOAD_CTL_TIME_CONSTANT_DAYS;
+  const atlContribution = trainingStressScore / TRAINING_LOAD_ATL_TIME_CONSTANT_DAYS;
+  return {
+    trainingStressScore,
+    ctlContribution,
+    atlContribution,
+    formContribution: ctlContribution - atlContribution,
+  };
+}
+
+/** Resolves the actual model movement for one UTC Training day, including normal decay. */
+export function resolveTrainingLoadDayImpact(
+  points: readonly TrainingLoadPoint[] | null | undefined,
+  dayMs: number,
+): TrainingLoadDayImpact | null {
+  if (!Number.isSafeInteger(dayMs) || dayMs < 0 || dayMs % TRAINING_LOAD_DAY_MS !== 0) {
+    return null;
+  }
+  const normalizedPoints = Array.isArray(points) ? points : [];
+  const index = normalizedPoints.findIndex(point => point.dayMs === dayMs);
+  if (index < 0) {
+    return null;
+  }
+  const point = normalizedPoints[index];
+  const previousPoint = index > 0 ? normalizedPoints[index - 1] : null;
+  const previousCtl = previousPoint?.ctl ?? 0;
+  const previousAtl = previousPoint?.atl ?? 0;
+  const formPriorDay = previousCtl - previousAtl;
+  const ctlChange = point.ctl - previousCtl;
+  const atlChange = point.atl - previousAtl;
+  const formChange = point.formSameDay - formPriorDay;
+  const outcome: TrainingLoadDayOutcome = ctlChange > Number.EPSILON
+    ? 'raised'
+    : ctlChange < -Number.EPSILON
+      ? 'declined'
+      : 'held';
+  return {
+    dayMs: point.dayMs,
+    trainingStressScore: point.load,
+    previousCtl,
+    previousAtl,
+    ctl: point.ctl,
+    atl: point.atl,
+    formPriorDay,
+    formSameDay: point.formSameDay,
+    ctlChange,
+    atlChange,
+    formChange,
+    outcome,
+  };
+}
+
+/**
+ * Places one completed session inside its UTC Training day without assigning an
+ * order to same-day sessions. Contributions are linear; the day outcome includes decay.
+ */
+export function buildTrainingSessionLoadImpact(
+  trainingStressScore: number,
+  day: TrainingLoadDayImpact,
+): TrainingSessionLoadImpact | null {
+  const contribution = buildTrainingLoadContribution(trainingStressScore);
+  if (!contribution || !isTrainingLoadWithinTotal(trainingStressScore, day.trainingStressScore)) {
+    return null;
+  }
+  let role: TrainingSessionLoadRole;
+  if (trainingStressScore === 0) {
+    role = 'no-load';
+  } else if (day.trainingStressScore > day.previousCtl) {
+    role = day.trainingStressScore - trainingStressScore <= day.previousCtl
+      ? 'pushed-above-maintenance'
+      : 'added-to-building-day';
+  } else {
+    role = 'offset-fitness-decay';
+  }
+  return { ...contribution, role, day };
 }
 
 function resolveUtcDayStartMs(timeMs: number): number {

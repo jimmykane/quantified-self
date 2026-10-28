@@ -5,6 +5,7 @@ import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { buildHeaderStatCards, HeaderStatCard } from '../../helpers/header-stats-composite.helper';
 import { normalizeUnitDerivedStatLabel } from '../../helpers/stat-label.helper';
 import { resolveSummaryDisplayStat } from '../../helpers/summary-display.helper';
+import { RR_STAT_TOOLTIPS } from '../../constants/rr-metrics';
 
 @Component({
   selector: 'app-header-stats',
@@ -14,13 +15,16 @@ import { resolveSummaryDisplayStat } from '../../helpers/summary-display.helper'
   standalone: false
 })
 export class HeaderStatsComponent implements OnChanges {
+  readonly statTooltips = RR_STAT_TOOLTIPS;
   @Input() statsToShow: string[];
   @Input() stats: DataInterface[] = [];
   @Input() singleValueTypes: string[] = [];
   @Input() unitSettings?: UserUnitSettingsInterface;
   @Input() activityTypes: string[] = [];
+  @Input() metricManufacturer?: string;
   @Input() layout: 'grid' | 'condensed' = 'grid';
   @Input() showDiff = false;
+  @Input() statLabels?: Readonly<Record<string, string>>;
   @Input() diffByType?: Map<string, { display: string; percent: number; color: string }>;
   public displayedStats: DataInterface[] = [];
   public displayedStatCards: HeaderStatCard[] = [];
@@ -42,13 +46,15 @@ export class HeaderStatsComponent implements OnChanges {
       || !!changes['stats']
       || !!changes['unitSettings']
       || !!changes['activityTypes']
+      || !!changes['metricManufacturer']
       || !!changes['singleValueTypes'];
+    const labelsChanged = !!changes['statLabels'];
 
-    if (shouldRebuildStats) {
+    if (shouldRebuildStats || labelsChanged) {
       this.rebuildDisplayedStatsAndCards();
     }
 
-    if (shouldRebuildStats || !!changes['showDiff'] || !!changes['diffByType']) {
+    if (shouldRebuildStats || labelsChanged || !!changes['showDiff'] || !!changes['diffByType']) {
       this.rebuildCompositeCardCaches();
     }
   }
@@ -75,7 +81,7 @@ export class HeaderStatsComponent implements OnChanges {
   }
 
   getNormalizedStatLabel(stat: DataInterface) {
-    return normalizeUnitDerivedStatLabel(stat);
+    return this.statLabels?.[stat.getType()] ?? normalizeUnitDerivedStatLabel(stat, { manufacturer: this.metricManufacturer });
   }
 
   getCompositeUnit(card: HeaderStatCard): string {
@@ -159,16 +165,18 @@ export class HeaderStatsComponent implements OnChanges {
 
     this.displayedStats = enrichedStats;
 
-    this.displayedStatCards = buildHeaderStatCards(this.displayedStats, expandedStatsMap, this.singleValueTypes)
+    this.displayedStatCards = buildHeaderStatCards(this.displayedStats, expandedStatsMap, this.singleValueTypes,
+      { manufacturer: this.metricManufacturer })
       .map((card) => ({
         ...card,
+        label: this.statLabels?.[card.iconType] ?? card.label,
         valueItems: card.valueItems.filter((valueItem) => !this.isInvalidDisplayToken(valueItem.displayValue)),
       }))
       .filter((card) => card.valueItems.length > 0);
   }
 
   private getSummaryDisplayStats(stat: DataInterface): DataInterface[] {
-    const displayStat = resolveSummaryDisplayStat(stat, stat.getType(), this.activityTypes);
+    const displayStat = resolveSummaryDisplayStat(stat, stat.getType(), this.activityTypes, this.unitSettings);
     return DynamicDataLoader.getUnitBasedDataFromDataInstance(displayStat ?? stat, this.unitSettings);
   }
 

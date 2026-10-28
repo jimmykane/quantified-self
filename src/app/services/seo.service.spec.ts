@@ -1,12 +1,13 @@
 import { TestBed } from '@angular/core/testing';
 
-import { SeoService } from './seo.service';
+import { DEFAULT_SOCIAL_IMAGE_ALT, DEFAULT_SOCIAL_IMAGE_URL, SeoService } from './seo.service';
 import { Title, Meta } from '@angular/platform-browser';
 import { Router, NavigationEnd, ActivatedRoute } from '@angular/router';
 import { Subject, of } from 'rxjs';
 import { DOCUMENT } from '@angular/common';
 import { PLATFORM_ID } from '@angular/core';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { HOME_SEO_JSON_LD } from '../shared/home-seo';
 
 describe('SeoService', () => {
     let service: SeoService;
@@ -103,6 +104,48 @@ describe('SeoService', () => {
         expect(metaServiceSpy.updateTag).not.toHaveBeenCalledWith({ name: 'keywords', content: 'test, seo' });
         expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:title', content: 'Test Page - Quantified Self' });
         expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:description', content: 'Test Description' });
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:image', content: DEFAULT_SOCIAL_IMAGE_URL });
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ name: 'twitter:image', content: DEFAULT_SOCIAL_IMAGE_URL });
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:image:alt', content: DEFAULT_SOCIAL_IMAGE_ALT });
+    });
+
+    it('uses a page social image and resets it to the safe default on the next route', () => {
+        const trainingImage = 'https://quantified-self.io/assets/images/training-plans-social.png';
+        mockActivatedRoute.data = of({
+            title: 'Training Plans',
+            socialImage: trainingImage,
+            socialImageAlt: 'Synthetic training plan calendar',
+        });
+        mockRouter.url = '/features/training-plans';
+        service.init();
+        routerEventsSubject.next(new NavigationEnd(1, mockRouter.url, mockRouter.url));
+
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:image', content: trainingImage });
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ name: 'twitter:image', content: trainingImage });
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:image:alt', content: 'Synthetic training plan calendar' });
+
+        metaServiceSpy.updateTag.mockClear();
+        mockActivatedRoute.data = of({ title: 'Other' });
+        mockRouter.url = '/other';
+        routerEventsSubject.next(new NavigationEnd(2, mockRouter.url, mockRouter.url));
+
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:image', content: DEFAULT_SOCIAL_IMAGE_URL });
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ name: 'twitter:image', content: DEFAULT_SOCIAL_IMAGE_URL });
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ name: 'twitter:image:alt', content: DEFAULT_SOCIAL_IMAGE_ALT });
+    });
+
+    it('rejects unsafe social image schemes', () => {
+        mockActivatedRoute.data = of({ title: 'Unsafe', socialImage: 'javascript:alert(1)' });
+        service.init();
+        routerEventsSubject.next(new NavigationEnd(1, '/unsafe', '/unsafe'));
+
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:image', content: DEFAULT_SOCIAL_IMAGE_URL });
+
+        metaServiceSpy.updateTag.mockClear();
+        mockActivatedRoute.data = of({ title: 'Insecure', socialImage: 'http://example.com/social.png' });
+        routerEventsSubject.next(new NavigationEnd(2, '/insecure', '/insecure'));
+
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:image', content: DEFAULT_SOCIAL_IMAGE_URL });
     });
 
     it('should inject JSON-LD on home page', () => {
@@ -130,15 +173,17 @@ describe('SeoService', () => {
         expect(mockScript.setAttribute).toHaveBeenCalledWith('type', 'application/ld+json');
         expect(mockDocument.head.appendChild).toHaveBeenCalledWith(mockScript);
         expect(mockScript.textContent).toContain('"@type":"SoftwareApplication"');
-        expect(mockScript.textContent).toContain('in one dashboard');
+        expect(JSON.parse(mockScript.textContent)).toEqual(HOME_SEO_JSON_LD);
+        expect(mockScript.textContent).toContain('build structured workouts');
         expect(mockScript.textContent).not.toMatch(/\bprivate\b/i);
         expect(mockScript.textContent).toContain('Week, Month, and Year activity calendar with duration-scaled activity groups');
         expect(mockScript.textContent).toContain('Curated training analysis for readiness, load, intensity, durability, sleep context, and best builds');
+        expect(mockScript.textContent).toContain('Training plans with named date phases and standalone structured workouts for running and cycling');
         expect(mockScript.textContent).toContain('Garmin to Suunto activity sync');
         expect(mockScript.textContent).toContain('COROS to Suunto activity sync');
         expect(mockScript.textContent).toContain('Wahoo to Suunto activity sync');
         expect(mockScript.textContent).toContain('Activity and route delivery to Wahoo');
-        expect(mockScript.textContent).toContain('Read-only MCP access for compatible clients');
+        expect(mockScript.textContent).toContain('Permission-scoped MCP access for compatible clients');
         expect(mockScript.textContent).toContain('Sync past activities to Suunto by date');
     });
 

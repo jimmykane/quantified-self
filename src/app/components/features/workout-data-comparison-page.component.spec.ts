@@ -29,15 +29,15 @@ describe('WorkoutDataComparisonPageComponent', () => {
   it('renders the comparison feature page content and provider chips', () => {
     const text = fixture.nativeElement.textContent as string;
     const providerChips = fixture.nativeElement.querySelectorAll('.provider-chip');
-    const compactRows = fixture.nativeElement.querySelectorAll('app-compact-feature-row');
+    const compactRows = fixture.nativeElement.querySelectorAll('app-compact-row');
     const faqItems = fixture.nativeElement.querySelectorAll('.faq-item');
 
     expect(providerChips.length).toBe(4);
-    expect(compactRows.length).toBe(11);
+    expect(compactRows.length).toBe(12);
     expect(fixture.nativeElement.querySelector('.feature-card')).toBeNull();
     expect(fixture.nativeElement.querySelector('.tool-row')).toBeNull();
-    expect(fixture.nativeElement.querySelectorAll('.compact-feature-row-host--without-divider').length).toBe(3);
-    expect(faqItems.length).toBe(5);
+    expect(fixture.nativeElement.querySelectorAll('.compact-row-host--without-divider').length).toBe(3);
+    expect(faqItems.length).toBe(6);
     expect(text).toContain('Compare workout files, providers, and sports devices');
     expect(text).toContain('Garmin, Suunto, COROS, Wahoo, FIT, TCX, GPX, JSON, and SML recordings');
     const reviewerPreview = fixture.nativeElement.querySelector(
@@ -51,6 +51,11 @@ describe('WorkoutDataComparisonPageComponent', () => {
     expect(text).toContain('Connected provider activities');
     expect(text).toContain('Uploaded workout files');
     expect(text).toContain('Synchronized metric overlays');
+    expect(text).toContain('R–R intervals and heart rate variability (HRV)');
+    const rrCapability = Array.from(fixture.nativeElement.querySelectorAll('#signals app-compact-row'))
+      .find((row: Element) => row.textContent?.includes('R–R intervals')) as Element;
+    expect(rrCapability).toBeTruthy();
+    expect(rrCapability.closest('[data-nosnippet]')).toBeNull();
     expect(text).toContain('GNSS and route disagreement');
     expect(text).toContain('Stable device colors and review tags');
     expect(text).toContain('Copy, share, or download the result');

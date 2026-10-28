@@ -1,3 +1,6 @@
+import type { TimelineNoteCategory, TimelineNoteColor } from './timeline-notes';
+import type { ManualHealthMetricId, ManualVo2Context, ManualVo2Method, ManualHealthMeasurementFields } from './manual-health';
+
 export const ASSISTANT_CONVERSATION_VERSION = 1 as const;
 export const ASSISTANT_MAX_MESSAGE_CHARS = 1_000;
 export const ASSISTANT_MAX_RESPONSE_CHARS = 4_000;
@@ -156,6 +159,15 @@ export interface AssistantConversation {
 }
 
 export interface AssistantChatRequest {
+  /** Missing on older clients means disabled. Enabling requires a fresh server-owned chat. */
+  timelineNotesEnabled?: boolean;
+  activityTagChangesEnabled?: boolean;
+  timelineNoteChangesEnabled?: boolean;
+  measurementChangesEnabled?: boolean;
+  reflectionChangesEnabled?: boolean;
+  trainingPlansEnabled?: boolean;
+  trainingPlanChangesEnabled?: boolean;
+  trainingDeliveryEnabled?: boolean;
   requestId: string;
   message: string;
   timeZone: string;
@@ -163,7 +175,97 @@ export interface AssistantChatRequest {
   conversationId?: string;
 }
 
+export type AssistantContentProposalKind =
+  | 'save_workout_reflection'
+  | 'delete_workout_reflection'
+  | 'create_manual_measurement'
+  | 'update_manual_measurement'
+  | 'delete_manual_measurement'
+  | 'update_event_tags'
+  | 'create_timeline_note'
+  | 'update_timeline_note'
+  | 'delete_timeline_note';
+
+export interface AssistantTimelineNoteFields {
+  category: TimelineNoteCategory;
+  title: string;
+  details: string | null;
+  startDate: string;
+  endDate: string | null;
+  timeZone: string;
+  showOnCharts: boolean;
+  color: TimelineNoteColor;
+}
+
+export type AssistantContentProposalArguments =
+  | { activityRef: string; target: 'recording' | 'activity'; expectedRevision: number; mutationId: string; note: string | null }
+  | { activityRef: string; target: 'recording' | 'activity'; expectedRevision: number; mutationId: string }
+  | ({ mutationId: string; metricId: ManualHealthMetricId; observedAt: string } & AssistantManualMeasurementInput)
+  | ({ measurementRef: string; expectedRevision: number; observedAt?: string } & AssistantManualMeasurementInput)
+  | { measurementRef: string; expectedRevision: number }
+  | {
+      activityRef: string;
+      expectedTags: string[];
+      tags: string[];
+    }
+  | ({ mutationId: string } & AssistantTimelineNoteFields)
+  | ({ noteRef: string; expectedRevision: number } & AssistantTimelineNoteFields)
+  | { noteRef: string; expectedRevision: number };
+
+export interface AssistantManualMeasurementInput {
+  value: number;
+  unit: 'kg' | 'lb' | 'percent' | 'mmHg' | 'ml_per_kg_per_min';
+  diastolicValue?: number;
+  pulseValue?: number | null;
+  vo2Context?: ManualVo2Context;
+  vo2Method?: ManualVo2Method;
+}
+
+export interface AssistantContentProposalPreview {
+  reflectionReview?: { before: { note: string | null } | null };
+  measurementReview?: { before: ManualHealthMeasurementFields | null; after: ManualHealthMeasurementFields | null };
+  proposalRef: string;
+  kind: AssistantContentProposalKind;
+  expiresAtMs: number;
+  summary: string;
+  requiresConfirmation: true;
+  arguments: AssistantContentProposalArguments;
+}
+
+export interface AssistantTrainingProposalPreview {
+  workoutReviews?: import('./assistant-workout-review').AssistantWorkoutReview[];
+  phaseReview?: import('./training-plans').TrainingPlanPhaseReviewV1;
+  proposalRef: string;
+  permissionMode: 'schedule' | 'delivery' | 'combined';
+  expiresAtMs: number;
+  scheduleRevision: number;
+  summary: string;
+  requiresConfirmation: true;
+  changes: Array<{ index: number; kind: string; summary: string }>;
+  providerPreviews: Array<{
+    index: number;
+    provider: 'garmin' | 'coros' | 'wahoo' | 'suunto';
+    targetType: 'plan' | 'workout';
+    action: 'enable' | 'send' | 'resume' | 'stop' | 'retry' | 'check' | 'approve' | 'replace';
+    availability: 'ready' | 'unavailable' | 'reconnect_required' | 'connection_repair' | 'pro_required';
+    timeZone: string | null;
+    eligibleCount: number;
+    warningCount: number;
+    summary: string;
+  }>;
+}
+
 export interface AssistantChatResponse {
+  timelineNotesEnabled?: boolean;
+  activityTagChangesEnabled?: boolean;
+  timelineNoteChangesEnabled?: boolean;
+  measurementChangesEnabled?: boolean;
+  reflectionChangesEnabled?: boolean;
+  trainingPlansEnabled?: boolean;
+  trainingPlanChangesEnabled?: boolean;
+  trainingDeliveryEnabled?: boolean;
+  pendingTrainingProposal?: AssistantTrainingProposalPreview;
+  pendingContentProposal?: AssistantContentProposalPreview;
   conversation: AssistantConversation;
   quota: AssistantQuotaStatus;
   pendingRequestId: string | null;
@@ -172,15 +274,69 @@ export interface AssistantChatResponse {
 export type GetAssistantConversationRequest = Record<string, never>;
 
 export interface GetAssistantConversationResponse {
+  timelineNotesEnabled?: boolean;
+  activityTagChangesEnabled?: boolean;
+  timelineNoteChangesEnabled?: boolean;
+  measurementChangesEnabled?: boolean;
+  reflectionChangesEnabled?: boolean;
+  trainingPlansEnabled?: boolean;
+  trainingPlanChangesEnabled?: boolean;
+  trainingDeliveryEnabled?: boolean;
+  pendingTrainingProposal?: AssistantTrainingProposalPreview;
+  pendingContentProposal?: AssistantContentProposalPreview;
   conversation: AssistantConversation | null;
   pendingRequestId: string | null;
   locationAccess: AssistantLocationAccess;
 }
 
 export interface ResetAssistantConversationRequest {
+  /** Expected active generation; null asserts there is no unexpired conversation. Missing is legacy, notes-off only. */
+  conversationId?: string | null;
+  timelineNotesEnabled?: boolean;
+  activityTagChangesEnabled?: boolean;
+  timelineNoteChangesEnabled?: boolean;
+  measurementChangesEnabled?: boolean;
+  reflectionChangesEnabled?: boolean;
+  trainingPlansEnabled?: boolean;
+  trainingPlanChangesEnabled?: boolean;
+  trainingDeliveryEnabled?: boolean;
   locationAccess: AssistantLocationAccess;
 }
 
 export interface ResetAssistantConversationResponse {
+  timelineNotesEnabled?: boolean;
+  activityTagChangesEnabled?: boolean;
+  timelineNoteChangesEnabled?: boolean;
+  measurementChangesEnabled?: boolean;
+  reflectionChangesEnabled?: boolean;
+  trainingPlansEnabled?: boolean;
+  trainingPlanChangesEnabled?: boolean;
+  trainingDeliveryEnabled?: boolean;
   conversation: AssistantConversation;
+}
+
+export interface ApplyAssistantTrainingProposalRequest {
+  proposalRef: string;
+  permissionMode: 'schedule' | 'delivery' | 'combined';
+  conversationId: string;
+  confirm: boolean;
+}
+
+export interface ApplyAssistantTrainingProposalResponse {
+  status: 'applied' | 'partially_applied' | 'dismissed';
+  scheduleRevision: number;
+  changes: Array<{ index: number; kind: string; status: 'applied' | 'already_applied' | 'failed'; message: string }>;
+  providers: Array<{ index: number; provider: 'garmin' | 'coros' | 'wahoo' | 'suunto'; status: 'queued' | 'applied' | 'already_applied' | 'blocked' | 'failed'; message: string }>;
+}
+
+export interface ApplyAssistantContentProposalRequest {
+  proposalRef: string;
+  conversationId: string;
+  confirm: boolean;
+}
+
+export interface ApplyAssistantContentProposalResponse {
+  status: 'applied' | 'dismissed';
+  kind: AssistantContentProposalKind;
+  message: string;
 }

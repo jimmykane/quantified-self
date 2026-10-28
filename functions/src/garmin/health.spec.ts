@@ -168,6 +168,56 @@ describe('Garmin Health API summary mapping', () => {
     ]));
   });
 
+  it('retains a daily -2 code as native-only availability without losing other days or metrics', () => {
+    const interval = {
+      calendarDate: '2025-10-09', startTimeInSeconds: 1_760_000_000,
+      durationInSeconds: 86_400,
+    };
+    const results = map('dailies', [
+      { ...interval, summaryId: 'unavailable-stress', averageStressLevel: -2, steps: 123 },
+      { ...interval, summaryId: 'measured-stress', startTimeInSeconds: 1_760_086_400,
+        calendarDate: '2025-10-10', averageStressLevel: 25 },
+    ]);
+    expect(results).toHaveLength(2);
+    expect(results[0].input.metrics).toEqual(expect.arrayContaining([
+      expect.objectContaining({ metricId: HEALTH_METRIC_IDS.Steps, canonical: { value: 123, unit: HEALTH_UNITS.Count } }),
+      expect.objectContaining({
+        metricId: HEALTH_METRIC_IDS.StressState,
+        semanticVariant: 'daily_average_availability',
+        normalizationStatus: HEALTH_NORMALIZATION_STATUSES.NativeOnly,
+        native: expect.objectContaining({ metric: 'averageStressLevel', value: '-2' }),
+      }),
+    ]));
+    const state = results[0].input.metrics.find(metric => metric.metricId === HEALTH_METRIC_IDS.StressState);
+    expect(state).not.toHaveProperty('canonical.value');
+    expect(results[0].input.metrics.some(metric => metric.metricId === HEALTH_METRIC_IDS.StressLevel)).toBe(false);
+    expect(results[1].input.metrics).toEqual(expect.arrayContaining([
+      expect.objectContaining({ metricId: HEALTH_METRIC_IDS.StressLevel, canonical: { value: 25, unit: HEALTH_UNITS.Score } }),
+    ]));
+  });
+
+  it('preserves zero stress samples alongside positive scores, state codes and Body Battery', () => {
+    const [result] = map('stressDetails', [{
+      summaryId: 'zero-stress', calendarDate: '2025-10-09',
+      startTimeInSeconds: 1_760_000_000, durationInSeconds: 540,
+      timeOffsetStressLevelValues: { 0: 0, 180: -2, 360: 25, 540: 0 },
+      timeOffsetBodyBatteryValues: { 0: 50 },
+    }]);
+    expect(result.input.sampleSeries).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        seriesKey: 'stress_level_3_minute_average', offsetMs: [0, 360_000, 540_000],
+        nativeValues: [0, 25, 0], canonicalValues: [0, 25, 0],
+        normalizationStatus: HEALTH_NORMALIZATION_STATUSES.Canonical,
+      }),
+      expect.objectContaining({
+        seriesKey: 'stress_measurement_state', offsetMs: [180_000],
+        nativeValues: ['-2'], canonicalValues: ['large_motion'],
+      }),
+      expect.objectContaining({ seriesKey: 'garmin_body_battery', nativeValues: [50] }),
+    ]));
+    expect(result.input.coverage).toMatchObject({ sampleCount: 4 });
+  });
+
   it('caps Body Battery activity events within the shared metric write budget', () => {
     const bodyBatteryActivityEvents = Array.from({ length: 256 }, (_, index) => ({
       eventType: 'ACTIVITY',
@@ -501,6 +551,156 @@ describe('Garmin Health API summary mapping', () => {
     expect(replacement.input.revision.token).toBe(first.input.revision.token);
   });
 
+  describe('bounded skin-temperature duration diagnostics', () => {
+    const summary = {
+      summaryId: 'synthetic-skin-temperature', calendarDate: '2025-10-09',
+      startTimeInSeconds: 1_760_000_000, durationInSeconds: 1_980,
+      avgDeviationCelsius: 0,
+    };
+    const secret = 'https://example.invalid/callback?token=do-not-log';
+
+    it.each([
+      [-16_920, 'negative_duration', 'number', -16_920, 'included'],
+      [-1_000_000, 'negative_duration', 'number', -1_000_000, 'included'],
+      [-1_000_001, 'negative_duration', 'number', null, 'outside_diagnostic_range'],
+      [604_801, 'out_of_range', 'number', 604_801, 'included'],
+      [1_000_001, 'out_of_range', 'number', null, 'outside_diagnostic_range'],
+      [1.5, 'not_integer', 'number', 1.5, 'included'],
+      [Number.NaN, 'non_finite', 'number', null, 'non_finite'],
+      [Number.POSITIVE_INFINITY, 'non_finite', 'number', null, 'non_finite'],
+      [Number.NEGATIVE_INFINITY, 'non_finite', 'number', null, 'non_finite'],
+      [undefined, 'invalid_type', 'undefined', null, 'non_numeric'],
+      [null, 'invalid_type', 'null', null, 'non_numeric'],
+      ['1980', 'invalid_type', 'string', null, 'non_numeric'],
+      [secret.repeat(1000), 'invalid_type', 'string', null, 'non_numeric'],
+      [{ accessToken: secret }, 'invalid_type', 'object', null, 'non_numeric'],
+      [[secret], 'invalid_type', 'array', null, 'non_numeric'],
+      [false, 'invalid_type', 'boolean', null, 'non_numeric'],
+    ])('preserves rejection and bounds the diagnostic for case %#', (value, reason, valueType, numericValue, valueDisposition) => {
+      let caught: unknown;
+      try {
+        map('skinTemp', [summary, {
+          ...summary, durationInSeconds: value, callbackURL: secret, accessToken: secret,
+        }]);
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(GarminHealthValidationError);
+      expect((caught as GarminHealthValidationError).message)
+        .toBe('skinTemp[1].durationInSeconds is outside the supported numeric range.');
+      expect((caught as GarminHealthValidationError).diagnostic).toEqual({
+        summaryType: 'skinTemp', summaryIndex: 1, field: 'durationInSeconds', reason,
+        valueType, numericValue, valueDisposition, sampleOffsetSeconds: null,
+      });
+      expect(JSON.stringify(caught)).not.toContain(secret);
+      expect(JSON.stringify(caught)).not.toContain(summary.summaryId);
+      expect(JSON.stringify(caught).length).toBeLessThan(600);
+    });
+
+    it.each([0, 1_980, 604_800])('preserves accepted duration %s', durationInSeconds => {
+      const [result] = map('skinTemp', [{ ...summary, durationInSeconds }]);
+      expect(result.input.endTimeMs - result.input.startTimeMs).toBe(durationInSeconds * 1000);
+      expect(result.input.coverage?.observedDurationSeconds).toBe(durationInSeconds);
+    });
+
+    it.each([
+      ['skinTemp', { ...summary, avgDeviationCelsius: 101 }],
+      ['skinTemp', { ...summary, startTimeInSeconds: -1 }],
+      ['dailies', { ...summary, durationInSeconds: -1 }],
+    ] as const)('does not attach duration diagnostics to unrelated failures (%#)', (type, value) => {
+      let caught: unknown;
+      try {
+        map(type, [value]);
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(GarminHealthValidationError);
+      expect((caught as GarminHealthValidationError).diagnostic).toBeUndefined();
+    });
+  });
+
+  describe('bounded stress-validation diagnostics', () => {
+    const interval = {
+      summaryId: 'diagnostic-summary', calendarDate: '2025-10-09',
+      startTimeInSeconds: 1_760_000_000, durationInSeconds: 60,
+    };
+    const secret = 'https://example.invalid/callback?token=do-not-log';
+
+    it.each([
+      [-3, 'out_of_range', 'number', -3, 'included'],
+      [101, 'out_of_range', 'number', 101, 'included'],
+      [43.5, 'not_integer', 'number', 43.5, 'included'],
+      [-1_000_000, 'out_of_range', 'number', -1_000_000, 'included'],
+      [1_000_001, 'out_of_range', 'number', null, 'outside_diagnostic_range'],
+      [Number.NaN, 'non_finite', 'number', null, 'non_finite'],
+      [Number.POSITIVE_INFINITY, 'non_finite', 'number', null, 'non_finite'],
+      ['43', 'invalid_type', 'string', null, 'non_numeric'],
+      [secret.repeat(1000), 'invalid_type', 'string', null, 'non_numeric'],
+      [{ accessToken: secret }, 'invalid_type', 'object', null, 'non_numeric'],
+      [[secret], 'invalid_type', 'array', null, 'non_numeric'],
+      [false, 'invalid_type', 'boolean', null, 'non_numeric'],
+    ])('keeps Daily rejection unchanged and sanitizes case %#', (value, reason, valueType, numericValue, valueDisposition) => {
+      let caught: unknown;
+      try {
+        map('dailies', [
+          { ...interval, steps: 10 },
+          { ...interval, averageStressLevel: value, accessToken: secret },
+        ]);
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(GarminHealthValidationError);
+      expect((caught as GarminHealthValidationError).message)
+        .toBe('averageStressLevel is outside the supported numeric range.');
+      expect((caught as GarminHealthValidationError).diagnostic).toEqual({
+        summaryType: 'dailies', summaryIndex: 1, field: 'averageStressLevel', reason,
+        valueType, numericValue, valueDisposition, sampleOffsetSeconds: null,
+      });
+      expect(JSON.stringify(caught)).not.toContain(secret);
+      expect(JSON.stringify(caught).length).toBeLessThan(600);
+    });
+
+    it.each([-0.5, -4.5])('identifies the first unsupported Stress point (%s)', value => {
+      let caught: unknown;
+      try {
+        map('stressDetails', [
+          { ...interval, timeOffsetStressLevelValues: { 0: 20 } },
+          { ...interval, timeOffsetStressLevelValues: { 60: -0.25, 30: value, 0: 20 }, callbackURL: secret },
+        ]);
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(GarminHealthValidationError);
+      expect((caught as GarminHealthValidationError).message)
+        .toBe('stressDetails[1].timeOffsetStressLevelValues contains an unsupported stress code.');
+      expect((caught as GarminHealthValidationError).diagnostic).toEqual({
+        summaryType: 'stressDetails', summaryIndex: 1, field: 'timeOffsetStressLevelValues',
+        reason: 'unsupported_stress_code', valueType: 'number', numericValue: value,
+        valueDisposition: 'included', sampleOffsetSeconds: 30,
+      });
+      expect(JSON.stringify(caught)).not.toContain(secret);
+    });
+
+    it.each([undefined, null, -2, -1, 0, 1, 100])('preserves accepted Daily values (%s)', value => {
+      expect(map('dailies', [{ ...interval, steps: 10, averageStressLevel: value }])).toHaveLength(1);
+    });
+
+    it.each([-5, -4, -3, -2, -1, 0, 1, 100])('preserves accepted Stress values (%s)', value => {
+      expect(map('stressDetails', [{ ...interval, timeOffsetStressLevelValues: { 0: value } }])).toHaveLength(1);
+    });
+
+    it('does not attach stress diagnostics to unrelated validation failures', () => {
+      try {
+        map('dailies', [{ ...interval, steps: -1, averageStressLevel: -2 }]);
+      } catch (error) {
+        expect(error).toBeInstanceOf(GarminHealthValidationError);
+        expect((error as GarminHealthValidationError).diagnostic).toBeUndefined();
+        return;
+      }
+      expect.fail('Expected Daily steps validation to fail first.');
+    });
+  });
+
   it('rounds documented fractional-second timestamps to model millisecond precision', () => {
     const [result] = map('healthSnapshot', [{
       summaryId: 'snapshot-1', calendarDate: '2025-10-09',
@@ -517,13 +717,13 @@ describe('Garmin Health API summary mapping', () => {
       summaryId: 'daily-1', userId: 'other-account', calendarDate: '2025-10-09',
       startTimeInSeconds: 1_760_000_000, durationInSeconds: 1,
     }]],
-    ['out-of-range Daily sample', 'dailies', [{
-      summaryId: 'daily-1', calendarDate: '2025-10-09', startTimeInSeconds: 1_760_000_000,
-      durationInSeconds: 60, timeOffsetHeartRateSamples: { 61: 70 },
+    ['out-of-range Stress sample', 'stressDetails', [{
+      summaryId: 'stress-1', calendarDate: '2025-10-09', startTimeInSeconds: 1_760_000_000,
+      durationInSeconds: 60, timeOffsetStressLevelValues: { 61: 70 },
     }]],
     ['unsupported stress code', 'stressDetails', [{
       summaryId: 'stress-1', calendarDate: '2025-10-09', startTimeInSeconds: 1_760_000_000,
-      durationInSeconds: 60, timeOffsetStressLevelValues: { 0: 0 },
+      durationInSeconds: 60, timeOffsetStressLevelValues: { 0: -0.5 },
     }]],
     ['nonzero on-demand duration', 'pulseox', [{
       summaryId: 'pulse-1', calendarDate: '2025-10-09', startTimeInSeconds: 1_760_000_000,

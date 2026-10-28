@@ -1,6 +1,7 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
+import { newEmailDeliveryFields } from '../email/queue-metadata';
 import { Timestamp } from 'firebase-admin/firestore';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import {
@@ -18,7 +19,11 @@ import {
     getTimestampMillis,
 } from '../stripe/subscription-state';
 
-export const checkSubscriptionNotifications = onSchedule({ schedule: 'every 24 hours', region: 'europe-west2' }, async () => {
+export const checkSubscriptionNotifications = onSchedule({
+    schedule: 'every 24 hours',
+    region: 'europe-west2',
+    memory: '512MiB',
+}, async () => {
     const db = admin.firestore();
     const now = new Date();
 
@@ -101,6 +106,7 @@ export const checkSubscriptionNotifications = onSchedule({ schedule: 'every 24 h
             }
 
             transaction.set(mailRef, {
+                ...newEmailDeliveryFields(),
                 toUids: [uid],
                 from: TRANSACTIONAL_EMAIL_FROM,
                 replyTo: TRANSACTIONAL_EMAIL_REPLY_TO,

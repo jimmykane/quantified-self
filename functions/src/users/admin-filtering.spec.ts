@@ -56,6 +56,7 @@ vi.mock('firebase-admin', () => ({
 
 vi.mock('firebase-functions/v2/https', () => ({
     onCall: mockOnCall,
+    onRequest: vi.fn((_options: unknown, handler: unknown) => handler),
     HttpsError: class extends Error {
         code: string;
         constructor(code: string, message: string) {

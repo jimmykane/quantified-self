@@ -1,5 +1,5 @@
 <div class="performance-charts-container">
-  @if (durabilityOutputUnavailable) {
+  @if (shouldShowTabs && !hasDurability && durabilityOutputUnavailable) {
   <section class="performance-durability-notice" aria-label="Durability unavailable">
     <mat-icon aria-hidden="true">info_outline</mat-icon>
     <div>

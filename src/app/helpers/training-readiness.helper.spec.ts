@@ -14,10 +14,12 @@ describe('training-readiness.helper', () => {
       rampRate: 1,
       sleepScore: 90,
       latestSleepAtMs: Date.UTC(2026, 6, 16, 6),
+      hrvPersonalRange: null,
       hrvRatio: 1.1,
       averageHeartRateRatio: 0.95,
       minimumHeartRateRatio: 0.96,
       overnightHeartRateRatio: 0.953,
+      overnightHeartRateCalculatedByQs: true,
       trend: [],
     }, { locale: 'en-US' });
 
@@ -32,14 +34,55 @@ describe('training-readiness.helper', () => {
     expect(view.metricRows.map(row => [row.label, row.valueText])).toEqual([
       ['Load context', 'Form +10 · Ramp +1'],
       ['Sleep', '90/100'],
-      ['HRV vs baseline', '+10%'],
+      ['HRV · 7-day average', '—'],
       ['Overnight HR vs baseline', '-5%'],
     ]);
+    expect(view.metricRows.find(row => row.label === 'HRV · 7-day average')?.detailText)
+      .toBe('No current HRV · 60-day personal range');
+    expect(view.metricRows.find(row => row.label === 'Overnight HR vs baseline')?.detailText).toContain('Calculated by QS');
     expect(view.implicationTitle).toBe('Signals are broadly supportive');
     expect(view.implicationText).toContain('does not choose a workout');
     expect(view.sourceText).toContain('bounded sleep envelope');
-    expect(view.sourceText).toContain('same 30-day window applied at each daily cutoff');
+    expect(view.sourceText).toContain('same 60-day HRV window applied at each daily cutoff');
     expect(view.sourceText).toContain('browser does not load workout history');
+  });
+
+  it('adds the recent HRV direction to the existing status line without changing its value', () => {
+    const view = buildTrainingReadinessViewModel({
+      score: 70,
+      label: 'Mixed',
+      confidence: 'medium',
+      availableSignalCount: 1,
+      baselineEvidenceCount: 14,
+      totalSignalCount: 4,
+      form: null,
+      rampRate: null,
+      sleepScore: null,
+      latestSleepAtMs: Date.UTC(2026, 8, 17, 6),
+      hrvRatio: 1,
+      hrvPersonalRange: {
+        tone: 'positive',
+        reason: 'within_range',
+        observationDayCount: 30,
+        requiredObservationDayCount: 14,
+        currentObservationDayCount: 7,
+        requiredCurrentObservationDayCount: 3,
+        baselineAverage: 40,
+        currentAverage: 40,
+        normalRange: { min: 35, max: 45 },
+        latestMs: 36,
+        latestAtMs: Date.UTC(2026, 8, 17, 6),
+      },
+      averageHeartRateRatio: null,
+      minimumHeartRateRatio: null,
+      overnightHeartRateRatio: null,
+      trend: [],
+    }, { hrvRecentTrend: 'falling', calculatedAtMs: Date.UTC(2026, 8, 17, 12) });
+
+    const hrv = view.metricRows.find(row => row.label === 'HRV · 7-day average');
+    expect(hrv?.valueText).toBe('40 ms');
+    expect(hrv?.detailText).toContain('Within range · falling');
+    expect(hrv?.detailText).toContain('Latest HRV 36 ms · Today');
   });
 
   it('keeps unavailable evidence explicit while the shared inputs prepare', () => {
@@ -67,6 +110,7 @@ describe('training-readiness.helper', () => {
       rampRate: 1,
       sleepScore: null,
       latestSleepAtMs: null,
+      hrvPersonalRange: null,
       hrvRatio: null,
       averageHeartRateRatio: null,
       minimumHeartRateRatio: null,
@@ -74,30 +118,10 @@ describe('training-readiness.helper', () => {
       trend: [],
     }, { sleepEvidenceFailed: true });
     const unavailable = buildTrainingReadinessViewModel(null, { sleepEvidenceFailed: true });
-    const retained = buildTrainingReadinessViewModel({
-      score: 88,
-      label: 'Ready',
-      confidence: 'low',
-      availableSignalCount: 2,
-      baselineEvidenceCount: 0,
-      totalSignalCount: 4,
-      form: 10,
-      rampRate: 1,
-      latestSleepAtMs: Date.UTC(2026, 6, 16, 6),
-      sleepScore: 85,
-      hrvRatio: null,
-      averageHeartRateRatio: null,
-      minimumHeartRateRatio: null,
-      overnightHeartRateRatio: null,
-      trend: [],
-    }, { sleepEvidenceFailed: true });
-
     expect(loadOnly.state).toBe('ready');
     expect(loadOnly.detailText).toContain('could not be loaded');
     expect(loadOnly.detailText).toContain('load signals only');
     expect(loadOnly.metricRows.find(row => row.label === 'Sleep')?.detailText).toContain('could not be loaded');
-    expect(retained.detailText).toContain('last loaded evidence');
-    expect(retained.metricRows.find(row => row.label === 'Sleep')?.detailText).toContain('Latest eligible night ended');
     expect(unavailable).toMatchObject({ state: 'unavailable', label: 'Unavailable' });
     expect(unavailable.detailText).toContain('Refresh the page to retry');
   });
@@ -115,6 +139,7 @@ describe('training-readiness.helper', () => {
       rampRate: null,
       sleepScore: 80,
       latestSleepAtMs: Date.UTC(2026, 6, 16, 6),
+      hrvPersonalRange: null,
       hrvRatio: null,
       averageHeartRateRatio: null,
       minimumHeartRateRatio: null,
@@ -144,6 +169,7 @@ describe('training-readiness.helper', () => {
       rampRate: index === 5 ? null : 1,
       sleepScore: index === 5 ? null : 80,
       latestSleepAtMs: index === 5 ? null : asOfDayMs,
+      hrvPersonalRange: null,
       hrvRatio: index === 5 ? null : 1,
       averageHeartRateRatio: index === 5 ? null : 1,
       minimumHeartRateRatio: index === 5 ? null : 1,
@@ -160,6 +186,7 @@ describe('training-readiness.helper', () => {
       rampRate: 1,
       sleepScore: 90,
       latestSleepAtMs: asOfDayMs,
+      hrvPersonalRange: null,
       hrvRatio: 1.1,
       averageHeartRateRatio: 0.95,
       minimumHeartRateRatio: 0.96,
@@ -170,7 +197,8 @@ describe('training-readiness.helper', () => {
       calculatedAtMs: Date.UTC(2026, 6, 16, 12),
       historyStatus: 'ready',
       history: {
-        formulaVersion: 3,
+        formulaVersion: 4,
+        evidenceVersion: 4,
         dayBoundary: 'UTC',
         asOfDayMs,
         generatedAtMs: Date.UTC(2026, 6, 16, 11),
@@ -209,6 +237,7 @@ describe('training-readiness.helper', () => {
       rampRate: 1,
       sleepScore: 80,
       latestSleepAtMs: asOfDayMs,
+      hrvPersonalRange: null,
       hrvRatio: null,
       averageHeartRateRatio: null,
       minimumHeartRateRatio: null,
@@ -225,6 +254,7 @@ describe('training-readiness.helper', () => {
       rampRate: 1,
       sleepScore: 90,
       latestSleepAtMs: Date.UTC(2026, 6, 16, 6),
+      hrvPersonalRange: null,
       hrvRatio: null,
       averageHeartRateRatio: null,
       minimumHeartRateRatio: null,
@@ -235,6 +265,7 @@ describe('training-readiness.helper', () => {
       historyStatus: 'ready',
       history: {
         formulaVersion: 3,
+        evidenceVersion: 2,
         dayBoundary: 'UTC',
         asOfDayMs,
         generatedAtMs: Date.UTC(2026, 6, 15, 12),
@@ -263,6 +294,7 @@ describe('training-readiness.helper', () => {
       rampRate: null,
       sleepScore: null,
       latestSleepAtMs: null,
+      hrvPersonalRange: null,
       hrvRatio: null,
       averageHeartRateRatio: null,
       minimumHeartRateRatio: null,
@@ -273,6 +305,7 @@ describe('training-readiness.helper', () => {
       historyStatus: 'failed',
       history: {
         formulaVersion: 3,
+        evidenceVersion: 2,
         dayBoundary: 'UTC',
         asOfDayMs,
         generatedAtMs: Date.UTC(2026, 6, 16, 11),

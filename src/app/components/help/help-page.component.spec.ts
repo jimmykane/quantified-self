@@ -1,20 +1,27 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
+import { provideRouter, Router } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { HelpPageComponent } from './help-page.component';
 import { HELP_ACTIONS, HELP_SECTIONS } from '../../shared/help.content';
+import { MarkdownPipe } from '../../helpers/markdown.pipe';
+import { AppHapticsService } from '../../services/app.haptics.service';
+import { routes } from '../../app.routing.module';
 
 describe('HelpPageComponent', () => {
   let component: HelpPageComponent;
   let fixture: ComponentFixture<HelpPageComponent>;
+  let haptics: { selection: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
     window.history.replaceState(null, '', '/help');
-
+    haptics = { selection: vi.fn() };
     await TestBed.configureTestingModule({
       imports: [HelpPageComponent, RouterTestingModule.withRoutes([]), NoopAnimationsModule],
+      providers: [{ provide: AppHapticsService, useValue: haptics }],
     }).compileComponents();
 
     fixture = TestBed.createComponent(HelpPageComponent);
@@ -26,6 +33,65 @@ describe('HelpPageComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('renders every topic as a shareable link and leaves initialization silent', () => {
+    for (const section of HELP_SECTIONS) {
+      expect(fixture.nativeElement.querySelector(`a.topic-card[href="/help#${section.id}"]`)?.textContent).toContain(section.title);
+    }
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('gives article selection feedback once while leaving repeated and modified clicks silent', () => {
+    component.openSection('getting-started', new MouseEvent('click', { ctrlKey: true }));
+    expect(component.isArticleOpen()).toBe(false);
+    expect(window.location.hash).toBe('');
+    expect(haptics.selection).not.toHaveBeenCalled();
+    component.openSection('getting-started');
+    component.openSection('getting-started');
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps public article HTML and navigation stable through a change-detection pass', async () => {
+    await vi.waitFor(() => expect(component.renderedSectionContent()['activity-calendar']).toBeTruthy());
+    component.openSection('activity-calendar'); fixture.detectChanges();
+    const sections = component.sections();
+    const rendered = component.renderedSectionContent();
+    const transform = vi.spyOn(fixture.debugElement.injector.get(MarkdownPipe), 'transform');
+    expect(component.sections()).toBe(sections);
+    expect(component.renderedSectionContent()).toBe(rendered);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(transform).not.toHaveBeenCalled();
+    expect(component.selectedSectionId()).toBe('activity-calendar');
+    expect(window.location.hash).toBe('#activity-calendar');
+  });
+
+  it('keeps planning topics, search, links and articles available publicly', async () => {
+    component.openSection('training-plans'); fixture.detectChanges();
+    expect(component.isArticleOpen()).toBe(true);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.isArticleOpen()).toBe(true);
+    expect(component.sections().some(section => section.id === 'training-plans')).toBe(true);
+    component.onSearchQueryChange('training plans'); fixture.detectChanges();
+    expect(component.searchResults().some(section => section.id === 'training-plans')).toBe(true);
+    component.openSection('getting-started');
+    await vi.waitFor(() => expect(component.renderedSectionContent()['getting-started']).toBeTruthy());
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('a[href*="training/plans"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('a[href*="#training-plans"]')).toBeTruthy();
+    expect(fixture.nativeElement.textContent).toContain('Training');
+    component.openSection('activity-calendar'); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Planned workouts');
+    expect(fixture.nativeElement.textContent).toContain('Plan color');
+  });
+
+  it('renders the planning hash on an initial public visit', async () => {
+    window.history.replaceState(null, '', '/help#training-plans');
+    const otherFixture = TestBed.createComponent(HelpPageComponent);
+    otherFixture.detectChanges(); await otherFixture.whenStable();
+    expect(otherFixture.componentInstance.selectedSectionId()).toBe('training-plans');
+    expect(otherFixture.componentInstance.isArticleOpen()).toBe(true);
+    otherFixture.destroy();
   });
 
   it('renders the documentation home with every topic and quick action', () => {
@@ -128,7 +194,7 @@ describe('HelpPageComponent', () => {
     }
 
     const sectionCopy = fixture.debugElement.query(By.css('#help-section-content .section-copy'))?.nativeElement as HTMLElement | undefined;
-    expect(sectionCopy?.innerHTML).toContain('Every current answer must use at least one read-only Quantified Self result');
+    expect(sectionCopy?.innerHTML).toContain('Every current answer must use at least one verified Quantified Self tool result');
     expect(sectionCopy?.innerHTML).toContain('latest six completed turns');
     expect(sectionCopy?.innerHTML).toContain('keeps the pending question visible');
     expect(sectionCopy?.innerHTML).toContain('safely resends the same request ID');
@@ -200,5 +266,38 @@ describe('HelpPageComponent', () => {
 
     secondFixture.destroy();
     window.history.replaceState(null, '', '/help');
+  });
+});
+
+describe('Help article routing', () => {
+  beforeEach(async () => {
+    window.history.replaceState(null, '', '/help');
+    const aliases = routes.filter(route => route.path?.startsWith('help/'));
+    await TestBed.configureTestingModule({
+      imports: [HelpPageComponent, NoopAnimationsModule],
+      providers: [
+        provideRouter([...aliases, { path: 'help', component: HelpPageComponent }]),
+        { provide: AppHapticsService, useValue: { selection: vi.fn() } },
+      ],
+    }).compileComponents();
+  });
+
+  it('opens direct topic aliases and updates the article when Help is reused', async () => {
+    const harness = await RouterTestingHarness.create();
+    const component = await harness.navigateByUrl('/help/getting-started', HelpPageComponent);
+    expect(TestBed.inject(Router).url).toBe('/help#getting-started');
+    expect(component.selectedSectionId()).toBe('getting-started');
+    const reused = await harness.navigateByUrl('/help/plans-billing', HelpPageComponent);
+    expect(reused).toBe(component);
+    expect(TestBed.inject(Router).url).toBe('/help#plans-and-billing');
+    expect(component.selectedSectionId()).toBe('plans-and-billing');
+    await harness.navigateByUrl('/help#getting-started?source=guide', HelpPageComponent);
+    expect(component.selectedSectionId()).toBe('getting-started');
+    await harness.navigateByUrl('/help#unknown-topic', HelpPageComponent);
+    expect(component.isArticleOpen()).toBe(false);
+    await harness.navigateByUrl('/help#getting-started', HelpPageComponent);
+    expect(component.selectedSectionId()).toBe('getting-started');
+    await harness.navigateByUrl('/help', HelpPageComponent);
+    expect(component.isArticleOpen()).toBe(false);
   });
 });

@@ -104,6 +104,7 @@ export interface AdminDashboardHistoryPoint {
         last7Days: number;
         last30Days: number;
         byPlan: AdminDashboardHistoryAuthActivityPlanBreakdown | null;
+        eligibleByPlan?: Record<'free' | 'basic' | 'pro', number> | null;
     };
     subscriptionCadence: {
         pro: AdminDashboardHistoryCadenceTierStats;
@@ -692,6 +693,14 @@ export class AdminService {
                     `snapshots[${index}].authActivity.last30Days`
                 ),
                 byPlan: activityByPlan,
+                eligibleByPlan: authActivity['eligibleByPlan'] == null ? null : (() => {
+                    const eligible = requireRecord(authActivity['eligibleByPlan'], 'authActivity.eligibleByPlan');
+                    return {
+                        free: requireCount(eligible['free'], 'authActivity.eligibleByPlan.free'),
+                        basic: requireCount(eligible['basic'], 'authActivity.eligibleByPlan.basic'),
+                        pro: requireCount(eligible['pro'], 'authActivity.eligibleByPlan.pro'),
+                    };
+                })(),
             },
             subscriptionCadence: { pro, basic },
         };
@@ -709,7 +718,14 @@ export class AdminService {
         ) {
             throw new Error(`Admin dashboard history snapshot ${index} has inconsistent activity totals.`);
         }
+        const eligible = mapped.authActivity.eligibleByPlan;
         const byPlan = mapped.authActivity.byPlan;
+        if (eligible && (!byPlan
+            || eligible.free + eligible.basic + eligible.pro !== mapped.authActivity.eligibleAccounts
+            || eligible.basic > mapped.users.basic || eligible.pro > mapped.users.pro
+            || (['free', 'basic', 'pro'] as const).some(plan => byPlan[plan].last30Days > eligible[plan]))) {
+            throw new Error(`Admin dashboard history snapshot ${index} has inconsistent eligible plan totals.`);
+        }
         if (byPlan) {
             const plans = ['free', 'basic', 'pro'] as const;
             const windows: readonly AuthActivityWindowKey[] = ['last24Hours', 'last7Days', 'last30Days'];

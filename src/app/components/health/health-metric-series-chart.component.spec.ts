@@ -1,4 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { DistanceUnits } from '@sports-alliance/sports-lib';
 import {
   HEALTH_METRIC_IDS,
   HEALTH_PROVIDERS,
@@ -6,16 +9,19 @@ import {
   HEALTH_VALUE_ORIGINS,
   HEALTH_VALUE_TYPES,
 } from '@shared/health';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import type { TimelineNote } from '@shared/timeline-notes';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildHealthChartModels } from '../../helpers/health-metric-chart.helper';
 import { HealthWorkspaceSeries } from '../../helpers/health-workspace.helper';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
 import { HealthMetricSeriesChartComponent } from './health-metric-series-chart.component';
+import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../helpers/echarts-tooltip-interaction.helper';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function series(): HealthWorkspaceSeries {
+function series(overrides: Partial<HealthWorkspaceSeries> = {}): HealthWorkspaceSeries {
   return {
     id: 'garmin-resting-heart-rate',
     metricId: HEALTH_METRIC_IDS.RestingHeartRate,
@@ -41,11 +47,24 @@ function series(): HealthWorkspaceSeries {
     coverageText: '2/14 days',
     freshnessText: 'Fresh',
     hasConflict: false,
+    ...overrides,
   };
 }
 
 describe('HealthMetricSeriesChartComponent', () => {
+  it('gives Highlights a readable plot height on both breakpoints without enlarging full charts', () => {
+    const styles = readFileSync(resolve(process.cwd(),
+      'src/app/components/health/health-metric-series-chart.component.scss'), 'utf8');
+    expect(styles).toContain('height: var(--health-metric-series-chart-height, 190px);');
+    expect(styles).toContain('contain: size;');
+    expect(styles).toMatch(/@media[^}]+height:\s*210px/);
+    expect(styles.match(/\.health-metric-series-chart-compact\s*\{/g)).toHaveLength(1);
+    expect(styles).toMatch(/\.health-metric-series-chart-compact\s*\{\s*height:\s*112px/);
+    expect(styles.indexOf('.health-metric-series-chart-compact')).toBeGreaterThan(styles.indexOf('@media'));
+  });
+
   let fixture: ComponentFixture<HealthMetricSeriesChartComponent>;
+  let chart: { isDisposed: ReturnType<typeof vi.fn>; dispatchAction: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn>; off: ReturnType<typeof vi.fn>; getWidth: ReturnType<typeof vi.fn> };
   let eChartsLoader: {
     init: ReturnType<typeof vi.fn>;
     setOption: ReturnType<typeof vi.fn>;
@@ -56,9 +75,12 @@ describe('HealthMetricSeriesChartComponent', () => {
   };
 
   beforeEach(async () => {
-    const chart = {
+    chart = {
       isDisposed: vi.fn().mockReturnValue(false),
       dispatchAction: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
+      getWidth: vi.fn().mockReturnValue(320),
     };
     eChartsLoader = {
       init: vi.fn().mockResolvedValue(chart),
@@ -92,7 +114,186 @@ describe('HealthMetricSeriesChartComponent', () => {
     expect(host.querySelector('svg')).toBeNull();
     expect(eChartsLoader.init).toHaveBeenCalledWith(expect.any(HTMLDivElement), 'light', undefined);
     expect(eChartsLoader.setOption).toHaveBeenCalledTimes(1);
+    expect(eChartsLoader.attachMobileSeriesTapFeedback).toHaveBeenCalledExactlyOnceWith(
+      expect.anything(), DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS,
+    );
     const option = eChartsLoader.setOption.mock.calls[0][1] as { series: Array<{ type: string }> };
-    expect(option.series[0].type).toBe('line');
+    expect(option.series[0].type).toBe('scatter');
+  });
+
+  it('keeps thumbnail readings and colors while hiding axes and interaction chrome', async () => {
+    const full = eChartsLoader.setOption.mock.calls.at(-1)![1];
+    fixture.componentRef.setInput('thumbnail', true);
+    fixture.detectChanges(); await fixture.whenStable();
+    const thumbnail = eChartsLoader.setOption.mock.calls.at(-1)![1];
+    expect(thumbnail.tooltip.show).toBe(false);
+    expect(thumbnail.xAxis.show).toBe(false);
+    expect(thumbnail.yAxis.show).toBe(false);
+    expect(thumbnail.series[0].data).toEqual(full.series[0].data);
+    expect(thumbnail.series[0].lineStyle.color).toEqual(full.series[0].lineStyle.color);
+    fixture.componentRef.setInput('thumbnail', false);
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(eChartsLoader.setOption.mock.calls.at(-1)![1].xAxis.show).not.toBe(false);
+  });
+
+  it('keeps zero-valued bars visible only in thumbnails without changing their values', async () => {
+    fixture.componentRef.setInput('model', buildHealthChartModels([series({ metricId: 'steps', chartKind: 'bar',
+      points: [{ timestampMs: 0, calendarDate: '1970-01-01', value: 0, qualityCode: null }] })], 0, DAY_MS)[0]);
+    fixture.componentRef.setInput('thumbnail', true); fixture.detectChanges(); await fixture.whenStable();
+    const preview = eChartsLoader.setOption.mock.calls.at(-1)![1];
+    expect(preview.series[0].barMinHeight).toBe(2);
+    expect(preview.series[0].data[0][1]).toBe(0);
+    fixture.componentRef.setInput('thumbnail', false); fixture.detectChanges(); await fixture.whenStable();
+    expect(eChartsLoader.setOption.mock.calls.at(-1)![1].series[0].barMinHeight).toBeUndefined();
+  });
+
+  it('fits sparse thumbnail history to its recorded span and restores the full chart window', async () => {
+    fixture.componentRef.setInput('endTimeMs', DAY_MS * 30);
+    fixture.componentRef.setInput('thumbnail', true); fixture.detectChanges(); await fixture.whenStable();
+    const preview = eChartsLoader.setOption.mock.calls.at(-1)![1];
+    expect(preview.xAxis.min).toBeLessThan(0);
+    expect(preview.xAxis.max).toBeGreaterThan(DAY_MS);
+    expect(preview.xAxis.max).toBeLessThan(2 * DAY_MS);
+    expect(preview.series[0].type).toBe('scatter');
+    expect(preview.series[0].data).toEqual([[0, 50], [DAY_MS, 52]]);
+    fixture.componentRef.setInput('thumbnail', false); fixture.detectChanges(); await fixture.whenStable();
+    const full = eChartsLoader.setOption.mock.calls.at(-1)![1];
+    expect(full.xAxis.max).toBe(DAY_MS * 30);
+    expect(full.series[0].lineStyle.width).toBe(1);
+  });
+
+  it('keeps two monthly measurements as dots in the thumbnail and restored full chart', async () => {
+    const points = [0, 30].map(day => ({ timestampMs: day * DAY_MS,
+      calendarDate: new Date(day * DAY_MS).toISOString().slice(0, 10), value: 70 + day / 30, qualityCode: null }));
+    const model = buildHealthChartModels([series({ metricId: 'body_weight', unit: 'kilogram', points })], 0, 31 * DAY_MS)[0];
+    fixture.componentRef.setInput('model', model);
+    fixture.componentRef.setInput('endTimeMs', 31 * DAY_MS);
+    fixture.componentRef.setInput('thumbnail', true); fixture.detectChanges(); await fixture.whenStable();
+    const preview = eChartsLoader.setOption.mock.calls.at(-1)![1];
+    expect(preview.series[0]).toMatchObject({ type: 'scatter', showSymbol: true, data: [[0, 70], [30 * DAY_MS, 71]] });
+    fixture.componentRef.setInput('thumbnail', false); fixture.detectChanges(); await fixture.whenStable();
+    const full = eChartsLoader.setOption.mock.calls.at(-1)![1];
+    expect(full.series[0]).toMatchObject({ type: 'scatter', data: preview.series[0].data });
+    expect(full.xAxis).toMatchObject({ min: 0, max: 31 * DAY_MS });
+  });
+
+  it('retains dense line history and its light thumbnail stroke', async () => {
+    const points = [0, 1, 2].map(day => ({ timestampMs: day * DAY_MS,
+      calendarDate: `1970-01-0${day + 1}`, value: 50 + day, qualityCode: null }));
+    fixture.componentRef.setInput('model', buildHealthChartModels([series({ points })], 0, 2 * DAY_MS)[0]);
+    fixture.componentRef.setInput('endTimeMs', 2 * DAY_MS);
+    fixture.componentRef.setInput('thumbnail', true); fixture.detectChanges(); await fixture.whenStable();
+    const preview = eChartsLoader.setOption.mock.calls.at(-1)![1];
+    expect(preview.series[0]).toMatchObject({ type: 'line', lineStyle: { width: 1.5 }, data: [[0, 50], [DAY_MS, 51], [2 * DAY_MS, 52]] });
+    fixture.componentRef.setInput('thumbnail', false); fixture.detectChanges(); await fixture.whenStable();
+    expect(eChartsLoader.setOption.mock.calls.at(-1)![1].series[0]).toMatchObject({ type: 'line', lineStyle: { width: 1 } });
+  });
+
+  it('centers a visible marker for a single recorded measurement', async () => {
+    const timestampMs = Date.parse('2026-09-14T08:00:00Z');
+    fixture.componentRef.setInput('model', buildHealthChartModels([series({ metricId: 'body_weight', chartKind: 'point',
+      points: [{ timestampMs, calendarDate: '2026-09-14', value: 72, qualityCode: null }] })], timestampMs - DAY_MS * 30, timestampMs + DAY_MS)[0]);
+    fixture.componentRef.setInput('thumbnail', true); fixture.detectChanges(); await fixture.whenStable();
+    const preview = eChartsLoader.setOption.mock.calls.at(-1)![1];
+    expect(preview.xAxis.min).toBeLessThan(timestampMs);
+    expect(preview.xAxis.max).toBeGreaterThan(timestampMs);
+    expect(preview.series[0]).toMatchObject({ type: 'scatter', symbolSize: 6, data: [[timestampMs, 72]] });
+  });
+
+  it('refreshes chart labels when the signed-in user changes display units', async () => {
+    fixture.componentRef.setInput('model', buildHealthChartModels([series({
+      metricId: HEALTH_METRIC_IDS.Distance,
+      unit: 'meter',
+      points: [{ timestampMs: 0, calendarDate: '1970-01-01', value: 10_000, qualityCode: null }],
+    })], 0, DAY_MS)[0]);
+    fixture.componentRef.setInput('unitSettings', normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => {
+      expect(eChartsLoader.setOption).toHaveBeenCalledTimes(2);
+    });
+
+    const option = eChartsLoader.setOption.mock.calls.at(-1)?.[1] as {
+      tooltip: { formatter: (params: { value?: unknown }) => string };
+      yAxis: { axisLabel: { formatter: (value: number) => string } };
+    };
+    expect(option.tooltip.formatter({ value: [0, 10_000] })).toContain('6.22 mi');
+    expect(option.yAxis.axisLabel.formatter(10_000)).toBe('6.22');
+  });
+
+  it('renders an accessible personal-range overlay when the highlight provides one', async () => {
+    fixture.componentRef.setInput('model', buildHealthChartModels([series({
+      metricId: HEALTH_METRIC_IDS.HeartRateVariability, unit: 'millisecond',
+    })], 0, DAY_MS)[0]);
+    fixture.componentRef.setInput('statusOverlay', {
+      normalRangeColor: '#00aa00',
+      statusColor: '#ffaa00',
+      pointStatuses: [0, DAY_MS].map(timestampMs => ({ timestampMs, color: '#ffaa00',
+        label: 'Outside personal range', normalRange: { min: 45, max: 55 } })),
+    });
+    fixture.componentRef.setInput('statusDescription', 'Outside personal range. 7-day average 58 ms.');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => {
+      expect(eChartsLoader.setOption.mock.calls.some(call =>
+        (call[1] as { series?: Array<{ id?: string }> })?.series?.some(item => item.id === 'hrv-personal-range-band'))).toBe(true);
+    });
+
+    const chart = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[role="img"]');
+    expect(chart?.getAttribute('aria-label')).toContain('Outside personal range. 7-day average 58 ms.');
+    const option = eChartsLoader.setOption.mock.calls
+      .map(call => call[1] as { series: Array<{ id?: string; markPoint: unknown }> })
+      .find(candidate => candidate.series.some(item => item.id === 'hrv-personal-range-band')) as {
+      series: Array<{ id?: string; markPoint: unknown }>;
+    };
+    expect(option.series.some(item => item.id === 'hrv-personal-range-band')).toBe(true);
+    expect(option.series[0].markPoint).toBeTruthy();
+  });
+
+  it('adds note tooltips to compact Highlights while preserving both visible axes and personal range', async () => {
+    const note: TimelineNote = { id: 'a'.repeat(64), category: 'travel', title: 'Travel', startDate: '1970-01-01', endDate: '1970-01-02', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+    const context = { notes: [note], select: vi.fn(), reportRange: vi.fn() };
+    fixture.componentRef.setInput('compact', true);
+    fixture.componentRef.setInput('model', buildHealthChartModels([series({
+      metricId: HEALTH_METRIC_IDS.HeartRateVariability, unit: 'millisecond',
+    })], 0, DAY_MS)[0]);
+    fixture.componentRef.setInput('statusOverlay', { normalRangeColor: '#00aa00', statusColor: '#ffaa00',
+      pointStatuses: [0, DAY_MS].map(timestampMs => ({ timestampMs, color: '#ffaa00',
+        label: 'Outside personal range', normalRange: { min: 45, max: 55 } })),
+    });
+    fixture.detectChanges(); await fixture.whenStable();
+    await vi.waitFor(() => expect(eChartsLoader.setOption).toHaveBeenCalledTimes(2));
+    type Axis = { type: string; min: number; max: number; show: boolean };
+    type Option = { xAxis: Axis; yAxis: Axis; series: Array<{ id?: string; data: unknown[]; markArea?: unknown; markLine?: { data: Array<{ name: string; tooltip: { formatter: () => string } }> } }> };
+    const before = eChartsLoader.setOption.mock.calls.at(-1)?.[1] as Option;
+    expect(before.xAxis.show).toBe(true);
+    expect(before.yAxis.show).toBe(true);
+    fixture.componentRef.setInput('timelineNotes', context);
+    fixture.detectChanges(); await fixture.whenStable();
+    await vi.waitFor(() => expect(eChartsLoader.setOption).toHaveBeenCalledTimes(3));
+    const annotated = eChartsLoader.setOption.mock.calls.at(-1)?.[1] as Option;
+    // A normal merge containing only markers leaves metric colors, personal range and axes untouched.
+    expect(Object.keys(annotated)).toEqual(['series']);
+    expect(annotated.series).toHaveLength(1);
+    expect(eChartsLoader.setOption.mock.calls.at(-1)?.[2]).toEqual({ notMerge: false, lazyUpdate: false });
+    expect(context.reportRange).toHaveBeenCalledWith(expect.anything(), { startDate: '1970-01-01', endDate: '1970-01-02' });
+    const overlay = annotated.series.at(-1)!;
+    expect(overlay.id).toBe('timeline-note-overlay-0');
+    expect(overlay.data).toEqual([]);
+    expect(overlay.markLine!.data[0].tooltip.formatter()).toContain('Travel');
+    // Notes use native tooltips; editing stays in the keyboard-accessible workspace manager.
+    expect(chart.on.mock.calls).toEqual([['finished', expect.any(Function)]]);
+    expect(context.select).not.toHaveBeenCalled();
+
+    fixture.componentRef.setInput('timelineNotes', { ...context, notes: [] });
+    fixture.detectChanges(); await fixture.whenStable();
+    await vi.waitFor(() => expect(eChartsLoader.setOption).toHaveBeenCalledTimes(4));
+    const hidden = eChartsLoader.setOption.mock.calls.at(-1)?.[1] as Option;
+    expect(hidden).toEqual({ series: [{ id: 'timeline-note-overlay-0', markLine: { data: [] }, markArea: { data: [] } }] });
+    expect(context.reportRange).toHaveBeenCalledOnce();
+    expect(context.select).not.toHaveBeenCalled();
+    fixture.destroy();
+    expect(chart.off.mock.calls).toEqual([['finished', chart.on.mock.calls[0][1]]]);
+    expect(context.reportRange).toHaveBeenLastCalledWith(expect.anything(), null);
   });
 });

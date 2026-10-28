@@ -59,6 +59,30 @@ export function getEventTags(event: EventTagsContainer | null | undefined): stri
   return normalizeEventTags(event?.benchmarkReviewTags);
 }
 
+export function storedEventTagNames(event: EventTagsContainer | null | undefined): string[] {
+  return normalizeEventTagSuggestions([
+    ...normalizeEventTags(event?.tags),
+    ...normalizeEventTags(event?.benchmarkReviewTags),
+  ]);
+}
+
+export function newlyAssignedEventTags(
+  before: EventTagsContainer | null | undefined,
+  after: EventTagsContainer | null | undefined,
+): string[] {
+  const previous = new Set(storedEventTagNames(before).map(tag => tag.toLowerCase()));
+  return storedEventTagNames(after).filter(tag => !previous.has(tag.toLowerCase()));
+}
+
+export async function eventTagCatalogKeyFromWebCrypto(tag: string): Promise<string> {
+  const [normalized] = normalizeEventTagSuggestions([tag]);
+  if (!normalized) throw new Error('An event tag is required for a catalog key.');
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) throw new Error('Secure event tag storage is unavailable in this browser.');
+  const digest = await subtle.digest('SHA-256', new TextEncoder().encode(normalized.toLowerCase()));
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
 export function preserveEventTagsOnRewrite(
   incomingEvent: Record<string, unknown>,
   existingEvent: EventTagsContainer | null | undefined,

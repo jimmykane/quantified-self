@@ -78,6 +78,28 @@ export function getDashboardPowerCurveActivityTypes(scope: DashboardPowerCurveSc
   return [...activityTypes];
 }
 
+// The complete default lists saved by Sports Lib 21.5/21.6 before refined
+// canonical names. Only exact set matches migrate; custom subsets stay exact.
+export function expandHistoricalDashboardPowerCurveDefaultTypes(activityTypes: ActivityTypes[]): ActivityTypes[] {
+  const historicalDefaults: Record<DashboardPowerCurveScope, readonly ActivityTypes[]> = {
+    cycling: [
+      ActivityTypes.Cycling, ActivityTypes.DownhillCycling, ActivityTypes.EBiking,
+      ActivityTypes['Enduro MTB'], ActivityTypes.Handcycle, ActivityTypes.IndoorCycling,
+      ActivityTypes.MountainBiking, ActivityTypes.Velomobile, ActivityTypes.VirtualCycling,
+    ],
+    running: [
+      ActivityTypes.IndoorRunning, ActivityTypes.Running, ActivityTypes.TrailRunning,
+      ActivityTypes.Treadmill, ActivityTypes.VirtualRunning,
+    ],
+  };
+  const selected = new Set(activityTypes);
+  const scope = getDashboardPowerCurveScopeDefinitions().find(definition => {
+    const defaults = historicalDefaults[definition.scope];
+    return selected.size === defaults.length && defaults.every(type => selected.has(type));
+  })?.scope;
+  return scope ? getDashboardPowerCurveActivityTypes(scope) : activityTypes;
+}
+
 export function getDashboardPowerCurveEventFiltersForScope(
   scope: DashboardPowerCurveScope,
 ): AppDashboardTileEventFiltersInterface {

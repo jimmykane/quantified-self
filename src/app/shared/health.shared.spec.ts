@@ -198,6 +198,17 @@ describe('unified health shared contract', () => {
         expect(() => normalizeHealthRangeQuery(query)).toThrow(HealthQueryValidationError);
     });
 
+    it('keeps the public sample limit at 31 days while allowing an explicit bounded app projection', () => {
+        const query = { startDate: '2026-01-01', endDate: '2026-03-31', includeSamples: true };
+        expect(() => normalizeHealthRangeQuery(query)).toThrow(/31-day limit/);
+        expect(normalizeHealthRangeQuery(query, { maximumSampleRangeDays: 90 })).toMatchObject({
+            startDate: '2026-01-01', endDate: '2026-03-31', includeSamples: true,
+        });
+        expect(() => normalizeHealthRangeQuery({ ...query, endDate: '2026-04-01' }, {
+            maximumSampleRangeDays: 90,
+        })).toThrow(/90-day limit/);
+    });
+
     it('keeps the maximum source-page fetch below a bounded callable response envelope', () => {
         expect(HEALTH_MAX_QUERY_FETCH_BYTES).toBeLessThan(17 * 1024 * 1024);
     });

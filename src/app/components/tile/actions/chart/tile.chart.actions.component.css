@@ -1,8 +1,0 @@
-/* Layout classes are now global via .qs-config-menu */
-
-
-/* Form Styles */
-mat-form-field {
-    width: 100%;
-    display: block;
-}

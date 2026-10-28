@@ -25,6 +25,7 @@ import {
   DataRunningFlightTimeMin,
   DataSleepDuration,
   DataStrokeRate,
+  DataStore,
   DynamicDataLoader,
   UnitSystem,
 } from '@sports-alliance/sports-lib';
@@ -39,6 +40,72 @@ import {
 } from './metric-catalog';
 
 describe('MCP Sports Lib metric catalog', () => {
+  it.each([
+    [DataStore.DataDistanceMiles.type, 'mi'],
+    [DataStore.DataGNSSDistanceMiles.type, 'mi'],
+    [DataStore.DataSpeedAvgFeetPerMinute.type, 'ft/min'],
+    [DataStore.DataGradeAdjustedSpeedAvgFeetPerMinute.type, 'ft/min'],
+    [DataStore.DataPaceAvgMinutesPerMile.type, 'min/m'],
+    [DataStore.DataEffortPaceMaxMinutesPerMile.type, 'min/m'],
+    [DataStore.DataSwimPaceAvgMinutesPer100Yard.type, 'min/100yd'],
+    [DataStore.DataVerticalSpeedMinFeetPerHour.type, 'ft/h'],
+  ])('exposes corrected imperial metadata for %s only when its canonical value is persisted', (type, unit) => {
+    const descriptor = resolveSportsLibNumericMetric(type);
+    expect(descriptor).toMatchObject({ type, unit, unitSystem: 'imperial' });
+    expect(resolveAvailableSportsLibMetrics([{}])).not.toContainEqual(descriptor);
+    for (const value of [0, 5]) {
+      const stat = DynamicDataLoader.getDataInstanceFromDataType(type, value);
+      const json = JSON.parse(JSON.stringify(stat.toJSON()));
+      expect(json).toEqual({ [type]: value });
+      expect(projectSportsLibNumericMetricValue(type, json[type])).toBe(value);
+      expect(resolveAvailableSportsLibMetrics([json])).toContainEqual(descriptor);
+    }
+  });
+
+  it('discovers all released R-R summaries only when persisted, preserving native units and valid zero', () => {
+    const expected = {
+      'R-R Interval Count': 'count', 'R-R Invalid Interval Count': 'count', 'R-R Artifact Count': 'count',
+      'R-R Artifact Percentage': '%', 'R-R Suspected Ectopic Pair Count': 'count',
+      'R-R Suspected Ectopic Pair Rate': 'pairs/h', 'R-R Coverage': '%', 'R-R Gap Count': 'count',
+      'R-R Longest Gap': 's', 'R-R Mean Interval': 'ms', 'R-R Average Heart Rate': 'bpm',
+      'R-R Minimum Heart Rate': 'bpm', 'R-R Maximum Heart Rate': 'bpm', 'R-R RMSSD': 'ms',
+      'R-R SDNN': 'ms', 'R-R pNN50': '%', 'R-R DFA Alpha1 Median': '',
+      'R-R DFA Alpha1 Minimum': '', 'R-R DFA Alpha1 Maximum': '', 'R-R DFA Window Count': 'count',
+    };
+    const catalog = buildSportsLibNumericMetricCatalog().filter(metric => metric.type.startsWith('R-R '));
+    expect(Object.fromEntries(catalog.map(metric => [metric.type, metric.unit]))).toEqual(expected);
+    expect(resolveAvailableSportsLibMetrics([{}]).filter(metric => metric.type.startsWith('R-R '))).toEqual([]);
+    for (const metric of catalog) {
+      expect(resolveAvailableSportsLibMetrics([{ [metric.type]: 0 }])).toContainEqual(metric);
+      expect(projectSportsLibNumericMetricValue(metric.type, 0)).toBe(0);
+      for (const invalid of [null, NaN, Infinity, '', '42']) {
+        expect(projectSportsLibNumericMetricValue(metric.type, invalid)).toBeNull();
+      }
+    }
+    expect(projectSportsLibNumericMetricValue('IBI', [800, 900])).toBeNull();
+    expect(resolveSportsLibNumericMetric('sampleTimes')).toBeNull();
+  });
+
+  it('resolves qualified EnergySense terminology without creating duplicate or ambiguous metrics', () => {
+    expect(resolveSportsLibNumericMetric('Suunto EnergySense Endurance')?.type).toBe('Stamina');
+    expect(resolveSportsLibNumericMetric('Minimum EnergySense Endurance')?.type).toBe('Minimum Stamina');
+    expect(resolveSportsLibNumericMetric('EnergySense')).toBeNull();
+    expect(resolveSportsLibNumericMetric('EnergySense distance to target')).toBeNull();
+    const distance = resolveSportsLibNumericMetric('Estimated Sustainable Distance');
+    expect(resolveSportsLibNumericMetric('EnergySense Sustainable Distance')).toEqual(distance);
+    expect(resolveSportsLibNumericMetric('EnergySense Sustainable Distance', new Map())).toBeNull();
+    if (distance) {
+      expect(distance).toMatchObject({ type: 'Estimated Sustainable Distance', unit: 'm' });
+      expect(resolveAvailableSportsLibMetrics([{}])).not.toContainEqual(distance);
+      expect(resolveAvailableSportsLibMetrics([{ 'Estimated Sustainable Distance': 0 }])).toContainEqual(distance);
+      expect(projectSportsLibNumericMetricValue(distance.type, 0)).toBe(0);
+      for (const invalid of [null, '', '0', -1, Infinity, NaN]) {
+        expect(projectSportsLibNumericMetricValue(distance.type, invalid)).toBeNull();
+      }
+      expect(getSportsLibNumericMetricCatalog().filter(metric => metric.type === distance.type)).toHaveLength(1);
+    }
+  });
+
   it('enumerates canonical numeric data classes with their native metadata', () => {
     const distance = resolveSportsLibNumericMetric(DataDistance.type);
 

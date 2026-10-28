@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { ActivityTypeGroups, ActivityTypes } from '@sports-alliance/sports-lib';
+import { ActivityInterface, ActivityTypeGroups, ActivityTypes } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from './app.event.color.service';
 import { LoggerService } from '../logger.service';
 import { AppColors } from './app.colors';
@@ -57,8 +57,8 @@ describe('AppEventColorService', () => {
   });
 
   describe('getColorByNumber', () => {
-    it('should return a hex-like color string', () => {
-      expect(service.getColorByNumber(123)).toMatch(/^#[0-9a-fA-F]+$/);
+    it.each([0, 22, 123])('returns a valid six-digit color for seed %s', (seed) => {
+      expect(service.getColorByNumber(seed)).toMatch(/^#[0-9a-fA-F]{6}$/);
     });
 
     it('should be deterministic', () => {
@@ -70,6 +70,14 @@ describe('AppEventColorService', () => {
   describe('getActivityColor', () => {
     beforeEach(() => {
       service.clearCache();
+    });
+
+    it('uses an automatic color for an activity without device metadata', () => {
+      const activity = { getID: () => 'anonymous' } as ActivityInterface;
+      const knownDevice = { getID: () => 'known', creator: { name: 'Suunto 0' } } as ActivityInterface;
+      const activities = [activity, knownDevice];
+      expect(service.getActivityColor(activities, activity)).toMatch(/^#[0-9a-fA-F]{6}$/);
+      expect(service.getActivityColor(activities, knownDevice)).toBe(AppDeviceColors['Suunto 0']);
     });
 
     it('should return the same color for the same activity (cache hit)', () => {

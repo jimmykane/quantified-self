@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { ActivityTypes, DateRanges, DaysOfTheWeek } from '@sports-alliance/sports-lib';
+import { CompatibleTrainingActivityTypes } from '@shared/activity-type-compatibility';
 import {
   AppDashboardTileEventFilterRange,
 } from '../models/app-user.interface';
@@ -12,6 +13,7 @@ import {
   normalizeActivityTypes,
   normalizeDashboardEventTableFilters,
   normalizeDashboardTileEventFilters,
+  navigateDashboardTileEventWindow,
   resolveDashboardTileEventWindow,
   resolveLegacyDashboardTileEventFilterRange,
 } from './dashboard-tile-event-filters.helper';
@@ -41,6 +43,7 @@ describe('dashboard-tile-event-filters.helper', () => {
   it('resolves duration windows for rolling ranges', () => {
     const nowMs = Date.UTC(2026, 3, 30, 12, 0, 0);
     const cases: Array<[AppDashboardTileEventFilterRange, number]> = [
+      ['7d', 7],
       ['14d', 14],
       ['30d', 30],
       ['90d', 90],
@@ -65,6 +68,8 @@ describe('dashboard-tile-event-filters.helper', () => {
     expect(DASHBOARD_TILE_EVENT_RANGE_OPTIONS).toEqual(expect.arrayContaining([
       expect.objectContaining({ range: 'thisWeek', label: 'This week', buttonLabel: 'Week', shortLabel: 'W' }),
       expect.objectContaining({ range: 'thisMonth', label: 'This month', buttonLabel: 'Month', shortLabel: 'M' }),
+      expect.objectContaining({ range: 'lastMonth', label: 'Last month', buttonLabel: 'Last month', shortLabel: 'Last mo' }),
+      expect.objectContaining({ range: '7d', label: 'Last 7 days', buttonLabel: '7d', shortLabel: '7d' }),
       expect.objectContaining({ range: '90d', label: '90d', buttonLabel: '90d', shortLabel: '90d' }),
     ]));
   });
@@ -90,6 +95,58 @@ describe('dashboard-tile-event-filters.helper', () => {
     });
   });
 
+  it.each([
+    ['2026-01-15T12:00:00', '2025-12-01T00:00:00', '2025-12-31T23:59:59.999'],
+    ['2024-03-15T12:00:00', '2024-02-01T00:00:00', '2024-02-29T23:59:59.999'],
+    ['2026-03-15T12:00:00', '2026-02-01T00:00:00', '2026-02-28T23:59:59.999'],
+    ['2026-04-15T12:00:00', '2026-03-01T00:00:00', '2026-03-31T23:59:59.999'],
+    ['2026-11-15T12:00:00', '2026-10-01T00:00:00', '2026-10-31T23:59:59.999'],
+  ])('resolves last month from %s using complete local calendar boundaries', (now, start, end) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(now));
+
+    expect(resolveDashboardTileEventWindow({ range: 'lastMonth' }, DaysOfTheWeek.Monday)).toEqual({
+      range: 'lastMonth',
+      startMs: new Date(start).getTime(),
+      endMs: new Date(end).getTime(),
+    });
+    expect(dashboardTileEventRangeDays('lastMonth')).toBeNull();
+    expect(navigateDashboardTileEventWindow({ range: 'lastMonth' }, 'older', null)).toBeNull();
+  });
+
+  it('navigates rolling seven-day windows and returns to the latest window', () => {
+    const nowMs = Date.UTC(2026, 3, 30, 12);
+    const weekMs = 7 * 24 * 60 * 60 * 1000;
+    const filters = { range: '7d' as const };
+    const olderAnchor = navigateDashboardTileEventWindow(filters, 'older', null, nowMs);
+
+    expect(olderAnchor).toBe(nowMs - weekMs);
+    expect(resolveDashboardTileEventWindow(filters, DaysOfTheWeek.Monday, olderAnchor, nowMs)).toEqual({
+      range: '7d', startMs: nowMs - 2 * weekMs, endMs: nowMs - weekMs,
+    });
+    expect(navigateDashboardTileEventWindow(filters, 'newer', olderAnchor, nowMs)).toBeNull();
+  });
+
+  it.each(['7d', 'lastMonth'] as const)('preserves the saved %s range and activity selection when cloning', range => {
+    const saved = JSON.parse(JSON.stringify({ range, activityTypes: [ActivityTypes.Hiking] }));
+
+    expect(cloneDashboardTileEventFilters(saved)).toEqual(saved);
+  });
+
+  it('migrates legacy seven-day and last-month selections to their exact ranges', () => {
+    expect(resolveLegacyDashboardTileEventFilterRange(DateRanges.lastSevenDays)).toBe('7d');
+    expect(resolveLegacyDashboardTileEventFilterRange(DateRanges.lastMonth)).toBe('lastMonth');
+    expect(resolveLegacyDashboardTileEventFilterRange(DateRanges.lastThirtyDays)).toBe('30d');
+  });
+
+  it('migrates custom windows of up to seven days to 7d and longer windows to 14d', () => {
+    const startMs = Date.UTC(2026, 3, 1);
+    const dayMs = 24 * 60 * 60 * 1000;
+
+    expect(resolveLegacyDashboardTileEventFilterRange(DateRanges.custom, startMs, startMs + 7 * dayMs)).toBe('7d');
+    expect(resolveLegacyDashboardTileEventFilterRange(DateRanges.custom, startMs, startMs + 8 * dayMs)).toBe('14d');
+  });
+
   it('filters activities only when activity filters are selected', () => {
     const running = makeEvent([ActivityTypes.Running]);
     const cycling = makeEvent([ActivityTypes.Cycling]);
@@ -105,6 +162,22 @@ describe('dashboard-tile-event-filters.helper', () => {
       ActivityTypes.Running,
       'not-valid' as ActivityTypes,
     ])).toEqual([ActivityTypes.Running]);
+  });
+
+  it.each(Object.values(CompatibleTrainingActivityTypes))('retains the exact saved %s filter before the catalog upgrade', sport => {
+    const filters = { range: '30d' as const, activityTypes: [sport, sport, 'not-valid' as ActivityTypes] };
+    expect(normalizeDashboardTileEventFilters(filters)).toEqual({ range: '30d', activityTypes: [sport] });
+    expect(cloneDashboardTileEventFilters(filters)?.activityTypes).toEqual([sport]);
+    expect(normalizeDashboardEventTableFilters({ activityTypes: [sport] }).activityTypes).toEqual([sport]);
+  });
+
+  it('matches specific saved filters exactly instead of silently falling back to all activities', () => {
+    const roadRunning = makeEvent([CompatibleTrainingActivityTypes.RoadRunning]);
+    const running = makeEvent([ActivityTypes.Running]);
+    const cycling = makeEvent([ActivityTypes.Cycling]);
+    expect(filterDashboardTileEventsByActivityTypes([roadRunning, running, cycling], [CompatibleTrainingActivityTypes.RoadRunning]))
+      .toEqual([roadRunning]);
+    expect(filterDashboardTileEventsByActivityTypes([roadRunning, running, cycling], [ActivityTypes.Running])).toEqual([running]);
   });
 
   it('matches event activity types defensively', () => {

@@ -132,6 +132,41 @@
   cursor: pointer;
 }
 
+// These wrappers only reserve layout space in the month picker.
+.activity-calendar-day-indicators,
+.activity-calendar-day-notes {
+  display: contents;
+}
+
+.activity-calendar-note-colors {
+  position: absolute;
+  inset-block: 4px;
+  inset-inline-start: 2px;
+  display: flex;
+  width: 3px;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.activity-calendar-note-color {
+  flex: 1;
+  min-height: 0;
+}
+
+.activity-calendar-note-indicator {
+  position: absolute;
+  top: 3px;
+  right: 2px;
+  width: 12px;
+  height: 12px;
+  font-size: 12px;
+  line-height: 12px;
+  pointer-events: none;
+}
+
 .activity-calendar-day-button:hover,
 .activity-calendar-day-button:focus-visible {
   background: var(--mat-sys-surface-container-high);
@@ -141,6 +176,11 @@
   z-index: 5;
   outline: 2px solid var(--mat-sys-primary);
   outline-offset: -2px;
+}
+
+.activity-calendar-day--selected {
+  z-index: 1;
+  box-shadow: inset 0 0 0 2px var(--mat-sys-primary);
 }
 
 .activity-calendar-day--outside {
@@ -153,6 +193,17 @@
 
 .activity-calendar-day--weekend {
   background: var(--activity-calendar-weekend-background);
+}
+
+// The height-filling dashboard grid can place row edges on fractional pixels.
+// Paint weekend columns once behind the cells so their tint has no row seams.
+.activity-calendar--fill-height .activity-calendar-day--weekend {
+  background: transparent;
+}
+
+.activity-calendar--fill-height .activity-calendar-day-button:hover,
+.activity-calendar--fill-height .activity-calendar-day-button:focus-visible {
+  background: var(--mat-sys-surface-container-high);
 }
 
 .activity-calendar-day-number {
@@ -227,6 +278,32 @@
   letter-spacing: 0;
 }
 
+.planned-workout-markers {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  display: inline-flex;
+  max-width: calc(100% - 6px);
+  align-items: center;
+  gap: 1px;
+  padding: 1px 3px;
+  border-radius: var(--mat-sys-corner-extra-small);
+  background: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-small);
+}
+
+.planned-workout-markers--skipped {
+  background: var(--mat-sys-surface-container-highest);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.planned-workout-markers mat-icon {
+  width: 13px;
+  height: 13px;
+  font-size: 13px;
+}
+
 .activity-calendar--year .activity-calendar-weekdays {
   min-height: 22px;
 }
@@ -242,6 +319,43 @@
   padding: 2px 1px;
   border-right-color: transparent;
   border-bottom-color: transparent;
+}
+
+.activity-calendar--year .planned-workout-markers,
+.activity-calendar--compact .planned-workout-markers {
+  // Small cells reserve their right edge for planning, below the note icon and opposite note colors.
+  top: 18px;
+  right: 2px;
+  bottom: 3px;
+  width: 3px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0;
+  background: transparent;
+}
+
+.activity-calendar--year .planned-workout-markers mat-icon,
+.activity-calendar--compact .planned-workout-markers mat-icon {
+  box-sizing: border-box;
+  width: 3px;
+  height: auto;
+  min-height: 0;
+  flex: 1;
+  border-inline-end: 3px solid currentColor;
+  font-size: 0;
+  line-height: 0;
+}
+
+.activity-calendar--year .planned-workout-markers .planned-workout-marker--skipped,
+.activity-calendar--compact .planned-workout-markers .planned-workout-marker--skipped {
+  border-inline-end-style: dashed;
+}
+
+.activity-calendar--year .planned-workout-markers > span,
+.activity-calendar--compact .planned-workout-markers > span {
+  // Full counts remain in the date's accessible name and day details; do not cover recorded markers.
+  display: none;
 }
 
 .activity-calendar--year .activity-calendar-day-number,
@@ -330,32 +444,455 @@
   }
 }
 
-@media (max-width: 860px) {
-  .activity-calendar--compact,
-  .activity-calendar--compact .activity-calendar-months,
-  .activity-calendar--compact .activity-calendar-month {
-    height: 100%;
-    min-height: 0;
+// The scrollable month picker has its own readable density; other calendar layouts retain their existing sizes.
+.activity-calendar--picker {
+  .activity-calendar-weekdays {
+    min-height: 36px;
   }
 
-  .activity-calendar--compact .activity-calendar-month {
-    display: grid;
-    grid-template-rows: 28px minmax(0, 1fr);
+  .activity-calendar-weekdays span {
+    font: var(--mat-sys-label-medium);
   }
 
-  .activity-calendar--compact .activity-calendar-days {
-    min-height: 0;
-    grid-template-rows: repeat(6, minmax(0, 1fr));
+  .activity-calendar-day {
+    min-height: 64px;
+    gap: 2px;
+    padding: 4px 0 7px;
   }
 
-  .activity-calendar--compact .activity-calendar-day {
-    min-height: 0;
-    padding-block: 0;
+  .activity-calendar-day-number {
+    width: 28px;
+    height: 28px;
+    flex: 0 0 28px;
+    font: var(--mat-sys-body-medium);
+  }
+
+  .activity-calendar-day-indicators {
+    display: flex;
+    height: 22px;
+    flex: 0 0 22px;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+  }
+
+  .activity-calendar-marker-stage {
+    width: 22px;
+    height: 22px;
+    flex: 0 0 22px;
+  }
+
+  .activity-calendar-marker {
+    width: calc(var(--calendar-marker-compact-diameter) + 4px);
+    height: calc(var(--calendar-marker-compact-diameter) + 4px);
+  }
+
+  .activity-calendar-day-notes {
+    position: relative;
+    display: flex;
+    width: 14px;
+    height: 20px;
+    flex: 0 0 14px;
+    align-items: flex-start;
+  }
+
+  .activity-calendar-note-indicator {
+    position: static;
+    width: 14px;
+    height: 14px;
+    font-size: 14px;
+    line-height: 14px;
+  }
+
+  .activity-calendar-note-colors {
+    inset: auto 0 1px;
+    width: 14px;
+    height: 2px;
+    flex-direction: row;
+  }
+
+  .planned-workout-markers {
+    top: auto;
+    right: 8px;
+    bottom: 3px;
+    left: 8px;
+    width: auto;
+    height: 3px;
+    flex-direction: row;
+  }
+
+  .planned-workout-markers mat-icon {
+    width: auto;
+    height: 3px;
+    border-inline-end: 0;
+    border-bottom: 3px solid currentColor;
+  }
+
+  .planned-workout-markers .planned-workout-marker--skipped {
+    border-bottom-style: dashed;
+  }
+}
+
+// The Calendar route, dashboard, and Today picker share the same month markers.
+// Week and Year retain their own density and marker treatment.
+.activity-calendar--calm-month {
+  .activity-calendar-month--surface { padding: 0; overflow: visible; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+  .activity-calendar-weekdays { min-height: 34px; }
+  .activity-calendar-day,
+  &.activity-calendar--compact .activity-calendar-day {
+    min-height: 78px;
+    align-items: flex-start;
+    gap: 5px;
+    padding: 7px;
+    border-right-color: var(--mat-sys-outline-variant);
+    border-bottom-color: var(--mat-sys-outline-variant);
+    text-align: left;
+  }
+  .activity-calendar-day:nth-child(7n) { border-right: 0; }
+  .activity-calendar-day--selected { background: color-mix(in srgb, var(--mat-sys-primary) 8%, transparent); }
+  .activity-calendar-day--today .activity-calendar-day-number {
+    background: transparent;
+    color: var(--mat-sys-on-surface);
+    font-weight: 600;
+  }
+  .activity-calendar-today-corner {
+    position: absolute;
+    top: 10px;
+    right: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--mat-sys-primary);
+    pointer-events: none;
+  }
+  .activity-calendar-today-label { font: var(--mat-sys-label-small); }
+  .activity-calendar-today-dot {
+    position: relative;
+    display: block;
+    width: 6px;
+    height: 6px;
+    flex: 0 0 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .activity-calendar-today-dot::after {
+    position: absolute;
+    inset: -1px;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    content: '';
+    animation: activity-calendar-today-pulse 2.4s ease-out infinite;
+  }
+  .activity-calendar-day-number,
+  &.activity-calendar--compact .activity-calendar-day-number {
+    width: 24px;
+    height: 24px;
+    flex-basis: 24px;
+    font: var(--mat-sys-label-medium);
+  }
+  .activity-calendar-day-indicators {
+    display: flex;
+    width: 100%;
+    min-height: 16px;
+    align-items: center;
+    gap: 4px;
+  }
+  .activity-calendar-marker-stage,
+  &.activity-calendar--compact .activity-calendar-marker-stage {
+    position: static;
+    display: flex;
+    width: auto;
+    height: 16px;
+    flex: 0 1 auto;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0;
+  }
+  .activity-calendar-marker {
+    width: 13px;
+    height: 13px;
+    margin-right: -4px;
+    border: 2px solid var(--mat-sys-surface);
+  }
+  .activity-calendar-marker-overflow,
+  &.activity-calendar--compact .activity-calendar-marker-overflow {
+    position: static;
+    z-index: auto;
+    min-width: 0;
+    margin-left: 6px;
+    padding: 0;
+    background: transparent;
+    font: var(--mat-sys-label-small);
+  }
+  .activity-calendar-calm-note {
+    width: 3px;
+    height: 13px;
+    flex: 0 0 3px;
+    margin-left: auto;
+    border-radius: 3px;
+  }
+  .planned-workout-markers,
+  &.activity-calendar--compact .planned-workout-markers {
+    position: absolute;
+    top: 26px;
+    right: auto;
+    bottom: 0;
+    left: 0;
+    width: 3px;
+    max-width: none;
+    height: auto;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1px;
+    overflow: hidden;
+    padding: 0;
+    background: transparent;
+  }
+  .planned-workout-markers mat-icon,
+  &.activity-calendar--compact .planned-workout-markers mat-icon {
+    width: 3px;
+    height: auto;
+    flex: 1 1 0;
+    border: 0;
+    border-inline-start: 3px solid currentColor;
+    font-size: 0;
+    line-height: 0;
+  }
+  .planned-workout-markers .planned-workout-marker--skipped { border-inline-start-style: dashed; }
+  .planned-workout-markers > span { display: none; }
+  .activity-calendar-workout-preview {
+    position: absolute;
+    right: 5px;
+    bottom: 5px;
+    left: 7px;
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 3px;
+    font: var(--mat-sys-label-small);
+    pointer-events: none;
+  }
+  .activity-calendar-workout-preview-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .activity-calendar-workout-preview-more { flex: 0 0 auto; }
+  .activity-calendar-workout-preview--skipped .activity-calendar-workout-preview-title { text-decoration: line-through; }
+  .activity-calendar-workout-preview--completed { font-weight: 600; }
+  .activity-calendar-calm-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 15px;
+    margin-top: 11px;
+    color: var(--mat-sys-on-surface-variant);
+    font: var(--mat-sys-body-small);
+  }
+  .activity-calendar-calm-legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .activity-calendar-calm-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+  .activity-calendar-calm-legend .activity-calendar-calm-legend-note {
+    width: 3px;
+    height: 12px;
+    border-radius: 2px;
+    background: var(--mat-sys-primary);
+  }
+  .activity-calendar-calm-legend .activity-calendar-calm-legend-plan {
+    width: 3px;
+    height: 10px;
+    border-radius: 0;
+    background: var(--mat-sys-outline);
+  }
+}
+
+@keyframes activity-calendar-today-pulse {
+  0% { opacity: 0.7; transform: scale(1); }
+  75%, 100% { opacity: 0; transform: scale(var(--activity-calendar-today-pulse-scale, 2.2)); }
+}
+
+@container (max-width: 600px) {
+  .activity-calendar--calm-month .activity-calendar-today-label { display: none; }
+}
+
+.activity-calendar--calm-month.activity-calendar--dashboard-context {
+  .activity-calendar-day { min-height: 64px; gap: 3px; padding: 5px; }
+  .activity-calendar-day-number { width: 21px; height: 21px; flex-basis: 21px; }
+  .activity-calendar-marker-stage { height: 14px; }
+}
+
+// The bottom sheet has seven narrow columns even on a wide phone. Keep the
+// shared markers and selection treatment without squeezing workout titles in.
+.activity-calendar--calm-month.activity-calendar--picker {
+  .activity-calendar-day { min-height: 64px; }
+  .activity-calendar-workout-preview { display: none; }
+}
+
+// A six-week dashboard month uses shorter fixed-height rows. Keep its colored
+// plan rail and accessible name, and leave the full title to the day preview.
+.activity-calendar--dense-dashboard-month .activity-calendar-workout-preview { display: none; }
+
+// The shared narrow-grid rules use concentric markers. Calm month keeps its
+// separate dots and readable date cells until the phone layout takes over.
+@container (max-width: 700px) {
+  .activity-calendar--calm-month:not(.activity-calendar--year):not(.activity-calendar--compact) {
+    .activity-calendar-day { min-height: 78px; align-items: flex-start; gap: 5px; padding: 7px; }
+    .activity-calendar-marker-stage { position: static; width: auto; height: 16px; flex: 0 1 auto; }
+    .activity-calendar-marker { position: static; width: 13px; height: 13px; border: 2px solid var(--mat-sys-surface); transform: none; }
+  }
+}
+
+@container (max-width: 540px) {
+  .activity-calendar--calm-month {
+    // Keep the pulse clear of the selected cell's inset border on narrow grids.
+    .activity-calendar-today-corner { top: 8px; right: 6px; }
+    .activity-calendar-today-dot { --activity-calendar-today-pulse-scale: 1.4; }
+    .activity-calendar-day,
+    &.activity-calendar--compact .activity-calendar-day {
+      min-height: 52px;
+      align-items: center;
+      gap: 2px;
+      padding: 4px 1px;
+    }
+    .activity-calendar-day-indicators { justify-content: center; min-height: 12px; }
+    .activity-calendar-marker-stage,
+    &.activity-calendar--compact .activity-calendar-marker-stage { height: 12px; }
+    .activity-calendar-marker { width: 8px; height: 8px; margin-right: -3px; border-width: 1px; }
+    .activity-calendar-marker-overflow { display: none; }
+    .activity-calendar-calm-note { position: absolute; right: 2px; bottom: 7px; width: 2px; height: 12px; }
+    .activity-calendar-workout-preview { display: none; }
+    .planned-workout-markers,
+    &.activity-calendar--compact .planned-workout-markers { top: 18px; width: 2px; }
+    .planned-workout-markers mat-icon,
+    &.activity-calendar--compact .planned-workout-markers mat-icon { width: 2px; border-inline-start-width: 2px; }
+  }
+  .activity-calendar--calm-month.activity-calendar--dashboard-context .activity-calendar-day { min-height: 48px; }
+  .activity-calendar--calm-month:not(.activity-calendar--year):not(.activity-calendar--compact) {
+    .activity-calendar-day { min-height: 52px; align-items: center; gap: 2px; padding: 4px 1px; }
+    .activity-calendar-day-number { width: 19px; height: 19px; flex-basis: 19px; font: var(--mat-sys-label-small); }
+    .activity-calendar-marker-stage { width: auto; height: 12px; flex: 0 1 auto; }
+    .activity-calendar-marker { width: 8px; height: 8px; border-width: 1px; }
+  }
+}
+
+// Fixed-height tiles distribute their visible weeks evenly at every viewport width.
+.activity-calendar--fill-height,
+.activity-calendar--fill-height .activity-calendar-months,
+.activity-calendar--fill-height .activity-calendar-month {
+  height: 100%;
+  min-height: 0;
+}
+
+.activity-calendar--fill-height .activity-calendar-month {
+  display: grid;
+  grid-template-rows: 28px minmax(0, 1fr);
+}
+
+.activity-calendar--fill-height .activity-calendar-days {
+  min-height: 0;
+  grid-auto-rows: minmax(0, 1fr);
+}
+
+.activity-calendar--fill-height .activity-calendar-day {
+  min-height: 0;
+  padding-block: 0;
+}
+
+.activity-calendar--calm-month.activity-calendar--fill-height {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+.activity-calendar--calm-month.activity-calendar--fill-height .activity-calendar-months { height: auto; min-height: 0; }
+.activity-calendar--calm-month.activity-calendar--fill-height .activity-calendar-month { grid-template-rows: 33px minmax(0, 1fr); }
+.activity-calendar--calm-month.activity-calendar--fill-height .activity-calendar-calm-legend { margin-top: 0; }
+
+// The dashboard day panel is content-sized, so the month no longer needs to
+// squeeze its rows into a fixed tile height. Keep this override off the other
+// compact calendars, which intentionally fill their allocated tile space.
+.activity-calendar--calm-month.activity-calendar--dashboard-context.activity-calendar--fill-height {
+  display: block;
+  height: auto;
+
+  .activity-calendar-months,
+  .activity-calendar-month { height: auto; }
+  .activity-calendar-month { display: block; }
+  .activity-calendar-days { grid-auto-rows: minmax(78px, auto); }
+  .activity-calendar-day { min-height: 78px; padding: 7px; }
+  .activity-calendar-calm-legend { margin-top: 12px; }
+  &.activity-calendar--dense-dashboard-month .activity-calendar-workout-preview { display: flex; }
+}
+
+@container (max-width: 540px) {
+  .activity-calendar--calm-month.activity-calendar--dashboard-context.activity-calendar--fill-height {
+    .activity-calendar-days { grid-auto-rows: minmax(56px, auto); }
+    .activity-calendar-day { min-height: 56px; padding: 4px 1px; }
+  }
+}
+
+@container (min-width: 560px) {
+  .activity-calendar--dashboard-context .activity-calendar-weekdays {
+    min-height: 32px;
+  }
+
+  .activity-calendar--dashboard-context .activity-calendar-day {
+    padding-block: 4px;
+  }
+
+  .activity-calendar--dashboard-context .activity-calendar-day-number {
+    width: 24px;
+    height: 24px;
+    flex-basis: 24px;
+    font: var(--mat-sys-label-large);
+  }
+
+  .activity-calendar--dashboard-context .activity-calendar-marker-stage {
+    height: 28px;
+    flex-basis: 28px;
+  }
+
+  .activity-calendar--dashboard-context .activity-calendar-marker-stage--concentric .activity-calendar-marker {
+    width: calc(var(--calendar-marker-compact-diameter) * 1.2);
+    height: calc(var(--calendar-marker-compact-diameter) * 1.2);
+  }
+}
+
+@container (min-width: 560px) {
+  .activity-calendar--calm-month.activity-calendar--dashboard-context .activity-calendar-marker-stage {
+    height: 16px;
+    flex-basis: auto;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .activity-calendar-today-dot::after {
+    animation: none;
+    opacity: 0.45;
+    transform: scale(var(--activity-calendar-today-pulse-scale, 2.2));
+  }
   .activity-calendar-day-button {
     scroll-behavior: auto;
   }
 }
+
+.activity-calendar-day-month {
+  margin-left: 4px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-small);
+  letter-spacing: 0;
+}
+
+// Keep boundary-month labels clear of today's corner signal on narrow seven-column grids.
+.activity-calendar--calm-month .activity-calendar-day-month {
+  flex-shrink: 0;
+}
+@container (max-width: 420px) {
+  .activity-calendar--calm-month .activity-calendar-day-month {
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    margin: 0;
+  }
+}
+
+.activity-calendar--calm-month .activity-calendar-day-number--month-label { width: auto; min-width: 24px; }
+:host .activity-calendar-phase { display: block; min-width: 0; max-width: 100%; padding: 1px 3px; border-block-start: 2px solid var(--phase-color); background: color-mix(in srgb, var(--phase-color) 15%, transparent); color: var(--mat-sys-on-surface); font: var(--mat-sys-label-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -1,0 +1,77 @@
+<section class="health-sources-sheet" aria-label="Health sources">
+  <app-bottom-sheet-header title="Sources" icon="hub">
+    <button mat-icon-button type="button" aria-label="Close sources" (click)="cancel()">
+      <mat-icon aria-hidden="true">close</mat-icon>
+    </button>
+  </app-bottom-sheet-header>
+  <div class="bottom-sheet-content health-sources-content">
+    <p class="health-sources-hint">Applies to Highlights and every metric. Each source stays separate.</p>
+    @if (data.syncStatus === 'loading') {
+      <p class="health-sources-hint" role="status">Loading source status…</p>
+    } @else if (data.syncStatus === 'denied' || data.syncStatus === 'error') {
+      <p class="health-sources-hint" role="alert">
+        {{ data.syncStatus === 'denied' ? 'Health sync status access was denied.' : 'Source status could not be loaded.' }}
+        Available readings can still be selected.
+      </p>
+    }
+    @if (data.providers.length === 0 && data.syncStatus !== 'loading') {
+      <p class="health-sources-hint">No Health sources found yet.</p>
+    }
+    @if (data.providers.length > 1) {
+      <mat-checkbox [checked]="allSelected()" [indeterminate]="partlySelected()" (change)="selectAll($event.checked)">
+        All sources
+      </mat-checkbox>
+    }
+    @for (option of providerOptions(); track option.provider) {
+      <div class="health-source-row">
+        @if (data.providers.length > 1) {
+          <mat-checkbox class="health-source-choice" [checked]="option.selected"
+            (change)="selectProvider(option.provider, $event.checked)">
+            <ng-container *ngTemplateOutlet="sourceContent; context: { $implicit: option }"></ng-container>
+          </mat-checkbox>
+        } @else {
+          <div class="health-source-single">
+            <ng-container *ngTemplateOutlet="sourceContent; context: { $implicit: option }"></ng-container>
+          </div>
+        }
+      </div>
+    }
+    @if (!canApply()) {
+      <p class="health-sources-hint" role="status">Choose at least one source.</p>
+    }
+    <a mat-button class="health-sources-connectivity" routerLink="/services"
+      aria-label="Manage Health connections in Connectivity" (click)="cancel()">
+      <mat-icon aria-hidden="true">hub</mat-icon>Connectivity
+    </a>
+  </div>
+  <div class="health-sources-actions">
+    <button mat-button type="button" (click)="cancel()">Cancel</button>
+    <button mat-flat-button type="button" [disabled]="!canApply()" (click)="apply()">Apply</button>
+  </div>
+</section>
+
+<ng-template #sourceContent let-option>
+  <span class="health-source-label">
+    @if (option.presentation) {
+      <app-service-source-icon [presentation]="option.presentation" [showText]="false" [showTooltip]="false">
+      </app-service-source-icon>
+    }
+    <span>{{ option.label }}</span>
+  </span>
+  @if (option.sync; as sync) {
+    <span class="health-source-status" [matTooltip]="sync.statusTooltip">
+      <span class="health-source-dot" [attr.data-tone]="sync.tone" aria-hidden="true"></span>
+      <span>{{ sync.statusLabel }}</span><span aria-hidden="true">·</span>
+      @if (sync.lastUpdateDateTime) {
+        <time [attr.datetime]="sync.lastUpdateDateTime">{{ sync.lastUpdateText }}</time>
+      } @else {
+        <span>{{ sync.lastUpdateText }}</span>
+      }
+    </span>
+  } @else {
+    <span class="health-source-status">{{ option.provider === manualProvider ? 'Your measurements' : 'No sync status available' }}</span>
+  }
+  @if (option.hasDataInView === false) {
+    <span class="health-source-status">No readings in the current metric window</span>
+  }
+</ng-template>

@@ -9,40 +9,48 @@ Shared library path (keep stable for antigravity and other apps/agents): `.agent
 
 Always-on rules:
 - `.agent/rules/verify-changes-with-tests.md`
+- `.agent/rules/backend-crud-boundary.md`
+- `.agent/rules/canonical-metric-display.md`
+- `.agent/rules/event-summary-reads.md` for event summary, list, chart, map, preview, or aggregation read paths
+- `.agent/rules/frontend-test-environments.md` for frontend specs, helper runtime imports, or frontend test runner/CI changes
+- `.agent/rules/functions-emulator-shards.md` for Functions emulator specs or their test runner/CI changes
+- `.agent/rules/queue-monitoring-coverage.md` for provider/service integrations and queue lifecycle changes
 - `.agent/rules/firestore-write-sanitization.md` for any frontend/functions write path that persists event or activity data
 - Never patch or directly modify files under `node_modules/`.
+- Never install or add the official Garmin FIT SDK as a project dependency, development dependency, optional dependency,
+  or vendored project code. Its license prevents its use as a dependency in Quantified Self, sports-lib, and fit-parser.
+  When needed for investigation, run it only as a standalone tool outside those repositories and their dependency trees.
 - Use prefixed commit subjects: `feat:`, `fix:`, `chore:`, `refactor:`, `test:`, `docs:`.
 - Pick the dominant intent; do not create unprefixed commit subjects.
 - When asked to commit, use unsigned commits by default (`git commit --no-gpg-sign`) unless the user explicitly asks for a signed commit.
-- After completing implementation changes, create an unsigned commit by default, staging only files changed for the current task with explicit paths. Do not push unless the user explicitly asks.
+- After completing implementation changes, create an unsigned commit by default, staging only files changed for the current task with explicit paths.
+- When working in a worktree whose branch already has an open PR, completing requested fixes or changes includes pushing
+  the verified commits to that same PR branch and updating its description/verification notes as needed. Do not stop at
+  a local commit or ask for another push request. Verify the PR head matches the local commit before reporting completion.
+  This is standing authorization for that feature branch and its existing PR only: do not push the base branch, force-push,
+  merge, or deploy without separate explicit authorization. An explicit instruction not to push overrides this workflow.
+  Outside this existing-PR workflow, do not push unless the user explicitly asks.
 - Whenever creating a GitHub issue or epic for this repository, add it to the `Quantified Self IO` GitHub Project
   (`jimmykane` user project 2) in the same task and verify project membership before reporting completion. Add newly
   created subissues as project items too; preserve existing project status and do not infer a status change unless the
   user requests one or the agreed workflow clearly requires it.
 - When building a feature, review the app help page and update or add help content when needed.
-- When adding a new indexable public page, add it to `src/sitemap.xml` in the same change. Also verify its `robots.txt` policy, SSR/prerender registration, route SEO metadata, public-route handling, internal links, and tests. Deliberately exclude non-indexable pages from the sitemap and set their `noindex` policy where applicable.
 - Before changing the Training workspace, Training settings, Training-derived metrics, or sports-lib durability integration,
   read `docs/training-workspace.md` completely and update the relevant sections in the same change. Keep this as the
   single detailed Training source of truth instead of creating a competing Training architecture document.
-- Before adding or changing an MCP tool or response field, a Sports Lib event metric, an activity/route projection, a
-  Training-derived metric kind or payload, or a normalized sleep field, read
-  `.agent/skills/mcp-metric-surface/SKILL.md` and `docs/mcp-server.md`. Update the exhaustive strict output-schema
-  registry in the same change, preserve validated `structuredContent` plus equivalent JSON text, add or update negative
-  leakage fixtures, run the MCP output contract suite and `npm --prefix functions run mcp:contract:check`, and keep the
-  MCP documentation current. Existing registered tool schemas are frozen; follow the documented digest-bound
-  refresh/publication lifecycle for compatible additive metadata, and never hand-edit the registered baseline or its
-  append-only transition history.
-- When MCP tools, schemas, scopes, instructions, plugin metadata, starter prompts, branding, or any bundled Quantified
-  Self plugin skill change, follow the local-plugin update matrix in `docs/mcp-server.md`. Review every affected focused
-  skill and the cross-domain skill, and keep the exhaustive bundled-skill registry, fixtures, per-skill starter prompts,
-  MCP dependencies, and validation aligned. Run `npm run plugin:tools`,
-  `npm --prefix tools/quantified-self-plugin test`, and `npm run plugin:validate` with a fixture app ID, and state
-  whether the registered ChatGPT app needs a rescan or the local plugin needs `npm run plugin:sync`. Never commit the
-  generated `.app.json`, generated cache-busted manifest, local app ID configuration, or installed plugin cache.
-- When adding a new provider/service integration, add or update a focused public `/integrations/<provider>` page when it has a clear product or search purpose. Keep integration routes intentional, and update route metadata, sitemap/robots, internal links, help content, and tests alongside the page.
-- When adding or materially changing a provider/service integration, update `docs/provider-integration-guide.md` in the same change. Keep its provider matrix, implementation checklist, lifecycle guidance, operational coverage, and pitfalls accurate.
+- For any MCP tool, response, scope, consent, exposed metric or data contract, instruction, plugin metadata, branding,
+  or bundled-skill change, follow `.agent/skills/mcp-metric-surface/SKILL.md`.
+- Manual Health entry changes must review the independent `measurements:write` MCP/Assistant surface: deliberately
+  cover types, units, paired fields, revisions, consent and review; never expose imported entries or new stored fields automatically.
+- Every Training planning feature change requires an MCP impact review, including frontend/backend-only work. Extend
+  relevant plan/workout read coverage in the same PR using `.agent/skills/mcp-metric-surface/SKILL.md`; record a no-impact
+  rationale in verification notes, or track a genuine deferral in a focused #583 subissue in Project 2 before completion.
+  When an existing MCP Training mutation is affected, update its strict proposal/confirmation contract in the same PR.
+  Existing read or write coverage never authorizes new mutation kinds, provider actions, wider consent, or deployment.
+- For any provider or service integration addition or material change, follow
+  `.agent/skills/connected-provider-integration/SKILL.md`.
 - For read-only Sentry queries in this repository, source `$HOME/.config/sentry/personal.env` only for the Sentry API command. Infer the organization and project from the `sentry:upload-sourcemaps` script in `package.json`; never print the token or profile contents.
-- Never deploy, publish, push, or otherwise mutate production/cloud infrastructure unless the user gives explicit approval for that specific action in the current conversation. Requests to implement, fix, commit, push code, prepare a deployment, continue, or "go" do not authorize a deployment. Prepare and verify changes locally, then report the exact manual command or ask for separate explicit deployment approval.
+- Never deploy, publish releases, or otherwise mutate production/cloud infrastructure unless the user gives explicit approval for that specific action in the current conversation. The existing-PR workflow above authorizes Git branch/PR updates only. Requests to implement, fix, commit, push code, prepare a deployment, continue, or "go" do not authorize a deployment. Prepare and verify changes locally, then report the exact manual command or ask for separate explicit deployment approval.
 - Never delete, purge, or disable any Firebase data or resource without separate explicit approval that identifies the exact target and scope. This includes Firestore documents or collections, Authentication users, Storage objects, Functions, Hosting releases, Extensions, scheduled jobs, task queues, configuration, and secrets. Prior approval for a deployment or a different deletion does not carry over; read-only inspection is allowed.
 
 Layer entry points:

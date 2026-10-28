@@ -1,0 +1,237 @@
+import { getRejectedSwimTiming, resolveSwimTiming } from '@shared/swim-timing';
+import {
+  ActivityInterface, ActivityUtilities, convertSpeedToSwimPace, DataActiveLengths, DataCadenceAvg,
+  DataInterface, DataNumber, DataStrokeRateAvg, DataSwimPace, DataSwimPaceAvg, DataTotalCycles,
+  LapInterface, SwimPaceUnits, UserUnitSettingsInterface,
+} from '@sports-alliance/sports-lib/metrics';
+import {
+  createSwimDistanceDisplayStat, normalizeUserUnitSettings, resolveUnitAwareDisplayStat,
+} from '@shared/unit-aware-display';
+import { AppSwimLength, getRecordedLapActive, getSwimLapLengths, isRestSwimLength } from './event-swim-length.helper';
+import { getDerivedSwimIntervalLengths } from './event-swim-interval-metadata.helper';
+
+export const EVENT_LAP_STROKES_COLUMN = 'Total strokes';
+/** Display-only calculation; does not replace the recorded provider SWOLF. */
+export class DataNormalizedSwolf extends DataNumber {
+  static override type = 'Normalized SWOLF';
+  constructor(value: number) {
+    super(ActivityUtilities.round(value, 1));
+  }
+}
+export const EVENT_LAP_SWOLF_COLUMN = DataNormalizedSwolf.type;
+
+/** Column meaning is separate from the data class's canonical value/unit formatting. */
+export const SWIM_TABLE_HEADER_TOOLTIPS: Readonly<Record<string, string>> = Object.freeze(Object.assign(Object.create(null), {
+  'Total strokes': 'Total strokes across the active lengths in this interval; excludes rest.',
+  Strokes: 'Recorded stroke count for this individual length.',
+  Lap: 'Original lap number for this recorded length, when available.',
+  'Average Stroke Count': 'Recorded average strokes per length, rather than the total for an interval.',
+  Stroke: 'Stroke recorded for the active lengths. Mixed means more than one stroke type.',
+  'Average Stroke Rate': 'Average active swimming stroke rate, in strokes per minute; excludes rest.',
+  'Average Cadence': 'Average recorded cadence. For swimming, this is the stroke rate per minute.',
+  'Normalized SWOLF': 'Active swim time plus strokes, normalized to the reference distance shown; excludes rest.',
+  SWOLF: 'Original SWOLF recorded by the watch for this length.',
+  Duration: 'Recorded timer duration, falling back to elapsed duration only when timer time was not recorded.',
+  'Swim Pace': 'Average active swim pace; excludes rest.',
+  [DataSwimPaceAvg.type]: 'Average active swim pace; excludes rest.',
+}));
+
+export interface SwimLapAnalytics {
+  lengths: AppSwimLength[];
+  isRest: boolean;
+  activeDuration: number | null;
+  activeDistance: number | null;
+  cadenceDuration: number | null;
+  /** Keep the legacy cadence column available only when it was recorded. */
+  hasRecordedCadence: boolean;
+  strokes: DataTotalCycles | null;
+  cadence: DataStrokeRateAvg | null;
+  pace: DataSwimPaceAvg | null;
+  swolf: DataNormalizedSwolf | null;
+}
+
+export function getSwolfReferenceDistance(settings?: UserUnitSettingsInterface | null): number {
+  return normalizeUserUnitSettings(settings).swimPaceUnits[0] === SwimPaceUnits.MinutesPer100Yard
+    ? 25 * 0.9144 : 25;
+}
+
+export function getSwolfColumnLabel(settings?: UserUnitSettingsInterface | null): string {
+  const distance = createSwimDistanceDisplayStat(getSwolfReferenceDistance(settings), settings);
+  return `SWOLF (${resolveUnitAwareDisplayStat(distance, settings)?.text || ''})`;
+}
+
+function finite(stat: DataInterface | void | null): number | null {
+  const value = stat ? stat.getValue?.() : null;
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+/** Compensated addition keeps repeated recorded yard distances from losing a pace display second. */
+export function sumSwimValues(values: readonly number[]): number {
+  let total = 0;
+  let compensation = 0;
+  values.forEach(value => {
+    const corrected = value - compensation;
+    const next = total + corrected;
+    compensation = (next - total) - corrected;
+    total = next;
+  });
+  return total;
+}
+
+/** Never present the sum of available samples as a complete length-group total. */
+export function getCompleteSwimLengthSum(lengths: readonly AppSwimLength[], getValue: (length: AppSwimLength) => number | null): number | null {
+  if (!lengths.length) {
+    return null;
+  }
+  const values = lengths.map(getValue);
+  return values.every(value => value !== null && Number.isFinite(value) && value >= 0)
+    ? sumSwimValues(values) : null;
+}
+
+export function getSwimLengthDuration(length: AppSwimLength): number | null {
+  return resolveSwimTiming(length).duration;
+}
+
+export function getSwimLengthDistance(length: AppSwimLength): number | null {
+  return length.distanceIsInvalid ? null : finite(length.distance ?? (isRestSwimLength(length) ? null : length.poolLength));
+}
+
+/** Recorded speed wins; only active lengths may derive pace from usable time and distance. */
+export function getSwimLengthPace(length: AppSwimLength): DataSwimPace | null {
+  if (getRejectedSwimTiming(length)) return null;
+  const speed = finite(length.avgSpeed);
+  if (speed > 0) return new DataSwimPace(convertSpeedToSwimPace(speed));
+  if (isRestSwimLength(length)) return null;
+  const duration = getSwimLengthDuration(length);
+  const distance = getSwimLengthDistance(length);
+  return duration > 0 && distance > 0 ? new DataSwimPace(convertSpeedToSwimPace(distance / duration)) : null;
+}
+
+/** Duration-weighted estimate for the supplied lengths; requires complete HR and timing. */
+export function getSwimLengthHeartRateAverage(lengths: readonly AppSwimLength[]): number | null {
+  const duration = getCompleteSwimLengthSum(lengths, getSwimLengthDuration);
+  const weightedHeartRate = getCompleteSwimLengthSum(lengths, length => {
+    const heartRate = finite(length.avgHeartRate);
+    const seconds = getSwimLengthDuration(length);
+    return heartRate !== null && seconds !== null ? heartRate * seconds : null;
+  });
+  return duration > 0 && weightedHeartRate !== null ? weightedHeartRate / duration : null;
+}
+
+export function getNormalizedSwolf(
+  duration: number | null, distance: number | null, strokes: number | null,
+  settings?: UserUnitSettingsInterface | null,
+): DataNormalizedSwolf | null {
+  if (duration === null || distance === null || strokes === null
+    || ![duration, distance, strokes].every(Number.isFinite) || duration <= 0 || distance <= 0 || strokes < 0) {
+    return null;
+  }
+  return new DataNormalizedSwolf(ActivityUtilities.computeSwimSwolf(
+    100 * duration / distance, 60 * strokes / duration, getSwolfReferenceDistance(settings),
+  ));
+}
+
+/** Never classify a recorded active drill as rest just because its stroke rate is zero. */
+export function isRestSwimLap(lap: LapInterface, lengths: readonly AppSwimLength[] = []): boolean {
+  // FIT's inactive flag can be inferred from missing distance/speed. A recorded
+  // active-length count remains evidence even when individual lengths are unavailable.
+  const activeLengthCount = finite(lap.getStat?.(DataActiveLengths.type));
+  if ((Number.isInteger(activeLengthCount) && activeLengthCount > 0)
+    || lengths.some(length => length.type.trim().toLowerCase() === 'active')) {
+    return false;
+  }
+  const active = getRecordedLapActive(lap);
+  if (active !== null) {
+    return !active;
+  }
+  if (lengths.length && lengths.every(isRestSwimLength)) {
+    return true;
+  }
+  const cadence = finite(lap.getStat?.(DataStrokeRateAvg.type)) ?? finite(lap.getStat?.(DataCadenceAvg.type));
+  return finite(lap.getDistance?.()) === 0 && cadence === 0;
+}
+
+function getActiveSwimLengthCadenceMetrics(lengths: readonly AppSwimLength[]): { value: number; duration: number } | null {
+  if (lengths.some(length => !isRestSwimLength(length) && getSwimLengthDuration(length) === null)) return null;
+  let total = 0;
+  let duration = 0;
+  lengths.filter(length => !isRestSwimLength(length)).forEach(length => {
+    const rate = finite(length.avgCadence);
+    const seconds = getSwimLengthDuration(length);
+    if (rate !== null && seconds !== null && seconds > 0) {
+      total += rate * seconds;
+      duration += seconds;
+    }
+  });
+  return duration > 0 ? { value: total / duration, duration } : null;
+}
+
+export function getActiveSwimLengthCadence(lengths: readonly AppSwimLength[]): number | null {
+  return getActiveSwimLengthCadenceMetrics(lengths)?.value ?? null;
+}
+
+export function getSwimLapAnalytics(
+  activity: ActivityInterface, settings?: UserUnitSettingsInterface | null,
+): Map<LapInterface, SwimLapAnalytics> {
+  return new Map([...getSwimLapLengths(activity)].map(([lap, lengths]) => {
+    const isRest = isRestSwimLap(lap, lengths);
+    const active = lengths.filter(length => !isRestSwimLength(length));
+    const recordedActiveCount = finite(lap.getStat?.(DataActiveLengths.type));
+    // Retain every recorded row for expansion, but never present a known partial
+    // collection of lengths as the full interval's totals or average weights.
+    const completeLengths = lengths.length > 0
+      && (!Number.isInteger(recordedActiveCount) || recordedActiveCount === active.length);
+    // A constructed interval has no independent watch summary to fall back to.
+    // In particular, available rate samples cannot replace its missing stroke total for SWOLF.
+    const nativeFallback = !getDerivedSwimIntervalLengths(lap) && active.length === lengths.length;
+    const validTiming = !getRejectedSwimTiming(lap) && !active.some(length => getRejectedSwimTiming(length));
+    const nativeTimingFallback = nativeFallback && validTiming;
+    const lengthDuration = completeLengths ? getCompleteSwimLengthSum(active, getSwimLengthDuration) : null;
+    const lengthDistance = completeLengths ? getCompleteSwimLengthSum(active, getSwimLengthDistance) : null;
+    const duration = lengthDuration ?? (nativeTimingFallback ? finite(lap.getDuration?.()) : null);
+    const distance = lengthDistance ?? (nativeFallback ? finite(lap.getDistance?.()) : null);
+    const recordedStrokes = finite(lap.getStat?.(DataTotalCycles.type));
+    const strokes = (completeLengths ? getCompleteSwimLengthSum(active, length => length.strokes) : null)
+      ?? (nativeFallback ? recordedStrokes : null);
+    const recordedPace = finite(lap.getStat?.(DataSwimPaceAvg.type));
+    const pace = lengthDuration > 0 && lengthDistance > 0 ? 100 * lengthDuration / lengthDistance
+      : nativeTimingFallback ? recordedPace : null;
+    const nativeCadence = finite(lap.getStat?.(DataCadenceAvg.type));
+    const recordedCadence = finite(lap.getStat?.(DataStrokeRateAvg.type)) ?? nativeCadence;
+    const cadenceMetrics = completeLengths ? getActiveSwimLengthCadenceMetrics(active) : null;
+    const cadence = cadenceMetrics?.value
+      ?? (strokes !== null && lengthDuration > 0 ? 60 * strokes / lengthDuration : null)
+      ?? (nativeTimingFallback ? recordedCadence : null);
+    const swolf = getNormalizedSwolf(duration, distance, strokes, settings)
+      ?? (nativeTimingFallback && pace > 0 && cadence !== null
+        ? new DataNormalizedSwolf(ActivityUtilities.computeSwimSwolf(pace, cadence, getSwolfReferenceDistance(settings))) : null);
+    return [lap, {
+      lengths, isRest,
+      activeDuration: isRest ? null : duration,
+      activeDistance: isRest ? null : distance,
+      cadenceDuration: isRest || cadence === null ? null : cadenceMetrics?.duration ?? duration,
+      hasRecordedCadence: nativeCadence !== null,
+      strokes: isRest || strokes === null ? null : new DataTotalCycles(strokes),
+      cadence: isRest || cadence === null ? null : new DataStrokeRateAvg(cadence),
+      pace: isRest || pace === null ? null : new DataSwimPaceAvg(pace),
+      swolf: isRest ? null : swolf,
+    }];
+  }));
+}
+
+export function getSwimLapDisplayMetric(
+  analytics: SwimLapAnalytics | undefined, metricType: string,
+): DataInterface | null | undefined {
+  if (!analytics) {
+    return undefined;
+  }
+  switch (metricType) {
+    case EVENT_LAP_STROKES_COLUMN: return analytics.strokes;
+    case EVENT_LAP_SWOLF_COLUMN: return analytics.swolf;
+    case DataCadenceAvg.type: return analytics.isRest || !analytics.hasRecordedCadence ? undefined
+      : analytics.cadence ? new DataCadenceAvg(analytics.cadence.getValue()) : null;
+    case DataStrokeRateAvg.type: return analytics.isRest ? undefined : analytics.cadence;
+    case DataSwimPaceAvg.type: return analytics.isRest ? undefined : analytics.pace;
+    default: return undefined;
+  }
+}

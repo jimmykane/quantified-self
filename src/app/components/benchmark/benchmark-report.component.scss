@@ -433,6 +433,57 @@ li {
   color: var(--mat-sys-error);
 }
 
+.rr-table-region {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.rr-summary-table {
+  width: 100%;
+  min-width: 34rem;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.rr-summary-table th,
+.rr-summary-table td {
+  padding: 0.75rem 0.5rem;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+  vertical-align: top;
+}
+
+.rr-summary-table th {
+  font: var(--mat-sys-label-medium);
+}
+
+.rr-recording-label {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.rr-value {
+  display: block;
+  font: 600 1.125rem 'Barlow Condensed', sans-serif;
+  white-space: nowrap;
+}
+
+.rr-detail,
+.rr-scroll-hint {
+  display: block;
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.rr-unavailable .rr-value {
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.rr-scroll-hint {
+  display: none;
+  margin-bottom: 0;
+}
+
 .streams-container {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -478,6 +529,10 @@ li {
 }
 
 @include bp.xsmall {
+  .rr-scroll-hint {
+    display: block;
+  }
+
   .benchmark-container {
     padding: 1rem;
   }
@@ -499,6 +554,10 @@ li {
 
 .benchmark-container.benchmark-export {
   padding: 1.5rem;
+}
+
+.benchmark-container.benchmark-export .rr-scroll-hint {
+  display: none;
 }
 
 .benchmark-container.benchmark-export .stats-grid {

@@ -42,14 +42,60 @@ export class GarminHealthValidationError extends Error {
   public readonly name = 'GarminHealthValidationError';
   public readonly code = 'garmin_health_invalid_response';
 
-  constructor(message: string) {
+  constructor(message: string, public readonly diagnostic?: GarminHealthValidationDiagnostic) {
     super(message);
   }
+}
+
+// Internal error telemetry only: never retain raw strings, objects, or summaries.
+interface GarminHealthValidationDiagnostic {
+  summaryType: 'dailies' | 'stressDetails' | 'skinTemp';
+  summaryIndex: number;
+  field: 'averageStressLevel' | 'timeOffsetStressLevelValues' | 'durationInSeconds';
+  reason: 'invalid_type' | 'non_finite' | 'out_of_range' | 'not_integer' | 'unsupported_stress_code' | 'negative_duration';
+  valueType: string;
+  numericValue: number | null;
+  valueDisposition: 'included' | 'non_numeric' | 'non_finite' | 'outside_diagnostic_range';
+  sampleOffsetSeconds: number | null;
+}
+
+function healthValidationDiagnostic(
+  summaryType: GarminHealthValidationDiagnostic['summaryType'],
+  summaryIndex: number,
+  field: GarminHealthValidationDiagnostic['field'],
+  reason: GarminHealthValidationDiagnostic['reason'],
+  value: unknown,
+  sampleOffsetSeconds: number | null = null,
+): GarminHealthValidationDiagnostic {
+  // This telemetry bound is independent of (and never changes) validation.
+  const valueDisposition = typeof value !== 'number' ? 'non_numeric'
+    : !Number.isFinite(value) ? 'non_finite'
+      : Math.abs(value) > 1_000_000 ? 'outside_diagnostic_range'
+        : 'included';
+  return {
+    summaryType,
+    summaryIndex,
+    field,
+    reason,
+    valueType: value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value,
+    numericValue: valueDisposition === 'included' ? value as number : null,
+    valueDisposition,
+    sampleOffsetSeconds,
+  };
 }
 
 export interface GarminHealthResult {
   input: HealthSourceRecordInput;
   observedAtMs: number;
+}
+
+// Internal normalization telemetry only; never persisted or included in content digests.
+export interface GarminHealthSampleBoundsDiagnostic {
+  summaryType: 'dailies';
+  field: 'timeOffsetHeartRateSamples';
+  reason: 'samples_outside_summary_interval';
+  affectedSummaryCount: number;
+  discardedSampleCount: number;
 }
 
 interface ParsedInterval {
@@ -232,18 +278,33 @@ function dailyCoverage(interval: ParsedInterval, sampleCount: number): HealthCov
 function parseInterval(
   value: unknown,
   field: string,
-  options: { calendarDateRequired?: boolean; offsetField?: string } = {},
+  options: { calendarDateRequired?: boolean; offsetField?: string; skinTemperatureSummaryIndex?: number } = {},
 ): ParsedInterval {
   const summary = asRecord(value, field);
   const summaryId = boundedString(summary.summaryId, `${field}.summaryId`);
   const startTimeMs = timestampMs(summary.startTimeInSeconds, `${field}.startTimeInSeconds`);
-  const durationSeconds = requiredNumber(
-    summary.durationInSeconds,
-    `${field}.durationInSeconds`,
-    0,
-    MAX_DURATION_SECONDS,
-    true,
-  );
+  let durationSeconds: number;
+  try {
+    durationSeconds = requiredNumber(
+      summary.durationInSeconds,
+      `${field}.durationInSeconds`,
+      0,
+      MAX_DURATION_SECONDS,
+      true,
+    );
+  } catch (error) {
+    if (!(error instanceof GarminHealthValidationError)
+      || options.skinTemperatureSummaryIndex === undefined) throw error;
+    const rejectedValue = summary.durationInSeconds;
+    const reason = typeof rejectedValue !== 'number' ? 'invalid_type'
+      : !Number.isFinite(rejectedValue) ? 'non_finite'
+        : rejectedValue < 0 ? 'negative_duration'
+          : rejectedValue > MAX_DURATION_SECONDS ? 'out_of_range'
+            : 'not_integer';
+    throw new GarminHealthValidationError(error.message, healthValidationDiagnostic(
+      'skinTemp', options.skinTemperatureSummaryIndex, 'durationInSeconds', reason, rejectedValue,
+    ));
+  }
   const offsetField = options.offsetField || 'startTimeOffsetInSeconds';
   const timezoneOffsetSeconds = optionalTimezoneOffsetSeconds(summary, offsetField);
   const calendarDate = summary.calendarDate === undefined || summary.calendarDate === null
@@ -356,7 +417,7 @@ function categoryMetric(options: {
   semanticVariant: string;
   nativeMetric: string;
   nativeValue: string;
-  canonicalValue: string;
+  canonicalValue?: string;
   qualifiers?: Record<string, string | number | boolean | null>;
 }): HealthMetricEntry {
   return {
@@ -369,14 +430,16 @@ function categoryMetric(options: {
     recordingMethod: HEALTH_RECORDING_METHODS.ProviderCalculated,
     quality: { status: HEALTH_QUALITY_STATUSES.Valid },
     coverage: { status: HEALTH_COVERAGE_STATUSES.Unknown },
-    normalizationStatus: HEALTH_NORMALIZATION_STATUSES.Canonical,
+    normalizationStatus: options.canonicalValue === undefined
+      ? HEALTH_NORMALIZATION_STATUSES.NativeOnly
+      : HEALTH_NORMALIZATION_STATUSES.Canonical,
     native: {
       metric: options.nativeMetric,
       value: options.nativeValue,
       unit: 'category',
       qualifiers: options.qualifiers,
     },
-    canonical: {
+    canonical: options.canonicalValue === undefined ? undefined : {
       value: options.canonicalValue,
       unit: HEALTH_UNITS.Category,
     },
@@ -536,6 +599,7 @@ function mapDaily(
   revisionOrder: number,
   receivedAtMs: number,
   index: number,
+  reportDiscardedSamples?: (count: number) => void,
 ): GarminHealthResult | null {
   const field = `dailies[${index}]`;
   const interval = parseInterval(value, field, { calendarDateRequired: true });
@@ -616,7 +680,23 @@ function mapDaily(
       canonicalUnit: HEALTH_UNITS.BeatsPerMinute,
     }));
   }
-  const averageStress = optionalNumber(interval.summary, 'averageStressLevel', -1, 100, true);
+  let averageStress: number | null;
+  try {
+    // Garmin also emits -2 for daily averages. Its meaning is not specified
+    // for this field in API 1.2.4; retain the code without inventing a score
+    // or borrowing the meaning of -2 from the separate Stress Details feed.
+    averageStress = optionalNumber(interval.summary, 'averageStressLevel', -2, 100, true);
+  } catch (error) {
+    if (!(error instanceof GarminHealthValidationError)) throw error;
+    const rejectedValue = interval.summary.averageStressLevel;
+    const reason = typeof rejectedValue !== 'number' ? 'invalid_type'
+      : !Number.isFinite(rejectedValue) ? 'non_finite'
+        : rejectedValue < -2 || rejectedValue > 100 ? 'out_of_range'
+          : 'not_integer';
+    throw new GarminHealthValidationError(error.message, healthValidationDiagnostic(
+      'dailies', index, 'averageStressLevel', reason, rejectedValue,
+    ));
+  }
   if (averageStress !== null) {
     if (averageStress > 0) {
       metrics.push(canonicalNumberMetric({
@@ -635,7 +715,7 @@ function mapDaily(
         semanticVariant: 'daily_average_availability',
         nativeMetric: 'averageStressLevel',
         nativeValue: `${averageStress}`,
-        canonicalValue: 'not_enough_data',
+        canonicalValue: averageStress === -2 ? undefined : 'not_enough_data',
       }));
     }
   }
@@ -698,13 +778,18 @@ function mapDaily(
     }));
   }
 
-  const heartRatePoints = numericMap(
+  const rawHeartRatePoints = numericMap(
     interval.summary.timeOffsetHeartRateSamples,
     `${field}.timeOffsetHeartRateSamples`,
     1,
     300,
   );
-  assertPointsWithinInterval(heartRatePoints, interval.durationSeconds, `${field}.timeOffsetHeartRateSamples`);
+  // Garmin can append HR samples beyond its declared monitoring duration. Validate
+  // every raw sample first, then preserve the valid daily content without extending
+  // the interval, moving sample timestamps, or weakening other summary families.
+  const heartRatePoints = rawHeartRatePoints.filter(point => point.offsetSeconds <= interval.durationSeconds);
+  const discardedCount = rawHeartRatePoints.length - heartRatePoints.length;
+  if (discardedCount > 0) reportDiscardedSamples?.(discardedCount);
   const coverage = dailyCoverage(interval, heartRatePoints.length);
   const series = numericSeries({
     seriesKey: 'heart_rate_15_second_representative',
@@ -771,10 +856,21 @@ function mapStressDetails(
     100,
   );
   assertPointsWithinInterval(rawStressPoints, interval.durationSeconds, `${field}.timeOffsetStressLevelValues`);
-  if (rawStressPoints.some(point => point.value === 0 || (point.value < 0 && !STRESS_STATE_CODES[point.value]))) {
-    throw new GarminHealthValidationError(`${field}.timeOffsetStressLevelValues contains an unsupported stress code.`);
+  const unsupportedStressPoint = rawStressPoints.find(
+    point => point.value < 0 && !STRESS_STATE_CODES[point.value],
+  );
+  if (unsupportedStressPoint) {
+    throw new GarminHealthValidationError(
+      `${field}.timeOffsetStressLevelValues contains an unsupported stress code.`,
+      healthValidationDiagnostic(
+        'stressDetails', index, 'timeOffsetStressLevelValues', 'unsupported_stress_code',
+        unsupportedStressPoint.value, unsupportedStressPoint.offsetSeconds,
+      ),
+    );
   }
-  const stressPoints = rawStressPoints.filter(point => point.value > 0);
+  // The Stress Details table includes Rest < 26; zero is emitted by Garmin
+  // and is a numeric sample, unlike the explicitly negative state codes.
+  const stressPoints = rawStressPoints.filter(point => point.value >= 0);
   const statePoints = rawStressPoints.filter(point => point.value < 0);
   const bodyBatteryPoints = numericMap(
     interval.summary.timeOffsetBodyBatteryValues,
@@ -1304,7 +1400,7 @@ function mapSkinTemperature(
   index: number,
 ): GarminHealthResult | null {
   const field = `skinTemp[${index}]`;
-  const interval = parseInterval(value, field, { calendarDateRequired: true });
+  const interval = parseInterval(value, field, { calendarDateRequired: true, skinTemperatureSummaryIndex: index });
   validateProviderUser(interval.summary, providerAccountId, field);
   const deviation = requiredNumber(interval.summary.avgDeviationCelsius, `${field}.avgDeviationCelsius`, -100, 100);
   const coverage = commonCoverage(interval.startTimeMs, interval.endTimeMs, interval.durationSeconds);
@@ -1522,6 +1618,7 @@ const SUMMARY_MAPPERS: Readonly<Record<GarminHealthSummaryType, (
   revisionOrder: number,
   receivedAtMs: number,
   index: number,
+  reportDiscardedSamples?: (count: number) => void,
 ) => GarminHealthResult | null>> = Object.freeze({
   dailies: mapDaily,
   stressDetails: mapStressDetails,
@@ -1541,6 +1638,7 @@ export function mapGarminHealthSummaries(
   providerAccountId: string,
   revisionOrder: number,
   receivedAtMs = Date.now(),
+  onSampleBoundsDiagnostic?: (diagnostic: GarminHealthSampleBoundsDiagnostic) => void,
 ): GarminHealthResult[] {
   if (!Array.isArray(payload)) {
     throw new GarminHealthValidationError(`${summaryType} response must be an array.`);
@@ -1552,6 +1650,12 @@ export function mapGarminHealthSummaries(
   requiredNumber(revisionOrder, 'revisionOrder', 0, Number.MAX_SAFE_INTEGER, true);
   requiredNumber(receivedAtMs, 'receivedAtMs', 0, Number.MAX_SAFE_INTEGER, true);
   const byIdentity = new Map<string, GarminHealthResult>();
+  let affectedSummaryCount = 0;
+  let discardedSampleCount = 0;
+  const reportDiscardedSamples = (count: number): void => {
+    affectedSummaryCount++;
+    discardedSampleCount += count;
+  };
   payload.forEach((value, index) => {
     const result = SUMMARY_MAPPERS[summaryType](
       value,
@@ -1559,6 +1663,7 @@ export function mapGarminHealthSummaries(
       revisionOrder,
       receivedAtMs,
       index,
+      reportDiscardedSamples,
     );
     if (!result) return;
     const identity = `${result.input.sourceRecordType}:${result.input.sourceRecordKey}`;
@@ -1566,5 +1671,15 @@ export function mapGarminHealthSummaries(
     // identities inside the same upload range; only the last row is written.
     byIdentity.set(identity, result);
   });
+  if (discardedSampleCount > 0) {
+    try {
+      // At most one diagnostic per bounded callback, including empty/duplicate
+      // summaries. Counts are bounded by the existing summary and raw sample caps.
+      onSampleBoundsDiagnostic?.({
+        summaryType: 'dailies', field: 'timeOffsetHeartRateSamples', reason: 'samples_outside_summary_interval',
+        affectedSummaryCount, discardedSampleCount,
+      });
+    } catch { /* Diagnostic logging must not change ingestion or queue retries. */ }
+  }
   return [...byIdentity.values()];
 }

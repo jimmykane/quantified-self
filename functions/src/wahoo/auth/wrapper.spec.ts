@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => {
   const firestoreCollection = vi.fn(() => rootCollection);
   const firestore = vi.fn(() => ({ collection: firestoreCollection }));
   return {
+    callableOptions: new Map<unknown, { memory?: string; maxInstances?: number }>(),
     enforceAppCheck: vi.fn(),
     hasServiceOAuthConnectAccess: vi.fn(),
     getAndSetServiceOAuth2AccessTokenForUser: vi.fn(),
@@ -33,7 +34,10 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock('firebase-functions/v2/https', () => ({
-  onCall: (_options: unknown, handler: unknown) => handler,
+  onCall: (options: { memory?: string; maxInstances?: number }, handler: unknown) => {
+    mocks.callableOptions.set(handler, options);
+    return handler;
+  },
   HttpsError: class HttpsError extends Error {
     constructor(
       public readonly code: string,
@@ -91,17 +95,47 @@ import {
   getWahooAPIConnectionAccount,
   requestAndSetWahooAPIAccessToken,
 } from './wrapper';
+import * as logger from 'firebase-functions/logger';
 
 describe('Wahoo Auth Wrapper', () => {
+  it.each([
+    ['getWahooAPIAuthRequestTokenRedirectURI', getWahooAPIAuthRequestTokenRedirectURI],
+    ['requestAndSetWahooAPIAccessToken', requestAndSetWahooAPIAccessToken],
+    ['deauthorizeWahooAPI', deauthorizeWahooAPI],
+  ])('configures %s with 512 MiB while preserving its instance limit', (_name, callable) => {
+    expect(mocks.callableOptions.get(callable)).toMatchObject({ memory: '512MiB', maxInstances: 10 });
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getAndSetServiceOAuth2AccessTokenForUser.mockReset().mockResolvedValue(undefined);
+    mocks.getAndSetServiceOAuth2AccessTokenForUser.mockReset().mockResolvedValue({
+      connected: true,
+      outcome: 'connected',
+    });
     mocks.disconnectServiceForUser.mockReset().mockResolvedValue(undefined);
     mocks.getServiceConnectionMeta.mockResolvedValue(null);
     mocks.getActiveWahooTokenSnapshot.mockRejectedValue(new Error('No Wahoo account'));
     mocks.tokenQueryGet.mockResolvedValue({ docs: [] });
     mocks.hasServiceOAuthConnectAccess.mockResolvedValue(true);
     mocks.validateOAuth2State.mockResolvedValue(true);
+  });
+
+  it('forwards explicit history consent and range to the OAuth context', async () => {
+    mocks.getServiceOAuth2CodeRedirectAndSaveStateToUser.mockResolvedValue('https://wahoo.example/authorize');
+    await expect(getWahooAPIAuthRequestTokenRedirectURI({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-1' },
+      data: { redirectUri: 'https://localhost/callback', importRecentHistory: true, importHistoryRange: 'maximum' },
+    } as Parameters<typeof getWahooAPIAuthRequestTokenRedirectURI>[0])).resolves.toEqual({
+      redirect_uri: 'https://wahoo.example/authorize',
+    });
+    expect(mocks.getServiceOAuth2CodeRedirectAndSaveStateToUser).toHaveBeenCalledWith(
+      'user-1',
+      ServiceNames.WahooAPI,
+      'https://localhost/callback',
+      true,
+      'maximum',
+    );
   });
 
   it('returns a retryable callable error when OAuth start is blocked by a disconnect', async () => {
@@ -138,7 +172,10 @@ describe('Wahoo Auth Wrapper', () => {
         code: 'oauth-code',
         redirectUri: 'https://localhost/callback',
       },
-    } as Parameters<typeof requestAndSetWahooAPIAccessToken>[0])).resolves.toBeUndefined();
+    } as Parameters<typeof requestAndSetWahooAPIAccessToken>[0])).resolves.toEqual({
+      connected: true,
+      outcome: 'connected',
+    });
 
     expect(mocks.getAndSetServiceOAuth2AccessTokenForUser).toHaveBeenCalledWith(
       'user-1',
@@ -185,6 +222,33 @@ describe('Wahoo Auth Wrapper', () => {
       code: 'permission-denied',
       message: 'Wahoo rejected the authorization request.',
     });
+  });
+
+  it('does not log provider-echoed authorization secrets after exchange failure', async () => {
+    mocks.getAndSetServiceOAuth2AccessTokenForUser.mockRejectedValue(
+      Object.assign(new Error('authorization code secret-authorization-code was rejected'), {
+        statusCode: 400,
+        error_description: 'secret-authorization-code',
+      }),
+    );
+
+    await expect(requestAndSetWahooAPIAccessToken({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-1' },
+      data: {
+        state: 'oauth-state',
+        code: 'secret-authorization-code',
+        redirectUri: 'https://localhost/callback',
+      },
+    } as Parameters<typeof requestAndSetWahooAPIAccessToken>[0])).rejects.toMatchObject({
+      code: 'internal',
+    });
+
+    expect(logger.error).toHaveBeenCalledWith(
+      'Wahoo authorization code flow failed',
+      { statusCode: 400 },
+    );
+    expect(JSON.stringify(vi.mocked(logger.error).mock.calls)).not.toContain('secret-authorization-code');
   });
 
   it('returns only the pinned Wahoo account ID for an authenticated user', async () => {

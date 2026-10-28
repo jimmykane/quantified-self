@@ -1,4 +1,5 @@
 import {
+  ActivityInterface,
   DataDistance,
   DataDepthAvg,
   DataDiveNumber,
@@ -9,8 +10,19 @@ import {
   DataEHPE,
   DataEVPE,
   DataHeartRateAvg,
+  DataHeartRate,
+  DataActiveLap,
   DataHeartRateMax,
   DataHeartRateMin,
+  DataJumpHangTimeMax,
+  DataPowerAvg,
+  DataPowerMax,
+  DataCadenceAvg,
+  DataAscent,
+  DataMovingTime,
+  DataTemperatureAvg,
+  DataAvgRespirationRate,
+  DataStrokeRateMax,
   DataNumberOfSatellites,
   DataSatellite5BestSNR,
   DataSpeedAvg,
@@ -24,6 +36,7 @@ import {
   SwimPaceUnits,
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
+import { createNominalYardPoolFixture } from './event-swim-distance-display.test-fixtures';
 import {
   DataDuration,
   DataEffortPaceAvg,
@@ -32,17 +45,23 @@ import {
 } from '@sports-alliance/sports-lib';
 import {
   EVENT_LAP_TABLE_FIXED_COLUMN,
+  EVENT_LAP_STROKE_COLUMN,
   formatEventLapMetric,
   getAverageEventLapMetrics,
+  getAvailableEventLapMetricTypes,
   getDefaultEventLapMetricTypes,
+  getEventLapColumnPickerOptions,
   getEventLapMetricOptionGroups,
+  getEventLapAdditionalMetricOptionGroups,
   getSelectedEventLapSummaryMetrics,
   getSelectedEventLapMetricTypes,
   isEventLapSportFamily,
   normalizeEventDetailsSettings,
   normalizeEventLapMetricTypes,
+  moveEventLapMetricType,
   resolveEventLapSportFamily,
 } from './event-lap-table-columns.helper';
+import { EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN } from './event-swim-analytics.helper';
 
 const unitSettings: UserUnitSettingsInterface = {
   paceUnits: [PaceUnits.MinutesPerMile],
@@ -51,6 +70,224 @@ const unitSettings: UserUnitSettingsInterface = {
 } as UserUnitSettingsInterface;
 
 describe('event lap table columns helper', () => {
+  const hrLap = (maximum: number | undefined, average = 100, rest = false): LapInterface => ({
+    getDuration: () => new DataDuration(rest ? 120 : 30),
+    getDistance: () => new DataDistance(rest ? 0 : 25),
+    getStat: (type: string) => type === DataHeartRateMax.type && maximum !== undefined ? new DataHeartRateMax(maximum)
+      : type === DataHeartRateAvg.type ? new DataHeartRateAvg(average)
+        : type === DataActiveLap.type ? new DataActiveLap(!rest) : undefined,
+  } as LapInterface);
+  const hrActivity = (laps: LapInterface[], maximum?: number, samples: (number | null)[] = []): ActivityInterface => ({
+    type: 'Swimming', getLaps: () => laps, getSwimLengths: () => [],
+    getStat: (type: string) => type === DataHeartRateMax.type && maximum !== undefined ? new DataHeartRateMax(maximum) : undefined,
+    hasStreamData: (type: string) => type === DataHeartRate.type && samples.length > 0,
+    getStreamData: () => samples,
+  } as unknown as ActivityInterface);
+
+  it.each([undefined, unitSettings])('uses the whole-session HR peak including rest with units %j', units => {
+    const laps = [hrLap(110, 90), hrLap(137, 130), hrLap(165, 180, true)];
+    laps[1].getDuration = () => new DataDuration(90);
+    const activity = hrActivity(laps, 155, [null, 0, 150, 170, Number.NaN, Number.POSITIVE_INFINITY]);
+    expect(getAverageEventLapMetrics(laps, [DataHeartRateMax.type, DataHeartRateAvg.type], units, 'Swimming', activity))
+      .toEqual([{ type: DataHeartRateMax.type, display: '170 bpm' }, { type: DataHeartRateAvg.type, display: '110 bpm' }]);
+    expect(getAverageEventLapMetrics([laps[0]], [DataHeartRateMax.type], units, 'Swimming', activity))
+      .toEqual([{ type: DataHeartRateMax.type, display: '170 bpm' }]);
+  });
+
+  it('retains a higher native peak and falls back to valid lap peaks without samples', () => {
+    const laps = [hrLap(137), hrLap(165, 130, true)];
+    for (const [native, expected] of [[175, '175 bpm'], [155, '165 bpm'], [undefined, '165 bpm']] as const) {
+      expect(getAverageEventLapMetrics(laps, [DataHeartRateMax.type], undefined, 'Swimming', hrActivity(laps, native)))
+        .toEqual([{ type: DataHeartRateMax.type, display: expected }]);
+    }
+    expect(getAverageEventLapMetrics(laps, [DataHeartRateMax.type], undefined, 'Swimming'))
+      .toEqual([{ type: DataHeartRateMax.type, display: '165 bpm' }]);
+  });
+
+  it('supports a native-only or sample-only peak without manufacturing an empty lap table', () => {
+    const laps = [hrLap(undefined)];
+    for (const activity of [hrActivity(laps, 160), hrActivity(laps, undefined, [160])]) {
+      expect(getAverageEventLapMetrics(laps, [DataHeartRateMax.type], undefined, 'Swimming', activity))
+        .toEqual([{ type: DataHeartRateMax.type, display: '160 bpm' }]);
+      expect(getAverageEventLapMetrics([], [DataHeartRateMax.type], undefined, 'Swimming', activity)).toEqual([]);
+    }
+  });
+
+  it.each([undefined, unitSettings])('discovers summary-only Max HR before column selection with units %j', units => {
+    const laps = [hrLap(undefined), hrLap(undefined)];
+    const otherTabLap = hrLap(165, 130, true);
+    const types = [DataHeartRateMax.type, DataPowerMax.type];
+    for (const activity of [hrActivity(laps, 160), hrActivity(laps, undefined, [170]), hrActivity([...laps, otherTabLap])]) {
+      expect(getAvailableEventLapMetricTypes(activity, laps, types, units))
+        .toEqual(new Set([DataHeartRateMax.type]));
+      expect(getAvailableEventLapMetricTypes(activity, [], types, units)).toEqual(new Set());
+    }
+    expect(getAvailableEventLapMetricTypes(hrActivity(laps, 0, [null, 0, -1, Number.NaN]), laps, types, units))
+      .toEqual(new Set());
+  });
+
+  it.each([undefined, unitSettings])('does not advertise a hidden single-lap session summary with units %j', units => {
+    const lap = hrLap(undefined);
+    const otherTabLap = hrLap(165, 130, true);
+    for (const activity of [hrActivity([lap], 160), hrActivity([lap], undefined, [170]), hrActivity([lap, otherTabLap])]) {
+      expect(getAvailableEventLapMetricTypes(activity, [lap], [DataHeartRateMax.type], units)).toEqual(new Set());
+    }
+    const recordedPeak = hrLap(150);
+    expect(getAvailableEventLapMetricTypes(hrActivity([recordedPeak], 170), [recordedPeak], [DataHeartRateMax.type], units))
+      .toEqual(new Set([DataHeartRateMax.type]));
+  });
+
+  it('excludes cross-leg context laps from the session peak across lap tabs', () => {
+    const lap = { ...hrLap(140), startDate: new Date(0), endDate: new Date(30_000) } as LapInterface;
+    const rest = { ...hrLap(165, 130, true), startDate: new Date(30_000), endDate: new Date(60_000) } as LapInterface;
+    const crossLeg = { ...hrLap(220), startDate: new Date(0), endDate: new Date(120_000) } as LapInterface;
+    const activity = { ...hrActivity([lap, rest, crossLeg]), startDate: new Date(0), endDate: new Date(60_000) } as ActivityInterface;
+    const sibling = { type: 'Cycling', startDate: new Date(60_000), endDate: new Date(120_000) } as ActivityInterface;
+    expect(getAverageEventLapMetrics([lap], [DataHeartRateMax.type], undefined, 'Swimming', activity, [activity, sibling]))
+      .toEqual([{ type: DataHeartRateMax.type, display: '165 bpm' }]);
+  });
+
+  it('does not discover a summary-only peak in a context-only lap table', () => {
+    const lap = { ...hrLap(undefined), startDate: new Date(0), endDate: new Date(120_000) } as LapInterface;
+    const activity = { ...hrActivity([lap], 170), startDate: new Date(0), endDate: new Date(60_000) } as ActivityInterface;
+    const sibling = { type: 'Cycling', startDate: new Date(60_000), endDate: new Date(120_000) } as ActivityInterface;
+    expect(getAvailableEventLapMetricTypes(activity, [lap], [DataHeartRateMax.type], undefined, [activity, sibling]))
+      .toEqual(new Set());
+  });
+
+  it('keeps selected peaks inside selected original laps and counts valid rest readings', () => {
+    const active = hrLap(137), rest = hrLap(165, 130, true), missing = hrLap(undefined);
+    const activity = hrActivity([active, rest, missing, hrLap(190)], 200, [210]);
+    expect(getSelectedEventLapSummaryMetrics([active, rest, missing], [DataHeartRateMax.type], undefined, 'Swimming', activity))
+      .toEqual([{ type: DataHeartRateMax.type, display: '165 bpm', availableCount: 2, selectedCount: 3 }]);
+    expect(getSelectedEventLapSummaryMetrics([rest], [DataHeartRateMax.type], undefined, 'Swimming', activity))
+      .toEqual([{ type: DataHeartRateMax.type, display: '165 bpm', availableCount: 1, selectedCount: 1 }]);
+    expect(getSelectedEventLapSummaryMetrics([active], [DataHeartRateMax.type], undefined, 'Swimming', activity))
+      .toEqual([{ type: DataHeartRateMax.type, display: '137 bpm', availableCount: 1, selectedCount: 1 }]);
+    expect(getSelectedEventLapSummaryMetrics([], [DataHeartRateMax.type], undefined, 'Swimming', activity)).toEqual([]);
+  });
+
+  it('keeps missing, non-finite and nonpositive HR unavailable and handles long streams', () => {
+    const invalid = [undefined, Number.NaN, Number.POSITIVE_INFINITY, 0, -1].map(value => hrLap(value));
+    const activity = hrActivity(invalid, 0, [null, 0, -1, Number.NaN, Number.POSITIVE_INFINITY]);
+    expect(getAverageEventLapMetrics(invalid, [DataHeartRateMax.type], undefined, 'Swimming', activity)).toEqual([]);
+    expect(getSelectedEventLapSummaryMetrics(invalid, [DataHeartRateMax.type], undefined, 'Swimming', activity)).toEqual([]);
+    const samples = Array<number>(200_000).fill(120);
+    samples[100_000] = 180;
+    expect(getAverageEventLapMetrics(invalid, [DataHeartRateMax.type], undefined, 'Swimming', hrActivity(invalid, undefined, samples)))
+      .toEqual([{ type: DataHeartRateMax.type, display: '180 bpm' }]);
+  });
+
+  it('focuses swimming choices while keeping the full catalog recoverable and other sports unchanged', () => {
+    const normal = getEventLapMetricOptionGroups('swimming').flatMap(group => group.metrics.map(metric => metric.type));
+    const additional = getEventLapAdditionalMetricOptionGroups('swimming').flatMap(group => group.metrics.map(metric => metric.type));
+    const full = getEventLapMetricOptionGroups().flatMap(group => group.metrics.map(metric => metric.type));
+    expect(normal).toEqual(expect.arrayContaining([
+      DataDuration.type, DataDistance.type, DataMovingTime.type, DataSwimPaceAvg.type,
+      EVENT_LAP_STROKE_COLUMN, EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN,
+      DataStrokeRateAvg.type, DataStrokeRateMax.type, DataHeartRateMin.type,
+      DataEnergy.type, DataSpeedAvg.type, DataTemperatureAvg.type, DataAvgRespirationRate.type,
+    ]));
+    for (const type of [DataPowerAvg.type, DataJumpHangTimeMax.type, DataPaceAvg.type, DataAscent.type, DataCadenceAvg.type, DataDepthAvg.type]) {
+      expect(normal).not.toContain(type);
+      expect(additional).toContain(type);
+    }
+    expect(new Set([...normal, ...additional]).size).toBe(full.length);
+    expect([...normal, ...additional].sort()).toEqual([...full].sort());
+    for (const family of ['running', 'cycling', 'other'] as const) {
+      expect(getEventLapAdditionalMetricOptionGroups(family)).toEqual([]);
+      expect(getEventLapMetricOptionGroups(family).flatMap(group => group.metrics.map(metric => metric.type)))
+        .toEqual(full.filter(type => ![EVENT_LAP_STROKE_COLUMN, EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN].includes(type)));
+    }
+  });
+
+  it('uses focused swimming defaults without rewriting saved additional choices or their order', () => {
+    const defaults = getDefaultEventLapMetricTypes('swimming');
+    const normal = getEventLapMetricOptionGroups('swimming').flatMap(group => group.metrics.map(metric => metric.type));
+    expect(defaults.every(type => normal.includes(type))).toBe(true);
+    expect(defaults).not.toContain(DataCadenceAvg.type);
+    expect(defaults).not.toContain(DataPowerAvg.type);
+    expect(defaults).not.toContain(DataAscent.type);
+    const saved = [DataJumpHangTimeMax.type, DataDuration.type, DataPowerAvg.type];
+    expect(getSelectedEventLapMetricTypes({ lapTableColumnsBySportFamily: { swimming: saved } }, 'swimming')).toEqual(saved);
+    expect(normalizeEventLapMetricTypes(saved)).toEqual(saved);
+  });
+
+  it('discovers unselected valid lap metrics including zero without using activity summary values', () => {
+    const lap = {
+      getDuration: () => new DataDuration(30),
+      getDistance: () => new DataDistance(25),
+      getStat: (type: string) => type === DataPowerAvg.type ? new DataPowerAvg(0)
+        : type === DataPowerMax.type ? new DataPowerMax(Number.NaN) : undefined,
+    } as unknown as LapInterface;
+    const activity = {
+      type: 'Swimming', getLaps: () => [lap],
+      getStat: () => new DataJumpHangTimeMax(2),
+    } as unknown as ActivityInterface;
+    const types = [DataDuration.type, DataDistance.type, DataPowerAvg.type, DataPowerMax.type, DataJumpHangTimeMax.type, 'unknown metric', DataEHPE.type];
+    for (const units of [undefined, unitSettings]) {
+      expect(getAvailableEventLapMetricTypes(activity, [lap], types, units))
+        .toEqual(new Set([DataDuration.type, DataDistance.type, DataPowerAvg.type]));
+    }
+    expect(getAvailableEventLapMetricTypes(activity, [], types, unitSettings)).toEqual(new Set());
+  });
+
+  it('discovers calculated swim columns from active lengths and leaves rest-only performance unavailable', () => {
+    const active = {
+      lapId: 1, getDuration: () => new DataDuration(30), getDistance: () => new DataDistance(25), getStat: () => undefined,
+    } as unknown as LapInterface;
+    const rest = {
+      lapId: 2, getDuration: () => new DataDuration(30), getDistance: () => new DataDistance(0), getStat: () => undefined,
+    } as unknown as LapInterface;
+    const activity = {
+      type: 'Swimming', getLaps: () => [active, rest], getSwimLengths: () => [
+        { index: 1, lapIndex: 1, type: 'active', stroke: 'freestyle', startDate: 0, endDate: 30_000, timerTime: 30, distance: 25, strokes: 12 },
+        { index: 2, lapIndex: 2, type: 'idle', startDate: 30_000, endDate: 60_000, timerTime: 30, distance: 0 },
+      ],
+    } as unknown as ActivityInterface;
+    const types = [EVENT_LAP_STROKE_COLUMN, EVENT_LAP_STROKES_COLUMN, EVENT_LAP_SWOLF_COLUMN, DataStrokeRateAvg.type, DataSwimPaceAvg.type];
+    for (const units of [undefined, unitSettings]) {
+      expect(getAvailableEventLapMetricTypes(activity, [active], types, units)).toEqual(new Set(types));
+      expect(getAvailableEventLapMetricTypes(activity, [rest], types, units)).toEqual(new Set());
+    }
+  });
+
+  it('presents selected columns in saved order with complete variant names and no duplicated options', () => {
+    const groups = getEventLapMetricOptionGroups('swimming');
+    const original = JSON.stringify(groups);
+    const selected = [DataHeartRateMax.type, DataDuration.type, DataSwimPaceAvg.type];
+    const picker = getEventLapColumnPickerOptions(groups, selected);
+    expect(picker.selectedMetrics).toEqual(selected.map(type => ({ type, label: type })));
+    const available = picker.availableMetricGroups.flatMap(group => group.metrics.map(metric => metric.type));
+    selected.forEach(type => expect(available).not.toContain(type));
+    expect(available).toContain(DataDistance.type);
+    expect(JSON.stringify(groups)).toBe(original);
+  });
+
+  it('preserves selected columns missing from a narrowed catalog and keeps customized labels', () => {
+    const picker = getEventLapColumnPickerOptions([
+      { id: 'swim', label: 'Swimming', metrics: [{ type: 'Normalized SWOLF', label: 'SWOLF (25 yd)' }] },
+    ], [DataDuration.type, 'Normalized SWOLF']);
+    expect(picker.selectedMetrics).toEqual([
+      { type: DataDuration.type, label: DataDuration.type },
+      { type: 'Normalized SWOLF', label: 'SWOLF (25 yd)' },
+    ]);
+    expect(picker.availableMetricGroups).toEqual([]);
+    expect(getEventLapColumnPickerOptions(getEventLapMetricOptionGroups(), []).selectedMetrics).toEqual([]);
+  });
+
+  it('moves a selected column without altering membership or the original saved layout', () => {
+    const saved = [DataDuration.type, DataDistance.type, DataHeartRateMax.type, DataSwimPaceAvg.type];
+    const moved = moveEventLapMetricType(saved, DataSwimPaceAvg.type, -1);
+    expect(moved).toEqual([DataDuration.type, DataDistance.type, DataSwimPaceAvg.type, DataHeartRateMax.type]);
+    expect(moveEventLapMetricType(moved, DataSwimPaceAvg.type, 1)).toEqual(saved);
+    expect(saved).toEqual([DataDuration.type, DataDistance.type, DataHeartRateMax.type, DataSwimPaceAvg.type]);
+    expect(moveEventLapMetricType(saved, DataDuration.type, -1)).toEqual(saved);
+    expect(moveEventLapMetricType(saved, DataSwimPaceAvg.type, 1)).toEqual(saved);
+    expect(moveEventLapMetricType(saved, 'missing', -1)).toEqual(saved);
+    expect(moveEventLapMetricType([], DataDuration.type, 1)).toEqual([]);
+  });
+
   it('resolves canonical and aliased activities into independent sport families', () => {
     expect(resolveEventLapSportFamily('Running')).toBe('running');
     expect(resolveEventLapSportFamily(' trail running ')).toBe('running');
@@ -65,6 +302,10 @@ describe('event lap table columns helper', () => {
     expect(getDefaultEventLapMetricTypes('cycling')).toContain(DataSpeedAvg.type);
     expect(getDefaultEventLapMetricTypes('swimming')).toContain(DataSwimPaceAvg.type);
     expect(getDefaultEventLapMetricTypes('swimming')).toContain(DataStrokeRateAvg.type);
+    expect(getDefaultEventLapMetricTypes('swimming')).toContain(EVENT_LAP_STROKE_COLUMN);
+    expect(getDefaultEventLapMetricTypes('running')).not.toContain(EVENT_LAP_STROKE_COLUMN);
+    expect(getDefaultEventLapMetricTypes('cycling')).not.toContain(EVENT_LAP_STROKE_COLUMN);
+    expect(getDefaultEventLapMetricTypes('other')).not.toContain(EVENT_LAP_STROKE_COLUMN);
     expect(getDefaultEventLapMetricTypes('other')).toContain(DataSpeedAvg.type);
     expect(EVENT_LAP_TABLE_FIXED_COLUMN).toBe('#');
   });
@@ -73,6 +314,29 @@ describe('event lap table columns helper', () => {
     expect(isEventLapSportFamily('running')).toBe(true);
     expect(isEventLapSportFamily('rowing')).toBe(false);
     expect(isEventLapSportFamily(null)).toBe(false);
+  });
+
+  it.each(['Climbing', 'Rock Climbing', 'Indoor Climbing', 'Bouldering', 'Floor Climbing'])('hides default effort columns for %s while retaining explicit layouts', sport => {
+      expect(getSelectedEventLapMetricTypes(null, 'other', [sport])).not.toContain(DataSpeedAvg.type);
+      const custom = [DataSpeedAvg.type, DataPaceAvg.type, DataGradeAdjustedPaceAvg.type];
+      expect(getSelectedEventLapMetricTypes({ lapTableColumnsBySportFamily: { other: custom } }, 'other', [sport])).toEqual(custom);
+      expect(getSelectedEventLapMetricTypes({ lapTableColumnsBySportFamily: { other: [] } }, 'other', [sport])).toEqual([]);
+    });
+
+  it('retains default effort for another sport sharing the Other lap family', () => {
+    expect(getDefaultEventLapMetricTypes('other', ['Climbing', 'Hiking'])).toContain(DataSpeedAvg.type);
+    expect(getDefaultEventLapMetricTypes('other', ['Hiking'])).toContain(DataSpeedAvg.type);
+    expect(getDefaultEventLapMetricTypes('running', ['Running'])).toContain(DataPaceAvg.type);
+  });
+
+  it('offers stroke as a selectable column while respecting existing saved swim layouts', () => {
+    expect(getEventLapMetricOptionGroups().flatMap(group => group.metrics))
+      .toContainEqual({ type: EVENT_LAP_STROKE_COLUMN, label: 'Stroke' });
+    expect(normalizeEventLapMetricTypes([EVENT_LAP_STROKE_COLUMN, DataDuration.type]))
+      .toEqual([EVENT_LAP_STROKE_COLUMN, DataDuration.type]);
+    expect(getSelectedEventLapMetricTypes({ lapTableColumnsBySportFamily: { swimming: [DataDuration.type] } }, 'swimming'))
+      .toEqual([DataDuration.type]);
+    expect(getSelectedEventLapMetricTypes({ lapTableColumnsBySportFamily: { swimming: [] } }, 'swimming')).toEqual([]);
   });
 
   it('normalizes saved choices while preserving an intentional empty layout', () => {
@@ -151,6 +415,32 @@ describe('event lap table columns helper', () => {
       .toBe('01:22 min/100yd');
   });
 
+  it('formats swimming lap distance in yards while retaining running distance preferences', () => {
+    expect(formatEventLapMetric(new DataDistance(91.44), DataDistance.type, unitSettings, 'Swimming')).toBe('100 yd');
+    expect(formatEventLapMetric(new DataDistance(1609.344), DataDistance.type, unitSettings, 'Running')).toBe('1.61 Km');
+  });
+
+  it('uses corroborated nominal lap distance only for display and selected distance summaries', () => {
+    const { activity, lap } = createNominalYardPoolFixture();
+    expect(formatEventLapMetric(lap.getDistance(), DataDistance.type, unitSettings, 'Swimming', 91.44)).toBe('100 yd');
+    expect(lap.getDistance().getValue()).toBe(91.4);
+    const summaries = getSelectedEventLapSummaryMetrics([lap], [DataDistance.type, DataDuration.type], unitSettings, 'Swimming', activity);
+    expect(summaries.find(metric => metric.type === DataDistance.type)?.display).toBe('100 yd');
+    expect(summaries.find(metric => metric.type === DataDuration.type)?.display).toBe('2:00.00');
+  });
+
+  it('keeps a selected nominal swim distance consistent when zero-distance rest laps also contribute', () => {
+    const { activity, lap } = createNominalYardPoolFixture();
+    const rest = { ...lap, getDistance: () => new DataDistance(0) } as LapInterface;
+    activity.getLaps = () => [lap, rest];
+    const summaries = getSelectedEventLapSummaryMetrics([lap, rest], [DataDistance.type], unitSettings, 'Swimming', activity);
+    expect(summaries[0]).toEqual({ type: DataDistance.type, display: '50 yd', availableCount: 2, selectedCount: 2 });
+    const meters = { ...unitSettings, swimPaceUnits: [SwimPaceUnits.MinutesPer100Meter] };
+    expect(getSelectedEventLapSummaryMetrics([lap, rest], [DataDistance.type], meters, 'Swimming', activity)[0].display).toBe('45.7 m');
+    expect(lap.getDistance().getValue()).toBe(91.4);
+    expect(rest.getDistance().getValue()).toBe(0);
+  });
+
   it('formats averages with saved units while excluding accumulated lap totals', () => {
     const laps = [
       { duration: 120, distance: 1000, energy: 300, pace: 300 },
@@ -217,7 +507,7 @@ describe('event lap table columns helper', () => {
       },
       {
         type: DataHeartRateMax.type,
-        display: formatEventLapMetric(new DataHeartRateMax(170), DataHeartRateMax.type, unitSettings, 'Running'),
+        display: formatEventLapMetric(new DataHeartRateMax(180), DataHeartRateMax.type, unitSettings, 'Running'),
         availableCount: 2,
         selectedCount: 2,
       },

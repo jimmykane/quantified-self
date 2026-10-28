@@ -6,6 +6,40 @@ import { AppWindowService } from './app.window.service';
     providedIn: 'root'
 })
 export class BrowserCompatibilityService {
+    public static checkResizeObserverSupport(): boolean {
+        return typeof ResizeObserver !== 'undefined';
+    }
+
+    public static checkFullscreenSupport(element: HTMLElement | null | undefined): boolean {
+        if (!element) return false;
+        const host = element as HTMLElement & { webkitRequestFullscreen?: () => void };
+        const documentRef = element.ownerDocument as Document & {
+            webkitFullscreenEnabled?: boolean;
+            webkitExitFullscreen?: () => void;
+        };
+        return (documentRef.fullscreenEnabled !== false && typeof host.requestFullscreen === 'function'
+            && typeof documentRef.exitFullscreen === 'function')
+            || (documentRef.webkitFullscreenEnabled !== false && typeof host.webkitRequestFullscreen === 'function'
+                && typeof documentRef.webkitExitFullscreen === 'function');
+    }
+
+    public static checkWorkerSupport(): boolean {
+        return typeof Worker !== 'undefined';
+    }
+
+    /** Optional Intl API: older browsers still get useful timezone choices. */
+    public static getSupportedTimeZones(): string[] {
+        const intl = Intl as typeof Intl & { supportedValuesOf?: (key: string) => string[] };
+        if (typeof intl.supportedValuesOf === 'function') return intl.supportedValuesOf('timeZone');
+        return ['America/Los_Angeles', 'America/New_York', 'Asia/Kolkata', 'Asia/Tokyo',
+            'Australia/Sydney', 'Europe/Berlin', 'Europe/Helsinki', 'Europe/London', 'Pacific/Auckland'];
+    }
+
+    /** Also used by framework-independent chart lifecycle helpers. */
+    public static checkIntersectionObserverSupport(): boolean {
+        return typeof IntersectionObserver !== 'undefined';
+    }
+
     private dialog = inject(MatDialog);
     private windowService = inject(AppWindowService);
 
@@ -40,6 +74,10 @@ export class BrowserCompatibilityService {
         } catch {
             return false;
         }
+    }
+
+    public checkWebCryptoSupport(): boolean {
+        return typeof globalThis.crypto?.subtle?.digest === 'function';
     }
 
     public createRandomUUID(): string | null {

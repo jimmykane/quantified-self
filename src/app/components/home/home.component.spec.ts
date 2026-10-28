@@ -1,467 +1,474 @@
-import {
-    ComponentFixture,
-    DeferBlockBehavior,
-    TestBed,
-} from '@angular/core/testing';
+import { ComponentFixture, DeferBlockBehavior, DeferBlockState, TestBed } from '@angular/core/testing';
+import { Component } from '@angular/core';
 import { By } from '@angular/platform-browser';
-import { HomeComponent } from './home.component';
-import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
+import { Location } from '@angular/common';
+import { SpyLocation } from '@angular/common/testing';
 import { RouterTestingModule } from '@angular/router/testing';
-import { MatIconModule } from '@angular/material/icon';
-import { MatButtonModule } from '@angular/material/button';
-import { MatTooltip, MatTooltipModule } from '@angular/material/tooltip';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
-import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { MatTooltip } from '@angular/material/tooltip';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { BehaviorSubject } from 'rxjs';
-import { AppThemes } from '@sports-alliance/sports-lib';
-import { signal } from '@angular/core';
-import { AppThemeService } from '../../services/app.theme.service';
+import { ASSISTANT_REQUEST_LIMITS, USAGE_LIMITS, ROUTE_USAGE_LIMITS } from '@shared/limits';
+import { AppAuthService } from '../../authentication/app.auth.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
-import { LoggerService } from '../../services/logger.service';
-import { CompactFeatureRowComponent } from '../shared/compact-feature-row/compact-feature-row.component';
-import { ProviderDataFlowMatrixComponent } from '../shared/provider-data-flow-matrix/provider-data-flow-matrix.component';
+import { ShellNavigationEffectsService } from '../../services/shell-navigation-effects.service';
 import { PublicFeaturePreviewComponent } from '../public-seo/public-feature-preview.component';
+import { HomeComponent } from './home.component';
+
+@Component({ standalone: true, template: '<p>Destination</p>' })
+class HomeDestinationStub {}
 
 describe('HomeComponent', () => {
-    let component: HomeComponent;
-    let fixture: ComponentFixture<HomeComponent>;
-    let mockAuthService: any;
-    let mockRouter: any;
-    let userSubject: BehaviorSubject<any>;
-    const chart = {
-        dispatchAction: vi.fn(),
-        isDisposed: vi.fn(() => false),
-        on: vi.fn(),
-        off: vi.fn(),
-    };
-    const eChartsLoader = {
-        init: vi.fn().mockResolvedValue(chart),
-        setOption: vi.fn(),
-        dispose: vi.fn(),
-        resize: vi.fn(),
-        subscribeToViewportResize: vi.fn(() => vi.fn()),
-        attachMobileSeriesTapFeedback: vi.fn(() => vi.fn()),
-    };
+  let fixture: ComponentFixture<HomeComponent>;
+  let userSubject: BehaviorSubject<{ uid: string } | null>;
+  let router: Router;
+  let location: SpyLocation;
+  const selection = vi.fn();
 
-    beforeEach(async () => {
-        userSubject = new BehaviorSubject<any>(null);
-        vi.clearAllMocks();
-        mockAuthService = {
-            getUser: vi.fn().mockResolvedValue(null),
-            user$: userSubject.asObservable()
-        };
+  beforeEach(async () => {
+    userSubject = new BehaviorSubject<{ uid: string } | null>(null);
+    selection.mockClear();
+    await TestBed.configureTestingModule({
+      deferBlockBehavior: DeferBlockBehavior.Manual,
+      imports: [HomeComponent, RouterTestingModule.withRoutes([]), MatIconTestingModule, NoopAnimationsModule],
+      providers: [
+        { provide: AppAuthService, useValue: { user$: userSubject.asObservable() } },
+        { provide: AppHapticsService, useValue: { selection } },
+        { provide: EChartsLoaderService, useValue: {
+          init: vi.fn().mockResolvedValue({ isDisposed: () => false, dispatchAction: vi.fn(), on: vi.fn(), off: vi.fn(), getWidth: () => 320 }),
+          setOption: vi.fn(), resize: vi.fn(), dispose: vi.fn(),
+          subscribeToViewportResize: () => () => undefined, attachMobileSeriesTapFeedback: () => () => undefined,
+        } },
+      ],
+    }).compileComponents();
+    router = TestBed.inject(Router);
+    location = TestBed.inject(Location) as SpyLocation;
+    vi.spyOn(router, 'navigate').mockResolvedValue(true);
+  });
 
-        await TestBed.configureTestingModule({
-            deferBlockBehavior: DeferBlockBehavior.Manual,
-            imports: [
-                HomeComponent,
-                RouterTestingModule.withRoutes([]),
-                MatIconModule,
-                MatIconTestingModule,
-                MatButtonModule,
-                MatTooltipModule,
-                BrowserAnimationsModule
-            ],
-            providers: [
-                { provide: AppAuthService, useValue: mockAuthService },
-                { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
-                { provide: EChartsLoaderService, useValue: eChartsLoader },
-                { provide: LoggerService, useValue: { error: vi.fn() } },
-            ]
-        }).compileComponents();
+  function renderHome(): void {
+    fixture = TestBed.createComponent(HomeComponent);
+    fixture.detectChanges();
+  }
 
-        mockRouter = TestBed.inject(Router);
-        vi.spyOn(mockRouter, 'navigate').mockResolvedValue(true);
-    });
+  it('keeps anonymous visitors on home and redirects authenticated users to Dashboard', () => {
+    renderHome();
+    expect(router.navigate).not.toHaveBeenCalled();
+    userSubject.next({ uid: 'test-user' });
+    expect(router.navigate).toHaveBeenCalledWith(['/dashboard']);
+    vi.mocked(router.navigate).mockClear();
+    fixture.destroy();
+    userSubject.next({ uid: 'another-user' });
+    expect(router.navigate).not.toHaveBeenCalled();
+  });
 
-    beforeEach(() => {
-        fixture = TestBed.createComponent(HomeComponent);
-        component = fixture.componentInstance;
-        fixture.detectChanges();
-    });
+  it('restores the branded hero and keeps the shared Training overview in its feature section', async () => {
+    renderHome();
+    const hero = fixture.nativeElement.querySelector('.hero-section') as HTMLElement;
+    expect(hero.querySelector('h1')?.textContent).toBe('Your Training Data, Connected. One Dashboard. Every Activity in Context.');
+    expect(hero.querySelector('.brand-name')?.textContent).toBe('Quantified Self.io');
+    expect(hero.querySelector('app-public-feature-preview')).toBeNull();
+    const training = fixture.nativeElement.querySelector('#home-training') as HTMLElement;
+    expect(training.textContent).toContain('Sample data');
+    expect(training.querySelector('.preview-placeholder--training')).toBeTruthy();
+    expect(training.querySelector('app-training-summary-cards')).toBeNull();
+    const [providerBlock, trainingBlock] = await fixture.getDeferBlocks();
+    expect(providerBlock).toBeTruthy();
+    await trainingBlock.render(DeferBlockState.Complete);
+    fixture.detectChanges();
+    expect(training.querySelector('app-training-summary-cards')).toBeTruthy();
+    expect(training.querySelectorAll('app-training-metric-grid')).toHaveLength(2);
+    expect(hero.querySelector('a[href="/login"]')?.textContent).toContain('Get Started');
+    expect(hero.querySelector('a[mat-flat-button]')?.getAttribute('href')).toBe('/login');
+    expect(hero.querySelector('a[href="/pricing"]')).toBeNull();
+    expect(hero.querySelector('a[mat-stroked-button]')?.getAttribute('href')).toBe('/features/training-analysis');
+    expect(fixture.nativeElement.textContent).not.toMatch(/explore the demo|try the demo/i);
+    expect(selection).not.toHaveBeenCalled();
+  });
 
-    it('should create', () => {
-        expect(component).toBeTruthy();
-    });
+  it('links only to existing public discovery, membership and onboarding destinations', () => {
+    renderHome();
+    const paths = Array.from(fixture.nativeElement.querySelectorAll('a[href]'))
+      .map((link: Element) => link.getAttribute('href')!);
+    expect(paths.every(path => path === '/login' || path === '/integrations' || path === '/pricing'
+      || path === '/help' || path === '/help#data-and-privacy'
+      || fixture.componentInstance.features.some(feature => path === '#home-' + feature.id)
+      || path.startsWith('/features/'))).toBe(true);
+    expect(paths).not.toContain('/demo');
+    expect(fixture.nativeElement.querySelector('nav[aria-label="Homepage features"]')).toBeTruthy();
+  });
 
-    it('should redirect app-authenticated browser users from public home to dashboard', () => {
-        userSubject.next({ uid: '123' });
+  it('prepares homepage examples ahead of scrolling instead of presenting gray blocks', () => {
+    renderHome();
+    const previews = Array.from(fixture.nativeElement.querySelectorAll('app-public-feature-preview')) as HTMLElement[];
+    expect(previews.length).toBeGreaterThan(0);
+    expect(previews.every(preview => preview.classList.contains('preview-prepares-ahead'))).toBe(true);
+  });
 
-        expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
-    });
+  it('exposes every supported provider logo and its name to assistive technology', () => {
+    renderHome();
+    const logos = Array.from(fixture.nativeElement.querySelectorAll('.logos-container [role="img"]')) as HTMLElement[];
+    expect(logos.map(logo => logo.getAttribute('aria-label'))).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo']);
+    expect(logos.every(logo => logo.getAttribute('aria-hidden') === 'false')).toBe(true);
+  });
 
-    it('should keep anonymous browser users on the public home page', () => {
-        userSubject.next(null);
+  it('leads with signup, keeps Starter access explicit and leaves pricing in membership', () => {
+    renderHome();
+    const hero = fixture.nativeElement.querySelector('.hero-section') as HTMLElement;
+    expect(hero.querySelector('.hero-subtitle')?.textContent).toContain('Pro imports new activities automatically');
+    expect(hero.querySelector('.hero-subtitle')?.textContent).toContain('supported recordings along the paths you choose');
+    expect(hero.querySelector('.hero-access-note')?.textContent).toContain('manual uploads and training analysis on free Starter');
+    expect(hero.querySelector('.hero-access-note')?.textContent).toContain('Provider connections and automatic sync require Pro');
+    const integrations = fixture.nativeElement.querySelector('#home-integrations') as HTMLElement;
+    expect(integrations.textContent).toContain('you choose which services exchange activities');
+    expect(integrations.querySelector('.integration-actions a[href="/login"]')?.textContent).toContain('Get Started');
+    expect(integrations.querySelector('a[href="/pricing"]')).toBeNull();
+    expect(integrations.querySelector('.integration-actions a[href="/integrations"]')).toBeTruthy();
+    expect(fixture.componentInstance.memberships.find(plan => plan.name === 'Pro')?.action).toBe('See pricing');
+  });
 
-        expect(mockRouter.navigate).not.toHaveBeenCalled();
-    });
+  it.each([
+    { selector: '.hero-actions a[href="/login"]', destination: '/login' },
+    { selector: '.integration-actions a[href="/login"]', destination: '/login' },
+    { selector: '.integration-actions a[href="/integrations"]', destination: '/integrations' },
+    { selector: '.membership-grid mat-card:last-child a', destination: '/pricing' },
+    { selector: '.hero-actions a[href="/features/training-analysis"]', destination: '/features/training-analysis' },
+  ])('opens $destination from $selector with one shell-owned haptic', async ({ selector, destination }) => {
+    renderHome();
+    router.resetConfig(['', 'pricing', 'integrations', 'login', 'features/training-analysis'].map(path => ({ path, component: HomeDestinationStub })));
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    TestBed.inject(ShellNavigationEffectsService);
+    await router.navigateByUrl('/');
+    expect(selection).not.toHaveBeenCalled();
 
-    it('keeps every homepage CTA on an auth entry or public product page', () => {
-        const ctaLinks = Array.from(fixture.nativeElement.querySelectorAll('.landing-page a[href]')) as HTMLAnchorElement[];
-        const paths = ctaLinks.map(link => new URL(link.href).pathname);
-        const privateWorkspacePaths = ['/dashboard', '/mytracks', '/training', '/calendar', '/health', '/routes', '/services', '/settings'];
+    fixture.nativeElement.querySelector(selector).click();
+    await fixture.whenStable();
 
-        expect(paths.filter(path => path === '/login')).toHaveLength(2);
-        expect(paths.some(path => privateWorkspacePaths.includes(path))).toBe(false);
-        expect(paths.every(path => path === '/login' || path === '/integrations' || path.startsWith('/features/'))).toBe(true);
-    });
+    expect(router.url).toBe(destination);
+    expect(selection).toHaveBeenCalledTimes(1);
+  });
 
-    it('should keep passive homepage tooltips from claiming touch gestures', () => {
-        const tooltipHosts = fixture.debugElement.queryAll(By.directive(MatTooltip));
+  it.each([
+    { selector: '.hero-actions a[href="/login"]', destination: 'login' },
+    { selector: '.integration-actions a[href="/login"]', destination: 'login' },
+    { selector: '.membership-grid mat-card:last-child a', destination: 'pricing' },
+  ])('keeps canceled navigation from $selector silent', async ({ selector, destination }) => {
+    renderHome();
+    router.resetConfig([
+      { path: '', component: HomeDestinationStub },
+      { path: destination, component: HomeDestinationStub, canActivate: [() => false] },
+    ]);
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    TestBed.inject(ShellNavigationEffectsService);
+    await router.navigateByUrl('/');
 
-        expect(tooltipHosts.length).toBeGreaterThan(0);
-        expect(tooltipHosts.every(host => host.injector.get(MatTooltip).touchGestures === 'off')).toBe(true);
-    });
+    fixture.nativeElement.querySelector(selector).click();
+    await fixture.whenStable();
 
-    it('should render provider-focused hero messaging and a standalone Assistant section', () => {
-        const text = fixture.nativeElement.textContent as string;
-        const heroText = (fixture.nativeElement.querySelector('.hero-section') as HTMLElement | null)?.textContent ?? '';
-        const aiSectionText = (fixture.nativeElement.querySelector('.ai-insights-section') as HTMLElement | null)?.textContent ?? '';
-        expect(heroText).toContain('Your Training Data, Connected.');
-        expect(heroText).toContain('One Dashboard. Every Activity in Context.');
-        expect(heroText).toContain('Bring Garmin, Suunto, COROS, and Wahoo activities together.');
-        expect(heroText).toContain('Understand readiness, training load, sleep, routes,');
-        expect(heroText).toContain('keep supported activities synced across services');
-        expect(heroText).toContain('Your Data Stays Yours');
-        expect(heroText).not.toContain('Export Anytime');
-        expect(heroText).not.toMatch(/\bprivate\b/i);
-        expect(heroText).not.toContain('Quantified Self Assistant');
-        expect(heroText).not.toContain('chart-backed answers');
-        expect(aiSectionText).toContain('Ask About Your Training');
-        expect(aiSectionText).toContain('Explore sleep, readiness, training, measurements, and recent activities in one conversation.');
-        expect(aiSectionText).toContain('The Assistant answers from your current data');
-        expect(aiSectionText).toContain('not generic fitness advice');
-        expect(aiSectionText).toContain('Ask in Your Own Words');
-        expect(aiSectionText).toContain('Ask follow-up questions without starting over.');
-        expect(aiSectionText).toContain('Bring Your Data Together');
-        expect(aiSectionText).toContain('when your question needs the broader context.');
-        expect(aiSectionText).toContain('Check the Evidence');
-        expect(aiSectionText).toContain('see exactly what supports it.');
-        expect(aiSectionText).toContain('Analyze with ChatGPT or Claude');
-        expect(aiSectionText).toContain('analyze your training, review your season, plan your next workout, or draft a longer training-plan proposal');
-        expect(aiSectionText).toContain('load, fatigue, readiness, sleep, measurements, workout charts, and routes');
-        expect(aiSectionText).toContain('neither tool can add workouts or change your account');
-        expect(aiSectionText).toContain('Location access remains separate.');
-        expect(aiSectionText).toContain('Connect ChatGPT or Claude');
-        expect(aiSectionText).not.toContain('read-only sleep, readiness');
-        expect(aiSectionText).not.toContain('complete training history');
-        expect(aiSectionText).not.toContain('Read-only MCP Server');
-        expect(aiSectionText).toContain('Explore the Assistant');
-        expect(fixture.nativeElement.querySelectorAll('.ai-insights-section .features-grid app-compact-feature-row').length).toBe(3);
-        expect(fixture.nativeElement.querySelector('.mcp-access-row').classList)
-            .toContain('compact-feature-row-host--without-divider');
-        expect(fixture.nativeElement.querySelector('a[routerlink="/features/ai-insights"], a[ng-reflect-router-link="/features/ai-insights"]')).toBeTruthy();
-        expect(fixture.nativeElement.querySelector('.ai-insights-section a[routerlink="/features/mcp-server"], .ai-insights-section a[ng-reflect-router-link="/features/mcp-server"]')).toBeTruthy();
-        expect(text).not.toContain('New Feature');
-    });
+    expect(router.url).toBe('/');
+    expect(selection).not.toHaveBeenCalled();
+  });
 
-    it('should render home sections in the requested narrative order', () => {
-        const sectionOrder = Array.from(
-            fixture.nativeElement.querySelectorAll('.landing-page > section, .landing-page > footer')
-        ).map((section: Element) => {
-            if (section.classList.contains('hero-section')) {
-                return 'hero';
-            }
-            if (section.classList.contains('integrations-section')) {
-                return 'integrations';
-            }
-            if (section.classList.contains('features-section') && !section.classList.contains('ai-insights-section')) {
-                return 'performance';
-            }
-            if (section.classList.contains('ai-insights-section')) {
-                return 'ai-insights';
-            }
-            if (section.classList.contains('footprint-section')) {
-                return 'footprint';
-            }
-            if (section.classList.contains('sovereignty-section')) {
-                return 'sovereignty';
-            }
-            if (section.classList.contains('analysis-section')) {
-                return 'hardware';
-            }
-            return 'unknown';
-        });
+  it('retains every shared product visual and detailed feature section', () => {
+    renderHome();
+    const sections = Array.from(fixture.nativeElement.querySelectorAll('.landing-page > section'))
+      .map((section: Element) => section.className);
+    expect(sections).toEqual(['hero-section', 'integrations-section', 'feature-section training-section',
+      'feature-section workouts-section', 'feature-section training-plans-section', 'feature-section health-section',
+      'feature-section ai-insights-section', 'feature-section footprint-section', 'feature-section analysis-section',
+      'getting-started-section', 'membership-section', 'sovereignty-section', 'faq-section', 'final-cta-section']);
+    const previews = fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent));
+    expect(previews.map(preview => preview.componentInstance.previewKey()))
+      .toEqual(['provider-flow', 'training-snapshot', 'training-readiness', 'training-signals',
+        'training-explorer', 'dashboard', 'workout-analysis', 'training-plans',
+        'health-overview', 'health-sleep', 'health-hrv', 'health-note-comparison', 'health-weight', 'assistant-example', 'mcp-flow',
+        'activity-map', 'reviewer-benchmark']);
+    expect(previews.every(preview => !!preview.nativeElement.querySelector(':scope > div[data-nosnippet]'))).toBe(true);
+    expect(fixture.nativeElement.querySelector('app-training-explorer-preview')).toBeNull();
+    expect(fixture.nativeElement.querySelector('app-workout-profile')).toBeNull();
+    expect(fixture.nativeElement.querySelector('a[href="/features/workout-data-comparison"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('a[href="/features/activity-map"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('a[href="/features/mcp-server"]')).toBeTruthy();
+    const copy = fixture.nativeElement.textContent as string;
+    expect(copy).toContain('Charts Behind Every Signal');
+    expect(copy).toContain('Curated, KPI, Custom, and Map tiles');
+    expect(copy).toContain('aerobic durability, and cadence versus power');
+    expect(copy).toContain('blood pressure, weight, body composition');
+    const health = fixture.nativeElement.querySelector('#home-health') as HTMLElement;
+    expect(health.textContent).toContain('What Changed Around Your Note?');
+    expect(health.textContent).toContain('matching 7, 14, or 28-day windows');
+    expect(health.textContent).toContain('Observed differences, not cause and effect');
+    expect(health.querySelector('.preview-placeholder--note-comparison')).toBeTruthy();
+    expect(health.querySelector('app-health-note-comparison-preview')).toBeNull();
+    expect(copy).toContain('reference and test devices');
+    const comparisonCopy = fixture.nativeElement.querySelector('#home-comparisons .section-heading') as HTMLElement;
+    expect(comparisonCopy.textContent).toContain('R–R intervals and heart rate variability (HRV)');
+    expect(comparisonCopy.closest('[data-nosnippet]')).toBeNull();
+    expect(copy).toContain('location access remains separate');
+    expect(fixture.nativeElement.querySelectorAll('.training-plans-section app-compact-row')).toHaveLength(6);
+    expect(fixture.nativeElement.querySelector('#home-plans-example-title')?.textContent)
+      .toContain("Create Today's Workout");
+  });
 
-        expect(sectionOrder).toEqual([
-            'hero',
-            'integrations',
-            'performance',
-            'ai-insights',
-            'footprint',
-            'hardware',
-            'sovereignty',
-        ]);
-    });
+  it('uses shared tier limits and clearly distinguishes free uploads from Pro connections', () => {
+    renderHome();
+    const memberships = fixture.componentInstance.memberships;
+    expect(memberships[0].features).toContain(`Up to ${USAGE_LIMITS.free} activities`);
+    expect(memberships[0].features).toContain(`Up to ${ROUTE_USAGE_LIMITS.free} saved routes`);
+    expect(memberships[0].features).toContain(`Up to ${ASSISTANT_REQUEST_LIMITS.free} Assistant requests per calendar month`);
+    expect(memberships[1].features).toContain('Up to 1,000 activities');
+    expect(memberships[1].features).toContain(`Up to ${ROUTE_USAGE_LIMITS.basic} saved routes`);
+    expect(memberships[1].features).toContain(`Up to ${ASSISTANT_REQUEST_LIMITS.basic} Assistant requests per billing period`);
+    expect(memberships[2].features).toContain(`Up to ${ASSISTANT_REQUEST_LIMITS.pro} Assistant requests per billing period`);
+    expect(fixture.nativeElement.querySelectorAll('.membership-grid mat-card')).toHaveLength(3);
+    expect(Array.from(fixture.nativeElement.querySelectorAll('.membership-grid h3'))
+      .map((heading: Element) => heading.textContent)).toEqual(['Starter', 'Basic', 'Pro']);
+    const steps = fixture.nativeElement.querySelector('.getting-started-steps');
+    expect(steps.querySelectorAll('li')).toHaveLength(3);
+    expect(steps.textContent).toContain('connect a supported provider with Pro');
+    expect(fixture.nativeElement.querySelector('.membership-note').textContent).toContain('Paid prices');
+  });
 
-    it('should render three precise integration principles with one integrations hub link', () => {
-        const text = fixture.nativeElement.textContent as string;
-        const integrationRows = fixture.nativeElement.querySelectorAll(
-            '.integration-followup-list .integration-capability'
-        );
-        const integrationLinks = fixture.nativeElement.querySelectorAll(
-            'a[href="/integrations"], a[routerlink="/integrations"], a[ng-reflect-router-link="/integrations"]'
-        );
+  it('opens and closes FAQ answers with one feedback owner and valid control targets', () => {
+    renderHome();
+    const buttons = Array.from(fixture.nativeElement.querySelectorAll('.faq-row button')) as HTMLButtonElement[];
+    expect(buttons.every(button => button.getAttribute('aria-expanded') === 'false')).toBe(true);
+    expect(buttons.every(button => !!fixture.nativeElement.querySelector('#' + button.getAttribute('aria-controls')))).toBe(true);
+    buttons[0].click();
+    fixture.detectChanges();
+    expect(buttons[0].getAttribute('aria-expanded')).toBe('true');
+    expect(fixture.nativeElement.querySelector('#home-faq-watch').hidden).toBe(false);
+    expect(selection).toHaveBeenCalledOnce();
+    buttons[1].click();
+    fixture.detectChanges();
+    expect(buttons[0].getAttribute('aria-expanded')).toBe('false');
+    expect(buttons[1].getAttribute('aria-expanded')).toBe('true');
+    buttons[1].click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.expandedFaq()).toBeNull();
+    expect(selection).toHaveBeenCalledTimes(3);
+    fixture.componentInstance.toggleFaq('invalid');
+    expect(selection).toHaveBeenCalledTimes(3);
+  });
 
-        expect(integrationRows.length).toBe(3);
-        expect(fixture.nativeElement.querySelector('.integration-followup-list mat-card')).toBeNull();
-        expect(text).toContain('Bring It In. Keep It Moving.');
-        expect(text).toContain('Sync Your History');
-        expect(text).toContain('New activities arrive automatically');
-        expect(text).toContain('activity history already stored with each provider');
-        expect(text).not.toContain('FIT-backed Wahoo history');
-        expect(text).not.toContain('rolling 5 years');
-        expect(text).not.toContain('last 3 months');
-        expect(text).toContain('Move Workouts and Routes');
-        expect(text).toContain('automatic delivery between supported providers');
-        expect(text).toContain('send past activities by date range');
-        expect(text).toContain('Supported provider paths');
-        expect(text).toContain('Activity paths:');
-        expect(text).toContain('backfill past activities by date range');
-        expect(text).toContain('Route paths:');
-        expect(text).toContain('Deliver imported Suunto routes automatically or on demand');
-        expect(text).toContain('Saved FIT/GPX routes');
-        const providerMatrix = fixture.debugElement.query(By.directive(ProviderDataFlowMatrixComponent));
-        expect(providerMatrix).toBeTruthy();
-        expect(providerMatrix.componentInstance.rows()).toBe(component.providerDataFlowRows);
-        expect(providerMatrix.componentInstance.compact()).toBe(true);
-        expect(providerMatrix.componentInstance.interactive()).toBe(false);
-        expect(providerMatrix.nativeElement.hasAttribute('data-nosnippet')).toBe(true);
-        expect(providerMatrix.nativeElement.querySelector('.provider-data-flow-matrix__mobile')).toBeNull();
-        expect(providerMatrix.nativeElement.querySelectorAll('button')).toHaveLength(0);
-        expect(text).toContain('Upload Your Own Files');
-        expect(text).toContain('FIT, TCX, GPX, JSON, and SML activity files');
-        expect(text).toContain('send FIT activities directly to Suunto, COROS, or Wahoo');
-        const integrationDividerRows = fixture.debugElement.queryAll(By.directive(CompactFeatureRowComponent))
-            .filter(row => row.nativeElement.classList.contains('integration-capability'));
-        expect(integrationDividerRows).toHaveLength(3);
-        expect(integrationDividerRows[0].componentInstance.showDivider()).toBe(true);
-        expect(integrationDividerRows[1].componentInstance.showDivider()).toBe(true);
-        expect(integrationDividerRows[2].componentInstance.showDivider()).toBe(false);
-        expect(fixture.nativeElement.querySelector('mat-icon[svgIcon="wahoo"], mat-icon[ng-reflect-svg-icon="wahoo"]')).toBeTruthy();
-        expect(text).toContain('Explore Integrations');
-        expect(text).not.toContain('Explore Wahoo');
-        expect(integrationLinks.length).toBe(1);
-        expect(text).not.toContain('Set up sync');
-        expect(text).not.toContain('How it works');
-        expect(fixture.nativeElement.querySelector('.garmin-suunto-launch')).toBeNull();
-    });
+  it('keeps every feature visible with direct jump links rather than selection controls', () => {
+    renderHome();
+    const links = Array.from(fixture.nativeElement.querySelectorAll('.home-navigation a')) as HTMLAnchorElement[];
+    expect(links.map(link => link.getAttribute('href')))
+      .toEqual(fixture.componentInstance.features.map(feature => '#home-' + feature.id));
+    for (const feature of fixture.componentInstance.features) {
+      const section = fixture.nativeElement.querySelector('#home-' + feature.id) as HTMLElement;
+      expect(section.hidden).toBe(false);
+      expect(section.hasAttribute('hidden')).toBe(false);
+    }
+    expect(fixture.nativeElement.querySelector('mat-tab-nav-panel')).toBeNull();
+    expect(fixture.nativeElement.querySelector('mat-select')).toBeNull();
+    expect(selection).not.toHaveBeenCalled();
+  });
 
-    it('should surface a concrete Training snapshot and supporting analysis capabilities', () => {
-        const text = fixture.nativeElement.textContent as string;
-        const performanceCards = fixture.nativeElement.querySelectorAll(
-            '.features-section:not(.ai-insights-section) .features-grid .feature-card'
-        );
-        const trainingPreview = fixture.nativeElement.querySelector('.training-preview-row');
-        const signalPreviews = fixture.nativeElement.querySelectorAll('.signal-preview-widget');
-        const publicPreviews = fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent));
-        const previewKeys = publicPreviews.map(preview => preview.componentInstance.previewKey());
+  it.each(['training', 'workouts', 'plans', 'health', 'assistant', 'maps', 'comparisons', 'integrations'])(
+    'jumps directly to %s without hiding or replacing any shared preview', async id => {
+      renderHome();
+      const previews = Array.from(fixture.nativeElement.querySelectorAll('app-public-feature-preview'));
+      const target = fixture.nativeElement.querySelector('#home-' + id) as HTMLElement;
+      const scrollIntoView = vi.fn();
+      target.scrollIntoView = scrollIntoView;
+      const heading = fixture.nativeElement.querySelector('#' + target.getAttribute('aria-labelledby')) as HTMLElement;
+      const focus = vi.spyOn(heading, 'focus');
+      fixture.nativeElement.querySelector(`.home-navigation a[href="#home-${id}"]`).click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start', behavior: 'instant' });
+      expect(heading.tabIndex).toBe(-1);
+      expect(focus).toHaveBeenCalledExactlyOnceWith({ preventScroll: true });
+      expect(location.path(true)).toBe('/#home-' + id);
+      expect(selection).toHaveBeenCalledOnce();
+      expect(Array.from(fixture.nativeElement.querySelectorAll('app-public-feature-preview'))).toEqual(previews);
+      expect(fixture.nativeElement.querySelectorAll('section[hidden]')).toHaveLength(0);
+    },
+  );
 
-        expect(performanceCards.length).toBe(3);
-        expect(trainingPreview).toBeTruthy();
-        expect(trainingPreview.classList).toContain('compact-feature-row-host--without-divider');
-        expect(performanceCards[0].classList).not.toContain('compact-feature-row-host--without-divider');
-        expect(trainingPreview.querySelector('.training-preview-data[data-nosnippet]')).toBeTruthy();
-        expect(signalPreviews.length).toBe(0);
-        expect(previewKeys).toContain('training-snapshot');
-        expect(previewKeys).toContain('training-signals');
-        expect(previewKeys).toContain('dashboard');
-        expect(previewKeys).toContain('workout-analysis');
-        expect(text).toContain('Bring It In. Keep It Moving.');
-        expect(text).toContain('Training Load, Readiness, and Recovery');
-        expect(text).toContain('See your current load, fitness, fatigue, form, recovery, intensity balance, and efficiency');
-        expect(text).not.toContain('Illustrative data');
-        expect(text).toContain('Your Training Snapshot');
-        expect(text).toContain('Explore Training Analysis');
-        const trainingCta = fixture.nativeElement.querySelector(
-            '.training-actions a[routerlink="/features/training-analysis"], .training-actions a[ng-reflect-router-link="/features/training-analysis"]'
-        ) as HTMLAnchorElement | null;
-        expect(trainingCta).toBeTruthy();
-        expect(trainingPreview.querySelector('[compactFeatureRowAction]')).toBeNull();
-        expect(
-            fixture.nativeElement.querySelector('.features-grid')?.compareDocumentPosition(trainingCta!) & Node.DOCUMENT_POSITION_FOLLOWING
-        ).toBeTruthy();
-        expect(text).toContain('sleep views');
-        expect(text).not.toContain('Training Load & Readiness Engine');
-        expect(text).not.toContain('Derived metrics turn your activity history into load, fatigue, form, recovery, ramp, and intensity signals');
-        expect(text).not.toContain('Form Model (CTL / ATL / TSB)');
-        expect(text).toContain('Charts Behind Every Signal');
-        expect(text).toContain('Build the Dashboard You Need');
-        expect(text).toContain('Start from a preset or arrange');
-        expect(text).toContain('Curated');
-        expect(text).toContain('KPI');
-        expect(text).toContain('Custom');
-        expect(text).toContain('Map');
-        expect(text).toContain('marker-clustering controls');
-        expect(text).toContain('Analyze Every Workout');
-        expect(text).toContain('Compare heart rate, power, altitude, depth, pace, and more in synchronized charts');
-        expect(text).toContain('Inspect intensity zones');
-        expect(text).toContain('grade-colored elevation');
-        expect(text).toContain('inverse depth');
-        expect(text).toContain('distance, duration, or time where supported');
-        expect(text).toContain('select a range for stats or zoom in');
-        expect(text).toContain('aerobic durability, and cadence versus power');
-        expect(text).not.toContain('7 chart types');
-        expect(text).not.toContain('12 map styles');
-        expect(text).not.toContain('recorded streams');
-        expect(text).not.toContain('routes with heatmaps');
-        expect(text).not.toContain('Open Your Dashboard');
-        expect(text).not.toContain('Explore Activity Calendar');
-        expect(fixture.nativeElement.querySelector('a[routerlink="/dashboard"], a[ng-reflect-router-link="/dashboard"]')).toBeNull();
-        expect(text).not.toContain('Read-only MCP Server');
-        expect(text).not.toContain('KPI Lane for Fast Decisions');
-        expect(text).not.toContain('Connected Training Data');
-    });
+  it('restores direct section links, query parameters and browser history silently', () => {
+    renderHome();
+    fixture.destroy();
+    location.go('/?source=homepage#home-plans');
+    fixture = TestBed.createComponent(HomeComponent);
+    const plansScroll = vi.fn();
+    const comparisonScroll = vi.fn();
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('#home-plans').scrollIntoView = plansScroll;
+    fixture.nativeElement.querySelector('#home-comparisons').scrollIntoView = comparisonScroll;
+    fixture.componentInstance.jumpToFeature('comparisons');
+    fixture.detectChanges();
+    expect(comparisonScroll).toHaveBeenCalled();
+    expect(location.path(true)).toBe('/?source=homepage#home-comparisons');
+    expect(selection).toHaveBeenCalledOnce();
+    location.simulateUrlPop('/?source=homepage#home-plans');
+    fixture.detectChanges();
+    expect(plansScroll).toHaveBeenCalled();
+    location.simulateUrlPop('/?source=homepage#home-comparisons');
+    fixture.detectChanges();
+    expect(comparisonScroll).toHaveBeenCalledTimes(2);
+    expect(selection).toHaveBeenCalledOnce();
+  });
 
-    it('uses the shared compact row primitive for every top-level homepage card', () => {
-        const compactRows = fixture.nativeElement.querySelectorAll('app-compact-feature-row');
+  it('moves focus into the chosen feature so keyboard navigation continues from that section', async () => {
+    renderHome();
+    document.body.appendChild(fixture.nativeElement);
+    const link = fixture.nativeElement.querySelector('.home-navigation a[href="#home-health"]') as HTMLAnchorElement;
+    const heading = fixture.nativeElement.querySelector('#home-health-title') as HTMLElement;
+    const scrollIntoView = vi.fn();
+    fixture.nativeElement.querySelector('#home-health').scrollIntoView = scrollIntoView;
+    link.focus();
+    link.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(heading);
+    expect(heading.tabIndex).toBe(-1);
+    expect(scrollIntoView).toHaveBeenCalled();
+    link.focus();
+    link.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(heading);
+    expect(selection).toHaveBeenCalledOnce();
+    fixture.nativeElement.remove();
+  });
 
-        expect(compactRows.length).toBe(11);
-        expect(fixture.nativeElement.querySelector('mat-card')).toBeNull();
-        expect(fixture.nativeElement.querySelectorAll('.compact-row-stack').length).toBe(5);
-        expect(Array.from(compactRows).every((row: Element) => row.querySelector('article.compact-feature-row'))).toBe(true);
-        expect(fixture.nativeElement.querySelector('app-public-feature-preview[previewkey="reviewer-benchmark"]')).toBeTruthy();
-    });
+  it('keeps focus unchanged during browser history restoration', () => {
+    renderHome();
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    location.simulateUrlPop('/#home-health');
+    fixture.detectChanges();
+    expect(focus).not.toHaveBeenCalled();
+    expect(selection).not.toHaveBeenCalled();
+  });
 
-    it('should delegate every visual to the shared deferred preview boundary', () => {
-        const previews = fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent));
-        const previewKeys = previews.map(preview => preview.componentInstance.previewKey());
+  it('returns Back to the exact unanchored view and Forward to the point left within a feature', () => {
+    renderHome();
+    const shell = document.createElement('mat-sidenav-content');
+    document.body.appendChild(shell);
+    shell.appendChild(fixture.nativeElement);
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    const go = vi.spyOn(location, 'go');
+    shell.scrollTop = 380;
+    shell.scrollLeft = 12;
+    fixture.nativeElement.querySelector('#home-health').scrollIntoView = vi.fn();
 
-        expect(previewKeys).toEqual([
-            'training-snapshot',
-            'training-signals',
-            'dashboard',
-            'workout-analysis',
-            'assistant-example',
-            'mcp-flow',
-            'activity-map',
-            'reviewer-benchmark',
-        ]);
-        expect(previews.every(preview => preview.nativeElement.hasAttribute('data-nosnippet'))).toBe(true);
-    });
+    fixture.componentInstance.jumpToFeature('health');
+    fixture.detectChanges();
+    shell.scrollTop = 4200;
+    shell.scrollLeft = 0;
+    location.back();
+    fixture.detectChanges();
+    expect(shell.scrollTop).toBe(380);
+    expect(shell.scrollLeft).toBe(12);
+    expect(scrollTo).toHaveBeenCalledWith({ left: 0, top: 0, behavior: 'instant' });
+    expect(location.path(true)).toBe('');
 
-    it('should explain benchmark merge and hardware precision workflows', () => {
-        const text = fixture.nativeElement.textContent as string;
-        const publicPreviews = fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent));
-        const previewKeys = publicPreviews.map(preview => preview.componentInstance.previewKey());
+    location.forward();
+    fixture.detectChanges();
+    expect(shell.scrollTop).toBe(4200);
+    expect(shell.scrollLeft).toBe(0);
+    expect(location.path(true)).toBe('/#home-health');
+    expect(go).toHaveBeenCalledOnce();
+    expect(selection).toHaveBeenCalledOnce();
+    fixture.destroy();
+    shell.remove();
+  });
 
-        expect(previewKeys).toContain('reviewer-benchmark');
-        expect(text).toContain('Map Your Activities');
-        expect(text).toContain('See every GPS activity together');
-        expect(text).toContain('filter by date or activity type');
-        expect(text).toContain('Real activity traces');
-        expect(previewKeys).toContain('activity-map');
-        expect(fixture.nativeElement.querySelector('app-home-my-tracks-preview')).toBeNull();
-        const mapStage = fixture.nativeElement.querySelector('.footprint-map-stage') as HTMLElement;
-        const mapCta = fixture.nativeElement.querySelector('.footprint-cta') as HTMLElement;
-        expect(mapStage.compareDocumentPosition(mapCta) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-        expect(text).toContain('Your Data. Yours to Keep.');
-        expect(text).toContain('Download your original activity files whenever you want');
-        expect(text).toContain('creating a backup, changing services');
-        expect(text).not.toContain('No hidden mining');
-        expect(text).toContain('Built for Device Reviewers');
-        expect(text).toContain('Compare same-session recordings from watches, bike computers, and sensors');
-        expect(text).toContain('turn GNSS and sensor differences into repeatable evidence');
-        expect(fixture.nativeElement.querySelector('.analysis-header-icon')?.textContent?.trim()).toBe('rate_review');
-        expect(text).toContain('Compare Workouts and Devices');
-        expect(fixture.nativeElement.querySelector('a[routerlink="/features/workout-data-comparison"], a[ng-reflect-router-link="/features/workout-data-comparison"]')).toBeTruthy();
-        expect(text).not.toContain('Benchmark your devices with high-fidelity trace comparison.');
-        expect(text).not.toContain('Sync Quality');
-    });
+  it('keeps separate reading positions for repeated visits to the same feature URL', () => {
+    renderHome();
+    const shell = document.createElement('mat-sidenav-content');
+    document.body.appendChild(shell);
+    shell.appendChild(fixture.nativeElement);
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    fixture.nativeElement.querySelector('#home-training').scrollIntoView = vi.fn();
+    fixture.nativeElement.querySelector('#home-maps').scrollIntoView = vi.fn();
+    fixture.componentInstance.jumpToFeature('training');
+    fixture.detectChanges();
+    shell.scrollTop = 1100;
+    fixture.componentInstance.jumpToFeature('maps');
+    fixture.detectChanges();
+    shell.scrollTop = 7300;
+    fixture.componentInstance.jumpToFeature('training');
+    fixture.detectChanges();
+    shell.scrollTop = 1900;
 
-    it('should delegate Assistant examples to the shared deferred preview', () => {
-        const assistantPreview = fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent))
-            .find(preview => preview.componentInstance.previewKey() === 'assistant-example');
+    location.back();
+    fixture.detectChanges();
+    expect(shell.scrollTop).toBe(7300);
+    location.back();
+    fixture.detectChanges();
+    expect(shell.scrollTop).toBe(1100);
+    location.forward();
+    fixture.detectChanges();
+    location.forward();
+    fixture.detectChanges();
+    expect(shell.scrollTop).toBe(1900);
+    expect(selection).toHaveBeenCalledTimes(3);
+    fixture.destroy();
+    shell.remove();
+  });
 
-        expect(assistantPreview).toBeTruthy();
-        expect(assistantPreview?.nativeElement.hasAttribute('data-nosnippet')).toBe(true);
-        expect(fixture.nativeElement.querySelector('app-typed-prompt-rotator')).toBeNull();
-    });
+  it('preserves existing query/history state and restores a saved view after recreating the homepage', () => {
+    renderHome();
+    const shell = document.createElement('mat-sidenav-content');
+    document.body.appendChild(shell);
+    shell.appendChild(fixture.nativeElement);
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    location.replaceState('/?source=homepage', '', { navigationId: 12, otherState: 'preserved' });
+    shell.scrollTop = 480;
+    fixture.nativeElement.querySelector('#home-plans').scrollIntoView = vi.fn();
+    fixture.componentInstance.jumpToFeature('plans');
+    fixture.detectChanges();
+    expect(location.path(true)).toBe('/?source=homepage#home-plans');
+    location.back();
+    fixture.detectChanges();
+    expect(location.getState()).toMatchObject({ navigationId: 12, otherState: 'preserved' });
+    expect(location.path(true)).toBe('/?source=homepage');
+    fixture.destroy();
+    shell.scrollTop = 0;
+    fixture = TestBed.createComponent(HomeComponent);
+    shell.appendChild(fixture.nativeElement);
+    fixture.detectChanges();
+    expect(shell.scrollTop).toBe(480);
+    expect(selection).toHaveBeenCalledOnce();
+    fixture.destroy();
+    shell.remove();
+  });
 
-    it('should keep animated content visible when IntersectionObserver is unavailable', () => {
-        const originalIntersectionObserver = globalThis.IntersectionObserver;
-        Object.defineProperty(globalThis, 'IntersectionObserver', {
-            value: undefined,
-            configurable: true,
-        });
+  it('keeps initialization, invalid and unchanged destinations silent and cleans up history listeners', () => {
+    renderHome();
+    const component = fixture.componentInstance;
+    component.jumpToFeature('invalid');
+    expect(location.path(true)).toBe('');
+    expect(selection).not.toHaveBeenCalled();
+    component.jumpToFeature('training');
+    fixture.detectChanges();
+    expect(selection).toHaveBeenCalledOnce();
+    component.jumpToFeature('training');
+    fixture.detectChanges();
+    expect(selection).toHaveBeenCalledOnce();
+    location.simulateUrlPop('/#unknown');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('section[hidden]')).toHaveLength(0);
+    fixture.destroy();
+    location.simulateUrlPop('/#home-health');
+    expect(selection).toHaveBeenCalledOnce();
+  });
 
-        try {
-            component.ngAfterViewInit();
-            const animatedElements = Array.from(
-                fixture.nativeElement.querySelectorAll('.animate-on-scroll')
-            ) as Element[];
-
-            expect(animatedElements.length).toBeGreaterThan(0);
-            expect(animatedElements.every(element => element.classList.contains('is-visible'))).toBe(true);
-        } finally {
-            Object.defineProperty(globalThis, 'IntersectionObserver', {
-                value: originalIntersectionObserver,
-                configurable: true,
-            });
-        }
-    });
-
-    it('should reveal scroll content once without hiding it after viewport changes', () => {
-        fixture.destroy();
-        const originalIntersectionObserver = globalThis.IntersectionObserver;
-        const observerRecords: Array<{
-            callback: IntersectionObserverCallback;
-            observe: ReturnType<typeof vi.fn>;
-            unobserve: ReturnType<typeof vi.fn>;
-            disconnect: ReturnType<typeof vi.fn>;
-        }> = [];
-
-        Object.defineProperty(globalThis, 'IntersectionObserver', {
-            configurable: true,
-            value: vi.fn((callback: IntersectionObserverCallback) => {
-                const record = {
-                    callback,
-                    observe: vi.fn(),
-                    unobserve: vi.fn(),
-                    disconnect: vi.fn(),
-                };
-                observerRecords.push(record);
-                return {
-                    ...record,
-                    takeRecords: vi.fn(() => []),
-                    root: null,
-                    rootMargin: '',
-                    thresholds: [0.1],
-                } as IntersectionObserver;
-            }),
-        });
-
-        try {
-            fixture = TestBed.createComponent(HomeComponent);
-            component = fixture.componentInstance;
-            fixture.detectChanges();
-
-            const target = fixture.nativeElement.querySelector('.animate-on-scroll') as Element;
-            const homeObserver = observerRecords.find(record =>
-                record.observe.mock.calls.some(([observedTarget]) => observedTarget === target)
-            );
-            expect(homeObserver).toBeTruthy();
-            expect(target.classList.contains('is-visible')).toBe(false);
-
-            homeObserver?.callback([
-                { isIntersecting: true, target } as IntersectionObserverEntry,
-            ], {} as IntersectionObserver);
-            expect(target.classList.contains('is-visible')).toBe(true);
-            expect(homeObserver?.unobserve).toHaveBeenCalledWith(target);
-
-            homeObserver?.callback([
-                { isIntersecting: false, target } as IntersectionObserverEntry,
-            ], {} as IntersectionObserver);
-            expect(target.classList.contains('is-visible')).toBe(true);
-        } finally {
-            fixture.destroy();
-            Object.defineProperty(globalThis, 'IntersectionObserver', {
-                configurable: true,
-                value: originalIntersectionObserver,
-            });
-        }
-    });
-
+  it('preserves modified section links and leaves public-route haptics to the shell', () => {
+    renderHome();
+    const event = new MouseEvent('click', { ctrlKey: true, cancelable: true });
+    fixture.componentInstance.jumpToFeature('health', event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(location.path(true)).toBe('');
+    expect(selection).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('a[href="/features/training-analysis"]').hasAttribute('appHapticTap')).toBe(false);
+    expect(fixture.debugElement.queryAll(By.directive(MatTooltip))
+      .every(host => host.injector.get(MatTooltip).touchGestures === 'off')).toBe(true);
+  });
 });

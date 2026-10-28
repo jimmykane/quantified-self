@@ -1,9 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { gzipSync } from 'zlib';
 import * as logger from 'firebase-functions/logger';
-import { ACTIVITY_SYNC_ROUTE_IDS, ACTIVITY_SYNC_ROUTES } from '../../../shared/activity-sync-routes';
+import { ACTIVITY_SYNC_ROUTE_IDS, ACTIVITY_SYNC_ROUTES, HISTORICAL_MANUAL_ACTIVITY_ROUTE_IDS } from '../../../shared/activity-sync-routes';
 import { ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
 import { ProviderOperationError } from '../shared/provider-operation-error';
+import { PROVIDER_MAX_RETRY_COUNT } from '../shared/queue-config';
+import { createCOROSActivityFITFixture } from '../../test-utils/coros-activity-fit';
+import { prepareCOROSActivityFITUpload } from '../coros/activity-fit';
+import { sessionlessFixture } from '../../test-utils/fit-activity-session';
 
 type MockActivitySyncQueueItemRef = NonNullable<ActivitySyncQueueItemInterface['ref']>;
 
@@ -23,13 +28,23 @@ interface MockActivitySyncDlqParams {
   context?: string;
 }
 
-function createMockActivitySyncQueueItemRef(): MockActivitySyncQueueItemRef {
-  return {} as unknown as MockActivitySyncQueueItemRef;
+function createMockActivitySyncQueueItemRef(currentQueueItem?: Record<string, unknown>): MockActivitySyncQueueItemRef {
+  return {
+    parent: { id: 'activitySyncQueue' },
+    get: vi.fn().mockResolvedValue({
+      exists: currentQueueItem !== undefined,
+      data: () => currentQueueItem,
+    }),
+  } as unknown as MockActivitySyncQueueItemRef;
 }
 
 const {
   mockTokenGet,
   mockEventGet,
+  mockHistoricalEventGet,
+  mockActivitySendGet,
+  mockHistoricalMetaGet,
+  mockFileMetadata,
   mockDownload,
   mockUpdateToProcessed,
   mockDeferQueueItemForPendingDisconnect,
@@ -74,6 +89,10 @@ const {
   return {
     mockTokenGet,
     mockEventGet: vi.fn(),
+    mockHistoricalEventGet: vi.fn(),
+    mockActivitySendGet: vi.fn(),
+    mockHistoricalMetaGet: vi.fn(),
+    mockFileMetadata: vi.fn(),
     mockDownload,
     mockUpdateToProcessed: vi.fn(),
     mockDeferQueueItemForPendingDisconnect: vi.fn(),
@@ -120,6 +139,10 @@ const {
 
 vi.mock('firebase-admin', () => ({
   firestore: () => ({
+    doc: vi.fn((path: string) => ({
+      get: path.includes('/activitySendOperations/') ? mockActivitySendGet : mockHistoricalEventGet,
+      collection: vi.fn(() => ({ doc: vi.fn(() => ({ get: mockHistoricalMetaGet })) })),
+    })),
     collection: vi.fn((collectionName: string) => ({
       doc: vi.fn(() => ({
         collection: vi.fn((nestedCollectionName: string) => (
@@ -138,6 +161,7 @@ vi.mock('firebase-admin', () => ({
     bucket: vi.fn(() => ({
       file: vi.fn(() => ({
         download: mockDownload,
+        getMetadata: mockFileMetadata,
       })),
     })),
   }),
@@ -165,6 +189,7 @@ vi.mock('../queue-utils', () => ({
   ),
   QueueResult: {
     Processed: 'PROCESSED',
+    AcknowledgedStale: 'ACKNOWLEDGED_STALE',
     Skipped: 'SKIPPED',
     Deferred: 'DEFERRED',
     ProviderStatusPending: 'PROVIDER_STATUS_PENDING',
@@ -347,6 +372,7 @@ const baseQueueItem: ActivitySyncQueueItemInterface = {
 describe('activity-sync/process-queue-item', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockActivitySendGet.mockResolvedValue({ exists: true, data: () => ({ state: 'confirmed', expiresAt: Date.now() + 60_000 }) });
     baseQueueItem.ref = createMockActivitySyncQueueItemRef();
     baseQueueItem.dispatchedToCloudTask = null;
     delete baseQueueItem.providerOperationStartedAt;
@@ -432,6 +458,210 @@ describe('activity-sync/process-queue-item', () => {
       exists: true,
       data: () => ({ stats: { 'Activity Types': ['Hiking'] } }),
     });
+    mockHistoricalEventGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ originalFiles: [{ path: baseQueueItem.originalFile.path, generation: '42' }] }),
+    });
+    mockHistoricalMetaGet.mockResolvedValue({ exists: true, data: () => ({ kind: 'manualUpload', version: 1 }) });
+    mockFileMetadata.mockResolvedValue([{ generation: '42', size: '14' }]);
+  });
+
+  it('delivers a retained provider import after its source disconnects', async () => {
+    const fit = Buffer.alloc(14);
+    fit[0] = 12;
+    fit.write('.FIT', 8, 'ascii');
+    mockDownload.mockResolvedValue([fit]);
+    mockGetServiceConnectionMeta.mockImplementation(async (_userID: string, serviceName: ServiceNames) => (
+      serviceName === ServiceNames.GarminAPI ? { connectionState: 'disconnect_pending' } : null
+    ));
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      manual: true,
+      deliveryMode: 'historical',
+      originalFile: { ...baseQueueItem.originalFile, generation: '42' },
+    };
+
+    await processActivitySyncQueueItem(queueItem);
+
+    expect(mockGetServiceConnectionMeta).not.toHaveBeenCalledWith('user-1', ServiceNames.GarminAPI);
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledWith('user-1', fit, expect.anything());
+    expect(mockSetActivitySyncSuccessMetadata).toHaveBeenCalled();
+  });
+  it.each([{ state: 'confirmed', expiresAt: 1 }, { state: 'confirmed', expiresAt: Number.MAX_SAFE_INTEGER, stopped: true }, undefined])('does not upload an unaccepted workspace activity with closed authority: %j', async operation => {
+    mockActivitySendGet.mockResolvedValue({ exists: !!operation, data: () => operation });
+    const queueItem = { ...baseQueueItem, manual: true, deliveryMode: 'historical' as const, sendBatchID: 'batch', sendRowID: 'row' };
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled(); expect(mockDownload).not.toHaveBeenCalled();
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({ updateData: expect.objectContaining({ processed: true, resultStatus: 'skipped', skippedReason: operation?.stopped ? 'send_stopped' : 'send_source_expired' }) }));
+  });
+  it('rechecks workspace authority inside the provider-claim transaction', async () => {
+    const fit = Buffer.alloc(14); fit[0] = 12; fit.write('.FIT', 8, 'ascii'); mockDownload.mockResolvedValue([fit]);
+    await processActivitySyncQueueItem({ ...baseQueueItem, manual: true, deliveryMode: 'historical', sendBatchID: 'batch', sendRowID: 'row', originalFile: { ...baseQueueItem.originalFile, generation: '42' } });
+    const claim = mockUpdateQueueItemIfUserActive.mock.calls.map(([params]) => params).find(params => params.phase === 'before_activity_sync_destination_provider_operation');
+    expect(claim).toBeDefined();
+    const doc = vi.fn(() => 'operation-ref'); const get = vi.fn(async () => ({ data: () => ({ state: 'confirmed', expiresAt: Date.now() + 60_000 }) }));
+    expect(await claim.isAuthorizedInTransaction({ doc }, { get })).toBe(true);
+    expect(doc).toHaveBeenCalledWith('users/user-1/activitySendOperations/batch');
+    get.mockResolvedValue({ data: () => ({ state: 'confirmed', expiresAt: 1 }) });
+    expect(await claim.isAuthorizedInTransaction({ doc }, { get })).toBe(false);
+  });
+
+  it('does not upload a historical original with missing Storage size metadata', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      manual: true,
+      deliveryMode: 'historical',
+      originalFile: { ...baseQueueItem.originalFile, generation: '42' },
+    };
+    mockFileMetadata.mockResolvedValue([{ generation: '42', size: undefined }]);
+
+    await processActivitySyncQueueItem(queueItem);
+
+    expect(mockDownload).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'missing_invalid_or_oversized_original', requireEventExists: true,
+    }));
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
+  it('skips a historical send when its event was deleted before delivery', async () => {
+    mockHistoricalEventGet.mockResolvedValue({ exists: false, data: () => undefined });
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, manual: true, deliveryMode: 'historical',
+      originalFile: { ...baseQueueItem.originalFile, generation: '42' },
+    };
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'historical_event_missing', requireEventExists: true,
+    }));
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      updateData: expect.objectContaining({ processed: true, resultStatus: 'skipped', skippedReason: 'historical_event_missing' }),
+    }));
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
+  it('skips a missing or replaced historical original without using the DLQ', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, manual: true, deliveryMode: 'historical',
+      originalFile: { ...baseQueueItem.originalFile, generation: '42' },
+    };
+    mockFileMetadata.mockRejectedValueOnce(Object.assign(new Error('gone'), { code: 404 }));
+    await processActivitySyncQueueItem(queueItem);
+    expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'missing_invalid_or_oversized_original',
+    }));
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+
+    vi.clearAllMocks();
+    mockHistoricalEventGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ originalFiles: [{ path: queueItem.originalFile.path, generation: '42' }] }),
+    });
+    mockHistoricalMetaGet.mockResolvedValue({ exists: true });
+    mockFileMetadata.mockResolvedValue([{ generation: '43', size: '14' }]);
+    mockUpdateQueueItemIfUserActive.mockResolvedValue('updated');
+    await processActivitySyncQueueItem(queueItem);
+    expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'missing_invalid_or_oversized_original',
+    }));
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
+  it('retries transient Storage failures when reading a historical original', async () => {
+    mockFileMetadata.mockRejectedValueOnce(Object.assign(new Error('unavailable'), { code: 503 }));
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, manual: true, deliveryMode: 'historical',
+      originalFile: { ...baseQueueItem.originalFile, generation: '42' },
+    };
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalled();
+    expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
+  it('retries a transient Storage connection reset before historical upload', async () => {
+    mockFileMetadata.mockRejectedValueOnce(Object.assign(new Error('connection reset'), { code: 'ECONNRESET' }));
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, manual: true, deliveryMode: 'historical',
+      originalFile: { ...baseQueueItem.originalFile, generation: '42' },
+    };
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
+  it('retains reconciliation for a prior accepted upload even if its historical event disappears', async () => {
+    mockHistoricalEventGet.mockResolvedValue({ exists: false, data: () => undefined });
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, manual: true, deliveryMode: 'historical',
+      outboundFingerprintID: null,
+      destinationUploadID: 'accepted-upload',
+      destinationProviderUserID: 'suunto-user-1',
+      originalFile: { ...baseQueueItem.originalFile, generation: '42' },
+    };
+
+    await processActivitySyncQueueItem(queueItem);
+
+    expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).toHaveBeenCalled();
+  });
+
+  it('skips a manual upload whose retained provenance changed before delivery', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: HISTORICAL_MANUAL_ACTIVITY_ROUTE_IDS.SuuntoApp,
+      sourceServiceName: 'manualUpload', manual: true, deliveryMode: 'historical',
+      originalFile: { ...baseQueueItem.originalFile, generation: '42' },
+    };
+    mockHistoricalEventGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ originalFiles: [{ path: 'users/user-1/events/event-1/replaced.fit', generation: '42' }] }),
+    });
+
+    await processActivitySyncQueueItem(queueItem);
+
+    expect(mockSetActivitySyncSkippedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      skippedReason: 'historical_provenance_changed',
+    }));
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
+  it('expands a retained manual FIT.gz before uploading through the shared adapter', async () => {
+    const fit = Buffer.alloc(14);
+    fit[0] = 12;
+    fit.write('.FIT', 8, 'ascii');
+    const compressed = gzipSync(fit);
+    mockDownload.mockResolvedValue([compressed]);
+    mockFileMetadata.mockResolvedValue([{ generation: '42', size: `${compressed.length}` }]);
+    const path = 'users/user-1/events/event-1/original.fit.gz';
+    mockHistoricalEventGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ originalFiles: [{ path, generation: '42' }] }),
+    });
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: HISTORICAL_MANUAL_ACTIVITY_ROUTE_IDS.SuuntoApp,
+      sourceServiceName: 'manualUpload',
+      manual: true,
+      deliveryMode: 'historical',
+      originalFile: { path, extension: 'fit.gz', generation: '42' },
+    };
+
+    await processActivitySyncQueueItem(queueItem);
+
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledWith('user-1', fit, expect.anything());
+    expect(mockSetActivitySyncSuccessMetadata).toHaveBeenCalled();
   });
 
   it('persists provider-echo fingerprints before starting a new destination upload', async () => {
@@ -454,10 +684,177 @@ describe('activity-sync/process-queue-item', () => {
       .toBeLessThan(mockUploadActivityFileToSuunto.mock.invocationCallOrder[0]);
   });
 
+  it('continues after the initial dispatch marker arrives behind a fast fingerprint write', async () => {
+    delete baseQueueItem.outboundFingerprintID;
+    const dispatchedAtMs = Date.now();
+    const currentQueueItem = {
+      ...baseQueueItem,
+      processed: false,
+      dispatchedToCloudTask: dispatchedAtMs,
+    };
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef(currentQueueItem);
+    mockUpdateQueueItemIfUserActive
+      .mockImplementationOnce(async ({ isCurrent }) => {
+        expect(isCurrent(currentQueueItem)).toBe(false);
+        return 'not_current';
+      })
+      .mockImplementationOnce(async ({ isCurrent }) => {
+        expect(isCurrent(currentQueueItem)).toBe(true);
+        return 'updated';
+      });
+
+    await expect(processActivitySyncQueueItem(baseQueueItem)).resolves.toBe(QueueResult.Processed);
+
+    const fingerprintGuard = mockUpdateQueueItemIfUserActive.mock.calls[0]?.[0];
+    expect(fingerprintGuard.phase).toBe('before_activity_sync_outbound_fingerprint_marker');
+    expect(fingerprintGuard.isCurrent({ ...baseQueueItem, dispatchedToCloudTask: dispatchedAtMs })).toBe(false);
+    expect(baseQueueItem.dispatchedToCloudTask).toBe(PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER);
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledOnce();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
+  it('still retries when an initial dispatch marker arrives with another provider-state change', async () => {
+    delete baseQueueItem.outboundFingerprintID;
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef({
+      ...baseQueueItem,
+      dispatchedToCloudTask: Date.now(),
+      outboundFingerprintID: 'another-worker-fingerprint',
+    });
+    mockUpdateQueueItemIfUserActive.mockResolvedValueOnce('not_current');
+
+    await expect(processActivitySyncQueueItem(baseQueueItem))
+      .rejects.toThrow('changed before provider upload but remains unclaimed; retrying the task');
+
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledOnce();
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('does not adopt an initial dispatch marker from a replaced queue revision', async () => {
+    delete baseQueueItem.outboundFingerprintID;
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef({
+      ...baseQueueItem,
+      dateCreated: baseQueueItem.dateCreated + 1,
+      dispatchedToCloudTask: Date.now(),
+    });
+    mockUpdateQueueItemIfUserActive.mockResolvedValueOnce('not_current');
+
+    await expect(processActivitySyncQueueItem(baseQueueItem))
+      .rejects.toThrow('changed before provider upload but remains unclaimed; retrying the task');
+
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledOnce();
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('does not adopt a dispatch marker older than the queue revision', async () => {
+    delete baseQueueItem.outboundFingerprintID;
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef({
+      ...baseQueueItem,
+      dispatchedToCloudTask: baseQueueItem.dateCreated - 1,
+    });
+    mockUpdateQueueItemIfUserActive.mockResolvedValueOnce('not_current');
+
+    await expect(processActivitySyncQueueItem(baseQueueItem))
+      .rejects.toThrow('changed before provider upload but remains unclaimed; retrying the task');
+
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledOnce();
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('does not upload if another worker claims during the marker refresh', async () => {
+    delete baseQueueItem.outboundFingerprintID;
+    const dispatchedAtMs = Date.now();
+    baseQueueItem.ref = {
+      get: vi.fn()
+        .mockResolvedValueOnce({
+          exists: true,
+          data: () => ({ ...baseQueueItem, dispatchedToCloudTask: dispatchedAtMs }),
+        })
+        .mockResolvedValueOnce({
+          exists: true,
+          data: () => ({
+            ...baseQueueItem,
+            dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+            providerOperationStartedAt: Date.now(),
+          }),
+        }),
+    } as unknown as MockActivitySyncQueueItemRef;
+    mockUpdateQueueItemIfUserActive
+      .mockResolvedValueOnce('not_current')
+      .mockResolvedValueOnce('not_current');
+
+    await expect(processActivitySyncQueueItem(baseQueueItem)).resolves.toBe(QueueResult.AcknowledgedStale);
+
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledTimes(2);
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+  });
+
+  it('acknowledges a stale fingerprint write only after another worker processed the item', async () => {
+    delete baseQueueItem.outboundFingerprintID;
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef({ ...baseQueueItem, processed: true });
+    mockUpdateQueueItemIfUserActive.mockResolvedValueOnce('not_current');
+
+    await expect(processActivitySyncQueueItem(baseQueueItem)).resolves.toBe(QueueResult.AcknowledgedStale);
+
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+  });
+
+  it('acknowledges a stale fingerprint write after another worker durably claimed the upload', async () => {
+    delete baseQueueItem.outboundFingerprintID;
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef({
+      ...baseQueueItem,
+      dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+      providerOperationStartedAt: Date.now(),
+    });
+    mockUpdateQueueItemIfUserActive.mockResolvedValueOnce('not_current');
+
+    await expect(processActivitySyncQueueItem(baseQueueItem)).resolves.toBe(QueueResult.AcknowledgedStale);
+
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it('does not treat an in-flight marker without a claim timestamp as a durable claim', async () => {
+    delete baseQueueItem.outboundFingerprintID;
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef({
+      ...baseQueueItem,
+      dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+      providerOperationStartedAt: null,
+    });
+    mockUpdateQueueItemIfUserActive.mockResolvedValueOnce('not_current');
+
+    await expect(processActivitySyncQueueItem(baseQueueItem))
+      .rejects.toThrow('changed before provider upload but remains unclaimed; retrying the task');
+
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+  });
+
+  it.each(['updated', 'not_current', 'skipped_deleted_user'])('records delivery only after a committed %s success finalization', async state => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, destinationUploadID: 'upload-1', destinationProviderUserID: 'suunto-user-1',
+    };
+    mockUpdateQueueItemIfUserActive.mockImplementation(async ({ phase }) => phase === 'before_activity_sync_success_finalize' ? state : 'updated');
+    await expect(processActivitySyncQueueItem(queueItem)).resolves.toBe(QueueResult.Processed);
+    const deliveries = vi.mocked(logger.info).mock.calls.filter(([message, fields]) => message === '[ActivityDelivery]' && fields.outcome === 'delivered');
+    expect(deliveries).toHaveLength(state === 'updated' ? 1 : 0);
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+  });
+
+  it.each([QueueResult.MovedToDLQ, QueueResult.Processed, QueueResult.Failed])('records a new DLQ only when its guarded transition returns %s', async result => {
+    mockUploadActivityFileToSuunto.mockRejectedValueOnce(new Error('permanent failure'));
+    mockMoveToDeadLetterQueue.mockResolvedValueOnce(result);
+    await processActivitySyncQueueItem(baseQueueItem);
+    expect(vi.mocked(logger.info).mock.calls.filter(([message, fields]) => message === '[ActivityDelivery]' && fields.outcome === 'dead_lettered'))
+      .toHaveLength(result === QueueResult.MovedToDLQ ? 1 : 0);
+  });
+
   it('marks queue item processed and writes success metadata when upload succeeds', async () => {
     const result = await processActivitySyncQueueItem(baseQueueItem);
 
     expect(result).toBe(QueueResult.Processed);
+    expect(logger.info).toHaveBeenCalledWith('[ActivityDelivery]', expect.objectContaining({ event: 'committed', outcome: 'delivered' }));
     expect(mockSetActivitySyncProcessingMetadata).toHaveBeenCalled();
     expect(mockUploadActivityFileToSuunto).toHaveBeenCalledWith(
       'user-1',
@@ -521,6 +918,18 @@ describe('activity-sync/process-queue-item', () => {
       dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
       providerOperationStartedAt,
     })).toBe(false);
+    expect(claim?.isCurrent({
+      ...baseQueueItem,
+      dateCreated: baseQueueItem.dateCreated + 1,
+      processed: false,
+      dispatchedToCloudTask: null,
+      providerOperationStartedAt: undefined,
+      destinationUploadID: undefined,
+      destinationProviderUserID: undefined,
+      destinationWorkoutKey: undefined,
+      destinationInfoCode: undefined,
+      destinationUploadContinuation: undefined,
+    })).toBe(false);
     expect(receipt?.isCurrent({
       ...baseQueueItem,
       processed: false,
@@ -561,16 +970,44 @@ describe('activity-sync/process-queue-item', () => {
   });
 
   it('does not call the provider when another worker already claimed this dispatch', async () => {
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef({
+      ...baseQueueItem,
+      dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+      providerOperationStartedAt: Date.now(),
+    });
     mockUpdateQueueItemIfUserActive.mockResolvedValueOnce('not_current');
 
     const result = await processActivitySyncQueueItem(baseQueueItem);
 
-    expect(result).toBe(QueueResult.Processed);
+    expect(result).toBe(QueueResult.AcknowledgedStale);
     expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledOnce();
     expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
     expect(mockUploadActivityFileToWahoo).not.toHaveBeenCalled();
     expect(mockSetActivitySyncSuccessMetadata).not.toHaveBeenCalled();
     expect(mockUpdateToProcessed).not.toHaveBeenCalled();
+  });
+
+  it('claims once when the initial dispatch marker arrives behind a fast provider claim', async () => {
+    const dispatchedAtMs = Date.now();
+    const currentQueueItem = {
+      ...baseQueueItem,
+      dispatchedToCloudTask: dispatchedAtMs,
+    };
+    baseQueueItem.ref = createMockActivitySyncQueueItemRef(currentQueueItem);
+    mockUpdateQueueItemIfUserActive
+      .mockImplementationOnce(async ({ isCurrent }) => {
+        expect(isCurrent(currentQueueItem)).toBe(false);
+        return 'not_current';
+      })
+      .mockImplementationOnce(async ({ isCurrent }) => {
+        expect(isCurrent(currentQueueItem)).toBe(true);
+        return 'updated';
+      });
+
+    await expect(processActivitySyncQueueItem(baseQueueItem)).resolves.toBe(QueueResult.Processed);
+
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledOnce();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
   });
 
   it('persists a fresh Suunto upload ID through the guarded queue write before blob delivery continues', async () => {
@@ -894,6 +1331,30 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['Road Cycling', 0], ['Vertical Running', 4], ['Indoor Walking', 6],
+    ['E-Enduro MTB', 64], ['LES MILLS RPM', 12], ['AMRAP', 43],
+  ])('persists the approved Wahoo correction for %s before upload', async (sport, id) => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+    mockEventGet.mockResolvedValueOnce({
+      exists: true, data: () => ({ stats: { 'Activity Types': [sport] } }),
+    });
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+    expect(mockUploadActivityFileToWahoo).toHaveBeenCalledWith(
+      queueItem.userID, Buffer.from('FITDATA'), expect.objectContaining({ expectedWorkoutTypeId: id }),
+    );
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'before_activity_sync_destination_provider_operation',
+      updateData: expect.objectContaining({ destinationExpectedWorkoutTypeID: id }),
+    }));
+    expect(mockUpdateQueueItemIfUserActive.mock.invocationCallOrder[0])
+      .toBeLessThan(mockUploadActivityFileToWahoo.mock.invocationCallOrder[0]);
+  });
+
   it('maps multiple persisted event activity types to Wahoo multisport', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
@@ -1123,12 +1584,16 @@ describe('activity-sync/process-queue-item', () => {
     const firstResult = await processActivitySyncQueueItem(queueItem);
 
     expect(firstResult).toBe(QueueResult.Failed);
+    expect(vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityDelivery]')).toHaveLength(0);
     expect(queueItem.destinationUploadID).toBe('wahoo-upload-1');
     queueItem.providerOperationStartedAt = Date.now() - 13 * 60 * 1000;
 
     const secondResult = await processActivitySyncQueueItem(queueItem);
 
     expect(secondResult).toBe(QueueResult.Processed);
+    expect(vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityDelivery]')).toEqual([
+      ['[ActivityDelivery]', expect.objectContaining({ event: 'committed', outcome: 'delivered' })],
+    ]);
     expect(mockGetWahooActivityUploadStatus).toHaveBeenCalledWith(
       queueItem.userID,
       'wahoo-upload-1',
@@ -1205,6 +1670,9 @@ describe('activity-sync/process-queue-item', () => {
     dateNowSpy.mockRestore();
 
     expect(firstResult).toBe(QueueResult.ProviderStatusPending);
+    expect(vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityDelivery]')).toEqual([
+      ['[ActivityDelivery]', expect.objectContaining({ event: 'committed', outcome: 'provider_pending' })],
+    ]);
     expect(mockUploadActivityFileToWahoo).toHaveBeenCalledWith('user-1', Buffer.from('FITDATA'), expect.objectContaining({
       filename: 'original.fit',
     }));
@@ -1264,6 +1732,10 @@ describe('activity-sync/process-queue-item', () => {
 
     expect(result).toBe(QueueResult.MovedToDLQ);
     expect(mockSetActivitySyncRetryingMetadata).not.toHaveBeenCalled();
+    expect(vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityDelivery]')).toEqual([
+      ['[ActivityDelivery]', expect.objectContaining({ event: 'committed', outcome: 'dead_lettered' })],
+      ['[ActivityDelivery]', expect.objectContaining({ event: 'committed', outcome: 'manual_reconciliation' })],
+    ]);
     expect(mockSetActivitySyncFailedMetadata).toHaveBeenCalledWith(expect.objectContaining({
       destinationServiceName: ServiceNames.WahooAPI,
     }));
@@ -1336,6 +1808,101 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockUploadActivityFileToCOROS).toHaveBeenCalledTimes(1);
   });
 
+  it('sends the shared Session-repaired copy once and keeps accepted work status-only', async () => {
+    const input = sessionlessFixture({ bigEndian: true }), original = Buffer.from(input);
+    mockDownload.mockResolvedValue([input]);
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+      destinationServiceName: ServiceNames.COROSAPI,
+    };
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.ProviderStatusPending);
+    const sent = mockUploadActivityFileToCOROS.mock.calls[0][1] as Buffer;
+    expect(sent).toEqual(prepareCOROSActivityFITUpload(input));
+    expect(sent).not.toEqual(input);
+    expect(mockRecordActivitySyncOutboundFingerprint).toHaveBeenCalledWith({
+      userID: 'user-1', destinationServiceName: ServiceNames.COROSAPI, fileBuffer: sent,
+    });
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+    expect(mockUploadActivityFileToCOROS).toHaveBeenCalledTimes(1);
+    expect(mockDownload).toHaveBeenCalledTimes(1);
+    expect(input).toEqual(original);
+  });
+
+  it.each([[82, true, false, true], [82, false, false, true], [32, true, false, true],
+    [1, true, true, true], [1, true, true, false]] as const)(
+    'queued sport %i refreshes the prepared receipt and then only polls (GPS=%s, empty fields=%s, restart=%s)', async (sport, withGPS, emptyFields, restart) => {
+      const input = createCOROSActivityFITFixture({ sport, withGPS, emptyNativeFields: emptyFields ? 'zero' : undefined });
+      const original = Buffer.from(input);
+      mockDownload.mockResolvedValue([input]);
+      const queueItem: ActivitySyncQueueItemInterface = {
+        ...baseQueueItem, routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+        destinationServiceName: ServiceNames.COROSAPI, destinationRestartProviderUserID: restart ? 'coros-user-1' : undefined,
+      };
+      expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.ProviderStatusPending);
+      const sent = mockUploadActivityFileToCOROS.mock.calls[0][1] as Buffer;
+      expect(sent).toEqual(prepareCOROSActivityFITUpload(input));
+      expect(sent).not.toEqual(input);
+      expect(mockRecordActivitySyncOutboundFingerprint).toHaveBeenCalledExactlyOnceWith({
+        userID: 'user-1', destinationServiceName: ServiceNames.COROSAPI, fileBuffer: sent,
+      });
+      expect(queueItem.outboundFingerprintID).toBe('exact-v1-new');
+      expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+        phase: 'before_activity_sync_outbound_fingerprint_marker',
+        updateData: { outboundFingerprintID: 'exact-v1-new' },
+      }));
+      expect(mockRecordActivitySyncOutboundFingerprint.mock.invocationCallOrder[0])
+        .toBeLessThan(mockUploadActivityFileToCOROS.mock.invocationCallOrder[0]);
+      expect(input).toEqual(original);
+      expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+      expect(mockDownload).toHaveBeenCalledTimes(1);
+      expect(mockUploadActivityFileToCOROS).toHaveBeenCalledTimes(1);
+      expect(mockRecordActivitySyncOutboundFingerprint).toHaveBeenCalledTimes(1);
+      expect(mockGetCOROSActivityUploadStatus).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([false, true])('does not prepare an accepted COROS upload while repairing its receipt (empty fields=%s)', async emptyFields => {
+    const input = createCOROSActivityFITFixture({ sport: emptyFields ? 1 : 82, emptyNativeFields: emptyFields ? 'zero' : undefined });
+    mockDownload.mockResolvedValue([input]);
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+      destinationServiceName: ServiceNames.COROSAPI, destinationUploadID: '9223372036854775806',
+      destinationProviderUserID: 'coros-user-1', outboundFingerprintID: undefined,
+    };
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+    expect(mockRecordActivitySyncOutboundFingerprint).toHaveBeenCalledWith(expect.objectContaining({ fileBuffer: input }));
+    expect(mockUploadActivityFileToCOROS).not.toHaveBeenCalled();
+    expect(mockGetCOROSActivityUploadStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not send a converted queue copy when its fingerprint marker loses ownership', async () => {
+    mockDownload.mockResolvedValue([createCOROSActivityFITFixture()]);
+    mockUpdateQueueItemIfUserActive.mockImplementation(async params => (
+      params.phase === 'before_activity_sync_outbound_fingerprint_marker' ? 'not_current' : 'updated'
+    ));
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+      destinationServiceName: ServiceNames.COROSAPI,
+    };
+    await expect(processActivitySyncQueueItem(queueItem)).rejects.toThrow('changed before provider upload but remains unclaimed');
+    expect(mockUploadActivityFileToCOROS).not.toHaveBeenCalled();
+    expect(mockGetCOROSActivityUploadStatus).not.toHaveBeenCalled();
+    expect(queueItem.outboundFingerprintID).toBe('exact-v1-existing');
+  });
+
+  it.each([ServiceNames.SuuntoApp, ServiceNames.WahooAPI])('leaves snorkeling FIT unchanged for %s', async destinationServiceName => {
+    const input = createCOROSActivityFITFixture({ emptyNativeFields: 'zero' });
+    mockDownload.mockResolvedValue([input]);
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, destinationServiceName,
+      routeId: destinationServiceName === ServiceNames.SuuntoApp
+        ? ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp : ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+    };
+    await processActivitySyncQueueItem(queueItem);
+    const upload = destinationServiceName === ServiceNames.SuuntoApp ? mockUploadActivityFileToSuunto : mockUploadActivityFileToWahoo;
+    expect(upload.mock.calls[0][1]).toBe(input);
+  });
+
   it('keeps exhausted COROS pending polling visible as a terminal failure', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
@@ -1361,19 +1928,29 @@ describe('activity-sync/process-queue-item', () => {
     );
   });
 
-  it('moves a permanently rejected COROS status poll to DLQ', async () => {
+  it('requires explicit workspace retry after provider-confirmed processing failure', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = { ...baseQueueItem, routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI, destinationServiceName: ServiceNames.COROSAPI, destinationUploadID: 'accepted-id', destinationProviderUserID: 'coros-user-1', sendBatchID: 'reviewed-batch', sendRowID: 'row', retryCount: 1, ref: {} as NonNullable<ActivitySyncQueueItemInterface['ref']> };
+    mockGetCOROSActivityUploadStatus.mockRejectedValueOnce(new ProviderOperationError({ serviceName: ServiceNames.COROSAPI, operation: 'activity_upload_status', disposition: 'retryable', retryMode: 'restart', code: 'provider-processing-failed', message: 'Synthetic failed processing.', providerStatus: -1, providerUserId: 'coros-user-1', providerOperationId: 'accepted-id' }));
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+    expect(mockUploadActivityFileToCOROS).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({ updateData: expect.objectContaining({ resultStatus: 'skipped', sendConfirmedFailure: true }) }));
+  });
+  it('restarts a confirmed COROS processing failure on the original account, then polls the new upload', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
       destinationServiceName: ServiceNames.COROSAPI,
       destinationUploadID: '9223372036854775806',
       destinationProviderUserID: 'coros-user-1',
+      retryCount: 1,
       ref: {} as unknown as NonNullable<ActivitySyncQueueItemInterface['ref']>,
     };
     mockGetCOROSActivityUploadStatus.mockRejectedValueOnce(new ProviderOperationError({
       serviceName: ServiceNames.COROSAPI,
       operation: 'activity_upload_status',
-      disposition: 'permanent',
+      disposition: 'retryable',
+      retryMode: 'restart',
       code: 'provider-processing-failed',
       message: 'COROS could not process this activity file.',
       providerStatus: -1,
@@ -1384,24 +1961,158 @@ describe('activity-sync/process-queue-item', () => {
 
     const result = await processActivitySyncQueueItem(queueItem);
 
-    expect(result).toBe(QueueResult.MovedToDLQ);
-    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
-    expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToCOROS).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
       queueItem,
       expect.objectContaining({
         code: 'provider-processing-failed',
         providerStatus: -1,
       }),
+      1,
       undefined,
       'COROS_ACTIVITY_UPLOAD_FAILED',
     );
-    expect(logger.error).toHaveBeenCalledWith(
-      '[ActivitySync] Destination provider failure moved to DLQ.',
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[ActivitySync] Destination provider failure classified.',
       expect.objectContaining({
         providerStatus: -1,
-        outcome: 'dlq',
+        providerOperationId: '9223372036854775806',
+        retryMode: 'restart',
+        outcome: 'retry',
       }),
     );
+    expect(queueItem.destinationUploadID).toBeNull();
+    expect(queueItem.destinationProviderUserID).toBeNull();
+    expect(queueItem.destinationRestartProviderUserID).toBe('coros-user-1');
+    const restartUpdate = mockUpdateQueueItemIfUserActive.mock.calls
+      .map(([params]) => params)
+      .find(params => params.phase === 'before_activity_sync_pending_upload_restart');
+    expect(restartUpdate.updateData).toMatchObject({
+      destinationUploadID: null,
+      destinationProviderUserID: null,
+      destinationRestartProviderUserID: 'coros-user-1',
+    });
+    const providerClaim = mockUpdateQueueItemIfUserActive.mock.calls
+      .map(([params]) => params)
+      .find(params => params.phase === 'before_activity_sync_destination_provider_operation');
+    const claimedState = {
+      ...queueItem,
+      destinationUploadID: '9223372036854775806',
+      destinationProviderUserID: 'coros-user-1',
+      destinationRestartProviderUserID: undefined,
+      dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+      providerOperationStartedAt: providerClaim.updateData.providerOperationStartedAt,
+    };
+    expect(restartUpdate.isCurrent(claimedState)).toBe(true);
+    expect(restartUpdate.isCurrent({ ...claimedState, destinationRestartProviderUserID: 'coros-user-2' })).toBe(false);
+
+    // Simulate the durable counter increment and the next task's normal backoff delivery.
+    queueItem.retryCount = 2;
+    mockUploadActivityFileToCOROS.mockResolvedValueOnce({
+      status: 'pending', uploadId: '43', providerUserId: 'coros-user-1',
+    });
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.ProviderStatusPending);
+    expect(mockUploadActivityFileToCOROS).toHaveBeenCalledExactlyOnceWith('user-1', Buffer.from('FITDATA'), {
+      expectedProviderUserId: 'coros-user-1',
+    });
+    expect(queueItem.destinationUploadID).toBe('43');
+    expect(mockGetCOROSActivityUploadStatus).toHaveBeenCalledTimes(1);
+
+    queueItem.retryCount = 3;
+    mockGetCOROSActivityUploadStatus.mockResolvedValueOnce({
+      status: 'success', uploadId: '43', providerUserId: 'coros-user-1',
+    });
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+    expect(mockGetCOROSActivityUploadStatus).toHaveBeenLastCalledWith('user-1', '43', 'coros-user-1', {
+      queueItemRef: queueItem.ref,
+    });
+    expect(mockUploadActivityFileToCOROS).toHaveBeenCalledTimes(1);
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'before_activity_sync_success_finalize',
+      updateData: expect.objectContaining({ processed: true, resultStatus: 'success', destinationUploadID: '43' }),
+    }));
+  });
+
+  it('retains the last failed COROS upload when the shared retry budget is exhausted', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+      destinationServiceName: ServiceNames.COROSAPI,
+      destinationUploadID: '42',
+      destinationProviderUserID: 'coros-user-1',
+      retryCount: PROVIDER_MAX_RETRY_COUNT - 1,
+    };
+    mockGetCOROSActivityUploadStatus.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.COROSAPI,
+      operation: 'activity_upload_status',
+      disposition: 'retryable', retryMode: 'restart', code: 'provider-processing-failed',
+      message: 'COROS could not process this activity file.',
+      providerStatus: -1, providerOperationId: '42', providerUserId: 'coros-user-1',
+      dlqContext: 'COROS_ACTIVITY_UPLOAD_FAILED',
+    }));
+    mockIncreaseRetryCountForQueueItem.mockResolvedValueOnce(QueueResult.MovedToDLQ);
+
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.MovedToDLQ);
+    expect(queueItem.destinationUploadID).toBe('42');
+    expect(queueItem.destinationProviderUserID).toBe('coros-user-1');
+    expect(mockUpdateQueueItemIfUserActive.mock.calls.some(
+      ([params]) => params.phase === 'before_activity_sync_pending_upload_restart',
+    )).toBe(false);
+    const retryParams = mockIncreaseRetryCountIfCurrentParams.mock.calls.at(-1)?.[0];
+    expect(retryParams).toMatchObject({
+      maxRetryDlqContext: 'COROS_ACTIVITY_UPLOAD_FAILED',
+      manualReconciliation: { additionalData: { destinationUploadID: '42', destinationProviderUserID: 'coros-user-1' } },
+      queueItem: { destinationUploadID: '42', destinationProviderUserID: 'coros-user-1' },
+    });
+    expect(mockSetActivitySyncFailedMetadata).toHaveBeenCalled();
+    expect(mockUploadActivityFileToCOROS).not.toHaveBeenCalled();
+  });
+
+  it.each(['not_current', 'skipped_deleted_user'])('does not schedule a COROS restart when clearing fails with %s', async outcome => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+      destinationServiceName: ServiceNames.COROSAPI,
+      destinationUploadID: '42', destinationProviderUserID: 'coros-user-1',
+    };
+    mockGetCOROSActivityUploadStatus.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.COROSAPI, operation: 'activity_upload_status',
+      disposition: 'retryable', retryMode: 'restart', code: 'provider-processing-failed',
+      message: 'COROS could not process this activity file.', providerStatus: -1,
+    }));
+    mockUpdateQueueItemIfUserActive.mockImplementation(async params => (
+      params.phase === 'before_activity_sync_pending_upload_restart' ? outcome : 'updated'
+    ));
+
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+    expect(queueItem.destinationUploadID).toBe('42');
+    expect(queueItem.destinationRestartProviderUserID).toBeUndefined();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToCOROS).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { code: 'invalid-argument', providerCode: '5096' },
+    { code: 'unexpected-provider-status', providerStatus: 99 },
+  ])('does not restart permanent COROS status rejection $code', async failure => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+      destinationServiceName: ServiceNames.COROSAPI,
+      destinationUploadID: '42', destinationProviderUserID: 'coros-user-1',
+    };
+    mockGetCOROSActivityUploadStatus.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.COROSAPI, operation: 'activity_upload_status',
+      disposition: 'permanent', message: 'COROS rejected the file or returned an unknown status.',
+      ...failure,
+    }));
+
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.MovedToDLQ);
+    expect(queueItem.destinationUploadID).toBe('42');
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToCOROS).not.toHaveBeenCalled();
   });
 
   it('retries COROS post-upload writes after the upload count marker is committed', async () => {
@@ -1559,6 +2270,60 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockUploadActivityFileToSuunto).toHaveBeenCalledTimes(1);
   });
 
+  it.each(['NEW', 'PROCESSING', 'UNKNOWN', undefined, 'UNRECOGNIZED'])('observes Suunto status %s without changing retry scheduling or reposting the file', async providerStatus => {
+    const queueItem = { ...baseQueueItem, ref: createMockActivitySyncQueueItemRef() };
+    mockUploadActivityFileToSuunto.mockResolvedValueOnce({
+      status: 'pending', providerStatus, uploadId: 'PRIVATE_UPLOAD', providerUserId: 'PRIVATE_ACCOUNT',
+    });
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.RetryIncremented);
+    expect(queueItem.dispatchedToCloudTask).toBeNull();
+    expect(queueItem.providerOperationStartedAt).toBeNull();
+    expect(mockIncreaseRetryCountIfCurrentParams).toHaveBeenCalledWith(expect.objectContaining({ retryDispatchMarkerAtMs: undefined }));
+    const observations = vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityDelivery]');
+    expect(observations).toEqual([['[ActivityDelivery]', expect.objectContaining({
+      event: 'committed', outcome: providerStatus === 'NEW' || providerStatus === 'PROCESSING' ? 'provider_pending' : 'retry',
+    })]]);
+    expect(JSON.stringify(observations)).not.toContain('PRIVATE');
+    await processActivitySyncQueueItem(queueItem);
+    expect(mockGetSuuntoActivityUploadStatus).toHaveBeenCalledWith(queueItem.userID, 'PRIVATE_UPLOAD', 'PRIVATE_ACCOUNT');
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not suppress a Suunto status transport deadline just because an upload was accepted', async () => {
+    const queueItem = { ...baseQueueItem, ref: createMockActivitySyncQueueItemRef() };
+    mockUploadActivityFileToSuunto.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.SuuntoApp, operation: 'activity_upload_status', disposition: 'retryable', retryMode: 'resume',
+      code: 'deadline-exceeded', message: 'PRIVATE_TRANSPORT', providerOperationId: 'PRIVATE_UPLOAD', providerUserId: 'PRIVATE_ACCOUNT',
+    }));
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.RetryIncremented);
+    expect(vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityDelivery]')).toEqual([
+      ['[ActivityDelivery]', expect.objectContaining({ event: 'committed', outcome: 'retry' })],
+    ]);
+  });
+
+  it('keeps exhausted recognized Suunto pending work visible as a new permanent failure', async () => {
+    const queueItem = { ...baseQueueItem, ref: createMockActivitySyncQueueItemRef() };
+    mockUploadActivityFileToSuunto.mockResolvedValueOnce({
+      status: 'pending', providerStatus: 'PROCESSING', uploadId: 'PRIVATE_UPLOAD', providerUserId: 'PRIVATE_ACCOUNT',
+    });
+    mockIncreaseRetryCountForQueueItem.mockResolvedValueOnce(QueueResult.MovedToDLQ);
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.MovedToDLQ);
+    expect(vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityDelivery]')).toEqual([
+      ['[ActivityDelivery]', expect.objectContaining({ event: 'committed', outcome: 'dead_lettered' })],
+      ['[ActivityDelivery]', expect.objectContaining({ event: 'committed', outcome: 'manual_reconciliation' })],
+    ]);
+  });
+
+  it.each([QueueResult.Processed, QueueResult.Failed])('emits no pending commit when Suunto retry persistence returns %s', async result => {
+    const queueItem = { ...baseQueueItem, ref: createMockActivitySyncQueueItemRef() };
+    mockUploadActivityFileToSuunto.mockResolvedValueOnce({
+      status: 'pending', providerStatus: 'PROCESSING', uploadId: 'PRIVATE_UPLOAD', providerUserId: 'PRIVATE_ACCOUNT',
+    });
+    mockIncreaseRetryCountForQueueItem.mockResolvedValueOnce(result);
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(result);
+    expect(vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityDelivery]')).toEqual([]);
+  });
+
   it('moves an accepted Suunto upload to DLQ with resume identifiers when state persistence fails', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
@@ -1667,6 +2432,9 @@ describe('activity-sync/process-queue-item', () => {
     const result = await processActivitySyncQueueItem(queueItem);
 
     expect(result).toBe(QueueResult.Skipped);
+    expect(vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityDelivery]')).toEqual([
+      ['[ActivityDelivery]', expect.objectContaining({ event: 'committed', outcome: 'manual_reconciliation' })],
+    ]);
     expect(mockUploadActivityFileToWahoo).toHaveBeenCalledTimes(1);
     expect(mockMoveToDeadLetterQueue).toHaveBeenCalledTimes(1);
     expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
@@ -1703,6 +2471,7 @@ describe('activity-sync/process-queue-item', () => {
     const result = await processActivitySyncQueueItem(queueItem);
 
     expect(result).toBe(QueueResult.Failed);
+    expect(vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[ActivityDelivery]')).toHaveLength(0);
     expect(mockUploadActivityFileToWahoo).toHaveBeenCalledTimes(1);
     expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledTimes(3);
     expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
@@ -2177,6 +2946,141 @@ describe('activity-sync/process-queue-item', () => {
       undefined,
       'ACTIVITY_SYNC_PERMANENT_FAILURE',
     );
+  });
+
+  it.each([
+    [0, QueueResult.RetryIncremented],
+    [PROVIDER_MAX_RETRY_COUNT - 1, QueueResult.MovedToDLQ],
+  ])('handles malformed Suunto initialization within the existing retry budget (%i)', async (retryCount, expectedResult) => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      retryCount,
+      ref: createMockActivitySyncQueueItemRef(),
+    };
+    const providerError = new ProviderOperationError({
+      serviceName: ServiceNames.SuuntoApp,
+      operation: 'activity_upload_init',
+      disposition: 'retryable',
+      retryMode: 'restart',
+      code: 'unavailable',
+      message: 'Invalid response from Suunto initialization.',
+      dlqContext: 'SUUNTO_ACTIVITY_UPLOAD_INVALID_RESPONSE',
+    });
+    mockUploadActivityFileToSuunto.mockRejectedValueOnce(providerError);
+    mockIncreaseRetryCountForQueueItem.mockResolvedValueOnce(expectedResult);
+
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(expectedResult);
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledOnce();
+    expect(mockIncreaseRetryCountIfCurrentParams).toHaveBeenCalledWith(expect.objectContaining({
+      queueItem,
+      error: providerError,
+      maxRetryDlqContext: 'SUUNTO_ACTIVITY_UPLOAD_INVALID_RESPONSE',
+    }));
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledOnce();
+    expect(mockSetActivitySyncRetryingMetadata).toHaveBeenCalled();
+    expect(mockSetActivitySyncSuccessMetadata).not.toHaveBeenCalled();
+    expect(mockUpdateToProcessed).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+    if (expectedResult === QueueResult.MovedToDLQ) {
+      expect(mockSetActivitySyncFailedMetadata).toHaveBeenCalled();
+    } else {
+      expect(mockSetActivitySyncFailedMetadata).not.toHaveBeenCalled();
+      expect(queueItem.dispatchedToCloudTask).toBeNull();
+      expect(queueItem.providerOperationStartedAt).toBeNull();
+    }
+  });
+
+  it.each([500, 504, undefined])('retries an unaccepted workspace Suunto initialization using the guarded retry budget (%s)', async statusCode => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, sendBatchID: 'reviewed-batch', sendRowID: 'row',
+      destinationPinnedProviderUserID: 'reviewed-account', retryCount: 2,
+    };
+    const error = new ProviderOperationError({
+      serviceName: ServiceNames.SuuntoApp, operation: 'activity_upload_init',
+      disposition: 'retryable', retryMode: 'restart', code: 'unavailable', statusCode,
+      message: 'Synthetic initialization failure.',
+      dlqContext: statusCode ? 'SUUNTO_ACTIVITY_UPLOAD_RETRY_EXHAUSTED' : 'SUUNTO_ACTIVITY_UPLOAD_INVALID_RESPONSE',
+    });
+    mockUploadActivityFileToSuunto.mockRejectedValueOnce(error);
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.RetryIncremented);
+    expect(mockIncreaseRetryCountIfCurrentParams).toHaveBeenCalledWith(expect.objectContaining({ queueItem, error, incrementBy: 1 }));
+    expect(queueItem).toMatchObject({ processed: false, dispatchedToCloudTask: null, providerOperationStartedAt: null, destinationPinnedProviderUserID: 'reviewed-account' });
+    expect(mockUpdateQueueItemIfUserActive).not.toHaveBeenCalledWith(expect.objectContaining({ updateData: expect.objectContaining({ processed: true }) }));
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledOnce();
+    expect(mockSetActivitySyncRetryingMetadata).toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith('[ActivityDelivery]', expect.objectContaining({ event: 'committed', outcome: 'retry' }));
+  });
+
+  it('retains terminal workspace review when Suunto initialization exhausts its existing attempt budget', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = { ...baseQueueItem, sendBatchID: 'reviewed-batch', sendRowID: 'row', retryCount: PROVIDER_MAX_RETRY_COUNT - 1 };
+    mockUploadActivityFileToSuunto.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.SuuntoApp, operation: 'activity_upload_init', disposition: 'retryable',
+      retryMode: 'restart', code: 'unavailable', message: 'Synthetic initialization failure.',
+    }));
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({ updateData: expect.objectContaining({ processed: true, resultStatus: 'manual_reconciliation_required', sendConfirmedFailure: false }) }));
+  });
+
+  it.each([
+    { state: 'confirmed', expiresAt: Number.MAX_SAFE_INTEGER, stopped: true },
+    { state: 'confirmed', expiresAt: 1 },
+  ])('rechecks sending authority before retrying an unaccepted Suunto initialization: %j', async operation => {
+    const queueItem: ActivitySyncQueueItemInterface = { ...baseQueueItem, sendBatchID: 'reviewed-batch', sendRowID: 'row' };
+    mockUploadActivityFileToSuunto.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.SuuntoApp, operation: 'activity_upload_init', disposition: 'retryable',
+      retryMode: 'restart', code: 'unavailable', message: 'Synthetic initialization failure.',
+    }));
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.RetryIncremented);
+    mockActivitySendGet.mockResolvedValueOnce({ exists: true, data: () => operation });
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledOnce();
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({ updateData: expect.objectContaining({ resultStatus: 'skipped', skippedReason: operation.stopped ? 'send_stopped' : 'send_source_expired' }) }));
+  });
+
+  it.each([
+    [ServiceNames.SuuntoApp, 'activity_upload_blob'],
+    [ServiceNames.WahooAPI, 'activity_upload_init'],
+  ] as const)('does not extend initialization retry safety to %s %s', async (serviceName, operation) => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, sendBatchID: 'reviewed-batch', sendRowID: 'row', destinationServiceName: serviceName,
+      routeId: serviceName === ServiceNames.SuuntoApp ? ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp : ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+    };
+    const upload = serviceName === ServiceNames.SuuntoApp ? mockUploadActivityFileToSuunto : mockUploadActivityFileToWahoo;
+    upload.mockRejectedValueOnce(new ProviderOperationError({ serviceName, operation, disposition: 'retryable', retryMode: 'restart', code: 'unavailable', message: 'Synthetic uncertain failure.' }));
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({ updateData: expect.objectContaining({ resultStatus: 'manual_reconciliation_required' }) }));
+  });
+
+  it('never restarts an accepted workspace Suunto upload on an initialization-shaped error', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, sendBatchID: 'reviewed-batch', sendRowID: 'row',
+      destinationUploadID: 'accepted-canary', destinationProviderUserID: 'reviewed-account',
+    };
+    mockGetSuuntoActivityUploadStatus.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.SuuntoApp, operation: 'activity_upload_init', disposition: 'retryable',
+      retryMode: 'restart', code: 'unavailable', message: 'Synthetic conflicting phase.', providerOperationId: 'accepted-canary',
+    }));
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+    expect(mockUploadActivityFileToSuunto).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(queueItem.destinationUploadID).toBe('accepted-canary');
+  });
+
+  it.each(['providerOperationId', 'destinationWorkoutKey'] as const)('keeps workspace reconciliation when initialization errors carry %s evidence', async evidence => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, sendBatchID: 'reviewed-batch', sendRowID: 'row',
+      ...(evidence === 'destinationWorkoutKey' ? { destinationWorkoutKey: 'accepted-workout' } : {}),
+    };
+    mockUploadActivityFileToSuunto.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.SuuntoApp, operation: 'activity_upload_init', disposition: 'retryable',
+      retryMode: 'restart', code: 'unavailable', message: 'Synthetic conflicting acceptance evidence.',
+      ...(evidence === 'providerOperationId' ? { providerOperationId: 'accepted-operation' } : {}),
+    }));
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({ updateData: expect.objectContaining({ resultStatus: 'manual_reconciliation_required' }) }));
   });
 
   it('clears stale job metadata before restart even when upload identifiers are absent', async () => {

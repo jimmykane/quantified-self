@@ -3,6 +3,9 @@ import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Auth } from 'app/firebase/auth';
+import { AppHapticsService } from '../../services/app.haptics.service';
+import { EventTagCatalogService } from '../../services/event-tag-catalog.service';
 
 import {
   BenchmarkReviewTagsDialogComponent,
@@ -32,6 +35,9 @@ describe('BenchmarkReviewTagsDialogComponent', () => {
         { provide: MAT_DIALOG_DATA, useFactory: () => dialogData },
         { provide: MatDialogRef, useValue: dialogRefMock },
         { provide: MatSnackBar, useValue: snackBarMock },
+        { provide: AppHapticsService, useValue: { success: vi.fn(), error: vi.fn() } },
+        { provide: EventTagCatalogService, useValue: { listAllTags: vi.fn().mockResolvedValue([]) } },
+        { provide: Auth, useValue: { currentUser: { uid: 'owner-1' } } },
       ],
     }).compileComponents();
 

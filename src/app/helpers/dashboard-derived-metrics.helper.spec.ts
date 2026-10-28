@@ -1,7 +1,10 @@
+import { APPROVED_REMAINING_SPORT_CASES } from '@shared/testing/training-remaining-sport-cases';
+import { APPROVED_WATER_TEAM_SPORT_CASES } from '@shared/testing/training-water-team-cases';
 import { describe, expect, it } from 'vitest';
 import { DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION } from '@shared/derived-metrics';
 import { TRAINING_DISCIPLINES } from '@shared/training-disciplines';
 import {
+  dashboardAcwrComparison,
   resolveDashboardEasyPercentContext,
   resolveDashboardEfficiencyDelta4wContext,
   resolveDashboardAcwrContext,
@@ -15,6 +18,7 @@ import {
   resolveDashboardHardPercentContext,
   resolveDashboardIntensityDistributionContext,
   resolveDashboardMonotonyStrainContext,
+  resolveDashboardMonotonyHistoryFromFormPoints,
   resolveDashboardRampRateContext,
   resolveDashboardRampRateContextFromPoints,
   resolveDashboardTrainingSummaryContext,
@@ -23,7 +27,34 @@ import {
   resolveDashboardTrainingSwimPerformanceContext,
 } from './dashboard-derived-metrics.helper';
 
+it('shares the existing ACWR presentation bands without reclassifying boundaries or missing values', () => {
+  expect([null, undefined, NaN, Infinity, 0.8, 1.3, 1].map(dashboardAcwrComparison)).toEqual(Array(7).fill(null));
+  expect(dashboardAcwrComparison(0.79)).toBe('lower'); expect(dashboardAcwrComparison(1.31)).toBe('higher');
+});
+import { buildDashboardFormPointsFromDailyLoads } from './dashboard-form.helper';
+
 describe('dashboard-derived-metrics.helper', () => {
+  it('derives real weekly Monotony observations from Form loads, stopping at the snapshot cutoff', () => {
+    const start = Date.UTC(2026, 0, 1);
+    const points = buildDashboardFormPointsFromDailyLoads([10, 20, 30, 400].map((load, index) => ({ dayMs: start + index * 86400000, load })));
+    const history = resolveDashboardMonotonyHistoryFromFormPoints(points, start + 2 * 86400000);
+    expect(history).toEqual([{ time: Date.UTC(2025, 11, 29), value: 2.4495 }]);
+    expect(points).toHaveLength(4);
+    expect(history[0].value).not.toBeCloseTo(60 * 2.4495);
+    expect(resolveDashboardMonotonyHistoryFromFormPoints(points, start + 10 * 86400000).at(-1)?.value).toBeNull();
+    expect(resolveDashboardMonotonyHistoryFromFormPoints(null)).toEqual([]);
+    expect(resolveDashboardMonotonyHistoryFromFormPoints([], Number.NaN)).toEqual([]);
+  });
+
+  it('keeps missing daily evidence unavailable and limits Monotony history to eight UTC weeks', () => {
+    const start = Date.UTC(2026, 0, 5);
+    const points = buildDashboardFormPointsFromDailyLoads(Array.from({ length: 80 }, (_, index) => ({ dayMs: start + index * 86400000, load: index % 3 * 20 })));
+    const fullHistory = resolveDashboardMonotonyHistoryFromFormPoints(points, points.at(-1)!.time);
+    expect(fullHistory).toHaveLength(8);
+    const gap = points.slice(0, 5).filter((_, index) => index !== 2);
+    expect(resolveDashboardMonotonyHistoryFromFormPoints(gap, gap.at(-1)!.time)[0].value).toBeNull();
+    expect(resolveDashboardMonotonyHistoryFromFormPoints([{ ...points[0], trainingStressScore: Number.NaN }], start)[0].value).toBeNull();
+  });
   it('normalizes ACWR payload context', () => {
     const context = resolveDashboardAcwrContext({
       latestDayMs: Date.UTC(2026, 0, 1),
@@ -131,6 +162,15 @@ describe('dashboard-derived-metrics.helper', () => {
     expect(freshness?.points).toHaveLength(1);
     expect(intensity?.weeks[0].source).toBe('power');
     expect(efficiency?.latestValue).toBe(1.92);
+  });
+
+  it('retains valid coverage and rejects malformed metadata without creating intensity bars', () => {
+    const coverage = { weekStartMs: 1, powerActivityCount: 0, heartRateActivityCount: 0,
+      excludedActivityCount: 2, powerZoneSeconds: 0, heartRateZoneSeconds: 0 };
+    expect(resolveDashboardIntensityDistributionContext({ weeks: [], coverageWeeks: [coverage, null,
+      { ...coverage, powerActivityCount: -1 }, { ...coverage, heartRateZoneSeconds: NaN }] }))
+      .toMatchObject({ weeks: [], coverageWeeks: [coverage] });
+    expect(resolveDashboardIntensityDistributionContext({ weeks: [], coverageWeeks: {} })?.coverageWeeks).toEqual([]);
   });
 
   it('normalizes readiness and execution KPI payload contexts', () => {
@@ -320,6 +360,112 @@ describe('dashboard-derived-metrics.helper', () => {
     ]);
   });
 
+  it('retains stair climbing metrics and zones through JSON reloads while rejecting undeclared metrics', () => {
+    const emptyWindow = {
+      periodDays: 28, windowStartDayMs: 1, windowEndDayMs: 2,
+      activityCount: 0, durationSeconds: 0, easySeconds: 0, moderateSeconds: 0, hardSeconds: 0, contexts: [],
+    };
+    const stairWindow = {
+      ...emptyWindow, activityCount: 2, durationSeconds: 3_600, easySeconds: 600, moderateSeconds: 300, hardSeconds: 100,
+      contexts: [{ context: 'stair-climbing', profile: 'general', activityCount: 2, metrics: [
+        { metric: 'elapsed-time', value: 3_600, sourceActivityCount: 2 },
+        { metric: 'ascent', value: 0, sourceActivityCount: 1 },
+      ] }],
+    };
+    const payload = JSON.parse(JSON.stringify({
+      dayBoundary: 'UTC', asOfDayMs: Date.UTC(2026, 6, 10), currentWindowDays: 28, baselineWindowDays: 84, excludesMergedEvents: true,
+      disciplines: TRAINING_DISCIPLINES.map(discipline => ({
+        discipline, current28d: discipline === 'fitness-gym' ? stairWindow : emptyWindow, baseline28d: emptyWindow,
+      })),
+    }));
+    expect(resolveDashboardTrainingSummaryContext(payload)?.disciplines
+      .find(item => item.discipline === 'fitness-gym')?.current28d).toEqual(stairWindow);
+    const stair = payload.disciplines.find(item => item.discipline === 'fitness-gym').current28d.contexts[0];
+    stair.metrics.push({ metric: 'distance', value: 2_000, sourceActivityCount: 1 });
+    expect(resolveDashboardTrainingSummaryContext(payload)).toBeNull();
+  });
+
+  it('reloads both approved 50-sport context batches and recorded metrics from JSON without dropping separate names', () => {
+    const expected = [
+      { sport: 'walking-hiking', profile: 'vertical-endurance', context: 'snowshoeing', metrics: ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent'] },
+      { sport: 'climbing-mountaineering', profile: 'general', context: 'bouldering', metrics: ['elapsed-time', 'ascent'] },
+      { sport: 'climbing-mountaineering', profile: 'general', context: 'climbing', metrics: ['elapsed-time', 'ascent'] },
+      { sport: 'climbing-mountaineering', profile: 'general', context: 'rock-climbing', metrics: ['elapsed-time', 'ascent'] },
+      { sport: 'climbing-mountaineering', profile: 'general', context: 'indoor-climbing', metrics: ['elapsed-time', 'ascent'] },
+      { sport: 'climbing-mountaineering', profile: 'general', context: 'via-ferrata', metrics: ['elapsed-time', 'ascent'] },
+      { sport: 'climbing-mountaineering', profile: 'vertical-endurance', context: 'mountaineering', metrics: ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent'] },
+      { sport: 'mountain-snow', profile: 'mixed-gravity', context: 'ski-touring', metrics: ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time'] },
+      { sport: 'mountain-snow', profile: 'mixed-gravity', context: 'ski-mountaineering', metrics: ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time'] },
+      { sport: 'mountain-snow', profile: 'mixed-gravity', context: 'backcountry-skiing', metrics: ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time'] },
+      { sport: 'mountain-snow', profile: 'mixed-gravity', context: 'backcountry-snowboarding', metrics: ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time'] },
+      { sport: 'mountain-snow', profile: 'mixed-gravity', context: 'splitboarding', metrics: ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time'] },
+      { sport: 'mountain-snow', profile: 'gravity', context: 'alpine-skiing', metrics: ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time'] },
+      { sport: 'mountain-snow', profile: 'gravity', context: 'snowboarding', metrics: ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time'] },
+      { sport: 'mountain-snow', profile: 'gravity', context: 'telemark-skiing', metrics: ['distance', 'moving-time', 'elapsed-time', 'ascent', 'descent', 'descent-time'] },
+      { sport: 'skating', profile: 'endurance', context: 'inline-skating', metrics: ['distance', 'moving-time', 'elapsed-time'] },
+      { sport: 'skating', profile: 'general', context: 'skating', metrics: ['distance', 'moving-time', 'elapsed-time'] },
+      { sport: 'skating', profile: 'general', context: 'ice-skating', metrics: ['distance', 'moving-time', 'elapsed-time'] },
+      { sport: 'skating', profile: 'general', context: 'skateboarding', metrics: ['distance', 'moving-time', 'elapsed-time'] },
+      { sport: 'combat-martial-arts', profile: 'general', context: 'boxing', metrics: ['elapsed-time'] },
+      { sport: 'combat-martial-arts', profile: 'general', context: 'combat', metrics: ['elapsed-time'] },
+      { sport: 'combat-martial-arts', profile: 'general', context: 'judo', metrics: ['elapsed-time'] },
+      { sport: 'combat-martial-arts', profile: 'general', context: 'kickboxing', metrics: ['elapsed-time'] },
+      { sport: 'combat-martial-arts', profile: 'general', context: 'mixed-martial-arts', metrics: ['elapsed-time'] },
+      { sport: 'combat-martial-arts', profile: 'general', context: 'taekwondo', metrics: ['elapsed-time'] },
+      { sport: 'dance', profile: 'general', context: 'ballet-dancing', metrics: ['elapsed-time'] },
+      { sport: 'dance', profile: 'general', context: 'ballroom-dancing', metrics: ['elapsed-time'] },
+      { sport: 'dance', profile: 'general', context: 'dancing', metrics: ['elapsed-time'] },
+      { sport: 'dance', profile: 'general', context: 'jazz-dancing', metrics: ['elapsed-time'] },
+      { sport: 'dance', profile: 'general', context: 'latin-dancing', metrics: ['elapsed-time'] },
+      { sport: 'dance', profile: 'general', context: 'modern-dancing', metrics: ['elapsed-time'] },
+      { sport: 'dance', profile: 'general', context: 'show-dancing', metrics: ['elapsed-time'] },
+      { sport: 'dance', profile: 'general', context: 'street-dancing', metrics: ['elapsed-time'] },
+      { sport: 'team-sports', profile: 'general', context: 'basketball', metrics: ['elapsed-time'] },
+      { sport: 'team-sports', profile: 'general', context: 'wheelchair-basketball', metrics: ['elapsed-time'] },
+      { sport: 'team-sports', profile: 'general', context: 'football', metrics: ['elapsed-time'] },
+      { sport: 'team-sports', profile: 'general', context: 'soccer', metrics: ['elapsed-time'] },
+      { sport: 'team-sports', profile: 'general', context: 'volleyball', metrics: ['elapsed-time'] },
+      { sport: 'team-sports', profile: 'general', context: 'beach-volleyball', metrics: ['elapsed-time'] },
+      { sport: 'racket-sports', profile: 'general', context: 'badminton', metrics: ['elapsed-time'] },
+      { sport: 'racket-sports', profile: 'general', context: 'beach-tennis', metrics: ['elapsed-time'] },
+      { sport: 'racket-sports', profile: 'general', context: 'padel', metrics: ['elapsed-time'] },
+      { sport: 'racket-sports', profile: 'general', context: 'pickleball', metrics: ['elapsed-time'] },
+      { sport: 'racket-sports', profile: 'general', context: 'platform-tennis', metrics: ['elapsed-time'] },
+      { sport: 'racket-sports', profile: 'general', context: 'racket-sport', metrics: ['elapsed-time'] },
+      { sport: 'racket-sports', profile: 'general', context: 'racquet-ball', metrics: ['elapsed-time'] },
+      { sport: 'racket-sports', profile: 'general', context: 'squash', metrics: ['elapsed-time'] },
+      { sport: 'racket-sports', profile: 'general', context: 'table-tennis', metrics: ['elapsed-time'] },
+      { sport: 'racket-sports', profile: 'general', context: 'tennis', metrics: ['elapsed-time'] },
+      { sport: 'racket-sports', profile: 'general', context: 'wheelchair-tennis', metrics: ['elapsed-time'] },
+      ...APPROVED_WATER_TEAM_SPORT_CASES,
+      ...APPROVED_REMAINING_SPORT_CASES,
+
+    ];
+    const empty = { periodDays: 28, windowStartDayMs: 1, windowEndDayMs: 2, activityCount: 0,
+      durationSeconds: 0, easySeconds: 0, moderateSeconds: 0, hardSeconds: 0, contexts: [] };
+    const payload = JSON.parse(JSON.stringify({ dayBoundary: 'UTC', asOfDayMs: Date.UTC(2026, 6, 10),
+      currentWindowDays: 28, baselineWindowDays: 84, excludesMergedEvents: true,
+      disciplines: TRAINING_DISCIPLINES.map(discipline => {
+        const contexts = expected.filter(item => item.sport === discipline).map(item => ({
+          context: item.context, profile: item.profile, activityCount: 1,
+          metrics: item.metrics.map(metric => ({ metric, value: metric === 'ascent' ? 0 : 1_800, sourceActivityCount: 1 })),
+        }));
+        return { discipline, current28d: { ...empty, activityCount: contexts.length, durationSeconds: contexts.length * 1_800, contexts }, baseline28d: empty };
+      }),
+    }));
+    const normalized = resolveDashboardTrainingSummaryContext(payload);
+    expect(normalized?.disciplines).toEqual(payload.disciplines);
+    expect(normalized?.disciplines.flatMap(item => item.current28d.contexts)).toHaveLength(137);
+    const diving = payload.disciplines.find(item => item.discipline === 'diving').current28d.contexts[0];
+    diving.metrics.push({ metric: 'ascent', value: 0, sourceActivityCount: 1 });
+    expect(resolveDashboardTrainingSummaryContext(payload)).toBeNull();
+    diving.metrics.pop();
+    expect(resolveDashboardTrainingSummaryContext(payload)).not.toBeNull();
+    const dance = payload.disciplines.find(item => item.discipline === 'dance').current28d.contexts[0];
+    dance.metrics.push({ metric: 'distance', value: 1_000, sourceActivityCount: 1 });
+    expect(resolveDashboardTrainingSummaryContext(payload)).toBeNull();
+  });
+
   it('normalizes imported capacity markers without a QS-owned power model', () => {
     const context = resolveDashboardTrainingCapacityContext({
       dayBoundary: 'UTC',
@@ -333,6 +479,13 @@ describe('dashboard-derived-metrics.helper', () => {
           firstSeenAtMs: Date.UTC(2026, 0, 1), lastSeenAtMs: Date.UTC(2026, 6, 12), observationCount: 14,
           previousValue: null, previousAtMs: null, previousSourceKey: null, changePct: null,
         },
+        referenceVo2Max: {
+          kind: 'vo2-max', value: 57, context: 'running', method: 'lab-test',
+          observedAtMs: Date.UTC(2026, 6, 11), provenance: 'manual-health-measurement',
+          comparison: {
+            value: 55.9, observedAtMs: Date.UTC(2026, 6, 12), delta: 1.1, gapDays: 1,
+          },
+        },
       }, {
         discipline: 'cycling',
         ftpSetting: {
@@ -341,10 +494,12 @@ describe('dashboard-derived-metrics.helper', () => {
           previousValue: 215, previousAtMs: Date.UTC(2025, 9, 30), previousSourceKey: 'garmin', changePct: 3.26,
         },
         importedVo2Max: null,
+        referenceVo2Max: null,
       }],
     });
 
     expect(context?.disciplines[0].importedVo2Max?.value).toBe(55.9);
+    expect(context?.disciplines[0].referenceVo2Max).toMatchObject({ value: 57, method: 'lab-test' });
     expect(context?.disciplines[1].ftpSetting).toMatchObject({ value: 222, observationCount: 28 });
     expect(context?.disciplines[1]).not.toHaveProperty('modeledCriticalPower');
   });
@@ -354,6 +509,7 @@ describe('dashboard-derived-metrics.helper', () => {
       discipline,
       ftpSetting: null,
       importedVo2Max: null,
+      referenceVo2Max: null,
     });
 
     expect(resolveDashboardTrainingCapacityContext({
@@ -496,7 +652,7 @@ describe('dashboard-derived-metrics.helper', () => {
     };
     const context = resolveDashboardTrainingBuildComparisonContext(payload);
 
-    expect(context?.disciplines).toHaveLength(10);
+    expect(context?.disciplines).toHaveLength(25);
     expect(context?.disciplines[0].current?.trainingStressScore).toBeNull();
     expect(context?.disciplines[0].selection?.mode).toBe('event');
     expect(context?.disciplines[0].selection?.label).toBe('Spring marathon');

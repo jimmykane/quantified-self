@@ -1,0 +1,75 @@
+import { describe, expect, it } from 'vitest';
+import { GARMIN_WORKOUT_NOT_FOUND_ISSUE, type TrainingDeliveryStatusV1 } from '@shared/training-provider-delivery';
+import type { TrainingVerificationV1 } from '@shared/training-provider-verification';
+import { TRAINING_DELIVERY_STATUS_LABELS } from './training-delivery-display.helper';
+import { trainingVerificationCommandError, trainingVerificationLabel } from './training-verification-display.helper';
+
+describe('Training remote check labels', () => {
+  it('distinguishes a not-found observation from an ordinary inconclusive check without claiming definitive deletion', () => {
+    expect(trainingVerificationLabel({ provider: 'garmin', status: 'needs_attention', issues: [GARMIN_WORKOUT_NOT_FOUND_ISSUE] } as TrainingDeliveryStatusV1))
+      .toBe('Not found in Garmin · review required');
+  });
+  it('offers another check, not a nonexistent Cancel/Save review, after a revision conflict', () => {
+    expect(trainingVerificationCommandError({ code: 'functions/aborted' })).toContain('Check again');
+    expect(trainingVerificationCommandError({ code: 'aborted' })).not.toContain('Cancel');
+    expect(trainingVerificationCommandError(new Error('failure'))).toContain('Unable to check sync');
+  });
+  it.each(['failed', 'needs_attention', 'unsupported', 'outside_horizon'] as const)(
+    'does not hide %s behind an earlier check or restoration state', status => {
+      for (const state of ['present', 'unknown', 'restoring', 'deferred'] as const) {
+        expect(trainingVerificationLabel({ status } as TrainingDeliveryStatusV1, { state } as TrainingVerificationV1))
+          .toBe(TRAINING_DELIVERY_STATUS_LABELS[status]);
+      }
+    });
+  it.each([
+    [false, null, null, 'Not sent · Needs review'],
+    [true, 1000, 1000, 'Update needs review'],
+    [true, null, 1000, 'Update needs review'],
+    [false, 1000, 1000, 'Update needs review'],
+    [false, null, 1000, 'Needs review'],
+  ])('distinguishes initial review from updates and uncertain acceptance (%s, %s, %s)', (hasRemoteCopy, lastAcceptedAtMs, lastAttemptAtMs, label) => {
+    for (const state of ['present', 'restoring', 'unknown'] as const) {
+      expect(trainingVerificationLabel({ status: 'approval_required', hasRemoteCopy, lastAcceptedAtMs, lastAttemptAtMs } as TrainingDeliveryStatusV1,
+        { state } as TrainingVerificationV1)).toBe(label);
+    }
+  });
+  it('distinguishes the linked activity source, another sent copy and an unrelated past copy', () => {
+    const base = { workoutId: 'workout', status: 'past', hasRemoteCopy: true, differsFromQS: false,
+      lastAcceptedAtMs: 1000 } as TrainingDeliveryStatusV1;
+    expect(trainingVerificationLabel({ ...base, provider: 'suunto' }, undefined,
+      { workoutId: 'workout', provider: 'suunto' })).toBe('Completed · activity linked');
+    expect(trainingVerificationLabel({ ...base, provider: 'garmin' }, undefined,
+      { workoutId: 'workout', provider: 'suunto' })).toBe('Sent · workout completed');
+    expect(trainingVerificationLabel({ ...base, provider: 'garmin' })).toBe('Past workout · previously sent');
+    expect(trainingVerificationLabel({ ...base, provider: 'garmin', status: 'failed' }, undefined,
+      { workoutId: 'workout', provider: 'suunto' })).toBe(TRAINING_DELIVERY_STATUS_LABELS.failed);
+    expect(trainingVerificationLabel({ ...base, provider: 'garmin', status: 'delivered' },
+      { state: 'confirmed_missing' } as TrainingVerificationV1,
+      { workoutId: 'workout', provider: 'suunto' })).toBe('Missing from connected app');
+  });
+  it('keeps Suunto cloud-record evidence separate from app and watch visibility', () => {
+    const status = { provider: 'suunto', status: 'delivered', workoutId: 'workout', hasRemoteCopy: true,
+      differsFromQS: false, lastAcceptedAtMs: 1000 } as TrainingDeliveryStatusV1;
+    expect(trainingVerificationLabel(status)).toBe('Sent to Suunto · app and watch visibility cannot be checked');
+    expect(trainingVerificationLabel(status, { state: 'present' } as TrainingVerificationV1))
+      .toBe('Sent to Suunto · app and watch visibility cannot be checked');
+    expect(trainingVerificationLabel(status, { state: 'unknown' } as TrainingVerificationV1))
+      .toBe('Sent to Suunto · app and watch visibility cannot be checked');
+    expect(trainingVerificationLabel(status, { state: 'confirmed_missing', missing: true } as TrainingVerificationV1))
+      .toBe('Sent to Suunto · app and watch visibility cannot be checked');
+    for (const label of [
+      trainingVerificationLabel(status),
+      trainingVerificationLabel(status, { state: 'present' } as TrainingVerificationV1),
+    ]) expect(label).not.toMatch(/available in|found in (the )?app|watch receipt/i);
+  });
+  it.each([
+    ['pending', 'Waiting to send'],
+    ['needs_attention', 'Send could not be confirmed — inspect before retrying'],
+    ['failed', 'Send failed'],
+    ['removed', 'No active Suunto Guide delivery'],
+    ['completed', 'Completed workout · sent Guide retained'],
+    ['provider_unavailable', 'Suunto workout delivery is unavailable'],
+  ] as const)('uses truthful Suunto wording for %s', (state, label) => {
+    expect(trainingVerificationLabel({ provider: 'suunto', status: state } as TrainingDeliveryStatusV1)).toBe(label);
+  });
+});

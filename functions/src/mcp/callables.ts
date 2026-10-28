@@ -73,6 +73,7 @@ function toHttpsError(error: unknown): never {
 
 export const getMcpAuthorizationRequest = onCall({
   region: FUNCTIONS_MANIFEST.getMcpAuthorizationRequest.region,
+  memory: '512MiB',
 }, async (request) => {
   requireAuthenticatedRequest(request);
   try {
@@ -85,6 +86,7 @@ export const getMcpAuthorizationRequest = onCall({
 
 export const decideMcpAuthorization = onCall({
   region: FUNCTIONS_MANIFEST.decideMcpAuthorization.region,
+  memory: '512MiB',
 }, async (request) => {
   const uid = requireAuthenticatedRequest(request);
   try {
@@ -102,6 +104,7 @@ export const decideMcpAuthorization = onCall({
 
 export const listMcpConnections = onCall({
   region: FUNCTIONS_MANIFEST.listMcpConnections.region,
+  memory: '512MiB',
 }, async (request) => {
   const uid = requireAuthenticatedRequest(request);
   try {

@@ -2,6 +2,8 @@ import {
   DataAscent,
   DataDescent,
   DataDuration,
+  DataTrainingStressScore,
+  DataSwimDistance,
   type DataInterface,
   DaysOfTheWeek,
   DistanceUnits,
@@ -13,9 +15,11 @@ import {
   SpeedUnits,
   SpeedUnitsToGradeAdjustedSpeedUnits,
   SwimPaceUnits,
+  SwimDistanceUnits,
   type UserUnitSettingsInterface,
   VerticalSpeedUnits,
-} from '@sports-alliance/sports-lib';
+  WeightUnits,
+} from '@sports-alliance/sports-lib/metrics';
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
 
@@ -143,6 +147,7 @@ export function getDefaultUserUnitSettings(): UserUnitSettingsInterface {
     swimPaceUnits: [SwimPaceUnits.MinutesPer100Meter],
     verticalSpeedUnits: [VerticalSpeedUnits.MetersPerSecond],
     distanceUnits: DistanceUnits.Kilometers,
+    weightUnits: WeightUnits.Kilograms,
     startOfTheWeek: DaysOfTheWeek.Monday,
   };
 }
@@ -191,15 +196,59 @@ export function normalizeUserUnitSettings(raw: unknown): UserUnitSettingsInterfa
       rawSettings.distanceUnits,
       defaults.distanceUnits ?? DistanceUnits.Kilometers,
     ),
+    weightUnits: normalizeEnumValue(
+      rawSettings.weightUnits,
+      getValidEnumValues(WeightUnits),
+      WeightUnits.Kilograms,
+    ),
     startOfTheWeek,
   };
 }
 
-interface ResolveUnitAwareDisplayOptions {
+export interface ResolveUnitAwareDisplayOptions {
   preferredType?: string | null;
   stripRepeatedUnit?: boolean;
   compactAscentDescent?: boolean;
+  compactDuration?: boolean;
+  /** Preserve Sports Lib's fractional seconds for recorded length/split timing. */
+  durationMilliseconds?: boolean;
+  /** Keep the load editor's requested precision in the canonical Sports Lib formatter. */
+  trainingStressScoreDecimals?: 0 | 1;
   locale?: string | null;
+}
+
+/** Recorded swimming distance: the first swim-pace preference selects display units only. */
+export function createSwimDistanceDisplayStat(
+  meters: number,
+  unitSettings?: UserUnitSettingsInterface | null,
+  nominalDisplayMeters?: number | null,
+): DataSwimDistance {
+  const settings = normalizeUserUnitSettings(unitSettings);
+  const units = settings.swimPaceUnits[0] === SwimPaceUnits.MinutesPer100Yard
+    ? SwimDistanceUnits.Yards
+    : SwimDistanceUnits.Meters;
+  return units === SwimDistanceUnits.Yards && Number.isFinite(meters) && meters > 0
+    && typeof nominalDisplayMeters === 'number' && Number.isFinite(nominalDisplayMeters) && nominalDisplayMeters > 0
+    ? new NominalDisplaySwimDistance(meters, units, nominalDisplayMeters)
+    : new DataSwimDistance(meters, units);
+}
+
+/** Only the Sports Lib display delegate sees the corroborated nominal amount. */
+class NominalDisplaySwimDistance extends DataSwimDistance {
+  private readonly displayStat: DataSwimDistance;
+
+  constructor(meters: number, units: SwimDistanceUnits, nominalDisplayMeters: number) {
+    super(meters, units);
+    this.displayStat = new DataSwimDistance(nominalDisplayMeters, units);
+  }
+
+  override getDisplayValue(): string {
+    return this.displayStat.getDisplayValue();
+  }
+
+  override getDisplayUnit(): string {
+    return this.displayStat.getDisplayUnit();
+  }
 }
 
 function resolveAscentDescentDisplayValue(
@@ -244,9 +293,17 @@ export function resolveUnitAwareDisplayStat(
   const rawValue = typeof selectedStat.getValue === 'function' ? Number(selectedStat.getValue()) : null;
   const isDuration = selectedStat instanceof DataDuration;
   const ascentDescentDisplayValue = resolveAscentDescentDisplayValue(selectedStat, selectedType, options);
-  const displayValueRaw = isDuration && rawValue !== null && Number.isFinite(rawValue) && rawValue >= SECONDS_PER_DAY
-    ? selectedStat.getDisplayValue(true, false)
-    : ascentDescentDisplayValue ?? selectedStat.getDisplayValue?.();
+  const displayValueRaw = isDuration
+    ? options?.durationMilliseconds === true
+      ? selectedStat.getDisplayValue(false, true, true)
+      : rawValue !== null && Number.isFinite(rawValue) && rawValue >= SECONDS_PER_DAY
+      ? selectedStat.getDisplayValue(true, false)
+      : options?.compactDuration === true
+        ? selectedStat.getDisplayValue(false, false)
+        : selectedStat.getDisplayValue()
+    : selectedStat instanceof DataTrainingStressScore && options?.trainingStressScoreDecimals !== undefined
+      ? selectedStat.getDisplayValue(options.trainingStressScoreDecimals)
+      : ascentDescentDisplayValue ?? selectedStat.getDisplayValue?.();
   const displayUnitRaw = selectedStat.getDisplayUnit?.();
   const displayUnit = toDisplayText(displayUnitRaw).trim();
   const displayValue = options?.stripRepeatedUnit === true
@@ -280,7 +337,7 @@ export function resolveUnitAwareDisplayFromValue(
   try {
     const stat = DynamicDataLoader.getDataInstanceFromDataType(dataType, numericValue);
     return resolveUnitAwareDisplayStat(stat, unitSettings, options);
-  } catch (_error) {
+  } catch {
     return null;
   }
 }

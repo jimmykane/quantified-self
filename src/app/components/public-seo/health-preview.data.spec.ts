@@ -1,0 +1,109 @@
+import { describe, expect, it } from 'vitest';
+import { HEALTH_PROVIDERS, HEALTH_RECORDING_METHODS, HEALTH_VALUE_ORIGINS } from '@shared/health';
+import { MANUAL_HEALTH_AGGREGATION, MANUAL_POINT_SEMANTIC_VARIANT } from '@shared/manual-health';
+import { buildHealthNoteComparisonExample, buildHealthPreviewSeries, buildHealthPreviewSleepTrend, HEALTH_PREVIEW_END, HEALTH_PREVIEW_START, HEALTH_PREVIEW_NOTES } from './health-preview.data';
+import { buildNoteComparisonRows } from '../../helpers/timeline-note-comparison.helper';
+import { healthExampleValue } from '../../helpers/health-example-days.helper';
+import { validateTimelineFields } from '@shared/timeline-notes';
+import { addTimelineNotesToChart } from '../../helpers/timeline-notes-chart.helper';
+import { buildDashboardHealthExample } from '../../helpers/dashboard-health-preview.helper';
+import { resolveHealthWorkspaceWindow } from '../../helpers/health-workspace.helper';
+
+describe('public Health sample data', () => {
+  it('adapts the existing fictional trip and canonical readings through real comparison coverage gates', () => {
+    const example = buildHealthNoteComparisonExample();
+    expect(example.note).toBe(HEALTH_PREVIEW_NOTES[0]);
+    expect(example.window).toMatchObject({ days: 7, anchor: '2026-08-21', incomplete: false });
+    const rows = buildNoteComparisonRows(example.series, example.window, example.complete);
+    expect(rows).toHaveLength(3);
+    for (const row of rows) {
+      expect(row.status).toBe('comparable');
+      expect(row.beforeCount).toBe(7); expect(row.afterCount).toBe(7);
+      expect(row.difference).toBe(row.after! - row.before!);
+      expect(row.dailySeries!.points).toHaveLength(14);
+      expect(row.dailySeries!.points.some(point => point.calendarDate === example.window.anchor)).toBe(false);
+      for (const point of row.series!.points) {
+        const offset = Math.round((Date.parse('2026-08-31T12:00:00Z') - point.timestampMs) / 86_400_000);
+        expect(point.value).toBe(healthExampleValue(row.metricId, offset));
+      }
+    }
+    // Public samples cannot bypass the same minimum-days rule as the private comparison.
+    const sparse = example.series.map(series => ({ ...series, points: series.points.slice(0, 3) }));
+    expect(buildNoteComparisonRows(sparse, example.window, example.complete).every(row => row.difference === null)).toBe(true);
+  });
+  it('uses valid fictional notes within the visible window without changing HRV values', () => {
+    expect(HEALTH_PREVIEW_NOTES.map(note => note.category)).toEqual(['travel', 'stress', 'sickness']);
+    for (const note of HEALTH_PREVIEW_NOTES) {
+      expect(() => validateTimelineFields({ ...note })).not.toThrow();
+      expect(Date.parse(note.startDate)).toBeGreaterThanOrEqual(HEALTH_PREVIEW_START);
+      expect(note.endDate).not.toBeNull();
+      expect(Date.parse(note.endDate!)).toBeLessThanOrEqual(HEALTH_PREVIEW_END);
+    }
+    const series = { type: 'line' as const, data: buildHealthPreviewSeries('hrv').points
+      .filter(point => point.timestampMs >= HEALTH_PREVIEW_START).map(point => [point.timestampMs, Number(point.value)]) };
+    const originalData = structuredClone(series.data);
+    const result = addTimelineNotesToChart({ xAxis: { type: 'time', min: HEALTH_PREVIEW_START, max: HEALTH_PREVIEW_END }, series: [series] }, HEALTH_PREVIEW_NOTES);
+    expect(result.groups.size).toBe(3);
+    expect(result.option.series?.[0]).toBe(series);
+    expect(series.data).toEqual(originalData);
+  });
+  it('shows occasional weigh-ins with small fluctuations instead of an artificially perfect decline', () => {
+    const values = buildHealthPreviewSeries('weight').points.map(point => Number(point.value));
+    expect(values.length).toBeGreaterThan(3);
+    expect(values.length).toBeLessThan(14);
+    expect(values[0] - values.at(-1)!).toBeGreaterThan(0);
+    expect(values[0] - values.at(-1)!).toBeLessThan(0.5);
+    expect(values.some((value, index) => index > 0 && value > values[index - 1])).toBe(true);
+    for (let index = 1; index < values.length; index++) {
+      const change = values[index] - values[index - 1];
+      expect(Math.abs(change)).toBeLessThanOrEqual(0.3 + 1e-10);
+    }
+  });
+
+  it('keeps detailed samples consistent with the overview and accounts for every minute in bed', () => {
+    const settings = { metric: 'heart_rate_variability' as const, range: '30d' as const };
+    const overview = buildDashboardHealthExample(settings, resolveHealthWorkspaceWindow({ ...settings, endDate: '2026-08-31' }));
+    const sleepSettings = { metric: 'sleep' as const, range: '30d' as const };
+    const sleepOverview = buildDashboardHealthExample(sleepSettings, resolveHealthWorkspaceWindow({ ...sleepSettings, endDate: '2026-08-31' }));
+    for (const point of buildHealthPreviewSeries('hrv').points.filter(point => point.timestampMs >= HEALTH_PREVIEW_START)) {
+      expect(point.value).toBe(overview.selected!.model.series.points.find(reading => reading.calendarDate === point.calendarDate)?.value);
+    }
+    for (const night of buildHealthPreviewSleepTrend().points) {
+      const overviewNight = sleepOverview.sleep.points.find(point => point.sleepDate === night.sleepDate)!;
+      expect(night.startTimeMs).toBe(overviewNight.startTimeMs);
+      expect(night.endTimeMs).toBe(overviewNight.endTimeMs);
+      expect(night.deepSeconds + night.lightSeconds + night.remSeconds).toBe(night.totalSeconds);
+      expect(night.endTimeMs - night.startTimeMs).toBe((night.totalSeconds + night.awakeSeconds) * 1000);
+      expect(new Date(night.endTimeMs).getHours()).toBeGreaterThanOrEqual(6);
+      expect(new Date(night.endTimeMs).getHours()).toBeLessThanOrEqual(8);
+    }
+  });
+
+  it('uses the same nightly HRV readings in the sleep and personal-range previews', () => {
+    const hrv = buildHealthPreviewSeries('hrv');
+    const sleep = buildHealthPreviewSleepTrend();
+    for (const night of sleep.points) {
+      const reading = hrv.points.find(point => point.calendarDate === night.sleepDate);
+      expect(reading).toBeDefined();
+      expect(night.provider).toBe(hrv.provider);
+      expect(night.averageHrvMs).toBe(reading?.value);
+    }
+  });
+
+  it('retains baseline history outside the visible HRV window', () => {
+    const points = buildHealthPreviewSeries('hrv').points;
+    expect(points.filter(point => point.timestampMs < HEALTH_PREVIEW_START)).toHaveLength(60);
+    expect(points.filter(point => point.timestampMs >= HEALTH_PREVIEW_START && point.timestampMs <= HEALTH_PREVIEW_END)).toHaveLength(14);
+  });
+
+  it('uses the app manual-measurement contract for weight observations', () => {
+    expect(buildHealthPreviewSeries('weight')).toMatchObject({
+      provider: HEALTH_PROVIDERS.QuantifiedSelf,
+      origin: HEALTH_VALUE_ORIGINS.Recorded,
+      recordingMethod: HEALTH_RECORDING_METHODS.Manual,
+      aggregation: MANUAL_HEALTH_AGGREGATION,
+      semanticVariant: MANUAL_POINT_SEMANTIC_VARIANT,
+      nativeOnly: false,
+    });
+  });
+});

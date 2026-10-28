@@ -42,8 +42,13 @@
     <button mat-icon-button type="button"
       class="qs-action-menu-icon-button event-chart-actions__icon-button"
       [matMenuTriggerFor]="optionsMenu" [disabled]="!user"
-      aria-label="Chart options">
+      [attr.aria-busy]="isSavingDistinctLinePatterns || isSavingZoneColors || isSavingLineContinuity"
+      aria-label="Chart options" (menuOpened)="onOptionsMenuOpened()">
+      @if (isSavingDistinctLinePatterns || isSavingZoneColors || isSavingLineContinuity) {
+      <mat-progress-spinner diameter="24" mode="indeterminate" aria-label="Saving chart settings"></mat-progress-spinner>
+      } @else {
       <mat-icon>tune</mat-icon>
+      }
     </button>
   </span>
 </section>
@@ -96,6 +101,34 @@
 </mat-menu>
 
 <mat-menu #optionsMenu="matMenu" xPosition="before" class="qs-menu-panel qs-menu-panel-form qs-config-menu chart-options-menu">
+  <app-menu-radio-list label="Line continuity" [value]="lineContinuity.mode" [options]="lineContinuityOptions"
+    [disabled]="!user || !canChangeLineContinuity || isSavingLineContinuity"
+    (valueChange)="onLineContinuityModeChange($event)">
+  </app-menu-radio-list>
+  <section class="chart-options-menu__continuity" (click)="$event.stopPropagation()">
+    @if (lineContinuity.mode === 'custom') {
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Maximum gap (seconds)</mat-label>
+      <input matInput type="number" min="1" [max]="maxLineGapSeconds" step="1"
+        [value]="gapLimitDraft()" [disabled]="!user || !canChangeLineContinuity || isSavingLineContinuity"
+        [attr.aria-invalid]="gapLimitInvalid()" [aria-describedby]="gapLimitInvalid() ? gapLimitErrorID : ''"
+        (input)="onGapLimitInput($event)" (change)="onGapLimitCommit()"
+        (keydown)="onGapLimitKeydown($event)">
+    </mat-form-field>
+    @if (gapLimitInvalid()) {
+    <p [id]="gapLimitErrorID" role="alert">Enter a whole number from 1 to 86400 seconds.</p>
+    }
+    }
+    @if (lineContinuity.mode === 'continuous') {
+    <p>Connects available readings, including across missing data.</p>
+    } @else if (lineContinuity.mode === 'detect') {
+    <p>Estimates gaps from the recording cadence. Some missing readings can look like normal sampling.</p>
+    } @else {
+    <p>Breaks the line when readings are more than this many seconds apart.</p>
+    }
+    <p>Display only. Saved to your chart settings.</p>
+  </section>
+  <mat-divider></mat-divider>
   <app-menu-radio-list label="X Axis" [value]="xAxisType" [options]="xAxisOptions"
     [disabled]="!user || event?.isMultiSport()" (valueChange)="onXAxisTypeChange($event)">
   </app-menu-radio-list>
@@ -113,6 +146,44 @@
   </section>
 
   <mat-divider></mat-divider>
+
+  @if (showDistinctLinePatternsToggle) {
+  <section mat-menu-item [attr.aria-busy]="isSavingDistinctLinePatterns"
+    matTooltip="Saved to your chart settings. Applies to merged and benchmark charts." matTooltipPosition="above">
+    <div class="chart-options-menu__pattern-row">
+      <mat-slide-toggle [checked]="useDistinctLinePatterns"
+        [disabled]="!canChangeDistinctLinePatterns || isSavingDistinctLinePatterns"
+        [disabledInteractive]="isSavingDistinctLinePatterns"
+        (click)="$event.stopPropagation()" (change)="onDistinctLinePatternsChange($event)">
+        Distinct line patterns
+      </mat-slide-toggle>
+      <span class="chart-options-menu__pattern-status">
+        @if (isSavingDistinctLinePatterns) {
+        <mat-progress-spinner diameter="18" mode="indeterminate" aria-label="Saving line patterns"></mat-progress-spinner>
+        }
+      </span>
+    </div>
+  </section>
+  }
+
+  @if (showIntensityZoneColorsToggle) {
+  <section mat-menu-item [attr.aria-busy]="isSavingZoneColors"
+    matTooltip="Saved to your chart settings. Colors Heart Rate and Power by their recorded zones." matTooltipPosition="above">
+    <div class="chart-options-menu__pattern-row">
+      <mat-slide-toggle [checked]="colorIntensityZoneLines"
+        [disabled]="!user || !canChangeZoneColors || isSavingZoneColors"
+        [disabledInteractive]="isSavingZoneColors"
+        (click)="$event.stopPropagation()" (change)="onColorIntensityZoneLinesChange($event)">
+        Color by zones
+      </mat-slide-toggle>
+      <span class="chart-options-menu__pattern-status">
+        @if (isSavingZoneColors) {
+        <mat-progress-spinner diameter="18" mode="indeterminate" aria-label="Saving zone colors"></mat-progress-spinner>
+        }
+      </span>
+    </div>
+  </section>
+  }
 
   <section mat-menu-item>
     <mat-slide-toggle [checked]="showLaps" [disabled]="!user"

@@ -1,4 +1,6 @@
+import { hasCurrentIntensityPolicy } from '../../../shared/intensity-zones';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { enforceAppCheck } from '../utils';
@@ -10,12 +12,16 @@ import {
     DERIVED_METRICS_COORDINATOR_DOC_ID,
     CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS,
     getDerivedMetricDocId,
+    hasMatchingDerivedFormSourceEventCount,
     normalizeDerivedMetricKinds,
+    normalizeDerivedMetricKindsStrict,
+    resolveDerivedFormMetricPayload,
     type EnsureDerivedMetricsRequest,
     type EnsureDerivedMetricsResponse,
     type DerivedMetricKind,
 } from '../../../shared/derived-metrics';
 import { normalizeDerivedTrainingReadinessMetricPayload } from '../../../shared/training-readiness-metric';
+import { isMcpTrainingMetricPayloadReadable } from '../mcp/data.service';
 import { markDerivedMetricsDirtyAndMaybeQueue } from './derived-metrics.service';
 
 const DERIVED_METRICS_STUCK_QUEUED_THRESHOLD_MS = 10 * 60 * 1000;
@@ -196,7 +202,7 @@ export function decideDerivedMetricsFreshness(input: DerivedMetricsFreshnessInpu
             hardStaleKinds.push(metricKind);
             continue;
         }
-        if (!Number.isFinite(snapshot.schemaVersion) || (snapshot.schemaVersion as number) < DERIVED_METRIC_SCHEMA_VERSION) {
+        if (snapshot.schemaVersion !== DERIVED_METRIC_SCHEMA_VERSION) {
             hardStaleKinds.push(metricKind);
             continue;
         }
@@ -243,8 +249,7 @@ export function decideDerivedMetricsFreshness(input: DerivedMetricsFreshnessInpu
         );
         const hasSchemaVersionMismatch = hardStaleKinds.some((kind) => {
             const snapshot = input.metricSnapshotsByKind[kind];
-            return !Number.isFinite(snapshot?.schemaVersion)
-                || (snapshot?.schemaVersion as number) < DERIVED_METRIC_SCHEMA_VERSION;
+            return snapshot?.schemaVersion !== DERIVED_METRIC_SCHEMA_VERSION;
         });
         const hasMissingSnapshotMutationVersion = hardStaleKinds.some(
             kind => !Number.isFinite(input.metricSnapshotsByKind[kind]?.builtFromEventMutationVersion),
@@ -288,55 +293,29 @@ export function decideDerivedMetricsFreshness(input: DerivedMetricsFreshnessInpu
     return { shouldQueue: false, metricKindsToQueue: [], reason: 'fresh' };
 }
 
-export const ensureDerivedMetrics = onCall({
-    region: FUNCTIONS_MANIFEST.ensureDerivedMetrics.region,
-    cors: true,
-    timeoutSeconds: 120,
-    memory: '512MiB',
-    maxInstances: 100,
-}, async (request): Promise<EnsureDerivedMetricsResponse> => {
-    if (!request.auth?.uid) {
-        throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
-    }
+export interface DerivedMetricsProbe {
+    input: DerivedMetricsFreshnessInput;
+    generation: number | null;
+    scheduledMetricKinds: DerivedMetricKind[];
+}
 
-    enforceAppCheck(request);
-
-    const uid = request.auth.uid;
-    const payload = (request.data || {}) as EnsureDerivedMetricsRequest;
-    const metricKinds = normalizeDerivedMetricKinds(payload.metricKinds);
-    const coordinatorRef = admin
-        .firestore()
-        .doc(`users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${DERIVED_METRICS_COORDINATOR_DOC_ID}`);
-    const metricSnapshotRefs = metricKinds.map((metricKind) => admin
-        .firestore()
-        .doc(`users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${getDerivedMetricDocId(metricKind)}`));
-    const eventsCollectionRef = admin
-        .firestore()
-        .collection('users')
-        .doc(uid)
-        .collection('events');
-    const [
-        coordinatorSnapshot,
-        metricSnapshots,
-        latestEventSnapshot,
-    ] = await Promise.all([
+async function readDerivedMetricsProbe(uid: string, metricKinds: DerivedMetricKind[]): Promise<DerivedMetricsProbe> {
+    const coordinatorRef = admin.firestore().doc(
+        `users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${DERIVED_METRICS_COORDINATOR_DOC_ID}`,
+    );
+    const metricSnapshotRefs = metricKinds.map(metricKind => admin.firestore().doc(
+        `users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${getDerivedMetricDocId(metricKind)}`,
+    ));
+    const eventsCollectionRef = admin.firestore().collection('users').doc(uid).collection('events');
+    const [coordinatorSnapshot, metricSnapshots, latestEventSnapshot] = await Promise.all([
         coordinatorRef.get(),
-        Promise.all(metricSnapshotRefs.map((snapshotRef) => snapshotRef.get())),
+        Promise.all(metricSnapshotRefs.map(snapshotRef => snapshotRef.get())),
         eventsCollectionRef.orderBy('startDate', 'desc').limit(1).select('startDate').get(),
     ]);
-
     const coordinatorData = coordinatorSnapshot.data() || {};
-    const coordinatorStatus = parseCoordinatorStatus(coordinatorData.status);
-    const coordinatorCompletedAtMs = toFiniteNumber(coordinatorData.completedAtMs);
-    const coordinatorRequestedAtMs = toFiniteNumber(coordinatorData.requestedAtMs);
-    const coordinatorStartedAtMs = toFiniteNumber(coordinatorData.startedAtMs);
-    const coordinatorUpdatedAtMs = toFiniteNumber(coordinatorData.updatedAtMs);
-    const coordinatorGeneration = toFiniteNumber(coordinatorData.generation);
-    const coordinatorEventMutationVersion = toFiniteNumber(coordinatorData.eventMutationVersion);
-
     const metricSnapshotsByKind = metricKinds.reduce((result, metricKind, index) => {
         const snapshotData = (metricSnapshots[index]?.data() || {}) as Record<string, unknown>;
-        const payload = (snapshotData?.payload && typeof snapshotData.payload === 'object')
+        const payload = snapshotData.payload && typeof snapshotData.payload === 'object'
             ? snapshotData.payload as Record<string, unknown>
             : {};
         result[metricKind] = {
@@ -344,53 +323,183 @@ export const ensureDerivedMetrics = onCall({
             schemaVersion: toFiniteNumber(snapshotData.schemaVersion),
             builtFromEventMutationVersion: toFiniteNumber(snapshotData.builtFromEventMutationVersion),
             asOfDayMs: toFiniteNumber(payload.asOfDayMs),
-            payloadValid: resolveDerivedMetricSnapshotPayloadValidity(metricKind, snapshotData.payload),
+            payloadValid: isDerivedMetricSnapshotReadableByMcp(
+                metricKind,
+                snapshotData.payload,
+                snapshotData.sourceEventCount,
+                snapshotData.legacyPowerSystemsPolicy1,
+            ),
         };
         return result;
-    }, {} as Record<DerivedMetricKind, {
-        status: string | null;
-        schemaVersion: number | null;
-        builtFromEventMutationVersion: number | null;
-        asOfDayMs: number | null;
-        payloadValid: boolean;
-    }>);
-    const latestEventDoc = latestEventSnapshot.docs[0];
-    const latestEventUpdatedAtMs = toMillis(latestEventDoc?.updateTime);
-    const freshnessDecision = decideDerivedMetricsFreshness({
-        metricKinds,
-        nowMs: Date.now(),
-        coordinatorStatus,
-        coordinatorCompletedAtMs,
-        coordinatorRequestedAtMs,
-        coordinatorStartedAtMs,
-        coordinatorUpdatedAtMs,
-        coordinatorEventMutationVersion,
-        metricSnapshotsByKind,
-        latestEventUpdatedAtMs,
-    });
-    if (!freshnessDecision.shouldQueue) {
+    }, {} as DerivedMetricsFreshnessInput['metricSnapshotsByKind']);
+    return {
+        generation: toFiniteNumber(coordinatorData.generation),
+        scheduledMetricKinds: normalizeDerivedMetricKindsStrict([
+            ...(Array.isArray(coordinatorData.dirtyMetricKinds) ? coordinatorData.dirtyMetricKinds : []),
+            ...(Array.isArray(coordinatorData.processingMetricKinds) ? coordinatorData.processingMetricKinds : []),
+        ]),
+        input: {
+            metricKinds,
+            nowMs: Date.now(),
+            coordinatorStatus: parseCoordinatorStatus(coordinatorData.status),
+            coordinatorCompletedAtMs: toFiniteNumber(coordinatorData.completedAtMs),
+            coordinatorRequestedAtMs: toFiniteNumber(coordinatorData.requestedAtMs),
+            coordinatorStartedAtMs: toFiniteNumber(coordinatorData.startedAtMs),
+            coordinatorUpdatedAtMs: toFiniteNumber(coordinatorData.updatedAtMs),
+            coordinatorEventMutationVersion: toFiniteNumber(coordinatorData.eventMutationVersion),
+            metricSnapshotsByKind,
+            latestEventUpdatedAtMs: toMillis(latestEventSnapshot.docs[0]?.updateTime),
+        },
+    };
+}
+
+export function resolveDerivedMetricKindsToQueue(probe: DerivedMetricsProbe): DerivedMetricKind[] {
+    const decision = decideDerivedMetricsFreshness(probe.input);
+    if (decision.shouldQueue) {
+        return decision.metricKindsToQueue.length ? decision.metricKindsToQueue : [...probe.input.metricKinds];
+    }
+    if (probe.input.coordinatorStatus !== 'queued' && probe.input.coordinatorStatus !== 'processing') {
+        return [];
+    }
+    const scheduled = new Set(probe.scheduledMetricKinds);
+    return probe.input.metricKinds.filter(metricKind => !scheduled.has(metricKind)
+        && decideDerivedMetricsFreshness({
+            ...probe.input,
+            coordinatorStatus: 'idle',
+            metricKinds: [metricKind],
+        }).shouldQueue);
+}
+
+export async function ensureDerivedMetricsForUser(
+    uid: string,
+    metricKinds: DerivedMetricKind[],
+): Promise<EnsureDerivedMetricsResponse> {
+    const probe = await readDerivedMetricsProbe(uid, metricKinds);
+    const metricKindsToQueue = resolveDerivedMetricKindsToQueue(probe);
+    if (!metricKindsToQueue.length) {
         return {
             accepted: true,
             queued: false,
-            generation: Number.isFinite(coordinatorGeneration) ? Math.max(0, Math.floor(coordinatorGeneration as number)) : null,
+            generation: Number.isFinite(probe.generation)
+                ? Math.max(0, Math.floor(probe.generation as number)) : null,
             metricKinds,
         };
     }
-
     return markDerivedMetricsDirtyAndMaybeQueue(
         uid,
-        freshnessDecision.metricKindsToQueue.length
-            ? freshnessDecision.metricKindsToQueue
-            : metricKinds,
+        metricKindsToQueue,
+        { background: true },
     );
+}
+
+export interface PrepareDerivedMetricsResult {
+    status: 'ready' | 'preparing' | 'unavailable';
+    metricKinds: DerivedMetricKind[];
+    readyMetricKinds: DerivedMetricKind[];
+    retryAfterSeconds: number | null;
+}
+
+export function resolveReadyDerivedMetricKinds(input: DerivedMetricsFreshnessInput): DerivedMetricKind[] {
+    return input.metricKinds.filter(metricKind =>
+        !decideDerivedMetricsFreshness({ ...input, metricKinds: [metricKind] }).shouldQueue
+        && input.coordinatorStatus === 'idle'
+        && input.metricSnapshotsByKind[metricKind]?.status === 'ready',
+    );
+}
+
+export async function prepareDerivedMetricsForUser(
+    uid: string,
+    metricKinds: DerivedMetricKind[],
+    waitMs = 5_000,
+    dependencies: {
+        ensure: typeof ensureDerivedMetricsForUser;
+        readProbe: typeof readDerivedMetricsProbe;
+        now: () => number;
+        sleep: (ms: number) => Promise<void>;
+    } = {
+        ensure: ensureDerivedMetricsForUser,
+        readProbe: readDerivedMetricsProbe,
+        now: Date.now,
+        sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
+    },
+): Promise<PrepareDerivedMetricsResult> {
+    const initial = await dependencies.ensure(uid, metricKinds);
+    if (!initial.accepted) {
+        return { status: 'unavailable', metricKinds, readyMetricKinds: [], retryAfterSeconds: null };
+    }
+    const deadline = dependencies.now() + Math.max(0, Math.min(waitMs, 5_000));
+    while (true) {
+        const probe = await dependencies.readProbe(uid, metricKinds);
+        const readyMetricKinds = resolveReadyDerivedMetricKinds(probe.input);
+        if (readyMetricKinds.length === metricKinds.length) {
+            return { status: 'ready', metricKinds, readyMetricKinds, retryAfterSeconds: null };
+        }
+        if (probe.input.coordinatorStatus === 'failed') {
+            return { status: 'unavailable', metricKinds, readyMetricKinds, retryAfterSeconds: null };
+        }
+        if (dependencies.now() >= deadline) {
+            return { status: 'preparing', metricKinds, readyMetricKinds, retryAfterSeconds: 5 };
+        }
+        await dependencies.sleep(Math.min(1_000, Math.max(0, deadline - dependencies.now())));
+    }
+}
+
+export const ensureDerivedMetrics = onCall({
+    region: FUNCTIONS_MANIFEST.ensureDerivedMetrics.region,
+    cors: true,
+    timeoutSeconds: 120,
+    memory: '512MiB',
+    maxInstances: 100,
+}, async (request): Promise<EnsureDerivedMetricsResponse> => {
+    let stage: 'authentication' | 'app_check' | 'metric_selection' | 'freshness_check' = 'authentication';
+    try {
+        if (!request.auth?.uid) {
+            throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
+        }
+
+        stage = 'app_check';
+        enforceAppCheck(request);
+
+        stage = 'metric_selection';
+        const uid = request.auth.uid;
+        const payload = (request.data || {}) as EnsureDerivedMetricsRequest;
+        const metricKinds = normalizeDerivedMetricKinds(payload.metricKinds);
+        stage = 'freshness_check';
+        return await ensureDerivedMetricsForUser(uid, metricKinds);
+    } catch (error) {
+        // Firebase logs unexpected errors itself, but sends HttpsError responses silently.
+        // Use fixed labels only; the SDK supplies execution/trace correlation automatically.
+        if (error instanceof HttpsError) {
+            try {
+                logger.warn('[derived-metrics] ensureDerivedMetrics request rejected.', {
+                    stage,
+                    errorCode: error.code,
+                    reason: stage === 'authentication' ? 'authentication_required'
+                        : stage === 'app_check' ? 'app_check_unverified' : 'request_rejected',
+                });
+            } catch {
+                // Diagnostics must never change the original rejection or security decision.
+            }
+        }
+        throw error;
+    }
 });
 
 export function resolveDerivedMetricSnapshotPayloadValidity(
     metricKind: DerivedMetricKind,
     payload: unknown,
+    sourceEventCount?: unknown,
 ): boolean {
+    if (!hasCurrentIntensityPolicy(metricKind, payload) || payload === null || payload === undefined) {
+        return false;
+    }
     if (metricKind === DERIVED_METRIC_KINDS.TrainingDurability) {
         return hasTrainingDurabilitySupportingEventStartTimes(payload);
+    }
+    if (metricKind === DERIVED_METRIC_KINDS.Form) {
+        return sourceEventCount === undefined
+            ? resolveDerivedFormMetricPayload(payload) !== null
+            : hasMatchingDerivedFormSourceEventCount(payload, sourceEventCount);
     }
     if (metricKind === DERIVED_METRIC_KINDS.TrainingReadiness) {
         return normalizeDerivedTrainingReadinessMetricPayload(payload) !== null;
@@ -402,6 +511,16 @@ export function resolveDerivedMetricSnapshotPayloadValidity(
         return source?.recoveryVersion === DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION;
     }
     return true;
+}
+
+export function isDerivedMetricSnapshotReadableByMcp(
+    metricKind: DerivedMetricKind,
+    payload: unknown,
+    sourceEventCount?: unknown,
+    legacyPowerSystemsPolicy1?: unknown,
+): boolean {
+    return resolveDerivedMetricSnapshotPayloadValidity(metricKind, payload, sourceEventCount)
+        && isMcpTrainingMetricPayloadReadable(metricKind, payload, legacyPowerSystemsPolicy1);
 }
 
 function hasTrainingDurabilitySupportingEventStartTimes(payload: unknown): boolean {

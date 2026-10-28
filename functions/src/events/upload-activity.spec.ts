@@ -4,6 +4,10 @@ import { gzipSync } from 'node:zlib';
 import type { Response } from 'express';
 import type { Request } from 'firebase-functions/v2/https';
 import { USAGE_LIMITS } from '../../../shared/limits';
+import * as logger from 'firebase-functions/logger';
+import { ACTIVITY_IDENTITY_CONFLICT_MESSAGE, ActivityIdentityConflictError } from '../shared/activity-identity-conflict';
+
+vi.mock('firebase-functions/logger', () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
 
 const hoisted = vi.hoisted(() => {
   const capturedOnRequestOptions = { value: undefined as unknown };
@@ -47,6 +51,8 @@ const hoisted = vi.hoisted(() => {
   const mockServerTimestamp = vi.fn(() => 'SERVER_TIMESTAMP');
   const mockSportsLibVersionToCode = vi.fn(() => 9001004);
   const mockGunzipSync = vi.fn();
+  const mockUploadDebugFile = vi.fn();
+  const mockPrepareTrainingLoad = vi.fn();
 
   return {
     capturedOnRequestOptions,
@@ -77,6 +83,8 @@ const hoisted = vi.hoisted(() => {
     mockServerTimestamp,
     mockSportsLibVersionToCode,
     mockGunzipSync,
+    mockUploadDebugFile,
+    mockPrepareTrainingLoad,
   };
 });
 
@@ -160,6 +168,15 @@ vi.mock('../utils', () => ({
   setEventDocumentIfUserActive: (...args: unknown[]) => hoisted.mockSetEventDocumentIfUserActive(...args),
 }));
 
+vi.mock('../debug-utils', () => ({
+  uploadDebugFile: hoisted.mockUploadDebugFile,
+}));
+
+vi.mock('../shared/import-preservation', async importOriginal => ({
+  ...await importOriginal<typeof import('../shared/import-preservation')>(),
+  prepareImportedEventWrite: hoisted.mockPrepareTrainingLoad,
+}));
+
 vi.mock('../shared/event-writer', () => ({
   EventWriter: vi.fn((firestoreAdapter: unknown, storageAdapter: unknown) => {
     hoisted.capturedFirestoreAdapter.value = firestoreAdapter;
@@ -175,7 +192,8 @@ vi.mock('../shared/id-generator', () => ({
   generateActivityID: (...args: unknown[]) => hoisted.mockGenerateActivityID(...args),
 }));
 
-vi.mock('@sports-alliance/sports-lib', () => ({
+vi.mock('@sports-alliance/sports-lib', async importOriginal => ({
+  ...await importOriginal<typeof import('@sports-alliance/sports-lib')>(),
   EventImporterFIT: hoisted.mockFITImporter,
   EventImporterGPX: hoisted.mockGPXImporter,
   EventImporterTCX: hoisted.mockTCXImporter,
@@ -292,6 +310,8 @@ describe('uploadActivity', () => {
     hoisted.mockAssertEventWriteUserActive.mockResolvedValue(undefined);
     hoisted.mockSetEventDocumentIfUserActive.mockResolvedValue(undefined);
     hoisted.mockEnforceAppCheckFlag.value = true;
+    hoisted.mockUploadDebugFile.mockReset().mockResolvedValue(undefined);
+    hoisted.mockPrepareTrainingLoad.mockReset().mockResolvedValue(Object.assign(vi.fn(), { sourceWriteId: 'attempt' }));
 
     hoisted.mockFITImporter.getFromArrayBuffer.mockResolvedValue(makeParsedEvent());
     hoisted.mockGPXImporter.getFromString.mockResolvedValue(makeParsedEvent());
@@ -353,6 +373,17 @@ describe('uploadActivity', () => {
     expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
     expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
     expect(hoisted.mockSetEventDocumentIfUserActive).not.toHaveBeenCalled();
+  });
+
+  it('returns a review conflict instead of a server failure when saved activity identities cannot be matched', async () => {
+    hoisted.mockWriteAllEventData.mockRejectedValueOnce(new ActivityIdentityConflictError());
+    const response = makeResponse();
+    await invokeUploadActivity(makeRequest({ headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' } }), response);
+    expect(response.status).toHaveBeenCalledExactlyOnceWith(409);
+    expect(response.json).toHaveBeenCalledExactlyOnceWith({ error: ACTIVITY_IDENTITY_CONFLICT_MESSAGE, code: 'ACTIVITY_IDENTITY_CONFLICT' });
+    expect(hoisted.mockSetEventDocumentIfUserActive).not.toHaveBeenCalled();
+    expect(hoisted.mockDocSet).not.toHaveBeenCalled();
+    expect(logger.error).not.toHaveBeenCalled();
   });
 
   it('returns a deletion conflict when deletion starts during event persistence', async () => {
@@ -422,6 +453,7 @@ describe('uploadActivity', () => {
     }), response);
 
     expect(response.status).toHaveBeenCalledWith(401);
+    expect(hoisted.mockUploadDebugFile).not.toHaveBeenCalled();
   });
 
   it('should reject empty bearer token', async () => {
@@ -520,6 +552,7 @@ describe('uploadActivity', () => {
 
     expect(response.status).toHaveBeenCalledWith(401);
     expect(response.json).toHaveBeenCalledWith({ error: 'Invalid App Check token.' });
+    expect(hoisted.mockUploadDebugFile).not.toHaveBeenCalled();
   });
 
   it('should allow missing app check header when enforcement is disabled', async () => {
@@ -618,6 +651,8 @@ describe('uploadActivity', () => {
         processedAt: expect.anything(),
       }),
       { merge: true },
+      undefined,
+      expect.any(Function),
     );
     expect(hoisted.mockWriteAllEventData).toHaveBeenCalledWith(
       'user-1',
@@ -716,6 +751,7 @@ describe('uploadActivity', () => {
     }), response);
 
     expect(response.status).toHaveBeenCalledWith(429);
+    expect(hoisted.mockUploadDebugFile).not.toHaveBeenCalled();
     expect(hoisted.mockDocGet).toHaveBeenCalledTimes(1);
     expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
   });
@@ -787,6 +823,7 @@ describe('uploadActivity', () => {
     }), response);
 
     expect(response.status).toHaveBeenCalledWith(200);
+    expect(hoisted.mockUploadDebugFile).not.toHaveBeenCalled();
     expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
       uploadLimit: null,
       uploadCountAfterWrite: 251,
@@ -817,12 +854,172 @@ describe('uploadActivity', () => {
 
   it('should map FIT parser failures to 400', async () => {
     hoisted.mockFITImporter.getFromArrayBuffer.mockRejectedValueOnce(new Error('bad fit'));
+    const rawBody = Buffer.alloc(18);
+    rawBody.writeUInt8(12, 0);
+    rawBody.writeUInt32LE(4, 4);
+    rawBody.write('.FIT', 8);
     const response = makeResponse();
+    await invokeUploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-Original-Filename': 'Private-place-name.fit',
+      },
+      rawBody,
+    }), response);
+
+    expect(response.status).toHaveBeenCalledWith(400);
+    expect(logger.warn).toHaveBeenCalledWith('[uploadActivity] Activity parsing failed', expect.objectContaining({
+      format: 'fit', payloadBytes: rawBody.length, sportsLibVersion: expect.any(String),
+      errorMessage: 'Unclassified parser error; message withheld.',
+      userID: 'user-1',
+      payloadSha256: createHash('sha256').update(rawBody).digest('hex'),
+      fitEnvelopeReason: 'valid',
+    }));
+    expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain('Private-place-name');
+    expect(hoisted.mockUploadDebugFile).toHaveBeenCalledExactlyOnceWith(
+      rawBody, 'fit', createHash('sha256').update(rawBody).digest('hex'), 'manualUpload', 'user-1',
+    );
+    expect(hoisted.mockAssertEventWriteUserActive).toHaveBeenCalledWith('user-1', 'activity_upload_debug_file');
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+  });
+
+  it.each(['fit', 'fit.gz'])('retains original gzip bytes with the parser digest when the declared extension is %s', async extension => {
+    const payload = Buffer.from('synthetic sessionless FIT');
+    const rawBody = gzipSync(payload);
+    hoisted.mockVerifyIdToken.mockResolvedValueOnce({ uid: 'verified-user' });
+    hoisted.mockFITImporter.getFromArrayBuffer.mockRejectedValueOnce(
+      Object.assign(new Error('No activities found'), { code: 'EVENT_EMPTY_ERROR' }),
+    );
+    const response = makeResponse();
+
+    await invokeUploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': extension, 'X-Original-Filename': '../../Private-place-name.fit.gz',
+        'X-User-Id': 'spoofed-user',
+      },
+      rawBody,
+    }), response);
+
+    expect(response.status).toHaveBeenCalledWith(400);
+    expect(response.json).toHaveBeenCalledWith({ error: 'Could not parse uploaded payload.' });
+    expect(hoisted.mockUploadDebugFile).toHaveBeenCalledExactlyOnceWith(
+      rawBody, 'fit.gz', createHash('sha256').update(payload).digest('hex'), 'manualUpload', 'verified-user',
+    );
+    expect(arrayBufferToBuffer(hoisted.mockFITImporter.getFromArrayBuffer.mock.calls[0][0])).toEqual(payload);
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+    expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain('Private-place-name');
+  });
+
+  it('keeps the parser HTTP 400 when debug capture rejects without logging the raw storage error', async () => {
+    hoisted.mockFITImporter.getFromArrayBuffer.mockRejectedValueOnce(new Error('bad fit'));
+    hoisted.mockUploadDebugFile.mockRejectedValueOnce(new Error('Private storage details'));
+    const response = makeResponse();
+
     await invokeUploadActivity(makeRequest({
       headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
     }), response);
 
     expect(response.status).toHaveBeenCalledWith(400);
+    expect(response.json).toHaveBeenCalledWith({ error: 'Could not parse uploaded payload.' });
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[uploadActivity] Could not retain rejected upload for debugging',
+      expect.objectContaining({ userID: 'user-1', payloadSha256: expect.any(String) }),
+    );
+    expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain('Private storage details');
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+  });
+
+  it.each(['deleted', 'guard unavailable'])('skips debug capture if the account becomes %s during parsing', async reason => {
+    hoisted.mockFITImporter.getFromArrayBuffer.mockRejectedValueOnce(new Error('bad fit'));
+    hoisted.mockAssertEventWriteUserActive.mockResolvedValueOnce(undefined).mockRejectedValueOnce(
+      reason === 'deleted'
+        ? new hoisted.MockEventWriteSkippedForDeletedUserError('user-1', 'activity_upload_debug_file')
+        : new Error('guard read failed'),
+    );
+    const response = makeResponse();
+
+    await invokeUploadActivity(makeRequest({
+      headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
+    }), response);
+
+    expect(response.status).toHaveBeenCalledWith(400);
+    expect(response.json).toHaveBeenCalledWith({ error: 'Could not parse uploaded payload.' });
+    expect(hoisted.mockUploadDebugFile).not.toHaveBeenCalled();
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+  });
+
+  it('should fingerprint the same rejected FIT bytes across account IDs', async () => {
+    const rawBody = Buffer.from([0x01, 0x02, 0x03]);
+    hoisted.mockVerifyIdToken
+      .mockResolvedValueOnce({ uid: 'old-user' })
+      .mockResolvedValueOnce({ uid: 'new-user' });
+    hoisted.mockFITImporter.getFromArrayBuffer
+      .mockRejectedValueOnce(new Error('bad fit'))
+      .mockRejectedValueOnce(new Error('bad fit'));
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const response = makeResponse();
+      await invokeUploadActivity(makeRequest({
+        headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
+        rawBody,
+      }), response);
+      expect(response.status).toHaveBeenCalledWith(400);
+    }
+
+    const warnings = vi.mocked(logger.warn).mock.calls.map(([, details]) => details as {
+      userID: string;
+      payloadSha256: string;
+    });
+    expect(warnings.map(({ userID }) => userID)).toEqual(['old-user', 'new-user']);
+    expect(warnings.map(({ payloadSha256 }) => payloadSha256)).toEqual([
+      createHash('sha256').update(rawBody).digest('hex'),
+      createHash('sha256').update(rawBody).digest('hex'),
+    ]);
+    expect(hoisted.mockUploadDebugFile).toHaveBeenNthCalledWith(
+      1, rawBody, 'fit', createHash('sha256').update(rawBody).digest('hex'), 'manualUpload', 'old-user',
+    );
+    expect(hoisted.mockUploadDebugFile).toHaveBeenNthCalledWith(
+      2, rawBody, 'fit', createHash('sha256').update(rawBody).digest('hex'), 'manualUpload', 'new-user',
+    );
+  });
+
+  it('logs both failed JSON attempts in one warning while retaining the 400 response', async () => {
+    const primary = new TypeError("Cannot read properties of undefined (reading 'Device')");
+    primary.stack = 'TypeError\n at parse (/private/node_modules/@sports-alliance/sports-lib/lib/cjs/events/adapters/importers/suunto/importer.suunto.json.js:129:134)';
+    const fallback = new TypeError("Cannot read properties of undefined (reading 'filter')");
+    fallback.stack = 'TypeError\n at parse (/private/node_modules/@sports-alliance/sports-lib/lib/cjs/events/adapters/importers/suunto/importer.suunto.sml.js:81:36)';
+    hoisted.mockSuuntoJSONImporter.getFromJSONString.mockRejectedValueOnce(primary);
+    hoisted.mockSuuntoSMLImporter.getFromJSONString.mockRejectedValueOnce(fallback);
+    const rawBody = Buffer.from('{"name":"Private-place-name"}');
+    const response = makeResponse();
+    await invokeUploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': 'json', 'X-Original-Filename': 'Private-place-name.json',
+      },
+      rawBody,
+    }), response);
+
+    expect(response.status).toHaveBeenCalledWith(400);
+    expect(response.json).toHaveBeenCalledWith({ error: 'Could not parse uploaded payload.' });
+    expect(logger.warn).toHaveBeenCalledExactlyOnceWith('[uploadActivity] Activity parsing failed', expect.objectContaining({
+      userID: 'user-1', format: 'json', payloadBytes: rawBody.length,
+      payloadSha256: createHash('sha256').update(rawBody).digest('hex'),
+      jsonParserAttempts: [
+        expect.objectContaining({ parser: 'suunto_json', stage: 'primary', reason: 'missing_device_log', errorMessageFingerprint: expect.any(String) }),
+        expect.objectContaining({ parser: 'suunto_sml_json', stage: 'fallback', reason: 'missing_top_level_samples', errorMessageFingerprint: expect.any(String) }),
+      ],
+    }));
+    expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain('Private-place-name');
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(hoisted.mockUploadDebugFile).toHaveBeenCalledExactlyOnceWith(
+      rawBody, 'json', createHash('sha256').update(rawBody).digest('hex'), 'manualUpload', 'user-1',
+    );
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+    expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
   });
 
   it('should reject route-only GPX files before writing event data', async () => {
@@ -841,10 +1038,17 @@ describe('uploadActivity', () => {
     }), response);
 
     expect(response.status).toHaveBeenCalledWith(400);
-    expect(response.json).toHaveBeenCalledWith({ error: ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE });
+    expect(response.json).toHaveBeenCalledWith({ error: ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE, code: 'route_file_in_activity_upload' });
+    expect(logger.warn).toHaveBeenCalledWith('[uploadActivity] Rejected route/course file submitted to activity upload', expect.objectContaining({
+      userID: 'user-1',
+      payloadSha256: createHash('sha256').update('<gpx><rte></rte></gpx>').digest('hex'),
+      resolvedExtension: 'gpx',
+      reason: 'route_only',
+    }));
     expect(hoisted.mockGenerateActivityID).not.toHaveBeenCalled();
     expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
     expect(hoisted.mockDocSet).not.toHaveBeenCalled();
+    expect(hoisted.mockUploadDebugFile).not.toHaveBeenCalled();
   });
 
   it('should reject parsed route activities before assigning ids or writing event data', async () => {
@@ -872,7 +1076,7 @@ describe('uploadActivity', () => {
     }), response);
 
     expect(response.status).toHaveBeenCalledWith(400);
-    expect(response.json).toHaveBeenCalledWith({ error: ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE });
+    expect(response.json).toHaveBeenCalledWith({ error: ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE, code: 'route_file_in_activity_upload' });
     expect(event.setID).not.toHaveBeenCalled();
     expect(routeActivity.setID).not.toHaveBeenCalled();
     expect(hoisted.mockGenerateActivityID).not.toHaveBeenCalled();
@@ -905,7 +1109,7 @@ describe('uploadActivity', () => {
     }), response);
 
     expect(response.status).toHaveBeenCalledWith(400);
-    expect(response.json).toHaveBeenCalledWith({ error: ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE });
+    expect(response.json).toHaveBeenCalledWith({ error: ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE, code: 'route_file_in_activity_upload' });
     expect(courseActivity.setID).not.toHaveBeenCalled();
     expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
     expect(hoisted.mockDocSet).not.toHaveBeenCalled();
@@ -945,6 +1149,15 @@ describe('uploadActivity', () => {
         extension: 'fit',
         originalFilename: 'run.fit',
       }),
+    );
+    expect(hoisted.mockSetEventDocumentIfUserActive).toHaveBeenCalledWith(
+      'user-1',
+      'activity_upload_origin_metadata',
+      expect.anything(),
+      { kind: 'manualUpload', version: 1 },
+      { merge: true },
+      undefined,
+      expect.any(Function),
     );
     expect(response.status).toHaveBeenCalledWith(200);
     expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -1253,6 +1466,8 @@ describe('uploadActivity', () => {
 
     expect(hoisted.mockSuuntoJSONImporter.getFromJSONString).toHaveBeenCalledTimes(1);
     expect(hoisted.mockSuuntoSMLImporter.getFromJSONString).toHaveBeenCalledTimes(1);
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(logger.error).not.toHaveBeenCalled();
     expect(response.status).toHaveBeenCalledWith(200);
   });
 
@@ -1290,6 +1505,7 @@ describe('uploadActivity', () => {
       { ok: true },
       undefined,
       expect.any(Function),
+      expect.any(Function),
     );
 
     await firestoreAdapter.setDoc(['users', 'user-1', 'activities', 'activity-test'], { ok: true });
@@ -1299,19 +1515,27 @@ describe('uploadActivity', () => {
       expect.anything(),
       { ok: true },
       undefined,
-      undefined,
+      expect.any(Function),
+      expect.any(Function),
     );
     expect(hoisted.mockDocSet).not.toHaveBeenCalled();
 
     expect(firestoreAdapter.createBlob(Uint8Array.from([7, 8, 9]))).toEqual(Buffer.from([7, 8, 9]));
     expect(firestoreAdapter.generateID()).toBe('tmp-generated-id');
 
-    await storageAdapter.uploadFile('users/user-1/events/adapter-test/original.fit', Buffer.from([0xaa]));
+    await expect(storageAdapter.uploadFile('users/user-1/events/adapter-test/original.fit', Buffer.from([0xaa])))
+      .resolves.toEqual({
+        path: expect.stringMatching(/^users\/user-1\/events\/adapter-test\/sources\/[a-f0-9]{64}\/original\.fit$/),
+        generation: 'storage-generation-1',
+      });
     expect(hoisted.mockAssertEventWriteUserActive).toHaveBeenCalledWith(
       'user-1',
       'activity_upload_original_file:users/user-1/events/adapter-test/original.fit',
     );
-    expect(hoisted.mockStorageSave).toHaveBeenCalledWith(Buffer.from([0xaa]));
+    expect(hoisted.mockStorageSave).toHaveBeenCalledWith(Buffer.from([0xaa]), {
+      validation: 'crc32c',
+      metadata: { crc32c: expect.any(String) },
+    });
     expect(hoisted.mockStorageGetMetadata).toHaveBeenCalled();
     expect(storageAdapter.getBucketName()).toBe('test-bucket');
 
@@ -1323,4 +1547,27 @@ describe('uploadActivity', () => {
     )).rejects.toThrow('deletion in progress');
     expect(hoisted.mockStorageSave).not.toHaveBeenCalled();
   });
+
+  it('uses atomic import preparation and applies live edit preservation to both document kinds', async () => {
+    const response = makeResponse();
+    await invokeUploadActivity(makeRequest({ headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' } }), response);
+    const adapter = hoisted.capturedFirestoreAdapter.value as {
+      prepareTrainingLoad: (event: unknown) => Promise<unknown>;
+      setDoc: (path: string[], data: unknown) => Promise<void>;
+    };
+    const parsed = { ...makeParsedEvent(), getID: () => 'saved' };
+    await adapter.prepareTrainingLoad(parsed);
+    expect(hoisted.mockPrepareTrainingLoad).toHaveBeenCalledWith('user-1', parsed);
+    for (const kind of ['events', 'activities']) {
+      await adapter.setDoc(['users', 'user-1', kind, 'saved'], { creator: { name: 'Parsed' } });
+      const transform = hoisted.mockSetEventDocumentIfUserActive.mock.calls.at(-1)![5] as (incoming: object, saved: object) => object;
+      expect(transform(kind === 'events' ? { name: 'File' } : { type: 'Yoga', creator: { name: 'Parsed' } },
+        kind === 'events' ? { name: 'Edited', description: 'Saved', tags: ['Tag'] } : { type: 'Stretching', creator: { name: 'Edited watch' } }))
+        .toMatchObject(kind === 'events' ? { name: 'Edited', description: 'Saved', tags: ['Tag'] } : { type: 'Yoga', creator: { name: 'Edited watch' } });
+    }
+    hoisted.mockPrepareTrainingLoad.mockRejectedValueOnce(new Error('deleted or superseded'));
+    await expect(adapter.prepareTrainingLoad(parsed)).rejects.toThrow('deleted or superseded');
+  });
+
+
 });

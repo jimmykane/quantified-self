@@ -1,3 +1,4 @@
+import type { DashboardChartLibrarySeen } from '../helpers/dashboard-chart-library-revision.helper';
 import {
     User,
     ChartThemes,
@@ -23,6 +24,8 @@ import type { TrainingSettings } from '@shared/derived-metrics';
 import { HEALTH_METRIC_IDS, type HealthMetricId } from '@shared/health';
 import type { TrainingDestinationId, TrainingSportId } from '@shared/training-disciplines';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
+import type { AppFormatLocalePreference } from '../shared/adapters/app-locale';
+import type { SuuntoSwimmingGuideSettings } from '@shared/suunto-swimming-guide-settings';
 
 export type AppMapStyleName = 'default' | 'satellite' | 'outdoors';
 export type AppMyTracksTripSortDirection = 'asc' | 'desc';
@@ -47,6 +50,8 @@ export type AppDashboardSleepTrendRange = '14d' | '30d' | '90d' | '1y';
 
 export const APP_HEALTH_WORKSPACE_RANGES = ['today', '14d', '30d', '90d', '1y'] as const;
 export type AppHealthWorkspaceRange = typeof APP_HEALTH_WORKSPACE_RANGES[number];
+export const APP_HEALTH_WORKSPACE_SAMPLE_RANGE: AppHealthWorkspaceRange = '90d';
+export const APP_HEALTH_WORKSPACE_SAMPLE_MAX_DAYS = 90;
 export type AppHealthWorkspaceMetric = 'sleep' | HealthMetricId;
 export const APP_HEALTH_WORKSPACE_METRICS: readonly AppHealthWorkspaceMetric[] = [
     'sleep',
@@ -56,6 +61,22 @@ export const APP_HEALTH_WORKSPACE_METRICS: readonly AppHealthWorkspaceMetric[] =
 export interface AppHealthWorkspaceSettingsInterface {
     metric?: AppHealthWorkspaceMetric;
     range?: AppHealthWorkspaceRange;
+    /** Display-only source choices, independent of explorer filters and metric calculations. */
+    highlightSources?: AppHealthHighlightSources;
+    /** Explicit source/reading pins for overview metrics; missing data never selects a replacement. */
+    metricSources?: AppHealthMetricSources;
+}
+
+export type AppHealthMetricSources = Partial<Record<AppHealthWorkspaceMetric, string>>;
+
+export const APP_HEALTH_HIGHLIGHT_IDS = ['sleep', 'heart_rate', 'heart_rate_variability'] as const;
+export type AppHealthHighlightId = typeof APP_HEALTH_HIGHLIGHT_IDS[number];
+export type AppHealthHighlightSources = Partial<Record<AppHealthHighlightId, string>>;
+
+export interface AppDashboardHealthMetricSettings {
+    metric: AppHealthWorkspaceMetric;
+    range: AppHealthWorkspaceRange;
+    sourceKey?: string;
 }
 
 export interface AppDashboardSleepTrendSettingsInterface {
@@ -125,6 +146,8 @@ export type AppDashboardActionPrompts = Partial<Record<AppDashboardActionPromptI
 export type AppDashboardTileEventFilterRange =
     'thisWeek'
     | 'thisMonth'
+    | 'lastMonth'
+    | '7d'
     | '14d'
     | '30d'
     | '90d'
@@ -153,6 +176,7 @@ export type AppDashboardFormTimelineWindow = 'w' | 'm' | 'y';
 export type AppDashboardPowerCurveCompareMode = 'latest' | 'best30d' | 'best90d';
 
 export interface AppDashboardChartTileDisplaySettingsInterface {
+    calendarView?: 'month' | '30d';
     derivedChartRange?: AppDashboardDerivedChartRange;
     formTimelineWindow?: AppDashboardFormTimelineWindow;
     powerCurveCompareMode?: AppDashboardPowerCurveCompareMode;
@@ -160,6 +184,8 @@ export interface AppDashboardChartTileDisplaySettingsInterface {
 
 export interface AppDashboardChartTileSettingsInterface extends TileChartSettingsInterface {
     eventFilters?: AppDashboardTileEventFiltersInterface;
+    healthMetric?: AppDashboardHealthMetricSettings;
+    healthSection?: 'health' | 'trainingState';
     displaySettings?: AppDashboardChartTileDisplaySettingsInterface;
 }
 
@@ -176,7 +202,9 @@ export interface AppDashboardSettingsInterface extends UserDashboardSettingsInte
     includeMergedEvents?: boolean;
     showTodaySummary?: boolean;
     dismissedCuratedRecoveryNowTile?: boolean;
+    calendarDayContextLayoutVersion?: number;
     sleepTrend?: AppDashboardSleepTrendSettingsInterface;
+    hrvTrend?: AppDashboardSleepTrendSettingsInterface;
     autoTiles?: AppDashboardAutoTiles;
     eventTableFilters?: AppDashboardEventTableFiltersInterface;
 }
@@ -188,25 +216,33 @@ export interface AppEventDetailsSettingsInterface {
 }
 
 export interface AppChartSettingsInterface extends Omit<UserChartSettingsInterface, 'theme' | 'extraMaxForPower' | 'extraMaxForPace'> {
+    eventLineContinuity?: import('../helpers/event-chart-line-continuity.helper').EventLineContinuitySettings;
     theme?: ChartThemes;
     fillOpacityVersion?: number;
     syncChartHoverToMap?: boolean;
     eventChartOverlayDataTypeByPrimary?: Record<string, string>;
     colorAltitudeByGrade?: boolean;
+    colorIntensityZoneLines?: boolean;
+    useDistinctComparisonLinePatterns?: boolean;
     showSwimLengths: boolean;
 }
 
 export interface AppAppSettingsInterface extends UserAppSettingsInterface {
     lastSeenChangelogDate?: AppDateValue;
+    dashboardChartLibrarySeen?: DashboardChartLibrarySeen;
     themePreference?: AppThemePreference;
     unitSetupCompleted?: boolean;
     dashboardActionPrompts?: AppDashboardActionPrompts;
     trainingWorkspace?: TrainingWorkspacePreferences;
     healthWorkspace?: AppHealthWorkspaceSettingsInterface;
+    timelineNotes?: { showOnCharts?: boolean };
+    formatLocale?: AppFormatLocalePreference;
 }
 
 export interface TrainingWorkspacePreferences {
     preferredDestination?: TrainingDestinationId;
+    /** Last explicitly selected Training Plans browse scope; unrelated to plan activation. */
+    plansView?: 'plans' | 'standalone';
     /** Null selects automatic shortcuts; an array pins a canonical one-to-four sport set. */
     sportShortcuts?: TrainingSportId[] | null;
 }
@@ -229,6 +265,8 @@ export interface AppDeviceDisplaySettingsInterface {
 }
 
 export interface AppUserServiceMetaInterface extends UserServiceMetaInterface, ServiceConnectionMetaFields {
+    /** Server-owned Garmin/Wahoo activity history request expiry; a UI hint, not provider authority. */
+    historyImportLeaseExpiresAt?: number;
     didLastRouteImport?: AppDateValue;
     queuedRoutesFromLastRouteImportCount?: number;
     skippedRoutesFromLastRouteImportCount?: number;
@@ -256,6 +294,7 @@ export interface AppUserServiceMetaInterface extends UserServiceMetaInterface, S
 }
 
 export interface AppUserSettingsInterface extends UserSettingsInterface {
+    suuntoSwimmingGuide?: SuuntoSwimmingGuideSettings;
     myTracksSettings?: AppMyTracksSettings;
     mapSettings?: AppMapSettingsInterface;
     dashboardSettings?: AppDashboardSettingsInterface;

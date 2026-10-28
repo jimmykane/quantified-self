@@ -1,6 +1,7 @@
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import { QueueErrors, QueueLogs } from '../shared/constants';
 import { addToQueueForGarmin, resolveFirebaseUserIDForGarminUserID } from '../queue';
 import { isProviderQueueSkippedWithoutRetryError } from '../queue/provider-queue-errors';
@@ -16,6 +17,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
   getTokenData,
   TerminalServiceAuthError,
+  TokenRefreshInProgressError,
   TokenRefreshSkippedForDeletedUserError,
 } from '../tokens';
 import { EventImporterGPX } from '@sports-alliance/sports-lib';
@@ -29,12 +31,30 @@ import { createParsingOptions } from '../../../shared/parsing-options';
 import { enqueueActivitySyncJobsForImportedEvent } from '../activity-sync/enqueue-imported-event';
 import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 import { resolveProviderImportEventID } from '../queue/provider-event-id';
+import { isActivityIdentityConflict } from '../shared/activity-identity-conflict';
+import {
+  deferWorkoutQueueItemForTokenRefreshContention,
+} from '../queue/token-refresh-contention';
+import { retainGarminFITWorkoutReferences } from '../training-plans/completion/fit-workout-evidence';
+import { fitActivityReferencesFromEvent } from '../suunto/guide-completion';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { authenticateGarminWebhook } from './webhook-auth';
+import { normalizeGarminActivityCallbackURL } from './activity-callback-url';
+import { GARMIN_API_TOKENS_COLLECTION_NAME } from './constants';
+import { getServiceConnectionMeta } from '../service-connection-meta';
+import { QueueItemUserGuardedUpdateResult, updateQueueItemIfUserActive } from '../queue/dispatch-marker';
+import { recordImportCompletion } from '../queue/import-monitoring';
 
 interface RequestError extends Error {
   statusCode?: number;
 }
 
 const GARMIN_CALLBACK_QUEUE_CONCURRENCY = 10;
+export const GARMIN_ACTIVITY_WEBHOOK_MAX_FILES = 10_000;
+export const GARMIN_ACTIVITY_WEBHOOK_MAX_BYTES = 10 * 1024 * 1024;
+// QS worker safety limits, not claimed Garmin API file-size guarantees.
+export const GARMIN_ACTIVITY_MAX_RESPONSE_BYTES = 128 * 1024 * 1024;
+export const GARMIN_ACTIVITY_DOWNLOAD_TIMEOUT_MS = 60_000;
 
 interface GarminActivityQueueInput {
   userID: string,
@@ -49,8 +69,12 @@ interface GarminActivityQueueInput {
 }
 
 function parseGarminActivityFileForQueue(activityFile: GarminAPIActivityFileInterface): GarminActivityQueueInput {
-  const callbackQuery = activityFile.callbackURL.split('?')[1];
-  const callbackParams = new URLSearchParams(callbackQuery);
+  const callbackURL = normalizeGarminActivityCallbackURL(activityFile?.callbackURL);
+  if (!callbackURL || typeof activityFile.userId !== 'string' || !activityFile.userId
+    || activityFile.userId.length > 512 || !['FIT', 'TCX', 'GPX'].includes(activityFile.fileType)) {
+    throw new Error('Invalid Garmin activity file callback.');
+  }
+  const callbackParams = new URL(callbackURL).searchParams;
   const activityFileID = activityFile.summaryId || callbackParams.get('id');
   if (!activityFileID) {
     throw new Error('Garmin activity file callback is missing activity file id.');
@@ -64,7 +88,7 @@ function parseGarminActivityFileForQueue(activityFile: GarminAPIActivityFileInte
     activityFileType: activityFile.fileType,
     token: callbackParams.get('token') || 'No token',
     userAccessToken: activityFile.userAccessToken,
-    callbackURL: activityFile.callbackURL,
+    callbackURL,
   };
 }
 
@@ -134,18 +158,83 @@ function deferGarminQueueItemForPendingDisconnect(
   });
 }
 
+async function skipDisconnectedGarminQueueItem(
+  queueItem: GarminAPIActivityQueueItemInterface,
+  firebaseUserID: string,
+): Promise<QueueResult.Processed | null> {
+  const expected = { ...queueItem };
+  const meta = await getServiceConnectionMeta(firebaseUserID, ServiceNames.GarminAPI);
+  // Missing credentials alone are not proof of a completed disconnect. Require
+  // the cleared lifecycle AND a confirmed empty server-owned account projection.
+  if (meta?.connectionState !== undefined
+    || typeof meta?.connectionStateGeneration !== 'string' || !meta.connectionStateGeneration.trim()
+    || typeof meta.connectionAccountsRevisionKey !== 'string' || !meta.connectionAccountsRevisionKey.trim()
+    || !Array.isArray(meta.connectionAccounts) || meta.connectionAccounts.length !== 0) return null;
+
+  if (!expected.ref) throw new Error('Missing Garmin queue document reference.');
+  const completion = {
+    processed: true,
+    processedAt: Date.now(),
+    resultStatus: 'skipped',
+    skippedReason: 'service_disconnected',
+    callbackURL: FieldValue.delete(),
+  };
+  const result = await updateQueueItemIfUserActive({
+    queueItemDocument: expected.ref,
+    queueItemId: expected.id,
+    userID: firebaseUserID,
+    phase: 'garmin_disconnected_import',
+    logPrefix: 'GarminWorkoutQueue',
+    actionDescription: 'disconnected import skip',
+    updateData: completion,
+    cleanupOnDeletedUser: false,
+    // Duplicate Garmin webhooks refresh these fields without advancing the
+    // creation time or revision; an older disconnect observation must not close them.
+    isCurrent: current => {
+      if (current.processed === true
+        || current.firebaseUserID !== firebaseUserID
+        || current.userID !== expected.userID
+        || current.dateCreated !== expected.dateCreated
+        || current.queueRevision !== expected.queueRevision) return false;
+      if (current.callbackURL !== expected.callbackURL
+        || current.token !== expected.token
+        || current.userAccessToken !== expected.userAccessToken
+        || current.activityFileType !== expected.activityFileType
+        || current.startTimeInSeconds !== expected.startTimeInSeconds) {
+        // Keep the existing Cloud Task alive: this row still has its dispatch
+        // marker, so acknowledging it would strand the refreshed payload.
+        throw new Error('Garmin queue payload changed during disconnect check.');
+      }
+      return true;
+    },
+  });
+  if (result === QueueItemUserGuardedUpdateResult.Updated) {
+    recordImportCompletion(expected.ref.parent.id, completion);
+    logger.info('[GarminWorkoutQueue] Import skipped after disconnect.', { queueItemId: expected.id, reason: 'service_disconnected' });
+  }
+  return QueueResult.Processed;
+}
+
 
 export const insertGarminAPIActivityFileToQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: 60,
-  memory: '256MB',
+  memory: '512MB',
+  secrets: FUNCTION_SECRET_BINDINGS.insertGarminAPIActivityFileToQueue,
 }).https.onRequest(async (req, res) => {
-  const activityFiles: GarminAPIActivityFileInterface[] = req.body.activityFiles;
+  if (!authenticateGarminWebhook(req, res, 'insertGarminAPIActivityFileToQueue')) return;
+  const activityFiles: GarminAPIActivityFileInterface[] = req.body?.activityFiles;
+  if ((req.rawBody && req.rawBody.length > GARMIN_ACTIVITY_WEBHOOK_MAX_BYTES)
+    || !Array.isArray(activityFiles) || activityFiles.length > GARMIN_ACTIVITY_WEBHOOK_MAX_FILES) {
+    logger.warn('[GarminWebhook] Dropped invalid or oversized activity delivery');
+    res.status(200).send();
+    return;
+  }
   let queueItems: GarminActivityQueueInput[];
   try {
     queueItems = activityFiles.map(parseGarminActivityFileForQueue);
-  } catch (e: unknown) {
-    logger.error(e);
-    res.status(500).send();
+  } catch {
+    logger.warn('[GarminWebhook] Dropped invalid activity callbacks');
+    res.status(200).send();
     return;
   }
 
@@ -210,23 +299,29 @@ export const insertGarminAPIActivityFileToQueue = functions.region('europe-west2
 
 
 
-export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActivityQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<QueueResult> {
+export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActivityQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>, taskRecoveryGeneration?: number): Promise<QueueResult> {
+  // Capture the validated URL before any await, including for legacy queue rows.
+  const url = normalizeGarminActivityCallbackURL(queueItem.callbackURL);
   logger.info(`Processing queue item ${queueItem.id} at retry count ${queueItem.retryCount}`);
   // queueItem is never undefined for query queueItem snapshots
   let tokenQuerySnapshots: admin.firestore.QuerySnapshot | undefined;
   // Use UserID for cache key as it's stable, unlike access tokens
-  const userKey = `GarminAPI:${queueItem.userID}`;
+  const recordedOwner = typeof queueItem.firebaseUserID === 'string' ? queueItem.firebaseUserID.trim() : '';
+  const userKey = `GarminAPI:${queueItem.userID}${recordedOwner ? `:${recordedOwner}` : ''}`;
+  // An owned job must never borrow another Firebase user's connection after an
+  // account transfer. Legacy unowned rows retain their existing lookup policy.
+  const tokenQuery = () => (recordedOwner
+    ? admin.firestore().collection(GARMIN_API_TOKENS_COLLECTION_NAME).doc(recordedOwner).collection('tokens')
+    : admin.firestore().collectionGroup('tokens'))
+    .where('userID', '==', queueItem.userID)
+    .where('serviceName', '==', ServiceNames.GarminAPI)
+    .limit(1)
+    .get();
 
   if (tokenCache) {
     let tokenPromise = tokenCache.get(userKey);
     if (!tokenPromise) {
-      // Lookup by userID (Garmin User ID) which is stored in the 'userID' field of the token document
-      // Since we don't know the Firebase User ID (the parent doc ID), we must use a Collection Group Query.
-      tokenPromise = admin.firestore().collectionGroup('tokens')
-        .where('userID', '==', queueItem.userID)
-        .where('serviceName', '==', ServiceNames.GarminAPI)
-        .limit(1)
-        .get();
+      tokenPromise = tokenQuery();
       tokenCache.set(userKey, tokenPromise);
     }
     try {
@@ -236,14 +331,14 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
       return increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
     }
   } else {
-    tokenQuerySnapshots = await admin.firestore().collectionGroup('tokens')
-      .where('userID', '==', queueItem.userID)
-      .where('serviceName', '==', ServiceNames.GarminAPI)
-      .limit(1)
-      .get();
+    tokenQuerySnapshots = await tokenQuery();
   }
 
   if (!tokenQuerySnapshots.size) {
+    if (recordedOwner) {
+      const skipped = await skipDisconnectedGarminQueueItem(queueItem, recordedOwner);
+      if (skipped) return skipped;
+    }
     logger.warn(QueueLogs.NO_TOKEN_FOUND.replace('${id}', queueItem.id));
     return moveToDeadLetterQueue(queueItem, new Error(QueueErrors.NO_TOKEN_FOUND), bulkWriter, 'NO_TOKEN_FOUND');
   }
@@ -254,11 +349,30 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
     return markGarminQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
   }
 
+  if (!url) {
+    return moveToDeadLetterQueue(queueItem, new Error('Untrusted Garmin activity callback URL'), bulkWriter, 'GARMIN_ACTIVITY_INVALID_CALLBACK_URL');
+  }
+
   // Use getTokenData (Shared) to handle auto-refresh if needed
   let serviceToken;
   try {
     serviceToken = await getTokenData(tokenQuerySnapshots.docs[0], ServiceNames.GarminAPI);
   } catch (e: any) {
+    if (e instanceof TokenRefreshInProgressError) {
+      return deferWorkoutQueueItemForTokenRefreshContention({
+        serviceName: ServiceNames.GarminAPI,
+        queueItem,
+        userID: firebaseUserID,
+        phase: 'garmin_workout_queue_token_refresh_contention',
+        logPrefix: 'GarminWorkoutQueue',
+        isCurrent: currentQueueItem => currentQueueItem.processed !== true
+          && currentQueueItem.dateCreated === queueItem.dateCreated
+          && currentQueueItem.dispatchedToCloudTask === queueItem.dispatchedToCloudTask
+          && (typeof currentQueueItem.firebaseUserID !== 'string'
+            || currentQueueItem.firebaseUserID === firebaseUserID),
+        taskRecoveryGeneration,
+      });
+    }
     if (isTokenRefreshSkippedForDeletedUserError(e)) {
       logger.warn(`Skipping Garmin queue item ${queueItem.id} because user ${firebaseUserID} is missing or deletion is in progress.`);
       return markGarminQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
@@ -282,50 +396,44 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
   }
 
   let result;
-  // Use the ORIGINAL callback URL directly, do not reconstruct it
-  const url = queueItem.callbackURL;
+  const downloadActivity = (binary: boolean) => requestPromise.get({
+    headers: { Authorization: `Bearer ${serviceToken.accessToken}` },
+    encoding: binary ? null : undefined,
+    url,
+    redirect: 'error',
+    timeout: GARMIN_ACTIVITY_DOWNLOAD_TIMEOUT_MS,
+    maxResponseBytes: GARMIN_ACTIVITY_MAX_RESPONSE_BYTES,
+  });
+  const handleDownloadFailure = async (error: unknown): Promise<QueueResult> => {
+    // Do not retain provider bodies, fetch error text or signed URLs.
+    const safeError = new Error('Garmin activity download failed.');
+    if (error instanceof requestPromise.ResponseBodyTooLargeError) {
+      return moveToDeadLetterQueue(queueItem, safeError, bulkWriter, 'GARMIN_ACTIVITY_FILE_TOO_LARGE');
+    }
+    const status = (error as RequestError | null)?.statusCode;
+    logger.warn('[GarminActivity] Download failed', { queueItemID: queueItem.id, status: typeof status === 'number' ? status : null });
+    if (status === 410) {
+      return moveToDeadLetterQueue(queueItem, safeError, bulkWriter, 'RESOURCE_GONE');
+    }
+    await increaseRetryCountForQueueItem(queueItem, safeError, status === 400 || status === 500 ? 20 : 1, bulkWriter);
+    return QueueResult.RetryIncremented;
+  };
 
   try {
     logger.info(`Downloading Garmin activityID: ${queueItem.activityFileID} for queue item ${queueItem.id}`);
     logger.info('Starting timer: DownloadFile');
-    result = await requestPromise.get({
-      headers: {
-        'Authorization': `Bearer ${serviceToken.accessToken}`,
-      },
-      encoding: queueItem.activityFileType === 'FIT' ? null : undefined,
-      url: url,
-    });
+    result = await downloadActivity(queueItem.activityFileType === 'FIT');
     logger.info('Ending timer: DownloadFile');
     logger.info(`Downloaded ${queueItem.activityFileType} for ${queueItem.id} and token user ${(serviceToken as any).userID}`);
   } catch (error: unknown) {
-    const e = error as RequestError;
-    if (e.statusCode === 400) {
-      logger.error(new Error(`Could not get workout for ${queueItem.id} and token user ${(serviceToken as any).userID} due to 400, increasing retry by 20 URL: ${url}`));
-      await increaseRetryCountForQueueItem(queueItem, e, 20, bulkWriter);
-    } else if (e.statusCode === 500) {
-      logger.error(new Error(`Could not get workout for ${queueItem.id} and token user ${(serviceToken as any).userID} due to 500 increasing retry by 20 URL: ${url}`));
-      await increaseRetryCountForQueueItem(queueItem, e, 20, bulkWriter);
-    } else if (e.statusCode === 410) {
-      logger.error(new Error(`410 Gone for ${queueItem.id}. The resource is no longer available. Aborting retries.`));
-      await moveToDeadLetterQueue(queueItem, e, bulkWriter, 'RESOURCE_GONE');
-      return QueueResult.MovedToDLQ;
-    } else if (e.statusCode === 401) {
-      // Token might be bad, getTokenData usually handles refresh but if it fails here, maybe we need force refresh?
-      // For now, treat as error
-      logger.error(new Error(`401 Unauthorized for ${queueItem.id}. Token might be invalid despite refresh.`));
-      await increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
-    } else {
-      logger.error(new Error(`Could not get workout for ${queueItem.id} and token user ${(serviceToken as any).userID}. Trying to refresh token and update retry count from ${queueItem.retryCount} to ${queueItem.retryCount + 1} -> ${e.message}  URL: ${url}`));
-      await increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
-    }
-    logger.info('Ending timer: DownloadFile');
-    return QueueResult.RetryIncremented;
+    return handleDownloadFailure(error);
   }
 
 
   try {
     logger.info(`File size: ${result.byteLength || result.length} bytes for queue item ${queueItem.id}`);
     let event;
+    let parsedFromFIT = queueItem.activityFileType === 'FIT';
     switch (queueItem.activityFileType) {
       case 'FIT':
         event = await EventImporterFIT.getFromArrayBuffer(result, createParsingOptions());
@@ -340,16 +448,15 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
           logger.info('Starting timer: DownloadFileRetry');
           // Retry as FIT if GPX failed (Legacy fallback?)
           // Note: We use the same URL
-          result = await requestPromise.get({
-            headers: {
-              'Authorization': `Bearer ${serviceToken.accessToken}`,
-            },
-            encoding: null,
-            url: url,
-          });
+          try {
+            result = await downloadActivity(true);
+          } catch (error) {
+            return handleDownloadFailure(error);
+          }
           logger.info('Ending timer: DownloadFileRetry');
           logger.info(`Downloaded ${queueItem.activityFileType} (retry as FIT) for ${queueItem.id}`);
           event = await EventImporterFIT.getFromArrayBuffer(result, createParsingOptions());
+          parsedFromFIT = true;
         }
         break;
       case 'TCX':
@@ -381,6 +488,18 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
       return markGarminQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
     }
     const setEventResult = await setEvent(firebaseUserID, eventID, event, metaData, { data: result, extension: queueItem.activityFileType.toLowerCase(), startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
+    if (parsedFromFIT) {
+      await retainGarminFITWorkoutReferences(
+        admin.firestore(),
+        firebaseUserID,
+        eventID,
+        queueItem.userID,
+        String(tokenQuerySnapshots.docs[0].data().tokenCredentialGeneration ?? ''),
+        { activityFileID: queueItem.activityFileID, activityFileType: queueItem.activityFileType },
+        Buffer.from(result),
+        fitActivityReferencesFromEvent(event),
+      );
+    }
     if (!bulkWriter) {
       if (await shouldSkipQueueWorkForDeletedUser(firebaseUserID, ServiceNames.GarminAPI, queueItem.id, 'before_activity_sync_enqueue')) {
         return markGarminQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
@@ -404,6 +523,9 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
     // For each ended so we can set it to processed
     return updateToProcessed(queueItem, bulkWriter);
   } catch (e: unknown) {
+    if (isActivityIdentityConflict(e)) {
+      return moveToDeadLetterQueue(queueItem, e, bulkWriter, e.code);
+    }
     logger.error(e);
     if (isEventWriteSkippedForDeletedUserError(e)) {
       logger.warn(`Skipping Garmin queue item ${queueItem.id} because event write detected user ${e.userID} is missing or deletion is in progress.`);

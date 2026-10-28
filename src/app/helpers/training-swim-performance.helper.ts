@@ -1,10 +1,13 @@
 import { SwimPaceUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { createSwimDistanceDisplayStat, normalizeUserUnitSettings, resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import type { DashboardTrainingSwimPerformanceContext } from './dashboard-derived-metrics.helper';
+import { getNumberFormatter } from './number-format.helper';
 
 export interface TrainingSwimChartPoint {
   weekStartMs: number;
   paceSeconds: number | null;
   distanceMeters: number;
+  distanceText: string;
   activityCount: number;
   swolf: number | null;
   swolfLengthCount: number;
@@ -42,13 +45,18 @@ export function buildTrainingSwimPerformanceViewModel(
   context: DashboardTrainingSwimPerformanceContext | null | undefined,
   unitSettings: UserUnitSettingsInterface | null | undefined,
 ): TrainingSwimPerformanceViewModel {
-  const usesYards = unitSettings?.swimPaceUnits?.[0] === SwimPaceUnits.MinutesPer100Yard;
+  const settings = normalizeUserUnitSettings(unitSettings);
+  const usesYards = settings.swimPaceUnits[0] === SwimPaceUnits.MinutesPer100Yard;
+  const formatDistance = (meters: number): string => typeof meters === 'number' && Number.isFinite(meters) && meters >= 0
+    ? resolveUnitAwareDisplayStat(createSwimDistanceDisplayStat(meters, settings), settings)?.text ?? '--'
+    : '--';
   const mapPoint = (environment: 'pool' | 'open-water'): TrainingSwimChartPoint[] => (context?.weeks || [])
     .filter(week => week.environment === environment)
     .map(week => ({
       weekStartMs: week.weekStartMs,
       paceSeconds: week.averagePaceSecondsPer100m,
       distanceMeters: week.distanceMeters,
+      distanceText: formatDistance(week.distanceMeters),
       activityCount: week.activityCount,
       swolf: week.swolf,
       swolfLengthCount: week.swolfLengthCount,
@@ -69,11 +77,11 @@ export function buildTrainingSwimPerformanceViewModel(
     hasSessions: all.some(point => point.activityCount > 0),
     hasPace: all.some(point => point.paceSeconds !== null),
     swolfContextText: swolfContext
-      ? `${swolfContext.stroke.replace(/\b\w/g, character => character.toUpperCase())} · ${swolfContext.poolLengthMeters} m pool`
+      ? `${swolfContext.stroke.replace(/\b\w/g, character => character.toUpperCase())} · ${formatDistance(swolfContext.poolLengthMeters)} pool`
       : null,
     latestSwolfText: latestSwolf?.swolf === null || latestSwolf?.swolf === undefined
       ? null
-      : new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(latestSwolf.swolf),
+      : getNumberFormatter(undefined, { maximumFractionDigits: 1 }).format(latestSwolf.swolf),
     conclusionText: buildConclusion(poolPaceWeekCount, openWaterPaceWeekCount),
     evidenceText: buildEvidenceText(poolPaceWeekCount, openWaterPaceWeekCount),
     nextStepText: latestSwolf && swolfContext

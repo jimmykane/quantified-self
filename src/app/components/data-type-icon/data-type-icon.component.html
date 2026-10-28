@@ -1,18 +1,24 @@
 @if (getColumnHeaderIcon(dataType)) {
-<mat-icon matTooltip="{{dataType}}"
+<mat-icon [matTooltip]="tooltip || statTooltips[dataType] || dataType"
+  [attr.tabindex]="focusable ? 0 : null" [attr.aria-hidden]="focusable ? 'false' : 'true'"
+  [attr.aria-label]="focusable ? (tooltip || statTooltips[dataType] || dataType) : null"
   [ngClass]="getColumnHeaderIconClass(dataType)"
   [ngStyle]="{'font-size': size ? size : '24px', 'width':  size ? size : '24px', 'height':  size ? size : '24px', 'vertical-align': vAlign? vAlign : 'middle'}">
   {{ getColumnHeaderIcon(dataType) }}
 </mat-icon>
 }
 @if (getColumnHeaderSVGIcon(dataType)) {
-<mat-icon matTooltip="{{dataType}}"
+<mat-icon [matTooltip]="tooltip || statTooltips[dataType] || dataType"
+  [attr.tabindex]="focusable ? 0 : null" [attr.aria-hidden]="focusable ? 'false' : 'true'"
+  [attr.aria-label]="focusable ? (tooltip || statTooltips[dataType] || dataType) : null"
   [ngStyle]="{'font-size': size ? size : '24px', 'width':  size ? size : '24px', 'height':  size ? size : '24px', 'vertical-align': vAlign? vAlign : 'middle'}"
   [svgIcon]="getColumnHeaderSVGIcon(dataType)">
 </mat-icon>
 }
 @if (!getColumnHeaderSVGIcon(dataType) && !getColumnHeaderIcon(dataType)) {
-<section matTooltip="{{dataType}}" [attr.data-letters]="getColumnHeaderTextInitials(dataType)"
+<section [attr.role]="focusable ? 'img' : null" [matTooltip]="tooltip || statTooltips[dataType] || dataType"
+  [attr.tabindex]="focusable ? 0 : null" [attr.aria-hidden]="focusable ? 'false' : 'true'"
+  [attr.aria-label]="focusable ? (tooltip || statTooltips[dataType] || dataType) : null" [attr.data-letters]="getColumnHeaderTextInitials(dataType)"
   [ngStyle]="{'font-size': size ? size : '24px', 'width':  size ? size : '24px', 'height':  size ? size : '24px', 'vertical-align': vAlign? vAlign : 'middle'}">
 </section>
 }

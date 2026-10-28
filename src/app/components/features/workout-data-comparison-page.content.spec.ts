@@ -38,7 +38,7 @@ describe('workout-data-comparison-page.content', () => {
     ]);
     expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA.jsonLd).toMatchObject({
       audience: [
-        { '@type': 'Audience', audienceType: 'Endurance athletes' },
+        { '@type': 'Audience', audienceType: 'People comparing activity data' },
         { '@type': 'Audience', audienceType: 'Sports technology reviewers' },
       ],
     });
@@ -56,14 +56,17 @@ describe('workout-data-comparison-page.content', () => {
     expect(COMPARISON_PROVIDER_SOURCES.map(source => source.label)).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo']);
     expect(COMPARISON_FREE_PLAN_ACTIVITY_LIMIT).toBe(100);
     expect(COMPARISON_SOURCE_ITEMS).toHaveLength(3);
-    expect(COMPARISON_ANALYSIS_ITEMS).toHaveLength(4);
+    expect(COMPARISON_ANALYSIS_ITEMS).toHaveLength(5);
     expect(COMPARISON_REVIEW_ITEMS).toHaveLength(4);
-    expect(COMPARISON_FAQ_ITEMS).toHaveLength(5);
+    expect(COMPARISON_FAQ_ITEMS).toHaveLength(6);
     expect(visibleCopy).toContain('Garmin, Suunto, COROS, and Wahoo');
     expect(visibleCopy).toContain('FIT, TCX, GPX, JSON, and SML');
     expect(visibleCopy).toContain('lab tests, beta firmware, and review units');
     expect(visibleCopy).toContain('Reference and test roles');
     expect(visibleCopy).toContain('Synchronized metric overlays');
+    expect(visibleCopy).toContain('R–R intervals and heart rate variability (HRV)');
+    expect(visibleCopy).toContain('Ordinary heart-rate samples cannot supply missing beat intervals');
+    expect(visibleCopy).toContain('separately from overnight HRV and the hardware agreement grade');
     expect(visibleCopy).toContain('CEP50, CEP95, RMSE');
     expect(visibleCopy).toContain('Stable device colors and review tags');
     expect(visibleCopy).toContain('YouTube videos, blog posts, coaching notes, firmware tests, and QA');
@@ -77,5 +80,15 @@ describe('workout-data-comparison-page.content', () => {
     expect(visibleCopy).not.toContain('AI analysis');
     expect(visibleCopy).not.toContain('centralize Garmin Suunto and COROS workout data');
     expect(visibleCopy).not.toContain('compare Garmin Suunto COROS workout data');
+  });
+
+  it('keeps HRV structured content aligned with visible capabilities and answers', () => {
+    const entities = WORKOUT_DATA_COMPARISON_ROUTE_DATA.jsonLd['mainEntity'] as Array<Record<string, unknown>>;
+    expect(entities.find(entity => entity['@type'] === 'SoftwareApplication')?.['featureList'])
+      .toContain('R–R intervals and heart rate variability (HRV)');
+    const faq = COMPARISON_FAQ_ITEMS.find(item => item.question.includes('R–R intervals'))!;
+    expect(entities.find(entity => entity['@type'] === 'FAQPage')?.['mainEntity']).toContainEqual({
+      '@type': 'Question', name: faq.question, acceptedAnswer: { '@type': 'Answer', text: faq.answer },
+    });
   });
 });

@@ -2,7 +2,11 @@
   <section class="hero-section" aria-labelledby="public-seo-title">
     <p class="eyebrow">{{ page.eyebrow }}</p>
     <h1 id="public-seo-title">{{ page.h1 }}</h1>
-    <p class="hero-copy">{{ page.intro }}</p>
+    <p class="hero-copy">{{ page.intro }}
+      @if (page.accessNote) {
+      <span class="hero-access-note">{{ page.accessNote }}</span>
+      }
+    </p>
 
     <div class="topic-strip" aria-label="Page topics">
       @for (chip of page.chips; track chip) {
@@ -13,14 +17,14 @@
     <div class="action-row" aria-label="Primary actions">
       @for (action of page.actions; track action.label) {
       @if (action.variant === 'flat') {
-      <a mat-flat-button class="qs-mat-primary" [routerLink]="action.routerLink" [fragment]="action.fragment ?? null">
+      <a mat-flat-button appHapticTap class="qs-mat-primary" [routerLink]="action.routerLink" [queryParams]="action.queryParams ?? null" [fragment]="action.fragment ?? null">
         {{ action.label }}
         @if (action.icon) {
         <mat-icon iconPositionEnd>{{ action.icon }}</mat-icon>
         }
       </a>
       } @else {
-      <a mat-stroked-button [routerLink]="action.routerLink" [fragment]="action.fragment ?? null">
+      <a mat-stroked-button appHapticTap [routerLink]="action.routerLink" [queryParams]="action.queryParams ?? null" [fragment]="action.fragment ?? null">
         {{ action.label }}
         @if (action.icon) {
         <mat-icon iconPositionEnd>{{ action.icon }}</mat-icon>
@@ -39,21 +43,20 @@
       <p>{{ section.copy }}</p>
     </div>
 
-    <div class="compact-feature-row-stack">
+    <div class="compact-row-stack">
       @for (item of section.items; track item.title; let last = $last) {
-      <app-compact-feature-row
+      <app-compact-row
         [icon]="item.icon"
         [title]="item.title"
         [summary]="item.copy"
         [showDivider]="!last"
-      ></app-compact-feature-row>
+      ></app-compact-row>
       }
     </div>
 
     @if (section.preview) {
       <app-public-feature-preview
         class="section-preview"
-        data-nosnippet
         [previewKey]="section.preview"
       ></app-public-feature-preview>
     }
@@ -103,14 +106,14 @@
     <div class="action-row closing-actions" aria-label="Closing actions">
       @for (action of page.closingActions; track action.label) {
       @if (action.variant === 'flat') {
-      <a mat-flat-button class="qs-mat-primary" [routerLink]="action.routerLink" [fragment]="action.fragment ?? null">
+      <a mat-flat-button appHapticTap class="qs-mat-primary" [routerLink]="action.routerLink" [queryParams]="action.queryParams ?? null" [fragment]="action.fragment ?? null">
         {{ action.label }}
         @if (action.icon) {
         <mat-icon iconPositionEnd>{{ action.icon }}</mat-icon>
         }
       </a>
       } @else {
-      <a mat-stroked-button [routerLink]="action.routerLink" [fragment]="action.fragment ?? null">
+      <a mat-stroked-button appHapticTap [routerLink]="action.routerLink" [queryParams]="action.queryParams ?? null" [fragment]="action.fragment ?? null">
         {{ action.label }}
         @if (action.icon) {
         <mat-icon iconPositionEnd>{{ action.icon }}</mat-icon>

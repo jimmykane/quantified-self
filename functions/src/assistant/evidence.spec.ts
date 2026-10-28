@@ -1,3 +1,5 @@
+import { analyzeWorkoutStructureV1 } from '../../../shared/planned-workout-analysis';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildAssistantEvidence,
@@ -21,6 +23,45 @@ const evidenceTools = [
 ] satisfies AssistantMcpToolDefinition[];
 
 describe('Assistant evidence', () => {
+  it('retains compact phase names and dates without private descriptions or references', () => {
+    const evidence = buildAssistantEvidence({ name: 'get_training_plan_phases', title: 'Plan phases' }, {
+      scheduleRevision: 1, planRevision: 1, planRef: 'PRIVATE-REF', startDate: '2026-09-01', endDate: '2026-09-30',
+      phases: { version: 1, items: [{ id: 'private-structural-id', name: 'Base', description: 'PRIVATE-TEXT',
+        startLocalDate: '2026-09-01', endLocalDate: '2026-09-10' }] },
+    });
+    expect(evidence?.facts).toEqual([{ label: 'Base', value: '2026-09-01 – 2026-09-10' }]);
+    expect(JSON.stringify(evidence)).not.toMatch(/PRIVATE|private-structural-id/);
+  });
+  it.each([null, 'PRIVATE-TEXT'])('shows only bounded private-note evidence (%s)', note => {
+    const evidence = buildAssistantEvidence({ name: 'get_workout_reflection', title: 'Workout reflection' }, {
+      activityRef: 'PRIVATE-REF', revision: 2, target: 'activity', note,
+      provider: 'PRIVATE-PROVIDER', effort: 5, effortScale: 'borg_cr10', present: true,
+    });
+    expect(evidence.summary).toContain('Athlete-reported context');
+    expect(evidence.facts).toHaveLength(2);
+    expect(evidence.facts[1].value).toContain(note === null ? 'None' : 'characters of private context');
+    expect(JSON.stringify(evidence)).not.toMatch(/PRIVATE|revision|effort|Borg|severe/);
+  });
+
+  it('pairs manual measurement display values and units without references or revision internals', () => {
+    const evidence = buildAssistantEvidence({ name: 'get_manual_measurement', title: 'Manual measurement' }, {
+      measurement: { measurementRef: 'private-ref', revision: 1, metricId: 'body_weight', canonicalValue: 80,
+        canonicalUnit: 'kg', displayValue: '176.4', displayUnit: 'lb', observedAt: '2026-10-01T08:00:00Z',
+        timezoneOffsetSeconds: 10800, diastolic: null, pulse: null, vo2Context: null, vo2Method: null } });
+    expect(evidence.facts).toEqual([{ label: 'Body weight', value: '176.4 lb' }, { label: 'Observed', value: '2026-10-01T08:00:00Z' }]);
+    expect(JSON.stringify(evidence)).not.toMatch(/private-ref|revision|80|kg/);
+  });
+  it('keeps note evidence compact with actual dates and no raw details, identities or overlays', () => {
+    const evidence = buildAssistantEvidence({ name: 'query_timeline_notes', title: 'Timeline notes' }, {
+      notes: [{ title: 'Travel', category: 'travel', details: 'private-full-text', startDate: '2026-09-01', endDate: null,
+        effectiveEndDate: '2026-09-09', id: 'private-id', appUrl: 'https://quantified-self.io/user/private' }],
+      nextCursor: 'private-cursor', scanComplete: false,
+    });
+    expect(evidence.facts).toEqual([{ label: 'Travel', value: 'travel: 2026-09-01 – ongoing (through 2026-09-09)' }]);
+    expect(evidence.summary).toContain('More context may remain');
+    expect(evidence.links).toEqual([]);
+    expect(JSON.stringify(evidence)).not.toContain('private');
+  });
   afterEach(() => {
     vi.unstubAllEnvs();
   });
@@ -271,6 +312,146 @@ describe('Assistant evidence', () => {
     expect(evidence.facts).toEqual([]);
   });
 
+  it('presents Training impact as identity-free modeled load evidence', () => {
+    const evidence = buildAssistantEvidence({
+      name: 'get_training_impact',
+      title: 'Get Training impact',
+    }, {
+      status: 'ready',
+      activityRef: 'opaque-ref-must-not-leak',
+      title: 'Private ride title',
+      provider: 'private-provider',
+      contribution: {
+        trainingStressScore: 84,
+        fitnessLoadCtlContribution: 2,
+        fatigueLoadAtlContribution: 12,
+        freshnessFormContribution: -10,
+        eventId: 'private-event-id',
+      },
+      outcomes: [{
+        trainingDay: '2026-09-20',
+        fitnessLoadOutcome: 'rose',
+        fitnessLoadCtlChange: 0.74,
+        startTimeMs: 1_758_345_600_000,
+      }, {
+        trainingDay: '2026-09-21',
+        fitnessLoadOutcome: 'declined',
+        fitnessLoadCtlChange: -0.18,
+      }],
+    });
+
+    expect(evidence.summary).toBe(
+      'TSS-based Training impact is ready; it does not measure physiological adaptation.',
+    );
+    expect(evidence.facts).toEqual([
+      { label: 'Training stress score', value: '84 TSS' },
+      { label: 'Fitness load (CTL)', value: '2' },
+      { label: 'Fatigue load (ATL)', value: '12' },
+      { label: 'Freshness (Form)', value: '-10' },
+      { label: '2026-09-20', value: 'Fitness load rose (0.74 CTL)' },
+      { label: '2026-09-21', value: 'Fitness load declined (-0.18 CTL)' },
+    ]);
+    expect(evidence.links).toEqual([]);
+    expect(JSON.stringify(evidence)).not.toMatch(
+      /opaque-ref|Private ride|private-provider|private-event|startTimeMs|1758345600000/,
+    );
+
+    const session = buildAssistantEvidence({
+      name: 'get_training_impact',
+      title: 'Get Training impact',
+    }, {
+      status: 'ready',
+      sessionRole: 'pushed-above-maintenance',
+      contribution: {
+        trainingStressScore: 42,
+        fitnessLoadCtlContribution: 1,
+        fatigueLoadAtlContribution: 6,
+        freshnessFormContribution: -5,
+      },
+      outcomes: [{
+        trainingDay: '2026-09-20',
+        fitnessLoadOutcome: 'raised',
+        fitnessLoadCtlChange: 1,
+      }],
+    });
+    expect(session.facts).toContainEqual({
+      label: 'Session role',
+      value: 'Helped push the day above maintenance',
+    });
+    expect(session.facts).toContainEqual({
+      label: '2026-09-20',
+      value: 'Fitness load rose (1 CTL)',
+    });
+
+    const excluded = buildAssistantEvidence({
+      name: 'get_training_impact',
+      title: 'Get Training impact',
+    }, {
+      status: 'excluded',
+      reason: 'benchmark_or_merge',
+      contribution: null,
+      outcomes: [],
+    });
+    expect(excluded.facts).toEqual([
+      { label: 'Status', value: 'Excluded' },
+      { label: 'Reason', value: 'Benchmark or merge' },
+    ]);
+  });
+
+  it('summarizes bulk exact completion evidence without retaining opaque references', () => {
+    const evidence = buildAssistantEvidence({
+      name: 'get_planned_workout_completions',
+      title: 'Check planned workout completions',
+    }, {
+      completions: [{ workoutRef: 'private-workout-1', state: 'linked', provider: 'garmin', timing: 'on_date',
+        scheduledDate: '2026-09-20', workoutChangedSinceCompletion: false, activityRef: 'private-activity' },
+      { workoutRef: 'private-workout-2', state: 'unlinked', provider: null, timing: null,
+        scheduledDate: '2026-09-21', workoutChangedSinceCompletion: false, activityRef: null }],
+    });
+    expect(evidence.summary).toBe('1 of 2 planned workouts have an exact stored completion link.');
+    expect(evidence.facts).toEqual([
+      { label: '2026-09-20', value: 'Linked via garmin; on date' },
+      { label: '2026-09-21', value: 'No exact stored completion link' },
+    ]);
+    expect(JSON.stringify(evidence)).not.toContain('private-');
+  });
+
+  it('summarizes compatibility as local mapping evidence rather than delivery success', () => {
+    const evidence = buildAssistantEvidence({
+      name: 'assess_planned_workout_compatibility',
+      title: 'Assess planned workout provider compatibility',
+    }, {
+      workoutRef: 'private-workout',
+      assessments: [{ provider: 'garmin', level: 'exact', issues: [] },
+        { provider: 'wahoo', level: 'unsupported', issues: [{ severity: 'unsupported',
+          code: 'scheduling_duration_unavailable', field: '$.nodes', message: 'Time-based steps are required.' }] }],
+    });
+    expect(evidence.summary).toBe('1 exact, 0 degraded, 1 unsupported local provider mappings; not a live provider check.');
+    expect(evidence.facts).toEqual([
+      { label: 'garmin', value: 'exact' },
+      { label: 'wahoo', value: 'unsupported: Time-based steps are required.' },
+    ]);
+    expect(JSON.stringify(evidence)).not.toContain('private-workout');
+  });
+
+  it('describes Suunto sync evidence as sent without claiming app or watch visibility', () => {
+    const evidence = buildAssistantEvidence({
+      name: 'get_training_sync_status',
+      title: 'Get Training sync status',
+    }, {
+      scanComplete: true,
+      services: [
+        { provider: 'suunto', state: 'current', syncedWorkouts: 2, totalWorkouts: 3 },
+        { provider: 'garmin', state: 'current', syncedWorkouts: 3, totalWorkouts: 3 },
+      ],
+    });
+    expect(evidence.facts).toEqual([
+      { label: 'suunto', value: 'current; 2 of 3 workouts sent; Suunto app/watch visibility unknown' },
+      { label: 'garmin', value: 'current; 3 of 3 workouts confirmed; not watch receipt' },
+    ]);
+    expect(evidence.facts[0].value).not.toMatch(/found in|available in/i);
+  });
+
   it('does not discover app links nested under denied provenance fields', () => {
     const evidence = buildAssistantEvidence({
       name: 'get_training_metric',
@@ -311,5 +492,29 @@ describe('Assistant evidence', () => {
       label: 'Open in Quantified Self',
       url: appUrl,
     }]);
+  });
+});
+
+
+describe('workout prescription analysis evidence', () => {
+  it('retains partial-duration caveats and counts without references, IDs, revisions or authored text', () => {
+    const value = { source: 'scheduled', reference: 'private-reference', revision: 2, scheduleRevision: 3,
+      libraryRevision: null, sport: ActivityTypes.Running,
+      analysis: analyzeWorkoutStructureV1({ version: 1, sport: ActivityTypes.Running, nodes: [
+        { kind: 'step', id: 'private-step-id', purpose: 'warmup', ending: { kind: 'time', seconds: 600, allowEarlyLap: true }, targets: [] },
+        { kind: 'step', id: 'private-rest-id', purpose: 'rest', ending: { kind: 'manual' }, targets: [] },
+      ] }), displaySummary: '10m timed subtotal + 1 step with unknown duration (prescribed limits) · 1 step allows early Lap' };
+    const evidence = buildAssistantEvidence({ name: 'get_workout_prescription_analysis', title: 'Prescription analysis' }, value);
+    expect(evidence.summary).toBe(value.displaySummary);
+    expect(evidence.facts).toContainEqual({ label: 'Duration coverage', value: 'partial' });
+    expect(evidence.facts).toContainEqual({ label: 'Steps allowing early Lap', value: '1' });
+    expect(JSON.stringify(evidence)).not.toMatch(/private|revision|600/);
+    expect(evidence.links).toEqual([]);
+  });
+  it('fails closed when analysis contains an undeclared field', () => {
+    const evidence = buildAssistantEvidence({ name: 'get_workout_prescription_analysis', title: 'Analysis' },
+      { displaySummary: 'private text', providerId: 'private' });
+    expect(evidence.summary).toBe('Prescription analysis unavailable.');
+    expect(evidence.facts).toEqual([]);
   });
 });

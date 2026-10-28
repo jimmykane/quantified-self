@@ -92,7 +92,7 @@ describe('WorkspaceSectionNavigationComponent', () => {
     };
     component.ngAfterViewChecked();
 
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', inline: 'center' });
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', inline: 'center', behavior: 'instant' });
   });
 
   it('retries scrolling the active section resolved after the initial layout completes', () => {
@@ -121,7 +121,7 @@ describe('WorkspaceSectionNavigationComponent', () => {
 
       expect(scrollIntoView).toHaveBeenCalledTimes(2);
       expect((component as any).mobileSectionTabs.get).toHaveBeenLastCalledWith(1);
-      expect(scrollIntoView).toHaveBeenLastCalledWith({ block: 'nearest', inline: 'center' });
+      expect(scrollIntoView).toHaveBeenLastCalledWith({ block: 'nearest', inline: 'center', behavior: 'instant' });
     } finally {
       globalThis.requestAnimationFrame = originalRequestAnimationFrame;
     }

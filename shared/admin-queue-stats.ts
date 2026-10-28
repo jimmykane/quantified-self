@@ -6,6 +6,8 @@ export interface QueueRetryHistogram {
     '0-3': number;
     '4-7': number;
     '8-9': number;
+    /** Optional for compatibility with older deployed queue-stat responses. */
+    '10-19'?: number;
 }
 
 export interface QueueTopError {
@@ -35,6 +37,7 @@ export interface CloudTaskQueueStats {
 
 export interface CloudTaskQueueBreakdown {
     workout: CloudTaskQueueStats;
+    trainingDelivery: CloudTaskQueueStats;
     activitySync: CloudTaskQueueStats;
     routeDeliverySync: CloudTaskQueueStats;
     routeSync: CloudTaskQueueStats;
@@ -45,6 +48,7 @@ export interface CloudTaskQueueBreakdown {
     derivedMetrics: CloudTaskQueueStats;
     sleepSync: CloudTaskQueueStats;
     garminHealthBackfill: CloudTaskQueueStats;
+    connectionHistory?: CloudTaskQueueStats;
 }
 
 export interface ReparseCheckpointBaseStats {
@@ -216,7 +220,22 @@ export interface SyncPipelineQueueStats {
     advanced: QueueAdvancedStats;
 }
 
-export type ActivitySyncQueueStats = SyncPipelineQueueStats;
+export interface ActivitySyncBreakdownStats {
+    pending: number | null;
+    succeeded: number | null;
+    stuck: number | null;
+    manualReconciliationRequired: number | null;
+    dead: number | null;
+}
+
+export interface ActivitySyncQueueStats extends SyncPipelineQueueStats {
+    /** Manual uploads are a subset of historical sends; counts reflect retained queue/DLQ rows. */
+    breakdowns?: {
+        historical: ActivitySyncBreakdownStats;
+        manualUploads: ActivitySyncBreakdownStats;
+        directFiles?: ActivitySyncBreakdownStats;
+    };
+}
 
 export interface RouteDeliverySyncQueueStats extends SyncPipelineQueueStats {
     skipped: number;
@@ -241,6 +260,34 @@ export interface SleepSyncQueueStats extends SyncPipelineQueueStats {
     providers: SleepSyncProviderQueueStats[];
 }
 
+/** Jobs are transient work; outcomes count per-delivery projections, including retained older identities. */
+export interface TrainingDeliveryQueueStats {
+    jobsAvailable: boolean;
+    jobs: {
+        total: number;
+        due: number;
+        reconcile: number;
+        delivery: number;
+        verification: number;
+        oldestDueLagMs: number;
+    };
+    statusCountsAvailable: boolean;
+    outcomes: {
+        delivered: number;
+        retrying: number;
+        failed: number;
+        needsAttention: number;
+    };
+    providers: {
+        provider: string;
+        queued: number;
+        delivered: number;
+        retrying: number;
+        failed: number;
+        needsAttention: number;
+    }[];
+}
+
 export interface AdminQueueProviderStats {
     name: string;
     pending: number;
@@ -250,6 +297,8 @@ export interface AdminQueueProviderStats {
 }
 
 export interface AdminQueueStatsResponse {
+    /** Finished includes failed/skipped/request-only runs, not confirmed ingestion. Older backends omit it. */
+    connectionHistory?: { pending: number; finished?: number; failed: number; maxLagMs: number | null } | null;
     pending: number;
     succeeded: number;
     stuck: number;
@@ -264,6 +313,7 @@ export interface AdminQueueStatsResponse {
     derivedMetrics: DerivedMetricsStats;
     advanced: QueueAdvancedStats;
     activitySync: ActivitySyncQueueStats;
+    trainingDelivery: TrainingDeliveryQueueStats;
     routeDeliverySync: RouteDeliverySyncQueueStats;
     routeSync: RouteSyncQueueStats;
     sleepSync: SleepSyncQueueStats;
@@ -271,7 +321,7 @@ export interface AdminQueueStatsResponse {
 
 export type AdminQueueStatsSnapshot = Omit<
     AdminQueueStatsResponse,
-    'cloudTasks' | 'dlq' | 'reparse' | 'routeReparse' | 'derivedMetrics' | 'advanced' | 'activitySync' | 'sleepSync'
+    'cloudTasks' | 'dlq' | 'reparse' | 'routeReparse' | 'derivedMetrics' | 'advanced' | 'activitySync' | 'sleepSync' | 'trainingDelivery'
 > & {
     cloudTasks?: {
         pending: number;
@@ -283,6 +333,7 @@ export type AdminQueueStatsSnapshot = Omit<
     derivedMetrics?: DerivedMetricsStats;
     advanced?: QueueAdvancedStats;
     activitySync?: ActivitySyncQueueStats;
+    trainingDelivery?: TrainingDeliveryQueueStats;
     routeDeliverySync?: RouteDeliverySyncQueueStats;
     routeSync?: RouteSyncQueueStats;
     sleepSync?: SleepSyncQueueStats;

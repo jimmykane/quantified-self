@@ -36,6 +36,7 @@ import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { ROLE_HIERARCHY, ROLE_DISPLAY_NAMES } from '../shared/pricing';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
+import { newEmailDeliveryFields } from '../email/queue-metadata';
 import { DocumentData } from 'firebase-admin/firestore';
 import { isDeviceSyncEnabledForRole } from '../../../shared/limits';
 import {
@@ -66,12 +67,16 @@ function isAuthUserNotFound(error: unknown): boolean {
 }
 
 function buildMailPayload(
+    uid: string,
     recipient: string,
     templateName: string,
     data: Record<string, unknown>,
 ): FirebaseFirestore.DocumentData {
     return {
+        ...newEmailDeliveryFields(),
         to: recipient,
+        // Ownership is separate from the delivery address, which can be reused.
+        uid,
         from: TRANSACTIONAL_EMAIL_FROM,
         replyTo: TRANSACTIONAL_EMAIL_REPLY_TO,
         template: {
@@ -210,7 +215,7 @@ export async function checkAndSendSubscriptionEmails(
             pendingEmails.push({
                 id: `welcome_email_${subscriptionId}`,
                 label: 'welcome',
-                payload: buildMailPayload(recipient, 'welcome_email', {
+                payload: buildMailPayload(uid, recipient, 'welcome_email', {
                     role: displayNames[currentRole] || currentRole,
                     is_trial: currentSubscription.status === 'trialing',
                     ...buildEmailPlanDetails(currentRole),
@@ -227,7 +232,7 @@ export async function checkAndSendSubscriptionEmails(
             pendingEmails.push({
                 id: `upgrade_${eventId}`,
                 label: 'upgrade',
-                payload: buildMailPayload(recipient, 'subscription_upgrade', {
+                payload: buildMailPayload(uid, recipient, 'subscription_upgrade', {
                     new_role: displayNames[newRole] || newRole,
                     old_role: displayNames[oldRole] || oldRole,
                     ...buildEmailPlanDetails(newRole),
@@ -244,7 +249,7 @@ export async function checkAndSendSubscriptionEmails(
             pendingEmails.push({
                 id: `downgrade_${eventId}`,
                 label: 'downgrade',
-                payload: buildMailPayload(recipient, 'subscription_downgrade', {
+                payload: buildMailPayload(uid, recipient, 'subscription_downgrade', {
                     new_role: displayNames[newRole] || newRole,
                     old_role: displayNames[oldRole] || oldRole,
                     ...buildEmailPlanDetails(newRole),
@@ -271,7 +276,7 @@ export async function checkAndSendSubscriptionEmails(
                 pendingEmails.push({
                     id: `cancellation_${canonicalEndingSubscription.subscriptionId}_${Math.floor(canonicalEndingSubscription.currentPeriodEndMs / 1000)}`,
                     label: 'cancellation',
-                    payload: buildMailPayload(recipient, 'subscription_cancellation', {
+                    payload: buildMailPayload(uid, recipient, 'subscription_cancellation', {
                         role: displayNames[canonicalRole] || canonicalRole,
                         expiration_date: formatEmailDate(canonicalEndingSubscription.subscription.current_period_end),
                         grace_period_end: formatGracePeriodEnd(canonicalEndingSubscription.subscription.current_period_end),

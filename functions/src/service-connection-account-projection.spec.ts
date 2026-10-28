@@ -18,6 +18,7 @@ import {
   projectionRevisionKeyFromMs,
   readServiceConnectionAccountProjection,
   refreshServiceConnectionAccountProjection,
+  serviceConnectionAccountProjectionTestInternals,
 } from './service-connection-account-projection';
 
 function snapshot(id: string, data: Record<string, unknown>) {
@@ -32,6 +33,10 @@ describe('service connection account projection', () => {
       deletionInProgress: false,
       shouldSkip: false,
     });
+  });
+
+  it('allocates 512 MiB to every provider token projection trigger', () => {
+    expect(serviceConnectionAccountProjectionTestInternals.tokenProjectionMemory).toBe('512MiB');
   });
 
   it('projects only browser-safe Garmin account fields', () => {

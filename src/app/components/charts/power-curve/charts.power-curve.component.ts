@@ -1,3 +1,4 @@
+import { dashboardChartFrameGrid } from '../../../helpers/dashboard-chart-layout.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -104,6 +105,7 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
     private logger: LoggerService,
   ) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsPowerCurveComponent]',
@@ -143,6 +145,7 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
   private async refreshChart(): Promise<void> {
     const renderModel = this.buildSeries();
     this.updateHeaderAndErrorState(renderModel.durations);
+    dashboardChartFrameGrid(this.chartDiv?.nativeElement, { legendBottom: renderModel.series.length > 1 ? 32 : 0 });
     const chart = await this.chartHost.init(
       this.chartDiv?.nativeElement,
       resolveEChartsThemeName(this.darkTheme),
@@ -315,6 +318,7 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
         right: 6,
         top: 8,
         bottom: showLegend ? (isMobileTooltipViewport || useCompactChartLayout ? 54 : 44) : 22,
+        ...dashboardChartFrameGrid(this.chartDiv.nativeElement, { legendBottom: showLegend ? 32 : 0 }),
         containLabel: false,
       },
       tooltip: {

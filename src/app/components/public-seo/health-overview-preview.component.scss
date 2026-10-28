@@ -1,0 +1,6 @@
+:host { display: block; min-width: 0; }
+.sample-caption { margin: 0 0 0.75rem; color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+.sample-history { scroll-margin-top: calc(max(var(--qs-visible-top-offset, 64px), 64px) + 16px); }
+.sample-history h3 { margin-block: 0.75rem; font: var(--mat-sys-title-large); }
+.sample-history p { font: var(--mat-sys-title-medium); }
+.sample-history app-sleep-trend-chart { display: block; height: 320px; }

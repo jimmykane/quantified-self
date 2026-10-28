@@ -1,0 +1,2319 @@
+import { formatWorkoutPrescriptionSummaryV1 } from '@shared/planned-workout-analysis-display';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  ElementRef,
+  HostListener,
+  Injector,
+  LOCALE_ID,
+  afterNextRender,
+  afterRenderEffect,
+  computed,
+  effect,
+  inject,
+  signal,
+  untracked,
+  viewChild,
+} from '@angular/core';
+import { Location } from '@angular/common';
+import { LiveAnnouncer } from '@angular/cdk/a11y';
+import { DragDropModule, type CdkDragDrop } from '@angular/cdk/drag-drop';
+import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { MatDialog, type MatDialogRef } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { ActivatedRoute, Router, type NavigationExtras } from '@angular/router';
+import { ActivityTypes, DataWeight, DistanceUnits, WeightUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import {
+  MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1,
+  MANUAL_WORKOUT_EDITOR_RUNNING_SPORTS_V1,
+  MANUAL_WORKOUT_EDITOR_SWIMMING_SPORTS_V1,
+  MANUAL_WORKOUT_EDITOR_WALKING_SPORTS_V1,
+  MANUAL_WORKOUT_EDITOR_ROWING_SPORTS_V1,
+  isRowingWorkoutSportV1,
+  isSwimmingWorkoutSportV1,
+  WORKOUT_STRUCTURE_MAX_NODES,
+} from '@shared/planned-workout';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import dayjs, { type Dayjs } from 'dayjs';
+import { catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
+import type { AppUserInterface } from '../../models/app-user.interface';
+import { SharedModule } from '../../modules/shared.module';
+import { AppUserService } from '../../services/app.user.service';
+import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
+import {
+  TrainingPlansService,
+  type CurrentTrainingScheduleV1,
+} from '../../services/training-plans.service';
+import { TrainingWorkoutDuplicateService } from '../../services/training-workout-duplicate.service';
+import { WorkoutLibraryService } from '../../services/workout-library.service';
+import { ConfirmationDialogComponent, type ConfirmationWithPastProviderCleanup } from '../confirmation-dialog/confirmation-dialog.component';
+import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
+import { PlanScheduleCalendarComponent } from './plan-schedule-calendar.component';
+import { PlanPhasesDialogComponent } from './plan-phases-dialog.component';
+import { trainingPlanPhaseOnDate } from '../../helpers/training-plan-phases.helper';
+import { TrainingDeliveryButtonComponent } from './training-delivery-button.component';
+import { WorkoutTargetsEditorComponent } from './workout-targets-editor.component';
+import { WorkoutTimeInputComponent } from './workout-time-input.component';
+import { WorkoutProfileComponent } from './workout-profile.component';
+import type { WorkoutProfileSelection } from '../../helpers/workout-profile.helper';
+import { resolvePlanScheduleDate } from '../../helpers/plan-schedule-calendar.helper';
+import { TRAINING_PLAN_COLOR_OPTIONS, trainingPlanAppearance } from '../../helpers/training-plan-appearance.helper';
+import {
+  isTrainingPlansBrowseUrl,
+  parseTrainingPlansRoute,
+  trainingPlansBrowseRoute,
+  trainingPlansCreateRoute,
+  trainingPlansRouteKey,
+  trainingPlansWorkoutRoute,
+  type TrainingPlansRouteState,
+} from '../../helpers/training-plans-navigation.helper';
+import {
+  createManualWorkoutEditorStep,
+  createManualWorkoutEditorValue,
+  changeManualWorkoutEditorSport,
+  changeManualWorkoutEditorStepEnding,
+  formatManualWorkoutStructure,
+  manualWorkoutEditorToStructure,
+  workoutStructureToManualEditor,
+  type ManualWorkoutEditorNode,
+  type ManualWorkoutEditorStep,
+  type ManualWorkoutEditorValue,
+  type ManualWorkoutEnding,
+  type ManualWorkoutSport,
+} from '../../helpers/planned-workout-editor.helper';
+import {
+  duplicateManualWorkoutEditorNode,
+  manualWorkoutEditorNodeCount,
+  manualWorkoutEditorSiblings,
+  moveManualWorkoutEditorNode,
+} from '../../helpers/planned-workout-editor-actions.helper';
+import {
+  DELETED_WORKOUT_RECOVERY_DAYS,
+  TRAINING_PLAN_MAX_CURRENT_WORKOUTS,
+  addDaysToTrainingLocalDate,
+  normalizeTrainingLocalDate,
+  type DeleteTrainingPlanRequestV1,
+  type DeleteTrainingPlanResponseV1,
+  type ExpectedTrainingScheduleRevision,
+  type MutateTrainingScheduleRequestV1,
+  type MutateTrainingScheduleResponseV1,
+  type ScheduledWorkoutV1,
+  type SetTrainingPlanPhasesMutationV1,
+  type TrainingPlanLifecycle,
+  type TrainingPlanColor,
+  type TrainingPlanV1,
+  type TrainingScheduleHistoryEntryV1,
+  type TrainingScheduleRevisionScope,
+} from '@shared/training-plans';
+import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
+import {
+  isStrengthWorkoutSportV1, STRENGTH_WORKOUT_SPORT_ALIASES_V1,
+  parseStrengthWorkoutDraftV1,
+  projectStrengthWorkoutToV1,
+  strengthProjectionMatchesDetails,
+  type StrengthSetV1,
+  type StrengthWorkoutDraftV1,
+} from '@shared/strength-workout';
+import { WORKOUT_LIBRARY_MAX_PLACEMENTS, type PlaceWorkoutLibraryRequestV1, type WorkoutLibraryItemV1 } from '@shared/workout-library';
+import { filterWorkoutLibrary, presentWorkoutLibraryItem, type LibraryStatusFilter } from '../../helpers/workout-library-presentation.helper';
+
+type PlansView = 'plans' | 'standalone';
+
+interface ScheduleLoadState {
+  status: 'loading' | 'ready' | 'error';
+  schedule: CurrentTrainingScheduleV1;
+  message: string | null;
+}
+
+interface LibraryLoadState {
+  status: 'loading' | 'ready' | 'error';
+  items: WorkoutLibraryItemV1[];
+  message: string | null;
+}
+
+interface WorkoutEditorSession {
+  mode: 'create' | 'edit';
+  original: ScheduledWorkoutV1 | null;
+  originalWorkoutRevision: number | null;
+  destinationPlanId: string | null;
+  unitSettings: UserUnitSettingsInterface;
+  value: ManualWorkoutEditorValue;
+  strength: StrengthWorkoutDraftV1 | null;
+  strengthLoading: boolean;
+  strengthLoadFailed: boolean;
+}
+
+interface WorkoutRow {
+  workout: ScheduledWorkoutV1;
+  completion: TrainingWorkoutCompletionV1 | null;
+  summary: string[];
+  prescriptionSummary: string;
+  mayHaveStrengthDetails: boolean;
+  actionBusy: boolean;
+  historyScope: TrainingScheduleRevisionScope;
+}
+
+interface PlanDraft {
+  name: string;
+  color: TrainingPlanColor;
+  startLocalDate: string;
+  endLocalDate: string;
+  activate: boolean;
+}
+
+interface HistoryPanelState {
+  scope: TrainingScheduleRevisionScope;
+  status: 'loading' | 'ready' | 'error';
+  entries: TrainingScheduleHistoryEntryV1[];
+  nextBeforeRevision: number | null;
+  error: string | null;
+}
+
+interface DeletedWorkoutPanelState {
+  scopeKey: string;
+  status: 'idle' | 'loading' | 'ready' | 'error';
+  workouts: ScheduledWorkoutV1[];
+  nextCursor: { deletedAtMs: number; id: string } | null;
+  error: string | null;
+}
+
+const EMPTY_SCHEDULE: CurrentTrainingScheduleV1 = {
+  state: { schemaVersion: 1, activePlanId: null, revision: 0, currentWorkoutCount: 0, updatedAtMs: 0 },
+  plans: [],
+  workouts: [],
+};
+
+@Component({
+  selector: 'app-plans-workspace',
+  standalone: true,
+  imports: [SharedModule, DragDropModule, CompactRowComponent, PlanScheduleCalendarComponent, TrainingDeliveryButtonComponent, WorkoutTimeInputComponent, WorkoutProfileComponent, WorkoutTargetsEditorComponent],
+  templateUrl: './plans-workspace.component.html',
+  styleUrls: ['./plans-workspace.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class PlansWorkspaceComponent {
+  readonly deletedWorkoutRecoveryDays = DELETED_WORKOUT_RECOVERY_DAYS;
+  readonly strengthSport = ActivityTypes.StrengthTraining;
+  private readonly userService = inject(AppUserService);
+  private readonly userSettings = inject(AppUserSettingsQueryService);
+  private readonly plansService = inject(TrainingPlansService);
+  private readonly duplicateService = inject(TrainingWorkoutDuplicateService);
+  private readonly libraryService = inject(WorkoutLibraryService);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly injector = inject(Injector);
+  private readonly dialog = inject(MatDialog);
+  private phaseDialog: MatDialogRef<PlanPhasesDialogComponent> | null = null;
+  private readonly snackBar = inject(MatSnackBar);
+  private readonly liveAnnouncer = inject(LiveAnnouncer);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly location = inject(Location);
+  private readonly routeState = toSignal(combineLatest([
+    this.route.paramMap,
+    this.route.queryParamMap,
+    this.route.data,
+  ]).pipe(map(([pathParams, queryParams, data]) => parseTrainingPlansRoute(pathParams, queryParams, data))), {
+    initialValue: parseTrainingPlansRoute(
+      this.route.snapshot.paramMap,
+      this.route.snapshot.queryParamMap,
+      this.route.snapshot.data,
+    ),
+  });
+  private readonly locale = inject(LOCALE_ID);
+  private readonly destroyRef = inject(DestroyRef);
+  readonly haptics = inject(AppHapticsService);
+  private readonly workoutTitleInput = viewChild<ElementRef<HTMLInputElement>>('workoutTitleInput');
+  private readonly planNameInput = viewChild<ElementRef<HTMLInputElement>>('planNameInput');
+  private readonly addWorkoutButton = viewChild<unknown, ElementRef<HTMLButtonElement>>('addWorkoutButton', { read: ElementRef });
+  private readonly scopeNavigation = viewChild<ElementRef<HTMLElement>>('scopeNavigation');
+  private hadFocusedEditor = false;
+  private appliedRouteKey: string | null = null;
+  private editorGeneration = 0;
+  private navigationSequence = 0;
+  private routeOwner: string | undefined;
+  private viewPreferenceSequence = 0;
+  private viewPreferenceOwnerGeneration = 0;
+  private historyRequestSequence = 0;
+  private deletedWorkoutRequestSequence = 0;
+  private nodeSequence = 1;
+  private editorDrag: { generation: number; uid: string; nodeId: string; repeatId: string | null; siblingIds: string[] } | null = null;
+  private editorMenuFocus: { generation: number; uid: string; nodeId: string } | null = null;
+  private readonly pendingEditorNodeFocus = signal<{ generation: number; uid: string; nodeId: string } | null>(null);
+  private editorHasAnnouncement = false;
+  readonly editorNodeLimit = WORKOUT_STRUCTURE_MAX_NODES;
+  readonly editorNodeCount = computed(() => this.editor() ? manualWorkoutEditorNodeCount(this.editor()!.value) : 0);
+  readonly editorDragDelay = { touch: 200, mouse: 0 };
+
+  constructor() {
+    this.destroyRef.onDestroy(() => { this.clearEditorAnnouncement(); this.phaseDialog?.close(); });
+  }
+
+  readonly sportOptionGroups: ReadonlyArray<{
+    label: string;
+    strength?: boolean;
+    options: ReadonlyArray<{ value: ManualWorkoutSport; label: string }>;
+  }> = [
+    {
+      label: 'Running',
+      options: MANUAL_WORKOUT_EDITOR_RUNNING_SPORTS_V1.map(value => ({ value, label: value })),
+    },
+    {
+      label: 'Cycling',
+      options: MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1.map(value => ({ value, label: value })),
+    },
+    {
+      label: 'Swimming',
+      options: MANUAL_WORKOUT_EDITOR_SWIMMING_SPORTS_V1.map(value => ({
+        value,
+        label: value === ActivityTypes.Swimming ? 'Pool swimming' : 'Open-water swimming',
+      })),
+    },
+    {
+      label: 'Walking & hiking',
+      options: MANUAL_WORKOUT_EDITOR_WALKING_SPORTS_V1.map(value => ({ value, label: value })),
+    },
+    {
+      label: 'Rowing',
+      options: MANUAL_WORKOUT_EDITOR_ROWING_SPORTS_V1.map(value => ({ value, label: value })),
+    },
+    { label: 'Strength', strength: true, options: [ActivityTypes.StrengthTraining, ...STRENGTH_WORKOUT_SPORT_ALIASES_V1].map(value => ({ value, label: value })) },
+  ];
+  readonly purposeOptions = ['warmup', 'work', 'recovery', 'cooldown', 'rest', 'other'] as const;
+  readonly endingOptions: ReadonlyArray<{ value: ManualWorkoutEnding; label: string }> = [
+    { value: 'time', label: 'Time' },
+    { value: 'distance', label: 'Distance' },
+    { value: 'manual', label: 'Lap button press' },
+  ];
+  readonly currentUser = computed(() => this.userService.user() as AppUserInterface | null);
+  readonly editorIsSwimming = computed(() => isSwimmingWorkoutSportV1(this.editor()?.value.sport));
+  readonly editorIsStrength = computed(() => !!this.editor()?.strength || !!this.editor()?.strengthLoading || !!this.editor()?.strengthLoadFailed
+    || this.editor()?.value.sport === ActivityTypes.StrengthTraining);
+  readonly editorIsRowing = computed(() => isRowingWorkoutSportV1(this.editor()?.value.sport));
+  readonly editorIsPoolSwimming = computed(() => this.editor()?.value.sport === ActivityTypes.Swimming);
+  readonly editorWeightUnit = computed(() => this.editor()?.unitSettings.weightUnits === WeightUnits.Pounds ? 'lb' : 'kg');
+  readonly editorDistanceUnit = computed(() => this.editorIsSwimming() || this.editorIsRowing()
+    ? 'Metres'
+    : this.editor()?.unitSettings.distanceUnits === DistanceUnits.Miles ? 'Miles' : 'Kilometres');
+  readonly hasTrainingPlanningUIAccess = computed(() => !!this.currentUser()?.uid);
+  readonly libraryView = computed(() => this.routeState().mode.startsWith('library-'));
+  private readonly libraryReload = signal(0);
+  readonly librarySearch = signal('');
+  readonly librarySport = signal<ActivityTypes | null>(null);
+  readonly libraryStatus = signal<LibraryStatusFilter>('active');
+  readonly libraryExpandedIds = signal<string[]>([]);
+  readonly libraryCalendarDate = computed(() => this.routeState().localDate);
+  readonly libraryBrowseUrl = computed(() => '/training/plans/library'
+    + (this.libraryCalendarDate() ? `?date=${this.libraryCalendarDate()}` : ''));
+  readonly libraryState = toSignal(combineLatest([this.userService.user$, toObservable(this.libraryView), toObservable(this.libraryReload)]).pipe(
+    switchMap(([user, enabled]) => user?.uid && enabled ? this.libraryService.watch(user.uid).pipe(
+      map(items => ({ status: 'ready', items, message: null } as LibraryLoadState)),
+      startWith({ status: 'loading', items: [], message: null } as LibraryLoadState),
+      catchError(error => of({ status: 'error', items: [], message: errorMessage(error) } as LibraryLoadState)),
+    ) : of({ status: 'ready', items: [], message: null } as LibraryLoadState)),
+  ), { initialValue: { status: 'loading', items: [], message: null } as LibraryLoadState });
+  readonly libraryItems = computed(() => this.libraryState().items);
+  readonly librarySports = computed(() => [...new Set(this.libraryItems().map(item => item.structure.sport))].sort());
+  private readonly libraryPresentations = computed(() => this.libraryItems().map(item => ({
+    ...presentWorkoutLibraryItem(item, this.currentUser()?.settings?.unitSettings, this.locale),
+    prescriptionSummary: formatWorkoutPrescriptionSummaryV1(item.structure,
+      this.currentUser()?.settings?.unitSettings ?? null, item.structure.sport, this.locale),
+  })));
+  readonly libraryRows = computed(() => {
+    const ids = new Set(filterWorkoutLibrary(this.libraryItems(), this.librarySearch(),
+      this.librarySport(), this.libraryStatus()).map(item => item.id));
+    return this.libraryPresentations().filter(row => ids.has(row.item.id));
+  });
+  readonly libraryEditorItem = signal<WorkoutLibraryItemV1 | null>(null);
+  readonly placementItem = signal<WorkoutLibraryItemV1 | null>(null);
+  readonly placementPreview = computed(() => this.placementItem()
+    ? presentWorkoutLibraryItem(this.placementItem()!, this.currentUser()?.settings?.unitSettings, this.locale) : null);
+  private readonly placementAttempt = signal<{
+    request: PlaceWorkoutLibraryRequestV1;
+    plan: TrainingPlanV1 | null;
+  } | null>(null);
+  readonly placementRetry = computed(() => this.placementAttempt()?.request ?? null);
+  readonly placementLocked = computed(() => this.busyAction() !== null || this.placementRetry() !== null);
+  readonly placementPlanId = signal<string | null>(null);
+  readonly placementStartDate = signal(todayLocalDate());
+  readonly placementEndDate = signal(todayLocalDate());
+  readonly placementWeekdays = signal<number[]>([]);
+  private readonly placementWeekdaysCustomized = signal(false);
+  readonly placementDestination = computed(() => {
+    const attempt = this.placementAttempt();
+    return attempt ? attempt.plan : this.planOptions().find(plan => plan.id === this.placementPlanId()) ?? null;
+  });
+  readonly placementDestinationLabel = computed(() => this.placementDestination()?.name
+    ?? (this.placementPlanId() ? 'Unavailable plan' : 'Standalone'));
+  readonly placementRangeExtension = computed(() => {
+    const plan = this.placementDestination();
+    const dates = this.placementDates();
+    if (!plan || !dates.length) return null;
+    const start = dates[0] < plan.startLocalDate ? dates[0] : plan.startLocalDate;
+    const end = dates[dates.length - 1] > plan.endLocalDate ? dates[dates.length - 1] : plan.endLocalDate;
+    return start !== plan.startLocalDate || end !== plan.endLocalDate ? `${start}–${end}` : null;
+  });
+  readonly placementError = computed(() => {
+    // An uncertain request must stay replayable even after newer live data arrives.
+    if (this.placementRetry()) return null;
+    const start = this.placementStartDate();
+    const end = this.placementEndDate();
+    try {
+      normalizeTrainingLocalDate(start); normalizeTrainingLocalDate(end);
+      if (end < start) return 'The end date must be on or after the start date.';
+      if (end > addDaysToTrainingLocalDate(start, 365)) return 'Choose at most 366 days at once.';
+    } catch { return 'Choose valid calendar dates.'; }
+    if (this.placementWeekdays().length === 0) return 'Choose at least one weekday.';
+    if (this.placementDates().length > WORKOUT_LIBRARY_MAX_PLACEMENTS) return 'Add at most 100 dates at once.';
+    if (!this.placementRetry()) {
+      if (this.schedule().state.currentWorkoutCount + this.placementDates().length > TRAINING_PLAN_MAX_CURRENT_WORKOUTS) {
+        return 'Your calendar can hold at most 400 current workouts. Add fewer dates or remove unused workouts first.';
+      }
+      const plan = this.placementDestination();
+      if (this.placementPlanId() && (!plan || plan.lifecycle === 'archived')) return 'Choose an available destination plan or Standalone.';
+      if (plan && this.placementDates().length) {
+        const dates = this.placementDates();
+        const extendedStart = dates[0] < plan.startLocalDate ? dates[0] : plan.startLocalDate;
+        const extendedEnd = dates[dates.length - 1] > plan.endLocalDate ? dates[dates.length - 1] : plan.endLocalDate;
+        if (extendedEnd > addDaysToTrainingLocalDate(extendedStart, 365)) return 'A plan can span at most 366 days. Choose closer dates or Standalone.';
+      }
+    }
+    return null;
+  });
+  readonly placementDates = computed(() => {
+    const request = this.placementRetry();
+    if (request) return request.dates;
+    const start = this.placementStartDate();
+    const end = this.placementEndDate();
+    const weekdays = this.placementWeekdays();
+    try {
+      normalizeTrainingLocalDate(start); normalizeTrainingLocalDate(end);
+      if (start > end) return [] as string[];
+      const dates: string[] = [];
+      for (let offset = 0; offset <= 366; offset += 1) {
+        const date = addDaysToTrainingLocalDate(start, offset);
+        if (date > end) return dates;
+        if (weekdays.includes(new Date(`${date}T12:00:00Z`).getUTCDay())) dates.push(date);
+        if (dates.length > WORKOUT_LIBRARY_MAX_PLACEMENTS) return dates;
+      }
+      return [] as string[];
+    } catch { return [] as string[]; }
+  });
+  readonly placementOverlaps = computed(() => {
+    const dates = new Set(this.placementDates());
+    return this.schedule().workouts.filter(workout => workout.lifecycle !== 'deleted'
+      && workout.planId === this.placementPlanId() && dates.has(workout.localDate)).length;
+  });
+  readonly placementWeekdayOptions = computed(() => {
+    const start = this.currentUser()?.settings?.unitSettings?.startOfTheWeek;
+    const first = typeof start === 'number' && start >= 0 && start <= 6 ? start : 1;
+    const labels = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    return Array.from({ length: 7 }, (_, index) => {
+      const day = (first + index) % 7;
+      return { day, label: labels[day] };
+    });
+  });
+  readonly scheduleState = toSignal(this.userService.user$.pipe(
+    switchMap(user => user?.uid
+      ? this.plansService.watchSchedule(user.uid).pipe(
+        map(schedule => schedule.restoreUnavailable
+          ? ({ status: 'loading', schedule: EMPTY_SCHEDULE,
+              message: 'Restoring your training plan…' } as ScheduleLoadState)
+          : ({ status: 'ready', schedule, message: null } as ScheduleLoadState)),
+        startWith({ status: 'loading', schedule: EMPTY_SCHEDULE, message: null } as ScheduleLoadState),
+        catchError(error => of({
+          status: 'error',
+          schedule: EMPTY_SCHEDULE,
+          message: errorMessage(error),
+        } as ScheduleLoadState)),
+      )
+      : of({ status: 'ready', schedule: EMPTY_SCHEDULE, message: null } as ScheduleLoadState)),
+  ), { initialValue: { status: 'loading', schedule: EMPTY_SCHEDULE, message: null } as ScheduleLoadState });
+  readonly schedule = computed(() => this.scheduleState().schedule);
+  readonly completions = toSignal(this.userService.user$.pipe(
+    switchMap(user => user?.uid
+      ? this.plansService.watchWorkoutCompletions(user.uid).pipe(
+        startWith([] as TrainingWorkoutCompletionV1[]),
+        catchError(() => of([])),
+      )
+      : of([])),
+  ), { initialValue: [] as TrainingWorkoutCompletionV1[] });
+  readonly completedWorkoutIds = computed(() => this.completions().map(completion => completion.workoutId));
+  readonly view = signal<PlansView>('plans');
+  readonly selectedPlanId = signal<string | null>(null);
+  readonly nowMs = signal(Date.now());
+  readonly today = signal(todayLocalDate(new Date(this.nowMs())));
+  private readonly todayClock = afterNextRender(() => {
+    const handle = globalThis.setInterval(() => this.refreshToday(), 60_000);
+    this.destroyRef.onDestroy(() => globalThis.clearInterval(handle));
+  });
+  private readonly scheduleDateSelection = signal<{ uid: string; planId: string; localDate: string } | null>(null);
+  private readonly pendingDuplicateFocus = signal<{ uid: string; workoutId: string } | null>(null);
+  readonly showPlanForm = signal(false);
+  readonly planDraft = signal<PlanDraft>(defaultPlanDraft());
+  readonly planColorOptions = TRAINING_PLAN_COLOR_OPTIONS;
+  readonly planDraftAppearance = computed(() => trainingPlanAppearance(this.planDraft()));
+  readonly renamingPlanId = signal<string | null>(null);
+  readonly renameValue = signal('');
+  readonly shiftingPlanId = signal<string | null>(null);
+  readonly shiftDays = signal(1);
+  readonly deletingPlanId = signal<string | null>(null);
+  readonly deleteDisposition = signal<DeleteTrainingPlanRequestV1['workoutDisposition']>('convert-to-standalone');
+  readonly removePastProviderCopies = signal(false);
+  readonly editor = signal<WorkoutEditorSession | null>(null);
+  readonly editorProfileSelection = signal<WorkoutProfileSelection | null>(null);
+  readonly editorProfileContext = computed(() => this.editor()
+    ? `${this.currentUser()?.uid}/${this.editorGeneration}` : '');
+  readonly editorPrescriptionStructure = computed(() => {
+    const session = this.editor();
+    if (!session || session.strengthLoading) return null;
+    try { return this.editorStructure(session); } catch { return null; }
+  });
+  readonly editorProfile = computed(() => this.editorIsStrength() ? null : this.editorPrescriptionStructure());
+  readonly editorPrescriptionSummary = computed(() => {
+    const session = this.editor();
+    const structure = this.editorPrescriptionStructure();
+    return session && structure
+      ? formatWorkoutPrescriptionSummaryV1(structure, session.unitSettings, session.value.sport) : null;
+  });
+  readonly editorProfileStepId = computed(() => {
+    const id = this.editorProfileSelection()?.stepId;
+    return this.editorProfile()?.nodes.some(node => node.kind === 'step' ? node.id === id : node.steps.some(step => step.id === id)) ? id : null;
+  });
+  readonly workoutDatePickerValue = computed(() => workoutDatePickerInput(this.editor()?.value.localDate ?? ''));
+  readonly workoutDateInputInvalid = signal(false);
+  readonly busyAction = signal<string | null>(null);
+  readonly historyPanel = signal<HistoryPanelState | null>(null);
+  readonly deletedWorkoutsExpanded = signal(false);
+  readonly deletedWorkoutPanel = signal<DeletedWorkoutPanelState | null>(null);
+  readonly browsing = computed(() => !this.editor() && !this.showPlanForm());
+  readonly savedEditorWorkout = computed(() => {
+    const id = this.editor()?.original?.id;
+    return id ? this.schedule().workouts.find(workout => workout.id === id && workout.lifecycle !== 'deleted') ?? null : null;
+  });
+  readonly savedEditorPlan = computed(() => this.schedule().plans.find(plan => plan.id === this.savedEditorWorkout()?.planId) ?? null);
+  private readonly acknowledgedPlan = signal<{
+    uid: string;
+    plan: TrainingPlanV1;
+    state: CurrentTrainingScheduleV1['state'];
+  } | null>(null);
+
+  readonly planOptions = computed(() => {
+    const plans = this.schedule().plans;
+    const acknowledged = this.acknowledgedPlan();
+    if (!acknowledged || acknowledged.uid !== this.currentUser()?.uid) return plans;
+    const current = plans.find(plan => plan.id === acknowledged.plan.id);
+    if (current && current.revision >= acknowledged.plan.revision) return plans;
+    return current ? plans.map(plan => plan.id === acknowledged.plan.id ? acknowledged.plan : plan)
+      : [...plans, acknowledged.plan];
+  });
+  readonly activePlan = computed(() => this.schedule().plans.find(plan => (
+    plan.id === this.schedule().state.activePlanId
+  )) ?? null);
+  readonly selectedPlan = computed(() => this.planOptions().find(plan => (
+    plan.id === this.selectedPlanId()
+  )) ?? null);
+  readonly selectedPlanAppearance = computed(() => trainingPlanAppearance(this.selectedPlan()));
+  readonly selectedDayPhase = computed(() => trainingPlanPhaseOnDate(this.selectedPlan(), this.planScheduleDate() ?? ''));
+  readonly planAppearances = computed(() => Object.fromEntries(this.planOptions().map(plan => [plan.id, trainingPlanAppearance(plan)])));
+  readonly selectedPlanActionBusy = computed(() => {
+    const planId = this.selectedPlanId();
+    const action = this.busyAction();
+    return Boolean(planId && action && [
+      `rename-${planId}`,
+      `color-${planId}`,
+      `shift-${planId}`,
+      `lifecycle-${planId}`,
+      `delete-plan-${planId}`,
+    ].includes(action));
+  });
+  readonly workoutRows = computed<WorkoutRow[]>(() => {
+    const selectedPlanId = this.view() === 'plans' ? this.selectedPlanId() : null;
+    return this.schedule().workouts
+      .filter(workout => this.view() === 'standalone'
+        ? workout.planId === null
+        : workout.planId === selectedPlanId)
+      .map(workout => ({
+        workout,
+        mayHaveStrengthDetails: isStrengthWorkoutSportV1(workout.structure.sport),
+        prescriptionSummary: formatWorkoutPrescriptionSummaryV1(workout.structure,
+          this.currentUser()?.settings?.unitSettings ?? null, workout.structure.sport, this.locale),
+        completion: this.completions().find(completion => completion.workoutId === workout.id) ?? null,
+        summary: formatManualWorkoutStructure(
+          workout.structure,
+          this.currentUser()?.settings?.unitSettings ?? null,
+          this.locale,
+        ),
+        actionBusy: ['copy', 'skip', 'delete', 'permanent', 'library'].some(action => this.busyAction() === `${action}-${workout.id}`),
+        historyScope: workout.planId
+          ? { kind: 'plan', id: workout.planId }
+          : { kind: 'workout', id: workout.id },
+      }));
+  });
+  readonly currentWorkoutRows = computed(() => this.workoutRows().filter(row => row.workout.lifecycle !== 'deleted'));
+  readonly planScheduleDate = computed(() => {
+    const plan = this.selectedPlan();
+    if (!plan) return null;
+    const selection = this.scheduleDateSelection();
+    return resolvePlanScheduleDate(plan,
+      selection?.uid === this.currentUser()?.uid && selection?.planId === plan.id ? selection.localDate : null,
+      this.today());
+  });
+  readonly displayedWorkoutRows = computed(() => this.view() === 'standalone' ? this.currentWorkoutRows()
+    : this.currentWorkoutRows().filter(row => row.workout.localDate === this.planScheduleDate()));
+  // Standalone defaults resolve at the actual click, even just after midnight before the clock ticks.
+  readonly addWorkoutDate = computed(() => this.view() === 'plans' ? this.planScheduleDate() ?? undefined : undefined);
+  readonly deletedWorkoutRows = computed<WorkoutRow[]>(() => (this.deletedWorkoutPanel()?.workouts ?? []).map(workout => ({
+    workout,
+    mayHaveStrengthDetails: isStrengthWorkoutSportV1(workout.structure.sport),
+    prescriptionSummary: formatWorkoutPrescriptionSummaryV1(workout.structure,
+      this.currentUser()?.settings?.unitSettings ?? null, workout.structure.sport, this.locale),
+    completion: null,
+    summary: formatManualWorkoutStructure(
+      workout.structure,
+      this.currentUser()?.settings?.unitSettings ?? null,
+      this.locale,
+    ),
+    actionBusy: this.busyAction() === `permanent-${workout.id}`,
+    historyScope: workout.planId
+      ? { kind: 'plan', id: workout.planId }
+      : { kind: 'workout', id: workout.id },
+  })));
+  readonly deletedWorkoutScope = computed(() => {
+    const uid = this.currentUser()?.uid;
+    if (!uid) return null;
+    const planId = this.view() === 'plans' ? this.selectedPlanId() : null;
+    if (this.view() === 'plans' && !planId) return null;
+    return { uid, planId,
+      key: `${uid}:${planId === null ? 'standalone' : `plan:${planId}`}:${this.schedule().state.revision}` };
+  });
+  readonly pageStatus = computed(() => {
+    if (this.libraryView() && this.libraryState().status === 'error') return 'warning' as const;
+    if (this.libraryView() && this.libraryState().status === 'loading') return 'pending' as const;
+    if (this.scheduleState().status === 'loading') return 'pending' as const;
+    if (this.scheduleState().status === 'error') return 'warning' as const;
+    return null;
+  });
+
+  private readonly editorFocusEffect = afterRenderEffect(() => {
+    const input = this.workoutTitleInput()?.nativeElement ?? this.planNameInput()?.nativeElement;
+    if (input) {
+      input.focus();
+      this.hadFocusedEditor = true;
+    } else if (this.hadFocusedEditor) {
+      const returnTarget = this.addWorkoutButton()?.nativeElement ?? this.scopeNavigation()?.nativeElement;
+      if (returnTarget) {
+        returnTarget.focus();
+        this.hadFocusedEditor = false;
+      }
+    }
+  });
+  private readonly duplicateFocusEffect = afterRenderEffect(() => {
+    const pending = this.pendingDuplicateFocus();
+    this.displayedWorkoutRows();
+    if (!pending) return;
+    if (pending.uid !== this.currentUser()?.uid) {
+      this.pendingDuplicateFocus.set(null);
+      return;
+    }
+    const row = Array.from(this.host.nativeElement.querySelectorAll<HTMLElement>('[data-workout-id]'))
+      .find(candidate => candidate.dataset['workoutId'] === pending.workoutId);
+    if (!row) return;
+    row.focus();
+    row.scrollIntoView?.({ block: 'nearest' });
+    this.pendingDuplicateFocus.set(null);
+  });
+  private readonly editorNodeFocusEffect = afterRenderEffect(() => {
+    const pending = this.pendingEditorNodeFocus();
+    this.editor();
+    if (!pending) return;
+    if (pending.generation === this.editorGeneration && pending.uid === this.currentUser()?.uid && !this.busyAction()) {
+      const button = Array.from(this.host.nativeElement.querySelectorAll<HTMLButtonElement>('[data-editor-node-action]'))
+        .find(candidate => candidate.dataset['editorNodeAction'] === pending.nodeId);
+      button?.focus();
+      button?.scrollIntoView?.({ block: 'nearest' });
+    }
+    this.pendingEditorNodeFocus.set(null);
+  });
+
+  private readonly selectionEffect = effect(() => {
+    const plans = this.planOptions();
+    const selected = this.selectedPlanId();
+    if (selected && plans.some(plan => plan.id === selected)) return;
+    this.selectedPlanId.set(this.schedule().state.activePlanId ?? plans[0]?.id ?? null);
+  });
+
+  private readonly deletedWorkoutScopeEffect = effect(() => {
+    const key = this.deletedWorkoutScope()?.key ?? null;
+    if (this.deletedWorkoutPanel()?.scopeKey === key) return;
+    this.deletedWorkoutRequestSequence += 1;
+    this.deletedWorkoutsExpanded.set(false);
+    this.deletedWorkoutPanel.set(key ? {
+      scopeKey: key, status: 'idle', workouts: [], nextCursor: null, error: null,
+    } : null);
+  });
+
+  private readonly acknowledgedPlanEffect = effect(() => {
+    const acknowledged = this.acknowledgedPlan();
+    if (!acknowledged) return;
+    if (acknowledged.uid !== this.currentUser()?.uid || (
+      this.schedule().state.revision >= acknowledged.state.revision
+      && this.schedule().plans.some(plan => plan.id === acknowledged.plan.id
+        && plan.revision >= acknowledged.plan.revision)
+    )) {
+      this.acknowledgedPlan.set(null);
+    }
+  });
+
+  private readonly requestedEditorEffect = effect(() => {
+    const requested = this.routeState();
+    const uid = this.currentUser()?.uid;
+    if (this.routeOwner !== uid) {
+      this.phaseDialog?.close();
+      this.phaseDialog = null;
+      this.routeOwner = uid;
+      this.viewPreferenceOwnerGeneration += 1;
+      this.viewPreferenceSequence += 1;
+      this.view.set('plans');
+      this.appliedRouteKey = null;
+      this.advanceEditorGeneration();
+      this.editor.set(null);
+      this.libraryEditorItem.set(null);
+      this.placementItem.set(null);
+      this.placementAttempt.set(null);
+      if (this.busyAction()?.startsWith('place-')) this.busyAction.set(null);
+      this.librarySearch.set('');
+      this.librarySport.set(null);
+      this.libraryStatus.set('active');
+      this.libraryExpandedIds.set([]);
+      this.showPlanForm.set(false);
+      this.scheduleDateSelection.set(null);
+      this.closeHistory();
+      this.clearPlanActions();
+    }
+    if (!this.hasTrainingPlanningUIAccess() || this.scheduleState().status !== 'ready') return;
+    // Only a navigation/account change can replace a draft, never a live schedule or unit-settings update.
+    const key = trainingPlansRouteKey(uid, requested);
+    if (key === this.appliedRouteKey) {
+      // Keep a browse URL canonical when the selected plan is removed by this account in another session.
+      if (
+        requested.mode === 'browse'
+        && requested.planId
+        && !this.planOptions().some(plan => plan.id === requested.planId)
+        && !this.busyAction()
+      ) {
+        this.snackBar.open('That training plan is no longer available.', 'Dismiss', { duration: 5000 });
+        untracked(() => this.replaceUnavailableRoute());
+      }
+      return;
+    }
+    untracked(() => this.applyRoute(requested));
+  });
+
+  private applyRoute(requested: TrainingPlansRouteState): void {
+    this.appliedRouteKey = trainingPlansRouteKey(this.currentUser()?.uid, requested);
+    this.advanceEditorGeneration();
+    this.editor.set(null);
+    this.libraryEditorItem.set(null);
+    this.placementItem.set(null);
+    this.placementAttempt.set(null);
+    if (this.busyAction()?.startsWith('place-')) this.busyAction.set(null);
+    this.showPlanForm.set(false);
+    this.closeHistory();
+    this.clearPlanActions();
+    if (!this.currentUser()?.uid) return;
+    if (requested.mode === 'library-browse') return;
+    if (requested.mode === 'library-create') {
+      this.startNewWorkoutEditor(null, todayLocalDate());
+      return;
+    }
+    if (requested.mode === 'library-edit' && requested.libraryItemId) {
+      const generation = this.editorGeneration;
+      const uid = this.currentUser()!.uid;
+      void this.libraryService.get(uid, requested.libraryItemId).then(item => {
+        if (this.destroyRef.destroyed || generation !== this.editorGeneration || uid !== this.currentUser()?.uid) return;
+        if (!item) throw new Error('This saved workout is no longer available.');
+        this.libraryEditorItem.set(item);
+        this.editor.set({ mode: 'edit', original: null, originalWorkoutRevision: null,
+          destinationPlanId: null, unitSettings: normalizeUserUnitSettings(this.currentUser()?.settings?.unitSettings),
+          value: item.strength
+            ? { ...createManualWorkoutEditorValue(todayLocalDate()), title: item.title,
+              sport: item.structure.sport as ManualWorkoutSport, nodes: [] }
+            : workoutStructureToManualEditor(item.title, todayLocalDate(), item.structure,
+              normalizeUserUnitSettings(this.currentUser()?.settings?.unitSettings)),
+          strength: item.strength ?? null, strengthLoading: false, strengthLoadFailed: false });
+      }).catch(error => {
+        if (generation !== this.editorGeneration || this.destroyRef.destroyed) return;
+        this.showError(error);
+        this.returnToLibraryBrowse();
+      });
+      return;
+    }
+    if (requested.mode === 'edit' && requested.workoutId) {
+      const workout = this.schedule().workouts.find(candidate => (
+        candidate.id === requested.workoutId && candidate.lifecycle !== 'deleted'
+      ));
+      if (workout) {
+        this.selectWorkoutScope(workout.planId, workout.localDate);
+        this.startWorkoutEditor(workout);
+        return;
+      }
+      this.snackBar.open('That planned workout is no longer available.', 'Dismiss', { duration: 5000 });
+      this.replaceUnavailableRoute();
+      return;
+    }
+    if (requested.mode === 'browse' && !requested.planId && !requested.standalone
+      && this.currentUser()?.settings?.appSettings?.trainingWorkspace?.plansView === 'standalone') {
+      this.selectWorkoutScope(null, requested.localDate ?? todayLocalDate());
+      this.scheduleDateSelection.set(null);
+      const restored = { ...requested, standalone: true };
+      this.navigateWorkspace(trainingPlansBrowseRoute(null, true), restored, { replaceUrl: true });
+      return;
+    }
+    const plan = this.planOptions().find(candidate => candidate.id === requested.planId);
+    if (requested.planId && !plan) {
+      this.snackBar.open('That training plan is no longer available.', 'Dismiss', { duration: 5000 });
+      this.replaceUnavailableRoute();
+      return;
+    }
+    const planId = requested.standalone ? null : plan?.id ?? this.schedule().state.activePlanId
+      ?? (requested.mode === 'create' ? null : this.planOptions()[0]?.id ?? null);
+    this.selectWorkoutScope(planId, requested.localDate ?? todayLocalDate());
+    if (!requested.localDate) this.scheduleDateSelection.set(null);
+    if (!planId && !requested.standalone && requested.mode === 'browse') this.view.set('plans');
+    if (requested.mode === 'create') {
+      this.startNewWorkoutEditor(planId, requested.localDate ?? todayLocalDate());
+    }
+  }
+
+  private browseRouteState(): TrainingPlansRouteState {
+    const standalone = this.view() === 'standalone';
+    return {
+      mode: 'browse',
+      workoutId: null,
+      planId: standalone ? null : this.selectedPlanId(),
+      standalone,
+      localDate: standalone ? null : this.planScheduleDate(),
+    };
+  }
+
+  private navigateWorkspace(
+    commands: string[],
+    requested: TrainingPlansRouteState,
+    options: { replaceUrl?: boolean; editorReturn?: boolean } = {},
+  ): void {
+    const sequence = ++this.navigationSequence;
+    this.appliedRouteKey = trainingPlansRouteKey(this.currentUser()?.uid, requested);
+    const navigation: NavigationExtras = {
+      queryParams: requested.localDate ? { date: requested.localDate } : undefined,
+      replaceUrl: options.replaceUrl,
+      ...(options.editorReturn ? { state: { trainingPlansEditorReturn: { uid: this.currentUser()?.uid, url: this.router.url } } } : {}),
+    };
+    void this.router.navigate(commands, navigation).then(navigated => {
+      if (!navigated && sequence === this.navigationSequence && !this.destroyRef.destroyed) {
+        this.appliedRouteKey = null;
+        this.applyRoute(this.routeState());
+      }
+    }).catch(error => {
+      if (sequence !== this.navigationSequence || this.destroyRef.destroyed) return;
+      this.appliedRouteKey = null;
+      this.applyRoute(this.routeState());
+      this.showError(error);
+    });
+  }
+
+  @HostListener('window:focus')
+  refreshToday(): void {
+    const now = new Date();
+    this.nowMs.set(now.getTime());
+    this.today.set(todayLocalDate(now));
+  }
+
+  @HostListener('document:visibilitychange')
+  refreshVisibleToday(): void {
+    if (document.visibilityState === 'visible') this.refreshToday();
+  }
+
+  async selectView(view: PlansView): Promise<void> {
+    const uid = this.currentUser()?.uid;
+    if (!uid || (view !== 'plans' && view !== 'standalone')
+      || view === this.view() || !this.browsing() || this.busyAction()) return;
+    this.haptics.selection();
+    this.view.set(view);
+    this.closeHistory();
+    this.clearPlanActions();
+    const route = this.browseRouteState();
+    this.navigateWorkspace(trainingPlansBrowseRoute(route.planId, route.standalone), route);
+    const sequence = ++this.viewPreferenceSequence;
+    const ownerGeneration = this.viewPreferenceOwnerGeneration;
+    try {
+      // The shared writer orders saves even when this route is closed and reopened.
+      await this.userSettings.updateTrainingWorkspacePreferences(uid, { plansView: view });
+    } catch {
+      if (this.destroyRef.destroyed || uid !== this.currentUser()?.uid
+        || sequence !== this.viewPreferenceSequence || ownerGeneration !== this.viewPreferenceOwnerGeneration) return;
+      this.showError(new Error('Could not remember your Plans view. Your selection is still active for this visit.'));
+    }
+  }
+
+  selectPlan(planId: string): void {
+    if (planId === this.selectedPlanId() || !this.browsing() || this.busyAction()) return;
+    this.haptics.selection();
+    this.selectedPlanId.set(planId);
+    this.view.set('plans');
+    this.closeHistory();
+    this.clearPlanActions();
+    const route = this.browseRouteState();
+    this.navigateWorkspace(trainingPlansBrowseRoute(route.planId, false), route);
+  }
+
+  selectScheduleDate(localDate: string): void {
+    const uid = this.currentUser()?.uid;
+    const plan = this.selectedPlan();
+    if (!uid || !plan || this.busyAction() || !this.browsing()) return;
+    this.scheduleDateSelection.set({ uid, planId: plan.id, localDate });
+    // Date/keyboard navigation refines the current screen rather than filling browser history.
+    const route = this.browseRouteState();
+    this.navigateWorkspace(trainingPlansBrowseRoute(route.planId, false), route, { replaceUrl: true });
+  }
+
+  editScheduledWorkout(workout: ScheduledWorkoutV1): void {
+    this.editWorkout(workout);
+  }
+
+  beginPlanCreation(): void {
+    if (!this.browsing() || this.busyAction()) return;
+    this.closeHistory();
+    this.clearPlanActions();
+    this.planDraft.set(defaultPlanDraft());
+    this.showPlanForm.set(true);
+  }
+
+  cancelPlanCreation(): void {
+    this.showPlanForm.set(false);
+  }
+
+  updatePlanDraft<K extends keyof PlanDraft>(field: K, value: PlanDraft[K]): void {
+    if (this.busyAction() || this.planDraft()[field] === value) return;
+    if (field === 'activate' || field === 'color') this.haptics.selection();
+    this.planDraft.update(draft => ({ ...draft, [field]: value }));
+  }
+
+  async createPlan(): Promise<void> {
+    const uid = this.currentUser()?.uid;
+    if (!uid) return;
+    const draft = this.planDraft();
+    const planId = this.plansService.createEntityId('plan');
+    const expected = this.expectedRevisions({
+      planIds: draft.activate && this.activePlan() ? [this.activePlan()!.id] : [],
+    });
+    const response = await this.runMutation({
+      mutationId: this.plansService.createMutationId('create-plan'),
+      expectedRevisions: expected,
+      operation: {
+        kind: 'create-plan',
+        planId,
+        name: draft.name,
+        color: draft.color,
+        startLocalDate: draft.startLocalDate,
+        endLocalDate: draft.endLocalDate,
+        activate: draft.activate,
+      },
+    }, 'create-plan');
+    if (!response) return;
+    // The callable and the independent Firestore listeners can arrive in either
+    // order. Keep the acknowledged plan selectable until its live record arrives.
+    const createdPlan = response.plans.find(plan => plan.id === planId);
+    if (createdPlan) this.acknowledgedPlan.set({ uid, plan: createdPlan, state: response.state });
+    this.showPlanForm.set(false);
+    this.selectedPlanId.set(planId);
+    this.view.set('plans');
+    const route = this.browseRouteState();
+    this.navigateWorkspace(trainingPlansBrowseRoute(route.planId, false), route, { replaceUrl: true });
+    this.snackBar.open('Training plan created.', 'Dismiss', { duration: 3500 });
+  }
+
+  beginRename(plan: TrainingPlanV1): void {
+    this.clearPlanActions();
+    this.renamingPlanId.set(plan.id);
+    this.renameValue.set(plan.name);
+  }
+
+  async editPlanPhases(plan: TrainingPlanV1): Promise<void> {
+    const uid = this.currentUser()?.uid;
+    if (!uid || this.busyAction() || !this.browsing()) return;
+    const expectedRevisions = this.expectedRevisions({ planIds: [plan.id],
+      planRevisionOverrides: new Map([[plan.id, plan.revision]]) });
+    const mutationIds = new Map<string, string>();
+    const reference: MatDialogRef<PlanPhasesDialogComponent> = this.dialog.open(PlanPhasesDialogComponent, { width: '640px', maxWidth: 'calc(100vw - 24px)',
+      data: { plan, currentWorkoutDates: this.schedule().workouts.filter(workout => workout.planId === plan.id
+        && workout.lifecycle !== 'deleted').map(workout => workout.localDate),
+        onSave: async (operation: SetTrainingPlanPhasesMutationV1): Promise<boolean> => {
+          const isCurrent = () => !this.destroyRef.destroyed && this.currentUser()?.uid === uid && this.phaseDialog === reference;
+          if (!isCurrent() || !this.browsing() || this.busyAction()) return false;
+          const key = JSON.stringify(operation);
+          const mutationId = mutationIds.get(key) ?? this.plansService.createMutationId('set-plan-phases');
+          mutationIds.set(key, mutationId);
+          const response = await this.runMutation({ mutationId,
+            expectedRevisions, operation }, `phases-${plan.id}`, isCurrent);
+          if (!response || !isCurrent()) return false;
+          this.snackBar.open('Plan phases updated.', 'Dismiss', { duration: 3000 });
+          return true;
+        } } });
+    this.phaseDialog = reference;
+    reference.afterClosed().pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+      if (this.phaseDialog === reference) this.phaseDialog = null;
+    });
+  }
+
+  async setPlanColor(plan: TrainingPlanV1, color: TrainingPlanColor): Promise<void> {
+    if (this.busyAction() || !this.browsing() || !this.currentUser()?.uid || (plan.color ?? 'default') === color) return;
+    this.haptics.selection();
+    const response = await this.runMutation({
+      mutationId: this.plansService.createMutationId('set-plan-color'),
+      expectedRevisions: this.expectedRevisions({
+        planIds: [plan.id], planRevisionOverrides: new Map([[plan.id, plan.revision]]),
+      }),
+      operation: { kind: 'set-plan-color', planId: plan.id, color },
+    }, `color-${plan.id}`);
+    if (response) this.snackBar.open('Plan color updated.', 'Dismiss', { duration: 3000 });
+  }
+
+  async renamePlan(plan: TrainingPlanV1): Promise<void> {
+    const name = this.renameValue().trim();
+    if (!name) return;
+    const response = await this.runMutation({
+      mutationId: this.plansService.createMutationId('rename-plan'),
+      expectedRevisions: this.expectedRevisions({
+        planIds: [plan.id],
+        planRevisionOverrides: new Map([[plan.id, plan.revision]]),
+      }),
+      operation: { kind: 'rename-plan', planId: plan.id, name },
+    }, `rename-${plan.id}`);
+    if (!response) return;
+    this.renamingPlanId.set(null);
+    this.snackBar.open('Plan renamed.', 'Dismiss', { duration: 3000 });
+  }
+
+  async setPlanLifecycle(plan: TrainingPlanV1, lifecycle: TrainingPlanLifecycle): Promise<void> {
+    const uid = this.currentUser()?.uid;
+    if (!uid || !this.browsing() || this.scheduleState().status !== 'ready' || this.busyAction()
+      || plan.lifecycle === lifecycle) return;
+    const generation = this.editorGeneration;
+    const isCurrent = () => uid === this.currentUser()?.uid && generation === this.editorGeneration;
+    const planIds = [plan.id];
+    if (lifecycle === 'active' && this.activePlan() && this.activePlan()!.id !== plan.id) {
+      planIds.push(this.activePlan()!.id);
+    }
+    const response = await this.runMutation({
+      mutationId: this.plansService.createMutationId(`plan-${lifecycle}`),
+      expectedRevisions: this.expectedRevisions({
+        planIds,
+        planRevisionOverrides: new Map([[plan.id, plan.revision]]),
+      }),
+      operation: { kind: 'set-plan-lifecycle', planId: plan.id, lifecycle },
+    }, `lifecycle-${plan.id}`, isCurrent);
+    if (!response || !isCurrent()) return;
+    if (lifecycle === 'archived' && this.deletingPlanId() === plan.id) {
+      this.deletingPlanId.set(null);
+    }
+    this.snackBar.open(`Plan ${lifecycle}.`, 'Dismiss', { duration: 3000 });
+  }
+
+  beginShift(plan: TrainingPlanV1): void {
+    this.clearPlanActions();
+    this.shiftingPlanId.set(plan.id);
+    this.shiftDays.set(1);
+  }
+
+  async shiftPlan(plan: TrainingPlanV1): Promise<void> {
+    const days = Number(this.shiftDays());
+    if (!Number.isSafeInteger(days) || days === 0 || Math.abs(days) > 366) {
+      this.snackBar.open('Enter a non-zero whole-day shift up to 366 days.', 'Dismiss', { duration: 5000 });
+      return;
+    }
+    const response = await this.runMutation({
+      mutationId: this.plansService.createMutationId('shift-plan'),
+      expectedRevisions: this.expectedRevisions({
+        planIds: [plan.id],
+        planRevisionOverrides: new Map([[plan.id, plan.revision]]),
+      }),
+      operation: { kind: 'shift-plan', planId: plan.id, days },
+    }, `shift-${plan.id}`);
+    if (!response) return;
+    this.shiftingPlanId.set(null);
+    this.snackBar.open(`Plan shifted ${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'}.`, 'Dismiss', { duration: 3500 });
+  }
+
+  beginPlanDeletion(plan: TrainingPlanV1): void {
+    this.clearPlanActions();
+    this.deletingPlanId.set(plan.id);
+    this.deleteDisposition.set('convert-to-standalone');
+    this.removePastProviderCopies.set(false);
+  }
+
+  async deletePlan(plan: TrainingPlanV1): Promise<void> {
+    const disposition = this.deleteDisposition();
+    const removePastProviderCopies = this.removePastProviderCopies();
+    const expectedRevisions = this.expectedRevisions({
+      planIds: [plan.id],
+      planRevisionOverrides: new Map([[plan.id, plan.revision]]),
+    });
+    const confirmed = await this.confirm(
+      'Delete training plan?',
+      disposition === 'convert-to-standalone'
+        ? `Delete ${plan.name} and keep its current workouts as standalone workouts? Plan history will be removed.`
+        : `Delete ${plan.name}, its current workouts, and their history permanently?`,
+      'Delete plan',
+      'warn',
+    );
+    if (!confirmed) return;
+    this.busyAction.set(`delete-plan-${plan.id}`);
+    try {
+      const response = await this.plansService.deletePlan({
+        mutationId: this.plansService.createMutationId('delete-plan'),
+        planId: plan.id,
+        expectedRevisions,
+        workoutDisposition: disposition,
+        confirmPlanDeletion: true,
+        ...(removePastProviderCopies ? { removePastProviderCopies: true } : {}),
+      });
+      this.haptics.success();
+      this.deletingPlanId.set(null);
+      this.navigateAfterPlanDeletion(response);
+      this.snackBar.open(removePastProviderCopies
+        ? 'Training plan deleted. Past provider cleanup is pending where supported; check Workout sync history.'
+        : 'Training plan deleted.', 'Dismiss', { duration: 6000 });
+    } catch (error) {
+      this.showError(error);
+    } finally {
+      this.busyAction.set(null);
+    }
+  }
+
+  openNewWorkout(destinationPlanId?: string | null, localDate = todayLocalDate()): void {
+    if (!this.browsing() || this.busyAction()) return;
+    this.closeHistory();
+    this.clearPlanActions();
+    const defaultDestination = destinationPlanId === undefined
+      ? (this.view() === 'plans' ? this.selectedPlanId() : null)
+      : destinationPlanId;
+    this.startNewWorkoutEditor(defaultDestination ?? null, localDate);
+    const requested: TrainingPlansRouteState = {
+      mode: 'create', workoutId: null, planId: defaultDestination ?? null,
+      standalone: defaultDestination === null, localDate,
+    };
+    this.navigateWorkspace(trainingPlansCreateRoute(requested.planId, requested.standalone), requested, { editorReturn: true });
+  }
+
+  private startNewWorkoutEditor(destinationPlanId: string | null, localDate: string): void {
+    this.advanceEditorGeneration();
+    this.workoutDateInputInvalid.set(false);
+    this.editor.set({
+      mode: 'create',
+      original: null,
+      originalWorkoutRevision: null,
+      destinationPlanId,
+      unitSettings: normalizeUserUnitSettings(this.currentUser()?.settings?.unitSettings),
+      value: createManualWorkoutEditorValue(localDate, this.nextNodeId('step')),
+      strength: null,
+      strengthLoading: false,
+      strengthLoadFailed: false,
+    });
+  }
+
+  editWorkout(workout: ScheduledWorkoutV1): void {
+    if (!this.browsing() || this.busyAction()) return;
+    this.selectWorkoutScope(workout.planId, workout.localDate);
+    if (this.startWorkoutEditor(workout)) {
+      this.navigateWorkspace(trainingPlansWorkoutRoute(workout.id), {
+        mode: 'edit', workoutId: workout.id, planId: null, standalone: false, localDate: null,
+      }, { editorReturn: true });
+    }
+  }
+
+  private startWorkoutEditor(workout: ScheduledWorkoutV1): boolean {
+    try {
+      this.closeHistory();
+      this.clearPlanActions();
+      this.advanceEditorGeneration();
+      this.workoutDateInputInvalid.set(false);
+      const strength = isStrengthWorkoutSportV1(workout.structure.sport);
+      const unitSettings = normalizeUserUnitSettings(this.currentUser()?.settings?.unitSettings);
+      this.editor.set({
+        mode: 'edit',
+        original: workout,
+        originalWorkoutRevision: workout.revision,
+        destinationPlanId: workout.planId,
+        unitSettings,
+        value: strength
+          ? { ...createManualWorkoutEditorValue(workout.localDate), title: workout.title,
+            sport: workout.structure.sport as ManualWorkoutSport, nodes: [] }
+          : workoutStructureToManualEditor(
+            workout.title, workout.localDate, workout.structure, unitSettings,
+          ),
+        strength: null,
+        strengthLoading: strength,
+        strengthLoadFailed: false,
+      });
+      if (strength) {
+        const generation = this.editorGeneration;
+        const uid = this.currentUser()?.uid;
+        if (!uid) throw new Error('Sign in to edit this strength workout.');
+        const pending = workout.structure.sport === ActivityTypes.StrengthTraining
+          ? this.plansService.getStrengthDetails(uid, workout.id) : this.plansService.getStrengthDetails(uid, workout.id, true);
+        void pending.then(details => {
+          if (this.destroyRef.destroyed || generation !== this.editorGeneration || uid !== this.currentUser()?.uid) return;
+          if (!details) {
+            if (workout.structure.sport === ActivityTypes.StrengthTraining) throw new Error('The strength prescription is missing.');
+            this.editor.update(session => session && session.original?.id === workout.id ? { ...session,
+              value: workoutStructureToManualEditor(session.value.title, session.value.localDate, workout.structure, unitSettings),
+              strength: null, strengthLoading: false } : session);
+            return;
+          }
+          if (!strengthProjectionMatchesDetails(workout.structure, details)) throw new Error('Strength prescription and summary do not match.');
+          this.editor.update(session => session && session.original?.id === workout.id ? {
+            ...session, strength: { version: details.version, exercises: details.exercises }, strengthLoading: false,
+          } : session);
+        }).catch(error => {
+          if (generation !== this.editorGeneration || this.destroyRef.destroyed || uid !== this.currentUser()?.uid) return;
+          this.editor.update(session => session && session.original?.id === workout.id
+            ? { ...session, strengthLoading: false, strengthLoadFailed: true } : session);
+          this.showError(error);
+        });
+      }
+      return true;
+    } catch (error) {
+      this.showError(error);
+      return false;
+    }
+  }
+
+  cancelEditor(): void {
+    if (this.busyAction() || !this.editor()) return;
+    this.advanceEditorGeneration();
+    this.editor.set(null);
+    const state = this.location.getState() as { trainingPlansEditorReturn?: { uid?: string; url?: string } } | null;
+    const previous = state?.trainingPlansEditorReturn;
+    if (this.libraryView()) {
+      this.libraryEditorItem.set(null);
+      if (previous?.uid === this.currentUser()?.uid && previous.url === this.libraryBrowseUrl()) {
+        this.location.back();
+      } else {
+        this.returnToLibraryBrowse();
+      }
+      return;
+    }
+    // Only go Back for an entry we pushed from this owner's Plans screen; direct links get a safe local fallback.
+    if (previous?.uid === this.currentUser()?.uid && isTrainingPlansBrowseUrl(previous?.url)) {
+      this.location.back();
+    } else {
+      const route = this.browseRouteState();
+      this.navigateWorkspace(trainingPlansBrowseRoute(route.planId, route.standalone), route, { replaceUrl: true });
+    }
+  }
+
+  private replaceUnavailableRoute(): void {
+    const plans = this.planOptions();
+    const activePlanId = this.schedule().state.activePlanId;
+    const fallbackPlanId = plans.some(plan => plan.id === activePlanId) ? activePlanId : plans[0]?.id ?? null;
+    this.selectWorkoutScope(fallbackPlanId, todayLocalDate());
+    if (!fallbackPlanId) this.view.set('plans');
+    const route = this.browseRouteState();
+    this.navigateWorkspace(trainingPlansBrowseRoute(route.planId, route.standalone), route, { replaceUrl: true });
+  }
+
+  private navigateAfterPlanDeletion(response: DeleteTrainingPlanResponseV1): void {
+    const remainingPlans = this.planOptions().filter(plan => plan.id !== response.removedPlanId);
+    const fallbackPlanId = remainingPlans.some(plan => plan.id === response.state.activePlanId)
+      ? response.state.activePlanId
+      : remainingPlans[0]?.id ?? null;
+    const standalone = fallbackPlanId === null && response.convertedWorkoutIds.length > 0;
+    this.view.set(standalone ? 'standalone' : 'plans');
+    this.selectedPlanId.set(fallbackPlanId);
+    if (fallbackPlanId) {
+      const uid = this.currentUser()?.uid;
+      if (uid) this.scheduleDateSelection.set({ uid, planId: fallbackPlanId, localDate: todayLocalDate() });
+    }
+    const route = this.browseRouteState();
+    this.navigateWorkspace(trainingPlansBrowseRoute(route.planId, route.standalone), route, { replaceUrl: true });
+  }
+
+  private clearPlanActions(): void {
+    this.renamingPlanId.set(null);
+    this.shiftingPlanId.set(null);
+    this.deletingPlanId.set(null);
+  }
+
+  updateEditorField<K extends keyof ManualWorkoutEditorValue>(field: K, value: ManualWorkoutEditorValue[K]): void {
+    if (this.busyAction() || this.editor()?.value[field] === value) return;
+    if (field === 'sport' && this.editor()?.mode === 'edit'
+      && (this.editorIsStrength() || isStrengthWorkoutSportV1(value))) return;
+    if (field === 'sport' || field === 'poolLengthUnit') this.haptics.selection();
+    this.editor.update(session => {
+      if (!session) return null;
+      if (field !== 'sport') return { ...session, value: { ...session.value, [field]: value } };
+      const sport = value as ManualWorkoutSport;
+      if (isStrengthWorkoutSportV1(sport) && session.strength && isStrengthWorkoutSportV1(session.value.sport)) {
+        return { ...session, value: { ...session.value, sport } };
+      }
+      if (isStrengthWorkoutSportV1(sport)) return {
+        ...session,
+        value: { ...session.value, sport, nodes: [], poolLengthValue: null },
+        strength: { version: 1, exercises: [{ id: this.nextNodeId('exercise'), name: '',
+          sets: [{ id: this.nextNodeId('set'), ending: { kind: 'repetitions', repetitions: 8 } }] }] } as StrengthWorkoutDraftV1,
+      };
+      const manual = session.strength || session.value.sport === ActivityTypes.StrengthTraining
+        ? { ...session.value, sport, nodes: [createManualWorkoutEditorStep(this.nextNodeId('step'))] }
+        : changeManualWorkoutEditorSport(session.value, sport, session.unitSettings);
+      return { ...session, value: manual, strength: null };
+    });
+  }
+
+  addStrengthExercise(): void {
+    this.editor.update(session => session?.strength ? { ...session, strength: {
+      ...session.strength, exercises: [...session.strength.exercises, { id: this.nextNodeId('exercise'), name: '',
+        sets: [{ id: this.nextNodeId('set'), ending: { kind: 'repetitions' as const, repetitions: 8 } }] }],
+    } } : session);
+  }
+
+  removeStrengthExercise(index: number): void {
+    this.editor.update(session => session?.strength ? { ...session, strength: {
+      ...session.strength, exercises: session.strength.exercises.filter((_, candidate) => candidate !== index),
+    } } : session);
+  }
+
+  updateStrengthExerciseName(index: number, name: string): void {
+    this.editor.update(session => session?.strength ? { ...session, strength: {
+      ...session.strength, exercises: session.strength.exercises.map((exercise, candidate) =>
+        candidate === index ? { ...exercise, name } : exercise),
+    } } : session);
+  }
+
+  addStrengthSet(exerciseIndex: number): void {
+    this.editor.update(session => session?.strength ? { ...session, strength: {
+      ...session.strength, exercises: session.strength.exercises.map((exercise, candidate) => candidate === exerciseIndex
+        ? { ...exercise, sets: [...exercise.sets, { id: this.nextNodeId('set'),
+          ending: { kind: 'repetitions' as const, repetitions: 8 } }] }
+        : exercise),
+    } } : session);
+  }
+
+  removeStrengthSet(exerciseIndex: number, setIndex: number): void {
+    this.editor.update(session => session?.strength ? { ...session, strength: {
+      ...session.strength, exercises: session.strength.exercises.map((exercise, candidate) => candidate === exerciseIndex
+        ? { ...exercise, sets: exercise.sets.filter((_, index) => index !== setIndex) }
+        : exercise),
+    } } : session);
+  }
+
+  updateStrengthSet(exerciseIndex: number, setIndex: number,
+    field: 'kind' | 'value' | 'externalLoadKg' | 'restAfterSeconds', value: unknown): void {
+    if (this.busyAction()) return;
+    if (field === 'kind') this.haptics.selection();
+    this.editor.update(session => session?.strength ? { ...session, strength: {
+      ...session.strength, exercises: session.strength.exercises.map((exercise, candidate) => candidate === exerciseIndex
+        ? { ...exercise, sets: exercise.sets.map((set, index): StrengthSetV1 => {
+          if (index !== setIndex) return set;
+          if (field === 'kind') return { ...set, ending: value === 'time'
+            ? { kind: 'time', seconds: 30 } : { kind: 'repetitions', repetitions: 8 } };
+          if (field === 'value') return { ...set, ending: set.ending.kind === 'time'
+            ? { kind: 'time', seconds: Number(value) }
+            : { kind: 'repetitions', repetitions: Number(value) } };
+          const next = { ...set };
+          if (value === '' || value === null) delete next[field];
+          else next[field] = field === 'externalLoadKg'
+            ? DataWeight.fromDisplayValue(Number(value), session.unitSettings.weightUnits ?? WeightUnits.Kilograms).getValue()
+            : Number(value);
+          return next;
+        }) } : exercise),
+    } } : session);
+  }
+
+  strengthLoadInputValue(kilograms: number | undefined): number | null {
+    if (kilograms === undefined) return null;
+    const units = this.editor()?.unitSettings.weightUnits ?? WeightUnits.Kilograms;
+    return units === WeightUnits.Pounds
+      ? Number(new DataWeight(kilograms, WeightUnits.Pounds).getDisplayValue())
+      : kilograms;
+  }
+
+  updateWorkoutDate(value: Dayjs | null): void {
+    const localDate = workoutLocalDate(value);
+    this.workoutDateInputInvalid.set(!localDate);
+    this.updateEditorField('localDate', localDate);
+  }
+
+  updateWorkoutDateInput(value: Dayjs | null): void {
+    const localDate = workoutLocalDate(value);
+    this.workoutDateInputInvalid.set(!localDate);
+    // Preserve partial text until the user finishes typing or leaves the field.
+    if (localDate) this.updateEditorField('localDate', localDate);
+  }
+
+  updateEditorDestination(planId: string | null): void {
+    if (this.busyAction() || this.editor()?.destinationPlanId === planId) return;
+    this.haptics.selection();
+    this.editor.update(session => session ? { ...session, destinationPlanId: planId } : null);
+  }
+
+  addEditorStep(): void {
+    if (this.busyAction() || this.editorIsStrength() || this.editorNodeCount() >= WORKOUT_STRUCTURE_MAX_NODES) return;
+    this.editor.update(session => session ? {
+      ...session,
+      value: {
+        ...session.value,
+        nodes: [...session.value.nodes, createManualWorkoutEditorStep(this.nextNodeId('step'))],
+      },
+    } : null);
+  }
+
+  addEditorRepeat(): void {
+    if (this.busyAction() || this.editorIsStrength() || this.editorNodeCount() + 3 > WORKOUT_STRUCTURE_MAX_NODES) return;
+    this.editor.update(session => session ? {
+      ...session,
+      value: {
+        ...session.value,
+        nodes: [...session.value.nodes, {
+          kind: 'repeat',
+          id: this.nextNodeId('repeat'),
+          count: 4,
+          steps: [
+            createManualWorkoutEditorStep(this.nextNodeId('step')),
+            { ...createManualWorkoutEditorStep(this.nextNodeId('step')), purpose: 'recovery' },
+          ],
+        }],
+      },
+    } : null);
+  }
+
+  removeEditorNode(nodeIndex: number): void {
+    this.editor.update(session => session ? {
+      ...session,
+      value: { ...session.value, nodes: session.value.nodes.filter((_, index) => index !== nodeIndex) },
+    } : null);
+  }
+
+  addRepeatStep(nodeIndex: number): void {
+    if (this.busyAction() || this.editorIsStrength() || this.editorNodeCount() >= WORKOUT_STRUCTURE_MAX_NODES) return;
+    this.editor.update(session => {
+      if (!session) return null;
+      const nodes = session.value.nodes.map((node, index) => index === nodeIndex && node.kind === 'repeat'
+        ? { ...node, steps: [...node.steps, createManualWorkoutEditorStep(this.nextNodeId('step'))] }
+        : node);
+      return { ...session, value: { ...session.value, nodes } };
+    });
+  }
+
+  removeRepeatStep(nodeIndex: number, stepIndex: number): void {
+    this.editor.update(session => {
+      if (!session) return null;
+      const nodes = session.value.nodes.map((node, index) => index === nodeIndex && node.kind === 'repeat'
+        ? { ...node, steps: node.steps.filter((_, candidate) => candidate !== stepIndex) }
+        : node);
+      return { ...session, value: { ...session.value, nodes } };
+    });
+  }
+
+  private advanceEditorGeneration(): void {
+    this.editorGeneration += 1;
+    this.editorProfileSelection.set(null);
+    this.editorDrag = null;
+    this.editorMenuFocus = null;
+    this.pendingEditorNodeFocus.set(null);
+    this.clearEditorAnnouncement();
+  }
+
+  private clearEditorAnnouncement(): void {
+    if (!this.editorHasAnnouncement) return;
+    this.editorHasAnnouncement = false;
+    // An empty announcement also replaces a pending delayed message; clear() alone does not.
+    void this.liveAnnouncer.announce('', 'polite');
+  }
+
+  moveEditorNode(nodeId: string, direction: -1 | 1, repeatId: string | null = null): void {
+    const session = this.editor();
+    if (!session) return;
+    const index = manualWorkoutEditorSiblings(session.value, repeatId).findIndex(node => node.id === nodeId);
+    this.applyEditorNodeAction(nodeId, repeatId, value => moveManualWorkoutEditorNode(value, nodeId, index + direction, repeatId), 'moved');
+  }
+
+  duplicateEditorNode(nodeId: string, repeatId: string | null = null): void {
+    this.applyEditorNodeAction(nodeId, repeatId, value => duplicateManualWorkoutEditorNode(value, nodeId,
+      kind => this.nextNodeId(kind), repeatId), 'copied');
+  }
+
+  startEditorDrag(nodeId: string, repeatId: string | null = null): void {
+    const session = this.editor();
+    const uid = this.currentUser()?.uid;
+    this.editorDrag = session && uid && !this.busyAction() && !this.editorIsStrength()
+      ? { generation: this.editorGeneration, uid, nodeId, repeatId,
+        siblingIds: manualWorkoutEditorSiblings(session.value, repeatId).map(node => node.id) } : null;
+  }
+
+  openEditorNodeMenu(nodeId: string): void {
+    const uid = this.currentUser()?.uid;
+    this.editorMenuFocus = uid ? { generation: this.editorGeneration, uid, nodeId } : null;
+  }
+
+  closeEditorNodeMenu(): void {
+    // Material's default restoration would focus the source after copying. Restore our chosen row,
+    // including the original trigger on Escape/backdrop dismissal.
+    this.pendingEditorNodeFocus.set(this.editorMenuFocus);
+    this.editorMenuFocus = null;
+  }
+
+  dropEditorNode(event: CdkDragDrop<string | null>, repeatId: string | null = null): void {
+    const drag = this.editorDrag;
+    this.editorDrag = null;
+    const session = this.editor();
+    if (!drag || !session || drag.generation !== this.editorGeneration || drag.uid !== this.currentUser()?.uid
+      || drag.repeatId !== repeatId || event.previousContainer !== event.container || !event.isPointerOverContainer
+      || event.container.data !== repeatId || event.item.data !== drag.nodeId) return;
+    const ids = manualWorkoutEditorSiblings(session.value, repeatId).map(node => node.id);
+    if (ids.length !== drag.siblingIds.length || ids.some((id, index) => id !== drag.siblingIds[index])) return;
+    this.applyEditorNodeAction(drag.nodeId, repeatId,
+      value => moveManualWorkoutEditorNode(value, drag.nodeId, event.currentIndex, repeatId), 'moved');
+  }
+
+  private applyEditorNodeAction(nodeId: string, repeatId: string | null,
+    action: (value: ManualWorkoutEditorValue) => ManualWorkoutEditorValue, verb: 'moved' | 'copied'): void {
+    const session = this.editor();
+    const uid = this.currentUser()?.uid;
+    if (!session || !uid || this.busyAction() || this.editorIsStrength()) return;
+    const value = action(session.value);
+    if (value === session.value) return;
+    const siblings = manualWorkoutEditorSiblings(value, repeatId);
+    const sourceIndex = siblings.findIndex(node => node.id === nodeId);
+    const index = sourceIndex + (verb === 'copied' ? 1 : 0);
+    const node = siblings[index];
+    this.editor.set({ ...session, value });
+    this.haptics.selection();
+    this.editorHasAnnouncement = true;
+    // CDK clears and delays the live region so consecutive identical results are announced again.
+    void this.liveAnnouncer.announce(`${node.kind === 'repeat' ? 'Repeat block' : 'Step'} ${verb} to position ${index + 1} of ${siblings.length}${repeatId ? ' within the repeat block' : ''}.`, 'polite');
+    if (this.editorMenuFocus) this.editorMenuFocus = { generation: this.editorGeneration, uid, nodeId: node.id };
+    this.pendingEditorNodeFocus.set({ generation: this.editorGeneration, uid, nodeId: node.id });
+  }
+
+  updateNode(nodeIndex: number, field: string, value: unknown): void {
+    this.editor.update(session => {
+      if (!session) return null;
+      const nodes = session.value.nodes.map((node, index) => index === nodeIndex
+        ? { ...node, [field]: value } as ManualWorkoutEditorNode
+        : node);
+      return { ...session, value: { ...session.value, nodes } };
+    });
+  }
+
+  updateStep(nodeIndex: number, stepIndex: number | null, field: string, value: unknown, durationSeconds?: number): void {
+    if (this.busyAction()) return;
+    const sourceDuration = typeof value === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 0
+      && durationSeconds / 60 === value ? { editorValue: value, seconds: durationSeconds } : undefined;
+    this.editor.update(session => {
+      if (!session) return null;
+      const nodes = session.value.nodes.map((node, index) => {
+        if (index !== nodeIndex) return node;
+        const isSelection = ['purpose', 'endingKind', 'allowEarlyLap'].includes(field);
+        if (stepIndex === null && node.kind === 'step') {
+          if (isSelection && node[field as keyof ManualWorkoutEditorStep] !== value) this.haptics.selection();
+          if (field === 'endingKind') {
+            return changeManualWorkoutEditorStepEnding(node, value as ManualWorkoutEnding, session.value.sport, session.unitSettings);
+          }
+          return { ...node, [field]: value,
+            ...(field === 'endingValue' && value !== node[field]
+              ? { sourceDistance: undefined, sourceDuration: node.endingKind === 'time' ? sourceDuration : undefined } : {}),
+          } as ManualWorkoutEditorStep;
+        }
+        if (stepIndex !== null && node.kind === 'repeat') {
+          return {
+            ...node,
+            steps: node.steps.map((step, candidate) => {
+              if (candidate !== stepIndex) return step;
+              if (isSelection && step[field as keyof ManualWorkoutEditorStep] !== value) this.haptics.selection();
+              if (field === 'endingKind') {
+                return changeManualWorkoutEditorStepEnding(step, value as ManualWorkoutEnding, session.value.sport, session.unitSettings);
+              }
+              return { ...step, [field]: value,
+                ...(field === 'endingValue' && value !== step[field]
+                  ? { sourceDistance: undefined, sourceDuration: step.endingKind === 'time' ? sourceDuration : undefined } : {}),
+              } as ManualWorkoutEditorStep;
+            }),
+          };
+        }
+        return node;
+      });
+      return { ...session, value: { ...session.value, nodes } };
+    });
+  }
+
+  private editorStructure(session: WorkoutEditorSession) {
+    if (session.strengthLoading) throw new Error('The exercise prescription is still loading.');
+    if (session.strengthLoadFailed) throw new Error('The exercise prescription could not be loaded. Close and reopen this workout to retry.');
+    return session.strength || session.value.sport === ActivityTypes.StrengthTraining
+      ? projectStrengthWorkoutToV1({ ...parseStrengthWorkoutDraftV1(session.strength),
+        workoutId: session.original?.id ?? 'draft', revision: 1 }, session.value.sport)
+      : manualWorkoutEditorToStructure(session.value, session.unitSettings);
+  }
+
+  async saveEditorCopyToLibrary(): Promise<void> {
+    const session = this.editor();
+    const uid = this.currentUser()?.uid;
+    if (!session || session.mode !== 'edit' || this.libraryView() || !uid || this.busyAction()) return;
+    const generation = this.editorGeneration;
+    const title = session.value.title.trim();
+    if (!title) {
+      this.snackBar.open('Enter a workout title.', 'Dismiss', { duration: 4000 });
+      return;
+    }
+    let structure;
+    try { structure = this.editorStructure(session); }
+    catch (error) { this.showError(error); return; }
+    this.busyAction.set('save-library-from-editor');
+    try {
+      await this.libraryService.mutate({
+        mutationId: this.plansService.createMutationId('library-from-editor'),
+        operation: { kind: 'create', itemId: this.plansService.createEntityId('library'), title, structure,
+          ...(session.strength ? { strength: session.strength } : {}) },
+      });
+      if (this.destroyRef.destroyed || generation !== this.editorGeneration || uid !== this.currentUser()?.uid) return;
+      this.haptics.success();
+      this.snackBar.open('Copy saved to Workout library. Your calendar workout is unchanged.', 'Dismiss', { duration: 5000 });
+    } catch (error) { if (uid === this.currentUser()?.uid) this.showError(error); }
+    finally { this.busyAction.set(null); }
+  }
+
+  async saveWorkout(): Promise<void> {
+    const session = this.editor();
+    if (!session) return;
+    if (!this.libraryView() && this.workoutDateInputInvalid()) {
+      this.showError(new Error('Choose a valid workout date.'));
+      return;
+    }
+    const generation = this.editorGeneration;
+    const uid = this.currentUser()?.uid;
+    const title = session.value.title.trim();
+    if (!title) {
+      this.snackBar.open('Enter a workout title.', 'Dismiss', { duration: 4000 });
+      return;
+    }
+    let structure;
+    try {
+      structure = this.editorStructure(session);
+      if (!this.libraryView()) normalizeTrainingLocalDate(session.value.localDate);
+    } catch (error) {
+      this.showError(error);
+      return;
+    }
+    if (this.libraryView()) {
+      this.busyAction.set('save-library');
+      try {
+        const item = this.libraryEditorItem();
+        await this.libraryService.mutate({
+          mutationId: this.plansService.createMutationId('library-save'),
+          operation: item ? { kind: 'update', itemId: item.id, expectedRevision: item.revision,
+            title, structure, ...(session.strength ? { strength: session.strength } : {}) }
+            : { kind: 'create', itemId: this.plansService.createEntityId('library'), title, structure,
+              ...(session.strength ? { strength: session.strength } : {}) },
+        });
+        if (this.destroyRef.destroyed || generation !== this.editorGeneration || uid !== this.currentUser()?.uid) return;
+        this.haptics.success();
+        this.editor.set(null);
+        this.libraryEditorItem.set(null);
+        this.snackBar.open(item ? 'Saved workout updated.' : 'Workout saved to your library.', 'Dismiss', { duration: 4000 });
+        this.returnToLibraryBrowse();
+      } catch (error) { if (uid === this.currentUser()?.uid) this.showError(error); }
+      finally { this.busyAction.set(null); }
+      return;
+    }
+    if (session.mode === 'create') {
+      const workoutId = this.plansService.createEntityId('workout');
+      const response = await this.runMutation({
+        mutationId: this.plansService.createMutationId('create-workout'),
+        expectedRevisions: this.expectedRevisions({
+          planIds: session.destinationPlanId ? [session.destinationPlanId] : [],
+        }),
+        operation: {
+          kind: 'create-workout',
+          workoutId,
+          planId: session.destinationPlanId,
+          localDate: session.value.localDate,
+          title,
+          structure,
+          ...(session.strength ? { strength: session.strength } : {}),
+          confirmPlanRangeExtension: false,
+        },
+      }, 'save-workout');
+      if (!response || this.destroyRef.destroyed || generation !== this.editorGeneration || uid !== this.currentUser()?.uid) return;
+      this.selectWorkoutScope(session.destinationPlanId, session.value.localDate);
+      this.editor.set(null);
+      this.advanceEditorGeneration();
+      const route = this.browseRouteState();
+      this.navigateWorkspace(trainingPlansBrowseRoute(route.planId, route.standalone), route, { replaceUrl: true });
+      this.snackBar.open('Workout added.', 'Dismiss', { duration: 3000 });
+      return;
+    }
+
+    const original = session.original!;
+    const response = await this.runMutation({
+      mutationId: this.plansService.createMutationId('update-workout'),
+      expectedRevisions: this.expectedRevisions({
+        workoutIds: [original.id],
+        workoutRevisionOverrides: new Map([[original.id, session.originalWorkoutRevision!]]),
+        planIds: [original.planId, session.destinationPlanId].filter((id): id is string => !!id),
+      }),
+      operation: {
+        kind: 'update-workout',
+        workoutId: original.id,
+        planId: session.destinationPlanId,
+        localDate: session.value.localDate,
+        title,
+        structure,
+        ...(session.strength ? { strength: session.strength } : {}),
+        confirmPlanRangeExtension: false,
+      },
+    }, 'save-workout');
+    if (!response || this.destroyRef.destroyed || generation !== this.editorGeneration || uid !== this.currentUser()?.uid) return;
+    this.selectWorkoutScope(session.destinationPlanId, session.value.localDate);
+    this.editor.set(null);
+    this.advanceEditorGeneration();
+    const route = this.browseRouteState();
+    this.navigateWorkspace(trainingPlansBrowseRoute(route.planId, route.standalone), route, { replaceUrl: true });
+    this.snackBar.open('Workout updated.', 'Dismiss', { duration: 3000 });
+  }
+
+  openLibrary(): void {
+    if (this.busyAction()) return;
+    void this.router.navigate(['/training/plans/library']);
+  }
+
+  async saveExistingWorkoutToLibrary(workout: ScheduledWorkoutV1): Promise<void> {
+    const uid = this.currentUser()?.uid;
+    if (!uid || this.busyAction()) return;
+    this.busyAction.set(`library-${workout.id}`);
+    try {
+      await this.libraryService.mutate({ mutationId: this.plansService.createMutationId('library-from-workout'),
+        operation: { kind: 'save-workout', itemId: this.plansService.createEntityId('library'),
+          sourceWorkoutId: workout.id, expectedSourceRevision: workout.revision } });
+      if (uid !== this.currentUser()?.uid) return;
+      this.haptics.success();
+      this.snackBar.open('Saved to your workout library.', 'Dismiss', { duration: 4000 });
+    } catch (error) { if (uid === this.currentUser()?.uid) this.showError(error); }
+    finally { this.busyAction.set(null); }
+  }
+
+  async setLibraryStatus(item: WorkoutLibraryItemV1, status: 'active' | 'archived'): Promise<void> {
+    const uid = this.currentUser()?.uid;
+    if (!uid || this.busyAction()) return;
+    this.busyAction.set(`library-${item.id}`);
+    try {
+      await this.libraryService.mutate({ mutationId: this.plansService.createMutationId('library-status'),
+        operation: { kind: 'set-status', itemId: item.id, expectedRevision: item.revision, status } });
+      if (uid !== this.currentUser()?.uid) return;
+      this.haptics.success();
+    } catch (error) { if (uid === this.currentUser()?.uid) this.showError(error); }
+    finally { this.busyAction.set(null); }
+  }
+
+  async copyLibraryItem(item: WorkoutLibraryItemV1): Promise<void> {
+    const uid = this.currentUser()?.uid;
+    if (!uid || this.busyAction()) return;
+    this.busyAction.set(`library-${item.id}`);
+    try {
+      await this.libraryService.mutate({ mutationId: this.plansService.createMutationId('library-copy'),
+        operation: { kind: 'copy', itemId: this.plansService.createEntityId('library'),
+          sourceItemId: item.id, expectedSourceRevision: item.revision } });
+      if (uid !== this.currentUser()?.uid) return;
+      this.haptics.success();
+      this.snackBar.open('Saved workout copied.', 'Dismiss', { duration: 4000 });
+    } catch (error) { if (uid === this.currentUser()?.uid) this.showError(error); }
+    finally { this.busyAction.set(null); }
+  }
+
+  async deleteLibraryItem(item: WorkoutLibraryItemV1): Promise<void> {
+    const uid = this.currentUser()?.uid;
+    if (!uid || this.busyAction()) return;
+    const confirmed = await this.confirm('Delete saved workout?',
+      `Remove “${item.title}” from your library? Workouts already on your calendar will stay as they are.`,
+      'Delete saved workout', 'warn');
+    if (!confirmed || uid !== this.currentUser()?.uid || this.busyAction()) return;
+    this.busyAction.set(`library-${item.id}`);
+    try {
+      await this.libraryService.mutate({ mutationId: this.plansService.createMutationId('library-delete'),
+        operation: { kind: 'delete', itemId: item.id, expectedRevision: item.revision, confirmDeletion: true } });
+      if (uid !== this.currentUser()?.uid) return;
+      this.haptics.success();
+      if (this.placementItem()?.id === item.id) this.placementItem.set(null);
+      this.snackBar.open('Saved workout deleted. Calendar workouts are unchanged.', 'Dismiss', { duration: 4000 });
+    } catch (error) { if (uid === this.currentUser()?.uid) this.showError(error); }
+    finally { this.busyAction.set(null); }
+  }
+
+  beginLibraryPlacement(item: WorkoutLibraryItemV1): void {
+    if (this.placementLocked() || item.status !== 'active') return;
+    const plan = this.activePlan();
+    const today = todayLocalDate();
+    const date = this.libraryCalendarDate() ?? (plan && today < plan.startLocalDate ? plan.startLocalDate : today);
+    this.placementItem.set(item);
+    this.placementPlanId.set(plan?.id ?? null);
+    this.placementStartDate.set(date);
+    this.placementEndDate.set(date);
+    this.placementWeekdays.set([new Date(`${date}T12:00:00Z`).getUTCDay()]);
+    this.placementWeekdaysCustomized.set(false);
+    // The review replaces the results, so keyboard and screen-reader users land at its heading.
+    const uid = this.currentUser()?.uid;
+    const generation = this.editorGeneration;
+    afterNextRender(() => {
+      if (uid === this.currentUser()?.uid && generation === this.editorGeneration && this.placementItem()?.id === item.id) {
+        this.host.nativeElement.querySelector<HTMLElement>('#library-placement-heading')?.focus();
+      }
+    }, { injector: this.injector });
+  }
+
+  private returnToLibraryBrowse(): void {
+    void this.router.navigate(['/training/plans/library'], { replaceUrl: true,
+      ...(this.libraryCalendarDate() ? { queryParams: { date: this.libraryCalendarDate() } } : {}) });
+  }
+
+  retryLibraryLoad(): void {
+    if (this.libraryState().status !== 'error') return;
+    this.libraryReload.update(value => value + 1);
+  }
+
+  setLibrarySport(value: ActivityTypes | 'all' | null): void {
+    const sport = value === 'all' ? null : value;
+    if (this.librarySport() === sport) return;
+    this.librarySport.set(sport);
+    this.haptics.selection();
+  }
+
+  setLibraryStatusFilter(value: LibraryStatusFilter): void {
+    if (this.libraryStatus() === value) return;
+    this.libraryStatus.set(value);
+    this.haptics.selection();
+  }
+
+  toggleLibraryPreview(id: string): void {
+    this.libraryExpandedIds.update(ids => ids.includes(id) ? ids.filter(value => value !== id) : [...ids, id]);
+  }
+
+  cancelLibraryPlacement(): void {
+    if (this.placementLocked()) return;
+    const id = this.placementItem()?.id;
+    if (!id) return;
+    this.placementItem.set(null);
+    this.restoreLibraryPlacementFocus(id);
+  }
+
+  private restoreLibraryPlacementFocus(id: string): void {
+    const uid = this.currentUser()?.uid;
+    const generation = this.editorGeneration;
+    afterNextRender(() => {
+      if (uid !== this.currentUser()?.uid || generation !== this.editorGeneration || this.placementItem()) return;
+      // A live archive/delete or listener error can hide the original action.
+      const target = this.host.nativeElement.querySelector<HTMLElement>(`[data-library-add="${id}"]`)
+        ?? this.host.nativeElement.querySelector<HTMLElement>('#library-heading');
+      target?.focus();
+    }, { injector: this.injector });
+  }
+
+  setPlacementPlan(value: string): void {
+    const id = value === 'standalone' ? null : value;
+    if (this.placementLocked() || this.placementPlanId() === id) return;
+    this.placementPlanId.set(id);
+    this.haptics.selection();
+  }
+
+  togglePlacementWeekday(day: number): void {
+    if (this.placementLocked()) return;
+    this.haptics.selection();
+    this.placementWeekdaysCustomized.set(true);
+    this.placementWeekdays.update(days => days.includes(day) ? days.filter(value => value !== day)
+      : [...days, day].sort((a, b) => a - b));
+  }
+
+  setPlacementStartDate(value: string): void {
+    if (this.placementLocked()) return;
+    const old = this.placementStartDate();
+    this.placementStartDate.set(value);
+    if (this.placementEndDate() === old) this.placementEndDate.set(value);
+    if (this.placementWeekdaysCustomized()) return;
+    try {
+      normalizeTrainingLocalDate(value);
+      this.placementWeekdays.set([new Date(`${value}T12:00:00Z`).getUTCDay()]);
+    } catch { this.placementWeekdays.set([]); }
+  }
+
+  setPlacementEndDate(value: string): void {
+    if (this.placementLocked()) return;
+    this.placementEndDate.set(value);
+  }
+
+  async placeLibraryItem(): Promise<void> {
+    const item = this.placementItem();
+    const uid = this.currentUser()?.uid;
+    const dates = this.placementDates();
+    if (!uid || !item || this.busyAction() || this.placementError() || dates.length < 1
+      || dates.length > WORKOUT_LIBRARY_MAX_PLACEMENTS) return;
+    const generation = this.editorGeneration;
+    const routeKey = trainingPlansRouteKey(uid, this.routeState());
+    const current = () => !this.destroyRef.destroyed && uid === this.currentUser()?.uid
+      && generation === this.editorGeneration && routeKey === trainingPlansRouteKey(uid, this.routeState());
+    const plan = this.placementDestination();
+    if (!this.placementRetry() && this.placementPlanId() && (!plan || plan.lifecycle === 'archived')) return;
+    let request: PlaceWorkoutLibraryRequestV1 = this.placementRetry() ?? { mutationId: this.plansService.createMutationId('library-place'), itemId: item.id,
+      expectedTemplateRevision: item.revision, expectedStateRevision: this.schedule().state.revision,
+      planId: plan?.id ?? null, expectedPlanRevision: plan?.revision ?? null,
+      dates, confirmPlanRangeExtension: false };
+    this.busyAction.set(`place-${item.id}`);
+    this.placementAttempt.set({ request, plan });
+    try {
+      let response;
+      try { response = await this.libraryService.place(request); }
+      catch (error) {
+        const message = errorMessage(error);
+        if (!current()) return;
+        if (!plan || !/requires extending/i.test(message)) throw error;
+        const extendedStart = dates[0] < plan.startLocalDate ? dates[0] : plan.startLocalDate;
+        const finalDate = dates[dates.length - 1];
+        const extendedEnd = finalDate > plan.endLocalDate ? finalDate : plan.endLocalDate;
+        const placementMessage = `Adding ${dates.length} ${dates.length === 1 ? 'workout' : 'workouts'} `
+          + `will extend ${plan.name} to ${extendedStart}–${extendedEnd}.`;
+        if (!await this.confirm('Extend plan dates?', placementMessage, 'Extend and add workouts')) {
+          // This rejection is definitive: nothing was added.
+          if (current()) this.placementAttempt.set(null);
+          return;
+        }
+        if (!current()) return;
+        request = { ...request, confirmPlanRangeExtension: true };
+        this.placementAttempt.set({ request, plan });
+        response = await this.libraryService.place(request);
+      }
+      if (!current()) return;
+      this.haptics.success();
+      this.placementAttempt.set(null);
+      this.placementItem.set(null);
+      this.restoreLibraryPlacementFocus(item.id);
+      this.snackBar.open(`${response.workoutIds.length} ${response.workoutIds.length === 1 ? 'workout' : 'workouts'} added to your calendar.`,
+        'Dismiss', { duration: 5000 });
+    } catch (error) {
+      if (!current()) return;
+      const code = (error as { code?: string })?.code?.replace(/^functions\//, '');
+      if (code && ['invalid-argument', 'failed-precondition', 'aborted', 'out-of-range', 'resource-exhausted',
+        'permission-denied', 'unauthenticated', 'not-found', 'already-exists'].includes(code)) this.placementAttempt.set(null);
+      this.showError(error);
+    } finally { if (current() && this.busyAction() === `place-${item.id}`) this.busyAction.set(null); }
+  }
+
+  async duplicateWorkout(workout: ScheduledWorkoutV1): Promise<void> {
+    const uid = this.currentUser()?.uid;
+    if (!uid || this.busyAction()) return;
+    this.busyAction.set(`copy-${workout.id}`);
+    try {
+      const result = await this.duplicateService.duplicate(uid, workout, () => {
+        if (this.currentUser()?.uid !== uid || this.scheduleState().status !== 'ready') return null;
+        const schedule = this.schedule();
+        const acknowledged = this.acknowledgedPlan();
+        const state = acknowledged?.uid === uid && acknowledged.state.revision > schedule.state.revision
+          ? acknowledged.state : schedule.state;
+        return { ...schedule, state, plans: this.planOptions() };
+      });
+      if (!result || this.destroyRef.destroyed || this.currentUser()?.uid !== uid) return;
+      if (result.acknowledgedPlan && result.acknowledgedState) {
+        this.acknowledgedPlan.set({ uid, plan: result.acknowledgedPlan, state: result.acknowledgedState });
+      }
+      this.selectWorkoutScope(result.planId, result.localDate);
+      this.pendingDuplicateFocus.set({ uid, workoutId: result.workoutId });
+      const route = this.browseRouteState();
+      this.navigateWorkspace(trainingPlansBrowseRoute(result.planId, result.planId === null), route, { replaceUrl: true });
+    } finally {
+      this.busyAction.set(null);
+    }
+  }
+
+  private selectWorkoutScope(planId: string | null, localDate: string): void {
+    this.view.set(planId === null ? 'standalone' : 'plans');
+    this.selectedPlanId.set(planId);
+    const uid = this.currentUser()?.uid;
+    if (planId && uid) this.scheduleDateSelection.set({ uid, planId, localDate });
+  }
+
+  async setWorkoutSkipped(workout: ScheduledWorkoutV1, skipped: boolean): Promise<void> {
+    const response = await this.runMutation({
+      mutationId: this.plansService.createMutationId(skipped ? 'skip-workout' : 'unskip-workout'),
+      expectedRevisions: this.expectedRevisions({
+        workoutIds: [workout.id],
+        workoutRevisionOverrides: new Map([[workout.id, workout.revision]]),
+        planIds: workout.planId ? [workout.planId] : [],
+      }),
+      operation: { kind: 'set-workout-lifecycle', workoutId: workout.id, lifecycle: skipped ? 'skipped' : 'planned' },
+    }, `skip-${workout.id}`);
+    if (response) this.snackBar.open(skipped ? 'Workout marked skipped.' : 'Workout restored to planned.', 'Dismiss', { duration: 3000 });
+  }
+
+  async deleteWorkout(workout: ScheduledWorkoutV1): Promise<void> {
+    const expectedRevisions = this.expectedRevisions({
+      workoutIds: [workout.id],
+      workoutRevisionOverrides: new Map([[workout.id, workout.revision]]),
+      planIds: workout.planId ? [workout.planId] : [],
+    });
+    const confirmation = await this.confirmWithPastProviderCleanup(
+      'Delete workout?',
+      'The workout will remain in history and can be restored.',
+      'Delete workout',
+      'warn',
+    );
+    if (!confirmation) return;
+    const response = await this.runMutation({
+      mutationId: this.plansService.createMutationId('delete-workout'),
+      expectedRevisions,
+      operation: { kind: 'delete-workout', workoutId: workout.id,
+        ...(confirmation.removePastProviderCopies ? { removePastProviderCopies: true } : {}) },
+    }, `delete-${workout.id}`);
+    if (response) this.snackBar.open(confirmation.removePastProviderCopies
+      ? 'Workout deleted. Past provider cleanup is pending where supported; check Workout sync history.'
+      : 'Workout deleted. Open history to restore it.', 'Dismiss', { duration: 6000 });
+  }
+
+  async permanentlyDeleteWorkout(workout: ScheduledWorkoutV1): Promise<void> {
+    const expectedRevisions = this.expectedRevisions({
+      workoutIds: [workout.id],
+      workoutRevisionOverrides: new Map([[workout.id, workout.revision]]),
+      planIds: workout.planId ? [workout.planId] : [],
+    });
+    const confirmation = await this.confirmWithPastProviderCleanup(
+      'Permanently delete workout?',
+      workout.planId
+        ? 'This removes the workout and prevents restoration. Its plan revision audit remains until the plan is deleted. This cannot be undone.'
+        : 'This removes the workout and its standalone revision history. This cannot be undone.',
+      'Delete permanently',
+      'warn',
+    );
+    if (!confirmation) return;
+    const response = await this.runMutation({
+      mutationId: this.plansService.createMutationId('permanent-workout-delete'),
+      expectedRevisions,
+      operation: { kind: 'permanently-delete-workout', workoutId: workout.id, confirmPermanentDeletion: true,
+        ...(confirmation.removePastProviderCopies ? { removePastProviderCopies: true } : {}) },
+    }, `permanent-${workout.id}`);
+    if (response) this.snackBar.open(confirmation.removePastProviderCopies
+      ? 'Workout deleted permanently. Past provider cleanup is pending where supported; check Workout sync history.'
+      : 'Workout permanently retired and can no longer be restored.', 'Dismiss', { duration: 6000 });
+    if (response) this.deletedWorkoutPanel.update(panel => panel ? {
+      ...panel, workouts: panel.workouts.filter(item => item.id !== workout.id),
+    } : null);
+  }
+
+  async toggleDeletedWorkouts(): Promise<void> {
+    const expanded = !this.deletedWorkoutsExpanded();
+    this.deletedWorkoutsExpanded.set(expanded);
+    if (expanded && this.deletedWorkoutPanel()?.status === 'idle') await this.loadDeletedWorkouts();
+  }
+
+  async loadDeletedWorkouts(): Promise<void> {
+    const scope = this.deletedWorkoutScope();
+    const panel = this.deletedWorkoutPanel();
+    if (!scope || !panel || panel.scopeKey !== scope.key || panel.status === 'loading'
+      || (panel.status === 'ready' && panel.nextCursor === null)) return;
+    const requestSequence = ++this.deletedWorkoutRequestSequence;
+    this.deletedWorkoutPanel.set({ ...panel, status: 'loading', error: null });
+    try {
+      const page = await this.plansService.getDeletedWorkoutsPage(scope.uid, scope.planId, panel.nextCursor);
+      if (requestSequence !== this.deletedWorkoutRequestSequence
+        || this.deletedWorkoutScope()?.key !== scope.key) return;
+      const byId = new Map([...panel.workouts, ...page.workouts].map(item => [item.id, item]));
+      this.deletedWorkoutPanel.set({
+        scopeKey: scope.key,
+        status: 'ready',
+        workouts: [...byId.values()].sort((left, right) => (right.deletedAtMs ?? 0) - (left.deletedAtMs ?? 0)
+          || right.id.localeCompare(left.id)),
+        nextCursor: page.nextCursor,
+        error: null,
+      });
+    } catch (error) {
+      if (requestSequence !== this.deletedWorkoutRequestSequence
+        || this.deletedWorkoutScope()?.key !== scope.key) return;
+      this.haptics.error();
+      this.deletedWorkoutPanel.set({ ...panel, status: 'error', error: errorMessage(error) });
+    }
+  }
+
+  async openHistory(scope: TrainingScheduleRevisionScope): Promise<void> {
+    const requestSequence = ++this.historyRequestSequence;
+    const uid = this.currentUser()?.uid;
+    this.historyPanel.set({ scope, status: 'loading', entries: [], nextBeforeRevision: null, error: null });
+    afterNextRender(() => {
+      if (uid !== this.currentUser()?.uid || !this.isCurrentHistoryPanel(scope, requestSequence)) return;
+      const panel = this.host.nativeElement.querySelector<HTMLElement>('#history-panel');
+      panel?.focus({ preventScroll: true });
+      panel?.scrollIntoView?.({ block: 'start' });
+    }, { injector: this.injector });
+    try {
+      const response = await this.plansService.getHistory({ scope, limit: 50 });
+      if (!this.isCurrentHistoryPanel(scope, requestSequence)) return;
+      this.historyPanel.set({
+        scope,
+        status: 'ready',
+        entries: response.entries,
+        nextBeforeRevision: response.nextBeforeRevision,
+        error: null,
+      });
+    } catch (error) {
+      if (!this.isCurrentHistoryPanel(scope, requestSequence)) return;
+      this.haptics.error();
+      this.historyPanel.set({
+        scope,
+        status: 'error',
+        entries: [],
+        nextBeforeRevision: null,
+        error: errorMessage(error),
+      });
+    }
+  }
+
+  async loadOlderHistory(): Promise<void> {
+    const panel = this.historyPanel();
+    if (!panel || panel.status !== 'ready' || panel.nextBeforeRevision === null) return;
+    const requestSequence = this.historyRequestSequence;
+    this.busyAction.set('history-older');
+    try {
+      const response = await this.plansService.getHistory({
+        scope: panel.scope,
+        beforeRevision: panel.nextBeforeRevision,
+        limit: 50,
+      });
+      if (!this.isCurrentHistoryPanel(panel.scope, requestSequence)) return;
+      const current = this.historyPanel()!;
+      const entries = new Map(current.entries.map(entry => [entry.revision, entry]));
+      response.entries.forEach(entry => entries.set(entry.revision, entry));
+      this.historyPanel.set({
+        ...current,
+        entries: [...entries.values()].sort((left, right) => right.revision - left.revision),
+        nextBeforeRevision: response.nextBeforeRevision,
+      });
+    } catch (error) {
+      this.showError(error);
+    } finally {
+      this.busyAction.set(null);
+    }
+  }
+
+  closeHistory(): void {
+    this.historyRequestSequence += 1;
+    this.historyPanel.set(null);
+  }
+
+  async restoreHistoryEntry(entry: TrainingScheduleHistoryEntryV1): Promise<void> {
+    const panel = this.historyPanel();
+    if (!panel) return;
+    const requestSequence = this.historyRequestSequence;
+    const expected = panel.scope.kind === 'workout'
+      ? this.expectedRevisions({ workoutIds: [panel.scope.id] })
+      : this.expectedRevisions({
+        planIds: [
+          panel.scope.id,
+          ...(this.activePlan() && this.activePlan()!.id !== panel.scope.id ? [this.activePlan()!.id] : []),
+        ],
+      });
+    this.busyAction.set(`restore-${entry.revision}`);
+    try {
+      const preview = await this.plansService.previewRestore({ scope: panel.scope, targetRevision: entry.revision });
+      if (!this.isCurrentHistoryPanel(panel.scope, requestSequence)) return;
+      const changedCount = preview.changedPlanIds.length + preview.changedWorkoutIds.length;
+      const warnings = preview.warnings.length ? ` ${preview.warnings.join(' ')}` : '';
+      const confirmed = await this.confirm(
+        `Restore revision ${entry.revision}?`,
+        `This creates a new revision and changes ${changedCount} item${changedCount === 1 ? '' : 's'}.${warnings}`,
+        'Restore revision',
+      );
+      if (!confirmed || !this.isCurrentHistoryPanel(panel.scope, requestSequence)) return;
+      const response = await this.plansService.restore({
+        mutationId: this.plansService.createMutationId('restore-schedule'),
+        expectedRevisions: expected,
+        scope: panel.scope,
+        targetRevision: entry.revision,
+      });
+      this.haptics.success();
+      this.closeHistory();
+      const skipped = response.skippedWorkoutIds.length;
+      this.snackBar.open(
+        skipped ? `Revision restored; ${skipped} workout${skipped === 1 ? '' : 's'} left unchanged.` : 'Revision restored.',
+        'Dismiss',
+        { duration: 6000 },
+      );
+    } catch (error) {
+      this.showError(error);
+    } finally {
+      this.busyAction.set(null);
+    }
+  }
+
+  private expectedRevisions(options: {
+    planIds?: string[];
+    workoutIds?: string[];
+    planRevisionOverrides?: ReadonlyMap<string, number>;
+    workoutRevisionOverrides?: ReadonlyMap<string, number>;
+  }): ExpectedTrainingScheduleRevision[] {
+    const schedule = this.schedule();
+    const acknowledged = this.acknowledgedPlan();
+    const state = acknowledged?.uid === this.currentUser()?.uid && acknowledged.state.revision > schedule.state.revision
+      ? acknowledged.state : schedule.state;
+    return expectedRevisionsFromSchedule({ ...schedule, state, plans: this.planOptions() }, options);
+  }
+
+  private isCurrentHistoryPanel(scope: TrainingScheduleRevisionScope, requestSequence: number): boolean {
+    if (requestSequence !== this.historyRequestSequence) return false;
+    const current = this.historyPanel();
+    return Boolean(current && current.scope.kind === scope.kind && current.scope.id === scope.id);
+  }
+
+  private async runMutation(
+    request: MutateTrainingScheduleRequestV1,
+    action: string,
+    feedbackAllowed: () => boolean = () => true,
+  ): Promise<MutateTrainingScheduleResponseV1 | null> {
+    this.busyAction.set(action);
+    try {
+      const response = await this.plansService.mutate(request);
+      if (feedbackAllowed()) this.haptics.success();
+      return response;
+    } catch (error) {
+      if (!feedbackAllowed()) return null;
+      const message = errorMessage(error);
+      if (/requires extending/i.test(message) && 'confirmPlanRangeExtension' in request.operation) {
+        const confirmed = await this.confirm('Extend plan dates?', message, 'Extend and continue');
+        if (confirmed && feedbackAllowed()) {
+          try {
+            const response = await this.plansService.mutate({
+              ...request,
+              operation: { ...request.operation, confirmPlanRangeExtension: true },
+            } as MutateTrainingScheduleRequestV1);
+            if (feedbackAllowed()) this.haptics.success();
+            return response;
+          } catch (retryError) {
+            if (feedbackAllowed()) this.showError(retryError);
+            return null;
+          }
+        }
+        return null;
+      }
+      this.showError(error);
+      return null;
+    } finally {
+      this.busyAction.set(null);
+    }
+  }
+
+  private async confirm(
+    title: string,
+    message: string,
+    confirmText: string,
+    confirmColor: 'primary' | 'accent' | 'warn' = 'primary',
+  ): Promise<boolean> {
+    const reference = this.dialog.open(ConfirmationDialogComponent, {
+      data: { title, message, confirmText, confirmColor },
+    });
+    return new Promise(resolve => reference.afterClosed().subscribe(value => resolve(value === true)));
+  }
+
+  private async confirmWithPastProviderCleanup(
+    title: string,
+    message: string,
+    confirmText: string,
+    confirmColor: 'primary' | 'accent' | 'warn' = 'warn',
+  ): Promise<ConfirmationWithPastProviderCleanup | null> {
+    const reference = this.dialog.open<ConfirmationDialogComponent, unknown, ConfirmationWithPastProviderCleanup>(
+      ConfirmationDialogComponent,
+      { data: { title, message, confirmText, confirmColor, pastProviderCleanupOption: true } },
+    );
+    return new Promise(resolve => reference.afterClosed().subscribe(value => resolve(value?.confirmed === true ? value : null)));
+  }
+
+  private showError(error: unknown): void {
+    this.haptics.error();
+    this.snackBar.open(errorMessage(error), 'Dismiss', { duration: 7000 });
+  }
+
+  private nextNodeId(prefix: 'step' | 'repeat' | 'exercise' | 'set'): string {
+    this.nodeSequence += 1;
+    return `${prefix}-${Date.now().toString(36)}-${this.nodeSequence}`;
+  }
+}
+
+function expectedRevisionsFromSchedule(
+  schedule: CurrentTrainingScheduleV1,
+  options: {
+    planIds?: string[];
+    workoutIds?: string[];
+    planRevisionOverrides?: ReadonlyMap<string, number>;
+    workoutRevisionOverrides?: ReadonlyMap<string, number>;
+  },
+): ExpectedTrainingScheduleRevision[] {
+  const expected: ExpectedTrainingScheduleRevision[] = [
+    { scope: 'state', id: 'current', revision: schedule.state.revision },
+  ];
+  [...new Set(options.planIds ?? [])].forEach((planId) => {
+    const plan = schedule.plans.find(candidate => candidate.id === planId);
+    if (plan) expected.push({
+      scope: 'plan',
+      id: plan.id,
+      revision: options.planRevisionOverrides?.get(plan.id) ?? plan.revision,
+    });
+  });
+  [...new Set(options.workoutIds ?? [])].forEach((workoutId) => {
+    const workout = schedule.workouts.find(candidate => candidate.id === workoutId);
+    if (workout) expected.push({
+      scope: 'workout',
+      id: workout.id,
+      revision: options.workoutRevisionOverrides?.get(workout.id) ?? workout.revision,
+    });
+  });
+  if (expected.length > 4) throw new Error('This change requires too many concurrent revision checks.');
+  return expected;
+}
+
+function errorMessage(error: unknown): string {
+  const message = (error as { message?: unknown } | null)?.message;
+  if (typeof message === 'string' && message.trim()) {
+    return message.replace(/^FirebaseError:\s*/i, '').replace(/^functions\/[^:]+:\s*/i, '');
+  }
+  return 'The training schedule could not be updated. Try again.';
+}
+
+function todayLocalDate(now = new Date()): string {
+  const year = now.getFullYear();
+  const month = `${now.getMonth() + 1}`.padStart(2, '0');
+  const day = `${now.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function workoutDatePickerInput(localDate: string): Dayjs | null {
+  try {
+    return dayjs(normalizeTrainingLocalDate(localDate));
+  } catch {
+    return null;
+  }
+}
+
+function workoutLocalDate(value: Dayjs | null): string {
+  if (!dayjs.isDayjs(value) || !value.isValid()) return '';
+  const candidate = `${value.year()}-${`${value.month() + 1}`.padStart(2, '0')}-${`${value.date()}`.padStart(2, '0')}`;
+  try {
+    return normalizeTrainingLocalDate(candidate);
+  } catch {
+    return '';
+  }
+}
+
+function defaultPlanDraft(now = new Date()): PlanDraft {
+  const startLocalDate = todayLocalDate(now);
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 27);
+  return {
+    name: '',
+    color: 'default',
+    startLocalDate,
+    endLocalDate: todayLocalDate(end),
+    activate: true,
+  };
+}

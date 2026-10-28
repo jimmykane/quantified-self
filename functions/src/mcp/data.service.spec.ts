@@ -1,5 +1,9 @@
+import { ActivitySampleCache } from './activity-sample-cache';
+import { supplementNightlyHrvSleepDocuments } from '../sleep/nightly-hrv';
+import { nightlyHealthAccountKey, type NightlyHrvRecord } from '../../../shared/nightly-hrv';
 import {
   ActivityTypes,
+  ActivityTypesHelper,
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   DataActivityTypes,
@@ -12,11 +16,13 @@ import {
   DataCadenceAvg,
   DataDescent,
   DataDistance,
+  DynamicDataLoader,
   DataDepthAvg,
   DataDuration,
   DataEndPosition,
   DataEnergy,
   DataHeartRateAvg,
+  DataHeartRate,
   DataJumpDistanceMax,
   DataJumpEvent,
   DataLatitudeDegrees,
@@ -38,16 +44,30 @@ import {
   EventInterface,
   TimeIntervals,
 } from '@sports-alliance/sports-lib';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  DERIVED_FORM_PAYLOAD_VERSION,
   DERIVED_METRIC_KINDS,
   DERIVED_METRIC_SCHEMA_VERSION,
   DERIVED_METRICS_ENTRY_TYPES,
 } from '../../../shared/derived-metrics';
 import {
   buildReadinessSignals,
-} from '../../../shared/readiness';
+} from '../../../shared/readiness-legacy';
+import { READINESS_EVIDENCE_VERSION } from '../../../shared/readiness';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
+import {
+  HEALTH_COVERAGE_STATUSES,
+  HEALTH_METRIC_IDS,
+  HEALTH_NORMALIZATION_STATUSES,
+  HEALTH_QUALITY_STATUSES,
+  HEALTH_RECORDING_METHODS,
+  HEALTH_SOURCE_RECORD_KINDS,
+  HEALTH_UNITS,
+  HEALTH_VALUE_ORIGINS,
+  HEALTH_VALUE_TYPES,
+} from '../../../shared/health';
+import { encodeHealthMetricSportsLibData } from '../../../shared/sports-lib-health-data';
 import {
   buildTrainingLoadPoints,
 } from '../../../shared/training-load';
@@ -55,9 +75,11 @@ import { normalizePersistedEventMetricSemantics } from '../../../shared/sports-l
 import { TRAINING_DISCIPLINES } from '../../../shared/training-disciplines';
 import {
   createMcpDataService,
+  createMetricAggregationReader,
   McpDataError,
   McpDataServiceDependencies,
   projectDerivedMetricPayloadForMcp,
+  redactDerivedPayload,
   resolveMcpActivitySourcePath,
   resolveMcpRouteSourcePath,
   SAFE_ACTIVITY_LOCATION_FIELDS,
@@ -138,6 +160,8 @@ function activityDocument(overrides: Record<string, unknown> = {}) {
       type: ActivityTypes.Cycling,
       name: 'Private MTB workout',
       creator: { name: 'Private device' },
+      sourceIdentity: { version: 1, activityId: 'activity-1', startMs: Date.parse('2026-07-01T08:00:00.000Z'),
+        endMs: Date.parse('2026-07-01T09:00:00.000Z'), importedType: 'Cycling', privateCanary: 'private-source-identity' },
       sourceActivityKey: 'private-source-key',
       powerMeter: true,
       trainer: false,
@@ -199,6 +223,36 @@ function routeDocument(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function healthWeightDocument(
+  id: string,
+  recordedAtMs: number,
+  weightKg: number,
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    id,
+    data: {
+      kind: HEALTH_SOURCE_RECORD_KINDS.PointMeasurement,
+      endTimeMs: recordedAtMs,
+      metrics: [encodeHealthMetricSportsLibData({
+        kind: 'value',
+        metricId: HEALTH_METRIC_IDS.BodyWeight,
+        valueType: HEALTH_VALUE_TYPES.Number,
+        aggregation: 'measurement',
+        semanticVariant: 'point',
+        origin: HEALTH_VALUE_ORIGINS.Recorded,
+        recordingMethod: HEALTH_RECORDING_METHODS.Manual,
+        quality: { status: HEALTH_QUALITY_STATUSES.Valid },
+        coverage: { status: HEALTH_COVERAGE_STATUSES.Complete },
+        normalizationStatus: HEALTH_NORMALIZATION_STATUSES.Canonical,
+        native: { metric: DataWeight.type, value: weightKg, unit: HEALTH_UNITS.Kilogram },
+        canonical: { value: weightKg, unit: HEALTH_UNITS.Kilogram },
+      })],
+      ...overrides,
+    },
+  };
+}
+
 describe('MCP data service', () => {
   let dependencies: McpDataServiceDependencies;
 
@@ -207,11 +261,13 @@ describe('MCP data service', () => {
       now: vi.fn().mockReturnValue(Date.parse('2026-07-27T12:00:00.000Z')),
       fetchMetricDiscoveryDocuments: vi.fn().mockResolvedValue([]),
       fetchEventDocuments: vi.fn().mockResolvedValue([]),
+      fetchHealthSourceRecordDocuments: vi.fn().mockResolvedValue([]),
       fetchDerivedSnapshot: vi.fn().mockResolvedValue(null),
       fetchDerivedSnapshotMetadataDocuments: vi.fn().mockResolvedValue([]),
       fetchSleepDocuments: vi.fn().mockResolvedValue([]),
       fetchReadinessSleepDocuments: vi.fn().mockResolvedValue([]),
       fetchActivityDocuments: vi.fn().mockResolvedValue([]),
+      fetchActivityEventTagDocuments: vi.fn().mockResolvedValue([]),
       fetchNearbyActivityDocuments: vi.fn().mockResolvedValue([]),
       fetchActivityDetailDocument: vi.fn().mockResolvedValue(null),
       fetchActivityMetricDocument: vi.fn().mockResolvedValue(null),
@@ -242,6 +298,135 @@ describe('MCP data service', () => {
       consumeGeocodingRateLimit: vi.fn().mockResolvedValue(undefined),
       importEvent: vi.fn(),
     };
+  });
+
+  it('encrypts Training references and rejects cross-user, connection and kind replay', async () => {
+    const doc = { id:'private-plan', data: { schemaVersion:1, name:'Private plan', lifecycle:'active',
+      startLocalDate:'2026-09-01', endLocalDate:'2026-09-30', revision:1,workoutCount:0,createdAtMs:1,updatedAtMs:1 } };
+    dependencies.trainingReads = { state: async () => ({ revision:1, activePlanId:null }),
+      snapshot: async (_uid, read) => read({ get: async () => doc, page: async () => [doc], units: async () => null }) };
+    const service = createMcpDataService(dependencies);
+    const base = { uid:'owner', connectionId:'connection', scopes:['training-plans:read'] };
+    const list = await service.readTrainingPlans({ ...base, tool:'list_training_plans', arguments:{} });
+    if (!('plans' in list)) throw Error('Expected plan list');
+    const planRef = list.plans[0].planRef;
+    expect(Buffer.from(planRef,'base64url').toString()).not.toMatch(/private-plan|owner|Private plan/);
+    await expect(service.readTrainingPlans({ ...base, tool:'get_training_plan', arguments:{ planRef } })).resolves.toHaveProperty('plan');
+    for (const patch of [{uid:'another'}, {connectionId:'another'}, {scopes:[]}]) {
+      await expect(service.readTrainingPlans({ ...base, ...patch, tool:'get_training_plan', arguments:{planRef} })).rejects.toMatchObject({code:'invalid_request'});
+    }
+    await expect(service.readTrainingPlans({ ...base, tool:'get_planned_workout', arguments:{workoutRef:planRef} })).rejects.toMatchObject({code:'invalid_request'});
+  });
+
+  async function descriptionFixture() {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([activityDocument()]);
+    const reads = { activeOwner: vi.fn().mockResolvedValue(true),
+      fetchActivity: vi.fn().mockResolvedValue({ id: 'activity-1', data: { eventID: 'event-1', description: 'Wrong activity text' } }),
+      fetchEvent: vi.fn().mockResolvedValue({ id: 'event-1', data: { description: 'Parent context\nFelt tired 🏃',
+        name: 'private-name', creator: 'private-device', sourceKey: 'private-source', notes: 'private-notes' } }),
+    };
+    dependencies.activityDescriptionReads = reads;
+    const service = createMcpDataService(dependencies);
+    const listed = await service.listActivities({ uid: 'user-1', connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io' });
+    const input = { uid: 'user-1', connectionId: 'connection-1',
+      scopes: ['activity-details:read', 'activity-descriptions:read'], activityRef: listed.activities[0].activityRef };
+    return { reads, service, input };
+  }
+
+  it('reads only the referenced parent description and preserves full text, null and empty values', async () => {
+    const { reads, service, input } = await descriptionFixture();
+    const result = await service.getActivityDescription(input);
+    expect(result).toEqual({ activityRef: input.activityRef, description: 'Parent context\nFelt tired 🏃' });
+    expect(JSON.stringify(result)).not.toMatch(/private-|Wrong activity/);
+    expect(reads.fetchActivity).toHaveBeenCalledWith('user-1', 'activity-1');
+    expect(reads.fetchEvent).toHaveBeenCalledWith('user-1', 'event-1');
+    expect(reads.activeOwner).toHaveBeenCalledTimes(2);
+    for (const description of [undefined, null, '', '  keep whitespace  ', 'a'.repeat(65_536)]) {
+      reads.fetchEvent.mockResolvedValue({ id: 'event-1', data: { description } } as never);
+      expect((await service.getActivityDescription(input)).description).toBe(description ?? null);
+    }
+  });
+
+  it('denies description reads before database work for missing grants and replayed or tampered references', async () => {
+    const { reads, service, input } = await descriptionFixture();
+    for (const change of [{ scopes: [] }, { scopes: ['activity-details:read'] },
+      { scopes: ['activity-descriptions:read'] }, { uid: 'other-owner' }, { connectionId: 'other-connection' },
+      { activityRef: input.activityRef.slice(0, -8) + 'tampered' }]) {
+      await expect(service.getActivityDescription({ ...input, ...change })).rejects.toMatchObject({ code: 'invalid_request' });
+    }
+    expect(reads.activeOwner).not.toHaveBeenCalled();
+    expect(reads.fetchActivity).not.toHaveBeenCalled();
+    expect(reads.fetchEvent).not.toHaveBeenCalled();
+  });
+
+  it('fails closed for stale parent bindings, missing documents, malformed or oversized text and backend errors', async () => {
+    const { reads, service, input } = await descriptionFixture();
+    for (const activity of [null, { id: 'different', data: { eventID: 'event-1' } },
+      { id: 'activity-1', data: { eventID: 'other-event' } }]) {
+      reads.fetchActivity.mockResolvedValue(activity as never);
+      await expect(service.getActivityDescription(input)).rejects.toMatchObject({ code: 'detail_not_available' });
+    }
+    expect(reads.fetchEvent).not.toHaveBeenCalled();
+    reads.fetchActivity.mockResolvedValue({ id: 'activity-1', data: { eventID: 'event-1' } } as never);
+    for (const event of [null, { id: 'different', data: { description: 'private' } },
+      { id: 'event-1', data: { description: { text: 'private' } } }]) {
+      reads.fetchEvent.mockResolvedValue(event as never);
+      await expect(service.getActivityDescription(input)).rejects.toMatchObject({ code: 'detail_not_available' });
+    }
+    for (const description of ['a'.repeat(65_537), '🏃'.repeat(16_385), '\u0000'.repeat(30_000)]) {
+      reads.fetchEvent.mockResolvedValue({ id: 'event-1', data: { description } } as never);
+      await expect(service.getActivityDescription(input)).rejects.toMatchObject({ code: 'query_too_large' });
+    }
+    reads.fetchEvent.mockRejectedValue(new Error('private description and backend path'));
+    await expect(service.getActivityDescription(input)).rejects.toMatchObject({ code: 'temporarily_unavailable',
+      message: 'The activity description could not be read safely. Try again later.' });
+  });
+
+  it('checks account deletion before reading and again before releasing private description text', async () => {
+    const { reads, service, input } = await descriptionFixture();
+    reads.activeOwner.mockResolvedValueOnce(false);
+    await expect(service.getActivityDescription(input)).rejects.toMatchObject({ code: 'invalid_request' });
+    expect(reads.fetchActivity).not.toHaveBeenCalled();
+    reads.activeOwner.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    await expect(service.getActivityDescription(input)).rejects.toMatchObject({ code: 'invalid_request' });
+    expect(reads.fetchEvent).toHaveBeenCalledOnce();
+  });
+
+  it('redacts unexpected Health reader errors instead of disclosing backend details', async () => {
+    dependencies.healthReads = {
+      fetchPage: vi.fn().mockRejectedValue(new Error('private callback token and provider account')),
+      fetchUnitSettings: vi.fn().mockResolvedValue(null),
+    };
+    await expect(createMcpDataService(dependencies).queryHealthMetric({
+      uid: 'owner', metricId: 'heart_rate', startDate: '2026-09-01', endDate: '2026-09-02',
+      mode: 'summaries', maxPoints: 200, measurementsAllowed: false,
+    })).rejects.toMatchObject({ code: 'temporarily_unavailable', message: 'Health data could not be read safely. Try again later.' });
+  });
+
+  it('encrypts notes cursors and binds them to the owner, connection, dates, and phase', async () => {
+    const documents = [1, 2].map(index => ({ id: String(index).padStart(64, '0'), data: {
+      category: 'other', title: 'Private context', startDate: '2026-07-01', endDate: '2026-07-02',
+      timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1,
+    } }));
+    dependencies.timelineNotesReads = { activeOwner: vi.fn().mockResolvedValue(true),
+      fetchPage: vi.fn(async (_uid, _range, phase, _size, position) => phase === 'ongoing' ? []
+        : documents.slice(position ? documents.findIndex(doc => doc.id === position.id) + 1 : 0)),
+    };
+    const service = createMcpDataService(dependencies);
+    const input = { uid: 'owner', connectionId: 'connection', scopes: ['timeline-notes:read'],
+      startDate: '2026-07-01', endDate: '2026-07-02', limit: 1 };
+    const first = await service.queryTimelineNotes(input);
+    const cursor = first.nextCursor!;
+    expect(Buffer.from(cursor, 'base64url').toString()).not.toMatch(/Private|2026|000000|closed/);
+    expect((await service.queryTimelineNotes({ ...input, cursor })).scanComplete).toBe(true);
+    for (const change of [{ uid: 'other' }, { connectionId: 'other' }, { endDate: '2026-07-03' },
+      { cursor: `${cursor.slice(0, 10)}${cursor[10] === 'A' ? 'B' : 'A'}${cursor.slice(11)}` }]) {
+      await expect(service.queryTimelineNotes({ ...input, cursor, ...change })).rejects.toMatchObject({ code: 'invalid_request' });
+    }
+    vi.mocked(dependencies.timelineNotesReads.fetchPage).mockRejectedValue(new Error('private note text and owner identity'));
+    await expect(service.queryTimelineNotes(input)).rejects.toMatchObject({ code: 'temporarily_unavailable',
+      message: 'Timeline notes could not be read safely. Try again later.' });
   });
 
   it('restricts route source reads to the owning route path and project bucket', () => {
@@ -359,6 +544,8 @@ describe('MCP data service', () => {
     const activityRef = activities.activities[0].activityRef;
     expect(Buffer.from(activityRef, 'base64url').toString('utf8')).not.toContain('activity-1');
     expect(JSON.stringify(activities.activities[0])).not.toContain('Private device');
+    expect(activities.activities[0]).not.toHaveProperty('sourceIdentity');
+    expect(JSON.stringify(activities.activities[0])).not.toContain('private-source-identity');
     expect(JSON.stringify(activities.activities[0])).not.toContain('private-source-key');
     expect(JSON.stringify(activities.activities[0])).not.toContain('private-position-source');
     expect(JSON.stringify(activities.activities[0])).not.toContain('private-position-payload');
@@ -424,6 +611,291 @@ describe('MCP data service', () => {
       'jumps',
       true,
     );
+  });
+
+  it('reads normalized event tags and filters tagged activities without exposing event fields', async () => {
+    const raceActivity = activityDocument({ eventID: 'event-race' });
+    raceActivity.id = 'activity-race';
+    const recoveryActivity = activityDocument({
+      eventID: 'event-recovery',
+      eventStartDate: new Date('2026-07-01T07:00:00.000Z'),
+      startDate: Date.parse('2026-07-01T07:00:00.000Z'),
+      endDate: Date.parse('2026-07-01T08:00:00.000Z'),
+    });
+    recoveryActivity.id = 'activity-recovery';
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      raceActivity,
+      recoveryActivity,
+    ]);
+    vi.mocked(dependencies.fetchActivityEventTagDocuments).mockResolvedValue([
+      {
+        id: 'event-race',
+        data: {
+          tags: [' Race ', 'Long   Run', 'race'],
+          name: 'Private race name',
+          description: 'Private event description',
+          creator: { name: 'Private source' },
+        },
+      },
+      {
+        id: 'event-recovery',
+        data: { benchmarkReviewTags: ['Recovery'] },
+      },
+      {
+        id: 'unrequested-event',
+        data: { tags: ['Race'] },
+      },
+    ]);
+
+    const service = createMcpDataService(dependencies);
+    const result = await service.queryActivitiesWithTags({
+        uid: 'user-1',
+        connectionId: 'connection-1',
+        appBaseUrl: 'https://quantified-self.io',
+        startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+        endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+        tags: ['race', ' LONG RUN '],
+        tagMatch: 'all',
+      });
+
+    expect(result.activities).toHaveLength(1);
+    expect(result.activities[0]).toMatchObject({
+      activityType: ActivityTypes.Cycling,
+      tags: ['Race', 'Long Run'],
+      locationRedacted: true,
+    });
+    expect(result).toMatchObject({
+      scannedActivityCount: 2,
+      skippedActivityCount: 1,
+      scanComplete: true,
+      nextCursor: null,
+    });
+    expect(JSON.stringify(result)).not.toContain('Private race name');
+    expect(JSON.stringify(result)).not.toContain('Private event description');
+    expect(JSON.stringify(result)).not.toContain('Private source');
+    expect(dependencies.fetchActivityDocuments).toHaveBeenCalledWith(
+      'user-1',
+      Date.parse('2026-07-01T00:00:00.000Z'),
+      Date.parse('2026-07-02T00:00:00.000Z'),
+      101,
+      undefined,
+      false,
+    );
+    expect(dependencies.fetchActivityEventTagDocuments).toHaveBeenCalledWith(
+      'user-1',
+      ['event-race', 'event-recovery'],
+    );
+
+    const anyResult = await service.queryActivitiesWithTags({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      tags: ['RACE', 'recovery'],
+    });
+    expect(anyResult.activities.map(activity => activity.tags)).toEqual([
+      ['Race', 'Long Run'],
+      ['Recovery'],
+    ]);
+  });
+
+  it('returns empty and legacy event tags when no tag filter is supplied', async () => {
+    const secondActivity = activityDocument({
+      eventID: 'event-2',
+      eventStartDate: new Date('2026-07-01T07:00:00.000Z'),
+      startDate: Date.parse('2026-07-01T07:00:00.000Z'),
+      endDate: Date.parse('2026-07-01T08:00:00.000Z'),
+    });
+    secondActivity.id = 'activity-2';
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+      secondActivity,
+    ]);
+    vi.mocked(dependencies.fetchActivityEventTagDocuments).mockResolvedValue([
+      { id: 'event-1', data: {} },
+      { id: 'event-2', data: { benchmarkReviewTags: ['Recovery'] } },
+    ]);
+
+    const result = await createMcpDataService(dependencies)
+      .queryActivitiesWithTags({
+        uid: 'user-1',
+        connectionId: 'connection-1',
+        appBaseUrl: 'https://quantified-self.io',
+        limit: 2,
+      });
+
+    expect(result.activities.map(activity => activity.tags)).toEqual([
+      [],
+      ['Recovery'],
+    ]);
+  });
+
+  it('skips activities whose parent event is unavailable instead of reporting empty tags', async () => {
+    const secondActivity = activityDocument({
+      eventID: 'event-2',
+      eventStartDate: new Date('2026-07-01T07:00:00.000Z'),
+      startDate: Date.parse('2026-07-01T07:00:00.000Z'),
+      endDate: Date.parse('2026-07-01T08:00:00.000Z'),
+    });
+    secondActivity.id = 'activity-2';
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+      secondActivity,
+    ]);
+    vi.mocked(dependencies.fetchActivityEventTagDocuments).mockResolvedValue([
+      { id: 'event-2', data: { tags: ['Recovery'] } },
+    ]);
+
+    const result = await createMcpDataService(dependencies)
+      .queryActivitiesWithTags({
+        uid: 'user-1',
+        connectionId: 'connection-1',
+        appBaseUrl: 'https://quantified-self.io',
+        limit: 2,
+      });
+
+    expect(result.activities.map(activity => activity.tags)).toEqual([
+      ['Recovery'],
+    ]);
+    expect(result).toMatchObject({
+      scannedActivityCount: 2,
+      skippedActivityCount: 1,
+      scanComplete: true,
+    });
+  });
+
+  it('reads tags only for activities eligible for the requested activity types', async () => {
+    const runningActivity = activityDocument({
+      eventID: 'event-running',
+      type: ActivityTypes.Running,
+    });
+    runningActivity.id = 'activity-running';
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      runningActivity,
+      activityDocument(),
+    ]);
+    vi.mocked(dependencies.fetchActivityEventTagDocuments).mockResolvedValue([
+      { id: 'event-1', data: { tags: ['Race'] } },
+    ]);
+
+    const result = await createMcpDataService(dependencies)
+      .queryActivitiesWithTags({
+        uid: 'user-1',
+        connectionId: 'connection-1',
+        appBaseUrl: 'https://quantified-self.io',
+        activityTypes: [ActivityTypes.Cycling],
+      });
+
+    expect(result.activities).toHaveLength(1);
+    expect(dependencies.fetchActivityEventTagDocuments).toHaveBeenCalledWith(
+      'user-1',
+      ['event-1'],
+    );
+  });
+
+  it('enforces the activity read budget before loading parent event tags', async () => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument({ canary: 'x'.repeat(513 * 1024) }),
+    ]);
+
+    await expect(createMcpDataService(dependencies).queryActivitiesWithTags({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+    })).rejects.toMatchObject<McpDataError>({ code: 'query_too_large' });
+    expect(dependencies.fetchActivityEventTagDocuments).not.toHaveBeenCalled();
+  });
+
+  it('binds tagged activity cursors to normalized tags and match mode', async () => {
+    const secondActivity = activityDocument({
+      eventID: 'event-2',
+      eventStartDate: new Date('2026-07-01T07:00:00.000Z'),
+      startDate: Date.parse('2026-07-01T07:00:00.000Z'),
+      endDate: Date.parse('2026-07-01T08:00:00.000Z'),
+    });
+    secondActivity.id = 'activity-2';
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+      secondActivity,
+    ]);
+    vi.mocked(dependencies.fetchActivityEventTagDocuments).mockResolvedValue([
+      { id: 'event-1', data: { tags: ['Race'] } },
+      { id: 'event-2', data: { tags: ['Race'] } },
+    ]);
+    const service = createMcpDataService(dependencies);
+    const input = {
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      tags: [' Race ', 'race'] as string[],
+      tagMatch: 'any' as const,
+      limit: 1,
+    };
+    const first = await service.queryActivitiesWithTags(input);
+
+    expect(first.nextCursor).toEqual(expect.any(String));
+    expect(first.nextCursor!.length).toBeLessThanOrEqual(512);
+    await expect(service.queryActivitiesWithTags({
+      ...input,
+      tags: ['Recovery'],
+      cursor: first.nextCursor!,
+    })).rejects.toMatchObject<McpDataError>({ code: 'invalid_request' });
+    await expect(service.queryActivitiesWithTags({
+      ...input,
+      tagMatch: 'all',
+      cursor: first.nextCursor!,
+    })).rejects.toMatchObject<McpDataError>({ code: 'invalid_request' });
+    expect(dependencies.fetchActivityDocuments).toHaveBeenCalledTimes(1);
+
+    await service.queryActivitiesWithTags({
+      ...input,
+      tags: ['RACE'],
+      cursor: first.nextCursor!,
+    });
+    expect(dependencies.fetchActivityDocuments).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    { tags: [] },
+    { tags: Array.from({ length: 11 }, (_, index) => `tag-${index}`) },
+    { tags: ['x'.repeat(33)] },
+    { tags: [1] as unknown as string[] },
+    { tags: ['Race'], tagMatch: 'none' as 'any' },
+  ])('rejects invalid tagged activity filters before data reads: %o', async input => {
+    await expect(createMcpDataService(dependencies).queryActivitiesWithTags({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      ...input,
+    })).rejects.toMatchObject<McpDataError>({ code: 'invalid_request' });
+    expect(dependencies.fetchActivityDocuments).not.toHaveBeenCalled();
+    expect(dependencies.fetchActivityEventTagDocuments).not.toHaveBeenCalled();
+  });
+
+  it('redacts tagged activity backend failures and rejects oversized tag reads', async () => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+    ]);
+    vi.mocked(dependencies.fetchActivityEventTagDocuments).mockRejectedValue(
+      new Error('secret backend detail'),
+    );
+    const service = createMcpDataService(dependencies);
+    await expect(service.queryActivitiesWithTags({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'temporarily_unavailable',
+      message: expect.not.stringContaining('secret backend detail'),
+    });
+
+    vi.mocked(dependencies.fetchActivityEventTagDocuments).mockResolvedValue([
+      { id: 'event-1', data: { tags: ['Race'], canary: 'x'.repeat(513 * 1024) } },
+    ]);
+    await expect(service.queryActivitiesWithTags({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+    })).rejects.toMatchObject<McpDataError>({ code: 'query_too_large' });
   });
 
   it('normalizes historical absolute jump timestamps to elapsed milliseconds', async () => {
@@ -555,6 +1027,105 @@ describe('MCP data service', () => {
     });
     expect(jumps.items[0]).not.toHaveProperty('latitudeDegrees');
     expect(jumps.items[0]).not.toHaveProperty('longitudeDegrees');
+  });
+
+  async function samplesFixture() {
+    const {service, input} = await descriptionFixture();
+    const startDate = Date.parse('2026-07-01T08:00:00Z');
+    const activity = activityDocument({startDate, endDate: startDate + 4000, sourceActivityKey: undefined, stats: {}});
+    const context = {event: {id: 'event-1', data: {originalFile: {path: 'users/user-1/events/event-1/original.fit'}}}, activities: [activity]};
+    vi.mocked(dependencies.fetchActivityChartContext).mockResolvedValue(context);
+    const cache = new ActivitySampleCache();
+    const reads = {
+      cache, activeOwner: vi.fn().mockResolvedValue(true),
+      sourceVersions: vi.fn(async (_uid: string, _event: string, files: readonly import('../../../shared/app-event.interface').OriginalFileMetaData[]) => files.map(file => ({...file, generation: '123'}))),
+      parseSource: vi.fn(async () => EventImporterJSON.getEventFromJSON({
+        name: 'Private name', startDate, endDate: startDate + 4000, stats: {},
+        activities: [{...activity.data, streams: {[DataHeartRate.type]: [100, null, 0, 140, 150]}, laps: [], intensityZones: [], events: []}],
+      } as never)),
+    };
+    dependencies.activitySamplesReads = reads;
+    return {service, input: {...input, scopes: ['activity-details:read'], metrics: ['hr'], limit: 2}, reads, context};
+  }
+
+  it.each(['broken', '', ' ', null, 123, -1, '9'.repeat(41)])('rejects invalid stored source generation %j before reading charts or samples', async generation => {
+    const {service, input, reads, context} = await samplesFixture();
+    vi.mocked(dependencies.fetchActivityChartContext).mockResolvedValue({
+      ...context, event: {...context.event, data: {
+        originalFile: {...context.event.data.originalFile, generation},
+      }},
+    });
+    try {
+      await expect(service.getActivitySamples(input)).rejects.toMatchObject({code: 'detail_not_available'});
+      await expect(service.getActivityChartData(input)).rejects.toMatchObject({code: 'detail_not_available'});
+      expect(reads.sourceVersions).not.toHaveBeenCalled();
+      expect(dependencies.consumeActivityChartRateLimit).not.toHaveBeenCalled();
+      expect(dependencies.downloadActivityChartSource).not.toHaveBeenCalled();
+      expect(dependencies.buildActivityChartData).not.toHaveBeenCalled();
+    } finally { reads.cache.clear(); }
+  });
+
+  it.each([undefined, '123', ' 123 '])('preserves legacy sources and normalizes valid stored source generation %j', async generation => {
+    const {service, input, reads, context} = await samplesFixture();
+    vi.mocked(dependencies.fetchActivityChartContext).mockResolvedValue({
+      ...context, event: {...context.event, data: {
+        originalFile: {...context.event.data.originalFile, ...(generation === undefined ? {} : {generation})},
+      }},
+    });
+    try {
+      await service.getActivitySamples(input);
+      expect(reads.sourceVersions.mock.calls[0][2][0].generation).toBe(generation?.trim());
+      await service.getActivityChartData(input);
+      expect(vi.mocked(dependencies.buildActivityChartData).mock.calls[0][0].sourceFiles[0].generation).toBe(generation?.trim());
+    } finally { reads.cache.clear(); }
+  });
+
+  it('reads sample pages through the shared owner context and existing parser rate limit with real opaque cursors', async () => {
+    const {service, input, reads} = await samplesFixture();
+    try {
+      const first = await service.getActivitySamples(input);
+      expect(first.series[0].values).toEqual([100, null]); expect(first.nextCursor!.length).toBeLessThanOrEqual(512);
+      const second = await service.getActivitySamples({...input, cursor: first.nextCursor!});
+      expect(second.series[0].values).toEqual([0, 140]);
+      expect(dependencies.consumeActivityChartRateLimit).toHaveBeenCalledTimes(1);
+      expect(dependencies.consumeActivityChartRateLimit).toHaveBeenCalledWith('user-1', 'connection-1');
+      expect(dependencies.downloadActivityChartSource).toHaveBeenCalledWith('user-1', 'event-1', expect.objectContaining({generation: '123'}), expect.any(Number));
+      expect(dependencies.buildActivityChartData).not.toHaveBeenCalled();
+      for (const change of [{scopes: []}, {uid: 'other'}, {connectionId: 'other'}, {cursor: first.nextCursor!.slice(0, -8) + 'tampered'}]) {
+        await expect(service.getActivitySamples({...input, cursor: first.nextCursor!, ...change})).rejects.toMatchObject({code: 'invalid_request'});
+      }
+      const otherConnection = await service.listActivities({uid: input.uid, connectionId: 'other', appBaseUrl: 'https://quantified-self.io'});
+      await expect(service.getActivitySamples({...input, connectionId: 'other', activityRef: otherConnection.activities[0].activityRef, cursor: first.nextCursor!}))
+        .rejects.toMatchObject({code: 'invalid_request'});
+      expect(JSON.stringify(first)).not.toMatch(/Private|private|event-1|activity-1|original.fit|generation/);
+    } finally { reads.cache.clear(); }
+  });
+
+  it('rejects changed, missing or oversized sample parents and sanitizes storage and parser errors', async () => {
+    const {service, input, reads, context} = await samplesFixture();
+    try {
+      const first = await service.getActivitySamples(input);
+      for (const value of [null, {...context, event: {...context.event, id: 'other'}}, {...context, activities: []},
+        {...context, activities: Array(101).fill(context.activities[0])},
+        {...context, activities: [{...context.activities[0], data: {...context.activities[0].data, eventID: 'other'}}]}]) {
+        vi.mocked(dependencies.fetchActivityChartContext).mockResolvedValueOnce(value);
+        await expect(service.getActivitySamples({...input, cursor: first.nextCursor!})).rejects.toMatchObject({code: 'detail_not_available'});
+      }
+      vi.mocked(dependencies.fetchActivityChartContext).mockResolvedValueOnce({
+        ...context, event: {...context.event, data: {originalFiles: [context.event.data.originalFile, {bucket: 'missing-path'}]}},
+      });
+      await expect(service.getActivitySamples({...input, cursor: first.nextCursor!})).rejects.toMatchObject({code: 'detail_not_available'});
+      context.activities[0].data.endDate += 1000;
+      await expect(service.getActivitySamples({...input, cursor: first.nextCursor!})).rejects.toMatchObject({code: 'invalid_request'});
+      context.activities[0].data.endDate -= 1000;
+      reads.cache.clear();
+      vi.mocked(dependencies.consumeActivityChartRateLimit).mockRejectedValueOnce(new McpActivityChartRateLimitError());
+      await expect(service.getActivitySamples(input)).rejects.toMatchObject({code: 'temporarily_unavailable'});
+      reads.sourceVersions.mockRejectedValueOnce(new Error('private storage path'));
+      await expect(service.getActivitySamples(input)).rejects.toMatchObject({code: 'detail_not_available', message: 'The original activity samples could not be read safely.'});
+      reads.parseSource.mockRejectedValueOnce(new Error('private original payload'));
+      await expect(service.getActivitySamples(input)).rejects.toMatchObject({code: 'detail_not_available', message: 'The original activity samples could not be read safely.'});
+    } finally { reads.cache.clear(); }
   });
 
   it('resolves chart sources from the connection-bound activity and rate-limits before reading', async () => {
@@ -752,6 +1323,28 @@ describe('MCP data service', () => {
       code: 'query_too_large',
       message: 'The activity chart request exceeds a processing limit.',
     });
+  });
+
+  it.each([0, undefined])('deduplicates Stamina and EnergySense aliases using only canonical persisted data (%s)', async value => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([activityDocument()]);
+    const service = createMcpDataService(dependencies);
+    const listed = await service.listActivities({
+      uid: 'user-1', connectionId: 'connection-1', appBaseUrl: 'https://quantified-self.io',
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'), endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+    });
+    const stats = { ...(value === undefined ? {} : { Stamina: value }), 'EnergySense Endurance': 99 };
+    vi.mocked(dependencies.fetchActivityMetricDocument).mockResolvedValue({
+      id: 'activity-1', data: { eventID: 'event-1', stats },
+    });
+    const result = await service.getActivityMetrics({
+      uid: 'user-1', connectionId: 'connection-1', activityRef: listed.activities[0].activityRef,
+      metrics: ['Stamina', 'energysense endurance', 'Suunto EnergySense Endurance'],
+    });
+    expect(dependencies.fetchActivityMetricDocument).toHaveBeenCalledExactlyOnceWith('user-1', 'activity-1', ['Stamina']);
+    expect(result).toMatchObject({ selectedMetricCount: 1, availableMetricCount: value === undefined ? 0 : 1,
+      metrics: [{ type: 'Stamina', value: value ?? null, available: value !== undefined, unit: '%' }],
+    });
+    expect(stats).toEqual({ ...(value === undefined ? {} : { Stamina: value }), 'EnergySense Endurance': 99 });
   });
 
   it('returns only explicitly selected canonical numeric metrics for a referenced activity', async () => {
@@ -1039,7 +1632,7 @@ describe('MCP data service', () => {
     expect(JSON.stringify(result)).not.toContain('private-rowing-source');
   });
 
-  it('does not mislabel pre-19 lap stroke rate as cadence', async () => {
+  it.each([0, 7, 9])('preserves source lap ID %s without mislabeling pre-19 stroke rate as cadence', async lapId => {
     vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
       activityDocument({ type: ActivityTypes.Rowing }),
     ]);
@@ -1056,7 +1649,7 @@ describe('MCP data service', () => {
         eventID: 'event-1',
         type: ActivityTypes.Rowing,
         laps: [{
-          lapId: 1,
+          lapId,
           type: 'Manual',
           startDate: Date.parse('2026-07-01T08:00:00.000Z'),
           endDate: Date.parse('2026-07-01T08:10:00.000Z'),
@@ -1073,6 +1666,7 @@ describe('MCP data service', () => {
       activityRef: listed.activities[0].activityRef,
     });
 
+    expect(result.items[0].lapNumber).toBe(lapId);
     expect(result.items[0].stats).toMatchObject({
       averageCadenceRpm: null,
       maximumCadenceRpm: null,
@@ -1129,6 +1723,28 @@ describe('MCP data service', () => {
       ascentMeters: null,
       descentMeters: null,
     });
+  });
+
+  it('projects corrected source lap statistics without exposing private matching evidence', async () => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([activityDocument()]);
+    const service = createMcpDataService(dependencies);
+    const listed = await service.listActivities({ uid: 'user-1', connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io', limit: 1 });
+    const start = Date.parse('2026-07-01T08:00:00.000Z');
+    vi.mocked(dependencies.fetchActivityDetailDocument).mockResolvedValue({ id: 'activity-1', data: {
+      eventID: 'event-1', type: ActivityTypes.Running,
+      laps: [{ lapId: 1, type: 'Distance', startDate: start, endDate: start + 440_000,
+        stats: { [DataDistance.type]: 1000, [DataDuration.type]: 439.9 },
+        sourceWindow: { ActivityId: 3, privateMatchingEvidence: 'private-evidence' },
+      }],
+    } });
+    const result = await service.listActivityLaps({ uid: 'user-1', connectionId: 'connection-1',
+      activityRef: listed.activities[0].activityRef });
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({ startTimeMs: start, endTimeMs: start + 440_000,
+      stats: { durationSeconds: 439.9, distanceMeters: 1000 } });
+    expect(JSON.stringify(result)).not.toContain('private-evidence');
+    expect(JSON.stringify(result)).not.toContain('sourceWindow');
   });
 
   it('rejects oversized activity overview projections before chart-source reads', async () => {
@@ -1286,6 +1902,97 @@ describe('MCP data service', () => {
       code: 'invalid_metric',
     });
     expect(dependencies.fetchActivityRankingDocuments).not.toHaveBeenCalled();
+  });
+
+  describe('complete catalog group ranking', () => {
+    let family: string[];
+
+    beforeEach(async () => {
+      // The shared setup deliberately mocks a small provider-era catalog. These
+      // cases exercise the installed catalog without changing that shared mock.
+      const actual = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+      family = actual.ActivityTypesHelper.getActivityTypesForActivityGroup(actual.ActivityTypeGroups.IndoorSportsGroup)
+        .map(String).sort();
+      vi.spyOn(ActivityTypesHelper, 'getActivityTypeGroupsAsUniqueArray')
+        .mockReturnValue(actual.ActivityTypesHelper.getActivityTypeGroupsAsUniqueArray());
+      vi.spyOn(ActivityTypesHelper, 'getActivityTypesForActivityGroup')
+        .mockImplementation(group => actual.ActivityTypesHelper.getActivityTypesForActivityGroup(group));
+    });
+
+    afterEach(() => vi.restoreAllMocks());
+
+    it('ranks a complete catalog group beyond the public explicit-type limit without clipping it', async () => {
+      expect(family.length).toBeGreaterThan(20);
+      vi.mocked(dependencies.fetchActivityRankingDocuments).mockImplementation(async (_uid, _start, _end, _metric, types) => [{
+        ...activityDocument({ type: types.at(-1), stats: { [DataAscent.type]: 12, providerPayload: 'PRIVATE' } }),
+        ascentCorrection: { value: 12, sourceValue: 250, private: 'PRIVATE_CORRECTION' },
+        descentCorrection: { value: 14, sourceValue: 300, private: 'PRIVATE_DESCENT_CORRECTION' },
+        id: `activity-${family.indexOf(types[0])}`,
+      }]);
+      const result = await createMcpDataService(dependencies).rankActivitiesByMetric({
+        uid: 'user-1', connectionId: 'connection-1', metric: DataAscent.type,
+        activityGroup: 'indoor_sports_group', order: 'highest', limit: 25,
+      });
+      const queries = vi.mocked(dependencies.fetchActivityRankingDocuments).mock.calls;
+      expect(queries.flatMap(query => query[4])).toEqual(family);
+      expect(queries.every(query => query[4].length <= 20 && query[5] === 25)).toBe(true);
+      expect(result.matchedActivityCount).toBe(Math.ceil(family.length / 20));
+      expect(result.activities.some(activity => activity.activityType === family.at(-1))).toBe(true);
+      expect(JSON.stringify(result)).not.toContain('PRIVATE');
+      expect(JSON.stringify(result)).not.toContain('ascentCorrection');
+      expect(JSON.stringify(result)).not.toContain('descentCorrection');
+      expect(JSON.stringify(result)).not.toContain('sourceValue');
+      expect(createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false }).rank_activities_by_metric.safeParse(result).success).toBe(true);
+    });
+
+    it('retains one date-range scan for an expanded group and rejects oversized explicit inputs', async () => {
+      const service = createMcpDataService(dependencies);
+      await service.rankActivitiesByMetric({
+        uid: 'user-1', connectionId: 'connection-1', metric: DataAscent.type,
+        activityGroup: 'indoor_sports_group', order: 'highest',
+        startTimeMs: Date.parse('2026-07-01T00:00:00Z'), endTimeMs: Date.parse('2026-07-02T00:00:00Z'),
+      });
+      const queries = vi.mocked(dependencies.fetchActivityRankingDocuments).mock.calls;
+      expect(queries).toHaveLength(1);
+      expect(queries[0][4].length).toBeGreaterThan(20);
+      vi.mocked(dependencies.fetchActivityRankingDocuments).mockClear();
+      await expect(service.rankActivitiesByMetric({
+        uid: 'user-1', connectionId: 'connection-1', metric: DataAscent.type,
+        activityTypes: Array(21).fill(ActivityTypes.Running),
+        activityGroup: 'indoor_sports_group', order: 'highest',
+      })).rejects.toMatchObject({ code: 'invalid_request' });
+      expect(dependencies.fetchActivityRankingDocuments).not.toHaveBeenCalled();
+    });
+
+    it('shares the ranking byte budget across expanded family queries', async () => {
+      vi.mocked(dependencies.fetchActivityRankingDocuments).mockImplementation(async (_uid, _start, _end, _metric, types) => [{
+        ...activityDocument({ type: types[0], stats: { [DataAscent.type]: 12 }, privatePadding: 'x'.repeat(300 * 1024) }),
+      }]);
+      await expect(createMcpDataService(dependencies).rankActivitiesByMetric({
+        uid: 'user-1', connectionId: 'connection-1', metric: DataAscent.type,
+        activityGroup: 'indoor_sports_group', order: 'highest',
+      })).rejects.toMatchObject({ code: 'query_too_large' });
+      expect(dependencies.fetchActivityRankingDocuments).toHaveBeenCalledTimes(2);
+    });
+
+    it('shares the ranking record budget and pagination across every expanded family query', async () => {
+      vi.mocked(dependencies.fetchActivityRankingDocuments).mockImplementation(async (_uid, _start, _end, _metric, types, limit, cursor) => {
+        const offset = typeof cursor === 'number' ? cursor : 0;
+        return Array.from({ length: Math.min(limit, 1_100 - offset) }, (_, index) => ({
+          data: { type: types[0], stats: { [DataAscent.type]: 12 } },
+          id: `activity-${types[0]}-${offset + index}`, cursor: offset + index + 1,
+        }));
+      });
+      await expect(createMcpDataService(dependencies).rankActivitiesByMetric({
+        uid: 'user-1', connectionId: 'connection-1', metric: DataAscent.type,
+        activityGroup: 'indoor_sports_group', order: 'highest',
+      })).rejects.toMatchObject({ code: 'query_too_large' });
+      const queries = vi.mocked(dependencies.fetchActivityRankingDocuments).mock.calls;
+      expect(new Set(queries.map(query => query[4][0])).size).toBe(2);
+      expect(queries.at(-1)?.[5]).toBe(1);
+      expect(queries.some(query => typeof query[6] === 'number')).toBe(true);
+    });
+
   });
 
   it('ranks pre-19 stroke-rate activities through the canonical metric', async () => {
@@ -1822,6 +2529,108 @@ describe('MCP data service', () => {
     expect(secondPage.nextCursor).toBeNull();
   });
 
+  it('binds Training impact to opaque activity references and the existing Form snapshot', async () => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+    ]);
+    const trainingImpactReads = {
+      activeOwner: vi.fn().mockResolvedValue(true),
+      fetchActivities: vi.fn().mockResolvedValue([{
+        id: 'activity-1',
+        data: {
+          eventID: 'event-1',
+          startDate: Date.parse('2026-07-01T08:00:00.000Z'),
+          endDate: Date.parse('2026-07-01T09:00:00.000Z'),
+          stats: { 'Training Stress Score': 42 },
+        },
+      }]),
+      fetchEvents: vi.fn().mockResolvedValue([{
+        id: 'event-1',
+        data: {},
+      }]),
+      fetchFormSnapshot: vi.fn().mockResolvedValue({
+        entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot,
+        metricKind: DERIVED_METRIC_KINDS.Form,
+        schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+        status: 'ready',
+        payload: {
+          payloadVersion: DERIVED_FORM_PAYLOAD_VERSION,
+          dayBoundary: 'UTC',
+          rangeStartDayMs: Date.parse('2026-07-01T00:00:00.000Z'),
+          rangeEndDayMs: Date.parse('2026-07-01T00:00:00.000Z'),
+          dailyLoads: [{
+            dayMs: Date.parse('2026-07-01T00:00:00.000Z'),
+            load: 42,
+            activityCount: 1,
+          }],
+          excludesMergedEvents: true,
+        },
+      }),
+    };
+    dependencies.trainingImpactReads = trainingImpactReads;
+    const service = createMcpDataService(dependencies);
+    const listed = await service.listActivities({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+    });
+    const activityRef = listed.activities[0].activityRef;
+
+    await expect(service.getTrainingImpact({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      mode: 'session',
+      activityRef,
+    })).resolves.toMatchObject({
+      status: 'ready',
+      contribution: {
+        trainingStressScore: 42,
+        fitnessLoadCtlContribution: 1,
+      },
+    });
+    await expect(service.getTrainingImpact({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      mode: 'day',
+      activityRefs: [activityRef],
+      localDate: '2026-07-01',
+      timeZone: 'UTC',
+    })).resolves.toMatchObject({
+      mode: 'day',
+      localDate: '2026-07-01',
+      timeZone: 'UTC',
+      status: 'ready',
+      sessionRole: null,
+    });
+    expect(trainingImpactReads.fetchActivities).toHaveBeenCalledWith(
+      'user-1',
+      ['activity-1'],
+    );
+    expect(trainingImpactReads.fetchEvents).toHaveBeenCalledWith(
+      'user-1',
+      ['event-1'],
+    );
+
+    vi.clearAllMocks();
+    for (const change of [
+      { uid: 'other-user' },
+      { connectionId: 'other-connection' },
+      { activityRef: `${activityRef.slice(0, -8)}tampered` },
+    ]) {
+      await expect(service.getTrainingImpact({
+        uid: 'user-1',
+        connectionId: 'connection-1',
+        mode: 'session',
+        activityRef,
+        ...change,
+      })).rejects.toMatchObject({ code: 'invalid_request' });
+    }
+    expect(trainingImpactReads.activeOwner).not.toHaveBeenCalled();
+    expect(trainingImpactReads.fetchActivities).not.toHaveBeenCalled();
+    expect(trainingImpactReads.fetchEvents).not.toHaveBeenCalled();
+    expect(trainingImpactReads.fetchFormSnapshot).not.toHaveBeenCalled();
+  });
+
   it('binds activity list cursors to the original date range', async () => {
     const secondActivity = activityDocument({
       eventID: 'event-2',
@@ -2313,6 +3122,81 @@ describe('MCP data service', () => {
       energyKilocalories: 5,
     }]);
     expect(JSON.stringify(result)).not.toContain('privateExtension');
+  });
+
+  it('withholds rejected swim and lap timing through existing nullable fields without exposing metadata', async () => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+    ]);
+    const service = createMcpDataService(dependencies);
+    const activities = await service.listActivities({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+    });
+    vi.mocked(dependencies.fetchActivityDetailDocument).mockResolvedValue({
+      id: 'activity-1',
+      data: {
+        eventID: 'event-1',
+        laps: [{ startDate: Date.parse('2026-07-01T08:00:00.000Z'), endDate: Date.parse('2026-07-01T08:00:30.000Z'),
+          stats: { [DataDuration.type]: 4000000, [DataDistance.type]: 25 },
+          timingValidity: { version: 1, reason: 'exceeds-workout-envelope', timerTime: 4000000 } }],
+        swimLengths: [{
+          index: 4,
+          lapIndex: 1,
+          startDate: Date.parse('2026-07-01T08:00:00.000Z'),
+          endDate: Date.parse('2026-07-01T08:00:30.000Z'),
+          type: 'active',
+          stroke: 'freestyle',
+          strokes: 18,
+          elapsedTime: 30,
+          timerTime: 4000000,
+          timingValidity: { version: 1, reason: 'exceeds-workout-envelope', timerTime: 4000000 },
+          distance: 25,
+          poolLength: 25,
+          avgSpeed: 0.83,
+          avgCadence: 36,
+          avgHeartRate: 130,
+          maxHeartRate: 142,
+          swolf: 48,
+          calories: 5,
+          privateExtension: { source: 'provider' },
+        }],
+      },
+    });
+
+    const result = await service.listActivitySwimLengths({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      activityRef: activities.activities[0].activityRef,
+    });
+
+    expect(result.items).toEqual([{
+      index: 0,
+      sourceIndex: 4,
+      lapIndex: 1,
+      startTimeMs: Date.parse('2026-07-01T08:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-01T08:00:30.000Z'),
+      type: 'active',
+      stroke: 'freestyle',
+      strokeCount: 18,
+      elapsedTimeSeconds: 30,
+      timerTimeSeconds: null,
+      distanceMeters: 25,
+      poolLengthMeters: 25,
+      averageSpeedMetersPerSecond: 0.83,
+      averageCadenceRpm: 36,
+      averageHeartRateBpm: 130,
+      maximumHeartRateBpm: 142,
+      swolf: 48,
+      energyKilocalories: 5,
+    }]);
+    expect(JSON.stringify(result)).not.toMatch(/privateExtension|timingValidity|exceeds-workout-envelope|4000000/);
+    const laps = await service.listActivityLaps({ uid: 'user-1', connectionId: 'connection-1', activityRef: activities.activities[0].activityRef });
+    expect(laps.items[0].stats).toMatchObject({ durationSeconds: null, distanceMeters: 25 });
+    expect(JSON.stringify(laps)).not.toMatch(/timingValidity|exceeds-workout-envelope|4000000/);
   });
 
   it('rejects oversized activity list and detail materialization', async () => {
@@ -3643,6 +4527,27 @@ describe('MCP data service', () => {
     );
   });
 
+  it('reuses each validated persisted metric without constructing an implicit missing metric', async () => {
+    dependencies.importEvent = vi.fn(createMetricAggregationReader);
+    vi.mocked(dependencies.fetchEventDocuments).mockResolvedValue([{ id: 'event-1', data: {
+      startDate: Date.parse('2024-04-01T08:00:00Z'), stats: { [DataDistance.type]: 5000,
+        [DataSpeedAvg.type]: 4, [DataActivityTypes.type]: [ActivityTypes.Running] },
+    } }]);
+    const construct = vi.spyOn(DynamicDataLoader, 'getDataInstanceFromDataType');
+    try {
+      const result = await createMcpDataService(dependencies).queryMetric({ uid: 'user-1', metric: DataDistance.type,
+        aggregation: 'total', groupBy: 'date', interval: 'daily', timeZone: 'UTC',
+        startTimeMs: Date.parse('2024-04-01T00:00:00Z'), endTimeMs: Date.parse('2024-04-02T00:00:00Z') });
+      expect(result.aggregation.buckets[0].aggregateValue).toBe(5000);
+      expect(construct.mock.calls.filter(([type, value]) => type === DataDistance.type && value === 5000)).toHaveLength(1);
+      const [json, id, instances] = vi.mocked(dependencies.importEvent).mock.calls[0];
+      const reader = createMetricAggregationReader(json, id, instances);
+      expect(reader.getStat(DataDistance.type)).toBe(instances.get(DataDistance.type));
+      expect(reader.getStat('Average Pace')).toBeUndefined();
+      expect(instances.has(DataSpeedAvg.type)).toBe(false);
+    } finally { construct.mockRestore(); }
+  });
+
   it('queries several canonical metrics through one bounded import pass', async () => {
     vi.mocked(dependencies.fetchEventDocuments).mockResolvedValue([{
       id: 'event-1',
@@ -3716,6 +4621,7 @@ describe('MCP data service', () => {
         },
       }),
       'event-1',
+      expect.any(Map),
     );
     expect(dependencies.fetchEventDocuments).toHaveBeenCalledWith(
       'user-1',
@@ -3832,40 +4738,16 @@ describe('MCP data service', () => {
   });
 
   it('returns identity-free daily median body-weight measurements in an IANA timezone', async () => {
-    vi.mocked(dependencies.fetchEventDocuments).mockResolvedValue([
-      {
-        id: 'weight-1',
-        data: {
-          startDate: Date.parse('2024-03-31T00:30:00.000Z'),
-          stats: { [DataWeight.type]: 70 },
-          name: 'Private morning weigh-in',
-          sourceKey: 'private-source-key',
-          creator: { name: 'Private scale' },
-        },
-      },
-      {
-        id: 'weight-2',
-        data: {
-          startDate: Date.parse('2024-03-31T01:30:00.000Z'),
-          stats: { [DataWeight.type]: 72 },
-          previousSourceKey: 'private-previous-source',
-        },
-      },
-      {
-        id: 'benchmark-1',
-        data: {
-          startDate: Date.parse('2024-03-31T02:30:00.000Z'),
-          isMerge: true,
-          stats: { [DataWeight.type]: 200 },
-        },
-      },
-      {
-        id: 'weight-3',
-        data: {
-          startDate: Date.parse('2024-04-01T04:00:00.000Z'),
-          stats: { [DataWeight.type]: 73 },
-        },
-      },
+    vi.mocked(dependencies.fetchHealthSourceRecordDocuments).mockResolvedValue([
+      healthWeightDocument('weight-1', Date.parse('2024-03-31T00:30:00.000Z'), 70, {
+        source: { accountKey: 'private-source-key' },
+        device: { displayName: 'Private scale' },
+      }),
+      healthWeightDocument('weight-2', Date.parse('2024-03-31T01:30:00.000Z'), 72),
+      healthWeightDocument('not-a-point', Date.parse('2024-03-31T02:30:00.000Z'), 200, {
+        kind: HEALTH_SOURCE_RECORD_KINDS.ProfileSnapshot,
+      }),
+      healthWeightDocument('weight-3', Date.parse('2024-04-01T04:00:00.000Z'), 73),
     ]);
 
     const result = await createMcpDataService(dependencies).queryMeasurements({
@@ -3905,36 +4787,23 @@ describe('MCP data service', () => {
     });
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain('weight-1');
-    expect(serialized).not.toContain('Private morning weigh-in');
     expect(serialized).not.toContain('private-source-key');
-    expect(serialized).not.toContain('private-previous-source');
     expect(serialized).not.toContain('Private scale');
-    expect(dependencies.fetchEventDocuments).toHaveBeenCalledWith(
+    expect(dependencies.fetchEventDocuments).not.toHaveBeenCalled();
+    expect(dependencies.fetchHealthSourceRecordDocuments).toHaveBeenCalledWith(
       'user-1',
-      Date.parse('2024-03-30T00:00:00.000Z'),
-      Date.parse('2024-04-02T00:00:00.000Z'),
-      [DataWeight.type],
+      HEALTH_METRIC_IDS.BodyWeight,
+      '2024-03-29',
+      '2024-04-03',
       25,
       undefined,
     );
   });
 
   it('keeps even-count medians finite when all persisted values are finite', async () => {
-    vi.mocked(dependencies.fetchEventDocuments).mockResolvedValue([
-      {
-        id: 'weight-extreme-1',
-        data: {
-          startDate: Date.parse('2026-07-26T08:00:00.000Z'),
-          stats: { [DataWeight.type]: Number.MAX_VALUE },
-        },
-      },
-      {
-        id: 'weight-extreme-2',
-        data: {
-          startDate: Date.parse('2026-07-26T20:00:00.000Z'),
-          stats: { [DataWeight.type]: Number.MAX_VALUE },
-        },
-      },
+    vi.mocked(dependencies.fetchHealthSourceRecordDocuments).mockResolvedValue([
+      healthWeightDocument('weight-extreme-1', Date.parse('2026-07-26T08:00:00.000Z'), Number.MAX_VALUE),
+      healthWeightDocument('weight-extreme-2', Date.parse('2026-07-26T20:00:00.000Z'), Number.MAX_VALUE),
     ]);
 
     const result = await createMcpDataService(dependencies).queryMeasurements({
@@ -3956,28 +4825,10 @@ describe('MCP data service', () => {
   });
 
   it('supports natural body-weight aliases and latest-within-bucket aggregation', async () => {
-    vi.mocked(dependencies.fetchEventDocuments).mockResolvedValue([
-      {
-        id: 'weight-newer',
-        data: {
-          startDate: Date.parse('2026-07-26T20:00:00.000Z'),
-          stats: { [DataWeight.type]: 70.5 },
-        },
-      },
-      {
-        id: 'weight-older',
-        data: {
-          startDate: Date.parse('2026-07-26T08:00:00.000Z'),
-          stats: { [DataWeight.type]: 71 },
-        },
-      },
-      {
-        id: 'weight-invalid',
-        data: {
-          startDate: Date.parse('2026-07-26T09:00:00.000Z'),
-          stats: { [DataWeight.type]: 0 },
-        },
-      },
+    vi.mocked(dependencies.fetchHealthSourceRecordDocuments).mockResolvedValue([
+      healthWeightDocument('weight-newer', Date.parse('2026-07-26T20:00:00.000Z'), 70.5),
+      healthWeightDocument('weight-older', Date.parse('2026-07-26T08:00:00.000Z'), 71),
+      healthWeightDocument('weight-invalid', Date.parse('2026-07-26T09:00:00.000Z'), 0),
     ]);
 
     const result = await createMcpDataService(dependencies).queryMeasurements({
@@ -4010,7 +4861,7 @@ describe('MCP data service', () => {
     })).rejects.toMatchObject<McpDataError>({
       code: 'invalid_metric',
     });
-    expect(dependencies.fetchEventDocuments).not.toHaveBeenCalled();
+    expect(dependencies.fetchHealthSourceRecordDocuments).not.toHaveBeenCalled();
   });
 
   it('keeps measurement ranges bounded and represents missing history explicitly', async () => {
@@ -4027,7 +4878,7 @@ describe('MCP data service', () => {
     })).rejects.toMatchObject<McpDataError>({
       code: 'query_too_large',
     });
-    expect(dependencies.fetchEventDocuments).not.toHaveBeenCalled();
+    expect(dependencies.fetchHealthSourceRecordDocuments).not.toHaveBeenCalled();
 
     await expect(service.queryMeasurements({
       uid: 'user-1',
@@ -4040,7 +4891,7 @@ describe('MCP data service', () => {
     })).rejects.toMatchObject<McpDataError>({
       code: 'invalid_timezone',
     });
-    expect(dependencies.fetchEventDocuments).not.toHaveBeenCalled();
+    expect(dependencies.fetchHealthSourceRecordDocuments).not.toHaveBeenCalled();
 
     const empty = await service.queryMeasurements({
       uid: 'user-1',
@@ -4109,6 +4960,7 @@ describe('MCP data service', () => {
         },
       }),
       'event-1',
+      expect.any(Map),
     );
   });
 
@@ -4255,7 +5107,33 @@ describe('MCP data service', () => {
     expect(dependencies.importEvent).toHaveBeenCalledTimes(26);
   });
 
-  it('describes Training metrics and reports availability without reading payloads', async () => {
+  it.each([
+    DERIVED_METRIC_KINDS.IntensityDistribution,
+    DERIVED_METRIC_KINDS.EasyPercent,
+    DERIVED_METRIC_KINDS.HardPercent,
+    DERIVED_METRIC_KINDS.TrainingSummary,
+    DERIVED_METRIC_KINDS.TrainingBuildComparison,
+  ])('reports old intensity policies as stale in the %s catalog entry', async metricKind => {
+    const service = createMcpDataService(dependencies);
+    for (const intensityPolicyVersion of [undefined, 0, 1, 2]) {
+      vi.mocked(dependencies.fetchDerivedSnapshotMetadataDocuments).mockResolvedValueOnce([{
+        id: metricKind,
+        data: {
+          entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot, metricKind, status: 'ready',
+          schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, updatedAtMs: 123, sourceEventCount: 9,
+          payload: { intensityPolicyVersion, coverageWeeks: [{ privateActivityId: 'hidden' }] },
+        },
+      }]);
+      const result = await service.listTrainingMetrics({ uid: 'user-1' });
+      expect(result.metrics.find(metric => metric.metricKind === metricKind)?.status)
+        .toBe(intensityPolicyVersion === 1 ? 'ready' : 'stale');
+      expect(JSON.stringify(result)).not.toContain('intensityPolicyVersion');
+      expect(JSON.stringify(result)).not.toContain('hidden');
+    }
+    expect(dependencies.fetchDerivedSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('describes Training metrics and reports availability without reading full payloads', async () => {
     vi.mocked(dependencies.fetchDerivedSnapshotMetadataDocuments)
       .mockImplementation(async (_uid, metricKinds) => metricKinds.flatMap(
         (metricKind) => {
@@ -4388,13 +5266,8 @@ describe('MCP data service', () => {
     expect(JSON.stringify(all)).not.toContain('private-error');
   });
 
-  it('returns ready Training snapshots without event or activity identifiers and labels', async () => {
-    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({
-      status: 'ready',
-      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
-      updatedAtMs: 123,
-      sourceEventCount: 3,
-      payload: {
+  it('redacts nested event and activity identifiers and labels before schema validation', () => {
+    const payload = {
         score: 88,
         sourceEventIds: ['event-1'],
         event: {
@@ -4433,16 +5306,10 @@ describe('MCP data service', () => {
           }],
         },
         activityLabel: 'Private label',
-      },
-    });
+    };
+    const redactedPayload = redactDerivedPayload(payload);
 
-    const result = await createMcpDataService(dependencies).getTrainingMetric(
-      'user-1',
-      DERIVED_METRIC_KINDS.TrainingReadiness,
-    );
-
-    expect(result.schemaVersion).toBe(MCP_TRAINING_METRIC_SCHEMA_VERSION);
-    expect(result.payload).toEqual({
+    expect(redactedPayload).toEqual({
       score: 88,
       event: {
         value: 42,
@@ -4469,8 +5336,8 @@ describe('MCP data service', () => {
         }],
       },
     });
-    expect(JSON.stringify(result.payload)).not.toContain('event-3');
-    expect(JSON.stringify(result.payload)).not.toContain('sourceFingerprint');
+    expect(JSON.stringify(redactedPayload)).not.toContain('event-3');
+    expect(JSON.stringify(redactedPayload)).not.toContain('sourceFingerprint');
   });
 
   it('keeps exact durability supporting-workout start times in the workspace only', async () => {
@@ -4559,6 +5426,31 @@ describe('MCP data service', () => {
     expect(JSON.stringify(payload)).not.toContain('startMs');
   });
 
+  it.each([DERIVED_METRIC_KINDS.IntensityDistribution, DERIVED_METRIC_KINDS.EasyPercent,
+    DERIVED_METRIC_KINDS.HardPercent])('projects current %s without internal policy, coverage or identities', async kind => {
+    const payload = kind === DERIVED_METRIC_KINDS.IntensityDistribution ? {
+      dayBoundary: 'UTC', weeks: [{ weekStartMs: 1, easySeconds: 10, moderateSeconds: 20, hardSeconds: 30,
+        source: 'heart-rate', activityId: 'private-identity' }], latestWeekStartMs: 1,
+      latestEasyPercent: 16.67, latestModeratePercent: 33.33, latestHardPercent: 50,
+    } : { dayBoundary: 'UTC', latestWeekStartMs: 1, value: 50,
+      trend8Weeks: [{ weekStartMs: 1, value: 50, eventId: 'private-identity' }] };
+    const snapshot = { status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, updatedAtMs: 1,
+      sourceEventCount: 1, payload: { ...payload, intensityPolicyVersion: 1,
+        coverageWeeks: [{ privateProvider: 'must-not-leak' }], privateUserId: 'must-not-leak' } };
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue(snapshot);
+    const service = createMcpDataService(dependencies);
+    const result = await service.getTrainingMetric('user-1', kind);
+    const json = JSON.stringify(result.payload);
+    expect(json).not.toContain('intensityPolicyVersion');
+    expect(json).not.toContain('coverageWeeks');
+    expect(json).not.toContain('private');
+    expect(json).not.toContain('must-not-leak');
+    expect(MCP_DERIVED_PAYLOAD_SCHEMAS[kind].safeParse(result.payload).success).toBe(true);
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({ ...snapshot,
+      payload: { ...snapshot.payload, intensityPolicyVersion: undefined } });
+    await expect(service.getTrainingMetric('user-1', kind)).rejects.toMatchObject({ code: 'metric_not_ready' });
+  });
+
   it('projects expanded internal Training summaries through the frozen three-sport MCP contract', async () => {
     const contextByDiscipline = {
       running: ['running', 'endurance'],
@@ -4570,6 +5462,22 @@ describe('MCP data service', () => {
       strength: ['strength', 'strength'],
       'fitness-gym': ['general-fitness', 'general'],
       paddling: ['kayaking', 'paddling'],
+      wheelchair: ['wheelchair-racing', 'general'],
+      'climbing-mountaineering': ['bouldering', 'general'],
+      'mountain-snow': ['ski-touring', 'mixed-gravity'],
+      'skating': ['inline-skating', 'endurance'],
+      'combat-martial-arts': ['boxing', 'general'],
+      'dance': ['ballet-dancing', 'general'],
+      'team-sports': ['basketball', 'general'],
+      'racket-sports': ['badminton', 'general'],
+      'precision-sports': ['archery', 'general'],
+      'water-sports': ['surfing', 'general'],
+      'diving': ['diving', 'general'],
+
+      'performance-sports': ['parkour', 'general'],
+      'outdoor-adventures': ['adventure-racing', 'general'],
+      'aerial-sports': ['flying', 'general'],
+      'motorized-activities': ['atv', 'general'],
       'other-training': ['other-training', 'general'],
     } as const;
     const window = (discipline: typeof TRAINING_DISCIPLINES[number]) => ({
@@ -4586,6 +5494,7 @@ describe('MCP data service', () => {
         profile: contextByDiscipline[discipline][1],
         activityCount: 1,
         metrics: discipline === 'fitness-gym' || discipline === 'other-training'
+          || ['climbing-mountaineering', 'mountain-snow', 'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports', 'precision-sports', 'water-sports', 'diving', 'performance-sports', 'outdoor-adventures', 'aerial-sports', 'motorized-activities'].includes(discipline)
           ? [{ metric: 'elapsed-time', value: 3_600, sourceActivityCount: 1 }]
           : discipline === 'cycling'
           ? [{ metric: 'max-jump-distance', value: 7.4, sourceActivityCount: 1 }]
@@ -4601,6 +5510,7 @@ describe('MCP data service', () => {
       updatedAtMs: 123,
       sourceEventCount: 10,
       payload: {
+        intensityPolicyVersion: 1,
         dayBoundary: 'UTC',
         asOfDayMs: 2,
         currentWindowDays: 28,
@@ -4631,6 +5541,65 @@ describe('MCP data service', () => {
     expect(serialized).not.toContain('privateContextNote');
     expect(serialized).not.toContain('max-jump-distance');
     expect(serialized).not.toContain('stroke-rate');
+    ['climbing-mountaineering', 'mountain-snow', 'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports', 'precision-sports', 'water-sports', 'diving', 'performance-sports', 'outdoor-adventures', 'aerial-sports', 'motorized-activities'].forEach(id => expect(serialized).not.toContain(id));
+  });
+
+  it('projects the versioned internal Form payload without exact activity counts', () => {
+    const dayMs = Date.UTC(2026, 8, 29);
+    const projected = projectDerivedMetricPayloadForMcp(
+      DERIVED_METRIC_KINDS.Form,
+      {
+        payloadVersion: DERIVED_FORM_PAYLOAD_VERSION,
+        dayBoundary: 'UTC',
+        rangeStartDayMs: dayMs,
+        rangeEndDayMs: dayMs,
+        dailyLoads: [{ dayMs, load: 42, activityCount: 2 }],
+        excludesMergedEvents: true,
+      },
+    );
+
+    expect(projected).toEqual({
+      dayBoundary: 'UTC',
+      rangeStartDayMs: dayMs,
+      rangeEndDayMs: dayMs,
+      dailyLoads: [{ dayMs, load: 42 }],
+      excludesMergedEvents: true,
+    });
+    expect(JSON.stringify(projected)).not.toContain('payloadVersion');
+    expect(JSON.stringify(projected)).not.toContain('activityCount');
+    expect(MCP_DERIVED_PAYLOAD_SCHEMAS[DERIVED_METRIC_KINDS.Form].safeParse(projected).success).toBe(true);
+  });
+
+  it('returns the frozen public Form shape from a versioned exact-count snapshot', async () => {
+    const dayMs = Date.UTC(2026, 8, 29);
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({
+      status: 'ready',
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      updatedAtMs: dayMs,
+      sourceEventCount: 2,
+      payload: {
+        payloadVersion: DERIVED_FORM_PAYLOAD_VERSION,
+        dayBoundary: 'UTC',
+        rangeStartDayMs: dayMs,
+        rangeEndDayMs: dayMs,
+        dailyLoads: [{ dayMs, load: 42, activityCount: 2 }],
+        excludesMergedEvents: true,
+      },
+    });
+
+    const result = await createMcpDataService(dependencies).getTrainingMetric(
+      'user-1',
+      DERIVED_METRIC_KINDS.Form,
+    );
+    expect(result.payload).toEqual({
+      dayBoundary: 'UTC',
+      rangeStartDayMs: dayMs,
+      rangeEndDayMs: dayMs,
+      dailyLoads: [{ dayMs, load: 42 }],
+      excludesMergedEvents: true,
+    });
+    expect(JSON.stringify(result)).not.toContain('activityCount');
+    expect(JSON.stringify(result)).not.toContain('payloadVersion');
   });
 
   it('strips internal context metrics and added families from Training build projection', () => {
@@ -4705,6 +5674,22 @@ describe('MCP data service', () => {
       ['strength', 'Strength', null],
       ['fitness-gym', 'Fitness & Gym', null],
       ['paddling', 'Paddling', 70],
+      ['wheelchair', 'Wheelchair Training', 100],
+      ['climbing-mountaineering', 'Climbing & Mountaineering', 5],
+      ['mountain-snow', 'Mountain Snow Sports', 5],
+      ['skating', 'Skating', 5],
+      ['combat-martial-arts', 'Combat & Martial Arts', 5],
+      ['dance', 'Dance', 5],
+      ['team-sports', 'Team Sports', 5],
+      ['racket-sports', 'Racket Sports', 5],
+      ['precision-sports', 'Precision Sports', 5],
+      ['water-sports', 'Water Sports', 5],
+      ['diving', 'Diving', 5],
+
+      ['performance-sports', 'Performance Sports', 5],
+      ['outdoor-adventures', 'Outdoor Adventures', 5],
+      ['aerial-sports', 'Aerial Sports', 5],
+      ['motorized-activities', 'Motorized Activities', 5],
       ['other-training', 'Other training', null],
       ['other', 'Other', 80],
       ['unclassified', 'Unclassified', 90],
@@ -4717,20 +5702,20 @@ describe('MCP data service', () => {
       loadSharePercent: trainingStressScore === null ? null : 10,
     }));
     const coverage = {
-      totalCount: 12,
-      loadedCount: 9,
-      classifiedCount: 11,
+      totalCount: 23,
+      loadedCount: 20,
+      classifiedCount: 22,
       unclassifiedCount: 1,
-      ratio: 0.75,
+      ratio: 20 / 23,
     };
     const windowMetrics = {
-      parentEventCount: 12,
-      parentLoadEventCount: 9,
-      parentTrainingStressScore: 450,
+      parentEventCount: 23,
+      parentLoadEventCount: 20,
+      parentTrainingStressScore: 600,
       parentLoadCoverage: coverage,
-      childActivityCount: 12,
-      childLoadActivityCount: 9,
-      childTrainingStressScore: 450,
+      childActivityCount: 23,
+      childLoadActivityCount: 20,
+      childTrainingStressScore: 600,
       childLoadCoverage: coverage,
       sportLoads: loads,
       rhythms: TRAINING_DISCIPLINES.map(discipline => ({
@@ -4752,7 +5737,7 @@ describe('MCP data service', () => {
       status: 'ready',
       schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
       updatedAtMs: 123,
-      sourceEventCount: 12,
+      sourceEventCount: 23,
       payload: {
         dayBoundary: 'UTC',
         asOfDayMs: 2,
@@ -4770,7 +5755,7 @@ describe('MCP data service', () => {
           startDayMs: 2,
           trainingStressScore: 50,
           loadSharePercent: 10,
-          childComposition: [loads[0], loads[3], loads[6]],
+          childComposition: [loads[0], loads[3], loads[6], loads[9], ...loads.slice(10, 24)],
         }],
       },
     });
@@ -4785,15 +5770,18 @@ describe('MCP data service', () => {
     expect(payload.current.sportLoads.map(load => load.sport))
       .toEqual(['running', 'cycling', 'swimming', 'other', 'unclassified']);
     expect(payload.current.sportLoads.find(load => load.sport === 'other')).toMatchObject({
-      activityCount: 8,
-      loadActivityCount: 5,
-      trainingStressScore: 300,
+      activityCount: 23,
+      loadActivityCount: 20,
+      trainingStressScore: 470,
     });
     expect(payload.topContributors[0].childComposition).toEqual([
       expect.objectContaining({ sport: 'running', trainingStressScore: 10 }),
-      expect.objectContaining({ sport: 'other', activityCount: 2, trainingStressScore: 40 }),
+      expect.objectContaining({ sport: 'other', activityCount: 17, trainingStressScore: 210 }),
     ]);
     expect(payload.topContributors[0].childComposition.every(load => !('label' in load))).toBe(true);
+    expect(JSON.stringify(payload)).not.toContain('wheelchair');
+    expect(JSON.stringify(payload)).not.toContain('Wheelchair Training');
+    ['climbing-mountaineering', 'mountain-snow', 'skating', 'combat-martial-arts', 'dance', 'team-sports', 'racket-sports', 'precision-sports', 'water-sports', 'diving', 'performance-sports', 'outdoor-adventures', 'aerial-sports', 'motorized-activities'].forEach(id => expect(JSON.stringify(payload)).not.toContain(id));
   });
 
   it('fails closed when an expanded Training payload is malformed before projection', () => {
@@ -4846,6 +5834,22 @@ describe('MCP data service', () => {
           eventId: 'private-weight-entry',
           label: 'Morning measurement',
         }],
+        series: [{
+          sourceKind: 'health-measurement',
+          provider: 'QuantifiedSelf',
+          sourceKey: 'private-health-account-key',
+          latestWeightKg: 71.2,
+          latestWeightDayMs: Date.parse('2026-07-26T00:00:00.000Z'),
+          median7dKg: 71.4,
+          median28dKg: 71.8,
+          change7dKg: -0.3,
+          change7dPercent: -0.42,
+          change28dKg: -0.6,
+          change28dPercent: -0.84,
+          recordedDayCount7d: 4,
+          recordedDayCount28d: 11,
+          points: [],
+        }],
       },
     });
 
@@ -4883,6 +5887,8 @@ describe('MCP data service', () => {
     });
     expect(JSON.stringify(result.payload)).not.toContain('private-weight-entry');
     expect(JSON.stringify(result.payload)).not.toContain('Morning measurement');
+    expect(JSON.stringify(result.payload)).not.toContain('private-health-account-key');
+    expect(JSON.stringify(result.payload)).not.toContain('series');
   });
 
   it('removes imported device provenance from Training capacity while preserving metrics', async () => {
@@ -4911,6 +5917,15 @@ describe('MCP data service', () => {
             changePct: 5.77,
           },
           importedVo2Max: null,
+          referenceVo2Max: {
+            kind: 'vo2-max',
+            value: 57,
+            context: 'cycling',
+            method: 'lab-test',
+            observedAtMs: 220,
+            provenance: 'manual-health-measurement',
+            comparison: null,
+          },
         }],
       },
     });
@@ -4944,15 +5959,12 @@ describe('MCP data service', () => {
     expect(serialized).not.toContain('sourceKey');
     expect(serialized).not.toContain('edge 840');
     expect(serialized).not.toContain('edge 830');
+    expect(serialized).not.toContain('referenceVo2Max');
+    expect(serialized).not.toContain('manual-health-measurement');
   });
 
-  it('preserves current Training power-system diagnostics while removing the source fingerprint', async () => {
-    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({
-      status: 'ready',
-      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
-      updatedAtMs: 123,
-      sourceEventCount: 4,
-      payload: {
+  it('preserves power-system diagnostics while redacting the source fingerprint', () => {
+    const payload = {
         dayBoundary: 'UTC',
         asOfDayMs: Date.parse('2026-07-20T00:00:00.000Z'),
         policyVersion: 1,
@@ -4985,18 +5997,10 @@ describe('MCP data service', () => {
             },
           },
         }],
-      },
-    });
+    };
+    const redactedPayload = redactDerivedPayload(payload);
 
-    const result = await createMcpDataService(dependencies).getTrainingMetric(
-      'user-1',
-      DERIVED_METRIC_KINDS.TrainingPowerSystems,
-    );
-
-    expect(result).toMatchObject({
-      metricKind: DERIVED_METRIC_KINDS.TrainingPowerSystems,
-      schemaVersion: MCP_TRAINING_METRIC_SCHEMA_VERSION,
-      payload: {
+    expect(redactedPayload).toMatchObject({
         activityTypes: [{
           current: {
             status: 'partial',
@@ -5021,10 +6025,9 @@ describe('MCP data service', () => {
             },
           },
         }],
-      },
     });
-    expect(JSON.stringify(result.payload)).not.toContain('sourceFingerprint');
-    expect(JSON.stringify(result.payload)).not.toContain('private-input-fingerprint');
+    expect(JSON.stringify(redactedPayload)).not.toContain('sourceFingerprint');
+    expect(JSON.stringify(redactedPayload)).not.toContain('private-input-fingerprint');
   });
 
   it.each([
@@ -5050,13 +6053,28 @@ describe('MCP data service', () => {
     });
   });
 
+  it('treats a malformed unprojected Training snapshot as not ready', async () => {
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({
+      status: 'ready',
+      schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      updatedAtMs: 123,
+      sourceEventCount: 3,
+      payload: { score: 88 },
+    });
+
+    await expect(createMcpDataService(dependencies).getTrainingMetric(
+      'user-1',
+      DERIVED_METRIC_KINDS.Form,
+    )).rejects.toMatchObject<McpDataError>({ code: 'metric_not_ready' });
+  });
+
   it('calculates current readiness with Dashboard-parity load, HRV, and overnight-HR evidence', async () => {
     const nowTimeMs = Date.parse('2026-07-27T12:00:00.000Z');
     const asOfDayMs = Date.parse('2026-07-27T00:00:00.000Z');
     const dailyLoads = [
-      { dayMs: Date.parse('2026-07-18T00:00:00.000Z'), load: 100 },
-      { dayMs: Date.parse('2026-07-20T00:00:00.000Z'), load: 40 },
-      { dayMs: Date.parse('2026-07-25T00:00:00.000Z'), load: 80 },
+      { dayMs: Date.parse('2026-07-18T00:00:00.000Z'), load: 100, activityCount: 1 },
+      { dayMs: Date.parse('2026-07-20T00:00:00.000Z'), load: 40, activityCount: 1 },
+      { dayMs: Date.parse('2026-07-25T00:00:00.000Z'), load: 80, activityCount: 1 },
     ];
     const loadPoints = buildTrainingLoadPoints(dailyLoads, asOfDayMs);
     const latestLoad = loadPoints[loadPoints.length - 1];
@@ -5127,6 +6145,7 @@ describe('MCP data service', () => {
       updatedAtMs: Date.parse('2026-07-27T08:00:00.000Z'),
       sourceEventCount: 3,
       payload: {
+        payloadVersion: DERIVED_FORM_PAYLOAD_VERSION,
         dayBoundary: 'UTC',
         rangeStartDayMs: dailyLoads[0].dayMs,
         rangeEndDayMs: dailyLoads[dailyLoads.length - 1].dayMs,
@@ -5430,6 +6449,10 @@ describe('MCP data service', () => {
       status: 'available',
       sleepDate: '2026-07-27',
     });
+    expect(result.drivers.hrv).toMatchObject({
+      status: 'not_recorded',
+      latestMs: null,
+    });
     expect(JSON.stringify(result)).not.toContain('SuuntoApp');
     expect(JSON.stringify(result)).not.toContain('private-suunto');
   });
@@ -5455,6 +6478,159 @@ describe('MCP data service', () => {
     })).rejects.toMatchObject<McpDataError>({
       code: 'query_too_large',
     });
+  });
+
+  it.each([[], ['metrics:read', 'sleep:read'], ['metrics:read', 'health:read'], ['sleep:read', 'health:read']])(
+    'requires all readiness-history grants before reading a snapshot: %j', async (...scopes) => {
+      await expect(createMcpDataService(dependencies).getReadinessHistory({ uid: 'user-1', scopes }))
+        .rejects.toMatchObject({ code: 'invalid_request' });
+      expect(dependencies.fetchDerivedSnapshot).not.toHaveBeenCalled();
+    });
+
+
+  it('projects the updated internal recovery snapshots onto the frozen MCP versions', async () => {
+    const { buildTrainingReadinessMetricPayload, buildTrainingBuildComparisonMetricPayload } = await import('../derived-metrics/derived-metrics.service');
+    const now = Date.parse('2026-07-27T12:00:00Z');
+    const readiness = buildTrainingReadinessMetricPayload([], 0, [], now).payload;
+    const recovery = buildTrainingBuildComparisonMetricPayload([], {}, now).payload;
+    expect(readiness.evidenceVersion).toBe(READINESS_EVIDENCE_VERSION);
+    expect(recovery.recoveryVersion).toBe(4);
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockImplementation(async (_uid, kind) => ({status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      payload: kind === DERIVED_METRIC_KINDS.TrainingReadiness ? readiness : recovery}));
+    const service = createMcpDataService(dependencies);
+    const publicReadiness = await service.getTrainingMetric('user-1', DERIVED_METRIC_KINDS.TrainingReadiness);
+    const publicRecovery = await service.getTrainingMetric('user-1', DERIVED_METRIC_KINDS.TrainingBuildComparison);
+    expect(publicReadiness.payload).not.toHaveProperty('evidenceVersion');
+    expect(publicReadiness.payload).toMatchObject({formulaVersion: 3});
+    expect(publicRecovery.payload).toMatchObject({recoveryVersion: 3});
+  });
+
+  it('returns the same rolling HRV range in the current tool, daily report and current history while preserving formula 3', async () => {
+    const { buildTrainingReadinessMetricPayload } = await import('../derived-metrics/derived-metrics.service');
+    const now = Date.parse('2026-07-27T12:00:00Z');
+    const day = 86400000;
+    const documents = Array.from({ length: 60 }, (_, index) => {
+      const end = now - (59 - index) * day - 4 * 3600000;
+      return { ...sleepDocument({ sleepDate: new Date(end).toISOString().slice(0, 10),
+        startTimeMs: end - 8 * 3600000, endTimeMs: end, durationSeconds: 28800,
+        vitals: { averageHrvMs: index < 46 ? 45 : index === 59 ? 32 : 31, averageHeartRateBpm: 60 },
+      }), id: `night-${index}` };
+    });
+    vi.mocked(dependencies.now).mockReturnValue(now);
+    vi.mocked(dependencies.fetchReadinessSleepDocuments).mockResolvedValue(documents);
+    const service = createMcpDataService(dependencies);
+    const current = await service.getCurrentReadiness({ uid: 'user-1', timeZone: 'Europe/Helsinki' });
+    const report = await service.getDailyReport({ uid: 'user-1', timeZone: 'Europe/Helsinki' });
+    const legacy = await service.getTodayReadiness({ uid: 'user-1', timeZone: 'Europe/Helsinki' });
+    expect(current.formulaVersion).toBe(4);
+    expect(current.drivers.hrv.personalRange).toMatchObject({ latestMs: 32, reason: 'outside_range', observationDayCount: 60, currentObservationDayCount: 7 });
+    expect(current.drivers.hrv.personalRange?.currentAverage).toBeCloseTo(31 + 1 / 7);
+    expect(report.readiness).toEqual(current);
+    expect(legacy.formulaVersion).toBe(3);
+    expect(legacy.drivers.hrv).toMatchObject({ latestMs: 32, baselineMedianMs: 31, baselineNightCount: 14 });
+    expect(dependencies.fetchReadinessSleepDocuments).toHaveBeenNthCalledWith(1, 'user-1', now - 60 * day, now, 257);
+    expect(dependencies.fetchReadinessSleepDocuments).toHaveBeenLastCalledWith('user-1', now - 30 * day, now, 257);
+    const payload = buildTrainingReadinessMetricPayload([], 0, documents.map(doc => ({ id: doc.id, data: () => doc.data })) as never, now).payload;
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({ status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, payload });
+    const history = await service.getReadinessHistory({ uid: 'user-1', scopes: ['metrics:read', 'sleep:read', 'health:read'] });
+    expect(history.points.at(-1)?.hrvPersonalRange).toEqual(current.drivers.hrv.personalRange);
+    expect(history).not.toHaveProperty('legacyPoints');
+    expect(history).not.toHaveProperty('evidenceVersion');
+    const oldHistory = await service.getTrainingMetric('user-1', DERIVED_METRIC_KINDS.TrainingReadiness);
+    expect(oldHistory.payload).toMatchObject({ formulaVersion: 3 });
+    expect(JSON.stringify(current)).not.toContain('private');
+    expect(JSON.stringify(history)).not.toContain('SourceKey');
+  });
+
+  it('withholds current HRV when the latest provider night is split into multiple fragments', async () => {
+    const now = Date.parse('2026-09-28T09:00:00Z');
+    const day = 86400000;
+    const source = { provider: SLEEP_PROVIDERS.SuuntoApp,
+      sourceSessionKey: 'private-session', providerUserId: 'private-provider-user' };
+    const baseline = Array.from({ length: 15 }, (_, index) => {
+      const endTimeMs = now - (15 - index) * day - (2 * 3600000);
+      return { ...sleepDocument({ source, sleepDate: new Date(endTimeMs).toISOString().slice(0, 10),
+        startTimeMs: endTimeMs - 8 * 3600000, endTimeMs, durationSeconds: 28800,
+        timezoneOffsetSeconds: 3 * 3600, vitals: { averageHrvMs: 34 },
+      }), id: `baseline-${index}` };
+    });
+    const fragments = [{ id: 'part-1', start: '2026-09-27T18:57:00Z', end: '2026-09-27T23:54:00Z', hrv: 29 },
+      { id: 'part-2', start: '2026-09-28T00:01:00Z', end: '2026-09-28T04:00:00Z', hrv: 40 }]
+      .map(fragment => ({ ...sleepDocument({ source, sleepDate: '2026-09-28',
+        startTimeMs: Date.parse(fragment.start), endTimeMs: Date.parse(fragment.end),
+        durationSeconds: (Date.parse(fragment.end) - Date.parse(fragment.start)) / 1000,
+        timezoneOffsetSeconds: 3 * 3600, vitals: { averageHrvMs: fragment.hrv },
+      }), id: fragment.id }));
+    vi.mocked(dependencies.now).mockReturnValue(now);
+    vi.mocked(dependencies.fetchReadinessSleepDocuments).mockResolvedValue([...baseline, ...fragments]);
+
+    const service = createMcpDataService(dependencies);
+    const current = await service.getCurrentReadiness({ uid: 'user-1', timeZone: 'Europe/Helsinki' });
+    const report = await service.getDailyReport({ uid: 'user-1', timeZone: 'Europe/Helsinki' });
+
+    expect(current.drivers.hrv.personalRange).toBeNull();
+    expect(report.readiness.drivers.hrv.personalRange).toBeNull();
+    expect(current.availableSignalCount).toBe(1);
+    expect(JSON.stringify(current)).not.toContain('private-provider-user');
+  });
+
+  it('keeps QS-calculated HR behind Health and Sleep grants, out of legacy and ordinary Sleep tools', async () => {
+    const end = Date.parse('2026-07-27T06:00:00Z');
+    vi.mocked(dependencies.now).mockReturnValue(end + 3600000);
+    const docs = Array.from({ length: 4 }, (_, i) => ({ ...sleepDocument({
+      sleepDate: new Date(end - i * 86400000).toISOString().slice(0, 10), startTimeMs: end - i * 86400000 - 28800000,
+      endTimeMs: end - i * 86400000, vitals: null,
+    }), id: `night-${i}` }));
+    vi.mocked(dependencies.fetchReadinessSleepDocuments).mockResolvedValue(docs);
+    vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue(docs);
+    dependencies.supplementReadinessDocuments = vi.fn(async (_uid, input) => input.map((d, i) => ({ ...d, data: { ...d.data,
+      qsCalculatedHeartRate: { average: true, minimum: true },
+      vitals: { averageHeartRateBpm: i ? 60 : 54, minimumHeartRateBpm: i ? 50 : 45 },
+    } })));
+    const service = createMcpDataService(dependencies);
+    const input = { uid: 'user-1', timeZone: 'UTC', scopes: ['metrics:read', 'sleep:read'] };
+    const without = await service.getCurrentReadiness(input);
+    expect(without.drivers.overnightHeartRate.combinedRatio).toBeNull();
+    expect(dependencies.supplementReadinessDocuments).not.toHaveBeenCalled();
+    const granted = { ...input, scopes: [...input.scopes, 'health:read'] };
+    const current = await service.getCurrentReadiness(granted);
+    expect(current.drivers.overnightHeartRate.combinedRatio).toBeCloseTo(0.9);
+    expect(createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false }).get_current_readiness.safeParse(current).success).toBe(true);
+    const report = await service.getDailyReport(granted);
+    expect(report.sleep.latestSession?.vitals.averageHeartRateBpm).toBe(54);
+    expect(createMcpOutputSchemaRegistry({ activityLocation: false, routeLocation: false }).get_daily_report.safeParse(report).success).toBe(true);
+    expect(JSON.stringify(report)).not.toMatch(/qsCalculatedHeartRate|SourceKey|private-provider-user|offsetMs|canonicalValues/);
+    const legacy = await service.getTodayReadiness(granted);
+    expect(legacy.drivers.overnightHeartRate.combinedRatio).toBeNull();
+    const vitals = await service.listSleepVitals({ uid: 'user-1', startTimeMs: end - 4 * 86400000, endTimeMs: end, scopes: granted.scopes });
+    expect(vitals.vitals.some(v => v.type === 'averageHeartRateBpm')).toBe(false);
+    expect(dependencies.supplementReadinessDocuments).toHaveBeenCalledTimes(2);
+  });
+
+  it('supplements daily-report HRV only with explicit Health and Sleep grants', async () => {
+    const endTimeMs = Date.parse('2026-07-27T06:00:00Z');
+    const original = sleepDocument({sleepDate: '2026-07-27', startTimeMs: endTimeMs - 28800000, endTimeMs, vitals: null});
+    vi.mocked(dependencies.fetchReadinessSleepDocuments).mockResolvedValue([original]);
+    const record: NightlyHrvRecord = {userID: 'user-1', schemaVersion: 1, kind: 'interval_summary',
+      source: {provider: 'GarminAPI', accountKey: await nightlyHealthAccountKey('user-1', 'GarminAPI', 'private-provider-user')},
+      calendarDate: '2026-07-27', startTimeMs: endTimeMs - 28800000, endTimeMs,
+      metrics: [{kind: 'value', metricId: 'heart_rate_variability', valueType: 'number', aggregation: 'average',
+        semanticVariant: 'overnight_rmssd', origin: 'provider_summary', recordingMethod: 'provider_calculated',
+        normalizationStatus: 'canonical', canonical: {value: 44, unit: 'ms'}}]};
+    dependencies.supplementSleepDocuments = vi.fn((uid, docs) => supplementNightlyHrvSleepDocuments(uid, docs, async () => ({records: [record]})));
+    const service = createMcpDataService(dependencies);
+    const without = await service.getDailyReport({uid: 'user-1', timeZone: 'UTC', scopes: ['metrics:read', 'sleep:read']});
+    expect(without.sleep.latestSession?.vitals.overnightHrvMs).toBeNull();
+    expect(dependencies.supplementSleepDocuments).not.toHaveBeenCalled();
+    const withHealth = await service.getDailyReport({uid: 'user-1', timeZone: 'UTC', scopes: ['metrics:read', 'sleep:read', 'health:read']});
+    expect(withHealth.sleep.latestSession?.vitals.overnightHrvMs).toBe(44);
+    expect(withHealth.readiness.drivers.hrv.personalRange?.latestMs).toBe(44);
+    expect(JSON.stringify(withHealth)).not.toContain('private-provider-user');
+    expect(JSON.stringify(withHealth)).not.toContain('SourceKey');
+    vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([original]);
+    const vitals = await service.listSleepVitals({uid: 'user-1', startTimeMs: endTimeMs - 86400000, endTimeMs,
+      scopes: ['health:read', 'sleep:read']});
+    expect(vitals.vitals).toContainEqual(expect.objectContaining({type: 'overnightHrvMs', sessionCount: 1}));
   });
 
   it('returns one bounded daily report with safe sleep HRV, heart rate, and live readiness', async () => {
@@ -5561,8 +6737,8 @@ describe('MCP data service', () => {
         asOfTimeMs: nowTimeMs,
         timeZone: 'Europe/Helsinki',
         status: 'available',
-        availableSignalCount: 3,
-        availableWeightPercent: 60,
+        availableSignalCount: 2,
+        availableWeightPercent: 40,
         baselineEvidenceCount: 3,
         drivers: {
           load: {
@@ -5572,13 +6748,7 @@ describe('MCP data service', () => {
             status: 'available',
             recordedScore: 84,
           },
-          hrv: {
-            status: 'available',
-            latestMs: 55,
-            baselineMedianMs: 50,
-            baselineNightCount: 3,
-            ratio: 1.1,
-          },
+          hrv: { personalRange: { latestMs: 55, reason: 'building_baseline', observationDayCount: 4 } },
           overnightHeartRate: {
             status: 'available',
             average: {
@@ -5600,7 +6770,7 @@ describe('MCP data service', () => {
     });
     expect(dependencies.fetchReadinessSleepDocuments).toHaveBeenCalledWith(
       'user-1',
-      nowTimeMs - 30 * 24 * 60 * 60 * 1000,
+      nowTimeMs - 60 * 24 * 60 * 60 * 1000,
       nowTimeMs,
       257,
       true,
@@ -5660,9 +6830,7 @@ describe('MCP data service', () => {
           sleep: {
             status: 'no_recent_session',
           },
-          hrv: {
-            status: 'not_recorded',
-          },
+          hrv: { personalRange: null },
           overnightHeartRate: {
             status: 'not_recorded',
           },
@@ -5674,7 +6842,7 @@ describe('MCP data service', () => {
     });
   });
 
-  it('uses the same deterministic same-provider sleep-night grouping for the report and readiness', async () => {
+  it('reconciles adjacent Suunto fragments for report and current readiness HRV', async () => {
     const nightlyDocument = (
       id: string,
       sleepDate: string,
@@ -5684,8 +6852,14 @@ describe('MCP data service', () => {
       averageHeartRate: number,
       minimumHeartRate: number,
       score: number | null = null,
+      hrvSampleCount = 35,
     ) => ({
       ...sleepDocument({
+        source: {
+          provider: SLEEP_PROVIDERS.SuuntoApp,
+          sourceSessionKey: id,
+          providerUserId: 'private-suunto-user',
+        },
         sleepDate,
         startTimeMs,
         endTimeMs,
@@ -5697,6 +6871,7 @@ describe('MCP data service', () => {
         },
         vitals: {
           averageHrvMs: hrv,
+          hrvSampleCount,
           averageHeartRateBpm: averageHeartRate,
           minimumHeartRateBpm: minimumHeartRate,
         },
@@ -5723,16 +6898,18 @@ describe('MCP data service', () => {
         '2026-07-27',
         Date.parse('2026-07-26T22:00:00.000Z'),
         Date.parse('2026-07-27T02:00:00.000Z'),
-        50,
+        29,
         50,
         42,
+        null,
+        46,
       ),
       nightlyDocument(
         'latest-b',
         '2026-07-27',
         Date.parse('2026-07-27T02:00:00.000Z'),
         Date.parse('2026-07-27T06:00:00.000Z'),
-        60,
+        40,
         48,
         40,
         82,
@@ -5758,18 +6935,19 @@ describe('MCP data service', () => {
         qualifier: 'recorded',
       },
       vitals: {
-        averageHrvMs: 55,
+        averageHrvMs: ((29 * 46) + (40 * 35)) / 81,
         averageHeartRateBpm: 49,
         minimumHeartRateBpm: 40,
       },
     });
+    expect(result.sleep.latestSession?.vitals).not.toHaveProperty('hrvSampleCount');
     expect(result.readiness.drivers.sleep).toMatchObject({
       durationSeconds: 28_800,
       recordedScore: 82,
     });
-    expect(result.readiness.drivers.hrv).toMatchObject({
-      latestMs: 55,
-      baselineMedianMs: 50,
+    expect(result.readiness.drivers.hrv.personalRange).toMatchObject({
+      reason: 'building_baseline',
+      latestMs: ((29 * 46) + (40 * 35)) / 81,
     });
     expect(result.readiness.drivers.overnightHeartRate).toMatchObject({
       average: {
@@ -5783,12 +6961,17 @@ describe('MCP data service', () => {
     });
   });
 
-  it('does not understate grouped in-bed duration when a sleep fragment is missing it', async () => {
+  it('keeps canonical Suunto in-bed duration unavailable when a fragment is missing it', async () => {
     const firstEndTimeMs = Date.parse('2026-07-27T02:00:00.000Z');
     const secondEndTimeMs = Date.parse('2026-07-27T06:00:00.000Z');
     vi.mocked(dependencies.fetchReadinessSleepDocuments).mockResolvedValue([
       {
         ...sleepDocument({
+          source: {
+            provider: SLEEP_PROVIDERS.SuuntoApp,
+            sourceSessionKey: 'latest-a',
+            providerUserId: 'private-suunto-user',
+          },
           sleepDate: '2026-07-27',
           startTimeMs: Date.parse('2026-07-26T22:00:00.000Z'),
           endTimeMs: firstEndTimeMs,
@@ -5799,6 +6982,11 @@ describe('MCP data service', () => {
       },
       {
         ...sleepDocument({
+          source: {
+            provider: SLEEP_PROVIDERS.SuuntoApp,
+            sourceSessionKey: 'latest-b',
+            providerUserId: 'private-suunto-user',
+          },
           sleepDate: '2026-07-27',
           startTimeMs: firstEndTimeMs,
           endTimeMs: secondEndTimeMs,
@@ -5817,6 +7005,47 @@ describe('MCP data service', () => {
     expect(result.sleep.latestSession).toMatchObject({
       durationSeconds: 28_800,
       inBedDurationSeconds: null,
+    });
+  });
+
+  it('keeps Suunto sleeps more than 30 minutes apart as separate nights', async () => {
+    const firstEndTimeMs = Date.parse('2026-07-27T02:00:00.000Z');
+    const secondStartTimeMs = firstEndTimeMs + (31 * 60 * 1000);
+    vi.mocked(dependencies.fetchReadinessSleepDocuments).mockResolvedValue([
+      {
+        ...sleepDocument({
+          source: { provider: SLEEP_PROVIDERS.SuuntoApp,
+            sourceSessionKey: 'first', providerUserId: 'private-suunto-user' },
+          sleepDate: '2026-07-27',
+          startTimeMs: Date.parse('2026-07-26T22:00:00.000Z'),
+          endTimeMs: firstEndTimeMs,
+          durationSeconds: 14_400,
+          inBedDurationSeconds: 14_400,
+        }),
+        id: 'first',
+      },
+      {
+        ...sleepDocument({
+          source: { provider: SLEEP_PROVIDERS.SuuntoApp,
+            sourceSessionKey: 'second', providerUserId: 'private-suunto-user' },
+          sleepDate: '2026-07-27',
+          startTimeMs: secondStartTimeMs,
+          endTimeMs: Date.parse('2026-07-27T06:00:00.000Z'),
+          durationSeconds: 12_540,
+          inBedDurationSeconds: 12_540,
+        }),
+        id: 'second',
+      },
+    ]);
+
+    const result = await createMcpDataService(dependencies).getDailyReport({
+      uid: 'user-1',
+      timeZone: 'UTC',
+    });
+
+    expect(result.sleep.latestSession).toMatchObject({
+      startTimeMs: secondStartTimeMs,
+      durationSeconds: 12_540,
     });
   });
 
@@ -5895,6 +7124,7 @@ describe('MCP data service', () => {
       schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
       updatedAtMs: nowTimeMs,
       payload: {
+        intensityPolicyVersion: 1,
         dayBoundary: 'UTC',
         asOfDayMs: Date.parse('2026-07-27T00:00:00.000Z'),
         currentWindowDays: 28,
@@ -6059,6 +7289,12 @@ describe('MCP data service', () => {
       'user-1',
       DERIVED_METRIC_KINDS.TrainingSummary,
     );
+    trainingSummarySnapshot.payload.intensityPolicyVersion = 0;
+    const legacyIntensitySummary = await createMcpDataService(dependencies)
+      .getDailyBriefing({ uid: 'user-1', timeZone: 'Europe/Helsinki' });
+    expect(legacyIntensitySummary.trainingSummary).toMatchObject({ status: 'not_ready', current28d: null });
+    trainingSummarySnapshot.payload.intensityPolicyVersion = 1;
+    expect(JSON.stringify(result)).not.toContain('intensityPolicyVersion');
     trainingSummarySnapshot.payload.excludesMergedEvents = false;
     const summaryIncludingMergedEvents = await createMcpDataService(dependencies)
       .getDailyBriefing({
@@ -6079,6 +7315,55 @@ describe('MCP data service', () => {
     expect(serialized).not.toContain('latestSleepAtMs');
     expect(serialized).not.toContain('windowStartDayMs');
     expect(serialized).not.toContain('windowEndDayMs');
+  });
+
+  it('uses the canonical Suunto night in the frozen daily briefing', async () => {
+    const nowTimeMs = Date.parse('2026-09-28T12:00:00.000Z');
+    const source = { provider: SLEEP_PROVIDERS.SuuntoApp, providerUserId: 'private-suunto-user' };
+    vi.mocked(dependencies.now).mockReturnValue(nowTimeMs);
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue(null);
+    vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([
+      {
+        ...sleepDocument({
+          source: { ...source, sourceSessionKey: 'part-1' },
+          sleepDate: '2026-09-28',
+          startTimeMs: Date.parse('2026-09-27T18:57:00.000Z'),
+          endTimeMs: Date.parse('2026-09-27T23:54:00.000Z'),
+          durationSeconds: 15_840,
+          inBedDurationSeconds: 15_840,
+          score: { value: 62, qualifier: null },
+          providerFields: { suunto: { SleepOnsetLatencyDuration: 360 } },
+        }),
+        id: 'part-1',
+      },
+      {
+        ...sleepDocument({
+          source: { ...source, sourceSessionKey: 'part-2' },
+          sleepDate: '2026-09-28',
+          startTimeMs: Date.parse('2026-09-28T00:01:00.000Z'),
+          endTimeMs: Date.parse('2026-09-28T04:00:00.000Z'),
+          durationSeconds: 13_320,
+          inBedDurationSeconds: 13_320,
+          score: { value: 72, qualifier: null },
+          providerFields: { suunto: { SleepOnsetLatencyDuration: 480 } },
+        }),
+        id: 'part-2',
+      },
+    ]);
+
+    const result = await createMcpDataService(dependencies).getDailyBriefing({
+      uid: 'user-1',
+      timeZone: 'Europe/Helsinki',
+    });
+
+    expect(result.sleep.latestSession).toEqual({
+      sleepDate: '2026-09-28',
+      startTimeMs: Date.parse('2026-09-27T19:03:00.000Z'),
+      endTimeMs: Date.parse('2026-09-28T04:00:00.000Z'),
+      durationSeconds: 29_160,
+      inBedDurationSeconds: 29_160,
+      score: { value: 72, qualifier: null },
+    });
   });
 
   it('makes unavailable daily-briefing inputs explicit without returning a stale readiness score', async () => {
@@ -6192,6 +7477,7 @@ describe('MCP data service', () => {
           schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
           updatedAtMs: -1,
           payload: {
+            intensityPolicyVersion: 1,
             dayBoundary: 'UTC',
             asOfDayMs: staleSummaryDayMs,
             currentWindowDays: 28,
@@ -6232,6 +7518,7 @@ describe('MCP data service', () => {
           schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
           updatedAtMs: Date.parse('2026-07-27T12:00:00.000Z'),
           payload: {
+            intensityPolicyVersion: 1,
             dayBoundary: 'UTC',
             asOfDayMs: Date.parse('2026-07-27T00:00:00.000Z'),
             currentWindowDays: 28,
@@ -6551,6 +7838,7 @@ describe('MCP data service', () => {
         minimumHeartRateBpm: 40,
         averageHrvMs: 54,
         overnightHrvMs: 56,
+        hrvSampleCount: 47,
         maxSpo2Percent: 98,
         averageRespirationBrpm: 13,
       },
@@ -6585,6 +7873,7 @@ describe('MCP data service', () => {
       'averageHeartRateBpm',
       'minimumHeartRateBpm',
       'averageHrvMs',
+      'hrvSampleCount',
       'overnightHrvMs',
       'maxSpo2Percent',
       'averageRespirationBrpm',
@@ -6593,6 +7882,7 @@ describe('MCP data service', () => {
       averageHeartRateBpm: 49,
       minimumHeartRateBpm: 40,
       averageHrvMs: 54,
+      hrvSampleCount: 47,
       overnightHrvMs: 56,
       maxSpo2Percent: 98,
       averageRespirationBrpm: 13,
@@ -6605,6 +7895,7 @@ describe('MCP data service', () => {
     });
     expect(JSON.stringify(report)).not.toContain('maxSpo2Percent');
     expect(JSON.stringify(report)).not.toContain('averageRespirationBrpm');
+    expect(JSON.stringify(report)).not.toContain('hrvSampleCount');
   });
 
   it('averages session-level SpO2 maxima and respiration averages in trend buckets', async () => {
@@ -6818,6 +8109,71 @@ describe('MCP data service', () => {
     });
 
     expect(result.sessions).toEqual([]);
+  });
+
+  it('uses current and legacy Suunto offsets without merging raw sessions or accepting impossible timestamps', async () => {
+    const impossibleTime = sleepDocument({
+      startTimeMs: Number.MAX_SAFE_INTEGER - 1,
+      endTimeMs: Number.MAX_SAFE_INTEGER,
+    });
+    impossibleTime.id = 'impossible-time';
+    const suuntoLocalWakeDate = sleepDocument({
+      source: {
+        provider: SLEEP_PROVIDERS.SuuntoApp,
+        sourceSessionKey: 'private-suunto-source-key',
+        providerUserId: 'private-suunto-user',
+      },
+      sleepDate: '2024-03-31',
+      startTimeMs: Date.parse('2024-03-31T20:00:00.000Z'),
+      endTimeMs: Date.parse('2024-03-31T23:30:00.000Z'),
+      timezoneOffsetSeconds: 2 * 60 * 60,
+    });
+    suuntoLocalWakeDate.id = 'suunto-local-wake-date';
+    const legacySuuntoLocalWakeDate = sleepDocument({
+      source: {
+        provider: SLEEP_PROVIDERS.SuuntoApp,
+        sourceSessionKey: 'private-legacy-suunto-source-key',
+        providerUserId: 'private-suunto-user',
+      },
+      sleepDate: '2024-03-30',
+      startTimeMs: Date.parse('2024-03-30T20:00:00.000Z'),
+      endTimeMs: Date.parse('2024-03-30T23:30:00.000Z'),
+      timezoneOffsetSeconds: null,
+      providerFields: { suunto: { timestamp: '2024-03-30T22:00:00.000+02:00' } },
+    });
+    legacySuuntoLocalWakeDate.id = 'legacy-suunto-local-wake-date';
+    vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([
+      sleepDocument({ sleepDate: undefined }),
+      suuntoLocalWakeDate,
+      legacySuuntoLocalWakeDate,
+      impossibleTime,
+    ]);
+
+    const result = await createMcpDataService(dependencies).listSleepSessions({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      startTimeMs: Date.parse('2024-03-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2024-05-01T00:00:00.000Z'),
+    });
+
+    expect(result.sessions).toEqual([
+      expect.objectContaining({
+        sleepDate: '2024-04-01',
+        startTimeMs: Date.parse('2024-03-31T20:00:00.000Z'),
+        endTimeMs: Date.parse('2024-04-01T04:00:00.000Z'),
+      }),
+      expect.objectContaining({
+        provider: SLEEP_PROVIDERS.SuuntoApp,
+        sleepDate: '2024-04-01',
+        endTimeMs: Date.parse('2024-03-31T23:30:00.000Z'),
+      }),
+      expect.objectContaining({
+        provider: SLEEP_PROVIDERS.SuuntoApp,
+        sleepDate: '2024-03-31',
+        endTimeMs: Date.parse('2024-03-30T23:30:00.000Z'),
+      }),
+    ]);
+    expect(JSON.stringify(result)).not.toMatch(/private|providerFields|timezoneOffsetSeconds|\+02:00/);
   });
 
   it('rejects plaintext or tampered pagination cursors', async () => {

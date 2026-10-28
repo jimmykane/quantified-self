@@ -9,6 +9,7 @@
         "**/node_modules/**"
       ],
       "headers": [
+        { "source": "/email/unsubscribe", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }, { "key": "Cache-Control", "value": "no-store" }] },
         {
           "source": "/mcp/authorize",
           "headers": [
@@ -31,6 +32,10 @@
             {
               "key": "X-Frame-Options",
               "value": "DENY"
+            },
+            {
+              "key": "X-Robots-Tag",
+              "value": "noindex, nofollow"
             }
           ]
         },
@@ -56,6 +61,10 @@
             {
               "key": "X-Frame-Options",
               "value": "DENY"
+            },
+            {
+              "key": "X-Robots-Tag",
+              "value": "noindex, nofollow"
             }
           ]
         },
@@ -78,6 +87,102 @@
           ]
         },
         {
+          "source": "/onboarding",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/admin",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/admin/**",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/pricing",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/subscriptions",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/payment/**",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/releases",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/tools/compare/saved",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/services",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        { "source": "/send-activities", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] },
+        { "source": "/send-activities/**", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] },
+        {
+          "source": "/dashboard",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/health",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        { "source": "/health/compare", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] },
+        { "source": "/health/compare/*", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] },
+        {
+          "source": "/tags",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/activities",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/calendar",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/calendar/day/**",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/training/plans",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/training/plans/**",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/training",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/mytracks",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/routes",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/settings",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/user/**",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/ai-insights",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
           "source": "404.html",
           "headers": [
             {
@@ -89,6 +194,10 @@
       ],
       "trailingSlash": false,
       "redirects": [
+        { "source": "/membership", "destination": "/pricing", "type": 301 },
+        { "source": "/help/getting-started", "destination": "/help#getting-started", "type": 301 },
+        { "source": "/help/plans-and-billing", "destination": "/help#plans-and-billing", "type": 301 },
+        { "source": "/help/plans-billing", "destination": "/help#plans-and-billing", "type": 301 },
         {
           "source": "/features/workout-file-comparison",
           "destination": "/features/workout-data-comparison",
@@ -155,6 +264,10 @@
           }
         },
         {
+          "source": "/email/unsubscribe",
+          "function": { "functionId": "marketingUnsubscribe", "region": "europe-west2" }
+        },
+        {
           "source": "/login",
           "destination": "/index.csr.html"
         },
@@ -164,6 +277,10 @@
         },
         {
           "source": "/admin",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/marketing",
           "destination": "/index.csr.html"
         },
         {
@@ -184,6 +301,10 @@
         },
         {
           "source": "/admin/queues/activity-sync",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/queues/training-delivery",
           "destination": "/index.csr.html"
         },
         {
@@ -234,6 +355,8 @@
           "source": "/services",
           "destination": "/index.csr.html"
         },
+        { "source": "/send-activities", "destination": "/index.csr.html" },
+        { "source": "/send-activities/*", "destination": "/index.csr.html" },
         {
           "source": "/dashboard",
           "destination": "/index.csr.html"
@@ -242,8 +365,62 @@
           "source": "/health",
           "destination": "/index.csr.html"
         },
+        { "source": "/health/compare", "destination": "/index.csr.html" },
+        { "source": "/health/compare/*", "destination": "/index.csr.html" },
+        {
+          "source": "/tags",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/activities",
+          "destination": "/index.csr.html"
+        },
         {
           "source": "/calendar",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/calendar/day/*",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/workout/*",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/library/new",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/library/*",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/library",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/standalone/new",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/plan/*/new",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/new",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/standalone",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/plan/*",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans",
           "destination": "/index.csr.html"
         },
         {
@@ -293,6 +470,7 @@
         "**/node_modules/**"
       ],
       "headers": [
+        { "source": "/email/unsubscribe", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }, { "key": "Cache-Control", "value": "no-store" }] },
         {
           "source": "/mcp/authorize",
           "headers": [
@@ -364,6 +542,10 @@
       ],
       "trailingSlash": false,
       "redirects": [
+        { "source": "/membership", "destination": "/pricing", "type": 301 },
+        { "source": "/help/getting-started", "destination": "/help#getting-started", "type": 301 },
+        { "source": "/help/plans-and-billing", "destination": "/help#plans-and-billing", "type": 301 },
+        { "source": "/help/plans-billing", "destination": "/help#plans-and-billing", "type": 301 },
         {
           "source": "/features/workout-file-comparison",
           "destination": "/features/workout-data-comparison",
@@ -430,6 +612,10 @@
           }
         },
         {
+          "source": "/email/unsubscribe",
+          "function": { "functionId": "marketingUnsubscribe", "region": "europe-west2" }
+        },
+        {
           "source": "/login",
           "destination": "/index.csr.html"
         },
@@ -439,6 +625,10 @@
         },
         {
           "source": "/admin",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/marketing",
           "destination": "/index.csr.html"
         },
         {
@@ -459,6 +649,10 @@
         },
         {
           "source": "/admin/queues/activity-sync",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/admin/queues/training-delivery",
           "destination": "/index.csr.html"
         },
         {
@@ -509,6 +703,8 @@
           "source": "/services",
           "destination": "/index.csr.html"
         },
+        { "source": "/send-activities", "destination": "/index.csr.html" },
+        { "source": "/send-activities/*", "destination": "/index.csr.html" },
         {
           "source": "/dashboard",
           "destination": "/index.csr.html"
@@ -517,8 +713,62 @@
           "source": "/health",
           "destination": "/index.csr.html"
         },
+        { "source": "/health/compare", "destination": "/index.csr.html" },
+        { "source": "/health/compare/*", "destination": "/index.csr.html" },
+        {
+          "source": "/tags",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/activities",
+          "destination": "/index.csr.html"
+        },
         {
           "source": "/calendar",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/calendar/day/*",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/workout/*",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/library/new",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/library/*",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/library",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/standalone/new",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/plan/*/new",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/new",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/standalone",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/plan/*",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans",
           "destination": "/index.csr.html"
         },
         {
@@ -562,9 +812,9 @@
   ],
   "functions": {
     "predeploy": [
-      "rm -rf \"$RESOURCE_DIR/lib\"",
-      "node \"$RESOURCE_DIR/node_modules/typescript/bin/tsc\" --project \"$RESOURCE_DIR/tsconfig.json\"",
+      "npm --prefix \"$RESOURCE_DIR\" run build",
       "node \"$RESOURCE_DIR/lib/functions/src/scripts/check-deployment-files.js\" \"$RESOURCE_DIR\"",
+      "node \"$RESOURCE_DIR/lib/functions/src/scripts/check-entrypoint-loading.js\"",
       "node \"$RESOURCE_DIR/lib/functions/src/scripts/check-secret-bindings.js\""
     ],
     "source": "functions",
@@ -579,6 +829,8 @@
       "**/*service_account*.json",
       "**/*serviceAccount*.json",
       "**/*firebase-adminsdk*.json",
+      "*.csv",
+      "**/*.csv",
       "**/*.log",
       "coverage",
       "tmp",
@@ -615,9 +867,7 @@
     }
   },
   "extensions": {
-    "delete-user-data": "firebase/delete-user-data@0.1.30",
-    "firestore-send-email": "firebase/firestore-send-email@0.2.10",
-    "firestore-stripe-payments": "invertase/firestore-stripe-payments@0.3.12"
+    "firestore-send-email": "firebase/firestore-send-email@0.2.10"
   },
   "remoteconfig": {
     "template": "remoteconfig.json"

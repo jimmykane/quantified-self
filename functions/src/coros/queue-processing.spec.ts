@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import type { COROSAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface';
+import { recordImportCompletion } from '../queue/import-monitoring';
+vi.mock('../queue/import-monitoring', () => ({ recordImportCommit: vi.fn(), recordImportCompletion: vi.fn() }));
 
 const mocks = vi.hoisted(() => {
   const state = { current: {} as Record<string, unknown> };
-  const queueRef = { id: 'coros-queue-1' };
+  const queueRef = { id: 'coros-queue-1', parent: { id: 'COROSAPIWorkoutQueue' } };
   const tokenRootRef = { id: 'firebase-1' };
   const transactionUpdate = vi.fn((_ref: unknown, update: Record<string, unknown>) => {
     for (const [field, value] of Object.entries(update)) {
@@ -142,6 +144,7 @@ describe('COROS event-write revision lease', () => {
       dispatchedToCloudTask: null,
     }));
     expect(mocks.state.current).not.toHaveProperty('processingOwner');
+    expect(recordImportCompletion).not.toHaveBeenCalled();
 
     await expect(claimCOROSEventWriteRevision(secondRevision, 'firebase-1', 'worker-r2'))
       .resolves.toBe('claimed');
@@ -151,6 +154,7 @@ describe('COROS event-write revision lease', () => {
       queueRevision: 'revision-2',
       processed: true,
     }));
+    expect(recordImportCompletion).toHaveBeenCalledExactlyOnceWith('COROSAPIWorkoutQueue', {});
   });
 
   it('preserves pending-disconnect parking across claim, deferral, and final release', async () => {

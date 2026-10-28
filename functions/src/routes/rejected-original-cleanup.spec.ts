@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
+import * as logger from 'firebase-functions/logger';
 
 const USER_ID = 'user-1';
 const ROUTE_ID = 'route-1';
@@ -144,6 +145,18 @@ describe('rejected synced-route original cleanup', () => {
     hoisted.query.limit.mockReturnValue(hoisted.query);
     hoisted.query.startAfter.mockReturnValue(hoisted.query);
     hoisted.queryGet.mockResolvedValue({ empty: true, docs: [] });
+  });
+
+  it.each(['route_read', 'storage_delete', 'intent_delete'])('diagnoses %s failures without exporting private data', async phase => {
+    const error = new Error('PRIVATE_PROVIDER_PAYLOAD');
+    const snapshot = createCleanupSnapshot();
+    if (phase === 'route_read') hoisted.routeGet.mockRejectedValueOnce(error);
+    if (phase === 'storage_delete') hoisted.storageDelete.mockRejectedValueOnce(error);
+    if (phase === 'intent_delete') snapshot.ref.delete.mockRejectedValueOnce(error);
+    await expect(processRejectedRouteOriginalCleanupDocument(snapshot, CLEANUP_ID, 2_000)).rejects.toBe(error);
+    const observed = vi.mocked(logger.info).mock.calls.filter(([message]) => message === '[RouteQueue]');
+    expect(observed).toEqual([['[RouteQueue]', { telemetryVersion: 1, lane: 'cleanup', event: 'original_cleanup', outcome: 'failed', phase }]]);
+    expect(JSON.stringify(observed)).not.toMatch(/PRIVATE|user-1|route-1|test-bucket|provider-sync/);
   });
 
   it('registers a retryable update trigger and recurring single-instance redrive', () => {

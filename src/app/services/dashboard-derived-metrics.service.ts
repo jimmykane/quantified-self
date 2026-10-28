@@ -1,6 +1,7 @@
+import { hasCurrentIntensityPolicy } from '@shared/intensity-zones';
 import { Injectable, inject } from '@angular/core';
 import { Firestore, doc, docData } from 'app/firebase/firestore';
-import { combineLatest, from, Observable, of } from 'rxjs';
+import { combineLatest, defer, from, Observable, of } from 'rxjs';
 import { catchError, finalize, map, tap } from 'rxjs/operators';
 import type { DashboardFormPoint } from '../helpers/dashboard-form.helper';
 import { buildDashboardFormPointsFromDailyLoads } from '../helpers/dashboard-form.helper';
@@ -53,6 +54,8 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import {
   DERIVED_METRIC_KINDS,
   DERIVED_METRIC_SCHEMA_VERSION,
+  hasMatchingDerivedFormSourceEventCount,
+  resolveDerivedFormMetricPayload,
   DERIVED_METRICS_COLLECTION_ID,
   CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS,
   getDerivedMetricDocId,
@@ -92,6 +95,7 @@ export interface DashboardDerivedMetricsState {
   powerCurve: DerivedPowerCurveMetricPayload | null;
   trainingSwimPerformance: DashboardTrainingSwimPerformanceContext | null;
   formStatus: DashboardDerivedMetricStatus;
+  formUpdatedAtMs?: number | null;
   recoveryNowStatus: DashboardDerivedMetricStatus;
   acwrStatus: DashboardDerivedMetricStatus;
   rampRateStatus: DashboardDerivedMetricStatus;
@@ -247,7 +251,10 @@ export function getDefaultDashboardDerivedMetricKinds(): DerivedMetricKind[] {
   return [...DASHBOARD_DERIVED_METRIC_KINDS];
 }
 
-export const TRAINING_WORKSPACE_DERIVED_METRIC_KINDS = [...ALL_DERIVED_METRIC_KINDS];
+// Body context is retired from Training; explicit snapshot consumers remain supported.
+export const TRAINING_WORKSPACE_DERIVED_METRIC_KINDS = ALL_DERIVED_METRIC_KINDS.filter(
+  kind => kind !== DERIVED_METRIC_KINDS.BodyWeightTrend,
+);
 
 export interface DashboardDerivedMetricsScopeOptions {
   metricKinds?: readonly DerivedMetricKind[];
@@ -395,7 +402,7 @@ export class DashboardDerivedMetricsService {
     };
   watch(
     user: UserUIDCarrier,
-    options?: DashboardDerivedMetricsScopeOptions,
+    options?: DashboardDerivedMetricsScopeOptions & { reportReadErrors?: boolean },
   ): Observable<DashboardDerivedMetricsState> {
     const uid = `${user?.uid || ''}`.trim();
     if (!uid) {
@@ -403,7 +410,7 @@ export class DashboardDerivedMetricsService {
     }
     const metricDescriptors = this.resolveMetricDescriptors(options?.metricKinds);
     const snapshotStreams = metricDescriptors
-      .map(descriptor => this.watchMetricSnapshot(uid, descriptor.kind));
+      .map(descriptor => this.watchMetricSnapshot(uid, descriptor.kind, options?.reportReadErrors));
     return combineLatest(snapshotStreams).pipe(
       map((snapshots) => {
         const nextState = createDashboardDerivedMetricsMissingState();
@@ -415,6 +422,7 @@ export class DashboardDerivedMetricsService {
           const descriptor = metricDescriptors[index];
           mutableState[descriptor.statusKey] = this.resolveSnapshotStatus(descriptor.kind, snapshot);
           mutableState[descriptor.contextKey] = descriptor.resolveContext(snapshot);
+          if (descriptor.kind === DERIVED_METRIC_KINDS.Form) nextState.formUpdatedAtMs = this.toFiniteNumber(snapshot?.updatedAtMs);
         });
         return nextState;
       }),
@@ -513,7 +521,7 @@ export class DashboardDerivedMetricsService {
     return `${uid}:${[...metricKinds].sort().join(',')}`;
   }
 
-  private watchMetricSnapshot(uid: string, metricKind: DerivedMetricKind): Observable<SnapshotRecord> {
+  private watchMetricSnapshot(uid: string, metricKind: DerivedMetricKind, reportReadErrors = false): Observable<SnapshotRecord> {
     const metricDocRef = doc(
       this.firestore,
       'users',
@@ -521,9 +529,15 @@ export class DashboardDerivedMetricsService {
       DERIVED_METRICS_COLLECTION_ID,
       getDerivedMetricDocId(metricKind),
     );
-    return (docData(metricDocRef) as Observable<Record<string, unknown> | undefined>).pipe(
-      catchError(() => of(undefined)),
-    );
+    return defer(() => {
+      let lastSnapshot: SnapshotRecord;
+      return (docData(metricDocRef) as Observable<SnapshotRecord>).pipe(
+        tap(snapshot => { lastSnapshot = snapshot; }),
+        // Read-only discovery needs to distinguish a failed read from a missing
+        // document without requesting a rebuild or hiding the last loaded values.
+        catchError(() => of(reportReadErrors ? { ...lastSnapshot, status: 'failed' } : undefined)),
+      );
+    });
   }
 
   private resolveSnapshotStatus(
@@ -542,6 +556,10 @@ export class DashboardDerivedMetricsService {
       return 'missing';
     }
 
+    if (status === 'ready' && !hasCurrentIntensityPolicy(metricKind, this.resolveSnapshotPayload(snapshot))) {
+      return 'stale';
+    }
+
     const schemaVersion = this.toFiniteNumber(snapshot?.schemaVersion);
     const updatedAtMs = this.toFiniteNumber(snapshot?.updatedAtMs);
     // Self-heal old snapshot documents by requeueing ensureDerivedMetrics when schema is behind.
@@ -558,6 +576,17 @@ export class DashboardDerivedMetricsService {
     // A ready snapshot with an unsupported Power Curve payload must be rebuilt.
     // Otherwise the chart would silently present an empty state even though its
     // document claims to be healthy.
+    if (
+      status === 'ready'
+      && metricKind === DERIVED_METRIC_KINDS.Form
+      && !hasMatchingDerivedFormSourceEventCount(
+        this.resolveSnapshotPayload(snapshot),
+        snapshot?.sourceEventCount,
+      )
+    ) {
+      return 'stale';
+    }
+
     if (
       status === 'ready'
       && metricKind === DERIVED_METRIC_KINDS.PowerCurve
@@ -691,14 +720,14 @@ export class DashboardDerivedMetricsService {
   }
 
   private resolveFormPoints(snapshot: Record<string, unknown> | undefined): DashboardFormPoint[] | null {
-    const payload = snapshot?.payload as { dailyLoads?: unknown } | undefined;
-    const dailyLoads = Array.isArray(payload?.dailyLoads)
-      ? payload?.dailyLoads
-      : null;
-    if (!dailyLoads) {
+    if (!hasMatchingDerivedFormSourceEventCount(snapshot?.payload, snapshot?.sourceEventCount)) {
       return null;
     }
-    return buildDashboardFormPointsFromDailyLoads(dailyLoads);
+    const payload = resolveDerivedFormMetricPayload(snapshot?.payload);
+    if (!payload) {
+      return null;
+    }
+    return buildDashboardFormPointsFromDailyLoads(payload.dailyLoads);
   }
 
   private resolveRecoveryNowContext(snapshot: Record<string, unknown> | undefined): DashboardRecoveryNowContext | null {

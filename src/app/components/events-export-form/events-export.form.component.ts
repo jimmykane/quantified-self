@@ -1,5 +1,7 @@
+import type { EventRead } from '@shared/event-read';
 import { Component, Inject, inject } from '@angular/core';
-import { EventInterface } from '@sports-alliance/sports-lib';
+import { isRunningFamilyActivityType } from '@shared/activity-type-family';
+
 import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -26,8 +28,16 @@ import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { convertSpeedToPace } from '@sports-alliance/sports-lib';
 import { convertSpeedToSwimPace } from '@sports-alliance/sports-lib';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { LoggerService } from '../../services/logger.service';
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
+
+function formatLocalDateKey(value: Date): string {
+  const year = value.getFullYear();
+  const month = `${value.getMonth() + 1}`.padStart(2, '0');
+  const day = `${value.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 
 @Component({
@@ -43,10 +53,11 @@ export class EventsExportFormComponent extends FormsAbstract {
 
   public exportFromGroup: UntypedFormGroup;
   public user: User;
-  public events: EventInterface[];
+  public events: EventRead[];
   public startDate: Date;
   public endDate: Date;
   public isLoading: boolean;
+  readonly haptics = inject(AppHapticsService);
   private analyticsService = inject(AppAnalyticsService);
   private logger = inject(LoggerService);
 
@@ -65,7 +76,7 @@ export class EventsExportFormComponent extends FormsAbstract {
       throw new Error('Component needs events, user, start date and end date')
     }
 
-    this.events.sort((eventA: EventInterface, eventB: EventInterface) => {
+    this.events.sort((eventA: EventRead, eventB: EventRead) => {
       return +eventA.startDate - +eventB.startDate;
     });
 
@@ -102,6 +113,8 @@ export class EventsExportFormComponent extends FormsAbstract {
 
   async onSubmit(someEvent) {
     super.onSubmit(someEvent);
+    if (this.isLoading || this.exportFromGroup.invalid) return;
+    this.haptics.selection();
     // create csv header
     this.user.settings.exportToCSVSettings.startDate = this.exportFromGroup.get('startDate').value;
     this.user.settings.exportToCSVSettings.name = this.exportFromGroup.get('name').value;
@@ -202,12 +215,12 @@ export class EventsExportFormComponent extends FormsAbstract {
     // Go over the events
     this.events.forEach((event) => {
       const activityTypes = <DataActivityTypes>event.getStat(DataActivityTypes.type);
-      const isRunning = activityTypes && [<string>ActivityTypes.running, <string>ActivityTypes.trail_running, <string>ActivityTypes.treadmill].indexOf(activityTypes.getValue()[0]) !== -1;
+      const isRunning = activityTypes && isRunningFamilyActivityType(activityTypes.getValue()[0]);
       const isSwimming = activityTypes && [<string>ActivityTypes.swimming, <string>ActivityTypes['open water swimming']].indexOf(activityTypes.getValue()[0]) !== -1;
 
       const row = [];
       if (this.user.settings.exportToCSVSettings.startDate) {
-        row.push(`"${event.startDate.toLocaleDateString()}"`);
+        row.push(`"${formatLocalDateKey(event.startDate)}"`);
       }
       if (this.user.settings.exportToCSVSettings.name) {
         row.push(`"${event.name}"`);
@@ -230,7 +243,8 @@ export class EventsExportFormComponent extends FormsAbstract {
         row.push(`"${display}"`);
       }
       if (this.user.settings.exportToCSVSettings.duration) {
-        row.push(`"${event.getDuration().getDisplayValue()}"`);
+        const duration = resolveUnitAwareDisplayStat(event.getDuration(), this.user.settings.unitSettings);
+        row.push(`"${duration?.text ?? ''}"`);
       }
       if (this.user.settings.exportToCSVSettings.ascent) {
         const stat = event.getStat(DataAscent.type);
@@ -352,7 +366,7 @@ export class EventsExportFormComponent extends FormsAbstract {
     this.fileService.downloadFile((new Blob(
       [csvString],
       { type: 'data:text/csv;charset=utf-8' },
-    )), `${this.startDate.toLocaleDateString()}-${this.endDate.toLocaleDateString()}`, 'csv');
+    )), `${formatLocalDateKey(this.startDate)}-${formatLocalDateKey(this.endDate)}`, 'csv');
 
     await this.close(new Event('Done'));
 

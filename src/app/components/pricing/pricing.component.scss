@@ -1,6 +1,32 @@
 @use '../../../styles/breakpoints' as bp;
 
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.selected-price-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--mat-sys-primary);
+  font-weight: 600;
+}
+
+.plan-action-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 20px;
+
+  mat-spinner {
+    flex: 0 0 20px;
+  }
+}
+
 .pricing-container {
+  container: pricing / inline-size;
   padding: 28px 20px;
   min-height: 80vh;
   display: flex;
@@ -874,6 +900,7 @@
     margin: -16px 0 24px;
     text-align: center;
     color: var(--mat-sys-on-surface-variant);
+    font: var(--mat-sys-body-medium);
   }
 
   .products-grid {
@@ -884,6 +911,7 @@
   }
 
   .product-card-shell {
+    container: pricing-card / inline-size;
     position: relative;
     display: flex;
     min-width: 0;
@@ -1002,6 +1030,7 @@
 
       .price {
         display: flex;
+        flex-wrap: wrap;
         align-items: baseline;
         justify-content: center;
         margin: 0;
@@ -1034,7 +1063,7 @@
         color: var(--mat-sys-primary);
         font: var(--mat-sys-label-medium);
         letter-spacing: 0;
-        white-space: nowrap;
+        white-space: normal;
       }
 
       .trial-offer-copy {
@@ -1091,31 +1120,10 @@
 
     &.basic-card .plan-price-section,
     &.pro-card .plan-price-section {
-      display: grid;
-      grid-template-rows: auto 40px minmax(50px, auto) 44px;
-      align-items: start;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
       gap: 10px;
-
-      .price {
-        grid-row: 1;
-      }
-
-      .yearly-savings-label,
-      .trial-cta-note {
-        grid-row: 2;
-        align-self: center;
-      }
-
-      .trial-offer-copy {
-        grid-row: 3;
-        align-self: start;
-      }
-
-      button {
-        grid-row: 4;
-        align-self: end;
-        margin-top: 0;
-      }
     }
 
     .plan-price-section + .plan-price-section {
@@ -1128,6 +1136,33 @@
 
   .free-feature-icon {
     color: var(--mat-sys-outline);
+  }
+}
+
+// The onboarding stepper can be narrow even in a wide browser window.
+@container pricing (max-width: 959.98px) {
+  .pricing-container .products-grid {
+    grid-template-columns: minmax(0, 560px);
+    max-width: 560px;
+    gap: 16px;
+  }
+}
+
+// Billing options need to respond to the card width, independently of the viewport.
+@container pricing-card (max-width: 349.98px) {
+  .pricing-container .products-grid .product-card {
+    mat-card-content {
+      display: flex;
+    }
+
+    .plan-price-section {
+      height: auto;
+    }
+
+    .plan-price-section + .plan-price-section {
+      border-top: 1px solid var(--mat-sys-outline-variant);
+      border-left: 0;
+    }
   }
 }
 
@@ -1196,5 +1231,38 @@
         border-left: 0;
       }
     }
+  }
+}
+
+// Starter members and onboarding use the same price-first reading order as
+// public pricing. Let selection/trial copy grow naturally instead of assigning
+// the selection note an implicit grid row below the purchase button.
+.pricing-container .products-grid {
+  .product-card mat-card-content {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .plan-billing {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .product-card .plan-price-section {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    height: auto;
+    gap: 10px;
+
+    .selected-price-note { margin: 0; }
+    button { margin-top: auto; }
+  }
+}
+
+@container pricing-card (max-width: 349.98px) {
+  .pricing-container .products-grid .plan-billing {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

@@ -5,6 +5,33 @@ Read `/Users/dimitrios/Projects/quantified-self/AGENTS.md` first.
 Frontend-only rules:
 - `../.agent/rules/rules.md`
 - `../.agent/rules/material-design-strict.md`
+- `../.agent/rules/frontend-test-environments.md` when adding/changing specs or helper runtime imports
+- When changing lazy ECharts module registration, update the loader spec's explicit module mocks and registration
+  expectations together. Run both `echarts-registrations.helper.spec.ts` and `echarts-loader.service.spec.ts`.
+- Non-interactive chart tests must distinguish render lifecycle listeners such as `finished` from input handlers.
+  Assert the exact allowed listener set while retaining checks against user interactions, ZRender handlers and editing.
+- All scrollable surfaces must use the shared thin QS scrollbar skin from `styles/_scrollbars.scss`, included globally
+  by `styles.scss`. This covers dialogs, bottom sheets, menus/selects, nested lists, tables, textareas and page panels,
+  including CDK overlays outside app-root. Do not add stock or component-specific scrollbar skins. Keep the actual
+  scroll owner bounded, preserve intentional scrollbar-free navigation rails, and verify overflow in light/dark and
+  at phone widths. Never hide a needed scrollbar or clip content to disguise an overflow bug. See `docs/frontend-ui.md`.
+- When adding a new indexable public page, add it to `sitemap.xml` in the same change. Also verify its `robots.txt`
+  policy, SSR/prerender registration, route SEO metadata, public-route handling, internal links, and tests. Deliberately
+  exclude non-indexable pages from the sitemap and set their `noindex` policy where applicable.
+- When changing public content or sitemap `lastmod` values, update and run `src/firebase-hosting.config.spec.ts` in
+  the same change. Retain specific expected dates for each updated page.
+  For public SEO title/heading changes, update route, content and template expectations together; run
+  `src/app/app.routing.module.spec.ts` plus the affected content/component specs to cover lazy route-data resolution.
 - Authenticated product workspace routes, except Settings, must apply the shared `qs-workspace-page` class to their route
-  root. Do not add route-local outer width, margin, or padding rules. Settings intentionally retains its centered 760px
-  form layout. See `docs/frontend-ui.md` for the shell contract.
+  root. Do not add route-local outer width, margin, or padding rules. Settings intentionally uses a centered 800px
+  overview layout with one column on desktop and phones. See `docs/frontend-ui.md` for the shell contract.
+- Always include the app's haptic feedback in new or changed interactive UI. Reuse `AppHapticsService` and
+  `appHapticTap` (exported by `AppChartSharedModule`); never call vibration APIs directly. Audit the whole interaction,
+  including mobile selectors, range/source changes, disclosure controls, dialogs, retries, and completed mutations.
+- Use selection feedback for accepted user actions and success/error feedback only after the operation actually
+  succeeds/fails. Do not vibrate for hydration, background refreshes, typing, disabled actions, or unchanged selections.
+  Prefer Material semantic events for selects/toggles so touch and keyboard work. Give each action one feedback owner;
+  do not duplicate the directive, handler, router-navigation, or shared ECharts haptics. Reuse the shared chart feedback
+  options rather than adding chart listeners. Preserve unsupported-device, reduced-motion, pointer, and rate-limit guards.
+- Test feedback with a mocked `AppHapticsService`, including silent initialization/no-op paths and async outcomes.
+  Browser emulation can check wiring and layout but cannot prove physical vibration; report device verification honestly.

@@ -3,13 +3,22 @@
   @if (panel) {
   <header class="event-chart-panel__header">
     <div class="event-chart-panel__heading">
-      <div class="event-chart-panel__title-row">
+      <div class="event-chart-panel__title-row" [class.event-chart-panel__title-row--power]="!previewMode && canSmoothPower">
         <div class="event-chart-panel__title">
           <h3>{{ panel?.displayName }}</h3>
           @if (panel?.unit) {
           <span>({{ panel?.unit }})</span>
           }
         </div>
+
+        @if (!previewMode && canSmoothPower) {
+        <mat-button-toggle-group class="event-chart-panel__power-view"
+          aria-label="Power chart view" [hideSingleSelectionIndicator]="true"
+          [value]="powerView()" (change)="setPowerView($event.value)">
+          <mat-button-toggle value="raw">Raw</mat-button-toggle>
+          <mat-button-toggle value="3s">3s</mat-button-toggle>
+        </mat-button-toggle-group>
+        }
 
         @if (!previewMode) {
         <div class="event-chart-panel__actions">
@@ -52,8 +61,17 @@
       @if (seriesLegendItems.length > 0) {
       <div class="event-chart-panel__series-legend">
         @for (item of seriesLegendItems; track item.key) {
-        <span class="event-chart-panel__series-legend-item">
-          <span class="event-chart-panel__series-legend-dot" [style.background]="item.color"></span>
+        <span class="event-chart-panel__series-legend-item" [class.event-chart-panel__series-legend-item--device]="!!item.lineStyle">
+          <span class="event-chart-panel__series-legend-dot"
+            [class.event-chart-panel__series-legend-dot--line]="!!item.lineStyle"
+            [class.event-chart-panel__series-legend-dot--dash-dot]="item.lineStyle === 'dash-dot'"
+            [style.background]="item.lineStyle ? null : item.color"
+            [style.--series-color]="item.color"
+            [style.--series-line-width]="item.lineWidth ? item.lineWidth + 'px' : null"
+            [style.border-top-style]="item.lineStyle === 'dash-dot' ? null : item.lineStyle"
+            [attr.role]="item.lineStyle ? 'img' : null"
+            [attr.aria-label]="item.lineStyle ? item.lineStyle + ' line' : null"
+            [attr.aria-hidden]="item.lineStyle ? null : true"></span>
           <span class="event-chart-panel__series-legend-label">{{ item.label }}</span>
         </span>
         }
@@ -81,11 +99,29 @@
         }
       </div>
       }
+      @if (swimTimelineLanes().length > 0) {
+      <div class="event-chart-panel__swim-timeline-legend" aria-label="Swim and rest timeline legend">
+        @for (lane of swimTimelineLanes(); track lane.activityID; let laneIndex = $index) {
+        <span class="event-chart-panel__series-legend-item">
+          @if (swimTimelineLanes().length > 1) {
+          <span>{{ laneIndex + 1 }}. {{ lane.activityName }}</span>
+          }
+          <span class="event-chart-panel__swim-timeline-swatch" [style.color]="lane.color" aria-hidden="true"></span>
+          <span>Swim</span>
+          <span class="event-chart-panel__swim-timeline-swatch event-chart-panel__swim-timeline-swatch--rest"
+            [style.color]="lane.color" aria-hidden="true"></span>
+          <span>Rest</span>
+        </span>
+        }
+        <span class="event-chart-panel__series-legend-item">Gaps: unavailable</span>
+      </div>
+      }
     </div>
   </header>
   }
 
-  <div #chartDiv class="event-chart-panel__chart" [class.event-chart-panel__chart--zoom-only]="!panel && showZoomBar"></div>
+  <div #chartDiv class="event-chart-panel__chart" [class.event-chart-panel__chart--zoom-only]="!panel && showZoomBar"
+    [class.event-chart-panel__chart--pinch-enabled]="!!panel && (!previewMode || previewInteractions) && cursorBehaviour === zoomCursorBehaviour"></div>
 
   @if (hasSelection) {
   <section class="event-chart-panel__stats">

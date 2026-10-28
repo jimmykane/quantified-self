@@ -360,7 +360,7 @@ describe('tokens', () => {
             });
 
             expect(hoisted.logger.info).toHaveBeenCalledWith(
-                '[ServiceAuth] Provider token remains valid.',
+                '[ServiceAuth] Provider token is unexpired; provider access has not been verified.',
                 { serviceName: ServiceNames.SuuntoApp },
             );
             expect(JSON.stringify(hoisted.logger.info.mock.calls))
@@ -983,6 +983,18 @@ describe('tokens', () => {
                 expiresAt: 1000,
                 dateRefreshed: 750,
             }));
+        });
+
+        it('releases refresh admission without HTTP or auth cleanup when caller capacity is deferred', async () => {
+            mockDoc.data.mockReturnValue({ accessToken: 'old', refreshToken: 'refresh',
+                serviceName: ServiceNames.COROSAPI, openId: 'coros-user', expiresAt: 1000, dateCreated: 500 });
+            mockToken.expired.mockReturnValue(true);
+            const deferred = new Error('capacity-deferred');
+            await expect(getTokenData(mockDoc, ServiceNames.COROSAPI, false, {
+                beforeRefreshRequest: async () => { throw deferred; },
+            })).rejects.toBe(deferred);
+            expect(mockToken.refresh).not.toHaveBeenCalled();
+            expect(handleTerminalServiceAuthFailure).not.toHaveBeenCalled();
         });
 
         it('routes COROS invalid-authorization refresh results through reconnect handling', async () => {

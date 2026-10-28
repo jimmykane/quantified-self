@@ -1,0 +1,52 @@
+@if (measurements().length > 1 || measurements().length && !choice()) {
+  <div class="chart-reading-picker">
+    <span [class.cdk-visually-hidden]="compact()">Measurement</span>
+    <button mat-button type="button" class="chart-source-trigger chart-reading-trigger" [disabled]="disabled()"
+      #measurementTrigger="matMenuTrigger" [matMenuTriggerFor]="measurementMenu" (menuOpened)="opened()"
+      [attr.aria-label]="chartTitle() + ' measurement: ' + (choice()?.readingLabel || 'Choose measurement')">
+      <span class="chart-source-trigger-content"><span>{{ choice()?.readingLabel || 'Choose measurement' }}</span><mat-icon aria-hidden="true">expand_more</mat-icon></span>
+    </button>
+  </div>
+}
+<mat-menu #measurementMenu="matMenu" class="qs-menu-panel">
+  @for (reading of primaryMeasurements(); track reading.key) {
+    <button mat-menu-item type="button" role="menuitemradio" [attr.aria-checked]="choice()?.readingKey === reading.key"
+      [disabled]="disabled()" [attr.aria-label]="reading.label" (click)="chooseMeasurement(reading.key)">
+      <mat-icon aria-hidden="true">{{ choice()?.readingKey === reading.key ? 'check' : 'radio_button_unchecked' }}</mat-icon>{{ reading.label }}</button>
+  }
+  @if (secondaryMeasurements().length) {
+    <button mat-menu-item type="button" [matMenuTriggerFor]="statisticsMenu" [disabled]="disabled()" (menuOpened)="opened()">More measurements</button>
+  }
+</mat-menu>
+<mat-menu #statisticsMenu="matMenu" class="qs-menu-panel">
+  @for (reading of secondaryMeasurements(); track reading.key) {
+    <button mat-menu-item type="button" role="menuitemradio" [attr.aria-checked]="choice()?.readingKey === reading.key"
+      [disabled]="disabled()" [attr.aria-label]="reading.label" (click)="chooseMeasurement(reading.key)">
+      <mat-icon aria-hidden="true">{{ choice()?.readingKey === reading.key ? 'check' : 'radio_button_unchecked' }}</mat-icon>{{ reading.label }}</button>
+  }
+</mat-menu>
+<div class="chart-source-row">
+@if (canChoose()) {
+  <button mat-button type="button" class="chart-source-trigger" [disabled]="disabled()"
+    #sourceTrigger="matMenuTrigger" [matMenuTriggerFor]="sourceMenu" (menuOpened)="opened()" [attr.aria-label]="ariaLabel()" [matTooltip]="description()">
+    <span class="chart-source-trigger-content"><span>{{ label() }}</span><mat-icon aria-hidden="true">expand_more</mat-icon></span>
+  </button>
+} @else {
+  <span class="chart-source-caption" [matTooltip]="description()">{{ label() }}</span>
+}
+  <ng-content select="[chartSourceAction]"></ng-content>
+</div>
+<mat-menu #sourceMenu="matMenu" class="qs-menu-panel" xPosition="before">
+  <div class="chart-source-menu-heading">{{ measurements().length ? 'Source' : 'Source and reading' }}</div>
+  @if (selectedKey() && !choice()) {
+    <p class="chart-source-menu-notice">Your selected reading has no data in this period.</p>
+  }
+  @for (option of sourceChoices(); track option.key) {
+    <button mat-menu-item type="button" role="menuitemradio" [attr.aria-checked]="option.key === selectedKey()"
+      [disabled]="disabled()" [attr.aria-label]="option.label" (click)="choose(option.key)">
+      <mat-icon aria-hidden="true">{{ option.key === selectedKey() ? 'check' : 'radio_button_unchecked' }}</mat-icon>
+      <span class="chart-source-option"><span class="chart-source-option-label">{{ option.sourceLabel }}</span><span class="chart-source-option-detail">{{ option.readingMethod || option.detail }}</span></span>
+    </button>
+  }
+</mat-menu>
+@if (!compact() && methodLabel(); as method) { <span class="chart-reading-method">{{ method }}</span> }

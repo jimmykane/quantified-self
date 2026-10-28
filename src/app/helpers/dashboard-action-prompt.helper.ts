@@ -13,6 +13,7 @@ import {
 } from '@shared/activity-sync-routes';
 import { isActivitySyncRouteUIDAllowlisted } from '@shared/activity-sync-rollout';
 import { getProviderDisplayName } from '@shared/provider-presentation';
+import type { ConnectionHistoryStatusProjection } from '@shared/connection-history';
 
 export const DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID: AppDashboardActionPromptId = 'unitSetup';
 export const DASHBOARD_ACTION_PROMPT_FIRST_ACTIVITY_UPLOAD_ID: AppDashboardActionPromptId = 'firstActivityUpload';
@@ -37,7 +38,6 @@ export const DASHBOARD_ACTIVITY_AUTO_SYNC_ROUTE_IDS: readonly ActivitySyncRouteI
 
 export type DashboardActionPromptActionId =
   | 'applyUnitSetup'
-  | 'dismissUnitSetup'
   | 'openUnitSettings'
   | 'upgradeToPro'
   | 'dismissFirstActivityUpload'
@@ -185,6 +185,13 @@ export function buildReconnectSuuntoServicePromptSource(lastDisconnectedAt: numb
   return `${DASHBOARD_ACTION_PROMPT_RECONNECT_SUUNTO_SERVICE_SOURCE}:${Number.isFinite(lastDisconnectedAt) ? lastDisconnectedAt : 'unknown'}`;
 }
 
+export function hasGarminSleepHealthConnectionHistory(status: ConnectionHistoryStatusProjection | null | undefined): boolean {
+  // Failed/skipped runs belong to the existing Services progress/retry flow, not a second import prompt.
+  return !!status?.runId && Array.isArray(status.steps) && status.steps.some(step => (
+    Array.isArray(step.resources) && step.resources.some(resource => resource === 'sleep' || resource === 'health')
+  ));
+}
+
 export function resolveDashboardActivityAutoSyncRouteIds(
   options: ResolveDashboardActivityAutoSyncRouteIdsOptions,
 ): ActivitySyncRouteId[] {
@@ -223,17 +230,13 @@ export function buildDashboardActionPromptViewModels(
       id: DASHBOARD_ACTION_PROMPT_UNIT_SETUP_ID,
       icon: 'straighten',
       title: 'Default units',
-      description: 'Choose the units most of the dashboard should use. You can fine-tune them later in Settings.',
+      description: 'Choose your distance, speed, and pace units. Weight and week start stay as they are. You can customize units in Settings.',
       busy: options.unitSetupBusy,
       error: options.unitSetupError,
       primaryAction: {
         id: 'applyUnitSetup',
         label: 'Apply',
         loadingLabel: 'Saving...',
-      },
-      secondaryAction: {
-        id: 'dismissUnitSetup',
-        label: 'Not now',
       },
       menuActions: [{
         id: 'openUnitSettings',
@@ -331,7 +334,7 @@ export function buildDashboardActionPromptViewModels(
       id: DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_ID,
       icon: 'bedtime',
       title: 'Import Garmin history',
-      description: 'Import Garmin sleep and, when available for your account, Health metrics from January 1, 2016 to today. Records may appear gradually over the next few hours.',
+      description: 'Request up to five years of Garmin sleep and, when available for your account, Health metrics. Garmin may allow a shorter range. Records may appear gradually over the next few hours.',
       busy: options.backfillGarminSleepBusy,
       error: options.backfillGarminSleepError,
       primaryAction: {

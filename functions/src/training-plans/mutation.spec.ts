@@ -1,0 +1,619 @@
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { STRENGTH_WORKOUT_SPORT_ALIASES_V1, projectStrengthWorkoutToV1, type StrengthWorkoutDraftV1 } from '../../../shared/strength-workout';
+import { beforeEach, describe, expect, it } from 'vitest';
+import {
+    TRAINING_PLAN_MAX_CURRENT_WORKOUTS,
+    addDaysToTrainingLocalDate,
+    type MutateTrainingScheduleRequestV1,
+    type ScheduledWorkoutV1,
+    type TrainingPlanV1,
+} from '../../../shared/training-plans';
+import {
+    TrainingScheduleMutationError,
+    applyTrainingScheduleMutation,
+    createEmptyTrainingPlanState,
+    type TrainingScheduleSnapshotV1,
+} from './mutation';
+
+const NOW_MS = Date.UTC(2026, 8, 2, 10);
+const STRUCTURE = {
+    version: 1 as const,
+    sport: ActivityTypes.Running,
+    nodes: [{
+        kind: 'step' as const,
+        id: 'steady',
+        purpose: 'work' as const,
+        ending: { kind: 'time' as const, seconds: 1800 },
+        targets: [],
+    }],
+};
+
+function plan(overrides: Partial<TrainingPlanV1> = {}): TrainingPlanV1 {
+    return {
+        schemaVersion: 1,
+        id: 'plan-1',
+        name: 'Plan one',
+        lifecycle: 'active',
+        startLocalDate: '2026-09-01',
+        endLocalDate: '2026-09-30',
+        revision: 3,
+        lastCheckpointRevision: 1,
+        workoutCount: 0,
+        createdAtMs: 1,
+        updatedAtMs: 2,
+        ...overrides,
+    };
+}
+
+function workout(overrides: Partial<ScheduledWorkoutV1> = {}): ScheduledWorkoutV1 {
+    return {
+        schemaVersion: 1,
+        id: 'workout-1',
+        planId: null,
+        localDate: '2026-09-02',
+        lifecycle: 'planned',
+        title: 'Steady run',
+        structure: STRUCTURE,
+        revision: 2,
+        createdAtMs: 1,
+        updatedAtMs: 2,
+        ...overrides,
+    };
+}
+
+function snapshot(
+    plans: TrainingPlanV1[] = [],
+    workouts: ScheduledWorkoutV1[] = [],
+    activePlanId: string | null = null,
+): TrainingScheduleSnapshotV1 {
+    return {
+        state: {
+            ...createEmptyTrainingPlanState(0),
+            activePlanId,
+            revision: 7,
+            currentWorkoutCount: workouts.filter(item => item.lifecycle !== 'deleted').length,
+        },
+        plans: new Map(plans.map(item => [item.id, item])),
+        workouts: new Map(workouts.map(item => [item.id, item])),
+    };
+}
+
+function request(
+    operation: MutateTrainingScheduleRequestV1['operation'],
+    expectedRevisions: MutateTrainingScheduleRequestV1['expectedRevisions'] = [],
+): MutateTrainingScheduleRequestV1 {
+    return {
+        mutationId: `mutation-${operation.kind}`,
+        expectedRevisions: [
+            { scope: 'state', id: 'current', revision: 7 },
+            ...expectedRevisions,
+        ],
+        operation,
+    };
+}
+
+describe('applyTrainingScheduleMutation', () => {
+    it('replaces and removes phases through plan revisions without altering workouts', () => {
+        const selected = plan({ workoutCount: 1 });
+        const scheduled = workout({ planId: selected.id });
+        const source = snapshot([selected], [scheduled], selected.id);
+        const operation = { kind: 'set-plan-phases' as const, planId: selected.id,
+            startLocalDate: selected.startLocalDate, endLocalDate: selected.endLocalDate,
+            confirmPlanRangeExtension: false,
+            phases: { version: 1 as const, items: [{ id: 'base', name: 'Base',
+                startLocalDate: '2026-09-01', endLocalDate: '2026-09-10' }] } };
+        const result = applyTrainingScheduleMutation(source, request(operation,
+            [{ scope: 'plan', id: selected.id, revision: selected.revision }]), NOW_MS);
+        expect(result.after.plans.get(selected.id)).toMatchObject({ phases: operation.phases, revision: 4 });
+        expect(result.changedWorkoutIds).toEqual([]);
+        expect(result.after.workouts).toEqual(source.workouts);
+        const removed = applyTrainingScheduleMutation(result.after, { mutationId: 'remove-phases',
+            expectedRevisions: [{ scope: 'state', id: 'current', revision: 8 }, { scope: 'plan', id: selected.id, revision: 4 }],
+            operation: { ...operation, phases: { version: 1, items: [] } } }, NOW_MS + 1);
+        expect(removed.after.plans.get(selected.id)).not.toHaveProperty('phases');
+        expect(() => applyTrainingScheduleMutation(result.after, request(operation,
+            [{ scope: 'plan', id: selected.id, revision: selected.revision }]), NOW_MS)).toThrow('changed from revision');
+    });
+
+    it('requires explicit phase range extension and refuses shrinking past current workouts', () => {
+        const selected = plan({ workoutCount: 1 });
+        const source = snapshot([selected], [workout({ planId: selected.id })], selected.id);
+        const operation = { kind: 'set-plan-phases' as const, planId: selected.id,
+            startLocalDate: '2026-08-31', endLocalDate: selected.endLocalDate,
+            confirmPlanRangeExtension: false, phases: { version: 1 as const, items: [] } };
+        const expected = [{ scope: 'plan' as const, id: selected.id, revision: selected.revision }];
+        expect(() => applyTrainingScheduleMutation(source, request(operation, expected), NOW_MS)).toThrow('requires extending');
+        expect(applyTrainingScheduleMutation(source, request({ ...operation, confirmPlanRangeExtension: true }, expected), NOW_MS)
+            .after.plans.get(selected.id)?.startLocalDate).toBe('2026-08-31');
+        expect(() => applyTrainingScheduleMutation(source, request({ ...operation, startLocalDate: '2026-09-03' }, expected), NOW_MS))
+            .toThrow('every current workout');
+    });
+
+    it('shifts date-only phases across DST while keeping their identity and metadata', () => {
+        const selected = plan({ startLocalDate: '2026-10-20', endLocalDate: '2026-11-01', phases: { version: 1, items: [
+            { id: 'taper', name: 'Taper', description: 'Keep easy', color: 'purple', startLocalDate: '2026-10-24', endLocalDate: '2026-10-26' },
+        ] } });
+        const result = applyTrainingScheduleMutation(snapshot([selected]), request({ kind: 'shift-plan', planId: selected.id, days: 7 },
+            [{ scope: 'plan', id: selected.id, revision: selected.revision }]), NOW_MS);
+        expect(result.after.plans.get(selected.id)?.phases?.items[0]).toEqual({ ...selected.phases!.items[0],
+            startLocalDate: '2026-10-31', endLocalDate: '2026-11-02' });
+    });
+
+    let initial: TrainingScheduleSnapshotV1;
+
+    beforeEach(() => {
+        initial = snapshot();
+    });
+
+    it.each([ActivityTypes.StrengthTraining, ...STRENGTH_WORKOUT_SPORT_ALIASES_V1])('keeps %s exercise details paired through create, move, copy, and edit', sport => {
+        const strength: StrengthWorkoutDraftV1 = { version: 1, exercises: [{ id: 'squat', name: 'Squat', sets: [
+            { id: 'set-a', ending: { kind: 'repetitions', repetitions: 5 }, externalLoadKg: 80, restAfterSeconds: 90 },
+        ] }] };
+        const structure = projectStrengthWorkoutToV1({ ...strength, workoutId: 'lift', revision: 1 }, sport);
+        const created = applyTrainingScheduleMutation(initial, request({ kind: 'create-workout', workoutId: 'lift',
+            planId: null, localDate: '2026-09-03', title: 'Lift', structure, strength,
+            confirmPlanRangeExtension: false }), NOW_MS);
+        expect(created.after.workouts.get('lift')?.structure.sport).toBe(sport);
+        expect(created.after.strengthDetails?.get('lift')).toMatchObject({ workoutId: 'lift', revision: 1,
+            exercises: [{ sets: [{ externalLoadKg: 80, restAfterSeconds: 90 }] }] });
+        const moved = applyTrainingScheduleMutation(created.after, {
+            mutationId: 'move-lift', expectedRevisions: [
+                { scope: 'state', id: 'current', revision: 8 }, { scope: 'workout', id: 'lift', revision: 1 },
+            ], operation: { kind: 'move-workout', workoutId: 'lift', planId: null, localDate: '2026-09-04',
+                confirmPlanRangeExtension: false },
+        }, NOW_MS + 1);
+        expect(moved.after.strengthDetails?.get('lift')?.revision).toBe(1);
+        const copied = applyTrainingScheduleMutation(moved.after, {
+            mutationId: 'copy-lift', expectedRevisions: [
+                { scope: 'state', id: 'current', revision: 9 }, { scope: 'workout', id: 'lift', revision: 2 },
+            ], operation: { kind: 'copy-workout', sourceWorkoutId: 'lift', workoutId: 'copy-lift', planId: null,
+                localDate: '2026-09-05', confirmPlanRangeExtension: false },
+        }, NOW_MS + 2);
+        expect(copied.after.strengthDetails?.get('copy-lift')).toMatchObject({ workoutId: 'copy-lift', revision: 1,
+            exercises: [{ sets: [{ externalLoadKg: 80 }] }] });
+        expect(() => applyTrainingScheduleMutation(copied.after, {
+            mutationId: 'unsafe-lift', expectedRevisions: [
+                { scope: 'state', id: 'current', revision: 10 }, { scope: 'workout', id: 'lift', revision: 2 },
+            ], operation: { kind: 'update-workout', workoutId: 'lift', planId: null,
+                localDate: '2026-09-04', title: 'Unsafe', structure, confirmPlanRangeExtension: false },
+        }, NOW_MS + 3)).toThrow('complete exercise prescription');
+        const revisedStrength: StrengthWorkoutDraftV1 = { ...strength, exercises: [{ ...strength.exercises[0], sets: [
+            { ...strength.exercises[0].sets[0], externalLoadKg: 85 },
+        ] }] };
+        const edited = applyTrainingScheduleMutation(copied.after, {
+            mutationId: 'edit-lift', expectedRevisions: [
+                { scope: 'state', id: 'current', revision: 10 }, { scope: 'workout', id: 'lift', revision: 2 },
+            ], operation: { kind: 'update-workout', workoutId: 'lift', planId: null,
+                localDate: '2026-09-04', title: 'Heavier',
+                structure: projectStrengthWorkoutToV1({ ...revisedStrength, workoutId: 'lift', revision: 2 }, sport),
+                strength: revisedStrength, confirmPlanRangeExtension: false },
+        }, NOW_MS + 3);
+        expect(edited.after.strengthDetails?.get('lift')?.revision).toBe(2);
+        expect(edited.after.strengthDetails?.get('lift')?.exercises[0].sets[0].externalLoadKg).toBe(85);
+        const renamed = applyTrainingScheduleMutation(edited.after, {
+            mutationId: 'rename-lift', expectedRevisions: [
+                { scope: 'state', id: 'current', revision: 11 }, { scope: 'workout', id: 'lift', revision: 3 },
+            ], operation: { kind: 'update-workout', workoutId: 'lift', planId: null,
+                localDate: '2026-09-04', title: 'Renamed',
+                structure: projectStrengthWorkoutToV1({ ...revisedStrength, workoutId: 'lift', revision: 2 }, sport),
+                strength: revisedStrength, confirmPlanRangeExtension: false },
+        }, NOW_MS + 4);
+        expect(renamed.after.strengthDetails?.get('lift')?.revision).toBe(2);
+    });
+
+    it('revisions only the chosen plan when changing its color, including stale-revision rejection', () => {
+        const current = plan();
+        const scheduled = workout({ planId: current.id });
+        const source = snapshot([current, plan({ id: 'other' })], [scheduled], current.id);
+        const change = request({ kind: 'set-plan-color', planId: current.id, color: 'purple' }, [
+            { scope: 'plan', id: current.id, revision: current.revision },
+        ]);
+        const result = applyTrainingScheduleMutation(source, change, NOW_MS);
+        expect(result.after.plans.get(current.id)).toMatchObject({ color: 'purple', revision: 4 });
+        expect(result.after.plans.get('other')).toEqual(source.plans.get('other'));
+        expect(result.after.workouts).toEqual(source.workouts);
+        expect(result.after.state).toMatchObject({ activePlanId: current.id, currentWorkoutCount: 1, revision: 8 });
+        expect(result.changedWorkoutIds).toEqual([]);
+        expect(source.plans.get(current.id)).not.toHaveProperty('color');
+        expect(() => applyTrainingScheduleMutation(result.after, { ...change,
+            expectedRevisions: [{ scope: 'state', id: 'current', revision: 8 },
+                { scope: 'plan', id: current.id, revision: 3 }] }, NOW_MS + 1)).toThrow('changed from revision');
+    });
+
+    it('creates a standalone workout without a plan', () => {
+        const result = applyTrainingScheduleMutation(initial, request({
+            kind: 'create-workout',
+            workoutId: 'standalone-1',
+            planId: null,
+            localDate: '2026-09-03',
+            title: 'Standalone run',
+            structure: STRUCTURE,
+            confirmPlanRangeExtension: false,
+        }), NOW_MS);
+
+        expect(result.after.workouts.get('standalone-1')).toMatchObject({
+            id: 'standalone-1',
+            planId: null,
+            revision: 1,
+            lifecycle: 'planned',
+        });
+        expect(result.after.state.currentWorkoutCount).toBe(1);
+        expect(result.affectedPlanIds).toEqual([]);
+    });
+
+    it('places a long weekly pattern as independent snapshots in one plan revision', () => {
+        const selectedPlan = plan({ endLocalDate: '2027-03-31' });
+        const placements = Array.from({ length: 78 }, (_, index) => ({
+            workoutId: `placed-${index}`,
+            localDate: addDaysToTrainingLocalDate('2026-09-02', index * 2),
+        }));
+        const result = applyTrainingScheduleMutation(snapshot([selectedPlan]), request({
+            kind: 'bulk-create-workouts', planId: selectedPlan.id, placements,
+            title: 'Library run', structure: STRUCTURE, templateOrigin: { itemId: 'library-1', revision: 2 },
+            confirmPlanRangeExtension: false,
+        }, [{ scope: 'plan', id: selectedPlan.id, revision: selectedPlan.revision }]), NOW_MS);
+        expect(result.after.state.currentWorkoutCount).toBe(78);
+        expect(result.after.plans.get(selectedPlan.id)).toMatchObject({ revision: 4, workoutCount: 78,
+            lastCheckpointRevision: 4 });
+        expect(result.after.workouts.get('placed-0')).toMatchObject({ revision: 1, lifecycle: 'planned',
+            planId: selectedPlan.id, localDate: '2026-09-02', templateOrigin: { itemId: 'library-1', revision: 2 } });
+        expect(result.response.workouts).toEqual([]);
+        expect(result.changedWorkoutIds).toHaveLength(78);
+        expect(snapshot([selectedPlan]).workouts.size).toBe(0);
+    });
+
+    it('does not place anything when plan extension was not confirmed', () => {
+        const selectedPlan = plan();
+        const operation = { kind: 'bulk-create-workouts' as const, planId: selectedPlan.id,
+            placements: [{ workoutId: 'inside', localDate: '2026-09-10' },
+                { workoutId: 'outside', localDate: '2026-10-10' }],
+            title: 'Library run', structure: STRUCTURE, templateOrigin: { itemId: 'library-1', revision: 2 },
+            confirmPlanRangeExtension: false };
+        const source = snapshot([selectedPlan]);
+        expect(() => applyTrainingScheduleMutation(source, request(operation, [
+            { scope: 'plan', id: selectedPlan.id, revision: selectedPlan.revision },
+        ]), NOW_MS)).toThrow(/requires extending/);
+        expect(source.workouts.size).toBe(0);
+        expect(source.plans.get(selectedPlan.id)?.endLocalDate).toBe('2026-09-30');
+    });
+
+    it('keeps the selected physical pool length through create and plan association', () => {
+        const poolStructure: ScheduledWorkoutV1['structure'] = {
+            version: 1, sport: ActivityTypes.Swimming,
+            poolLength: { meters: 25, presentation: 'meters' },
+            nodes: [{ kind: 'step', id: 'length', purpose: 'work', ending: { kind: 'distance', meters: 25 }, targets: [] }],
+        };
+        const selectedPlan = plan();
+        const created = applyTrainingScheduleMutation(snapshot([selectedPlan]), request({
+            kind: 'create-workout', workoutId: 'pool-1', planId: null, localDate: '2026-09-03',
+            title: 'Pool set', structure: poolStructure, confirmPlanRangeExtension: false,
+        }), NOW_MS);
+        expect(created.after.workouts.get('pool-1')?.structure).toEqual(poolStructure);
+        const attached = applyTrainingScheduleMutation(created.after, {
+            mutationId: 'attach-pool', expectedRevisions: [
+                { scope: 'state', id: 'current', revision: 8 },
+                { scope: 'workout', id: 'pool-1', revision: 1 },
+                { scope: 'plan', id: selectedPlan.id, revision: selectedPlan.revision },
+            ],
+            operation: { kind: 'move-workout', workoutId: 'pool-1', planId: selectedPlan.id,
+                localDate: '2026-09-04', confirmPlanRangeExtension: false },
+        }, NOW_MS + 1);
+        expect(attached.after.workouts.get('pool-1')?.structure).toEqual(poolStructure);
+    });
+
+    it('activates a new plan and atomically pauses the previous active plan', () => {
+        const oldPlan = plan();
+        initial = snapshot([oldPlan], [], oldPlan.id);
+
+        const result = applyTrainingScheduleMutation(initial, request({
+            kind: 'create-plan',
+            planId: 'plan-2',
+            name: 'Plan two',
+            startLocalDate: '2026-10-01',
+            endLocalDate: '2026-10-31',
+            activate: true,
+        }, [{ scope: 'plan', id: oldPlan.id, revision: oldPlan.revision }]), NOW_MS);
+
+        expect(result.after.state.activePlanId).toBe('plan-2');
+        expect(result.after.plans.get('plan-1')).toMatchObject({ lifecycle: 'paused', revision: 4 });
+        expect(result.after.plans.get('plan-2')).toMatchObject({ lifecycle: 'active', revision: 1 });
+        expect(result.affectedPlanIds).toEqual(['plan-1', 'plan-2']);
+    });
+
+    it('requires confirmation before atomically extending a plan range', () => {
+        const targetPlan = plan();
+        initial = snapshot([targetPlan]);
+        const operation = {
+            kind: 'create-workout' as const,
+            workoutId: 'outside',
+            planId: targetPlan.id,
+            localDate: '2026-10-02',
+            title: 'Outside range',
+            structure: STRUCTURE,
+            confirmPlanRangeExtension: false,
+        };
+        const expected = [{ scope: 'plan' as const, id: targetPlan.id, revision: targetPlan.revision }];
+
+        expect(() => applyTrainingScheduleMutation(initial, request(operation, expected), NOW_MS))
+            .toThrow(expect.objectContaining({ code: 'range-extension-required' }));
+
+        const result = applyTrainingScheduleMutation(initial, request({
+            ...operation,
+            confirmPlanRangeExtension: true,
+        }, expected), NOW_MS);
+        expect(result.after.plans.get(targetPlan.id)).toMatchObject({
+            endLocalDate: '2026-10-02',
+            workoutCount: 1,
+            revision: 4,
+        });
+    });
+
+    it('moves standalone workouts into plans and plan workouts back to standalone without changing IDs', () => {
+        const targetPlan = plan();
+        const standalone = workout();
+        initial = snapshot([targetPlan], [standalone]);
+        const attached = applyTrainingScheduleMutation(initial, request({
+            kind: 'move-workout',
+            workoutId: standalone.id,
+            planId: targetPlan.id,
+            localDate: '2026-09-05',
+            confirmPlanRangeExtension: false,
+        }, [
+            { scope: 'workout', id: standalone.id, revision: standalone.revision },
+            { scope: 'plan', id: targetPlan.id, revision: targetPlan.revision },
+        ]), NOW_MS);
+
+        expect(attached.after.workouts.get(standalone.id)).toMatchObject({
+            id: standalone.id,
+            planId: targetPlan.id,
+            revision: 3,
+        });
+        expect(attached.after.plans.get(targetPlan.id)?.workoutCount).toBe(1);
+
+        const detached = applyTrainingScheduleMutation(attached.after, {
+            mutationId: 'detach',
+            expectedRevisions: [
+                { scope: 'state', id: 'current', revision: 8 },
+                { scope: 'workout', id: standalone.id, revision: 3 },
+                { scope: 'plan', id: targetPlan.id, revision: 4 },
+            ],
+            operation: {
+                kind: 'move-workout',
+                workoutId: standalone.id,
+                planId: null,
+                localDate: '2026-09-06',
+                confirmPlanRangeExtension: false,
+            },
+        }, NOW_MS + 1);
+
+        expect(detached.after.workouts.get(standalone.id)).toMatchObject({ id: standalone.id, planId: null });
+        expect(detached.after.plans.get(targetPlan.id)?.workoutCount).toBe(0);
+    });
+
+    it('moves a workout between plans while revising both plan streams once', () => {
+        const sourcePlan = plan({ workoutCount: 1 });
+        const destinationPlan = plan({ id: 'plan-2', name: 'Plan two', lifecycle: 'paused', revision: 6 });
+        const scheduled = workout({ planId: sourcePlan.id });
+        initial = snapshot([sourcePlan, destinationPlan], [scheduled], sourcePlan.id);
+
+        const result = applyTrainingScheduleMutation(initial, request({
+            kind: 'move-workout',
+            workoutId: scheduled.id,
+            planId: destinationPlan.id,
+            localDate: '2026-09-10',
+            confirmPlanRangeExtension: false,
+        }, [
+            { scope: 'workout', id: scheduled.id, revision: scheduled.revision },
+            { scope: 'plan', id: sourcePlan.id, revision: sourcePlan.revision },
+            { scope: 'plan', id: destinationPlan.id, revision: destinationPlan.revision },
+        ]), NOW_MS);
+
+        expect(result.after.plans.get(sourcePlan.id)).toMatchObject({ revision: 4, workoutCount: 0 });
+        expect(result.after.plans.get(destinationPlan.id)).toMatchObject({ revision: 7, workoutCount: 1 });
+        expect(result.after.workouts.get(scheduled.id)?.id).toBe(scheduled.id);
+    });
+
+    it('shifts only the selected plan range and its associated current workouts', () => {
+        const selectedPlan = plan({ workoutCount: 1 });
+        const otherPlan = plan({ id: 'plan-2', name: 'Other', revision: 2, workoutCount: 1 });
+        const selectedWorkout = workout({ planId: selectedPlan.id });
+        const otherWorkout = workout({ id: 'workout-2', planId: otherPlan.id, localDate: '2026-09-03' });
+        const standalone = workout({ id: 'standalone', localDate: '2026-09-04' });
+        initial = snapshot([selectedPlan, otherPlan], [selectedWorkout, otherWorkout, standalone], selectedPlan.id);
+
+        const result = applyTrainingScheduleMutation(initial, request({
+            kind: 'shift-plan',
+            planId: selectedPlan.id,
+            days: 7,
+        }, [{ scope: 'plan', id: selectedPlan.id, revision: selectedPlan.revision }]), NOW_MS);
+
+        expect(result.after.plans.get(selectedPlan.id)).toMatchObject({
+            startLocalDate: '2026-09-08',
+            endLocalDate: '2026-10-07',
+        });
+        expect(result.after.workouts.get(selectedWorkout.id)?.localDate).toBe('2026-09-09');
+        expect(result.after.workouts.get(otherWorkout.id)?.localDate).toBe('2026-09-03');
+        expect(result.after.workouts.get(standalone.id)?.localDate).toBe('2026-09-04');
+        expect(result.bulkOperation).toBe(true);
+    });
+
+    it('updates content, date, association, and plan range in one revisioned mutation', () => {
+        const sourcePlan = plan({ workoutCount: 1 });
+        const destinationPlan = plan({
+            id: 'plan-2',
+            name: 'Destination',
+            lifecycle: 'paused',
+            revision: 5,
+            startLocalDate: '2026-09-01',
+            endLocalDate: '2026-09-30',
+        });
+        const scheduled = workout({ planId: sourcePlan.id });
+        initial = snapshot([sourcePlan, destinationPlan], [scheduled], sourcePlan.id);
+
+        const operation = {
+            kind: 'update-workout' as const,
+            workoutId: scheduled.id,
+            planId: destinationPlan.id,
+            localDate: '2026-10-02',
+            title: 'Moved and edited',
+            structure: STRUCTURE,
+            confirmPlanRangeExtension: false,
+        };
+        const expected = [
+            { scope: 'workout' as const, id: scheduled.id, revision: scheduled.revision },
+            { scope: 'plan' as const, id: sourcePlan.id, revision: sourcePlan.revision },
+            { scope: 'plan' as const, id: destinationPlan.id, revision: destinationPlan.revision },
+        ];
+
+        expect(() => applyTrainingScheduleMutation(initial, request(operation, expected), NOW_MS))
+            .toThrow(expect.objectContaining({ code: 'range-extension-required' }));
+
+        const result = applyTrainingScheduleMutation(initial, request({
+            ...operation,
+            confirmPlanRangeExtension: true,
+        }, expected), NOW_MS);
+
+        expect(result.after.workouts.get(scheduled.id)).toMatchObject({
+            planId: destinationPlan.id,
+            localDate: '2026-10-02',
+            title: 'Moved and edited',
+            revision: scheduled.revision + 1,
+        });
+        expect(result.after.plans.get(sourcePlan.id)).toMatchObject({ workoutCount: 0, revision: 4 });
+        expect(result.after.plans.get(destinationPlan.id)).toMatchObject({
+            workoutCount: 1,
+            revision: 6,
+            endLocalDate: '2026-10-02',
+        });
+    });
+
+    it('keeps skipped workouts current and makes deletion history-recoverable before permanent deletion', () => {
+        const scheduled = workout();
+        initial = snapshot([], [scheduled]);
+        const skipped = applyTrainingScheduleMutation(initial, request({
+            kind: 'set-workout-lifecycle', workoutId: scheduled.id, lifecycle: 'skipped',
+        }, [{ scope: 'workout', id: scheduled.id, revision: scheduled.revision }]), NOW_MS);
+        expect(skipped.after.workouts.get(scheduled.id)?.lifecycle).toBe('skipped');
+        expect(skipped.after.state.currentWorkoutCount).toBe(1);
+
+        const deleted = applyTrainingScheduleMutation(skipped.after, {
+            mutationId: 'soft-delete',
+            expectedRevisions: [
+                { scope: 'state', id: 'current', revision: 8 },
+                { scope: 'workout', id: scheduled.id, revision: 3 },
+            ],
+            operation: { kind: 'delete-workout', workoutId: scheduled.id },
+        }, NOW_MS + 1);
+        expect(deleted.after.workouts.get(scheduled.id)).toMatchObject({
+            lifecycle: 'deleted',
+            deletedAtMs: NOW_MS + 1,
+        });
+        expect(deleted.after.state.currentWorkoutCount).toBe(0);
+
+        const permanentlyDeleted = applyTrainingScheduleMutation(deleted.after, {
+            mutationId: 'permanent-delete',
+            expectedRevisions: [
+                { scope: 'state', id: 'current', revision: 9 },
+                { scope: 'workout', id: scheduled.id, revision: 4 },
+            ],
+            operation: {
+                kind: 'permanently-delete-workout',
+                workoutId: scheduled.id,
+                confirmPermanentDeletion: true,
+            },
+        }, NOW_MS + 2);
+        expect(permanentlyDeleted.after.workouts.has(scheduled.id)).toBe(false);
+        expect(permanentlyDeleted.permanentlyDeletedWorkoutIds).toEqual([scheduled.id]);
+    });
+
+    it('records permanent deletion of a plan-bound workout in the plan revision stream', () => {
+        const selectedPlan = plan({ workoutCount: 0 });
+        const deletedWorkout = workout({
+            planId: selectedPlan.id,
+            lifecycle: 'deleted',
+            deletedAtMs: NOW_MS - 1,
+        });
+        initial = snapshot([selectedPlan], [deletedWorkout], selectedPlan.id);
+
+        const permanentlyDeleted = applyTrainingScheduleMutation(initial, request({
+            kind: 'permanently-delete-workout',
+            workoutId: deletedWorkout.id,
+            confirmPermanentDeletion: true,
+        }, [
+            { scope: 'plan', id: selectedPlan.id, revision: selectedPlan.revision },
+            { scope: 'workout', id: deletedWorkout.id, revision: deletedWorkout.revision },
+        ]), NOW_MS);
+
+        expect(permanentlyDeleted.after.workouts.has(deletedWorkout.id)).toBe(false);
+        expect(permanentlyDeleted.affectedPlanIds).toEqual([selectedPlan.id]);
+        expect(permanentlyDeleted.changedWorkoutIds).toEqual([deletedWorkout.id]);
+        expect(permanentlyDeleted.after.plans.get(selectedPlan.id)).toMatchObject({
+            revision: selectedPlan.revision + 1,
+            workoutCount: 0,
+        });
+    });
+
+    it('rejects missing or stale expected revisions', () => {
+        const scheduled = workout();
+        initial = snapshot([], [scheduled]);
+
+        expect(() => applyTrainingScheduleMutation(initial, request({
+            kind: 'update-workout',
+            workoutId: scheduled.id,
+            planId: scheduled.planId,
+            localDate: scheduled.localDate,
+            title: 'Changed',
+            structure: STRUCTURE,
+            confirmPlanRangeExtension: false,
+        }), NOW_MS)).toThrow(expect.objectContaining({ code: 'revision-conflict' }));
+
+        expect(() => applyTrainingScheduleMutation(initial, request({
+            kind: 'update-workout',
+            workoutId: scheduled.id,
+            planId: scheduled.planId,
+            localDate: scheduled.localDate,
+            title: 'Changed',
+            structure: STRUCTURE,
+            confirmPlanRangeExtension: false,
+        }, [{ scope: 'workout', id: scheduled.id, revision: 1 }]), NOW_MS))
+            .toThrow(expect.objectContaining({ code: 'revision-conflict' }));
+    });
+
+    it('enforces the current workout cap without counting soft-deleted workouts', () => {
+        const workouts = Array.from({ length: TRAINING_PLAN_MAX_CURRENT_WORKOUTS }, (_, index) => workout({
+            id: `workout-${index}`,
+        }));
+        initial = snapshot([], workouts);
+
+        expect(() => applyTrainingScheduleMutation(initial, request({
+            kind: 'create-workout',
+            workoutId: 'one-too-many',
+            planId: null,
+            localDate: '2026-09-03',
+            title: 'Too many',
+            structure: STRUCTURE,
+            confirmPlanRangeExtension: false,
+        }), NOW_MS)).toThrow(expect.objectContaining({ code: 'limit-exceeded' }));
+    });
+
+    it('checkpoints bulk shifts even when the next revision is not divisible by twenty', () => {
+        const selectedPlan = plan({ revision: 8, lastCheckpointRevision: 1 });
+        initial = snapshot([selectedPlan]);
+        const result = applyTrainingScheduleMutation(initial, request({
+            kind: 'shift-plan', planId: selectedPlan.id, days: 1,
+        }, [{ scope: 'plan', id: selectedPlan.id, revision: selectedPlan.revision }]), NOW_MS);
+
+        expect(result.after.plans.get(selectedPlan.id)).toMatchObject({
+            revision: 9,
+            lastCheckpointRevision: 9,
+        });
+    });
+
+    it('exposes typed mutation errors for callers without leaking storage details', () => {
+        expect(new TrainingScheduleMutationError('not-found', 'Missing')).toMatchObject({
+            name: 'TrainingScheduleMutationError',
+            code: 'not-found',
+            message: 'Missing',
+        });
+    });
+});

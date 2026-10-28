@@ -20,26 +20,27 @@
 }
 
 .dialog-content {
+  box-sizing: border-box;
   width: 100%;
   min-width: 0;
   max-width: none;
   padding: 0 !important;
   overflow: auto !important;
   overflow-x: hidden !important;
-  scrollbar-gutter: stable;
+  scrollbar-gutter: stable both-edges;
 }
 
 .dialog-body {
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 16px;
   width: 100%;
-  padding: 20px 24px !important;
+  padding: 20px 24px;
 }
 
 .feed-wrapper {
-  width: 100%;
-  padding: 4px; /* Space for hover transform */
+  min-width: 0;
 }
 
 .update-banner {
@@ -74,18 +75,7 @@
 }
 
 @media (max-width: 599.98px) {
-  .dialog-content {
-    min-width: unset;
-    width: 100%;
-  }
-
   .dialog-body {
-    padding: 16px !important;
-  }
-
-  // The notification feed is already inset by the dialog body on small screens.
-  // It does not need the hover-transform buffer used by wider pointer layouts.
-  .feed-wrapper {
-    padding: 0;
+    padding: 16px;
   }
 }

@@ -1,5 +1,5 @@
-import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
-import { AppUserService } from '../../../services/app.user.service';
+import { Component, EventEmitter, Input, OnInit, Output, inject } from '@angular/core';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import { MatSelectionListChange } from '@angular/material/list';
 
@@ -12,9 +12,11 @@ import { MatSelectionListChange } from '@angular/material/list';
   standalone: false
 })
 export class EventTableActionsComponent implements OnInit {
+  private readonly haptics = inject(AppHapticsService);
   @Input() selectedDataTypes: string[];
+  @Input() icon = 'more_vert';
   @Output() selectedDataTypesChange: EventEmitter<string[]> = new EventEmitter<string[]>();
-  dataTypes = [
+  @Input() dataTypes = [
     ...AppUserUtilities.getDefaultSelectedTableColumns().filter(a => a !== 'Start Date'),
   ]
 
@@ -22,7 +24,10 @@ export class EventTableActionsComponent implements OnInit {
   }
 
   selectionChange(event: MatSelectionListChange) {
-    this.selectedDataTypes = event.source.selectedOptions.selected.map(option => option.value);
+    const next = event.source.selectedOptions.selected.map(option => option.value);
+    if (next.length === this.selectedDataTypes.length && next.every((value, index) => value === this.selectedDataTypes[index])) return;
+    this.selectedDataTypes = next;
+    this.haptics.selection();
   }
 
   menuClosed() {

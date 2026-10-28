@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { assertHistoryWrite } from '../connection-history/context';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { RouteDeliverySyncRouteId } from '../../../shared/route-delivery-sync-routes';
@@ -19,6 +20,7 @@ import {
     QUEUE_CLEANUP_TOMBSTONE_REASONS,
 } from '../queue/cleanup-tombstone';
 import { ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME } from './constants';
+import { observeRouteDispatch, recordRouteDispatchFailure } from '../routes/monitoring';
 import {
     parseRouteDeliverySourceLifecycleFence,
     recheckSuuntoRouteDeliverySourceLifecycleInTransaction,
@@ -70,12 +72,14 @@ async function deleteQueueDocAfterDeletionGuard(
             QUEUE_CLEANUP_TOMBSTONE_REASONS.UserDeletionGuard,
         );
         if (!tombstoneWritten) {
+            recordRouteDispatchFailure('delivery', null, 'immediate', 'cleanup');
             logger.error(`[RouteDeliverySync] Failed to write cleanup tombstone for queue item ${queueItemId}; leaving item in place to avoid missing-doc Cloud Task retries.`);
             return;
         }
         await db.recursiveDelete(queueDocRef);
         logger.info(`[RouteDeliverySync] Deleted queue item ${queueItemId} for deleting user ${userID} before Cloud Task dispatch.`);
     } catch (error) {
+        recordRouteDispatchFailure('delivery', null, 'immediate', 'cleanup');
         logger.error(`[RouteDeliverySync] Failed to delete queue item ${queueItemId} after deletion guard tripped for user ${userID}`, error);
     }
 }
@@ -158,6 +162,7 @@ export async function enqueueRouteDeliverySyncQueueItem(
     const queueDocRef = db.collection(ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME).doc(queueItemId);
     const decision = await db.runTransaction(async (transaction): Promise<QueueInsertDecision> => {
         const existingSnapshot = await transaction.get(queueDocRef);
+        await assertHistoryWrite(transaction);
         let deletionGuard;
         try {
             deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
@@ -254,22 +259,22 @@ export async function enqueueRouteDeliverySyncQueueItem(
     });
 
     if (decision.enqueued) {
-        if (!(await canDispatchRouteDeliverySyncQueueItem(db, queueDocRef, queueItemId, userID, 'route_delivery_sync_queue_dispatch_new'))) {
+        if (!(await observeRouteDispatch('delivery', params, 'guard', () => canDispatchRouteDeliverySyncQueueItem(db, queueDocRef, queueItemId, userID, 'route_delivery_sync_queue_dispatch_new')))) {
             return {
                 enqueued: false,
                 queueItemId,
                 reason: 'user_deleted_or_deleting',
             };
         }
-        const wasTaskEnqueued = await enqueueRouteDeliverySyncTask(queueItemId, decision.dateCreated || Date.now());
+        const wasTaskEnqueued = await observeRouteDispatch('delivery', params, 'enqueue', () => enqueueRouteDeliverySyncTask(queueItemId, decision.dateCreated || Date.now()));
         if (wasTaskEnqueued) {
-            const markerResult = await markRouteDeliverySyncQueueItemDispatchedIfUserActive(
+            const markerResult = await observeRouteDispatch('delivery', params, 'marker', () => markRouteDeliverySyncQueueItemDispatchedIfUserActive(
                 queueDocRef,
                 queueItemId,
                 userID,
                 'route_delivery_sync_queue_mark_new_dispatched',
                 decision.dateCreated || 0,
-            );
+            ));
             if (markerResult === QueueDispatchMarkerResult.SkippedDeletedUser) {
                 return {
                     enqueued: false,
@@ -286,22 +291,22 @@ export async function enqueueRouteDeliverySyncQueueItem(
 
     let redispatched = false;
     if (decision.shouldDispatchExisting) {
-        if (!(await canDispatchRouteDeliverySyncQueueItem(db, queueDocRef, queueItemId, userID, 'route_delivery_sync_queue_redispatch_existing'))) {
+        if (!(await observeRouteDispatch('delivery', params, 'guard', () => canDispatchRouteDeliverySyncQueueItem(db, queueDocRef, queueItemId, userID, 'route_delivery_sync_queue_redispatch_existing')))) {
             return {
                 enqueued: false,
                 queueItemId,
                 reason: 'user_deleted_or_deleting',
             };
         }
-        const wasTaskEnqueued = await enqueueRouteDeliverySyncTask(queueItemId, decision.dateCreated || Date.now());
+        const wasTaskEnqueued = await observeRouteDispatch('delivery', params, 'enqueue', () => enqueueRouteDeliverySyncTask(queueItemId, decision.dateCreated || Date.now()));
         if (wasTaskEnqueued) {
-            const markerResult = await markRouteDeliverySyncQueueItemDispatchedIfUserActive(
+            const markerResult = await observeRouteDispatch('delivery', params, 'marker', () => markRouteDeliverySyncQueueItemDispatchedIfUserActive(
                 queueDocRef,
                 queueItemId,
                 userID,
                 'route_delivery_sync_queue_mark_existing_dispatched',
                 decision.dateCreated || 0,
-            );
+            ));
             if (markerResult === QueueDispatchMarkerResult.SkippedDeletedUser) {
                 return {
                     enqueued: false,

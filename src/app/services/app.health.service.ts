@@ -6,6 +6,7 @@ import {
     documentId,
     getCountFromServer,
     getDocs,
+    getDocsFromServer,
     limit,
     orderBy,
     query,
@@ -17,6 +18,9 @@ import { Observable, combineLatest, of } from 'rxjs';
 import { map, shareReplay } from 'rxjs/operators';
 import {
     HEALTH_SYNC_STATE_COLLECTION_ID,
+    HEALTH_METRIC_IDS,
+    HEALTH_PROVIDERS,
+    HEALTH_SOURCE_RECORD_KINDS,
     HEALTH_METRIC_CATALOG,
     HEALTH_SOURCE_RECORDS_COLLECTION_ID,
     HealthRangeQuery,
@@ -34,6 +38,18 @@ import {
 } from '@shared/health-firestore-query';
 import { projectHealthRange, projectLoadedHealthRange } from '@shared/health-query';
 import { AppFunctionsService } from './app.functions.service';
+import type {
+    DeleteManualHealthMeasurementRequest,
+    DeleteManualHealthMeasurementResponse,
+    ManualHealthAccountAssertion,
+    ManualHealthMeasurementFields,
+    SaveManualHealthMeasurementRequest,
+    SaveManualHealthMeasurementResponse,
+} from '@shared/manual-health';
+import { MANUAL_HEALTH_SOURCE_RECORD_TYPE, MANUAL_HEALTH_VALUE_MAXIMUMS } from '@shared/manual-health';
+import { decodeHealthSourceRecordSportsLibData } from '@shared/sports-lib-health-data';
+import { countStaleHeartRateChunks, withDailyHeartRateSummaries } from '../helpers/health-heart-rate-summary.helper';
+import { APP_HEALTH_WORKSPACE_SAMPLE_MAX_DAYS } from '../models/app-user.interface';
 
 export const HEALTH_WORKSPACE_LOAD_LIMITS = Object.freeze({
     sourceRecords: 2_048,
@@ -113,6 +129,77 @@ export class AppHealthService {
         return response.data;
     }
 
+    async saveManualMeasurement(
+        request: SaveManualHealthMeasurementRequest,
+        expectedUserID: string,
+    ): Promise<SaveManualHealthMeasurementResponse> {
+        const response = await this.functions.call<
+            SaveManualHealthMeasurementRequest & ManualHealthAccountAssertion,
+            SaveManualHealthMeasurementResponse
+        >('saveManualHealthMeasurement', { ...request, expectedUserID });
+        return response.data;
+    }
+
+    async deleteManualMeasurement(
+        request: DeleteManualHealthMeasurementRequest,
+        expectedUserID: string,
+    ): Promise<DeleteManualHealthMeasurementResponse> {
+        const response = await this.functions.call<
+            DeleteManualHealthMeasurementRequest & ManualHealthAccountAssertion,
+            DeleteManualHealthMeasurementResponse
+        >('deleteManualHealthMeasurement', { ...request, expectedUserID });
+        return response.data;
+    }
+
+    /** The range projection contains one selected metric; edits need the complete paired reading. */
+    async loadManualBloodPressure(
+        userID: string,
+        sourceRecordId: string,
+        expectedRevisionOrder: number,
+    ): Promise<ManualHealthMeasurementFields> {
+        if (!userID || userID.includes('/') || !/^[a-f0-9]{64}$/.test(sourceRecordId)) {
+            throw new Error('Invalid measurement identity.');
+        }
+        const snapshot = await getDocsFromServer(query(
+            collection(this.firestore, 'users', userID, HEALTH_SOURCE_RECORDS_COLLECTION_ID),
+            where(documentId(), '==', sourceRecordId), limit(1),
+        ));
+        const raw = snapshot.docs[0]?.data() as HealthSourceRecord | undefined;
+        if (!raw || raw.userID !== userID || raw.id !== sourceRecordId
+            || raw.source?.revision?.order !== expectedRevisionOrder
+            || raw.source?.provider !== HEALTH_PROVIDERS.QuantifiedSelf
+            || raw.source?.sourceRecordType !== MANUAL_HEALTH_SOURCE_RECORD_TYPE
+            || raw.kind !== HEALTH_SOURCE_RECORD_KINDS.PointMeasurement
+            || !Array.isArray(raw.sampleChunkIds) || raw.sampleChunkIds.length !== 0) {
+            throw new Error('Measurement changed or is no longer available.');
+        }
+        const record = decodeHealthSourceRecordSportsLibData(raw);
+        const ids = [HEALTH_METRIC_IDS.BloodPressureSystolic, HEALTH_METRIC_IDS.BloodPressureDiastolic, HEALTH_METRIC_IDS.PulseRate] as const;
+        if (record.metrics.length < 2 || record.metrics.length > 3
+            || new Set(record.metrics.map(metric => metric.metricId)).size !== record.metrics.length
+            || record.metrics.some(metric => !(ids as readonly string[]).includes(metric.metricId)
+                || metric.origin !== 'recorded' || metric.recordingMethod !== 'manual' || metric.aggregation !== 'measurement')) {
+            throw new Error('Invalid paired measurement.');
+        }
+        const valueFor = (id: typeof ids[number]): number => {
+            const metric = record.metrics.find(entry => entry.metricId === id);
+            const value = metric?.kind === 'value' ? metric.canonical?.value : undefined;
+            if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0 || value > MANUAL_HEALTH_VALUE_MAXIMUMS[id]) {
+                throw new Error('Invalid paired measurement value.');
+            }
+            return value;
+        };
+        return {
+            metricId: HEALTH_METRIC_IDS.BloodPressureSystolic,
+            canonicalValue: valueFor(HEALTH_METRIC_IDS.BloodPressureSystolic),
+            diastolicValue: valueFor(HEALTH_METRIC_IDS.BloodPressureDiastolic),
+            ...(record.metrics.some(metric => metric.metricId === HEALTH_METRIC_IDS.PulseRate)
+                ? { pulseValue: valueFor(HEALTH_METRIC_IDS.PulseRate) } : {}),
+            observedAtMs: record.startTimeMs,
+            timezoneOffsetSeconds: record.timezoneOffsetSeconds ?? 0,
+        };
+    }
+
     watchSyncStates(userID: string | null | undefined): Observable<HealthSyncState[]> {
         const uid = `${userID || ''}`.trim();
         if (!uid) {
@@ -176,25 +263,37 @@ export class AppHealthService {
             providers: [],
             includeSamples: request.includeSamples,
         };
-        const normalizedQuery = planHealthFirestoreQueries(queryValue).query;
+        const normalizedQuery = planHealthFirestoreQueries(queryValue, {
+            maximumSampleRangeDays: APP_HEALTH_WORKSPACE_SAMPLE_MAX_DAYS,
+        }).query;
         if (!uid) {
             return this.buildWorkspaceLoad([], [], normalizedQuery, true, true, null, null, 0);
         }
 
         const sourcePage = await this.loadSourceRecordPages(uid, normalizedQuery);
+        const dailyHeartRate = request.metricId === HEALTH_METRIC_IDS.HeartRate
+            && !request.includeSamples
+            && Date.parse(normalizedQuery.endDate) - Date.parse(normalizedQuery.startDate) >= 30 * 86_400_000;
+        const sampleDates = dailyHeartRate ? sourcePage.values
+            .filter(record => record.sampleChunkIds.length > 0).map(record => record.calendarDate).sort() : [];
+        // Summaries require a known parent. Avoid reading empty months before
+        // or after that source history, without changing the displayed window.
+        const readQuery = dailyHeartRate ? { ...normalizedQuery, includeSamples: sampleDates.length > 0,
+            startDate: sampleDates[0] || normalizedQuery.startDate,
+            endDate: sampleDates.at(-1) || normalizedQuery.endDate } : normalizedQuery;
         let chunkPage: LoadedCollectionPage<HealthSampleChunk> = {
             values: [],
-            complete: !normalizedQuery.includeSamples,
+            complete: !readQuery.includeSamples,
             cursor: null,
             serializedBytes: sourcePage.serializedBytes,
             limitReached: sourcePage.limitReached,
         };
-        if (normalizedQuery.includeSamples && sourcePage.complete) {
-            chunkPage = await this.loadSampleChunkPages(uid, normalizedQuery, sourcePage.serializedBytes);
+        if (readQuery.includeSamples && sourcePage.complete) {
+            chunkPage = await this.loadSampleChunkPages(uid, readQuery, sourcePage.serializedBytes);
         }
 
         const limitReached = sourcePage.limitReached || chunkPage.limitReached;
-        return this.buildWorkspaceLoad(
+        const loaded = this.buildWorkspaceLoad(
             sourcePage.values,
             chunkPage.values,
             normalizedQuery,
@@ -205,6 +304,22 @@ export class AppHealthService {
             chunkPage.serializedBytes,
             limitReached,
         );
+        if (!dailyHeartRate) return loaded;
+
+        // Reuse the same owner-scoped pages and safety budgets. Old records need
+        // no migration: derived entries exist only in this workspace projection.
+        const summarizedRecords = withDailyHeartRateSummaries(sourcePage.values, chunkPage.values,
+            chunkPage.complete ? null : chunkPage.cursor?.calendarDate ?? normalizedQuery.startDate);
+        const result = projectLoadedHealthRange(summarizedRecords, [], normalizedQuery, {
+            sourceRecordsComplete: sourcePage.complete,
+            samplesComplete: chunkPage.complete,
+            sourceRecordCursor: sourcePage.cursor,
+            chunkCursor: chunkPage.cursor,
+        });
+        result.pageInfo.sampleRevisionMismatchCount = countStaleHeartRateChunks(sourcePage.values, chunkPage.values);
+        result.pageInfo.sampleAggregateComplete = chunkPage.complete && result.pageInfo.sampleRevisionMismatchCount === 0;
+        return { ...loaded, result, sampleChunkCount: chunkPage.values.length,
+            samplePointCount: chunkPage.values.reduce((count, chunk) => count + chunk.offsetMs.length, 0) };
     }
 
     private watchCollection<T>(userID: string, plan: HealthFirestoreQueryPlan): Observable<T[]> {
@@ -236,7 +351,9 @@ export class AppHealthService {
         let cursor: HealthQueryCursor | null = null;
         let serializedBytes = 0;
         while (true) {
-            const plan = planHealthFirestoreQueries({ ...queryValue, sourceRecordCursor: cursor }).sourceRecords;
+            const plan = planHealthFirestoreQueries({ ...queryValue, sourceRecordCursor: cursor }, {
+                maximumSampleRangeDays: APP_HEALTH_WORKSPACE_SAMPLE_MAX_DAYS,
+            }).sourceRecords;
             const snapshot = await getDocs(this.buildCollectionQuery(userID, plan));
             const page = snapshot.docs.slice(0, plan.fetchLimit - 1);
             for (const documentSnapshot of page) {
@@ -270,8 +387,15 @@ export class AppHealthService {
         let cursor: HealthQueryCursor | null = null;
         let serializedBytes = initialSerializedBytes;
         let samplePoints = 0;
+        let windowStart = queryValue.startDate;
         while (true) {
-            const plan = planHealthFirestoreQueries({ ...queryValue, chunkCursor: cursor }).chunks;
+            // The shared sample-query contract remains at 31 days. App sample
+            // views and long-range HR summaries walk those windows with one
+            // cumulative load budget.
+            const windowEnd = new Date(Math.min(Date.parse(queryValue.endDate),
+                Date.parse(windowStart) + 30 * 86_400_000)).toISOString().slice(0, 10);
+            const plan = planHealthFirestoreQueries({ ...queryValue,
+                startDate: windowStart, endDate: windowEnd, chunkCursor: cursor }).chunks;
             if (!plan) {
                 return { values, complete: true, cursor: null, serializedBytes, limitReached: null };
             }
@@ -296,6 +420,10 @@ export class AppHealthService {
                 cursor = { calendarDate: value.calendarDate, id: value.id };
             }
             if (snapshot.docs.length <= page.length) {
+                if (windowEnd < queryValue.endDate) {
+                    windowStart = new Date(Date.parse(windowEnd) + 86_400_000).toISOString().slice(0, 10);
+                    continue;
+                }
                 return { values, complete: true, cursor: null, serializedBytes, limitReached: null };
             }
             if (!cursor) {
@@ -337,6 +465,7 @@ export class AppHealthService {
             samplesComplete,
             sourceRecordCursor,
             chunkCursor,
+            maximumSampleRangeDays: APP_HEALTH_WORKSPACE_SAMPLE_MAX_DAYS,
         });
         const metricId = result.query.metricIds[0];
         const matchingRecords = metricId

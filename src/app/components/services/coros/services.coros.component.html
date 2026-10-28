@@ -6,6 +6,7 @@
   <app-service-connection-status
     serviceLabel="COROS"
     providerIcon="coros"
+    [proOffer]="proOffer"
     [description]="connectionDescription"
     [connected]="isConnectedToService()"
     [loading]="isLoading"
@@ -81,7 +82,7 @@
     }
     </div>
 
-    <div connection-actions class="tool-actions">
+    <div connection-actions class="tool-actions connection-history-actions">
       @if (isConnectedToService() && hasActiveSyncRoutesUsingService) {
       <div class="active-sync-warning-pill">
         <mat-icon>warning</mat-icon>
@@ -89,6 +90,9 @@
       </div>
       }
       @if (shouldShowConnectAction) {
+      <app-connection-history-option [service]="serviceName" [checked]="importRecentHistory" [range]="importHistoryRange"
+        [disabled]="!user || isLoading || isConnecting || !hasProAccess"
+        (checkedChange)="importRecentHistory = $event" (rangeChange)="importHistoryRange = $event"></app-connection-history-option>
       <button mat-flat-button class="qs-mat-primary"
         [disabled]="!user || isLoading || isConnecting" (click)="connectWithService($event)">
         @if (isConnecting) {
@@ -107,6 +111,9 @@
 
     </div>
   </app-service-connection-status>
+  <app-connection-history-status [service]="serviceName" [status]="serviceMeta?.connectionHistoryImport || null"
+    [disabled]="!hasProAccess || isConnecting || isDisconnecting"
+    (reconnect)="reconnectRequested = true"></app-connection-history-status>
   }
 
   @if (showAdvancedTools) {
@@ -197,7 +204,7 @@
         <div class="tool-subsection-header">
           <div class="tool-subsection-title">
             <mat-icon>cloud_upload</mat-icon>
-            <span>Upload FIT Activity</span>
+            <span>Send activities</span>
           </div>
           @if (corosServiceMeta && corosServiceMeta.uploadedActivitiesCount && corosServiceMeta.uploadedActivitiesCount > 0) {
           <span class="tool-subsection-meta">{{ corosServiceMeta.uploadedActivitiesCount }} uploaded</span>
@@ -213,8 +220,7 @@
           Reconnect COROS before uploading activities.
         </app-status-info>
         } @else if (isConnectedToService()) {
-        <app-upload-activity-to-service [user]="user" [hasProAccess]="hasProAccess"
-          [serviceName]="serviceName"></app-upload-activity-to-service>
+        <a mat-stroked-button routerLink="/send-activities/coros" appHapticTap>Open activity sending workspace</a>
         } @else {
         <app-status-info type="info" title="Connect Account First">
           You need to connect your COROS account before uploading activities.
@@ -306,65 +312,11 @@
           Connect COROS and Suunto before syncing activities.
         </app-status-info>
         } @else {
-        <mat-slide-toggle [checked]="isCorosToSuuntoRouteEnabled" [disabled]="isSavingSyncRoute || isBackfillingSync"
+        <mat-slide-toggle [checked]="isCorosToSuuntoRouteEnabled" [disabled]="isSavingSyncRoute"
           (change)="onCorosToSuuntoRouteToggle($event.checked)">
           Automatically send new COROS activities to Suunto
         </mat-slide-toggle>
 
-        <mat-divider class="tool-divider"></mat-divider>
-
-        <div class="tool-section-title">Sync past activities</div>
-        <app-status-info type="info" title="Choose which activities to send">
-          Choose a date range to send COROS activities already in Quantified Self to Suunto. You can do this even
-          when automatic activity sync is off.
-        </app-status-info>
-        <div class="date-fields">
-          <mat-form-field appearance="outline">
-            <mat-label>From</mat-label>
-            <input matInput [matDatepicker]="syncStartDatePicker" [max]="backfillEndDate" [(ngModel)]="backfillStartDate"
-              [ngModelOptions]="{standalone: true}" (click)="syncStartDatePicker.open()">
-            <mat-datepicker-toggle matSuffix [for]="syncStartDatePicker"></mat-datepicker-toggle>
-            <mat-datepicker #syncStartDatePicker></mat-datepicker>
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>To</mat-label>
-            <input matInput [matDatepicker]="syncEndDatePicker" [min]="backfillStartDate" [(ngModel)]="backfillEndDate"
-              [ngModelOptions]="{standalone: true}" (click)="syncEndDatePicker.open()">
-            <mat-datepicker-toggle matSuffix [for]="syncEndDatePicker"></mat-datepicker-toggle>
-            <mat-datepicker #syncEndDatePicker></mat-datepicker>
-          </mat-form-field>
-        </div>
-
-        <button mat-flat-button class="qs-mat-primary service-tool-primary-action"
-          [disabled]="isBackfillingSync || isBackfillDateRangeInvalid"
-          (click)="runCorosToSuuntoBackfill($event)">
-          @if (isBackfillingSync) {
-          <span class="service-action-content">
-            <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
-            Scheduling activities…
-          </span>
-          } @else {
-          <span class="service-action-content">
-            Schedule activities
-          </span>
-          }
-        </button>
-
-        @if (backfillSummary) {
-        <app-status-info type="success" title="Activity sync started">
-          <div>Found: {{ backfillSummary.scanned }} | Scheduled: {{ backfillSummary.queued }}</div>
-          @if (backfillSummary.failedCount > 0) {
-          <div>Could not schedule: {{ backfillSummary.failedCount }}</div>
-          @if (backfillSummary.failedEvents?.length) {
-          <ul class="backfill-summary-list">
-            <li *ngFor="let failedEvent of backfillSummary.failedEvents">
-              <code>{{ failedEvent.eventID }}</code>: {{ failedEvent.message }}
-            </li>
-          </ul>
-          }
-          }
-        </app-status-info>
-        }
         }
         }
 

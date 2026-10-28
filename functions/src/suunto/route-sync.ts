@@ -6,10 +6,12 @@ import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { createHash } from 'node:crypto';
 
 import { verifySuuntoWebhookSignature } from './webhook-signature';
 import { isProviderQueueSkippedWithoutRetryError } from '../queue/provider-queue-errors';
-import { enqueueRouteSyncQueueItem } from '../routes/route-sync-queue';
+import { buildRouteSyncQueueItemId, enqueueRouteSyncQueueItem } from '../routes/route-sync-queue';
+import { UserDeletionGuardReadError } from '../shared/user-deletion-guard';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { SuuntoRouteImportStateEntry } from '../../../shared/suunto-route-import-state';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck, hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
@@ -50,6 +52,11 @@ function asString(value: unknown): string | null {
 
 function asNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function logRouteQueueResult(notificationId: string, queueItemId: string, outcome: string): void {
+  // Diagnostics must not turn a durable enqueue into an HTTP retry.
+  try { logger.info('[SuuntoRouteWebhook] Queue result', { notificationId, queueItemId, outcome }); } catch { /* best effort */ }
 }
 
 function getRequestHeader(req: functions.https.Request, headerName: string): string | null {
@@ -142,19 +149,27 @@ export const insertSuuntoAppRouteToQueue = functions.region('europe-west2').runW
     return;
   }
 
+  // Stable across redelivery; never log provider identities, route metadata or payloads.
+  const notificationId = createHash('sha256')
+    .update(JSON.stringify(['suunto-route', userName, routeId, routeModifiedAt]))
+    .digest('hex');
+  const failedQueueItemIds: string[] = [];
+  let phase = 'binding_lookup';
   try {
     const firebaseUserIDs = await resolveActiveSuuntoWebhookUserIDs(
       admin.firestore(),
       userName,
     );
     if (firebaseUserIDs.length === 0) {
-      logger.info('Skipping Suunto route webhook without an active bound connection.');
+      logger.info('Skipping Suunto route webhook without an active bound connection.', { notificationId });
       res.status(200).send();
       return;
     }
+    phase = 'enqueue';
     const queueResults = await Promise.allSettled(firebaseUserIDs.map(async firebaseUserID => {
+      const queueItemId = await buildRouteSyncQueueItemId(ServiceNames.SuuntoApp, userName, routeId, firebaseUserID);
       try {
-        await enqueueRouteSyncQueueItem({
+        const result = await enqueueRouteSyncQueueItem({
           sourceServiceName: ServiceNames.SuuntoApp,
           providerUserId: userName,
           providerRouteId: routeId,
@@ -164,9 +179,15 @@ export const insertSuuntoAppRouteToQueue = functions.region('europe-west2').runW
           manual: false,
           firebaseUserID,
         });
+        logRouteQueueResult(notificationId, queueItemId, result.reason === 'user_deleted_or_deleting' ? 'skipped'
+          : result.enqueued ? 'enqueued' : result.redispatched ? 'redispatched' : 'already_pending');
         return 'queued' as const;
       } catch (error) {
-        if (isProviderQueueSkippedWithoutRetryError(error)) return 'skipped' as const;
+        if (isProviderQueueSkippedWithoutRetryError(error)) {
+          logRouteQueueResult(notificationId, queueItemId, 'skipped');
+          return 'skipped' as const;
+        }
+        failedQueueItemIds.push(queueItemId);
         throw error;
       }
     }));
@@ -178,6 +199,8 @@ export const insertSuuntoAppRouteToQueue = functions.region('europe-west2').runW
       result => result.status === 'fulfilled' && result.value === 'queued',
     ).length;
     logger.info('Fanned out signed Suunto route webhook.', {
+      notificationId,
+      statusCode: 200,
       notificationType: 'ROUTE_UPDATED',
       queuedConnectionCount,
       skippedConnectionCount: queueResults.length - queuedConnectionCount,
@@ -187,13 +210,21 @@ export const insertSuuntoAppRouteToQueue = functions.region('europe-west2').runW
     if (isProviderQueueSkippedWithoutRetryError(error)) {
       logger.warn('Skipping Suunto route webhook because no local token/user is connected or the user is being deleted.', {
         provider: 'Suunto',
-        reason: (error as { code?: string }).code,
-        routeId,
+        notificationId,
       });
       res.status(200).send();
       return;
     }
-    logger.error(error);
+    const cause = error instanceof UserDeletionGuardReadError ? error.originalError : error;
+    const code = asRecord(cause).code;
+    logger.error('[SuuntoRouteWebhook] Notification failed', {
+      notificationId,
+      phase,
+      failedQueueItemIds,
+      statusCode: 500,
+      // gRPC codes only. Messages, stacks and arbitrary provider codes may contain private data.
+      errorCode: typeof code === 'number' && Number.isInteger(code) && code >= 0 && code <= 16 ? code : 'unknown',
+    });
     res.status(500).send();
   }
 });

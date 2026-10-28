@@ -1,3 +1,5 @@
+import { assertHistoryWrite, currentHistoryExecution } from '../connection-history/context';
+import { type HistoryExecution, assertHistoryReservation } from '../connection-history/execution';
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as crypto from 'crypto';
@@ -5,6 +7,7 @@ import * as logger from 'firebase-functions/logger';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { ServiceNames, WahooAPIAuth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
+import type { ConnectionHistoryStatusProjection } from '../../../shared/connection-history';
 import { getNextAllowedHistoryImportDate, HistoryImportResult } from '../history';
 import { isServiceDisconnectPendingForUser } from '../service-disconnect-pending';
 import {
@@ -43,6 +46,7 @@ const HISTORY_LEASE_MS = 15 * 60 * 1000;
 interface HistoryToQueueRequest {
   startDate: string;
   endDate: string;
+  background?: boolean;
 }
 
 interface WahooWorkoutsResponse {
@@ -55,6 +59,7 @@ interface WahooWorkoutsResponse {
 export interface WahooHistoryImportResult extends HistoryImportResult {
   skippedCount: number;
   pagesFetched: number;
+  nextPage?: number;
 }
 
 export function toWahooHistoryCallableError(error: unknown): HttpsError | null {
@@ -119,11 +124,12 @@ export function selectWahooHistoryPage(
   return { items, skippedCount, reachedStart };
 }
 
-async function acquireHistoryLease(userID: string, leaseOwner: string): Promise<void> {
+async function acquireHistoryLease(userID: string, leaseOwner: string, execution?: HistoryExecution): Promise<void> {
   const db = admin.firestore();
   const metaRef = db.collection('users').doc(userID).collection('meta').doc(SERVICE_NAME);
   const now = Date.now();
   await db.runTransaction(async (transaction) => {
+    await assertHistoryWrite(transaction);
     let deletionGuard;
     try {
       deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID, now);
@@ -134,6 +140,8 @@ async function acquireHistoryLease(userID: string, leaseOwner: string): Promise<
       throw new HttpsError('failed-precondition', 'Account deletion is in progress.');
     }
     const meta = await transaction.get(metaRef);
+    await execution?.inTransaction(transaction);
+    assertHistoryReservation(meta.data(), execution?.runId);
     const currentOwner = `${meta.data()?.historyImportLeaseOwner || ''}`;
     const currentExpiry = Number(meta.data()?.historyImportLeaseExpiresAt || 0);
     if (currentOwner && currentOwner !== leaseOwner && currentExpiry > now) {
@@ -158,6 +166,7 @@ export async function finishWahooHistoryLease(
   const db = admin.firestore();
   const metaRef = db.collection('users').doc(userID).collection('meta').doc(SERVICE_NAME);
   await db.runTransaction(async (transaction) => {
+    await assertHistoryWrite(transaction);
     let deletionGuard;
     try {
       deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
@@ -185,7 +194,10 @@ export async function finishWahooHistoryLease(
       historyImportLeaseExpiresAt: FieldValue.delete(),
     };
     if (completed && accountIsCurrent) {
-      update.didLastHistoryImport = Date.now();
+      if (!currentHistoryExecution()) {
+        update.connectionHistoryReservation = FieldValue.delete(); update.connectionHistoryReservationExpiresAt = FieldValue.delete();
+      }
+      update.didLastHistoryImport = currentHistoryExecution()?.cooldownStartedAtMs ?? Date.now();
       update.lastHistoryImportStartDate = startDate.getTime();
       update.lastHistoryImportEndDate = endDate.getTime();
       update.processedActivitiesFromLastHistoryImportCount = processedCount;
@@ -198,12 +210,13 @@ export async function importWahooHistory(
   userID: string,
   startDate: Date,
   endDate: Date,
+  options: { execution?: HistoryExecution; page?: number; singlePage?: boolean; processedCountOffset?: number } = {},
 ): Promise<WahooHistoryImportResult> {
   if (await isServiceDisconnectPendingForUser(userID, SERVICE_NAME)) {
     throw new HttpsError('failed-precondition', 'Wahoo disconnect is pending.');
   }
   const leaseOwner = crypto.randomUUID();
-  await acquireHistoryLease(userID, leaseOwner);
+  await acquireHistoryLease(userID, leaseOwner, options.execution);
   const stats: WahooHistoryImportResult = {
     successCount: 0,
     failureCount: 0,
@@ -218,11 +231,12 @@ export async function importWahooHistory(
     const initialTokenSnapshot = await getActiveWahooTokenSnapshot(userID);
     const providerUserId = initialTokenSnapshot.id;
     {
-      let page = 1;
+      let page = options.page ?? 1;
       let reachedStart = false;
       while (!reachedStart) {
         // Wahoo rotates refresh tokens and limits unrevoked tokens. Re-read and refresh
         // immediately before the API request so this call always uses the newest token.
+        await options.execution?.beforeRequest();
         const currentTokenSnapshot = await getActiveWahooTokenSnapshot(userID, providerUserId);
         const token = await getTokenData(currentTokenSnapshot, ServiceNames.WahooAPI, false) as WahooAPIAuth2ServiceTokenInterface;
         if (normalizeWahooUserID(token.wahooUserID) !== providerUserId) {
@@ -254,6 +268,7 @@ export async function importWahooHistory(
         await assertWahooActiveAccountGuardCurrent(userID, pageAccountGuard);
         stats.pagesFetched++;
         const workouts = Array.isArray(response.workouts) ? response.workouts : [];
+        if (options.execution && workouts.length > PAGE_SIZE) throw new Error('Wahoo returned more workouts than the requested page limit.');
         const selectedPage = selectWahooHistoryPage(token.wahooUserID, workouts, startDate, endDate);
         stats.skippedCount += selectedPage.skippedCount;
         reachedStart = selectedPage.reachedStart;
@@ -265,13 +280,16 @@ export async function importWahooHistory(
               id,
               firebaseUserID: userID,
               fromHistory: true,
+              ...(options.execution ? { connectionHistoryRunId: options.execution.runId } : {}),
             }, 'deferred', async transaction => {
+              await options.execution?.inTransaction(transaction);
               await assertWahooActiveAccountGuardCurrentInTransaction(
                 transaction,
                 userID,
                 pageAccountGuard,
               );
             });
+            options.execution?.onQueued(`wahooAPIWorkoutQueue/${id}`);
             if (queued.queued) stats.successCount++;
             else stats.skippedCount++;
           } catch (error) {
@@ -279,6 +297,7 @@ export async function importWahooHistory(
             // page-level check. Do not reduce that lifecycle fence to an
             // ordinary per-item failure and continue through the old page.
             await assertWahooActiveAccountGuardCurrent(userID, pageAccountGuard);
+            if (options.execution) throw error;
             stats.failureCount++;
             logger.error('Could not queue a Wahoo history item', {
               userID,
@@ -290,8 +309,9 @@ export async function importWahooHistory(
         stats.processedBatches++;
         const total = Number(response.total || 0);
         const isLastPage = workouts.length < PAGE_SIZE || (total > 0 && page * PAGE_SIZE >= total);
-        if (isLastPage) break;
+        if (isLastPage || reachedStart) break;
         page++;
+        if (options.singlePage) { stats.nextPage = page; break; }
       }
     }
     completed = true;
@@ -302,7 +322,7 @@ export async function importWahooHistory(
       leaseOwner,
       startDate,
       endDate,
-      stats.successCount,
+      stats.successCount + (options.processedCountOffset || 0),
       completed,
       historyAccountGuard,
     );
@@ -316,17 +336,25 @@ export const addWahooAPIHistoryToQueue = onCall({
   memory: '512MiB',
   timeoutSeconds: 540,
   maxInstances: 10,
-}, async (request): Promise<{ result: string; stats: WahooHistoryImportResult }> => {
+}, async (request): Promise<{ result: string; stats?: WahooHistoryImportResult; historyImport?: ConnectionHistoryStatusProjection }> => {
   enforceAppCheck(request);
   if (!request.auth) throw new HttpsError('unauthenticated', 'User must be authenticated.');
   if (!(await hasProAccess(request.auth.uid))) throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
-  const { startDate: startValue, endDate: endValue } = request.data as HistoryToQueueRequest;
+  const { startDate: startValue, endDate: endValue, background } = (request.data || {}) as HistoryToQueueRequest;
+  if (background !== undefined && typeof background !== 'boolean') {
+    throw new HttpsError('invalid-argument', 'Invalid background option.');
+  }
   const startDate = new Date(startValue);
   const endDate = new Date(endValue);
   if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime())) {
     throw new HttpsError('invalid-argument', 'No valid start and/or end date was provided.');
   }
   if (startDate > endDate) throw new HttpsError('invalid-argument', 'Start date is after the end date.');
+  if (background === true) {
+    const { startManualActivityHistory } = await import('../connection-history/manual-activity');
+    const historyImport = await startManualActivityHistory(request.auth.uid, SERVICE_NAME, startDate, endDate);
+    return { result: 'History import accepted', historyImport };
+  }
   const nextAllowedDate = await getNextAllowedHistoryImportDate(request.auth.uid, SERVICE_NAME);
   if (nextAllowedDate && nextAllowedDate > new Date()) {
     throw new HttpsError('permission-denied', `History import is not allowed until ${nextAllowedDate.toISOString()}`);

@@ -1,5 +1,5 @@
 <app-loading-overlay [isLoading]="isLoading" [hasError]="showNoDataError" [allowErrorPassthrough]="true" [errorMessage]="noDataErrorMessage"
   [errorHint]="noDataErrorHint" [errorIcon]="noDataErrorIcon" [showSkeleton]="false" height="100%"
   [style.height.%]="100">
-  <div #chartDiv [style.min-width.%]="100" [style.min-height.%]="100"></div>
+  <div #chartDiv data-dashboard-chart-canvas [style.min-width.%]="100" [style.min-height.%]="100"></div>
 </app-loading-overlay>

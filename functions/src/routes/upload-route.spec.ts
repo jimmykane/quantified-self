@@ -422,7 +422,10 @@ describe('uploadRoute', () => {
         gpx: expect.objectContaining({ importTimedTracksAsRoutes: true }),
       }),
     );
-    expect(hoisted.mockStorageSave).toHaveBeenCalledWith(rawBody);
+    expect(hoisted.mockStorageSave).toHaveBeenCalledWith(rawBody, {
+      validation: 'crc32c',
+      metadata: { crc32c: expect.any(String) },
+    });
 
     const routeSetCall = transactionSetCallForPath(`users/user-1/routes/${expectedRouteID}`);
     expect(routeSetCall?.[1]).toMatchObject({
@@ -514,7 +517,10 @@ describe('uploadRoute', () => {
         gpx: expect.objectContaining({ importTimedTracksAsRoutes: true }),
       }),
     );
-    expect(hoisted.mockStorageSave).toHaveBeenCalledWith(compressedPayload);
+    expect(hoisted.mockStorageSave).toHaveBeenCalledWith(compressedPayload, {
+      validation: 'crc32c',
+      metadata: { crc32c: expect.any(String) },
+    });
     expect(transactionSetCallForPath(`users/user-1/routes/${expectedRouteID}`)?.[1]).toMatchObject({
       originalFile: {
         path: expect.stringMatching(originalUploadPathPattern(expectedRouteID, 'gpx.gz')),
@@ -571,7 +577,10 @@ describe('uploadRoute', () => {
       duplicate: false,
     }));
     expect(hoisted.mockSportsLib.importRoutesFromGPX).toHaveBeenCalled();
-    expect(hoisted.mockStorageSave).toHaveBeenCalledWith(compressedPayload);
+    expect(hoisted.mockStorageSave).toHaveBeenCalledWith(compressedPayload, {
+      validation: 'crc32c',
+      metadata: { crc32c: expect.any(String) },
+    });
     expect(hoisted.mockRunTransaction).toHaveBeenCalled();
   });
 
@@ -639,7 +648,10 @@ describe('uploadRoute', () => {
 
     await invokeUploadRoute(makeRequest({ rawBody }), response);
 
-    expect(hoisted.mockStorageSave).toHaveBeenCalledWith(rawBody);
+    expect(hoisted.mockStorageSave).toHaveBeenCalledWith(rawBody, {
+      validation: 'crc32c',
+      metadata: { crc32c: expect.any(String) },
+    });
     expect(hoisted.mockStorageDelete).toHaveBeenCalledWith({ ignoreNotFound: true });
     expect(transactionSetCallForPath(`users/user-1/routes/${expectedRouteID}`)).toBeUndefined();
     expect(transactionSetCallForPath(`users/user-1/routes/${expectedRouteID}/metaData/processing`)).toBeUndefined();

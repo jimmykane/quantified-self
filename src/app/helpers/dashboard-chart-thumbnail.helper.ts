@@ -1,0 +1,222 @@
+import { buildActivityCalendarViewModel } from './activity-calendar.helper';
+import { DASHBOARD_CATEGORY_PALETTE as PALETTE, DASHBOARD_SLEEP_STAGE_SERIES } from './dashboard-chart-series.helper';
+import { resolveActivityTypeColor } from '../services/color/app.activity-type-group.colors';
+import { resolveEventSeriesColor } from './event-echarts-style.helper';
+import { buildDashboardPieChartData } from './dashboard-pie-chart-data.helper';
+import { buildDashboardDateActivitySegmentation } from './dashboard-date-activity-segmentation.helper';
+import { filterDashboardDerivedWeeklyRange, normalizeDashboardDerivedChartRange } from './dashboard-derived-chart-range.helper';
+import { ActivityTypesHelper, ChartDataCategoryTypes, ChartDataValueTypes, ChartTypes, DataStartPosition, TileTypes, TimeIntervals } from '@sports-alliance/sports-lib';
+import type { EChartsOption, LineSeriesOption, SeriesOption } from 'echarts';
+import type { DashboardChartPreview } from './dashboard-chart-preview.helper';
+import type { DashboardChartTileViewModel, DashboardMapTileViewModel } from './dashboard-tile-view-model.helper';
+import { buildDashboardFormRenderPoints, extendDashboardFormPointsWithZeroLoadUntil, type DashboardFormPoint } from './dashboard-form.helper';
+import { resolveDashboardKpiSparklineStyle, resolveDashboardKpiTrend, usesDashboardKpiHistoryColumns } from './dashboard-kpi-sparkline.helper';
+import { buildMetricHistoryChartOption } from './metric-history-chart.helper';
+import { buildDashboardCartesianPoints } from './dashboard-echarts-cartesian.helper';
+import { buildOfficialEChartsThemeTokens } from './echarts-theme.helper';
+import { buildRoutePreviewMapTracks } from './route-preview-map.helper';
+import { resolveActiveRecoveryTotalSeconds, resolveRemainingRecoverySeconds } from './dashboard-recovery-now.helper';
+import { buildHealthMetricEChartsOption } from './health-metric-chart.helper';
+import { buildDashboardEChartsStyleTokens } from './dashboard-echarts-style.helper';
+import { AppColors } from '../services/color/app.colors';
+import * as C from './dashboard-special-chart-types';
+
+type Point = [number, number | null];
+const MAX_POINTS = 48;
+
+function sample<T>(points: readonly T[]): T[] {
+  if (points.length <= MAX_POINTS) return [...points];
+  return Array.from({ length: MAX_POINTS }, (_, index) => points[Math.round(index * (points.length - 1) / (MAX_POINTS - 1))]);
+}
+
+function line(points: Point[], color: string, area = false, dashed = false): LineSeriesOption {
+  return {
+    type: 'line', data: sample(points), showSymbol: points.length === 1, symbolSize: 3,
+    silent: true, animation: false, connectNulls: false, emphasis: { disabled: true },
+    lineStyle: { width: 1.3, color, type: dashed ? 'dashed' : 'solid' }, itemStyle: { color },
+    ...(area ? { areaStyle: { color, opacity: .1 } } : {}),
+  };
+}
+
+/** Decorative chart shapes only: no axes, numeric labels, tooltips, data reads or interactions.
+ * Values and units remain in the full preview's existing canonical chart renderers. */
+export function buildDashboardChartThumbnailOption(preview: DashboardChartPreview, darkTheme: boolean): EChartsOption {
+  const theme = buildOfficialEChartsThemeTokens(darkTheme);
+  const base: EChartsOption = {
+    animation: false, backgroundColor: 'transparent', color: PALETTE, aria: { enabled: false },
+    tooltip: { show: false, triggerOn: 'none' }, legend: { show: false },
+    grid: { left: 2, right: 2, top: 3, bottom: 3, containLabel: false },
+    xAxis: { type: 'value', show: false, min: 'dataMin', max: 'dataMax' },
+    yAxis: { type: 'value', show: false, scale: true },
+  };
+  const cartesian = (series: SeriesOption[]): EChartsOption => ({ ...base, series });
+  const bars = (values: (number | null)[][], colors: string[] = PALETTE, stacked = false): EChartsOption => ({
+    ...base, xAxis: { type: 'category', show: false, data: values[0]?.map((_, index) => index) || [] },
+    yAxis: { type: 'value', show: false, min: 0 },
+    series: values.map((data, index) => ({ type: 'bar', data, barMaxWidth: 8, stack: stacked ? 'total' : undefined,
+      silent: true, animation: false, itemStyle: { color: colors[index % colors.length] }, emphasis: { disabled: true } })),
+  });
+  const pie = (values: number[], colors: string[] = PALETTE): EChartsOption => ({ ...base, series: [{ type: 'pie', radius: ['38%', '90%'],
+    data: values.map((value, index) => ({ value, itemStyle: { color: colors[index % colors.length] } })), label: { show: false }, labelLine: { show: false },
+    silent: true, animation: false, emphasis: { disabled: true } }] });
+
+  if (preview.tile.type === TileTypes.Map) {
+    const map = preview.tile as DashboardMapTileViewModel;
+    if (map.mapSource === 'routes') {
+      return cartesian(buildRoutePreviewMapTracks(map.routePreviews.slice(0, 1)).slice(0, 3)
+        .map(track => line(track.positions.map(point => [point.longitudeDegrees, point.latitudeDegrees]), track.strokeColor)));
+    }
+    const points = sample(map.events).flatMap(event => {
+      const stat = event.getStat(DataStartPosition.type);
+      const position = (stat ? stat.getValue() : undefined) as { longitudeDegrees?: number; latitudeDegrees?: number } | undefined;
+      return Number.isFinite(position?.longitudeDegrees) && Number.isFinite(position?.latitudeDegrees)
+        ? [[position!.longitudeDegrees, position!.latitudeDegrees]] : [];
+    });
+    return cartesian([{ type: 'scatter', data: points, symbolSize: 5, silent: true,
+      itemStyle: { color: AppColors.Blue, opacity: .75 }, emphasis: { disabled: true } }]);
+  }
+
+  const tile = preview.tile as DashboardChartTileViewModel;
+  const type = `${tile.chartType}`;
+  if (type === C.DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE) {
+    const anchor = new Date(preview.anchorMs);
+    const month = buildActivityCalendarViewModel(preview.calendarEvents, {
+      view: 'month', anchorDate: anchor, now: anchor, startOfWeek: preview.startOfWeek,
+    }).months[0];
+    return { ...base, xAxis: { type: 'value', show: false, min: -.5, max: 6.5 },
+      yAxis: { type: 'value', show: false, min: -.5, max: month.days.length / 7 - .5, inverse: true },
+      series: [{ type: 'scatter', symbolSize: [5, 4], silent: true, emphasis: { disabled: true },
+        data: month.days.map((day, index) => ({ value: [index % 7, Math.floor(index / 7)],
+          symbol: day.eventCount ? 'circle' : 'rect', itemStyle: { color: day.families[0]?.color || theme.splitLineColor } })) }] };
+  }
+  if (type === C.DASHBOARD_RECOVERY_NOW_CHART_TYPE) {
+    const total = resolveActiveRecoveryTotalSeconds(tile.recoveryNow) ?? 0;
+    const left = resolveRemainingRecoverySeconds(tile.recoveryNow) ?? 0;
+    return pie(total > 0 ? [left, Math.max(0, total - left)] : [0, 1], [AppColors.Green, AppColors.DarkGray]);
+  }
+  if (type === C.DASHBOARD_FORM_CHART_TYPE) {
+    const window = tile.displaySettings?.formTimelineWindow || 'w';
+    const all = buildDashboardFormRenderPoints(extendDashboardFormPointsWithZeroLoadUntil(tile.data as DashboardFormPoint[], preview.anchorMs),
+      window === 'y' ? TimeIntervals.Monthly : window === 'm' ? TimeIntervals.Weekly : TimeIntervals.Daily);
+    const end = all.at(-1)?.time ?? 0;
+    const points = all.filter(point => window === 'y' || point.time >= end - (window === 'm' ? 365 : 84) * 86400000);
+    return { ...base,
+      grid: [{ left: 2, right: 2, top: 2, height: '55%' }, { left: 2, right: 2, top: '67%', bottom: 2 }],
+      xAxis: [0, 1].map(gridIndex => ({ type: 'value', show: false, gridIndex, min: 'dataMin', max: 'dataMax' })),
+      yAxis: [0, 1].map(gridIndex => ({ type: 'value', show: false, gridIndex, scale: true })),
+      series: [line(points.map(point => [point.time, point.ctl]), theme.trendLineColor),
+        line(points.map(point => [point.time, point.atl]), AppColors.Red),
+        { ...line(points.map(point => [point.time, point.formSameDay]), theme.textSecondary), xAxisIndex: 1, yAxisIndex: 1 }],
+    };
+  }
+  if (type === C.DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE) {
+    const points = tile.freshnessForecast?.points || [];
+    return cartesian([line(points.map(point => [point.dayMs, point.ctl]), theme.trendLineColor),
+      line(points.map(point => [point.dayMs, point.atl]), '#e91e63'),
+      line(points.map(point => [point.dayMs, point.isForecast ? null : point.formSameDay ?? point.formPriorDay]), '#4caf50'),
+      line(points.map(point => [point.dayMs, point.isForecast ? point.formSameDay ?? point.formPriorDay : null]), '#4caf50', false, true)]);
+  }
+  if (type === C.DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE) {
+    const weeks = sample(filterDashboardDerivedWeeklyRange(tile.intensityDistribution?.weeks || [], normalizeDashboardDerivedChartRange(tile.displaySettings?.derivedChartRange)));
+    return bars([weeks.map(week => week.easySeconds), weeks.map(week => week.moderateSeconds), weeks.map(week => week.hardSeconds)],
+      ['#43a047', '#fb8c00', '#e53935'], true);
+  }
+  if (type === C.DASHBOARD_POWER_CURVE_CHART_TYPE) {
+    const powerSeries = (tile.powerCurve?.series || []).filter(series => series.points?.length);
+    return { ...cartesian(powerSeries.map((series, index) =>
+      line(series.points.filter(point => Number.isFinite(point.power) && point.duration > 0).map(point => [point.duration, point.power]),
+        resolveEventSeriesColor('Power', index, Math.max(1, powerSeries.length))))),
+      xAxis: { type: 'log', show: false, min: 'dataMin', max: 'dataMax' } };
+  }
+  if (type === C.DASHBOARD_EFFICIENCY_TREND_CHART_TYPE) {
+    return cartesian([line(filterDashboardDerivedWeeklyRange((tile.efficiencyTrend?.points || []).filter(point => Number.isFinite(point.value)), normalizeDashboardDerivedChartRange(tile.displaySettings?.derivedChartRange)).map(point => [point.weekStartMs, point.value]), theme.trendLineColor)]);
+  }
+  if (type === C.DASHBOARD_HRV_TREND_CHART_TYPE) {
+    const chart = tile.hrvTrend?.charts[0];
+    if (!chart) return cartesian([]);
+    const window = tile.hrvTrend!.window;
+    const option = buildHealthMetricEChartsOption(chart.model, window.startTimeMs, window.endTimeMs,
+      buildDashboardEChartsStyleTokens(darkTheme, 72), false, null, true, chart.statusOverlay) as EChartsOption;
+    return { ...option, ...base, xAxis: { type: 'time', show: false, min: window.startTimeMs, max: window.endTimeMs },
+      series: (option.series as SeriesOption[]).map((series): SeriesOption => series.type === 'line'
+        ? { ...series, silent: true, symbolSize: 2, markPoint: undefined, emphasis: { disabled: true } }
+        : { ...series, silent: true }) };
+
+  }
+  if (type === C.DASHBOARD_SLEEP_TREND_CHART_TYPE) {
+    const points = sample(tile.sleepTrend?.points || []);
+    const stages = [...DASHBOARD_SLEEP_STAGE_SERIES, ...(points.some(point => point.napSeconds > 0)
+      ? [{ key: 'napSeconds' as const, name: 'Nap', color: AppColors.Yellow }] : [])];
+    const option = bars(stages.map(stage => points.map(point => point[stage.key])), stages.map(stage => stage.color), true);
+    const vitals = [
+      { field: 'averageHrvMs', color: AppColors.Green }, { field: 'averageHeartRateBpm', color: AppColors.Blue },
+      { field: 'minimumHeartRateBpm', color: AppColors.Pink }, { field: 'maxSpo2Percent', color: AppColors.Red },
+    ] as const;
+    option.yAxis = [{ type: 'value', show: false, min: 0 }, { type: 'value', show: false, min: 0 }];
+    option.series = [...option.series as SeriesOption[], ...vitals.filter(metric => points.some(point => Number.isFinite(point[metric.field])))
+      .map(metric => ({ ...line(points.map((point, index) => [index, point[metric.field]]), metric.color), yAxisIndex: 1 }))];
+    return option;
+  }
+  if (C.isDashboardKpiChartType(type)) {
+    const style = resolveDashboardKpiSparklineStyle(tile, theme.trendLineColor);
+    if (usesDashboardKpiHistoryColumns(type)) {
+      const historyStyle = buildDashboardEChartsStyleTokens(darkTheme, 72);
+      return {
+        ...buildMetricHistoryChartOption(resolveDashboardKpiTrend(tile), {
+          color: style.lineColor, mutedColor: historyStyle.gridColor, baselineColor: historyStyle.axisColor,
+          silent: true, barMaxWidth: 8,
+        }),
+        tooltip: base.tooltip, legend: base.legend, aria: base.aria,
+      };
+    }
+    const series = line(resolveDashboardKpiTrend(tile).map(point => [point.time, point.value]), style.lineColor);
+    return cartesian([{ ...series, smooth: true, areaStyle: { color: style.areaColor, opacity: style.areaOpacity } }]);
+  }
+
+  const allPoints = buildDashboardCartesianPoints({ data: tile.data, chartDataValueType: tile.dataValueType,
+    chartDataCategoryType: tile.dataCategoryType, chartDataTimeInterval: tile.timeInterval });
+  const points = sample(allPoints);
+  const pointColor = (activityType: Parameters<typeof resolveActivityTypeColor>[0] | null, index: number) =>
+    activityType ? resolveActivityTypeColor(activityType) : PALETTE[index % PALETTE.length];
+  if (tile.chartType === ChartTypes.Pie) {
+    const { slices } = buildDashboardPieChartData({ data: tile.data, chartDataValueType: tile.dataValueType, chartDataCategoryType: tile.dataCategoryType });
+    return pie(slices.map(slice => slice.value), slices.map((slice, index) => tile.dataCategoryType === ChartDataCategoryTypes.ActivityType
+      ? slice.isOther ? AppColors.DarkGray : pointColor(ActivityTypesHelper.resolveActivityType(slice.label), index) : PALETTE[index % PALETTE.length]));
+  }
+  const horizontal = tile.chartType === ChartTypes.ColumnsHorizontal || tile.chartType === ChartTypes.LinesHorizontal;
+  const axes: EChartsOption = {
+    ...base,
+    xAxis: horizontal ? { type: 'value', show: false, min: 0 } : { type: 'category', show: false, data: points.map(point => point.index) },
+    yAxis: horizontal ? { type: 'category', show: false, inverse: true, data: points.map(point => point.index) } : { type: 'value', show: false, min: 0 },
+  };
+  const data = points.map(point => ({ value: point.value, itemStyle: { color: pointColor(point.activityType, point.index) } }));
+  if (tile.chartType === ChartTypes.LinesVertical || tile.chartType === ChartTypes.LinesHorizontal) {
+    return { ...axes, series: [{ ...line([], theme.trendLineColor), data, showSymbol: true, symbolSize: 2, connectNulls: true }] };
+  }
+  const pyramid = tile.chartType === ChartTypes.PyramidsVertical;
+  if (tile.dataCategoryType === ChartDataCategoryTypes.DateType && tile.dataValueType === ChartDataValueTypes.Total) {
+    const segmented = buildDashboardDateActivitySegmentation({ rawData: tile.data, points: allPoints, chartDataValueType: tile.dataValueType });
+    const buckets = sample(segmented.buckets);
+    const colors = segmented.series.map((series, index) => pointColor(series.activityType, index));
+    if (!pyramid) return { ...axes, series: segmented.series.map((series, index) => ({
+      type: 'bar', stack: 'activity', barMaxWidth: 8, silent: true, animation: false, emphasis: { disabled: true },
+      itemStyle: { color: colors[index] },
+      data: buckets.map(bucket => bucket.total == null ? null : bucket.segments.find(segment => segment.activityKey === series.key)?.value ?? 0),
+    })) };
+    // ECharts' triangle symbol uses the same cumulative activity shares as the full segmented pyramids.
+    return { ...axes, series: [{ type: 'pictorialBar', symbol: 'triangle', silent: true, animation: false, emphasis: { disabled: true },
+      data: buckets.map(bucket => {
+        let offset = 0;
+        const colorStops = segmented.series.flatMap((series, index) => {
+          const value = bucket.segments.find(segment => segment.activityKey === series.key)?.value ?? 0;
+          const start = offset;
+          offset = Math.min(1, offset + (bucket.total ? value / bucket.total : 0));
+          return [{ offset: start, color: colors[index] }, { offset, color: colors[index] }];
+        });
+        return { value: bucket.total, itemStyle: { color: { type: 'linear', x: 0, y: 1, x2: 0, y2: 0, colorStops } } };
+      }),
+    }] };
+  }
+  return { ...axes, series: [{ type: pyramid ? 'pictorialBar' : 'bar', ...(pyramid ? { symbol: 'triangle' } : { barMaxWidth: 8 }),
+    data, silent: true, animation: false, emphasis: { disabled: true } }] };
+}

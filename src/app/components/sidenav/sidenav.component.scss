@@ -194,12 +194,26 @@ mat-nav-list {
   width: 100%;
 }
 
-mat-list-item {
+mat-list-item, button[mat-list-item], a[mat-list-item] {
   margin: 2px 0;
   border-radius: 0 !important;
   transition: all 0.2s ease;
   height: 48px !important;
   width: 100%;
+}
+
+[mat-list-item].sidenav-route-link {
+  padding-inline-start: 16px;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+}
+
+// Match the icon spacing of the other route rows.
+.sidenav-route-link mat-icon {
+  margin-inline: 8px 16px;
 }
 
 :host ::ng-deep mat-list-item:not(.theme-toggle-item) .mat-mdc-list-item-unscoped-content {
@@ -223,6 +237,8 @@ mat-list-item:not(.theme-toggle-item):hover {
       color-mix(in srgb, var(--mat-sys-primary) 12%, transparent),
       color-mix(in srgb, var(--mat-sys-primary) 4%, transparent)) !important;
   border-left: 3px solid var(--mat-sys-primary) !important;
+  // Keep the active border inside the same 16px inset as other rows.
+  padding-inline-start: calc(16px - 3px) !important;
 }
 
 /* Ensure active state styles persist on hover */
@@ -236,7 +252,6 @@ mat-list-item.active:hover {
   background: linear-gradient(90deg,
       color-mix(in srgb, var(--mat-sys-primary) 15%, transparent),
       color-mix(in srgb, var(--mat-sys-primary) 5%, transparent)) !important;
-  border-left: 3px solid var(--mat-sys-primary) !important;
 }
 
 :host-context(.dark-theme) mat-list-item.active:hover {
@@ -460,7 +475,8 @@ mat-divider {
   opacity: 1;
 }
 
-.sidenav-footer-links button {
+.sidenav-footer-links button,
+.sidenav-footer-links a[mat-icon-button] {
   width: 40px;
   height: 40px;
   padding: 8px;
@@ -471,16 +487,19 @@ mat-divider {
   transition: opacity 0.2s ease, background-color 0.2s ease;
 }
 
-.sidenav-footer-links button:hover {
+.sidenav-footer-links button:hover,
+.sidenav-footer-links a[mat-icon-button]:hover {
   opacity: 1;
   background-color: var(--mat-sys-surface-container-high, rgba(0, 0, 0, 0.06));
 }
 
-:host-context(.dark-theme) .sidenav-footer-links button:hover {
+:host-context(.dark-theme) .sidenav-footer-links button:hover,
+:host-context(.dark-theme) .sidenav-footer-links a[mat-icon-button]:hover {
   background-color: rgba(255, 255, 255, 0.08);
 }
 
-.sidenav-footer-links button mat-icon {
+.sidenav-footer-links button mat-icon,
+.sidenav-footer-links a[mat-icon-button] mat-icon {
   margin: 0;
   opacity: 1;
   width: 24px;
@@ -504,8 +523,9 @@ mat-divider {
     height: 42px;
   }
 
-  mat-list-item {
+  mat-list-item, button[mat-list-item], a[mat-list-item] {
     margin: 2px 4px;
+    width: calc(100% - 8px);
   }
 }
 

@@ -9,10 +9,12 @@ import {
   OnDestroy,
   SimpleChanges,
   ViewChild,
-  inject
+  effect,
+  inject,
+  signal
 } from '@angular/core';
 import { EventInterface } from '@sports-alliance/sports-lib';
-import { ActivityInterface } from '@sports-alliance/sports-lib';
+import { ActivityInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { DataInterface } from '@sports-alliance/sports-lib';
 import { ActivityUtilities } from '@sports-alliance/sports-lib';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
@@ -30,6 +32,12 @@ import { buildSummaryMetricTabs, SummaryMetricTab } from '../../../helpers/summa
 import { expandStatsTypesForCompositeDiff } from '../../../helpers/header-stats-composite.helper';
 import { AppEventSummaryTabsLocalStorageService } from '../../../services/storage/app.event-summary-tabs.local.storage.service';
 import { hasEventDiveSourceRecords } from '../../../helpers/event-dive-source-records.helper';
+import { buildRRStatSummary, getBenchmarkRRLabels, type RRStatSummary } from '../../../helpers/benchmark-rr.helper';
+import { RR_METRICS, RR_STAT_LABELS } from '../../../constants/rr-metrics';
+import { isBenchmarkEvent } from '@shared/event-classification';
+import { AppHapticsService } from '../../../services/app.haptics.service';
+
+import { getCommonMetricManufacturer } from '@shared/endurance-metrics';
 
 const SUMMARY_TAB_ICONS: Record<EventSummaryMetricGroupId, string> = {
   overall: 'leaderboard',
@@ -38,6 +46,7 @@ const SUMMARY_TAB_ICONS: Record<EventSummaryMetricGroupId, string> = {
   diving: 'scuba_diving',
   environment: 'landscape_2',
   device: 'devices',
+  rr: 'ecg_heart',
   physiological: 'demography',
   other: 'category',
 };
@@ -45,6 +54,8 @@ const SUMMARY_TAB_HEIGHT_WOBBLE_TOLERANCE_PX = 2;
 const STATS_GRID_PERF_LOGS_ENABLED = false;
 const SUMMARY_TAB_SWITCH_ANIMATION_DURATION_MS = 300;
 type TabBodyHeightSyncMode = 'allow_shrink' | 'only_grow';
+let nextRRRegionId = 0;
+interface RRRecording extends RRStatSummary { key: string; label: string; summaryId: string; activity: ActivityInterface; }
 
 @Component({
   selector: 'app-event-card-stats-grid',
@@ -65,7 +76,16 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
 
   public displayedStatsToShow: string[] = [];
   public stats: DataInterface[] = [];
+  public rrRecordings: RRRecording[] = [];
+  readonly activeRRRecording = signal<RRRecording | null>(null);
+  public rrShowDiff = false;
+  public rrDiffByType = new Map<string, { display: string; percent: number; color: string }>();
+  readonly rrStatLabels = RR_STAT_LABELS;
+  readonly rrRegionId = `event-rr-summary-${++nextRRRegionId}`;
   public activityTypes: ActivityTypes[] = [];
+  public get metricManufacturer(): string | undefined {
+    return getCommonMetricManufacturer(this.selectedActivities);
+  }
   public metricTabs: SummaryMetricTab[] = [];
   public selectedTabIndex = 0;
   public tabAnimationDuration = `${SUMMARY_TAB_SWITCH_ANIMATION_DURATION_MS}ms`;
@@ -89,6 +109,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   private cdr = inject(ChangeDetectorRef);
 
   private userSettingsQuery = inject(AppUserSettingsQueryService);
+  private haptics = inject(AppHapticsService);
   private eventColorService = inject(AppEventColorService);
   private logger = inject(LoggerService);
   private eventSummaryTabsLocalStorageService = inject(AppEventSummaryTabsLocalStorageService);
@@ -99,6 +120,10 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
 
   public get summariesSettings() {
     return this.userSettingsQuery.summariesSettings();
+  }
+
+  constructor() {
+    effect(() => this.updateDiffMap(this.unitSettings));
   }
 
   ngAfterViewInit() {
@@ -129,6 +154,9 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   ngOnChanges(simpleChanges: SimpleChanges) {
     const ngChangesStart = this.getPerfStart();
     if (!this.selectedActivities.length) {
+      this.rrRecordings = [];
+      this.activeRRRecording.set(null);
+      this.updateRRDiffMap();
       this.displayedStatsToShow = [];
       this.stats = [];
       this.activityTypes = [];
@@ -146,6 +174,22 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
       }
       return;
     }
+
+    const labels = getBenchmarkRRLabels(this.selectedActivities);
+    const allActivities = this.event.getActivities();
+    this.rrRecordings = this.selectedActivities.flatMap((activity, index) => {
+      const requested = this.statsToShow;
+      const summary = buildRRStatSummary(this.getStatsForActivity(activity).filter(stat => !requested || requested.includes(stat.getType())));
+      if (!summary.stats.length) return [];
+      const eventIndex = allActivities.indexOf(activity);
+      return [{ ...summary,
+        activity,
+        key: `${this.event?.getID?.() ?? 'event'}:${activity.getID?.() || (eventIndex >= 0 ? eventIndex : index)}`,
+        label: `${labels[index]}${this.selectedActivities.length > 1 && activity.type ? ` · ${activity.type}` : ''}`,
+        summaryId: `${this.rrRegionId}-${index}`,
+      }];
+    });
+    this.activeRRRecording.set(this.rrRecordings.find(recording => recording.key === this.activeRRRecording()?.key) ?? this.rrRecordings[0] ?? null);
 
     const statsBuildStart = this.getPerfStart();
     if (this.selectedActivities.length === 1) {
@@ -194,16 +238,19 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   }
 
   public onSelectedTabIndexChange(index: number) {
+    if (!Number.isInteger(index) || index < 0 || index >= this.metricTabs.length) return;
+    const changed = index !== this.selectedTabIndex;
     this.selectedTabIndex = index;
     if (this.isPrewarmingTabs) {
       return;
     }
+    if (changed) this.haptics.selection();
     const selectedTabId = this.metricTabs[index]?.id;
     if (selectedTabId) {
       this.eventSummaryTabsLocalStorageService.setLastSelectedStatsTabId(selectedTabId);
     }
     this.setupTabBodyResizeObserver();
-    this.applyGrowOnlyHeightFromSelectedTab(index);
+    this.applyHeightFromSelectedTab(index);
     this.scheduleTabBodyHeightSyncAfterTabSwitch();
   }
 
@@ -227,25 +274,51 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     return SUMMARY_TAB_ICONS[tabId] || SUMMARY_TAB_ICONS.other;
   }
 
-  private updateDiffMap() {
+  private updateDiffMap(unitSettings = this.unitSettings) {
+    this.updateRRDiffMap(unitSettings);
     const diffStart = this.getPerfStart();
     this.showDiff = !!this.event?.isMerge && this.selectedActivities.length === 2;
-    if (!this.showDiff || !this.unitSettings) {
+    if (!this.showDiff || !unitSettings) {
       this.diffByType = new Map();
       if (STATS_GRID_PERF_LOGS_ENABLED) {
         this.logPerf('update_diff_map', diffStart, { showDiff: false });
       }
       return;
     }
-    this.diffByType = this.buildDiffMap();
+    this.diffByType = this.buildDiffMap(unitSettings);
     if (STATS_GRID_PERF_LOGS_ENABLED) {
       this.logPerf('update_diff_map', diffStart, { showDiff: true, diffCount: this.diffByType.size });
     }
   }
 
-  private buildDiffMap(): Map<string, { display: string; percent: number; color: string }> {
+  public onRRRecordingChange(key: string): void {
+    const recording = this.rrRecordings.find(candidate => candidate.key === key);
+    if (!recording || recording === this.activeRRRecording()) return;
+    this.activeRRRecording.set(recording);
+    this.haptics.selection();
+    this.updateRRDiffMap();
+    this.scheduleTabBodyHeightSync('allow_shrink', true);
+  }
+
+  private updateRRDiffMap(unitSettings = this.unitSettings): void {
+    this.rrDiffByType = new Map();
+    this.rrShowDiff = isBenchmarkEvent(this.event) && this.selectedActivities.length === 2;
+    const source = this.activeRRRecording();
+    if (!this.rrShowDiff || !source || !unitSettings) return;
+    const other = this.rrRecordings.find(recording => recording.activity !== source.activity);
+    if (!other) return;
+    const otherTypes = new Set(other.stats.map(stat => stat.getType()));
+    const comparableStats = source.stats.filter(stat => otherTypes.has(stat.getType()));
+    const differences = buildDiffMapForStats(comparableStats, RR_METRICS.map(metric => metric.type),
+      [source.activity, other.activity], unitSettings);
+    differences.forEach((diff, type) => this.rrDiffByType.set(type, {
+      ...diff, color: this.eventColorService.getDifferenceColor(diff.percent),
+    }));
+  }
+
+  private buildDiffMap(unitSettings: UserUnitSettingsInterface): Map<string, { display: string; percent: number; color: string }> {
     const compositeAwareTypes = expandStatsTypesForCompositeDiff(this.displayedStatsToShow);
-    const diffMap = buildDiffMapForStats(this.stats, compositeAwareTypes, this.selectedActivities, this.unitSettings);
+    const diffMap = buildDiffMapForStats(this.stats, compositeAwareTypes, this.selectedActivities, unitSettings);
     const coloredMap = new Map<string, { display: string; percent: number; color: string }>();
     diffMap.forEach((diff, type) => {
       coloredMap.set(type, {
@@ -262,11 +335,13 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     const includeEmptyGroupIds: EventSummaryMetricGroupId[] = hasEventDiveSourceRecords(this.selectedActivities)
       ? ['diving']
       : [];
+    if (this.rrRecordings.length) includeEmptyGroupIds.push('rr');
+    const rrTypes = new Set(this.rrRecordings.flatMap(recording => recording.stats.map(stat => stat.getType())));
 
     this.metricTabs = buildSummaryMetricTabs(this.displayedStatsToShow, { includeEmptyGroupIds })
       .map((tab) => ({
         ...tab,
-        metricTypes: tab.metricTypes.filter((metricType) => availableStatTypes.has(metricType)),
+        metricTypes: tab.metricTypes.filter((metricType) => (tab.id === 'rr' ? rrTypes : availableStatTypes).has(metricType)),
       }))
       .filter((tab) => tab.metricTypes.length > 0 || includeEmptyGroupIds.includes(tab.id));
     this.resetSelectedTab();
@@ -327,7 +402,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     }
 
     if (typeof requestAnimationFrame === 'undefined') {
-      this.scheduleTabBodyHeightSync('only_grow');
+      this.scheduleTabBodyHeightSync('allow_shrink', true);
       return;
     }
 
@@ -341,7 +416,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
         return;
       }
       if (typeof requestAnimationFrame === 'undefined') {
-        this.scheduleTabBodyHeightSync('only_grow');
+        this.scheduleTabBodyHeightSync('allow_shrink', true);
         return;
       }
       this.tabSwitchMeasureRafId = requestAnimationFrame(() => {
@@ -349,7 +424,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
         if (this.isDestroyed) {
           return;
         }
-        this.scheduleTabBodyHeightSync('only_grow');
+        this.scheduleTabBodyHeightSync('allow_shrink', true);
       });
     });
   }
@@ -484,11 +559,9 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     const layoutSignature = this.buildTabBodyLayoutSignature(tabGroupElement, tabBodyContents.length);
     this.lastMeasuredTabBodyLayoutSignature = layoutSignature;
 
-    const maxHeight = Array.from(tabBodyContents).reduce((currentMax, tabBodyContent) => {
-      return Math.max(currentMax, this.getIntrinsicTabBodyContentHeight(tabBodyContent));
-    }, 0);
+    const selectedHeight = this.getTabIntrinsicHeightByIndex(this.selectedTabIndex);
 
-    const heightDelta = Math.abs(maxHeight - this.lastAppliedMinHeightPx);
+    const heightDelta = Math.abs(selectedHeight - this.lastAppliedMinHeightPx);
     if (heightDelta === 0) {
       return;
     }
@@ -497,7 +570,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
       return;
     }
 
-    if (mode === 'only_grow' && maxHeight < this.lastAppliedMinHeightPx) {
+    if (mode === 'only_grow' && selectedHeight < this.lastAppliedMinHeightPx) {
       return;
     }
 
@@ -505,8 +578,8 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
       this.lastAllowShrinkSyncAtMs = performance.now();
     }
 
-    this.lastAppliedMinHeightPx = maxHeight;
-    tabGroupElement.style.setProperty('--summary-tabs-body-min-height', `${maxHeight}px`);
+    this.lastAppliedMinHeightPx = selectedHeight;
+    tabGroupElement.style.setProperty('--summary-tabs-body-min-height', `${selectedHeight}px`);
   }
 
   private getIntrinsicTabBodyContentHeight(tabBodyContent: HTMLElement): number {
@@ -532,7 +605,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     return this.getIntrinsicTabBodyContentHeight(tabBody);
   }
 
-  private applyGrowOnlyHeightFromSelectedTab(selectedIndex: number) {
+  private applyHeightFromSelectedTab(selectedIndex: number) {
     const tabGroupElement = this.summaryTabGroupRef?.nativeElement;
     if (!tabGroupElement || selectedIndex < 0) {
       return;
@@ -544,14 +617,9 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
       return;
     }
 
-    const selectedTabHeight = Math.max(
-      this.getIntrinsicTabBodyContentHeight(selectedTabBody),
-      Math.ceil(selectedTabBody.scrollHeight || 0),
-      Math.ceil(selectedTabBody.offsetHeight || 0),
-      Math.ceil(selectedTabBody.clientHeight || 0),
-    );
+    const selectedTabHeight = this.getIntrinsicTabBodyContentHeight(selectedTabBody);
 
-    if (selectedTabHeight <= this.lastAppliedMinHeightPx) {
+    if (selectedTabHeight <= 0) {
       return;
     }
 

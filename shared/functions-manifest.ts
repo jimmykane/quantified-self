@@ -5,6 +5,15 @@ export const COROS_HISTORY_IMPORT_CLIENT_TIMEOUT_MS = 310_000;
 
 export const FUNCTIONS_MANIFEST = {
     // Admin Functions (europe-west2)
+    listMarketingCampaigns: { name: 'listMarketingCampaigns', region: 'europe-west2' },
+    saveMarketingCampaign: { name: 'saveMarketingCampaign', region: 'europe-west2' },
+    cloneMarketingCampaign: { name: 'cloneMarketingCampaign', region: 'europe-west2' },
+    previewMarketingCampaign: { name: 'previewMarketingCampaign', region: 'europe-west2' },
+    prepareMarketingCampaign: { name: 'prepareMarketingCampaign', region: 'europe-west2', clientTimeoutMs: 560_000 },
+    setMarketingDailyCap: { name: 'setMarketingDailyCap', region: 'europe-west2' },
+    sendMarketingTest: { name: 'sendMarketingTest', region: 'europe-west2' },
+    changeMarketingCampaignStatus: { name: 'changeMarketingCampaignStatus', region: 'europe-west2', clientTimeoutMs: 560_000 },
+
     listUsers: { name: 'listUsers', region: 'europe-west2' },
     getQueueStats: { name: 'getQueueStats', region: 'europe-west2' },
     setSportsLibReparseSettings: { name: 'setSportsLibReparseSettings', region: 'europe-west2' },
@@ -29,6 +38,10 @@ export const FUNCTIONS_MANIFEST = {
     revokeMcpConnection: { name: 'revokeMcpConnection', region: 'europe-west2' },
     queryHealthRange: { name: 'queryHealthRange', region: 'europe-west2' },
     queryActivityHealthRange: { name: 'queryActivityHealthRange', region: 'europe-west2' },
+    saveManualHealthMeasurement: { name: 'saveManualHealthMeasurement', region: 'europe-west2' },
+    deleteManualHealthMeasurement: { name: 'deleteManualHealthMeasurement', region: 'europe-west2' },
+    saveTimelineNote: { name: 'saveTimelineNote', region: 'europe-west2' },
+    deleteTimelineNote: { name: 'deleteTimelineNote', region: 'europe-west2' },
 
     // COROS Functions
     getCOROSAPIAuthRequestTokenRedirectURI: { name: 'getCOROSAPIAuthRequestTokenRedirectURI', region: 'europe-west2' },
@@ -45,6 +58,8 @@ export const FUNCTIONS_MANIFEST = {
     getCOROSAPIWorkoutFileUploadStatus: { name: 'getCOROSAPIWorkoutFileUploadStatus', region: 'europe-west2' },
     importRouteToCOROSAPI: { name: 'importRouteToCOROSAPI', region: 'europe-west2' },
 
+    activitySendCommand: { name: 'activitySendCommand', region: 'europe-west2', clientTimeoutMs: 120000 },
+    uploadActivitySendFile: { name: 'uploadActivitySendFile', region: 'europe-west2' },
     // Wahoo Functions
     getWahooAPIAuthRequestTokenRedirectURI: { name: 'getWahooAPIAuthRequestTokenRedirectURI', region: 'europe-west2' },
     requestAndSetWahooAPIAccessToken: { name: 'requestAndSetWahooAPIAccessToken', region: 'europe-west2' },
@@ -67,7 +82,6 @@ export const FUNCTIONS_MANIFEST = {
     importRouteToSuuntoApp: { name: 'importRouteToSuuntoApp', region: 'europe-west2' },
     sendRoutesToService: { name: 'sendRoutesToService', region: 'europe-west2' },
     importActivityToSuuntoApp: { name: 'importActivityToSuuntoApp', region: 'europe-west2' },
-    getSuuntoFITFile: { name: 'getSuuntoFITFile', region: 'europe-west2' },
 
     // Garmin Functions
     getGarminAPIAuthRequestTokenRedirectURI: { name: 'getGarminAPIAuthRequestTokenRedirectURI', region: 'europe-west2' },
@@ -85,7 +99,7 @@ export const FUNCTIONS_MANIFEST = {
     linkExistingStripeCustomer: { name: 'linkExistingStripeCustomer', region: 'europe-west2' },
     cleanupStripeCustomer: { name: 'cleanupStripeCustomer', region: 'europe-west2' },
     getUpcomingRenewalAmount: { name: 'getUpcomingRenewalAmount', region: 'europe-west2' },
-    createPortalLink: { name: 'ext-firestore-stripe-payments-createPortalLink', region: 'europe-west3' },
+    createPortalLink: { name: 'createStripePortalLink', region: 'europe-west3' },
 
     // Reparse Functions
     scheduleSportsLibReparseScan: { name: 'scheduleSportsLibReparseScan', region: 'europe-west2' },
@@ -94,6 +108,10 @@ export const FUNCTIONS_MANIFEST = {
     processSportsLibReparseHeavyTask: { name: SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME, region: 'europe-west2' },
     processSportsLibRouteReparseTask: { name: 'processSportsLibRouteReparseTask', region: 'europe-west2' },
     processRouteDeliverySyncTask: { name: 'processRouteDeliverySyncTask', region: 'europe-west2' },
+    processConnectionHistoryTask: { name: 'processConnectionHistoryTask', region: 'europe-west2' },
+    onConnectionHistoryImportWritten: { name: 'onConnectionHistoryImportWritten', region: 'europe-west2' },
+    recoverConnectionHistoryImports: { name: 'recoverConnectionHistoryImports', region: 'europe-west2' },
+    retryConnectionHistoryImport: { name: 'retryConnectionHistoryImport', region: 'europe-west2' },
     processGarminHealthBackfillTask: { name: 'processGarminHealthBackfillTask', region: 'europe-west2' },
 
     // Upload/Reprocess Functions
@@ -121,8 +139,26 @@ export const FUNCTIONS_MANIFEST = {
     getAssistantQuotaStatus: { name: 'getAssistantQuotaStatus', region: 'europe-west2' },
     getAssistantConversation: { name: 'getAssistantConversation', region: 'europe-west2' },
     resetAssistantConversation: { name: 'resetAssistantConversation', region: 'europe-west2' },
+    applyAssistantTrainingProposal: { name: 'applyAssistantTrainingProposal', region: 'europe-west2' },
     ensureDerivedMetrics: { name: 'ensureDerivedMetrics', region: 'europe-west2' },
     setTrainingBuildBenchmark: { name: 'setTrainingBuildBenchmark', region: 'europe-west2' },
+    mutateTrainingSchedule: { name: 'mutateTrainingSchedule', region: 'europe-west2' },
+    mutateWorkoutLibrary: { name: 'mutateWorkoutLibrary', region: 'europe-west2' },
+    placeWorkoutLibrary: { name: 'placeWorkoutLibrary', region: 'europe-west2' },
+    previewTrainingProviderDelivery: { name: 'previewTrainingProviderDelivery', region: 'europe-west2' },
+    mutateTrainingProviderDelivery: { name: 'mutateTrainingProviderDelivery', region: 'europe-west2' },
+    processTrainingDeliveryTask: { name: 'processTrainingDeliveryTask', region: 'europe-west2' },
+    dispatchTrainingDelivery: { name: 'dispatchTrainingDelivery', region: 'europe-west2' },
+    onTrainingDeliveryQueued: { name: 'onTrainingDeliveryQueued', region: 'europe-west2' },
+    onTrainingDeliveryConnectionChanged: { name: 'onTrainingDeliveryConnectionChanged', region: 'europe-west2' },
+    onTrainingDeliveryEntitlementChanged: { name: 'onTrainingDeliveryEntitlementChanged', region: 'europe-west2' },
+    getTrainingScheduleHistory: { name: 'getTrainingScheduleHistory', region: 'europe-west2' },
+    previewTrainingScheduleRestore: { name: 'previewTrainingScheduleRestore', region: 'europe-west2' },
+    restoreTrainingScheduleRevision: { name: 'restoreTrainingScheduleRevision', region: 'europe-west2' },
+    deleteTrainingPlan: { name: 'deleteTrainingPlan', region: 'europe-west2' },
+    reconcileTrainingPlanCleanup: { name: 'reconcileTrainingPlanCleanup', region: 'europe-west2' },
+    reconcileTrainingWorkoutExpiry: { name: 'reconcileTrainingWorkoutExpiry', region: 'europe-west2' },
+    reconcileTrainingBulkShift: { name: 'reconcileTrainingBulkShift', region: 'europe-west2' },
     processDerivedMetricsIngressTask: { name: 'processDerivedMetricsIngressTask', region: 'europe-west2' },
 } as const;
 

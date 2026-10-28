@@ -161,7 +161,8 @@ export class MapStyleService implements MapStyleServiceInterface {
     const targetS = 0.8; // High saturation to contrast with dark map
     if (l < targetL) {
       l = targetL;
-      s = targetS; // Ensure we also boost saturation if it's too dark
+      // Neutral device colors must stay neutral, including the Okabe–Ito black.
+      s = max === min ? 0 : targetS;
     }
 
     const hue2rgb = (p: number, q: number, t: number) => {

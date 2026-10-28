@@ -6,15 +6,23 @@ import {
   type AssistantChatResponse,
   type AssistantConversation,
   type AssistantLocationAccess,
+  type ApplyAssistantContentProposalRequest,
+  type ApplyAssistantContentProposalResponse,
+  type ApplyAssistantTrainingProposalRequest,
+  type ApplyAssistantTrainingProposalResponse,
   type GetAssistantConversationResponse,
   type ResetAssistantConversationRequest,
   type ResetAssistantConversationResponse,
 } from '@shared/assistant.types';
+import type { FunctionName } from '@shared/functions-manifest';
 import {
+  isAssistantTrainingProposal,
+  isAssistantContentProposal,
   validateAssistantChatResponse,
   validateAssistantConversation,
 } from '@shared/assistant-response.contract';
 import { normalizeAssistantConversationEvidence } from '@shared/assistant-evidence-display';
+import { Auth } from 'app/firebase/auth';
 import { AppFunctionsService } from './app.functions.service';
 
 export type AssistantErrorCode =
@@ -26,6 +34,7 @@ export type AssistantErrorCode =
   | 'TURN_IN_PROGRESS'
   | 'CONVERSATION_CHANGED'
   | 'UNAVAILABLE'
+  | 'TRAINING_METRICS_PREPARING'
   | 'INTERNAL';
 
 export class AssistantError extends Error {
@@ -42,10 +51,11 @@ export class AssistantError extends Error {
 @Injectable({ providedIn: 'root' })
 export class AssistantService {
   private readonly functionsService = inject(AppFunctionsService);
+  private readonly auth = inject(Auth);
 
   async sendMessage(request: AssistantChatRequest): Promise<AssistantChatResponse> {
     try {
-      const response = await this.functionsService.call<AssistantChatRequest, AssistantChatResponse>(
+      const response = await this.callWithAuthenticationRetry<AssistantChatRequest, AssistantChatResponse>(
         'assistantChat',
         request,
       );
@@ -65,6 +75,22 @@ export class AssistantService {
           validation.data,
         );
       }
+      if ((validation.data.trainingPlansEnabled === true) !== (request.trainingPlansEnabled === true)) {
+        throw new AssistantError('CONVERSATION_CHANGED', 'The Assistant data-access setting changed.');
+      }
+      if ((validation.data.timelineNotesEnabled === true) !== (request.timelineNotesEnabled === true)) {
+        throw new AssistantError('CONVERSATION_CHANGED', 'The Assistant data-access setting changed.');
+      }
+      if ((validation.data.activityTagChangesEnabled === true) !== (request.activityTagChangesEnabled === true)
+        || (validation.data.timelineNoteChangesEnabled === true) !== (request.timelineNoteChangesEnabled === true)
+        || (validation.data.measurementChangesEnabled === true) !== (request.measurementChangesEnabled === true)
+        || (validation.data.reflectionChangesEnabled === true) !== (request.reflectionChangesEnabled === true)) {
+        throw new AssistantError('CONVERSATION_CHANGED', 'The Assistant content-change access setting changed.');
+      }
+      if ((validation.data.trainingPlanChangesEnabled === true) !== (request.trainingPlanChangesEnabled === true)
+        || (validation.data.trainingDeliveryEnabled === true) !== (request.trainingDeliveryEnabled === true)) {
+        throw new AssistantError('CONVERSATION_CHANGED', 'The Assistant data-access setting changed.');
+      }
       return {
         ...validation.data,
         conversation: normalizeAssistantConversationEvidence(validation.data.conversation),
@@ -83,7 +109,7 @@ export class AssistantService {
 
   async getConversationState(): Promise<GetAssistantConversationResponse> {
     try {
-      const response = await this.functionsService.call<void, GetAssistantConversationResponse>(
+      const response = await this.callWithAuthenticationRetry<void, GetAssistantConversationResponse>(
         'getAssistantConversation',
       );
       const pendingRequestId = (
@@ -93,6 +119,34 @@ export class AssistantService {
         response.data as Partial<GetAssistantConversationResponse>
       ).locationAccess;
       const locationAccess = rawLocationAccess ?? 'coordinate_free';
+      const timelineNotesEnabled = response.data.timelineNotesEnabled ?? false;
+      const activityTagChangesEnabled = response.data.activityTagChangesEnabled ?? false;
+      const timelineNoteChangesEnabled = response.data.timelineNoteChangesEnabled ?? false;
+      const measurementChangesEnabled = response.data.measurementChangesEnabled ?? false;
+      const reflectionChangesEnabled = response.data.reflectionChangesEnabled ?? false;
+      const trainingPlansEnabled = response.data.trainingPlansEnabled ?? false;
+      const trainingPlanChangesEnabled = response.data.trainingPlanChangesEnabled ?? false;
+      const trainingDeliveryEnabled = response.data.trainingDeliveryEnabled ?? false;
+      const pendingTrainingProposal = response.data.pendingTrainingProposal;
+      const pendingContentProposal = response.data.pendingContentProposal;
+      if (typeof trainingPlansEnabled !== 'boolean') throw new AssistantError('INTERNAL', 'The saved Assistant data-access setting is invalid.');
+      if (typeof trainingPlanChangesEnabled !== 'boolean' || typeof trainingDeliveryEnabled !== 'boolean'
+        || ((trainingPlanChangesEnabled || trainingDeliveryEnabled) && !trainingPlansEnabled)) {
+        throw new AssistantError('INTERNAL', 'The saved Assistant Training change access is invalid.');
+      }
+      if (typeof timelineNotesEnabled !== 'boolean') {
+        throw new AssistantError('INTERNAL', 'The saved Assistant data-access setting is invalid.');
+      }
+      if (typeof activityTagChangesEnabled !== 'boolean' || typeof timelineNoteChangesEnabled !== 'boolean' || typeof measurementChangesEnabled !== 'boolean' || typeof reflectionChangesEnabled !== 'boolean'
+        || (timelineNoteChangesEnabled && !timelineNotesEnabled)) {
+        throw new AssistantError('INTERNAL', 'The saved Assistant content-change access is invalid.');
+      }
+      if (pendingTrainingProposal !== undefined && !isAssistantTrainingProposal(pendingTrainingProposal)) {
+        throw new AssistantError('INTERNAL', 'The saved Assistant Training proposal is invalid.');
+      }
+      if (pendingContentProposal !== undefined && !isAssistantContentProposal(pendingContentProposal)) {
+        throw new AssistantError('INTERNAL', 'The saved Assistant content proposal is invalid.');
+      }
       if (pendingRequestId !== null
         && !isValidAssistantRequestId(pendingRequestId)) {
         throw new AssistantError(
@@ -109,7 +163,17 @@ export class AssistantService {
         );
       }
       if (response.data.conversation === null) {
-        return { conversation: null, pendingRequestId, locationAccess };
+        return { conversation: null, pendingRequestId, locationAccess,
+          ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
+          ...(activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
+          ...(timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
+          ...(measurementChangesEnabled ? { measurementChangesEnabled: true } : {}),
+          ...(reflectionChangesEnabled ? { reflectionChangesEnabled: true } : {}),
+          ...(trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
+          ...(trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
+          ...(trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
+          ...(pendingTrainingProposal ? { pendingTrainingProposal } : {}),
+          ...(pendingContentProposal ? { pendingContentProposal } : {}) };
       }
       const validation = validateAssistantConversation(response.data.conversation);
       if (validation.ok === false) {
@@ -123,6 +187,16 @@ export class AssistantService {
         conversation: normalizeAssistantConversationEvidence(validation.data),
         pendingRequestId,
         locationAccess,
+        ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
+        ...(activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
+        ...(timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
+        ...(measurementChangesEnabled ? { measurementChangesEnabled: true } : {}),
+        ...(reflectionChangesEnabled ? { reflectionChangesEnabled: true } : {}),
+        ...(trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
+        ...(trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
+        ...(trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
+        ...(pendingTrainingProposal ? { pendingTrainingProposal } : {}),
+        ...(pendingContentProposal ? { pendingContentProposal } : {}),
       };
     } catch (error) {
       if (error instanceof AssistantError) {
@@ -134,15 +208,47 @@ export class AssistantService {
 
   async resetConversation(
     locationAccess: AssistantLocationAccess = 'coordinate_free',
+    timelineNotesEnabled = false,
+    conversationId: string | null = null,
+    trainingPlansEnabled = false,
+    trainingPlanChangesEnabled = false,
+    trainingDeliveryEnabled = false,
+    activityTagChangesEnabled = false,
+    timelineNoteChangesEnabled = false,
+    measurementChangesEnabled = false,
+    reflectionChangesEnabled = false,
   ): Promise<AssistantConversation> {
     try {
-      const response = await this.functionsService.call<
+      const response = await this.callWithAuthenticationRetry<
         ResetAssistantConversationRequest,
         ResetAssistantConversationResponse
       >(
         'resetAssistantConversation',
-        { locationAccess },
+        { locationAccess, conversationId, ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
+          ...(activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
+          ...(timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
+          ...(measurementChangesEnabled ? { measurementChangesEnabled: true } : {}),
+          ...(reflectionChangesEnabled ? { reflectionChangesEnabled: true } : {}),
+          ...(trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
+          ...(trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
+          ...(trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}) },
       );
+      if ((response.data.trainingPlansEnabled ?? false) !== trainingPlansEnabled) {
+        throw new AssistantError('CONVERSATION_CHANGED', 'The Assistant data-access setting was not confirmed.');
+      }
+      if ((response.data.timelineNotesEnabled ?? false) !== timelineNotesEnabled) {
+        throw new AssistantError('CONVERSATION_CHANGED', 'The Assistant data-access setting was not confirmed.');
+      }
+      if ((response.data.activityTagChangesEnabled ?? false) !== activityTagChangesEnabled
+        || (response.data.timelineNoteChangesEnabled ?? false) !== timelineNoteChangesEnabled
+        || (response.data.measurementChangesEnabled ?? false) !== measurementChangesEnabled
+        || (response.data.reflectionChangesEnabled ?? false) !== reflectionChangesEnabled) {
+        throw new AssistantError('CONVERSATION_CHANGED', 'The Assistant content-change access was not confirmed.');
+      }
+      if ((response.data.trainingPlanChangesEnabled ?? false) !== trainingPlanChangesEnabled
+        || (response.data.trainingDeliveryEnabled ?? false) !== trainingDeliveryEnabled) {
+        throw new AssistantError('CONVERSATION_CHANGED', 'The Assistant Training change access was not confirmed.');
+      }
       const validation = validateAssistantConversation(response.data.conversation);
       if (validation.ok === false) {
         throw new AssistantError(
@@ -156,6 +262,28 @@ export class AssistantService {
       if (error instanceof AssistantError) {
         throw error;
       }
+      throw this.mapFunctionError(error);
+    }
+  }
+
+  async applyTrainingProposal(request: ApplyAssistantTrainingProposalRequest): Promise<ApplyAssistantTrainingProposalResponse> {
+    try {
+      const response = await this.callWithAuthenticationRetry<ApplyAssistantTrainingProposalRequest,
+        ApplyAssistantTrainingProposalResponse>('applyAssistantTrainingProposal', request);
+      return response.data;
+    } catch (error) {
+      if (error instanceof AssistantError) throw error;
+      throw this.mapFunctionError(error);
+    }
+  }
+
+  async applyContentProposal(request: ApplyAssistantContentProposalRequest): Promise<ApplyAssistantContentProposalResponse> {
+    try {
+      const response = await this.callWithAuthenticationRetry<ApplyAssistantContentProposalRequest,
+        ApplyAssistantContentProposalResponse>('applyAssistantTrainingProposal', request);
+      return response.data;
+    } catch (error) {
+      if (error instanceof AssistantError) throw error;
       throw this.mapFunctionError(error);
     }
   }
@@ -181,9 +309,19 @@ export class AssistantService {
         return 'The conversation changed in another tab. Reload it and try again.';
       case 'UNAVAILABLE':
         return 'The Assistant could not answer right now. Please try again.';
+      case 'TRAINING_METRICS_PREPARING':
+        return 'Your Training metrics are being prepared. Try your message again in a few seconds; this attempt does not use your Assistant allowance.';
       default:
         return 'Something went wrong while preparing the answer.';
     }
+  }
+
+  getConversationUpdateErrorMessage(error: unknown): string {
+    if (error instanceof AssistantError
+      && !['INTERNAL', 'UNAVAILABLE'].includes(error.code)) {
+      return this.getErrorMessage(error);
+    }
+    return 'The Assistant could not update this chat. Your conversation and data access settings are unchanged. Please try again.';
   }
 
   private mapFunctionError(error: unknown): AssistantError {
@@ -212,8 +350,58 @@ export class AssistantService {
       return new AssistantError('CONVERSATION_CHANGED', message || 'Conversation changed.', error);
     }
     if (code.includes('unavailable')) {
+      const reason = `${(error as { details?: { reason?: unknown } } | null)?.details?.reason || ''}`;
+      if (reason === 'training_metrics_preparing') {
+        return new AssistantError('TRAINING_METRICS_PREPARING', message, error);
+      }
       return new AssistantError('UNAVAILABLE', message || 'Assistant unavailable.', error);
     }
     return new AssistantError('INTERNAL', message || 'Assistant request failed.', error);
+  }
+
+  private async callWithAuthenticationRetry<RequestData, ResponseData>(
+    functionKey: FunctionName,
+    data?: RequestData,
+  ): Promise<{ data: ResponseData }> {
+    const originatingUid = this.auth.currentUser?.uid;
+    const assertAccount = () => {
+      if (!originatingUid || this.auth.currentUser?.uid !== originatingUid) {
+        throw new AssistantError('UNAUTHENTICATED', 'The signed-in account changed.');
+      }
+    };
+    const invoke = async () => {
+      assertAccount();
+      const result = data === undefined
+        ? await this.functionsService.call<RequestData, ResponseData>(functionKey)
+        : await this.functionsService.call<RequestData, ResponseData>(functionKey, data);
+      assertAccount();
+      return result;
+    };
+
+    try {
+      return await invoke();
+    } catch (error) {
+      if (!this.isUnauthenticatedCallableError(error)) {
+        throw error;
+      }
+
+      const currentUser = this.auth.currentUser;
+      if (!currentUser || currentUser.uid !== originatingUid) {
+        throw error;
+      }
+
+      try {
+        await currentUser.getIdToken(true);
+      } catch {
+        throw error;
+      }
+
+      return invoke();
+    }
+  }
+
+  private isUnauthenticatedCallableError(error: unknown): boolean {
+    const code = `${(error as { code?: unknown } | null)?.code || ''}`;
+    return code.includes('unauthenticated');
   }
 }

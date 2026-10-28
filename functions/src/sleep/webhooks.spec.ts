@@ -85,6 +85,7 @@ function createResponse() {
 
 describe('sleep webhooks', () => {
     beforeEach(() => {
+        process.env.GARMINAPI_WEBHOOK_SECRET = 'a'.repeat(64);
         vi.clearAllMocks();
         hoisted.garminEnabled = false;
         hoisted.garminHealthEnabled = false;
@@ -130,10 +131,22 @@ describe('sleep webhooks', () => {
         expect(input.garminCallbackURLs).toEqual(callbackURLs);
     }
 
+    it.each(['/', '/wrong/API', '/receiveGarminAPIHealthData/wrong/API'])('rejects forged Health ingress before inspecting the payload: %s', async path => {
+        const response = createResponse();
+        const request = { method: 'POST', path };
+        Object.defineProperty(request, 'body', { get() { throw new Error('body accessed'); } });
+        Object.defineProperty(request, 'rawBody', { get() { throw new Error('rawBody accessed'); } });
+        await receiveGarminAPIHealthData(request as any, response as any);
+        expect(response.status).toHaveBeenCalledWith(403);
+        expect(hoisted.resolveGarminPingFirebaseUserIDs).not.toHaveBeenCalled();
+        expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+    });
+
     it('acknowledges disabled Garmin webhooks without queueing', async () => {
         const response = createResponse();
 
         await receiveGarminAPIHealthData({
+            path: `/${'a'.repeat(64)}/API`,
             method: 'POST',
             rawBody: Buffer.from('{}'),
             body: {
@@ -151,6 +164,7 @@ describe('sleep webhooks', () => {
         const callbackURL = garminCallbackURL('sleeps');
 
         await receiveGarminAPIHealthData({
+            path: `/${'a'.repeat(64)}/API`,
             method: 'POST',
             rawBody: Buffer.from('{}'),
             body: {
@@ -182,6 +196,7 @@ describe('sleep webhooks', () => {
         const callbackURL = garminCallbackURL(summaryType);
 
         await receiveGarminAPIHealthData({
+            path: `/${'a'.repeat(64)}/API`,
             method: 'POST',
             rawBody: Buffer.from('{}'),
             body: { [summaryType]: [{ userId: 'garmin-user-1', callbackURL }] },
@@ -200,6 +215,7 @@ describe('sleep webhooks', () => {
         const callbackURL = garminCallbackURL('dailies');
 
         await receiveGarminAPIHealthData({
+            path: `/${'a'.repeat(64)}/API`,
             method: 'POST',
             rawBody: Buffer.from('{}'),
             body: { dailies: [{ userId: 'garmin-user-1', callbackURL }] },
@@ -221,6 +237,7 @@ describe('sleep webhooks', () => {
         const validCallbackURL = garminCallbackURL('hrv', 1760000100);
 
         await receiveGarminAPIHealthData({
+            path: `/${'a'.repeat(64)}/API`,
             method: 'POST',
             rawBody: Buffer.from('{}'),
             body: {
@@ -246,6 +263,7 @@ describe('sleep webhooks', () => {
         );
 
         await receiveGarminAPIHealthData({
+            path: `/${'a'.repeat(64)}/API`,
             method: 'POST',
             rawBody: Buffer.from('{}'),
             body: {
@@ -269,6 +287,7 @@ describe('sleep webhooks', () => {
         const response = createResponse();
 
         await receiveGarminAPIHealthData({
+            path: `/${'a'.repeat(64)}/API`,
             method: 'POST',
             rawBody: Buffer.from('{}'),
             body: {
@@ -288,6 +307,7 @@ describe('sleep webhooks', () => {
         const response = createResponse();
 
         await receiveGarminAPIHealthData({
+            path: `/${'a'.repeat(64)}/API`,
             method: 'POST',
             rawBody: Buffer.from('{}'),
             body: {
@@ -305,6 +325,7 @@ describe('sleep webhooks', () => {
         const response = createResponse();
 
         await receiveGarminAPIHealthData({
+            path: `/${'a'.repeat(64)}/API`,
             method: 'POST',
             rawBody: Buffer.from('{}'),
             body: {
@@ -352,6 +373,7 @@ describe('sleep webhooks', () => {
         const response = createResponse();
 
         await receiveGarminAPIHealthData({
+            path: `/${'a'.repeat(64)}/API`,
             method: 'POST',
             rawBody: Buffer.from('{}'),
             body: {
@@ -419,6 +441,7 @@ describe('sleep webhooks', () => {
         const response = createResponse();
 
         await receiveGarminAPIHealthData({
+            path: `/${'a'.repeat(64)}/API`,
             method: 'POST',
             rawBody: Buffer.from('{}'),
             body: {
@@ -438,6 +461,7 @@ describe('sleep webhooks', () => {
         const callbackURL = garminCallbackURL('dailies');
 
         await receiveGarminAPIHealthData({
+            path: `/${'a'.repeat(64)}/API`,
             method: 'POST',
             rawBody: Buffer.from('{}'),
             body: {
@@ -473,6 +497,7 @@ describe('sleep webhooks', () => {
         const acceptedResponse = createResponse();
 
         await receiveGarminAPIHealthData({
+            path: `/${'a'.repeat(64)}/API`,
             method: 'POST',
             rawBody: Buffer.alloc(10 * 1024 * 1024),
             body: { dailies: [{ userId: 'garmin-user-1', callbackURL }] },
@@ -483,6 +508,7 @@ describe('sleep webhooks', () => {
         vi.clearAllMocks();
         const oversizedResponse = createResponse();
         await receiveGarminAPIHealthData({
+            path: `/${'a'.repeat(64)}/API`,
             method: 'POST',
             rawBody: Buffer.alloc((10 * 1024 * 1024) + 1),
             body: { dailies: [{ userId: 'garmin-user-1', callbackURL }] },
@@ -497,6 +523,7 @@ describe('sleep webhooks', () => {
         const response = createResponse();
 
         await receiveGarminAPIHealthData({
+            path: `/${'a'.repeat(64)}/API`,
             method: 'POST',
             rawBody: Buffer.from('{}'),
             body: {

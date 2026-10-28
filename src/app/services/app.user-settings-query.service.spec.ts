@@ -5,7 +5,7 @@ import { AppAuthService } from '../authentication/app.auth.service';
 import { AppUserService } from './app.user.service';
 import { LoggerService } from './logger.service';
 import { BehaviorSubject } from 'rxjs';
-import { User, AppThemes, DataPaceAvg, MapTypes } from '@sports-alliance/sports-lib';
+import { User, AppThemes, DataDuration, DataPaceAvg, MapTypes } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 describe('AppUserSettingsQueryService', () => {
@@ -163,6 +163,26 @@ describe('AppUserSettingsQueryService', () => {
             });
         });
 
+        it.each([false, true])('persists a scoped pattern preference of %s without other chart settings', async (enabled) => {
+            const user = createMockUser({ uid: 'original-user' });
+            mockUserSubject.next(user);
+            await service.updateChartSettings({ useDistinctComparisonLinePatterns: enabled }, {
+                force: true, expectedUserID: 'original-user',
+            });
+            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(user, {
+                settings: { chartSettings: { useDistinctComparisonLinePatterns: enabled } },
+            });
+        });
+
+        it('rejects a scoped pattern save if the account changes before the write starts', async () => {
+            mockUserSubject.next(createMockUser({ uid: 'original-user' }));
+            const options = { force: true, expectedUserID: 'original-user' };
+            const save = service.updateChartSettings({ useDistinctComparisonLinePatterns: true }, options);
+            mockUserSubject.next(createMockUser({ uid: 'different-user' }));
+            await expect(save).rejects.toThrow('account changed');
+            expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        });
+
         it('propagates chart settings write failures to the caller', async () => {
             const user = createMockUser();
             const error = new Error('write failed');
@@ -202,6 +222,28 @@ describe('AppUserSettingsQueryService', () => {
     });
 
     describe('eventDetailsSettings', () => {
+        it('persists an order-only change as a sparse family write and hydrates the exact order', async () => {
+            const initial = [DataDuration.type, DataPaceAvg.type];
+            const reordered = [DataPaceAvg.type, DataDuration.type];
+            const user = createMockUser({ settings: { eventDetailsSettings: {
+                lapTableColumnsBySportFamily: { running: initial, cycling: [] },
+            } } });
+            mockUserSubject.next(user);
+            TestBed.flushEffects();
+            await service.updateLapTableColumns('running', reordered);
+            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(user, {
+                settings: { eventDetailsSettings: { lapTableColumnsBySportFamily: { running: reordered } } },
+            });
+            mockUserSubject.next(createMockUser({ settings: { eventDetailsSettings: {
+                lapTableColumnsBySportFamily: { running: reordered, cycling: [] },
+            } } }));
+            TestBed.flushEffects();
+            expect(service.eventDetailsSettings().lapTableColumnsBySportFamily?.running).toEqual(reordered);
+            mockUserService.updateUserProperties.mockClear();
+            await service.updateLapTableColumns('running', reordered);
+            expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        });
+
         it('normalizes saved lap columns and persists an independent sport family choice', async () => {
             const user = createMockUser({
                 settings: {
@@ -237,9 +279,67 @@ describe('AppUserSettingsQueryService', () => {
 
             expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
         });
+
+        it('saves the categorical Stroke column through the existing swimming layout preference', async () => {
+            const user = createMockUser({ uid: 'test-uid' });
+            mockUserSubject.next(user);
+            TestBed.flushEffects();
+            await service.updateLapTableColumns('swimming', ['Stroke', DataDuration.type]);
+            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(user, {
+                settings: { eventDetailsSettings: { lapTableColumnsBySportFamily: { swimming: ['Stroke', DataDuration.type] } } },
+            });
+        });
     });
 
     describe('Health workspace preferences', () => {
+        it('merges only the selected metric source without replacing other metric preferences', async () => {
+            const user = createMockUser({ uid: 'test-uid' });
+            mockUserSubject.next(user);
+            await service.updateHealthWorkspacePreferences('test-uid', {
+                metric: 'sleep', range: '30d', metricSources: { body_weight: 'health-series-0123456789abcdef' },
+            });
+            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(user, {
+                settings: { appSettings: { healthWorkspace: {
+                    metric: 'sleep', range: '30d', metricSources: { body_weight: 'health-series-0123456789abcdef' },
+                } } },
+            });
+        });
+
+        it('rejects malformed metric source patches before persistence', async () => {
+            mockUserSubject.next(createMockUser({ uid: 'test-uid' }));
+            for (const metricSources of [{ sleep: '["suunto","account"]' }, { unknown: 'health-series-0123456789abcdef' }, null]) {
+                await expect(service.updateHealthWorkspacePreferences('test-uid', {
+                    metric: 'sleep', range: '30d', metricSources: metricSources as never,
+                })).rejects.toThrow('opaque Health metric');
+            }
+            expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        });
+
+        it('merges only the chosen highlight without replaying other saved sources', async () => {
+            const user = createMockUser({ uid: 'test-uid' });
+            mockUserSubject.next(user);
+            await service.updateHealthWorkspacePreferences('test-uid', {
+                metric: 'sleep', range: '30d',
+                highlightSources: { heart_rate: 'health-series-0123456789abcdef' },
+            });
+            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(user, {
+                settings: { appSettings: { healthWorkspace: {
+                    metric: 'sleep', range: '30d',
+                    highlightSources: { heart_rate: 'health-series-0123456789abcdef' },
+                } } },
+            });
+        });
+
+        it('rejects raw or unsupported highlight preferences before persistence', async () => {
+            mockUserSubject.next(createMockUser({ uid: 'test-uid' }));
+            for (const highlightSources of [{ heart_rate: 'raw-account-id' }, { unknown: 'health-series-0123456789abcdef' }, null]) {
+                await expect(service.updateHealthWorkspacePreferences('test-uid', {
+                    metric: 'sleep', range: '30d', highlightSources: highlightSources as never,
+                })).rejects.toThrow('opaque Health highlight');
+            }
+            expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        });
+
         it('writes the selected metric and range as one client-owned Health workspace setting', async () => {
             const user = createMockUser({ uid: 'test-uid' });
             mockUserSubject.next(user);
@@ -291,6 +391,58 @@ describe('AppUserSettingsQueryService', () => {
     });
 
     describe('Training workspace preferences', () => {
+        it('orders Plans view writes across callers and continues after a failed earlier save', async () => {
+            mockUserSubject.next(createMockUser({ uid: 'test-uid' }));
+            let started!: () => void;
+            const firstStarted = new Promise<void>(resolve => { started = resolve; });
+            let failFirst!: (error: Error) => void;
+            mockUserService.updateUserProperties.mockImplementationOnce(() => {
+                started();
+                return new Promise<void>((_resolve, reject) => { failFirst = reject; });
+            });
+            const first = service.updateTrainingWorkspacePreferences('test-uid', { plansView: 'standalone' });
+            const firstResult = first.catch(error => error);
+            await firstStarted;
+            const last = service.updateTrainingWorkspacePreferences('test-uid', { plansView: 'plans' });
+            expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
+            failFirst(new Error('offline'));
+            expect(await firstResult).toBeInstanceOf(Error);
+            await last;
+            expect(mockUserService.updateUserProperties.mock.calls.map(call => call[1])).toEqual([
+                { settings: { appSettings: { trainingWorkspace: { plansView: 'standalone' } } } },
+                { settings: { appSettings: { trainingWorkspace: { plansView: 'plans' } } } },
+            ]);
+        });
+
+        it('rechecks the owner before a queued Plans view reaches Firestore', async () => {
+            mockUserSubject.next(createMockUser({ uid: 'test-uid' }));
+            let started!: () => void;
+            const firstStarted = new Promise<void>(resolve => { started = resolve; });
+            let finishFirst!: () => void;
+            mockUserService.updateUserProperties.mockImplementationOnce(() => {
+                started();
+                return new Promise<void>(resolve => { finishFirst = resolve; });
+            });
+            const first = service.updateTrainingWorkspacePreferences('test-uid', { plansView: 'standalone' });
+            await firstStarted;
+            const last = service.updateTrainingWorkspacePreferences('test-uid', { plansView: 'plans' });
+            const rejected = expect(last).rejects.toThrow('account changed');
+            mockUserSubject.next(createMockUser({ uid: 'other-owner' }));
+            finishFirst();
+            await first;
+            await rejected;
+            expect(mockUserService.updateUserProperties).toHaveBeenCalledTimes(1);
+        });
+
+        it.each(['plans', 'standalone'] as const)('saves the %s Plans view without replaying other settings', async plansView => {
+            const user = createMockUser({ uid: 'test-uid' });
+            mockUserSubject.next(user);
+            await service.updateTrainingWorkspacePreferences('test-uid', { plansView });
+            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(user, {
+                settings: { appSettings: { trainingWorkspace: { plansView } } },
+            });
+        });
+
         it('writes only the requested client-owned Training preference map', async () => {
             const user = createMockUser({ uid: 'test-uid' });
             mockUserSubject.next(user);
@@ -331,6 +483,8 @@ describe('AppUserSettingsQueryService', () => {
 
         it.each([
             [{ preferredDestination: 'unknown' }, 'destination'],
+            [{ plansView: 'library' }, 'Plans view'],
+            [{ plansView: null }, 'Plans view'],
             [{ sportShortcuts: [] }, 'sport shortcuts'],
             [{ sportShortcuts: ['running', 'running'] }, 'sport shortcuts'],
             [{ sportShortcuts: ['running', 'cycling', 'swimming', 'rowing', 'strength'] }, 'no more than 4'],

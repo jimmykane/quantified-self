@@ -1,3 +1,5 @@
+import { assertHistoryWrite, currentHistoryExecution } from '../connection-history/context';
+import { type HistoryExecution, assertHistoryReservation } from '../connection-history/execution';
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import * as crypto from 'crypto';
@@ -31,10 +33,11 @@ const MAX_PROVIDER_MINIMUM_ADJUSTMENTS_PER_BATCH = 3;
 interface BackfillRequest {
   startDate: string; // ISO Dates
   endDate: string;
+  background?: boolean;
 }
 
-class GarminHistoryRangeUnavailableError extends Error {
-  constructor(minimumDate?: Date | null) {
+export class GarminHistoryRangeUnavailableError extends Error {
+  constructor(public readonly minimumDate?: Date | null) {
     const minimumDateLabel = minimumDate
       ? minimumDate.toISOString().slice(0, 10)
       : null;
@@ -234,11 +237,12 @@ async function assertGarminHistoryImportUserActive(userID: string): Promise<void
   }
 }
 
-async function acquireGarminHistoryImportLease(userID: string, leaseOwner: string): Promise<void> {
+async function acquireGarminHistoryImportLease(userID: string, leaseOwner: string, execution?: HistoryExecution): Promise<void> {
   const db = admin.firestore();
   const metaRef = db.collection('users').doc(userID).collection('meta').doc(ServiceNames.GarminAPI);
   const nowMs = Date.now();
   await db.runTransaction(async (transaction) => {
+    await assertHistoryWrite(transaction);
     let deletionGuard;
     try {
       deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID, nowMs);
@@ -251,9 +255,11 @@ async function acquireGarminHistoryImportLease(userID: string, leaseOwner: strin
 
     const snapshot = await transaction.get(metaRef);
     const meta = snapshot.exists ? snapshot.data() as GarminHistoryServiceMeta : null;
+    await execution?.inTransaction(transaction);
+    assertHistoryReservation(meta as unknown as Record<string, unknown>, execution?.runId);
     const lastImportAtMs = Number(meta?.didLastHistoryImport || 0);
     const nextAvailableAtMs = lastImportAtMs + (GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS * DAY_IN_MS);
-    if (lastImportAtMs > 0 && nextAvailableAtMs > nowMs) {
+    if (lastImportAtMs > 0 && nextAvailableAtMs > nowMs && !(execution && (meta as unknown as Record<string, unknown>)?.connectionHistoryReservation === execution.runId)) {
       throw new GarminHistoryImportCooldownError(new Date(nextAvailableAtMs));
     }
 
@@ -278,6 +284,7 @@ async function finishGarminHistoryImportLease(
   const db = admin.firestore();
   const metaRef = db.collection('users').doc(userID).collection('meta').doc(ServiceNames.GarminAPI);
   await db.runTransaction(async (transaction) => {
+    await assertHistoryWrite(transaction);
     let deletionGuard;
     try {
       deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
@@ -302,7 +309,10 @@ async function finishGarminHistoryImportLease(
       historyImportLeaseExpiresAt: FieldValue.delete(),
     };
     if (coverage) {
-      update.didLastHistoryImport = Date.now();
+      if (!currentHistoryExecution()) {
+        update.connectionHistoryReservation = FieldValue.delete(); update.connectionHistoryReservationExpiresAt = FieldValue.delete();
+      }
+      update.didLastHistoryImport = currentHistoryExecution()?.cooldownStartedAtMs ?? Date.now();
       update.lastHistoryImportStartDate = coverage.startMs;
       update.lastHistoryImportEndDate = coverage.endMs;
     }
@@ -341,6 +351,9 @@ export const backfillGarminAPIActivities = functions.region(FUNCTIONS_MANIFEST.b
     throw new functions.https.HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
   }
 
+  if (data?.background !== undefined && typeof data.background !== 'boolean') {
+    throw new functions.https.HttpsError('invalid-argument', 'background must be a boolean.');
+  }
   const startDate = new Date(data?.startDate);
   const endDate = new Date(data?.endDate);
 
@@ -369,8 +382,14 @@ export const backfillGarminAPIActivities = functions.region(FUNCTIONS_MANIFEST.b
     );
   }
 
+  if (data.background === true) {
+    const { startManualActivityHistory } = await import('../connection-history/manual-activity');
+    const historyImport = await startManualActivityHistory(userID, ServiceNames.GarminAPI, startDate, endDate);
+    return { result: 'History import accepted', historyImport };
+  }
+
   try {
-    await processGarminBackfill(userID, startDate, endDate);
+    return await processGarminBackfill(userID, startDate, endDate);
   } catch (error: unknown) {
     const errorMessage = getErrorMessage(error);
     if (error instanceof GarminHistoryImportCooldownError) {
@@ -382,8 +401,12 @@ export const backfillGarminAPIActivities = functions.region(FUNCTIONS_MANIFEST.b
     if (error instanceof GarminHistoryImportSkippedForDeletedUserError) {
       throw new functions.https.HttpsError('failed-precondition', error.message);
     }
-    if (error instanceof GarminHistoryImportInProgressError) {
-      throw new functions.https.HttpsError('already-exists', error.message);
+    if (error instanceof GarminHistoryImportInProgressError
+      || (error instanceof functions.https.HttpsError && error.code === 'already-exists')) {
+      logger.info('[GarminHistoryImport] History import is already running.');
+      throw error instanceof functions.https.HttpsError
+        ? error
+        : new functions.https.HttpsError('already-exists', error.message);
     }
     if (error instanceof UserDeletionGuardReadError) {
       throw new functions.https.HttpsError('unavailable', error.message);
@@ -393,12 +416,12 @@ export const backfillGarminAPIActivities = functions.region(FUNCTIONS_MANIFEST.b
   }
 });
 
-export async function processGarminBackfill(userID: string, startDate: Date, endDate: Date) {
+export async function processGarminBackfill(userID: string, startDate: Date, endDate: Date, execution?: HistoryExecution) {
   const leaseOwner = crypto.randomUUID();
-  await acquireGarminHistoryImportLease(userID, leaseOwner);
+  await acquireGarminHistoryImportLease(userID, leaseOwner, execution);
   let leaseCompleted = false;
   try {
-    const coverage = await requestGarminBackfill(userID, startDate, endDate);
+    const coverage = await requestGarminBackfill(userID, startDate, endDate, execution);
     await finishGarminHistoryImportLease(userID, leaseOwner, coverage);
     leaseCompleted = true;
   } finally {
@@ -412,13 +435,13 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
   }
 }
 
-async function requestGarminBackfill(userID: string, startDate: Date, endDate: Date): Promise<GarminBackfillCoverage> {
+async function requestGarminBackfill(userID: string, startDate: Date, endDate: Date, execution?: HistoryExecution): Promise<GarminBackfillCoverage> {
   const tokensQuerySnapshot = await admin.firestore().collection(GARMIN_API_TOKENS_COLLECTION_NAME).doc(userID).collection('tokens').limit(1).get();
   if (tokensQuerySnapshot.empty) {
     logger.error(`No token found for user ${userID}`);
     throw new Error('Bad request: No token found');
   }
-  const tokenDoc = tokensQuerySnapshot.docs[0];
+  const tokenDoc = execution ? await admin.firestore().doc(execution.tokenPath).get() : tokensQuerySnapshot.docs[0];
 
   // Use getTokenData for auto-refresh if expired
   let garminToken: GarminAPIAuth2ServiceTokenInterface;
@@ -426,6 +449,7 @@ async function requestGarminBackfill(userID: string, startDate: Date, endDate: D
     garminToken = await getTokenData(tokenDoc, ServiceNames.GarminAPI) as GarminAPIAuth2ServiceTokenInterface;
   } catch (error: unknown) {
     logger.error(`Failed to get/refresh Garmin token for ${userID}: ${getErrorMessage(error)}`);
+    if (execution) throw error;
     throw new Error('Token refresh failed');
   }
 
@@ -464,7 +488,9 @@ async function requestGarminBackfill(userID: string, startDate: Date, endDate: D
     while (true) {
       try {
         await assertGarminHistoryImportUserActive(userID);
+        await execution?.beforeRequest();
         await requestPromise.get({
+          timeout: 30_000,
           headers: {
             'Authorization': `Bearer ${garminToken.accessToken}`,
           },

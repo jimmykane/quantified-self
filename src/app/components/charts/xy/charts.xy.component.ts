@@ -1,3 +1,5 @@
+import { dashboardChartFrameGrid } from '../../../helpers/dashboard-chart-layout.helper';
+import { DASHBOARD_CATEGORY_PALETTE } from '../../../helpers/dashboard-chart-series.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -18,7 +20,6 @@ import {
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
-import { AppColors } from '../../../services/color/app.colors';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
@@ -86,18 +87,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
   private readonly chartHost: EChartsHostController;
-  private readonly dateTypePalette = [
-    AppColors.Blue,
-    AppColors.Green,
-    AppColors.Orange,
-    AppColors.Purple,
-    AppColors.LightBlue,
-    AppColors.Yellow,
-    AppColors.Pink,
-    AppColors.Red,
-    AppColors.DeepBlue,
-    AppColors.LightGreen
-  ];
+  private readonly dateTypePalette = DASHBOARD_CATEGORY_PALETTE;
   private static readonly EMPTY_DATA_UPDATE_SETTINGS: ChartSetOptionSettings = {
     notMerge: true,
     lazyUpdate: false
@@ -109,6 +99,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
     private logger: LoggerService
   ) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsXYComponent]',
@@ -200,7 +191,8 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
         color: axisColor,
       }
       : { show: false };
-    const showValueLabels = points.length > 0 && points.length <= 200;
+    const showValueLabels = points.length > 0 && points.length <= 200
+      && (!isCompactLayout || points.length <= 6);
 
     if (!points.length) {
       return {
@@ -278,7 +270,8 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
           label: { show: false },
           handle: mobileAxisPointerHandle,
         }
-        : undefined,
+        // ECharts writes tooltip-inherited pointer state here; undefined removes its default object.
+        : {},
       axisLine: {
         lineStyle: { color: axisColor }
       },
@@ -329,7 +322,8 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
         top: 62,
         bottom: isCompactLayout ? 16 : 10,
         outerBoundsMode: 'same',
-        outerBoundsContain: 'axisLabel'
+        outerBoundsContain: 'axisLabel',
+        ...dashboardChartFrameGrid(this.chartDiv.nativeElement, { heading: 54 })
       },
       tooltip: {
         show: true,
@@ -372,6 +366,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
               return this.formatValue(point.value);
             }
           },
+          labelLayout: { hideOverlap: true },
           emphasis: {
             focus: 'series'
           },

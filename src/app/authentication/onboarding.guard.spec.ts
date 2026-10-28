@@ -16,6 +16,7 @@ describe('onboardingGuard', () => {
     let logger: any;
 
     const mockRouter = {
+        getCurrentNavigation: vi.fn().mockReturnValue(null),
         createUrlTree: vi.fn().mockImplementation((commands) => ({
             toString: () => commands.join('/')
         })),
@@ -59,6 +60,7 @@ describe('onboardingGuard', () => {
         mockUserService.hasIncompleteProfileReads.mockReturnValue(false);
         profileReadStateSubject.next({ status: 'signed-out' });
         mockAuthService.redirectUrl = null;
+        mockRouter.getCurrentNavigation.mockReturnValue(null);
         vi.clearAllMocks();
     });
 
@@ -135,6 +137,26 @@ describe('onboardingGuard', () => {
         expect(result).not.toBe(true);
         expect(result).not.toBe(false);
         expect((result as any).toString()).toContain('/onboarding');
+    });
+
+    it.each(['Wahoo%20API', 'COROS%20API'])('keeps %s setup selected while still requiring onboarding', async service => {
+        mockRouter.getCurrentNavigation.mockReturnValue({
+            extractedUrl: { toString: () => `/services?serviceName=${service}` },
+        });
+        const result = await firstValueFrom(runGuard({ uid: '123' }, [{ path: 'services' }]) as Observable<unknown>);
+        expect(result).not.toBe(true);
+        expect(mockRouter.createUrlTree).toHaveBeenCalledWith(['/onboarding'], {
+            queryParams: { returnUrl: `/services?serviceName=${service}` },
+        });
+    });
+
+    it('keeps service setup as the destination while requiring onboarding', async () => {
+        const result = await firstValueFrom(runGuard({ uid: '123' }, [{ path: 'services' }]) as Observable<unknown>);
+
+        expect(result).not.toBe(true);
+        expect(mockRouter.createUrlTree).toHaveBeenCalledWith(['/onboarding'], {
+            queryParams: { returnUrl: '/services' },
+        });
     });
 
     it('should allow payment success route when onboarding is incomplete', async () => {
@@ -253,7 +275,12 @@ describe('onboardingGuard', () => {
         subscription.unsubscribe();
     });
 
-    it('should route an actionable profile failure to login recovery', async () => {
+    it.each([
+        { path: 'dashboard', returnUrl: '/dashboard' },
+        { path: 'services', returnUrl: '/services?serviceName=Wahoo%20API' },
+        { path: 'services', returnUrl: '/services?serviceName=COROS%20API' },
+    ])('routes a profile failure on $path to recovery with its setup context', async ({ path, returnUrl }) => {
+        mockRouter.getCurrentNavigation.mockReturnValue({ extractedUrl: { toString: () => returnUrl } });
         const users$ = new BehaviorSubject<any>({
             uid: 'current-user',
             acceptedPrivacyPolicy: true,
@@ -268,7 +295,7 @@ describe('onboardingGuard', () => {
 
         const guardPromise = firstValueFrom(TestBed.runInInjectionContext(() => onboardingGuard(
             {} as any,
-            [{ path: 'dashboard' }] as any
+            [{ path }] as any
         )) as Observable<unknown>);
         profileReadStateSubject.next({
             status: 'recovering',
@@ -281,8 +308,8 @@ describe('onboardingGuard', () => {
 
         expect(result).not.toBe(true);
         expect(mockRouter.createUrlTree).toHaveBeenCalledWith(['/login'], {
-            queryParams: { returnUrl: '/dashboard' },
+            queryParams: { returnUrl },
         });
-        expect(mockAuthService.redirectUrl).toBe('/dashboard');
+        expect(mockAuthService.redirectUrl).toBe(returnUrl);
     });
 });

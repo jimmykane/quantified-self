@@ -10,7 +10,11 @@ import {
   type AssistantChatResponse,
   type AssistantLocationAccess,
   type AssistantMessage,
+  type ApplyAssistantContentProposalRequest,
+  type ApplyAssistantContentProposalResponse,
   type AssistantQuotaStatusResponse,
+  type ApplyAssistantTrainingProposalRequest,
+  type ApplyAssistantTrainingProposalResponse,
   type GetAssistantConversationResponse,
   type ResetAssistantConversationRequest,
   type ResetAssistantConversationResponse,
@@ -39,9 +43,16 @@ import {
   assistantRuntime,
   getAssistantRuntimeErrorReason,
   getAssistantRuntimeErrorToolName,
+  getAssistantRuntimeToolFailureDiagnostic,
   type AssistantRuntimeResult,
 } from './runtime';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { applyTrainingChanges } from '../mcp/training-plans-write.service';
+import { applySavedWorkoutChange, isWorkoutLibraryProposalRef } from '../mcp/workout-library-write.service';
+import { MCP_OAUTH_SCOPES } from '../mcp/oauth.service';
+import { McpDataError } from '../mcp/data.service';
+import { createMcpDataService } from '../mcp/data.service';
+import { AssistantTrainingMetricsPreparingError } from './mcp-session';
 
 interface AssistantCallableContext {
   auth?: {
@@ -74,6 +85,19 @@ export interface AssistantCallableDependencies {
     prompt: string;
     timeZone: string;
     locationAccess: AssistantLocationAccess;
+    timelineNotesEnabled?: boolean;
+    activityTagChangesEnabled?: boolean;
+    timelineNoteChangesEnabled?: boolean;
+    measurementChangesEnabled?: boolean;
+    reflectionChangesEnabled?: boolean;
+    trainingPlansEnabled?: boolean;
+    trainingPlanChangesEnabled?: boolean;
+    trainingDeliveryEnabled?: boolean;
+    conversationId?: string;
+    assertTrainingPlansAccess?: () => Promise<void>;
+    assertTrainingWriteAccess?: () => Promise<void>;
+    assertTimelineNotesAccess?: () => Promise<void>;
+    assertContentWriteAccess?: (kind: 'activity_tags' | 'timeline_notes' | 'measurements' | 'reflections') => Promise<void>;
     history: AssistantMessage[];
     onBillableAttempt: () => Promise<void>;
   }) => Promise<AssistantRuntimeResult>;
@@ -207,6 +231,12 @@ function parseAssistantLocationAccess(value: unknown): AssistantLocationAccess {
   return value;
 }
 
+function parseOptionalDataAccess(value: unknown, name: string): boolean {
+  if (value === undefined) return false;
+  if (typeof value !== 'boolean') throw new HttpsError('invalid-argument', `${name} must be a boolean.`);
+  return value;
+}
+
 function parseAssistantChatRequest(value: unknown): AssistantChatRequest {
   const data = asRecord(value);
   if (!isValidAssistantRequestId(data.requestId)) {
@@ -253,11 +283,33 @@ function parseAssistantChatRequest(value: unknown): AssistantChatRequest {
       'conversationId must contain 1 to 120 characters.',
     );
   }
+  const trainingPlansEnabled = parseOptionalDataAccess(data.trainingPlansEnabled, 'trainingPlansEnabled');
+  const trainingPlanChangesEnabled = parseOptionalDataAccess(data.trainingPlanChangesEnabled, 'trainingPlanChangesEnabled');
+  const trainingDeliveryEnabled = parseOptionalDataAccess(data.trainingDeliveryEnabled, 'trainingDeliveryEnabled');
+  const activityTagChangesEnabled = parseOptionalDataAccess(data.activityTagChangesEnabled, 'activityTagChangesEnabled');
+  const timelineNoteChangesEnabled = parseOptionalDataAccess(data.timelineNoteChangesEnabled, 'timelineNoteChangesEnabled');
+  const measurementChangesEnabled = parseOptionalDataAccess(data.measurementChangesEnabled, 'measurementChangesEnabled');
+  const reflectionChangesEnabled = parseOptionalDataAccess(data.reflectionChangesEnabled, 'reflectionChangesEnabled');
+  const timelineNotesEnabled = parseOptionalDataAccess(data.timelineNotesEnabled, 'timelineNotesEnabled');
+  if ((trainingPlanChangesEnabled || trainingDeliveryEnabled) && !trainingPlansEnabled) {
+    throw new HttpsError('invalid-argument', 'Training plans read access is required before enabling Training changes.');
+  }
+  if (timelineNoteChangesEnabled && !timelineNotesEnabled) {
+    throw new HttpsError('invalid-argument', 'Timeline notes read access is required before enabling note changes.');
+  }
   return {
     requestId: data.requestId,
     message,
     timeZone,
     locationAccess: parseAssistantLocationAccess(data.locationAccess),
+    timelineNotesEnabled,
+    activityTagChangesEnabled,
+    timelineNoteChangesEnabled,
+    measurementChangesEnabled,
+    reflectionChangesEnabled,
+    trainingPlansEnabled,
+    trainingPlanChangesEnabled,
+    trainingDeliveryEnabled,
     ...(conversationId
       ? { conversationId }
       : {}),
@@ -302,6 +354,14 @@ function assertRequestFingerprintMatchesInput(
     input.requestId,
     input.message,
     input.locationAccess,
+    input.timelineNotesEnabled,
+    input.trainingPlansEnabled,
+    input.trainingPlanChangesEnabled,
+    input.trainingDeliveryEnabled,
+    input.activityTagChangesEnabled,
+    input.timelineNoteChangesEnabled,
+    input.measurementChangesEnabled,
+    input.reflectionChangesEnabled,
   )) {
     throw new HttpsError(
       'invalid-argument',
@@ -311,6 +371,9 @@ function assertRequestFingerprintMatchesInput(
 }
 
 function isRetryableGroundedAnswerError(error: unknown): boolean {
+  if (error instanceof AssistantTrainingMetricsPreparingError) {
+    return false;
+  }
   if (error instanceof AssistantConversationStoreError) {
     return false;
   }
@@ -363,6 +426,7 @@ async function answerWithGroundedRetry(
         errorReason: getAssistantRuntimeErrorReason(error) ?? 'unknown',
         errorStatus: getGenkitErrorStatus(error) ?? 'unknown',
         toolName: getAssistantRuntimeErrorToolName(error) ?? 'unknown',
+        ...getAssistantRuntimeToolFailureDiagnostic(error),
       });
     }
   }
@@ -382,6 +446,20 @@ async function buildExistingRequestResponse(
     : await dependencies.getQuotaStatus(uid);
   return {
     conversation: requestState.conversation,
+    ...(input.timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
+    ...(input.activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
+    ...(input.timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
+    ...(input.measurementChangesEnabled ? { measurementChangesEnabled: true } : {}),
+    ...(input.reflectionChangesEnabled ? { reflectionChangesEnabled: true } : {}),
+    ...(input.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
+    ...(input.trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
+    ...(input.trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
+    ...(requestState.pendingTrainingProposal
+      ? { pendingTrainingProposal: requestState.pendingTrainingProposal }
+      : {}),
+    ...(requestState.pendingContentProposal
+      ? { pendingContentProposal: requestState.pendingContentProposal }
+      : {}),
     quota,
     pendingRequestId: requestState.kind === 'pending'
       ? input.requestId
@@ -400,7 +478,14 @@ export async function runAssistantChat(
   let reservation: AssistantQuotaReservation | null = null;
   let begunTurn: BegunAssistantTurn | null = null;
   let finalizedQuota: AssistantQuotaStatusResponse | null = null;
+  let billableAttemptStarted = false;
   let finalizeQuotaPromise: Promise<AssistantQuotaStatusResponse> | null = null;
+  const markBillableAttempt = async (): Promise<void> => {
+    if (!reservation && !finalizedQuota) {
+      throw new Error('Assistant quota reservation was unavailable at the billable-work boundary.');
+    }
+    billableAttemptStarted = true;
+  };
   const finalizeQuotaForBillableAttempt = async (): Promise<void> => {
     if (finalizedQuota) {
       return;
@@ -425,6 +510,14 @@ export async function runAssistantChat(
       input.requestId,
       input.message,
       input.locationAccess,
+      input.timelineNotesEnabled,
+      input.trainingPlansEnabled,
+      input.trainingPlanChangesEnabled,
+      input.trainingDeliveryEnabled,
+      input.activityTagChangesEnabled,
+      input.timelineNoteChangesEnabled,
+      input.measurementChangesEnabled,
+      input.reflectionChangesEnabled,
     );
     const existingRequest = await dependencies.conversationStore.findRequestState(
       uid,
@@ -473,6 +566,14 @@ export async function runAssistantChat(
       input.requestId,
       requestFingerprint,
       input.locationAccess,
+      input.timelineNotesEnabled,
+      input.trainingPlansEnabled,
+      input.trainingPlanChangesEnabled,
+      input.trainingDeliveryEnabled,
+      input.activityTagChangesEnabled,
+      input.timelineNoteChangesEnabled,
+      input.measurementChangesEnabled,
+      input.reflectionChangesEnabled,
     );
     if (turnStart.kind === 'replayed') {
       assertRequestFingerprintMatchesInput(turnStart, input);
@@ -480,6 +581,20 @@ export async function runAssistantChat(
       reservation = null;
       return {
         conversation: turnStart.conversation,
+        ...(input.timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
+        ...(input.activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
+        ...(input.timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
+        ...(input.measurementChangesEnabled ? { measurementChangesEnabled: true } : {}),
+        ...(input.reflectionChangesEnabled ? { reflectionChangesEnabled: true } : {}),
+        ...(input.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
+        ...(input.trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
+        ...(input.trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
+        ...(turnStart.pendingTrainingProposal
+          ? { pendingTrainingProposal: turnStart.pendingTrainingProposal }
+          : {}),
+        ...(turnStart.pendingContentProposal
+          ? { pendingContentProposal: turnStart.pendingContentProposal }
+          : {}),
         quota,
         pendingRequestId: null,
       };
@@ -490,23 +605,105 @@ export async function runAssistantChat(
       reservation = null;
       return {
         conversation: turnStart.conversation,
+        ...(input.timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
+        ...(input.activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
+        ...(input.timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
+        ...(input.measurementChangesEnabled ? { measurementChangesEnabled: true } : {}),
+        ...(input.reflectionChangesEnabled ? { reflectionChangesEnabled: true } : {}),
+        ...(input.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
+        ...(input.trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
+        ...(input.trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
+        ...(turnStart.pendingTrainingProposal
+          ? { pendingTrainingProposal: turnStart.pendingTrainingProposal }
+          : {}),
+        ...(turnStart.pendingContentProposal
+          ? { pendingContentProposal: turnStart.pendingContentProposal }
+          : {}),
         quota,
         pendingRequestId: input.requestId,
       };
     }
     begunTurn = turnStart;
+    const notesConversationId = begunTurn.conversationId;
+    const timelineNotesEnabled = begunTurn.timelineNotesEnabled === true;
+    const activityTagChangesEnabled = begunTurn.activityTagChangesEnabled === true;
+    const timelineNoteChangesEnabled = begunTurn.timelineNoteChangesEnabled === true;
+    const measurementChangesEnabled = begunTurn.measurementChangesEnabled === true;
+    const reflectionChangesEnabled = begunTurn.reflectionChangesEnabled === true;
+    const trainingPlansEnabled = begunTurn.trainingPlansEnabled === true;
+    const trainingPlanChangesEnabled = begunTurn.trainingPlanChangesEnabled === true;
+    const trainingDeliveryEnabled = begunTurn.trainingDeliveryEnabled === true;
+    if (trainingPlansEnabled !== (input.trainingPlansEnabled === true)) {
+      throw new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
+    }
+    if (timelineNotesEnabled !== (input.timelineNotesEnabled === true)) {
+      throw new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
+    }
+    if (activityTagChangesEnabled !== (input.activityTagChangesEnabled === true)
+      || timelineNoteChangesEnabled !== (input.timelineNoteChangesEnabled === true)
+      || measurementChangesEnabled !== (input.measurementChangesEnabled === true)
+      || reflectionChangesEnabled !== (input.reflectionChangesEnabled === true)) {
+      throw new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
+    }
+    if (trainingPlanChangesEnabled !== (input.trainingPlanChangesEnabled === true)
+      || trainingDeliveryEnabled !== (input.trainingDeliveryEnabled === true)) {
+      throw new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
+    }
     const result = await answerWithGroundedRetry(dependencies.answer, {
       uid,
       appBaseUrl: resolveAssistantAppBaseUrl(context),
       prompt: input.message,
       timeZone: input.timeZone,
       locationAccess: input.locationAccess,
+      timelineNotesEnabled,
+      activityTagChangesEnabled,
+      timelineNoteChangesEnabled,
+      measurementChangesEnabled,
+      reflectionChangesEnabled,
+      trainingPlansEnabled,
+      trainingPlanChangesEnabled,
+      trainingDeliveryEnabled,
+      conversationId: notesConversationId,
+      ...(trainingPlansEnabled ? { assertTrainingPlansAccess: async () => {
+        const current = await dependencies.conversationStore.getActiveConversationState(uid);
+        if (current.conversation?.conversationId !== notesConversationId || current.trainingPlansEnabled !== true) {
+          throw new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
+        }
+      } } : {}),
+      ...((trainingPlanChangesEnabled || trainingDeliveryEnabled) ? { assertTrainingWriteAccess: async () => {
+        const current = await dependencies.conversationStore.getActiveConversationState(uid);
+        if (current.conversation?.conversationId !== notesConversationId
+          || current.trainingPlansEnabled !== true
+          || (current.trainingPlanChangesEnabled === true) !== trainingPlanChangesEnabled
+          || (current.trainingDeliveryEnabled === true) !== trainingDeliveryEnabled) {
+          throw new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
+        }
+      } } : {}),
+      ...(timelineNotesEnabled ? { assertTimelineNotesAccess: async () => {
+        const current = await dependencies.conversationStore.getActiveConversationState(uid);
+        if (current.conversation?.conversationId !== notesConversationId || current.timelineNotesEnabled !== true) {
+          throw new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
+        }
+      } } : {}),
+      ...((activityTagChangesEnabled || timelineNoteChangesEnabled || measurementChangesEnabled || reflectionChangesEnabled) ? { assertContentWriteAccess: async (
+        kind: 'activity_tags' | 'timeline_notes' | 'measurements' | 'reflections',
+      ) => {
+        const current = await dependencies.conversationStore.getActiveConversationState(uid);
+        const permitted = kind === 'activity_tags'
+          ? current.activityTagChangesEnabled === true
+          : kind === 'reflections' ? current.reflectionChangesEnabled === true
+          : kind === 'measurements' ? current.measurementChangesEnabled === true
+          : current.timelineNotesEnabled === true && current.timelineNoteChangesEnabled === true;
+        if (current.conversation?.conversationId !== notesConversationId || !permitted) {
+          throw new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
+        }
+      } } : {}),
       history: begunTurn.history,
-      onBillableAttempt: finalizeQuotaForBillableAttempt,
+      onBillableAttempt: markBillableAttempt,
     }, () => finalizeQuotaPromise === null || finalizedQuota !== null);
-    // Production runtime calls this immediately before Gemini or an MCP tool.
-    // Retain a defensive completion fallback for injected runtimes: a grounded
-    // answer must never be committed without consuming its reserved allowance.
+    // Finalize before committing the answer. The reservation holds capacity
+    // throughout grounded work, but a pending Training build can still be
+    // released without a compensating refund transaction.
     await finalizeQuotaForBillableAttempt();
     if (!finalizedQuota) {
       throw new Error('Assistant quota was not finalized for a completed answer.');
@@ -526,19 +723,44 @@ export async function runAssistantChat(
       evidence: result.evidence,
       ...(result.visuals?.length ? { visuals: result.visuals } : {}),
     };
-    const conversation = await dependencies.conversationStore.completeTurn(
+    const completedTurn = await dependencies.conversationStore.completeTurn(
       uid,
       begunTurn,
       userMessage,
       assistantMessage,
+      result.pendingTrainingProposal,
+      result.pendingContentProposal,
     );
     begunTurn = null;
     return {
-      conversation,
+      conversation: completedTurn.conversation,
       quota: finalizedQuota,
+      ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
+      ...(activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
+      ...(timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
+      ...(measurementChangesEnabled ? { measurementChangesEnabled: true } : {}),
+      ...(reflectionChangesEnabled ? { reflectionChangesEnabled: true } : {}),
+      ...(trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
+      ...(trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
+      ...(trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
+      ...(result.pendingTrainingProposal ? { pendingTrainingProposal: result.pendingTrainingProposal } : {}),
+      ...(completedTurn.pendingContentProposal
+        ? { pendingContentProposal: completedTurn.pendingContentProposal }
+        : {}),
       pendingRequestId: null,
     };
   } catch (error) {
+    let failure = error;
+    if (!(error instanceof AssistantTrainingMetricsPreparingError)
+      && billableAttemptStarted
+      && reservation
+      && finalizeQuotaPromise === null) {
+      try {
+        await finalizeQuotaForBillableAttempt();
+      } catch (quotaError) {
+        failure = quotaError;
+      }
+    }
     if (begunTurn) {
       try {
         await dependencies.conversationStore.releaseTurn(uid, begunTurn);
@@ -557,13 +779,20 @@ export async function runAssistantChat(
         });
       }
     }
-    const mappedError = mapAssistantError(error);
+    if (error instanceof AssistantTrainingMetricsPreparingError) {
+      throw new HttpsError('unavailable', 'Training metrics are still preparing. Try again shortly.', {
+        reason: 'training_metrics_preparing',
+        retryAfterSeconds: error.retryAfterSeconds,
+      });
+    }
+    const mappedError = mapAssistantError(failure);
     if (mappedError.code === 'unavailable') {
       logger.error('[Assistant] Grounded response generation failed.', {
-        errorName: error instanceof Error ? error.name : 'unknown',
-        errorReason: getAssistantRuntimeErrorReason(error) ?? 'unknown',
-        errorStatus: getGenkitErrorStatus(error) ?? 'unknown',
-        toolName: getAssistantRuntimeErrorToolName(error) ?? 'unknown',
+        errorName: failure instanceof Error ? failure.name : 'unknown',
+        errorReason: getAssistantRuntimeErrorReason(failure) ?? 'unknown',
+        errorStatus: getGenkitErrorStatus(failure) ?? 'unknown',
+        toolName: getAssistantRuntimeErrorToolName(failure) ?? 'unknown',
+        ...getAssistantRuntimeToolFailureDiagnostic(failure),
       });
     }
     throw mappedError;
@@ -601,12 +830,244 @@ export async function runResetAssistantConversation(
   const uid = requireAuthenticatedUid(context);
   const data = asRecord(value) as Partial<ResetAssistantConversationRequest>;
   const locationAccess = parseAssistantLocationAccess(data.locationAccess);
+  const timelineNotesEnabled = parseOptionalDataAccess(data.timelineNotesEnabled, 'timelineNotesEnabled');
+  const activityTagChangesEnabled = parseOptionalDataAccess(data.activityTagChangesEnabled, 'activityTagChangesEnabled');
+  const timelineNoteChangesEnabled = parseOptionalDataAccess(data.timelineNoteChangesEnabled, 'timelineNoteChangesEnabled');
+  const measurementChangesEnabled = parseOptionalDataAccess(data.measurementChangesEnabled, 'measurementChangesEnabled');
+  const reflectionChangesEnabled = parseOptionalDataAccess(data.reflectionChangesEnabled, 'reflectionChangesEnabled');
+  const trainingPlansEnabled = parseOptionalDataAccess(data.trainingPlansEnabled, 'trainingPlansEnabled');
+  const trainingPlanChangesEnabled = parseOptionalDataAccess(data.trainingPlanChangesEnabled, 'trainingPlanChangesEnabled');
+  const trainingDeliveryEnabled = parseOptionalDataAccess(data.trainingDeliveryEnabled, 'trainingDeliveryEnabled');
+  if ((trainingPlanChangesEnabled || trainingDeliveryEnabled) && !trainingPlansEnabled) {
+    throw new HttpsError('invalid-argument', 'Training plans read access is required before enabling Training changes.');
+  }
+  if (timelineNoteChangesEnabled && !timelineNotesEnabled) {
+    throw new HttpsError('invalid-argument', 'Timeline notes read access is required before enabling note changes.');
+  }
+  const conversationId = typeof data.conversationId === 'string' ? data.conversationId.trim() : data.conversationId;
+  if ((conversationId !== undefined && conversationId !== null
+    && (typeof conversationId !== 'string' || !conversationId || conversationId.length > 120))
+    || ((timelineNotesEnabled || activityTagChangesEnabled || timelineNoteChangesEnabled || measurementChangesEnabled || reflectionChangesEnabled || trainingPlansEnabled
+      || trainingPlanChangesEnabled || trainingDeliveryEnabled) && conversationId === undefined)) {
+    throw new HttpsError('invalid-argument', 'Provide the current conversationId or null before enabling optional data access.');
+  }
   try {
     return {
-      conversation: await conversationStore.resetConversation(uid, locationAccess),
+      conversation: await conversationStore.resetConversation(uid, locationAccess, timelineNotesEnabled, conversationId,
+        trainingPlansEnabled, trainingPlanChangesEnabled, trainingDeliveryEnabled,
+        activityTagChangesEnabled, timelineNoteChangesEnabled, measurementChangesEnabled, reflectionChangesEnabled),
+      ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
+      ...(activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
+      ...(timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
+      ...(measurementChangesEnabled ? { measurementChangesEnabled: true } : {}),
+      ...(reflectionChangesEnabled ? { reflectionChangesEnabled: true } : {}),
+      ...(trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
+      ...(trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
+      ...(trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
     };
   } catch (error) {
     throw mapAssistantError(error);
+  }
+}
+
+export async function runApplyAssistantTrainingProposal(
+  value: unknown,
+  context: AssistantCallableContext | undefined,
+  conversationStore: AssistantConversationStore = assistantConversationStore,
+  applyProposal: typeof applyTrainingChanges = applyTrainingChanges,
+  applyLibraryProposal: typeof applySavedWorkoutChange = applySavedWorkoutChange,
+): Promise<ApplyAssistantTrainingProposalResponse> {
+  const uid = requireAuthenticatedUid(context);
+  const data = asRecord(value) as Partial<ApplyAssistantTrainingProposalRequest>;
+  const proposalRef = typeof data.proposalRef === 'string' ? data.proposalRef.trim() : '';
+  const conversationId = typeof data.conversationId === 'string' ? data.conversationId.trim() : '';
+  const permissionMode = data.permissionMode;
+  const confirm = data.confirm;
+  if (!proposalRef || proposalRef.length > 2048 || !conversationId || conversationId.length > 120
+    || !['schedule', 'delivery', 'combined'].includes(`${permissionMode}`) || typeof confirm !== 'boolean') {
+    throw new HttpsError('invalid-argument', 'A valid current Training proposal is required.');
+  }
+  const current = await conversationStore.getActiveConversationState(uid);
+  const needsSchedule = permissionMode === 'schedule' || permissionMode === 'combined';
+  const needsDelivery = permissionMode === 'delivery' || permissionMode === 'combined';
+  if (current.conversation?.conversationId !== conversationId
+    || current.pendingTrainingProposal?.proposalRef !== proposalRef
+    || current.pendingTrainingProposal?.permissionMode !== permissionMode
+    || current.trainingPlansEnabled !== true
+    || (needsSchedule && current.trainingPlanChangesEnabled !== true)
+    || (needsDelivery && current.trainingDeliveryEnabled !== true)) {
+    throw new HttpsError('aborted', 'The Assistant data-access setting changed. Review the proposal again.');
+  }
+  if (!confirm) {
+    const result: ApplyAssistantTrainingProposalResponse = { status: 'dismissed', scheduleRevision: current.pendingTrainingProposal.scheduleRevision,
+      changes: [], providers: [] };
+    await conversationStore.clearTrainingProposal(uid, conversationId, proposalRef, result);
+    return result;
+  }
+  const retainResult = async (result: ApplyAssistantTrainingProposalResponse) => {
+    try {
+      await conversationStore.clearTrainingProposal(uid, conversationId, proposalRef, result);
+    } catch (error) {
+      // A committed, idempotent authored change is still accepted if the chat
+      // was replaced meanwhile or its confirmation cleanup needs a retry.
+      logger.warn('[Assistant] Applied Training proposal could not be cleared.', {
+        errorName: error instanceof Error ? error.name : 'unknown',
+      });
+    }
+    return result;
+  };
+  try {
+    const writeInput = {
+      uid,
+      connectionId: `first-party-assistant-v1:${conversationId}`,
+      scopes: [
+        MCP_OAUTH_SCOPES.TrainingPlansRead,
+        ...(needsSchedule ? [MCP_OAUTH_SCOPES.TrainingPlansWrite] : []),
+        ...(needsDelivery ? [MCP_OAUTH_SCOPES.TrainingDeliveryWrite] : []),
+      ],
+      arguments: { proposalRef, permissionMode },
+    };
+    if (isWorkoutLibraryProposalRef(writeInput, proposalRef)) {
+      if (permissionMode !== 'schedule') {
+        throw new HttpsError('invalid-argument', 'Saved-workout changes require plan write permission.');
+      }
+      const result = await applyLibraryProposal({ ...writeInput,
+        arguments: { proposalRef, permissionMode: 'schedule' } });
+      return retainResult({ status: result.status, scheduleRevision: result.scheduleRevision,
+        changes: [{ index: 0, kind: result.kind, status: 'applied',
+          message: result.kind === 'place'
+            ? `${result.workoutRefs.length} workout${result.workoutRefs.length === 1 ? '' : 's'} added to the schedule.`
+            : 'Saved workout library updated.' }], providers: [] });
+    }
+    const result = await applyProposal(writeInput);
+    return retainResult({
+      status: result.status,
+      scheduleRevision: result.scheduleRevision,
+      changes: result.changes,
+      providers: result.providers,
+    });
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    if (error instanceof McpDataError) throw new HttpsError('failed-precondition', error.message);
+    throw new HttpsError('internal', 'The Training proposal could not be applied safely.');
+  }
+}
+
+export async function runApplyAssistantContentProposal(
+  value: unknown,
+  context: AssistantCallableContext | undefined,
+  conversationStore: AssistantConversationStore = assistantConversationStore,
+  dataService: ReturnType<typeof createMcpDataService> = createMcpDataService(),
+): Promise<ApplyAssistantContentProposalResponse> {
+  const uid = requireAuthenticatedUid(context);
+  const data = asRecord(value) as Partial<ApplyAssistantContentProposalRequest>;
+  const proposalRef = typeof data.proposalRef === 'string' ? data.proposalRef.trim() : '';
+  const conversationId = typeof data.conversationId === 'string' ? data.conversationId.trim() : '';
+  if (!proposalRef || proposalRef.length > 120 || !conversationId || conversationId.length > 120
+    || typeof data.confirm !== 'boolean') {
+    throw new HttpsError('invalid-argument', 'A valid current content proposal is required.');
+  }
+  let current;
+  try {
+    current = await conversationStore.getActiveConversationState(uid);
+  } catch (error) {
+    throw mapAssistantError(error);
+  }
+  const proposal = current.pendingContentProposal;
+  const needsReflections = proposal?.kind === 'save_workout_reflection' || proposal?.kind === 'delete_workout_reflection';
+  const needsTags = proposal?.kind === 'update_event_tags';
+  const needsMeasurements = proposal?.kind === 'create_manual_measurement'
+    || proposal?.kind === 'update_manual_measurement' || proposal?.kind === 'delete_manual_measurement';
+  const needsNotes = proposal?.kind === 'create_timeline_note'
+    || proposal?.kind === 'update_timeline_note'
+    || proposal?.kind === 'delete_timeline_note';
+  if (current.conversation?.conversationId !== conversationId
+    || !proposal || proposal.proposalRef !== proposalRef
+    || (needsReflections && (current.reflectionChangesEnabled !== true || !proposal.reflectionReview))
+    || (needsTags && current.activityTagChangesEnabled !== true)
+    || (needsMeasurements && current.measurementChangesEnabled !== true)
+    || (needsMeasurements && !proposal.measurementReview)
+    || (needsNotes && (current.timelineNotesEnabled !== true || current.timelineNoteChangesEnabled !== true))) {
+    throw new HttpsError('aborted', 'The Assistant data-access setting changed. Review the change again.');
+  }
+  if (!data.confirm) {
+    try {
+      await conversationStore.clearContentProposal(uid, conversationId, proposalRef);
+    } catch (error) {
+      throw mapAssistantError(error);
+    }
+    return { status: 'dismissed', kind: proposal.kind, message: 'Nothing was changed.' };
+  }
+  const writeInput = {
+    uid,
+    connectionId: `first-party-assistant-v1:${conversationId}`,
+    assistantConversationId: conversationId,
+    assistantProposalRef: proposalRef,
+    scopes: needsReflections
+      ? [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.WorkoutReflectionsRead, MCP_OAUTH_SCOPES.WorkoutReflectionsWrite]
+      : needsTags
+      ? [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.EventsWrite]
+      : needsMeasurements ? [MCP_OAUTH_SCOPES.MeasurementsWrite]
+      : [MCP_OAUTH_SCOPES.TimelineNotesRead, MCP_OAUTH_SCOPES.TimelineNotesWrite],
+    arguments: proposal.arguments,
+  };
+  let eventTagsChanged: boolean | null = null;
+  try {
+    switch (proposal.kind) {
+      case 'save_workout_reflection':
+      case 'delete_workout_reflection':
+        await dataService.workoutReflection(proposal.kind, writeInput);
+        break;
+      case 'create_manual_measurement':
+      case 'update_manual_measurement':
+      case 'delete_manual_measurement':
+        await dataService.manualMeasurement(proposal.kind, writeInput);
+        break;
+      case 'update_event_tags': {
+        const result = await dataService.updateEventTags(writeInput);
+        eventTagsChanged = result.changed;
+        break;
+      }
+      case 'create_timeline_note':
+        await dataService.createTimelineNote(writeInput);
+        break;
+      case 'update_timeline_note':
+        await dataService.updateTimelineNote(writeInput);
+        break;
+      case 'delete_timeline_note':
+        await dataService.deleteTimelineNote(writeInput);
+        break;
+    }
+    try {
+      await conversationStore.clearContentProposal(uid, conversationId, proposalRef);
+    } catch (error) {
+      // The content mutation is already accepted and is idempotent. Do not report
+      // it as failed merely because a newer proposal won the conversation race
+      // or the best-effort cleanup must be retried after a refresh.
+      logger.warn('[Assistant] Applied content proposal could not be cleared.', {
+        errorName: error instanceof Error ? error.name : 'unknown',
+      });
+    }
+    return {
+      status: 'applied',
+      kind: proposal.kind,
+      message: proposal.kind === 'update_event_tags'
+        ? eventTagsChanged
+          ? 'Event tags updated.'
+          : 'Event tags already matched the requested list.'
+        : needsReflections ? proposal.kind === 'delete_workout_reflection' ? 'Reflection permanently deleted.' : 'Reflection saved.'
+        : needsMeasurements ? proposal.kind === 'delete_manual_measurement' ? 'Manual measurement deleted.'
+          : proposal.kind === 'create_manual_measurement' ? 'Manual measurement logged.' : 'Manual measurement updated.'
+        : proposal.kind === 'delete_timeline_note'
+          ? 'Timeline note deleted.'
+          : proposal.kind === 'create_timeline_note'
+            ? 'Timeline note created.'
+            : 'Timeline note updated.',
+    };
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    if (error instanceof McpDataError) throw new HttpsError('failed-precondition', error.message);
+    throw new HttpsError('internal', 'The content proposal could not be applied safely.');
   }
 }
 
@@ -630,16 +1091,39 @@ export const getAssistantQuotaStatus = onCall({
   region: FUNCTIONS_MANIFEST.getAssistantQuotaStatus.region,
   cors: ALLOWED_CORS_ORIGINS,
   enforceAppCheck: true,
+  memory: '512MiB',
 }, request => runGetAssistantQuotaStatus(request));
 
 export const getAssistantConversation = onCall({
   region: FUNCTIONS_MANIFEST.getAssistantConversation.region,
   cors: ALLOWED_CORS_ORIGINS,
   enforceAppCheck: true,
+  memory: '512MiB',
 }, request => runGetAssistantConversation(request));
 
-export const resetAssistantConversation = onCall({
+export const RESET_ASSISTANT_CONVERSATION_OPTIONS = {
   region: FUNCTIONS_MANIFEST.resetAssistantConversation.region,
   cors: ALLOWED_CORS_ORIGINS,
   enforceAppCheck: true,
-}, request => runResetAssistantConversation(request.data, request));
+  memory: '512MiB' as const,
+};
+
+export const resetAssistantConversation = onCall(
+  RESET_ASSISTANT_CONVERSATION_OPTIONS,
+  request => runResetAssistantConversation(request.data, request),
+);
+
+export const APPLY_ASSISTANT_TRAINING_PROPOSAL_OPTIONS = {
+  region: FUNCTIONS_MANIFEST.applyAssistantTrainingProposal.region,
+  secrets: FUNCTION_SECRET_BINDINGS.applyAssistantTrainingProposal,
+  cors: ALLOWED_CORS_ORIGINS,
+  enforceAppCheck: true,
+  memory: '512MiB' as const,
+};
+
+export const applyAssistantTrainingProposal = onCall(
+  APPLY_ASSISTANT_TRAINING_PROPOSAL_OPTIONS,
+  request => ('permissionMode' in asRecord(request.data)
+    ? runApplyAssistantTrainingProposal(request.data, request)
+    : runApplyAssistantContentProposal(request.data, request)),
+);

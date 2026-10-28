@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EventWriter, FirestoreAdapter, LogAdapter } from './event-writer';
+import { ProviderImportDuplicateError } from './provider-import-duplicate';
 
 function containsKeyRecursively(value: unknown, targetKey: string): boolean {
     if (value === null || value === undefined) {
@@ -67,6 +68,55 @@ describe('EventWriter', () => {
         };
     });
 
+    it('leaves source documents and original files untouched for a verified provider duplicate', async () => {
+        const duplicate = new ProviderImportDuplicateError('event-1');
+        adapter.prepareTrainingLoad = vi.fn().mockRejectedValue(duplicate);
+        const logger: LogAdapter = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        const guardedWriter = new EventWriter(adapter, storageAdapter, undefined, logger);
+        await expect(guardedWriter.writeAllEventData('user-1', eventMock, {
+            data: Buffer.from('synthetic'), extension: 'fit', startDate: new Date(0),
+        })).rejects.toBe(duplicate);
+        expect(adapter.setDoc).not.toHaveBeenCalled();
+        expect(storageAdapter.uploadFile).not.toHaveBeenCalled();
+        expect(logger.error).not.toHaveBeenCalled();
+    });
+
+    it('does not launch source writes when the original-file upload fails', async () => {
+        storageAdapter.uploadFile.mockRejectedValue(new Error('upload interrupted'));
+        await expect(writer.writeAllEventData('user', eventMock, {
+            data: new Uint8Array([1]), extension: 'fit', startDate: new Date(),
+        })).rejects.toThrow('upload interrupted');
+        expect(adapter.setDoc).not.toHaveBeenCalled();
+    });
+
+    it('freezes load identity before source writes and propagates a final metadata failure', async () => {
+        const persist = vi.fn(async () => {
+            expect(adapter.setDoc).toHaveBeenCalled();
+            throw new Error('source changed');
+        });
+        adapter.prepareTrainingLoad = vi.fn(async parsed => {
+            expect(adapter.setDoc).not.toHaveBeenCalled();
+            expect(parsed).toBe(eventMock);
+            return persist;
+        });
+        await expect(writer.writeAllEventData('user-1', eventMock)).rejects.toThrow('source changed');
+        expect(adapter.prepareTrainingLoad).toHaveBeenCalledOnce();
+        expect(persist).toHaveBeenCalledOnce();
+    });
+    it.each(['prepare', 'source', 'finalize'] as const)('preserves a history lifecycle skip during %s without logging a write failure', async phase => {
+        const skipped = Object.assign(new Error('History import was superseded'), { name: 'HistoryLifecycleChangedError' });
+        const logger: LogAdapter = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        const guardedWriter = new EventWriter(adapter, storageAdapter, undefined, logger);
+        if (phase === 'source') adapter.setDoc = vi.fn().mockRejectedValue(skipped);
+        adapter.prepareTrainingLoad = vi.fn(async () => {
+            if (phase === 'prepare') throw skipped;
+            return async () => { if (phase === 'finalize') throw skipped; };
+        });
+        await expect(guardedWriter.writeAllEventData('user-1', eventMock)).rejects.toBe(skipped);
+        expect(logger.error).not.toHaveBeenCalled();
+        if (phase === 'prepare') expect(adapter.setDoc).not.toHaveBeenCalled();
+    });
+
     it('should write activities, streams, and event in order', async () => {
         await writer.writeAllEventData('user-1', eventMock);
 
@@ -129,15 +179,16 @@ describe('EventWriter', () => {
         expect(eventWrite?.[1]).not.toHaveProperty('benchmarkReviewTags');
     });
 
-    it('should upload original file if provided', async () => {
+    it.each([undefined, 'users/user-1/events/event-1/sources/digest/original.fit'])('retains the uploaded original location (%s)', async retainedPath => {
         const originalFile = {
             data: Buffer.from('test'),
             extension: 'fit',
             startDate: new Date(),
             originalFilename: 'test.fit',
         };
-        storageAdapter.uploadFile.mockResolvedValueOnce({ generation: '101' });
-        await writer.writeAllEventData('user-1', eventMock, originalFile);
+        storageAdapter.uploadFile.mockResolvedValueOnce({ path: retainedPath, generation: '101' });
+        const saved = await writer.writeAllEventData('user-1', eventMock, originalFile);
+        expect(saved[0].path).toBe(retainedPath ?? 'users/user-1/events/event-1/original.fit');
 
         expect(storageAdapter.uploadFile).toHaveBeenCalledWith(
             'users/user-1/events/event-1/original.fit',
@@ -149,7 +200,7 @@ describe('EventWriter', () => {
             ['users', 'user-1', 'events', 'event-1'],
             expect.objectContaining({
                 originalFile: expect.objectContaining({
-                    path: 'users/user-1/events/event-1/original.fit',
+                    path: retainedPath ?? 'users/user-1/events/event-1/original.fit',
                     bucket: 'quantified-self-io',
                     generation: '101',
                     startDate: originalFile.startDate,
@@ -157,7 +208,7 @@ describe('EventWriter', () => {
                 }),
                 originalFiles: expect.arrayContaining([
                     expect.objectContaining({
-                        path: 'users/user-1/events/event-1/original.fit',
+                        path: retainedPath ?? 'users/user-1/events/event-1/original.fit',
                         bucket: 'quantified-self-io',
                         generation: '101',
                         startDate: originalFile.startDate,
@@ -313,6 +364,20 @@ describe('EventWriter', () => {
         }));
     });
 
+    it('writes only validated source provenance bound to the final saved activity ID', async () => {
+        const sourceIdentity = { version: 1, activityId: 'activity-1', startMs: 1000, endMs: 61000, importedType: 'Yoga' };
+        activityMock.sourceIdentity = sourceIdentity;
+        activityMock.toJSON.mockReturnValue({ id: 'activity-1', sourceIdentity: { privateCanary: 'untrusted' } });
+        await writer.writeAllEventData('user-1', eventMock);
+        const activityWrite = vi.mocked(adapter.setDoc).mock.calls.find(([path]) => path[2] === 'activities')![1];
+        expect(activityWrite).toHaveProperty('sourceIdentity', sourceIdentity);
+        expect(JSON.stringify(activityWrite)).not.toContain('untrusted');
+        vi.mocked(adapter.setDoc).mockClear();
+        activityMock.sourceIdentity = { ...sourceIdentity, activityId: 'foreign-id' };
+        await writer.writeAllEventData('user-1', eventMock);
+        expect(vi.mocked(adapter.setDoc).mock.calls.find(([path]) => path[2] === 'activities')![1]).not.toHaveProperty('sourceIdentity');
+    });
+
     it('should persist sourceActivityKey when available on activity instance', async () => {
         activityMock.sourceActivityKey = 'sha256:signature:0';
         activityMock.toJSON.mockReturnValue({
@@ -408,7 +473,7 @@ describe('EventWriter', () => {
             );
         });
 
-        it('should log warn when no storage adapter is provided', async () => {
+        it('should log info when no storage adapter is provided', async () => {
             const writerWithoutStorage = new EventWriter(adapter, undefined, undefined, mockLogger);
             const originalFile = {
                 data: Buffer.from('test'),
@@ -418,11 +483,22 @@ describe('EventWriter', () => {
 
             await writerWithoutStorage.writeAllEventData('user-1', eventMock, originalFile);
 
-            expect(mockLogger.warn).toHaveBeenCalledWith(
+            expect(mockLogger.info).toHaveBeenCalledWith(
                 expect.stringContaining('Skipping file upload'),
                 expect.any(String),
                 expect.any(Boolean)
             );
+            expect(mockLogger.warn).not.toHaveBeenCalled();
+        });
+
+        it.each([true, false])('logs skipped uploads at info when no new files are supplied (storage adapter: %s)', async hasStorageAdapter => {
+            const writerWithoutFiles = new EventWriter(adapter, hasStorageAdapter ? storageAdapter : undefined, undefined, mockLogger);
+
+            await writerWithoutFiles.writeAllEventData('user-1', eventMock);
+
+            expect(mockLogger.info).toHaveBeenCalledWith('Skipping file upload.', 'storageAdapter:', hasStorageAdapter);
+            expect(mockLogger.warn).not.toHaveBeenCalled();
+            expect(storageAdapter.uploadFile).not.toHaveBeenCalled();
         });
 
         it('should log error when write fails', async () => {
@@ -440,9 +516,10 @@ describe('EventWriter', () => {
             expect(mockLogger.error).toHaveBeenCalled();
         });
 
-        it('should rethrow account-deletion write aborts without wrapping them', async () => {
+        it.each(['EventWriteSkippedForDeletedUserError', 'EventWriteSkippedForDeletedEventError'])(
+            'should rethrow deletion write aborts without wrapping them (%s)', async name => {
             const deletionSkipError = Object.assign(new Error('deleted'), {
-                name: 'EventWriteSkippedForDeletedUserError',
+                name,
             });
             const failingAdapter: FirestoreAdapter = {
                 setDoc: vi.fn().mockRejectedValue(deletionSkipError),

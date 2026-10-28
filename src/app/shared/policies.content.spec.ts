@@ -22,6 +22,38 @@ describe('Policy consent fields', () => {
 });
 
 describe('Built-in Assistant policy', () => {
+  it('discloses deletion cleanup as an explicit approved choice under both existing Training grants', () => {
+    const external = CONNECTED_SERVICES_POLICY_SECTION.topics
+      .find(candidate => candidate.id === POLICIES_MCP_CLIENTS_FRAGMENT)?.content.join(' ') ?? '';
+    expect(external).toContain('both Training change permissions');
+    expect(external).toContain('older, uncompleted copies');
+    expect(external).toContain('explicit choice appears in the deletion preview');
+    expect(external).toContain('does not require Pro');
+    expect(external).toContain('Completed copies and recorded activities stay protected');
+    expect(external).toContain('not confirmed removal from a provider app or watch');
+    expect(external).toContain('earlier explicit disconnects');
+  });
+  it('discloses separate optional notes consent, full text and retained client copies', () => {
+    const assistant = CONNECTED_SERVICES_POLICY_SECTION.topics
+      .find(candidate => candidate.id === POLICIES_AI_AND_PROCESSORS_FRAGMENT)?.content.join(' ') ?? '';
+    const external = CONNECTED_SERVICES_POLICY_SECTION.topics
+      .find(candidate => candidate.id === POLICIES_MCP_CLIENTS_FRAGMENT)?.content.join(' ') ?? '';
+    expect(assistant).toContain('Timeline notes');
+    expect(assistant).toContain('Timeline notes, Timeline note changes, and Activity tag changes are off by default');
+    expect(external).toContain('The separate Change events grant');
+    expect(external).toContain('benchmark events cannot be changed');
+    expect(assistant).toContain('full private');
+    expect(external).toContain('Timeline notes permission');
+    expect(external).toContain('an authored pool-swim length when selected');
+    expect(external).toContain('Both checkboxes are selected by default when requested; uncheck either before approving.');
+    expect(external).toContain('separate dependent change grant');
+    expect(external).toContain('Activity descriptions permission');
+    expect(external).toContain('Like every requested MCP permission, the checkbox is selected by default');
+    expect(external).toContain('Every requested current or future permission starts checked');
+    expect(external).toContain('64 KiB of UTF-8 text');
+    expect(external).toContain('even without Activity locations permission');
+    expect(external).toContain('copies');
+  });
   it('documents the bounded MCP-backed Gemini context, exclusions, and retention', () => {
     const topic = CONNECTED_SERVICES_POLICY_SECTION.topics
       .find(candidate => candidate.id === POLICIES_AI_AND_PROCESSORS_FRAGMENT);
@@ -30,11 +62,11 @@ describe('Built-in Assistant policy', () => {
     expect(CONNECTED_SERVICES_POLICY_SECTION.summary).toContain('built-in Assistant');
     expect(content).toContain("browser's IANA timezone");
     expect(content).toContain('latest six completed conversation turns');
-    expect(content).toContain('bounded validated results from the read-only tools');
+    expect(content).toContain('bounded validated results selected through Quantified Self\'s MCP tools');
     expect(content).toContain('Results are coordinate-free by default');
     expect(content).toContain('Precise activity locations enabled');
     expect(content).toContain('exact activity start/end and MTB jump coordinates');
-    expect(content).toContain('Changing the setting starts a fresh chat');
+    expect(content).toContain('Changing a setting starts a fresh chat');
     expect(content).toContain('Coordinate-free saved-route summaries may be selected');
     expect(content).toContain('Direct in-app URLs are withheld from Gemini');
     expect(content).toContain('opaque reference or cursor is rejected');
@@ -73,6 +105,13 @@ describe('Wahoo connected-service policy', () => {
     expect(content).toContain('Garmin, COROS, or Suunto activities');
     expect(content).toContain('does not create or retain a Quantified Self activity');
     expect(content).toContain('Wahoo-to-Suunto or Wahoo-to-COROS activity sync');
+    expect(content).toContain('authored workout recipe, title and scheduled date');
+    expect(content).toContain('Connected Pro users can explicitly enable plan sync or send a standalone workout');
+    expect(content).toContain('Provider identifiers and operation receipts are retained server-side');
+    expect(content).toContain('not receipt by a Wahoo app, ELEMNT computer or watch');
+    expect(content).toContain('does not import Wahoo-owned plans or grant assistants permission to send workouts');
+    expect(CONNECTED_SERVICES_POLICY_SECTION.topics.flatMap(candidate => candidate.content).join(' '))
+      .toContain('explicit QS-authored planned-workout');
   });
 });
 
@@ -94,6 +133,9 @@ describe('COROS connected-service policy', () => {
     expect(content).toContain('Disconnecting COROS stops future daily Health and sleep imports');
     expect(content).toContain('Deleting your Quantified Self account recursively removes');
     expect(content).toContain('active COROS connection');
+    expect(content).toContain('collision-checked partner workout identities');
+    expect(content).toContain('exact returned COROS planWorkoutId');
+    expect(content).toContain('COROS Training plan sync and standalone Send are coming soon and are not currently available');
     expect(content).toContain('automatically send new Garmin/Suunto/Wahoo FIT activities');
     expect(content).toContain('Eligible connected Pro users can also send');
     expect(content).toContain('selected GPX/FIT route');
@@ -113,7 +155,8 @@ describe('MCP client access policy', () => {
 
     expect(topic?.title).toBe('MCP Client Access');
     expect(topic?.summary).toContain('body-measurement');
-    expect(content).toContain('one or more requested read-only permissions');
+    expect(content).toContain('only the capabilities you approve');
+    expect(content).toContain('Training plan/workout and delivery changes additionally require a bounded preview');
     expect(content).toContain(
       'excludes precise latitude/longitude and first-class body-measurement metrics',
     );
@@ -122,14 +165,30 @@ describe('MCP client access policy', () => {
     expect(content).toContain('Oversized rankings fail instead of returning a partial result');
     expect(content).toContain('jump count is not treated as jump quality');
     expect(content).toContain('Metric permission');
+    expect(content).toContain('TSS-based Training impact');
+    expect(content).toContain('up to 32 exact activity references');
+    expect(content).toContain('one or two dated UTC Training-day outcomes');
+    expect(content).toContain('models sustained load rather than measured physiological adaptation');
     expect(content).toContain('Body-measurement permission');
-    expect(content).toContain('Activity locations depend on activity details');
+    expect(content).toContain('Activity locations and event changes depend on activity details');
+    expect(content).toContain('Event changes');
     expect(content).toContain('bounded body-measurement history');
+    expect(content).toContain('provider or manual canonical Health Weight point measurements');
+    expect(content).toContain('Workout profile Weight is excluded because it is not a weigh-in');
     expect(content).toContain('identity-free day, week, or month values');
     expect(content).toContain('range of at most 366 days');
     expect(content).toContain('exact source measurement timestamps');
     expect(content).toContain('provider/device metadata');
     expect(content).toContain('bounded chart-ready streams');
+    expect(content).toContain('parent event tags');
+    expect(content).toContain('1–10 exact case-insensitive tags');
+    expect(content).toContain('Activities from the same event share tags');
+    expect(content).toContain('personal, health, or location context');
+    expect(content).toContain('untrusted labels');
+    expect(content).toContain('Tag reads select only the event tag fields');
+    expect(content).toContain('separate internal ID fields');
+    expect(content).toContain('signed-in application link retains its normal event route');
+    expect(content).toContain('built-in Assistant can read current tags only after its separate default-off');
     expect(content).toContain('discover canonical Sports Lib activity types');
     expect(content).toContain('filter bounded newest-first scans');
     expect(content).toContain('explicit IANA timezone');
@@ -152,6 +211,10 @@ describe('MCP client access policy', () => {
     expect(content).toContain('activity data, route data, account identifiers');
     expect(content).toContain('Original files');
     expect(content).toContain('full-resolution recordings');
+    expect(content).toContain('Health metrics permission');
+    expect(content).toContain('Body composition additionally requires Body measurements');
+    expect(content).toContain('existing grants are not expanded automatically');
+    expect(content).toContain('UTC sample times and provider names');
     expect(content).toContain('raw sleep-stage intervals');
     expect(content).toContain('one-call sleep trend');
     expect(content).toContain('preferred daily report');
@@ -160,8 +223,8 @@ describe('MCP client access policy', () => {
     expect(content).toContain('average/minimum sleep heart rate');
     expect(content).toContain('current-versus-usual equivalent 28-day Training totals');
     expect(content).toContain('same live UTC-day Readiness used by Dashboard Today');
-    expect(content).toContain('same-provider baseline medians');
-    expect(content).toContain('missing or insufficient-baseline states');
+    expect(content).toContain('seven-day HRV average and same-source 60-day personal range');
+    expect(content).toContain('missing or insufficient-history states');
     expect(content).toContain('does not change the UTC scoring boundary');
     expect(content).toContain('workout plans, and medical advice');
     expect(content).toContain('stored server-side only as hashes');
@@ -223,12 +286,17 @@ describe('Garmin Health policy', () => {
 });
 
 describe('workout context Health policy', () => {
-  it('documents the on-demand, separated, identity-free workout projection', () => {
+  it('documents manual Health storage and the on-demand, identity-free workout projection', () => {
     const content = CONNECTED_SERVICES_POLICY_SECTION.content.join(' ');
 
+    expect(content).toContain('Manual Health measurements');
+    expect(content).toContain('add, edit, and delete Weight, VO₂ max, body fat, blood pressure, muscle mass, body water percentage, bone mass, and blood oxygen (SpO₂) measurements');
+    expect(content).toContain('systolic and diastolic together with any pulse');
+    expect(content).toContain('Account deletion removes them');
     expect(content).toContain('Workout context in Health');
     expect(content).toContain('profile context rather than a weigh-in');
-    expect(content).toContain('hidden when a real Health Weight measurement exists');
+    expect(content).toContain('active provider-filtered view has no provider or manual Health Weight');
+    expect(content).toContain('never plotted as a weigh-in');
     expect(content).toContain('separate by provider, local account label, and discipline');
     expect(content).toContain('do not copy workout values into Health storage');
     expect(content).toContain('excludes workout identifiers, names, locations, provider account IDs, and raw creator details');

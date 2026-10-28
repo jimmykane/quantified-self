@@ -1,12 +1,12 @@
 interface:
   display_name: "Analyze Training"
-  short_description: "Review training load, volume, and trends"
+  short_description: "Read plans, upcoming workouts, and training trends"
   default_prompt: "Use $analyze-quantified-self-training to explain how my training changed over the last four weeks."
 dependencies:
   tools:
     - type: "mcp"
       value: "quantified-self"
-      description: "Read-only Quantified Self activity metrics and Training snapshots"
+      description: "Permission-scoped Quantified Self Training reads, identity-safe completed-activity impact, approval-gated planning changes, and separate reported-workout context"
       transport: "streamable_http"
       url: "https://quantified-self.io/mcp"
 policy:

@@ -1,0 +1,57 @@
+:host { display: block; min-width: 0; }
+p, li, span, a { overflow-wrap: anywhere; }
+.delivery-actions, .delivery-review-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem; }
+.delivery-review { display: flex; flex-direction: column; align-items: stretch; gap: 0.75rem; }
+.delivery-review p { margin-block: 0; }
+.delivery-subtitle, .delivery-caption { color: var(--mat-sys-on-surface-variant); }
+.delivery-context { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 0.25rem 0.75rem; margin-block: 0.5rem 0.75rem; }
+.delivery-context-copy { flex: 1 1 14rem; min-width: 0; }
+.delivery-edit-workout { flex: 0 0 auto; margin-inline-start: auto; }
+.delivery-subtitle { margin: 0; font: var(--mat-sys-title-medium); color: var(--mat-sys-on-surface); }
+.delivery-context .delivery-caption { margin-block: 0.25rem 0; }
+.delivery-setting-label { margin: 0 0 0.25rem; font-weight: 500; }
+// Align wordmarks (including their raised brand symbols) with the label's text baseline.
+.delivery-provider-row { --compact-row-title-align-items: baseline; }
+.delivery-provider-logo { display: flex; flex: 0 0 auto; }
+.delivery-provider-overview { min-width: 0; }
+.delivery-provider-overview > .delivery-caption { margin-block: 0 0.5rem; }
+.delivery-provider-overview-copy { display: grid; gap: 0.125rem; min-width: 0; }
+.delivery-provider-overview-copy p { margin: 0; }
+.delivery-provider-state { display: flex; align-items: center; gap: 0.35rem; color: var(--mat-sys-on-surface); font-weight: 500; }
+.delivery-provider-state mat-icon { width: 18px; height: 18px; font-size: 18px; }
+.delivery-provider-state--enabled { color: var(--mat-sys-primary); }
+.delivery-provider-back { margin-block-end: 0.25rem; }
+.delivery-provider-manage { min-width: 6rem; }
+.delivery-provider-settings { display: grid; gap: 0.25rem; }
+.delivery-workouts h4 { margin: 0 0 0.25rem; font: var(--mat-sys-title-small); }
+app-compact-row p.delivery-caption { margin: 0; }
+.delivery-caption { font: var(--mat-sys-body-small); }
+.delivery-progress { display: flex; align-items: center; gap: 0.75rem; }
+.delivery-progress mat-spinner { flex: 0 0 20px; }
+.delivery-zone { display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem; }
+.delivery-zone-form { display: flex; align-items: start; flex-wrap: wrap; gap: 0.25rem; }
+.delivery-zone-form mat-form-field { flex: 1 1 220px; min-width: 0; }
+.delivery-status-label { font-weight: 500; }
+.delivery-provider-settings .delivery-status-label { margin-block: 0.25rem; }
+.delivery-list { list-style: none; margin: 0; padding: 0; }
+.delivery-status { padding-block: 0.5rem; }
+.delivery-status + .delivery-status { border-top: 1px solid var(--mat-sys-outline-variant); }
+.delivery-status p { margin-block: 0.125rem; }
+.delivery-status--summary { padding-block: 0; }
+.delivery-workout-button { width: 100%; height: auto; min-height: 56px; justify-content: space-between; padding: 8px; text-align: start; }
+.delivery-status-summary { display: flex; flex-direction: column; min-width: 0; font: var(--mat-sys-body-medium); }
+.delivery-workout-meta { display: flex; flex-direction: column; }
+.delivery-workout-title { color: var(--mat-sys-on-surface); }
+.delivery-attempts { margin: 0.25rem 0; }
+.delivery-attempts div { display: flex; flex-wrap: wrap; column-gap: 0.5rem; padding-block: 0.125rem; }
+.delivery-attempts dt { font-weight: 500; }
+.delivery-attempts dd { margin: 0; }
+// Material's 48px touch target extends 4px below the 40px disclosure button.
+// Reserve that space so the otherwise-fitting content does not acquire a scrollbar.
+.delivery-guidance { margin-block-start: 0.75rem; padding-block-end: 0.25rem; }
+.delivery-guidance p { margin-block: 0.5rem; }
+[hidden] { display: none !important; }
+
+@media (max-width: 520px) {
+  .delivery-provider-manage { width: 100%; }
+}

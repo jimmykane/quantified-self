@@ -39,13 +39,16 @@ vi.mock('../shared/user-deletion-guard', () => ({
 }));
 
 import {
+    HealthSourceRecordBatchSplitRequiredError,
     HealthSourceRecordRevisionConflictError,
     HealthLifecycleGuardReadError,
     HealthWriteSizeError,
+    HEALTH_SOURCE_RECORD_TRANSACTION_BATCH_SIZE,
     assertHealthSourceRecordWriteSize,
     buildHealthSourceRecordWrite,
     markHealthProviderDisconnected,
     replaceHealthSourceRecord,
+    replaceHealthSourceRecords,
     updateHealthSyncState,
 } from './writer';
 
@@ -261,6 +264,105 @@ describe('health writer', () => {
         expect(fake.sets).toHaveBeenCalledTimes(2);
         expect(fake.deletes).not.toHaveBeenCalled();
         expect(hoisted.deletionGuard).toHaveBeenCalledOnce();
+    });
+
+    it('writes eight source records in one transaction with one read per shared lifecycle document', async () => {
+        const fake = fakeDatabase();
+        const tokenRef = { id: 'provider-account', path: 'tokens/provider-account' };
+        const queueRef = { id: 'queue-item', path: 'sleepSyncQueue/queue-item' };
+        fake.stored.set(tokenRef.path, {
+            accessToken: 'captured-token',
+            refreshToken: '',
+            expiresAt: 0,
+            dateCreated: 0,
+            dateRefreshed: 0,
+            tokenCredentialGeneration: 'captured-generation',
+            connectionState: 'connected',
+        });
+        fake.stored.set(queueRef.path, { queueRevision: 'revision-1' });
+        const inputs = Array.from(
+            { length: HEALTH_SOURCE_RECORD_TRANSACTION_BATCH_SIZE },
+            (_, index) => ({
+                ...validInput(),
+                sourceRecordKey: `2026-01-${String(index + 1).padStart(2, '0')}`,
+                sampleSeries: [],
+            }),
+        );
+
+        const results = await replaceHealthSourceRecords('user-1', inputs, 10_000, {
+            db: fake.db as never,
+            generateId: fakeId,
+            requiredExistingDocumentRef: tokenRef as never,
+            requiredExistingTokenCredential: tokenCredential('captured-token', 'captured-generation'),
+            requiredDocumentFieldValues: {
+                documentRef: tokenRef as never,
+                expectedFields: { connectionState: 'connected' },
+            },
+            additionalRequiredDocumentFieldValues: [{
+                documentRef: queueRef as never,
+                expectedFields: { queueRevision: 'revision-1' },
+            }],
+        });
+
+        expect(results).toHaveLength(HEALTH_SOURCE_RECORD_TRANSACTION_BATCH_SIZE);
+        expect(results.every(result => result.status === 'written')).toBe(true);
+        expect(fake.db.runTransaction).toHaveBeenCalledOnce();
+        expect(fake.sets).toHaveBeenCalledTimes(HEALTH_SOURCE_RECORD_TRANSACTION_BATCH_SIZE);
+        expect(fake.transaction.get.mock.calls.filter(([ref]) => ref.path === tokenRef.path)).toHaveLength(1);
+        expect(fake.transaction.get.mock.calls.filter(([ref]) => ref.path === queueRef.path)).toHaveLength(1);
+        expect(hoisted.deletionGuard).toHaveBeenCalledOnce();
+    });
+
+    it('rejects oversized record batches before starting a transaction', async () => {
+        const fake = fakeDatabase();
+        const inputs = Array.from(
+            { length: HEALTH_SOURCE_RECORD_TRANSACTION_BATCH_SIZE + 1 },
+            (_, index) => ({
+                ...validInput(),
+                sourceRecordKey: `2026-02-${String(index + 1).padStart(2, '0')}`,
+                sampleSeries: [],
+            }),
+        );
+
+        await expect(replaceHealthSourceRecords('user-1', inputs, 10_000, {
+            db: fake.db as never,
+            generateId: fakeId,
+        })).rejects.toBeInstanceOf(HealthSourceRecordBatchSplitRequiredError);
+
+        expect(fake.db.runTransaction).not.toHaveBeenCalled();
+        expect(hoisted.deletionGuard).not.toHaveBeenCalled();
+    });
+
+    it('rejects duplicate source identities before starting a batch transaction', async () => {
+        const fake = fakeDatabase();
+        const first = { ...validInput(), sampleSeries: [] };
+        const second = JSON.parse(JSON.stringify(first)) as Record<string, unknown>;
+        (second.revision as Record<string, unknown>).order = 2;
+        (second.revision as Record<string, unknown>).token = 'revision-2';
+
+        await expect(replaceHealthSourceRecords('user-1', [first, second], 10_000, {
+            db: fake.db as never,
+            generateId: fakeId,
+        })).rejects.toBeInstanceOf(HealthSourceRecordBatchSplitRequiredError);
+
+        expect(fake.db.runTransaction).not.toHaveBeenCalled();
+    });
+
+    it('keeps a conflicting record batch atomic', async () => {
+        const fake = fakeDatabase();
+        const first = { ...validInput(), sourceRecordKey: '2026-03-01', sampleSeries: [] };
+        const second = { ...validInput(), sourceRecordKey: '2026-03-02', sampleSeries: [] };
+        const conflicting = await buildHealthSourceRecordWrite('user-1', second, 9_000, fakeId);
+        conflicting.sourceRecord.source.revision.digest = 'different-digest';
+        fake.stored.set(sourceRecordPath(conflicting.sourceRecord.id), conflicting.sourceRecord);
+
+        await expect(replaceHealthSourceRecords('user-1', [first, second], 10_000, {
+            db: fake.db as never,
+            generateId: fakeId,
+        })).rejects.toBeInstanceOf(HealthSourceRecordRevisionConflictError);
+
+        expect(fake.db.runTransaction).toHaveBeenCalledOnce();
+        expect(fake.sets).not.toHaveBeenCalled();
     });
 
     it('length-encodes ID inputs so delimiter-bearing provider fields cannot collide', async () => {
@@ -571,6 +673,58 @@ describe('health writer', () => {
 
         expect(built.chunks[0].canonicalValues).toBeNull();
         expect(built.chunks[0].qualityCodes).toBeNull();
+    });
+
+    it.each([true, false])('records pending and exhausted retries: %s', async retryPending => {
+        const fake = fakeDatabase();
+        await updateHealthSyncState('user-1', HEALTH_PROVIDERS.COROSAPI, {
+            status: HEALTH_SYNC_STATUSES.Failed, retryPending,
+        }, 10_000, { db: fake.db as never });
+        expect(fake.sets.mock.calls[0][1]).toMatchObject({ status: 'failed', retryPending });
+    });
+
+    it('clears retry metadata on recovery and preserves it against an older failure', async () => {
+        const fake = fakeDatabase();
+        fake.stored.set('users/user-1/healthSyncState/COROSAPI', {
+            status: 'failed', retryPending: true, lastSyncedAtMs: 8_000, updatedAtMs: 10_000,
+        });
+        await updateHealthSyncState('user-1', HEALTH_PROVIDERS.COROSAPI, {
+            status: HEALTH_SYNC_STATUSES.Ready,
+        }, 11_000, { db: fake.db as never });
+        expect(fake.sets.mock.calls[0][1]).toMatchObject({ status: 'ready', retryPending: false });
+        fake.stored.set('users/user-1/healthSyncState/COROSAPI', {
+            status: 'ready', retryPending: false, lastSyncedAtMs: 8_000, updatedAtMs: 11_000,
+        });
+        await updateHealthSyncState('user-1', HEALTH_PROVIDERS.COROSAPI, {
+            status: HEALTH_SYNC_STATUSES.Failed, retryPending: false,
+        }, 9_000, { db: fake.db as never });
+        expect(fake.sets.mock.calls[1][1]).not.toHaveProperty('retryPending');
+        expect(fake.sets.mock.calls[1][1]).not.toHaveProperty('status');
+        expect(fake.sets.mock.calls[1][1]).not.toHaveProperty('lastSyncedAtMs');
+    });
+
+    it('stages terminal status in the caller transaction without nesting transactions', async () => {
+        const fake = fakeDatabase();
+        await updateHealthSyncState('user-1', HEALTH_PROVIDERS.COROSAPI, {
+            status: HEALTH_SYNC_STATUSES.Failed, retryPending: false,
+        }, 10_000, { db: fake.db as never, transaction: fake.transaction as never });
+        expect(fake.db.runTransaction).not.toHaveBeenCalled();
+        expect(fake.sets.mock.calls[0][1]).toMatchObject({ status: 'failed', retryPending: false });
+    });
+
+    it.each(['true', 1, null])('rejects invalid retry metadata: %s', async retryPending => {
+        const fake = fakeDatabase();
+        await expect(updateHealthSyncState('user-1', HEALTH_PROVIDERS.COROSAPI, {
+            status: 'failed', retryPending,
+        }, 10_000, { db: fake.db as never })).rejects.toThrow('retryPending must be a boolean');
+        expect(fake.sets).not.toHaveBeenCalled();
+    });
+
+    it('rejects a pending retry on a successful state', async () => {
+        const fake = fakeDatabase();
+        await expect(updateHealthSyncState('user-1', HEALTH_PROVIDERS.COROSAPI, {
+            status: 'ready', retryPending: true,
+        }, 10_000, { db: fake.db as never })).rejects.toThrow('pending retry requires a failed');
     });
 
     it('writes only opaque sync error codes', async () => {

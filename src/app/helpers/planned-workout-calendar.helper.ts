@@ -1,0 +1,83 @@
+import type { ScheduledWorkoutV1, TrainingPlanV1 } from '@shared/training-plans';
+import { STANDALONE_WORKOUT_COLOR, trainingPlanAppearance } from './training-plan-appearance.helper';
+
+export interface PlannedWorkoutCalendarEntry {
+  workout: ScheduledWorkoutV1;
+  planName: string | null;
+  color?: string;
+  completed?: boolean;
+  /** False means absence of a completion link has not been established. */
+  completionKnown?: boolean;
+}
+
+export interface PlannedWorkoutCalendarDayOverlay {
+  entries: PlannedWorkoutCalendarEntry[];
+  visibleEntries: PlannedWorkoutCalendarEntry[];
+  overflowCount: number;
+  hasSkipped: boolean;
+  ariaLabel: string;
+}
+
+export type PlannedWorkoutCalendarOverlay = Readonly<Record<string, PlannedWorkoutCalendarDayOverlay>>;
+
+export function buildPlannedWorkoutCalendarOverlay(
+  workouts: readonly ScheduledWorkoutV1[],
+  plans: readonly TrainingPlanV1[] = [],
+  activePlanId?: string | null,
+  completedWorkoutIds: readonly string[] = [],
+  completionCoverageComplete = true,
+): PlannedWorkoutCalendarOverlay {
+  const plansById = new Map(plans.map(plan => [plan.id, plan]));
+  const completedWorkoutIdSet = new Set(completedWorkoutIds);
+  const activePlanIds = activePlanId === undefined
+    ? new Set(plans.filter(plan => plan.lifecycle === 'active').map(plan => plan.id))
+    : new Set(activePlanId ? [activePlanId] : []);
+  const grouped = new Map<string, PlannedWorkoutCalendarEntry[]>();
+  workouts
+    .filter(workout => (
+      workout.lifecycle !== 'deleted'
+      && (workout.planId === null || activePlanIds.has(workout.planId))
+    ))
+    .forEach((workout) => {
+      const entries = grouped.get(workout.localDate) ?? [];
+      entries.push({
+        workout,
+        planName: workout.planId ? plansById.get(workout.planId)?.name ?? 'Plan workout' : null,
+        color: workout.planId ? trainingPlanAppearance(plansById.get(workout.planId)).color : STANDALONE_WORKOUT_COLOR,
+        completed: completedWorkoutIdSet.has(workout.id),
+        ...(!completionCoverageComplete && !completedWorkoutIdSet.has(workout.id) ? { completionKnown: false } : {}),
+      });
+      grouped.set(workout.localDate, entries);
+    });
+
+  return Object.fromEntries([...grouped.entries()].map(([date, entries]) => {
+    const sorted = [...entries].sort((left, right) => (
+      Number(right.completed) - Number(left.completed)
+      || Number(left.workout.lifecycle === 'skipped') - Number(right.workout.lifecycle === 'skipped')
+      || left.workout.title.localeCompare(right.workout.title)
+      || left.workout.id.localeCompare(right.workout.id)
+    ));
+    const completedCount = sorted.filter(entry => entry.completed).length;
+    const skippedCount = sorted.filter(entry => !entry.completed && entry.workout.lifecycle === 'skipped').length;
+    const plannedCount = sorted.length - skippedCount - completedCount;
+    // Reserve a marker for each visible scope so standalone workouts cannot hide the active plan's color.
+    const visibleEntries = sorted.slice(0, 2);
+    const otherScope = sorted.find(entry => entry.workout.planId !== visibleEntries[0]?.workout.planId);
+    if (otherScope && visibleEntries.every(entry => entry.workout.planId === visibleEntries[0].workout.planId)) {
+      visibleEntries[1] = otherScope;
+    }
+    const parts = [
+      plannedCount ? `${plannedCount} planned workout${plannedCount === 1 ? '' : 's'}` : '',
+      skippedCount ? `${skippedCount} skipped workout${skippedCount === 1 ? '' : 's'}` : '',
+      completedCount ? `${completedCount} completed workout${completedCount === 1 ? '' : 's'}, activity linked` : '',
+      !completionCoverageComplete ? 'Completion coverage unknown' : '',
+    ].filter(Boolean);
+    return [date, {
+      entries: sorted,
+      visibleEntries,
+      overflowCount: Math.max(0, sorted.length - 2),
+      hasSkipped: skippedCount > 0,
+      ariaLabel: parts.join(', '),
+    } satisfies PlannedWorkoutCalendarDayOverlay];
+  }));
+}

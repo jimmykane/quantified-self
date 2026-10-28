@@ -1,3 +1,4 @@
+import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -28,6 +29,8 @@ import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../helpe
 import type { TrainingReadinessTrendPointViewModel } from '../../helpers/training-readiness.helper';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
+import { getDateTimeFormatter } from '../../helpers/date-time-format.helper';
+import { getNumberFormatter } from '../../helpers/number-format.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
@@ -40,12 +43,13 @@ interface TrendTooltipParam {
   templateUrl: './training-readiness-trend-chart.component.html',
   styleUrls: ['./training-readiness-trend-chart.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: false,
+  standalone: true,
 })
 export class TrainingReadinessTrendChartComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() points: readonly TrainingReadinessTrendPointViewModel[] = [];
   @Input() ariaLabel = 'Readiness scores over 14 days.';
   @Input() darkTheme = false;
+  @Input() timelineNotes: TimelineNoteChartContext | null = null;
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
   private readonly chartHost: EChartsHostController;
@@ -53,6 +57,7 @@ export class TrainingReadinessTrendChartComponent implements AfterViewInit, OnCh
 
   constructor(eChartsLoader: EChartsLoaderService, logger: LoggerService) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader,
       logger,
       logPrefix: '[TrainingReadinessTrendChartComponent]',
@@ -65,7 +70,11 @@ export class TrainingReadinessTrendChartComponent implements AfterViewInit, OnCh
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (this.viewInitialized && (changes.points || changes.darkTheme)) {
+    if (changes.timelineNotes && Object.keys(changes).length === 1) {
+      this.chartHost.updateTimelineNotes(this.timelineNotes);
+      return;
+    }
+    if (this.viewInitialized && (changes.points || changes.darkTheme || changes.timelineNotes)) {
       void this.refresh();
     }
   }
@@ -87,6 +96,7 @@ export class TrainingReadinessTrendChartComponent implements AfterViewInit, OnCh
       return;
     }
     this.chartHost.hideTooltip();
+    this.chartHost.setTimelineNotes(this.timelineNotes);
     this.chartHost.setOption(this.buildOption(), ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
   }
@@ -102,7 +112,7 @@ export class TrainingReadinessTrendChartComponent implements AfterViewInit, OnCh
     );
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
     const pointsByIndex = this.points;
-    const dateFormatter = new Intl.DateTimeFormat(undefined, {
+    const dateFormatter = getDateTimeFormatter(undefined, {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -207,7 +217,7 @@ export class TrainingReadinessTrendChartComponent implements AfterViewInit, OnCh
 }
 
 function formatScore(value: number): string {
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value);
+  return getNumberFormatter(undefined, { maximumFractionDigits: 0 }).format(value);
 }
 
 function capitalize(value: string): string {

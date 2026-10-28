@@ -1,5 +1,7 @@
 import { CommonModule } from '@angular/common';
-import { Component, ElementRef, Input, OnDestroy, ViewChild, computed, signal } from '@angular/core';
+import { Component, ElementRef, Input, OnDestroy, ViewChild, computed, inject, signal } from '@angular/core';
+import { MatButtonModule } from '@angular/material/button';
+import { MatChipsModule } from '@angular/material/chips';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
@@ -28,28 +30,15 @@ import type {
     AdminDashboardHistoryResponse,
     AuthActivityWindowKey,
 } from '../../../services/admin.service';
+import { buildAdminHistoryAxisBounds, type AdminHistoryScale } from '../../../helpers/admin-history-axis.helper';
+import { adminHistoryMetrics, type HistoryChartKey } from '../../../helpers/admin-history-series.helper';
+import { adminHistoryPercentage, formatAdminHistoryPercentage, formatAdminHistoryTooltipValue, type AdminHistoryDisplayMode, type AdminHistoryPlanBasis } from '../../../helpers/admin-history-percentage.helper';
+import { getNumberFormatter } from '../../../helpers/number-format.helper';
+import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
-
-const CHART_COLORS = {
-    active24Hours: '#5470c6',
-    active7Days: '#3ba272',
-    active30Days: '#9a60b4',
-    free: '#7f8c8d',
-    basic: '#fac858',
-    pro: '#ee6666',
-    onboarding: '#73c0de',
-    proMonthly: '#5470c6',
-    proYearly: '#91cc75',
-    basicMonthly: '#fac858',
-    basicYearly: '#ee6666',
-    proUnknown: '#9a60b4',
-    basicUnknown: '#ea7ccc',
-} as const;
-
-type ChartLineType = 'solid' | 'dashed' | 'dotted';
-type ChartSymbol = 'circle' | 'diamond' | 'rect' | 'triangle';
 
 @Component({
     selector: 'app-admin-user-history',
@@ -57,6 +46,8 @@ type ChartSymbol = 'circle' | 'diamond' | 'rect' | 'triangle';
     imports: [
         CommonModule,
         MatButtonToggleModule,
+        MatButtonModule,
+        MatChipsModule,
         MatCardModule,
         MatIconModule,
         MatProgressSpinnerModule,
@@ -65,17 +56,23 @@ type ChartSymbol = 'circle' | 'diamond' | 'rect' | 'triangle';
     styleUrls: ['./admin-user-history.component.scss'],
 })
 export class AdminUserHistoryComponent implements OnDestroy {
+    private readonly haptics = inject(AppHapticsService);
+    private readonly selectedSeriesState = signal<Partial<Record<HistoryChartKey, readonly string[]>>>({});
     private readonly historyState = signal<AdminDashboardHistoryResponse | null>(null);
     private readonly destroy$ = new Subject<void>();
     private readonly authChartHost: EChartsHostController;
     private readonly activePlanChartHost: EChartsHostController;
     private readonly userMixChartHost: EChartsHostController;
+    private readonly onboardingChartHost: EChartsHostController;
     private readonly cadenceChartHost: EChartsHostController;
     private authChartRef?: ElementRef<HTMLDivElement>;
     private activePlanChartRef?: ElementRef<HTMLDivElement>;
     private userMixChartRef?: ElementRef<HTMLDivElement>;
+    private onboardingChartRef?: ElementRef<HTMLDivElement>;
     private cadenceChartRef?: ElementRef<HTMLDivElement>;
     private isDark = false;
+    private destroyed = false;
+    private renderQueued = false;
 
     @Input()
     set history(value: AdminDashboardHistoryResponse | null) {
@@ -108,12 +105,43 @@ export class AdminUserHistoryComponent implements OnDestroy {
         this.handleChartReference(value, this.activePlanChartHost);
     }
 
+    @ViewChild('onboardingChart')
+    set onboardingChart(value: ElementRef<HTMLDivElement> | undefined) {
+        this.onboardingChartRef = value;
+        this.handleChartReference(value, this.onboardingChartHost);
+    }
+
     @ViewChild('cadenceChart')
     set cadenceChart(value: ElementRef<HTMLDivElement> | undefined) {
         this.cadenceChartRef = value;
         this.handleChartReference(value, this.cadenceChartHost);
     }
 
+    readonly selectedMode = signal<AdminHistoryDisplayMode>('count');
+    readonly selectedActivePlanBasis = signal<AdminHistoryPlanBasis>('withinPlan');
+    readonly selectedScale = signal<AdminHistoryScale>('auto');
+    readonly seriesControls = computed(() => {
+        const choices = Object.fromEntries(
+            (['activity', 'activePlans', 'userMix', 'onboarding', 'cadence'] as const).map(key => [
+                key, this.metricsForChart(key).map(metric => ({ name: metric.name, color: metric.color })),
+            ]),
+        ) as Record<HistoryChartKey, Array<{ name: string; color: string }>>;
+        const control = (key: HistoryChartKey) => {
+            const names = choices[key].map(choice => choice.name);
+            const requested = this.selectedSeriesState()[key];
+            const matching = names.filter(name => !requested || requested.includes(name));
+            // A range may no longer contain the only selected unknown-cadence series.
+            const selected = matching.length ? matching : names;
+            return { choices: choices[key], names, selected, allSelected: selected.length === names.length };
+        };
+        return {
+            activity: control('activity'),
+            activePlans: control('activePlans'),
+            userMix: control('userMix'),
+            cadence: control('cadence'),
+            onboarding: control('onboarding'),
+        };
+    });
     readonly selectedDays = signal<AdminDashboardHistoryDays>(90);
     readonly selectedActivePlanWindow = signal<AuthActivityWindowKey>('last30Days');
     readonly minimumPoints = ADMIN_DASHBOARD_HISTORY_MINIMUM_POINTS;
@@ -132,7 +160,10 @@ export class AdminUserHistoryComponent implements OnDestroy {
         this.selectedDays(),
     ));
     readonly activePlanHistoryPoints = computed(() => this.historyView().observed.filter(
-        snapshot => snapshot.authActivity.byPlan !== null,
+        snapshot => snapshot.authActivity.byPlan != null && (
+            this.selectedMode() === 'count' || this.selectedActivePlanBasis() === 'activeShare'
+            || snapshot.authActivity.eligibleByPlan != null
+        ),
     ).length);
 
     constructor(
@@ -144,6 +175,7 @@ export class AdminUserHistoryComponent implements OnDestroy {
         this.authChartHost = new EChartsHostController(hostConfig('[AdminUserHistory:activity]'));
         this.activePlanChartHost = new EChartsHostController(hostConfig('[AdminUserHistory:active-plans]'));
         this.userMixChartHost = new EChartsHostController(hostConfig('[AdminUserHistory:plans]'));
+        this.onboardingChartHost = new EChartsHostController(hostConfig('[AdminUserHistory:onboarding]'));
         this.cadenceChartHost = new EChartsHostController(hostConfig('[AdminUserHistory:cadence]'));
 
         appThemeService.getAppTheme().pipe(takeUntil(this.destroy$)).subscribe(theme => {
@@ -162,6 +194,7 @@ export class AdminUserHistoryComponent implements OnDestroy {
             return;
         }
         this.selectedDays.set(days);
+        this.haptics.selection();
         this.scheduleRender();
     }
 
@@ -173,10 +206,51 @@ export class AdminUserHistoryComponent implements OnDestroy {
             return;
         }
         this.selectedActivePlanWindow.set(window);
+        this.haptics.selection();
+        this.scheduleRender();
+    }
+
+    selectMode(mode: AdminHistoryDisplayMode): void {
+        if ((mode !== 'count' && mode !== 'percentage') || this.selectedMode() === mode) {
+            return;
+        }
+        this.selectedMode.set(mode);
+        this.haptics.selection();
+        this.scheduleRender();
+    }
+
+    selectActivePlanBasis(basis: AdminHistoryPlanBasis): void {
+        if (this.selectedMode() !== 'percentage'
+            || (basis !== 'withinPlan' && basis !== 'activeShare') || this.selectedActivePlanBasis() === basis) {
+            return;
+        }
+        this.selectedActivePlanBasis.set(basis);
+        this.haptics.selection();
+        this.scheduleRender();
+    }
+
+    selectScale(scale: AdminHistoryScale): void {
+        if ((scale !== 'auto' && scale !== 'zero') || this.selectedScale() === scale) {
+            return;
+        }
+        this.selectedScale.set(scale);
+        this.haptics.selection();
+        this.scheduleRender();
+    }
+
+    selectSeries(key: HistoryChartKey, names: readonly string[]): void {
+        const control = this.seriesControls()[key];
+        const selected = control.names.filter(name => names.includes(name));
+        if (!selected.length || selected.join('|') === control.selected.join('|')) {
+            return;
+        }
+        this.selectedSeriesState.update(state => ({ ...state, [key]: selected }));
+        this.haptics.selection();
         this.scheduleRender();
     }
 
     ngOnDestroy(): void {
+        this.destroyed = true;
         this.destroy$.next();
         this.destroy$.complete();
         this.disposeCharts();
@@ -194,24 +268,39 @@ export class AdminUserHistoryComponent implements OnDestroy {
     }
 
     private scheduleRender(): void {
-        void Promise.resolve().then(() => this.renderCharts());
+        if (this.destroyed || this.renderQueued) {
+            return;
+        }
+        // Inputs and ViewChild setters can all change in the same view update.
+        // Render their final state once instead of redrawing every chart for each setter.
+        this.renderQueued = true;
+        void Promise.resolve().then(() => {
+            this.renderQueued = false;
+            return this.renderCharts();
+        });
     }
 
     private async renderCharts(): Promise<void> {
+        // A display change can queue this work just before the workspace is closed.
+        if (this.destroyed) {
+            return;
+        }
         const view = this.historyView();
         if (this.loading || this.error || view.availablePoints < this.minimumPoints) {
             return;
         }
 
         await Promise.all([
-            this.renderChart(this.authChartHost, this.authChartRef, () => this.buildAuthActivityOption()),
-            this.renderChart(this.activePlanChartHost, this.activePlanChartRef, () => this.buildActivePlanOption()),
-            this.renderChart(this.userMixChartHost, this.userMixChartRef, () => this.buildUserMixOption()),
-            this.renderChart(this.cadenceChartHost, this.cadenceChartRef, () => this.buildCadenceOption()),
+            this.renderChart('activity', this.authChartHost, this.authChartRef, () => this.buildMetricOption('activity', this.authChartRef)),
+            this.renderChart('activePlans', this.activePlanChartHost, this.activePlanChartRef, () => this.buildMetricOption('activePlans', this.activePlanChartRef)),
+            this.renderChart('userMix', this.userMixChartHost, this.userMixChartRef, () => this.buildMetricOption('userMix', this.userMixChartRef)),
+            this.renderChart('onboarding', this.onboardingChartHost, this.onboardingChartRef, () => this.buildMetricOption('onboarding', this.onboardingChartRef)),
+            this.renderChart('cadence', this.cadenceChartHost, this.cadenceChartRef, () => this.buildMetricOption('cadence', this.cadenceChartRef)),
         ]);
     }
 
     private async renderChart(
+        key: HistoryChartKey,
         host: EChartsHostController,
         reference: ElementRef<HTMLDivElement> | undefined,
         buildOption: () => Record<string, unknown>,
@@ -220,19 +309,43 @@ export class AdminUserHistoryComponent implements OnDestroy {
             return;
         }
         const chart = await host.init(reference.nativeElement, resolveEChartsThemeName(this.isDark));
-        if (!chart) {
+        if (!chart || this.destroyed) {
             return;
         }
-        host.setOption(buildOption(), ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);
+        const option = buildOption();
+        const series = option['series'] as Array<{ name: string; data: Array<number | null> }>;
+        const selected = this.seriesControls()[key].selected;
+        const bounds = buildAdminHistoryAxisBounds(
+            series.filter(item => selected.includes(item.name)).map(item => item.data),
+            this.selectedScale(),
+            this.selectedMode(),
+        );
+        host.setOption({
+            ...option,
+            legend: {
+                show: false,
+                data: series.map(item => item.name),
+                selected: Object.fromEntries(series.map(item => [item.name, selected.includes(item.name)])),
+            },
+            yAxis: { ...(option['yAxis'] as Record<string, unknown>), ...bounds },
+        }, ECHARTS_CARTESIAN_MERGE_UPDATE_SETTINGS);
         host.scheduleResize();
     }
 
-    private buildAuthActivityOption(): Record<string, unknown> {
+    private metricsForChart(key: HistoryChartKey) {
+        return adminHistoryMetrics(key, this.selectedActivePlanWindow(), this.selectedActivePlanBasis())
+            .filter(metric => !metric.onlyWhenNonzero
+                || this.historyView().observed.some(point => (metric.count(point) ?? 0) > 0));
+    }
+
+    private buildMetricOption(key: HistoryChartKey, reference: ElementRef<HTMLDivElement> | undefined): Record<string, unknown> {
         const view = this.historyView();
-        const style = this.chartStyle(this.authChartRef);
+        const style = this.chartStyle(reference);
+        const metrics = this.metricsForChart(key);
+        const percentage = this.selectedMode() === 'percentage';
         return {
             ...this.buildCartesianBase(style, view.timeline.map(item => item.date)),
-            color: [CHART_COLORS.active24Hours, CHART_COLORS.active7Days, CHART_COLORS.active30Days],
+            color: metrics.map(metric => metric.color),
             tooltip: {
                 ...buildDashboardEChartsTooltipChrome(style),
                 trigger: 'axis',
@@ -244,226 +357,34 @@ export class AdminUserHistoryComponent implements OnDestroy {
                     }
                     return renderDashboardEChartsTooltipCard(style, {
                         title: this.formatFullDate(snapshot.date),
-                        subtitle: `${this.formatCount(snapshot.authActivity.eligibleAccounts)} eligible accounts`,
-                        rows: [
-                            {
-                                label: 'Active 24h',
-                                value: this.formatActivity(snapshot.authActivity.last24Hours, snapshot.authActivity.eligibleAccounts),
-                                markerColor: CHART_COLORS.active24Hours,
-                            },
-                            {
-                                label: 'Active 7d',
-                                value: this.formatActivity(snapshot.authActivity.last7Days, snapshot.authActivity.eligibleAccounts),
-                                markerColor: CHART_COLORS.active7Days,
-                            },
-                            {
-                                label: 'Active 30d',
-                                value: this.formatActivity(snapshot.authActivity.last30Days, snapshot.authActivity.eligibleAccounts),
-                                markerColor: CHART_COLORS.active30Days,
-                            },
-                        ],
+                        subtitle: key === 'activePlans' ? this.activePlanWindowLabel(this.selectedActivePlanWindow()) : undefined,
+                        rows: this.visibleTooltipRows(key, metrics.map(metric => ({
+                            label: metric.name,
+                            ...formatAdminHistoryTooltipValue(
+                                metric.count(snapshot), metric.denominator(snapshot), metric.population, this.selectedMode(),
+                            ),
+                            markerColor: metric.color,
+                        }))),
+                        rowColumnCount: 1,
+                        stackHeader: true,
                     });
                 },
             },
-            series: [
-                this.lineSeries('Active 24h', CHART_COLORS.active24Hours, view.timeline.map(item => item.snapshot?.authActivity.last24Hours ?? null), 'solid', 'circle'),
-                this.lineSeries('Active 7d', CHART_COLORS.active7Days, view.timeline.map(item => item.snapshot?.authActivity.last7Days ?? null), 'dashed', 'diamond'),
-                this.lineSeries('Active 30d', CHART_COLORS.active30Days, view.timeline.map(item => item.snapshot?.authActivity.last30Days ?? null), 'dotted', 'triangle'),
-            ],
-        };
-    }
-
-    private buildActivePlanOption(): Record<string, unknown> {
-        const view = this.historyView();
-        const style = this.chartStyle(this.activePlanChartRef);
-        const window = this.selectedActivePlanWindow();
-        return {
-            ...this.buildCartesianBase(style, view.timeline.map(item => item.date)),
-            color: [CHART_COLORS.free, CHART_COLORS.basic, CHART_COLORS.pro],
-            tooltip: {
-                ...buildDashboardEChartsTooltipChrome(style),
-                trigger: 'axis',
-                confine: true,
-                formatter: (params: unknown) => {
-                    const snapshot = this.snapshotFromTooltip(params);
-                    const byPlan = snapshot?.authActivity.byPlan;
-                    if (!snapshot || !byPlan) {
-                        return '';
-                    }
-                    return renderDashboardEChartsTooltipCard(style, {
-                        title: this.formatFullDate(snapshot.date),
-                        subtitle: `${this.formatCount(snapshot.authActivity[window])} active · ${this.activePlanWindowLabel(window)}`,
-                        rows: [
-                            { label: 'Free', value: this.formatCount(byPlan.free[window]), markerColor: CHART_COLORS.free },
-                            { label: 'Basic', value: this.formatCount(byPlan.basic[window]), markerColor: CHART_COLORS.basic },
-                            { label: 'Pro', value: this.formatCount(byPlan.pro[window]), markerColor: CHART_COLORS.pro },
-                        ],
-                    });
-                },
-            },
-            series: [
-                {
-                    ...this.areaSeries(
-                        'Free',
-                        CHART_COLORS.free,
-                        view.timeline.map(item => item.snapshot?.authActivity.byPlan?.free[window] ?? null),
-                        'active-plans',
-                        'dotted',
-                        0.65,
-                    ),
-                    id: 'active-plan-free',
-                },
-                {
-                    ...this.areaSeries(
-                        'Basic',
-                        CHART_COLORS.basic,
-                        view.timeline.map(item => item.snapshot?.authActivity.byPlan?.basic[window] ?? null),
-                        'active-plans',
-                        'dashed',
-                        0.85,
-                    ),
-                    id: 'active-plan-basic',
-                },
-                {
-                    ...this.areaSeries(
-                        'Pro',
-                        CHART_COLORS.pro,
-                        view.timeline.map(item => item.snapshot?.authActivity.byPlan?.pro[window] ?? null),
-                        'active-plans',
-                        'solid',
-                        1.1,
-                    ),
-                    id: 'active-plan-pro',
-                },
-            ],
-        };
-    }
-
-    private buildUserMixOption(): Record<string, unknown> {
-        const view = this.historyView();
-        const style = this.chartStyle(this.userMixChartRef);
-        return {
-            ...this.buildCartesianBase(style, view.timeline.map(item => item.date)),
-            color: [CHART_COLORS.free, CHART_COLORS.basic, CHART_COLORS.pro, CHART_COLORS.onboarding],
-            tooltip: {
-                ...buildDashboardEChartsTooltipChrome(style),
-                trigger: 'axis',
-                confine: true,
-                formatter: (params: unknown) => {
-                    const snapshot = this.snapshotFromTooltip(params);
-                    if (!snapshot) {
-                        return '';
-                    }
-                    return renderDashboardEChartsTooltipCard(style, {
-                        title: this.formatFullDate(snapshot.date),
-                        subtitle: `${this.formatCount(snapshot.users.total)} total users`,
-                        rows: [
-                            { label: 'Free', value: this.formatCount(snapshot.users.free), markerColor: CHART_COLORS.free },
-                            { label: 'Basic', value: this.formatCount(snapshot.users.basic), markerColor: CHART_COLORS.basic },
-                            { label: 'Pro', value: this.formatCount(snapshot.users.pro), markerColor: CHART_COLORS.pro },
-                            {
-                                label: 'Onboarding complete',
-                                value: this.formatCount(snapshot.users.onboardingCompleted),
-                                markerColor: CHART_COLORS.onboarding,
-                            },
-                        ],
-                    });
-                },
-            },
-            series: [
-                this.areaSeries('Free', CHART_COLORS.free, view.timeline.map(item => item.snapshot?.users.free ?? null), 'users', 'dotted', 0.65),
-                this.areaSeries('Basic', CHART_COLORS.basic, view.timeline.map(item => item.snapshot?.users.basic ?? null), 'users', 'dashed', 0.85),
-                this.areaSeries('Pro', CHART_COLORS.pro, view.timeline.map(item => item.snapshot?.users.pro ?? null), 'users', 'solid', 1.1),
-                {
-                    ...this.lineSeries(
-                        'Onboarding complete',
-                        CHART_COLORS.onboarding,
-                        view.timeline.map(item => item.snapshot?.users.onboardingCompleted ?? null),
-                        'dashed',
-                        'rect',
-                    ),
-                },
-            ],
-        };
-    }
-
-    private buildCadenceOption(): Record<string, unknown> {
-        const view = this.historyView();
-        const style = this.chartStyle(this.cadenceChartRef);
-        const hasProUnknownCadence = view.observed.some(
-            snapshot => snapshot.subscriptionCadence.pro.unknown > 0,
-        );
-        const hasBasicUnknownCadence = view.observed.some(
-            snapshot => snapshot.subscriptionCadence.basic.unknown > 0,
-        );
-        const series: Record<string, unknown>[] = [
-            this.areaSeries('Pro monthly', CHART_COLORS.proMonthly, view.timeline.map(item => item.snapshot?.subscriptionCadence.pro.monthly ?? null), 'cadence', 'solid', 1.1),
-            this.areaSeries('Pro yearly', CHART_COLORS.proYearly, view.timeline.map(item => item.snapshot?.subscriptionCadence.pro.yearly ?? null), 'cadence', 'dashed', 0.7),
-            this.areaSeries('Basic monthly', CHART_COLORS.basicMonthly, view.timeline.map(item => item.snapshot?.subscriptionCadence.basic.monthly ?? null), 'cadence', 'dotted', 0.95),
-            this.areaSeries('Basic yearly', CHART_COLORS.basicYearly, view.timeline.map(item => item.snapshot?.subscriptionCadence.basic.yearly ?? null), 'cadence', 'solid', 0.65),
-        ];
-        if (hasProUnknownCadence) {
-            series.push(this.areaSeries(
-                'Pro unknown',
-                CHART_COLORS.proUnknown,
-                view.timeline.map(item => item.snapshot?.subscriptionCadence.pro.unknown ?? null),
-                'cadence',
-                'dotted',
-                0.55,
-            ));
-        }
-        if (hasBasicUnknownCadence) {
-            series.push(this.areaSeries(
-                'Basic unknown',
-                CHART_COLORS.basicUnknown,
-                view.timeline.map(item => item.snapshot?.subscriptionCadence.basic.unknown ?? null),
-                'cadence',
-                'dashed',
-                0.55,
-            ));
-        }
-
-        return {
-            ...this.buildCartesianBase(style, view.timeline.map(item => item.date)),
-            color: series.map(item => item['itemStyle']).map(item => (item as { color: string }).color),
-            tooltip: {
-                ...buildDashboardEChartsTooltipChrome(style),
-                trigger: 'axis',
-                confine: true,
-                formatter: (params: unknown) => {
-                    const snapshot = this.snapshotFromTooltip(params);
-                    if (!snapshot) {
-                        return '';
-                    }
-                    const rows: DashboardEChartsTooltipMetricRow[] = [
-                        { label: 'Pro monthly', value: this.formatCount(snapshot.subscriptionCadence.pro.monthly), markerColor: CHART_COLORS.proMonthly },
-                        { label: 'Pro yearly', value: this.formatCount(snapshot.subscriptionCadence.pro.yearly), markerColor: CHART_COLORS.proYearly },
-                        { label: 'Basic monthly', value: this.formatCount(snapshot.subscriptionCadence.basic.monthly), markerColor: CHART_COLORS.basicMonthly },
-                        { label: 'Basic yearly', value: this.formatCount(snapshot.subscriptionCadence.basic.yearly), markerColor: CHART_COLORS.basicYearly },
-                    ];
-                    if (hasProUnknownCadence) {
-                        rows.push({
-                            label: 'Pro unknown',
-                            value: this.formatCount(snapshot.subscriptionCadence.pro.unknown),
-                            markerColor: CHART_COLORS.proUnknown,
-                        });
-                    }
-                    if (hasBasicUnknownCadence) {
-                        rows.push({
-                            label: 'Basic unknown',
-                            value: this.formatCount(snapshot.subscriptionCadence.basic.unknown),
-                            markerColor: CHART_COLORS.basicUnknown,
-                        });
-                    }
-                    return renderDashboardEChartsTooltipCard(style, {
-                        title: this.formatFullDate(snapshot.date),
-                        subtitle: `${this.formatCount(snapshot.users.pro + snapshot.users.basic)} paid users`,
-                        rows,
-                        rowColumnCount: 2,
-                    });
-                },
-            },
-            series,
+            series: metrics.map(metric => {
+                const data = view.timeline.map(({ snapshot }) => !snapshot ? null
+                    : percentage ? adminHistoryPercentage(metric.count(snapshot), metric.denominator(snapshot))
+                    : metric.count(snapshot) ?? null);
+                return {
+                    name: metric.name,
+                    id: metric.id ?? `${key}-${metric.name}`,
+                    type: 'line', data, connectNulls: false,
+                    showSymbol: data.length <= 90,
+                    symbol: metric.symbol ?? 'circle', symbolSize: 5,
+                    lineStyle: { width: 2, type: metric.lineType },
+                    itemStyle: { color: metric.color },
+                    emphasis: { focus: 'series' },
+                };
+            }),
         };
     }
 
@@ -476,16 +397,11 @@ export class AdminUserHistoryComponent implements OnDestroy {
             backgroundColor: 'transparent',
             animationDuration: 250,
             textStyle: { fontFamily: ECHARTS_GLOBAL_FONT_FAMILY },
-            legend: {
-                type: 'scroll',
-                bottom: 0,
-                textStyle: { color: style.secondaryTextColor, fontFamily: ECHARTS_GLOBAL_FONT_FAMILY },
-            },
             grid: {
                 left: 16,
                 right: 18,
                 top: 18,
-                bottom: 58,
+                bottom: 30,
                 outerBoundsMode: 'same',
                 outerBoundsContain: 'axisLabel',
             },
@@ -505,62 +421,43 @@ export class AdminUserHistoryComponent implements OnDestroy {
             },
             yAxis: {
                 type: 'value',
-                min: 0,
-                minInterval: 1,
+                scale: true,
+                minInterval: this.selectedMode() === 'percentage' ? 0.1 : 1,
                 axisLabel: {
                     color: style.secondaryTextColor,
                     fontSize: style.axisFontSize,
-                    formatter: (value: number) => this.formatCompactCount(value),
+                    formatter: (value: number) => this.selectedMode() === 'percentage' ? formatAdminHistoryPercentage(value) : this.formatCount(value),
                 },
                 splitLine: { lineStyle: { color: style.gridColor } },
             },
         };
     }
 
-    private lineSeries(
-        name: string,
-        color: string,
-        data: Array<number | null>,
-        lineType: ChartLineType = 'solid',
-        symbol: ChartSymbol = 'circle',
-    ): Record<string, unknown> {
+    private chartStyle(reference: ElementRef<HTMLDivElement> | undefined) {
+        const style = buildDashboardEChartsStyleTokens(
+            this.isDark,
+            reference?.nativeElement.clientWidth ?? 0,
+        );
         return {
-            name,
-            type: 'line',
-            data,
-            connectNulls: false,
-            showSymbol: data.length <= 90,
-            symbol,
-            symbolSize: 5,
-            lineStyle: { width: 2, type: lineType },
-            itemStyle: { color },
-            emphasis: { focus: 'series' },
-        };
-    }
-
-    private areaSeries(
-        name: string,
-        color: string,
-        data: Array<number | null>,
-        stack: string,
-        lineType: ChartLineType,
-        fillStrength: number,
-    ): Record<string, unknown> {
-        return {
-            ...this.lineSeries(name, color, data, lineType),
-            stack,
-            showSymbol: false,
-            areaStyle: {
-                opacity: Math.min(0.48, (this.isDark ? 0.38 : 0.3) * fillStrength),
+            ...style,
+            tooltipTypography: {
+                ...style.tooltipTypography,
+                labelFontSize: 14,
+                valueFontSize: 16,
+                titleFontSize: 14,
+                textLineHeight: 1.35,
+                metricGapPx: 10,
+                maxWidthPx: Math.min(320, reference?.nativeElement.clientWidth || 320),
             },
         };
     }
 
-    private chartStyle(reference: ElementRef<HTMLDivElement> | undefined) {
-        return buildDashboardEChartsStyleTokens(
-            this.isDark,
-            reference?.nativeElement.clientWidth ?? 0,
-        );
+    private visibleTooltipRows(
+        key: HistoryChartKey,
+        rows: DashboardEChartsTooltipMetricRow[],
+    ): DashboardEChartsTooltipMetricRow[] {
+        const selected = this.seriesControls()[key].selected;
+        return rows.filter(row => selected.includes(row.label));
     }
 
     private snapshotFromTooltip(params: unknown): AdminDashboardHistoryPoint | null {
@@ -571,13 +468,6 @@ export class AdminUserHistoryComponent implements OnDestroy {
             return null;
         }
         return this.historyView().observed.find(snapshot => snapshot.date === candidate) ?? null;
-    }
-
-    private formatActivity(count: number, eligibleAccounts: number): string {
-        if (eligibleAccounts <= 0) {
-            return this.formatCount(count);
-        }
-        return `${this.formatCount(count)} (${Math.round((count / eligibleAccounts) * 100)}%)`;
     }
 
     private activePlanWindowLabel(window: AuthActivityWindowKey): string {
@@ -592,23 +482,18 @@ export class AdminUserHistoryComponent implements OnDestroy {
     }
 
     private formatCount(value: number): string {
-        return new Intl.NumberFormat('en-US').format(value);
-    }
-
-    private formatCompactCount(value: number): string {
-        return new Intl.NumberFormat('en-US', {
-            notation: value >= 1_000 ? 'compact' : 'standard',
-            maximumFractionDigits: 1,
-        }).format(value);
+        return getNumberFormatter().format(value);
     }
 
     private formatAxisDate(value: string): string {
-        const [, month, day] = value.split('-');
-        return month && day ? `${month}/${day}` : value;
+        const timestamp = Date.parse(`${value}T00:00:00.000Z`);
+        return Number.isFinite(timestamp)
+            ? getDateTimeFormatter(undefined, { month: 'numeric', day: 'numeric', timeZone: 'UTC' }).format(timestamp)
+            : value;
     }
 
     private formatFullDate(value: string): string {
-        return new Intl.DateTimeFormat('en-US', {
+        return getDateTimeFormatter(undefined, {
             dateStyle: 'medium',
             timeZone: 'UTC',
         }).format(new Date(`${value}T00:00:00.000Z`));
@@ -619,5 +504,6 @@ export class AdminUserHistoryComponent implements OnDestroy {
         this.activePlanChartHost.dispose();
         this.userMixChartHost.dispose();
         this.cadenceChartHost.dispose();
+        this.onboardingChartHost.dispose();
     }
 }

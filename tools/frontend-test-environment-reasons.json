@@ -1,0 +1,138 @@
+{
+  "src/app/components/activities/activities-page.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the Activities route with TestBed to verify Material filter bindings, projected shared-table controls, query hydration, paginated owner changes, DestroyRef teardown and haptic ownership."
+  },
+  "src/app/components/activity-ascent-editor/activity-ascent-editor.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the standalone ascent editor with Material controls in TestBed to verify imported/edited values, unit settings, validation, reset review, haptics and account changes during pending saves."
+  },
+  "src/app/components/activity-send/activity-send-page.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the dedicated sending workspace with Material controls to verify Pro gating, explicit confirmation, recovery actions, account-safe teardown and haptics."
+  },
+  "src/app/components/benchmark/benchmark-rr.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the benchmark R\u2013R panel and Material controls in TestBed to verify per-source summary bindings, lazy component-scoped analysis, chart host lifecycle, source changes, linked zoom and single-owner haptics."
+  },
+  "src/app/components/event/laps/event.card.laps.picker.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the lap column picker with real Material dialogs, selection lists, checkboxes and buttons to verify keyboard selection, focus restoration, save outcomes and haptic ownership."
+  },
+  "src/app/components/health/health-category-overview.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the Health overview with TestBed to verify signal inputs, child chart bindings, Material category controls, account-scoped source choices and haptic feedback."
+  },
+  "src/app/components/history-import-progress/history-import-progress.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Renders the shared header indicator, dashboard cards and panel with TestBed to verify live shared bindings, account isolation, provider links, read-error refresh, Material overlay lifecycle and single-owner haptics."
+  },
+  "src/app/components/home/home-reveal.directive.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles a directive host with TestBed to verify host class bindings, afterNextRender viewport handling, SSR behavior and DestroyRef teardown."
+  },
+  "src/app/components/plans/suunto-swimming-guide-settings.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the swimming Guide screen controls with TestBed to verify Material selectors, disclosure bindings, owner-scoped preference saves and haptic feedback across pending/error/account-change paths."
+  },
+  "src/app/components/public-seo/health-note-comparison-preview.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the public note comparison adapter with real Material selection and Health chart to verify sample-only rendering, signal bindings, canonical displays and haptic ownership without account-data providers."
+  },
+  "src/app/components/public-seo/health-overview-preview.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the real Health overview and history renderers with TestBed to verify signal inputs, chart bindings, category navigation, focus restoration and haptic feedback."
+  },
+  "src/app/components/services/connection-history/connection-history.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles both history component templates with TestBed and verifies signal input bindings, rendered controls, haptics, and DestroyRef teardown during pending retries."
+  },
+  "src/app/components/shared/dialog-actions-haptics.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles legacy error and browser guidance dialogs with real Material controls in TestBed to verify rendered actions, silent initialization and single-owner haptic feedback."
+  },
+  "src/app/components/shared/health-change-summary/health-change-summary.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the shared Health change summary with TestBed and real Material buttons to verify disclosure accessibility, signal refreshes, owner resets and single-owner haptic feedback."
+  },
+  "src/app/components/shared/metric-history-chart/metric-history-chart.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Creates the chart with TestBed to verify signal input changes, rendered accessibility text, chart host initialization, responsive tooltips, haptic ownership and fixture teardown."
+  },
+  "src/app/components/shared/note-comparison-summary/note-comparison-summary.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles shared note summary rows, source pickers and the Material disclosure to verify unchanged formatted evidence, visible coverage, source events, neutral deltas and owner/note reset behavior."
+  },
+  "src/app/components/shared/summary-disclosure/summary-disclosure.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the shared Material summary shell with projected evidence/details to verify accessible disclosure, owner/scope resets, neutral presentation and single-owner haptic feedback."
+  },
+  "src/app/components/summaries/dashboard-daily-briefing/dashboard-daily-briefing.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the real sentence-only Dashboard rail to verify owner-fenced bounded reads, signal bindings, note visibility, local-day rollover and listener teardown."
+  },
+  "src/app/components/timeline-notes/active-sickness-note.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the shared owner-only sickness context with Material buttons, signal inputs, date rollover, range registration and component teardown in TestBed."
+  },
+  "src/app/components/timeline-notes/timeline-note-comparison-page.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the comparison route with real Material controls and shared header/source picker to verify signal bindings, disclosure accessibility, loading and owner fences, local selection and haptic ownership."
+  },
+  "src/app/components/timeline-notes/timeline-note-comparisons-page.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the comparisons landing route with real Material navigation links and shared header to verify owner-scoped signal rendering, pagination, explicit manager actions, teardown and haptic ownership."
+  },
+  "src/app/components/training-load/training-load-dialog.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection context and Material dialog providers to exercise reactive forms, component lifecycle, subscription teardown and asynchronous save/reload haptics without opening real overlays."
+  },
+  "src/app/components/training-load/training-load-settings.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection context for component-owned services and reactive forms, exercising account changes, lifecycle teardown, saved-policy subscriptions and asynchronous haptic outcomes."
+  },
+  "src/app/resolvers/public-pricing-json-ld.resolver.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection to verify the route resolver produces structured pricing data from the injected public catalog service."
+  },
+  "src/app/services/activity-ascent.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed to verify the injected Firebase Auth owner and callable service boundary, including account changes and the exact app-only ascent request."
+  },
+  "src/app/services/activity-send.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Instantiates the live signal/effect service with TestBed to verify account-scoped Firestore subscription teardown, global job reconciliation and authenticated binary staging."
+  },
+  "src/app/services/app-check-diagnostics.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed and DestroyRef teardown to verify startup token observation, deduplicated safe diagnostics and listener cleanup."
+  },
+  "src/app/services/benchmark-rr-analysis.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Exercises worker completion, cancellation, timeout and provider teardown through the browser compatibility service, whose runtime dependency graph imports Angular Material dialog components. Component-scoped injection and destruction are covered in the R\u2013R panel fixture suite."
+  },
+  "src/app/services/history-import-progress.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection, toSignal teardown and Angular effects to verify one shared owner subscription, raw sign-out, A/B/A isolation, read-error recovery and expiry timer cleanup."
+  },
+  "src/app/services/public-pricing-catalog.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection to verify the catalog service consumes Angular TransferState without a duplicate Firestore read."
+  },
+  "src/app/services/recorded-history-start.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection and the current-user signal to verify bounded owner-only Firestore SDK reads, cancellation and same-UID account replacement fences."
+  },
+  "src/app/services/timeline-note-comparison-navigation.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed for the injected Router and account signal/effect lifecycle, verifying owner-scoped return navigation and memory invalidation."
+  },
+  "src/app/services/timeline-note-comparison.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Instantiates the injected comparison read adapter with TestBed to verify shared-query dependencies, bounded requests, account fences and independent source failures."
+  },
+  "src/app/services/training-load.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed to verify injected Firestore, user and Calendar services together, including owner-scoped subscriptions, transactions and shared browser compatibility handling."
+  }
+}

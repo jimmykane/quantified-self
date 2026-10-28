@@ -1,4 +1,30 @@
 /* Main App Layout */
+.startup-recovery {
+  box-sizing: border-box;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  color: var(--mat-sys-on-surface);
+  background: var(--mat-sys-surface);
+  text-align: center;
+}
+
+.startup-recovery-content {
+  max-width: 32rem;
+
+  h1 {
+    font: var(--mat-sys-headline-small);
+  }
+
+  p {
+    font: var(--mat-sys-body-medium);
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
 /* Note: margin-top is set dynamically via [style.margin-top.px] binding */
 .qs-loader-overlay {
   position: fixed;

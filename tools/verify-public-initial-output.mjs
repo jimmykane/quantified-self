@@ -6,7 +6,15 @@ const outputDirectory = path.resolve(process.argv[2] ?? 'dist/browser');
 const indexPath = path.join(outputDirectory, 'index.html');
 const prerenderManifestPath = path.join(path.dirname(outputDirectory), 'prerendered-routes.json');
 const sourceMapCache = new Map();
-const HOME_SIGNAL_PREVIEW_INCREMENTAL_STATIC_BUDGET_BYTES = 160 * 1024;
+// Moving account-only initialization out of startup also moves shared chart code
+// into the preview. Bound both its first use and the combined page journey.
+const HOME_SIGNAL_PREVIEW_INCREMENTAL_STATIC_BUDGET_BYTES = 192 * 1024;
+const HOME_WITH_SIGNAL_PREVIEW_STATIC_BUDGET_BYTES = 3050 * 1024;
+const TRAINING_PLANS_ROUTE = '/features/training-plans';
+const TRAINING_PLANS_SOCIAL_IMAGE_PATH = path.join(
+  outputDirectory,
+  'assets/images/training-plans-social.png',
+);
 
 const prerenderedPageSourcePatterns = [
   /^src\/app\/components\/home\/home\.component\.ts$/,
@@ -47,6 +55,18 @@ const publicStartupJavaScriptAssets = collectStaticDependencyGraph([
 ]);
 const homeStartupSourceRecords = uniqueSourceRecords(homeStartupJavaScriptAssets.flatMap(readSourceRecords));
 const publicStartupSourceRecords = uniqueSourceRecords(publicStartupJavaScriptAssets.flatMap(readSourceRecords));
+const signInRouteAssets = findAssetsContainingSource(/^src\/app\/modules\/login\.module\.ts$/);
+if (signInRouteAssets.length === 0) {
+  throw new Error('Expected the sign-in module in the release output.');
+}
+const signInStartupAssets = collectStaticDependencyGraph(signInRouteAssets);
+const signInSourceRecords = uniqueSourceRecords(signInStartupAssets.flatMap(readSourceRecords));
+assertNoSourceRecords(
+  'activity-data services or broad UI modules',
+  signInSourceRecords,
+  /^src\/app\/(?:services\/(?:app\.(?:event|original-file-hydration)|activity-send)\.service|modules\/(?:shared|material)\.module)\.ts$/,
+  'sign-in startup graph',
+);
 const homeSignalPreviewJavaScriptAssets = collectStaticDependencyGraph(homeSignalPreviewAssets);
 const homeSignalPreviewSourceRecords = uniqueSourceRecords(
   homeSignalPreviewJavaScriptAssets.flatMap(readSourceRecords),
@@ -58,7 +78,7 @@ const homeSignalPreviewIncrementalStaticAssets = homeSignalPreviewJavaScriptAsse
 
 assertNoHomeStartupSource(
   'route-only public page content',
-  /^src\/app\/components\/(?:features\/(?:workout-data-comparison-page|supported-activities-page)|integrations\/integration-pages|public-seo\/public-seo-pages)\.content\.ts$/,
+  /^src\/app\/components\/(?:features\/(?:workout-data-comparison-page|supported-activities-page)|integrations\/integration-pages|public-seo\/(?:public-seo-pages|training-plans-page))\.content\.ts$/,
 );
 assertNoHomeStartupSource(
   'unused event data runtime',
@@ -77,6 +97,61 @@ assertNoHomeStartupSource(
   /^src\/app\/services\/admin\.service\.ts$/,
 );
 assertNoStartupSource('Mapbox', /(?:^|\/)(?:mapbox-gl|mapbox-loader)(?:[./]|$)/);
+assertNoHomeStartupSource(
+  'account settings normalization or chart metric catalogs',
+  /^src\/app\/(?:utils\/app\.user\.utilities|helpers\/app-chart-data-types\.helper)\.ts$/,
+);
+assertNoSourceRecords(
+  'account settings normalization or chart metric catalogs',
+  uniqueSourceRecords(collectStaticDependencyGraph(findAssetsContainingSource(
+    /^src\/app\/components\/public-seo\/public-seo-page\.component\.ts$/,
+  )).flatMap(readSourceRecords)),
+  /^src\/app\/(?:utils\/app\.user\.utilities|helpers\/app-chart-data-types\.helper)\.ts$/,
+  'public guide/feature page startup graph',
+);
+assertNoStartupSource(
+  'eager regional locale catalog',
+  /node_modules\/(?:dayjs\/locale|@angular\/common\/locales)\//,
+);
+assertNoStartupSource(
+  'deferred Training examples and charts',
+  /^src\/app\/components\/(?:public-seo\/training-explorer-preview\.(?:component|data)|training\/training-(?:readiness-trend|power-systems-trend|durability-trajectory)-chart\.component)\.ts$/,
+);
+assertNoStartupSource(
+  'deferred Training Plans preview',
+  /^src\/app\/components\/public-seo\/training-plans-preview\.(?:component|data)\.ts$/,
+);
+const trainingPreviewAssets = findAssetsContainingSource(/^src\/app\/components\/public-seo\/training-explorer-preview\.component\.ts$/);
+assertNoSourceRecords(
+  'authenticated Training data loading',
+  uniqueSourceRecords(collectStaticDependencyGraph(trainingPreviewAssets).flatMap(readSourceRecords)),
+  /^src\/app\/(?:components\/training\/training-workspace\.component|modules\/training\.module|services\/dashboard-derived-metrics\.service)\.ts$/,
+  'deferred public Training preview graph',
+);
+const trainingPlansPreviewAssets = findAssetsContainingSource(
+  /^src\/app\/components\/public-seo\/training-plans-preview\.component\.ts$/,
+);
+const trainingPlansPreviewSourceRecords = uniqueSourceRecords(
+  collectStaticDependencyGraph(trainingPlansPreviewAssets).flatMap(readSourceRecords),
+);
+assertNoSourceRecords(
+  'authenticated Training Plans or provider-delivery runtime',
+  trainingPlansPreviewSourceRecords,
+  /^src\/app\/(?:components\/plans\/(?:plans-workspace|training-delivery-(?:button|dialog))\.component|services\/training-(?:plans|delivery)\.service|helpers\/training-delivery-(?:display|rollout|summary)\.helper)\.ts$/,
+  'deferred public Training Plans preview graph',
+);
+assertNoSourceRecords(
+  'authentication, Firebase, or account-data runtime',
+  trainingPlansPreviewSourceRecords,
+  /(?:^|\/)(?:src\/app\/(?:authentication|firebase)\/|src\/app\/services\/app\.(?:functions|user)\.service\.ts$|shared\/user-profile-firestore\.ts$|node_modules\/(?:@angular\/fire|@firebase|firebase)\/)/,
+  'deferred public Training Plans preview graph',
+);
+assertNoSourceRecords(
+  'broad shared or Material module',
+  trainingPlansPreviewSourceRecords,
+  /^src\/app\/modules\/(?:shared|material)\.module\.ts$/,
+  'deferred public Training Plans preview graph',
+);
 assertNoStartupSource('dashboard upload UI', /\/components\/(?:dashboard\/dashboard-header-upload|upload\/upload-activities)\//);
 assertNoStartupSource(
   'broad shared or Material module',
@@ -105,6 +180,7 @@ assertNoSourceRecords(
   'deferred home signal preview graph',
 );
 assertNoInitialStylesheet('Mapbox', /mapboxgl-/);
+assertTrainingPlansSocialImage();
 assertPrerenderedDocuments();
 
 const homeStartupBytes = homeStartupJavaScriptAssets.reduce((total, asset) => (
@@ -116,6 +192,10 @@ const publicStartupBytes = publicStartupJavaScriptAssets.reduce((total, asset) =
 const homeSignalPreviewIncrementalStaticBytes = homeSignalPreviewIncrementalStaticAssets.reduce((total, asset) => (
   total + fs.statSync(path.join(outputDirectory, asset)).size
 ), 0);
+const homeWithSignalPreviewStaticBytes = homeStartupBytes + homeSignalPreviewIncrementalStaticBytes;
+if (homeWithSignalPreviewStaticBytes > HOME_WITH_SIGNAL_PREVIEW_STATIC_BUDGET_BYTES) {
+  throw new Error(`Home plus its signal preview exceeded its ${formatBytes(HOME_WITH_SIGNAL_PREVIEW_STATIC_BUDGET_BYTES)} static budget: ${formatBytes(homeWithSignalPreviewStaticBytes)}.`);
+}
 if (homeSignalPreviewIncrementalStaticBytes > HOME_SIGNAL_PREVIEW_INCREMENTAL_STATIC_BUDGET_BYTES) {
   throw new Error(
     `Deferred home signal preview exceeded its ${formatBytes(HOME_SIGNAL_PREVIEW_INCREMENTAL_STATIC_BUDGET_BYTES)} incremental static budget: `
@@ -130,6 +210,7 @@ const authBaseline = sourceBaseline(
 
 console.log(`Verified prerendered public startup union: ${publicStartupJavaScriptAssets.length} JS assets, ${formatBytes(publicStartupBytes)} raw.`);
 console.log(`Home startup baseline: ${homeStartupJavaScriptAssets.length} JS assets, ${formatBytes(homeStartupBytes)} raw.`);
+console.log(`Home plus signal preview: ${formatBytes(homeWithSignalPreviewStaticBytes)} raw.`);
 console.log(`Home Sports Lib baseline: ${sportsLibBaseline.count} source module(s), ${formatBytes(sportsLibBaseline.bytes)} source bytes.`);
 console.log(`Home auth/Firebase baseline: ${authBaseline.count} source module(s), ${formatBytes(authBaseline.bytes)} source bytes.`);
 console.log(
@@ -276,6 +357,20 @@ function assertPrerenderedDocuments() {
     if (!documentRef.querySelector('footer.public-footer')) {
       throw new Error(`Prerendered route ${route} is missing the public footer.`);
     }
+    if (!documentRef.querySelector('footer.public-footer a[href="/features/health"]')) {
+      throw new Error(`Prerendered route ${route} is missing the public Health footer link.`);
+    }
+    for (const preview of documentRef.querySelectorAll('app-public-feature-preview')) {
+      if (!preview.querySelector(':scope > div[data-nosnippet]')) {
+        throw new Error(`Prerendered route ${route} is missing a native snippet exclusion around a public preview.`);
+      }
+    }
+    if (documentRef.querySelector('app-training-explorer-preview')) {
+      throw new Error(`Prerendered route ${route} eagerly rendered the interactive Training examples.`);
+    }
+    if (documentRef.querySelector('app-training-plans-preview')) {
+      throw new Error(`Prerendered route ${route} eagerly rendered the interactive Training Plans preview.`);
+    }
 
     const jsonLdScripts = [...documentRef.querySelectorAll('script[type="application/ld+json"]')];
     if (jsonLdScripts.length === 0) {
@@ -289,12 +384,81 @@ function assertPrerenderedDocuments() {
       }
     }
 
+    if (route === TRAINING_PLANS_ROUTE) {
+      assertTrainingPlansDocument(documentRef);
+    }
+
     dom.window.close();
   }
 
   console.log(
     `Verified ${documentPaths.length} prerendered pages: title, description, H1, valid JSON-LD, and public footer.`,
   );
+}
+
+function assertTrainingPlansDocument(documentRef) {
+  const expectedTitle = 'Training Plans for Running, Cycling & More - Quantified Self';
+  const expectedDescription = 'Create free training plans and standalone workouts for running, cycling, swimming and more. Organize phases by date, with completed activities kept separate.';
+  const expectedCanonical = `https://quantified-self.io${TRAINING_PLANS_ROUTE}`;
+  const expectedSocialImage = 'https://quantified-self.io/assets/images/training-plans-social.png';
+
+  if (documentRef.title !== expectedTitle) {
+    throw new Error(`Prerendered ${TRAINING_PLANS_ROUTE} has unexpected title: ${documentRef.title}`);
+  }
+  if (documentRef.querySelector('meta[name="description"]')?.getAttribute('content') !== expectedDescription) {
+    throw new Error(`Prerendered ${TRAINING_PLANS_ROUTE} has unexpected description.`);
+  }
+  if (documentRef.querySelector('h1')?.textContent?.trim() !== 'Plan workouts for running, cycling, swimming and more') {
+    throw new Error(`Prerendered ${TRAINING_PLANS_ROUTE} has unexpected H1.`);
+  }
+  if (documentRef.querySelector('link[rel="canonical"]')?.getAttribute('href') !== expectedCanonical) {
+    throw new Error(`Prerendered ${TRAINING_PLANS_ROUTE} has an unexpected canonical URL.`);
+  }
+  for (const [selector, expectedValue] of [
+    ['meta[property="og:image"]', expectedSocialImage],
+    ['meta[name="twitter:image"]', expectedSocialImage],
+    ['meta[property="og:url"]', expectedCanonical],
+  ]) {
+    if (documentRef.querySelector(selector)?.getAttribute('content') !== expectedValue) {
+      throw new Error(`Prerendered ${TRAINING_PLANS_ROUTE} has unexpected metadata for ${selector}.`);
+    }
+  }
+
+  const pageText = documentRef.body.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+  for (const expectedCopy of [
+    'A standalone workout is first-class',
+    'Plan directly, through MCP, or with provider delivery',
+    'Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members',
+    'New COROS plan sync and standalone Send actions are coming soon in the app',
+    'Can I add a workout without creating a plan?',
+    'Can I use an MCP client with Training Plans?',
+  ]) {
+    if (!pageText.includes(expectedCopy)) {
+      throw new Error(`Prerendered ${TRAINING_PLANS_ROUTE} is missing visible copy: ${expectedCopy}`);
+    }
+  }
+  if (!documentRef.querySelector('footer.public-footer a[href="/features/training-plans"]')) {
+    throw new Error(`Prerendered ${TRAINING_PLANS_ROUTE} is missing the public Training Plans footer link.`);
+  }
+  if (/xcsAolLDDTWTgtRN9eYF3lW2YKL2|users\//.test(documentRef.documentElement.outerHTML)) {
+    throw new Error(`Prerendered ${TRAINING_PLANS_ROUTE} contains private account data.`);
+  }
+}
+
+function assertTrainingPlansSocialImage() {
+  if (!fs.existsSync(TRAINING_PLANS_SOCIAL_IMAGE_PATH)) {
+    throw new Error(`Expected Training Plans social image at ${TRAINING_PLANS_SOCIAL_IMAGE_PATH}.`);
+  }
+  const image = fs.readFileSync(TRAINING_PLANS_SOCIAL_IMAGE_PATH);
+  const pngSignature = '89504e470d0a1a0a';
+  if (image.subarray(0, 8).toString('hex') !== pngSignature) {
+    throw new Error('Training Plans social image is not a valid PNG.');
+  }
+  const width = image.readUInt32BE(16);
+  const height = image.readUInt32BE(20);
+  if (width !== 1200 || height !== 630) {
+    throw new Error(`Training Plans social image must be 1200x630, received ${width}x${height}.`);
+  }
 }
 
 function readPrerenderedRoutes() {

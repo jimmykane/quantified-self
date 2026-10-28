@@ -4,6 +4,7 @@ import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 
 import { normalizeRouteName, ROUTE_NAME_MAX_LENGTH } from '../../../helpers/route-name.helper';
 import { SharedModule } from '../../../modules/shared.module';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 
 export interface RouteNameDialogData {
   currentName: string;
@@ -20,6 +21,7 @@ export interface RouteNameDialogData {
 export class RouteNameDialogComponent {
   private formBuilder = inject(FormBuilder);
   private dialogRef = inject(MatDialogRef<RouteNameDialogComponent, string | undefined>);
+  private readonly haptics = inject(AppHapticsService);
   readonly data = inject<RouteNameDialogData>(MAT_DIALOG_DATA);
 
   readonly maxLength = ROUTE_NAME_MAX_LENGTH;
@@ -33,6 +35,7 @@ export class RouteNameDialogComponent {
   readonly routeNameControl = this.form.controls.routeName;
 
   close(): void {
+    this.haptics.selection();
     this.dialogRef.close();
   }
 
@@ -47,6 +50,7 @@ export class RouteNameDialogComponent {
       return;
     }
 
+    this.haptics.selection();
     this.dialogRef.close(routeName);
   }
 

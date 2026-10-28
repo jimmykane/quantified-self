@@ -2,6 +2,8 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { withHistoryExecution } from '../connection-history/context';
+import { HistoryLifecycleChangedError, type HistoryExecution } from '../connection-history/execution';
 
 const routeDocuments = new Map<string, Record<string, unknown>>();
 
@@ -61,11 +63,13 @@ vi.mock('./route-processing', () => ({
 const suuntoRouteMocks = {
   createSuuntoRouteUploadContext: vi.fn(),
   exportSuuntoRouteAsGPX: vi.fn(),
+  listSuuntoRoutes: vi.fn(),
 };
 
 vi.mock('../suunto/routes', () => ({
   createSuuntoRouteUploadContext: (...args: any[]) => suuntoRouteMocks.createSuuntoRouteUploadContext(...args),
   exportSuuntoRouteAsGPX: (...args: any[]) => suuntoRouteMocks.exportSuuntoRouteAsGPX(...args),
+  listSuuntoRoutes: (...args: any[]) => suuntoRouteMocks.listSuuntoRoutes(...args),
 }));
 
 const sourceLifecycleMocks = {
@@ -121,6 +125,20 @@ vi.mock('firebase-functions/v2/https', () => ({
   },
 }));
 
+const storedRouteOriginals = new Map<string, Buffer | Error>();
+const storageDownloadMock = vi.fn(async (path: string) => {
+  const storedValue = storedRouteOriginals.get(path);
+  if (storedValue instanceof Error) {
+    throw storedValue;
+  }
+  if (!storedValue) {
+    const error = new Error('not found') as Error & { code?: number };
+    error.code = 404;
+    throw error;
+  }
+  return [storedValue];
+});
+
 vi.mock('firebase-admin', () => ({
   firestore: () => ({
     doc: (path: string) => ({
@@ -130,6 +148,13 @@ vi.mock('firebase-admin', () => ({
           exists: data !== undefined,
           data: () => data,
         };
+      }),
+    }),
+  }),
+  storage: () => ({
+    bucket: () => ({
+      file: (path: string) => ({
+        download: () => storageDownloadMock(path),
       }),
     }),
   }),
@@ -182,10 +207,24 @@ function createTimestampLike(dateString: string) {
   };
 }
 
+function createSuuntoGPXRoute(revision: number): string {
+  return `<gpx xmlns="http://www.topografix.com/GPX/1/1" creator="Suunto app" version="1.1">
+    <metadata><name>Morning Route</name><extensions>
+      <route xmlns="http://www.suunto.com/xmlschemas/RouteExtension/v1">
+        <id>provider-route-1</id><modified>${revision}</modified><revision>${revision}</revision>
+        <activityId>1</activityId>
+      </route>
+    </extensions></metadata>
+    <rte><rtept lat="0" lon="0"><ele>10</ele></rtept>
+      <rtept lat="0.01" lon="0.01"><ele>20</ele></rtept></rte>
+  </gpx>`;
+}
+
 describe('processRouteSyncQueueItem', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     routeDocuments.clear();
+    storedRouteOriginals.clear();
     utilsMocks.generateIDFromParts.mockResolvedValue('route-doc-1');
     queueUtilsMocks.markQueueItemSkipped.mockResolvedValue(QueueResult.Processed);
     queueUtilsMocks.updateToProcessed.mockResolvedValue(QueueResult.Processed);
@@ -215,6 +254,18 @@ describe('processRouteSyncQueueItem', () => {
       userNames: ['suunto-user'],
     });
     suuntoRouteMocks.exportSuuntoRouteAsGPX.mockResolvedValue('<gpx />');
+    suuntoRouteMocks.listSuuntoRoutes.mockResolvedValue({
+      routes: [{
+        providerUserId: 'suunto-user',
+        providerSourceKey: 'suunto-user:1700000000000',
+        id: 'provider-route-1',
+        description: 'Morning Route',
+      }],
+      successfulProviderUserIds: ['suunto-user'],
+      failedProviderUserIds: [],
+      successfulProviderSourceKeys: ['suunto-user:1700000000000'],
+      failedProviderSourceKeys: [],
+    });
     upsertSyncedRouteMocks.upsertSyncedRoute.mockResolvedValue({
       status: 'created',
       routeID: 'route-doc-1',
@@ -283,6 +334,221 @@ describe('processRouteSyncQueueItem', () => {
       manual: false,
     }));
     expect(suuntoRouteMocks.createSuuntoRouteUploadContext).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops unchanged history routes before downstream delivery when the history authority changes', async () => {
+    routeDocuments.set('users/user-1/routes/route-doc-1', {
+      sourceSummary: { sourceServiceName: ServiceNames.SuuntoApp, providerRouteId: 'provider-route-1',
+        providerUserId: 'suunto-user', providerRouteName: 'Morning Route', modifiedAt: 2 },
+    });
+    const guard = vi.fn().mockRejectedValue(new HistoryLifecycleChangedError());
+    await expect(withHistoryExecution({ beforeRequest: guard } as unknown as HistoryExecution,
+      () => processRouteSyncQueueItem(createQueueItem({ manual: true, providerRouteModifiedAt: 1 }))))
+      .rejects.toThrow('earlier connection');
+    expect(guard).toHaveBeenCalledTimes(1);
+    expect(routeDeliverySyncMocks.enqueueRouteDeliverySyncJobsForImportedRoute).not.toHaveBeenCalled();
+    expect(queueUtilsMocks.markQueueItemSkipped).not.toHaveBeenCalled();
+    expect(queueUtilsMocks.updateToProcessed).not.toHaveBeenCalled();
+    expect(upsertSyncedRouteMocks.upsertSyncedRoute).not.toHaveBeenCalled();
+  });
+
+  it('propagates a history lifecycle change from downstream admission instead of marking the import successful', async () => {
+    routeDeliverySyncMocks.enqueueRouteDeliverySyncJobsForImportedRoute.mockRejectedValueOnce(new HistoryLifecycleChangedError());
+    await expect(processRouteSyncQueueItem(createQueueItem())).rejects.toThrow('earlier connection');
+    expect(upsertSyncedRouteMocks.upsertSyncedRoute).toHaveBeenCalledTimes(1);
+    expect(queueUtilsMocks.updateToProcessed).not.toHaveBeenCalled();
+    expect(queueUtilsMocks.increaseRetryCountForQueueItem).not.toHaveBeenCalled();
+  });
+
+  it('skips signed route notifications that are absent from the current Suunto account route listing', async () => {
+    suuntoRouteMocks.listSuuntoRoutes.mockResolvedValueOnce({
+      routes: [],
+      successfulProviderUserIds: ['suunto-user'],
+      failedProviderUserIds: [],
+      successfulProviderSourceKeys: ['suunto-user:1700000000000'],
+      failedProviderSourceKeys: [],
+    });
+
+    const result = await processRouteSyncQueueItem(createQueueItem());
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(queueUtilsMocks.markQueueItemSkipped).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'queue-1' }),
+      undefined,
+      'provider_route_not_listed',
+      expect.objectContaining({ resultStatus: 'skipped' }),
+    );
+    expect(suuntoRouteMocks.exportSuuntoRouteAsGPX).not.toHaveBeenCalled();
+    expect(upsertSyncedRouteMocks.upsertSyncedRoute).not.toHaveBeenCalled();
+    expect(routeDeliverySyncMocks.enqueueRouteDeliverySyncJobsForImportedRoute).not.toHaveBeenCalled();
+  });
+
+  it('does not repeat the listing check for manual work already created from that listing', async () => {
+    const result = await processRouteSyncQueueItem(createQueueItem({ manual: true }));
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(suuntoRouteMocks.listSuuntoRoutes).not.toHaveBeenCalled();
+    expect(suuntoRouteMocks.exportSuuntoRouteAsGPX).toHaveBeenCalled();
+    expect(upsertSyncedRouteMocks.upsertSyncedRoute).toHaveBeenCalled();
+  });
+
+  it('retries when the webhook source account route listing could not be confirmed', async () => {
+    suuntoRouteMocks.listSuuntoRoutes.mockResolvedValueOnce({
+      routes: [{
+        providerUserId: 'another-suunto-user',
+        providerSourceKey: 'another-suunto-user:1700000000000',
+        id: 'provider-route-1',
+      }],
+      successfulProviderUserIds: ['another-suunto-user'],
+      failedProviderUserIds: ['suunto-user'],
+      successfulProviderSourceKeys: ['another-suunto-user:1700000000000'],
+      failedProviderSourceKeys: ['suunto-user:1700000000000'],
+    });
+
+    const result = await processRouteSyncQueueItem(createQueueItem());
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(queueUtilsMocks.increaseRetryCountForQueueItem).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'queue-1' }),
+      expect.objectContaining({
+        message: 'Could not confirm the Suunto route against the current connected-account route listing.',
+      }),
+      1,
+    );
+    expect(suuntoRouteMocks.exportSuuntoRouteAsGPX).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('keeps the saved content revision for a timestamp-only notification (GPX revision changes: %s)', async changeGPXRevision => {
+    const originalPath = 'users/user-1/routes/route-doc-1/uploads/provider-sync/original.gpx';
+    const savedModifiedAt = createTimestampLike('2026-02-01T12:00:05.000Z');
+    const incomingModifiedAt = new Date('2026-02-02T12:00:05.000Z').getTime();
+    routeDocuments.set('users/user-1/routes/route-doc-1', {
+      id: 'route-doc-1',
+      userID: 'user-1',
+      originalFile: {
+        path: originalPath,
+        extension: 'gpx',
+      },
+      sourceSummary: {
+        sourceType: 'service_sync',
+        sourceServiceName: ServiceNames.SuuntoApp,
+        providerRouteId: 'provider-route-1',
+        providerUserId: 'suunto-user',
+        providerRouteName: 'Morning Route',
+        modifiedAt: savedModifiedAt,
+        importedAt: createTimestampLike('2026-02-01T12:00:01.000Z'),
+      },
+    });
+    const savedGPX = createSuuntoGPXRoute(savedModifiedAt.toDate().getTime());
+    storedRouteOriginals.set(originalPath, Buffer.from(savedGPX));
+    suuntoRouteMocks.exportSuuntoRouteAsGPX.mockResolvedValueOnce(changeGPXRevision
+      ? createSuuntoGPXRoute(incomingModifiedAt)
+      : savedGPX);
+
+    const result = await processRouteSyncQueueItem(createQueueItem({
+      providerRouteModifiedAt: incomingModifiedAt,
+    }));
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(storageDownloadMock).toHaveBeenCalledWith(originalPath);
+    expect(upsertSyncedRouteMocks.upsertSyncedRoute).not.toHaveBeenCalled();
+    expect(queueUtilsMocks.markQueueItemSkipped).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'queue-1' }),
+      undefined,
+      'provider_route_content_unchanged',
+      expect.objectContaining({
+        resultRouteId: 'route-doc-1',
+        resultStatus: 'skipped',
+      }),
+    );
+    expect(routeDeliverySyncMocks.buildRouteDeliverySourceRevisionKeyForRouteSource).toHaveBeenCalledWith(expect.objectContaining({
+      sourceSummary: expect.objectContaining({ modifiedAt: savedModifiedAt }),
+    }));
+    expect(routeDeliverySyncMocks.enqueueRouteDeliverySyncJobsForImportedRoute).toHaveBeenCalledTimes(1);
+    expect(storedRouteOriginals.get(originalPath)).toEqual(Buffer.from(savedGPX));
+  });
+
+  it('delivers a geometry edit even when Suunto also updates its embedded revision fields', async () => {
+    const originalPath = 'users/user-1/routes/route-doc-1/uploads/provider-sync/original.gpx';
+    const savedModifiedAt = new Date('2026-02-01T12:00:05.000Z').getTime();
+    const incomingModifiedAt = new Date('2026-02-02T12:00:05.000Z').getTime();
+    routeDocuments.set('users/user-1/routes/route-doc-1', {
+      originalFiles: [{ path: originalPath, extension: 'gpx' }],
+      sourceSummary: {
+        sourceType: 'service_sync',
+        sourceServiceName: ServiceNames.SuuntoApp,
+        providerRouteId: 'provider-route-1',
+        providerUserId: 'suunto-user',
+        providerRouteName: 'Morning Route',
+        modifiedAt: createTimestampLike('2026-02-01T12:00:05.000Z'),
+      },
+    });
+    storedRouteOriginals.set(originalPath, Buffer.from(createSuuntoGPXRoute(savedModifiedAt)));
+    suuntoRouteMocks.exportSuuntoRouteAsGPX.mockResolvedValueOnce(
+      createSuuntoGPXRoute(incomingModifiedAt).replace('lat="0.01"', 'lat="0.02"'),
+    );
+
+    const result = await processRouteSyncQueueItem(createQueueItem({ providerRouteModifiedAt: incomingModifiedAt }));
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(upsertSyncedRouteMocks.upsertSyncedRoute).toHaveBeenCalledWith(expect.objectContaining({
+      sourceMetadata: expect.objectContaining({ modifiedAt: new Date(incomingModifiedAt) }),
+    }));
+    expect(queueUtilsMocks.markQueueItemSkipped).not.toHaveBeenCalled();
+    expect(routeDeliverySyncMocks.enqueueRouteDeliverySyncJobsForImportedRoute).toHaveBeenCalledTimes(1);
+  });
+
+  it('still persists a real provider route update when the exported GPX bytes changed', async () => {
+    const originalPath = 'users/user-1/routes/route-doc-1/uploads/provider-sync/original.gpx';
+    routeDocuments.set('users/user-1/routes/route-doc-1', {
+      id: 'route-doc-1',
+      userID: 'user-1',
+      originalFiles: [{ path: originalPath, extension: 'gpx' }],
+      sourceSummary: {
+        sourceType: 'service_sync',
+        sourceServiceName: ServiceNames.SuuntoApp,
+        providerRouteId: 'provider-route-1',
+        providerUserId: 'suunto-user',
+        providerRouteName: 'Morning Route',
+        modifiedAt: createTimestampLike('2026-02-01T12:00:05.000Z'),
+      },
+    });
+    storedRouteOriginals.set(originalPath, Buffer.from('<gpx>old route</gpx>'));
+
+    const result = await processRouteSyncQueueItem(createQueueItem({
+      providerRouteModifiedAt: new Date('2026-02-02T12:00:05.000Z').getTime(),
+    }));
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(upsertSyncedRouteMocks.upsertSyncedRoute).toHaveBeenCalledTimes(1);
+    expect(queueUtilsMocks.updateToProcessed).toHaveBeenCalled();
+  });
+
+  it('still persists a provider rename even when the exported GPX bytes are unchanged', async () => {
+    const originalPath = 'users/user-1/routes/route-doc-1/uploads/provider-sync/original.gpx';
+    routeDocuments.set('users/user-1/routes/route-doc-1', {
+      id: 'route-doc-1',
+      userID: 'user-1',
+      originalFile: { path: originalPath, extension: 'gpx' },
+      sourceSummary: {
+        sourceType: 'service_sync',
+        sourceServiceName: ServiceNames.SuuntoApp,
+        providerRouteId: 'provider-route-1',
+        providerUserId: 'suunto-user',
+        providerRouteName: 'Old Route Name',
+        modifiedAt: createTimestampLike('2026-02-01T12:00:05.000Z'),
+      },
+    });
+    storedRouteOriginals.set(originalPath, Buffer.from('<gpx />'));
+
+    const result = await processRouteSyncQueueItem(createQueueItem({
+      providerRouteName: 'Renamed Route',
+      providerRouteModifiedAt: new Date('2026-02-02T12:00:05.000Z').getTime(),
+    }));
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(storageDownloadMock).not.toHaveBeenCalled();
+    expect(upsertSyncedRouteMocks.upsertSyncedRoute).toHaveBeenCalledTimes(1);
   });
 
   it('does not deliver an unchanged route after its Suunto source starts disconnecting', async () => {

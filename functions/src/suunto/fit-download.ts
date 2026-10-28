@@ -8,6 +8,7 @@ import {
 import { toSuuntoAuthorizationHeader } from './authorization-header';
 import {
   SUUNTO_FIT_DOWNLOAD_TIMEOUT_MS,
+  SUUNTO_FIT_MAX_RESPONSE_BYTES,
   SUUNTO_SUSPICIOUS_EMPTY_FIT_MAX_BYTES,
 } from './constants';
 
@@ -64,11 +65,15 @@ export async function downloadSuuntoFITFile(
 ): Promise<Buffer> {
   const response = await getBinaryResponse({
     headers: {
-      Accept: 'application/octet-stream',
+      // Suunto's FIT endpoint returns 500 for FIT-specific media types. Its
+      // content negotiation supports the wildcard request used by browsers.
+      Accept: '*/*',
       Authorization: toSuuntoAuthorizationHeader(accessToken),
       'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
     },
     timeout: SUUNTO_FIT_DOWNLOAD_TIMEOUT_MS,
+    maxResponseBytes: SUUNTO_FIT_MAX_RESPONSE_BYTES,
+    redirect: 'error',
     url: `https://cloudapi.suunto.com/v3/workouts/${encodeURIComponent(workoutID)}/fit`,
   });
 

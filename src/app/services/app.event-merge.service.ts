@@ -71,19 +71,19 @@ export class AppEventMergeService {
     if (error instanceof EventMergeError) {
       switch (error.code) {
         case 'INVALID_ARGUMENT':
-          return 'Could not merge events because the selection is invalid.';
+          return 'Could not merge activities because the selection is invalid.';
         case 'LIMIT_REACHED':
           return 'Upload limit reached for your tier.';
         case 'EVENT_NOT_FOUND':
-          return 'One or more selected events were not found.';
+          return 'One or more selected activities were not found.';
         case 'MISSING_SOURCE_FILE':
-          return 'One or more selected events have missing original files.';
+          return 'One or more selected activities have missing original files.';
         case 'DUPLICATE_SOURCE_FILE':
-          return 'Selected events include identical source files. Deselect duplicates and try again.';
+          return 'Selected activities include identical source files. Deselect duplicates and try again.';
         case 'OUTCOME_UNKNOWN':
-          return 'The merge may still be finishing. Refresh the event list, then retry the same selection; an existing result will be reused.';
+          return 'The merge may still be finishing. Refresh the activity list, then retry the same selection; an existing result will be reused.';
         default:
-          return 'Could not merge events.';
+          return 'Could not merge activities.';
       }
     }
 
@@ -91,7 +91,7 @@ export class AppEventMergeService {
       return error.message;
     }
 
-    return 'Could not merge events.';
+    return 'Could not merge activities.';
   }
 
   private isAmbiguousMergeOutcome(error: unknown): boolean {
@@ -130,7 +130,7 @@ export class AppEventMergeService {
       return new EventMergeError('LIMIT_REACHED', message || 'Upload limit reached.', error);
     }
     if (code.includes('not-found')) {
-      return new EventMergeError('EVENT_NOT_FOUND', message || 'Selected events were not found.', error);
+      return new EventMergeError('EVENT_NOT_FOUND', message || 'Selected activities were not found.', error);
     }
     if (code.includes('failed-precondition')) {
       return new EventMergeError('MISSING_SOURCE_FILE', message || 'Missing source files.', error);
@@ -138,11 +138,11 @@ export class AppEventMergeService {
     if (code.includes('already-exists')) {
       return new EventMergeError(
         'DUPLICATE_SOURCE_FILE',
-        message || 'Selected events include identical source files.',
+        message || 'Selected activities include identical source files.',
         error,
       );
     }
 
-    return new EventMergeError('INTERNAL', message || 'Could not merge events.', error);
+    return new EventMergeError('INTERNAL', message || 'Could not merge activities.', error);
   }
 }

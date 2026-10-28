@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { DerivedBodyWeightTrendMetricPayload } from '@shared/derived-metrics';
 import {
-  buildTrainingBodyWeightViewModel,
   resolveTrainingBodyWeightMetricPayload,
 } from './training-body-weight.helper';
 
 function createPayload(): DerivedBodyWeightTrendMetricPayload {
   const asOfDayMs = Date.UTC(2026, 6, 16);
+  const points = Array.from({ length: 28 }, (_, index) => ({
+    dayMs: asOfDayMs - ((27 - index) * 24 * 60 * 60 * 1000),
+    weightKg: index === 24 || index === 26 || index === 27 ? 70.2 + ((27 - index) * 0.2) : null,
+  }));
   return {
     dayBoundary: 'UTC',
     asOfDayMs,
@@ -23,10 +26,23 @@ function createPayload(): DerivedBodyWeightTrendMetricPayload {
     change28dPercent: -1.68,
     recordedDayCount7d: 4,
     recordedDayCount28d: 8,
-    points: Array.from({ length: 28 }, (_, index) => ({
-      dayMs: asOfDayMs - ((27 - index) * 24 * 60 * 60 * 1000),
-      weightKg: index === 24 || index === 26 || index === 27 ? 70.2 + ((27 - index) * 0.2) : null,
-    })),
+    points,
+    series: [{
+      sourceKind: 'health-measurement',
+      provider: 'QuantifiedSelf',
+      sourceKey: 'opaque-manual-source',
+      latestWeightKg: 70.2,
+      latestWeightDayMs: asOfDayMs,
+      median7dKg: 70.3,
+      median28dKg: 70.7,
+      change7dKg: -0.4,
+      change7dPercent: -0.57,
+      change28dKg: -1.2,
+      change28dPercent: -1.68,
+      recordedDayCount7d: 4,
+      recordedDayCount28d: 8,
+      points,
+    }],
   };
 }
 
@@ -46,37 +62,40 @@ describe('training body-weight helper', () => {
     })).toBeNull();
   });
 
-  it('builds a neutral, gap-preserving chart and comparison labels', () => {
+  it('preserves sparse canonical observations and separate provider/account sources for explicit consumers', () => {
     const payload = createPayload();
-    const model = buildTrainingBodyWeightViewModel(payload, 'ready', null, 'en-US');
-
-    expect(model).toMatchObject({
-      state: 'ready',
-      isUpdating: false,
-      latestWeightText: '70.2 kg',
-      median7dText: '70.3 kg',
-      median28dText: '70.7 kg',
-      change7dText: '−0.4 kg (−0.6%)',
-      coverageText: '8/28 days recorded',
-    });
-    expect(model.chartPoints).toHaveLength(28);
-    expect(model.chartPoints[0]).toEqual({ dayMs: payload.points[0].dayMs, weightKg: null });
-    expect(model.chartPoints.filter(point => point.weightKg !== null)).toHaveLength(3);
-    expect(model.sourceText).toContain('does not change Readiness');
+    payload.series = [
+      { ...payload.series[0], provider: 'GarminAPI', sourceKey: 'account-one' },
+      { ...payload.series[0], provider: 'GarminAPI', sourceKey: 'account-two' },
+    ];
+    expect(resolveTrainingBodyWeightMetricPayload(payload)).toEqual(payload);
+    expect(resolveTrainingBodyWeightMetricPayload(payload)?.points[0].weightKg).toBeNull();
+    expect(resolveTrainingBodyWeightMetricPayload(payload)?.series).toHaveLength(2);
   });
 
-  it('does not claim a comparison when its source windows are sparse', () => {
-    const payload = {
-      ...createPayload(),
-      change7dKg: null,
-      change7dPercent: null,
-      change28dKg: null,
-      change28dPercent: null,
+  it('rejects duplicate source identities and mixed Health/workout fallback sources', () => {
+    const payload = createPayload();
+    expect(resolveTrainingBodyWeightMetricPayload({
+      ...payload, series: [payload.series[0], payload.series[0]],
+    })).toBeNull();
+    expect(resolveTrainingBodyWeightMetricPayload({
+      ...payload, series: [
+        payload.series[0],
+        { ...payload.series[0], sourceKind: 'workout-profile-context', provider: null, sourceKey: 'workout' },
+      ],
+    })).toBeNull();
+  });
+
+  it('preserves unavailable comparisons while rejecting unpaired deltas', () => {
+    const payload = createPayload();
+    const unavailable = {
+      ...payload, change7dKg: null, change7dPercent: null,
+      series: payload.series.map(series => ({ ...series, change7dKg: null, change7dPercent: null })),
     };
-
-    const model = buildTrainingBodyWeightViewModel(payload, 'ready', null);
-
-    expect(model.change7dText).toBe('Not enough comparison data');
-    expect(model.change28dText).toBe('Not enough comparison data');
+    expect(resolveTrainingBodyWeightMetricPayload(unavailable)).toEqual(unavailable);
+    expect(resolveTrainingBodyWeightMetricPayload({ ...unavailable, change7dPercent: 1 })).toBeNull();
+    expect(resolveTrainingBodyWeightMetricPayload({
+      ...unavailable, series: [{ ...unavailable.series[0], change7dPercent: 1 }],
+    })).toBeNull();
   });
 });

@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { newEmailDeliveryFields } from '../email/queue-metadata';
 import * as logger from 'firebase-functions/logger';
 import { resolve } from 'path';
 import {
@@ -18,6 +19,7 @@ import {
     RenderedEmailMessage,
 } from '../email/template-renderer';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
+import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 
 const MAIL_COLLECTION = 'mail';
 const TEMPLATES_ROOT = resolve(__dirname, '../../templates');
@@ -29,7 +31,7 @@ export interface TestEmailArguments {
     templateIds?: string[];
 }
 
-export interface TestMailDocument {
+export interface TestMailDocument extends ReturnType<typeof newEmailDeliveryFields> {
     to: string;
     from: string;
     replyTo: string;
@@ -86,6 +88,7 @@ export function buildTestMailDocument(
 ): TestMailDocument {
     const isFounderNote = template.id === 'registration_welcome';
     const baseDocument = {
+        ...newEmailDeliveryFields(),
         to: targetEmail,
         from: isFounderNote ? FOUNDER_EMAIL_FROM : TRANSACTIONAL_EMAIL_FROM,
         replyTo: isFounderNote ? FOUNDER_EMAIL_REPLY_TO : TRANSACTIONAL_EMAIL_REPLY_TO,
@@ -136,6 +139,14 @@ export async function sendTestEmails(
 
     initializeAdmin(projectId);
     const templates = selectSeedableTemplates(templateIds);
+    let uid: string | undefined;
+    try {
+        uid = (await admin.auth().getUserByEmail(targetEmail)).uid;
+    } catch (error) {
+        // A controlled smoke-test inbox need not have an app account. Other Auth
+        // failures must abort instead of silently dropping known UID ownership.
+        if ((error as { code?: string })?.code !== 'auth/user-not-found') throw error;
+    }
     const previewCases = templates.flatMap(template =>
         template.previewCases.map(preview => ({ template, preview }))
     );
@@ -145,19 +156,23 @@ export async function sendTestEmails(
     logger.info(`Queueing ${previewCases.length} ${modeDescription} for ${targetEmail}.`);
 
     const db = admin.firestore();
-    const batch = db.batch();
     const renderer = createLocalEmailTemplateRenderer(TEMPLATES_ROOT);
-
-    for (const { template, preview } of previewCases) {
-        const docRef = db.collection(MAIL_COLLECTION).doc();
-        batch.set(docRef, {
+    const messages = previewCases.map(({ template, preview }) => ({
+        ref: db.collection(MAIL_COLLECTION).doc(),
+        data: {
             ...buildTestMailDocument(targetEmail, template, preview, inline, renderer),
+            ...(uid ? { uid } : {}),
             expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
-        });
-        logger.info(`Queued ${template.id} (${preview.name})`);
-    }
+        },
+    }));
 
-    await batch.commit();
+    await db.runTransaction(async transaction => {
+        if (uid) {
+            const guard = await getUserDeletionGuardStateInTransaction(db, transaction, uid);
+            if (guard.shouldSkip) throw new Error('Cannot queue test mail for a missing or deleting account.');
+        }
+        for (const message of messages) transaction.set(message.ref, message.data);
+    });
     logger.info(`All ${modeDescription} were queued. development_update was excluded.`);
 }
 

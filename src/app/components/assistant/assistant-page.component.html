@@ -6,8 +6,8 @@
         <a mat-icon-button routerLink="/help" fragment="ai-insights" aria-label="Assistant help" matTooltip="Assistant help">
           <mat-icon>help_outline</mat-icon>
         </a>
-        <button mat-icon-button type="button" aria-label="Start a new coordinate-free chat" matTooltip="Start a new chat"
-          [disabled]="loadingConversation() || !!conversationLoadError() || sending() || resetting()" (click)="resetConversation()">
+        <button mat-icon-button type="button" aria-label="Start a new chat with all optional data access off" matTooltip="Start a new chat"
+          [disabled]="loadingConversation() || !!conversationLoadError() || sending() || resetting() || proposalActionInProgress()" (click)="resetConversation()">
           @if (resetting()) {
             <mat-spinner diameter="20"></mat-spinner>
           } @else {
@@ -17,13 +17,25 @@
       </div>
     </div>
     <button class="assistant-explore-trigger" mat-button type="button"
-      [disabled]="loadingConversation() || !!conversationLoadError() || sending() || resetting()" (click)="openExploreSheet()">
+      [disabled]="loadingConversation() || !!conversationLoadError() || sending() || resetting() || proposalActionInProgress()" (click)="openExploreSheet()">
       <mat-icon>auto_awesome</mat-icon>
       Examples &amp; data access
       @if (preciseActivityLocationsEnabled()) {
-        <span class="assistant-location-status">
+        <span class="assistant-access-status assistant-location-status">
           <mat-icon aria-hidden="true">location_on</mat-icon>
           Precise locations on
+        </span>
+      }
+      @if (trainingAccessStatus(); as trainingStatus) {
+        <span class="assistant-access-status assistant-training-status">
+          <mat-icon aria-hidden="true">event_note</mat-icon>
+          {{ trainingStatus }}
+        </span>
+      }
+      @if (contentAccessStatus(); as contentStatus) {
+        <span class="assistant-access-status assistant-content-status">
+          <mat-icon aria-hidden="true">edit_note</mat-icon>
+          {{ contentStatus }}
         </span>
       }
     </button>
@@ -50,7 +62,7 @@
         <section class="assistant-empty-state" aria-labelledby="assistant-empty-state-title">
           <mat-icon aria-hidden="true">history</mat-icon>
           <h2 id="assistant-empty-state-title">If you could ask your training history one question, what would it be?</h2>
-          <p>Ask about the training, sleep, recovery, measurements, and activities you’ve connected. Every answer is grounded in verified, read-only evidence.</p>
+          <p>Ask about the training, sleep, recovery, measurements, and activities you’ve connected. Every answer is grounded in verified evidence; optional Training changes always require your review.</p>
         </section>
       }
 
@@ -64,7 +76,11 @@
               <mat-icon aria-hidden="true">{{ message.role === 'assistant' ? 'auto_awesome' : 'person' }}</mat-icon>
               <span>{{ message.role === 'assistant' ? 'Assistant' : 'You' }}</span>
             </div>
-            <p class="message-text">{{ message.text }}</p>
+            @if (message.role === 'assistant') {
+              <app-assistant-message-body [text]="message.text" />
+            } @else {
+              <p class="message-text">{{ message.text }}</p>
+            }
 
             @if (message.visuals?.length) {
               <section class="assistant-visuals" aria-label="Answer visuals">
@@ -172,6 +188,103 @@
       </section>
       }
 
+      @if (contentProposalReview(); as review) {
+        <section class="content-proposal" aria-labelledby="content-proposal-title">
+          <div class="training-proposal-heading">
+            <mat-icon aria-hidden="true">{{ review.proposal.kind === 'update_event_tags' ? 'sell' : 'edit_note' }}</mat-icon>
+            <div>
+              <h2 id="content-proposal-title">{{ review.title }}</h2>
+              <p>{{ review.proposal.summary }}</p>
+            </div>
+          </div>
+          <div class="training-proposal-list">
+            @for (detail of review.details; track $index) {
+              <div class="training-proposal-row">
+                <mat-icon aria-hidden="true">{{ review.proposal.kind.startsWith('delete_') ? 'warning' : 'arrow_forward' }}</mat-icon>
+                <span>{{ detail }}</span>
+              </div>
+            }
+          </div>
+          <p class="training-proposal-disclosure">Nothing changes until you apply this proposal. Concurrent edits are never overwritten.</p>
+          <div class="training-proposal-actions">
+            <button mat-flat-button type="button" [disabled]="proposalActionInProgress()"
+              (click)="applyPendingContentProposal()">
+              @if (applyingContentProposal()) { <mat-spinner diameter="18"></mat-spinner> } @else {
+                {{ review.proposal.kind === 'delete_timeline_note' ? 'Delete note' : review.proposal.kind === 'delete_manual_measurement' ? 'Delete measurement' : review.proposal.kind === 'delete_workout_reflection' ? 'Delete reflection' : 'Apply change' }}
+              }
+            </button>
+            <button mat-button type="button" [disabled]="proposalActionInProgress()"
+              (click)="dismissPendingContentProposal()">Dismiss</button>
+          </div>
+        </section>
+      } @else if (contentProposalResult()) {
+        <p class="training-proposal-result" role="status">{{ contentProposalResult() }}</p>
+      }
+
+      @if (pendingTrainingProposal(); as proposal) {
+        <section class="training-proposal" aria-labelledby="training-proposal-title">
+          <div class="training-proposal-heading">
+            <mat-icon aria-hidden="true">{{ trainingDeletionReview() ? 'delete_outline' : 'edit_calendar' }}</mat-icon>
+            <div>
+              <h2 id="training-proposal-title">{{ trainingDeletionReview()?.title ?? (pendingGarminReplacement() ? 'Review Garmin replacement copy' : pendingSavedWorkoutProposal() ? 'Review saved workout change' : 'Review Training changes') }}</h2>
+              <p>{{ proposal.summary }}</p>
+            </div>
+          </div>
+          <div class="training-proposal-list">
+            @if (proposal.phaseReview; as review) {
+              <section aria-label="Review plan phases" class="training-phase-review">
+                <h3>{{ review.planName }}</h3>
+                <p>Plan dates: {{ review.previousStartDate }} – {{ review.previousEndDate }} → {{ review.startDate }} – {{ review.endDate }}</p>
+                @for (side of [{ label: 'Current phases', phases: review.before }, { label: 'Proposed phases', phases: review.after }]; track side.label) {
+                  <h4>{{ side.label }}</h4>
+                  @for (phase of side.phases.items; track phase.id) {
+                    <p><strong>{{ phase.name }}</strong> · {{ phase.startLocalDate }} – {{ phase.endLocalDate }} · {{ phase.color ?? 'Plan color' }}</p>
+                    @if (phase.description) { <p class="training-phase-description">{{ phase.description }}</p> }
+                  } @empty { <p>No phases.</p> }
+                }
+              </section>
+            }
+            @for (change of proposal.changes; track change.index) {
+              <div class="training-proposal-row">
+                <mat-icon aria-hidden="true">arrow_forward</mat-icon>
+                <span>{{ change.summary }}</span>
+              </div>
+            }
+            @for (provider of proposal.providerPreviews; track provider.index + ':' + provider.provider) {
+              <div class="training-proposal-row training-proposal-row-provider">
+                <mat-icon aria-hidden="true">sync</mat-icon>
+                <span>{{ provider.summary }}</span>
+              </div>
+            }
+          </div>
+          @for (review of proposal.workoutReviews ?? []; track review.index) {
+            <app-assistant-workout-review [review]="review" [unitSettings]="workoutReviewUnitSettings()" [compact]="compactWorkoutReviews()"
+              [contextKey]="proposal.proposalRef + ':' + review.index"></app-assistant-workout-review>
+          }
+          <p class="training-proposal-disclosure">
+            @if (trainingDeletionReview(); as deletionReview) {
+              {{ deletionReview.disclosure }}
+            } @else if (pendingGarminReplacement()) {
+              The original Garmin copy may reappear and leave a duplicate. Creating a replacement requires your explicit confirmation. QS rechecks before sending; this does not edit your workout, other providers or completed activities.
+            } @else if (pendingSavedWorkoutProposal()) {
+              Nothing changes until you apply. A saved recipe has no sync setting; planned copies follow the plan's existing setting, while Standalone copies need their own Send action.
+            } @else {
+              Nothing changes until you apply this proposal. Provider results are independent, so a delivery problem never removes an authored workout.
+            }
+          </p>
+          <div class="training-proposal-actions">
+            <button mat-flat-button type="button" [disabled]="proposalActionInProgress()"
+              (click)="applyPendingTrainingProposal()">
+              @if (applyingTrainingProposal()) { <mat-spinner diameter="18"></mat-spinner> } @else { {{ trainingDeletionReview()?.applyLabel ?? (pendingGarminReplacement() ? 'Create replacement Garmin copy' : 'Apply changes') }} }
+            </button>
+            <button mat-button type="button" [disabled]="proposalActionInProgress()"
+              (click)="dismissPendingTrainingProposal()">Dismiss</button>
+          </div>
+        </section>
+      } @else if (trainingProposalResult()) {
+        <p class="training-proposal-result" role="status">{{ trainingProposalResult() }}</p>
+      }
+
       <footer class="assistant-composer-dock">
         @if (errorMessage()) {
           <section class="assistant-error" role="alert">
@@ -186,10 +299,10 @@
           <form class="composer" (submit)="handleComposerSubmit($event)">
             <textarea class="composer-input qs-scrollbar" rows="1" aria-label="Ask about your data"
               cdkTextareaAutosize cdkAutosizeMinRows="1" cdkAutosizeMaxRows="5"
-              [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending()"
+              [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending() || resetting() || proposalActionInProgress()"
               [placeholder]="composerPlaceholder" (keydown)="handleComposerKeydown($event)"></textarea>
             <button mat-icon-button class="composer-submit" type="submit"
-              [disabled]="sending() || quotaPreventsSend() || promptControl.invalid"
+              [disabled]="sending() || resetting() || proposalActionInProgress() || quotaPreventsSend() || promptControl.invalid"
               [attr.aria-label]="sending() ? 'Sending message' : 'Send message'">
               <span class="composer-submit-content">
                 @if (sending()) {

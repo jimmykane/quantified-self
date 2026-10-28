@@ -17,21 +17,9 @@ import {
 import { AppUserInterface } from '../../models/app-user.interface';
 import { Firestore, doc, runTransaction } from 'app/firebase/firestore';
 import { LoggerService } from '../logger.service';
-import { AppColors } from './app.colors';
+import { STANDARD_DEVICE_COLORS } from '../../helpers/device-color-palette.helper';
 
-export const DEVICE_COLOR_PREFERENCE_PALETTE = [
-    AppColors.Blue,
-    AppColors.StrongOrange,
-    AppColors.Green,
-    AppColors.Purple,
-    AppColors.Red,
-    AppColors.LightBlue,
-    AppColors.Pink,
-    AppColors.LightGreen,
-    AppColors.DeepBlue,
-    AppColors.Yellow,
-].map(color => normalizeDeviceColorValue(color))
-    .filter((color): color is string => !!color);
+export const DEVICE_COLOR_PREFERENCE_PALETTE = STANDARD_DEVICE_COLORS.map(swatch => swatch.color);
 
 export type DeviceColorPreferenceChangeMap = Record<string, string | null>;
 

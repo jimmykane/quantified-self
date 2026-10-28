@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
+import { cleanupObservation, cleanupProvider } from './cleanup-monitoring';
 import {
   Auth2ServiceTokenInterface,
   ServiceNames,
@@ -29,6 +30,8 @@ import {
   SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD,
 } from './service-token-store';
 import { cleanupProviderOperationalDocsForServiceToken } from './service-operational-cleanup';
+import { stageServiceDisconnectCleanup } from './service-disconnect-cleanup';
+import { getUserDeletionGuardStateInTransaction } from './shared/user-deletion-guard';
 import {
   doesSuuntoHealthWebhookBindingMatch,
   getSuuntoHealthWebhookAccountBindingRef,
@@ -60,6 +63,22 @@ export const SERVICE_AUTH_CLEANUP_REASONS = {
 } as const;
 
 export type ServiceAuthCleanupReason = typeof SERVICE_AUTH_CLEANUP_REASONS[keyof typeof SERVICE_AUTH_CLEANUP_REASONS];
+
+/** Record before local cleanup/metadata writes can fail or remove the last credential. */
+function observePartnerRevocationFailure(serviceName: ServiceNames, reason: ServiceAuthCleanupReason): void {
+  switch (reason) {
+    case SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion:
+      cleanupObservation('account', cleanupProvider(serviceName), 'remote_unconfirmed');
+      break;
+    case SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect:
+    case SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement:
+    case SERVICE_AUTH_CLEANUP_REASONS.TerminalAuthFailure:
+      cleanupObservation('disconnect', cleanupProvider(serviceName), 'remote_unconfirmed',
+        reason === SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect ? 'explicit'
+          : reason === SERVICE_AUTH_CLEANUP_REASONS.SubscriptionEnforcement ? 'subscription' : 'scheduler');
+      break;
+  }
+}
 export type MissingTokensBehavior = 'throw' | 'ignore';
 
 export interface RefreshFailureDetails {
@@ -199,6 +218,8 @@ interface CleanupServiceConnectionOptions {
   disconnectLifecycleGuard?: ServiceDisconnectLifecycleGuard;
   /** Explicit disconnect captures tokens atomically with its lifecycle fence. */
   initialTokenQuerySnapshot?: admin.firestore.QuerySnapshot;
+  /** Explicit disconnect persists queue cleanup with token deletion and runs it asynchronously. */
+  deferOperationalCleanup?: boolean;
 }
 
 interface CleanupServiceTokenResolution {
@@ -1203,6 +1224,7 @@ export async function cleanupServiceConnectionForUser(
           tokenSnapshotForCleanup = currentResolvedSnapshot;
         }
       } catch (error: any) {
+        if (!isPendingDisconnectTokenUseSkip(error)) observePartnerRevocationFailure(serviceName, reason);
         const statusCode = getErrorStatusCode(error);
         if (reason === SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion && isRetryableAccountDeletionPartnerFailure(statusCode)) {
           addAccountDeletionTokenArchive(
@@ -1247,6 +1269,7 @@ export async function cleanupServiceConnectionForUser(
           await adapter.deauthorize(serviceToken);
           logger.info(`Deauthorized ${serviceName} token ${tokenQueryDocumentSnapshot.id} for ${userID}`);
         } catch (apiError: any) {
+          observePartnerRevocationFailure(serviceName, reason);
           const statusCode = getErrorStatusCode(apiError);
           const shouldRetainTokenForAccountDeletionRetry = reason === SERVICE_AUTH_CLEANUP_REASONS.AccountDeletion
             && isRetryableAccountDeletionPartnerFailure(statusCode);
@@ -1308,6 +1331,8 @@ export async function cleanupServiceConnectionForUser(
         ...(needsDisconnectLifecycleGuard ? {
           preserveTokenRootWhenEmpty: true,
           shouldDeleteInTransaction: async (transaction: admin.firestore.Transaction) => {
+            if (options.deferOperationalCleanup
+              && (await getUserDeletionGuardStateInTransaction(admin.firestore(), transaction, userID)).shouldSkip) return false;
             const [lifecycleCurrent, currentTokenSnapshot] = await Promise.all([
               isServiceDisconnectLifecycleGuardCurrent(userDocRef, disconnectLifecycleGuard, transaction),
               transaction.get(tokenQueryDocumentSnapshot.ref),
@@ -1329,6 +1354,12 @@ export async function cleanupServiceConnectionForUser(
             );
           },
         } : {}),
+        ...(options.deferOperationalCleanup && tokenDataForOperationalCleanup ? {
+          onDeleteInTransaction: (transaction: admin.firestore.Transaction) => stageServiceDisconnectCleanup(
+            transaction, userID, serviceName, tokenDataForOperationalCleanup,
+            disconnectLifecycleGuard,
+          ),
+        } : {}),
       });
       if (deleteResult.skippedByCondition) {
         outcome.skippedByCondition = true;
@@ -1338,7 +1369,7 @@ export async function cleanupServiceConnectionForUser(
       knownNoTokensRemain = needsDisconnectLifecycleGuard
         ? deleteResult.remainingTokenCount === 0
         : deleteResult.tokenRootDeleted;
-      if (tokenDataForOperationalCleanup) {
+      if (tokenDataForOperationalCleanup && !options.deferOperationalCleanup) {
         try {
           await cleanupProviderOperationalDocsForServiceToken(
             userID,

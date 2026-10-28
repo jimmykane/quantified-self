@@ -141,6 +141,7 @@ describe('admin subscription gift logic', () => {
     it('recognizes yearly cadence and preserves scheduled cancellation in the preview', () => {
         const result = buildEligibleSubscriptionGiftSnapshot(subscription({
             cancel_at_period_end: true,
+            cancel_at: unixSeconds('2027-01-01T00:00:00Z'),
             items: {
                 object: 'list',
                 data: [{
@@ -158,6 +159,16 @@ describe('admin subscription gift logic', () => {
 
         expect(result.cadence).toBe('yearly');
         expect(result.cancelAtPeriodEnd).toBe(true);
+    });
+
+    it('preserves cancellation intent when Stripe moves the derived cancellation date after a gift', () => {
+        const before = subscription({ cancel_at_period_end: true, cancel_at: unixSeconds('2026-01-31T10:15:30Z') });
+        const after = subscription({ ...before, status: 'trialing', trial_end: unixSeconds('2026-02-28T10:15:30Z'),
+            cancel_at: unixSeconds('2026-02-28T10:15:30Z'), items: { ...before.items,
+                data: before.items.data.map(item => ({ ...item, current_period_end: unixSeconds('2026-02-28T10:15:30Z') })) } });
+        expect(buildSubscriptionGiftInvariantVersion(after)).toBe(buildSubscriptionGiftInvariantVersion(before));
+        expect(buildSubscriptionGiftInvariantVersion(subscription({ ...after, cancel_at_period_end: false })))
+            .not.toBe(buildSubscriptionGiftInvariantVersion(before));
     });
 
     it('accepts exactly two calendar years from the billing-cycle anchor across a leap day', () => {
@@ -227,6 +238,7 @@ describe('admin subscription gift logic', () => {
         ['flexible billing', { billing_mode: { type: 'flexible', flexible: {} } }, 'flexible-billing'],
         ['paused collection', { pause_collection: { behavior: 'keep_as_draft' } }, 'paused'],
         ['a custom cancellation date', { cancel_at: unixSeconds('2026-02-15T00:00:00Z') }, 'custom-cancellation'],
+        ['a custom date with the period-end flag', { cancel_at_period_end: true, cancel_at: unixSeconds('2026-02-15T00:00:00Z') }, 'custom-cancellation'],
         ['a truncated subscription-item list', {
             items: { ...subscription().items, has_more: true },
         }, 'incomplete-items'],

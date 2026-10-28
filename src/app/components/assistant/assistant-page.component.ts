@@ -1,3 +1,4 @@
+import { assistantReflectionReviewDetails } from '../../helpers/assistant-reflection-review.helper';
 import { CommonModule } from '@angular/common';
 import {
   ChangeDetectionStrategy,
@@ -23,15 +24,22 @@ import {
   isAssistantLocationAccess,
   isValidAssistantRequestId,
   type AssistantChatRequest,
+  type AssistantContentProposalKind,
+  type AssistantContentProposalPreview,
   type AssistantConversation,
   type AssistantLocationAccess,
   type AssistantMessage,
+  type AssistantTrainingProposalPreview,
   type AssistantVisual,
 } from '@shared/assistant.types';
 import type { AssistantQuotaStatus } from '@shared/assistant.types';
 import { MaterialModule } from '../../modules/material.module';
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
+import { assistantMeasurementReviewDetails } from '../../helpers/assistant-measurement-review.helper';
+import { assistantTrainingDeletionReview } from '../../helpers/assistant-training-deletion-review.helper';
+import { formatAssistantCalendarDate, formatAssistantCalendarRange } from '../../helpers/assistant-message-format.helper';
 import {
   AssistantError,
   AssistantService,
@@ -46,6 +54,8 @@ import {
   type AssistantVisualDetailData,
 } from './assistant-visual-detail.component';
 import { AssistantVisualMapComponent } from './assistant-visual-map.component';
+import { AssistantMessageBodyComponent } from './assistant-message-body.component';
+import { AssistantWorkoutReviewComponent } from './assistant-workout-review.component';
 
 const ASSISTANT_PENDING_INITIAL_POLL_INTERVAL_MS = 2_000;
 const ASSISTANT_PENDING_MAX_POLL_INTERVAL_MS = 5_000;
@@ -70,6 +80,64 @@ type RememberedAssistantRequest = AssistantPendingRequest | RememberedAssistantR
   requestId: string;
 };
 
+interface AssistantContentProposalReview {
+  proposal: AssistantContentProposalPreview;
+  title: string;
+  details: string[];
+}
+
+function contentProposalTitle(kind: AssistantContentProposalKind): string {
+  if (kind === 'save_workout_reflection') return 'Review workout reflection';
+  if (kind === 'delete_workout_reflection') return 'Review permanent reflection deletion';
+  if (kind === 'create_manual_measurement') return 'Review new manual measurement';
+  if (kind === 'update_manual_measurement') return 'Review manual measurement changes';
+  if (kind === 'delete_manual_measurement') return 'Review permanent measurement deletion';
+  if (kind === 'update_event_tags') return 'Review event tag change';
+  if (kind === 'delete_timeline_note') return 'Review permanent note deletion';
+  if (kind === 'create_timeline_note') return 'Review new Timeline note';
+  return 'Review Timeline note changes';
+}
+
+const SAVED_WORKOUT_CHANGE_KINDS = new Set(['create', 'save-workout', 'copy', 'update', 'set-status', 'delete', 'place']);
+
+function isSavedWorkoutProposal(proposal: AssistantTrainingProposalPreview): boolean {
+  return proposal.changes.length > 0
+    && proposal.changes.every(change => SAVED_WORKOUT_CHANGE_KINDS.has(change.kind));
+}
+
+function contentProposalDetails(proposal: AssistantContentProposalPreview): string[] {
+  const args = proposal.arguments as Record<string, unknown>;
+  if (proposal.kind === 'update_event_tags') {
+    const before = Array.isArray(args['expectedTags']) ? args['expectedTags'].join(', ') || 'No tags' : 'No tags';
+    const after = Array.isArray(args['tags']) ? args['tags'].join(', ') || 'No tags' : 'No tags';
+    return [
+      `Current: ${before}`,
+      `New: ${after}`,
+      'All workouts in the same event share these tags.',
+    ];
+  }
+  if (proposal.kind === 'delete_timeline_note') {
+    return ['The selected Timeline note and its text will be permanently deleted.'];
+  }
+  const dates = args['endDate'] === null
+    ? `${formatAssistantCalendarDate(String(args['startDate']))} – ongoing`
+    : args['startDate'] === args['endDate']
+      ? formatAssistantCalendarDate(String(args['startDate']))
+      : formatAssistantCalendarRange(String(args['startDate']), String(args['endDate']));
+  const readableChoice = (value: unknown): string => String(value)
+    .replaceAll('_', ' ')
+    .replace(/^./, firstCharacter => firstCharacter.toUpperCase());
+  return [
+    `Title: ${args['title']}`,
+    `Dates: ${dates}`,
+    `Category: ${readableChoice(args['category'])}`,
+    `Details: ${typeof args['details'] === 'string' && args['details'] ? args['details'] : 'None'}`,
+    `Charts and calendar: ${args['showOnCharts'] ? 'Shown' : 'Hidden'}`,
+    `Color: ${readableChoice(args['color'])}`,
+    `Time zone: ${args['timeZone']}`,
+  ];
+}
+
 @Component({
   selector: 'app-assistant-page',
   standalone: true,
@@ -81,6 +149,8 @@ type RememberedAssistantRequest = AssistantPendingRequest | RememberedAssistantR
     TextFieldModule,
     AssistantVisualChartComponent,
     AssistantVisualMapComponent,
+    AssistantMessageBodyComponent,
+    AssistantWorkoutReviewComponent,
   ],
   templateUrl: './assistant-page.component.html',
   styleUrls: ['./assistant-page.component.scss'],
@@ -90,6 +160,9 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   private readonly assistantService = inject(AssistantService);
   private readonly quotaService = inject(AssistantQuotaService);
   private readonly hapticsService = inject(AppHapticsService);
+  private readonly userSettings = inject(AppUserSettingsQueryService);
+  readonly workoutReviewUnitSettings = computed(() => this.userSettings.unitSettings());
+  readonly compactWorkoutReviews = computed(() => (this.pendingTrainingProposal()?.workoutReviews?.length ?? 0) > 3);
   private readonly bottomSheet = inject(MatBottomSheet);
   private readonly dialog = inject(MatDialog);
   private readonly breakpointObserver = inject(BreakpointObserver);
@@ -102,6 +175,8 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   private pendingPollIntervalMs = ASSISTANT_PENDING_INITIAL_POLL_INTERVAL_MS;
   private pendingRecoveryDeadlineMs = 0;
   private pendingRegistrationDeadlineMs = 0;
+  private pendingOwnerUid: string | null = null;
+  private viewOwnerUid: string | null = null;
   private destroyed = false;
 
   readonly maxMessageChars = ASSISTANT_MAX_MESSAGE_CHARS;
@@ -119,9 +194,63 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   });
   readonly conversation = signal<AssistantConversation | null>(null);
   readonly locationAccess = signal<AssistantLocationAccess>('coordinate_free');
+  readonly timelineNotesEnabled = signal(false);
+  readonly activityTagChangesEnabled = signal(false);
+  readonly timelineNoteChangesEnabled = signal(false);
+  readonly measurementChangesEnabled = signal(true);
+  readonly reflectionChangesEnabled = signal(true);
+  readonly trainingPlansEnabled = signal(false);
+  readonly trainingPlanChangesEnabled = signal(false);
+  readonly trainingDeliveryEnabled = signal(false);
+  readonly pendingTrainingProposal = signal<AssistantTrainingProposalPreview | null>(null);
+  readonly trainingDeletionReview = computed(() => assistantTrainingDeletionReview(this.pendingTrainingProposal()));
+  readonly pendingGarminReplacement = computed(() =>
+    this.pendingTrainingProposal()?.changes[0]?.kind === 'garmin-workout-replacement');
+  readonly pendingSavedWorkoutProposal = computed(() => {
+    const proposal = this.pendingTrainingProposal();
+    return proposal !== null && isSavedWorkoutProposal(proposal);
+  });
+  readonly pendingContentProposal = signal<AssistantContentProposalPreview | null>(null);
+  readonly applyingTrainingProposal = signal(false);
+  readonly trainingProposalResult = signal<string | null>(null);
+  readonly applyingContentProposal = signal(false);
+  readonly contentProposalResult = signal<string | null>(null);
+  readonly proposalActionInProgress = computed(
+    () => this.applyingTrainingProposal() || this.applyingContentProposal(),
+  );
+  readonly contentProposalReview = computed<AssistantContentProposalReview | null>(() => {
+    const proposal = this.pendingContentProposal();
+    return proposal === null ? null : {
+      proposal,
+      title: contentProposalTitle(proposal.kind),
+      details: proposal.kind.endsWith('_manual_measurement')
+        ? assistantMeasurementReviewDetails(proposal, this.userSettings.unitSettings())
+        : proposal.kind.endsWith('_workout_reflection') ? assistantReflectionReviewDetails(proposal)
+        : contentProposalDetails(proposal),
+    };
+  });
   readonly preciseActivityLocationsEnabled = computed(
     () => this.locationAccess() === 'precise_activity',
   );
+  readonly trainingAccessStatus = computed(() => {
+    if (!this.trainingPlansEnabled()) return null;
+    const changeCount = Number(this.trainingPlanChangesEnabled())
+      + Number(this.trainingDeliveryEnabled());
+    return changeCount === 0
+      ? 'Training read on'
+      : `Training read + ${changeCount} change${changeCount === 1 ? '' : 's'}`;
+  });
+  readonly contentAccessStatus = computed(() => {
+    const labels = [
+      ...(this.measurementChangesEnabled() ? ['Manual measurements'] : []),
+      ...(this.reflectionChangesEnabled() ? ['Private workout reflections'] : []),
+      ...(this.activityTagChangesEnabled() ? ['Tag changes'] : []),
+      ...(this.timelineNotesEnabled()
+        ? [this.timelineNoteChangesEnabled() ? 'Notes read/change' : 'Notes read']
+        : []),
+    ];
+    return labels.length > 0 ? labels.join(' · ') : null;
+  });
   readonly pendingUserMessage = signal<AssistantMessage | null>(null);
   readonly quota = signal<AssistantQuotaStatus | null>(null);
   readonly loadingConversation = signal(true);
@@ -180,27 +309,18 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     this.loadingConversation.set(true);
     this.conversationLoadError.set(null);
     const initializingUid = this.auth.currentUser?.uid;
+    if (this.viewOwnerUid !== (initializingUid ?? null)) this.clearAccountView();
+    this.viewOwnerUid = initializingUid ?? null;
     const rememberedRequest = this.readRememberedPendingRequest();
     let requestToResume: AssistantPendingRequest | null = null;
     const [conversationResult, quotaResult] = await Promise.allSettled([
       this.assistantService.getConversationState(),
       this.quotaService.loadQuotaStatus(),
     ]);
+    if (this.destroyed || this.viewOwnerUid !== (initializingUid ?? null)) return;
     if (!initializingUid || this.auth.currentUser?.uid !== initializingUid) {
-      this.cancelPendingResponsePoll();
       this.clearRememberedPendingRequest(rememberedRequest?.requestId);
-      this.conversation.set(null);
-      this.locationAccess.set('coordinate_free');
-      this.quota.set(null);
-      this.retryRequest.set(null);
-      this.pendingRequestId.set(null);
-      this.pendingUserMessage.set(null);
-      this.activeMapKey.set(null);
-      this.expandedMap.set(false);
-      this.promptControl.setValue('');
-      this.errorMessage.set(null);
-      this.conversationLoadError.set(null);
-      this.sending.set(false);
+      this.clearAccountView();
       this.loadingConversation.set(false);
       return;
     }
@@ -208,6 +328,18 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       const state = conversationResult.value;
       this.conversation.set(state.conversation);
       this.locationAccess.set(state.locationAccess ?? 'coordinate_free');
+      this.timelineNotesEnabled.set(state.timelineNotesEnabled === true);
+      this.activityTagChangesEnabled.set(state.activityTagChangesEnabled === true);
+      this.timelineNoteChangesEnabled.set(state.timelineNoteChangesEnabled === true);
+      this.measurementChangesEnabled.set(state.conversation ? state.measurementChangesEnabled === true
+        : rememberedRequest ? 'measurementChangesEnabled' in rememberedRequest && rememberedRequest.measurementChangesEnabled === true : true);
+      this.reflectionChangesEnabled.set(state.conversation ? state.reflectionChangesEnabled === true
+        : rememberedRequest ? 'reflectionChangesEnabled' in rememberedRequest && rememberedRequest.reflectionChangesEnabled === true : true);
+      this.trainingPlansEnabled.set(state.trainingPlansEnabled === true);
+      this.trainingPlanChangesEnabled.set(state.trainingPlanChangesEnabled === true);
+      this.trainingDeliveryEnabled.set(state.trainingDeliveryEnabled === true);
+      this.pendingTrainingProposal.set(state.pendingTrainingProposal ?? null);
+      this.pendingContentProposal.set(state.pendingContentProposal ?? null);
       if (rememberedRequest
         && this.hasCompletedRequest(state.conversation, rememberedRequest.requestId)) {
         this.clearRememberedPendingRequest(rememberedRequest.requestId);
@@ -237,7 +369,9 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       && this.isRetryablePendingStateError(conversationResult.reason)) {
       if (this.isResumablePendingRequest(rememberedRequest)
         && this.isFreshPendingRequest(rememberedRequest)) {
-        requestToResume = rememberedRequest;
+        // A remembered request is not authority for the conversation's permissions.
+        // Keep it intact until the server confirms the generation and access state.
+        this.conversationLoadError.set(this.assistantService.getErrorMessage(conversationResult.reason));
       } else if (this.isResumablePendingRequest(rememberedRequest)) {
         this.restoreExpiredPendingRequest(rememberedRequest);
       } else {
@@ -278,18 +412,66 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     if (this.loadingConversation()
       || this.conversationLoadError()
       || this.sending()
-      || this.resetting()) {
+      || this.resetting()
+      || this.proposalActionInProgress()) {
       return;
     }
+    const openingUid = this.viewOwnerUid;
+    if (!this.canApplyAccountResult(openingUid)) return;
+    const openingConversationId = this.conversation()?.conversationId ?? null;
     this.bottomSheet.open(AssistantExploreBottomSheetComponent, {
-      data: { locationAccess: this.locationAccess() },
+      data: { locationAccess: this.locationAccess(), timelineNotesEnabled: this.timelineNotesEnabled(),
+        activityTagChangesEnabled: this.activityTagChangesEnabled(),
+        timelineNoteChangesEnabled: this.timelineNoteChangesEnabled(),
+        measurementChangesEnabled: this.measurementChangesEnabled(),
+        reflectionChangesEnabled: this.reflectionChangesEnabled(),
+        trainingPlansEnabled: this.trainingPlansEnabled(), trainingPlanChangesEnabled: this.trainingPlanChangesEnabled(),
+        trainingDeliveryEnabled: this.trainingDeliveryEnabled() },
     })
       .afterDismissed()
       .subscribe((result: AssistantExploreBottomSheetResult | undefined) => {
+        if (!this.canApplyAccountResult(openingUid)) return;
+        if ((this.conversation()?.conversationId ?? null) !== openingConversationId) return;
         if (result?.kind === 'prompt') {
           this.useStarterPrompt(result.prompt);
         } else if (result?.kind === 'location_access') {
           void this.changeLocationAccess(result.locationAccess);
+        } else if (result?.kind === 'training_plans') {
+          if (result.enabled !== this.trainingPlansEnabled()) {
+            void this.replaceConversation(this.locationAccess(), true, this.timelineNotesEnabled(), result.enabled,
+              result.enabled && this.trainingPlanChangesEnabled(), result.enabled && this.trainingDeliveryEnabled(),
+              this.activityTagChangesEnabled(), this.timelineNoteChangesEnabled());
+          }
+        } else if (result?.kind === 'training_plan_changes') {
+          void this.replaceConversation(this.locationAccess(), true, this.timelineNotesEnabled(),
+            result.enabled || this.trainingPlansEnabled(), result.enabled, this.trainingDeliveryEnabled(),
+            this.activityTagChangesEnabled(), this.timelineNoteChangesEnabled());
+        } else if (result?.kind === 'training_delivery') {
+          void this.replaceConversation(this.locationAccess(), true, this.timelineNotesEnabled(),
+            result.enabled || this.trainingPlansEnabled(), this.trainingPlanChangesEnabled(), result.enabled,
+            this.activityTagChangesEnabled(), this.timelineNoteChangesEnabled());
+        } else if (result?.kind === 'timeline_notes') {
+          if (result.enabled !== this.timelineNotesEnabled()) {
+            void this.replaceConversation(this.locationAccess(), true, result.enabled, this.trainingPlansEnabled(),
+              this.trainingPlanChangesEnabled(), this.trainingDeliveryEnabled(), this.activityTagChangesEnabled(),
+              result.enabled && this.timelineNoteChangesEnabled());
+          }
+        } else if (result?.kind === 'activity_tag_changes') {
+          void this.replaceConversation(this.locationAccess(), true, this.timelineNotesEnabled(),
+            this.trainingPlansEnabled(), this.trainingPlanChangesEnabled(), this.trainingDeliveryEnabled(),
+            result.enabled, this.timelineNoteChangesEnabled());
+        } else if (result?.kind === 'timeline_note_changes') {
+          void this.replaceConversation(this.locationAccess(), true, result.enabled || this.timelineNotesEnabled(),
+            this.trainingPlansEnabled(), this.trainingPlanChangesEnabled(), this.trainingDeliveryEnabled(),
+            this.activityTagChangesEnabled(), result.enabled);
+        } else if (result?.kind === 'reflection_changes' && result.enabled !== this.reflectionChangesEnabled()) {
+          void this.replaceConversation(this.locationAccess(), true, this.timelineNotesEnabled(),
+            this.trainingPlansEnabled(), this.trainingPlanChangesEnabled(), this.trainingDeliveryEnabled(),
+            this.activityTagChangesEnabled(), this.timelineNoteChangesEnabled(), this.measurementChangesEnabled(), result.enabled);
+        } else if (result?.kind === 'measurement_changes') {
+          void this.replaceConversation(this.locationAccess(), true, this.timelineNotesEnabled(),
+            this.trainingPlansEnabled(), this.trainingPlanChangesEnabled(), this.trainingDeliveryEnabled(),
+            this.activityTagChangesEnabled(), this.timelineNoteChangesEnabled(), result.enabled);
         }
       });
   }
@@ -338,6 +520,8 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     if (this.loadingConversation()
       || this.conversationLoadError()
       || this.sending()
+      || this.resetting()
+      || this.proposalActionInProgress()
       || this.quotaPreventsSend()
       || this.promptControl.invalid) {
       this.promptControl.markAsTouched();
@@ -347,15 +531,25 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     if (!text) {
       return;
     }
+    const currentUid = this.viewOwnerUid ?? '';
+    if (!this.canApplyAccountResult(currentUid)) return;
     this.hapticsService.selection();
     this.errorMessage.set(null);
     this.sending.set(true);
     const activeConversation = this.conversation();
     const hadConversationMessages = this.messages().length > 0;
     const retryRequest = this.retryRequest();
-    const currentUid = this.auth.currentUser?.uid ?? '';
     const request: AssistantPendingRequest = retryRequest?.message === text
       && retryRequest.uid === currentUid
+      && (retryRequest.timelineNotesEnabled === true) === this.timelineNotesEnabled()
+      && (retryRequest.activityTagChangesEnabled === true) === this.activityTagChangesEnabled()
+      && (retryRequest.timelineNoteChangesEnabled === true) === this.timelineNoteChangesEnabled()
+      && (retryRequest.measurementChangesEnabled === true) === this.measurementChangesEnabled()
+      && (retryRequest.reflectionChangesEnabled === true) === this.reflectionChangesEnabled()
+      && (retryRequest.trainingPlansEnabled === true) === this.trainingPlansEnabled()
+      && (retryRequest.trainingPlanChangesEnabled === true) === this.trainingPlanChangesEnabled()
+      && (retryRequest.trainingDeliveryEnabled === true) === this.trainingDeliveryEnabled()
+      && retryRequest.locationAccess === this.locationAccess()
       ? {
         ...retryRequest,
         ...(activeConversation?.conversationId
@@ -369,6 +563,14 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         requestId: globalThis.crypto.randomUUID(),
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
         locationAccess: this.locationAccess(),
+        ...(this.timelineNotesEnabled() ? { timelineNotesEnabled: true } : {}),
+        ...(this.activityTagChangesEnabled() ? { activityTagChangesEnabled: true } : {}),
+        ...(this.timelineNoteChangesEnabled() ? { timelineNoteChangesEnabled: true } : {}),
+        ...(this.measurementChangesEnabled() ? { measurementChangesEnabled: true } : {}),
+        ...(this.reflectionChangesEnabled() ? { reflectionChangesEnabled: true } : {}),
+        ...(this.trainingPlansEnabled() ? { trainingPlansEnabled: true } : {}),
+        ...(this.trainingPlanChangesEnabled() ? { trainingPlanChangesEnabled: true } : {}),
+        ...(this.trainingDeliveryEnabled() ? { trainingDeliveryEnabled: true } : {}),
         submittedAtMs: Date.now(),
         ...(activeConversation?.conversationId
           ? { conversationId: activeConversation.conversationId }
@@ -393,11 +595,22 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         message: text,
         timeZone: request.timeZone,
         locationAccess: request.locationAccess,
+        ...(request.timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
+        ...(request.activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
+        ...(request.timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
+        ...(request.measurementChangesEnabled ? { measurementChangesEnabled: true } : {}),
+        ...(request.reflectionChangesEnabled ? { reflectionChangesEnabled: true } : {}),
+        ...(request.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
+        ...(request.trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
+        ...(request.trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
         ...(request.conversationId
           ? { conversationId: request.conversationId }
           : {}),
       });
+      if (!this.canApplyAccountResult(currentUid)) return;
       this.conversation.set(response.conversation);
+      this.pendingTrainingProposal.set(response.pendingTrainingProposal ?? null);
+      this.pendingContentProposal.set(response.pendingContentProposal ?? null);
       this.quota.set(response.quota);
       if (response.pendingRequestId === request.requestId) {
         this.errorMessage.set(null);
@@ -409,16 +622,30 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         this.hapticsService.success();
       }
     } catch (error) {
+      if (!this.canApplyAccountResult(currentUid)) return;
       let refreshedConversation: AssistantConversation | null | undefined;
       let refreshedPendingRequestId: string | null | undefined;
       try {
         const refreshedState = await this.assistantService.getConversationState();
+        if (!this.canApplyAccountResult(currentUid)) return;
         refreshedConversation = refreshedState.conversation;
         refreshedPendingRequestId = refreshedState.pendingRequestId;
         this.locationAccess.set(refreshedState.locationAccess ?? 'coordinate_free');
+        this.timelineNotesEnabled.set(refreshedState.timelineNotesEnabled === true);
+        this.activityTagChangesEnabled.set(refreshedState.activityTagChangesEnabled === true);
+        this.timelineNoteChangesEnabled.set(refreshedState.timelineNoteChangesEnabled === true);
+        this.measurementChangesEnabled.set(refreshedState.conversation ? refreshedState.measurementChangesEnabled === true : true);
+        this.reflectionChangesEnabled.set(refreshedState.conversation ? refreshedState.reflectionChangesEnabled === true
+          : request.reflectionChangesEnabled === true);
+        this.trainingPlansEnabled.set(refreshedState.trainingPlansEnabled === true);
+        this.trainingPlanChangesEnabled.set(refreshedState.trainingPlanChangesEnabled === true);
+        this.trainingDeliveryEnabled.set(refreshedState.trainingDeliveryEnabled === true);
+        this.pendingTrainingProposal.set(refreshedState.pendingTrainingProposal ?? null);
+        this.pendingContentProposal.set(refreshedState.pendingContentProposal ?? null);
       } catch {
         // Preserve the original send failure when reconciliation is unavailable.
       }
+      if (!this.canApplyAccountResult(currentUid)) return;
       if (refreshedConversation && this.isCompletedTurnRecovery(
         activeConversation,
         refreshedConversation,
@@ -463,13 +690,16 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         this.hapticsService.error();
       }
       try {
-        this.quota.set(await this.quotaService.loadQuotaStatus());
+        const quota = await this.quotaService.loadQuotaStatus();
+        if (!this.canApplyAccountResult(currentUid)) return;
+        this.quota.set(quota);
       } catch {
+        if (!this.canApplyAccountResult(currentUid)) return;
         // Do not present a potentially stale allowance after a failed attempt.
         this.quota.set(null);
       }
     } finally {
-      if (this.pendingRequestId() !== request.requestId) {
+      if (this.canApplyAccountResult(currentUid) && this.pendingRequestId() !== request.requestId) {
         this.pendingUserMessage.set(null);
         this.sending.set(false);
         if (this.isEmpty()) {
@@ -482,7 +712,128 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   }
 
   async resetConversation(): Promise<void> {
-    await this.replaceConversation('coordinate_free', false);
+    await this.replaceConversation('coordinate_free', false, false, false, false, false, false, false, true, true);
+  }
+
+  async applyPendingTrainingProposal(): Promise<void> {
+    const proposal = this.pendingTrainingProposal();
+    const conversationId = this.conversation()?.conversationId;
+    if (!proposal || !conversationId || this.proposalActionInProgress()) return;
+    this.applyingTrainingProposal.set(true);
+    this.errorMessage.set(null);
+    try {
+      const result = await this.assistantService.applyTrainingProposal({
+        proposalRef: proposal.proposalRef,
+        permissionMode: proposal.permissionMode,
+        conversationId,
+        confirm: true,
+      });
+      this.pendingTrainingProposal.set(null);
+      if (proposal.changes[0]?.kind === 'garmin-workout-replacement') {
+        const provider = result.providers.length === 1 && result.providers[0].index === 0
+          && result.providers[0].provider === 'garmin' ? result.providers[0] : null;
+        const accepted = result.status === 'applied' && !result.changes.length && provider
+          && ['applied', 'already_applied', 'queued'].includes(provider.status);
+        this.trainingProposalResult.set(provider?.message
+          ?? 'No Garmin replacement result was returned. Read the current sync status before trying again.');
+        if (accepted) this.hapticsService.success(); else this.hapticsService.error();
+        return;
+      }
+      if (assistantTrainingDeletionReview(proposal)) {
+        this.trainingProposalResult.set(result.changes.map(change => change.message).join(' ')
+          || 'No deletion result was returned. Check the current Training schedule before trying again.');
+        if (!result.changes.length || result.changes.some(change => change.status === 'failed')) {
+          this.hapticsService.error();
+        } else {
+          this.hapticsService.success();
+        }
+        return;
+      }
+      if (result.status === 'applied') {
+        this.trainingProposalResult.set(isSavedWorkoutProposal(proposal)
+          ? (result.changes[0]?.message ?? 'Saved workout change applied.')
+          : 'Training changes applied. Provider updates or checks are queued where applicable.');
+      } else {
+        const affectedProviders = [...new Set(result.providers
+          .filter(item => item.status === 'blocked' || item.status === 'failed')
+          .map(item => item.provider[0].toUpperCase() + item.provider.slice(1)))];
+        const providerDetail = affectedProviders.length
+          ? ` ${affectedProviders.join(', ')} sync needs attention.`
+          : '';
+        this.trainingProposalResult.set(`Some Training changes were applied.${providerDetail} Ask the Assistant to read the current status before trying again.`);
+      }
+      this.hapticsService.success();
+    } catch (error) {
+      this.errorMessage.set(this.assistantService.getErrorMessage(error));
+      this.hapticsService.error();
+    } finally {
+      this.applyingTrainingProposal.set(false);
+    }
+  }
+
+  async dismissPendingTrainingProposal(): Promise<void> {
+    if (this.proposalActionInProgress()) return;
+    const proposal = this.pendingTrainingProposal();
+    const conversationId = this.conversation()?.conversationId;
+    if (!proposal || !conversationId) return;
+    this.applyingTrainingProposal.set(true);
+    try {
+      await this.assistantService.applyTrainingProposal({ proposalRef: proposal.proposalRef,
+        permissionMode: proposal.permissionMode, conversationId, confirm: false });
+      this.pendingTrainingProposal.set(null);
+      this.trainingProposalResult.set('Training proposal dismissed. Nothing was changed.');
+      this.hapticsService.selection();
+    } catch (error) {
+      this.errorMessage.set(this.assistantService.getErrorMessage(error));
+      this.hapticsService.error();
+    } finally {
+      this.applyingTrainingProposal.set(false);
+    }
+  }
+
+  async applyPendingContentProposal(): Promise<void> {
+    const proposal = this.pendingContentProposal();
+    const conversationId = this.conversation()?.conversationId;
+    if (!proposal || !conversationId || this.proposalActionInProgress()) return;
+    this.applyingContentProposal.set(true);
+    this.errorMessage.set(null);
+    try {
+      const result = await this.assistantService.applyContentProposal({
+        proposalRef: proposal.proposalRef,
+        conversationId,
+        confirm: true,
+      });
+      this.pendingContentProposal.set(null);
+      this.contentProposalResult.set(result.message);
+      this.hapticsService.success();
+    } catch (error) {
+      this.errorMessage.set(this.assistantService.getErrorMessage(error));
+      this.hapticsService.error();
+    } finally {
+      this.applyingContentProposal.set(false);
+    }
+  }
+
+  async dismissPendingContentProposal(): Promise<void> {
+    const proposal = this.pendingContentProposal();
+    const conversationId = this.conversation()?.conversationId;
+    if (!proposal || !conversationId || this.proposalActionInProgress()) return;
+    this.applyingContentProposal.set(true);
+    try {
+      await this.assistantService.applyContentProposal({
+        proposalRef: proposal.proposalRef,
+        conversationId,
+        confirm: false,
+      });
+      this.pendingContentProposal.set(null);
+      this.contentProposalResult.set('Proposed content change dismissed. Nothing was changed.');
+      this.hapticsService.selection();
+    } catch (error) {
+      this.errorMessage.set(this.assistantService.getErrorMessage(error));
+      this.hapticsService.error();
+    } finally {
+      this.applyingContentProposal.set(false);
+    }
   }
 
   private async changeLocationAccess(
@@ -491,25 +842,55 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     if (locationAccess === this.locationAccess()) {
       return;
     }
-    await this.replaceConversation(locationAccess, true);
+    await this.replaceConversation(locationAccess, true, this.timelineNotesEnabled(), this.trainingPlansEnabled(),
+      this.trainingPlanChangesEnabled(), this.trainingDeliveryEnabled(), this.activityTagChangesEnabled(),
+      this.timelineNoteChangesEnabled());
   }
 
   private async replaceConversation(
     locationAccess: AssistantLocationAccess,
     preservePrompt: boolean,
+    timelineNotesEnabled = false,
+    trainingPlansEnabled = false,
+    trainingPlanChangesEnabled = false,
+    trainingDeliveryEnabled = false,
+    activityTagChangesEnabled = false,
+    timelineNoteChangesEnabled = false,
+    measurementChangesEnabled = this.measurementChangesEnabled(),
+    reflectionChangesEnabled = this.reflectionChangesEnabled(),
   ): Promise<void> {
     if (this.loadingConversation()
       || this.conversationLoadError()
       || this.resetting()
-      || this.sending()) {
+      || this.sending()
+      || this.proposalActionInProgress()) {
       return;
     }
     const prompt = preservePrompt ? this.promptControl.value : '';
+    const currentUid = this.viewOwnerUid ?? '';
+    if (!this.canApplyAccountResult(currentUid)) return;
+    this.hapticsService.selection();
     this.resetting.set(true);
     this.errorMessage.set(null);
     try {
-      this.conversation.set(await this.assistantService.resetConversation(locationAccess));
+      const conversation = await this.assistantService.resetConversation(
+        locationAccess, timelineNotesEnabled, this.conversation()?.conversationId ?? null, trainingPlansEnabled,
+        trainingPlanChangesEnabled, trainingDeliveryEnabled, activityTagChangesEnabled, timelineNoteChangesEnabled, measurementChangesEnabled, reflectionChangesEnabled,
+      );
+      if (!this.canApplyAccountResult(currentUid)) return;
+      this.conversation.set(conversation);
       this.locationAccess.set(locationAccess);
+      this.timelineNotesEnabled.set(timelineNotesEnabled);
+      this.activityTagChangesEnabled.set(activityTagChangesEnabled);
+      this.timelineNoteChangesEnabled.set(timelineNoteChangesEnabled);
+      this.measurementChangesEnabled.set(measurementChangesEnabled);
+      this.reflectionChangesEnabled.set(reflectionChangesEnabled);
+      this.trainingPlansEnabled.set(trainingPlansEnabled);
+      this.trainingPlanChangesEnabled.set(trainingPlanChangesEnabled);
+      this.trainingDeliveryEnabled.set(trainingDeliveryEnabled);
+      this.pendingTrainingProposal.set(null);
+      this.pendingContentProposal.set(null);
+      this.hapticsService.success();
       this.cancelPendingResponsePoll();
       this.pendingRequestId.set(null);
       this.clearRememberedPendingRequest();
@@ -519,9 +900,34 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       this.promptControl.setValue(prompt);
       this.scrollToPageStart();
     } catch (error) {
-      this.errorMessage.set(this.assistantService.getErrorMessage(error));
+      if (!this.canApplyAccountResult(currentUid)) return;
+      if (error instanceof AssistantError && error.code === 'CONVERSATION_CHANGED') {
+        try {
+          const state = await this.assistantService.getConversationState();
+          if (!this.canApplyAccountResult(currentUid)) return;
+          this.conversation.set(state.conversation);
+          this.locationAccess.set(state.locationAccess ?? 'coordinate_free');
+          this.timelineNotesEnabled.set(state.timelineNotesEnabled === true);
+          this.activityTagChangesEnabled.set(state.activityTagChangesEnabled === true);
+          this.timelineNoteChangesEnabled.set(state.timelineNoteChangesEnabled === true);
+          this.measurementChangesEnabled.set(state.conversation ? state.measurementChangesEnabled === true : true);
+          this.reflectionChangesEnabled.set(state.conversation ? state.reflectionChangesEnabled === true : true);
+          this.trainingPlansEnabled.set(state.trainingPlansEnabled === true);
+          this.trainingPlanChangesEnabled.set(state.trainingPlanChangesEnabled === true);
+          this.trainingDeliveryEnabled.set(state.trainingDeliveryEnabled === true);
+          this.pendingTrainingProposal.set(state.pendingTrainingProposal ?? null);
+          this.pendingContentProposal.set(state.pendingContentProposal ?? null);
+          this.retryRequest.set(null);
+          if (state.pendingRequestId) this.startPendingResponseRecovery(state.pendingRequestId);
+        } catch (refreshError) {
+          if (!this.canApplyAccountResult(currentUid)) return;
+          this.conversationLoadError.set(this.assistantService.getErrorMessage(refreshError));
+        }
+      }
+      this.errorMessage.set(this.assistantService.getConversationUpdateErrorMessage(error));
+      this.hapticsService.error();
     } finally {
-      this.resetting.set(false);
+      if (this.canApplyAccountResult(currentUid)) this.resetting.set(false);
     }
   }
 
@@ -571,6 +977,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     this.cancelPendingResponsePoll();
     this.rememberPendingRequestIdIfMissing(requestId);
     this.pendingRequestId.set(requestId);
+    this.pendingOwnerUid = this.auth.currentUser?.uid ?? null;
     this.pendingPollIntervalMs = ASSISTANT_PENDING_INITIAL_POLL_INTERVAL_MS;
     this.pendingRecoveryDeadlineMs = Date.now() + ASSISTANT_PENDING_RECOVERY_TIMEOUT_MS;
     this.pendingRegistrationDeadlineMs = awaitingServerRegistration
@@ -584,12 +991,26 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     if (this.destroyed || this.pendingRequestId() !== requestId) {
       return;
     }
+    const currentUid = this.pendingOwnerUid;
+    if (!this.canApplyAccountResult(currentUid)) return;
     try {
       const state = await this.assistantService.getConversationState();
+      if (!this.canApplyAccountResult(currentUid)) return;
       if (this.destroyed || this.pendingRequestId() !== requestId) {
         return;
       }
       this.conversation.set(state.conversation);
+      this.locationAccess.set(state.locationAccess ?? 'coordinate_free');
+      this.timelineNotesEnabled.set(state.timelineNotesEnabled === true);
+      this.activityTagChangesEnabled.set(state.activityTagChangesEnabled === true);
+      this.timelineNoteChangesEnabled.set(state.timelineNoteChangesEnabled === true);
+      this.measurementChangesEnabled.set(state.conversation ? state.measurementChangesEnabled === true : true);
+      if (state.conversation) this.reflectionChangesEnabled.set(state.reflectionChangesEnabled === true);
+      this.trainingPlansEnabled.set(state.trainingPlansEnabled === true);
+      this.trainingPlanChangesEnabled.set(state.trainingPlanChangesEnabled === true);
+      this.trainingDeliveryEnabled.set(state.trainingDeliveryEnabled === true);
+      this.pendingTrainingProposal.set(state.pendingTrainingProposal ?? null);
+      this.pendingContentProposal.set(state.pendingContentProposal ?? null);
       if (this.hasCompletedRequest(state.conversation, requestId)) {
         this.retryRequest.set(null);
         this.errorMessage.set(null);
@@ -611,6 +1032,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         return;
       }
     } catch (error) {
+      if (!this.canApplyAccountResult(currentUid)) return;
       if (!this.isRetryablePendingStateError(error)) {
         this.errorMessage.set(this.assistantService.getErrorMessage(error));
         this.hapticsService.error();
@@ -637,6 +1059,8 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     if (this.pendingRequestId() !== requestId) {
       return;
     }
+    const currentUid = this.pendingOwnerUid;
+    if (!this.canApplyAccountResult(currentUid)) return;
     const pendingText = this.pendingUserMessage()?.text;
     this.cancelPendingResponsePoll();
     this.pendingRequestId.set(null);
@@ -647,8 +1071,11 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       this.promptControl.setValue(pendingText);
     }
     try {
-      this.quota.set(await this.quotaService.loadQuotaStatus());
+      const quota = await this.quotaService.loadQuotaStatus();
+      if (!this.canApplyAccountResult(currentUid)) return;
+      this.quota.set(quota);
     } catch {
+      if (!this.canApplyAccountResult(currentUid)) return;
       this.quota.set(null);
     }
     if (this.isEmpty()) {
@@ -663,6 +1090,47 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       clearTimeout(this.pendingPollTimer);
       this.pendingPollTimer = null;
     }
+  }
+
+  private canApplyAccountResult(uid: string | null): boolean {
+    if (this.destroyed) return false;
+    // A later account load owns the view; an older completion must not clear it.
+    if (this.viewOwnerUid !== uid) return false;
+    if (uid && this.auth.currentUser?.uid === uid) return true;
+    this.clearAccountView();
+    return false;
+  }
+
+  private clearAccountView(): void {
+    this.cancelPendingResponsePoll();
+    const requestId = this.pendingRequestId() ?? this.retryRequest()?.requestId;
+    if (requestId) this.clearRememberedPendingRequest(requestId);
+    this.conversation.set(null);
+    this.locationAccess.set('coordinate_free');
+    this.timelineNotesEnabled.set(false);
+    this.activityTagChangesEnabled.set(false);
+    this.timelineNoteChangesEnabled.set(false);
+    this.measurementChangesEnabled.set(false);
+    this.reflectionChangesEnabled.set(false);
+    this.trainingPlansEnabled.set(false);
+    this.trainingPlanChangesEnabled.set(false);
+    this.trainingDeliveryEnabled.set(false);
+    this.pendingTrainingProposal.set(null);
+    this.pendingContentProposal.set(null);
+    this.trainingProposalResult.set(null);
+    this.contentProposalResult.set(null);
+    this.quota.set(null);
+    this.retryRequest.set(null);
+    this.pendingRequestId.set(null);
+    this.pendingOwnerUid = null;
+    this.pendingUserMessage.set(null);
+    this.promptControl.setValue('');
+    this.activeMapKey.set(null);
+    this.expandedMap.set(false);
+    this.errorMessage.set(null);
+    this.conversationLoadError.set(null);
+    this.sending.set(false);
+    this.resetting.set(false);
   }
 
   private schedulePendingResponsePoll(requestId: string): void {
@@ -761,6 +1229,46 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       const locationAccess = isAssistantLocationAccess(data.locationAccess)
         ? data.locationAccess
         : 'coordinate_free';
+      if (data.trainingPlansEnabled !== undefined && typeof data.trainingPlansEnabled !== 'boolean') {
+        this.clearRememberedPendingRequest();
+        return null;
+      }
+      if (data.trainingPlanChangesEnabled !== undefined && typeof data.trainingPlanChangesEnabled !== 'boolean') {
+        this.clearRememberedPendingRequest();
+        return null;
+      }
+      if (data.trainingDeliveryEnabled !== undefined && typeof data.trainingDeliveryEnabled !== 'boolean') {
+        this.clearRememberedPendingRequest();
+        return null;
+      }
+      if ((data.trainingPlanChangesEnabled === true || data.trainingDeliveryEnabled === true)
+        && data.trainingPlansEnabled !== true) {
+        this.clearRememberedPendingRequest();
+        return null;
+      }
+      if (data.timelineNotesEnabled !== undefined && typeof data.timelineNotesEnabled !== 'boolean') {
+        this.clearRememberedPendingRequest();
+        return null;
+      }
+      if (data.activityTagChangesEnabled !== undefined && typeof data.activityTagChangesEnabled !== 'boolean') {
+        this.clearRememberedPendingRequest();
+        return null;
+      }
+      if (data.timelineNoteChangesEnabled !== undefined && typeof data.timelineNoteChangesEnabled !== 'boolean') {
+        this.clearRememberedPendingRequest();
+        return null;
+      }
+      if (data.reflectionChangesEnabled !== undefined && typeof data.reflectionChangesEnabled !== 'boolean') {
+        this.clearRememberedPendingRequest(); return null;
+      }
+      if (data.measurementChangesEnabled !== undefined && typeof data.measurementChangesEnabled !== 'boolean') {
+        this.clearRememberedPendingRequest();
+        return null;
+      }
+      if (data.timelineNoteChangesEnabled === true && data.timelineNotesEnabled !== true) {
+        this.clearRememberedPendingRequest();
+        return null;
+      }
       const conversationId = typeof data.conversationId === 'string'
         ? data.conversationId.trim()
         : data.conversationId;
@@ -781,6 +1289,14 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         message,
         timeZone,
         locationAccess,
+        ...(data.timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
+        ...(data.activityTagChangesEnabled ? { activityTagChangesEnabled: true } : {}),
+        ...(data.timelineNoteChangesEnabled ? { timelineNoteChangesEnabled: true } : {}),
+        ...(data.measurementChangesEnabled ? { measurementChangesEnabled: true } : {}),
+        ...(data.reflectionChangesEnabled ? { reflectionChangesEnabled: true } : {}),
+        ...(data.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
+        ...(data.trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
+        ...(data.trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
         submittedAtMs: Number(data.submittedAtMs),
         ...(conversationId ? { conversationId } : {}),
       };
@@ -824,6 +1340,15 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     if (!this.isFreshPendingRequest(request)) {
       return false;
     }
+    if ((request.timelineNotesEnabled === true) !== this.timelineNotesEnabled()
+      || (request.activityTagChangesEnabled === true) !== this.activityTagChangesEnabled()
+      || (request.timelineNoteChangesEnabled === true) !== this.timelineNoteChangesEnabled()
+      || (request.measurementChangesEnabled === true) !== this.measurementChangesEnabled()
+      || (request.reflectionChangesEnabled === true) !== this.reflectionChangesEnabled()
+      || (request.trainingPlansEnabled === true) !== this.trainingPlansEnabled()
+      || (request.trainingPlanChangesEnabled === true) !== this.trainingPlanChangesEnabled()
+      || (request.trainingDeliveryEnabled === true) !== this.trainingDeliveryEnabled()
+      || request.locationAccess !== this.locationAccess()) return false;
     if (request.conversationId) {
       return request.conversationId === conversation?.conversationId;
     }

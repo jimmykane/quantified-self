@@ -1,4 +1,14 @@
+import { attachEventTrainingLoads, attachActivityTrainingLoad } from '../training-load/training-load-reader';
+import { attachedEffectiveTrainingLoad, recordedTrainingStressScore } from '../../../shared/training-load-policy';
+import { groupRecordedIntensityZones, INTENSITY_POLICY_VERSION } from '../../../shared/intensity-zones';
+import { readinessHrvObservations } from '../../../shared/readiness';
+import { buildReadinessSignals as buildLegacyReadinessSignals } from '../../../shared/readiness-legacy';
+import { supplementNightlyHrvSleepDocuments, supplementNightlyHealthSleepDocuments } from '../sleep/nightly-hrv';
+import { calculatedHeartRateSourceKeys } from '../../../shared/nightly-heart-rate';
+import { aggregateNightlyHrvEvidence, isIdentifiedSleepEvidenceSourceKey, isSleepAverageHrvSourceKey,
+    sleepEvidenceSourceKey, sleepHrvSourceKey } from '../../../shared/nightly-hrv';
 import * as admin from 'firebase-admin';
+import { FieldPath } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import {
     ActivityTypes,
@@ -44,6 +54,7 @@ import {
 } from '../../../shared/power-curve';
 import {
     buildDerivedFormDailyLoads,
+    DERIVED_FORM_PAYLOAD_VERSION,
     DERIVED_METRIC_KINDS,
     DERIVED_METRIC_SCHEMA_VERSION,
     DERIVED_METRICS_COLLECTION_ID,
@@ -51,6 +62,9 @@ import {
     DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
     DERIVED_TRAINING_POWER_SYSTEMS_HISTORY_DAYS,
     DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION,
+    DERIVED_TRAINING_POWER_SYSTEMS_LEGACY_POLICY1_ACTIVITY_TYPES,
+    DERIVED_TRAINING_POWER_SYSTEMS_LEGACY_POLICY1_MAX_BYTES,
+    DERIVED_TRAINING_POWER_SYSTEMS_MAX_SNAPSHOT_BYTES,
     DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS,
     DERIVED_METRICS_ENTRY_TYPES,
     DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS,
@@ -62,10 +76,14 @@ import {
     DERIVED_TRAINING_RECOVERY_MIN_SLEEP_NIGHTS,
     DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS,
     isDerivedTrainingPowerSystemsStatusReasonPair,
+    hasMatchingDerivedFormSourceEventCount,
+    normalizeDerivedFormDailyLoadsWithActivityCounts,
+    resolveDerivedFormMetricPayload,
     PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS,
     type DerivedAcwrMetricPayload,
     type DerivedBodyWeightTrendMetricPayload,
-    type DerivedFormDailyLoadEntry,
+    type DerivedBodyWeightTrendSeries,
+    type DerivedFormDailyLoadEntryWithActivityCount,
     type DerivedEasyPercentMetricPayload,
     type DerivedEfficiencyDelta4wMetricPayload,
     type DerivedEfficiencyTrendMetricPayload,
@@ -89,10 +107,12 @@ import {
     type DerivedTrainingCapacityImportedMetric,
     type DerivedTrainingCapacityImportedMetricKind,
     type DerivedTrainingCapacityMetricPayload,
+    type DerivedTrainingCapacityReferenceVo2Max,
     type DerivedTrainingPowerSystemsActivityType,
     type DerivedTrainingPowerSystemsComponent,
     type DerivedTrainingPowerSystemsHistoryPoint,
     type DerivedTrainingPowerSystemsMetricPayload,
+    type DerivedTrainingPowerSystemsLegacyPolicy1Sidecar,
     type DerivedTrainingPowerSystemsSnapshot,
     type DerivedTrainingBuildDurabilityComparison,
     type DerivedTrainingContextSummary,
@@ -135,33 +155,57 @@ import {
     normalizeTrainingBuildPeriodEndDayMs,
     normalizeDerivedMetricKinds,
     normalizeDerivedMetricKindsStrict,
-    normalizeDerivedFormDailyLoads,
     type EnsureDerivedMetricsResponse,
 } from '../../../shared/derived-metrics';
+import { resolveCompatibleActivityType } from '../../../shared/activity-type-compatibility';
 import {
     buildReadinessSignals,
     READINESS_FORMULA_VERSION,
+    READINESS_EVIDENCE_VERSION,
     READINESS_SLEEP_LOOKBACK_MS,
     type ReadinessSleepEvidencePoint,
 } from '../../../shared/readiness';
 import {
     buildTrainingLoadPoints,
+    resolveTrainingMonotonyStrain,
     TRAINING_LOAD_ATL_TIME_CONSTANT_DAYS,
     TRAINING_LOAD_CTL_TIME_CONSTANT_DAYS,
     type TrainingLoadPoint,
 } from '../../../shared/training-load';
 import {
+    groupCanonicalSleepNightFragments,
     normalizeSleepProvider,
+    resolveSleepDisplayDate,
+    resolveSleepEffectiveStartTimeMs,
+    resolveSleepTimezoneOffsetSeconds,
     SLEEP_PROVIDERS,
     SLEEP_SESSIONS_COLLECTION_ID,
-    SLEEP_SPORTS_LIB_METRIC_FIELDS,
     type SleepProvider,
     type SleepSession,
 } from '../../../shared/sleep';
 import {
+    decodeHealthMetricSportsLibData,
     decodeSleepSessionSportsLibData,
     SportsLibDataValidationError,
 } from '../../../shared/sports-lib-health-data';
+import {
+    HEALTH_METRIC_IDS,
+    HEALTH_PROVIDERS,
+    HEALTH_RECORDING_METHODS,
+    HEALTH_SOURCE_RECORD_KINDS,
+    HEALTH_SOURCE_RECORDS_COLLECTION_ID,
+    HEALTH_VALUE_ORIGINS,
+    type HealthMetricId,
+    type HealthProvider,
+    type HealthSourceRecord,
+} from '../../../shared/health';
+import {
+    MANUAL_HEALTH_AGGREGATION,
+    MANUAL_HEALTH_SOURCE_RECORD_TYPE,
+    MANUAL_VO2_CONTEXTS,
+    MANUAL_VO2_METHODS,
+    manualVo2SemanticVariant,
+} from '../../../shared/manual-health';
 import {
     createTrainingSportRecord,
     getTrainingProfileMetricDefinition,
@@ -172,6 +216,7 @@ import {
     TRAINING_SPORT_CONTEXT_IDS,
     resolveTrainingDisciplineFromActivityType,
     resolveTrainingSportContextFromActivityType,
+    resolveTrainingPowerSystemsModelActivityType,
     type ResolvedTrainingSportContext,
     type TrainingProfileMetricId,
 } from '../../../shared/training-disciplines';
@@ -179,54 +224,26 @@ import { isBenchmarkEventForTrainingMetrics } from '../../../shared/event-classi
 import { getEventTags } from '../../../shared/event-tags';
 import { getActivityTypeGroupLabel } from '../../../shared/activity-type-group.metadata';
 import { enqueueDerivedMetricsTask } from '../shared/cloud-tasks';
+import { recordDerivedMetricCommit } from './monitoring';
+import { derivedImportBuildIntervalMs, IMPORT_BUILD_INTERVAL_MS, isDerivedImportService } from './import-batching';
+import { CONNECTION_HISTORY_COLLECTION, isConnectionHistoryRunId } from '../connection-history/model';
 import {
     getUserDeletionGuardState,
     getUserDeletionGuardStateInTransaction,
 } from '../shared/user-deletion-guard';
 import { getDerivedMetricsUidAllowlist, isDerivedMetricsUidAllowed } from './derived-metrics-uid-gate';
 
-const FORM_STAT_TYPE = 'Training Stress Score';
-const LEGACY_FORM_STAT_TYPE = 'Power Training Stress Score';
-const DERIVED_METRICS_EVENT_FIELDS = ['startDate', 'endDate', 'stats', 'tags', 'benchmarkReviewTags', 'name', 'isMerge', 'mergeType', 'creator', 'serviceName', 'sourceServiceName'] as const;
-const DERIVED_METRICS_ACTIVITY_FIELDS = ['eventID', 'startDate', 'endDate', 'type', 'stats', 'creator', 'serviceName', 'sourceServiceName'] as const;
-const DERIVED_METRICS_TRAINING_SLEEP_FIELDS = [
-    'source.provider',
-    'sleepDate',
-    'startTimeMs',
-    'endTimeMs',
-    'timezoneOffsetSeconds',
-    'durationSeconds',
-    'sportsLibData.schemaVersion',
-    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.Duration}`,
-    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.OvernightHrv}`,
-    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHrv}`,
-    'isNap',
-    'providerFields.suunto.timestamp',
-    'vitals.overnightHrvMs',
-    'vitals.averageHrvMs',
-] as const;
-const DERIVED_METRICS_TRAINING_READINESS_SLEEP_FIELDS = [
-    'source.provider',
-    'sleepDate',
-    'startTimeMs',
-    'endTimeMs',
-    'timezoneOffsetSeconds',
-    'durationSeconds',
-    'sportsLibData.schemaVersion',
-    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.Duration}`,
-    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.Score}`,
-    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.OvernightHrv}`,
-    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHrv}`,
-    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHeartRate}`,
-    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.MinimumHeartRate}`,
-    'isNap',
-    'score.value',
-    'providerFields.suunto.timestamp',
-    'vitals.overnightHrvMs',
-    'vitals.averageHrvMs',
-    'vitals.averageHeartRateBpm',
-    'vitals.minimumHeartRateBpm',
-] as const;
+import {
+    DERIVED_METRICS_EVENT_FIELDS,
+    DERIVED_METRICS_ACTIVITY_FIELDS,
+    DERIVED_METRICS_TRAINING_SLEEP_FIELDS,
+    DERIVED_METRICS_TRAINING_READINESS_SLEEP_FIELDS,
+} from './derived-metrics-source-fields';
+import {
+    createTrainingBuildWorkoutSeedMetadata, resolveTrainingBuildWorkoutSeed, trainingBuildSettingsKey,
+    type TrainingBuildWorkoutSeed, type TrainingBuildWorkoutSeedContext,
+} from './training-build-workout-seed';
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HISTORY_TREND_WEEKS = 8;
 const FORECAST_DAYS = 7;
@@ -243,7 +260,8 @@ const TRAINING_READINESS_HISTORY_DAYS = 14 as const;
 const BODY_WEIGHT_TREND_DAYS = 28 as const;
 const BODY_WEIGHT_COMPARISON_WINDOW_DAYS = 7 as const;
 const BODY_WEIGHT_MIN_COMPARABLE_DAY_COUNT = 3 as const;
-const TRAINING_RECOVERY_MAX_TIMEZONE_OFFSET_SECONDS = 18 * 60 * 60;
+const DERIVED_HEALTH_SOURCE_DOCUMENT_LIMIT = 2_048;
+const TRAINING_CAPACITY_VO2_COMPARISON_MAX_GAP_MS = 14 * DAY_MS;
 const TRAINING_CAPACITY_SESSION_FTP_FACTOR = 0.95;
 const POWER_CURVE_MAX_STORED_POINTS = 128;
 const POWER_CURVE_BENCHMARK_DURATIONS_SECONDS = [5, 60, 300, 1200, 3600] as const;
@@ -280,7 +298,7 @@ const HEART_RATE_ZONE_STAT_TYPES = [
     DataHeartRateZoneSevenDuration.type,
 ] as const;
 
-type FirestoreQueryDocumentSnapshot = FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>;
+type FirestoreQueryDocumentSnapshot = Pick<FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>, 'id' | 'data'>;
 
 interface DerivedMetricBuildResult<TPayload> {
     sourceEventCount: number;
@@ -292,7 +310,9 @@ type DerivedMetricBuildSourceDependency = 'formDocs'
     | 'trainingActivityDocs'
     | 'trainingBuildBenchmarkSettings'
     | 'trainingBuildSleepDocs'
-    | 'trainingReadinessSleepDocs';
+    | 'trainingReadinessSleepDocs'
+    | 'bodyWeightHealthDocs'
+    | 'vo2HealthDocs';
 
 export interface DerivedTrainingActivitySource {
     activityId: string;
@@ -326,6 +346,23 @@ export interface StartDerivedMetricsProcessingResult {
     dirtyMetricKinds: DerivedMetricKind[];
     startedAtMs: number;
     eventMutationVersion: number;
+    workoutInputsVersion: number;
+}
+
+export interface DerivedMetricsProcessingClaim {
+    generation: number;
+    startedAtMs: number;
+}
+
+function matchesProcessingClaim(data: unknown, claim: DerivedMetricsProcessingClaim): boolean {
+    const coordinator = parseCoordinator(data);
+    return coordinator.status === 'processing' && coordinator.generation === claim.generation
+        && coordinator.startedAtMs === claim.startedAtMs;
+}
+
+function readWorkoutInputsVersion(data: unknown): number {
+    const value = (data as { workoutInputsVersion?: unknown } | undefined)?.workoutInputsVersion;
+    return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
 }
 
 export interface CompleteDerivedMetricsProcessingResult {
@@ -348,6 +385,9 @@ interface DerivedMetricBuildExecutionContext {
     trainingBuildSleepDocs: readonly FirestoreQueryDocumentSnapshot[];
     trainingReadinessSleepDocs: readonly FirestoreQueryDocumentSnapshot[];
     trainingActivities: readonly DerivedTrainingActivitySource[];
+    bodyWeightHealthDocs: readonly FirestoreQueryDocumentSnapshot[];
+    hasAnyBodyWeightHealthRecord: boolean;
+    vo2HealthDocs: readonly FirestoreQueryDocumentSnapshot[];
     getDailyLoadContext: () => ReturnType<typeof buildDailyLoadContext>;
     getDerivedLoadPoints: () => DerivedLoadPoint[];
     getKpiDerivedLoadPoints: () => DerivedLoadPoint[];
@@ -366,6 +406,7 @@ interface DerivedMetricBuildExecutionContext {
 }
 
 interface DerivedMetricBuildSourceDocs {
+    trainingBuildWorkoutSeed?: TrainingBuildWorkoutSeed | null;
     formDocs?: readonly FirestoreQueryDocumentSnapshot[];
     recoveryNowDocs?: readonly FirestoreQueryDocumentSnapshot[];
     trainingActivityDocs?: readonly FirestoreQueryDocumentSnapshot[];
@@ -373,6 +414,9 @@ interface DerivedMetricBuildSourceDocs {
     trainingBuildBenchmarkSettings?: unknown;
     trainingBuildSleepDocs?: readonly FirestoreQueryDocumentSnapshot[];
     trainingReadinessSleepDocs?: readonly FirestoreQueryDocumentSnapshot[];
+    bodyWeightHealthDocs?: readonly FirestoreQueryDocumentSnapshot[];
+    hasAnyBodyWeightHealthRecord?: boolean;
+    vo2HealthDocs?: readonly FirestoreQueryDocumentSnapshot[];
 }
 
 interface DerivedMetricBuildDefinition {
@@ -614,17 +658,9 @@ function resolveRawStatNumericValue(
 }
 
 function resolveTrainingStressScore(eventData: Record<string, unknown>): number | null {
-    const preferred = resolveRawStatNumericValue(eventData, FORM_STAT_TYPE);
-    if (preferred !== null && preferred >= 0) {
-        return preferred;
-    }
-
-    const legacy = resolveRawStatNumericValue(eventData, LEGACY_FORM_STAT_TYPE);
-    if (legacy !== null && legacy >= 0) {
-        return legacy;
-    }
-
-    return null;
+    const modeled = attachedEffectiveTrainingLoad(eventData);
+    if (modeled) return modeled.status === 'excluded' ? null : modeled.score;
+    return recordedTrainingStressScore(eventData);
 }
 
 function resolveRecoveryEventEndTimeMs(eventData: Record<string, unknown>): number | null {
@@ -669,9 +705,11 @@ function buildDailyLoadContext(
     docs: readonly FirestoreQueryDocumentSnapshot[],
 ): {
     dailyLoadsByUtcDay: Map<number, number>;
+    activityCountsByUtcDay: Map<number, number>;
     sourceEventCount: number;
 } {
     const dailyLoadsByUtcDay = new Map<number, number>();
+    const activityCountsByUtcDay = new Map<number, number>();
     let sourceEventCount = 0;
 
     docs.forEach((doc) => {
@@ -692,28 +730,39 @@ function buildDailyLoadContext(
 
         const dayMs = resolveUtcDayStartMs(startTimeMs);
         dailyLoadsByUtcDay.set(dayMs, (dailyLoadsByUtcDay.get(dayMs) || 0) + stressScore);
+        activityCountsByUtcDay.set(dayMs, (activityCountsByUtcDay.get(dayMs) || 0) + 1);
         sourceEventCount += 1;
     });
 
     return {
         dailyLoadsByUtcDay,
+        activityCountsByUtcDay,
         sourceEventCount,
     };
 }
 
 function buildDailyLoadContextFromDailyLoads(
-    dailyLoads: readonly DerivedFormDailyLoadEntry[],
+    dailyLoads: readonly DerivedFormDailyLoadEntryWithActivityCount[],
     sourceEventCount: number,
 ): {
     dailyLoadsByUtcDay: Map<number, number>;
+    activityCountsByUtcDay: Map<number, number>;
     sourceEventCount: number;
 } {
     const dailyLoadsByUtcDay = dailyLoads.reduce((accumulator, dailyLoad) => {
         accumulator.set(dailyLoad.dayMs, (accumulator.get(dailyLoad.dayMs) || 0) + dailyLoad.load);
         return accumulator;
     }, new Map<number, number>());
+    const activityCountsByUtcDay = dailyLoads.reduce((accumulator, dailyLoad) => {
+        accumulator.set(
+            dailyLoad.dayMs,
+            (accumulator.get(dailyLoad.dayMs) || 0) + dailyLoad.activityCount,
+        );
+        return accumulator;
+    }, new Map<number, number>());
     return {
         dailyLoadsByUtcDay,
+        activityCountsByUtcDay,
         sourceEventCount: Math.max(0, Math.floor(sourceEventCount)),
     };
 }
@@ -800,11 +849,15 @@ function buildFormMetricPayload(
     dailyLoadContext: ReturnType<typeof buildDailyLoadContext>,
 ): DerivedMetricBuildResult<DerivedFormMetricPayload> {
     // Firestore rejects nested arrays, so we persist day/load objects instead of tuple arrays.
-    const sortedDailyLoads = buildDerivedFormDailyLoads(dailyLoadContext.dailyLoadsByUtcDay);
+    const sortedDailyLoads = buildDerivedFormDailyLoads(
+        dailyLoadContext.dailyLoadsByUtcDay,
+        dailyLoadContext.activityCountsByUtcDay,
+    );
 
     return {
         sourceEventCount: dailyLoadContext.sourceEventCount,
         payload: {
+            payloadVersion: DERIVED_FORM_PAYLOAD_VERSION,
             dayBoundary: 'UTC',
             rangeStartDayMs: sortedDailyLoads.length ? sortedDailyLoads[0].dayMs : null,
             rangeEndDayMs: sortedDailyLoads.length ? sortedDailyLoads[sortedDailyLoads.length - 1].dayMs : null,
@@ -923,21 +976,7 @@ function resolveMonotonyStrain(
     points: readonly DerivedLoadPoint[],
     index: number,
 ): { weeklyLoad7: number; monotony: number | null; strain: number | null } {
-    const startIndex = Math.max(0, index - 6);
-    const windowLoads = points.slice(startIndex, index + 1).map(point => point.load);
-    const weeklyLoad7 = windowLoads.reduce((sum, value) => sum + value, 0);
-    const mean = windowLoads.length ? (weeklyLoad7 / windowLoads.length) : 0;
-    const variance = windowLoads.length
-        ? windowLoads.reduce((sum, value) => sum + Math.pow(value - mean, 2), 0) / windowLoads.length
-        : 0;
-    const stddev = Math.sqrt(variance);
-    const monotony = stddev > 0 ? (mean / stddev) : null;
-    const strain = monotony === null ? null : weeklyLoad7 * monotony;
-    return {
-        weeklyLoad7,
-        monotony,
-        strain,
-    };
+    return resolveTrainingMonotonyStrain(points, index);
 }
 
 function buildMonotonyStrainMetricPayload(
@@ -1115,6 +1154,13 @@ function buildFreshnessForecastMetricPayload(
             points: forecastPoints,
         },
     };
+}
+
+function resolveRecordedIntensity(eventData: Record<string, unknown>) {
+    return groupRecordedIntensityZones(
+        resolveZoneDurations(eventData, POWER_ZONE_STAT_TYPES),
+        resolveZoneDurations(eventData, HEART_RATE_ZONE_STAT_TYPES),
+    );
 }
 
 function resolveZoneDurations(
@@ -1325,6 +1371,7 @@ export function joinTrainingActivitySources(
         const activityData = (doc.data() || {}) as Record<string, unknown>;
         const eventId = toSafeString(activityData.eventID).trim();
         const eventData = eventById.get(eventId);
+        if (eventData) attachActivityTrainingLoad(doc.id, activityData, eventData);
         const discipline = resolveTrainingDisciplineFromActivityType(activityData.type);
         if (!eventId || !eventData || (!discipline && options.includeUnclassified === false)) {
             return [];
@@ -1667,9 +1714,104 @@ function isTrainingCapacitySessionDerivedFtp(
     return Math.round(twentyMinutePoint.power * TRAINING_CAPACITY_SESSION_FTP_FACTOR) === Math.round(ftp);
 }
 
+function buildManualTrainingCapacityVo2References(
+    docs: readonly FirestoreQueryDocumentSnapshot[],
+    imported: Readonly<Record<DerivedPowerCurveScope, readonly TrainingCapacityObservation[]>>,
+    nowMs: number,
+): Record<DerivedPowerCurveScope, DerivedTrainingCapacityReferenceVo2Max | null> {
+    const candidates: Record<DerivedPowerCurveScope, Array<{
+        value: number;
+        observedAtMs: number;
+        method: 'lab-test' | 'field-test';
+    }>> = { running: [], cycling: [] };
+    docs.forEach((doc) => {
+        const record = (doc.data() || {}) as Partial<HealthSourceRecord>;
+        if (record.kind !== HEALTH_SOURCE_RECORD_KINDS.PointMeasurement
+            || record.source?.provider !== HEALTH_PROVIDERS.QuantifiedSelf
+            || record.source.sourceRecordType !== MANUAL_HEALTH_SOURCE_RECORD_TYPE
+            || !Array.isArray(record.metrics)) {
+            return;
+        }
+        const observedAtMs = toMillis(record.endTimeMs);
+        if (observedAtMs === null || observedAtMs > nowMs) return;
+        record.metrics.forEach((storedEntry) => {
+            let entry;
+            try {
+                entry = decodeHealthMetricSportsLibData(storedEntry);
+            } catch (error) {
+                if (error instanceof SportsLibDataValidationError) return;
+                throw error;
+            }
+            if (entry.kind !== 'value'
+                || entry.metricId !== HEALTH_METRIC_IDS.Vo2Max
+                || entry.aggregation !== MANUAL_HEALTH_AGGREGATION
+                || entry.origin !== HEALTH_VALUE_ORIGINS.Recorded
+                || entry.recordingMethod !== HEALTH_RECORDING_METHODS.Manual
+                || typeof entry.canonical?.value !== 'number'
+                || !Number.isFinite(entry.canonical.value)
+                || entry.canonical.value <= 0) {
+                return;
+            }
+            const context = entry.native.qualifiers?.['context'];
+            const method = entry.native.qualifiers?.['method'];
+            if ((context !== 'running' && context !== 'cycling')
+                || !MANUAL_VO2_CONTEXTS.includes(context)
+                || (method !== 'lab_test' && method !== 'field_test')
+                || !MANUAL_VO2_METHODS.includes(method)
+                || entry.semanticVariant !== manualVo2SemanticVariant(context, method)) {
+                return;
+            }
+            candidates[context].push({
+                value: toRoundedNumber(entry.canonical.value, 1),
+                observedAtMs,
+                method: method === 'lab_test' ? 'lab-test' : 'field-test',
+            });
+        });
+    });
+
+    return (['running', 'cycling'] as const).reduce((result, discipline) => {
+        const sortedCandidates = candidates[discipline]
+            .sort((left, right) => left.observedAtMs - right.observedAtMs);
+        const latest = sortedCandidates[sortedCandidates.length - 1];
+        if (!latest) {
+            result[discipline] = null;
+            return result;
+        }
+        const comparison = imported[discipline]
+            .filter(item => Math.abs(item.timeMs - latest.observedAtMs) <= TRAINING_CAPACITY_VO2_COMPARISON_MAX_GAP_MS)
+            .sort((left, right) => {
+                const leftGap = Math.abs(left.timeMs - latest.observedAtMs);
+                const rightGap = Math.abs(right.timeMs - latest.observedAtMs);
+                return leftGap - rightGap || right.timeMs - left.timeMs;
+            })[0];
+        result[discipline] = {
+            kind: 'vo2-max',
+            value: latest.value,
+            context: discipline,
+            method: latest.method,
+            observedAtMs: latest.observedAtMs,
+            provenance: 'manual-health-measurement',
+            comparison: comparison ? {
+                value: toRoundedNumber(comparison.value, 1),
+                observedAtMs: comparison.timeMs,
+                delta: toRoundedNumber(latest.value - comparison.value, 1),
+                gapDays: toRoundedNumber(
+                    Math.abs(latest.observedAtMs - comparison.timeMs) / DAY_MS,
+                    2,
+                ),
+            } : null,
+        };
+        return result;
+    }, { running: null, cycling: null } as Record<
+        DerivedPowerCurveScope,
+        DerivedTrainingCapacityReferenceVo2Max | null
+    >);
+}
+
 export function buildTrainingCapacityMetricPayload(
     activities: readonly DerivedTrainingActivitySource[],
     nowMs = Date.now(),
+    manualVo2HealthDocs: readonly FirestoreQueryDocumentSnapshot[] = [],
 ): DerivedMetricBuildResult<DerivedTrainingCapacityMetricPayload> {
     const observations: Record<DerivedPowerCurveScope, {
         ftpSetting: TrainingCapacityObservation[];
@@ -1699,14 +1841,23 @@ export function buildTrainingCapacityMetricPayload(
         sourceEventCount += 1;
     });
 
+    const references = buildManualTrainingCapacityVo2References(
+        manualVo2HealthDocs,
+        {
+            running: observations.running.importedVo2Max,
+            cycling: observations.cycling.importedVo2Max,
+        },
+        nowMs,
+    );
     const disciplines = (['running', 'cycling'] as const).map((discipline) => ({
         discipline,
         ftpSetting: buildTrainingCapacityImportedMetric('ftp-setting', observations[discipline].ftpSetting),
         importedVo2Max: buildTrainingCapacityImportedMetric('vo2-max', observations[discipline].importedVo2Max),
+        referenceVo2Max: references[discipline],
     }));
 
     return {
-        sourceEventCount,
+        sourceEventCount: sourceEventCount + Object.values(references).filter(Boolean).length,
         payload: {
             dayBoundary: 'UTC',
             asOfDayMs: resolveUtcDayStartMs(nowMs),
@@ -1718,6 +1869,7 @@ export function buildTrainingCapacityMetricPayload(
 
 interface TrainingPowerSystemsCandidate {
     activityType: ActivityTypes;
+    modelActivityType: ActivityTypes;
     sourceId: string;
     eventId: string;
     startDayMs: number;
@@ -1809,16 +1961,15 @@ function resolveUtcDateKeyDayMs(dateKey: string | null): number | null {
 
 function prepareTrainingPowerSystemsCandidate(
     activity: DerivedTrainingActivitySource,
+    poolGenericRoadPairs: boolean,
 ): TrainingPowerSystemsCandidate | null {
-    let activityType: ActivityTypes | null = null;
-    try {
-        activityType = ActivityTypesHelper.resolveActivityType(activity.activityData.type);
-    } catch {
-        return null;
-    }
+    const activityType = resolveCompatibleActivityType(activity.activityData.type);
     if (!activityType) {
         return null;
     }
+    const modelActivityType = poolGenericRoadPairs
+        ? resolveTrainingPowerSystemsModelActivityType(activityType) as ActivityTypes
+        : activityType;
     const sourceId = `${activity.activityId || ''}`.trim();
     const points = filterPowerCurvePointsByMaxDuration(
         normalizePowerCurvePoints(resolveRawStatValue(activity.activityData, POWER_CURVE_STAT_TYPE)).points,
@@ -1826,13 +1977,14 @@ function prepareTrainingPowerSystemsCandidate(
     );
     return {
         activityType,
+        modelActivityType,
         sourceId,
         eventId: activity.eventId,
         startDayMs: activity.startDayMs,
         datedCurve: sourceId && points.length
             ? {
                 sourceId,
-                activityType,
+                activityType: modelActivityType,
                 date: resolveUtcDateKey(activity.startDayMs),
                 powerCurve: points,
             }
@@ -2026,6 +2178,42 @@ export function buildTrainingPowerSystemsMetricPayload(
     nowMs = Date.now(),
     fitCapacityModel: ThreeDimensionalCapacityFitter = fitThreeDimensionalCapacityModel,
 ): DerivedMetricBuildResult<DerivedTrainingPowerSystemsMetricPayload> {
+    return buildTrainingPowerSystemsMetricPayloadForPolicy(activities, nowMs, fitCapacityModel, DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION);
+}
+
+/** Independently fit the affected exact types for the registered policy-1 read. */
+export function buildLegacyTrainingPowerSystemsMetricPayload(
+    activities: readonly DerivedTrainingActivitySource[],
+    nowMs = Date.now(),
+    fitCapacityModel: ThreeDimensionalCapacityFitter = fitThreeDimensionalCapacityModel,
+): DerivedMetricBuildResult<DerivedTrainingPowerSystemsLegacyPolicy1Sidecar> {
+    const legacyTypes = new Set<string>(DERIVED_TRAINING_POWER_SYSTEMS_LEGACY_POLICY1_ACTIVITY_TYPES);
+    const result = buildTrainingPowerSystemsMetricPayloadForPolicy(
+        activities.filter(activity => legacyTypes.has(resolveCompatibleActivityType(activity.activityData.type) || '')),
+        nowMs,
+        fitCapacityModel,
+        1,
+    );
+    const maximumHistoryPoints = DERIVED_TRAINING_POWER_SYSTEMS_HISTORY_DAYS + 1;
+    if (
+        result.payload.activityTypes.length > legacyTypes.size
+        || result.payload.activityTypes.some(entry => entry.history.length > maximumHistoryPoints)
+        || Buffer.byteLength(JSON.stringify(result.payload), 'utf8') > DERIVED_TRAINING_POWER_SYSTEMS_LEGACY_POLICY1_MAX_BYTES
+    ) {
+        throw new Error('Legacy power-system sidecar exceeds its fixed storage bounds.');
+    }
+    return result;
+}
+
+function buildTrainingPowerSystemsMetricPayloadForPolicy<TPolicy extends 1 | 2>(
+    activities: readonly DerivedTrainingActivitySource[],
+    nowMs: number,
+    fitCapacityModel: ThreeDimensionalCapacityFitter,
+    policyVersion: TPolicy,
+): DerivedMetricBuildResult<Omit<DerivedTrainingPowerSystemsMetricPayload, 'policyVersion'> & { policyVersion: TPolicy }> {
+    const resolveModelActivityType = (activityType: ActivityTypes): ActivityTypes => policyVersion === 2
+        ? resolveTrainingPowerSystemsModelActivityType(activityType) as ActivityTypes
+        : activityType;
     const asOfDayMs = resolveUtcDayStartMs(nowMs);
     const historyStartDayMs = asOfDayMs - (DERIVED_TRAINING_POWER_SYSTEMS_HISTORY_DAYS * DAY_MS);
     const earliestInputDayMs = historyStartDayMs - (DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS * DAY_MS);
@@ -2036,7 +2224,7 @@ export function buildTrainingPowerSystemsMetricPayload(
             && activity.startDayMs >= earliestInputDayMs
             && activity.startDayMs <= asOfDayMs
         ))
-        .map(prepareTrainingPowerSystemsCandidate)
+        .map(activity => prepareTrainingPowerSystemsCandidate(activity, policyVersion === 2))
         .filter((candidate): candidate is TrainingPowerSystemsCandidate => candidate !== null)
         .sort((left, right) => (
             left.startDayMs - right.startDayMs
@@ -2059,15 +2247,16 @@ export function buildTrainingPowerSystemsMetricPayload(
         activityType: ActivityTypes,
         effectiveDayMs: number,
     ): DerivedTrainingPowerSystemsSnapshot => {
-        const cacheKey = `${activityType}\u0000${effectiveDayMs}`;
+        const modelActivityType = resolveModelActivityType(activityType);
+        const cacheKey = `${modelActivityType}\u0000${effectiveDayMs}`;
         const cached = fitCache.get(cacheKey);
         if (cached) {
-            return cached;
+            return { ...cached, activityType };
         }
         const windowStartDayMs = effectiveDayMs - (DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS * DAY_MS);
         const curves = candidates
             .filter(candidate => (
-                candidate.activityType === activityType
+                candidate.modelActivityType === modelActivityType
                 && candidate.datedCurve !== null
                 && candidate.startDayMs >= windowStartDayMs
                 && candidate.startDayMs < effectiveDayMs
@@ -2075,24 +2264,25 @@ export function buildTrainingPowerSystemsMetricPayload(
             .map(candidate => candidate.datedCurve as DatedActivityPowerCurve);
         const snapshot = serializeTrainingPowerSystemsFit(
             fitCapacityModel(curves, { effectiveDate: resolveUtcDateKey(effectiveDayMs) }),
-            activityType,
+            modelActivityType,
             effectiveDayMs,
         );
         fitCache.set(cacheKey, snapshot);
-        return snapshot;
+        return { ...snapshot, activityType };
     };
 
     const activityTypes: DerivedTrainingPowerSystemsActivityType[] = discoveredActivityTypes.map((activityType) => {
+        const modelActivityType = resolveModelActivityType(activityType);
         const currentWindowStartDayMs = asOfDayMs - (DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS * DAY_MS);
         const currentCandidates = candidates.filter(candidate => (
-            candidate.activityType === activityType
+            candidate.modelActivityType === modelActivityType
             && candidate.startDayMs >= currentWindowStartDayMs
             && candidate.startDayMs < asOfDayMs
         ));
         const effectiveDays = [...new Set([
             ...candidates
                 .filter(candidate => (
-                    candidate.activityType === activityType
+                    candidate.modelActivityType === modelActivityType
                     && candidate.datedCurve !== null
                     && candidate.startDayMs >= historyStartDayMs
                     && candidate.startDayMs <= asOfDayMs
@@ -2116,9 +2306,10 @@ export function buildTrainingPowerSystemsMetricPayload(
             },
         };
     });
+    const discoveredModelActivityTypes = new Set(discoveredActivityTypes.map(resolveModelActivityType));
     const sourceEventCount = new Set(
         candidates
-            .filter(candidate => discoveredActivityTypes.includes(candidate.activityType))
+            .filter(candidate => discoveredModelActivityTypes.has(candidate.modelActivityType))
             .map(candidate => candidate.eventId)
             .filter(Boolean),
     ).size;
@@ -2128,7 +2319,7 @@ export function buildTrainingPowerSystemsMetricPayload(
         payload: {
             dayBoundary: 'UTC',
             asOfDayMs,
-            policyVersion: DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION,
+            policyVersion,
             windowDays: DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS,
             historyDays: DERIVED_TRAINING_POWER_SYSTEMS_HISTORY_DAYS,
             cadence: 'workout-date',
@@ -2219,16 +2410,12 @@ export function buildTrainingSummaryMetricPayload(
         const accumulator = accumulators[discipline];
         const window = eventDayMs >= currentStartDayMs ? accumulator.current : accumulator.baseline;
         const context = resolveTrainingSportContextFromActivityType(eventData.type);
-        const powerZones = resolveZoneDurations(eventData, POWER_ZONE_STAT_TYPES);
-        const heartRateZones = resolveZoneDurations(eventData, HEART_RATE_ZONE_STAT_TYPES);
-        const zones = context?.intensityPolicy === 'zones'
-            ? (powerZones.reduce((sum, value) => sum + value, 0) > 0 ? powerZones : heartRateZones)
-            : [];
+        const intensity = context?.intensityPolicy === 'zones' ? resolveRecordedIntensity(eventData) : null;
         window.activityCount += 1;
         window.durationSeconds += toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataDuration.type)) || 0;
-        window.easySeconds += (zones[0] || 0) + (zones[1] || 0);
-        window.moderateSeconds += (zones[2] || 0) + (zones[3] || 0);
-        window.hardSeconds += (zones[4] || 0) + (zones[5] || 0) + (zones[6] || 0);
+        window.easySeconds += intensity?.easySeconds || 0;
+        window.moderateSeconds += intensity?.moderateSeconds || 0;
+        window.hardSeconds += intensity?.hardSeconds || 0;
         if (context) {
             addTrainingContextMetrics(window.contexts, eventData, context);
         }
@@ -2253,6 +2440,7 @@ export function buildTrainingSummaryMetricPayload(
     return {
         sourceEventCount,
         payload: {
+            intensityPolicyVersion: INTENSITY_POLICY_VERSION,
             dayBoundary: 'UTC',
             asOfDayMs,
             currentWindowDays: TRAINING_SUMMARY_CURRENT_WINDOW_DAYS,
@@ -2445,10 +2633,7 @@ function buildTrainingExplanationSportLoads(
 function resolveTrainingExplanationActivityLoad(
     activity: DerivedTrainingActivitySource,
 ): number | null {
-    const sportContext = resolveTrainingSportContextFromActivityType(activity.activityData.type);
-    return sportContext?.loadPolicy === 'volume-only'
-        ? null
-        : resolveTrainingStressScore(activity.activityData);
+    return resolveTrainingStressScore(activity.activityData);
 }
 
 function buildTrainingExplanationWindow(
@@ -2645,6 +2830,10 @@ interface ParsedDurabilityEvidence {
 function resolveTrainingDurabilityScope(
     activity: DerivedTrainingActivitySource,
 ): DerivedTrainingDurabilityScope | null {
+    const durabilityPolicy = resolveTrainingSportContextFromActivityType(activity.activityData.type)?.durabilityPolicy;
+    if (!durabilityPolicy || durabilityPolicy === 'omit') {
+        return null;
+    }
     if (activity.discipline === 'running' || activity.discipline === 'cycling') {
         return activity.discipline;
     }
@@ -2701,7 +2890,7 @@ function parsePersistedDurabilityEvidence(
     }
     const sportContext = resolveTrainingSportContextFromActivityType(activity.activityData.type);
     if (
-        (sportContext?.profile === 'gravity' || sportContext?.profile === 'mixed-gravity')
+        sportContext?.durabilityPolicy === 'unsupported-context'
         && (raw.eligibility.eligible || raw.eligibility.reason !== 'unsupported-context')
     ) {
         // Sports Lib previously applied the steady cycling adapter to every MTB
@@ -3143,25 +3332,17 @@ function addTrainingBuildEventToWindow(
         accumulator.distanceEventCount += 1;
     }
 
-    const trainingStressScore = sportContext?.loadPolicy === 'recorded'
-        ? resolveTrainingStressScore(eventData)
-        : null;
+    const trainingStressScore = resolveTrainingStressScore(eventData);
     if (trainingStressScore !== null && trainingStressScore >= 0) {
         accumulator.trainingStressScore += trainingStressScore;
         accumulator.trainingStressScoreEventCount += 1;
     }
 
-    const powerZones = resolveZoneDurations(eventData, POWER_ZONE_STAT_TYPES);
-    const powerZoneTotal = powerZones.reduce((sum, value) => sum + value, 0);
-    const heartRateZones = resolveZoneDurations(eventData, HEART_RATE_ZONE_STAT_TYPES);
-    const heartRateZoneTotal = heartRateZones.reduce((sum, value) => sum + value, 0);
-    const zones = sportContext?.intensityPolicy === 'zones'
-        ? (powerZoneTotal > 0 ? powerZones : (heartRateZoneTotal > 0 ? heartRateZones : null))
-        : null;
-    if (zones) {
-        accumulator.easySeconds += (zones[0] || 0) + (zones[1] || 0);
-        accumulator.moderateSeconds += (zones[2] || 0) + (zones[3] || 0);
-        accumulator.hardSeconds += (zones[4] || 0) + (zones[5] || 0) + (zones[6] || 0);
+    const intensity = sportContext?.intensityPolicy === 'zones' ? resolveRecordedIntensity(eventData) : null;
+    if (intensity) {
+        accumulator.easySeconds += intensity.easySeconds;
+        accumulator.moderateSeconds += intensity.moderateSeconds;
+        accumulator.hardSeconds += intensity.hardSeconds;
         accumulator.intensitySourceEventCount += 1;
     }
 
@@ -3289,12 +3470,7 @@ function buildTrainingBuildEventSuggestion(
             ? toFiniteNumber(resolveRawStatNumericValue(item.activityData, DataDistance.type))
             : null);
     }));
-    const trainingStressScore = sumOptional(events.map((item) => {
-        const sportContext = resolveTrainingSportContextFromActivityType(item.activityData.type);
-        return sportContext?.loadPolicy === 'recorded'
-            ? resolveTrainingStressScore(item.activityData)
-            : null;
-    }));
+    const trainingStressScore = sumOptional(events.map(item => resolveTrainingStressScore(item.activityData)));
     const durationSeconds = sumOptional(events.map(item => resolveTrainingBuildActivityDurationSeconds(item.activityData)));
     return {
         eventId: event.eventId,
@@ -3361,6 +3537,7 @@ function buildTrainingBuildEventSuggestions(
 }
 
 interface ResolvedTrainingSleepNight {
+    hrvSourceKey?: string;
     provider: SleepProvider;
     sleepDayMs: number;
     durationSeconds: number;
@@ -3370,7 +3547,13 @@ interface ResolvedTrainingSleepNight {
 }
 
 interface TrainingSleepNightCandidate {
+    id: string;
+    sourceKey: string;
+    hrvSourceKey?: string;
+    hrvSampleCount: number | null;
     provider: SleepProvider;
+    providerUserId: string | null;
+    sleepDate: string;
     sleepDayMs: number;
     durationSeconds: number;
     startTimeMs: number;
@@ -3403,29 +3586,6 @@ function resolveLocalClockMinutes(startTimeMs: number, timezoneOffsetSeconds: nu
     return Math.floor(localTimeOfDayMs / (60 * 1000));
 }
 
-function resolveTrainingSleepTimezoneOffsetSeconds(
-    data: Record<string, unknown>,
-    provider: SleepProvider,
-): number | null {
-    const explicitOffsetSeconds = toFiniteNumber(data.timezoneOffsetSeconds);
-    if (
-        explicitOffsetSeconds !== null
-        && Math.abs(explicitOffsetSeconds) <= TRAINING_RECOVERY_MAX_TIMEZONE_OFFSET_SECONDS
-    ) {
-        return explicitOffsetSeconds;
-    }
-    if (provider !== SLEEP_PROVIDERS.SuuntoApp) {
-        return null;
-    }
-    const providerFields = data.providerFields && typeof data.providerFields === 'object' && !Array.isArray(data.providerFields)
-        ? data.providerFields as Record<string, unknown>
-        : {};
-    const suuntoFields = providerFields.suunto && typeof providerFields.suunto === 'object' && !Array.isArray(providerFields.suunto)
-        ? providerFields.suunto as Record<string, unknown>
-        : {};
-    return parseDateTimeOffsetSeconds(suuntoFields.timestamp);
-}
-
 function hasValidTrainingSleepEndTime(startTimeMs: number, endTimeMs: number | null): endTimeMs is number {
     if (endTimeMs === null || endTimeMs <= startTimeMs) {
         return false;
@@ -3454,7 +3614,7 @@ function decodeTrainingSleepDocument(
 function resolveTrainingSleepNights(
     sleepDocs: readonly FirestoreQueryDocumentSnapshot[],
 ): ResolvedTrainingSleepNight[] {
-    const candidates = new Map<string, TrainingSleepNightCandidate>();
+    const candidateGroups = new Map<string, TrainingSleepNightCandidate[]>();
     sleepDocs.forEach((doc) => {
         const data = decodeTrainingSleepDocument(doc);
         if (!data) return;
@@ -3465,26 +3625,32 @@ function resolveTrainingSleepNights(
             ? data.source as Record<string, unknown>
             : {};
         const provider = normalizeSleepProvider(source.provider);
-        const sleepDayMs = resolveSleepDateDayMs(data.sleepDate);
-        const startTimeMs = toFiniteNumber(data.startTimeMs);
+        const sleepDate = resolveSleepDisplayDate(data as unknown as SleepSession);
+        const sleepDayMs = resolveSleepDateDayMs(sleepDate);
+        const storedStartTimeMs = toFiniteNumber(data.startTimeMs);
         const endTimeMs = toFiniteNumber(data.endTimeMs);
         const storedDurationSeconds = toFiniteNumber(data.durationSeconds);
         const durationSeconds = storedDurationSeconds !== null && storedDurationSeconds > 0
             ? storedDurationSeconds
-            : (startTimeMs !== null && endTimeMs !== null && endTimeMs > startTimeMs
-                ? (endTimeMs - startTimeMs) / 1000
+            : (storedStartTimeMs !== null && endTimeMs !== null && endTimeMs > storedStartTimeMs
+                ? (endTimeMs - storedStartTimeMs) / 1000
                 : null);
         if (
             !provider
             || sleepDayMs === null
-            || startTimeMs === null
+            || storedStartTimeMs === null
             || durationSeconds === null
-            || durationSeconds < DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS
+            || durationSeconds <= 0
+            || (provider !== SLEEP_PROVIDERS.SuuntoApp
+                && durationSeconds < DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS)
             || durationSeconds > DERIVED_TRAINING_RECOVERY_MAX_VALID_SLEEP_SECONDS
         ) {
             return;
         }
-        const timezoneOffsetSeconds = resolveTrainingSleepTimezoneOffsetSeconds(data, provider);
+        const startTimeMs = provider === SLEEP_PROVIDERS.SuuntoApp
+            ? resolveSleepEffectiveStartTimeMs(data as unknown as SleepSession)
+            : storedStartTimeMs;
+        const timezoneOffsetSeconds = resolveSleepTimezoneOffsetSeconds(data as unknown as SleepSession);
         const localStartTimeMs = startTimeMs + ((timezoneOffsetSeconds || 0) * 1000);
         if (
             !Number.isFinite(localStartTimeMs)
@@ -3496,68 +3662,147 @@ function resolveTrainingSleepNights(
         const vitals = data.vitals && typeof data.vitals === 'object' && !Array.isArray(data.vitals)
             ? data.vitals as Record<string, unknown>
             : {};
-        const overnightHrvMs = toFinitePositiveNumber(vitals.overnightHrvMs)
-            ?? toFinitePositiveNumber(vitals.averageHrvMs);
-        const hasValidEndTime = hasValidTrainingSleepEndTime(startTimeMs, endTimeMs);
+        const overnightHrvMs = toFinitePositiveNumber(vitals.averageHrvMs)
+            ?? toFinitePositiveNumber(vitals.overnightHrvMs);
+        const sourceKey = sleepEvidenceSourceKey(data as unknown as SleepSession);
+        const providerUserId = typeof source.providerUserId === 'string'
+            ? source.providerUserId.trim() || null
+            : null;
         const key = `${provider}:${formatUtcDayKey(sleepDayMs)}`;
-        const existing = candidates.get(key);
-        const existingHasValidEndTime = existing
-            ? hasValidTrainingSleepEndTime(existing.startTimeMs, existing.endTimeMs)
-            : false;
-        const shouldKeepExisting = existing
-            && (
-                existing.durationSeconds > durationSeconds
-                || (existing.durationSeconds === durationSeconds
-                    && existing.overnightHrvMs !== null
-                    && overnightHrvMs === null)
-                || (existing.durationSeconds === durationSeconds
-                    && (existing.overnightHrvMs !== null) === (overnightHrvMs !== null)
-                    && existing.timezoneOffsetSeconds !== null
-                    && timezoneOffsetSeconds === null)
-                || (existing.durationSeconds === durationSeconds
-                    && (existing.overnightHrvMs !== null) === (overnightHrvMs !== null)
-                    && (existing.timezoneOffsetSeconds !== null) === (timezoneOffsetSeconds !== null)
-                    && existingHasValidEndTime
-                    && !hasValidEndTime)
-                || (existing.durationSeconds === durationSeconds
-                    && (existing.overnightHrvMs !== null) === (overnightHrvMs !== null)
-                    && (existing.timezoneOffsetSeconds !== null) === (timezoneOffsetSeconds !== null)
-                    && existingHasValidEndTime === hasValidEndTime
-                    && existing.startTimeMs <= startTimeMs)
-            );
-        if (shouldKeepExisting) {
-            return;
-        }
-        candidates.set(key, {
+        const hasCanonicalNightIdentity = provider !== SLEEP_PROVIDERS.SuuntoApp
+            || isIdentifiedSleepEvidenceSourceKey(provider, sourceKey);
+        const candidate: TrainingSleepNightCandidate = {
+            id: doc.id,
+            sourceKey,
             provider,
+            providerUserId,
+            sleepDate: formatUtcDayKey(sleepDayMs),
             sleepDayMs,
             durationSeconds,
             startTimeMs,
             endTimeMs,
             timezoneOffsetSeconds,
-            overnightHrvMs,
-        });
+            overnightHrvMs: hasCanonicalNightIdentity ? overnightHrvMs : null,
+            hrvSampleCount: hasCanonicalNightIdentity ? toFiniteNumber(vitals.hrvSampleCount) : null,
+            hrvSourceKey: hasCanonicalNightIdentity
+                ? sleepHrvSourceKey(data as unknown as SleepSession)
+                : undefined,
+        };
+        candidateGroups.set(key, [...(candidateGroups.get(key) || []), candidate]);
     });
 
-    return [...candidates.values()].map((night): ResolvedTrainingSleepNight => ({
-        provider: night.provider,
-        sleepDayMs: night.sleepDayMs,
-        durationSeconds: night.durationSeconds,
-        localBedtimeMinutes: night.timezoneOffsetSeconds === null
-            ? null
-            : resolveLocalClockMinutes(night.startTimeMs, night.timezoneOffsetSeconds),
-        localWakeTimeMinutes: night.timezoneOffsetSeconds === null
-            || !hasValidTrainingSleepEndTime(night.startTimeMs, night.endTimeMs)
-            ? null
-            : resolveLocalClockMinutes(night.endTimeMs, night.timezoneOffsetSeconds),
-        overnightHrvMs: night.overnightHrvMs,
-    }));
+    return [...candidateGroups.values()].flatMap((group): ResolvedTrainingSleepNight[] => {
+        const canonicalCandidates = group[0]?.provider === SLEEP_PROVIDERS.SuuntoApp
+            ? canonicalizeTrainingSuuntoSleepCandidates(group)
+            : group;
+        const validCandidates = canonicalCandidates.filter(candidate => (
+            candidate.durationSeconds >= DERIVED_TRAINING_RECOVERY_MIN_VALID_SLEEP_SECONDS
+            && candidate.durationSeconds <= DERIVED_TRAINING_RECOVERY_MAX_VALID_SLEEP_SECONDS
+        ));
+        if (!validCandidates.length) return [];
+        const night = validCandidates.reduce((selected, candidate) => (
+            keepExistingTrainingSleepCandidate(selected, candidate) ? selected : candidate
+        ));
+        const hrv = night.provider === SLEEP_PROVIDERS.SuuntoApp
+            ? { averageHrvMs: night.overnightHrvMs, hrvSourceKey: night.hrvSourceKey }
+            : aggregateNightlyHrvEvidence(group.filter(candidate => candidate.sourceKey === night.sourceKey).map(candidate => ({
+                averageHrvMs: candidate.overnightHrvMs,
+                hrvSampleCount: candidate.hrvSampleCount,
+                hrvSourceKey: candidate.hrvSourceKey,
+            })));
+        return [{
+            provider: night.provider,
+            sleepDayMs: night.sleepDayMs,
+            durationSeconds: night.durationSeconds,
+            localBedtimeMinutes: night.timezoneOffsetSeconds === null
+                ? null
+                : resolveLocalClockMinutes(night.startTimeMs, night.timezoneOffsetSeconds),
+            localWakeTimeMinutes: night.timezoneOffsetSeconds === null
+                || !hasValidTrainingSleepEndTime(night.startTimeMs, night.endTimeMs)
+                ? null
+                : resolveLocalClockMinutes(night.endTimeMs, night.timezoneOffsetSeconds),
+            overnightHrvMs: hrv.averageHrvMs,
+            hrvSourceKey: hrv.hrvSourceKey,
+        }];
+    });
+}
+
+function keepExistingTrainingSleepCandidate(
+    existing: TrainingSleepNightCandidate,
+    candidate: TrainingSleepNightCandidate,
+): boolean {
+    const existingHasValidEndTime = hasValidTrainingSleepEndTime(existing.startTimeMs, existing.endTimeMs);
+    const candidateHasValidEndTime = hasValidTrainingSleepEndTime(candidate.startTimeMs, candidate.endTimeMs);
+    return existing.durationSeconds > candidate.durationSeconds
+        || (existing.durationSeconds === candidate.durationSeconds
+            && existing.overnightHrvMs !== null && candidate.overnightHrvMs === null)
+        || (existing.durationSeconds === candidate.durationSeconds
+            && (existing.overnightHrvMs !== null) === (candidate.overnightHrvMs !== null)
+            && existing.timezoneOffsetSeconds !== null && candidate.timezoneOffsetSeconds === null)
+        || (existing.durationSeconds === candidate.durationSeconds
+            && (existing.overnightHrvMs !== null) === (candidate.overnightHrvMs !== null)
+            && (existing.timezoneOffsetSeconds !== null) === (candidate.timezoneOffsetSeconds !== null)
+            && existingHasValidEndTime && !candidateHasValidEndTime)
+        || (existing.durationSeconds === candidate.durationSeconds
+            && (existing.overnightHrvMs !== null) === (candidate.overnightHrvMs !== null)
+            && (existing.timezoneOffsetSeconds !== null) === (candidate.timezoneOffsetSeconds !== null)
+            && existingHasValidEndTime === candidateHasValidEndTime
+            && (existing.startTimeMs < candidate.startTimeMs
+                || (existing.startTimeMs === candidate.startTimeMs && existing.id.localeCompare(candidate.id) <= 0)));
+}
+
+function canonicalizeTrainingSuuntoSleepCandidates(
+    candidates: readonly TrainingSleepNightCandidate[],
+): TrainingSleepNightCandidate[] {
+    return groupCanonicalSleepNightFragments(candidates.map(candidate => ({
+        candidate,
+        provider: candidate.provider,
+        providerUserId: candidate.providerUserId,
+        sleepDate: candidate.sleepDate,
+        isNap: false,
+        startTimeMs: candidate.startTimeMs,
+        endTimeMs: candidate.endTimeMs,
+    }))).map(group => aggregateTrainingSuuntoSleepCandidateGroup(
+        group.map(item => item.candidate),
+    ));
+}
+
+function aggregateTrainingSuuntoSleepCandidateGroup(
+    candidates: readonly TrainingSleepNightCandidate[],
+): TrainingSleepNightCandidate {
+    if (candidates.length === 1) return candidates[0];
+    const sorted = [...candidates].sort((left, right) => left.startTimeMs - right.startTimeMs
+        || (left.endTimeMs ?? 0) - (right.endTimeMs ?? 0) || left.id.localeCompare(right.id));
+    const byRecency = [...sorted].sort((left, right) => (left.endTimeMs ?? 0) - (right.endTimeMs ?? 0)
+        || left.startTimeMs - right.startTimeMs || left.id.localeCompare(right.id));
+    const latest = byRecency[byRecency.length - 1];
+    const endTimes = sorted.flatMap(candidate => candidate.endTimeMs === null ? [] : [candidate.endTimeMs]);
+    const timezoneOffsets = new Set(sorted.map(candidate => candidate.timezoneOffsetSeconds));
+    const hrv = aggregateNightlyHrvEvidence(sorted.map(candidate => ({
+        averageHrvMs: candidate.overnightHrvMs,
+        hrvSampleCount: candidate.hrvSampleCount,
+        hrvSourceKey: candidate.hrvSourceKey,
+    })), { requireEveryPoint: true });
+    return {
+        ...latest,
+        id: sorted.map(candidate => candidate.id).join('|'),
+        durationSeconds: sorted.reduce((total, candidate) => total + candidate.durationSeconds, 0),
+        startTimeMs: Math.min(...sorted.map(candidate => candidate.startTimeMs)),
+        endTimeMs: endTimes.length === sorted.length ? Math.max(...endTimes) : null,
+        timezoneOffsetSeconds: timezoneOffsets.size === 1 ? sorted[0].timezoneOffsetSeconds : null,
+        overnightHrvMs: hrv.averageHrvMs,
+        hrvSampleCount: hrv.hrvSampleCount ?? null,
+        hrvSourceKey: hrv.hrvSourceKey,
+    };
 }
 
 function resolveTrainingReadinessSleepEvidence(
     sleepDocs: readonly FirestoreQueryDocumentSnapshot[],
 ): ReadinessSleepEvidencePoint[] {
-    const groups = new Map<string, ReadinessSleepEvidencePoint[]>();
+    const groups = new Map<string, Array<{
+        point: ReadinessSleepEvidencePoint;
+        providerUserId: string | null;
+    }>>();
     sleepDocs.forEach((doc) => {
         const data = decodeTrainingSleepDocument(doc);
         if (!data) return;
@@ -3568,14 +3813,21 @@ function resolveTrainingReadinessSleepEvidence(
             ? data.source as Record<string, unknown>
             : {};
         const provider = normalizeSleepProvider(source.provider);
-        const startTimeMs = toFiniteNumber(data.startTimeMs);
+        const storedStartTimeMs = toFiniteNumber(data.startTimeMs);
         const endTimeMs = toFiniteNumber(data.endTimeMs);
         const sleepDayMs = endTimeMs === null
             ? null
-            : resolveTrainingReadinessSleepDayMs(data, provider, endTimeMs);
-        if (!provider || sleepDayMs === null || startTimeMs === null || endTimeMs === null || endTimeMs <= startTimeMs) {
+            : resolveTrainingReadinessSleepDayMs(data, endTimeMs);
+        if (!provider || sleepDayMs === null || storedStartTimeMs === null
+            || endTimeMs === null
+            || !Number.isFinite(new Date(storedStartTimeMs).getTime())
+            || !Number.isFinite(new Date(endTimeMs).getTime())
+            || endTimeMs <= storedStartTimeMs) {
             return;
         }
+        const startTimeMs = provider === SLEEP_PROVIDERS.SuuntoApp
+            ? resolveSleepEffectiveStartTimeMs(data as unknown as SleepSession)
+            : storedStartTimeMs;
         const storedDurationSeconds = toFiniteNumber(data.durationSeconds);
         const durationSeconds = storedDurationSeconds !== null && storedDurationSeconds > 0
             ? Math.floor(storedDurationSeconds)
@@ -3586,107 +3838,107 @@ function resolveTrainingReadinessSleepEvidence(
         const vitals = data.vitals && typeof data.vitals === 'object' && !Array.isArray(data.vitals)
             ? data.vitals as Record<string, unknown>
             : {};
+        const sourceKey = sleepEvidenceSourceKey(data as unknown as SleepSession);
+        const hasCanonicalNightIdentity = provider !== SLEEP_PROVIDERS.SuuntoApp
+            || isIdentifiedSleepEvidenceSourceKey(provider, sourceKey);
         const point: ReadinessSleepEvidencePoint = {
             id: doc.id,
             sleepDate: formatUtcDayKey(sleepDayMs),
             provider,
+            sourceKey,
+            hrvSourceKey: hasCanonicalNightIdentity
+                ? sleepHrvSourceKey(data as unknown as SleepSession)
+                : undefined,
+            hrvSampleCount: hasCanonicalNightIdentity ? toFiniteNumber(vitals.hrvSampleCount) : null,
             startTimeMs,
             endTimeMs,
             totalSeconds: durationSeconds,
             score: toFiniteNumber(score.value),
-            averageHrvMs: toFiniteNumber(vitals.averageHrvMs) ?? toFiniteNumber(vitals.overnightHrvMs),
+            averageHrvMs: hasCanonicalNightIdentity
+                ? toFiniteNumber(vitals.averageHrvMs) ?? toFiniteNumber(vitals.overnightHrvMs)
+                : null,
             averageHeartRateBpm: toFiniteNumber(vitals.averageHeartRateBpm),
             minimumHeartRateBpm: toFiniteNumber(vitals.minimumHeartRateBpm),
+            ...calculatedHeartRateSourceKeys(data as unknown as SleepSession),
         };
-        const key = `${point.sleepDate}:${provider}`;
-        groups.set(key, [...(groups.get(key) || []), point]);
+        point.hrvObservations = readinessHrvObservations(point);
+        const providerUserId = typeof source.providerUserId === 'string'
+            ? source.providerUserId.trim() || null
+            : null;
+        const key = JSON.stringify([
+            point.sleepDate,
+            point.sourceKey,
+            provider === SLEEP_PROVIDERS.SuuntoApp
+                && !isIdentifiedSleepEvidenceSourceKey(provider, point.sourceKey)
+                ? point.id
+                : null,
+        ]);
+        groups.set(key, [...(groups.get(key) || []), { point, providerUserId }]);
     });
 
-    return [...groups.values()].map((points): ReadinessSleepEvidencePoint => {
-        const sortedPoints = [...points].sort((left, right) => (
-            (left.endTimeMs || 0) - (right.endTimeMs || 0)
-            || (left.startTimeMs || 0) - (right.startTimeMs || 0)
-            || left.id.localeCompare(right.id)
-        ));
-        const latest = sortedPoints[sortedPoints.length - 1];
-        const averageHrvValues = points
-            .map(point => point.averageHrvMs)
-            .filter((value): value is number => Number.isFinite(value) && (value as number) > 0);
-        const averageHeartRateValues = points
-            .map(point => point.averageHeartRateBpm)
-            .filter((value): value is number => Number.isFinite(value) && (value as number) > 0);
-        const minimumHeartRateValues = points
-            .map(point => point.minimumHeartRateBpm)
-            .filter((value): value is number => Number.isFinite(value) && (value as number) > 0);
-        return {
-            ...latest,
-            id: sortedPoints.map(point => point.id).join('|'),
-            startTimeMs: Math.min(...points.map(point => point.startTimeMs as number)),
-            endTimeMs: Math.max(...points.map(point => point.endTimeMs as number)),
-            totalSeconds: points.reduce((total, point) => total + Math.max(0, point.totalSeconds || 0), 0),
-            averageHrvMs: averageHrvValues.length
-                ? averageHrvValues.reduce((total, value) => total + value, 0) / averageHrvValues.length
-                : null,
-            averageHeartRateBpm: averageHeartRateValues.length
-                ? averageHeartRateValues.reduce((total, value) => total + value, 0) / averageHeartRateValues.length
-                : null,
-            minimumHeartRateBpm: minimumHeartRateValues.length
-                ? Math.min(...minimumHeartRateValues)
-                : null,
-        };
+    return [...groups.values()].flatMap(entries => {
+        const canonicalGroups = entries[0]?.point.provider === SLEEP_PROVIDERS.SuuntoApp
+            ? groupCanonicalSleepNightFragments(entries.map(entry => ({
+                ...entry,
+                provider: entry.point.provider,
+                sleepDate: entry.point.sleepDate,
+                isNap: false,
+                startTimeMs: entry.point.startTimeMs ?? null,
+                endTimeMs: entry.point.endTimeMs ?? null,
+            })))
+            : [entries];
+        return canonicalGroups.map((fragmentEntries): ReadinessSleepEvidencePoint => {
+            const fragmentPoints = fragmentEntries.map(entry => entry.point);
+            const sortedPoints = [...fragmentPoints].sort((left, right) => (
+                (left.endTimeMs || 0) - (right.endTimeMs || 0)
+                || (left.startTimeMs || 0) - (right.startTimeMs || 0)
+                || left.id.localeCompare(right.id)
+            ));
+            const latest = sortedPoints[sortedPoints.length - 1];
+            const averageHeartRateValues = fragmentPoints
+                .filter(point => point.averageHeartRateSourceKey === latest.averageHeartRateSourceKey)
+                .map(point => point.averageHeartRateBpm)
+                .filter((value): value is number => Number.isFinite(value) && (value as number) > 0);
+            const minimumHeartRateValues = fragmentPoints
+                .filter(point => point.minimumHeartRateSourceKey === latest.minimumHeartRateSourceKey)
+                .map(point => point.minimumHeartRateBpm)
+                .filter((value): value is number => Number.isFinite(value) && (value as number) > 0);
+            const result: ReadinessSleepEvidencePoint = {
+                ...latest,
+                id: sortedPoints.map(point => point.id).join('|'),
+                startTimeMs: Math.min(...fragmentPoints.map(point => point.startTimeMs as number)),
+                endTimeMs: Math.max(...fragmentPoints.map(point => point.endTimeMs as number)),
+                totalSeconds: fragmentPoints.reduce(
+                    (total, point) => total + Math.max(0, point.totalSeconds || 0),
+                    0,
+                ),
+                ...aggregateNightlyHrvEvidence(fragmentPoints, {
+                    requireEveryPoint: latest.provider === SLEEP_PROVIDERS.SuuntoApp
+                        && fragmentPoints.some(point => isSleepAverageHrvSourceKey(point.hrvSourceKey)),
+                }),
+                hrvObservations: undefined,
+                averageHeartRateBpm: averageHeartRateValues.length
+                    ? averageHeartRateValues.reduce((total, value) => total + value, 0)
+                        / averageHeartRateValues.length
+                    : null,
+                minimumHeartRateBpm: minimumHeartRateValues.length
+                    ? Math.min(...minimumHeartRateValues)
+                    : null,
+            };
+            result.hrvObservations = readinessHrvObservations(result);
+            return result;
+        });
     });
 }
 
 function resolveTrainingReadinessSleepDayMs(
     data: Record<string, unknown>,
-    provider: SleepProvider | null,
     endTimeMs: number,
 ): number | null {
-    const storedSleepDate = toSafeString(data.sleepDate);
-    const fallbackDayMs = resolveSleepDateDayMs(storedSleepDate);
-    if (provider !== SLEEP_PROVIDERS.SuuntoApp) {
-        if (storedSleepDate) {
-            return fallbackDayMs;
-        }
-        const endDate = new Date(endTimeMs);
-        return Number.isFinite(endDate.getTime())
-            ? resolveSleepDateDayMs(endDate.toISOString().slice(0, 10))
-            : null;
-    }
-    const offsetSeconds = resolveTrainingSleepTimezoneOffsetSeconds(data, provider);
-    const localEndTimeMs = offsetSeconds === null
-        ? endTimeMs
-        : endTimeMs + (offsetSeconds * 1000);
-    const localEndDate = new Date(localEndTimeMs);
-    const displayDayMs = Number.isFinite(localEndDate.getTime())
-        ? resolveSleepDateDayMs(localEndDate.toISOString().slice(0, 10))
-        : null;
-    return displayDayMs ?? fallbackDayMs;
-}
-
-function parseDateTimeOffsetSeconds(value: unknown): number | null {
-    const stringValue = typeof value === 'string' ? value.trim() : '';
-    if (!stringValue) {
-        return null;
-    }
-    if (/z$/i.test(stringValue)) {
-        return 0;
-    }
-    const match = /([+-])(\d{2}):?(\d{2})$/.exec(stringValue);
-    if (!match) {
-        return null;
-    }
-    const hours = Number(match[2]);
-    const minutes = Number(match[3]);
-    const totalSeconds = ((hours * 60) + minutes) * 60;
-    if (
-        !Number.isFinite(totalSeconds)
-        || minutes >= 60
-        || totalSeconds > TRAINING_RECOVERY_MAX_TIMEZONE_OFFSET_SECONDS
-    ) {
-        return null;
-    }
-    return match[1] === '-' ? -totalSeconds : totalSeconds;
+    return resolveSleepDateDayMs(resolveSleepDisplayDate({
+        ...(data as unknown as SleepSession),
+        endTimeMs,
+    }));
 }
 
 export function buildTrainingReadinessMetricPayload(
@@ -3700,6 +3952,7 @@ export function buildTrainingReadinessMetricPayload(
     const loadPointsByDay = new Map(loadPoints.map(point => [point.dayMs, point]));
     const sleepPoints = resolveTrainingReadinessSleepEvidence(sleepDocs);
     const points: DerivedTrainingReadinessMetricPayload['points'] = [];
+    const legacyPoints: NonNullable<DerivedTrainingReadinessMetricPayload['legacyPoints']> = [];
 
     for (let dayMs = firstDayMs; dayMs <= asOfDayMs; dayMs += DAY_MS) {
         const loadPoint = loadPointsByDay.get(dayMs) || null;
@@ -3733,16 +3986,32 @@ export function buildTrainingReadinessMetricPayload(
             sleepScore: null,
             latestSleepAtMs: null,
             hrvRatio: null,
+            hrvPersonalRange: null,
             averageHeartRateRatio: null,
             minimumHeartRateRatio: null,
             overnightHeartRateRatio: null,
         });
     }
 
+    for (const point of points) {
+        const evaluatedAtMs = point.dayMs === asOfDayMs ? nowMs : point.dayMs + DAY_MS - 1;
+        // Frozen Sleep-only clients must not inherit a new Health-sample-derived value.
+        const legacySleepPoints = sleepPoints.map(sleep => ({ ...sleep,
+            averageHeartRateBpm: sleep.averageHeartRateSourceKey ? null : sleep.averageHeartRateBpm,
+            minimumHeartRateBpm: sleep.minimumHeartRateSourceKey ? null : sleep.minimumHeartRateBpm }));
+        const legacy = buildLegacyReadinessSignals({ form: point.form, rampRate: point.rampRate, sleepPoints: legacySleepPoints, nowMs: evaluatedAtMs });
+        legacyPoints.push(legacy ? { dayMs: point.dayMs, ...legacy } : {
+            dayMs: point.dayMs, form: point.form, rampRate: point.rampRate, totalSignalCount: 4,
+            score: null, label: null, confidence: null, availableSignalCount: 0, baselineEvidenceCount: 0,
+            sleepScore: null, latestSleepAtMs: null, hrvRatio: null,
+            averageHeartRateRatio: null, minimumHeartRateRatio: null, overnightHeartRateRatio: null });
+    }
     return {
         sourceEventCount,
         payload: {
+            legacyPoints,
             formulaVersion: READINESS_FORMULA_VERSION,
+            evidenceVersion: READINESS_EVIDENCE_VERSION,
             dayBoundary: 'UTC',
             asOfDayMs,
             generatedAtMs: nowMs,
@@ -3766,6 +4035,13 @@ function resolveMedian(values: readonly number[]): number | null {
 interface BodyWeightWindowSummary {
     medianKg: number | null;
     recordedDayCount: number;
+}
+
+interface BodyWeightSourceObservations {
+    sourceKind: DerivedBodyWeightTrendSeries['sourceKind'];
+    provider: HealthProvider | null;
+    sourceKey: string;
+    values: Array<{ timeMs: number; value: number }>;
 }
 
 function buildBodyWeightWindowSummary(
@@ -3809,83 +4085,111 @@ function resolveBodyWeightChange(
 export function buildBodyWeightTrendMetricPayload(
     docs: readonly FirestoreQueryDocumentSnapshot[],
     nowMs = Date.now(),
+    healthDocs: readonly FirestoreQueryDocumentSnapshot[] = [],
+    hasAnyBodyWeightHealthRecord = healthDocs.length > 0,
 ): DerivedMetricBuildResult<DerivedBodyWeightTrendMetricPayload> {
     const asOfDayMs = resolveUtcDayStartMs(nowMs);
-    const rawWeightsByDay = new Map<number, number[]>();
-    let sourceEventCount = 0;
+    const observationsBySource = new Map<string, BodyWeightSourceObservations>();
+    let sourceObservationCount = 0;
 
-    docs.forEach((doc) => {
-        const eventData = (doc.data() || {}) as Record<string, unknown>;
-        const weightKg = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataWeight.type));
-        const recordedAtMs = toMillis(eventData.startDate) ?? toMillis(eventData.endDate);
-        if (weightKg === null || recordedAtMs === null) {
+    healthDocs.forEach((doc) => {
+        const record = (doc.data() || {}) as Partial<HealthSourceRecord>;
+        if (record.kind !== HEALTH_SOURCE_RECORD_KINDS.PointMeasurement
+            || !record.source
+            || typeof record.source.accountKey !== 'string'
+            || !Array.isArray(record.metrics)) {
             return;
         }
-        const dayMs = resolveUtcDayStartMs(recordedAtMs);
-        if (dayMs > asOfDayMs) {
-            return;
-        }
-        const existing = rawWeightsByDay.get(dayMs) || [];
-        existing.push(weightKg);
-        rawWeightsByDay.set(dayMs, existing);
-        sourceEventCount += 1;
+        const recordedAtMs = toMillis(record.endTimeMs);
+        if (recordedAtMs === null || recordedAtMs > nowMs) return;
+        record.metrics.forEach((storedEntry) => {
+            let entry;
+            try {
+                entry = decodeHealthMetricSportsLibData(storedEntry);
+            } catch (error) {
+                if (error instanceof SportsLibDataValidationError) return;
+                throw error;
+            }
+            const weightKg = entry.kind === 'value'
+                && entry.metricId === HEALTH_METRIC_IDS.BodyWeight
+                && entry.aggregation === MANUAL_HEALTH_AGGREGATION
+                && typeof entry.canonical?.value === 'number'
+                ? toFinitePositiveNumber(entry.canonical.value)
+                : null;
+            if (weightKg === null) return;
+            const identity = `${record.source!.provider}:${record.source!.accountKey}`;
+            const source = observationsBySource.get(identity) || {
+                sourceKind: 'health-measurement' as const,
+                provider: record.source!.provider,
+                sourceKey: record.source!.accountKey,
+                values: [],
+            };
+            source.values.push({ timeMs: recordedAtMs, value: weightKg });
+            observationsBySource.set(identity, source);
+            sourceObservationCount += 1;
+        });
     });
 
-    const dailyWeights = new Map<number, number>();
-    rawWeightsByDay.forEach((weights, dayMs) => {
-        const medianKg = resolveMedian(weights);
-        if (medianKg !== null) {
-            dailyWeights.set(dayMs, toRoundedNumber(medianKg, 3));
-        }
-    });
-
-    const current7d = buildBodyWeightWindowSummary(
-        dailyWeights,
-        asOfDayMs,
-        BODY_WEIGHT_COMPARISON_WINDOW_DAYS,
-    );
-    const previous7d = buildBodyWeightWindowSummary(
-        dailyWeights,
-        asOfDayMs - (BODY_WEIGHT_COMPARISON_WINDOW_DAYS * DAY_MS),
-        BODY_WEIGHT_COMPARISON_WINDOW_DAYS,
-    );
-    const current28d = buildBodyWeightWindowSummary(dailyWeights, asOfDayMs, BODY_WEIGHT_TREND_DAYS);
-    const previous28d = buildBodyWeightWindowSummary(
-        dailyWeights,
-        asOfDayMs - (BODY_WEIGHT_TREND_DAYS * DAY_MS),
-        BODY_WEIGHT_TREND_DAYS,
-    );
-    const change7d = resolveBodyWeightChange(current7d, previous7d);
-    const change28d = resolveBodyWeightChange(current28d, previous28d);
-    let latestWeightDayMs: number | null = null;
-    let latestWeightKg: number | null = null;
-    for (let dayMs = asOfDayMs; dayMs >= 0; dayMs -= DAY_MS) {
-        const weightKg = dailyWeights.get(dayMs);
-        if (weightKg !== undefined) {
-            latestWeightDayMs = dayMs;
-            latestWeightKg = weightKg;
-            break;
-        }
-    }
-    const firstTrendDayMs = asOfDayMs - ((BODY_WEIGHT_TREND_DAYS - 1) * DAY_MS);
-    const points: DerivedBodyWeightTrendMetricPayload['points'] = [];
-    for (let dayMs = firstTrendDayMs; dayMs <= asOfDayMs; dayMs += DAY_MS) {
-        points.push({
-            dayMs,
-            weightKg: dailyWeights.get(dayMs) ?? null,
+    // Workout profile Weight is a fallback only. If any true Health measurement
+    // exists, no workout-derived value enters the Training trend.
+    if (!hasAnyBodyWeightHealthRecord && sourceObservationCount === 0) {
+        docs.forEach((doc) => {
+            const eventData = (doc.data() || {}) as Record<string, unknown>;
+            const weightKg = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataWeight.type));
+            const recordedAtMs = toMillis(eventData.startDate) ?? toMillis(eventData.endDate);
+            if (weightKg === null || recordedAtMs === null || recordedAtMs > nowMs) return;
+            const sourceKey = resolveTrainingSourceKey(eventData) || 'workout profile';
+            const identity = `workout:${sourceKey}`;
+            const source = observationsBySource.get(identity) || {
+                sourceKind: 'workout-profile-context' as const,
+                provider: null,
+                sourceKey,
+                values: [],
+            };
+            source.values.push({ timeMs: recordedAtMs, value: weightKg });
+            observationsBySource.set(identity, source);
+            sourceObservationCount += 1;
         });
     }
 
-    return {
-        sourceEventCount,
-        payload: {
-            dayBoundary: 'UTC',
-            asOfDayMs,
-            trendDays: BODY_WEIGHT_TREND_DAYS,
-            comparisonWindowDays: BODY_WEIGHT_COMPARISON_WINDOW_DAYS,
-            minimumComparableDayCount: BODY_WEIGHT_MIN_COMPARABLE_DAY_COUNT,
-            latestWeightKg,
-            latestWeightDayMs,
+    const buildSeries = (source: BodyWeightSourceObservations): DerivedBodyWeightTrendSeries => {
+        const rawWeightsByDay = new Map<number, number[]>();
+        source.values.forEach(({ timeMs, value }) => {
+            const dayMs = resolveUtcDayStartMs(timeMs);
+            if (dayMs > asOfDayMs) return;
+            rawWeightsByDay.set(dayMs, [...(rawWeightsByDay.get(dayMs) || []), value]);
+        });
+        const dailyWeights = new Map<number, number>();
+        rawWeightsByDay.forEach((weights, dayMs) => {
+            const medianKg = resolveMedian(weights);
+            if (medianKg !== null) dailyWeights.set(dayMs, toRoundedNumber(medianKg, 3));
+        });
+        const current7d = buildBodyWeightWindowSummary(dailyWeights, asOfDayMs, BODY_WEIGHT_COMPARISON_WINDOW_DAYS);
+        const previous7d = buildBodyWeightWindowSummary(
+            dailyWeights,
+            asOfDayMs - (BODY_WEIGHT_COMPARISON_WINDOW_DAYS * DAY_MS),
+            BODY_WEIGHT_COMPARISON_WINDOW_DAYS,
+        );
+        const current28d = buildBodyWeightWindowSummary(dailyWeights, asOfDayMs, BODY_WEIGHT_TREND_DAYS);
+        const previous28d = buildBodyWeightWindowSummary(
+            dailyWeights,
+            asOfDayMs - (BODY_WEIGHT_TREND_DAYS * DAY_MS),
+            BODY_WEIGHT_TREND_DAYS,
+        );
+        const change7d = resolveBodyWeightChange(current7d, previous7d);
+        const change28d = resolveBodyWeightChange(current28d, previous28d);
+        const latestDay = [...dailyWeights.keys()].filter(dayMs => dayMs <= asOfDayMs).sort((a, b) => b - a)[0];
+        const firstTrendDayMs = asOfDayMs - ((BODY_WEIGHT_TREND_DAYS - 1) * DAY_MS);
+        const points = Array.from({ length: BODY_WEIGHT_TREND_DAYS }, (_, index) => {
+            const dayMs = firstTrendDayMs + index * DAY_MS;
+            return { dayMs, weightKg: dailyWeights.get(dayMs) ?? null };
+        });
+        return {
+            sourceKind: source.sourceKind,
+            provider: source.provider,
+            sourceKey: source.sourceKey,
+            latestWeightKg: latestDay === undefined ? null : dailyWeights.get(latestDay) ?? null,
+            latestWeightDayMs: latestDay ?? null,
             median7dKg: current7d.medianKg === null ? null : toRoundedNumber(current7d.medianKg, 3),
             median28dKg: current28d.medianKg === null ? null : toRoundedNumber(current28d.medianKg, 3),
             change7dKg: change7d.changeKg,
@@ -3895,6 +4199,39 @@ export function buildBodyWeightTrendMetricPayload(
             recordedDayCount7d: current7d.recordedDayCount,
             recordedDayCount28d: current28d.recordedDayCount,
             points,
+        };
+    };
+    const series = [...observationsBySource.values()]
+        .map(buildSeries)
+        .sort((left, right) => `${left.provider || ''}:${left.sourceKey}`.localeCompare(
+            `${right.provider || ''}:${right.sourceKey}`,
+        ));
+    const legacy = series.length === 1 ? series[0] : null;
+    const emptyPoints = Array.from({ length: BODY_WEIGHT_TREND_DAYS }, (_, index) => ({
+        dayMs: asOfDayMs - ((BODY_WEIGHT_TREND_DAYS - 1 - index) * DAY_MS),
+        weightKg: null,
+    }));
+
+    return {
+        sourceEventCount: sourceObservationCount,
+        payload: {
+            dayBoundary: 'UTC',
+            asOfDayMs,
+            trendDays: BODY_WEIGHT_TREND_DAYS,
+            comparisonWindowDays: BODY_WEIGHT_COMPARISON_WINDOW_DAYS,
+            minimumComparableDayCount: BODY_WEIGHT_MIN_COMPARABLE_DAY_COUNT,
+            latestWeightKg: legacy?.latestWeightKg ?? null,
+            latestWeightDayMs: legacy?.latestWeightDayMs ?? null,
+            median7dKg: legacy?.median7dKg ?? null,
+            median28dKg: legacy?.median28dKg ?? null,
+            change7dKg: legacy?.change7dKg ?? null,
+            change7dPercent: legacy?.change7dPercent ?? null,
+            change28dKg: legacy?.change28dKg ?? null,
+            change28dPercent: legacy?.change28dPercent ?? null,
+            recordedDayCount7d: legacy?.recordedDayCount7d ?? 0,
+            recordedDayCount28d: legacy?.recordedDayCount28d ?? 0,
+            points: legacy?.points ?? emptyPoints,
+            series,
         },
     };
 }
@@ -3951,7 +4288,9 @@ function buildTrainingRecoveryWindow(
             && night.sleepDayMs >= windowStartDayMs
             && night.sleepDayMs <= windowEndDayMs)
         : [];
-    const hrvValues = selectedNights.flatMap(night => night.overnightHrvMs === null ? [] : [night.overnightHrvMs]);
+    const hrvSources = new Set(selectedNights.filter(night => night.overnightHrvMs !== null).map(night => night.hrvSourceKey));
+    const hrvValues = hrvSources.size > 1 ? []
+        : selectedNights.flatMap(night => night.overnightHrvMs === null ? [] : [night.overnightHrvMs]);
     const localBedtimes = selectedNights.flatMap(
         night => night.localBedtimeMinutes === null ? [] : [night.localBedtimeMinutes],
     );
@@ -4039,8 +4378,13 @@ function buildTrainingRecoveryComparison(
     const sharedProvider = comparableProviders[0]?.provider || null;
     const currentProvider = sharedProvider || resolveDominantTrainingSleepProvider(nights, currentStartDayMs, currentEndDayMs);
     const referenceProvider = sharedProvider || resolveDominantTrainingSleepProvider(nights, referenceStartDayMs, referenceEndDayMs);
-    const current = buildTrainingRecoveryWindow(nights, currentProvider, currentStartDayMs, currentEndDayMs);
-    const reference = buildTrainingRecoveryWindow(nights, referenceProvider, referenceStartDayMs, referenceEndDayMs);
+    const hrvSources = new Set(nights.filter(night => night.overnightHrvMs !== null && (
+        (night.provider === currentProvider && night.sleepDayMs >= currentStartDayMs && night.sleepDayMs <= currentEndDayMs)
+        || (night.provider === referenceProvider && night.sleepDayMs >= referenceStartDayMs && night.sleepDayMs <= referenceEndDayMs)
+    )).map(night => night.hrvSourceKey));
+    const comparableNights = currentProvider === referenceProvider && hrvSources.size > 1 ? nights.map(night => ({ ...night, overnightHrvMs: null })) : nights;
+    const current = buildTrainingRecoveryWindow(comparableNights, currentProvider, currentStartDayMs, currentEndDayMs);
+    const reference = buildTrainingRecoveryWindow(comparableNights, referenceProvider, referenceStartDayMs, referenceEndDayMs);
     const sameProvider = current.provider !== null && current.provider === reference.provider;
     return {
         current,
@@ -4093,10 +4437,6 @@ export function buildTrainingBuildComparisonMetricPayload(
     sleepDocs: readonly FirestoreQueryDocumentSnapshot[] = [],
 ): DerivedMetricBuildResult<DerivedTrainingBuildComparisonMetricPayload> {
     const asOfDayMs = resolveUtcDayStartMs(nowMs);
-    const sleepNights = resolveTrainingSleepNights(sleepDocs);
-    const recoveryCurrentStartDayMs = asOfDayMs - ((TRAINING_RECOVERY_CURRENT_WINDOW_DAYS - 1) * DAY_MS);
-    const recoveryReferenceEndDayMs = recoveryCurrentStartDayMs - DAY_MS;
-    const recoveryReferenceStartDayMs = recoveryReferenceEndDayMs - ((TRAINING_RECOVERY_REFERENCE_WINDOW_DAYS - 1) * DAY_MS);
     const eventsByDiscipline = groupTrainingBuildActivitiesByDiscipline(activities);
 
     const selections = resolveTrainingBuildBenchmarkSelections(benchmarkSettings);
@@ -4179,13 +4519,7 @@ export function buildTrainingBuildComparisonMetricPayload(
             selection: reference,
             current,
             benchmark,
-            recovery: buildTrainingRecoveryComparison(
-                sleepNights,
-                currentStartDayMs,
-                asOfDayMs,
-                reference.windowStartDayMs,
-                reference.windowEndDayMs,
-            ),
+            recovery: null,
             durabilityComparisons: buildTrainingBuildDurabilityComparisons(current, benchmark),
             suggestedRaces,
             suggestedEvents,
@@ -4194,20 +4528,36 @@ export function buildTrainingBuildComparisonMetricPayload(
 
     return {
         sourceEventCount: activities.filter(isClassifiedTrainingActivitySource).length,
-        payload: {
-            recoveryVersion: DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
+        payload: refreshTrainingBuildComparisonRecovery({
+            intensityPolicyVersion: INTENSITY_POLICY_VERSION,
             dayBoundary: 'UTC',
             asOfDayMs,
             excludesMergedEvents: true,
-            recovery: buildTrainingRecoveryComparison(
-                sleepNights,
-                recoveryCurrentStartDayMs,
-                asOfDayMs,
-                recoveryReferenceStartDayMs,
-                recoveryReferenceEndDayMs,
-            ),
             disciplines,
-        },
+        }, sleepDocs),
+    };
+}
+
+/** Recompute every sleep/HRV field without replaying unchanged workout history. */
+export function refreshTrainingBuildComparisonRecovery(
+    workout: Omit<DerivedTrainingBuildComparisonMetricPayload, 'recovery' | 'recoveryVersion'>,
+    sleepDocs: readonly FirestoreQueryDocumentSnapshot[],
+): DerivedTrainingBuildComparisonMetricPayload {
+    const sleepNights = resolveTrainingSleepNights(sleepDocs);
+    const currentStart = workout.asOfDayMs - ((TRAINING_RECOVERY_CURRENT_WINDOW_DAYS - 1) * DAY_MS);
+    const referenceEnd = currentStart - DAY_MS;
+    const referenceStart = referenceEnd - ((TRAINING_RECOVERY_REFERENCE_WINDOW_DAYS - 1) * DAY_MS);
+    return {
+        ...workout,
+        recoveryVersion: DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
+        recovery: buildTrainingRecoveryComparison(sleepNights, currentStart, workout.asOfDayMs, referenceStart, referenceEnd),
+        disciplines: workout.disciplines.map(discipline => ({
+            ...discipline,
+            recovery: discipline.status === 'ready' && discipline.current && discipline.benchmark
+                ? buildTrainingRecoveryComparison(sleepNights, discipline.current.windowStartDayMs,
+                    discipline.current.windowEndDayMs, discipline.benchmark.windowStartDayMs, discipline.benchmark.windowEndDayMs)
+                : null,
+        })),
     };
 }
 
@@ -4378,76 +4728,66 @@ export function buildTrainingSwimPerformanceMetricPayload(
     };
 }
 
-function buildIntensityDistributionMetricPayload(
-    docs: readonly FirestoreQueryDocumentSnapshot[],
+export function buildIntensityDistributionMetricPayload(
+    activities: readonly DerivedTrainingActivitySource[],
 ): DerivedMetricBuildResult<DerivedIntensityDistributionMetricPayload> {
     const weeklyBuckets = new Map<number, {
-        easySeconds: number;
-        moderateSeconds: number;
-        hardSeconds: number;
-        powerEvents: number;
-        heartRateEvents: number;
+        easySeconds: number; moderateSeconds: number; hardSeconds: number;
+        powerActivityCount: number; heartRateActivityCount: number; excludedActivityCount: number;
+        powerZoneSeconds: number; heartRateZoneSeconds: number;
     }>();
-    let sourceEventCount = 0;
-
-    docs.forEach((doc) => {
-        const eventData = (doc.data() || {}) as Record<string, unknown>;
-        if (isMergedEvent(eventData)) {
-            return;
-        }
-        const startTimeMs = toMillis(eventData.startDate);
-        if (startTimeMs === null) {
-            return;
-        }
-
-        const powerZones = resolveZoneDurations(eventData, POWER_ZONE_STAT_TYPES);
-        const powerTotal = powerZones.reduce((sum, value) => sum + value, 0);
-        const heartRateZones = resolveZoneDurations(eventData, HEART_RATE_ZONE_STAT_TYPES);
-        const heartRateTotal = heartRateZones.reduce((sum, value) => sum + value, 0);
-        const sourceZones = powerTotal > 0 ? powerZones : (heartRateTotal > 0 ? heartRateZones : null);
-        if (!sourceZones) {
-            return;
-        }
-
-        const weekStartMs = resolveUtcWeekStartMs(startTimeMs);
+    const sourceEventIds = new Set<string>();
+    activities.forEach(activity => {
+        const weekStartMs = resolveUtcWeekStartMs(activity.startMs);
         const week = weeklyBuckets.get(weekStartMs) || {
-            easySeconds: 0,
-            moderateSeconds: 0,
-            hardSeconds: 0,
-            powerEvents: 0,
-            heartRateEvents: 0,
+            easySeconds: 0, moderateSeconds: 0, hardSeconds: 0,
+            powerActivityCount: 0, heartRateActivityCount: 0, excludedActivityCount: 0,
+            powerZoneSeconds: 0, heartRateZoneSeconds: 0,
         };
-        week.easySeconds += (sourceZones[0] || 0) + (sourceZones[1] || 0);
-        week.moderateSeconds += (sourceZones[2] || 0) + (sourceZones[3] || 0);
-        week.hardSeconds += (sourceZones[4] || 0) + (sourceZones[5] || 0) + (sourceZones[6] || 0);
-        if (powerTotal > 0) {
-            week.powerEvents += 1;
+        const intensity = resolveRecordedIntensity(activity.activityData);
+        if (intensity) {
+            week.easySeconds += intensity.easySeconds;
+            week.moderateSeconds += intensity.moderateSeconds;
+            week.hardSeconds += intensity.hardSeconds;
+            if (intensity.source === 'power') {
+                week.powerActivityCount += 1;
+                week.powerZoneSeconds += intensity.totalSeconds;
+            } else {
+                week.heartRateActivityCount += 1;
+                week.heartRateZoneSeconds += intensity.totalSeconds;
+            }
+            sourceEventIds.add(activity.eventId);
         } else {
-            week.heartRateEvents += 1;
+            week.excludedActivityCount += 1;
         }
         weeklyBuckets.set(weekStartMs, week);
-        sourceEventCount += 1;
     });
-
-    const weeks: DerivedIntensityDistributionMetricPayload['weeks'] = [...weeklyBuckets.entries()]
-        .sort((left, right) => left[0] - right[0])
+    const buckets = [...weeklyBuckets.entries()].sort((left, right) => left[0] - right[0]);
+    const weeks: DerivedIntensityDistributionMetricPayload['weeks'] = buckets
+        .filter(([, bucket]) => bucket.powerActivityCount + bucket.heartRateActivityCount > 0)
         .map(([weekStartMs, bucket]) => ({
             weekStartMs,
             easySeconds: toRoundedNumber(bucket.easySeconds, 2),
             moderateSeconds: toRoundedNumber(bucket.moderateSeconds, 2),
             hardSeconds: toRoundedNumber(bucket.hardSeconds, 2),
-            source: bucket.powerEvents >= bucket.heartRateEvents ? 'power' : 'heart-rate',
+            // Legacy MCP enum denotes the dominant selected source by activity count.
+            source: bucket.powerActivityCount >= bucket.heartRateActivityCount ? 'power' : 'heart-rate',
         }));
     const latestWeek = weeks[weeks.length - 1];
-    const latestTotal = latestWeek
-        ? latestWeek.easySeconds + latestWeek.moderateSeconds + latestWeek.hardSeconds
-        : 0;
-
+    const latestTotal = latestWeek ? latestWeek.easySeconds + latestWeek.moderateSeconds + latestWeek.hardSeconds : 0;
     return {
-        sourceEventCount,
+        sourceEventCount: sourceEventIds.size,
         payload: {
-            dayBoundary: 'UTC',
-            weeks,
+            intensityPolicyVersion: INTENSITY_POLICY_VERSION,
+            dayBoundary: 'UTC', weeks,
+            coverageWeeks: buckets.map(([weekStartMs, bucket]) => ({
+                weekStartMs,
+                powerActivityCount: bucket.powerActivityCount,
+                heartRateActivityCount: bucket.heartRateActivityCount,
+                excludedActivityCount: bucket.excludedActivityCount,
+                powerZoneSeconds: toRoundedNumber(bucket.powerZoneSeconds, 2),
+                heartRateZoneSeconds: toRoundedNumber(bucket.heartRateZoneSeconds, 2),
+            })),
             latestWeekStartMs: latestWeek?.weekStartMs ?? null,
             latestEasyPercent: latestTotal > 0 ? toRoundedNumber((latestWeek!.easySeconds / latestTotal) * 100, 2) : null,
             latestModeratePercent: latestTotal > 0 ? toRoundedNumber((latestWeek!.moderateSeconds / latestTotal) * 100, 2) : null,
@@ -4475,6 +4815,7 @@ function buildEasyPercentMetricPayload(
     return {
         sourceEventCount,
         payload: {
+            intensityPolicyVersion: INTENSITY_POLICY_VERSION,
             dayBoundary: 'UTC',
             latestWeekStartMs: intensityPayload.latestWeekStartMs,
             value: intensityPayload.latestEasyPercent === null
@@ -4504,6 +4845,7 @@ function buildHardPercentMetricPayload(
     return {
         sourceEventCount,
         payload: {
+            intensityPolicyVersion: INTENSITY_POLICY_VERSION,
             dayBoundary: 'UTC',
             latestWeekStartMs: intensityPayload.latestWeekStartMs,
             value: intensityPayload.latestHardPercent === null
@@ -4757,14 +5099,14 @@ const DERIVED_METRIC_BUILD_REGISTRY: Record<DerivedMetricKind, DerivedMetricBuil
         },
     },
     [DERIVED_METRIC_KINDS.EasyPercent]: {
-        sourceDependencies: ['formDocs'],
+        sourceDependencies: ['formDocs', 'trainingActivityDocs'],
         build: (context) => {
             const distributionBuildResult = context.getIntensityDistributionBuildResult();
             return buildEasyPercentMetricPayload(distributionBuildResult.payload, distributionBuildResult.sourceEventCount);
         },
     },
     [DERIVED_METRIC_KINDS.HardPercent]: {
-        sourceDependencies: ['formDocs'],
+        sourceDependencies: ['formDocs', 'trainingActivityDocs'],
         build: (context) => {
             const distributionBuildResult = context.getIntensityDistributionBuildResult();
             return buildHardPercentMetricPayload(distributionBuildResult.payload, distributionBuildResult.sourceEventCount);
@@ -4794,7 +5136,7 @@ const DERIVED_METRIC_BUILD_REGISTRY: Record<DerivedMetricKind, DerivedMetricBuil
         },
     },
     [DERIVED_METRIC_KINDS.IntensityDistribution]: {
-        sourceDependencies: ['formDocs'],
+        sourceDependencies: ['formDocs', 'trainingActivityDocs'],
         build: (context) => context.getIntensityDistributionBuildResult(),
     },
     [DERIVED_METRIC_KINDS.EfficiencyTrend]: {
@@ -4806,7 +5148,7 @@ const DERIVED_METRIC_BUILD_REGISTRY: Record<DerivedMetricKind, DerivedMetricBuil
         build: (context) => context.getTrainingSummaryBuildResult(),
     },
     [DERIVED_METRIC_KINDS.TrainingCapacity]: {
-        sourceDependencies: ['formDocs', 'trainingActivityDocs'],
+        sourceDependencies: ['formDocs', 'trainingActivityDocs', 'vo2HealthDocs'],
         build: (context) => context.getTrainingCapacityBuildResult(),
     },
     [DERIVED_METRIC_KINDS.TrainingPowerSystems]: {
@@ -4834,7 +5176,7 @@ const DERIVED_METRIC_BUILD_REGISTRY: Record<DerivedMetricKind, DerivedMetricBuil
         build: (context) => context.getTrainingReadinessBuildResult(),
     },
     [DERIVED_METRIC_KINDS.BodyWeightTrend]: {
-        sourceDependencies: ['formDocs'],
+        sourceDependencies: ['formDocs', 'bodyWeightHealthDocs'],
         build: (context) => context.getBodyWeightTrendBuildResult(),
     },
     [DERIVED_METRIC_KINDS.TrainingSwimPerformance]: {
@@ -4855,6 +5197,9 @@ function createDerivedMetricBuildExecutionContext(
     const recoveryNowDocs = sourceDocs.recoveryNowDocs || [];
     const trainingBuildSleepDocs = sourceDocs.trainingBuildSleepDocs || [];
     const trainingReadinessSleepDocs = sourceDocs.trainingReadinessSleepDocs || [];
+    const bodyWeightHealthDocs = sourceDocs.bodyWeightHealthDocs || [];
+    const hasAnyBodyWeightHealthRecord = sourceDocs.hasAnyBodyWeightHealthRecord ?? bodyWeightHealthDocs.length > 0;
+    const vo2HealthDocs = sourceDocs.vo2HealthDocs || [];
     const trainingActivities = sourceDocs.trainingActivities
         ?? joinTrainingActivitySources(sourceDocs.trainingActivityDocs || [], formDocs);
     const trainingBuildBenchmarkSettings = sourceDocs.trainingBuildBenchmarkSettings || {};
@@ -4913,7 +5258,7 @@ function createDerivedMetricBuildExecutionContext(
         if (intensityDistributionBuildResultCache) {
             return intensityDistributionBuildResultCache;
         }
-        intensityDistributionBuildResultCache = buildIntensityDistributionMetricPayload(formDocs);
+        intensityDistributionBuildResultCache = buildIntensityDistributionMetricPayload(trainingActivities);
         return intensityDistributionBuildResultCache;
     };
 
@@ -4945,7 +5290,11 @@ function createDerivedMetricBuildExecutionContext(
         if (trainingCapacityBuildResultCache) {
             return trainingCapacityBuildResultCache;
         }
-        trainingCapacityBuildResultCache = buildTrainingCapacityMetricPayload(trainingActivities, nowMs);
+        trainingCapacityBuildResultCache = buildTrainingCapacityMetricPayload(
+            trainingActivities,
+            nowMs,
+            vo2HealthDocs,
+        );
         return trainingCapacityBuildResultCache;
     };
 
@@ -4981,7 +5330,10 @@ function createDerivedMetricBuildExecutionContext(
         if (trainingBuildComparisonBuildResultCache) {
             return trainingBuildComparisonBuildResultCache;
         }
-        trainingBuildComparisonBuildResultCache = buildTrainingBuildComparisonMetricPayload(
+        trainingBuildComparisonBuildResultCache = sourceDocs.trainingBuildWorkoutSeed ? {
+            sourceEventCount: sourceDocs.trainingBuildWorkoutSeed.sourceEventCount,
+            payload: refreshTrainingBuildComparisonRecovery(sourceDocs.trainingBuildWorkoutSeed.payload, trainingBuildSleepDocs),
+        } : buildTrainingBuildComparisonMetricPayload(
             trainingActivities,
             trainingBuildBenchmarkSettings,
             nowMs,
@@ -5008,7 +5360,12 @@ function createDerivedMetricBuildExecutionContext(
         if (bodyWeightTrendBuildResultCache) {
             return bodyWeightTrendBuildResultCache;
         }
-        bodyWeightTrendBuildResultCache = buildBodyWeightTrendMetricPayload(formDocs, nowMs);
+        bodyWeightTrendBuildResultCache = buildBodyWeightTrendMetricPayload(
+            formDocs,
+            nowMs,
+            bodyWeightHealthDocs,
+            hasAnyBodyWeightHealthRecord,
+        );
         return bodyWeightTrendBuildResultCache;
     };
 
@@ -5027,6 +5384,9 @@ function createDerivedMetricBuildExecutionContext(
         trainingBuildSleepDocs,
         trainingReadinessSleepDocs,
         trainingActivities,
+        bodyWeightHealthDocs,
+        hasAnyBodyWeightHealthRecord,
+        vo2HealthDocs,
         getDailyLoadContext,
         getDerivedLoadPoints,
         getKpiDerivedLoadPoints,
@@ -5055,6 +5415,8 @@ export function resolveDerivedMetricSourceRequirements(
     needsTrainingBuildBenchmarkSettings: boolean;
     needsTrainingBuildSleepDocs: boolean;
     needsTrainingReadinessSleepDocs: boolean;
+    needsBodyWeightHealthDocs: boolean;
+    needsVo2HealthDocs: boolean;
 } {
     let needsFormDocs = false;
     let needsRecoveryNowDocs = false;
@@ -5063,6 +5425,8 @@ export function resolveDerivedMetricSourceRequirements(
     let needsTrainingBuildBenchmarkSettings = false;
     let needsTrainingBuildSleepDocs = false;
     let needsTrainingReadinessSleepDocs = false;
+    let needsBodyWeightHealthDocs = false;
+    let needsVo2HealthDocs = false;
 
     metricKinds.forEach((metricKind) => {
         const definition = DERIVED_METRIC_BUILD_REGISTRY[metricKind];
@@ -5090,6 +5454,12 @@ export function resolveDerivedMetricSourceRequirements(
         if (definition.sourceDependencies.includes('trainingReadinessSleepDocs')) {
             needsTrainingReadinessSleepDocs = true;
         }
+        if (definition.sourceDependencies.includes('bodyWeightHealthDocs')) {
+            needsBodyWeightHealthDocs = true;
+        }
+        if (definition.sourceDependencies.includes('vo2HealthDocs')) {
+            needsVo2HealthDocs = true;
+        }
     });
 
     return {
@@ -5100,6 +5470,8 @@ export function resolveDerivedMetricSourceRequirements(
         needsTrainingBuildBenchmarkSettings,
         needsTrainingBuildSleepDocs,
         needsTrainingReadinessSleepDocs,
+        needsBodyWeightHealthDocs,
+        needsVo2HealthDocs,
     };
 }
 
@@ -5128,8 +5500,29 @@ function getMetricDocRef(uid: string, metricKind: DerivedMetricKind): FirebaseFi
     return admin.firestore().doc(`users/${uid}/${DERIVED_METRICS_COLLECTION_ID}/${getDerivedMetricDocId(metricKind)}`);
 }
 
-async function queueDerivedMetricsTask(uid: string, generation: number): Promise<boolean> {
-    const queued = await enqueueDerivedMetricsTask(uid, generation);
+// Private coordinator scheduling only; metric schemas and source revisions are unchanged.
+const BACKGROUND_BUILD_INTERVAL_MS = 2 * 60_000;
+
+async function backgroundBuildNotBeforeMs(
+    transaction: FirebaseFirestore.Transaction, uid: string, startedAtMs: number | null, nowMs: number,
+): Promise<number> {
+    // Legacy/malformed clocks must never create an unbounded wait.
+    if (startedAtMs === null || !Number.isFinite(startedAtMs) || startedAtMs < 0 || startedAtMs > nowMs) return nowMs;
+    // Once the longest interval has elapsed, metadata cannot delay this build.
+    // Avoid four billed reads and a new read-failure dependency for ordinary work.
+    if (startedAtMs + Math.max(BACKGROUND_BUILD_INTERVAL_MS, IMPORT_BUILD_INTERVAL_MS) <= nowMs) return nowMs;
+    const intervalMs = await derivedImportBuildIntervalMs(transaction, uid, nowMs, BACKGROUND_BUILD_INTERVAL_MS);
+    return Math.max(nowMs, startedAtMs + intervalMs);
+}
+
+async function queueDerivedMetricsTask(uid: string, generation: number, notBeforeMs = 0): Promise<boolean> {
+    const delaySeconds = Math.max(0, Math.ceil((notBeforeMs - Date.now()) / 1000));
+    const queued = delaySeconds > 0
+        ? await enqueueDerivedMetricsTask(uid, generation, delaySeconds)
+        : await enqueueDerivedMetricsTask(uid, generation);
+    if (queued && delaySeconds > 0) {
+        logger.info('[derived-metrics] Scheduled batched rebuild.', { generation, scheduledDelaySeconds: delaySeconds });
+    }
     return queued;
 }
 
@@ -5148,7 +5541,7 @@ async function markDerivedMetricsEnqueueFailed(
     fallbackError: string,
 ): Promise<void> {
     const coordinatorRef = getCoordinatorDocRef(uid);
-    await admin.firestore().runTransaction(async (transaction) => {
+    const committedKinds = await admin.firestore().runTransaction(async (transaction) => {
         const coordinatorSnapshot = await transaction.get(coordinatorRef);
         if (!coordinatorSnapshot.exists) {
             return;
@@ -5168,7 +5561,9 @@ async function markDerivedMetricsEnqueueFailed(
             lastError: toSafeString((error as { message?: unknown } | null)?.message) || fallbackError,
             updatedAtMs: Date.now(),
         }, { merge: true });
+        return coordinator.dirtyMetricKinds;
     });
+    if (committedKinds) recordDerivedMetricCommit('coordinator_commit', 'enqueue_failed', committedKinds);
 }
 
 async function readDerivedMetricsWriteBlocked(
@@ -5248,7 +5643,7 @@ export async function fetchDerivedMetricsEventDocs(uid: string): Promise<Firesto
         .collection('events')
         .select(...DERIVED_METRICS_EVENT_FIELDS)
         .get();
-    return snapshot.docs;
+    return attachEventTrainingLoads(uid, snapshot.docs);
 }
 
 export async function fetchDerivedMetricsActivityDocs(
@@ -5265,6 +5660,66 @@ export async function fetchDerivedMetricsActivityDocs(
         .select(...fields)
         .get();
     return snapshot.docs;
+}
+
+export async function fetchDerivedMetricsHealthDocs(
+    uid: string,
+    metricId: HealthMetricId,
+    startDate: string,
+    endDate: string,
+): Promise<FirestoreQueryDocumentSnapshot[]> {
+    let query = admin.firestore()
+        .collection('users')
+        .doc(uid)
+        .collection(HEALTH_SOURCE_RECORDS_COLLECTION_ID)
+        .where('metricIds', 'array-contains', metricId)
+        .where('calendarDate', '>=', startDate)
+        .where('calendarDate', '<=', endDate);
+    if (metricId === HEALTH_METRIC_IDS.Vo2Max) {
+        // Training uses only manual VO2 references. Keep provider VO2 and unrelated
+        // manual measurements outside the read budget, not just the later projection.
+        query = query.where('source.sourceRecordType', '==', MANUAL_HEALTH_SOURCE_RECORD_TYPE);
+    }
+    const snapshot = await query
+        .orderBy('calendarDate', 'asc')
+        .orderBy(FieldPath.documentId(), 'asc')
+        .select(
+            'kind',
+            'source.provider',
+            'source.accountKey',
+            'source.sourceRecordType',
+            'calendarDate',
+            'endTimeMs',
+            'metrics',
+            'metricIds',
+        )
+        .limit(DERIVED_HEALTH_SOURCE_DOCUMENT_LIMIT + 1)
+        .get();
+    if (snapshot.docs.length > DERIVED_HEALTH_SOURCE_DOCUMENT_LIMIT) {
+        throw new Error('Derived Health source query exceeded its bounded document limit.');
+    }
+    return snapshot.docs;
+}
+
+export async function hasAnyDerivedMetricsHealthRecord(
+    uid: string,
+    metricId: HealthMetricId,
+    startDate: string,
+    endDate: string,
+): Promise<boolean> {
+    const snapshot = await admin.firestore()
+        .collection('users')
+        .doc(uid)
+        .collection(HEALTH_SOURCE_RECORDS_COLLECTION_ID)
+        .where('metricIds', 'array-contains', metricId)
+        .where('calendarDate', '>=', startDate)
+        .where('calendarDate', '<=', endDate)
+        .orderBy('calendarDate', 'asc')
+        .orderBy(FieldPath.documentId(), 'asc')
+        .select('kind')
+        .limit(1)
+        .get();
+    return !snapshot.empty;
 }
 
 export async function fetchTrainingBuildBenchmarkSettings(uid: string): Promise<unknown> {
@@ -5303,6 +5758,7 @@ export async function fetchTrainingBuildSleepDocs(
     activities: readonly DerivedTrainingActivitySource[],
     benchmarkSettings: unknown,
     nowMs = Date.now(),
+    workoutSeed?: TrainingBuildWorkoutSeed | null,
 ): Promise<FirestoreQueryDocumentSnapshot[]> {
     const eventsByDiscipline = groupTrainingBuildActivitiesByDiscipline(activities);
     const selections = resolveTrainingBuildBenchmarkSelections(benchmarkSettings);
@@ -5311,6 +5767,14 @@ export async function fetchTrainingBuildSleepDocs(
         - (((TRAINING_RECOVERY_CURRENT_WINDOW_DAYS + TRAINING_RECOVERY_REFERENCE_WINDOW_DAYS) - 1) * DAY_MS);
     const ranges: TrainingSleepFetchRange[] = [{ startDayMs: recentStartDayMs, endDayMs: asOfDayMs }];
     TRAINING_DISCIPLINES.forEach((discipline) => {
+        if (workoutSeed) {
+            const cached = workoutSeed.payload.disciplines.find(item => item.discipline === discipline);
+            if (cached?.status === 'ready' && cached.current && cached.benchmark) {
+                ranges.push({ startDayMs: cached.current.windowStartDayMs, endDayMs: cached.current.windowEndDayMs },
+                    { startDayMs: cached.benchmark.windowStartDayMs, endDayMs: cached.benchmark.windowEndDayMs });
+            }
+            return;
+        }
         const selection = selections[discipline];
         if (!selection) {
             return;
@@ -5342,9 +5806,10 @@ export async function fetchTrainingBuildSleepDocs(
         .select(...DERIVED_METRICS_TRAINING_SLEEP_FIELDS)
         .get()));
     const docsById = new Map<string, FirestoreQueryDocumentSnapshot>();
-    snapshots.forEach(snapshot => snapshot.docs.forEach((doc) => {
-        docsById.set(doc.id, doc);
-    }));
+    for (const snapshot of snapshots) {
+        const enriched = await supplementNightlyHrvSleepDocuments(uid, snapshot.docs.map(doc => ({ id: doc.id, data: doc.data() })));
+        enriched.forEach(doc => docsById.set(doc.id, { id: doc.id, data: () => doc.data }));
+    }
     return [...docsById.values()].sort((left, right) => left.id.localeCompare(right.id));
 }
 
@@ -5364,7 +5829,8 @@ export async function fetchTrainingReadinessSleepDocs(
         .where('endTimeMs', '<=', nowMs)
         .select(...DERIVED_METRICS_TRAINING_READINESS_SLEEP_FIELDS)
         .get();
-    return snapshot.docs;
+    const enriched = await supplementNightlyHealthSleepDocuments(uid, snapshot.docs.map(doc => ({ id: doc.id, data: doc.data() })));
+    return enriched.map(doc => ({ id: doc.id, data: () => doc.data }));
 }
 
 export interface DerivedFormSnapshotSeed {
@@ -5373,22 +5839,42 @@ export interface DerivedFormSnapshotSeed {
     builtFromEventMutationVersion: number | null;
     sourceEventCount: number;
     sourceDocCount: number;
-    dailyLoads: DerivedFormDailyLoadEntry[];
+    dailyLoads: DerivedFormDailyLoadEntryWithActivityCount[];
+}
+
+export async function fetchTrainingBuildWorkoutSeed(
+    uid: string, context: TrainingBuildWorkoutSeedContext,
+): Promise<TrainingBuildWorkoutSeed | null> {
+    const snapshot = await getMetricDocRef(uid, DERIVED_METRIC_KINDS.TrainingBuildComparison).get();
+    return resolveTrainingBuildWorkoutSeed(snapshot.data(), context);
 }
 
 export async function fetchDerivedFormSnapshotSeed(uid: string): Promise<DerivedFormSnapshotSeed | null> {
     const snapshot = await getMetricDocRef(uid, DERIVED_METRIC_KINDS.Form).get();
     const data = (snapshot.data() || {}) as Record<string, unknown>;
-    const payload = (data.payload && typeof data.payload === 'object')
-        ? data.payload as Record<string, unknown>
-        : {};
+    const payload = resolveDerivedFormMetricPayload(data.payload);
+    const isCount = (value: unknown): value is number => typeof value === 'number'
+        && Number.isSafeInteger(value) && value >= 0;
+    // Normalization is appropriate for display, not for cache admission: dropping
+    // missing/malformed entries here would silently replace real load with zero.
+    if (data.entryType !== DERIVED_METRICS_ENTRY_TYPES.Snapshot || data.metricKind !== DERIVED_METRIC_KINDS.Form
+        || data.status !== 'ready' || data.schemaVersion !== DERIVED_METRIC_SCHEMA_VERSION
+        || !isCount(data.builtFromEventMutationVersion) || !isCount(data.sourceEventCount) || !isCount(data.sourceDocCount)
+        || data.sourceDocCount < data.sourceEventCount || !payload
+        || payload.dailyLoads.length > data.sourceEventCount
+        || (payload.dailyLoads.length === 0) !== (data.sourceEventCount === 0)
+        || !hasMatchingDerivedFormSourceEventCount(payload, data.sourceEventCount)) return null;
     return {
-        status: toSafeString(data.status) || null,
-        schemaVersion: toFiniteNumber(data.schemaVersion),
-        builtFromEventMutationVersion: toFiniteNumber(data.builtFromEventMutationVersion),
-        sourceEventCount: Math.max(0, Math.floor(toFiniteNumber(data.sourceEventCount) || 0)),
-        sourceDocCount: Math.max(0, Math.floor(toFiniteNumber(data.sourceDocCount) || 0)),
-        dailyLoads: normalizeDerivedFormDailyLoads(payload.dailyLoads),
+        status: data.status,
+        schemaVersion: data.schemaVersion,
+        builtFromEventMutationVersion: data.builtFromEventMutationVersion,
+        sourceEventCount: data.sourceEventCount,
+        sourceDocCount: data.sourceDocCount,
+        dailyLoads: payload.dailyLoads.map(entry => ({
+            dayMs: entry.dayMs,
+            load: entry.load,
+            activityCount: entry.activityCount,
+        })),
     };
 }
 
@@ -5418,11 +5904,29 @@ export async function fetchRecoveryLookbackEventDocs(
     return snapshot.docs;
 }
 
+/** Completion only expedites durable pending work; repeated/obsolete events cannot create a rebuild. */
+export async function flushPendingDerivedMetricsAfterHistory(
+    uid: string, runId: string, revision: number, options?: { repairOnly: true },
+): Promise<void> {
+    if (!isConnectionHistoryRunId(runId)
+        || !Number.isSafeInteger(revision) || revision < 0) return;
+    const result = await markDerivedMetricsDirtyAndMaybeQueue(uid, [], {
+        completedHistory: { runId, revision, repairOnly: options?.repairOnly },
+    });
+    if (!result.accepted && result.generation !== null) throw new Error('derived_metrics_history_flush_enqueue_failed');
+}
+
 export async function markDerivedMetricsDirtyAndMaybeQueue(
     uid: string,
     requestedMetricKinds: readonly unknown[] | null | undefined,
     options?: {
         incrementEventMutationVersion?: boolean;
+        // Only internal sleep/HRV ingress may preserve the workout projection.
+        preserveWorkoutInputs?: boolean;
+        // Automatic ingress/freshness probes batch; explicit owner edits retain priority.
+        background?: boolean;
+        // Internal history completion only: promote the pending union without invalidating inputs.
+        completedHistory?: { runId: string; revision: number; repairOnly?: boolean };
     },
 ): Promise<EnsureDerivedMetricsResponse> {
     const metricKinds = normalizeDerivedMetricKinds(requestedMetricKinds);
@@ -5449,13 +5953,19 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
     }
 
     const coordinatorRef = getCoordinatorDocRef(uid);
-    const nowMs = Date.now();
+    let nowMs = Date.now();
 
     let shouldEnqueue = false;
     let generationToQueue: number | null = null;
+    let notBeforeMs = nowMs;
     let blockedByDeletion = false;
 
     await admin.firestore().runTransaction(async (transaction) => {
+        // A transaction retry must not enqueue the decision from an abandoned attempt.
+        shouldEnqueue = false;
+        generationToQueue = null;
+        blockedByDeletion = false;
+        notBeforeMs = nowMs;
         const coordinatorSnapshot = await transaction.get(coordinatorRef);
         if (await readDerivedMetricsWriteBlockedInTransaction(transaction, uid, 'dirty-mark transaction', { metricKinds })) {
             blockedByDeletion = true;
@@ -5464,29 +5974,98 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
             return;
         }
 
-        const coordinator = parseCoordinator(coordinatorSnapshot.data());
-        const nextDirtyMetricKinds = mergeDerivedMetricKinds(coordinator.dirtyMetricKinds, metricKinds);
+        // Contention may outlive another build: compare its start with the current
+        // transaction time, not the timestamp when this request first arrived.
+        nowMs = Date.now();
+        const rawCoordinatorData = coordinatorSnapshot.data();
+        const coordinator = parseCoordinator(rawCoordinatorData);
+        const completedHistory = options?.completedHistory;
+        const flushPending = completedHistory !== undefined;
+        let historyFlushRef: FirebaseFirestore.DocumentReference | undefined;
+        const recordHistoryFlush = (generation: number | null): void => {
+            if (historyFlushRef && completedHistory) transaction.update(historyFlushRef, {
+                derivedMetricsFlush: { revision: completedHistory.revision, generation },
+            });
+        };
+        if (completedHistory) {
+            const history = await transaction.get(admin.firestore().doc(`${CONNECTION_HISTORY_COLLECTION}/${completedHistory.runId}`));
+            const current = history.data();
+            if (!history.exists || current?.userID !== uid || current.processed !== true
+                || current.revision !== completedHistory.revision) return;
+            const receipt = current.derivedMetricsFlush;
+            if (receipt?.revision === completedHistory.revision) {
+                // A lost enqueue response may repair only this event's exact,
+                // still-unclaimed generation. Never promote a later generation.
+                if (Number.isSafeInteger(receipt.generation) && receipt.generation > 0 && receipt.generation === coordinator.generation
+                    && coordinator.dirtyMetricKinds.length
+                    && (coordinator.status === 'queued' || coordinator.status === 'failed')) {
+                    shouldEnqueue = true;
+                    generationToQueue = coordinator.generation;
+                    notBeforeMs = toFiniteNumber(rawCoordinatorData?.buildNotBeforeMs) ?? 0;
+                }
+                return;
+            }
+            if (completedHistory.repairOnly) return;
+            if (!isDerivedImportService(current.serviceName)) return;
+            const [meta] = await transaction.getAll(admin.firestore().doc(`users/${uid}/meta/${current.serviceName}`),
+                { fieldMask: ['connectionHistoryImport'] });
+            const projection = meta.data()?.connectionHistoryImport;
+            // A first delivery can itself be obsolete after a newer import starts.
+            if (projection?.runId !== completedHistory.runId || projection.active !== false) return;
+            historyFlushRef = history.ref;
+            if (!coordinator.dirtyMetricKinds.length) {
+                recordHistoryFlush(null);
+                return;
+            }
+        }
         const isAlreadyQueuedOrProcessing = coordinator.status === 'queued' || coordinator.status === 'processing';
-        const dirtyMetricKindsChanged = !hasSameDerivedMetricKinds(coordinator.dirtyMetricKinds, nextDirtyMetricKinds);
         const coordinatorLikelyStuck = isAlreadyQueuedOrProcessing
             && isDerivedMetricsCoordinatorStuck(coordinator, nowMs);
+        const immediate = options?.background !== true;
+        const promoteQueuedBuild = immediate && coordinator.status === 'queued'
+            && typeof rawCoordinatorData?.buildNotBeforeMs === 'number'
+            && rawCoordinatorData.buildNotBeforeMs > nowMs;
+        const pendingImmediate = coordinator.status === 'processing'
+            && (immediate || rawCoordinatorData?.pendingImmediate === true);
+        const priorityChanged = pendingImmediate && rawCoordinatorData?.pendingImmediate !== true;
+        // Replacing a stuck generation also fences its old worker. Carry its
+        // claimed work forward before clearing processingMetricKinds below.
+        const retainedMetricKinds = coordinatorLikelyStuck && coordinator.status === 'processing'
+            ? mergeDerivedMetricKinds(coordinator.dirtyMetricKinds,
+                resolveInFlightMetricKinds(rawCoordinatorData, coordinator.dirtyMetricKinds))
+            : coordinator.dirtyMetricKinds;
+        const nextDirtyMetricKinds = flushPending ? retainedMetricKinds
+            : mergeDerivedMetricKinds(retainedMetricKinds, metricKinds);
+        const dirtyMetricKindsChanged = !hasSameDerivedMetricKinds(coordinator.dirtyMetricKinds, nextDirtyMetricKinds);
         const shouldIncrementEventMutationVersion = options?.incrementEventMutationVersion === true;
         const nextEventMutationVersion = shouldIncrementEventMutationVersion
             ? coordinator.eventMutationVersion + 1
             : coordinator.eventMutationVersion;
         const eventMutationVersionChanged = nextEventMutationVersion !== coordinator.eventMutationVersion;
+        const invalidateWorkoutInputs = !flushPending
+            && (options?.preserveWorkoutInputs !== true || shouldIncrementEventMutationVersion);
+        const workoutInputsVersion = readWorkoutInputsVersion(coordinatorSnapshot.data())
+            + (invalidateWorkoutInputs ? 1 : 0);
 
         // Coalesce repeated writes during bulk updates:
         // if a user is already queued/processing and the dirty set did not change,
         // avoid writing the coordinator doc again.
-        // Exception: event-write triggers increment the mutation version so completion
-        // freshness can be evaluated against an immutable source revision.
+        // Source mutations and explicit repairs still advance the reuse revision;
+        // only repeated sleep/HRV invalidations can skip that coordinator write.
         if (isAlreadyQueuedOrProcessing
             && !dirtyMetricKindsChanged
             && !coordinatorLikelyStuck
-            && !eventMutationVersionChanged) {
+            && !promoteQueuedBuild
+            && !priorityChanged
+            && !eventMutationVersionChanged
+            && !invalidateWorkoutInputs) {
             shouldEnqueue = false;
             generationToQueue = coordinator.generation;
+            recordHistoryFlush(coordinator.status === 'queued' ? coordinator.generation : null);
+            if (historyFlushRef && coordinator.status === 'queued') {
+                shouldEnqueue = true;
+                notBeforeMs = toFiniteNumber(rawCoordinatorData?.buildNotBeforeMs) ?? 0;
+            }
             return;
         }
 
@@ -5501,15 +6080,13 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
             });
         }
 
-        const nextGeneration = (isAlreadyQueuedOrProcessing && !coordinatorLikelyStuck)
-            ? coordinator.generation
-            : coordinator.generation + 1;
-        const nextStatus = (isAlreadyQueuedOrProcessing && !coordinatorLikelyStuck)
-            ? coordinator.status
-            : 'queued';
-        const shouldResetLifecycleFields = !isAlreadyQueuedOrProcessing || coordinatorLikelyStuck;
-
-        shouldEnqueue = !isAlreadyQueuedOrProcessing || coordinatorLikelyStuck;
+        shouldEnqueue = !isAlreadyQueuedOrProcessing || coordinatorLikelyStuck || promoteQueuedBuild;
+        const nextGeneration = shouldEnqueue ? coordinator.generation + 1 : coordinator.generation;
+        const nextStatus = shouldEnqueue ? 'queued' : coordinator.status;
+        const shouldResetLifecycleFields = shouldEnqueue;
+        // A fixed deadline from the last claim, never a sliding debounce. Recovery is prompt.
+        notBeforeMs = !immediate && coordinator.status === 'idle'
+            ? await backgroundBuildNotBeforeMs(transaction, uid, coordinator.startedAtMs, nowMs) : nowMs;
         generationToQueue = nextGeneration;
 
         const coordinatorUpdatePayload: Record<string, unknown> = {
@@ -5517,9 +6094,12 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
             status: nextStatus,
             generation: nextGeneration,
             eventMutationVersion: nextEventMutationVersion,
+            workoutInputsVersion,
             dirtyMetricKinds: nextDirtyMetricKinds,
             updatedAtMs: nowMs,
+            pendingImmediate: shouldEnqueue ? false : pendingImmediate,
             ...(shouldResetLifecycleFields ? {
+                retryFromGeneration: null,
                 startedAtMs: null,
                 completedAtMs: null,
                 lastError: null,
@@ -5530,9 +6110,11 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
         // coordinators can still be detected and force-requeued.
         if (nextStatus === 'queued' && shouldEnqueue) {
             coordinatorUpdatePayload.requestedAtMs = nowMs;
+            coordinatorUpdatePayload.buildNotBeforeMs = notBeforeMs;
         }
 
         transaction.set(coordinatorRef, coordinatorUpdatePayload, { merge: true });
+        recordHistoryFlush(shouldEnqueue ? nextGeneration : null);
     });
 
     if (blockedByDeletion) {
@@ -5546,7 +6128,7 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
 
     if (shouldEnqueue && generationToQueue !== null) {
         try {
-            await queueDerivedMetricsTask(uid, generationToQueue);
+            await queueDerivedMetricsTask(uid, generationToQueue, notBeforeMs);
         } catch (error) {
             logger.error('[derived-metrics] Failed to enqueue derived metrics task', {
                 uid,
@@ -5583,10 +6165,11 @@ export async function startDerivedMetricsProcessing(
     generation: number,
 ): Promise<StartDerivedMetricsProcessingResult | null> {
     const coordinatorRef = getCoordinatorDocRef(uid);
-    const nowMs = Date.now();
     let startedResult: StartDerivedMetricsProcessingResult | null = null;
+    const followUpRetry = { generation: null as number | null, notBeforeMs: 0 };
 
     await admin.firestore().runTransaction(async (transaction) => {
+        followUpRetry.generation = null;
         const coordinatorSnapshot = await transaction.get(coordinatorRef);
         if (!coordinatorSnapshot.exists) {
             startedResult = null;
@@ -5597,6 +6180,16 @@ export async function startDerivedMetricsProcessing(
         const coordinator = parseCoordinator(rawCoordinatorData);
         if (coordinator.generation !== generation) {
             startedResult = null;
+            // Completion may commit a successor before task creation fails (or
+            // the caller times out). The predecessor's retry can dispatch only
+            // that unclaimed successor, without rebuilding or advancing revisions.
+            if (coordinator.generation === generation + 1
+                && rawCoordinatorData?.retryFromGeneration === generation
+                && (coordinator.status === 'queued' || coordinator.status === 'failed')
+                && !await readDerivedMetricsWriteBlockedInTransaction(transaction, uid, 'follow-up enqueue retry', { generation })) {
+                followUpRetry.generation = coordinator.generation;
+                followUpRetry.notBeforeMs = toFiniteNumber(rawCoordinatorData?.buildNotBeforeMs) ?? 0;
+            }
             return;
         }
 
@@ -5605,6 +6198,9 @@ export async function startDerivedMetricsProcessing(
             return;
         }
 
+        // Reads and transaction retries may wait behind concurrent imports. Start
+        // the build interval at this claim, not at the original request's arrival.
+        const nowMs = Date.now();
         if (coordinator.status === 'processing') {
             // Keep healthy in-flight generations single-flight only.
             if (!isDerivedMetricsCoordinatorStuck(coordinator, nowMs)) {
@@ -5628,12 +6224,14 @@ export async function startDerivedMetricsProcessing(
                 dirtyMetricKinds: inFlightMetricKinds,
                 startedAtMs: nowMs,
                 eventMutationVersion: coordinator.eventMutationVersion,
+                workoutInputsVersion: readWorkoutInputsVersion(rawCoordinatorData),
             };
             return;
         }
 
-        // A generation can only be freshly claimed from queued state.
-        if (coordinator.status !== 'queued') {
+        // A thrown worker failure retains dirty kinds in failed state. Cloud Tasks
+        // retries the same generation; acknowledging it here would lose that retry.
+        if (coordinator.status !== 'queued' && coordinator.status !== 'failed') {
             startedResult = null;
             return;
         }
@@ -5652,46 +6250,65 @@ export async function startDerivedMetricsProcessing(
             return;
         }
 
+        // Retry claims must differ even if the clock has not advanced since failure.
+        const claimedAtMs = Math.max(nowMs, (coordinator.startedAtMs ?? -1) + 1);
         transaction.set(coordinatorRef, {
             entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
             status: 'processing',
             dirtyMetricKinds: [],
             processingMetricKinds: dirtyMetricKinds,
-            startedAtMs: nowMs,
+            retryFromGeneration: null,
+            pendingImmediate: false,
+            buildNotBeforeMs: null,
+            startedAtMs: claimedAtMs,
             updatedAtMs: nowMs,
             lastError: null,
         }, { merge: true });
 
         startedResult = {
             dirtyMetricKinds,
-            startedAtMs: nowMs,
+            startedAtMs: claimedAtMs,
             eventMutationVersion: coordinator.eventMutationVersion,
+            workoutInputsVersion: readWorkoutInputsVersion(rawCoordinatorData),
         };
     });
 
+    if (followUpRetry.generation !== null) {
+        try {
+            await queueDerivedMetricsTask(uid, followUpRetry.generation, followUpRetry.notBeforeMs);
+        } catch (error) {
+            await markDerivedMetricsEnqueueFailed(uid, followUpRetry.generation, error,
+                'follow-up retry enqueue failure', 'enqueue_follow_up_retry_failed');
+            throw error;
+        }
+    }
     return startedResult;
 }
 
 export async function completeDerivedMetricsProcessing(
     uid: string,
     generation: number,
+    claim?: DerivedMetricsProcessingClaim,
 ): Promise<CompleteDerivedMetricsProcessingResult> {
     const coordinatorRef = getCoordinatorDocRef(uid);
     const nowMs = Date.now();
+    let notBeforeMs = nowMs;
     let completion: CompleteDerivedMetricsProcessingResult = {
         requeued: false,
         nextGeneration: null,
         dirtyMetricKinds: [],
     };
 
-    await admin.firestore().runTransaction(async (transaction) => {
+    const observation = await admin.firestore().runTransaction(async (transaction) => {
+        // Firestore may retry after another attempt completes or replaces this claim.
+        completion = { requeued: false, nextGeneration: null, dirtyMetricKinds: [] };
         const coordinatorSnapshot = await transaction.get(coordinatorRef);
         if (!coordinatorSnapshot.exists) {
             return;
         }
 
         const coordinator = parseCoordinator(coordinatorSnapshot.data());
-        if (coordinator.generation !== generation) {
+        if (coordinator.generation !== generation || (claim && !matchesProcessingClaim(coordinatorSnapshot.data(), claim))) {
             return;
         }
 
@@ -5702,12 +6319,17 @@ export async function completeDerivedMetricsProcessing(
         const pendingDirtyMetricKinds = normalizeDerivedMetricKindsStrict(coordinator.dirtyMetricKinds);
         if (pendingDirtyMetricKinds.length) {
             const nextGeneration = coordinator.generation + 1;
+            notBeforeMs = coordinatorSnapshot.data()?.pendingImmediate === true
+                ? nowMs : await backgroundBuildNotBeforeMs(transaction, uid, coordinator.startedAtMs, nowMs);
             transaction.set(coordinatorRef, {
                 entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
                 status: 'queued',
                 generation: nextGeneration,
+                retryFromGeneration: generation,
                 dirtyMetricKinds: pendingDirtyMetricKinds,
                 processingMetricKinds: [],
+                pendingImmediate: false,
+                buildNotBeforeMs: notBeforeMs,
                 requestedAtMs: nowMs,
                 updatedAtMs: nowMs,
                 completedAtMs: null,
@@ -5717,7 +6339,7 @@ export async function completeDerivedMetricsProcessing(
                 nextGeneration,
                 dirtyMetricKinds: pendingDirtyMetricKinds,
             };
-            return;
+            return { outcome: 'requeued' as const, kinds: pendingDirtyMetricKinds };
         }
 
         transaction.set(coordinatorRef, {
@@ -5725,6 +6347,8 @@ export async function completeDerivedMetricsProcessing(
             status: 'idle',
             dirtyMetricKinds: [],
             processingMetricKinds: [],
+            pendingImmediate: false,
+            buildNotBeforeMs: null,
             updatedAtMs: nowMs,
             completedAtMs: nowMs,
             lastError: null,
@@ -5734,7 +6358,10 @@ export async function completeDerivedMetricsProcessing(
             nextGeneration: null,
             dirtyMetricKinds: [],
         };
+        return { outcome: 'settled' as const,
+            kinds: coordinatorSnapshot.data()?.processingMetricKinds };
     });
+    if (observation) recordDerivedMetricCommit('coordinator_commit', observation.outcome, observation.kinds);
 
     if (completion.requeued && completion.nextGeneration !== null) {
         try {
@@ -5744,7 +6371,7 @@ export async function completeDerivedMetricsProcessing(
             })) {
                 return completion;
             }
-            await queueDerivedMetricsTask(uid, completion.nextGeneration);
+            await queueDerivedMetricsTask(uid, completion.nextGeneration, notBeforeMs);
         } catch (error) {
             logger.error('[derived-metrics] Failed to enqueue follow-up derived metrics task', {
                 uid,
@@ -5759,6 +6386,7 @@ export async function completeDerivedMetricsProcessing(
                 'follow-up enqueue failure write',
                 'enqueue_follow_up_failed',
             );
+            throw error;
         }
     }
 
@@ -5770,6 +6398,7 @@ export async function abandonDerivedMetricsProcessingAfterWriteBlock(
     generation: number,
     processedMetricKinds: readonly DerivedMetricKind[],
     logContext: string,
+    claim?: DerivedMetricsProcessingClaim,
 ): Promise<AbandonDerivedMetricsProcessingAfterWriteBlockResult> {
     const db = admin.firestore();
     const normalizedMetricKinds = normalizeDerivedMetricKindsStrict(processedMetricKinds);
@@ -5788,6 +6417,7 @@ export async function abandonDerivedMetricsProcessingAfterWriteBlock(
 
     const coordinatorRef = getCoordinatorDocRef(uid);
     const nowMs = Date.now();
+    let notBeforeMs = nowMs;
     let requeueResult: AbandonDerivedMetricsProcessingAfterWriteBlockResult = {
         cleaned: false,
         requeued: false,
@@ -5798,13 +6428,20 @@ export async function abandonDerivedMetricsProcessingAfterWriteBlock(
         let attemptState: AbandonRequeueAttemptState = 'noop';
 
         await db.runTransaction(async (transaction) => {
+            // A retried transaction may find that completion/promotion already won.
+            // Never enqueue an abandoned attempt with its older (possibly delayed) decision.
+            attemptState = 'noop';
+            notBeforeMs = nowMs;
+            requeueResult = { cleaned: false, requeued: false, nextGeneration: null,
+                dirtyMetricKinds: normalizedMetricKinds };
             const coordinatorSnapshot = await transaction.get(coordinatorRef);
             if (!coordinatorSnapshot.exists) {
                 return;
             }
 
             const coordinator = parseCoordinator(coordinatorSnapshot.data());
-            if (coordinator.generation !== generation || coordinator.status !== 'processing') {
+            if (coordinator.generation !== generation || coordinator.status !== 'processing'
+                || (claim && !matchesProcessingClaim(coordinatorSnapshot.data(), claim))) {
                 return;
             }
 
@@ -5842,12 +6479,17 @@ export async function abandonDerivedMetricsProcessingAfterWriteBlock(
             }
 
             const nextGeneration = coordinator.generation + 1;
+            notBeforeMs = coordinatorSnapshot.data()?.pendingImmediate === true
+                ? nowMs : await backgroundBuildNotBeforeMs(transaction, uid, coordinator.startedAtMs, nowMs);
             transaction.set(coordinatorRef, {
                 entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
                 status: 'queued',
                 generation: nextGeneration,
+                retryFromGeneration: generation,
                 dirtyMetricKinds: retainedDirtyMetricKinds,
                 processingMetricKinds: [],
+                pendingImmediate: false,
+                buildNotBeforeMs: notBeforeMs,
                 requestedAtMs: nowMs,
                 startedAtMs: null,
                 completedAtMs: null,
@@ -5901,7 +6543,7 @@ export async function abandonDerivedMetricsProcessingAfterWriteBlock(
                     '[derived-metrics] Cleaned up derived metrics before write-block follow-up enqueue.',
                 );
             }
-            await queueDerivedMetricsTask(uid, requeueResult.nextGeneration);
+            await queueDerivedMetricsTask(uid, requeueResult.nextGeneration, notBeforeMs);
         } catch (error) {
             logger.error('[derived-metrics] Failed to enqueue write-block follow-up derived metrics task', {
                 uid,
@@ -5923,12 +6565,14 @@ export async function abandonDerivedMetricsProcessingAfterWriteBlock(
                     '[derived-metrics] Cleaned up derived metrics after write-block follow-up enqueue failure.',
                 );
             }
-            await coordinatorRef.set({
-                entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
-                status: 'failed',
-                lastError: toSafeString((error as { message?: unknown } | null)?.message) || 'enqueue_write_block_follow_up_failed',
-                updatedAtMs: Date.now(),
-            }, { merge: true });
+            await markDerivedMetricsEnqueueFailed(
+                uid,
+                requeueResult.nextGeneration,
+                error,
+                'write-block follow-up enqueue failure',
+                'enqueue_write_block_follow_up_failed',
+            );
+            throw error;
         }
     }
 
@@ -5940,19 +6584,20 @@ export async function failDerivedMetricsProcessing(
     generation: number,
     error: unknown,
     processedMetricKinds: readonly DerivedMetricKind[],
+    claim?: DerivedMetricsProcessingClaim,
 ): Promise<void> {
     const coordinatorRef = getCoordinatorDocRef(uid);
     const nowMs = Date.now();
     const errorMessage = toSafeString((error as { message?: unknown } | null)?.message) || toSafeString(error) || 'unknown_error';
 
-    await admin.firestore().runTransaction(async (transaction) => {
+    const committedKinds = await admin.firestore().runTransaction(async (transaction) => {
         const coordinatorSnapshot = await transaction.get(coordinatorRef);
         if (!coordinatorSnapshot.exists) {
             return;
         }
 
         const coordinator = parseCoordinator(coordinatorSnapshot.data());
-        if (coordinator.generation !== generation) {
+        if (coordinator.generation !== generation || (claim && !matchesProcessingClaim(coordinatorSnapshot.data(), claim))) {
             return;
         }
 
@@ -5972,36 +6617,62 @@ export async function failDerivedMetricsProcessing(
             lastError: errorMessage,
             updatedAtMs: nowMs,
         }, { merge: true });
+        return normalizeDerivedMetricKindsStrict(processedMetricKinds);
     });
+    if (committedKinds) recordDerivedMetricCommit('coordinator_commit', 'failed', committedKinds);
+}
+
+async function commitDerivedMetricSnapshotWrites(
+    uid: string,
+    writes: readonly { metricKind: DerivedMetricKind; data: Record<string, unknown> }[],
+    claim?: DerivedMetricsProcessingClaim,
+): Promise<boolean> {
+    const committed = await admin.firestore().runTransaction(async transaction => {
+        if (claim) {
+            const coordinator = await transaction.get(getCoordinatorDocRef(uid));
+            if (!coordinator.exists || !matchesProcessingClaim(coordinator.data(), claim)) return false;
+        }
+        // The deletion guard participates in the same commit, including transaction retries.
+        if (await readDerivedMetricsWriteBlockedInTransaction(transaction, uid, 'snapshot commit')) return false;
+        for (const write of writes) {
+            transaction.set(getMetricDocRef(uid, write.metricKind), write.data, { merge: true });
+        }
+        return true;
+    });
+    if (committed) {
+        for (const outcome of ['ready', 'failed'] as const) {
+            const kinds = writes.filter(write => write.data.status === outcome).map(write => write.metricKind);
+            if (kinds.length) recordDerivedMetricCommit('snapshot_commit', outcome, kinds);
+        }
+    }
+    return committed;
 }
 
 export async function markDerivedMetricSnapshotsBuilding(
     uid: string,
     metricKinds: readonly DerivedMetricKind[],
-): Promise<void> {
+    claim?: DerivedMetricsProcessingClaim,
+): Promise<boolean> {
     if (await readDerivedMetricsWriteBlocked(uid, 'snapshot building write', { metricKinds })) {
-        return;
+        return false;
     }
 
     const nowMs = Date.now();
-    const batch = admin.firestore().batch();
-    metricKinds.forEach((metricKind) => {
-        batch.set(getMetricDocRef(uid, metricKind), {
+    return commitDerivedMetricSnapshotWrites(uid, metricKinds.map(metricKind => ({ metricKind, data: {
             entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot,
             metricKind,
             schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
             status: 'building',
             updatedAtMs: nowMs,
             lastError: null,
-        }, { merge: true });
-    });
-    await batch.commit();
+        } })), claim);
 }
 
 export async function markDerivedMetricSnapshotsFailed(
     uid: string,
     metricKinds: readonly DerivedMetricKind[],
     error: unknown,
+    claim?: DerivedMetricsProcessingClaim,
 ): Promise<void> {
     if (await readDerivedMetricsWriteBlocked(uid, 'snapshot failure write', { metricKinds })) {
         return;
@@ -6009,18 +6680,14 @@ export async function markDerivedMetricSnapshotsFailed(
 
     const nowMs = Date.now();
     const errorMessage = toSafeString((error as { message?: unknown } | null)?.message) || toSafeString(error) || 'unknown_error';
-    const batch = admin.firestore().batch();
-    metricKinds.forEach((metricKind) => {
-        batch.set(getMetricDocRef(uid, metricKind), {
+    await commitDerivedMetricSnapshotWrites(uid, metricKinds.map(metricKind => ({ metricKind, data: {
             entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot,
             metricKind,
             schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
             status: 'failed',
             updatedAtMs: nowMs,
             lastError: errorMessage,
-        }, { merge: true });
-    });
-    await batch.commit();
+        } })), claim);
 }
 
 export async function writeDerivedMetricSnapshotsReady(
@@ -6030,26 +6697,35 @@ export async function writeDerivedMetricSnapshotsReady(
     options?: {
         buildAtMs?: number | null;
         builtFromEventMutationVersion?: number | null;
-        formDailyLoads?: readonly DerivedFormDailyLoadEntry[] | null;
+        formDailyLoads?: readonly DerivedFormDailyLoadEntryWithActivityCount[] | null;
         formSourceEventCount?: number | null;
         formSourceDocCount?: number | null;
+        workoutInputsVersion?: number;
+        claim?: DerivedMetricsProcessingClaim;
     },
-): Promise<void> {
+): Promise<boolean> {
     if (await readDerivedMetricsWriteBlocked(uid, 'snapshot ready write', { metricKinds })) {
-        return;
+        return false;
     }
 
     const nowMs = Number.isFinite(options?.buildAtMs)
         ? options?.buildAtMs as number
         : Date.now();
-    const batch = admin.firestore().batch();
-    const normalizedFormDailyLoads = normalizeDerivedFormDailyLoads(options?.formDailyLoads || []);
+    const writes: { metricKind: DerivedMetricKind; data: Record<string, unknown> }[] = [];
+    const normalizedFormDailyLoads = normalizeDerivedFormDailyLoadsWithActivityCounts(options?.formDailyLoads || []);
     const hasDailyLoadContextOverride = normalizedFormDailyLoads.length > 0
         || Number.isFinite(options?.formSourceEventCount)
         || Number.isFinite(options?.formSourceDocCount);
     const overrideFormSourceEventCount = Number.isFinite(options?.formSourceEventCount)
         ? Math.max(0, Math.floor(options?.formSourceEventCount as number))
         : 0;
+    if (
+        hasDailyLoadContextOverride
+        && normalizedFormDailyLoads.reduce((total, entry) => total + entry.activityCount, 0)
+            !== overrideFormSourceEventCount
+    ) {
+        throw new Error('Derived Form daily activity counts must match sourceEventCount.');
+    }
     const dailyLoadContextOverride = hasDailyLoadContextOverride
         ? buildDailyLoadContextFromDailyLoads(normalizedFormDailyLoads, overrideFormSourceEventCount)
         : null;
@@ -6060,6 +6736,8 @@ export async function writeDerivedMetricSnapshotsReady(
     const trainingActivitySourceDocCount = sourceDocs.trainingActivityDocs?.length || 0;
     const trainingBuildSleepSourceDocCount = sourceDocs.trainingBuildSleepDocs?.length || 0;
     const trainingReadinessSleepSourceDocCount = sourceDocs.trainingReadinessSleepDocs?.length || 0;
+    const bodyWeightHealthSourceDocCount = sourceDocs.bodyWeightHealthDocs?.length || 0;
+    const vo2HealthSourceDocCount = sourceDocs.vo2HealthDocs?.length || 0;
     const buildContext = createDerivedMetricBuildExecutionContext(sourceDocs, nowMs, {
         dailyLoadContextOverride,
     });
@@ -6089,6 +6767,12 @@ export async function writeDerivedMetricSnapshotsReady(
         if (sourceDependencies.includes('trainingReadinessSleepDocs')) {
             sourceDocCount += trainingReadinessSleepSourceDocCount;
         }
+        if (sourceDependencies.includes('bodyWeightHealthDocs')) {
+            sourceDocCount += bodyWeightHealthSourceDocCount;
+        }
+        if (sourceDependencies.includes('vo2HealthDocs')) {
+            sourceDocCount += vo2HealthSourceDocCount;
+        }
         return sourceDocCount;
     };
 
@@ -6097,7 +6781,20 @@ export async function writeDerivedMetricSnapshotsReady(
         buildResult: DerivedMetricBuildResult<TPayload>,
         sourceDocCount: number,
     ): void => {
-        batch.set(getMetricDocRef(uid, metricKind), {
+        const workoutSeed = sourceDocs.trainingBuildWorkoutSeed;
+        const isBuildComparison = metricKind === DERIVED_METRIC_KINDS.TrainingBuildComparison;
+        const workoutInputsReuse = isBuildComparison && Number.isSafeInteger(options?.workoutInputsVersion)
+            ? workoutSeed?.metadata ?? createTrainingBuildWorkoutSeedMetadata(
+                buildResult.payload as DerivedTrainingBuildComparisonMetricPayload,
+                { sourceVersion: options!.workoutInputsVersion!, nowMs,
+                    settingsKey: trainingBuildSettingsKey(resolveTrainingBuildBenchmarkSelections(sourceDocs.trainingBuildBenchmarkSettings)) },
+                buildContext.trainingActivities.map(activity => activity.startMs), formSourceDocCount, trainingActivitySourceDocCount,
+            ) : null;
+        // Source counts describe the result's inputs; worker logs separately count actual reads.
+        const persistedSourceDocCount = isBuildComparison && workoutSeed
+            ? workoutSeed.metadata.formSourceDocCount + workoutSeed.metadata.activitySourceDocCount + 1 + trainingBuildSleepSourceDocCount
+            : sourceDocCount;
+        const snapshotData: Record<string, unknown> = {
             entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot,
             metricKind,
             schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
@@ -6105,10 +6802,19 @@ export async function writeDerivedMetricSnapshotsReady(
             updatedAtMs: nowMs,
             builtFromEventMutationVersion,
             sourceEventCount: buildResult.sourceEventCount,
-            sourceDocCount,
+            sourceDocCount: persistedSourceDocCount,
             payload: buildResult.payload,
             lastError: null,
-        }, { merge: true });
+            ...(isBuildComparison ? { workoutInputsReuse } : {}),
+            ...(metricKind === DERIVED_METRIC_KINDS.TrainingPowerSystems ? {
+                legacyPowerSystemsPolicy1: buildLegacyTrainingPowerSystemsMetricPayload(buildContext.trainingActivities, nowMs).payload,
+            } : {}),
+        };
+        if (metricKind === DERIVED_METRIC_KINDS.TrainingPowerSystems
+            && Buffer.byteLength(JSON.stringify(snapshotData), 'utf8') > DERIVED_TRAINING_POWER_SYSTEMS_MAX_SNAPSHOT_BYTES) {
+            throw new Error('Power-system snapshot exceeds its fixed storage bound.');
+        }
+        writes.push({ metricKind, data: snapshotData });
     };
 
     metricKinds.forEach((metricKind) => {
@@ -6121,7 +6827,7 @@ export async function writeDerivedMetricSnapshotsReady(
         persistBuildResult(metricKind, buildResult, sourceDocCount);
     });
 
-    await batch.commit();
+    return commitDerivedMetricSnapshotWrites(uid, writes, options?.claim);
 }
 
 export function getDefaultDerivedMetricKindsForDashboard(): DerivedMetricKind[] {

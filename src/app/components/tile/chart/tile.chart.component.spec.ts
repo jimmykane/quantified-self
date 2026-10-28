@@ -1,4 +1,7 @@
-import { Component, EventEmitter, Input, NO_ERRORS_SCHEMA, Output } from '@angular/core';
+import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
+import { resolveDashboardChartInfoTooltip } from '../../../helpers/dashboard-chart-info.helper';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import { Component, EventEmitter, Input, NO_ERRORS_SCHEMA, Output, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { readFileSync } from 'node:fs';
@@ -36,6 +39,7 @@ import {
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
+  DASHBOARD_HRV_TREND_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
 } from '../../../helpers/dashboard-special-chart-types';
 import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../../helpers/echarts-tooltip-interaction.helper';
@@ -75,8 +79,9 @@ class MockTileChartActionsComponent {
   @Input() chartTimeInterval?: TimeIntervals;
   @Input() chartDataValueType?: ChartDataValueTypes;
   @Input() showLayoutControls = true;
+  @Input() calendarViewSaving = false;
   @Output() savingChange = new EventEmitter<boolean>();
-  @Output() editInDashboardManager = new EventEmitter<number>();
+  @Output() editTile = new EventEmitter<number>();
 }
 
 @Component({
@@ -104,6 +109,18 @@ class MockChartRangeSelectorComponent {
   @Input() ariaLabel = '';
   @Input() disabled = false;
   @Output() valueChange = new EventEmitter<string>();
+}
+
+@Component({ selector: 'app-activity-calendar-tile', template: '', standalone: false })
+class MockActivityCalendarTileComponent {
+  @Input() user: unknown;
+  @Input() timelineNotes: unknown;
+  @Input() dayContextEnabled = false;
+  @Input() privateHealthEnabled = false;
+  @Input() viewSaving = false;
+  @Input() view: 'month' | '30d' = 'month';
+  @Output() viewChange = new EventEmitter<'month' | '30d'>();
+  @Output() selectedDateKeyChange = new EventEmitter<string>();
 }
 
 @Component({
@@ -149,6 +166,7 @@ class MockPieChartComponent {
   standalone: false
 })
 class MockFormChartComponent {
+  @Input() timelineNotes: TimelineNoteChartContext | null = null;
   @Input() isLoading = false;
   @Input() data: any;
   @Input() darkTheme = false;
@@ -205,6 +223,7 @@ class MockKpiChartComponent {
   standalone: false
 })
 class MockFreshnessForecastChartComponent {
+  @Input() timelineNotes: TimelineNoteChartContext | null = null;
   @Input() isLoading = false;
   @Input() darkTheme = false;
   @Input() forecast: any;
@@ -251,6 +270,9 @@ class MockEfficiencyTrendChartComponent {
   standalone: false
 })
 class MockSleepTrendChartComponent {
+  @Input() timelineNotes: TimelineNoteChartContext | null = null;
+  @Input() displayMode: string;
+  @Input() unitSettings: unknown;
   @Input() isLoading = false;
   @Input() darkTheme = false;
   @Input() sleepTrend: any;
@@ -291,6 +313,18 @@ class MockEventIntensityZonesComponent {
   @Input() mobileTapFeedbackOptions?: unknown;
 }
 
+@Component({ selector: 'app-hrv-chart', template: '', standalone: false })
+class MockHrvChartComponent {
+  @Input() timelineNotes: TimelineNoteChartContext | null = null;
+  @Input() infoTooltip: string;
+  @Input() context: unknown;
+  @Input() unitSettings: unknown;
+  @Input() preferredSource: string;
+  @Input() isLoading = false;
+  @Input() darkTheme = false;
+  @Input() reserveTitleActionSpace = false;
+}
+
 describe('TileChartComponent', () => {
   let fixture: ComponentFixture<TileChartComponent>;
   let component: TileChartComponent;
@@ -303,6 +337,7 @@ describe('TileChartComponent', () => {
         MockTileChartActionsComponent,
         MockDashboardTileEventFiltersComponent,
         MockChartRangeSelectorComponent,
+        MockActivityCalendarTileComponent,
         MockXYChartComponent,
         MockPieChartComponent,
         MockFormChartComponent,
@@ -311,6 +346,7 @@ describe('TileChartComponent', () => {
         MockIntensityDistributionChartComponent,
         MockEfficiencyTrendChartComponent,
         MockSleepTrendChartComponent,
+        MockHrvChartComponent,
         MockPowerCurveChartComponent,
         MockEventIntensityZonesComponent,
       ],
@@ -332,6 +368,28 @@ describe('TileChartComponent', () => {
     const columnsDebugElement = fixture.debugElement.query(By.directive(MockColumnsChartComponent));
     return columnsDebugElement.componentInstance as MockColumnsChartComponent;
   };
+
+  it.each([
+    [DASHBOARD_HRV_TREND_CHART_TYPE, MockHrvChartComponent],
+    [DASHBOARD_FORM_CHART_TYPE, MockFormChartComponent],
+    [DASHBOARD_SLEEP_TREND_CHART_TYPE, MockSleepTrendChartComponent],
+    [DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE, MockFreshnessForecastChartComponent],
+  ])('shares live notes with %s and leaves library previews unannotated', (chartType, chartComponent) => {
+    fixture.componentRef.setInput('chartType', chartType);
+    fixture.detectChanges();
+    const chart = () => fixture.debugElement.query(By.directive(chartComponent)).componentInstance;
+    expect(chart().timelineNotes).toBeNull();
+    const source = signal<TimelineNoteChartContext | null>({ notes: [], ownerUid: 'owner', select: () => {}, reportRange: () => {} });
+    fixture.componentRef.setInput('timelineNotes', source);
+    fixture.detectChanges();
+    expect(chart().timelineNotes).toBe(source());
+    source.set({ ...source()!, notes: [{ id: 'a'.repeat(64), title: 'Trip', category: 'travel', startDate: '2026-09-01', endDate: null, timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 }] });
+    fixture.detectChanges();
+    expect(chart().timelineNotes.notes).toHaveLength(1);
+    fixture.componentRef.setInput('previewMode', true);
+    fixture.detectChanges();
+    expect(chart().timelineNotes).toBeNull();
+  });
 
   const getXYComponent = (): MockXYChartComponent => {
     const xyDebugElement = fixture.debugElement.query(By.directive(MockXYChartComponent));
@@ -493,12 +551,12 @@ describe('TileChartComponent', () => {
     component.chartType = ChartTypes.ColumnsVertical;
     component.showActions = true;
     const emittedOrders: number[] = [];
-    component.editInDashboardManager.subscribe((order) => emittedOrders.push(order));
+    component.editTile.subscribe((order) => emittedOrders.push(order));
 
     fixture.detectChanges();
 
     const actions = getActionsComponent();
-    actions.editInDashboardManager.emit(4);
+    actions.editTile.emit(4);
 
     expect(emittedOrders).toEqual([4]);
   });
@@ -558,11 +616,14 @@ describe('TileChartComponent', () => {
     const chart = getPowerCurveComponent();
     expect(chart.title).toBe('Running Power Curve');
     expect(chart.powerCurve).toBe(powerCurve);
-    expect(chart.infoTooltip).toContain('Power Curve compares');
+    expect(chart.infoTooltip).toBe(resolveDashboardChartInfoTooltip(DASHBOARD_POWER_CURVE_CHART_TYPE));
     expect(chart.reserveTitleActionSpace).toBe(true);
     expect(getEventFiltersComponent()).toBeUndefined();
     const rangeSelector = getRangeSelectorComponents().find(selector => selector.ariaLabel === 'Select Power Curve range');
     expect(rangeSelector?.value).toBe('1y');
+    expect(rangeSelector?.options.map(option => option.value)).toEqual([
+      'thisWeek', 'thisMonth', '14d', '30d', '90d', '1y', '2y', '3y', '4y', 'all',
+    ]);
     const compareSelector = getRangeSelectorComponents().find(selector => selector.ariaLabel === 'Select Power Curve comparison');
     expect(compareSelector).toBeTruthy();
     expect(compareSelector?.value).toBe('best30d');
@@ -935,8 +996,44 @@ describe('TileChartComponent', () => {
     expect(sleepTrend.sleepWindowLabel).toBe('Last 30 days');
     expect(sleepTrend.canNavigateOlder).toBe(true);
     expect(sleepTrend.canNavigateNewer).toBe(false);
-    expect(sleepTrend.infoTooltip).toContain('Sleep Trend');
+    expect(sleepTrend.infoTooltip).toBe(resolveDashboardChartInfoTooltip(DASHBOARD_SLEEP_TREND_CHART_TYPE));
     expect(sleepTrend.reserveTitleActionSpace).toBe(true);
+  });
+
+  it('renders the Health HRV context with shared range controls and user unit preferences', () => {
+    component.user = { ...component.user, settings: { ...component.user?.settings, unitSettings: normalizeUserUnitSettings({}) } } as typeof component.user;
+    component.chartType = DASHBOARD_HRV_TREND_CHART_TYPE;
+    component.sleepTrend = { points: [], latestPoint: null };
+    component.sleepTrendRange = '30d';
+    component.showActions = true;
+    fixture.detectChanges();
+    const chart = fixture.debugElement.query(By.directive(MockHrvChartComponent)).componentInstance as MockHrvChartComponent;
+    expect(chart.infoTooltip).toBe(resolveDashboardChartInfoTooltip(DASHBOARD_HRV_TREND_CHART_TYPE));
+    expect(chart.context).toBe(component.hrvTrend);
+    expect(fixture.debugElement.query(By.directive(MockSleepTrendChartComponent))).toBeNull();
+    expect(chart.unitSettings).toBe(component.user.settings.unitSettings);
+    expect(component.showEventFilters).toBe(false);
+    expect(component.showSleepRangeControls).toBe(true);
+    expect(fixture.nativeElement.querySelector('[aria-label="Show older HRV window"]')).not.toBeNull();
+    fixture.componentRef.setInput('showActions', false); fixture.componentRef.setInput('previewMode', true); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.tile-local-range-navigation')).toBeNull();
+  });
+
+  it('routes HRV header actions only to HRV outputs', () => {
+    component.chartType = DASHBOARD_HRV_TREND_CHART_TYPE;
+    component.hrvTrendRange = '90d'; component.sleepTrendRange = '14d';
+    component.hrvTrendCanNavigateNewer = true; component.sleepTrendCanNavigateNewer = false;
+    component.showActions = true; fixture.detectChanges();
+    const hrvRange = vi.spyOn(component.hrvTrendRangeChange, 'emit');
+    const sleepRange = vi.spyOn(component.sleepTrendRangeChange, 'emit');
+    const hrvNavigation = vi.spyOn(component.hrvTrendNavigate, 'emit');
+    const sleepNavigation = vi.spyOn(component.sleepTrendNavigate, 'emit');
+    component.onSleepRangeSelection('30d');
+    fixture.nativeElement.querySelector('[aria-label="Show newer HRV window"]').click();
+    expect(hrvRange).toHaveBeenCalledWith('30d');
+    expect(hrvNavigation).toHaveBeenCalledWith('newer');
+    expect(sleepRange).not.toHaveBeenCalled(); expect(sleepNavigation).not.toHaveBeenCalled();
+    expect(component.sleepTrendRange).toBe('14d');
   });
 
   it('should emit sleep trend range and navigation events from shared tile header controls', () => {
@@ -1006,6 +1103,45 @@ describe('TileChartComponent', () => {
     expect(fixture.nativeElement.querySelector('app-activity-calendar-tile')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.calendar-route-action')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.tile-event-filter-controls')).toBeNull();
+  });
+
+  it('forwards a selected Calendar date to its dashboard section', () => {
+    component.chartType = DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE;
+    fixture.detectChanges();
+    const selectedDates: string[] = [];
+    component.calendarDateChange.subscribe(dateKey => selectedDates.push(dateKey));
+    const calendar = fixture.debugElement.query(By.directive(MockActivityCalendarTileComponent))
+      .componentInstance as MockActivityCalendarTileComponent;
+    calendar.selectedDateKeyChange.emit('2026-09-09');
+    expect(selectedDates).toEqual(['2026-09-09']);
+  });
+
+  it('keeps the owner calendar header free of a duplicate full-page action', () => {
+    component.chartType = DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE;
+    component.showActions = true;
+    fixture.detectChanges();
+    expect(component.showCalendarRouteAction).toBe(false);
+    expect(fixture.nativeElement.querySelector('.calendar-route-action')).toBeNull();
+  });
+
+  it('forwards Calendar selector changes through the existing settings save and blocks concurrent actions', () => {
+    component.chartType = DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE;
+    component.showActions = true;
+    fixture.detectChanges();
+    const calendar = fixture.debugElement.query(By.directive(MockActivityCalendarTileComponent)).componentInstance as MockActivityCalendarTileComponent;
+    const actions = getActionsComponent();
+    const persisted = vi.spyOn(component.calendarViewChange, 'emit');
+    expect(calendar.view).toBe('month');
+    calendar.viewChange.emit('30d'); fixture.detectChanges();
+    expect(persisted).toHaveBeenCalledExactlyOnceWith('30d');
+    fixture.componentRef.setInput('calendarView', '30d'); fixture.detectChanges();
+    expect(calendar.view).toBe('30d');
+    fixture.componentRef.setInput('calendarViewSaving', true); fixture.detectChanges();
+    expect(actions.calendarViewSaving).toBe(true);
+    expect(calendar.viewSaving).toBe(true);
+    fixture.componentRef.setInput('calendarViewSaving', false);
+    component.onTileActionSaving(true); fixture.detectChanges();
+    expect(calendar.viewSaving).toBe(true);
   });
 
   it('should size the Calendar route action like other compact tile-header buttons', () => {

@@ -69,8 +69,10 @@ describe('serverRoutes', () => {
       'features/supported-activities',
       'features/activity-calendar',
       'features/training-analysis',
+      'features/training-plans',
       'features/training-dashboard',
       'features/activity-map',
+      'features/health',
       'features/mcp-server',
       'features/ai-insights',
       'features/fit-gpx-tcx-file-analyzer',
@@ -79,6 +81,7 @@ describe('serverRoutes', () => {
     expect(PRERENDERED_GUIDE_ROUTES).toEqual([
       'guides',
       'guides/sync-garmin-to-suunto',
+      'guides/sync-garmin-to-wahoo',
       'guides/sync-coros-to-suunto',
       'guides/sync-wahoo-to-suunto',
       'guides/import-activities-to-suunto',
@@ -98,6 +101,10 @@ describe('serverRoutes', () => {
     expect(prerenderedPaths.has('mcp/authorize')).toBe(false);
     expect(prerenderedPaths.has('dashboard')).toBe(false);
     expect(prerenderedPaths.has('health')).toBe(false);
+    expect(prerenderedPaths.has('health/compare')).toBe(false);
+    expect(prerenderedPaths.has('tags')).toBe(false);
+    expect(prerenderedPaths.has('calendar/day/:date')).toBe(false);
+    expect(prerenderedPaths.has('training/plans')).toBe(false);
     expect(prerenderedPaths.has('settings')).toBe(false);
     expect(prerenderedPaths.has('mytracks')).toBe(false);
     expect(prerenderedPaths.has('routes')).toBe(false);
@@ -118,6 +125,7 @@ describe('serverRoutes', () => {
     expect(prerenderedPaths.has('features/supported-activities')).toBe(true);
     expect(prerenderedPaths.has('features/activity-calendar')).toBe(true);
     expect(prerenderedPaths.has('features/training-analysis')).toBe(true);
+    expect(prerenderedPaths.has('features/training-plans')).toBe(true);
     expect(prerenderedPaths.has('features/training-dashboard')).toBe(true);
     expect(prerenderedPaths.has('features/activity-map')).toBe(true);
     expect(prerenderedPaths.has('features/mcp-server')).toBe(true);
@@ -147,6 +155,10 @@ describe('serverRoutes', () => {
     expect(PUBLIC_REDIRECT_ROUTES).toEqual([
       'features/workout-file-comparison',
       'features/sports-watch-benchmark',
+      'membership',
+      'help/getting-started',
+      'help/plans-and-billing',
+      'help/plans-billing',
     ]);
     expect(CLIENT_RENDERED_APP_ROUTES.every(path => !path.includes('**'))).toBe(true);
     expect(fallbackRoute).toMatchObject({
@@ -156,6 +168,13 @@ describe('serverRoutes', () => {
     });
     expect(clientRoutes.find(route => route.path === 'dashboard')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'health')?.status).toBeUndefined();
+    expect(clientRoutes.find(route => route.path === 'health/compare')).toMatchObject({ renderMode: RenderMode.Client });
+    expect(clientRoutes.find(route => route.path === 'training/plans/workout/:workoutId'))
+      .toMatchObject({ renderMode: RenderMode.Client });
+    expect(clientRoutes.find(route => route.path === 'training/plans/plan/:planId'))
+      .toMatchObject({ renderMode: RenderMode.Client });
+    expect(clientRoutes.find(route => route.path === 'training/plans')).toMatchObject({ renderMode: RenderMode.Client });
+    expect(clientRoutes.some(route => route.path === 'plans')).toBe(false);
     expect(clientRoutes.find(route => route.path === 'mcp/authorize')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'pricing')).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'releases')?.status).toBeUndefined();

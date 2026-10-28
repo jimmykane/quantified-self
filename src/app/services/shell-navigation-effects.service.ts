@@ -51,9 +51,10 @@ export class ShellNavigationEffectsService {
       .subscribe((event) => {
         if (event instanceof NavigationStart) {
           this.shouldTriggerNavigationHaptics =
-            this.hasCompletedInitialNavigation && event.navigationTrigger === 'imperative';
+            this.hasCompletedInitialNavigation && event.navigationTrigger === 'imperative'
+            && this.hasNavigationPathChanged(event.url);
           if (this.hasCompletedInitialNavigation && this.hasNavigationPathChanged(event.url)) {
-            this.resetScrollPosition();
+            this.scrollToTop();
           }
           return;
         }
@@ -73,7 +74,7 @@ export class ShellNavigationEffectsService {
         this.lastNavigationPath = this.readNavigationPath(event.urlAfterRedirects);
         const isInitialNavigationEnd = this.updateAnimationState(hasNavigationPathChanged);
         if (!isInitialNavigationEnd && hasNavigationPathChanged) {
-          this.resetScrollPosition();
+          this.scrollToTop();
         }
         this.navigationEndSubject.next();
       });
@@ -122,7 +123,8 @@ export class ShellNavigationEffectsService {
       : animationState;
   }
 
-  private resetScrollPosition(): void {
+  /** Reset the active page, including wizard steps that do not change routes. */
+  scrollToTop(): void {
     const windowRef = this.documentRef.defaultView;
     if (!windowRef) {
       return;

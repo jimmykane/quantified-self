@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'crypto';
 import * as admin from 'firebase-admin';
+import { newEmailDeliveryFields } from '../../email/queue-metadata';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import { HttpsError } from 'firebase-functions/v2/https';
@@ -1055,6 +1056,7 @@ async function runGiftNotificationTransaction(
         const nextMail = nextAttempt === currentAttempt ? currentMail : await transaction.get(nextMailRef);
         if (!nextMail.exists) {
             transaction.create(nextMailRef, {
+                ...newEmailDeliveryFields(),
                 to: resolution.recipient,
                 toUids: [uid],
                 from: TRANSACTIONAL_EMAIL_FROM,
@@ -1240,7 +1242,7 @@ export const previewAdminSubscriptionGift = onAdminCall<
     PreviewAdminSubscriptionGiftResponse
 >({
     region: FUNCTIONS_MANIFEST.previewAdminSubscriptionGift.region,
-    memory: '256MiB',
+    memory: '512MiB',
     secrets: FUNCTION_SECRET_BINDINGS.previewAdminSubscriptionGift,
 }, async request => {
     const input = validatePreviewRequest(request.data);
@@ -1299,7 +1301,7 @@ export const grantAdminSubscriptionGift = onAdminCall<
     GrantAdminSubscriptionGiftResponse
 >({
     region: FUNCTIONS_MANIFEST.grantAdminSubscriptionGift.region,
-    memory: '256MiB',
+    memory: '512MiB',
     timeoutSeconds: 60,
     secrets: FUNCTION_SECRET_BINDINGS.grantAdminSubscriptionGift,
 }, async request => {

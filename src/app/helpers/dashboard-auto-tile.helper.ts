@@ -40,6 +40,7 @@ import {
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
+  DASHBOARD_HRV_TREND_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
   type DashboardCuratedChartType,
   type DashboardKpiChartType,
@@ -77,7 +78,7 @@ export const DASHBOARD_AUTO_TILE_KPI_SOURCE = 'default-kpi';
 
 export type DashboardDefaultCuratedChartType = Exclude<
   DashboardCuratedChartType,
-  typeof DASHBOARD_SLEEP_TREND_CHART_TYPE | typeof DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE
+  typeof DASHBOARD_SLEEP_TREND_CHART_TYPE | typeof DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE | typeof DASHBOARD_HRV_TREND_CHART_TYPE
 >;
 export type DashboardDefaultCuratedAutoChartType = Exclude<DashboardDefaultCuratedChartType, typeof DASHBOARD_POWER_CURVE_CHART_TYPE>;
 

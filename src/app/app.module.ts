@@ -1,3 +1,5 @@
+import { connectFirestoreEmulator } from 'firebase/firestore';
+import { connectStorageEmulator } from 'firebase/storage';
 import { ErrorHandler, LOCALE_ID, NgModule, PLATFORM_ID, inject, provideAppInitializer } from '@angular/core';
 import { GlobalErrorHandler } from './services/global-error-handler.service';
 import { BrowserModule, provideClientHydration, withNoHttpTransferCache } from '@angular/platform-browser';
@@ -7,7 +9,7 @@ import { AppRoutingModule } from './app.routing.module';
 import { provideAnimations } from '@angular/platform-browser/animations';
 import { SideNavComponent } from './components/sidenav/sidenav.component';
 import { environment } from '../environments/environment';
-import { isPlatformBrowser } from '@angular/common';
+import { DOCUMENT, isPlatformBrowser } from '@angular/common';
 import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { provideFirebaseApp, initializeApp } from 'app/firebase/app';
 import { provideAuth, getAuth } from 'app/firebase/auth';
@@ -30,6 +32,7 @@ import { ServiceWorkerModule } from '@angular/service-worker';
 import { maybeConnectAuthEmulator } from './authentication/auth-emulator.config';
 
 import { AppUpdateService } from './services/app.update.service';
+import { AppCheckDiagnosticsService } from './services/app-check-diagnostics.service';
 import { MaintenanceComponent } from './components/maintenance/maintenance.component';
 import { GracePeriodBannerComponent } from './components/grace-period-banner/grace-period-banner.component';
 import { RouteLoaderComponent } from './components/route-loader/route-loader.component';
@@ -42,10 +45,11 @@ import { PublicLayoutComponent } from './components/public-layout/public-layout.
 import { AppRemoteConfigService } from './services/app.remote-config.service';
 import { FirebaseAnalyticsTrackingService } from './services/firebase-analytics-tracking.service';
 
-import { MAT_DATE_LOCALE_PROVIDER, getBrowserLocale } from './shared/adapters/date-locale.config';
+import { MAT_DATE_LOCALE_PROVIDER, getAppLocale } from './shared/adapters/date-locale.config';
 import { APP_STORAGE } from './services/storage/app.storage.token';
 import { MemoryStorage } from './services/storage/memory.storage';
 import { shouldProvideClientHydrationForRuntime } from './shared/public-startup-route';
+import { initializeProductionAnalytics } from './helpers/analytics-runtime.helper';
 
 export const QS_MENU_DEFAULT_OPTIONS: MatMenuDefaultOptions = {
   overlayPanelClass: 'qs-menu-panel',
@@ -56,7 +60,8 @@ export const QS_MENU_DEFAULT_OPTIONS: MatMenuDefaultOptions = {
   backdropClass: 'cdk-overlay-transparent-backdrop'
 };
 
-const enableAppCheck = environment.production || environment.beta || environment.localhost;
+const billingTest = environment.firebase.projectId === 'demo-stripe-billing';
+const enableAppCheck = !billingTest && (environment.production || environment.beta || environment.localhost);
 // `useFetchStreams` is an internal/unsupported Firestore Web SDK option.
 // We scope it behind this local type instead of `@ts-ignore` so usage is explicit and searchable.
 // If Firebase drops or changes this flag in a future release, remove it and re-validate Firestore-heavy flows.
@@ -100,14 +105,27 @@ const hydrationProviders = shouldProvideClientHydrationForRuntime(appDocument, t
     },
     provideHttpClient(withInterceptorsFromDi()),
     provideFirebaseApp(() => initializeApp(environment.firebase)),
+    provideAppInitializer(() => {
+      if (!billingTest) return;
+      const app = getApp();
+      // Profile verification and payment recovery share a separate Lite client.
+      // Connect it before authenticated services start reading during bootstrap.
+      return import('firebase/firestore/lite').then(({ getFirestore, connectFirestoreEmulator }) => {
+        connectFirestoreEmulator(getFirestore(app), '127.0.0.1', 8181);
+      });
+    }),
     ...(enableAppCheck ? [provideAppCheck(() => {
-      if (!isPlatformBrowser(inject(PLATFORM_ID))) {
+      if (billingTest || !isPlatformBrowser(inject(PLATFORM_ID))) {
         return null as unknown as ReturnType<typeof initializeAppCheck>;
       }
 
       const provider = new ReCaptchaV3Provider(environment.firebase.recaptchaSiteKey);
       (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = !environment.production && !environment.beta;
-      return initializeAppCheck(getApp(), { provider, isTokenAutoRefreshEnabled: true });
+      const diagnostics = inject(AppCheckDiagnosticsService);
+      diagnostics.observeInitialRejections();
+      const appCheck = initializeAppCheck(getApp(), { provider, isTokenAutoRefreshEnabled: true });
+      diagnostics.monitor(appCheck);
+      return appCheck;
     })] : []),
     provideAuth(() => {
       const auth = getAuth();
@@ -130,9 +148,15 @@ const hydrationProviders = shouldProvideClientHydrationForRuntime(appDocument, t
         });
       }
 
-      return initializeFirestore(getApp(), firestoreSettings);
+      const firestore = initializeFirestore(getApp(), firestoreSettings);
+      if (billingTest) connectFirestoreEmulator(firestore, '127.0.0.1', 8181);
+      return firestore;
     }),
-    provideStorage(() => getStorage()),
+    provideStorage(() => {
+      const storage = getStorage();
+      if (billingTest) connectStorageEmulator(storage, '127.0.0.1', 9291);
+      return storage;
+    }),
     provideFunctions(() => {
       const functions = getFunctions(undefined, 'europe-west2');
       if (environment.localhost) {
@@ -141,27 +165,23 @@ const hydrationProviders = shouldProvideClientHydrationForRuntime(appDocument, t
       return functions;
     }),
     providePerformance(() => {
-      if (!isPlatformBrowser(inject(PLATFORM_ID))) {
+      if (billingTest || !isPlatformBrowser(inject(PLATFORM_ID))) {
         return null as unknown as ReturnType<typeof getPerformance>;
       }
 
       return getPerformance();
     }),
     provideAnalytics(() => {
-      if (!isPlatformBrowser(inject(PLATFORM_ID))) {
-        return null as unknown as ReturnType<typeof initializeAnalytics>;
-      }
-
-      return initializeAnalytics(getApp(), {
-        config: {
-          app_name: environment.firebase.projectId,
-          app_version: environment.appVersion,
-          debug_mode: environment.localhost
-        }
-      });
+      const browser = isPlatformBrowser(inject(PLATFORM_ID));
+      const document = inject(DOCUMENT);
+      return initializeProductionAnalytics(environment, {
+        isBrowser: browser && !billingTest,
+        href: browser ? document.location?.href ?? '' : '',
+        referrer: browser ? document.referrer : '',
+      }, settings => initializeAnalytics(getApp(), settings)) as ReturnType<typeof initializeAnalytics>;
     }),
     provideRemoteConfig(() => {
-      if (!isPlatformBrowser(inject(PLATFORM_ID))) {
+      if (billingTest || !isPlatformBrowser(inject(PLATFORM_ID))) {
         return null as unknown as ReturnType<typeof getRemoteConfig>;
       }
 
@@ -173,7 +193,7 @@ const hydrationProviders = shouldProvideClientHydrationForRuntime(appDocument, t
     { provide: MAT_MENU_DEFAULT_OPTIONS, useValue: QS_MENU_DEFAULT_OPTIONS },
     { provide: MAT_BOTTOM_SHEET_DEFAULT_OPTIONS, useValue: { autoFocus: 'dialog', panelClass: 'qs-bottom-sheet-container' } },
     MAT_DATE_LOCALE_PROVIDER,
-    { provide: LOCALE_ID, useFactory: getBrowserLocale },
+    { provide: LOCALE_ID, useFactory: getAppLocale },
     {
       provide: APP_STORAGE,
       useFactory: () => {
@@ -185,7 +205,7 @@ const hydrationProviders = shouldProvideClientHydrationForRuntime(appDocument, t
       }
     },
     provideAppInitializer(() => {
-      if (!isPlatformBrowser(inject(PLATFORM_ID))) {
+      if (billingTest || !isPlatformBrowser(inject(PLATFORM_ID))) {
         return;
       }
 

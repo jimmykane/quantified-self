@@ -1,4 +1,4 @@
-import { ACTIVITY_SYNC_ROUTE_IDS, ActivitySyncRouteId } from './activity-sync-routes';
+import { ACTIVITY_SYNC_ROUTE_IDS, ActivityDeliveryRouteId, ActivitySyncRouteId, HISTORICAL_MANUAL_ACTIVITY_ROUTE_IDS } from './activity-sync-routes';
 
 export const ACTIVITY_SYNC_ROUTE_ALLOWED_UIDS: Record<ActivitySyncRouteId, ReadonlyArray<string>> = {
     // Empty allowlist disables UID-gating for the route (production-wide rollout).
@@ -13,13 +13,16 @@ export const ACTIVITY_SYNC_ROUTE_ALLOWED_UIDS: Record<ActivitySyncRouteId, Reado
     [ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_COROSAPI]: [],
 };
 
-export function isActivitySyncRouteUIDAllowlisted(routeId: ActivitySyncRouteId, uid: string): boolean {
+export function isActivitySyncRouteUIDAllowlisted(routeId: ActivityDeliveryRouteId, uid: string): boolean {
     const normalizedUID = `${uid || ''}`.trim();
     if (!normalizedUID) {
         return false;
     }
 
-    const allowlist = ACTIVITY_SYNC_ROUTE_ALLOWED_UIDS[routeId];
+    const allowlist = routeId === HISTORICAL_MANUAL_ACTIVITY_ROUTE_IDS.SuuntoApp
+        || routeId === HISTORICAL_MANUAL_ACTIVITY_ROUTE_IDS.WahooAPI
+        || routeId === HISTORICAL_MANUAL_ACTIVITY_ROUTE_IDS.COROSAPI
+        ? [] : ACTIVITY_SYNC_ROUTE_ALLOWED_UIDS[routeId as ActivitySyncRouteId];
     if (!Array.isArray(allowlist)) {
         return false;
     }

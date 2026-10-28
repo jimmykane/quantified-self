@@ -1,0 +1,1817 @@
+import * as admin from 'firebase-admin';
+import { randomUUID } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
+import { Timestamp } from 'firebase-admin/firestore';
+import * as logger from 'firebase-functions/logger';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { z } from 'zod';
+import { describeTrainingRecipeReview, describeTrainingRecipeSteps } from './training-recipe-review';
+import { findTrainingPrescriptionConflict } from './training-prescription-consistency';
+import { ActivityTypes, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { readSuuntoGuideUnitSettings } from '../training-plans/delivery/store';
+import { assertAssistantRecoveryDurationSeconds, isAssistantWorkoutReviews, type AssistantWorkoutReview, type AssistantWorkoutSnapshot } from '../../../shared/assistant-workout-review';
+import { assessDeliveryCompatibility } from './training-plans.service';
+import {
+  TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID,
+  parseMutateTrainingScheduleRequestV1,
+  parseDeleteTrainingPlanRequestV1,
+  parseScheduledWorkoutV1,
+  parseTrainingPlanStateV1,
+  parseTrainingPlanV1,
+  type DeleteTrainingPlanRequestV1,
+  type ExpectedTrainingScheduleRevision,
+  type MutateTrainingScheduleRequestV1,
+  type ScheduledWorkoutV1,
+  type TrainingPlanV1,
+  type TrainingScheduleMutationOperationV1,
+} from '../../../shared/training-plans';
+import { formatWorkoutEndingV1, parseWorkoutStructureV1, hasAuthoredEarlyLapV1 } from '../../../shared/planned-workout';
+import { isStrengthWorkoutSportV1, parseStrengthWorkoutDetailsV1, projectStrengthWorkoutToV1,
+  strengthProjectionMatchesDetails, type StrengthWorkoutDetailsV1 } from '../../../shared/strength-workout';
+import { PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1, PLANNED_WORKOUT_PROVIDER_IDS,
+  type PlannedWorkoutProviderId } from '../../../shared/planned-workout-providers';
+import { deliverySettingsId, normalizeDeliveryTimeZone, trainingDeliveryLocalDate, TrainingDeliveryContractError,
+  type TrainingDeliveryAction, type TrainingDeliveryPreviewV1 } from '../../../shared/training-provider-delivery';
+import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
+import { assertNoTrainingPlanDeletionInProgress } from '../training-plans/deletion-lock';
+import { applyTrainingScheduleMutation, createEmptyTrainingPlanState, TrainingScheduleMutationError,
+  type TrainingScheduleSnapshotV1 } from '../training-plans/mutation';
+import { TrainingScheduleBatchWriteLimitError, mutateTrainingScheduleBatchForUser,
+  mutateTrainingScheduleForUser, TrainingScheduleOversizedMutationError,
+  hashTrainingScheduleMutationRequest } from '../training-plans/persistence';
+import { BULK_SHIFT_LOCK_ID, abortUnapprovedMcpShift, stageLargeTrainingPlanShiftForUser, StagedShiftApprovalLostError,
+  type StagedShiftMcpAuthorityV1 } from '../training-plans/staged-shift';
+import { applyTrainingPlanDeletion, deleteTrainingPlanForUser,
+  TrainingPlanDeletionResumeRequiredError } from '../training-plans/delete-training-plan';
+import { trainingDeliveryCommand } from '../training-plans/delivery/commands';
+import { productionDeliveryRuntime } from '../training-plans/delivery/runtime';
+import { requiresDeliveryMappingApproval, type DeliveryRuntime } from '../training-plans/delivery/contracts';
+import { decodeOpaqueValue, encodeOpaqueValue, McpDataError } from './data.service';
+import {
+  TRAINING_CHANGE_SCHEMA,
+  TRAINING_PLAN_PHASE_CHANGE_SCHEMA,
+  TRAINING_DELETION_CHANGE_SCHEMA,
+  TRAINING_STRENGTH_INTERNAL_CHANGE_SCHEMA,
+  TRAINING_WORKOUT_V2_CHANGE_SCHEMA, TRAINING_WORKOUT_V3_CHANGE_SCHEMA,
+  TRAINING_DELIVERY_WRITE_SCOPE,
+  TRAINING_PLANS_SCOPE,
+  TRAINING_PLANS_WRITE_SCOPE,
+  TRAINING_WRITE_INPUTS,
+  TRAINING_WRITE_OUTPUTS,
+  TRAINING_CHANGE_STATUS_INPUT,
+  TRAINING_CHANGE_STATUS_OUTPUT,
+} from './training-plans.schemas';
+
+const PROPOSALS = 'trainingMcpProposals';
+const PROPOSAL_LIFETIME_MS = 15 * 60 * 1000;
+const PROPOSAL_RESULT_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
+const APPLY_LEASE_MS = 2 * 60 * 1000;
+const MAX_INPUT_BYTES = 256 * 1024;
+const entityId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/);
+const referencePayload = z.strictObject({ kind: z.enum(['plan', 'workout']), id: entityId,
+  createdAtMs: z.number().int().nonnegative().safe() });
+const proposalPayload = z.strictObject({ kind: z.literal('proposal'), id: entityId,
+  createdAtMs: z.number().int().nonnegative().safe() });
+
+type TrainingChange = z.infer<typeof TRAINING_CHANGE_SCHEMA> | z.infer<typeof TRAINING_STRENGTH_INTERNAL_CHANGE_SCHEMA>
+  | z.infer<typeof TRAINING_WORKOUT_V2_CHANGE_SCHEMA> | z.infer<typeof TRAINING_WORKOUT_V3_CHANGE_SCHEMA> | z.infer<typeof TRAINING_DELETION_CHANGE_SCHEMA>
+  | z.infer<typeof TRAINING_PLAN_PHASE_CHANGE_SCHEMA>;
+type PreviewResult = z.infer<typeof TRAINING_WRITE_OUTPUTS.preview_training_changes> & {
+  phaseReview?: z.infer<typeof TRAINING_WRITE_OUTPUTS.preview_training_plan_phases>['phaseReview'];
+};
+type ApplyResult = z.infer<typeof TRAINING_WRITE_OUTPUTS.apply_training_changes>;
+type ReplacementPreviewResult = z.infer<typeof TRAINING_WRITE_OUTPUTS.preview_garmin_workout_replacement>;
+
+interface StoredProviderOperation {
+  index: number;
+  provider: PlannedWorkoutProviderId;
+  targetType: 'plan' | 'workout';
+  targetId: string;
+  action: 'enable' | 'send' | 'resume' | 'stop' | 'retry' | 'check' | 'approve' | 'replace';
+  timeZone?: string;
+  expectedScheduleRevision: number;
+  expectedScopeRevision: number;
+  expectedSettingsRevision: number;
+  approvalDigest?: string;
+}
+
+type ProviderOperationDraft = Omit<StoredProviderOperation,
+  'expectedScheduleRevision' | 'expectedScopeRevision' | 'expectedSettingsRevision'>;
+type RegularProviderOperationDraft = ProviderOperationDraft & { action: Exclude<StoredProviderOperation['action'], 'replace'> };
+
+interface StoredScheduleOperation {
+  index: number;
+  request: MutateTrainingScheduleRequestV1;
+}
+
+interface StoredPlanDeletion {
+  index: number;
+  request: DeleteTrainingPlanRequestV1;
+}
+
+interface StoredProposal {
+  assistantWorkoutReviews?: AssistantWorkoutReview[];
+  assistantRecoveryDurationSeconds?: number;
+  schemaVersion: 1;
+  uid: string;
+  connectionId: string;
+  accessGeneration: string;
+  requiredScopes: string[];
+  createdAtMs: number;
+  expiresAtMs: number;
+  expireAt: Timestamp;
+  status: 'pending' | 'applying' | 'applied' | 'partially_applied';
+  leaseUntilMs: number | null;
+  nextScheduleOperation: number;
+  scheduleRequests: StoredScheduleOperation[];
+  planDeletion?: StoredPlanDeletion;
+  providerOperations: StoredProviderOperation[];
+  localEntities: Array<{ localKey: string; kind: 'plan' | 'workout'; id: string }>;
+  preview: PreviewResult | ReplacementPreviewResult;
+  changeResults: ApplyResult['changes'];
+  providerResults: ApplyResult['providers'];
+  result?: ApplyResult;
+  approvedAtMs?: number;
+  cancelledAtMs?: number;
+}
+
+export interface TrainingWriteInput {
+  uid: string;
+  connectionId: string;
+  scopes: readonly string[];
+  arguments: unknown;
+}
+
+export interface TrainingWriteDependencies {
+  db: FirebaseFirestore.Firestore;
+  runtime: DeliveryRuntime;
+  now(): number;
+  randomId(): string;
+  monotonicNow?: () => number;
+}
+
+function defaultDependencies(): TrainingWriteDependencies {
+  const db = admin.firestore();
+  return { db, runtime: productionDeliveryRuntime(db), now: Date.now, randomId: randomUUID };
+}
+
+function invalid(message: string): never {
+  throw new McpDataError('invalid_request', message);
+}
+
+function unavailable(message = 'Training changes cannot be prepared safely. Try again later.'): never {
+  throw new McpDataError('temporarily_unavailable', message);
+}
+
+function publicErrorMessage(error: unknown): string | null {
+  if (error instanceof McpDataError || error instanceof TrainingScheduleMutationError
+    || error instanceof TrainingDeliveryContractError || error instanceof HttpsError) {
+    return error.message.slice(0, 500);
+  }
+  return null;
+}
+
+function assertBytes(value: unknown): void {
+  if (Buffer.byteLength(JSON.stringify(value), 'utf8') > MAX_INPUT_BYTES) {
+    throw new McpDataError('query_too_large', 'The Training proposal exceeds the 256 KiB input limit. Split it into smaller changes.');
+  }
+}
+
+function requiredScopes(changes: readonly TrainingChange[]): string[] {
+  const result = [TRAINING_PLANS_SCOPE];
+  if (changes.some(change => change.kind !== 'provider-delivery')) result.push(TRAINING_PLANS_WRITE_SCOPE);
+  if (changes.some(change => change.kind === 'provider-delivery')) result.push(TRAINING_DELIVERY_WRITE_SCOPE);
+  return result;
+}
+
+function permissionMode(required: readonly string[]): 'schedule' | 'delivery' | 'combined' {
+  const schedule = required.includes(TRAINING_PLANS_WRITE_SCOPE);
+  const delivery = required.includes(TRAINING_DELIVERY_WRITE_SCOPE);
+  return schedule && delivery ? 'combined' : schedule ? 'schedule' : 'delivery';
+}
+
+function assertProviderActionsLast(changes: readonly TrainingChange[]): void {
+  if (changes.some(change => change.kind === 'delete-plan') && changes.length !== 1) {
+    invalid('Plan deletion must be reviewed and approved as the only change in a proposal.');
+  }
+  let providerActionSeen = false;
+  for (const change of changes) {
+    if (change.kind === 'provider-delivery') providerActionSeen = true;
+    else if (providerActionSeen) {
+      invalid('Provider delivery actions must follow all plan and workout changes so the confirmation order stays exact.');
+    }
+  }
+}
+
+function assertScopes(granted: readonly string[], required: readonly string[]): void {
+  const missing = required.filter(scope => !granted.includes(scope));
+  if (missing.length) invalid(`Missing required permission: ${missing.join(', ')}. Reauthorize this connection.`);
+}
+
+function accessGeneration(data: FirebaseFirestore.DocumentData): string {
+  return JSON.stringify([data.grantId ?? null, data.createdAtMs ?? null, [...(Array.isArray(data.scopes) ? data.scopes : [])].sort()]);
+}
+
+export async function assertAuthorityInTransaction(
+  deps: Pick<TrainingWriteDependencies, 'db' | 'now'>,
+  tx: FirebaseFirestore.Transaction,
+  uid: string,
+  connectionId: string,
+  required: readonly string[],
+  expectedGeneration?: string,
+  expectedAssistantProposalRef?: string,
+  allowActivePlanDeletion = false,
+): Promise<string> {
+  const user = deps.db.collection('users').doc(uid);
+  if ((await getUserDeletionGuardStateInTransaction(deps.db, tx, uid, deps.now())).shouldSkip) {
+    invalid('This account is unavailable or being deleted.');
+  }
+  const stateRef = user.collection('trainingPlanState').doc('current');
+  if (!allowActivePlanDeletion) await assertNoTrainingPlanDeletionInProgress(tx, stateRef);
+  if (connectionId.startsWith('first-party-assistant-v1:')) {
+    const conversationId = connectionId.slice('first-party-assistant-v1:'.length);
+    if (!conversationId) invalid('The Assistant Training permission generation is unavailable.');
+    const conversation = await tx.get(user.collection('assistantConversations').doc('active'));
+    const data = conversation.data() ?? {};
+    const authorized = conversation.exists
+      && data.conversationId === conversationId
+      && data.trainingPlansEnabled === true
+      && (!required.includes(TRAINING_PLANS_WRITE_SCOPE) || data.trainingPlanChangesEnabled === true)
+      && (!required.includes(TRAINING_DELIVERY_WRITE_SCOPE) || data.trainingDeliveryEnabled === true);
+    if (!authorized) invalid('The Assistant Training permissions changed. Review the proposal again.');
+    if (expectedAssistantProposalRef
+      && data.pendingTrainingProposal?.proposalRef !== expectedAssistantProposalRef) {
+      invalid('This Assistant Training proposal is no longer current. Review the latest proposal.');
+    }
+    const generation = JSON.stringify([conversationId, data.trainingPlanChangesEnabled === true,
+      data.trainingDeliveryEnabled === true]);
+    if (expectedGeneration !== undefined && generation !== expectedGeneration) {
+      invalid('The Assistant Training permissions changed. Review the proposal again.');
+    }
+    return generation;
+  }
+  if (connectionId === 'first-party-assistant-v1') {
+    invalid('The Assistant Training permission generation is unavailable.');
+  }
+  const connection = await tx.get(user.collection('mcpConnections').doc(connectionId));
+  const data = connection.data() ?? {};
+  if (!connection.exists || data.revokedAtMs != null || ![undefined, 'active'].includes(data.status)
+    || !Array.isArray(data.scopes) || required.some(scope => !data.scopes.includes(scope))) {
+    invalid('This MCP connection no longer has the required Training permissions.');
+  }
+  const generation = accessGeneration(data);
+  if (expectedGeneration !== undefined && generation !== expectedGeneration) {
+    invalid('The MCP permission grant changed. Prepare the Training change again.');
+  }
+  return generation;
+}
+
+/** Reconstruct approval from a private proposal on every staged final commit, including worker retries. */
+export async function approvedStagedShiftProposalInTransaction(
+  db: FirebaseFirestore.Firestore,
+  tx: FirebaseFirestore.Transaction,
+  uid: string,
+  authority: StagedShiftMcpAuthorityV1,
+  request: MutateTrainingScheduleRequestV1,
+  nowMs: number,
+): Promise<{ ref: FirebaseFirestore.DocumentReference; proposal: StoredProposal } | null> {
+  let decoded: Record<string, unknown>;
+  try {
+    decoded = decodeOpaqueValue('training_proposal', authority.proposalRef, uid,
+      authority.connectionId, 'Training proposal');
+  } catch { return null; }
+  const boundRef = proposalPayload.safeParse(decoded);
+  if (!boundRef.success || boundRef.data.id !== authority.proposalId
+    || boundRef.data.createdAtMs !== authority.proposalCreatedAtMs) return null;
+  const ref = db.collection('users').doc(uid).collection(PROPOSALS).doc(authority.proposalId);
+  const snapshot = await tx.get(ref);
+  const proposal = snapshot.data() as StoredProposal | undefined;
+  if (!proposal || proposal.schemaVersion !== 1 || proposal.uid !== uid
+    || proposal.connectionId !== authority.connectionId
+    || proposal.createdAtMs !== authority.proposalCreatedAtMs
+    || !Number.isSafeInteger(proposal.expiresAtMs) || proposal.expiresAtMs <= nowMs
+    || proposal.accessGeneration !== authority.accessGeneration
+    || JSON.stringify(proposal.requiredScopes) !== JSON.stringify(authority.requiredScopes)
+    || !Number.isSafeInteger(proposal.approvedAtMs)
+    || proposal.cancelledAtMs !== undefined
+    || !['pending', 'applying'].includes(proposal.status)
+    || proposal.result
+    || !Array.isArray(proposal.scheduleRequests) || !Array.isArray(proposal.changeResults)
+    || proposal.nextScheduleOperation !== authority.scheduleIndex) return null;
+  const storedRequest = proposal.scheduleRequests[authority.scheduleIndex]?.request;
+  if (!storedRequest || storedRequest.mutationId !== request.mutationId) return null;
+  try {
+    if (hashTrainingScheduleMutationRequest(storedRequest) !== hashTrainingScheduleMutationRequest(request)) return null;
+  } catch { return null; }
+  try {
+    await assertAuthorityInTransaction({ db, now: () => nowMs }, tx, uid, authority.connectionId,
+      authority.requiredScopes, authority.accessGeneration,
+      authority.connectionId.startsWith('first-party-assistant-v1:') ? authority.proposalRef : undefined, true);
+  } catch (error) {
+    if (error instanceof McpDataError) return null;
+    throw error;
+  }
+  return { ref, proposal };
+}
+
+export function completeApprovedStagedShiftInTransaction(
+  tx: FirebaseFirestore.Transaction,
+  approved: { ref: FirebaseFirestore.DocumentReference; proposal: StoredProposal },
+  authority: StagedShiftMcpAuthorityV1,
+  request: MutateTrainingScheduleRequestV1,
+): void {
+  const stored = approved.proposal.scheduleRequests[authority.scheduleIndex];
+  tx.update(approved.ref, {
+    nextScheduleOperation: authority.scheduleIndex + 1,
+    changeResults: [...approved.proposal.changeResults, { index: stored.index, kind: request.operation.kind,
+      status: 'applied', message: describeOperation(request.operation) }],
+    status: 'pending', leaseUntilMs: null,
+  });
+}
+
+async function loadSnapshot(
+  deps: TrainingWriteDependencies,
+  uid: string,
+  connectionId: string,
+  required: readonly string[],
+): Promise<{ snapshot: TrainingScheduleSnapshotV1; accessGeneration: string; units: UserUnitSettingsInterface | null }> {
+  const user = deps.db.collection('users').doc(uid);
+  return deps.db.runTransaction(async tx => {
+    const generation = await assertAuthorityInTransaction(deps, tx, uid, connectionId, required);
+    const [stateDoc, plansDocs, workoutsDocs, unitDocs] = await Promise.all([
+      tx.get(user.collection('trainingPlanState').doc('current')),
+      tx.get(user.collection('trainingPlans')),
+      tx.get(user.collection('scheduledWorkouts').where('lifecycle', 'in', ['planned', 'skipped'])),
+      tx.getAll(user, { fieldMask: ['settings.unitSettings'] }),
+    ]);
+    const plans = new Map<string, TrainingPlanV1>();
+    plansDocs.docs.forEach(doc => {
+      const plan = parseTrainingPlanV1(doc.data());
+      if (plan.id !== doc.id) unavailable();
+      plans.set(plan.id, plan);
+    });
+    const workouts = new Map<string, ScheduledWorkoutV1>();
+    workoutsDocs.docs.forEach(doc => {
+      const workout = parseScheduledWorkoutV1(doc.data());
+      if (workout.id !== doc.id) unavailable();
+      workouts.set(workout.id, workout);
+    });
+    const strengthWorkouts = [...workouts.values()].filter(workout => isStrengthWorkoutSportV1(workout.structure.sport));
+    const strengthDocs = strengthWorkouts.length ? await tx.getAll(...strengthWorkouts.map(workout =>
+      user.collection('scheduledWorkouts').doc(workout.id).collection('strengthDetails').doc('current'))) : [];
+    const strengthDetails = new Map<string, StrengthWorkoutDetailsV1>();
+    strengthDocs.forEach((doc, index) => {
+      const workout = strengthWorkouts[index];
+      if (!doc.exists) {
+        if (workout.structure.sport === ActivityTypes.StrengthTraining) unavailable();
+        return;
+      }
+      const details = parseStrengthWorkoutDetailsV1(doc.data());
+      if (details.workoutId !== workout.id || !strengthProjectionMatchesDetails(workout.structure, details)) unavailable();
+      strengthDetails.set(workout.id, details);
+    });
+    return { accessGeneration: generation, units: unitDocs[0].get('settings.unitSettings') ?? null, snapshot: {
+      state: stateDoc.exists ? parseTrainingPlanStateV1(stateDoc.data()) : createEmptyTrainingPlanState(),
+      plans, workouts, strengthDetails,
+    } };
+  }, { readOnly: true });
+}
+
+function safeEntityId(prefix: 'plan' | 'workout', randomId: string): string {
+  return `${prefix}-mcp-${randomId.replace(/[^A-Za-z0-9_-]/g, '')}`.slice(0, 128);
+}
+
+function resolveReference(
+  target: { ref: string } | { localKey: string },
+  expectedKind: 'plan' | 'workout',
+  input: Pick<TrainingWriteInput, 'uid' | 'connectionId'>,
+  snapshot: TrainingScheduleSnapshotV1,
+  locals: Map<string, { kind: 'plan' | 'workout'; id: string }>,
+): string {
+  if ('localKey' in target) {
+    const local = locals.get(target.localKey);
+    if (!local || local.kind !== expectedKind) invalid(`Unknown ${expectedKind} localKey ${target.localKey}.`);
+    return local.id;
+  }
+  let decoded: Record<string, unknown>;
+  try { decoded = decodeOpaqueValue('training_read', target.ref, input.uid, input.connectionId, 'Training reference'); }
+  catch { invalid('A Training reference is invalid for this connection.'); }
+  const parsed = referencePayload.safeParse(decoded!);
+  if (!parsed.success || parsed.data.kind !== expectedKind) invalid(`Expected a ${expectedKind} reference.`);
+  const entity = expectedKind === 'plan' ? snapshot.plans.get(parsed.data.id) : snapshot.workouts.get(parsed.data.id);
+  if (!entity || entity.createdAtMs !== parsed.data.createdAtMs) invalid(`The referenced ${expectedKind} is no longer available.`);
+  return parsed.data.id;
+}
+
+function expectedRevisions(snapshot: TrainingScheduleSnapshotV1, operation: TrainingScheduleMutationOperationV1): ExpectedTrainingScheduleRevision[] {
+  const expected: ExpectedTrainingScheduleRevision[] = [{ scope: 'state', id: 'current', revision: snapshot.state.revision }];
+  const addPlan = (planId: string | null | undefined) => {
+    if (!planId || expected.some(item => item.scope === 'plan' && item.id === planId)) return;
+    const plan = snapshot.plans.get(planId);
+    if (plan) expected.push({ scope: 'plan', id: planId, revision: plan.revision });
+  };
+  const addWorkout = (workoutId: string) => {
+    const workout = snapshot.workouts.get(workoutId);
+    if (workout) expected.push({ scope: 'workout', id: workoutId, revision: workout.revision });
+    return workout;
+  };
+  switch (operation.kind) {
+    case 'create-plan': if (operation.activate) addPlan(snapshot.state.activePlanId); break;
+    case 'rename-plan': case 'set-plan-color': case 'set-plan-phases': case 'shift-plan': addPlan(operation.planId); break;
+    case 'set-plan-lifecycle': addPlan(operation.planId); if (operation.lifecycle === 'active') addPlan(snapshot.state.activePlanId); break;
+    case 'create-workout': case 'bulk-create-workouts': addPlan(operation.planId); break;
+    case 'update-workout': case 'move-workout': {
+      const current = addWorkout(operation.workoutId); addPlan(current?.planId); addPlan(operation.planId); break;
+    }
+    case 'copy-workout': addWorkout(operation.sourceWorkoutId); addPlan(operation.planId); break;
+    case 'set-workout-lifecycle': case 'delete-workout': case 'permanently-delete-workout': {
+      const current = addWorkout(operation.workoutId); addPlan(current?.planId); break;
+    }
+  }
+  if (expected.length > 4) invalid('This change touches too many revision scopes. Split it into smaller operations.');
+  return expected;
+}
+
+function describeProviderDeletion(removePastProviderCopies: boolean): string {
+  return removePastProviderCopies
+    ? 'Request removal of eligible service copies, including older uncompleted copies. Completed activities stay untouched. Removal needs valid access and provider support; copies on a watch may remain.'
+    : 'Eligible future provider copies may withdraw; past provider copies remain. Recorded activities are not deleted.';
+}
+
+function describeAppliedProviderDeletion(removePastProviderCopies: boolean): string {
+  return `${removePastProviderCopies ? 'Service-copy cleanup was requested' : 'Eligible upcoming service-copy cleanup was requested; older copies remain'}; removal is not yet confirmed. Completed activities were not changed.`;
+}
+
+function describeOperation(operation: TrainingScheduleMutationOperationV1): string {
+  switch (operation.kind) {
+    case 'create-plan': return `Create plan “${operation.name}” from ${operation.startLocalDate} to ${operation.endLocalDate}${operation.activate ? ' and make it active' : ' as paused (not active; no plan delivery)'}.`;
+    case 'rename-plan': return `Rename a plan to “${operation.name}”.`;
+    case 'set-plan-color': return `Change the plan color to ${operation.color}.`;
+    case 'set-plan-phases': return `Replace the plan phases with ${operation.phases.items.length} phase${operation.phases.items.length === 1 ? '' : 's'}; plan dates become ${operation.startLocalDate} to ${operation.endLocalDate}. Workouts and provider delivery settings stay unchanged.`;
+    case 'set-plan-lifecycle': return `${operation.lifecycle === 'active' ? 'Activate' : operation.lifecycle === 'paused' ? 'Pause' : 'Archive'} the plan.`;
+    case 'shift-plan': return `Shift the plan ${Math.abs(operation.days)} day${Math.abs(operation.days) === 1 ? '' : 's'} ${operation.days > 0 ? 'later' : 'earlier'}.`;
+    case 'create-workout': return `Create “${operation.title}” on ${operation.localDate} (${operation.planId ? 'selected plan' : 'standalone'}).`;
+    case 'bulk-create-workouts': return `Create ${operation.placements.length} independent copies of “${operation.title}”${operation.planId ? ' in the selected plan' : ' as standalone workouts'}.`;
+    case 'update-workout': return `Update “${operation.title}” on ${operation.localDate}.`;
+    case 'move-workout': return `Move the workout to ${operation.localDate}${operation.planId ? ' in the selected plan' : ' as a standalone workout'}.`;
+    case 'copy-workout': return `Copy the workout to ${operation.localDate}${operation.planId ? ' in the selected plan' : ' as a standalone workout'}.`;
+    case 'set-workout-lifecycle': return `${operation.lifecycle === 'skipped' ? 'Mark' : 'Restore'} the workout ${operation.lifecycle === 'skipped' ? 'as skipped' : 'to planned'}.`;
+    case 'delete-workout': return `Move the workout to recoverable history. ${describeProviderDeletion(operation.removePastProviderCopies === true)}`;
+    case 'permanently-delete-workout': return 'Permanently delete the workout.';
+  }
+}
+
+function describeScheduleEffects(
+  operation: TrainingScheduleMutationOperationV1,
+  before: TrainingScheduleSnapshotV1,
+  after: TrainingScheduleSnapshotV1,
+): string {
+  const details: string[] = [];
+  const activatedPlanId = operation.kind === 'create-plan' && operation.activate
+    ? operation.planId
+    : operation.kind === 'set-plan-lifecycle' && operation.lifecycle === 'active'
+      ? operation.planId
+      : null;
+  if (activatedPlanId && before.state.activePlanId && before.state.activePlanId !== activatedPlanId) {
+    details.push('The previously active plan will be paused.');
+  }
+  if (operation.kind === 'shift-plan') {
+    const shifted = [...before.workouts.values()].filter(workout => workout.planId === operation.planId).length;
+    const plan = after.plans.get(operation.planId);
+    if (plan) details.push(`${shifted} associated workout${shifted === 1 ? '' : 's'} and ${plan.phases?.items.length ?? 0} phase dates will move with the plan; its range becomes ${plan.startLocalDate} to ${plan.endLocalDate}.`);
+  }
+  const workoutId = operation.kind === 'create-workout' || operation.kind === 'copy-workout'
+    ? operation.workoutId
+    : operation.kind === 'update-workout' || operation.kind === 'move-workout'
+      ? operation.workoutId
+      : null;
+  if (workoutId) {
+    const workout = after.workouts.get(workoutId);
+    if (workout && operation.kind !== 'move-workout') {
+      details.push(workout.structure.sport === ActivityTypes.StrengthTraining || after.strengthDetails?.has(workout.id)
+        ? 'Strength recipe: review the full exercise prescription; the v1 structure is only a compatibility summary.'
+        : describeTrainingRecipeReview(workout.structure));
+    }
+    const planId = workout?.planId ?? null;
+    const priorPlan = planId ? before.plans.get(planId) : null;
+    const nextPlan = planId ? after.plans.get(planId) : null;
+    if (priorPlan && nextPlan
+      && (priorPlan.startLocalDate !== nextPlan.startLocalDate || priorPlan.endLocalDate !== nextPlan.endLocalDate)) {
+      details.push(`Extend plan range: ${nextPlan.startLocalDate} to ${nextPlan.endLocalDate}.`);
+    }
+  }
+  return [describeOperation(operation), ...details].join(' ');
+}
+
+export function describeEarlyLapRecipeEffect(
+  previous: import('../../../shared/planned-workout').WorkoutStructureV1 | undefined,
+  current: import('../../../shared/planned-workout').WorkoutStructureV1,
+): string {
+  const enabled = (structure: typeof previous) => structure?.nodes
+    .flatMap(node => node.kind === 'step' ? [node] : node.steps)
+    .filter(step => (step.ending.kind === 'time' || step.ending.kind === 'distance') && step.ending.allowEarlyLap === true)
+    .map(step => step.id) ?? [];
+  const prior = enabled(previous), next = enabled(current);
+  const removed = prior.filter(id => !next.includes(id)).length;
+  // Keep the permission review visible within the public proposal's 500-character bound.
+  return `Early Lap: ${next.length ? `enabled on ${next.length} timed/distance step${next.length === 1 ? '' : 's'}` : 'disabled on all steps'}.`
+    + (removed ? ` Removed from ${removed} previously enabled step${removed === 1 ? '' : 's'}.` : '');
+}
+
+export function describeEarlyLapEffect(operation: TrainingScheduleMutationOperationV1,
+  before: TrainingScheduleSnapshotV1, after: TrainingScheduleSnapshotV1): string {
+  if (operation.kind !== 'create-workout' && operation.kind !== 'update-workout') return '';
+  const current = after.workouts.get(operation.workoutId)?.structure;
+  return current ? ` ${describeEarlyLapRecipeEffect(before.workouts.get(operation.workoutId)?.structure, current)}` : '';
+}
+
+function describePoolLengthEffect(
+  operation: TrainingScheduleMutationOperationV1,
+  before: TrainingScheduleSnapshotV1,
+  after: TrainingScheduleSnapshotV1,
+): string {
+  if (operation.kind !== 'create-workout' && operation.kind !== 'update-workout') return '';
+  const previous = before.workouts.get(operation.workoutId)?.structure.poolLength;
+  const current = after.workouts.get(operation.workoutId)?.structure.poolLength;
+  if (!current) return previous ? ' The selected pool length will be removed.' : '';
+  const length = formatWorkoutEndingV1({ kind: 'distance', meters: current.meters },
+    undefined, undefined, ActivityTypes.Swimming);
+  return ` Selected pool length: ${length} (${current.presentation} presentation).`;
+}
+
+function resolveScheduleOperation(
+  change: Exclude<TrainingChange, { kind: 'provider-delivery' } | { kind: 'delete-plan' }>,
+  input: Pick<TrainingWriteInput, 'uid' | 'connectionId'>,
+  snapshot: TrainingScheduleSnapshotV1,
+  locals: Map<string, { kind: 'plan' | 'workout'; id: string }>,
+  randomId: () => string,
+): TrainingScheduleMutationOperationV1 {
+  const plan = (target: { ref: string } | { localKey: string } | null) => target
+    ? resolveReference(target, 'plan', input, snapshot, locals) : null;
+  const workout = (target: { ref: string } | { localKey: string }) => resolveReference(target, 'workout', input, snapshot, locals);
+  switch (change.kind) {
+    case 'create-plan': {
+      if (locals.has(change.localKey)) invalid(`Duplicate localKey ${change.localKey}.`);
+      const planId = safeEntityId('plan', randomId()); locals.set(change.localKey, { kind: 'plan', id: planId });
+      return { kind: change.kind, planId, name: change.name, ...(change.color ? { color: change.color } : {}),
+        startLocalDate: change.startDate, endLocalDate: change.endDate, activate: change.activate };
+    }
+    case 'rename-plan': return { kind: change.kind, planId: plan(change.plan)!, name: change.name };
+    case 'set-plan-color': return { kind: change.kind, planId: plan(change.plan)!, color: change.color };
+    case 'set-plan-phases': {
+      const planId = plan(change.plan)!;
+      if (snapshot.plans.get(planId)?.revision !== change.expectedPlanRevision) invalid('The plan changed. Read its current phases and review again.');
+      return { kind: change.kind, planId, phases: change.phases, startLocalDate: change.startDate, endLocalDate: change.endDate,
+        confirmPlanRangeExtension: change.confirmPlanRangeExtension };
+    }
+    case 'set-plan-lifecycle': return { kind: change.kind, planId: plan(change.plan)!, lifecycle: change.lifecycle };
+    case 'shift-plan': return { kind: change.kind, planId: plan(change.plan)!, days: change.days };
+    case 'create-workout': {
+      if (locals.has(change.localKey)) invalid(`Duplicate localKey ${change.localKey}.`);
+      const workoutId = safeEntityId('workout', randomId()); locals.set(change.localKey, { kind: 'workout', id: workoutId });
+      return { kind: change.kind, workoutId, planId: plan(change.plan), localDate: change.localDate,
+        title: change.title, structure: parseWorkoutStructureV1(change.structure),
+        ...('strength' in change ? { strength: change.strength } : {}), confirmPlanRangeExtension: true };
+    }
+    case 'update-workout': return { kind: change.kind, workoutId: workout(change.workout), planId: plan(change.plan),
+      localDate: change.localDate, title: change.title, structure: parseWorkoutStructureV1(change.structure),
+      ...('strength' in change ? { strength: change.strength } : {}), confirmPlanRangeExtension: true };
+    case 'move-workout': return { kind: change.kind, workoutId: workout(change.workout), planId: plan(change.plan),
+      localDate: change.localDate, confirmPlanRangeExtension: true };
+    case 'copy-workout': {
+      if (locals.has(change.localKey)) invalid(`Duplicate localKey ${change.localKey}.`);
+      const workoutId = safeEntityId('workout', randomId()); locals.set(change.localKey, { kind: 'workout', id: workoutId });
+      return { kind: change.kind, sourceWorkoutId: workout(change.sourceWorkout), workoutId,
+        planId: plan(change.plan), localDate: change.localDate, confirmPlanRangeExtension: true };
+    }
+    case 'set-workout-lifecycle': return { kind: change.kind, workoutId: workout(change.workout), lifecycle: change.lifecycle };
+    case 'delete-workout': return { kind: change.kind, workoutId: workout(change.workout),
+      ...('removePastProviderCopies' in change ? { removePastProviderCopies: change.removePastProviderCopies } : {}) };
+  }
+}
+
+function mapDeliveryAction(operation: Pick<StoredProviderOperation, 'action'>): TrainingDeliveryAction {
+  if (operation.action === 'enable') return 'configure';
+  return operation.action;
+}
+
+function deliveryAvailability(preview: TrainingDeliveryPreviewV1,
+  operation?: Pick<ProviderOperationDraft, 'targetType' | 'action'>): 'ready' | 'unavailable' | 'reconnect_required' | 'connection_repair' | 'pro_required' {
+  if (!preview.hasPro && preview.effect !== 'remove-future-copies') return 'pro_required';
+  if (!preview.available) return 'unavailable';
+  if (preview.connection !== 'connected') return preview.connection;
+  if (operation?.targetType === 'workout' && ['send', 'resume'].includes(operation.action)
+    && preview.workoutCompatibility === 'unsupported') return 'unavailable';
+  return 'ready';
+}
+
+function mappingDisclosure(provider: PlannedWorkoutProviderId, preview: TrainingDeliveryPreviewV1,
+  action: 'send' | 'approve'): string {
+  const issues = [...new Set(preview.issues)].map(issue => {
+    if (provider === 'suunto' && issue === 'Suunto step text is limited to 54 characters by Suunto.') {
+      return 'Suunto will shorten long step instructions.';
+    }
+    if (provider === 'suunto' && issue === 'Suunto cannot show other fields alongside text longer than 40 characters.') {
+      return 'Instructions shown with duration or targets will be shortened to 40 characters on the watch.';
+    }
+    return issue;
+  });
+  const lead = action === 'send' ? `${provider}: this workout needs these mapping adjustments: `
+    : `${provider}: approve these current mapping adjustments: `;
+  const tail = action === 'send'
+    ? ' Confirming this proposal approves them and enables delivery; provider receipt is not yet confirmed.'
+    : ' This approval applies only to the current workout and destination.';
+  const summary = `${lead}${issues.join(' ')}${tail}`;
+  // The v1 public preview has one bounded summary field. Never approve a digest
+  // when its warning set cannot be completely explained in that field.
+  if (issues.length === 0 || preview.issues.length >= 20 || summary.length > 500) {
+    invalid('Provider mapping warnings are too extensive for one safe preview. Create without delivery or simplify the workout, then review compatibility before sending.');
+  }
+  return summary;
+}
+
+function providerSummary(provider: PlannedWorkoutProviderId,
+  operation: Pick<ProviderOperationDraft, 'targetType' | 'action'>, preview: TrainingDeliveryPreviewV1): string {
+  const action = operation.action;
+  const availability = deliveryAvailability(preview, operation);
+  if (availability === 'pro_required') return `${provider} delivery requires Pro.`;
+  if (availability === 'unavailable' && preview.available && operation.targetType === 'workout'
+    && ['send', 'resume'].includes(action) && preview.workoutCompatibility === 'unsupported') {
+    const label = PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label;
+    const reason = [...new Set(preview.issues)].join(' ').trim() || 'Its sport or steps are unsupported.';
+    const summary = `${label} cannot receive this workout: ${reason} No new ${label} delivery will start. You can keep the workout in QS or edit it before trying again.`;
+    return summary.length <= 500 ? summary
+      : `${label} cannot receive this workout because its sport or steps are unsupported. No new ${label} delivery will start. You can keep the workout in QS or edit it before trying again.`;
+  }
+  if (availability === 'unavailable') return `${provider} workout delivery is not enabled for this account.`;
+  if (availability === 'reconnect_required') return `${provider} must be reconnected before delivery can change.`;
+  if (availability === 'connection_repair') return `${provider} connection access must be repaired before delivery can change.`;
+  if (action === 'send' && preview.approvalDigest) {
+    return mappingDisclosure(provider, preview, 'send');
+  }
+  if (action === 'approve' && preview.approvalDigest) {
+    return mappingDisclosure(provider, preview, 'approve');
+  }
+  const effect = action === 'stop' ? 'stop sync and withdraw eligible future copies'
+    : action === 'check' ? 'queue a remote-copy check'
+      : action === 'retry' ? 'retry the current delivery state'
+        : action === 'approve' ? 'approve the current workout mapping differences'
+          : 'enable ongoing workout delivery';
+  const summary = `${provider}: ${effect}; ${preview.eligibleCount} currently eligible, ${preview.warningCount} with mapping warnings.`;
+  if (['enable', 'send', 'resume'].includes(action) && preview.warningCount && preview.approvalRequiredCount === 0) {
+    const notes = [...new Set(preview.issues)].join(' ');
+    const disclosure = `${summary} ${notes} No separate mapping approval is needed for these limitations; unsupported workouts cannot be sent.`;
+    if (preview.issues.length >= 20 || disclosure.length > 500) {
+      // Unlike digest approval, informational notes need not block a bulk plan
+      // when its full warning set exceeds the bounded public summary field.
+      return `${summary} Review each workout's compatibility details. Informational limitations need no separate mapping approval; unsupported workouts cannot be sent.`;
+    }
+    return disclosure;
+  }
+  return summary;
+}
+
+async function previewProviderOperation(
+  deps: TrainingWriteDependencies,
+  uid: string,
+  operation: RegularProviderOperationDraft,
+  scheduleRevision: number,
+  snapshot: TrainingScheduleSnapshotV1,
+): Promise<{ preview: TrainingDeliveryPreviewV1; publicPreview: PreviewResult['providerPreviews'][number] }> {
+  const scope = operation.targetType === 'plan' ? snapshot.plans.get(operation.targetId) : snapshot.workouts.get(operation.targetId);
+  if (!scope) invalid(`The provider target for change ${operation.index + 1} is unavailable.`);
+  const setting = await deps.db.collection('users').doc(uid).collection('trainingDeliverySettings')
+    .doc(deliverySettingsId(operation.targetType, operation.targetId, operation.provider)).get();
+  const command = {
+    schemaVersion: 1 as const,
+    mutationId: `mcp-preview-${operation.index}-${operation.provider}`,
+    scope: operation.targetType,
+    scopeId: operation.targetId,
+    provider: operation.provider,
+    action: mapDeliveryAction(operation),
+    expectedScheduleRevision: scheduleRevision,
+    expectedScopeRevision: scope.revision,
+    expectedSettingsRevision: setting.exists ? Number(setting.get('revision') ?? 0) : 0,
+    ...(operation.timeZone ? { timeZone: operation.timeZone } : {}),
+    ...(operation.action === 'approve' ? { approvalDigest: '0'.repeat(64) } : {}),
+  };
+  let preview: TrainingDeliveryPreviewV1;
+  try {
+    preview = await trainingDeliveryCommand(deps.runtime, uid, command, true) as TrainingDeliveryPreviewV1;
+  } catch (error) {
+    const message = publicErrorMessage(error);
+    if (message) invalid(message);
+    unavailable('Provider delivery cannot be previewed safely right now. Try again later.');
+  }
+  return { preview: preview!, publicPreview: { index: operation.index, provider: operation.provider,
+    targetType: operation.targetType, action: operation.action, availability: deliveryAvailability(preview!, operation),
+    timeZone: preview!.timeZone || null, eligibleCount: preview!.eligibleCount, warningCount: preview!.warningCount,
+    summary: providerSummary(operation.provider, operation, preview!) } };
+}
+
+async function previewSimulatedProviderAvailability(
+  deps: TrainingWriteDependencies,
+  uid: string,
+  operation: RegularProviderOperationDraft,
+  snapshot: TrainingScheduleSnapshotV1,
+): Promise<{ ready: boolean; unsupported: boolean; settingsRevision: number; approvalDigest: string | null;
+  publicPreview: PreviewResult['providerPreviews'][number] }> {
+  const target = operation.targetType === 'plan'
+    ? snapshot.plans.get(operation.targetId)
+    : snapshot.workouts.get(operation.targetId);
+  if (!target) invalid(`The provider target for change ${operation.index + 1} is unavailable.`);
+  const user = deps.db.collection('users').doc(uid);
+  const workout = operation.targetType === 'workout'
+    ? snapshot.workouts.get(operation.targetId) ?? null
+    : null;
+  const [hasPro, connection, setting, inheritedPlanSetting] = await Promise.all([
+    deps.runtime.hasPro(uid),
+    deps.db.runTransaction(tx => deps.runtime.connection(tx, uid, operation.provider), { readOnly: true }),
+    user.collection('trainingDeliverySettings')
+      .doc(deliverySettingsId(operation.targetType, operation.targetId, operation.provider)).get(),
+    workout?.planId
+      ? user.collection('trainingDeliverySettings').doc(deliverySettingsId('plan', workout.planId, operation.provider)).get()
+      : Promise.resolve(null),
+  ]);
+  const transport = deps.runtime.transport(operation.provider, uid);
+  const inspectionAvailable = operation.action !== 'check'
+    || (!!transport?.inspection && transport.inspection.policy.mode !== 'unavailable');
+  const previous = setting.data() ?? {};
+  const inherited = inheritedPlanSetting?.data() ?? {};
+  const timeZone = workout?.planId
+    ? String(inherited.timeZone ?? 'UTC')
+    : operation.timeZone ?? String(previous.timeZone ?? 'UTC');
+  const workouts = operation.targetType === 'workout'
+    ? [workout!]
+    : [...snapshot.workouts.values()].filter(item => item.planId === operation.targetId);
+  const suuntoUnitSettings = operation.provider === 'suunto'
+    ? await deps.db.runTransaction(tx => readSuuntoGuideUnitSettings(tx, user, operation.provider, workouts), { readOnly: true })
+    : undefined;
+  const assessments = workouts.map(item => transport?.assess(item, connection.destinationKey, timeZone,
+    snapshot.strengthDetails?.get(item.id) ?? null,
+    snapshot.strengthDetails?.has(item.id) ? suuntoUnitSettings?.weightUnits : undefined, suuntoUnitSettings));
+  const warningCount = assessments.filter(item => item && item.level !== 'exact').length;
+  const today = trainingDeliveryLocalDate(deps.now(), timeZone);
+  const eligibleCount = workouts.filter(item => item.lifecycle === 'planned' && item.localDate >= today
+    && (!transport || (Date.parse(item.localDate) - Date.parse(today)) / 86_400_000 <= transport.horizonDays)).length;
+  const preview: TrainingDeliveryPreviewV1 = {
+    schemaVersion: 1,
+    available: !!transport && inspectionAvailable,
+    connection: connection.state,
+    hasPro,
+    timeZone,
+    effect: operation.action === 'stop' ? 'remove-future-copies'
+      : operation.action === 'retry' ? 'retry'
+        : operation.action === 'approve' ? 'approve' : 'enable',
+    settingsRevision: Number(previous.revision ?? 0),
+    eligibleCount,
+    warningCount,
+    approvalRequiredCount: assessments.filter(item => item && requiresDeliveryMappingApproval(item)).length,
+    issues: [...new Set(assessments.flatMap(item => item?.issues ?? []))].slice(0, 20),
+    approvalDigest: operation.targetType === 'workout' && assessments[0] && requiresDeliveryMappingApproval(assessments[0])
+      ? assessments[0].digest : null,
+    workoutCompatibility: operation.targetType === 'workout' ? assessments[0]?.level ?? null : null,
+  };
+  const publicAvailability = deliveryAvailability(preview, operation);
+  const ready = publicAvailability === 'ready';
+  return { ready, unsupported: preview.workoutCompatibility === 'unsupported',
+    settingsRevision: Number(previous.revision ?? 0), approvalDigest: preview.approvalDigest,
+    publicPreview: { index: operation.index, provider: operation.provider,
+    targetType: operation.targetType, action: operation.action,
+    availability: publicAvailability,
+    timeZone, eligibleCount, warningCount, summary: providerSummary(operation.provider, operation, preview) } };
+}
+
+function proposalRef(id: string, createdAtMs: number, uid: string, connectionId: string): string {
+  return encodeOpaqueValue('training_proposal', { kind: 'proposal', id, createdAtMs }, uid, connectionId);
+}
+
+function decodeProposalRef(value: string, uid: string, connectionId: string): { id: string; createdAtMs: number } {
+  let decoded: Record<string, unknown>;
+  try { decoded = decodeOpaqueValue('training_proposal', value, uid, connectionId, 'Training proposal'); }
+  catch { invalid('This Training proposal is invalid for the current connection.'); }
+  const parsed = proposalPayload.safeParse(decoded!);
+  if (!parsed.success) invalid('This Training proposal is invalid.');
+  return { id: parsed.data.id, createdAtMs: parsed.data.createdAtMs };
+}
+
+/** Explicit recovery only. No registered batch action or provider HTTP is added. */
+export async function previewGarminWorkoutReplacement(
+  input: TrainingWriteInput, provided?: TrainingWriteDependencies,
+): Promise<ReplacementPreviewResult> {
+  const deps = provided ?? defaultDependencies();
+  const required = [TRAINING_PLANS_SCOPE, TRAINING_DELIVERY_WRITE_SCOPE];
+  assertScopes(input.scopes, required);
+  assertBytes(input.arguments);
+  const parsed = TRAINING_WRITE_INPUTS.preview_garmin_workout_replacement.safeParse(input.arguments);
+  if (!parsed.success) invalid('Use one current workout reference and its exact schedule and workout revisions.');
+  let decoded: Record<string, unknown>;
+  try { decoded = decodeOpaqueValue('training_read', parsed.data.workoutRef, input.uid, input.connectionId, 'Training reference'); }
+  catch { invalid('A Training reference is invalid for this connection.'); }
+  const reference = referencePayload.safeParse(decoded!);
+  if (!reference.success || reference.data.kind !== 'workout') invalid('A current planned workout reference is required.');
+  const user = deps.db.collection('users').doc(input.uid);
+  const workoutRef = user.collection('scheduledWorkouts').doc(reference.data.id);
+  const stateRef = user.collection('trainingPlanState').doc('current');
+  const settingRef = user.collection('trainingDeliverySettings').doc(deliverySettingsId('workout', reference.data.id, 'garmin'));
+  const loaded = await deps.db.runTransaction(async tx => {
+    const generation = await assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId, required);
+    const [state, doc, setting] = await tx.getAll(stateRef, workoutRef, settingRef);
+    if (!doc.exists) invalid('This planned workout is unavailable.');
+    const workout = parseScheduledWorkoutV1(doc.data());
+    if (workout.id !== doc.id || workout.createdAtMs !== reference.data.createdAtMs || workout.lifecycle !== 'planned'
+      || workout.revision !== parsed.data.expectedWorkoutRevision
+      || state.get('revision') !== parsed.data.expectedScheduleRevision) {
+      invalid('The workout or schedule changed. Read it again before reviewing replacement.');
+    }
+    return { generation, workout, settingsRevision: setting.get('revision') ?? 0 };
+  }, { readOnly: true });
+  const operation: StoredProviderOperation = { index: 0, provider: 'garmin', targetType: 'workout',
+    targetId: loaded.workout.id, action: 'replace', expectedScheduleRevision: parsed.data.expectedScheduleRevision,
+    expectedScopeRevision: loaded.workout.revision, expectedSettingsRevision: loaded.settingsRevision };
+  let delivery: TrainingDeliveryPreviewV1;
+  try {
+    delivery = await trainingDeliveryCommand(deps.runtime, input.uid, { schemaVersion: 1,
+      mutationId: 'mcp-replacement-preview', scope: 'workout', scopeId: operation.targetId, provider: 'garmin', action: 'replace',
+      expectedScheduleRevision: operation.expectedScheduleRevision, expectedScopeRevision: operation.expectedScopeRevision,
+      expectedSettingsRevision: operation.expectedSettingsRevision }, true,
+    tx => assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId, required, loaded.generation).then(() => undefined)) as TrainingDeliveryPreviewV1;
+  } catch (error) {
+    invalid(publicErrorMessage(error) ?? 'Garmin replacement cannot be reviewed safely. Use Check in the app, then read the current workout again.');
+  }
+  if (deliveryAvailability(delivery!, operation) !== 'ready' || !delivery!.approvalDigest) {
+    invalid('Garmin replacement is unavailable. Check the current workout, connection and Pro access.');
+  }
+  operation.approvalDigest = delivery!.approvalDigest;
+  const createdAtMs = deps.now(), expiresAtMs = createdAtMs + PROPOSAL_LIFETIME_MS;
+  const id = `proposal-${deps.randomId().replace(/[^A-Za-z0-9_-]/g, '')}`.slice(0, 128);
+  const preview: ReplacementPreviewResult = {
+    proposalRef: proposalRef(id, createdAtMs, input.uid, input.connectionId), expiresAtMs,
+    permissionMode: 'delivery', scheduleRevision: operation.expectedScheduleRevision, requiresConfirmation: true,
+    summary: 'Review creating a replacement Garmin copy. Garmin not-found responses do not prove deletion: the original may reappear and leave a duplicate. Nothing changes before explicit approval.',
+    changes: [{ index: 0, kind: 'garmin-workout-replacement',
+      summary: `Review Garmin replacement for “${loaded.workout.title}” on ${loaded.workout.localDate}. The QS workout, other providers and completed activities stay unchanged.` }],
+    providerPreviews: [{ index: 0, provider: 'garmin', targetType: 'workout', action: 'replace', availability: 'ready',
+      timeZone: delivery!.timeZone, eligibleCount: delivery!.eligibleCount, warningCount: delivery!.warningCount,
+      summary: 'Garmin will be checked again before sending. A reappearing original is reused; uncertain acceptance blocks another create. Existing sync consent and mapping approval are preserved. Approval queues recovery, not provider or watch receipt.' }],
+  };
+  TRAINING_WRITE_OUTPUTS.preview_garmin_workout_replacement.parse(preview);
+  const stored: StoredProposal = { schemaVersion: 1, uid: input.uid, connectionId: input.connectionId,
+    accessGeneration: loaded.generation, requiredScopes: required, createdAtMs, expiresAtMs,
+    expireAt: Timestamp.fromMillis(expiresAtMs), status: 'pending', leaseUntilMs: null, nextScheduleOperation: 0,
+    scheduleRequests: [], providerOperations: [operation], localEntities: [], preview, changeResults: [], providerResults: [] };
+  await deps.db.runTransaction(async tx => {
+    await assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId, required, loaded.generation);
+    const [state, workout, setting] = await tx.getAll(stateRef, workoutRef, settingRef);
+    if (state.get('revision') !== operation.expectedScheduleRevision || workout.get('revision') !== operation.expectedScopeRevision
+      || workout.get('createdAtMs') !== loaded.workout.createdAtMs || workout.get('lifecycle') !== 'planned'
+      || (setting.get('revision') ?? 0) !== operation.expectedSettingsRevision) {
+      invalid('The workout or delivery settings changed. Review replacement again.');
+    }
+    tx.create(user.collection(PROPOSALS).doc(id), stored);
+  });
+  return preview;
+}
+
+export async function previewTrainingChanges(
+  input: TrainingWriteInput,
+  provided?: TrainingWriteDependencies,
+  recipeMode: 'legacy' | 'strength' | 'v2' | 'v3' | 'v3-batch' | 'deletion' | 'phases' = 'legacy',
+): Promise<PreviewResult> {
+  const deps = provided ?? defaultDependencies();
+  assertBytes(input.arguments);
+  const parsed = recipeMode === 'phases'
+    ? z.strictObject({ expectedScheduleRevision: z.number().int().nonnegative().safe(),
+      changes: z.array(TRAINING_PLAN_PHASE_CHANGE_SCHEMA).length(1) }).safeParse(input.arguments)
+    : recipeMode === 'strength'
+    ? z.strictObject({ expectedScheduleRevision: z.number().int().nonnegative().safe(),
+      changes: z.array(TRAINING_STRENGTH_INTERNAL_CHANGE_SCHEMA).length(1) }).safeParse(input.arguments)
+    : recipeMode === 'v3-batch'
+      ? TRAINING_WRITE_INPUTS.preview_planned_workout_v3_changes.safeParse(input.arguments)
+    : (recipeMode === 'v2' || recipeMode === 'v3')
+      ? z.strictObject({ expectedScheduleRevision: z.number().int().nonnegative().safe(),
+        changes: z.array(recipeMode === 'v3' ? TRAINING_WORKOUT_V3_CHANGE_SCHEMA : TRAINING_WORKOUT_V2_CHANGE_SCHEMA).length(1) }).safeParse(input.arguments)
+      : recipeMode === 'deletion'
+        ? z.strictObject({ expectedScheduleRevision: z.number().int().nonnegative().safe(),
+          changes: z.array(TRAINING_DELETION_CHANGE_SCHEMA).length(1) }).safeParse(input.arguments)
+        : TRAINING_WRITE_INPUTS.preview_training_changes.safeParse(input.arguments);
+  if (!parsed.success) invalid('Invalid Training change proposal. Use the advertised operation schema and at most 25 changes.');
+  assertProviderActionsLast(parsed.data.changes);
+  const required = requiredScopes(parsed.data.changes);
+  // This focused tool explicitly offers provider cleanup and is available only
+  // under both existing child grants. Keep the same binding through apply/retry.
+  if (recipeMode === 'deletion') required.push(TRAINING_DELIVERY_WRITE_SCOPE);
+  assertScopes(input.scopes, required);
+  const loaded = await loadSnapshot(deps, input.uid, input.connectionId, required);
+  if (loaded.snapshot.state.revision !== parsed.data.expectedScheduleRevision) {
+    invalid('The Training schedule changed. Read it again before preparing changes.');
+  }
+  const locals = new Map<string, { kind: 'plan' | 'workout'; id: string }>();
+  const scheduleRequests: StoredScheduleOperation[] = [];
+  const assistantWorkoutReviews: AssistantWorkoutReview[] = [];
+  let assistantRecoveryDurationSeconds: number | undefined;
+  let planDeletion: StoredPlanDeletion | undefined;
+  const providerTemplates: Array<{ index: number; change: Extract<TrainingChange, { kind: 'provider-delivery' }> }> = [];
+  let simulated = loaded.snapshot;
+  const publicChanges: PreviewResult['changes'] = [];
+  parsed.data.changes.forEach((change, index) => {
+    if (change.kind === 'provider-delivery') {
+      providerTemplates.push({ index, change });
+      publicChanges.push({ index, kind: change.kind, summary: `${change.action} ${change.targetType} delivery.` });
+      return;
+    }
+    if (change.kind === 'delete-plan') {
+      const planId = resolveReference(change.plan, 'plan', input, simulated, locals);
+      const plan = simulated.plans.get(planId)!;
+      const currentWorkoutCount = [...simulated.workouts.values()]
+        .filter(workout => workout.planId === planId && workout.lifecycle !== 'deleted').length;
+      const request = parseDeleteTrainingPlanRequestV1({
+        mutationId: `mcp-plan-deletion-${deps.randomId()}`,
+        planId,
+        expectedRevisions: [
+          { scope: 'state', id: 'current', revision: simulated.state.revision },
+          { scope: 'plan', id: planId, revision: plan.revision },
+        ],
+        workoutDisposition: change.workoutDisposition,
+        confirmPlanDeletion: true,
+        ...('removePastProviderCopies' in change ? { removePastProviderCopies: change.removePastProviderCopies } : {}),
+      });
+      try { simulated = applyTrainingPlanDeletion(simulated, request, deps.now()).after; }
+      catch (error) { invalid(publicErrorMessage(error) ?? 'This Training plan cannot be deleted safely.'); }
+      planDeletion = { index, request };
+      const workoutEffect = change.workoutDisposition === 'convert-to-standalone'
+        ? `${currentWorkoutCount} current workout${currentWorkoutCount === 1 ? '' : 's'} will become standalone.`
+        : `${currentWorkoutCount} current workout${currentWorkoutCount === 1 ? '' : 's'} will also be permanently deleted.`;
+      publicChanges.push({ index, kind: change.kind,
+        summary: `Permanently delete plan “${plan.name}” and its revision history. ${workoutEffect} ${describeProviderDeletion(request.removePastProviderCopies === true)}` });
+      return;
+    }
+    if (recipeMode !== 'v3' && recipeMode !== 'v3-batch' && change.kind === 'update-workout') {
+      const workoutId = resolveReference(change.workout, 'workout', input, simulated, locals);
+      if (hasAuthoredEarlyLapV1(simulated.workouts.get(workoutId)!.structure)) {
+        invalid('Read the v3 recipe and use the v3 preview to preserve or explicitly change early Lap permission.');
+      }
+    }
+    if (recipeMode === 'legacy' && change.kind === 'update-workout') {
+      const workoutId = resolveReference(change.workout, 'workout', input, simulated, locals);
+      if (simulated.workouts.get(workoutId)?.structure.poolLength) {
+        invalid('This workout has an authored pool length. Read its v2 recipe and use the v2 preview to edit it without silently clearing that selection.');
+      }
+    }
+    const operation = resolveScheduleOperation(change, input, simulated, locals, deps.randomId);
+    if (recipeMode === 'strength' && operation.kind === 'update-workout' && operation.strength) {
+      const current = simulated.workouts.get(operation.workoutId);
+      if (!current || !simulated.strengthDetails?.has(current.id)) invalid('This workout needs its existing complete strength prescription.');
+      operation.structure = projectStrengthWorkoutToV1({ ...operation.strength, workoutId: current.id, revision: 1 }, current.structure.sport);
+    }
+    const request = parseMutateTrainingScheduleRequestV1({ mutationId: `mcp-proposal-${index}-${deps.randomId()}`,
+      expectedRevisions: expectedRevisions(simulated, operation), operation });
+    const before = simulated;
+    try { simulated = applyTrainingScheduleMutation(simulated, request, deps.now() + index).after; }
+    catch (error) { invalid(publicErrorMessage(error) ?? `Training change ${index + 1} is invalid.`); }
+    // Validate only newly authored/replaced recipes, not unrelated lifecycle, move or copy actions
+    // against an existing legacy title. No text can rewrite structure or authorize another action.
+    if (operation.kind === 'create-workout' || operation.kind === 'update-workout') {
+      const previous = operation.kind === 'update-workout' ? before.workouts.get(operation.workoutId) : null;
+      const unchangedRecipeAndTitle = previous?.title === operation.title
+        && JSON.stringify(previous.structure) === JSON.stringify(operation.structure);
+      if (!unchangedRecipeAndTitle && !operation.strength) {
+        const conflict = findTrainingPrescriptionConflict(operation.title, operation.structure);
+        if (conflict) invalid(`Change ${index + 1}: ${conflict}`);
+      }
+    }
+    scheduleRequests.push({ index, request });
+    if (input.connectionId.startsWith('first-party-assistant-v1:')) {
+      const review = projectAssistantWorkoutReview(index, operation, before, simulated);
+      if (review) assistantWorkoutReviews.push(review);
+      if (review?.before && review.after && operation.kind === 'update-workout' && parsed.data.changes.length === 1
+        && before.workouts.get(operation.workoutId)?.planId === simulated.workouts.get(operation.workoutId)?.planId) {
+        const recovery = review.after.structure.nodes.flatMap(node => node.kind === 'step' ? [node] : node.steps)
+          .find(step => step.purpose === 'recovery' && step.ending.kind === 'time');
+        if (recovery?.ending.kind === 'time') {
+          const seconds = recovery.ending.seconds;
+          try { assertAssistantRecoveryDurationSeconds(seconds, [review]); assistantRecoveryDurationSeconds = seconds; }
+          catch { /* A broader edit remains reviewable, but cannot satisfy a duration-only request. */ }
+        }
+      }
+    }
+    const deletionTarget = recipeMode === 'deletion' && operation.kind === 'delete-workout'
+      ? before.workouts.get(operation.workoutId) : null;
+    const summary = (deletionTarget
+      ? `Delete “${deletionTarget.title}” on ${deletionTarget.localDate}. ` : '') + describeScheduleEffects(operation, before, simulated)
+      + (['v2', 'v3', 'v3-batch'].includes(recipeMode) ? describePoolLengthEffect(operation, before, simulated) : '')
+      + (['v3', 'v3-batch'].includes(recipeMode) ? describeEarlyLapEffect(operation, before, simulated) : '');
+    const reviewStructure = ['create-workout', 'update-workout', 'copy-workout'].includes(operation.kind)
+      && 'workoutId' in operation ? simulated.workouts.get(operation.workoutId)?.structure : null;
+    publicChanges.push({ index, kind: operation.kind, summary: summary + (reviewStructure
+      && reviewStructure.sport !== ActivityTypes.StrengthTraining
+      && !('workoutId' in operation && simulated.strengthDetails?.has(operation.workoutId))
+      ? describeTrainingRecipeSteps(reviewStructure, loaded.units, 500 - summary.length) : '') });
+  });
+
+  const providerOperations: StoredProviderOperation[] = [];
+  const providerPreviews: PreviewResult['providerPreviews'] = [];
+  const providerDestinations = new Set<string>();
+  let hasUnsupportedDestination = false;
+  for (const template of providerTemplates) {
+    const targetId = resolveReference(template.change.target, template.change.targetType, input, simulated, locals);
+    if (template.change.targetType === 'plan' && ['send', 'resume', 'approve'].includes(template.change.action)) {
+      invalid(`${template.change.action} is a workout-only delivery action.`);
+    }
+    if (template.change.targetType === 'workout' && template.change.action === 'enable') {
+      invalid('Use send or resume for a workout; enable is for a plan.');
+    }
+    if (['enable', 'send'].includes(template.change.action) && !template.change.timeZone) {
+      invalid('Initial provider delivery consent requires an IANA time zone.');
+    }
+    if (template.change.action === 'check' && template.change.timeZone) {
+      invalid('A remote-copy check does not change the delivery time zone.');
+    }
+    let normalizedTimeZone: string | undefined;
+    if (template.change.timeZone) {
+      try { normalizedTimeZone = normalizeDeliveryTimeZone(template.change.timeZone); }
+      catch (error) { invalid(error instanceof Error ? error.message : 'Choose a valid IANA time zone.'); }
+    }
+    const selected = template.change.providers === 'all_connected'
+      ? [...PLANNED_WORKOUT_PROVIDER_IDS] : template.change.providers;
+    let readyCount = 0;
+    let unsupportedSummary: string | null = null;
+    for (const provider of selected) {
+      const operation: RegularProviderOperationDraft = { index: template.index, provider,
+        targetType: template.change.targetType, targetId, action: template.change.action,
+        ...(normalizedTimeZone ? { timeZone: normalizedTimeZone } : {}) };
+      const destination = `${operation.targetType}:${operation.targetId}:${provider}`;
+      if (providerDestinations.has(destination)) {
+        invalid('One proposal cannot change the same workout or plan provider setting more than once.');
+      }
+      providerDestinations.add(destination);
+      const originalTarget = operation.targetType === 'plan'
+        ? loaded.snapshot.plans.get(targetId)
+        : loaded.snapshot.workouts.get(targetId);
+      const simulatedTarget = operation.targetType === 'plan'
+        ? simulated.plans.get(targetId)
+        : simulated.workouts.get(targetId);
+      // Preview changed/new targets against the simulated authored result, never stale Firestore content.
+      if (!originalTarget || JSON.stringify(originalTarget) !== JSON.stringify(simulatedTarget)
+        || operation.action === 'check') {
+        let assessed: Awaited<ReturnType<typeof previewSimulatedProviderAvailability>>;
+        try {
+          assessed = await previewSimulatedProviderAvailability(deps, input.uid, operation, simulated);
+        } catch (error) {
+          const message = publicErrorMessage(error);
+          if (message) invalid(message);
+          unavailable('Provider delivery cannot be previewed safely right now. Try again later.');
+        }
+        providerPreviews.push(assessed.publicPreview);
+        if (assessed.unsupported && ['send', 'resume'].includes(operation.action)) {
+          hasUnsupportedDestination = true;
+          unsupportedSummary = assessed.publicPreview.summary;
+        }
+        if (operation.action === 'approve' && !assessed.approvalDigest) {
+          invalid('The current workout mapping no longer needs or permits approval.');
+        }
+        if (assessed.ready || template.change.providers !== 'all_connected') providerOperations.push({ ...operation,
+          expectedScheduleRevision: simulated.state.revision,
+          expectedScopeRevision: simulatedTarget!.revision,
+          expectedSettingsRevision: assessed.settingsRevision,
+          ...(assessed.approvalDigest ? { approvalDigest: assessed.approvalDigest } : {}) });
+        if (assessed.ready) readyCount += 1;
+        continue;
+      }
+      const previewed = await previewProviderOperation(deps, input.uid, operation, loaded.snapshot.state.revision, loaded.snapshot);
+      providerPreviews.push(previewed.publicPreview);
+      if (previewed.preview.workoutCompatibility === 'unsupported' && ['send', 'resume'].includes(operation.action)) {
+        hasUnsupportedDestination = true;
+        unsupportedSummary = previewed.publicPreview.summary;
+      }
+      const storedOperation: StoredProviderOperation = { ...operation,
+        expectedScheduleRevision: simulated.state.revision,
+        expectedScopeRevision: simulatedTarget!.revision,
+        expectedSettingsRevision: previewed.preview.settingsRevision,
+        ...(previewed.preview.approvalDigest ? { approvalDigest: previewed.preview.approvalDigest } : {}) };
+      if (operation.action === 'approve' && !storedOperation.approvalDigest) {
+        invalid('The current workout mapping no longer needs or permits approval.');
+      }
+      if (deliveryAvailability(previewed.preview, operation) === 'ready') { providerOperations.push(storedOperation); readyCount += 1; }
+      else if (template.change.providers !== 'all_connected') providerOperations.push(storedOperation);
+    }
+    if (template.change.providers === 'all_connected' && readyCount === 0) {
+      invalid(unsupportedSummary ?? 'No connected, rollout-enabled provider is currently eligible for this delivery action.');
+    }
+  }
+
+  const createdAtMs = deps.now();
+  const expiresAtMs = createdAtMs + PROPOSAL_LIFETIME_MS;
+  const proposalId = `proposal-${deps.randomId().replace(/[^A-Za-z0-9_-]/g, '')}`.slice(0, 128);
+  const ref = proposalRef(proposalId, createdAtMs, input.uid, input.connectionId);
+  const preview: PreviewResult = { proposalRef: ref, expiresAtMs, permissionMode: permissionMode(required),
+    scheduleRevision: loaded.snapshot.state.revision,
+    summary: `${publicChanges.length} Training change${publicChanges.length === 1 ? '' : 's'} proposed for client approval. Provider actions have independent results from authored changes.${hasUnsupportedDestination ? ' At least one requested provider action targets an unsupported workout version. No update will be sent there; an earlier copy may remain unchanged. Review each provider preview before confirming.' : ''}`,
+    requiresConfirmation: true, changes: publicChanges, providerPreviews };
+  if (recipeMode === 'phases') {
+    const operation = scheduleRequests[0].request.operation;
+    if (operation.kind !== 'set-plan-phases') invalid('Invalid phase-only proposal.');
+    const before = loaded.snapshot.plans.get(operation.planId)!, after = simulated.plans.get(operation.planId)!;
+    preview.phaseReview = { planName: before.name, previousStartDate: before.startLocalDate, previousEndDate: before.endLocalDate,
+      startDate: after.startLocalDate, endDate: after.endLocalDate, before: before.phases ?? { version: 1, items: [] },
+      after: after.phases ?? { version: 1, items: [] } };
+    TRAINING_WRITE_OUTPUTS.preview_training_plan_phases.parse(preview);
+  } else TRAINING_WRITE_OUTPUTS.preview_training_changes.parse(preview);
+  // A review must remain complete. Refuse oversized reviews before creating even a private proposal.
+  if (assistantWorkoutReviews.length) {
+    if (!isAssistantWorkoutReviews(assistantWorkoutReviews)) unavailable();
+    assertBytes({ ...preview, workoutReviews: assistantWorkoutReviews });
+  }
+  const stored: StoredProposal = { schemaVersion: 1, uid: input.uid, connectionId: input.connectionId,
+    accessGeneration: loaded.accessGeneration, requiredScopes: required, createdAtMs, expiresAtMs,
+    expireAt: Timestamp.fromMillis(expiresAtMs), status: 'pending', leaseUntilMs: null, nextScheduleOperation: 0,
+    scheduleRequests, ...(planDeletion ? { planDeletion } : {}), providerOperations,
+    localEntities: [...locals].map(([localKey, value]) => ({ localKey, ...value })),
+    preview, changeResults: [], providerResults: [],
+    ...(assistantWorkoutReviews.length ? { assistantWorkoutReviews } : {}) };
+  if (assistantRecoveryDurationSeconds !== undefined) stored.assistantRecoveryDurationSeconds = assistantRecoveryDurationSeconds;
+  await deps.db.runTransaction(async tx => {
+    const generation = await assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId, required, loaded.accessGeneration);
+    if (generation !== loaded.accessGeneration) invalid('The MCP permission grant changed. Prepare the Training change again.');
+    const state = await tx.get(deps.db.collection('users').doc(input.uid).collection('trainingPlanState').doc('current'));
+    if ((state.get('revision') ?? 0) !== loaded.snapshot.state.revision) invalid('The Training schedule changed. Prepare the change again.');
+    tx.create(deps.db.collection('users').doc(input.uid).collection(PROPOSALS).doc(proposalId), stored);
+  });
+  return preview;
+}
+
+function projectAssistantWorkoutReview(index: number, operation: TrainingScheduleMutationOperationV1,
+  before: TrainingScheduleSnapshotV1, after: TrainingScheduleSnapshotV1): AssistantWorkoutReview | null {
+  const id = 'workoutId' in operation ? operation.workoutId : null;
+  if (!id) return null;
+  const previous = operation.kind === 'copy-workout' ? before.workouts.get(operation.sourceWorkoutId) : before.workouts.get(id);
+  const current = after.workouts.get(id);
+  if ([previous, current].some(workout => workout && (workout.structure.sport === ActivityTypes.StrengthTraining
+    || before.strengthDetails?.has(workout.id) || after.strengthDetails?.has(workout.id)))) return null;
+  if (!previous && !current) return null;
+  const project = (workout: ScheduledWorkoutV1 | undefined, snapshot: TrainingScheduleSnapshotV1): AssistantWorkoutSnapshot | null => workout ? {
+    title: workout.title, localDate: workout.localDate, lifecycle: workout.lifecycle,
+    destination: workout.planId ? `Plan: ${snapshot.plans.get(workout.planId)?.name ?? 'Selected plan'}` : 'Standalone',
+    structure: parseWorkoutStructureV1(workout.structure),
+  } : null;
+  return { index, before: project(previous, before), after: project(current, after),
+    compatibility: PLANNED_WORKOUT_PROVIDER_IDS.map(provider => {
+      const prior = previous ? assessDeliveryCompatibility(provider, previous.structure) : null;
+      const next = current ? assessDeliveryCompatibility(provider, current.structure) : null;
+      return { provider, before: prior?.level ?? null, after: next?.level ?? null,
+        issues: (next ?? prior)!.issues.map(issue => issue.message) };
+    }) };
+}
+
+/** App-owned projection retrieval; deliberately absent from the registered MCP catalog and model tools. */
+export async function loadAssistantTrainingWorkoutReviews(input: Omit<TrainingWriteInput, 'arguments'> & { proposalRef: string; recoveryDurationSeconds?: number },
+  provided?: TrainingWriteDependencies): Promise<AssistantWorkoutReview[]> {
+  if (!input.connectionId.startsWith('first-party-assistant-v1:')) invalid('Assistant review requires its current conversation.');
+  const deps = provided ?? defaultDependencies();
+  const reference = decodeProposalRef(input.proposalRef, input.uid, input.connectionId);
+  return deps.db.runTransaction(async tx => {
+    const doc = await tx.get(deps.db.collection('users').doc(input.uid).collection(PROPOSALS).doc(reference.id));
+    const proposal = doc.data() as StoredProposal | undefined;
+    if (!proposal || proposal.schemaVersion !== 1 || proposal.uid !== input.uid || proposal.connectionId !== input.connectionId
+      || proposal.createdAtMs !== reference.createdAtMs || !Number.isSafeInteger(proposal.expiresAtMs)
+      || proposal.expiresAtMs <= deps.now() || proposal.preview.proposalRef !== input.proposalRef
+      || proposal.preview.expiresAtMs !== proposal.expiresAtMs || proposal.status !== 'pending') invalid('The workout review expired or is no longer available.');
+    assertScopes(input.scopes, proposal.requiredScopes);
+    await assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId, proposal.requiredScopes, proposal.accessGeneration);
+    if (input.recoveryDurationSeconds !== undefined && proposal.assistantRecoveryDurationSeconds !== input.recoveryDurationSeconds) {
+      invalid('Change only the timed recovery definitions; preserve the complete current workout and destination.');
+    }
+    const state = await tx.get(deps.db.collection('users').doc(input.uid).collection('trainingPlanState').doc('current'));
+    if ((state.get('revision') ?? 0) !== proposal.preview.scheduleRevision) invalid('The schedule changed. Prepare a fresh workout review.');
+    const reviews = proposal.assistantWorkoutReviews ?? [];
+    if (!isAssistantWorkoutReviews(reviews)) unavailable();
+    assertBytes({ ...proposal.preview, workoutReviews: reviews });
+    return reviews;
+  }, { readOnly: true });
+}
+
+/** Additive strength authoring path; the registered v1 recipe schema stays unchanged. */
+export async function previewStrengthWorkoutChange(
+  input: TrainingWriteInput, provided?: TrainingWriteDependencies,
+): Promise<PreviewResult> {
+  assertBytes(input.arguments);
+  const parsed = TRAINING_WRITE_INPUTS.preview_strength_workout_change.safeParse(input.arguments);
+  if (!parsed.success) invalid('Provide one complete, valid strength exercise prescription.');
+  const draft = parsed.data.change.strength;
+  const structure = projectStrengthWorkoutToV1({ ...draft, workoutId: 'preview', revision: 1 });
+  return previewTrainingChanges({ ...input, arguments: { expectedScheduleRevision: parsed.data.expectedScheduleRevision,
+    changes: [{ ...parsed.data.change, structure }] } }, provided, 'strength');
+}
+
+/** Additive full-recipe path; existing registered v1 create/update shapes remain frozen. */
+export async function previewPlannedWorkoutV2Change(
+  input: TrainingWriteInput, provided?: TrainingWriteDependencies,
+): Promise<PreviewResult> {
+  assertBytes(input.arguments);
+  const parsed = TRAINING_WRITE_INPUTS.preview_planned_workout_v2_change.safeParse(input.arguments);
+  if (!parsed.success) invalid('Provide one complete, valid planned workout v2 create or update.');
+  if (parsed.data.change.structure.sport === ActivityTypes.StrengthTraining) {
+    invalid('Use the strength workout preview for the complete exercise and set prescription.');
+  }
+  return previewTrainingChanges({ ...input, arguments: { expectedScheduleRevision: parsed.data.expectedScheduleRevision,
+    changes: [parsed.data.change] } }, provided, 'v2');
+}
+
+/** Additive early-Lap recipe, same approved authoring lifecycle and grants. */
+export async function previewPlannedWorkoutV3Change(input: TrainingWriteInput, provided?: TrainingWriteDependencies): Promise<PreviewResult> {
+  assertBytes(input.arguments);
+  const parsed = TRAINING_WRITE_INPUTS.preview_planned_workout_v3_change.safeParse(input.arguments);
+  if (!parsed.success) invalid('Provide one complete, valid planned workout v3 create or update.');
+  if (parsed.data.change.structure.sport === ActivityTypes.StrengthTraining) invalid('Use the complete strength workout preview.');
+  return previewTrainingChanges({ ...input, arguments: { expectedScheduleRevision: parsed.data.expectedScheduleRevision,
+    changes: [parsed.data.change] } }, provided, 'v3');
+}
+
+/** Complete non-strength recipes in one bounded review; no additional write or delivery authority. */
+export async function previewPlannedWorkoutV3Changes(input: TrainingWriteInput, provided?: TrainingWriteDependencies): Promise<PreviewResult> {
+  assertBytes(input.arguments);
+  const parsed = TRAINING_WRITE_INPUTS.preview_planned_workout_v3_changes.safeParse(input.arguments);
+  if (!parsed.success) invalid('Provide 1–25 complete, valid planned workout v3 creates or updates.');
+  if (parsed.data.changes.some(change => change.structure.sport === ActivityTypes.StrengthTraining)) {
+    invalid('Use the complete strength workout preview for exercise and set prescriptions.');
+  }
+  return previewTrainingChanges({ ...input, arguments: parsed.data }, provided, 'v3-batch');
+}
+
+/** Additive phase-only proposal; the existing separately approved apply owns persistence. */
+export async function previewTrainingPlanPhases(input: TrainingWriteInput, provided?: TrainingWriteDependencies): Promise<PreviewResult> {
+  assertBytes(input.arguments);
+  const parsed = TRAINING_WRITE_INPUTS.preview_training_plan_phases.safeParse(input.arguments);
+  if (!parsed.success) invalid('Provide the current plan and schedule revisions, complete phase list, resulting plan dates and explicit extension choice.');
+  return previewTrainingChanges({ ...input, arguments: { expectedScheduleRevision: parsed.data.expectedScheduleRevision,
+    changes: [parsed.data.change] } }, provided, 'phases');
+}
+
+/**
+ * Focused single-workout authoring entry point. The server owns the proposal-local
+ * key so clients only need to describe the workout they actually want to create.
+ */
+export async function previewCreatePlannedWorkout(
+  input: TrainingWriteInput,
+  provided?: TrainingWriteDependencies,
+): Promise<PreviewResult> {
+  assertBytes(input.arguments);
+  const parsed = TRAINING_WRITE_INPUTS.preview_create_planned_workout.safeParse(input.arguments);
+  if (!parsed.success) {
+    invalid('Invalid planned workout. Provide the schedule revision, date, title, optional plan reference, and complete advertised workout structure.');
+  }
+  return previewTrainingChanges({
+    ...input,
+    arguments: {
+      expectedScheduleRevision: parsed.data.expectedScheduleRevision,
+      changes: [{
+        kind: 'create-workout',
+        localKey: 'created_workout',
+        plan: parsed.data.planRef ? { ref: parsed.data.planRef } : null,
+        localDate: parsed.data.localDate,
+        title: parsed.data.title,
+        structure: parsed.data.structure,
+      }, ...(parsed.data.delivery ? [{
+        kind: 'provider-delivery' as const,
+        targetType: 'workout' as const,
+        target: { localKey: 'created_workout' },
+        providers: parsed.data.delivery.providers,
+        action: 'send' as const,
+        timeZone: parsed.data.delivery.timeZone,
+      }] : [])],
+    },
+  }, provided);
+}
+
+/** Reuses the existing deletion transactions and worker; preview never calls a provider. */
+export async function previewTrainingDeletion(
+  input: TrainingWriteInput,
+  provided?: TrainingWriteDependencies,
+): Promise<PreviewResult> {
+  assertBytes(input.arguments);
+  const parsed = TRAINING_WRITE_INPUTS.preview_training_deletion.safeParse(input.arguments);
+  if (!parsed.success) invalid('Select one current plan or workout and explicitly choose whether to remove older uncompleted service copies. Plan deletion also requires a workout disposition.');
+  return previewTrainingChanges({ ...input, arguments: { expectedScheduleRevision: parsed.data.expectedScheduleRevision,
+    changes: [parsed.data.change] } }, provided, 'deletion');
+}
+
+async function readProposal(input: TrainingWriteInput, deps: TrainingWriteDependencies): Promise<{ ref: string; id: string; proposal: StoredProposal }> {
+  const args = TRAINING_WRITE_INPUTS.apply_training_changes.safeParse(input.arguments);
+  if (!args.success) invalid('A valid Training proposal reference is required.');
+  const decoded = decodeProposalRef(args.data.proposalRef, input.uid, input.connectionId);
+  const snapshot = await deps.db.collection('users').doc(input.uid).collection(PROPOSALS).doc(decoded.id).get();
+  const proposal = snapshot.data() as StoredProposal | undefined;
+  if (!snapshot.exists || !proposal || proposal.schemaVersion !== 1 || proposal.uid !== input.uid
+    || proposal.connectionId !== input.connectionId || proposal.createdAtMs !== decoded.createdAtMs) {
+    invalid('This Training proposal is unavailable. Prepare it again.');
+  }
+  if (proposal.cancelledAtMs !== undefined) {
+    invalid('This Training proposal was cancelled. Earlier changes may have applied; review the current plan, then prepare and approve a new change.');
+  }
+  assertScopes(input.scopes, proposal.requiredScopes);
+  if (args.data.permissionMode !== permissionMode(proposal.requiredScopes)) {
+    invalid('The proposal permission mode does not match. Prepare it again.');
+  }
+  return { ref: args.data.proposalRef, id: decoded.id, proposal };
+}
+
+/** Read durable acceptance without applying, resuming, approving, or touching a lease. */
+export async function getTrainingChangeStatus(
+  input: TrainingWriteInput,
+  provided?: Pick<TrainingWriteDependencies, 'db' | 'now'>,
+): Promise<z.infer<typeof TRAINING_CHANGE_STATUS_OUTPUT>> {
+  assertScopes(input.scopes, [TRAINING_PLANS_SCOPE]);
+  const args = TRAINING_CHANGE_STATUS_INPUT.safeParse(input.arguments);
+  if (!args.success) invalid('A valid Training proposal reference and permission mode are required.');
+  const decoded = decodeProposalRef(args.data.proposalRef, input.uid, input.connectionId);
+  const deps = provided ?? { db: admin.firestore(), now: Date.now };
+  const ref = deps.db.collection('users').doc(input.uid).collection(PROPOSALS).doc(decoded.id);
+  return deps.db.runTransaction(async tx => {
+    const [snapshot] = await tx.getAll(ref, { fieldMask: [
+      'schemaVersion', 'uid', 'connectionId', 'createdAtMs', 'requiredScopes', 'accessGeneration',
+      'status', 'expiresAtMs', 'expireAt', 'leaseUntilMs', 'approvedAtMs', 'cancelledAtMs',
+      'nextScheduleOperation', 'changeResults', 'providerResults', 'result',
+    ] });
+    const proposal = snapshot.data() as StoredProposal | undefined;
+    const validTime = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+    if (!proposal || proposal.schemaVersion !== 1 || proposal.uid !== input.uid
+      || proposal.connectionId !== input.connectionId || proposal.createdAtMs !== decoded.createdAtMs
+      || !Array.isArray(proposal.requiredScopes) || !proposal.requiredScopes.includes(TRAINING_PLANS_SCOPE)
+      || !proposal.requiredScopes.some(scope => [TRAINING_PLANS_WRITE_SCOPE, TRAINING_DELIVERY_WRITE_SCOPE].includes(scope))
+      || new Set(proposal.requiredScopes).size !== proposal.requiredScopes.length
+      || proposal.requiredScopes.some(scope => ![TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE, TRAINING_DELIVERY_WRITE_SCOPE].includes(scope))
+      || !Array.isArray(proposal.changeResults) || proposal.changeResults.length > 25
+      || !TRAINING_WRITE_OUTPUTS.apply_training_changes.shape.changes.safeParse(proposal.changeResults).success
+      || !Array.isArray(proposal.providerResults) || proposal.providerResults.length > 100
+      || !TRAINING_WRITE_OUTPUTS.apply_training_changes.shape.providers.safeParse(proposal.providerResults).success
+      || !validTime(proposal.expiresAtMs)
+      || !Number.isSafeInteger(proposal.nextScheduleOperation) || proposal.nextScheduleOperation < 0
+      || proposal.nextScheduleOperation > 25
+      || (proposal.leaseUntilMs != null && !validTime(proposal.leaseUntilMs))
+      || (proposal.approvedAtMs !== undefined && !validTime(proposal.approvedAtMs))
+      || (proposal.cancelledAtMs !== undefined && !validTime(proposal.cancelledAtMs))
+      || typeof proposal.accessGeneration !== 'string'
+      || !(proposal.expireAt instanceof Timestamp)
+      || (proposal.result && proposal.expireAt.toMillis() <= deps.now())
+      || !['pending', 'applying', 'applied', 'partially_applied'].includes(proposal.status)) {
+      invalid('This Training proposal is unavailable. Review current records before preparing a new change.');
+    }
+    assertScopes(input.scopes, proposal.requiredScopes);
+    if (args.data.permissionMode !== permissionMode(proposal.requiredScopes)) {
+      invalid('The proposal permission mode does not match.');
+    }
+    // Status remains readable during a bulk lock, but never through lost/replaced authority.
+    await assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId, proposal.requiredScopes,
+      proposal.accessGeneration,
+      input.connectionId.startsWith('first-party-assistant-v1:') ? args.data.proposalRef : undefined, true);
+    const result = proposal.result ? TRAINING_WRITE_OUTPUTS.apply_training_changes.parse(proposal.result) : null;
+    if ((['applied', 'partially_applied'].includes(proposal.status) && !result)
+      || (result && (result.proposalRef !== args.data.proposalRef || result.status !== proposal.status
+        || result.changes.length !== proposal.changeResults.length || result.providers.length !== proposal.providerResults.length))) {
+      unavailable('The Training result could not be read safely. Review current records before preparing a new change.');
+    }
+    const now = deps.now();
+    const active = proposal.cancelledAtMs === undefined && proposal.status === 'applying' && (proposal.leaseUntilMs ?? 0) > now;
+    const started = proposal.approvedAtMs !== undefined || proposal.nextScheduleOperation > 0
+      || proposal.changeResults.length > 0 || proposal.providerResults.length > 0;
+    const state = proposal.cancelledAtMs !== undefined ? 'cancelled'
+      : result ? result.status
+        : active ? 'applying'
+          : proposal.expiresAtMs <= now ? 'expired'
+            : started ? 'interrupted' : 'not_started';
+    return TRAINING_CHANGE_STATUS_OUTPUT.parse({
+      proposalRef: args.data.proposalRef, state,
+      recordedChangeCount: proposal.changeResults.length,
+      recordedProviderCount: proposal.providerResults.length,
+      retryAfterSeconds: active ? Math.min(120, Math.max(1, Math.ceil(((proposal.leaseUntilMs ?? now) - now) / 1000))) : null,
+      result,
+    });
+  }, { readOnly: true });
+}
+
+async function currentDeliveryCommand(
+  deps: TrainingWriteDependencies,
+  uid: string,
+  connectionId: string,
+  requiredScopes: readonly string[],
+  expectedAccessGeneration: string,
+  assistantProposalRef: string,
+  operation: StoredProviderOperation,
+  mutationId: string,
+): Promise<Record<string, unknown>> {
+  const action = mapDeliveryAction(operation);
+  const base = { schemaVersion: 1 as const, mutationId, scope: operation.targetType, scopeId: operation.targetId,
+    provider: operation.provider, action, expectedScheduleRevision: operation.expectedScheduleRevision,
+    expectedScopeRevision: operation.expectedScopeRevision, expectedSettingsRevision: operation.expectedSettingsRevision,
+    ...(operation.timeZone ? { timeZone: operation.timeZone } : {}),
+    ...((action === 'approve' || action === 'send' || action === 'replace') && operation.approvalDigest
+      ? { approvalDigest: operation.approvalDigest } : {}) };
+  if (action === 'check') {
+    return await trainingDeliveryCommand(deps.runtime, uid, base, false,
+      tx => assertAuthorityInTransaction(deps, tx, uid, connectionId, requiredScopes, expectedAccessGeneration,
+        connectionId.startsWith('first-party-assistant-v1:') ? assistantProposalRef : undefined)
+        .then(() => undefined)) as unknown as Record<string, unknown>;
+  }
+  if (action === 'approve' && !operation.approvalDigest) invalid('The confirmed compatibility approval is unavailable. Prepare it again.');
+  return await trainingDeliveryCommand(deps.runtime, uid, base, false,
+    tx => assertAuthorityInTransaction(deps, tx, uid, connectionId, requiredScopes, expectedAccessGeneration,
+      connectionId.startsWith('first-party-assistant-v1:') ? assistantProposalRef : undefined)
+      .then(() => undefined)) as unknown as Record<string, unknown>;
+}
+
+export interface TrainingApplyTiming {
+  operationCount: number;
+  scheduleOperationCount: number;
+  providerOperationCount: number;
+  proposalMs: number;
+  scheduleMs: number;
+  providerMs: number;
+  finalizeMs: number;
+  outcome: 'applied' | 'partially_applied' | 'failed' | 'replayed';
+}
+
+function roundedDuration(value: number): number {
+  return Math.max(0, Math.round(value));
+}
+
+export function emitTrainingApplyDiagnostic(timing: TrainingApplyTiming, durationMs: number): void {
+  const stages = {
+    proposal: roundedDuration(timing.proposalMs),
+    schedule: roundedDuration(timing.scheduleMs),
+    provider: roundedDuration(timing.providerMs),
+    finalize: roundedDuration(timing.finalizeMs),
+  };
+  const slowStage = Object.entries(stages).sort((left, right) => right[1] - left[1])[0]?.[0] ?? 'proposal';
+  const diagnostic = {
+    operationCount: timing.operationCount,
+    scheduleOperationCount: timing.scheduleOperationCount,
+    providerOperationCount: timing.providerOperationCount,
+    durationMs: roundedDuration(durationMs),
+    stageDurationMs: stages,
+    outcome: timing.outcome,
+    slowStage,
+  };
+  logger.info('[MCP] Training apply finished', diagnostic);
+  if (durationMs >= 5_000) logger.warn('[MCP] Training apply slow', diagnostic);
+}
+
+type TrainingApplyStage = 'proposal' | 'schedule' | 'provider' | 'finalize';
+type TrainingApplyDurationField = 'proposalMs' | 'scheduleMs' | 'providerMs' | 'finalizeMs';
+
+function createTrainingApplyStageTracker(
+  timing: TrainingApplyTiming,
+  startedAtMs: number,
+  clock: () => number,
+): { moveTo(stage: TrainingApplyStage): void; finish(finishedAtMs: number): void } {
+  const fields: Record<TrainingApplyStage, TrainingApplyDurationField> = {
+    proposal: 'proposalMs',
+    schedule: 'scheduleMs',
+    provider: 'providerMs',
+    finalize: 'finalizeMs',
+  };
+  let activeStage: TrainingApplyStage = 'proposal';
+  let activeStartedAtMs = startedAtMs;
+  let finished = false;
+  const recordActiveStage = (finishedAtMs: number): void => {
+    if (finished) return;
+    const field = fields[activeStage];
+    timing[field] += Math.max(0, finishedAtMs - activeStartedAtMs);
+    activeStartedAtMs = finishedAtMs;
+  };
+  return {
+    moveTo(stage): void {
+      const changedAtMs = clock();
+      recordActiveStage(changedAtMs);
+      activeStage = stage;
+    },
+    finish(finishedAtMs): void {
+      recordActiveStage(finishedAtMs);
+      finished = true;
+    },
+  };
+}
+
+async function resetProposalLease(
+  proposalRefDoc: FirebaseFirestore.DocumentReference,
+): Promise<void> {
+  try { await proposalRefDoc.set({ status: 'pending', leaseUntilMs: null }, { merge: true }); }
+  catch { /* Preserve the original apply failure. The lease still expires safely. */ }
+}
+
+async function preserveResumableTrainingProposal(
+  proposalRefDoc: FirebaseFirestore.DocumentReference,
+  nowMs: number,
+): Promise<void> {
+  const expiresAtMs = Math.max(Date.now(), nowMs) + PROPOSAL_RESULT_LIFETIME_MS;
+  try {
+    await proposalRefDoc.set({
+      status: 'pending',
+      leaseUntilMs: null,
+      expiresAtMs,
+      expireAt: Timestamp.fromMillis(expiresAtMs),
+    }, { merge: true });
+  } catch {
+    // Preserve the original interruption. The current lease still expires and
+    // the bulk-operation lock keeps unrelated schedule writes fenced.
+  }
+}
+
+async function applyTrainingChangesInternal(
+  input: TrainingWriteInput,
+  deps: TrainingWriteDependencies,
+  timing: TrainingApplyTiming,
+  moveToStage: (stage: TrainingApplyStage) => void,
+): Promise<ApplyResult> {
+  const current = await readProposal(input, deps);
+  const ref = current.ref;
+  const proposalRefDoc = deps.db.collection('users').doc(input.uid).collection(PROPOSALS).doc(current.id);
+  let proposal = await deps.db.runTransaction(async tx => {
+    const snapshot = await tx.get(proposalRefDoc);
+    const value = snapshot.data() as StoredProposal | undefined;
+    if (!value || value.createdAtMs !== current.proposal.createdAtMs) invalid('This Training proposal is unavailable.');
+    if (value.cancelledAtMs !== undefined) {
+      invalid('This Training proposal was cancelled. Earlier changes may have applied; review the current plan, then prepare and approve a new change.');
+    }
+    const locks = await tx.get(deps.db.collection('users').doc(input.uid).collection('trainingPlanState').doc('current')
+      .collection(TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID));
+    const activeShift = locks.docs.length === 1 && locks.docs[0].id === BULK_SHIFT_LOCK_ID ? locks.docs[0] : null;
+    const pendingRequest = value.scheduleRequests?.[value.nextScheduleOperation]?.request;
+    const resumingOwnShift = !value.result && pendingRequest?.operation.kind === 'shift-plan'
+      && activeShift?.get('cancelling') !== true
+      && activeShift?.get('mcpAuthority.proposalId') === current.id
+      && activeShift?.get('mcpAuthority.proposalRef') === current.ref
+      && activeShift?.get('mcpAuthority.proposalCreatedAtMs') === value.createdAtMs
+      && activeShift?.get('mcpAuthority.connectionId') === input.connectionId
+      && activeShift?.get('mcpAuthority.scheduleIndex') === value.nextScheduleOperation
+      && activeShift?.get('mutationId') === pendingRequest?.mutationId;
+    await assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId, current.proposal.requiredScopes,
+      current.proposal.accessGeneration,
+      input.connectionId.startsWith('first-party-assistant-v1:') ? current.ref : undefined, resumingOwnShift);
+    if (value.result) return value;
+    const now = deps.now();
+    if (value.expiresAtMs <= now && value.status === 'pending') invalid('This Training proposal expired. Prepare it again.');
+    if (value.status === 'applying' && (value.leaseUntilMs ?? 0) > now) invalid('This Training proposal is already being applied.');
+    const next = { ...value, status: 'applying' as const, leaseUntilMs: now + APPLY_LEASE_MS,
+      approvedAtMs: value.approvedAtMs ?? now };
+    tx.update(proposalRefDoc, { status: next.status, leaseUntilMs: next.leaseUntilMs,
+      approvedAtMs: next.approvedAtMs });
+    return next;
+  });
+  timing.operationCount = proposal.scheduleRequests.length + proposal.providerOperations.length
+    + (proposal.planDeletion ? 1 : 0);
+  timing.scheduleOperationCount = proposal.scheduleRequests.length + (proposal.planDeletion ? 1 : 0);
+  timing.providerOperationCount = proposal.providerOperations.length;
+  if (proposal.result) {
+    timing.outcome = 'replayed';
+    return TRAINING_WRITE_OUTPUTS.apply_training_changes.parse(proposal.result);
+  }
+
+  moveToStage('schedule');
+  const changeResults = [...proposal.changeResults];
+  if (proposal.planDeletion && !changeResults.some(result => result.index === proposal.planDeletion!.index)) {
+    try {
+      const response = await deleteTrainingPlanForUser(input.uid, proposal.planDeletion.request, {
+        db: deps.db,
+        nowMs: proposal.createdAtMs,
+        transactionPrecondition: tx => assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId,
+          proposal.requiredScopes, proposal.accessGeneration,
+          input.connectionId.startsWith('first-party-assistant-v1:') ? current.ref : undefined, true)
+          .then(() => undefined),
+      });
+      const effect = response.workoutDisposition === 'convert-to-standalone'
+        ? `${response.convertedWorkoutIds.length} workout${response.convertedWorkoutIds.length === 1 ? '' : 's'} converted to standalone.`
+        : `${response.permanentlyDeletedWorkoutIds.length} workout${response.permanentlyDeletedWorkoutIds.length === 1 ? '' : 's'} permanently deleted.`;
+      changeResults.push({ index: proposal.planDeletion.index, kind: 'delete-plan', status: 'applied',
+        message: `The plan and its revision history were permanently deleted. ${effect} ${describeAppliedProviderDeletion(proposal.planDeletion.request.removePastProviderCopies === true)}` });
+      await proposalRefDoc.update({ changeResults, leaseUntilMs: deps.now() + APPLY_LEASE_MS });
+    } catch (error) {
+      if (error instanceof TrainingPlanDeletionResumeRequiredError) {
+        await preserveResumableTrainingProposal(proposalRefDoc, deps.now());
+        throw new McpDataError(
+          'temporarily_unavailable',
+          'The approved plan deletion was interrupted. Retry the same approved change; it resumes safely without repeating completed work.',
+        );
+      }
+      const message = publicErrorMessage(error);
+      if (!message) {
+        await resetProposalLease(proposalRefDoc);
+        throw error;
+      }
+      changeResults.push({ index: proposal.planDeletion.index, kind: 'delete-plan', status: 'failed', message });
+    }
+  }
+
+  const pendingSchedule = proposal.scheduleRequests.slice(proposal.nextScheduleOperation);
+  if (pendingSchedule.length > 0 && !changeResults.some(result => result.status === 'failed')) {
+    const appliedResults: ApplyResult['changes'] = pendingSchedule.map(stored => ({
+      index: stored.index,
+      kind: stored.request.operation.kind,
+      status: 'applied' as const,
+      message: stored.request.operation.kind === 'delete-workout'
+        ? `The workout was moved to recoverable history. ${describeAppliedProviderDeletion(stored.request.operation.removePastProviderCopies === true)}`
+        : describeOperation(stored.request.operation),
+    }));
+    const stagedLockRef = deps.db.collection('users').doc(input.uid).collection('trainingPlanState').doc('current')
+      .collection(TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID).doc(BULK_SHIFT_LOCK_ID);
+    const applyStagedShift = async (stored: StoredScheduleOperation, scheduleIndex: number): Promise<void> => {
+      const authority: StagedShiftMcpAuthorityV1 = {
+        kind: 'mcp-approved-shift', proposalId: current.id, proposalRef: current.ref,
+        proposalCreatedAtMs: proposal.createdAtMs, connectionId: input.connectionId,
+        accessGeneration: proposal.accessGeneration, requiredScopes: proposal.requiredScopes,
+        scheduleIndex,
+      };
+      try {
+        await stageLargeTrainingPlanShiftForUser(input.uid, stored.request, {
+          db: deps.db, nowMs: proposal.createdAtMs + scheduleIndex, approvalNow: deps.now,
+          stagedShiftAuthority: authority,
+        });
+      } catch (error) {
+        const lock = await stagedLockRef.get();
+        if (error instanceof StagedShiftApprovalLostError) {
+          if (lock.exists && lock.data()?.mcpAuthority?.proposalId === current.id) {
+            let cancelled = false;
+            try { cancelled = await abortUnapprovedMcpShift(deps.db, input.uid, stagedLockRef, deps.now()); }
+            catch { unavailable('The approved shift lost its permission or expired. Its unpublished staging needs cleanup; review the plan before preparing a new change.'); }
+            if (!cancelled) unavailable('The staged shift changed while its approval was checked. Read the current plan before retrying.');
+          }
+          invalid('The approved shift lost its permission or expired. Review the current plan, then prepare and approve a new change.');
+        }
+        if (lock.exists && lock.data()?.mcpAuthority?.proposalId === current.id) {
+          await preserveResumableTrainingProposal(proposalRefDoc, deps.now());
+          throw new McpDataError('temporarily_unavailable',
+            'The approved plan shift was interrupted. Retry the same approved change; it resumes safely.');
+        }
+        throw error;
+      }
+    };
+    try {
+      await mutateTrainingScheduleBatchForUser(input.uid, pendingSchedule.map(stored => stored.request), {
+        db: deps.db,
+        nowMs: proposal.createdAtMs + proposal.nextScheduleOperation,
+        additionalWriteBudget: 1,
+        transactionPrecondition: tx => assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId,
+          proposal.requiredScopes, proposal.accessGeneration,
+          input.connectionId.startsWith('first-party-assistant-v1:') ? current.ref : undefined).then(() => undefined),
+        transactionPostcondition: transaction => {
+          transaction.update(proposalRefDoc, {
+            nextScheduleOperation: proposal.scheduleRequests.length,
+            changeResults: [...changeResults, ...appliedResults],
+            leaseUntilMs: deps.now() + APPLY_LEASE_MS,
+          });
+        },
+      });
+      changeResults.push(...appliedResults);
+    } catch (error) {
+      const firstPending = pendingSchedule[0];
+      const stagedLock = error instanceof TrainingScheduleMutationError
+        && error.code === 'failed-precondition' && firstPending.request.operation.kind === 'shift-plan'
+        ? await stagedLockRef.get() : null;
+      const resumeStagedShift = stagedLock?.exists === true
+        && stagedLock.get('mcpAuthority.proposalId') === current.id
+        && stagedLock.get('mcpAuthority.connectionId') === input.connectionId
+        && stagedLock.get('mcpAuthority.scheduleIndex') === proposal.nextScheduleOperation
+        && stagedLock.get('mutationId') === firstPending.request.mutationId;
+      if (((error instanceof TrainingScheduleOversizedMutationError
+        || error instanceof TrainingScheduleBatchWriteLimitError)
+        && pendingSchedule.length === 1 && firstPending.request.operation.kind === 'shift-plan')
+        || (resumeStagedShift && pendingSchedule.length === 1)) {
+        await applyStagedShift(firstPending, proposal.nextScheduleOperation);
+        changeResults.push(appliedResults[0]);
+      } else if (error instanceof TrainingScheduleBatchWriteLimitError || resumeStagedShift) {
+        for (let offset = 0; offset < pendingSchedule.length; offset += 1) {
+          const stored = pendingSchedule[offset];
+          const appliedResult = appliedResults[offset];
+          if (offset === 0 && resumeStagedShift) {
+            await applyStagedShift(stored, proposal.nextScheduleOperation);
+            changeResults.push(appliedResult);
+            continue;
+          }
+          try {
+            await mutateTrainingScheduleForUser(input.uid, stored.request, {
+              db: deps.db,
+              nowMs: proposal.createdAtMs + proposal.nextScheduleOperation + offset,
+              additionalWriteBudget: 1,
+              transactionPrecondition: tx => assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId,
+                proposal.requiredScopes, proposal.accessGeneration,
+                input.connectionId.startsWith('first-party-assistant-v1:') ? current.ref : undefined)
+                .then(() => undefined),
+              transactionPostcondition: transaction => {
+                transaction.update(proposalRefDoc, {
+                  nextScheduleOperation: proposal.nextScheduleOperation + offset + 1,
+                  changeResults: [...changeResults, appliedResult],
+                  leaseUntilMs: deps.now() + APPLY_LEASE_MS,
+                });
+              },
+            });
+            changeResults.push(appliedResult);
+          } catch (sequentialError) {
+            if ((sequentialError instanceof TrainingScheduleOversizedMutationError
+              || sequentialError instanceof TrainingScheduleBatchWriteLimitError)
+              && stored.request.operation.kind === 'shift-plan') {
+              await applyStagedShift(stored, proposal.nextScheduleOperation + offset);
+              changeResults.push(appliedResult);
+              continue;
+            }
+            const message = publicErrorMessage(sequentialError);
+            if (!message) {
+              await resetProposalLease(proposalRefDoc);
+              throw sequentialError;
+            }
+            changeResults.push({ index: stored.index, kind: stored.request.operation.kind, status: 'failed',
+              message });
+            break;
+          }
+        }
+      } else {
+        const message = publicErrorMessage(error);
+        if (!message) {
+          await resetProposalLease(proposalRefDoc);
+          throw error;
+        }
+        const failed = pendingSchedule[0];
+        changeResults.push({ index: failed.index, kind: failed.request.operation.kind, status: 'failed', message });
+      }
+    }
+  }
+
+  const expectedScheduleResults = proposal.scheduleRequests.length + (proposal.planDeletion ? 1 : 0);
+  const completedSchedule = !changeResults.some(item => item.status === 'failed')
+    && changeResults.length >= expectedScheduleResults;
+  moveToStage('provider');
+  const providerResults = [...proposal.providerResults];
+  if (completedSchedule) {
+    for (let index = providerResults.length; index < proposal.providerOperations.length; index += 1) {
+      const operation = proposal.providerOperations[index];
+      try {
+        await currentDeliveryCommand(deps, input.uid, input.connectionId, proposal.requiredScopes,
+          proposal.accessGeneration, current.ref, operation, `mcp-${current.id}-${index}`.slice(0, 128));
+        providerResults.push({ index: operation.index, provider: operation.provider,
+          status: operation.action === 'check' ? 'queued' : 'applied',
+          message: operation.action === 'replace'
+            ? 'The reviewed Garmin replacement was queued. Provider or watch receipt is not yet confirmed; the original may reappear.'
+            : operation.action === 'check' ? 'Remote-copy verification was queued.'
+            : operation.action === 'send' && operation.approvalDigest
+              ? 'Delivery and the previewed mapping adjustment were approved; reconciliation was queued. Provider receipt is not yet confirmed.'
+              : 'Delivery preferences were updated and reconciliation was queued.' });
+      } catch (error) {
+        providerResults.push({ index: operation.index, provider: operation.provider, status: 'blocked',
+          message: publicErrorMessage(error) ?? 'Provider delivery is currently unavailable. Review its connection and try again.' });
+      }
+      await proposalRefDoc.update({ providerResults, leaseUntilMs: deps.now() + APPLY_LEASE_MS });
+    }
+  }
+
+  moveToStage('finalize');
+  const state = await deps.db.collection('users').doc(input.uid).collection('trainingPlanState').doc('current').get();
+  const createdReferences: ApplyResult['createdReferences'] = [];
+  const localRefs = proposal.localEntities.map(local => deps.db.collection('users').doc(input.uid)
+    .collection(local.kind === 'plan' ? 'trainingPlans' : 'scheduledWorkouts').doc(local.id));
+  const localDocs = localRefs.length > 0 ? await deps.db.getAll(...localRefs) : [];
+  proposal.localEntities.forEach((local, index) => {
+    const doc = localDocs[index];
+    if (doc.exists) createdReferences.push({ localKey: local.localKey, kind: local.kind,
+      reference: encodeOpaqueValue('training_read', { kind: local.kind, id: local.id,
+        createdAtMs: Number(doc.get('createdAtMs')) }, input.uid, input.connectionId) });
+  });
+  const partial = changeResults.some(item => item.status === 'failed') || providerResults.some(item => ['blocked', 'failed'].includes(item.status));
+  const result: ApplyResult = { proposalRef: ref, status: partial ? 'partially_applied' : 'applied',
+    scheduleRevision: Number(state.get('revision') ?? 0), changes: changeResults,
+    providers: providerResults, createdReferences };
+  TRAINING_WRITE_OUTPUTS.apply_training_changes.parse(result);
+  proposal = { ...proposal, status: result.status, result, changeResults, providerResults,
+    leaseUntilMs: null, expireAt: Timestamp.fromMillis(deps.now() + PROPOSAL_RESULT_LIFETIME_MS) };
+  await proposalRefDoc.set({ status: proposal.status, result, changeResults, providerResults, leaseUntilMs: null,
+    expireAt: proposal.expireAt }, { merge: true });
+  await deps.db.runTransaction(tx => assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId,
+    proposal.requiredScopes, proposal.accessGeneration,
+    input.connectionId.startsWith('first-party-assistant-v1:') ? current.ref : undefined), { readOnly: true });
+  timing.outcome = result.status;
+  return result;
+}
+
+export async function applyTrainingChanges(
+  input: TrainingWriteInput,
+  provided?: TrainingWriteDependencies,
+): Promise<ApplyResult> {
+  const deps = provided ?? defaultDependencies();
+  const clock = deps.monotonicNow ?? (() => performance.now());
+  const started = clock();
+  const timing: TrainingApplyTiming = {
+    operationCount: 0,
+    scheduleOperationCount: 0,
+    providerOperationCount: 0,
+    proposalMs: 0,
+    scheduleMs: 0,
+    providerMs: 0,
+    finalizeMs: 0,
+    outcome: 'failed',
+  };
+  const stageTracker = createTrainingApplyStageTracker(timing, started, clock);
+  try {
+    return await applyTrainingChangesInternal(input, deps, timing, stageTracker.moveTo);
+  } finally {
+    const finished = clock();
+    stageTracker.finish(finished);
+    emitTrainingApplyDiagnostic(timing, finished - started);
+  }
+}

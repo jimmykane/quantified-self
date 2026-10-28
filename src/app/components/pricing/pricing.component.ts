@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, inject, Output, EventEmitter, PLATFORM_ID, Input } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, Output, EventEmitter, PLATFORM_ID, Input, signal } from '@angular/core';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -8,15 +8,16 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatBadgeModule } from '@angular/material/badge';
 import { MatListModule } from '@angular/material/list';
-import { AppPaymentService, StripeProduct, StripeSubscription, StripePrice } from '../../services/app.payment.service';
+import { AppPaymentService, CheckoutStartError, StripeProduct, StripeSubscription, StripePrice } from '../../services/app.payment.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { Auth } from 'app/firebase/auth';
 import { LoggerService } from '../../services/logger.service';
-import { BehaviorSubject, Observable, Subscription, firstValueFrom, map, take } from 'rxjs';
+import { BehaviorSubject, Observable, Subscription, combineLatest, firstValueFrom, map, of, shareReplay, take } from 'rxjs';
 import { StripeRole } from '../../models/stripe-role.model';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { User } from '@sports-alliance/sports-lib';
 import { UpcomingRenewalAmountResult } from '@shared/stripe-renewal';
 
@@ -26,6 +27,11 @@ import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { POLICY_CONTENT } from '../../shared/policies.content';
 import { getAssistantRequestLimitForRole, getRouteUsageLimitForRole, getUsageLimitForRole } from '@shared/limits';
+import { getNumberFormatter } from '../../helpers/number-format.helper';
+import { membershipPriceId, membershipPriceIdFromReturnUrl, membershipReturnUrl, prioritizeMembershipSelection } from '../../helpers/membership-selection.helper';
+
+const FREE_PRICE_ID = 'free_price';
+const PLAN_DISPLAY_ORDER: Record<string, number> = { pro: 0, basic: 1, free: 2 };
 
 interface SubscriptionSummary {
     status: StripeSubscription['status'];
@@ -62,9 +68,12 @@ export class PricingComponent implements OnInit, OnDestroy {
     @Output() loadingStateChange = new EventEmitter<boolean>();
 
     products$: Observable<StripeProduct[]> | null = null;
+    readonly selectedPriceId = signal<string | null>(null);
+    readonly selectionUnavailable = signal(false);
     currentRole: StripeRole | null = null;
     isLoading = false;
     loadingPriceId: string | null = null;
+    readonly checkoutProgress = signal('Preparing your checkout…');
     activeSubscriptions$: Observable<StripeSubscription[]> | null = null;
     private readonly subscriptionSummarySubject = new BehaviorSubject<SubscriptionSummary | null>(null);
     subscriptionSummary$: Observable<SubscriptionSummary | null> = this.subscriptionSummarySubject.asObservable();
@@ -80,8 +89,10 @@ export class PricingComponent implements OnInit, OnDestroy {
     private auth = inject(Auth);
     private userService = inject(AppUserService);
     private analyticsService = inject(AppAnalyticsService);
+    private readonly haptics = inject(AppHapticsService);
     private logger = inject(LoggerService);
     private router = inject(Router);
+    private readonly route = inject(ActivatedRoute, { optional: true });
 
     constructor(
         private paymentService: AppPaymentService,
@@ -112,7 +123,7 @@ export class PricingComponent implements OnInit, OnDestroy {
             role: 'free',
             metadata: { role: 'free' },
             prices: [{
-                id: 'free_price',
+                id: FREE_PRICE_ID,
                 active: true,
                 currency: 'USD',
                 unit_amount: 0,
@@ -125,8 +136,21 @@ export class PricingComponent implements OnInit, OnDestroy {
             }]
         };
 
-        this.products$ = this.paymentService.getProducts().pipe(
-            map((products) => [freeProduct, ...products])
+        const selectionParams$ = this.route?.queryParamMap ?? of(this.route?.snapshot?.queryParamMap);
+        this.products$ = combineLatest([this.paymentService.getProducts(), selectionParams$]).pipe(
+            map(([products, params]) => {
+                const requestedPriceId = membershipPriceId(params?.get('priceId'))
+                    ?? membershipPriceIdFromReturnUrl(params?.get('returnUrl'));
+                const offeredProducts = [freeProduct, ...products].sort((left, right) => (
+                    (PLAN_DISPLAY_ORDER[left.metadata?.role ?? left.role] ?? 3)
+                    - (PLAN_DISPLAY_ORDER[right.metadata?.role ?? right.role] ?? 3)
+                ));
+                const selection = prioritizeMembershipSelection(offeredProducts, requestedPriceId);
+                this.selectedPriceId.set(selection.selectedPriceId);
+                this.selectionUnavailable.set(selection.selectionUnavailable);
+                return selection.products;
+            }),
+            shareReplay({ bufferSize: 1, refCount: true }),
         );
 
         // Initial load
@@ -210,12 +234,14 @@ export class PricingComponent implements OnInit, OnDestroy {
         if (isPlatformBrowser(this.platformId) && !document.hidden) {
             this.logger.log('Page became visible, resetting loading state');
             this.setLoadingState(false);
-            this.loadingPriceId = null;
         }
     };
 
     private setLoadingState(isLoading: boolean): void {
         this.isLoading = isLoading;
+        if (!isLoading) {
+            this.loadingPriceId = null;
+        }
         this.loadingStateChange.emit(isLoading);
     }
 
@@ -483,18 +509,23 @@ export class PricingComponent implements OnInit, OnDestroy {
     }
 
     async subscribe(price: any) {
-        if (!this.authService.currentUser) {
-            this.router.navigate(['/login'], { queryParams: { returnUrl: this.getReturnUrl() } });
+        if (this.isLoading) {
             return;
         }
 
-        const userWithRequiredPolicies = await this.getUserWithRequiredPolicies();
-        if (!userWithRequiredPolicies) {
+        const priceId = typeof price === 'string' ? price : price.id;
+        if (!this.authService.currentUser) {
+            this.router.navigate(['/login'], { queryParams: { returnUrl: membershipReturnUrl(priceId) } });
+            return;
+        }
+
+        const userWithRequiredPolicies = await this.getUserWithRequiredPolicies(priceId);
+        if (!userWithRequiredPolicies || this.isLoading || this.destroyed) {
             return;
         }
 
         // Handle both price object and legacy string ID for backward compatibility
-        const priceId = typeof price === 'string' ? price : price.id;
+        this.haptics.selection();
 
         // Double-Billing Protection:
         // If user already has a Paid Role (Basic/Pro), they CANNOT checkout again.
@@ -509,6 +540,7 @@ export class PricingComponent implements OnInit, OnDestroy {
         }
 
         this.loadingPriceId = priceId;
+        this.checkoutProgress.set('Preparing your checkout…');
         this.setLoadingState(true);
 
         try {
@@ -517,8 +549,13 @@ export class PricingComponent implements OnInit, OnDestroy {
                 typeof price !== 'string' ? price.currency : undefined,
                 typeof price !== 'string' ? price.unit_amount / 100 : undefined
             );
-            await this.paymentService.appendCheckoutSession(price);
+            await this.paymentService.appendCheckoutSession(price, undefined, undefined, () => !this.destroyed, () => {
+                if (!this.destroyed) this.checkoutProgress.set('Updating your checkout…');
+            });
         } catch (error) {
+            if (this.destroyed) {
+                return;
+            }
             const errorMessage = (error as Error).message || '';
             if (errorMessage === 'User cancelled redirection to portal.') {
                 this.logger.log('User cancelled subscription management.');
@@ -526,11 +563,13 @@ export class PricingComponent implements OnInit, OnDestroy {
                 const role = errorMessage.split(':')[1];
                 this.showSubscriptionRestoredDialog(role);
             } else {
-                this.logger.error('Error starting checkout:', error);
-                alert('Failed to start checkout. Please try again.');
+                this.haptics.error();
+                if (!(error instanceof CheckoutStartError)) {
+                    this.logger.error('Error starting checkout:', error);
+                }
+                alert(error instanceof CheckoutStartError ? error.message : 'Failed to start checkout. Please try again.');
             }
             this.setLoadingState(false);
-            this.loadingPriceId = null;
         }
     }
 
@@ -562,8 +601,11 @@ export class PricingComponent implements OnInit, OnDestroy {
         try {
             await this.paymentService.manageSubscriptions();
         } catch (error) {
-            this.logger.error('Error managing subscription:', error);
-            alert('Failed to redirect to subscription management. Please try again.');
+            this.haptics.error();
+            if (!(error instanceof CheckoutStartError)) {
+                this.logger.error('Error managing subscription:', error);
+            }
+            alert(error instanceof CheckoutStartError ? error.message : 'Failed to redirect to subscription management. Please try again.');
             this.setLoadingState(false);
         }
     }
@@ -598,30 +640,41 @@ export class PricingComponent implements OnInit, OnDestroy {
         try {
             await this.paymentService.manageSubscriptions();
         } catch (error) {
-            this.logger.error('Error redirecting to plan/billing change flow:', error);
-            alert('Failed to open billing portal. Please try again.');
+            this.haptics.error();
+            if (!(error instanceof CheckoutStartError)) {
+                this.logger.error('Error redirecting to plan/billing change flow:', error);
+            }
+            alert(error instanceof CheckoutStartError ? error.message : 'Failed to open billing portal. Please try again.');
             this.setLoadingState(false);
         }
     }
 
-    async selectFreeTier() {
+    async selectFreeTier(priceId: string = FREE_PRICE_ID) {
+        if (this.isLoading) {
+            return;
+        }
+
         if (!this.authService.currentUser) {
             this.router.navigate(['/login'], { queryParams: { returnUrl: this.getReturnUrl() } });
             return;
         }
 
         const userWithRequiredPolicies = await this.getUserWithRequiredPolicies();
-        if (!userWithRequiredPolicies) {
+        if (!userWithRequiredPolicies || this.isLoading) {
             return;
         }
 
+        this.loadingPriceId = priceId;
         this.setLoadingState(true);
+        this.haptics.selection();
         try {
             this.analyticsService.logSelectFreeTier();
             await this.userService.setFreeTier(userWithRequiredPolicies);
+            this.haptics.success();
             this.logger.log('Free tier selected. Waiting for reactive updates to handle navigation.');
             this.planSelected.emit();
         } catch (error) {
+            this.haptics.error();
             this.logger.error('Error selecting free tier:', error);
             alert('Failed to select free tier. Please try again.');
         } finally {
@@ -672,19 +725,15 @@ export class PricingComponent implements OnInit, OnDestroy {
         return url && url.startsWith('/') ? url : '/subscriptions';
     }
 
-    private async getUserWithRequiredPolicies() {
+    private async getUserWithRequiredPolicies(selectedPriceId?: string) {
         const user = await this.getCurrentAppUser();
         if (!user) {
             if (this.isOnboarding) {
                 this.logger.log('[PricingComponent] App user is unavailable during onboarding. Staying on onboarding.');
                 return null;
             }
-            this.router.navigate(['/onboarding'], { queryParams: { returnUrl: '/subscriptions' } });
+            this.router.navigate(['/onboarding'], { queryParams: { returnUrl: membershipReturnUrl(selectedPriceId) } });
             return null;
-        }
-
-        if (this.isOnboarding && this.onboardingUser?.uid) {
-            return user;
         }
 
         const termsAccepted = this.requiredPolicies.every((policy) => {
@@ -702,7 +751,7 @@ export class PricingComponent implements OnInit, OnDestroy {
         }
 
         this.logger.log('[PricingComponent] Required legal policies are missing. Redirecting to onboarding.');
-        this.router.navigate(['/onboarding'], { queryParams: { returnUrl: '/subscriptions' } });
+        this.router.navigate(['/onboarding'], { queryParams: { returnUrl: membershipReturnUrl(selectedPriceId) } });
         return null;
     }
 
@@ -803,7 +852,7 @@ export class PricingComponent implements OnInit, OnDestroy {
     private formatCurrencyFromMinor(amountMinor: number, currencyCode: string): string {
         const amountMajor = amountMinor / 100;
         const hasNoCents = amountMinor % 100 === 0;
-        const formatter = new Intl.NumberFormat(undefined, {
+        const formatter = getNumberFormatter(undefined, {
             style: 'currency',
             currency: currencyCode,
             minimumFractionDigits: hasNoCents ? 0 : 2,

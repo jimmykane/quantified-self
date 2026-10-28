@@ -1,3 +1,4 @@
+import { ActivityIdentityConflictError } from '../shared/activity-identity-conflict';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ACTIVITY_SYNC_ROUTES, ACTIVITY_SYNC_ROUTE_IDS } from '../../../shared/activity-sync-routes';
@@ -27,8 +28,13 @@ const mocks = vi.hoisted(() => {
     failRevision: vi.fn().mockResolvedValue('retry'),
     enqueueActivitySyncAfterEventPersistence: vi.fn(),
     isActivitySyncOutboundEcho: vi.fn(),
+    retainWahooTrainingCompletion: vi.fn(),
+    fitActivityReferencesFromEvent: vi.fn(),
+    firestore: { kind: 'firestore' },
   };
 });
+
+vi.mock('firebase-admin', () => ({ firestore: () => mocks.firestore }));
 
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@sports-alliance/sports-lib')>();
@@ -50,6 +56,12 @@ vi.mock('../activity-sync/enqueue-after-event-persistence', () => ({
 }));
 vi.mock('../activity-sync/outbound-fingerprint', () => ({
   isActivitySyncOutboundEcho: mocks.isActivitySyncOutboundEcho,
+}));
+vi.mock('../suunto/guide-completion', () => ({
+  fitActivityReferencesFromEvent: mocks.fitActivityReferencesFromEvent,
+}));
+vi.mock('./training-completion', () => ({
+  retainWahooTrainingCompletion: mocks.retainWahooTrainingCompletion,
 }));
 vi.mock('../queue-utils', () => ({
   markQueueItemSkipped: mocks.markSkipped,
@@ -125,6 +137,8 @@ describe('processWahooWorkoutQueueItem', () => {
     });
     mocks.enqueueActivitySyncAfterEventPersistence.mockResolvedValue(false);
     mocks.isActivitySyncOutboundEcho.mockResolvedValue(false);
+    mocks.fitActivityReferencesFromEvent.mockReturnValue([{ id: 'activity-1', startTimeMs: Date.parse('2026-07-18T09:00:00.000Z') }]);
+    mocks.retainWahooTrainingCompletion.mockResolvedValue({ retained: true, linkedWorkoutIds: ['planned-workout'] });
     mocks.hasProAccess.mockResolvedValue(true);
     mocks.claimRevision.mockResolvedValue('claimed');
     mocks.claimedRevisionCurrent.mockResolvedValue(true);
@@ -132,8 +146,38 @@ describe('processWahooWorkoutQueueItem', () => {
     mocks.failRevision.mockResolvedValue('retry');
   });
 
+  it('retains an exact Wahoo Training completion before activity fan-out', async () => {
+    const trainingQueueItem = {
+      ...queueItem,
+      workoutToken: 'qs-workout-abcdefghijklmnopqrstuvwxyzABCDEFGH123456789',
+      planID: '77123',
+    };
+
+    await expect(processWahooWorkoutQueueItem(trainingQueueItem)).resolves.toBe('processed');
+
+    expect(mocks.retainWahooTrainingCompletion).toHaveBeenCalledWith(
+      mocks.firestore,
+      'firebase-1',
+      'event-1',
+      expect.objectContaining({ providerUserId: 'wahoo-1' }),
+      'workout-1',
+      '77123',
+      'qs-workout-abcdefghijklmnopqrstuvwxyzABCDEFGH123456789',
+      'summary-1',
+      [{ id: 'activity-1', startTimeMs: Date.parse('2026-07-18T09:00:00.000Z') }],
+      undefined,
+      Buffer.from('valid-fit'),
+    );
+    expect(mocks.retainWahooTrainingCompletion.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.enqueueActivitySyncAfterEventPersistence.mock.invocationCallOrder[0]);
+  });
+
   it('downloads, parses, rechecks its lease, writes through setEvent, and marks processed', async () => {
     await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('processed');
+    expect(mocks.retainWahooTrainingCompletion).toHaveBeenCalledWith(
+      mocks.firestore, 'firebase-1', 'event-1', expect.any(Object), 'workout-1', undefined, undefined,
+      'summary-1', expect.any(Array), undefined, Buffer.from('valid-fit'),
+    );
 
     expect(mocks.deletionSkip).toHaveBeenNthCalledWith(1, 'firebase-1', ServiceNames.WahooAPI, 'queue-1', 'before_token_refresh');
     expect(mocks.deletionSkip).toHaveBeenNthCalledWith(2, 'firebase-1', ServiceNames.WahooAPI, 'queue-1', 'before_event_write');
@@ -182,7 +226,7 @@ describe('processWahooWorkoutQueueItem', () => {
       }),
       sourceFileData: Buffer.from('valid-fit'),
     });
-    expect(mocks.completeRevision).toHaveBeenCalledWith(queueItem, expect.any(String));
+    expect(mocks.completeRevision).toHaveBeenCalledWith(queueItem, expect.any(String), {}, true);
   });
 
   it('skips an inbound row that belongs to a different retained Wahoo account', async () => {
@@ -364,6 +408,13 @@ describe('processWahooWorkoutQueueItem', () => {
       expect.any(String),
       expect.objectContaining({ message: 'Wahoo activity processing failed: Error' }),
     );
+  });
+
+  it('retains the typed source conflict for revision-aware terminal handling', async () => {
+    const error = new ActivityIdentityConflictError();
+    mocks.setEvent.mockRejectedValueOnce(error);
+    await processWahooWorkoutQueueItem(queueItem);
+    expect(mocks.failRevision).toHaveBeenCalledWith(queueItem, expect.any(String), error);
   });
 
   it('sanitizes signed provider URLs before persisting retry errors', async () => {

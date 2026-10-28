@@ -2,6 +2,8 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as admin from 'firebase-admin';
 import { FieldPath, Timestamp } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
+import { cleanupAge, cleanupObservation, cleanupPage, cleanupProvider, observeCleanupSchedule, observeRemoteCleanup } from '../cleanup-monitoring';
+import { ServiceRecoveryDeferredError } from '../shared/service-recovery-deferral';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
@@ -28,6 +30,9 @@ import {
   recordServiceDisconnectRetryFailure,
 } from '../service-disconnect-pending';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { retryInterruptedExplicitDisconnects } from '../OAuth2';
+import { retryServiceDisconnectCleanup } from '../service-disconnect-cleanup';
+import { reconcileExpiredServiceOAuthRoots } from '../service-oauth-root-reconciliation';
 
 interface PendingDisconnectCollectionConfig {
   serviceName: ServiceNames;
@@ -176,6 +181,10 @@ async function getLifecycleRepairPage(
     snapshot = await runQuery();
   }
 
+  const lanes = { coros_health_lifecycle_projection: 'health_projection', wahoo_reconnect_release: 'wahoo_release',
+    route_restore: 'route_restore', pending_disconnect_queue_release: 'queue_release' } as const;
+  cleanupPage(lanes[scanType], 'all', snapshot.docs.length, LIFECYCLE_REPAIR_BATCH_LIMIT);
+
   return snapshot.docs;
 }
 
@@ -278,6 +287,7 @@ async function getDuePendingDisconnectRoots(
   }
 
   await updatePendingDisconnectScanCursor(config, scanType, snapshot.docs);
+  cleanupPage('subscription', cleanupProvider(config.serviceName), snapshot.docs.length, PENDING_SERVICE_DISCONNECT_BATCH_LIMIT);
   return snapshot.docs;
 }
 
@@ -316,7 +326,7 @@ async function clearPendingDisconnectRootIfEntitled(
   rootSnapshot: admin.firestore.QueryDocumentSnapshot,
 ): Promise<boolean> {
   const rootData = rootSnapshot.data() as PendingServiceDisconnectRootData;
-  if (!isServiceDisconnectPendingData(rootData)) {
+  if (!isServiceDisconnectPendingData(rootData) || rootData.disconnectOperationGeneration) {
     return false;
   }
 
@@ -325,7 +335,10 @@ async function clearPendingDisconnectRootIfEntitled(
     return false;
   }
 
-  await clearServiceDisconnectPending(userID, config.serviceName);
+  const clearResult = await clearServiceDisconnectPending(userID, config.serviceName);
+  if (clearResult !== 'cleared' && clearResult !== 'no_pending') {
+    return false;
+  }
   logger.info('[RetryPendingServiceDisconnects] Cleared pending disconnect because entitlement is active again.', {
     userID,
     serviceName: config.serviceName,
@@ -345,6 +358,7 @@ async function clearPendingDisconnectsForRestoredEntitlements(
         clearedCount += 1;
       }
     } catch (error) {
+      cleanupObservation('disconnect', cleanupProvider(config.serviceName), 'failed', 'subscription');
       logger.error('[RetryPendingServiceDisconnects] Failed to check restored entitlement for pending disconnect root.', {
         userID: rootSnapshot.id,
         serviceName: config.serviceName,
@@ -377,12 +391,15 @@ async function retryPendingDisconnectRoot(
   const userID = rootSnapshot.id;
   const rootData = rootSnapshot.data() as PendingServiceDisconnectRootData;
 
-  if (!isServiceDisconnectPendingData(rootData)) {
+  if (!isServiceDisconnectPendingData(rootData) || rootData.disconnectOperationGeneration) {
     return;
   }
 
   if (await shouldKeepConnectionForCurrentEntitlement(userID)) {
-    await clearServiceDisconnectPending(userID, config.serviceName);
+    const clearResult = await clearServiceDisconnectPending(userID, config.serviceName);
+    if (clearResult !== 'cleared' && clearResult !== 'no_pending') {
+      return;
+    }
     logger.info('[RetryPendingServiceDisconnects] Cleared pending disconnect because entitlement is active again.', {
       userID,
       serviceName: config.serviceName,
@@ -416,6 +433,8 @@ async function retryPendingDisconnectRoot(
       if (!didRecordRetryFailure) {
         return;
       }
+      cleanupObservation('disconnect', cleanupProvider(config.serviceName), 'retry', 'subscription',
+        cleanupAge(rootData.disconnectNextAttemptAt));
       logger.warn('[RetryPendingServiceDisconnects] Pending disconnect local cleanup remained partial without a recorded retryable failure; scheduled another attempt if retry budget remains.', {
         userID,
         serviceName: config.serviceName,
@@ -424,6 +443,7 @@ async function retryPendingDisconnectRoot(
       return;
     }
 
+    if (!outcome.skippedByCondition) observeRemoteCleanup(config.serviceName, outcome, 'disconnect', 'subscription');
     logger.info('[RetryPendingServiceDisconnects] Pending disconnect completed or reached terminal local cleanup.', {
       userID,
       serviceName: config.serviceName,
@@ -446,6 +466,8 @@ async function retryPendingDisconnectRoot(
   if (!didRecordRetryFailure) {
     return;
   }
+  cleanupObservation('disconnect', cleanupProvider(config.serviceName), 'retry', 'subscription',
+    cleanupAge(rootData.disconnectNextAttemptAt));
   logger.warn('[RetryPendingServiceDisconnects] Pending disconnect retry failed; scheduled another attempt if retry budget remains.', {
     userID,
     serviceName: config.serviceName,
@@ -477,8 +499,10 @@ async function retryPendingWahooReconnectQueueReleases(): Promise<number> {
     try {
       if (await retryWahooReconnectQueueRelease(userID)) {
         repairedCount += 1;
+        cleanupObservation('recovery', 'WahooAPI', 'completed', 'wahoo_release');
       }
     } catch (error) {
+      cleanupObservation('recovery', 'WahooAPI', 'failed', 'wahoo_release');
       logger.error('[RetryPendingServiceDisconnects] Failed to repair a Wahoo reconnect queue release.', {
         userID,
         serviceName: ServiceNames.WahooAPI,
@@ -506,8 +530,10 @@ async function retryPendingHealthLifecycleProjections(): Promise<number> {
     try {
       if (await retryPendingHealthLifecycleProjection(userID, metaSnapshot.id)) {
         repairedCount += 1;
+        cleanupObservation('recovery', cleanupProvider(metaSnapshot.id), 'completed', 'health_projection');
       }
     } catch (error) {
+      cleanupObservation('recovery', cleanupProvider(metaSnapshot.id), 'failed', 'health_projection');
       logger.error('[RetryPendingServiceDisconnects] Failed to repair a Health lifecycle projection.', {
         userID,
         serviceName: metaSnapshot.id,
@@ -533,8 +559,11 @@ async function retryPendingServiceRouteRestorations(): Promise<number> {
     try {
       if (await retryPendingServiceRouteRestore(userID, metaSnapshot.id as ServiceNames)) {
         repairedCount += 1;
+        cleanupObservation('recovery', cleanupProvider(metaSnapshot.id), 'completed', 'route_restore');
       }
     } catch (error) {
+      cleanupObservation('recovery', cleanupProvider(metaSnapshot.id),
+        error instanceof ServiceRecoveryDeferredError ? 'deferred' : 'failed', 'route_restore');
       logger.error('[RetryPendingServiceDisconnects] Failed to repair route restoration.', {
         userID,
         serviceName: metaSnapshot.id,
@@ -569,8 +598,10 @@ async function retryPendingDisconnectQueueReleases(): Promise<number> {
     try {
       if (await retryPendingDisconnectQueueRelease(userID, metaSnapshot.id as ServiceNames)) {
         repairedCount += 1;
+        cleanupObservation('recovery', cleanupProvider(metaSnapshot.id), 'completed', 'queue_release');
       }
     } catch (error) {
+      cleanupObservation('recovery', cleanupProvider(metaSnapshot.id), 'failed', 'queue_release');
       logger.error('[RetryPendingServiceDisconnects] Failed to repair a bounded pending-disconnect queue release.', {
         userID,
         serviceName: metaSnapshot.id,
@@ -589,8 +620,33 @@ export const retryPendingServiceDisconnects = onSchedule({
   schedule: 'every 30 minutes',
   timeoutSeconds: 300,
   memory: '512MiB',
-}, async () => {
+}, async () => observeCleanupSchedule(async () => {
   const now = Timestamp.now();
+  await retryServiceDisconnectCleanup().catch(() => {
+    cleanupObservation('operational', 'all', 'failed', 'operational');
+    logger.error('[ExplicitDisconnectCleanup] Could not scan pending cleanup; next schedule will retry.');
+  });
+
+  // Reserve the beginning of the invocation for bounded Firestore-only OAuth
+  // cleanup. Provider disconnect I/O can consume the remaining execution
+  // budget, but must not repeatedly starve expired-state reconciliation.
+  try {
+    const oauthRootReconciliation = await reconcileExpiredServiceOAuthRoots(
+      admin.firestore(),
+      now.toMillis(),
+    );
+    logger.info('[RetryPendingServiceDisconnects] Reconciled expired OAuth roots and disconnect fences.', {
+      rootsScanned: oauthRootReconciliation.rootsScanned,
+      cleaned: oauthRootReconciliation.cleaned,
+      failed: oauthRootReconciliation.failed,
+      byOutcome: oauthRootReconciliation.byOutcome,
+    });
+  } catch {
+    cleanupObservation('recovery', 'all', 'failed', 'scheduler');
+    logger.error('[RetryPendingServiceDisconnects] OAuth root reconciliation scan failed.', {
+      reason: 'oauth_root_reconciliation_scan_failed',
+    });
+  }
 
   // Repair already-connected accounts first. Pending-disconnect scans can
   // involve provider I/O, so putting these bounded pages first prevents a
@@ -616,6 +672,8 @@ export const retryPendingServiceDisconnects = onSchedule({
     repairedCount: repairedPendingDisconnectQueueReleaseCount,
   });
 
+  await retryInterruptedExplicitDisconnects();
+
   for (const config of PENDING_DISCONNECT_COLLECTIONS) {
     const restoredEntitlementClearedCount = await clearPendingDisconnectsForRestoredEntitlements(config);
     logger.info('[RetryPendingServiceDisconnects] Checked pending disconnect roots for restored entitlements.', {
@@ -633,6 +691,7 @@ export const retryPendingServiceDisconnects = onSchedule({
       try {
         await retryPendingDisconnectRoot(config, rootSnapshot);
       } catch (error) {
+        cleanupObservation('disconnect', cleanupProvider(config.serviceName), 'failed', 'subscription');
         logger.error('[RetryPendingServiceDisconnects] Failed to process pending disconnect root.', {
           userID: rootSnapshot.id,
           serviceName: config.serviceName,
@@ -641,7 +700,7 @@ export const retryPendingServiceDisconnects = onSchedule({
       }
     }
   }
-});
+}));
 
 export const retryPendingServiceDisconnectsTestInternals = {
   clearPendingDisconnectRootIfEntitled,

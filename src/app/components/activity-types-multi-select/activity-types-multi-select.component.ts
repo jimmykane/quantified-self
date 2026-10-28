@@ -1,142 +1,60 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  EventEmitter,
-  Input,
-  OnChanges,
-  OnInit,
-  Output,
-  SimpleChanges
-} from '@angular/core';
-import { UntypedFormControl } from '@angular/forms';
-import { Observable } from 'rxjs';
-import { map, startWith } from 'rxjs/operators';
+import { ChangeDetectionStrategy, Component, EventEmitter, HostBinding, Input, OnChanges, Optional, Output } from '@angular/core';
 import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
-import { AppUserService } from '../../services/app.user.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
+import { getActivityTypeFamilyFilterOptions, isSameActivityTypeSelection, normalizeActivityTypeSelection } from '../../helpers/activity-type-family-filter.helper';
+import type { ActivityFilterPickerOption, ActivityFilterPickerShortcut } from '../shared/activity-filter-picker/activity-filter-picker.component';
 
-export class ActivityTypeSelectionModel {
-  constructor(public activityType: ActivityTypes, public selected = false) {
-  }
-}
-
-/**
- * @title Multi-select autocomplete
- */
+/** Supplies sport catalog and family choices to the shared searchable picker. */
 @Component({
-    selector: 'app-activity-types-multi-select',
-    templateUrl: 'activity-types-multi-select.component.html',
-    styleUrls: ['activity-types-multi-select.component.css'],
-    changeDetection: ChangeDetectionStrategy.OnPush,
-    standalone: false
+  selector: 'app-activity-types-multi-select',
+  templateUrl: './activity-types-multi-select.component.html',
+  styleUrls: ['./activity-types-multi-select.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false,
 })
-export class ActivityTypesMultiSelectComponent implements OnInit, OnChanges {
+export class ActivityTypesMultiSelectComponent implements OnChanges {
+  @Input() selectedActivityTypes: ActivityTypes[] = [];
+  @Input() availableActivityTypes: ActivityTypes[] | null | undefined;
+  @Input() lockedActivityTypes: ActivityTypes[] = [];
+  @Input() disabled = false;
+  @Input() @HostBinding('class.is-compact') compact = false;
+  @Input() label = 'Sports';
+  @Input() ariaLabel?: string;
+  @Input() emptyLabel = 'All sports';
+  @Input() hint = '';
+  @Input() lockedOptionDescription = 'Required selection';
+  @Output() selectedActivityTypesChange = new EventEmitter<ActivityTypes[]>();
 
-  @Input() selectedActivityTypes: ActivityTypes[];
-  @Input() label = 'Filter by activities';
-  @Input() placeholder = 'Filter by activities';
-  @Output() selectedActivityTypesChange: EventEmitter<ActivityTypes[]> = new EventEmitter<ActivityTypes[]>();
+  options: ActivityFilterPickerOption[] = [];
+  shortcuts: ActivityFilterPickerShortcut[] = [];
+  private readonly catalog = normalizeActivityTypeSelection(ActivityTypesHelper.getActivityTypesAsUniqueArray());
 
-  activityTypesControl = new UntypedFormControl();
+  constructor(@Optional() private readonly haptics: AppHapticsService | null = null) {}
 
-  activityTypesSelectionModelList: ActivityTypeSelectionModel[] = ActivityTypesHelper.getActivityTypesAsUniqueArray().map(a => new ActivityTypeSelectionModel(ActivityTypes[a]));
+  ngOnChanges(): void { this.refreshOptions(); }
 
-  selectedActivityTypesSelectionModel: ActivityTypeSelectionModel[] = new Array<ActivityTypeSelectionModel>();
-
-  filteredActivityTypes: Observable<ActivityTypeSelectionModel[]>;
-  lastFilter = '';
-  private selectedActivityTypesSignature = '';
-
-  constructor(private userService: AppUserService) {
+  selectSports(values: readonly string[]): void {
+    if (this.disabled) return;
+    const allowed = new Set(this.options.map(option => option.value));
+    const next = normalizeActivityTypeSelection([...values.filter(value => allowed.has(value)), ...this.lockedActivityTypes]);
+    if (isSameActivityTypeSelection(this.selectedActivityTypes, next)) return;
+    this.selectedActivityTypes = next;
+    this.refreshOptions();
+    this.haptics?.selection();
+    this.selectedActivityTypesChange.emit(next);
   }
 
-  ngOnInit() {
-    this.filteredActivityTypes = this.activityTypesControl.valueChanges.pipe(
-      startWith<string | ActivityTypeSelectionModel[]>(''),
-      map(value => typeof value === 'string' ? value : this.lastFilter),
-      map(filter => this.filter(filter))
-    );
-  }
-
-  ngOnChanges(changes: SimpleChanges): void {
-    const selectedActivityTypes = this.selectedActivityTypes || [];
-    this.selectedActivityTypes = selectedActivityTypes;
-    const selectedActivityTypesSignature = selectedActivityTypes.join('|');
-    if (!changes.selectedActivityTypes || selectedActivityTypesSignature === this.selectedActivityTypesSignature) {
-      return;
-    }
-
-    this.selectedActivityTypesSignature = selectedActivityTypesSignature;
-    this.selectedActivityTypesSelectionModel = [];
-    this.activityTypesSelectionModelList.forEach(model => {
-      model.selected = false;
-    });
-    this.selectedActivityTypes.forEach(activityType => {
-      const model = this.activityTypesSelectionModelList.find(ac => ac.activityType === activityType);
-      if (model) {
-        model.selected = true
-        this.selectedActivityTypesSelectionModel.push(model)
-      }
-    })
-    this.activityTypesControl.setValue(this.selectedActivityTypesSelectionModel, { emitEvent: false });
-  }
-
-
-  filter(filter: string): ActivityTypeSelectionModel[] {
-    this.lastFilter = filter;
-    if (filter) {
-      return this.activityTypesSelectionModelList.filter(activityType => {
-        return activityType.activityType.toLowerCase().indexOf(filter.toLowerCase()) !== -1
-      })
-    } else {
-      return this.activityTypesSelectionModelList.slice();
-    }
-  }
-
-  displayFn(value: ActivityTypeSelectionModel[] | ActivityTypeSelectionModel): string | undefined {
-    let displayValue: string;
-    if (!value) {
-      return ''
-    }
-    if (Array.isArray(value)) {
-      value.forEach((activityType, index) => {
-        if (index === 0) {
-          displayValue = activityType.activityType;
-        } else {
-          displayValue += ', ' + activityType.activityType;
-        }
-      });
-    } else {
-      displayValue = value.activityType || '';
-    }
-    return displayValue;
-  }
-
-  optionClicked(event: Event, activityTypeSelectionModel: ActivityTypeSelectionModel) {
-    event.stopPropagation();
-    this.toggleSelection(activityTypeSelectionModel);
-  }
-
-  toggleSelection(activityTypeSelectionModel: ActivityTypeSelectionModel) {
-    activityTypeSelectionModel.selected = !activityTypeSelectionModel.selected;
-    if (activityTypeSelectionModel.selected) {
-      this.selectedActivityTypesSelectionModel.push(activityTypeSelectionModel);
-    } else {
-      const i = this.selectedActivityTypesSelectionModel.findIndex(value => value.activityType === activityTypeSelectionModel.activityType);
-      this.selectedActivityTypesSelectionModel.splice(i, 1);
-    }
-
-    this.activityTypesControl.setValue(this.selectedActivityTypesSelectionModel);
-    this.selectedActivityTypesChange.emit(this.activityTypesControl.value.map(a => a.activityType));
-  }
-
-  clearSelection() {
-    this.selectedActivityTypes = [];
-    this.selectedActivityTypesSignature = '';
-    this.selectedActivityTypesSelectionModel = [];
-    this.activityTypesSelectionModelList.forEach(model => {
-      model.selected = false;
-    });
-    this.activityTypesControl.setValue([], { emitEvent: false });
-    this.selectedActivityTypesChange.emit([]);
+  private refreshOptions(): void {
+    const locked = new Set(normalizeActivityTypeSelection(this.lockedActivityTypes));
+    this.selectedActivityTypes = normalizeActivityTypeSelection([...(this.selectedActivityTypes || []), ...locked]);
+    const available = Array.isArray(this.availableActivityTypes) ? normalizeActivityTypeSelection(this.availableActivityTypes) : this.catalog;
+    // Keep saved no-match and catalog bridge choices removable without widening a context's sport families.
+    const choices = normalizeActivityTypeSelection([...available, ...this.selectedActivityTypes]);
+    this.options = choices.sort((a, b) => a.localeCompare(b)).map(sport => ({
+      value: sport, label: sport, activityType: sport, disabled: locked.has(sport),
+      description: locked.has(sport) ? this.lockedOptionDescription : undefined,
+    }));
+    this.shortcuts = getActivityTypeFamilyFilterOptions(this.selectedActivityTypes, available)
+      .map(family => ({ label: family.label, values: family.activityTypes }));
   }
 }

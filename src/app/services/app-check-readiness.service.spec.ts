@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AppCheckReadinessService } from './app-check-readiness.service';
 import { AppCheck } from 'app/firebase/app-check';
+import { AppCheckDiagnosticsService } from './app-check-diagnostics.service';
 
 const hoisted = vi.hoisted(() => ({
   mockGetAppCheckToken: vi.fn(),
@@ -19,9 +20,10 @@ vi.mock('app/firebase/app-check', async (importOriginal) => {
 describe('AppCheckReadinessService', () => {
   let service: AppCheckReadinessService;
   let appCheckMock: object;
+  const diagnostics = { failureRevision: 0, reportFailure: vi.fn() };
 
   function configureTestingModule(options: { provideAppCheck?: boolean } = {}): AppCheckReadinessService {
-    const providers: any[] = [AppCheckReadinessService];
+    const providers: any[] = [AppCheckReadinessService, { provide: AppCheckDiagnosticsService, useValue: diagnostics }];
 
     if (options.provideAppCheck !== false) {
       providers.push({ provide: AppCheck, useValue: appCheckMock });
@@ -33,6 +35,8 @@ describe('AppCheckReadinessService', () => {
 
   beforeEach(() => {
     appCheckMock = {};
+    diagnostics.failureRevision = 0;
+    diagnostics.reportFailure.mockReset();
     hoisted.mockGetAppCheckToken.mockReset();
     hoisted.mockGetAppCheckToken.mockResolvedValue({ token: 'app-check-token' });
     service = configureTestingModule();
@@ -68,6 +72,16 @@ describe('AppCheckReadinessService', () => {
     expect(hoisted.mockGetAppCheckToken).toHaveBeenNthCalledWith(2, appCheckMock, true);
   });
 
+  it('invalidates memoized readiness after a background verification failure', async () => {
+    await service.ensureReady();
+    diagnostics.failureRevision += 1;
+    const failure = { code: 'appCheck/throttled' };
+    hoisted.mockGetAppCheckToken.mockRejectedValueOnce(failure);
+    await expect(service.ensureReady()).rejects.toBe(failure);
+    expect(hoisted.mockGetAppCheckToken).toHaveBeenCalledTimes(2);
+    expect(diagnostics.reportFailure).toHaveBeenCalledWith(failure, 'token-request');
+  });
+
   it('should clear the memoized readiness promise after a failure', async () => {
     hoisted.mockGetAppCheckToken
       .mockRejectedValueOnce(new Error('bootstrap failed'))
@@ -79,9 +93,37 @@ describe('AppCheckReadinessService', () => {
     expect(hoisted.mockGetAppCheckToken).toHaveBeenCalledTimes(2);
   });
 
+  it('should time out a stalled readiness request and allow a later retry', async () => {
+    vi.useFakeTimers();
+    hoisted.mockGetAppCheckToken
+      .mockImplementationOnce(() => new Promise(() => undefined))
+      .mockResolvedValueOnce({ token: 'app-check-token' });
+
+    const stalledAttempt = service.ensureReady();
+    const stalledExpectation = expect(stalledAttempt).rejects.toThrow('App Check is taking too long');
+    await vi.advanceTimersByTimeAsync(15_000);
+    await stalledExpectation;
+
+    await expect(service.ensureReady()).resolves.toBeUndefined();
+    expect(hoisted.mockGetAppCheckToken).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
   it('should return a usable token through getToken', async () => {
     await expect(service.getToken()).resolves.toBe('app-check-token');
     expect(hoisted.mockGetAppCheckToken).toHaveBeenCalledWith(appCheckMock, false);
+  });
+
+  it('should bound an individual token request', async () => {
+    vi.useFakeTimers();
+    hoisted.mockGetAppCheckToken.mockImplementationOnce(() => new Promise(() => undefined));
+
+    const tokenRequest = service.getToken();
+    const expectation = expect(tokenRequest).rejects.toThrow('App Check is taking too long');
+    await vi.advanceTimersByTimeAsync(15_000);
+    await expectation;
+
+    vi.useRealTimers();
   });
 
   it('should reject getToken when App Check is unavailable', async () => {

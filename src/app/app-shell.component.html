@@ -1,3 +1,17 @@
+@if (startupStalled()) {
+<section class="startup-recovery" role="alert" aria-labelledby="startup-recovery-title">
+  <div class="startup-recovery-content">
+    <mat-icon aria-hidden="true">cloud_off</mat-icon>
+    <h1 id="startup-recovery-title">Loading is taking longer than expected</h1>
+    <p>Check your connection, then reload the page to try again.</p>
+    <p>Your saved activities and account data stay unchanged.</p>
+    <button mat-flat-button class="qs-mat-primary" type="button" (click)="reloadStartup()"
+      [disabled]="startupReloading()" [attr.aria-busy]="startupReloading()">
+      {{ startupReloading() ? 'Reloading…' : 'Reload page' }}
+    </button>
+  </div>
+</section>
+} @else {
 @if (authState !== null || renderPublicShellWhileAuthPending) {
 <!-- Circular Reveal Theme Overlay -->
 @if (themeOverlayActive) {
@@ -33,7 +47,7 @@
     [unreadWhatsNewCount]="unreadWhatsNewCount"
     (toggleSidenav)="toggleSidenav()" (logoClick)="onLogoClick()"
     (whatsNewClick)="openWhatsNew()" (dashboardClick)="navigateToDashboard()"
-    (adminClick)="navigateToAdmin()" (loginClick)="navigateToLogin()">
+    (adminClick)="navigateToAdmin()" (loginClick)="navigateToLogin()" (heightChanged)="onHeaderHeightChanged($event)">
   </app-shell-header>
   }
 
@@ -41,7 +55,9 @@
     @if (showNavigation()) {
     <mat-sidenav #sidenav [mode]="'over'" [fixedInViewport]="true" [fixedTopGap]="layoutTopOffsetPx"
       [autoFocus]="false">
+      @defer (on idle; when sidenav.opened) {
       <app-sidenav></app-sidenav>
+      }
     </mat-sidenav>
     }
 
@@ -58,4 +74,5 @@
 </div>
 } @else {
 <app-metric-loader></app-metric-loader>
+}
 }

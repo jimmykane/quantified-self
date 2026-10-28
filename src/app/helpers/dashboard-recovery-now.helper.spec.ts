@@ -1,6 +1,7 @@
 import { DataDuration, DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import {
+  buildDashboardRecoveryPresentation,
   resolveActiveRecoveryTotalSeconds,
   resolveAggregatedRecoveryNowContext,
   resolveLatestWorkoutRecoverySeconds,
@@ -160,6 +161,27 @@ describe('dashboard-recovery-now.helper', () => {
     expect(resolveRecoveryFinishTimeMs(context, nowMs)).toBe(nowMs + (90 * 60 * 1000));
     expect(resolveRecoveryFinishTimeMs(context, nowMs + (4 * 60 * 60 * 1000))).toBeNull();
     expect(resolveRecoveryFinishTimeMs(null, nowMs)).toBeNull();
+  });
+
+  it('builds one localized duration and recovered-by presentation for every recovery surface', () => {
+    const nowMs = Date.UTC(2026, 6, 14, 8);
+    const presentation = buildDashboardRecoveryPresentation({
+      totalSeconds: (5 * 24 * 60 * 60) + (13 * 60 * 60) + (44 * 60),
+      endTimeMs: nowMs - ((27 * 60 * 60 + 4 * 60) * 1000),
+    }, {
+      locale: 'en-GB',
+      nowMs,
+      timeZone: 'UTC',
+    });
+
+    expect(presentation).toMatchObject({
+      activeTotalText: '5d 13h 44m',
+      remainingText: '4d 10h 40m',
+      finishDateText: 'Sat 18 Jul',
+      finishClockText: '18:40',
+      finishText: 'Sat 18 Jul at 18:40',
+    });
+    expect(presentation?.remainingPercent).toBeCloseTo(79.76, 2);
   });
 
   it('resolves active total recovery from currently active segments only', () => {

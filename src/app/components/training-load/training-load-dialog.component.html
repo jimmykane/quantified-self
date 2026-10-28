@@ -1,0 +1,71 @@
+<h2 mat-dialog-title>Training load</h2>
+<mat-dialog-content [attr.aria-busy]="busy()">
+  <p>Modeled TSS drives Fitness, Fatigue and Form. Recorded statistics stay unchanged.</p>
+  @if (error()) { <p role="alert">{{ error() }}</p> }
+  @if (!loaded() && !error()) { <mat-spinner diameter="28" aria-label="Loading Training load"></mat-spinner> }
+  @if (loaded()) {
+    <div class="workout-load"><strong>{{ showActivityLoad() ? 'Total workout TSS' : 'Modeled TSS' }}</strong><span>{{ score(model.score) }}</span></div>
+    @if (model.status === 'partial') { <p role="status">This total includes available activities only. Some included activities have no usable load.</p> }
+    <mat-slide-toggle [checked]="metadata()?.excluded === true" [disabled]="busy()"
+      (change)="excludeWorkout($event.checked)">Exclude entire workout from modeled load</mat-slide-toggle>
+    @if (activities.length > 1) {
+      <mat-form-field appearance="outline"><mat-label>Activity</mat-label>
+        <mat-select [value]="selectedId()" (selectionChange)="selectLeg($event.value)" [disabled]="busy()">
+          @for (activity of activityOptions; track activity.id) {
+            <mat-option [value]="activity.id">{{ activity.label }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      <p>Overrides apply to one activity. Included activities are summed; a score recorded only for the whole workout is never divided between activities.</p>
+    }
+    <dl>
+      <div><dt>Recorded TSS</dt><dd>{{ score(recorded) }}</dd></div>
+      <div><dt>Automatic TSS</dt><dd>{{ score(automatic) }}</dd></div>
+      @if (showActivityLoad()) { <div><dt>Modeled activity TSS</dt><dd>{{ score(legModel.score) }}</dd></div> }
+      <div><dt>Actual method</dt><dd>{{ actualMethodLabel }}</dd></div>
+    </dl>
+    <p role="status">{{ explanation }} {{ reasonText }}</p>
+    <div [formGroup]="form" class="load-fields">
+      <mat-form-field appearance="outline"><mat-label>Preferred method</mat-label>
+        <mat-select formControlName="method" (selectionChange)="selection()">
+          <mat-option value="AUTOMATIC">Automatic</mat-option>
+          <mat-option value="HR" [disabled]="!leg?.evaluations">Heart rate</mat-option>
+          <mat-option value="MET" [disabled]="!leg?.evaluations">Calories / MET estimate</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="outline"><mat-label>Numeric TSS override (optional)</mat-label>
+        <input matInput type="number" min="0" max="9999" step="0.1" formControlName="override">
+        <mat-hint>0–9999. Leave blank to use the selected method.</mat-hint>
+      </mat-form-field>
+      <mat-slide-toggle formControlName="included" (change)="selection()">Include this activity in modeled load</mat-slide-toggle>
+      @if (family) {
+        <mat-checkbox formControlName="future" (change)="selection()">Also use these preferences for future {{ familyLabel }} workouts</mat-checkbox>
+        <p class="hint">Copies method and inclusion only. Numeric overrides stay with this activity.</p>
+      }
+    </div>
+    @if (!valid) { <p role="alert">Enter a TSS between 0 and 9999.</p> }
+    <div class="leg-actions">
+      <button mat-button type="button" (click)="resetLeg()" [disabled]="busy() || !sourceCurrent() || !metadata()?.controls?.[selectedKey]">Reset activity</button>
+      <button mat-flat-button type="button" (click)="save()" [disabled]="busy() || !sourceCurrent() || !valid || !form.dirty">Save activity</button>
+    </div>
+    @if (busy()) { <p role="status">Saving Training load…</p> }
+    @for (key of unresolved; track key) {
+      <section class="unmatched"><h3>Unmatched saved activity: {{ metadata()?.legs?.[key]?.identity?.type }}</h3>
+        <p>Choose the current activity that should keep its saved preferences and override, or discard this unmatched record.</p>
+        <mat-form-field appearance="outline"><mat-label>Reassociate with</mat-label>
+          <mat-select (selectionChange)="associate(key, $event.value)" [disabled]="busy() || !sourceCurrent()">
+            @for (activity of activityOptions; track activity.id) {
+              <mat-option [value]="activity.id">{{ activity.label }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+        <button mat-button type="button" (click)="dismiss(key)" [disabled]="busy()">Discard unmatched controls</button>
+      </section>
+    }
+    <p class="hint">Reset restores the policy saved for this workout, not today’s sport defaults. Excluded workouts retain their history and volume.</p>
+  }
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="resetWorkout()" [disabled]="busy() || !loaded()">Reset workout controls</button>
+  <button mat-button type="button" appHapticTap (click)="dialog.close()" [disabled]="busy()">Close</button>
+</mat-dialog-actions>

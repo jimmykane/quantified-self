@@ -5,7 +5,7 @@ import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { QueueItemInterface } from './queue/queue-item.interface';
 
-import { MAX_RETRY_COUNT } from './shared/queue-config';
+import { PROVIDER_MAX_RETRY_COUNT } from './shared/queue-config';
 import { getExpireAtTimestamp, TTL_CONFIG } from './shared/ttl-config';
 import {
     getUserDeletionGuardStateInTransaction,
@@ -28,12 +28,22 @@ import { getServiceTokenRootDocumentRef } from './service-token-store';
 import { isServiceDisconnectPendingData } from './service-disconnect-pending-state';
 import { SLEEP_SYNC_QUEUE_COLLECTION_NAME } from './sleep/constants';
 import { getQueueCleanupTombstoneDocumentRef } from './queue/cleanup-tombstone';
+import { recordImportCommit, recordImportCompletion } from './queue/import-monitoring';
+import { recordHealthSleepCommit, recordHealthSleepCompletion, recordHealthSleepRetry } from './sleep/monitoring';
+import { recordActivityDeliveryCompletion } from './activity-sync/monitoring';
+import { recordRouteQueueCommit, recordRouteQueueCompletion, recordRouteQueueRetry } from './routes/monitoring';
+import { assertHistoryWrite, currentHistoryExecution } from './connection-history/context';
+import { HistoryLifecycleChangedError } from './connection-history/execution';
 
 
 export enum QueueResult {
     Processed = 'PROCESSED',
+    AcknowledgedStale = 'ACKNOWLEDGED_STALE',
     Skipped = 'SKIPPED',
     Deferred = 'DEFERRED',
+    /** Incomplete Health work with an enqueued, dispatch-marked continuation. */
+    HealthContinuationScheduled = 'HEALTH_CONTINUATION_SCHEDULED',
+    TokenRefreshDeferred = 'TOKEN_REFRESH_DEFERRED',
     ProviderStatusPending = 'PROVIDER_STATUS_PENDING',
     MovedToDLQ = 'MOVED_TO_DLQ',
     RetryIncremented = 'RETRY_INCREMENTED',
@@ -202,10 +212,9 @@ function buildFailedQueueItem(
     // Signed provider continuation URLs are short-lived credentials. They are
     // needed only while the live queue item can retry the exact same request.
     delete failedItem.destinationUploadContinuation;
-    // Garmin Ping/Pull callback URLs contain a short-lived pull token. Keep
-    // them only on a retryable live queue row, never in the longer-lived DLQ.
-    delete failedItem.callbackURL;
-    delete failedItem.garminCallbackURLs;
+    // Retain Garmin callback URLs for operator recovery within the existing
+    // admin-only failed-job TTL. A failed job does not prove the URL expired;
+    // successful/skipped live rows still clear them below. Never log them.
     delete failedItem.processingOwner;
     delete failedItem.processingRevision;
     delete failedItem.processingLeaseExpiresAt;
@@ -213,6 +222,7 @@ function buildFailedQueueItem(
 }
 
 export async function moveToDeadLetterQueue(queueItem: QueueItemInterface, error: Error, bulkWriter?: admin.firestore.BulkWriter, context?: string): Promise<QueueResult.MovedToDLQ | QueueResult.Processed | QueueResult.Failed> {
+    await currentHistoryExecution()?.beforeRequest();
 
     if (!queueItem.ref) {
         throw new Error(`No document reference supplied for queue item ${queueItem.id}`);
@@ -247,6 +257,10 @@ export async function moveToDeadLetterQueue(queueItem: QueueItemInterface, error
             await batch.commit();
         }
 
+        if (!bulkWriter) {
+            recordImportCommit(queueItem.ref?.parent?.id, 'dead_lettered');
+            recordRouteQueueCommit(queueItem, 'dead_lettered');
+        }
         logger.info(`Moved item ${queueItem.id} to Dead Letter Queue (failed_jobs)`);
         return QueueResult.MovedToDLQ;
     } catch (e) {
@@ -273,6 +287,7 @@ export interface MoveToDeadLetterQueueIfCurrentAndNotCleanupTombstonedParams {
 export async function moveToDeadLetterQueueIfCurrentAndNotCleanupTombstoned(
     params: MoveToDeadLetterQueueIfCurrentAndNotCleanupTombstonedParams,
 ): Promise<QueueResult.MovedToDLQ | QueueResult.Processed | QueueResult.Failed> {
+    await currentHistoryExecution()?.beforeRequest();
     const queueItemRef = params.queueItem.ref;
     if (!queueItemRef) {
         throw new Error(`No document reference supplied for queue item ${params.queueItem.id}`);
@@ -287,6 +302,7 @@ export async function moveToDeadLetterQueueIfCurrentAndNotCleanupTombstoned(
     );
     try {
         const moved = await db.runTransaction(async transaction => {
+            await assertHistoryWrite(transaction);
             const [queueSnapshot, tombstoneSnapshot] = await Promise.all([
                 transaction.get(queueItemRef),
                 transaction.get(tombstoneRef),
@@ -313,8 +329,12 @@ export async function moveToDeadLetterQueueIfCurrentAndNotCleanupTombstoned(
             return QueueResult.Processed;
         }
         logger.info(`[${params.logPrefix}] Moved queue item ${params.queueItem.id} to failed_jobs.`);
+        recordImportCommit(params.collectionName, 'dead_lettered');
+        recordHealthSleepCommit(params.queueItem, 'dead_lettered');
+        recordRouteQueueCommit(params.queueItem, 'dead_lettered');
         return QueueResult.MovedToDLQ;
     } catch (error) {
+        if (error instanceof HistoryLifecycleChangedError) throw error;
         logger.error(`[${params.logPrefix}] Failed guarded DLQ transition for ${params.queueItem.id}.`, {
             errorName: error instanceof Error ? error.name : 'UnknownError',
         });
@@ -368,6 +388,7 @@ async function runQueueItemTransitionIfCurrentUserActive(
 
     const db = admin.firestore();
     const transitionResult = await db.runTransaction(async transaction => {
+        await assertHistoryWrite(transaction);
         let deletionGuard;
         try {
             deletionGuard = await getUserDeletionGuardStateInTransaction(
@@ -436,6 +457,7 @@ function buildManualReconciliationUpdate(
 export async function moveToDeadLetterQueueIfCurrentUserActive(
     params: MoveToDeadLetterQueueIfCurrentUserActiveParams,
 ): Promise<QueueResult.MovedToDLQ | QueueResult.Processed | QueueResult.Failed> {
+    await currentHistoryExecution()?.beforeRequest();
     const { queueItem } = params;
     const db = admin.firestore();
     const failedDocRef = db.collection('failed_jobs').doc(queueItem.id);
@@ -480,8 +502,13 @@ export async function moveToDeadLetterQueueIfCurrentUserActive(
         } else {
             logger.info(`Moved item ${queueItem.id} to Dead Letter Queue (failed_jobs)`);
         }
+        recordImportCommit(queueItem.ref?.parent?.id, 'dead_lettered');
+        recordHealthSleepCommit(queueItem, 'dead_lettered');
+        recordRouteQueueCommit(queueItem, 'dead_lettered');
+        if (params.manualReconciliation) recordRouteQueueCommit(queueItem, 'manual_reconciliation');
         return QueueResult.MovedToDLQ;
     } catch (error) {
+        if (error instanceof HistoryLifecycleChangedError) throw error;
         logger.error(new Error(`Failed to move item ${queueItem.id} to DLQ: ${error}`));
         return QueueResult.Failed;
     }
@@ -811,7 +838,7 @@ export async function increaseRetryCountIfCurrentUserActive(
                 },
             ];
 
-            if (nextRetryCount >= MAX_RETRY_COUNT) {
+            if (nextRetryCount >= PROVIDER_MAX_RETRY_COUNT) {
                 movedToDlq = true;
                 await params.onRetryExhaustedInTransaction?.(
                     transaction,
@@ -878,19 +905,26 @@ export async function increaseRetryCountIfCurrentUserActive(
         params.queueItem.totalRetryCount = nextTotalRetryCount;
         params.queueItem.errors = nextErrors;
         if (movedToDlq) {
+            recordImportCommit(params.queueItem.ref?.parent?.id, 'dead_lettered');
+            recordHealthSleepCommit(params.queueItem, 'dead_lettered');
+            recordRouteQueueCommit(params.queueItem, 'dead_lettered');
+            if (params.manualReconciliation) recordRouteQueueCommit(params.queueItem, 'manual_reconciliation');
             if (params.manualReconciliation) {
-                logger.error(`Item ${params.queueItem.id} exceeded max retries (${MAX_RETRY_COUNT}). Copied it to DLQ and retained a terminal manual-reconciliation marker.`);
+                logger.error(`Item ${params.queueItem.id} exceeded max retries (${PROVIDER_MAX_RETRY_COUNT}). Copied it to DLQ and retained a terminal manual-reconciliation marker.`);
             } else {
-                logger.warn(`Item ${params.queueItem.id} exceeded max retries (${MAX_RETRY_COUNT}). Moved it to DLQ.`);
+                logger.warn(`Item ${params.queueItem.id} exceeded max retries (${PROVIDER_MAX_RETRY_COUNT}). Moved it to DLQ.`);
             }
             return QueueResult.MovedToDLQ;
         }
 
         params.queueItem.dispatchedToCloudTask = nextDispatchMarker;
         params.queueItem.providerOperationStartedAt = null;
+        recordHealthSleepRetry(params.queueItem, params.error);
+        recordRouteQueueRetry(params.queueItem, params.error);
         logger.info(`Updated retry count for ${params.queueItem.id} to ${nextRetryCount}`);
         return QueueResult.RetryIncremented;
     } catch (error) {
+        if (error instanceof HistoryLifecycleChangedError) throw error;
         logger.error(new Error(`Could not update guarded retry state on ${params.queueItem.id}: ${error}`));
         return QueueResult.Failed;
     }
@@ -907,6 +941,9 @@ export async function increaseRetryCountForQueueItem(
         'onRetryExhaustedInTransaction'
     ],
 ): Promise<QueueResult.MovedToDLQ | QueueResult.RetryIncremented | QueueResult.Processed | QueueResult.Failed> {
+    // Provider handlers may replace the original error with safe telemetry.
+    // Recheck history ownership before that error can consume retries or enter DLQ.
+    await currentHistoryExecution()?.beforeRequest();
     if (!queueItem.ref) {
         throw new Error(`No document reference supplied for queue item ${queueItem.id}`);
     }
@@ -928,8 +965,8 @@ export async function increaseRetryCountForQueueItem(
     }
 
     // Check if we overlap the max retry count
-    if ((queueItem.retryCount || 0) + incrementBy >= MAX_RETRY_COUNT) {
-        logger.warn(`Item ${queueItem.id} exceeded max retries (${MAX_RETRY_COUNT}). Moving to DLQ.`);
+    if ((queueItem.retryCount || 0) + incrementBy >= PROVIDER_MAX_RETRY_COUNT) {
+        logger.warn(`Item ${queueItem.id} exceeded max retries (${PROVIDER_MAX_RETRY_COUNT}). Moving to DLQ.`);
         return moveToDeadLetterQueue(queueItem, error, bulkWriter, maxRetryDlqContext);
     }
 
@@ -957,6 +994,7 @@ export async function increaseRetryCountForQueueItem(
         }
 
         queueItem.ref = ref;
+        if (!bulkWriter) recordRouteQueueRetry(queueItem, error);
         logger.info(`Updated retry count for ${queueItem.id} to ${queueItem.retryCount}`);
         return QueueResult.RetryIncremented;
     } catch {
@@ -992,8 +1030,15 @@ async function updateToProcessedIfCurrentUserActive(
         if (transitionResult === QueueItemUserGuardedUpdateResult.NotCurrent) {
             logger.info(`Skipping stale processed-state transition for queue item ${queueItem.id}; its revision already advanced.`);
         }
+        if (transitionResult === QueueItemUserGuardedUpdateResult.Updated) {
+            recordImportCompletion(queueItem.ref?.parent?.id, additionalData);
+            recordHealthSleepCompletion(queueItem, additionalData);
+            recordActivityDeliveryCompletion(queueItem, additionalData);
+            recordRouteQueueCompletion(queueItem, additionalData);
+        }
         return QueueResult.Processed;
     } catch (error) {
+        if (error instanceof HistoryLifecycleChangedError) throw error;
         logger.error(new Error(`Could not update guarded processed state for ${queueItem.id}: ${error}`));
         return QueueResult.Failed;
     }
@@ -1032,6 +1077,8 @@ async function updateLegacySleepQueueToProcessedIfCurrentAndNotCleanupTombstoned
         });
         if (!updated) {
             logger.info(`Skipping stale, leased, or cleanup-tombstoned legacy Sleep completion for queue item ${queueItem.id}.`);
+        } else {
+            recordHealthSleepCompletion(queueItem, additionalData);
         }
         return QueueResult.Processed;
     } catch (error) {
@@ -1069,6 +1116,11 @@ export async function updateToProcessed(queueItem: QueueItemInterface, bulkWrite
             await ref.update(updateData);
         }
 
+        if (!bulkWriter) {
+            recordImportCompletion(ref.parent?.id, additionalData);
+            recordActivityDeliveryCompletion({ ...queueItem, ref }, additionalData);
+            recordRouteQueueCompletion({ ...queueItem, ref }, additionalData);
+        }
         logger.info(`Updated to processed  ${queueItem.id}`);
         return QueueResult.Processed;
     } catch {

@@ -1,3 +1,4 @@
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { WhatsNewDialogComponent } from './whats-new-dialog.component';
 import { AppWhatsNewService } from '../../services/app.whats-new.service';
@@ -10,6 +11,8 @@ import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { ChangelogPost } from '../../services/app.whats-new.service';
 
+const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
+
 describe('WhatsNewDialogComponent', () => {
     let component: WhatsNewDialogComponent;
     let fixture: ComponentFixture<WhatsNewDialogComponent>;
@@ -20,6 +23,7 @@ describe('WhatsNewDialogComponent', () => {
     let mockDialogRef: any;
 
     beforeEach(async () => {
+        vi.clearAllMocks();
         // Create a signal for changelogs
         changelogsSignal = signal<ChangelogPost[]>([]);
         mockWhatsNewService = {
@@ -47,6 +51,7 @@ describe('WhatsNewDialogComponent', () => {
         await TestBed.configureTestingModule({
             imports: [WhatsNewDialogComponent, RouterTestingModule, NoopAnimationsModule],
             providers: [
+                { provide: AppHapticsService, useValue: haptics },
                 { provide: AppWhatsNewService, useValue: mockWhatsNewService },
                 { provide: AppUpdateService, useValue: mockUpdateService },
                 { provide: AppAnalyticsService, useValue: mockAnalyticsService },
@@ -59,8 +64,18 @@ describe('WhatsNewDialogComponent', () => {
         fixture.detectChanges();
     });
 
+    it('keeps absent updates silent and gives one feedback on dismiss', () => {
+        component.reload();
+        expect(haptics.selection).not.toHaveBeenCalled();
+        expect(mockUpdateService.activateUpdate).not.toHaveBeenCalled();
+        component.close();
+        expect(haptics.selection).toHaveBeenCalledOnce();
+        expect(mockDialogRef.close).toHaveBeenCalledOnce();
+    });
+
     it('should create', () => {
         expect(component).toBeTruthy();
+        expect(haptics.selection).not.toHaveBeenCalled();
     });
 
     it('should mark changelog as read on init', () => {
@@ -94,10 +109,12 @@ describe('WhatsNewDialogComponent', () => {
         reloadBtn.click();
 
         expect(mockUpdateService.activateUpdate).toHaveBeenCalled();
+        expect(haptics.selection).toHaveBeenCalledOnce();
+        expect(haptics.success).not.toHaveBeenCalled();
     });
 
-    it('should use flush mobile content alignment only for the single-entry notification feed', () => {
-        changelogsSignal.set([{
+    it('should show only the latest release as an open notification article', () => {
+        const release: ChangelogPost = {
             id: 'release-1',
             title: 'Test release',
             description: 'Release details',
@@ -105,9 +122,13 @@ describe('WhatsNewDialogComponent', () => {
             type: 'minor',
             version: '1.0.0',
             published: true
-        }]);
+        };
+        changelogsSignal.set([release, { ...release, id: 'release-2', title: 'Previous release' }]);
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.querySelector('.changelog-panel-notification')).not.toBeNull();
+        expect(fixture.nativeElement.querySelectorAll('article.changelog-notification')).toHaveLength(1);
+        expect(fixture.nativeElement.querySelector('h3').textContent).toContain(release.title);
+        expect(fixture.nativeElement.querySelector('mat-expansion-panel')).toBeNull();
+        expect(fixture.nativeElement.textContent).not.toContain('Previous release');
     });
 });

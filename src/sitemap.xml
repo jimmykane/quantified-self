@@ -2,37 +2,32 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://quantified-self.io/</loc>
-    <lastmod>2026-09-02</lastmod>
+    <lastmod>2026-10-24</lastmod>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://quantified-self.io/login</loc>
-    <lastmod>2026-01-07</lastmod>
-    <priority>0.8</priority>
-  </url>
-  <url>
     <loc>https://quantified-self.io/policies</loc>
-    <lastmod>2026-08-26</lastmod>
+    <lastmod>2026-10-14</lastmod>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/privacy</loc>
-    <lastmod>2026-08-26</lastmod>
+    <lastmod>2026-10-14</lastmod>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/terms</loc>
-    <lastmod>2026-08-05</lastmod>
+    <lastmod>2026-10-07</lastmod>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/pricing</loc>
-    <lastmod>2026-09-04</lastmod>
+    <lastmod>2026-10-28</lastmod>
     <priority>0.9</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/help</loc>
-    <lastmod>2026-08-26</lastmod>
+    <lastmod>2026-10-28</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -52,52 +47,62 @@
   </url>
   <url>
     <loc>https://quantified-self.io/integrations/garmin</loc>
-    <lastmod>2026-08-03</lastmod>
+    <lastmod>2026-10-24</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/integrations/suunto</loc>
-    <lastmod>2026-08-03</lastmod>
+    <lastmod>2026-10-13</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/integrations/coros</loc>
-    <lastmod>2026-08-26</lastmod>
+    <lastmod>2026-10-10</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/integrations/wahoo</loc>
-    <lastmod>2026-08-03</lastmod>
+    <lastmod>2026-10-24</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/features</loc>
-    <lastmod>2026-09-02</lastmod>
+    <lastmod>2026-10-09</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/features/activity-calendar</loc>
-    <lastmod>2026-08-04</lastmod>
+    <lastmod>2026-10-09</lastmod>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/features/workout-data-comparison</loc>
-    <lastmod>2026-09-02</lastmod>
+    <lastmod>2026-10-23</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/features/supported-activities</loc>
-    <lastmod>2026-08-24</lastmod>
+    <lastmod>2026-10-17</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/features/training-analysis</loc>
-    <lastmod>2026-09-02</lastmod>
+    <lastmod>2026-10-09</lastmod>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://quantified-self.io/features/training-plans</loc>
+    <lastmod>2026-10-09</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/features/training-dashboard</loc>
-    <lastmod>2026-09-02</lastmod>
+    <lastmod>2026-10-09</lastmod>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://quantified-self.io/features/health</loc>
+    <lastmod>2026-10-15</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -107,7 +112,7 @@
   </url>
   <url>
     <loc>https://quantified-self.io/features/mcp-server</loc>
-    <lastmod>2026-09-02</lastmod>
+    <lastmod>2026-10-07</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -127,47 +132,47 @@
   </url>
   <url>
     <loc>https://quantified-self.io/guides</loc>
-    <lastmod>2026-07-21</lastmod>
+    <lastmod>2026-10-24</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/guides/import-activities-to-suunto</loc>
-    <lastmod>2026-07-28</lastmod>
+    <lastmod>2026-10-24</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/guides/import-activities-to-wahoo</loc>
-    <lastmod>2026-07-28</lastmod>
+    <lastmod>2026-10-24</lastmod>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://quantified-self.io/guides/sync-garmin-to-wahoo</loc>
+    <lastmod>2026-10-24</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/guides/sync-garmin-to-suunto</loc>
-    <lastmod>2026-05-29</lastmod>
+    <lastmod>2026-10-24</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/guides/sync-coros-to-suunto</loc>
-    <lastmod>2026-05-29</lastmod>
+    <lastmod>2026-10-25</lastmod>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/guides/sync-wahoo-to-suunto</loc>
-    <lastmod>2026-07-21</lastmod>
+    <lastmod>2026-10-25</lastmod>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/guides/sync-suunto-routes-to-garmin-courses</loc>
-    <lastmod>2026-06-26</lastmod>
+    <lastmod>2026-10-24</lastmod>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/guides/centralize-garmin-suunto-coros-workout-data</loc>
     <lastmod>2026-07-21</lastmod>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://quantified-self.io/releases</loc>
-    <lastmod>2026-05-29</lastmod>
     <priority>0.7</priority>
   </url>
 </urlset>

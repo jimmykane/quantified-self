@@ -1,0 +1,86 @@
+<section class="health-tile" [class.health-thumbnail]="thumbnail()" [class.health-preview]="preview() && !thumbnail()" [class.health-overview]="overview()" [attr.aria-busy]="loading()">
+  @if (!thumbnail()) {
+    @if (!hideTitle()) { <header class="health-tile-header" [class.reserve-actions]="reserveActions()">
+      <div class="qs-dashboard-chart-title">{{ title() }}</div>
+    </header> }
+    @if (preview()) {
+      <div class="health-preview-source" role="status"><strong>{{ showingExample() ? 'Example data' : 'Your data' }}</strong><span>{{ previewNotice() }}</span></div>
+    }
+    <div class="health-tile-controls">
+      @if (showSleepSourcePicker()) {
+        <app-chart-source-picker class="health-sleep-source" [choices]="context()!.sources" [selectedKey]="context()!.selectedKey"
+          [chartTitle]="title()" [disabled]="disabled()" (selected)="selectSource($event)" />
+      } @else { <span class="health-tile-window">{{ window().label }}</span> }
+      @if (!overview()) { <div class="health-range-controls">
+        <button mat-icon-button aria-label="Show older period" [disabled]="disabled()" (click)="navigate('older')"><mat-icon>chevron_left</mat-icon></button>
+        <button mat-button type="button" class="health-range-trigger" [matMenuTriggerFor]="healthRangeMenu"
+          [attr.aria-label]="title() + ' date range: ' + rangeLabel()" [disabled]="disabled()" (menuOpened)="onRangeMenuOpened()">
+          <span>{{ rangeLabel() }}</span><mat-icon aria-hidden="true" iconPositionEnd>keyboard_arrow_down</mat-icon>
+        </button>
+        <mat-menu #healthRangeMenu="matMenu" class="qs-menu-panel" xPosition="before">
+          @for (range of ranges; track range.value) {
+            <button mat-menu-item type="button" role="menuitemradio" [attr.aria-checked]="settings().range === range.value"
+              [disabled]="disabled() || isRangeDisabled(range.value) || settings().range === range.value" (click)="selectRange(range.value)">
+              <mat-icon aria-hidden="true">{{ settings().range === range.value ? 'check' : 'calendar_today' }}</mat-icon><span>{{ range.menuLabel }}</span>
+            </button>
+          }
+        </mat-menu>
+        <button mat-icon-button aria-label="Show newer period" [disabled]="disabled() || !window().canNavigateNewer" (click)="navigate('newer')"><mat-icon>chevron_right</mat-icon></button>
+      </div> }
+      <div class="health-loading-slot"><mat-progress-bar mode="indeterminate" [style.visibility]="loading() ? 'visible' : 'hidden'" [attr.aria-label]="'Loading ' + title()" /></div>
+    </div>
+    @if (context(); as view) {
+      @if (!view.hasData && !showSleepSourcePicker() && (view.sources.length || view.missingSource)) {
+        <div class="health-source-empty"><app-chart-source-picker [choices]="view.sources" [selectedKey]="view.selectedKey"
+          [chartTitle]="title()" [disabled]="disabled()" (selected)="selectSource($event)" /></div>
+      }
+      @if (loading() && !preview()) { <p class="health-notice" role="status">Updating readings. Previous chart shown.</p> }
+      @if (showingExample() && view.sampleOnly) { <button mat-button (click)="selectRange('90d')">Show 90 days</button> }
+      @for (notice of view.notices; track notice) { <p class="health-notice" role="status">{{ notice }}</p> }
+      @if (view.failedSources) { <button mat-button [disabled]="loading()" (click)="reload()">Retry unavailable sources</button> }
+    }
+    @if (error()) { <p class="health-notice" role="status">Could not load this period. <button mat-button (click)="reload()">Try again</button></p> }
+  }
+  @if (displayContext(); as view) {
+    @if (view.selected; as chart) {
+      @if (thumbnail()) {
+        <div class="health-thumbnail-summary" [attr.aria-label]="chart.model.ariaLabel">
+          <span class="health-thumbnail-source">{{ chart.model.series.sourceLabel }}</span>
+          <span class="health-thumbnail-value">{{ chart.latestValueText }}</span>
+        </div>
+      }
+      @if (!thumbnail()) {
+        <div class="health-tile-summary">
+          <div class="health-value-row">
+            <strong>{{ chart.latestValueText }}</strong>
+            @if (!showingExample() && context(); as sourceView) {
+              <app-chart-source-picker [choices]="sourceView.sources" [selectedKey]="sourceView.selectedKey"
+                [chartTitle]="title()" [compact]="!overview()" [disabled]="disabled()" (selected)="selectSource($event)" />
+            } @else {
+              <span class="health-example-attribution">Example data · {{ chart.model.readingLabel }}</span>
+            }
+          </div>
+          @if (recordedDate()) { <span class="health-recorded-date">Recorded {{ recordedDate() }}</span> }
+          @if (chart.model.series.deviceLabel) { <span class="health-device-label">Device: {{ chart.model.series.deviceLabel }}</span> }
+          <span class="health-evidence-text">{{ chart.model.evidenceText }}</span>
+          @if (supportNote(); as note) { <span class="health-evidence-text">{{ note }}</span> }
+          @if (chart.model.twoReadingComparisonText) { <span class="health-evidence-text health-two-reading-comparison">{{ chart.model.twoReadingComparisonText }}</span> }
+          @if (chart.status; as status) { <span class="health-status"><span class="health-status-dot" [style.background-color]="chart.statusOverlay?.statusColor"></span>{{ status.label }}</span><span class="health-status-detail">{{ status.detailText }}</span> }
+        </div>
+      }
+      <app-health-metric-series-chart data-dashboard-chart-plot [model]="chart.model" [startTimeMs]="view.window.startTimeMs" [endTimeMs]="view.window.endTimeMs"
+        [darkTheme]="darkTheme()" [unitSettings]="user().settings.unitSettings" [fillHeight]="true" [compact]="overview()" [thumbnail]="thumbnail()"
+        [timelineNotes]="thumbnail() || showingExample() ? null : timelineNotes()" [statusOverlay]="chart.statusOverlay" [statusDescription]="chart.statusDescription" />
+    } @else if (settings().metric === 'sleep' && view.hasData) {
+      @if (thumbnail()) {
+        <span class="health-thumbnail-source">{{ selectedSourceLabel() }}</span>
+        <app-dashboard-chart-thumbnail [preview]="sleepThumbnail()" [darkTheme]="darkTheme()" />
+      } @else {
+        @if (!showSleepSourcePicker()) { <span class="health-sleep-attribution">{{ selectedSourceLabel() }} · Sleep overview</span> }
+        <app-sleep-trend-chart [hideTitle]="true" [overview]="overview()" [sleepTrend]="view.sleep" [sleepRange]="settings().range === 'today' ? '14d' : $any(settings().range)" [sleepWindowLabel]="view.window.label" [darkTheme]="darkTheme()" [unitSettings]="user().settings.unitSettings" [timelineNotes]="showingExample() ? null : timelineNotes()" />
+      }
+    } @else if (!thumbnail()) {
+      <div class="health-tile-empty" role="status"><p>{{ view.availability.reason }}</p>@if (view.sampleOnly) { <button mat-button (click)="selectRange('90d')">Show 90 days</button> }</div>
+    } @else { <span class="health-thumbnail-empty">—</span> }
+  } @else { <div class="health-tile-empty" role="status">{{ thumbnail() ? '…' : loading() ? 'Loading readings…' : error() ? 'Readings unavailable' : 'Chart loads when visible' }}</div> }
+</section>

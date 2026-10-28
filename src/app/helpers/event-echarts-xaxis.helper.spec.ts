@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ActivityTypes, DataDistance, DataHeartRate, DistanceUnits, XAxisTypes } from '@sports-alliance/sports-lib';
+import { ActivityInterface, ActivityTypes, DataDistance, DataHeartRate, DataStrydDistance, DistanceUnits, XAxisTypes } from '@sports-alliance/sports-lib';
 import {
   buildEventCanonicalXAxisScaleOptions,
   canSelectEventChartDistanceXAxis,
@@ -8,7 +8,8 @@ import {
   formatEventXAxisValue,
   getCanonicalEventXAxisInterval,
   normalizeEventRange,
-  resolveEventChartXAxisType
+  resolveEventChartXAxisType,
+  resolveEventDistanceCursorSeconds
 } from './event-echarts-xaxis.helper';
 
 describe('event-echarts-xaxis.helper', () => {
@@ -20,6 +21,38 @@ describe('event-echarts-xaxis.helper', () => {
   it('keeps configured axis for normal events', () => {
     const resolved = resolveEventChartXAxisType({ isMultiSport: () => false } as any, XAxisTypes.Duration);
     expect(resolved).toBe(XAxisTypes.Duration);
+  });
+
+  function swimWithDistance(type: ActivityTypes, distanceType = DataDistance.type): ActivityInterface {
+    return {
+      type,
+      getStream: (streamType: string) => streamType === distanceType
+        ? { getData: () => [0, 25, 50] } : null,
+    } as ActivityInterface;
+  }
+
+  it.each([DataDistance.type, DataStrydDistance.type])('disables %s as an axis for pool swimming even with recorded distance', (distanceType) => {
+    const poolSwim = swimWithDistance(ActivityTypes.Swimming, distanceType);
+
+    expect(canSelectEventChartDistanceXAxis([poolSwim])).toBe(false);
+    expect(resolveEventChartXAxisType(null, XAxisTypes.Distance, [poolSwim])).toBe(XAxisTypes.Duration);
+  });
+
+  it.each([XAxisTypes.Duration, XAxisTypes.Time])('keeps %s available for pool swimming', (axis) => {
+    expect(resolveEventChartXAxisType(null, axis, [swimWithDistance(ActivityTypes.Swimming)])).toBe(axis);
+  });
+
+  it('restricts distance only while a pool swim is selected, leaving open-water swimming unchanged', () => {
+    const poolSwim = swimWithDistance(ActivityTypes.Swimming);
+    const openWaterSwim = swimWithDistance(ActivityTypes.OpenWaterSwimming);
+
+    expect(canSelectEventChartDistanceXAxis([openWaterSwim, poolSwim])).toBe(false);
+    expect(resolveEventChartXAxisType(null, XAxisTypes.Distance, [poolSwim])).toBe(XAxisTypes.Duration);
+    expect(canSelectEventChartDistanceXAxis([openWaterSwim])).toBe(true);
+    expect(resolveEventChartXAxisType(null, XAxisTypes.Distance, [openWaterSwim])).toBe(XAxisTypes.Distance);
+    expect(resolveEventChartXAxisType(
+      { isMultiSport: () => true } as any, XAxisTypes.Distance, [poolSwim, openWaterSwim],
+    )).toBe(XAxisTypes.Time);
   });
 
   it('falls back to duration when distance is configured and a selected indoor activity has no distance stream', () => {
@@ -175,5 +208,49 @@ describe('event-echarts-xaxis.helper', () => {
     expect(buildEventCanonicalXAxisScaleOptions(XAxisTypes.Distance, { start: 0, end: 1000 }, true)).toEqual({
       splitNumber: 4,
     });
+  });
+});
+
+
+describe('resolveEventDistanceCursorSeconds', () => {
+  it.each([
+    { label: 'leading gaps before a real zero', distance: [null, null, 0, 10], time: [0, 1, 2, 3], target: 0, expected: 2 },
+    { label: 'interior gaps with independent timestamps', distance: [0, null, 100], time: [0, 10, 20], target: 95, expected: 20 },
+    { label: 'missing time at the nearest distance', distance: [0, 100, 200], time: [0, null, 20], target: 110, expected: 20 },
+    { label: 'recorded time zero', distance: [0, 10], time: [0, 1], target: 0, expected: 0 },
+    { label: 'repeated recorded distance', distance: [0, 0, 10], time: [0, 10, 20], target: 0, expected: 0 },
+    { label: 'equally near observations', distance: [0, 10], time: [5, 20], target: 5, expected: 5 },
+    { label: 'no overlapping finite pairs', distance: [null, 10], time: [0, null], target: 10, expected: null },
+    { label: 'all missing readings', distance: [null, null], time: [0, 1], target: 0, expected: null },
+    { label: 'non-finite distance', distance: [NaN, Infinity, 10], time: [0, 1, 2], target: 0, expected: 2 },
+    { label: 'non-finite time', distance: [0, 1, 2], time: [NaN, Infinity, 20], target: 0, expected: 20 },
+    { label: 'unpaired trailing distance', distance: [0, 100], time: [4], target: 100, expected: 4 },
+    { label: 'unpaired trailing time', distance: [100], time: [null, 4], target: 100, expected: null },
+    { label: 'numeric strings and booleans', distance: ['0', false, 10], time: [0, 1, 2], target: 0, expected: 2 },
+    { label: 'nonnumeric time', distance: [0, 10, 20], time: ['0', false, 2], target: 0, expected: 2 },
+    { label: 'empty streams', distance: [], time: [], target: 0, expected: null },
+  ])('handles $label without changing either stream', ({ distance, time, target, expected }) => {
+    const originalDistance = [...distance];
+    const originalTime = [...time];
+    expect(resolveEventDistanceCursorSeconds(Object.freeze(distance), Object.freeze(time), target)).toBe(expected);
+    expect(distance).toEqual(originalDistance);
+    expect(time).toEqual(originalTime);
+  });
+
+  it('ignores sparse array holes without shifting their paired time indices', () => {
+    const distance = new Array<number>(3);
+    distance[2] = 0;
+    expect(resolveEventDistanceCursorSeconds(distance, [0, 10, 20], 0)).toBe(20);
+    expect(0 in distance).toBe(false);
+    expect(1 in distance).toBe(false);
+  });
+
+  it.each([NaN, Infinity, -Infinity])('rejects non-finite target %s', (target) => {
+    expect(resolveEventDistanceCursorSeconds([0], [0], target)).toBeNull();
+  });
+
+  it.each([null, undefined, '0', 0, {}])('rejects a non-array stream %s', (invalid) => {
+    expect(resolveEventDistanceCursorSeconds(invalid, [0], 0)).toBeNull();
+    expect(resolveEventDistanceCursorSeconds([0], invalid, 0)).toBeNull();
   });
 });

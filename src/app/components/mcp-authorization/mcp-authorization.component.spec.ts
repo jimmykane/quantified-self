@@ -1,14 +1,22 @@
+import { MatCheckboxChange } from '@angular/material/checkbox';
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ActivatedRoute, convertToParamMap } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppFunctionsService } from '../../services/app.functions.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { LoggerService } from '../../services/logger.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { McpAuthorizationComponent } from './mcp-authorization.component';
+import { AppAuthService } from '../../authentication/app.auth.service';
+import { AppUserService, type AppUserProfileReadState } from '../../services/app.user.service';
 
 describe('McpAuthorizationComponent', () => {
   const assign = vi.fn();
+  const haptics = { selection: vi.fn() };
+  const navigate = vi.fn().mockResolvedValue(true);
+  const profile = signal<AppUserProfileReadState>({ status: 'ready', uid: 'test-user', profileExists: true });
   const functions = {
     call: vi.fn(),
   };
@@ -19,6 +27,7 @@ describe('McpAuthorizationComponent', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    profile.set({ status: 'ready', uid: 'test-user', profileExists: true });
     windowRef.navigator.userAgent = 'Mozilla/5.0 (X11; Linux x86_64)';
     functions.call.mockImplementation((name: string) => {
       if (name === 'getMcpAuthorizationRequest') {
@@ -30,6 +39,7 @@ describe('McpAuthorizationComponent', () => {
             redirectUri: 'https://client.example/oauth/callback',
             redirectHost: 'client.example',
             scopes: [
+              'health:read',
               'metrics:read',
               'measurements:read',
               'sleep:read',
@@ -62,8 +72,159 @@ describe('McpAuthorizationComponent', () => {
         { provide: AppFunctionsService, useValue: functions },
         { provide: AppWindowService, useValue: { windowRef } },
         { provide: LoggerService, useValue: { error: vi.fn() } },
+        { provide: AppHapticsService, useValue: haptics },
+        { provide: Router, useValue: { navigate } },
+        { provide: AppAuthService, useValue: { currentUser: { uid: 'test-user' } } },
+        { provide: AppUserService, useValue: { profileReadState: profile } },
       ],
     }).compileComponents();
+  });
+
+  it('requires setup for a missing profile without granting access, then preserves the pending request', async () => {
+    profile.set({ status: 'ready', uid: 'test-user', profileExists: false });
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const component = fixture.componentInstance;
+    expect(fixture.nativeElement.textContent).toContain('Complete your account setup before allowing access');
+    expect(haptics.selection).not.toHaveBeenCalled();
+
+    await component.approve();
+    expect(functions.call).toHaveBeenCalledTimes(1);
+
+    const setup = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button'))
+      .find(button => button.textContent?.includes('Complete account setup'))!;
+    setup.click(); await fixture.whenStable();
+    expect(navigate).toHaveBeenCalledWith(['/onboarding'], {
+      queryParams: { returnUrl: '/mcp/authorize', request_id: 'request-1' },
+    });
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    expect(functions.call).toHaveBeenCalledTimes(1);
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it('allows denial without an account profile or setup', async () => {
+    profile.set({ status: 'ready', uid: 'test-user', profileExists: false });
+    const component = TestBed.createComponent(McpAuthorizationComponent).componentInstance;
+    await component.ngOnInit();
+    await component.deny();
+    expect(functions.call).toHaveBeenLastCalledWith('decideMcpAuthorization', {
+      requestId: 'request-1', approved: false,
+    });
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it.each<AppUserProfileReadState>([
+    { status: 'loading', uid: 'test-user' },
+    { status: 'error', uid: 'test-user', code: 'permission-denied' },
+    { status: 'ready', uid: 'another-user', profileExists: true },
+    { status: 'ready', uid: 'another-user', profileExists: false },
+  ])('never approves or offers new-account setup from an unresolved/mismatched profile: %j', async (state) => {
+    profile.set(state);
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const component = fixture.componentInstance;
+    const allow = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button'))
+      .find(button => button.textContent?.includes('Allow selected access'))!;
+    expect(allow.disabled).toBe(true);
+    await component.approve();
+    await component.completeAccountSetup();
+    expect(functions.call).toHaveBeenCalledTimes(1);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('does not automatically approve after the account profile becomes available', async () => {
+    profile.set({ status: 'ready', uid: 'test-user', profileExists: false });
+    const component = TestBed.createComponent(McpAuthorizationComponent).componentInstance;
+    await component.ngOnInit();
+    profile.set({ status: 'ready', uid: 'test-user', profileExists: true });
+    expect(component.hasAccountProfile()).toBe(true);
+    expect(component.needsAccountSetup()).toBe(false);
+    expect(functions.call).toHaveBeenCalledTimes(1);
+    await component.completeAccountSetup();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    await component.approve();
+    expect(functions.call).toHaveBeenLastCalledWith('decideMcpAuthorization', {
+      requestId: 'request-1', approved: true, grantedScopes: component.selectedScopes(),
+    });
+  });
+
+  it('does not restart or approve an expired request while an account needs setup', async () => {
+    profile.set({ status: 'ready', uid: 'test-user', profileExists: false });
+    functions.call.mockRejectedValueOnce(new Error('Request expired'));
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    await component.completeAccountSetup();
+    await component.approve();
+
+    expect(fixture.nativeElement.textContent).toContain('invalid, expired, or no longer available');
+    expect(functions.call).toHaveBeenCalledTimes(1);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(assign).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('removes all reflection descendants when their activity parent is unchecked', () => {
+    const component = TestBed.createComponent(McpAuthorizationComponent).componentInstance;
+    component.selectedScopes.set(['activity-details:read', 'workout-reflections:read', 'workout-reflections:write', 'metrics:read']);
+    component.toggleScope('activity-details:read', { checked: false } as MatCheckboxChange);
+    expect(component.selectedScopes()).toEqual(['metrics:read']);
+  });
+
+  it('discloses Training-only consent and allows withholding it without granting activity or notes access', async () => {
+    functions.call.mockResolvedValueOnce({ data: { requestId: 'training-request', scopes: ['training-plans:read', 'metrics:read'],
+      clientName: 'Training client', redirectUri: 'https://client.example/callback' } });
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const component = fixture.componentInstance;
+    expect(component.selectedScopes()).toEqual(['training-plans:read', 'metrics:read']);
+    expect(component.scopeOptions()[0]).toMatchObject({
+      title: 'Training plans and planned workouts', selected: true, disabled: false,
+    });
+    expect(fixture.nativeElement.textContent).toContain('sensitive health or personal information');
+    expect(functions.call).toHaveBeenCalledTimes(1);
+    component.toggleScope('training-plans:read', { checked: false } as never);
+    await component.approve();
+    expect(functions.call).toHaveBeenLastCalledWith('decideMcpAuthorization', {
+      requestId: 'training-request', approved: true, grantedScopes: ['metrics:read'],
+    });
+  });
+
+  it('explains explicit service-copy cleanup under the existing delivery grant without adding permission choices', async () => {
+    functions.call.mockResolvedValueOnce({ data: { requestId: 'deletion-request', scopes: ['training-plans:read',
+      'training-plans:write', 'training-delivery:write'], clientName: 'Training client', redirectUri: 'https://client.example/callback' } });
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.scopeOptions()).toHaveLength(3);
+    expect(fixture.nativeElement.textContent).toContain('explicit request to remove older, uncompleted service copies');
+    expect(fixture.nativeElement.textContent).toContain('never deletes recorded activities');
+    expect(fixture.nativeElement.textContent).toContain('removal does not require Pro');
+    fixture.componentInstance.toggleScope('training-delivery:write', { checked: false } as never);
+    await fixture.componentInstance.approve();
+    expect(functions.call).toHaveBeenLastCalledWith('decideMcpAuthorization', {
+      requestId: 'deletion-request', approved: true, grantedScopes: ['training-plans:read', 'training-plans:write'],
+    });
+  });
+
+  it('preselects requested manual management independently and supports withholding its write grant', async () => {
+    functions.call.mockResolvedValueOnce({ data: { requestId: 'manual-request', scopes: ['measurements:write', 'measurements:read'],
+      clientName: 'Measurement client', redirectUri: 'https://client.example/callback' } });
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const component = fixture.componentInstance;
+    expect(component.selectedScopes()).toEqual(['measurements:write', 'measurements:read']);
+    expect(component.scopeOptions()[0]).toMatchObject({ title: 'Manage manual Health measurements', selected: true, disabled: false });
+    expect(fixture.nativeElement.textContent).toContain('Provider imports cannot be changed');
+    expect(fixture.nativeElement.textContent).toContain('Deletion cannot be undone');
+    expect(fixture.nativeElement.textContent).toContain('Existing connections must reauthorize');
+    component.toggleScope('measurements:write', { checked: false } as never);
+    await component.approve();
+    expect(functions.call).toHaveBeenLastCalledWith('decideMcpAuthorization', {
+      requestId: 'manual-request', approved: true, grantedScopes: ['measurements:read'],
+    });
   });
 
   it('shows the requesting client, redirect, and only the requested scopes', async () => {
@@ -77,13 +238,22 @@ describe('McpAuthorizationComponent', () => {
     expect(content).toContain('https://client.example/oauth/callback');
     expect(content).toContain('Activity and Training metrics');
     expect(content).toContain('Body measurements');
+    expect(content).toContain('Health metrics');
+    expect(content).toContain('exact UTC times');
+    expect(content).toContain('No measurements can be added, edited or deleted');
     expect(content).toContain('Read bounded identity-free body-measurement history such as weight');
     expect(content).toContain('exact source timestamps');
     expect(content).toContain('selected canonical numeric metrics for one activity');
+    expect(content).toContain('identity-safe TSS-based Training impact');
+    expect(content).toContain('not measured physiological adaptation');
     expect(content).toContain('Sleep summaries');
     expect(content).toContain('available aggregate HRV');
     expect(content).toContain('Individual activity details');
     expect(content).toContain('bounded on-demand chart series');
+    expect(content).toContain('event tags');
+    expect(content).toContain('exact case-insensitive tags');
+    expect(content).toContain('personal, health, or location context');
+    expect(content).toContain('untrusted labels');
     expect(content).toContain('Activity locations');
     expect(content).toContain('exact activity start, end, MTB jump');
     expect(content).toContain('Saved-route summaries');
@@ -97,6 +267,8 @@ describe('McpAuthorizationComponent', () => {
     expect(content).toContain('unrequested streams');
     expect(content).toContain('permissions are independent');
     expect(content).not.toContain('Android app handoff');
+    expect(content).not.toContain('Timeline notes');
+    expect(fixture.componentInstance.selectedScopes()).not.toContain('timeline-notes:read');
   });
 
   it('warns Android users before the client app-link handoff', async () => {
@@ -111,6 +283,135 @@ describe('McpAuthorizationComponent', () => {
     expect(content).toContain('ChatGPT opens but does not resume setup');
     expect(content).toContain('Open supported links');
     expect(content).toContain('finish setup in ChatGPT on the web from a desktop');
+  });
+
+  it('preselects descriptions and removes both child grants when activity details is unchecked', async () => {
+    functions.call.mockResolvedValueOnce({ data: { requestId: 'description-request',
+      scopes: ['activity-details:read', 'activity-descriptions:read', 'activity-location:read'],
+      clientName: 'Description client', redirectUri: 'https://client.example/callback' } });
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+    const option = () => component.scopeOptions().find(value => value.scope === 'activity-descriptions:read');
+    expect(component.selectedScopes()).toEqual([
+      'activity-details:read', 'activity-descriptions:read', 'activity-location:read',
+    ]);
+    expect(option()).toMatchObject({ title: 'Activity descriptions', selected: true, disabled: false });
+    expect(fixture.nativeElement.textContent).toContain('Selected by default when requested');
+    expect(fixture.nativeElement.textContent).toContain('location information, even without Activity locations');
+    expect(haptics.selection).not.toHaveBeenCalled();
+    await component.approve();
+    expect(functions.call).toHaveBeenLastCalledWith('decideMcpAuthorization', {
+      requestId: 'description-request', approved: true,
+      grantedScopes: ['activity-details:read', 'activity-descriptions:read', 'activity-location:read'],
+    });
+    component.deciding.set(null);
+    component.toggleScope('activity-details:read', { checked: false } as never);
+    expect(component.selectedScopes()).toEqual([]);
+    expect(option()).toMatchObject({ selected: false, disabled: true });
+    component.toggleScope('activity-descriptions:read', { checked: true } as never);
+    expect(component.selectedScopes()).toEqual([]);
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    component.toggleScope('activity-details:read', { checked: true } as never);
+    expect(option()).toMatchObject({ selected: false, disabled: false });
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+  });
+
+  it('preselects a requested notes-only permission but waits for approval to grant it', async () => {
+    functions.call.mockResolvedValueOnce({ data: { requestId: 'notes-request', scopes: ['timeline-notes:read'],
+      clientName: 'Notes client', redirectUri: 'https://client.example/callback' } });
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+    expect(component.selectedScopes()).toEqual(['timeline-notes:read']);
+    expect(component.scopeOptions()[0]).toMatchObject({ title: 'Timeline notes', selected: true, disabled: false });
+    expect(fixture.nativeElement.querySelector('input[type="checkbox"]').checked).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Selected by default when requested');
+    expect(fixture.nativeElement.textContent).toContain('sensitive health or personal information');
+    expect(fixture.nativeElement.textContent).toContain('cannot erase copies');
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(functions.call).toHaveBeenCalledTimes(1);
+    await component.approve();
+    expect(functions.call).toHaveBeenLastCalledWith('decideMcpAuthorization', {
+      requestId: 'notes-request', approved: true, grantedScopes: ['timeline-notes:read'],
+    });
+  });
+
+  it('preselects requested note and tag changes and removes them with their read parents', async () => {
+    functions.call.mockResolvedValueOnce({ data: {
+      requestId: 'content-write-request',
+      scopes: [
+        'timeline-notes:read', 'timeline-notes:write',
+        'activity-details:read', 'events:write',
+      ],
+      clientName: 'Content client', redirectUri: 'https://client.example/callback',
+    } });
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+    expect(component.selectedScopes()).toEqual([
+      'timeline-notes:read', 'timeline-notes:write',
+      'activity-details:read', 'events:write',
+    ]);
+    expect(component.scopeOptions().find(option => option.scope === 'timeline-notes:write'))
+      .toMatchObject({ selected: true, disabled: false, title: 'Change Timeline notes' });
+    expect(component.scopeOptions().find(option => option.scope === 'events:write'))
+      .toMatchObject({ selected: true, disabled: false, title: 'Change events' });
+
+    component.toggleScope('timeline-notes:read', { checked: false } as never);
+    component.toggleScope('activity-details:read', { checked: false } as never);
+    expect(component.selectedScopes()).toEqual([]);
+    expect(component.scopeOptions().find(option => option.scope === 'timeline-notes:write'))
+      .toMatchObject({ selected: false, disabled: true });
+    expect(component.scopeOptions().find(option => option.scope === 'events:write'))
+      .toMatchObject({ selected: false, disabled: true });
+  });
+
+  it('lets the user uncheck notes without changing other requested permissions', async () => {
+    functions.call.mockResolvedValueOnce({ data: { requestId: 'mixed-request',
+      scopes: ['timeline-notes:read', 'health:read', 'activity-details:read', 'activity-descriptions:read'],
+      clientName: 'Mixed client', redirectUri: 'https://client.example/callback' } });
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+    expect(component.selectedScopes()).toEqual([
+      'timeline-notes:read', 'health:read', 'activity-details:read', 'activity-descriptions:read',
+    ]);
+    const notesCheckbox = Array.from(fixture.nativeElement.querySelectorAll('mat-checkbox') as NodeListOf<HTMLElement>)
+      .find(checkbox => checkbox.textContent?.includes('Timeline notes'))!;
+    notesCheckbox.querySelector<HTMLInputElement>('input')!.click();
+    fixture.detectChanges();
+    expect(component.selectedScopes()).toEqual([
+      'health:read', 'activity-details:read', 'activity-descriptions:read',
+    ]);
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    await component.approve();
+    expect(functions.call).toHaveBeenLastCalledWith('decideMcpAuthorization', {
+      requestId: 'mixed-request', approved: true,
+      grantedScopes: ['health:read', 'activity-details:read', 'activity-descriptions:read'],
+    });
+  });
+
+  it('prevents empty approval after the only requested notes permission is unchecked', async () => {
+    functions.call.mockResolvedValueOnce({ data: { requestId: 'notes-request', scopes: ['timeline-notes:read'],
+      clientName: 'Notes client', redirectUri: 'https://client.example/callback' } });
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.componentInstance.toggleScope('timeline-notes:read', { checked: false } as never);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.mcp-authorization__actions button').disabled).toBe(true);
+    await fixture.componentInstance.approve();
+    expect(functions.call).toHaveBeenCalledTimes(1);
+    expect(fixture.componentInstance.error()).toContain('Select at least one permission');
   });
 
   it('stacks the full-width authorization actions with the primary action first', async () => {
@@ -141,6 +442,7 @@ describe('McpAuthorizationComponent', () => {
       requestId: 'request-1',
       approved: true,
       grantedScopes: [
+        'health:read',
         'metrics:read',
         'measurements:read',
         'sleep:read',
@@ -151,6 +453,34 @@ describe('McpAuthorizationComponent', () => {
       ],
     });
     expect(assign).toHaveBeenCalledWith('https://client.example/oauth/callback?code=code-1');
+  });
+
+  it('re-enables the authorization controls when a decision request fails', async () => {
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    functions.call.mockRejectedValueOnce(new Error('App Check is taking too long'));
+
+    await fixture.componentInstance.approve();
+
+    expect(fixture.componentInstance.deciding()).toBeNull();
+    expect(fixture.componentInstance.error()).toContain('Could not complete this authorization request');
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it('keeps Health opt-in independent and gives feedback only for an accepted selection change', async () => {
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    const healthOption = fixture.componentInstance.scopeOptions().find(option => option.scope === 'health:read');
+    expect(healthOption?.selected).toBe(true);
+    fixture.componentInstance.toggleScope('health:read', { checked: false } as never);
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    expect(fixture.componentInstance.selectedScopes()).not.toContain('health:read');
+    expect(fixture.componentInstance.selectedScopes()).toContain('measurements:read');
+    fixture.componentInstance.toggleScope('health:read', { checked: false } as never);
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
   });
 
   it('removes dependent location permissions with their parent scope', async () => {

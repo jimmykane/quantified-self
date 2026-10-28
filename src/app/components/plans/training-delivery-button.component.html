@@ -1,0 +1,56 @@
+@if (visible()) {
+  @if (summaries().length) {
+    @if (scope() === 'plan') {
+      <div class="delivery-plan-summary" role="group" aria-label="Plan sync by service">
+        <span class="delivery-plan-summary-heading"><span class="delivery-plan-heading-plan">Plan </span>sync</span>
+        <span class="delivery-plan-providers" [class.delivery-plan-providers--idle]="planIdleMessage()">
+          @if (planIdleMessage(); as message) { <span class="delivery-plan-idle-message">{{ message }}</span> }
+          @for (summary of compactPlanSummaries(); track summary.provider) {
+            <span class="delivery-plan-provider" role="group"
+              [attr.aria-label]="summary.presentation.displayLabel + ': ' + (summary.planFocus?.label ?? summary.label) + '. '
+                + ((summary.planFocus?.detail || summary.detail) ? (summary.planFocus?.detail || summary.detail) + '.' : '')">
+              <app-service-source-icon class="delivery-plan-provider-icon--wide" [presentation]="summary.presentation"
+                [showTooltip]="false" [iconHeight]="16" aria-hidden="true"></app-service-source-icon>
+              <app-service-source-icon class="delivery-plan-provider-icon--compact" [presentation]="summary.presentation"
+                [showTooltip]="false" [iconWidth]="20" [iconHeight]="16" aria-hidden="true"></app-service-source-icon>
+              @if (!planIdleMessage()) { <span class="delivery-plan-provider-count" aria-hidden="true">{{ summary.compactLabel }}</span> }
+            </span>
+          }
+        </span>
+        <button mat-button appHapticTap type="button" class="delivery-plan-view" (click)="open()" [disabled]="disabled()"
+          aria-label="View plan sync details">
+          <span class="delivery-plan-view-label">View</span><mat-icon iconPositionEnd aria-hidden="true">chevron_right</mat-icon>
+        </button>
+      </div>
+    } @else {
+      <div class="delivery-summaries" aria-label="Workout sync by service">
+        @for (summary of summaries(); track summary.provider) {
+          <button mat-button appHapticTap type="button" class="delivery-summary" (click)="open()" [disabled]="disabled()"
+            [attr.aria-label]="summary.presentation.displayLabel + ': ' + summary.label + '. ' + (summary.detail ? summary.detail + '. ' : '') + 'Open workout sync details'">
+            <span class="delivery-summary-content">
+              <app-service-source-icon [presentation]="summary.presentation" [showTooltip]="false" [iconHeight]="16" aria-hidden="true"></app-service-source-icon>
+              <span class="delivery-summary-copy"><span>{{ summary.presentation.displayLabel }} · {{ summary.label }}</span>
+                @if (summary.detail && summary.detail !== summary.label) { <span class="delivery-summary-detail">{{ summary.detail }}</span> }
+              </span>
+              <mat-icon aria-hidden="true">{{ summary.icon }}</mat-icon>
+            </span>
+          </button>
+        }
+      </div>
+    }
+  } @else {
+  <button mat-button appHapticTap type="button" (click)="open()" [disabled]="disabled()"
+      [attr.aria-label]="scope() === 'history' ? 'Workout sync history' : null"
+      [matTooltip]="scope() === 'history' && historyLabel() !== 'Workout sync history' ? 'Workout sync history' : ''">
+    <mat-icon aria-hidden="true">sync</mat-icon>{{ buttonLabel() }}
+  </button>
+    @if (showSetupHint()) {
+      <p class="delivery-setup-hint delivery-summary-detail">Optional Pro sync. Sends eligible upcoming workouts while this plan is active.</p>
+    }
+    @if (!readState().loaded) {
+      <span class="delivery-summary-detail" role="status">Loading sync settings…</span>
+    } @else if (readState().error || summaryState().error) {
+      <span class="delivery-summary-detail" role="status">Sync status unavailable</span>
+    }
+  }
+}

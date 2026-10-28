@@ -1,0 +1,373 @@
+import { DASHBOARD_HEALTH_GROUPS, dashboardHealthSettings } from '../../../helpers/dashboard-health-tile.helper';
+import { DashboardHealthService } from '../../../services/dashboard-health.service';
+import { buildDashboardHealthContext, DashboardHealthContext } from '../../../helpers/dashboard-health-context.helper';
+import type { HealthProvider } from '@shared/health';
+import { DashboardChartDiscoveryService } from '../../../services/dashboard-chart-discovery.service';
+import { dashboardChartSuggestions, unseenDashboardCharts } from '../../../helpers/dashboard-chart-discovery.helper';
+import { resolveDashboardTileCollectionPresentation, resolveDashboardTilePresentation } from '../../../helpers/dashboard-tile-presentation.helper';
+import { DOCUMENT } from '@angular/common';
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { MatDialog } from '@angular/material/dialog';
+import { MatBottomSheet } from '@angular/material/bottom-sheet';
+import { Observable, Subscription } from 'rxjs';
+import { isDashboardKpiChartType, isDashboardSleepBackedChartType, isDashboardHrvTrendChartType } from '../../../helpers/dashboard-special-chart-types';
+import { resolveDashboardChartInfoTooltip } from '../../../helpers/dashboard-chart-info.helper';
+import { DASHBOARD_TILE_EVENT_RANGE_OPTIONS, normalizeDashboardTileEventFilters } from '../../../helpers/dashboard-tile-event-filters.helper';
+import { Component, computed, inject, input, signal, ElementRef, effect, untracked, viewChild, TemplateRef, ViewContainerRef, DestroyRef, output } from '@angular/core';
+import { AppUserInterface } from '../../../models/app-user.interface';
+import { getAvailableDashboardCharts, getDashboardChartCatalog, matchesDashboardPreset } from '../../../helpers/dashboard-chart-catalog.helper';
+import { DASHBOARD_TILE_SECTION_DEFINITIONS, DashboardTileLaneKey, getDashboardTileSectionDefinition, resolveDashboardTileLaneKey } from '../../../helpers/dashboard-tile-section.helper';
+import { DashboardPreviewInput, buildDashboardThumbnailPreview, dashboardPreviewSourceLabel } from '../../../helpers/dashboard-chart-preview.helper';
+import { DashboardChartLibraryState } from './dashboard-chart-library-state.service';
+import { DashboardChartPreviewService } from '../../../services/dashboard-chart-preview.service';
+@Component({ selector: 'app-dashboard-chart-library', standalone: false, templateUrl: './dashboard-chart-library.component.html', styleUrls: ['./dashboard-chart-library.component.css'], providers: [DashboardChartPreviewService] })
+export class DashboardChartLibraryComponent {
+  private readonly document = inject(DOCUMENT);
+  private readonly dialog = inject(MatDialog);
+  private readonly bottomSheet = inject(MatBottomSheet);
+  private readonly breakpoints = inject(BreakpointObserver);
+  private readonly viewContainerRef = inject(ViewContainerRef);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly picker = viewChild<TemplateRef<unknown>>('picker');
+  private readonly entryButton = viewChild<ElementRef<HTMLButtonElement>>('entryButton');
+  private readonly detail = viewChild<ElementRef<HTMLElement>>('detail');
+  private readonly scrollContent = viewChild<ElementRef<HTMLElement>>('scrollContent');
+  private readonly browser = viewChild<ElementRef<HTMLElement>>('browser');
+  private overlay: { close: () => void; subscriptions: Subscription } | null = null;
+  readonly pickerClosed = output<void>();
+  readonly state = inject(DashboardChartLibraryState);
+  readonly user = input.required<AppUserInterface>();
+  readonly lane = input.required<DashboardTileLaneKey>();
+  readonly hideEntryAction = input(false);
+  /** Dashboard mounts one picker for every section; Health pinning stays section-scoped. */
+  readonly allSections = input(false);
+  readonly browseLane = computed(() => this.allSections() ? this.state.activeLane() || this.lane() : this.lane());
+  readonly providerFilter = input<readonly HealthProvider[]>([]);
+  readonly timelineNotes = input<import('../../../helpers/timeline-notes-chart.helper').TimelineNoteChartContext | null>(null);
+  readonly healthGroups = DASHBOARD_HEALTH_GROUPS;
+  readonly healthSettings = dashboardHealthSettings;
+  private readonly healthData = inject(DashboardHealthService);
+  private readonly healthContexts = signal<Record<string, { uid: string; context: DashboardHealthContext }>>({});
+  healthContext(id: string, context: DashboardHealthContext): void { this.healthContexts.update(current => ({...current, [id]:{uid:this.user().uid, context}})); }
+  readonly seed = input<DashboardPreviewInput>({ tiles: [] });
+  private readonly previewData = inject(DashboardChartPreviewService);
+  private readonly discovery = inject(DashboardChartDiscoveryService);
+  private readonly sessionNewIds = signal<ReadonlySet<string>>(new Set());
+  private readonly acknowledgedLanes = new Set<DashboardTileLaneKey>();
+  // A seen-badge settings update must not tear down the section's chart subscriptions.
+  private readonly previewOwnerKey = computed(() => JSON.stringify([this.user().uid, this.user().settings.unitSettings,
+    this.user().settings.appSettings?.healthWorkspace?.highlightSources?.heart_rate_variability]));
+  readonly sections = computed(() => [{ lane: 'kpi' as DashboardTileLaneKey, label: 'KPIs' },
+    ...DASHBOARD_TILE_SECTION_DEFINITIONS.map(section => ({ lane: `section:${section.id}` as DashboardTileLaneKey, label: section.label }))]
+    .map(section => {
+      const entries = this.catalog.filter(entry => entry.lane === section.lane);
+      const presentation = resolveDashboardTileCollectionPresentation(entries.map(entry => entry.tile));
+      const unseen = unseenDashboardCharts(this.catalog, section.lane, this.discovery.seenRevision(this.user(), section.lane), this.seed().tiles);
+      const available = getAvailableDashboardCharts(section.lane, this.seed().tiles).length;
+      const badgeDescription = unseen.length ? `${unseen.length} new ${presentation.plural} to explore` : '';
+      return { ...section, presentation, unseen, badgeDescription, available,
+        canAdd: available > 0 || section.lane === 'section:activityOverview',
+        hint: available ? `${available} presets available` : 'Create a custom chart',
+        actionLabel: `${presentation.add} to ${section.label}${badgeDescription ? ', ' + badgeDescription : ''}` };
+    }));
+  readonly sectionActions = computed(() => Object.fromEntries(this.sections().map(section => [section.lane, section])));
+  readonly unseen = computed(() => this.allSections() ? this.sections().flatMap(section => section.unseen) : this.sectionActions()[this.browseLane()].unseen);
+  readonly newBadgeDescription = computed(() => this.unseen().length ? `${this.unseen().length} new ${this.allSections() ? 'tiles' : this.sectionPresentation().plural} to explore` : '');
+  private readonly previewContexts = signal<{ uid: string; lane: DashboardTileLaneKey; data: Partial<DashboardPreviewInput> } | null>(null);
+  readonly previewSeed = computed((): DashboardPreviewInput => {
+    const context = this.previewContexts();
+    const seed = this.seed();
+    return this.expanded() && context?.lane === this.browseLane() && context.uid === this.user().uid
+      ? { ...seed, ...context.data, derivedMetrics: { ...seed.derivedMetrics, ...context.data.derivedMetrics },
+        previewMetricStatuses: { ...seed.previewMetricStatuses, ...context.data.previewMetricStatuses } }
+      : seed;
+  });
+  readonly darkTheme = input(false);
+  readonly search = signal('');
+  readonly usesBottomSheet = signal(false);
+  readonly group = signal('all');
+  readonly sectionLabel = computed(() => this.browseLane() === 'kpi' ? 'KPIs' : getDashboardTileSectionDefinition(this.browseLane().slice(8) as never).label);
+  readonly available = computed(() => getAvailableDashboardCharts(this.browseLane(), this.seed().tiles));
+  readonly canCreateCustom = computed(() => this.browseLane() === 'section:activityOverview');
+  readonly showAddAction = computed(() => this.allSections() || this.available().length > 0 || this.canCreateCustom());
+  readonly sectionPresentation = computed(() => resolveDashboardTileCollectionPresentation(this.catalog.filter(entry => entry.lane === this.browseLane()).map(entry => entry.tile)));
+  readonly draftPresentation = computed(() => resolveDashboardTilePresentation(this.state.draft()));
+  readonly entryActionText = computed(() => this.allSections() ? 'Add to dashboard' : this.sectionPresentation().add);
+  readonly addActionLabel = computed(() => `${this.allSections() ? 'Add to dashboard' : this.sectionPresentation().add + ' to ' + this.sectionLabel()}${this.newBadgeDescription() ? ', ' + this.newBadgeDescription() : ''}`);
+  readonly availableCountLabel = computed(() => `${this.filtered().length} ${this.filtered().length === 1 ? this.sectionPresentation().singular : this.sectionPresentation().plural} available`);
+  readonly emptyMessage = computed(() => this.available().length ? `No ${this.sectionPresentation().plural} match your search.` : 'All presets in this section are on your dashboard.');
+  readonly placeholderTitle = computed(() => !this.available().length ? this.canCreateCustom() ? 'Create your own chart' : 'This section is complete' : `Select a ${this.sectionPresentation().singular}`);
+  readonly placeholderDescription = computed(() => !this.available().length ? this.canCreateCustom()
+    ? 'Choose Create custom chart to select your metrics and chart style.'
+    : this.allSections() ? 'Choose another dashboard section to explore more tiles.' : 'All presets in this section are already on your dashboard.'
+    : `Choose a ${this.sectionPresentation().singular} from the list to see its preview and details.`);
+  readonly backLabel = computed(() => this.state.configuring() ? this.draftPresentation().back
+    : this.browseLane() === 'section:calendar' ? 'Back to Calendar' : `Back to ${this.sectionPresentation().plural}`);
+  readonly addActionHint = computed(() => this.allSections() ? 'Browse charts, KPIs, maps and more' : this.available().length ? `${this.available().length} presets available` : 'Create a custom chart');
+  readonly filtered = computed(() => this.available().filter(entry => `${entry.definition.label} ${entry.definition.description}`.toLowerCase().includes(this.search().toLowerCase()) && (this.browseLane() === 'section:health' && !!this.search().trim() || this.group() === 'all' || entry.definition.category === 'kpi' && entry.definition.kpiGroup === this.group() || entry.definition.category === 'health' && entry.definition.healthGroup === this.group() || entry.definition.id === 'curated-sleep' && this.group() === 'sleep' || entry.definition.id === 'curated-hrv' && this.group() === 'cardiovascular')));
+  private readonly availablePreviews = computed(() => this.available().map(entry => {
+    const healthSettings = dashboardHealthSettings(entry.tile);
+    const cached = this.healthContexts()[entry.definition.id];
+    const healthContext = cached?.uid === this.user().uid ? cached.context : null;
+    const preview = healthSettings ? {
+      tile: entry.tile as import('../../../helpers/dashboard-tile-view-model.helper').DashboardTileViewModel,
+      source: healthContext?.hasData ? 'user' as const : 'example' as const, loading: !healthContext, note: '', calendarEvents: [], anchorMs: Date.now(),
+      availability: healthContext?.availability || {state:'loading' as const, hasData:false, label:'Loading readings…', reason:'Readings load when visible.'},
+    } : buildDashboardThumbnailPreview(entry.tile, this.previewSeed());
+    const availabilityLabel = preview.availability?.label || dashboardPreviewSourceLabel(preview);
+    return { ...entry, preview, isNew: this.sessionNewIds().has(entry.definition.id),
+      healthSettings, healthContext: healthContext ? cached : null,
+      sourceHint: [preview.availability?.reason || availabilityLabel, healthContext?.selected?.model.ariaLabel].filter(Boolean).join(' '),
+      sourceLabel: healthSettings ? healthContext?.hasData ? 'Your data' : !healthContext ? 'Example · Loading…'
+        : healthContext.availability.state === 'error' ? 'Example · Unavailable' : healthContext.sampleOnly ? 'Example · Shorter range' : 'Example · No readings'
+        : preview.source === 'example' ? `Example · ${availabilityLabel}` : availabilityLabel,
+      title: entry.definition.label.replace(/^KPI:\s*/, ''),
+      format: resolveDashboardTilePresentation(entry.tile).label };
+  }));
+  readonly suggested = computed(() => {
+    const visible = new Set(this.filtered().map(entry => entry.definition.id));
+    return dashboardChartSuggestions(this.availablePreviews().filter(entry => visible.has(entry.definition.id)),
+      this.browseLane(), this.user().settings.dashboardSettings, entry => entry.preview.availability?.state === 'ready');
+  });
+  readonly rowPreviews = computed(() => {
+    const visible = new Set(this.filtered().map(entry => entry.definition.id));
+    const suggested = this.suggested();
+    const suggestedIds = new Set(suggested.map(entry => entry.definition.id));
+    const rest = this.availablePreviews().filter(entry => visible.has(entry.definition.id) && !suggestedIds.has(entry.definition.id));
+    return [...suggested, ...rest.filter(entry => entry.isNew), ...rest.filter(entry => !entry.isNew)];
+  });
+  private readonly catalog = getDashboardChartCatalog();
+  readonly draftDefinition = computed(() => {
+    const draft = this.state.draft();
+    return draft ? this.catalog.find(entry => matchesDashboardPreset(draft, entry.tile))?.definition : null;
+  });
+  readonly previewTitle = computed(() => this.draftDefinition()?.label || (this.state.editor()?.mode === 'edit' ? this.draftPresentation().edit : this.draftPresentation().kind === 'chart' ? 'Custom chart' : this.draftPresentation().label));
+  readonly explanation = computed(() => (this.state.healthSettings() ? this.draftDefinition()?.description : null) || resolveDashboardChartInfoTooltip(this.state.draft()?.['chartType']) || this.draftDefinition()?.description || 'Choose a metric, chart style, aggregation and date range.');
+  readonly explanationParagraphs = computed(() => this.explanation().split('\n\n'));
+  readonly dataScope = computed(() => {
+    const tile = this.state.draft();
+    if (!tile) return '';
+    if (dashboardHealthSettings(tile)) return 'Recorded Health history · Sources and readings kept separate';
+    const type = `${tile['chartType'] || ''}`;
+    if (isDashboardHrvTrendChartType(type)) return 'Recorded HRV summaries · Sources kept separate';
+    if (isDashboardSleepBackedChartType(type)) return 'Recorded sleep · Stages and readings depend on your source';
+    if (tile['mapSource'] === 'routes') return 'Saved routes · Up to 50 recent routes';
+    if (isDashboardKpiChartType(type)) return 'Calculated from your recorded training data';
+    const scopes: Record<string, string> = {
+      Form: 'Training Stress Score (TSS) history',
+      RecoveryNowPie: 'Recorded recovery estimates · Independent of activity filters',
+      FreshnessForecast: 'Training load · Next 7 days with no new training',
+      IntensityDistribution: 'Training intensity · Weekly distribution',
+      EfficiencyTrend: 'Training efficiency · Recent weekly trend',
+      PowerCurve: 'Activities with power · Uses this chart’s selected range',
+      ActivityCalendar: 'Activity calendar · Uses the displayed month',
+    };
+    if (scopes[type]) return scopes[type];
+    const range = normalizeDashboardTileEventFilters(tile['eventFilters']).range;
+    return 'Activity data · ' + (DASHBOARD_TILE_EVENT_RANGE_OPTIONS.find(option => option.range === range)?.label || range);
+  });
+  readonly creatingCustom = computed(() => this.state.editor()?.mode === 'add' && !this.state.selected());
+  readonly pickerTitle = computed(() => this.state.editor()?.mode === 'edit' ? (this.state.canConfigure() ? this.draftPresentation().edit : this.draftPresentation().details) : this.creatingCustom() ? 'Create custom chart' : this.state.configuring() ? this.draftPresentation().settings : this.browseLane() === 'section:calendar' ? 'Add Calendar' : `Add ${this.sectionPresentation().plural}`);
+  readonly pickerHeading = computed(() => this.allSections() && this.state.editor()?.mode !== 'edit' && !this.state.configuring() ? 'Add to dashboard' : this.browseLane() === 'section:calendar' || this.sectionLabel().toLowerCase() === this.sectionPresentation().plural.toLowerCase() ? this.pickerTitle() : `${this.pickerTitle()} · ${this.sectionLabel()}`);
+  readonly expanded = computed(() => this.allSections() ? !!this.state.activeLane() : this.state.activeLane() === this.browseLane());
+  readonly destination = computed(() => {
+    const tile = this.state.draft(); if (!tile) return '';
+    const lane = resolveDashboardTileLaneKey(tile);
+    return lane === 'kpi' ? 'KPIs' : getDashboardTileSectionDefinition(lane.slice(8) as never).label;
+  });
+  constructor() {
+    effect(onCleanup => {
+      this.previewOwnerKey();
+      const open = this.expanded();
+      const lane = this.browseLane();
+      const pinned = this.state.pinnedFromHealth();
+      untracked(() => {
+        const user = this.user();
+        this.previewContexts.set(null);
+        this.healthContexts.set({});
+        if (!open) {
+          this.sessionNewIds.set(new Set());
+          this.acknowledgedLanes.clear();
+          return;
+        }
+        if (pinned) return;
+        const entries = this.catalog.filter(entry => entry.lane === lane);
+        const tiles = entries.map(entry => entry.tile).filter(tile => !dashboardHealthSettings(tile));
+        const candidates = ['curated-sleep','curated-hrv','health:resting_heart_rate','health:steps','health:body_weight'];
+        const healthSubscriptions = new Subscription();
+        for (const entry of entries.filter(entry => candidates.includes(entry.definition.id))) {
+          if (this.seed().tiles.some(tile => matchesDashboardPreset(tile, entry.tile))) continue;
+          const settings = dashboardHealthSettings(entry.tile)!;
+          healthSubscriptions.add(this.healthData.watch(user.uid, settings, undefined, 5).subscribe({
+            next: evidence => this.healthContext(entry.definition.id, buildDashboardHealthContext(evidence, settings, user.settings.unitSettings,
+              user.settings.appSettings?.healthWorkspace?.highlightSources?.heart_rate_variability)),
+            error: () => undefined,
+          }));
+        }
+        onCleanup(() => healthSubscriptions.unsubscribe());
+        const subscription = this.previewData.watchLibraryContexts(user, tiles, this.seed()).subscribe({
+          next: data => this.previewContexts.set({ uid: user.uid, lane, data }),
+        });
+        onCleanup(() => subscription.unsubscribe());
+      });
+    });
+    effect(() => {
+      const expanded = this.expanded();
+      const template = this.picker();
+      untracked(() => {
+        if (expanded && template && !this.overlay) this.openOverlay(template);
+        if (!expanded) this.overlay?.close();
+      });
+    });
+    this.destroyRef.onDestroy(() => {
+      this.overlay?.subscriptions.unsubscribe();
+      this.overlay?.close();
+    });
+  }
+
+  private openOverlay(template: TemplateRef<unknown>): void {
+    const editOrder = this.state.editor()?.editTileOrder;
+    const tileAction = editOrder == null ? null : this.document.querySelector<HTMLElement>(`[data-dashboard-tile-order="${editOrder}"] .tile-actions-trigger`);
+    // The menu item that launched editing is removed when its menu closes.
+    const returnFocus = tileAction || this.document.activeElement as HTMLElement | null;
+    const options = {
+      viewContainerRef: this.viewContainerRef,
+      disableClose: true, // Route every dismissal through the existing dirty-draft/pending-save guard.
+      restoreFocus: false, // Restore here, then let the dashboard reveal a successfully saved tile.
+      autoFocus: 'dialog',
+      ariaLabel: this.allSections() ? 'Dashboard tile library' : `${this.sectionPresentation().label} library · ${this.sectionLabel()}`,
+    };
+    let close: () => void;
+    let closed$: Observable<unknown>;
+    let opened$: Observable<unknown>;
+    let backdrop$: Observable<MouseEvent>;
+    let keydown$: Observable<KeyboardEvent>;
+    this.usesBottomSheet.set(this.breakpoints.isMatched('(max-width: 959.98px)'));
+    if (this.usesBottomSheet()) {
+      const ref = this.bottomSheet.open(template, { ...options, height: '92dvh', maxHeight: '92dvh', panelClass: ['qs-bottom-sheet-container', 'qs-chart-picker-sheet'] });
+      close = () => ref.dismiss(); closed$ = ref.afterDismissed(); opened$ = ref.afterOpened(); backdrop$ = ref.backdropClick(); keydown$ = ref.keydownEvents();
+    } else {
+      const ref = this.dialog.open(template, { ...options, width: '1180px', maxWidth: 'calc(100vw - 48px)', height: 'min(860px, 90dvh)', maxHeight: '90dvh' });
+      close = () => ref.close(); closed$ = ref.afterClosed(); opened$ = ref.afterOpened(); backdrop$ = ref.backdropClick(); keydown$ = ref.keydownEvents();
+    }
+    const overlay = { close, subscriptions: new Subscription() };
+    this.overlay = overlay;
+    overlay.subscriptions.add(opened$.subscribe(() => {
+      const mobileDetail = this.state.draft() && this.breakpoints.isMatched('(max-width: 959.98px)');
+      if (!this.state.pinnedFromHealth() && !this.state.configuring() && !mobileDetail && this.state.editor()?.mode !== 'edit') this.acknowledgeBrowseSession();
+      if (this.state.pinnedFromHealth() || this.state.configuring() || mobileDetail) this.focusDetail();
+      else this.focusBrowser();
+    }));
+    overlay.subscriptions.add(backdrop$.subscribe(() => this.close()));
+    overlay.subscriptions.add(keydown$.subscribe(event => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      event.preventDefault(); this.close();
+    }));
+    overlay.subscriptions.add(closed$.subscribe(() => {
+      overlay.subscriptions.unsubscribe();
+      if (this.overlay !== overlay) return;
+      this.overlay = null;
+      this.sessionNewIds.set(new Set());
+      this.acknowledgedLanes.clear();
+      if (this.destroyRef.destroyed) return;
+      if (this.expanded()) this.state.resetContext();
+      const target = returnFocus?.isConnected && returnFocus !== this.document.body ? returnFocus : this.entryButton()?.nativeElement;
+      target?.focus({ preventScroll: true });
+      this.pickerClosed.emit();
+    }));
+  }
+
+  private acknowledgeBrowseSession(): void {
+    const lane = this.browseLane();
+    if (this.acknowledgedLanes.has(lane)) return;
+    this.acknowledgedLanes.add(lane);
+    const entries = this.sectionActions()[lane].unseen;
+    this.sessionNewIds.update(current => new Set([...current, ...entries.map(entry => entry.definition.id)]));
+    if (!entries.length) return;
+    const revision = Math.max(...entries.map(entry => entry.definition.introducedIn));
+    // Passive acknowledgement is silent and never blocks chart navigation. A failed
+    // write leaves the badge unread so a later opening can retry, with no polling.
+    void this.discovery.acknowledge(this.user(), this.browseLane(), revision).catch(() => undefined);
+  }
+
+  async toggle(): Promise<void> {
+    if (this.expanded()) { await this.close(); return; }
+    const preferred = this.sectionActions()[this.lane()];
+    const lane = this.allSections() ? this.sections().find(section => section.unseen.length)?.lane
+      || (preferred.available ? preferred.lane : this.sections().find(section => section.available)?.lane || preferred.lane) : this.lane();
+    await this.openSection(lane, this.allSections());
+  }
+  async openSection(lane: DashboardTileLaneKey, browseAll = false): Promise<void> {
+    if (this.state.busy() || this.expanded() && this.browseLane() === lane) return;
+    if (!browseAll && lane === 'section:activityOverview' && !getAvailableDashboardCharts(lane, this.seed().tiles).length) {
+      await this.createCustom(); return;
+    }
+    const wasExpanded = this.expanded();
+    await this.state.open(lane);
+    if (!this.expanded() || this.browseLane() !== lane) return; // Busy or discard declined.
+    this.search.set(''); this.group.set('all');
+    if (wasExpanded) this.acknowledgeBrowseSession();
+    if (!this.breakpoints.isMatched('(max-width: 959.98px)') && this.filtered().length) {
+      await this.state.select(this.user(), this.rowPreviews()[0], false);
+    }
+    if (wasExpanded) this.focusBrowser();
+  }
+  async select(entry: ReturnType<typeof getAvailableDashboardCharts>[number]): Promise<void> {
+    if (!(await this.state.select(this.user(), entry))) return;
+    this.focusContent(() => this.detail()?.nativeElement, this.breakpoints.isMatched('(max-width: 959.98px)'));
+  }
+  async createCustom(): Promise<void> { await this.state.createCustom(this.user()); this.focusDetail(); }
+  configure(): void { this.state.configure(); this.focusDetail(); }
+  async back(): Promise<void> {
+    const selectedId = this.state.selected()?.definition.id;
+    await this.state.back();
+    if (this.state.draft()) this.focusDetail();
+    else {
+      this.acknowledgeBrowseSession();
+      this.focusBrowser(selectedId);
+    }
+  }
+  async close(): Promise<void> { await this.state.close(); }
+  private focusDetail(): void { this.focusContent(() => this.detail()?.nativeElement); }
+  private focusBrowser(selectedId?: string): void {
+    if (!selectedId) {
+      this.focusContent(() => {
+        const browser = this.browser()?.nativeElement;
+        // Focus the section selector without outlining the entire list or opening a phone keyboard.
+        return this.allSections() ? browser?.querySelector<HTMLElement>('mat-select') || browser : browser;
+      });
+      return;
+    }
+    requestAnimationFrame(() => {
+      const browser = this.browser()?.nativeElement;
+      const row = Array.from(browser?.querySelectorAll<HTMLButtonElement>('[data-preset-id]') || [])
+        .find(button => button.dataset.presetId === selectedId);
+      // A row can safely scroll into view; focusing a tall pane must not move the sheet.
+      if (row) row.focus();
+      else browser?.focus({ preventScroll: true });
+    });
+  }
+  private focusContent(target: () => HTMLElement | undefined, focus = true): void {
+    requestAnimationFrame(() => {
+      const pane = target();
+      if (focus) pane?.focus({ preventScroll: true });
+      if (pane) pane.scrollTop = 0;
+      const content = this.scrollContent()?.nativeElement;
+      if (content) content.scrollTop = 0;
+    });
+  }
+  private clearExcludedPreview(): void {
+    if (!this.expanded()) return;
+    const selected = this.state.selected();
+    if (selected && !this.filtered().some(entry => entry.definition.id === selected.definition.id)) this.state.clearPreview();
+  }
+  filter(value: string): void {
+    if (this.state.busy()) return;
+    this.search.set(value); this.clearExcludedPreview();
+  }
+  selectGroup(value: string): void {
+    const group = value || 'all';
+    if (this.state.busy() || this.group() === group) return;
+    this.state.haptics.selection(); this.group.set(group); this.clearExcludedPreview();
+  }
+}

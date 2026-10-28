@@ -53,7 +53,9 @@ export class WorkspaceSectionNavigationComponent implements AfterViewChecked, On
       return;
     }
 
-    activeTab.scrollIntoView({ block: 'nearest', inline: 'center' });
+    // Finish before overflow controls change the strip width. A smooth scroll can
+    // retain the first target and leave the active tab clipped after that layout.
+    activeTab.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'instant' });
     this.lastVisibleActiveSection = this.activeSection;
     this.updateMobileNavigationScrollState();
     this.scheduleActiveSectionScroll();
@@ -118,7 +120,7 @@ export class WorkspaceSectionNavigationComponent implements AfterViewChecked, On
         return;
       }
 
-      activeTab.scrollIntoView({ block: 'nearest', inline: 'center' });
+      activeTab.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'instant' });
       this.updateMobileNavigationScrollState();
     });
   }

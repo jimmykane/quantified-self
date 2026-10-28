@@ -164,6 +164,94 @@ describe('getQueueStats Cloud Function', () => {
         };
     });
 
+    it('counts provider retries 10-19 as pending and includes them in every retry histogram', async () => {
+        const fallback = mockCollection.getMockImplementation()!;
+        const ingestionCollections = ['garminAPIActivityQueue', 'suuntoAppWorkoutQueue', 'COROSAPIWorkoutQueue', 'wahooAPIWorkoutQueue'];
+        const providerCollections = [...ingestionCollections, 'activitySyncQueue', 'routeDeliverySyncQueue', 'routeSyncQueue', 'sleepSyncQueue'];
+        const boundaryRows = [0, 3, 4, 7, 8, 9, 10, 19, 20].map(retryCount => ({ processed: false, retryCount }));
+        const rows = [...boundaryRows, { processed: true, retryCount: 10, resultStatus: 'success' }];
+        type Filter = { field: string; op: string; value: unknown };
+        mockCollection.mockImplementation((name: string) => {
+            if (!providerCollections.includes(name)) return fallback(name);
+            let documents: Array<Record<string, unknown>> = rows;
+            if (name === 'sleepSyncQueue') {
+                documents = ['GarminAPI', 'SuuntoApp', 'COROSAPI'].flatMap(provider => rows.map(row => ({ ...row, provider })));
+            } else if (name === 'activitySyncQueue') {
+                documents = [
+                    { deliveryMode: 'historical', sourceServiceName: 'GarminAPI' },
+                    { deliveryMode: 'direct', sourceServiceName: 'GarminAPI' },
+                    { deliveryMode: 'direct', sourceServiceName: 'manualUpload' },
+                ].flatMap(source => rows.map(row => ({ ...row, ...source })));
+            }
+            const buildQuery = (filters: Filter[]) => ({
+                where: (field: string, op: string, value: unknown) => buildQuery([...filters, { field, op, value }]),
+                orderBy: () => buildQuery(filters),
+                limit: () => buildQuery(filters),
+                count: () => ({ get: async () => ({ data: () => ({ count: documents.filter(row => filters.every(filter => {
+                    const actual = row[filter.field];
+                    if (filter.op === '==') return actual === filter.value;
+                    if (typeof actual !== 'number' || typeof filter.value !== 'number') return false;
+                    if (filter.op === '<') return actual < filter.value;
+                    if (filter.op === '>=') return actual >= filter.value;
+                    if (filter.op === '>') return actual > filter.value;
+                    throw new Error(`Unexpected operator ${filter.op}`);
+                })).length }) }) }),
+                get: async () => ({ empty: true, docs: [] }),
+            });
+            return buildQuery([]);
+        });
+
+        const result = await getQueueStats(request);
+        expect(result.pending).toBe(32);
+        expect(result.stuck).toBe(4);
+        for (const provider of result.providers) {
+            expect(provider).toMatchObject({ pending: 8, succeeded: 1, stuck: 1 });
+        }
+        expect(result.advanced?.retryHistogram).toEqual({ '0-3': 8, '4-7': 8, '8-9': 8, '10-19': 8 });
+        for (const lane of [result.activitySync, result.sleepSync]) {
+            expect(lane).toMatchObject({ pending: 24, succeeded: 3, stuck: 3 });
+            expect(lane?.advanced?.retryHistogram).toEqual({ '0-3': 6, '4-7': 6, '8-9': 6, '10-19': 6 });
+        }
+        for (const lane of [result.routeSync, result.routeDeliverySync]) {
+            expect(lane).toMatchObject({ pending: 8, succeeded: 1, stuck: 1 });
+            expect(lane?.advanced?.retryHistogram).toEqual({ '0-3': 2, '4-7': 2, '8-9': 2, '10-19': 2 });
+        }
+        expect(result.activitySync?.breakdowns?.historical).toMatchObject({ pending: 8, stuck: 1 });
+        expect(result.activitySync?.breakdowns?.manualUploads).toMatchObject({ pending: 8, stuck: 1 });
+        expect(result.activitySync?.breakdowns?.directFiles).toMatchObject({ pending: 16, stuck: 2 });
+        for (const provider of result.sleepSync?.providers || []) {
+            expect(provider).toMatchObject({ pending: 8, succeeded: 1, stuck: 1 });
+        }
+    });
+
+    it('counts retained finished history runs separately from pending and failed runs', async () => {
+        const fallback = mockCollection.getMockImplementation()!;
+        const nowMs = Date.now();
+        const ageMs = 8 * 86400000 + 11 * 3600000;
+        const limit = vi.fn(() => ({ get: vi.fn().mockResolvedValue({ empty: false,
+            docs: [{ data: () => ({ dateCreated: nowMs - ageMs }) }] }) }));
+        const where = vi.fn((field: string, _op: string, value: boolean) => ({
+            count: () => ({ get: async () => ({ data: () => ({ count: field === 'failed' ? 1 : value ? 17 : 3 }) }) }),
+            orderBy: () => ({ limit }),
+        }));
+        mockCollection.mockImplementation((name: string) => name === 'connectionHistoryImports' ? { where } : fallback(name));
+        const result = await getQueueStats(request);
+        expect(result.connectionHistory).toEqual({ pending: 3, finished: 17, failed: 1, maxLagMs: expect.any(Number) });
+        expect(result.connectionHistory?.maxLagMs).toBeGreaterThanOrEqual(ageMs);
+        expect(where).toHaveBeenCalledWith('processed', '==', true);
+        expect(limit).toHaveBeenCalledWith(1);
+    });
+
+    it('leaves unavailable history counts unknown without hiding the other queues', async () => {
+        const fallback = mockCollection.getMockImplementation()!;
+        mockCollection.mockImplementation((name: string) => name === 'connectionHistoryImports' ? {
+            where: () => { throw new Error('Unavailable aggregate'); },
+        } : fallback(name));
+        const result = await getQueueStats(request);
+        expect(result.connectionHistory).toBeNull();
+        expect(result.providers).toHaveLength(4);
+    });
+
     it('should return queue statistics including DLQ', async () => {
         const nowMs = Date.now();
         // Mock permissions
@@ -291,6 +379,12 @@ describe('getQueueStats Cloud Function', () => {
         expect(result.succeeded).toBe(20);
         expect(result.stuck).toBe(20);
         expect(result.providers).toHaveLength(4);
+        expect(result.trainingDelivery).toMatchObject({
+            jobsAvailable: true,
+            statusCountsAvailable: true,
+            jobs: { total: 5, due: 5, delivery: 5, verification: 5, reconcile: 5 },
+            outcomes: { delivered: 5, retrying: 5, failed: 5, needsAttention: 5 },
+        });
 
         // Check DLQ stats
         expect(result.dlq).toBeDefined();
@@ -309,11 +403,13 @@ describe('getQueueStats Cloud Function', () => {
             pending: 73,
             queues: {
                 workout: expectedQueueStats('processWorkoutTask', 42),
+                trainingDelivery: expectedQueueStats('processTrainingDeliveryTask', 0),
                 activitySync: expectedQueueStats('processActivitySyncTask', 0),
                 routeDeliverySync: expectedQueueStats('processRouteDeliverySyncTask', 0),
                 routeSync: expectedQueueStats('processRouteSyncTask', 4),
                 sleepSync: expectedQueueStats('processSleepSyncTask', 3),
                 garminHealthBackfill: expectedQueueStats('processGarminHealthBackfillTask', 2),
+                connectionHistory: expectedQueueStats('processConnectionHistoryTask', 0),
                 sportsLibReparse: expectedQueueStats('processSportsLibReparseTask', 8),
                 sportsLibReparseHeavy: expectedQueueStats('processSportsLibReparseHeavyTask', 2),
                 sportsLibRouteReparse: expectedQueueStats('processSportsLibRouteReparseTask', 1),
@@ -364,6 +460,7 @@ describe('getQueueStats Cloud Function', () => {
                     '0-3': 5,
                     '4-7': 5,
                     '8-9': 5,
+                    '10-19': 5,
                 },
                 topErrors: expect.arrayContaining([
                     { error: 'Token expired', count: 1 },
@@ -417,6 +514,11 @@ describe('getQueueStats Cloud Function', () => {
             manualReconciliationRequired: 5,
             stuck: 5,
             dead: 5,
+            breakdowns: {
+                historical: { pending: 5, succeeded: 5, stuck: 5, manualReconciliationRequired: 5, dead: 5 },
+                manualUploads: { pending: 5, succeeded: 5, stuck: 5, manualReconciliationRequired: 5, dead: 5 },
+                directFiles: { pending: 5, succeeded: 5, stuck: 5, manualReconciliationRequired: 5, dead: 5 },
+            },
             dlqByContext: expect.arrayContaining([
                 { context: 'NO_TOKEN_FOUND', count: 1 },
                 { context: 'MAX_RETRY_REACHED', count: 1 },
@@ -428,6 +530,7 @@ describe('getQueueStats Cloud Function', () => {
                     '0-3': 5,
                     '4-7': 5,
                     '8-9': 5,
+                    '10-19': 5,
                 },
                 topErrors: expect.arrayContaining([
                     { error: 'Token expired', count: 1 },
@@ -687,11 +790,13 @@ describe('getQueueStats Cloud Function', () => {
     it('should handle single-queue Cloud Task stats error and return safe defaults for that queue', async () => {
         mockGetCloudTaskQueueDepthForQueue
             .mockResolvedValueOnce(42)
+            .mockResolvedValueOnce(0)
             .mockRejectedValueOnce(new Error('Queue depth error'))
             .mockResolvedValueOnce(3)
             .mockResolvedValueOnce(8)
             .mockResolvedValueOnce(2)
             .mockResolvedValueOnce(2)
+            .mockResolvedValueOnce(0)
             .mockResolvedValueOnce(1)
             .mockResolvedValueOnce(6);
         const result = await (getQueueStats as any)(request);
@@ -699,11 +804,13 @@ describe('getQueueStats Cloud Function', () => {
             pending: 76,
             queues: {
                 workout: expectedQueueStats('processWorkoutTask', 42),
+                trainingDelivery: expectedQueueStats('processTrainingDeliveryTask', 0),
                 activitySync: expectedQueueStats('processActivitySyncTask', 0, 'UNKNOWN', null),
                 routeDeliverySync: expectedQueueStats('processRouteDeliverySyncTask', 3),
                 routeSync: expectedQueueStats('processRouteSyncTask', 8),
                 sleepSync: expectedQueueStats('processSleepSyncTask', 2),
                 garminHealthBackfill: expectedQueueStats('processGarminHealthBackfillTask', 2),
+                connectionHistory: expectedQueueStats('processConnectionHistoryTask', 0),
                 sportsLibReparse: expectedQueueStats('processSportsLibReparseTask', 1),
                 sportsLibReparseHeavy: expectedQueueStats('processSportsLibReparseHeavyTask', 6),
                 sportsLibRouteReparse: expectedQueueStats('processSportsLibRouteReparseTask', 1),
@@ -808,6 +915,20 @@ describe('getQueueStats Cloud Function', () => {
             const has = (field: string, op: string, value?: unknown): boolean =>
                 filters.some((filter) => filter.field === field && filter.op === op && (value === undefined || filter.value === value));
 
+            const historical = has('deliveryMode', '==', 'historical');
+            const manualUpload = has('sourceServiceName', '==', 'manualUpload');
+            if (has('deliveryMode', '==', 'direct')) return 0;
+            if (historical || manualUpload) {
+                const counts = historical
+                    ? { pending: 3, succeeded: 2, stuck: 1, manualReconciliationRequired: 1 }
+                    : { pending: 1, succeeded: 1, stuck: 0, manualReconciliationRequired: 0 };
+                if (has('resultStatus', '==', 'success')) return counts.succeeded;
+                if (has('resultStatus', '==', 'manual_reconciliation_required')) return counts.manualReconciliationRequired;
+                if (has('processed', '==', false) && has('retryCount', '>=', 20)) return counts.stuck;
+                if (has('processed', '==', false) && has('retryCount', '<', 20)) return counts.pending;
+                return 0;
+            }
+
             if (has('successProcessedAt', '>')) {
                 return 1;
             }
@@ -817,8 +938,11 @@ describe('getQueueStats Cloud Function', () => {
             if (has('resultStatus', '==', 'manual_reconciliation_required')) {
                 return 6;
             }
-            if (has('processed', '==', false) && has('retryCount', '>=', 10)) {
+            if (has('processed', '==', false) && has('retryCount', '>=', 20)) {
                 return 1;
+            }
+            if (has('retryCount', '>=', 10) && has('retryCount', '<', 20)) {
+                return 0;
             }
             if (has('processed', '==', false) && has('retryCount', '<', 4)) {
                 return 3;
@@ -829,7 +953,7 @@ describe('getQueueStats Cloud Function', () => {
             if (has('processed', '==', false) && has('retryCount', '>=', 8) && has('retryCount', '<', 10)) {
                 return 0;
             }
-            if (has('processed', '==', false) && has('retryCount', '<', 10)) {
+            if (has('processed', '==', false) && has('retryCount', '<', 20)) {
                 return 4;
             }
 
@@ -843,9 +967,10 @@ describe('getQueueStats Cloud Function', () => {
                     orderBy: vi.fn(() => buildQuery(filters)),
                     limit: vi.fn(() => buildQuery(filters)),
                     count: vi.fn(() => ({
-                        get: vi.fn().mockResolvedValue({
-                            data: () => ({ count: resolveActivitySyncCount(filters) }),
-                        }),
+                        get: vi.fn(() => filters.some(filter => filter.field === 'sourceServiceName' && filter.value === 'manualUpload')
+                            && filters.some(filter => filter.field === 'resultStatus' && filter.value === 'manual_reconciliation_required')
+                            ? Promise.reject(new Error('index unavailable'))
+                            : Promise.resolve({ data: () => ({ count: resolveActivitySyncCount(filters) }) })),
                     })),
                     get: vi.fn().mockResolvedValue({
                         empty: false,
@@ -874,7 +999,10 @@ describe('getQueueStats Cloud Function', () => {
                     count: vi.fn(() => ({
                         get: vi.fn().mockResolvedValue({
                             data: () => ({
-                                count: filters.some((f) => f.field === 'originalCollection' && f.value === 'activitySyncQueue') ? 2 : 5,
+                                count: filters.some((f) => f.field === 'deliveryMode' && f.value === 'direct') ? 0 : filters.some((f) => f.field === 'deliveryMode' && f.value === 'historical')
+                                    || filters.some((f) => f.field === 'sourceServiceName' && f.value === 'manualUpload')
+                                    ? 1
+                                    : filters.some((f) => f.field === 'originalCollection' && f.value === 'activitySyncQueue') ? 2 : 5,
                             }),
                         }),
                     })),
@@ -921,12 +1049,18 @@ describe('getQueueStats Cloud Function', () => {
             manualReconciliationRequired: 6,
             stuck: 1,
             dead: 2,
+            breakdowns: {
+                historical: { pending: 3, succeeded: 2, stuck: 1, manualReconciliationRequired: 1, dead: 1 },
+                manualUploads: { pending: 1, succeeded: 1, stuck: 0, manualReconciliationRequired: null, dead: 1 },
+                directFiles: { pending: 0, succeeded: 0, stuck: 0, manualReconciliationRequired: 0, dead: 0 },
+            },
             advanced: expect.objectContaining({
                 throughput: 1,
                 retryHistogram: {
                     '0-3': 3,
                     '4-7': 1,
                     '8-9': 0,
+                    '10-19': 0,
                 },
             }),
         }));
@@ -946,8 +1080,11 @@ describe('getQueueStats Cloud Function', () => {
             if (has('resultStatus', '==', 'skipped')) {
                 return 5;
             }
-            if (has('processed', '==', false) && has('retryCount', '>=', 10)) {
+            if (has('processed', '==', false) && has('retryCount', '>=', 20)) {
                 return 1;
+            }
+            if (has('retryCount', '>=', 10) && has('retryCount', '<', 20)) {
+                return 0;
             }
             if (has('processed', '==', false) && has('retryCount', '<', 4)) {
                 return 4;
@@ -958,7 +1095,7 @@ describe('getQueueStats Cloud Function', () => {
             if (has('processed', '==', false) && has('retryCount', '>=', 8) && has('retryCount', '<', 10)) {
                 return 1;
             }
-            if (has('processed', '==', false) && has('retryCount', '<', 10)) {
+            if (has('processed', '==', false) && has('retryCount', '<', 20)) {
                 return 7;
             }
 
@@ -1056,6 +1193,7 @@ describe('getQueueStats Cloud Function', () => {
                     '0-3': 4,
                     '4-7': 2,
                     '8-9': 1,
+                    '10-19': 0,
                 },
             }),
         }));
@@ -1078,8 +1216,11 @@ describe('getQueueStats Cloud Function', () => {
             if (has('resultStatus', '==', 'manual_reconciliation_required')) {
                 return 4;
             }
-            if (has('processed', '==', false) && has('retryCount', '>=', 10)) {
+            if (has('processed', '==', false) && has('retryCount', '>=', 20)) {
                 return 2;
+            }
+            if (has('retryCount', '>=', 10) && has('retryCount', '<', 20)) {
+                return 0;
             }
             if (has('processed', '==', false) && has('retryCount', '<', 4)) {
                 return 5;
@@ -1090,7 +1231,7 @@ describe('getQueueStats Cloud Function', () => {
             if (has('processed', '==', false) && has('retryCount', '>=', 8) && has('retryCount', '<', 10)) {
                 return 1;
             }
-            if (has('processed', '==', false) && has('retryCount', '<', 10)) {
+            if (has('processed', '==', false) && has('retryCount', '<', 20)) {
                 return 8;
             }
 
@@ -1189,6 +1330,7 @@ describe('getQueueStats Cloud Function', () => {
                     '0-3': 5,
                     '4-7': 2,
                     '8-9': 1,
+                    '10-19': 0,
                 },
             }),
         }));

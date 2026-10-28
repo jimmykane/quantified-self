@@ -1,15 +1,22 @@
+import { getRejectedSwimTiming, resolveSwimTiming } from '@shared/swim-timing';
 import { describe, expect, it } from 'vitest';
 import {
   ActivityInterface,
+  DataActiveLap,
   DataPoolLength,
   DataStrokeRate,
   DataSwimDistance,
+  LapInterface,
+  LapTypes,
 } from '@sports-alliance/sports-lib';
 import {
   getActivitySwimLengths,
   hasVisibleSwimLengths,
   normalizeSwimLength,
+  getSwimStrokeLabel,
+  getSwimLapStrokeLabels,
 } from './event-swim-length.helper';
+import { getSwimLengthDistance } from './event-swim-analytics.helper';
 
 describe('event-swim-length.helper', () => {
   const rawSwimLength = {
@@ -32,6 +39,18 @@ describe('event-swim-length.helper', () => {
     calories: 4,
   };
 
+  it('retains allowlisted timing validity and keeps missing distinct from zero and elapsed fallback', () => {
+    const timingValidity = { version: 1, reason: 'exceeds-workout-envelope', timerTime: 4000000, private: 'discard' };
+    const length = normalizeSwimLength({ ...rawSwimLength, timerTime: null, timingValidity })!;
+    expect(getRejectedSwimTiming(length)).toEqual({ version: 1, reason: 'exceeds-workout-envelope', timerTime: 4000000 });
+    expect(resolveSwimTiming(length)).toEqual({ timerTime: null, elapsedTime: 25, duration: null });
+    expect(resolveSwimTiming({ elapsedTime: 25, timerTime: 0 }).duration).toBe(0);
+    expect(resolveSwimTiming({ elapsedTime: 25, timerTime: null }).duration).toBe(25);
+    expect(resolveSwimTiming({ elapsedTime: 25, timerTime: -1 }).duration).toBeNull();
+    expect(getRejectedSwimTiming({ timingValidity: { ...timingValidity, version: 2 } })).toBeUndefined();
+    expect(getRejectedSwimTiming({ timingValidity: { ...timingValidity, timerTime: Infinity } })).toBeUndefined();
+  });
+
   it('normalizes valid swim length JSON', () => {
     const swimLength = normalizeSwimLength(rawSwimLength);
 
@@ -51,6 +70,22 @@ describe('event-swim-length.helper', () => {
     expect(swimLength?.endDate).toBeInstanceOf(Date);
   });
 
+  it('keeps invalid recorded distance distinct from missing distance after repeated normalization', () => {
+    for (const distance of [Number.NaN, Number.POSITIVE_INFINITY, 'invalid', '']) {
+      const source = { ...rawSwimLength, distance };
+      const length = normalizeSwimLength(source)!;
+      expect(getSwimLengthDistance(length)).toBeNull();
+      expect(getSwimLengthDistance(normalizeSwimLength(length)!)).toBeNull();
+      expect(length.poolLength?.getValue()).toBe(25);
+      expect(source.distance).toBe(distance);
+    }
+    for (const distance of [null, undefined]) {
+      expect(getSwimLengthDistance(normalizeSwimLength({ ...rawSwimLength, distance })!)).toBe(25);
+    }
+    expect(getSwimLengthDistance(normalizeSwimLength({ ...rawSwimLength, distance: 0 })!)).toBe(0);
+    expect(getSwimLengthDistance(normalizeSwimLength({ ...rawSwimLength, distance: -1 })!)).toBeNull();
+  });
+
   it('ignores malformed rows', () => {
     expect(normalizeSwimLength({ ...rawSwimLength, startDate: null })).toBeNull();
     expect(normalizeSwimLength({ ...rawSwimLength, index: 'bad' })).toBeNull();
@@ -63,5 +98,86 @@ describe('event-swim-length.helper', () => {
 
     expect(getActivitySwimLengths(activity)).toHaveLength(1);
     expect(hasVisibleSwimLengths([activity])).toBe(true);
+  });
+
+  it('labels recorded strokes consistently, excludes rest, and preserves mixed or missing strokes', () => {
+    const length = (stroke: string | null, type = 'active') => normalizeSwimLength({ ...rawSwimLength, stroke, type })!;
+    expect(getSwimStrokeLabel([length('freestyle'), length(' FREESTYLE '), length('backstroke', ' REST ')])).toBe('Freestyle');
+    expect(getSwimStrokeLabel([length('freestyle'), length('backstroke')])).toBe('Mixed');
+    expect(getSwimStrokeLabel([length('drill')])).toBe('Drill');
+    expect(getSwimStrokeLabel([length(null)])).toBe('');
+    expect(getSwimStrokeLabel([length('freestyle', 'idle')])).toBe('');
+  });
+
+  it('matches stroke to the complete lap list without renumbering filtered lap types or using lap IDs', () => {
+    const laps = [
+      { lapId: 99, type: LapTypes.Manual },
+      { lapId: 101, type: LapTypes.Interval },
+      { lapId: 103, type: LapTypes.Manual },
+      { lapId: 105, type: LapTypes.Manual },
+    ] as LapInterface[];
+    const activity = {
+      getLaps: () => laps,
+      getSwimLengths: () => [
+        { ...rawSwimLength, lapIndex: 1, stroke: 'freestyle' },
+        { ...rawSwimLength, lapIndex: 2, stroke: 'backstroke' },
+        { ...rawSwimLength, lapIndex: 3, stroke: 'butterfly' },
+        { ...rawSwimLength, lapIndex: 3, stroke: 'breaststroke' },
+        { ...rawSwimLength, lapIndex: 4, type: 'idle', stroke: 'freestyle' },
+        { ...rawSwimLength, lapIndex: null, stroke: 'drill' },
+        { ...rawSwimLength, lapIndex: 1.5, stroke: 'drill' },
+        { ...rawSwimLength, lapIndex: 10, stroke: 'drill' },
+      ],
+    } as unknown as ActivityInterface;
+    const labels = getSwimLapStrokeLabels(activity);
+    expect(laps.map(lap => labels.get(lap))).toEqual(['Freestyle', 'Backstroke', 'Mixed', '']);
+  });
+
+  it('corrects recorded FIT lengths at overlapping active/rest lap boundaries without changing source lengths', () => {
+    // Native FIT lap timestamps can end a second after the next lap starts.
+    const start = 1563714899000;
+    const lap = (offset: number, active: boolean) => ({
+      startDate: new Date(start + offset),
+      getStat: (type: string) => type === DataActiveLap.type ? new DataActiveLap(active) : undefined,
+    }) as unknown as LapInterface;
+    const laps = [lap(0, true), lap(54000, false), lap(70000, true)];
+    const sourceLengths = [
+      { ...rawSwimLength, lapIndex: 1, startDate: start, endDate: start + 28000 },
+      { ...rawSwimLength, lapIndex: 1, type: 'idle', startDate: start + 54000, endDate: start + 70233 },
+      { ...rawSwimLength, lapIndex: 2, stroke: 'backstroke', startDate: start + 70000, endDate: start + 98875 },
+      { ...rawSwimLength, lapIndex: 3, stroke: 'freestyle', startDate: start + 99000, endDate: start + 128000 },
+    ];
+    const activity = { getLaps: () => laps, getSwimLengths: () => sourceLengths } as unknown as ActivityInterface;
+
+    expect(getActivitySwimLengths(activity).map(length => length.lapIndex)).toEqual([1, 2, 3, 3]);
+    expect(laps.map(lap => getSwimLapStrokeLabels(activity).get(lap))).toEqual(['Freestyle', '', 'Mixed']);
+    expect(sourceLengths.map(length => length.lapIndex)).toEqual([1, 1, 2, 3]);
+  });
+
+  it('preserves recorded indices when lap state is absent, agrees, or the boundary is ambiguous', () => {
+    const lap = (active: boolean | undefined) => ({
+      startDate: new Date(rawSwimLength.startDate),
+      getStat: (type: string) => type === DataActiveLap.type && active !== undefined ? new DataActiveLap(active) : undefined,
+    }) as unknown as LapInterface;
+    for (const laps of [[lap(undefined), lap(true)], [lap(true), lap(false)], [lap(false), lap(true), lap(true)]]) {
+      const activity = {
+        getLaps: () => laps,
+        getSwimLengths: () => [{ ...rawSwimLength, lapIndex: 1 }],
+      } as unknown as ActivityInterface;
+      expect(getActivitySwimLengths(activity)[0].lapIndex).toBe(1);
+    }
+  });
+
+  it('keeps an explicitly inactive lap blank when a mismatched active length has no exact boundary match', () => {
+    const restLap = {
+      startDate: new Date(rawSwimLength.startDate - 1000),
+      getStat: (type: string) => type === DataActiveLap.type ? new DataActiveLap(false) : undefined,
+    } as unknown as LapInterface;
+    const activity = {
+      getLaps: () => [restLap],
+      getSwimLengths: () => [{ ...rawSwimLength, lapIndex: 1 }],
+    } as unknown as ActivityInterface;
+    expect(getActivitySwimLengths(activity)[0].lapIndex).toBe(1);
+    expect(getSwimLapStrokeLabels(activity).get(restLap)).toBe('');
   });
 });

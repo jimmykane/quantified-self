@@ -14,8 +14,10 @@ import type {
 import { getTrainingSportDefinition } from '@shared/training-disciplines';
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import { formatSleepDuration } from '../../helpers/dashboard-sleep-chart.helper';
+import { getNumberFormatter } from '../../helpers/number-format.helper';
 import { resolveTrainingEventDisplayLabel } from '../../helpers/training-event-label.helper';
 import { AppFunctionsService } from '../../services/app.functions.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 type TrainingBuildReferenceMode = 'event' | 'period';
 type TrainingBuildEventDateFilter = 'all' | 'recent' | 'earlier';
@@ -85,6 +87,7 @@ export class TrainingBuildBenchmarkDialogComponent {
     private readonly functionsService: AppFunctionsService,
     private readonly snackBar: MatSnackBar,
     private readonly changeDetector: ChangeDetectorRef,
+    private readonly haptics: AppHapticsService,
   ) {
     this.disciplineLabel = (getTrainingSportDefinition(data.discipline)?.label || data.discipline).toLowerCase();
     const selection = data.selection;
@@ -99,9 +102,13 @@ export class TrainingBuildBenchmarkDialogComponent {
   }
 
   public selectMode(mode: TrainingBuildReferenceMode): void {
+    if (this.isSaving || mode === this.mode) {
+      return;
+    }
     this.mode = mode;
     this.refreshSaveActionLabel();
     this.errorMessage = null;
+    this.haptics.selection();
   }
 
   public updateEventSuggestions(update: TrainingBuildEventSuggestionsUpdate): void {
@@ -114,10 +121,14 @@ export class TrainingBuildBenchmarkDialogComponent {
   }
 
   public selectDurationWeeks(durationWeeks: TrainingBuildDurationWeeks): void {
+    if (this.isSaving || durationWeeks === this.durationWeeks) {
+      return;
+    }
     const previousAutomaticPeriodEndDate = this.formatDateInput(this.defaultPeriodEndDayMs());
     const usesAutomaticPeriodEndDate = this.data.selection?.mode !== 'period'
       && this.periodEndDate === previousAutomaticPeriodEndDate;
     this.durationWeeks = durationWeeks;
+    this.haptics.selection();
     if (usesAutomaticPeriodEndDate) {
       this.periodEndDate = this.formatDateInput(this.defaultPeriodEndDayMs());
     }
@@ -139,9 +150,15 @@ export class TrainingBuildBenchmarkDialogComponent {
   }
 
   public selectEvent(eventId: string): void {
+    if (this.isSaving || eventId === this.eventId) {
+      return;
+    }
     this.eventId = eventId;
     this.refreshSelectedEvent();
     this.errorMessage = null;
+    if (this.selectedEvent?.isEligible) {
+      this.haptics.selection();
+    }
   }
 
   public selectEventOption(value: unknown): void {
@@ -153,21 +170,36 @@ export class TrainingBuildBenchmarkDialogComponent {
   }
 
   public selectEventDateFilter(value: TrainingBuildEventDateFilter): void {
+    if (this.isSaving || value === this.eventDateFilter) {
+      return;
+    }
     this.eventDateFilter = value;
     this.refreshEventOptions();
+    this.haptics.selection();
   }
 
   public selectEventSort(value: TrainingBuildEventSort): void {
+    if (this.isSaving || value === this.eventSort) {
+      return;
+    }
     this.eventSort = value;
     this.refreshEventOptions();
+    this.haptics.selection();
   }
 
   public toggleRaceList(): void {
+    if (this.isSaving) {
+      return;
+    }
     this.isRaceListExpanded = !this.isRaceListExpanded;
     this.refreshDisplayedSuggestedRaces();
+    this.haptics.selection();
   }
 
   public updatePeriodEndDate(value: string): void {
+    if (this.isSaving) {
+      return;
+    }
     this.periodEndDate = value;
     this.refreshSaveActionLabel();
     const endDayMs = this.parseDateInput(value);
@@ -177,6 +209,9 @@ export class TrainingBuildBenchmarkDialogComponent {
   }
 
   public async save(): Promise<void> {
+    if (this.isSaving) {
+      return;
+    }
     const selection = this.buildSelection();
     if (!selection) {
       return;
@@ -209,6 +244,9 @@ export class TrainingBuildBenchmarkDialogComponent {
   }
 
   private async persist(selection: TrainingBuildBenchmarkSelection | null): Promise<void> {
+    if (this.isSaving) {
+      return;
+    }
     this.isSaving = true;
     this.errorMessage = null;
     try {
@@ -227,10 +265,12 @@ export class TrainingBuildBenchmarkDialogComponent {
         );
       }
 
+      this.haptics.success();
       this.dialogRef.close({ saved: true, selection });
     } catch (error) {
       const errorMessage = this.resolveErrorMessage(error);
       this.errorMessage = errorMessage;
+      this.haptics.error();
       this.snackBar.open(errorMessage, 'Dismiss', {
         duration: 6000,
         politeness: 'assertive',
@@ -324,7 +364,7 @@ export class TrainingBuildBenchmarkDialogComponent {
       Number.isFinite(event.durationSeconds) && event.durationSeconds >= 60
         ? formatSleepDuration(event.durationSeconds)
         : null,
-      Number.isFinite(event.trainingStressScore) && event.trainingStressScore >= 0.5 ? `${new Intl.NumberFormat(undefined, {
+      Number.isFinite(event.trainingStressScore) && event.trainingStressScore >= 0.5 ? `${getNumberFormatter(undefined, {
         maximumFractionDigits: 0,
       }).format(event.trainingStressScore)} TSS` : null,
     ].filter((detail): detail is string => !!detail && detail !== '--');
@@ -342,7 +382,7 @@ export class TrainingBuildBenchmarkDialogComponent {
     }
     const fallbackValue = this.data.discipline === 'swimming' ? value : value / 1000;
     const fallbackUnit = this.data.discipline === 'swimming' ? 'm' : 'km';
-    return `${new Intl.NumberFormat(undefined, {
+    return `${getNumberFormatter(undefined, {
       maximumFractionDigits: this.data.discipline === 'swimming' ? 0 : 1,
     }).format(fallbackValue)} ${fallbackUnit}`;
   }

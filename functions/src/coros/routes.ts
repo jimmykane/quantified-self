@@ -15,6 +15,7 @@ import {
 
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { FirestoreRouteJSON } from '../../../shared/app-route.interface';
+import { resolveProviderRouteSportAlias } from '../../../shared/route-sport-aliases';
 import { isCOROSRouteUploadUIDAllowlisted } from '../../../shared/coros-rollout';
 import * as requestPromise from '../request-helper';
 import {
@@ -115,7 +116,8 @@ function getRouteActivityTypeCandidates(
   return [
     ...routeFile.getRoutes().map(route => route.activityType),
     ...(Array.isArray(routeDocument?.activityTypes) ? routeDocument.activityTypes : []),
-  ].map(value => `${value || ''}`.trim().toLowerCase()).filter(Boolean);
+  ].map(value => resolveProviderRouteSportAlias(value) || value)
+    .map(value => `${value || ''}`.trim().toLowerCase()).filter(Boolean);
 }
 
 /** COROS supports only bike or running routes; non-cycling routes intentionally fall back to running. */

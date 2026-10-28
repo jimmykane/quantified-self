@@ -5,9 +5,15 @@ import {
   DataDuration,
   DataHeartRate,
   DataPower,
+  analyzeActivityDurability,
 } from '@sports-alliance/sports-lib';
 
 import { PerformanceCurveDataService } from './performance-curve-data.service';
+
+vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@sports-alliance/sports-lib')>();
+  return { ...actual, analyzeActivityDurability: vi.fn(actual.analyzeActivityDurability) };
+});
 
 const POWER_CURVE_TYPE = 'PowerCurve';
 
@@ -28,7 +34,7 @@ function createActivity(options: {
   type?: string;
   creatorName?: string;
   powerCurve?: RawPoint[] | null;
-  durationSeconds?: number;
+  durationSeconds?: unknown;
   streams?: StreamMap;
 }): ActivityInterface {
   const streamMap = options.streams ?? {};
@@ -126,6 +132,7 @@ describe('PerformanceCurveDataService', () => {
       id: 'a1',
       type: 'Cycling',
       powerCurve: null,
+      durationSeconds: 5,
       streams: {
         [DataPower.type]: [200, 220, 240, 260, 250],
         [DataHeartRate.type]: [130, 132, 135, 138, 136],
@@ -248,12 +255,48 @@ describe('PerformanceCurveDataService', () => {
     ]);
   });
 
+  it.each(['BMX', 'Kickbiking', 'Obstacle Racing'])('omits specialist durability analysis for %s', (type) => {
+    vi.mocked(analyzeActivityDurability).mockClear();
+    const activity = createActivity({ id: 'excluded', type });
+    expect(service.buildDurabilitySeriesWithMarkerSource([activity])).toEqual({
+      renderSeries: [], markerSourceSeries: [], activitySummaries: [],
+    });
+    expect(analyzeActivityDurability).not.toHaveBeenCalled();
+  });
+
+  it.each(['Enduro MTB', 'E-Enduro MTB', 'Downhill Cycling'])('rejects legacy eligible %s evidence and preserves explicit exclusion', (type) => {
+    const activity = createActivity({ id: 'gravity', type, durationSeconds: 3600 });
+    const ordinary = createActivity({ id: 'ordinary', type: 'Cycling', durationSeconds: 3600, streams: {
+      [DataPower.type]: Array.from({ length: 3600 }, () => 220),
+      [DataHeartRate.type]: Array.from({ length: 3600 }, () => 130),
+    } });
+    const analyzed = analyzeActivityDurability(ordinary, { includeTimeline: true });
+    const legacy = { ...analyzed, summary: { ...analyzed.summary!,
+      eligibility: { ...analyzed.summary!.eligibility, eligible: true, reason: null },
+    } };
+    vi.mocked(analyzeActivityDurability).mockReturnValueOnce(legacy);
+    expect(service.buildDurabilitySeriesWithMarkerSource([activity])).toEqual({
+      renderSeries: [], markerSourceSeries: [], activitySummaries: [],
+    });
+    const explicit = { ...legacy, summary: { ...legacy.summary!,
+      eligibility: { ...legacy.summary!.eligibility, eligible: false, reason: 'unsupported-context' as const },
+      evidence: null,
+    } };
+    vi.mocked(analyzeActivityDurability).mockReturnValueOnce(explicit);
+    const result = service.buildDurabilitySeriesWithMarkerSource([activity]);
+    expect(result.activitySummaries).toHaveLength(1);
+    expect(result.activitySummaries[0].summary.eligibility.reason).toBe('unsupported-context');
+    expect(result.renderSeries).toHaveLength(0);
+    expect(result.markerSourceSeries).toHaveLength(0);
+  });
+
   it('should build durability series and filter invalid points', () => {
     const activities = [
       createActivity({
         id: 'a1',
         type: 'Cycling',
         creatorName: 'Watch A',
+        durationSeconds: 5,
         streams: {
           [DataPower.type]: [200, 210, 220, null, 230],
           [DataHeartRate.type]: [130, 132, 135, 136, null],
@@ -263,6 +306,7 @@ describe('PerformanceCurveDataService', () => {
         id: 'a2',
         type: 'Cycling',
         creatorName: 'Watch B',
+        durationSeconds: 5,
         streams: {
           [DataPower.type]: [180, 190, 205, 215, 220],
           [DataHeartRate.type]: [120, 121, 123, 125, 126],
@@ -281,6 +325,7 @@ describe('PerformanceCurveDataService', () => {
       id: 'a1',
       type: 'Cycling',
       creatorName: 'Watch A',
+      durationSeconds: 8,
       streams: {
         [DataPower.type]: [200, 210, 220, 230, 240, 250, 260, 270],
         [DataHeartRate.type]: [130, 132, 135, 136, 138, 140, 142, 143],
@@ -295,6 +340,62 @@ describe('PerformanceCurveDataService', () => {
     expect(combined.renderSeries).toHaveLength(1);
     expect(combined.markerSourceSeries[0].points.length).toBeGreaterThanOrEqual(combined.renderSeries[0].points.length);
     expect(combined.renderSeries).toEqual(renderOnly);
+  });
+
+  it.each([undefined, null, 0, -1, Number.NaN, Number.POSITIVE_INFINITY, '3600'])(
+    'does not infer durability from elapsed dates or streams when recorded duration is %s',
+    (durationSeconds) => {
+      const activity = Object.assign(createActivity({
+        id: 'missing-active-duration',
+        type: 'Cycling',
+        durationSeconds,
+        streams: {
+          [DataPower.type]: Array(3600).fill(200),
+          [DataHeartRate.type]: Array(3600).fill(150),
+        },
+      }), {
+        startDate: new Date('2026-01-01T10:00:00Z'),
+        endDate: new Date('2026-01-01T11:00:00Z'),
+      });
+
+      expect(service.buildDurabilitySeriesWithMarkerSource([activity])).toEqual({
+        renderSeries: [], markerSourceSeries: [], activitySummaries: [],
+      });
+      expect(service.getAvailability([activity]).hasDurability).toBe(false);
+    },
+  );
+
+  it('keeps legacy duration-only activities eligible without requiring a timer stat', () => {
+    const activity = createActivity({
+      id: 'legacy-active-duration',
+      type: 'Cycling',
+      durationSeconds: 3600,
+      streams: {
+        [DataPower.type]: Array(3600).fill(200),
+        [DataHeartRate.type]: Array(3600).fill(150),
+      },
+    });
+
+    const result = service.buildDurabilitySeriesWithMarkerSource([activity]);
+
+    expect(result.renderSeries).toHaveLength(1);
+    expect(result.activitySummaries[0].summary.eligibility.eligible).toBe(true);
+  });
+
+  it('retains the eligible leg when another selected leg has no recorded active duration', () => {
+    const streams = {
+      [DataPower.type]: Array(3600).fill(200),
+      [DataHeartRate.type]: Array(3600).fill(150),
+    };
+    const unavailable = createActivity({ id: 'unknown-duration', type: 'Cycling', streams });
+    const eligible = createActivity({ id: 'recorded-duration', type: 'Cycling', durationSeconds: 3600, streams });
+
+    const result = service.buildDurabilitySeriesWithMarkerSource([unavailable, eligible]);
+
+    expect(result.renderSeries.map(series => series.activityId)).toEqual(['recorded-duration']);
+    expect(result.markerSourceSeries.map(series => series.activityId)).toEqual(['recorded-duration']);
+    expect(result.activitySummaries.map(summary => summary.activityId)).toEqual(['recorded-duration']);
+    expect(service.getAvailability([unavailable, eligible]).hasDurability).toBe(true);
   });
 
   it('should downsample cadence-power points and keep density between 0 and 1', () => {
@@ -367,6 +468,7 @@ describe('PerformanceCurveDataService', () => {
     const activity = createActivity({
       id: 'a1',
       type: 'Cycling',
+      durationSeconds: 70,
       streams: {
         [DataPower.type]: [
           220, 230, 240, 250, 260, 270, 280, 300, 320, 340,
@@ -413,6 +515,7 @@ describe('PerformanceCurveDataService', () => {
     const activity = createActivity({
       id: 'a1',
       type: 'Cycling',
+      durationSeconds: 8400,
       streams: {
         [DataPower.type]: power as unknown as (number | null)[],
         [DataHeartRate.type]: hr as unknown as (number | null)[],

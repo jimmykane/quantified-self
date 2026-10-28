@@ -1,22 +1,21 @@
 import * as admin from 'firebase-admin';
+import { performance } from 'node:perf_hooks';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
 import { config } from '../config';
 import * as requestPromise from '../request-helper';
-import { getServiceTokenRootDocumentRef } from '../service-token-store';
-import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 import { getTokenData, TokenRefreshSkippedForDeletedUserError } from '../tokens';
 import {
   ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD,
   areTokenCredentialSnapshotsEqual,
-  doesOAuthCredentialGenerationAuthorizeToken,
   getTokenCredentialSnapshot,
   TokenCredentialSnapshot,
 } from '../token-refresh-coordinator';
 import { toSuuntoAuthorizationHeader } from './authorization-header';
 import {
   areSuuntoWebhookWriteLifecycleGuardsContinuous,
-  captureCurrentSuuntoWebhookWriteLifecycleGuards,
+  getSuuntoWebhookWriteLifecycleAuthorityDigest,
+  validateCurrentSuuntoWebhookWriteLifecycle,
   type SuuntoWebhookWriteLifecycleGuards,
 } from './health-webhook-binding-lifecycle';
 import {
@@ -28,15 +27,23 @@ import {
   parseSuuntoActivitySamples,
   parseSuuntoRecoverySamples,
   SUUNTO_HEALTH_MAX_RESPONSE_BYTES,
+  SUUNTO_HEALTH_MAX_SERIES_SOURCE_RECORDS,
+  SUUNTO_HEALTH_MAX_DAILY_SOURCE_RECORDS,
   SUUNTO_HEALTH_MAX_WINDOW_DAYS,
   SUUNTO_HEALTH_REQUEST_TIMEOUT_MS,
   SuuntoHealthResult,
+  SuuntoHealthResponseLimitError,
+  SuuntoHealthValidationError,
 } from './health';
+import { isValidSuuntoHealthProgress, type SuuntoHealthProgress } from './health-progress';
 
 type TokenSnapshot = admin.firestore.DocumentSnapshot | admin.firestore.QueryDocumentSnapshot;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SUUNTO_HEALTH_CONTEXT_PADDING_MS = DAY_MS;
 const SUUNTO_HEALTH_MAX_TARGET_WINDOW_MS = (SUUNTO_HEALTH_MAX_WINDOW_DAYS - 2) * DAY_MS;
+const SUUNTO_HEALTH_MAX_PULL_ATTEMPTS = 64;
+const SUUNTO_HEALTH_PULL_BUDGET_MS = 4 * 60 * 1000;
+const SUUNTO_HEALTH_MAX_RESULT_BYTES = 16 * 1024 * 1024;
 
 interface SuuntoHealthRequestWindow {
   targetStartMs: number;
@@ -60,9 +67,105 @@ export class SuuntoHealthRequestError extends Error {
   public readonly name = 'SuuntoHealthRequestError';
   public readonly code = 'suunto_health_request_failed';
 
-  constructor() {
+  constructor(
+    public readonly providerStatusCode?: number,
+    public readonly responseByteLimitExceeded = false,
+    public readonly transportCode?: string,
+  ) {
     super('Suunto Health request failed.');
   }
+}
+
+export interface SuuntoHealthRequestTelemetry {
+  errorName: 'SuuntoHealthRequestError';
+  errorCode: 'suunto_health_request_failed';
+  providerStatusCode?: number;
+  failureCategory?: 'response_byte_limit';
+  transportCode?: string;
+}
+
+const TRANSPORT_CODES = new Set(['ETIMEDOUT', 'ESOCKETTIMEDOUT', 'ECONNRESET',
+  'ECONNREFUSED', 'ECONNABORTED', 'EAI_AGAIN', 'ENOTFOUND']);
+
+function safeTransportCode(error: unknown): string | undefined {
+  try {
+    const code = (error as { code?: unknown } | null)?.code;
+    return typeof code === 'string' && TRANSPORT_CODES.has(code) ? code : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const SUUNTO_HEALTH_FAILURE_STAGES = [
+  'queue_validation', 'token_resolution', 'lifecycle_check', 'queue_claim',
+  'provider_sync', 'token_refresh', 'activity_request', 'activity_mapping',
+  'statistics_request', 'statistics_mapping', 'recovery_request', 'recovery_mapping',
+  'result_assembly', 'health_write', 'window_checkpoint', 'sync_state_write', 'unknown',
+] as const;
+export type SuuntoHealthFailureStage = typeof SUUNTO_HEALTH_FAILURE_STAGES[number];
+
+export type SuuntoHealthFeed = 'activity' | 'statistics' | 'recovery';
+export type SuuntoHealthRequestOutcome = 'success' | 'unauthorized' | 'failed';
+export interface SuuntoHealthRequestObservation {
+  feed: SuuntoHealthFeed;
+  outcome: SuuntoHealthRequestOutcome;
+  durationMs: number;
+}
+
+/** Classify the original exception before sanitization, without copying its message, stack or cause. */
+export function getSuuntoHealthFailureTelemetry(
+  error: unknown, stage: SuuntoHealthFailureStage, elapsedMs: number,
+): Record<string, string | number> {
+  const base = {
+    errorCode: 'suunto_health_processing_failed', errorName: 'UnknownError', failureCategory: 'unclassified',
+    failureStage: SUUNTO_HEALTH_FAILURE_STAGES.includes(stage) ? stage : 'unknown',
+    processingElapsedMs: Number.isFinite(elapsedMs) ? Math.max(0, Math.min(1_800_000, Math.round(elapsedMs))) : 0,
+  };
+  try {
+    const request = getSuuntoHealthRequestTelemetry(error);
+    if (request) return { ...base,
+      failureCategory: request.providerStatusCode ? 'provider_http_error' : request.transportCode ? 'transport_error' : 'provider_request_unknown',
+      ...request,
+    };
+    const candidate = error as { name?: unknown; code?: unknown } | null;
+    const errorName = typeof candidate?.name === 'string'
+      && ['Error', 'TypeError', 'RangeError', 'SyntaxError', 'ReferenceError', 'SuuntoHealthValidationError'].includes(candidate.name)
+      ? candidate.name : 'UnknownError';
+    if (error instanceof Error && errorName === 'SuuntoHealthValidationError') return {
+      ...base, errorName, failureCategory: 'validation_error', validationCode: suuntoHealthValidationTelemetryCode(error.message),
+    };
+    const code = candidate?.code;
+    if (typeof code === 'number' && Number.isSafeInteger(code) && code >= 1 && code <= 16) return {
+      ...base, errorName, failureCategory: 'rpc_error', rpcStatusCode: code,
+    };
+    const transportCode = safeTransportCode(error);
+    return { ...base, errorName, ...(transportCode ? { failureCategory: 'transport_error', transportCode } : {}) };
+  } catch {
+    // Even hostile error accessors must not interfere with the existing retry transition.
+    return base;
+  }
+}
+
+/**
+ * Provider response bodies can contain sensitive data. Keep production logs
+ * limited to the already-validated HTTP status and a stable error category.
+ */
+export function getSuuntoHealthRequestTelemetry(error: unknown): SuuntoHealthRequestTelemetry | null {
+  if (!(error instanceof SuuntoHealthRequestError)) return null;
+  const statusCode = error.providerStatusCode;
+  return {
+    errorName: 'SuuntoHealthRequestError',
+    errorCode: 'suunto_health_request_failed',
+    ...(error.responseByteLimitExceeded === true
+      ? { failureCategory: 'response_byte_limit' as const }
+      : {}),
+    ...(typeof error.transportCode === 'string' && TRANSPORT_CODES.has(error.transportCode)
+      ? { transportCode: error.transportCode } : {}),
+    ...(typeof statusCode === 'number'
+      && Number.isSafeInteger(statusCode) && statusCode >= 100 && statusCode <= 599
+      ? { providerStatusCode: statusCode }
+      : {}),
+  };
 }
 
 export async function captureSuuntoHealthWriteLifecycleGuards(
@@ -71,9 +174,28 @@ export async function captureSuuntoHealthWriteLifecycleGuards(
   expectedCredential: TokenCredentialSnapshot,
   authorityBaseline: SuuntoWebhookWriteLifecycleGuards,
 ): Promise<SuuntoHealthWriteLifecycleGuards> {
-  let currentAuthority: SuuntoWebhookWriteLifecycleGuards | null;
+  const currentAuthority = await captureCurrentSuuntoHealthLifecycle(
+    firebaseUserID,
+    tokenRef,
+    authorityBaseline,
+  );
+  if (!areTokenCredentialSnapshotsEqual(
+    currentAuthority.requiredExistingTokenCredential,
+    expectedCredential,
+  )) {
+    throw new SuuntoHealthAccountValidationError();
+  }
+  return currentAuthority;
+}
+
+async function captureCurrentSuuntoHealthLifecycle(
+  firebaseUserID: string,
+  tokenRef: admin.firestore.DocumentReference,
+  authorityBaseline: SuuntoWebhookWriteLifecycleGuards,
+): Promise<SuuntoHealthWriteLifecycleGuards> {
+  let validation: Awaited<ReturnType<typeof validateCurrentSuuntoWebhookWriteLifecycle>>;
   try {
-    currentAuthority = await captureCurrentSuuntoWebhookWriteLifecycleGuards(
+    validation = await validateCurrentSuuntoWebhookWriteLifecycle(
       admin.firestore(),
       firebaseUserID,
       tokenRef.id,
@@ -81,12 +203,38 @@ export async function captureSuuntoHealthWriteLifecycleGuards(
   } catch {
     throw new SuuntoHealthAccountValidationError();
   }
+  if (validation.status === 'user_deleted_or_deleting') {
+    throw new TokenRefreshSkippedForDeletedUserError(
+      firebaseUserID,
+      ServiceNames.SuuntoApp,
+      tokenRef.id,
+      'before_return',
+    );
+  }
+  const currentAuthority = validation.status === 'current' ? validation.guards : null;
   if (!currentAuthority
-    || !areSuuntoWebhookWriteLifecycleGuardsContinuous(authorityBaseline, currentAuthority)
-    || !areTokenCredentialSnapshotsEqual(
-      currentAuthority.requiredExistingTokenCredential,
-      expectedCredential,
-    )) {
+    || !areSuuntoWebhookWriteLifecycleGuardsContinuous(authorityBaseline, currentAuthority)) {
+    throw new SuuntoHealthAccountValidationError();
+  }
+  return currentAuthority;
+}
+
+async function captureSuuntoHealthLifecycleForAccessToken(
+  firebaseUserID: string,
+  tokenRef: admin.firestore.DocumentReference,
+  expectedAccessToken: string,
+  authorityBaseline: SuuntoWebhookWriteLifecycleGuards,
+): Promise<SuuntoHealthWriteLifecycleGuards> {
+  const currentAuthority = await captureCurrentSuuntoHealthLifecycle(
+    firebaseUserID,
+    tokenRef,
+    authorityBaseline,
+  );
+  const currentCredential = currentAuthority.requiredExistingTokenCredential;
+  if (!currentCredential.accessToken
+    || currentCredential.accessToken !== expectedAccessToken
+    || currentCredential.credentialGeneration
+      !== authorityBaseline.requiredExistingTokenCredential.credentialGeneration) {
     throw new SuuntoHealthAccountValidationError();
   }
   return currentAuthority;
@@ -103,28 +251,6 @@ function capturedTokenRootGeneration(
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 }
 
-async function assertCurrentTokenRootGeneration(
-  firebaseUserID: string,
-  expectedRootGeneration: string | null,
-): Promise<void> {
-  let tokenRootSnapshot: admin.firestore.DocumentSnapshot;
-  try {
-    tokenRootSnapshot = await getServiceTokenRootDocumentRef(
-      firebaseUserID,
-      ServiceNames.SuuntoApp,
-    ).get();
-  } catch {
-    throw new SuuntoHealthAccountValidationError();
-  }
-  if (!tokenRootSnapshot.exists
-    || !doesOAuthCredentialGenerationAuthorizeToken(
-      tokenRootSnapshot.data() as Record<string, unknown> | undefined,
-      expectedRootGeneration,
-    )) {
-    throw new SuuntoHealthAccountValidationError();
-  }
-}
-
 function assertLifecycleContinuity(
   initial: SuuntoHealthWriteLifecycleGuards,
   current: SuuntoHealthWriteLifecycleGuards,
@@ -136,39 +262,16 @@ function assertLifecycleContinuity(
   }
 }
 
-async function currentTokenCredential(
-  tokenRef: admin.firestore.DocumentReference,
-  expectedAccessToken: string,
-): Promise<TokenCredentialSnapshot> {
-  let snapshot: admin.firestore.DocumentSnapshot;
-  try {
-    snapshot = await tokenRef.get();
-  } catch {
-    throw new SuuntoHealthAccountValidationError();
-  }
-  if (!snapshot.exists) throw new SuuntoHealthAccountValidationError();
-  const credential = getTokenCredentialSnapshot(snapshot.data() as Record<string, unknown> | undefined);
-  if (!credential.accessToken || credential.accessToken !== expectedAccessToken) {
-    throw new SuuntoHealthAccountValidationError();
-  }
-  return credential;
-}
-
 async function assertCurrentLifecycle(
   firebaseUserID: string,
   tokenRef: admin.firestore.DocumentReference,
   expectedCredential: TokenCredentialSnapshot,
   initialGuards: SuuntoHealthWriteLifecycleGuards,
 ): Promise<SuuntoHealthWriteLifecycleGuards> {
-  const currentCredential = await currentTokenCredential(tokenRef, expectedCredential.accessToken);
-  if (!areTokenCredentialSnapshotsEqual(currentCredential, expectedCredential)) {
-    throw new SuuntoHealthAccountValidationError();
-  }
-  await assertCurrentTokenRootGeneration(firebaseUserID, capturedTokenRootGeneration(initialGuards));
   const currentGuards = await captureSuuntoHealthWriteLifecycleGuards(
     firebaseUserID,
     tokenRef,
-    currentCredential,
+    expectedCredential,
     initialGuards,
   );
   assertLifecycleContinuity(initialGuards, currentGuards);
@@ -210,26 +313,6 @@ function providerStatusCode(error: unknown): number | null {
   return null;
 }
 
-async function assertUserActiveBeforeProviderRequest(
-  firebaseUserID: string,
-  queueItemID: string,
-  tokenDocumentID: string,
-): Promise<void> {
-  if (await shouldSkipQueueWorkForDeletedUser(
-    firebaseUserID,
-    ServiceNames.SuuntoApp,
-    queueItemID,
-    'before_sleep_provider_sync',
-  )) {
-    throw new TokenRefreshSkippedForDeletedUserError(
-      firebaseUserID,
-      ServiceNames.SuuntoApp,
-      tokenDocumentID,
-      'before_return',
-    );
-  }
-}
-
 function buildSuuntoHealthRequestWindows(startMs: number, endMs: number): SuuntoHealthRequestWindow[] {
   const windows: SuuntoHealthRequestWindow[] = [];
   for (let targetStartMs = startMs; targetStartMs < endMs; targetStartMs += SUUNTO_HEALTH_MAX_TARGET_WINDOW_MS) {
@@ -265,57 +348,120 @@ export async function processSuuntoHealthQueueItem(
   firebaseUserID: string,
   initialGuards: SuuntoHealthWriteLifecycleGuards,
   onLifecycleGuardsCaptured?: (guards: SuuntoHealthWriteLifecycleGuards) => void,
+  onStage?: (stage: SuuntoHealthFailureStage) => void,
+  onRequest?: (observation: SuuntoHealthRequestObservation) => void,
 ): Promise<{
   healthResults: SuuntoHealthResult[];
   lifecycleGuards: SuuntoHealthWriteLifecycleGuards;
+  continuation: Pick<SuuntoHealthProgress, 'nextStartMs' | 'targetWindowMs' | 'authorityDigest'> | null;
 }> {
   const { startMs, endMs } = assertSuuntoHealthRange(queueItem.rangeStartMs, queueItem.rangeEndMs);
+  if (!isValidSuuntoHealthProgress(queueItem)) throw new SuuntoHealthValidationError('Invalid Suunto Health progress.');
+  const authorityDigest = getSuuntoWebhookWriteLifecycleAuthorityDigest(initialGuards);
+  if (queueItem.suuntoHealthProgress && queueItem.suuntoHealthProgress.authorityDigest !== authorityDigest) {
+    throw new SuuntoHealthAccountValidationError();
+  }
   const expectedRootGeneration = capturedTokenRootGeneration(initialGuards);
+  let lifecycleGuards = initialGuards;
+  let tokenCredential = initialGuards.requiredExistingTokenCredential;
+  const validateBeforeTokenRefreshRequest = async (): Promise<void> => {
+    onStage?.('lifecycle_check');
+    lifecycleGuards = await captureCurrentSuuntoHealthLifecycle(
+      firebaseUserID,
+      tokenSnapshot.ref,
+      initialGuards,
+    );
+    tokenCredential = lifecycleGuards.requiredExistingTokenCredential;
+    onLifecycleGuardsCaptured?.(lifecycleGuards);
+    onStage?.('token_refresh');
+  };
+  onStage?.('token_refresh');
   const tokenData = await getTokenData(tokenSnapshot, ServiceNames.SuuntoApp, false, {
     opaqueTelemetry: true,
     expectedActiveOAuthCredentialGeneration: expectedRootGeneration,
+    beforeRefreshRequest: validateBeforeTokenRefreshRequest,
   });
   let accessToken = typeof tokenData.accessToken === 'string' ? tokenData.accessToken : '';
   const providerUserID = typeof tokenData.userName === 'string' ? tokenData.userName.trim() : '';
   if (!accessToken || providerUserID !== queueItem.providerUserId.trim()) {
     throw new SuuntoHealthAccountValidationError();
   }
-  let tokenCredential = await currentTokenCredential(tokenSnapshot.ref, accessToken);
-  if (tokenCredential.credentialGeneration
-    !== initialGuards.requiredExistingTokenCredential.credentialGeneration) {
-    throw new SuuntoHealthAccountValidationError();
-  }
-  let lifecycleGuards = await captureSuuntoHealthWriteLifecycleGuards(
-    firebaseUserID,
-    tokenSnapshot.ref,
-    tokenCredential,
-    initialGuards,
-  );
-  assertLifecycleContinuity(initialGuards, lifecycleGuards);
-  onLifecycleGuardsCaptured?.(lifecycleGuards);
+  let resolvedAccessTokenNeedsValidation = true;
+  let authorizationRefreshAttempted = false;
 
-  const fetchPayload = async (url: string): Promise<unknown> => {
-    await assertUserActiveBeforeProviderRequest(firebaseUserID, queueItem.id, tokenSnapshot.id);
-    lifecycleGuards = await assertCurrentLifecycle(
-      firebaseUserID,
-      tokenSnapshot.ref,
-      tokenCredential,
-      initialGuards,
-    );
+  let pullAttempts = 0;
+  const pullDeadline = Date.now() + SUUNTO_HEALTH_PULL_BUDGET_MS;
+  const claimPullAttempt = (): void => {
+    if (++pullAttempts > SUUNTO_HEALTH_MAX_PULL_ATTEMPTS || Date.now() >= pullDeadline) {
+      throw new SuuntoHealthValidationError('Suunto Health pull budget exceeded.');
+    }
+  };
+  const fetchPayload = async (
+    url: string,
+    stage: SuuntoHealthFailureStage,
+    feed: SuuntoHealthFeed,
+  ): Promise<unknown> => {
+    onStage?.('lifecycle_check');
+    lifecycleGuards = resolvedAccessTokenNeedsValidation
+      ? await captureSuuntoHealthLifecycleForAccessToken(
+        firebaseUserID,
+        tokenSnapshot.ref,
+        accessToken,
+        initialGuards,
+      )
+      : await assertCurrentLifecycle(
+        firebaseUserID,
+        tokenSnapshot.ref,
+        tokenCredential,
+        initialGuards,
+      );
+    tokenCredential = lifecycleGuards.requiredExistingTokenCredential;
+    resolvedAccessTokenNeedsValidation = false;
     onLifecycleGuardsCaptured?.(lifecycleGuards);
+    claimPullAttempt();
+    const requestWithObservation = async (): Promise<unknown> => {
+      const startedAtMs = performance.now();
+      try {
+        const payload = await requestBoundedSuuntoHealthPayload(url, accessToken);
+        try {
+          onRequest?.({ feed, outcome: 'success', durationMs: Math.max(0, Math.round(performance.now() - startedAtMs)) });
+        } catch { /* Telemetry must not change provider processing. */ }
+        return payload;
+      } catch (error) {
+        try {
+          onRequest?.({
+            feed,
+            outcome: providerStatusCode(error) === 401 ? 'unauthorized' : 'failed',
+            durationMs: Math.max(0, Math.round(performance.now() - startedAtMs)),
+          });
+        } catch { /* Telemetry must not change provider processing. */ }
+        throw error;
+      }
+    };
     try {
-      return await requestBoundedSuuntoHealthPayload(url, accessToken);
+      onStage?.(stage);
+      return await requestWithObservation();
     } catch (error) {
-      if (providerStatusCode(error) !== 401) {
+      const statusCode = providerStatusCode(error);
+      if ((statusCode !== 401 && statusCode !== 403) || authorizationRefreshAttempted) {
         // Provider errors may contain request URLs, credentials, or response
-        // fragments. Keep durable retry telemetry deliberately opaque.
-        throw new SuuntoHealthRequestError();
+        // fragments. The validated numeric HTTP status is safe and lets us
+        // distinguish provider failures from transport failures in Cloud Logs.
+        throw new SuuntoHealthRequestError(
+          statusCode ?? undefined,
+          error instanceof requestPromise.ResponseBodyTooLargeError,
+          safeTransportCode(error),
+        );
       }
     }
 
+    // Share one recovery budget across all feeds and adaptive subrequests.
+    authorizationRefreshAttempted = true;
+    onStage?.('token_refresh');
     const refreshedToken = await getTokenData(tokenSnapshot, ServiceNames.SuuntoApp, true, {
       opaqueTelemetry: true,
       expectedActiveOAuthCredentialGeneration: expectedRootGeneration,
+      beforeRefreshRequest: validateBeforeTokenRefreshRequest,
     });
     const refreshedAccessToken = typeof refreshedToken.accessToken === 'string'
       ? refreshedToken.accessToken
@@ -326,42 +472,63 @@ export async function processSuuntoHealthQueueItem(
     if (!refreshedAccessToken || refreshedProviderUserID !== queueItem.providerUserId.trim()) {
       throw new SuuntoHealthAccountValidationError();
     }
-    const refreshedCredential = await currentTokenCredential(tokenSnapshot.ref, refreshedAccessToken);
-    if (refreshedCredential.credentialGeneration
-      !== initialGuards.requiredExistingTokenCredential.credentialGeneration) {
-      throw new SuuntoHealthAccountValidationError();
-    }
+    onStage?.('lifecycle_check');
     accessToken = refreshedAccessToken;
-    tokenCredential = refreshedCredential;
-    lifecycleGuards = await captureSuuntoHealthWriteLifecycleGuards(
+    lifecycleGuards = await captureSuuntoHealthLifecycleForAccessToken(
       firebaseUserID,
       tokenSnapshot.ref,
-      tokenCredential,
+      accessToken,
       initialGuards,
     );
-    assertLifecycleContinuity(initialGuards, lifecycleGuards);
+    tokenCredential = lifecycleGuards.requiredExistingTokenCredential;
+    resolvedAccessTokenNeedsValidation = false;
     onLifecycleGuardsCaptured?.(lifecycleGuards);
-    await assertUserActiveBeforeProviderRequest(firebaseUserID, queueItem.id, tokenSnapshot.id);
-    lifecycleGuards = await assertCurrentLifecycle(
-      firebaseUserID,
-      tokenSnapshot.ref,
-      tokenCredential,
-      initialGuards,
-    );
-    onLifecycleGuardsCaptured?.(lifecycleGuards);
+    claimPullAttempt();
     try {
-      return await requestBoundedSuuntoHealthPayload(url, accessToken);
-    } catch {
-      throw new SuuntoHealthRequestError();
+      onStage?.(stage);
+      return await requestWithObservation();
+    } catch (error) {
+      throw new SuuntoHealthRequestError(
+        providerStatusCode(error) ?? undefined,
+        error instanceof requestPromise.ResponseBodyTooLargeError,
+        safeTransportCode(error),
+      );
     }
   };
 
   const receivedAtMs = Date.now();
   const healthResultsBySource = new Map<string, SuuntoHealthResult>();
-  for (const window of buildSuuntoHealthRequestWindows(startMs, endMs)) {
+  let resultBytes = 0;
+  const processWindow = async (window: SuuntoHealthRequestWindow): Promise<SuuntoHealthRequestWindow> => {
+    try {
+      await processBoundedWindow(window);
+      return window;
+    } catch (error) {
+      const responseLimitExceeded = error instanceof SuuntoHealthResponseLimitError
+        || (error instanceof SuuntoHealthRequestError && error.responseByteLimitExceeded === true);
+      if (!responseLimitExceeded
+        || window.targetEndMs - window.targetStartMs <= DAY_MS) throw error;
+      // Re-fetch, never truncate. Padding is reapplied to each child so a
+      // split cannot replace a complete provider-local day with half a day.
+      const midpoint = Math.floor((window.targetStartMs + window.targetEndMs) / 2);
+      // Finish only the left child in this invocation. After its records are
+      // durable, the queue hands off the remaining range at this learned size.
+      // Retrying later work must not refetch already committed target windows.
+      return processWindow({
+        targetStartMs: window.targetStartMs, targetEndMs: midpoint,
+        requestStartMs: window.requestStartMs,
+        requestEndMs: midpoint + SUUNTO_HEALTH_CONTEXT_PADDING_MS,
+      });
+    }
+  };
+  const processBoundedWindow = async (window: SuuntoHealthRequestWindow): Promise<void> => {
+    const windowResults: SuuntoHealthResult[] = [];
     const activityPayload = await fetchPayload(
       `https://cloudapi.suunto.com/247samples/activity?from=${window.requestStartMs}&to=${window.requestEndMs - 1}`,
+      'activity_request',
+      'activity',
     );
+    onStage?.('activity_mapping');
     const activitySamples = parseSuuntoActivitySamples(activityPayload);
     assertSuuntoHealthSamplesInRange(
       activitySamples,
@@ -375,13 +542,16 @@ export async function processSuuntoHealthQueueItem(
       receivedAtMs,
     )) {
       if (resultIntersectsTarget(result, window)) {
-        healthResultsBySource.set(sourceResultIdentity(result), result);
+        windowResults.push(result);
       }
     }
 
     const statisticsPayload = await fetchPayload(
       `https://cloudapi.suunto.com/247samples/daily-activity-statistics?startdate=${encodeURIComponent(new Date(window.requestStartMs).toISOString())}&enddate=${encodeURIComponent(new Date(window.requestEndMs - 1).toISOString())}`,
+      'statistics_request',
+      'statistics',
     );
+    onStage?.('statistics_mapping');
     const statisticsResults = mapSuuntoDailyStatisticsHealth(
       statisticsPayload,
       queueItem.providerUserId,
@@ -394,13 +564,16 @@ export async function processSuuntoHealthQueueItem(
     // for the padded Activity and Recovery responses.
     for (const result of statisticsResults) {
       if (resultIntersectsTarget(result, window)) {
-        healthResultsBySource.set(sourceResultIdentity(result), result);
+        windowResults.push(result);
       }
     }
 
     const recoveryPayload = await fetchPayload(
       `https://cloudapi.suunto.com/247samples/recovery?from=${window.requestStartMs}&to=${window.requestEndMs - 1}`,
+      'recovery_request',
+      'recovery',
     );
+    onStage?.('recovery_mapping');
     const recoverySamples = parseSuuntoRecoverySamples(recoveryPayload);
     assertSuuntoHealthSamplesInRange(
       recoverySamples,
@@ -414,11 +587,33 @@ export async function processSuuntoHealthQueueItem(
       receivedAtMs,
     )) {
       if (resultIntersectsTarget(result, window)) {
-        healthResultsBySource.set(sourceResultIdentity(result), result);
+        windowResults.push(result);
       }
     }
-  }
+    onStage?.('result_assembly');
+    for (const result of windowResults) {
+      const key = sourceResultIdentity(result);
+      const previous = healthResultsBySource.get(key);
+      resultBytes += Buffer.byteLength(JSON.stringify(result), 'utf8')
+        - (previous ? Buffer.byteLength(JSON.stringify(previous), 'utf8') : 0);
+      if (resultBytes > SUUNTO_HEALTH_MAX_RESULT_BYTES
+        || (!previous && healthResultsBySource.size
+          >= 2 * SUUNTO_HEALTH_MAX_SERIES_SOURCE_RECORDS + SUUNTO_HEALTH_MAX_DAILY_SOURCE_RECORDS)) {
+        throw new SuuntoHealthValidationError('Suunto Health result budget exceeded.');
+      }
+      healthResultsBySource.set(key, result);
+    }
+  };
+  const targetStartMs = queueItem.suuntoHealthProgress?.nextStartMs ?? startMs;
+  const targetEndMs = Math.min(endMs, targetStartMs
+    + (queueItem.suuntoHealthProgress?.targetWindowMs ?? SUUNTO_HEALTH_MAX_TARGET_WINDOW_MS));
+  const completedWindow = await processWindow({
+    targetStartMs, targetEndMs,
+    requestStartMs: Math.max(0, targetStartMs - SUUNTO_HEALTH_CONTEXT_PADDING_MS),
+    requestEndMs: targetEndMs + SUUNTO_HEALTH_CONTEXT_PADDING_MS,
+  });
 
+  onStage?.('lifecycle_check');
   lifecycleGuards = await assertCurrentLifecycle(firebaseUserID, tokenSnapshot.ref, tokenCredential, initialGuards);
   onLifecycleGuardsCaptured?.(lifecycleGuards);
   return {
@@ -427,6 +622,11 @@ export async function processSuuntoHealthQueueItem(
         || left.input.sourceRecordType.localeCompare(right.input.sourceRecordType)
         || left.input.sourceRecordKey.localeCompare(right.input.sourceRecordKey)),
     lifecycleGuards,
+    continuation: completedWindow.targetEndMs < endMs ? {
+      nextStartMs: completedWindow.targetEndMs,
+      targetWindowMs: completedWindow.targetEndMs - completedWindow.targetStartMs,
+      authorityDigest,
+    } : null,
   };
 }
 
@@ -466,6 +666,8 @@ function suuntoHealthValidationTelemetryCode(message: string): string {
     [/ is outside the supported numeric range\.$/, 'numeric_value_out_of_range'],
     [/ response must be an array\.$/, 'expected_array'],
     [/ response exceeds the bounded item count\.$/, 'response_item_limit'],
+    [/^Suunto Health pull budget exceeded\.$/, 'pull_budget'],
+    [/^Suunto Health result budget exceeded\.$/, 'result_budget'],
     [/^Suunto activity HRExt minimum exceeds maximum\.$/, 'invalid_heart_rate_extrema'],
     [/ statistic value must be numeric or null\.$/, 'invalid_statistic_value'],
     [/ statistic value is outside the supported range\.$/, 'statistic_value_out_of_range'],

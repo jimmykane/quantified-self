@@ -6,12 +6,14 @@ import * as admin from 'firebase-admin';
 import { hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
 import { SERVICE_NAME } from './constants';
 import { COROS_HISTORY_IMPORT_LIMIT_MONTHS } from '../../../shared/history-import.constants';
-import { HistoryImportResult, addHistoryToQueue, getNextAllowedHistoryImportDate } from '../history';
+import { HistoryImportResult, withActivityHistoryImportReservation } from '../history';
+import { HistoryImportAdmissionError, HistoryLifecycleChangedError } from '../connection-history/execution';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { getActiveCOROSTokenSnapshot } from './account';
 import { isServiceUnavailableForSyncForUser } from '../service-connection-meta';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
+import type { ConnectionHistoryStatusProjection } from '../../../shared/connection-history';
 import {
   addUTCCalendarDays,
   chunkCOROSInclusiveDateRange,
@@ -22,15 +24,23 @@ import {
 interface HistoryToQueueRequest {
   startDate: string;
   endDate: string;
+  background?: boolean;
 }
 
 interface HistoryToQueueResponse {
   result: string;
   stats?: HistoryImportResult;
+  historyImport?: ConnectionHistoryStatusProjection;
 }
 
 function toHistoryCallableError(error: unknown): functions.https.HttpsError {
+  if (error instanceof HistoryLifecycleChangedError) {
+    return new functions.https.HttpsError('failed-precondition', 'History import is no longer active. Please retry.');
+  }
   const code = `${(error as { code?: unknown } | null)?.code || ''}`.replace(/^functions\//, '');
+  if (error instanceof functions.https.HttpsError && code === 'already-exists') {
+    return new functions.https.HttpsError('already-exists', 'Another history import is running.');
+  }
   if (code === 'unauthenticated') {
     return new functions.https.HttpsError('unauthenticated', 'Reconnect COROS before importing history.');
   }
@@ -47,10 +57,10 @@ async function assertCOROSHistoryAllowed(userID: string, phase: string): Promise
   try {
     const deletionGuard = await getUserDeletionGuardState(admin.firestore(), userID);
     if (deletionGuard.shouldSkip) {
-      throw new functions.https.HttpsError('failed-precondition', 'Account is being deleted or no longer exists.');
+      throw new HistoryImportAdmissionError('failed-precondition', 'Account is being deleted or no longer exists.');
     }
     if (await isServiceUnavailableForSyncForUser(userID, SERVICE_NAME)) {
-      throw new functions.https.HttpsError('failed-precondition', 'Reconnect COROS before importing history.');
+      throw new HistoryImportAdmissionError('failed-precondition', 'Reconnect COROS before importing history.');
     }
   } catch (error) {
     if (error instanceof functions.https.HttpsError) throw error;
@@ -94,6 +104,9 @@ export const addCOROSAPIHistoryToQueue = functions
 
     let startDate = parseCOROSCalendarDate(data?.startDate);
     const endDate = parseCOROSCalendarDate(data?.endDate);
+    if (data?.background !== undefined && typeof data.background !== 'boolean') {
+      throw new functions.https.HttpsError('invalid-argument', 'background must be a boolean.');
+    }
 
     if (!startDate || !endDate) {
       throw new functions.https.HttpsError('invalid-argument', 'No start and/or end date');
@@ -127,11 +140,12 @@ export const addCOROSAPIHistoryToQueue = functions
       startDate = threeMonthsAgo;
     }
 
-    // First check last history import
-    const nextAllowedDate = await getNextAllowedHistoryImportDate(userID, SERVICE_NAME);
-    if (nextAllowedDate && nextAllowedDate > new Date()) {
-      logger.error(`User ${userID} tried todo history import for ${SERVICE_NAME} while not allowed. (Requested: ${startDate.toISOString()} - ${endDate.toISOString()}, Available on: ${nextAllowedDate.toISOString()})`);
-      throw new functions.https.HttpsError('permission-denied', `History import is not allowed until ${nextAllowedDate.toISOString()}`);
+    if (data?.background === true) {
+      const { startManualActivityHistory } = await import('../connection-history/manual-activity');
+      // COROS accepts inclusive calendar dates, including the entire end day.
+      const historyImport = await startManualActivityHistory(userID, SERVICE_NAME, startDate,
+        new Date(addUTCCalendarDays(endDate, 1).getTime() - 1));
+      return { result: 'History import accepted', historyImport };
     }
 
     const dateWindows = chunkCOROSInclusiveDateRange(startDate, endDate);
@@ -142,57 +156,66 @@ export const addCOROSAPIHistoryToQueue = functions
       processedBatches: 0,
       failedBatches: 0,
     };
-    await assertCOROSHistoryAllowed(userID, 'before_account_lookup');
-    let expectedProviderUserId: string;
-    try {
-      expectedProviderUserId = (await getActiveCOROSTokenSnapshot(userID)).id;
-    } catch (error) {
-      logger.warn('[COROSHistoryImport] Could not resolve the active account.', {
-        userID,
-        errorName: error instanceof Error ? error.name : typeof error,
-        code: (error as { code?: unknown } | null)?.code,
-      });
-      throw toHistoryCallableError(error);
-    }
-
-    for (let i = 0; i < dateWindows.length; i++) {
-      const { startDate: batchStartDate, endDate: batchEndDate } = dateWindows[i];
-
+    return withActivityHistoryImportReservation(userID, SERVICE_NAME, async importWindow => {
+      await assertCOROSHistoryAllowed(userID, 'before_account_lookup');
+      let expectedProviderUserId: string;
       try {
-        await assertCOROSHistoryAllowed(userID, 'before_provider_request');
-        const stats = await addHistoryToQueue(userID, SERVICE_NAME, batchStartDate, batchEndDate, {
-          expectedProviderUserId,
-          cumulativeMetadata: {
-            startDate,
-            endDate: batchEndDate,
-            processedActivitiesCountOffset: totalStats.successCount,
-          },
-        });
-
-        totalStats.successCount += stats.successCount;
-        totalStats.failureCount += stats.failureCount;
-        totalStats.processedBatches += stats.processedBatches;
-        totalStats.failedBatches += stats.failedBatches;
-
-        if (stats.successCount === 0 && stats.failureCount > 0) {
-          throw new Error(`Failed to import all ${stats.failureCount} items in batch.`);
-        }
-
-        if (stats.failureCount > 0) {
-          logger.warn(`Partial import success in batch: ${stats.successCount} imported, ${stats.failureCount} failed.`);
-        }
-      } catch (e: any) {
-        logger.error('[COROSHistoryImport] Failed to queue a history window.', {
+        expectedProviderUserId = (await getActiveCOROSTokenSnapshot(userID)).id;
+      } catch (error) {
+        logger.warn('[COROSHistoryImport] Could not resolve the active account.', {
           userID,
-          providerUserId: expectedProviderUserId,
-          batchIndex: i,
-          errorName: e instanceof Error ? e.name : typeof e,
-          code: e?.code,
-          statusCode: Number.isFinite(Number(e?.statusCode)) ? Number(e.statusCode) : undefined,
+          errorName: error instanceof Error ? error.name : typeof error,
+          code: (error as { code?: unknown } | null)?.code,
         });
-        throw toHistoryCallableError(e);
+        throw toHistoryCallableError(error);
       }
-    }
 
-    return { result: 'History items added to queue', stats: totalStats };
+      for (let i = 0; i < dateWindows.length; i++) {
+        const { startDate: batchStartDate, endDate: batchEndDate } = dateWindows[i];
+
+        try {
+          await assertCOROSHistoryAllowed(userID, 'before_provider_request');
+          const stats = await importWindow(batchStartDate, batchEndDate, {
+            expectedProviderUserId,
+            cumulativeMetadata: {
+              startDate,
+              endDate: batchEndDate,
+              processedActivitiesCountOffset: totalStats.successCount,
+            },
+          });
+
+          totalStats.successCount += stats.successCount;
+          totalStats.failureCount += stats.failureCount;
+          totalStats.processedBatches += stats.processedBatches;
+          totalStats.failedBatches += stats.failedBatches;
+
+          if (stats.successCount === 0 && stats.failureCount > 0) {
+            throw new Error(`Failed to import all ${stats.failureCount} items in batch.`);
+          }
+
+          if (stats.failureCount > 0) {
+            logger.warn(`Partial import success in batch: ${stats.successCount} imported, ${stats.failureCount} failed.`);
+          }
+        } catch (e: any) {
+          if (e instanceof HistoryImportAdmissionError) throw e;
+          if (e instanceof HistoryLifecycleChangedError
+            || (e instanceof functions.https.HttpsError && e.code === 'already-exists')) {
+            throw toHistoryCallableError(e);
+          }
+          logger.error('[COROSHistoryImport] Failed to queue a history window.', {
+            userID,
+            providerUserId: expectedProviderUserId,
+            batchIndex: i,
+            errorName: e instanceof Error ? e.name : typeof e,
+            code: e?.code,
+            statusCode: Number.isFinite(Number(e?.statusCode)) ? Number(e.statusCode) : undefined,
+          });
+          throw toHistoryCallableError(e);
+        }
+      }
+      return { result: 'History items added to queue', stats: totalStats };
+    }).catch(error => {
+      if (error instanceof HistoryLifecycleChangedError) throw toHistoryCallableError(error);
+      throw error;
+    });
   });

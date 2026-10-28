@@ -1,0 +1,343 @@
+import { signal } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { MatDialog } from '@angular/material/dialog';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
+import { provideRouter } from '@angular/router';
+import { BehaviorSubject, Subject, of, throwError } from 'rxjs';
+import { createHash, webcrypto } from 'node:crypto';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { join } from 'node:path';
+import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { GARMIN_WORKOUT_NOT_FOUND_ISSUE, GARMIN_WORKOUT_WITH_CALENDAR_NOT_FOUND_ISSUE,
+  type TrainingDeliverySettingsV1, type TrainingDeliveryStatusV1 } from '@shared/training-provider-delivery';
+import type { ScheduledWorkoutV1, TrainingPlanV1 } from '@shared/training-plans';
+import { TrainingDeliveryService, type TrainingDeliveryView } from '../../services/training-delivery.service';
+import { AppUserService } from '../../services/app.user.service';
+import { AppEventService } from '../../services/app.event.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
+import { TrainingDeliveryButtonComponent } from './training-delivery-button.component';
+import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
+
+describe('Training delivery summaries on the workspace', () => {
+  const user = signal<{ uid: string } | null>({ uid: 'owner' });
+  const user$ = new BehaviorSubject(user());
+  const setting: TrainingDeliverySettingsV1 = { schemaVersion: 1, scope: 'plan', scopeId: 'p', provider: 'garmin', revision: 1,
+    enabled: true, suppressed: false, timeZone: 'Europe/Helsinki', destinationKey: 'safe', connectionEpoch: 0, scopeGeneration: 0,
+    associationPlanId: null, approvedDigest: null, updatedAtMs: 1 };
+  const workout: ScheduledWorkoutV1 = { schemaVersion: 1, id: 'w', planId: 'p', localDate: '2027-01-01', lifecycle: 'planned',
+    title: 'Run', structure: { version: 1, sport: ActivityTypes.Running, nodes: [] }, revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+  const plan: TrainingPlanV1 = { schemaVersion: 1, id: 'p', name: 'Winter', lifecycle: 'active', revision: 1, lastCheckpointRevision: 1,
+    startLocalDate: '2026-12-01', endLocalDate: '2027-02-01', workoutCount: 1, createdAtMs: 1, updatedAtMs: 1 };
+  const status: TrainingDeliveryStatusV1 = { schemaVersion: 1, id: createHash('sha256').update(JSON.stringify(['owner', 'garmin', 'safe', 'w'])).digest('hex'),
+    workoutId: 'w', planId: 'p', provider: 'garmin', status: 'delivered', hasRemoteCopy: true, differsFromQS: false,
+    timeZone: 'Europe/Helsinki', approvalDigest: null, issues: [], lastAcceptedAtMs: 2, lastAttemptAtMs: 2, retryCount: 0, nextRetryAtMs: null, updatedAtMs: 3 };
+  let view$: BehaviorSubject<TrainingDeliveryView>;
+  let service: { watchSummaryScope: ReturnType<typeof vi.fn>; watchPresence: ReturnType<typeof vi.fn>; anyReady: ReturnType<typeof vi.fn>;
+    isReady: ReturnType<typeof vi.fn>; isVisible: ReturnType<typeof vi.fn>; isSetupAvailable: ReturnType<typeof vi.fn> };
+  let open: ReturnType<typeof vi.fn>;
+  let selection: ReturnType<typeof vi.fn>;
+  beforeEach(async () => {
+    vi.stubGlobal('crypto', webcrypto); user.set({ uid: 'owner' }); user$.next(user());
+    view$ = new BehaviorSubject<TrainingDeliveryView>({ settings: [setting], statuses: [status] });
+    service = { watchSummaryScope: vi.fn(() => view$), watchPresence: vi.fn(() => of(true)), anyReady: vi.fn(() => false),
+      isReady: vi.fn(() => false), isVisible: vi.fn(provider => provider !== 'coros'),
+      isSetupAvailable: vi.fn((provider, _planDelivery) => service.isReady(provider)) };
+    open = vi.fn(); selection = vi.fn();
+    TestBed.overrideComponent(ServiceSourceIconComponent, { set: { template: '' } });
+    TestBed.overrideComponent(TrainingDeliveryButtonComponent, { add: { providers: [{ provide: MatDialog, useValue: { open } }] } });
+    await TestBed.configureTestingModule({ imports: [TrainingDeliveryButtonComponent], providers: [provideRouter([]), provideNoopAnimations(),
+      { provide: TrainingDeliveryService, useValue: service }, { provide: AppUserService, useValue: { user, user$ } },
+      { provide: MatDialog, useValue: { open } }, { provide: AppHapticsService, useValue: { selection } },
+      { provide: AppEventService, useValue: {} },
+      { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
+    ] }).compileComponents();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+  async function render(scope: 'plan' | 'workout' = 'plan') {
+    const fixture = TestBed.createComponent(TrainingDeliveryButtonComponent);
+    fixture.componentRef.setInput('scope', scope); fixture.componentRef.setInput('entityId', scope === 'plan' ? 'p' : 'w');
+    fixture.componentRef.setInput('title', scope === 'plan' ? plan.name : workout.title);
+    fixture.componentRef.setInput('summaryWorkouts', [workout]); fixture.componentRef.setInput('summaryPlan', plan);
+    fixture.detectChanges();
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.componentInstance.summaries().length).toBe(1); });
+    return fixture;
+  }
+  it('keeps the compact history shortcut accessible and opens the same history with one haptic', async () => {
+    const fixture = TestBed.createComponent(TrainingDeliveryButtonComponent);
+    fixture.componentRef.setInput('scope', 'history'); fixture.componentRef.setInput('entityId', 'current');
+    fixture.componentRef.setInput('title', 'Plans and standalone workouts'); fixture.componentRef.setInput('historyLabel', 'Sync');
+    fixture.detectChanges();
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.componentInstance.hasRecords()).toBe(true); });
+    const button: HTMLButtonElement = fixture.nativeElement.querySelector('button');
+    expect(button.textContent?.trim()).toBe('syncSync');
+    expect(button.getAttribute('aria-label')).toBe('Workout sync history');
+    expect(selection).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('disabled', true); fixture.detectChanges(); button.click();
+    expect(open).not.toHaveBeenCalled(); expect(selection).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('disabled', false); fixture.detectChanges(); button.click();
+    expect(selection).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: {
+      scope: 'history', id: 'current', title: 'Plans and standalone workouts',
+    } }));
+    user.set(null); user$.next(null); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('button')).toBeNull();
+  });
+  it('hints at optional plan sync only after settings load and a destination is ready, without opting in', async () => {
+    service.anyReady.mockReturnValue(true); service.isReady.mockImplementation(provider => provider === 'garmin');
+    service.watchPresence.mockReturnValue(of(false));
+    const pendingView = new Subject<TrainingDeliveryView>();
+    service.watchSummaryScope.mockReturnValue(pendingView);
+    const fixture = TestBed.createComponent(TrainingDeliveryButtonComponent);
+    fixture.componentRef.setInput('scope', 'plan'); fixture.componentRef.setInput('entityId', 'p');
+    fixture.componentRef.setInput('title', plan.name); fixture.componentRef.setInput('summaryWorkouts', [workout]);
+    fixture.componentRef.setInput('summaryPlan', { ...plan, lifecycle: 'paused' });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.delivery-setup-hint')).toBeNull();
+    pendingView.next({ settings: [], statuses: [] });
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.componentInstance.readState().loaded).toBe(true); });
+    expect(fixture.nativeElement.querySelector('.delivery-setup-hint').textContent)
+      .toContain('Optional Pro sync. Sends eligible upcoming workouts while this plan is active.');
+    expect(open).not.toHaveBeenCalled(); expect(selection).not.toHaveBeenCalled();
+    pendingView.next({ settings: [], statuses: [], summaryComplete: false }); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.delivery-setup-hint')).toBeNull();
+    pendingView.next({ settings: [], statuses: [] }); fixture.detectChanges();
+    fixture.componentRef.setInput('summaryPlan', { ...plan, lifecycle: 'archived' }); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.delivery-setup-hint')).toBeNull();
+    fixture.componentRef.setInput('summaryPlan', plan); fixture.detectChanges();
+    pendingView.next({ settings: [setting], statuses: [] });
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.componentInstance.hasRecords()).toBe(true); });
+    expect(fixture.nativeElement.querySelector('.delivery-setup-hint')).toBeNull();
+    user.set(null); user$.next(null); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.delivery-setup-hint')).toBeNull();
+  });
+  it.each(['plan', 'workout'] as const)('shows %s destination confirmation and opens details without granting consent', async scope => {
+    const fixture = await render(scope);
+    if (scope === 'plan') {
+      expect(fixture.nativeElement.querySelector('.delivery-plan-provider').getAttribute('aria-label'))
+        .toContain('Garmin Connect: Upcoming workout synced');
+      expect(fixture.nativeElement.querySelector('.delivery-plan-provider-count').textContent.trim()).toBe('1/1');
+    } else {
+      expect(fixture.nativeElement.textContent).toContain('Garmin Connect · Synced');
+    }
+    expect(service.watchPresence).not.toHaveBeenCalled(); expect(open).not.toHaveBeenCalled(); expect(selection).not.toHaveBeenCalled();
+    const button: HTMLButtonElement = fixture.nativeElement.querySelector(scope === 'plan' ? '.delivery-plan-view' : '.delivery-summary');
+    expect(button.getAttribute('aria-label')).toContain(scope === 'plan' ? 'View plan sync details' : 'Open workout sync details');
+    button.click(); expect(selection).toHaveBeenCalledTimes(1);
+    expect(open.mock.calls[0][1].data).toMatchObject({ scope, id: scope === 'plan' ? 'p' : 'w', title: scope === 'plan' ? plan.name : workout.title });
+    if (scope === 'plan') expect(typeof open.mock.calls[0][1].data.planSummaries).toBe('function');
+    else expect(open.mock.calls[0][1].data.planSummaries).toBeUndefined();
+  });
+  it('does not let retained COROS-only state create a plan summary or sync entry', async () => {
+    service.anyReady.mockReturnValue(false);
+    view$.next({ settings: [{ ...setting, provider: 'coros' }], statuses: [{ ...status, provider: 'coros' }] });
+    const fixture = TestBed.createComponent(TrainingDeliveryButtonComponent);
+    fixture.componentRef.setInput('scope', 'plan'); fixture.componentRef.setInput('entityId', 'p');
+    fixture.componentRef.setInput('title', plan.name); fixture.componentRef.setInput('summaryWorkouts', [workout]);
+    fixture.componentRef.setInput('summaryPlan', plan); fixture.detectChanges();
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.componentInstance.readState().loaded).toBe(true); });
+    expect(fixture.componentInstance.hasRecords()).toBe(false);
+    expect(fixture.componentInstance.summaries()).toEqual([]);
+    expect(fixture.nativeElement.textContent).not.toContain('COROS');
+    expect(fixture.nativeElement.querySelector('button')).toBeNull();
+  });
+  it('separates a confirmed Garmin cloud copy from an inconclusive later check', async () => {
+    const fixture = await render('workout');
+    const verification = { schemaVersion: 1 as const, id: status.id, workoutId: workout.id, planId: workout.planId,
+      provider: 'garmin' as const, state: 'present' as const, canCheck: true, missing: false,
+      lastCheckedAtMs: 4, nextCheckAtMs: null, updatedAtMs: 4 };
+    view$.next({ settings: [setting], statuses: [status], verifications: [verification] });
+    await vi.waitFor(() => { fixture.detectChanges();
+      expect(fixture.nativeElement.textContent).toContain('Garmin Connect · Cloud copy confirmed');
+    });
+    expect(fixture.nativeElement.querySelector('.delivery-summary').getAttribute('aria-label')).toContain('watch receipt is not verified');
+    view$.next({ settings: [setting], statuses: [status], verifications: [{ ...verification, state: 'unknown', updatedAtMs: 5 }] });
+    await vi.waitFor(() => { fixture.detectChanges();
+      expect(fixture.nativeElement.textContent).toContain('Garmin Connect · Cloud check inconclusive');
+    });
+    expect(fixture.nativeElement.textContent).not.toContain('Garmin Connect · Synced');
+    expect(fixture.nativeElement.querySelector('.delivery-summary').getAttribute('aria-label')).toContain('no automatic workout replacement');
+  });
+  it.each([GARMIN_WORKOUT_NOT_FOUND_ISSUE, GARMIN_WORKOUT_WITH_CALENDAR_NOT_FOUND_ISSUE])(
+    'shows complete not-found observations as attention, not synced, without hiding newer authored data: %s', async issue => {
+    const fixture = await render('workout');
+    view$.next({ settings: [setting], statuses: [{ ...status, status: 'needs_attention', differsFromQS: true, issues: [issue], updatedAtMs: 4 }],
+      verifications: [{ schemaVersion: 1, id: status.id, workoutId: workout.id, planId: workout.planId,
+        provider: 'garmin', state: 'unknown', canCheck: true, missing: false, lastCheckedAtMs: 4, nextCheckAtMs: null, updatedAtMs: 4 }] });
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.nativeElement.textContent).toContain('Garmin Connect · Not found in Garmin'); });
+    expect(fixture.nativeElement.textContent).not.toContain('Garmin Connect · Synced');
+    expect(fixture.nativeElement.querySelector('.delivery-summary').getAttribute('aria-label'))
+      .toContain(issue === GARMIN_WORKOUT_NOT_FOUND_ISSUE ? 'review creating a replacement' : 'Replacement is unavailable');
+    fixture.componentRef.setInput('summaryWorkouts', [{ ...workout, updatedAtMs: 5 }]);
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.nativeElement.textContent).toContain('Awaiting latest check'); });
+    expect(fixture.nativeElement.textContent).not.toContain('Not found in Garmin');
+    expect(open).not.toHaveBeenCalled();
+  });
+  it('does not let old or another destination’s check overrule a new accepted Garmin send', async () => {
+    const fixture = await render('workout');
+    const verification = { schemaVersion: 1 as const, id: status.id, workoutId: workout.id, planId: workout.planId,
+      provider: 'garmin' as const, state: 'unknown' as const, canCheck: true, missing: false,
+      lastCheckedAtMs: 4, nextCheckAtMs: null, updatedAtMs: 4 };
+    view$.next({ settings: [setting], statuses: [{ ...status, lastAcceptedAtMs: 5 }], verifications: [verification] });
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.nativeElement.textContent).toContain('Garmin Connect · Synced'); });
+    view$.next({ settings: [{ ...setting, destinationKey: 'other' }], statuses: [status],
+      verifications: [{ ...verification, lastCheckedAtMs: 6 }] });
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.nativeElement.textContent).not.toContain('Cloud check inconclusive'); });
+  });
+  it('updates live failures and authored edits without reopening all Firestore listeners', async () => {
+    const fixture = await render();
+    fixture.componentRef.setInput('summaryWorkouts', [{ ...workout, updatedAtMs: 10 }]); fixture.detectChanges();
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.nativeElement.querySelector('.delivery-plan-provider').getAttribute('aria-label'))
+      .toContain('awaiting latest check'); });
+    expect(service.watchSummaryScope).toHaveBeenCalledTimes(1);
+    view$.next({ settings: [setting], statuses: [{ ...status, status: 'approval_required', differsFromQS: true, updatedAtMs: 11 }] });
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.nativeElement.querySelector('.delivery-plan-provider').getAttribute('aria-label'))
+      .toContain('1 needs approval'); });
+    expect(fixture.nativeElement.querySelector('.delivery-plan-provider').getAttribute('aria-label')).toContain('needs approval');
+    expect(open).not.toHaveBeenCalled(); expect(selection).not.toHaveBeenCalled();
+  });
+  it('moves a workout from upcoming to earlier when the shared workspace clock crosses its saved-zone day', async () => {
+    const fixture = await render();
+    fixture.componentRef.setInput('summaryNowMs', Date.parse('2027-01-01T20:00:00Z')); fixture.detectChanges();
+    await vi.waitFor(() => { fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.delivery-plan-provider-count').textContent.trim()).toBe('1/1');
+    });
+    fixture.componentRef.setInput('summaryNowMs', Date.parse('2027-01-01T22:00:00Z')); fixture.detectChanges();
+    await vi.waitFor(() => { fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.delivery-plan-provider').getAttribute('aria-label'))
+        .toContain('No upcoming workouts. 1 earlier workout');
+    });
+    expect(fixture.nativeElement.textContent).toContain('No workouts due for sync');
+    expect(fixture.nativeElement.querySelectorAll('.delivery-plan-provider-count')).toHaveLength(0);
+    expect(service.watchSummaryScope).toHaveBeenCalledTimes(1);
+  });
+  it('replaces meaningless dashes with one clear plan message while keeping visible service details', async () => {
+    const fixture = await render();
+    const providers = ['garmin', 'coros', 'wahoo', 'suunto'] as const;
+    view$.next({ settings: providers.map(provider => ({ ...setting, provider })), statuses: providers.map(provider => ({
+      ...status, provider, id: createHash('sha256').update(JSON.stringify(['owner', provider, 'safe', workout.id])).digest('hex'),
+    })) });
+    fixture.componentRef.setInput('summaryNowMs', Date.parse('2027-01-02T12:00:00Z'));
+    await vi.waitFor(() => { fixture.detectChanges();
+      expect(fixture.nativeElement.querySelectorAll('.delivery-plan-provider')).toHaveLength(3);
+      expect(fixture.nativeElement.textContent).toContain('No workouts due for sync');
+    });
+    expect(fixture.nativeElement.querySelectorAll('.delivery-plan-provider-count')).toHaveLength(0);
+    expect(fixture.nativeElement.querySelector('.delivery-plan-summary').textContent).not.toContain('—');
+    for (const item of fixture.nativeElement.querySelectorAll('.delivery-plan-provider') as NodeListOf<HTMLElement>) {
+      expect(item.getAttribute('aria-label')).toContain('No upcoming workouts. 1 earlier workout');
+    }
+    expect(fixture.nativeElement.querySelector('.delivery-plan-view')).not.toBeNull();
+  });
+  it('uses a short service-specific label when only one service has nothing due', async () => {
+    const fixture = await render();
+    view$.next({ settings: [setting, { ...setting, provider: 'suunto' }], statuses: [status, {
+      ...status, provider: 'suunto', status: 'outside_horizon', hasRemoteCopy: false,
+      id: createHash('sha256').update(JSON.stringify(['owner', 'suunto', 'safe', workout.id])).digest('hex'),
+    }] });
+    await vi.waitFor(() => { fixture.detectChanges();
+      expect(fixture.nativeElement.querySelectorAll('.delivery-plan-provider-count')).toHaveLength(2);
+    });
+    const counts: HTMLElement[] = Array.from(fixture.nativeElement.querySelectorAll('.delivery-plan-provider-count'));
+    expect(counts.map(item => item.textContent?.trim())).toEqual(['1/1', 'Later']);
+  });
+  it('distinguishes a genuinely empty plan from a plan with only earlier workouts', async () => {
+    const fixture = await render();
+    fixture.componentRef.setInput('summaryWorkouts', []);
+    await vi.waitFor(() => { fixture.detectChanges();
+      expect(fixture.nativeElement.textContent).toContain('No workouts in this plan');
+    });
+    expect(fixture.nativeElement.querySelectorAll('.delivery-plan-provider-count')).toHaveLength(0);
+  });
+  it('clears summaries immediately on account change/sign-out and tears down the old read', async () => {
+    const fixture = await render();
+    user.set({ uid: 'other' }); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('Garmin Connect');
+    user.set(null); user$.next(null); fixture.detectChanges(); await fixture.whenStable();
+    expect(view$.observed).toBe(false); expect(fixture.nativeElement.querySelector('button')).toBeNull();
+    expect(open).not.toHaveBeenCalled();
+  });
+  it('keeps unavailable-provider details visible, but honors disabled controls', async () => {
+    const fixture = await render(); fixture.componentRef.setInput('disabled', true); fixture.detectChanges();
+    const button: HTMLButtonElement = fixture.nativeElement.querySelector('.delivery-plan-view');
+    expect(button.disabled).toBe(true); button.click(); expect(open).not.toHaveBeenCalled(); expect(selection).not.toHaveBeenCalled();
+  });
+  it('reports read errors without displaying invented zero/success totals', async () => {
+    service.watchSummaryScope.mockReturnValue(throwError(() => new Error('private')));
+    const fixture = TestBed.createComponent(TrainingDeliveryButtonComponent);
+    for (const [key, value] of Object.entries({ scope: 'plan', entityId: 'p', title: 'Winter', summaryWorkouts: [workout], summaryPlan: plan })) fixture.componentRef.setInput(key, value);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Sync status unavailable');
+    expect(fixture.nativeElement.textContent).not.toMatch(/0 of|synced|private/);
+  });
+  it('clears old scope results when the same component selects another plan', async () => {
+    const fixture = await render();
+    service.watchSummaryScope.mockReturnValue(of({ settings: [], statuses: [] }));
+    fixture.componentRef.setInput('entityId', 'other-plan'); fixture.componentRef.setInput('title', 'Other');
+    fixture.componentRef.setInput('summaryPlan', { ...plan, id: 'other-plan' }); fixture.detectChanges();
+    await fixture.whenStable(); fixture.detectChanges();
+    expect(view$.observed).toBe(false); expect(service.watchSummaryScope).toHaveBeenLastCalledWith('owner', 'plan', 'other-plan', null);
+    expect(fixture.nativeElement.textContent).not.toContain('synced');
+  });
+  it('fails closed if destination matching is unavailable', async () => {
+    vi.stubGlobal('crypto', {});
+    const fixture = TestBed.createComponent(TrainingDeliveryButtonComponent);
+    for (const [key, value] of Object.entries({ scope: 'plan', entityId: 'p', title: 'Winter', summaryWorkouts: [workout], summaryPlan: plan })) fixture.componentRef.setInput(key, value);
+    fixture.detectChanges();
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.nativeElement.textContent).toContain('Sync status unavailable'); });
+    expect(fixture.nativeElement.textContent).not.toContain('workouts synced'); expect(open).not.toHaveBeenCalled();
+  });
+  it('uses one plan-level entry while keeping every service status visible and named', async () => {
+    const fixture = await render();
+    const providers = ['garmin', 'coros', 'wahoo', 'suunto'] as const;
+    const workouts = [workout, { ...workout, id: 'new', title: 'New-year workout', localDate: '2027-01-03' }];
+    fixture.componentRef.setInput('summaryWorkouts', workouts);
+    view$.next({ settings: providers.map(provider => ({ ...setting, provider })), statuses: providers.flatMap(provider => workouts.map((workout, index) => ({
+      ...status, provider, workoutId: workout.id,
+      id: createHash('sha256').update(JSON.stringify(['owner', provider, 'safe', workout.id])).digest('hex'),
+      status: index ? 'approval_required' : 'delivered', differsFromQS: index > 0,
+    }))) });
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.componentInstance.summaries()).toHaveLength(3); });
+    const summary = fixture.nativeElement.querySelector('.delivery-plan-summary');
+    const buttons = summary.querySelectorAll('button');
+    expect(buttons).toHaveLength(1);
+    expect(summary.matches('button')).toBe(false);
+    expect(summary.textContent).toContain('Plan sync');
+    expect(buttons[0].textContent).toContain('View');
+    expect(fixture.nativeElement.querySelectorAll('.delivery-plan-provider')).toHaveLength(3);
+    const providerRows: HTMLElement[] = Array.from(fixture.nativeElement.querySelectorAll('.delivery-plan-provider'));
+    for (const provider of ['Garmin Connect', 'Wahoo', 'Suunto App']) {
+      const state = provider === 'Suunto App' ? 'sent' : 'synced';
+      expect(providerRows.some(row => row.getAttribute('aria-label')?.includes(`${provider}: 1 of 2 upcoming workouts ${state}`))).toBe(true);
+    }
+    expect(buttons[0].getAttribute('aria-label')).toBe('View plan sync details');
+    const visibleCounts: HTMLElement[] = Array.from(fixture.nativeElement.querySelectorAll('.delivery-plan-provider-count'));
+    expect(visibleCounts.map(node => node.textContent?.trim())).toEqual(['1/2', '1/2', '1/2']);
+    buttons[0].click();
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(fixture.nativeElement.querySelector('mat-expansion-panel')).toBeNull();
+    if (process.env.TRAINING_DELIVERY_QA_DIR) {
+      const require = createRequire(import.meta.url);
+      const sass = createRequire(require.resolve('@angular/build/package.json'))('sass');
+      const css = sass.compileString('app-training-delivery-button {' + readFileSync('src/app/components/plans/training-delivery-button.component.scss', 'utf8')
+        .replace(/:host/g, '&') + '}').css;
+      for (const theme of ['light', 'dark']) writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR, `sync-summary-${theme}.html`),
+        '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sync summary QA</title>'
+        + '<link rel="stylesheet" href="styles.css">' + Array.from(document.head.querySelectorAll('style')).map(style => style.outerHTML).join('')
+        + '<style>' + css + 'body{margin:0;background:var(--mat-sys-surface);color:var(--mat-sys-on-surface)}main{padding:16px;max-width:900px;margin:auto}h1{font:var(--mat-sys-title-large)}</style></head>'
+        + `<body class="app-hydrated ${theme}-theme"><main><h1>Winter plan · Sync by service</h1><app-training-delivery-button>${fixture.nativeElement.innerHTML}</app-training-delivery-button></main></body></html>`);
+    }
+  });
+  it('keeps an incomplete plan total compact while exposing its full status accessibly', async () => {
+    const fixture = await render();
+    view$.next({ settings: [setting], statuses: [status], summaryComplete: false });
+    await vi.waitFor(() => { fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.delivery-plan-provider-count').textContent.trim()).toBe('—');
+    });
+    expect(fixture.nativeElement.querySelector('.delivery-plan-provider').getAttribute('aria-label'))
+      .toContain('Garmin Connect: Upcoming status incomplete');
+    expect(fixture.nativeElement.querySelector('.delivery-plan-summary').textContent).not.toContain('Status incomplete');
+    expect(fixture.nativeElement.textContent).not.toContain('No workouts due for sync');
+  });
+});

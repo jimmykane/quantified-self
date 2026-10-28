@@ -1,3 +1,6 @@
+import { dashboardChartFrameGrid } from '../../../helpers/dashboard-chart-layout.helper';
+import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
+import { trainingStateChartGrid, TRAINING_STATE_AXIS_LABEL } from '../../../helpers/training-state-chart-layout.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -31,6 +34,7 @@ import {
   isDerivedMetricPendingStatus,
 } from '../../../helpers/derived-metric-status.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
+import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 import { resolveDashboardFormStatus } from '../../../helpers/dashboard-form.helper';
 import type {
   DashboardFreshnessForecastContext,
@@ -53,6 +57,7 @@ type AxisTooltipParam = {
 })
 export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() darkTheme = false;
+  @Input() timelineNotes: TimelineNoteChartContext | null = null;
   @Input() isLoading = false;
   @Input() forecast?: DashboardFreshnessForecastContext | null;
   @Input() status?: DashboardDerivedMetricStatus | null;
@@ -76,6 +81,7 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
     private logger: LoggerService,
   ) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsFreshnessForecastComponent]',
@@ -88,11 +94,15 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes.timelineNotes && Object.keys(changes).length === 1) {
+      this.chartHost.updateTimelineNotes(this.timelineNotes);
+      return;
+    }
     if (!this.chartDiv?.nativeElement) {
       this.updateHeaderAndErrorState();
       return;
     }
-    if (changes.darkTheme || changes.isLoading || changes.forecast || changes.status || changes.showMobileAxisPointerHandle) {
+    if (changes.darkTheme || changes.isLoading || changes.forecast || changes.status || changes.showMobileAxisPointerHandle || changes.timelineNotes) {
       void this.refreshChart();
     }
   }
@@ -113,6 +123,7 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
     }
 
     this.chartHost.hideTooltip();
+    this.chartHost.setTimelineNotes(this.timelineNotes, { offsetSeconds: ms => -new Date(ms).getTimezoneOffset() * 60 });
     this.chartHost.setOption(this.buildOption(points), ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
   }
@@ -180,6 +191,7 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
       ...points.map(point => point.formSameDay),
       ...points.map(point => point.formSameDay ?? point.formPriorDay),
     ]);
+    const includesZero = valueAxis.min <= 0 && valueAxis.max >= 0;
 
     return {
       animation: false,
@@ -189,11 +201,14 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
       },
       grid: {
+        // The forecast plots CTL, ATL, and Form on one shared numeric scale.
+        // Let ECharts reserve only the label space it needs, rather than
+        // taking a fixed wide gutter from already-compact tiles.
         left: 6,
         right: 6,
         top: 8,
-        bottom: 22,
-        containLabel: false,
+        ...dashboardChartFrameGrid(this.chartDiv.nativeElement),
+        ...trainingStateChartGrid(),
       },
       tooltip: {
         show: true,
@@ -218,13 +233,13 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
         axisTick: { show: false },
         splitLine: { show: false },
         axisLabel: {
-          color: style.textColor,
-          fontSize: style.axisFontSize,
+          color: style.secondaryTextColor,
           hideOverlap: true,
-          formatter: (value: number) => new Date(value).toLocaleDateString(undefined, {
+          ...TRAINING_STATE_AXIS_LABEL,
+          formatter: (value: number) => getDateTimeFormatter(undefined, {
             month: 'short',
             day: 'numeric',
-          }),
+          }).format(new Date(value)),
         },
       },
       yAxis: {
@@ -239,7 +254,11 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
           lineStyle: { color: style.gridColor },
         },
         axisLabel: {
-          show: false,
+          show: true,
+          color: style.textColor,
+          fontSize: style.axisFontSize,
+          hideOverlap: true,
+          formatter: (value: number) => this.formatValue(value),
         },
       },
       series: [
@@ -275,6 +294,19 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
             width: 1.2,
             color: '#4caf50',
           },
+          markLine: includesZero
+            ? {
+              symbol: 'none',
+              silent: true,
+              label: { show: false },
+              lineStyle: {
+                width: 1,
+                type: 'dashed',
+                color: style.axisColor,
+              },
+              data: [{ yAxis: 0 }],
+            }
+            : undefined,
         },
         {
           name: 'Form (forecast)',
@@ -310,11 +342,11 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
       && Number.isFinite(previousFormValue)
     ) ? Number(formValue) - Number(previousFormValue) : null;
     const status = resolveDashboardFormStatus(formValue);
-    const dateLabel = new Date(point.dayMs).toLocaleDateString(undefined, {
+    const dateLabel = getDateTimeFormatter(undefined, {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
-    });
+    }).format(new Date(point.dayMs));
     const firstForecastIndex = points.findIndex(entry => entry.isForecast);
     const forecastOffset = point.isForecast && firstForecastIndex >= 0
       ? (pointIndex - firstForecastIndex + 1)

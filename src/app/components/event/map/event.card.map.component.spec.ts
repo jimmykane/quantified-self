@@ -481,9 +481,27 @@ describe('EventCardMapComponent', () => {
     expect(component.activitiesMapData[0].laps).toEqual([]);
   });
 
+  it('does not clamp a cross-leg endpoint onto the earlier leg final GPS position', () => {
+    const origin = Date.parse('2025-01-01T10:00:00Z');
+    const lap = { type: LapTypes.Manual, startDate: new Date(origin), endDate: new Date(origin + 180_000) };
+    component.selectedActivities = [0, 120].map(offset => ({
+      startDate: new Date(origin + offset * 1000), endDate: new Date(origin + (offset + 120) * 1000),
+      hasPositionData: () => true,
+      getPositionData: () => [{ latitudeDegrees: 40.1 + offset, longitudeDegrees: 22.1 }],
+      getSquashedPositionData: () => [{ latitudeDegrees: 40.1 + offset, longitudeDegrees: 22.1 }],
+      generateTimeStream: () => ({ getData: () => [0] }),
+      getLaps: () => [lap], getAllEvents: () => [],
+    })) as never;
+    component.lapTypes = [LapTypes.Manual]; component.showLaps = true;
+    (component as any).processSequence = 1;
+    (component as any).mapActivities(1, false);
+    expect(component.activitiesMapData.map(a => a.laps.length)).toEqual([0, 1]);
+  });
+
   it('should place map laps using lap end index when lap dates collapse to activity start', () => {
     component.selectedActivities = [{
       startDate: new Date('2025-01-01T10:00:00Z'),
+      endDate: new Date('2025-01-01T10:01:30Z'),
       hasPositionData: () => true,
       getPositionData: () => [
         { latitudeDegrees: 40.1, longitudeDegrees: 22.1 },

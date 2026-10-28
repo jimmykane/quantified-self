@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import type * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
+import { DeferredQueueReleaseIncompleteError } from './queue/pending-disconnect-release';
+import { RouteRestoreQueueReleaseIncompleteError } from './queue/sync-route-eligibility';
+import { ServiceRecoveryDeferredError } from './shared/service-recovery-deferral';
 
 const hoisted = vi.hoisted(() => ({
+  historyCreate: vi.fn(),
   metaSet: vi.fn().mockResolvedValue(undefined),
   metaGet: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }),
   refreshTokenRef: { path: 'wahooAPIAccessTokens/user-1/tokens/provider-1' },
@@ -53,12 +58,14 @@ vi.mock('./activity-sync/route-cleanup', () => ({
   restoreActivitySyncRoutesForPendingDisconnectClear: hoisted.restoreActivitySyncRoutesForPendingDisconnectClear,
 }));
 
-vi.mock('./queue/pending-disconnect-release', () => ({
+vi.mock('./queue/pending-disconnect-release', async importOriginal => ({
+  ...await importOriginal<typeof import('./queue/pending-disconnect-release')>(),
   releaseQueueItemsDeferredForPendingDisconnect: hoisted.releaseQueueItemsDeferredForPendingDisconnect,
   releaseQueueItemsDeferredForReconnectRequired: hoisted.releaseQueueItemsDeferredForReconnectRequired,
 }));
 
-vi.mock('./queue/sync-route-eligibility', () => ({
+vi.mock('./queue/sync-route-eligibility', async importOriginal => ({
+  ...await importOriginal<typeof import('./queue/sync-route-eligibility')>(),
   releaseQueueItemsDeferredForRouteRestore: hoisted.releaseQueueItemsDeferredForRouteRestore,
 }));
 
@@ -67,6 +74,8 @@ vi.mock('./health/writer', () => ({
 }));
 
 vi.mock('./service-token-store', () => ({
+  OAUTH_FLOW_CREATED_AT_FIELD: 'oauthFlowCreatedAt',
+  OAUTH_FLOW_EXPIRES_AT_FIELD: 'oauthFlowExpiresAt',
   OAUTH_FLOW_GENERATION_FIELD: 'oauthFlowGeneration',
   SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD: 'disconnectOperationGeneration',
   getServiceDisconnectOperationGeneration: (data: Record<string, unknown> | undefined) => {
@@ -88,7 +97,8 @@ vi.mock('firebase-admin', () => {
         collection: vi.fn(() => ({
           doc: vi.fn(() => ({
             get: hoisted.metaGet,
-            set: hoisted.metaSet,
+            create: hoisted.historyCreate,
+      set: hoisted.metaSet,
           })),
         })),
       })),
@@ -154,9 +164,11 @@ describe('service-connection-meta', () => {
       }
     });
     hoisted.runTransaction.mockImplementation(async (runner: (transaction: {
+      create: typeof hoisted.historyCreate;
       set: typeof hoisted.metaSet;
       get: (target: unknown) => unknown;
     }) => unknown) => runner({
+      create: hoisted.historyCreate,
       set: hoisted.metaSet,
       get: (target: unknown) => {
         if (target === hoisted.refreshTokenRef) return hoisted.refreshTokenGet();
@@ -294,6 +306,21 @@ describe('service-connection-meta', () => {
     expect(hoisted.metaData).not.toHaveProperty('healthLifecycleProjectionPending');
   });
 
+  it('creates accepted history in the connected-state transaction and omits jobs for unchecked clients', async () => {
+    const context = { requested: true, rangePreset: '2_years' as const, runId: '11111111-1111-4111-8111-111111111111', tokenPath: 'private/owner/tokens/account',
+      rootPath: 'private/owner', providerUserId: 'account', credentialGeneration: 'credential' };
+    await expect(markServiceConnected('user-1', ServiceNames.WahooAPI, 'account', undefined, undefined, context)).resolves.toBe(true);
+    expect(hoisted.historyCreate).toHaveBeenCalledTimes(1);
+    const run = hoisted.historyCreate.mock.calls[0][1];
+    expect(run).toMatchObject({ userID: 'user-1', tokenPath: context.tokenPath, credentialGeneration: 'credential', rangePreset: '2_years', processed: false });
+    expect(hoisted.metaSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      connectionState: 'connected', connectionHistoryImport: expect.objectContaining({ runId: run.id }),
+    }), { merge: true });
+    hoisted.historyCreate.mockClear();
+    await markServiceConnected('user-1', ServiceNames.WahooAPI, 'account', undefined, undefined, { ...context, requested: false });
+    expect(hoisted.historyCreate).not.toHaveBeenCalled();
+  });
+
   it('does not create Health lifecycle state for providers outside this integration', async () => {
     await expect(markServiceConnected('user-1', ServiceNames.WahooAPI)).resolves.toBe(true);
 
@@ -339,8 +366,11 @@ describe('service-connection-meta', () => {
 
   it('mirrors Suunto connection and terminal-auth transitions to Health state', async () => {
     const healthUserID = 'suunto-health-user';
+    hoisted.metaData = { connectionState: 'connected', connectionStateGeneration: 'previous-connection', providerUserId: 'previous-suunto-account' };
 
-    await expect(markServiceConnected(healthUserID, ServiceNames.SuuntoApp)).resolves.toBe(true);
+    await expect(markServiceConnected(healthUserID, ServiceNames.SuuntoApp, 'current-suunto-account')).resolves.toBe(true);
+    expect(hoisted.metaData.providerUserId).toBe('current-suunto-account');
+    expect(hoisted.metaData.connectionStateGeneration).not.toBe('previous-connection');
     expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
       healthUserID,
       'SuuntoApp',
@@ -598,9 +628,11 @@ describe('service-connection-meta', () => {
   it('does not let terminal cleanup overwrite a fresh OAuth credential', async () => {
     const tokenCollection = { path: 'wahooAPIAccessTokens/user-1/tokens' };
     hoisted.runTransaction.mockImplementationOnce(async (runner: (transaction: {
+      create: typeof hoisted.historyCreate;
       set: typeof hoisted.metaSet;
       get: (target: unknown) => unknown;
     }) => unknown) => runner({
+      create: hoisted.historyCreate,
       set: hoisted.metaSet,
       get: (target: unknown) => target === tokenCollection
         ? Promise.resolve({ empty: false })
@@ -668,9 +700,11 @@ describe('service-connection-meta', () => {
   it('does not let fallback cleanup cross a newer OAuth root generation', async () => {
     const tokenRoot = { path: 'wahooAPIAccessTokens/user-1' };
     hoisted.runTransaction.mockImplementationOnce(async (runner: (transaction: {
+      create: typeof hoisted.historyCreate;
       set: typeof hoisted.metaSet;
       get: (target: unknown) => unknown;
     }) => unknown) => runner({
+      create: hoisted.historyCreate,
       set: hoisted.metaSet,
       get: (target: unknown) => target === tokenRoot
         ? Promise.resolve({
@@ -766,16 +800,19 @@ describe('service-connection-meta', () => {
       }),
     });
 
-    await expect(retryPendingServiceRouteRestore(
+    const work = retryPendingServiceRouteRestore(
       'user-1',
       ServiceNames.WahooAPI,
-    )).rejects.toThrow('disconnect is still active');
+    );
+    await expect(work).rejects.toThrow('disconnect is still active');
+    await expect(work).rejects.toBeInstanceOf(ServiceRecoveryDeferredError);
 
     expect(hoisted.restoreActivitySyncRoutesForPendingDisconnectClear).not.toHaveBeenCalled();
     expect(hoisted.releaseQueueItemsDeferredForRouteRestore).not.toHaveBeenCalled();
   });
 
-  it('does not let a stale OAuth callback mark an older credential connected', async () => {
+  it.each([ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])('does not let a stale %s OAuth callback overwrite the current account', async service => {
+    hoisted.metaData = { connectionState: 'connected', connectionStateGeneration: 'current-connection', providerUserId: 'current-account' };
     hoisted.refreshTokenGet.mockResolvedValueOnce({
       exists: true,
       data: () => ({
@@ -784,13 +821,13 @@ describe('service-connection-meta', () => {
         expiresAt: 2_000,
         dateCreated: 200,
         dateRefreshed: 200,
-        tokenCredentialGeneration: 'new-generation',
+        activeOAuthCredentialGeneration: 'new-generation',
       }),
     });
 
     await expect(markServiceConnected(
       'user-1',
-      ServiceNames.WahooAPI,
+      service,
       'provider-1',
       {
         documentRef: hoisted.refreshTokenRef as unknown as admin.firestore.DocumentReference,
@@ -800,6 +837,7 @@ describe('service-connection-meta', () => {
     )).resolves.toBe(false);
 
     expect(hoisted.metaSet).not.toHaveBeenCalled();
+    expect(hoisted.metaData).toEqual({ connectionState: 'connected', connectionStateGeneration: 'current-connection', providerUserId: 'current-account' });
     expect(hoisted.releaseQueueItemsDeferredForReconnectRequired).not.toHaveBeenCalled();
   });
 
@@ -852,9 +890,46 @@ describe('service-connection-meta', () => {
 
     expect(hoisted.metaSet).toHaveBeenCalledWith(
       expect.objectContaining({ path: hoisted.tokenRootRef.path }),
-      { oauthFlowGeneration: 'delete-sentinel' },
+      {
+        oauthFlowGeneration: 'delete-sentinel',
+        oauthFlowCreatedAt: 'delete-sentinel',
+        oauthImportRecentHistory: 'delete-sentinel',
+        oauthImportHistoryRange: 'delete-sentinel',
+        oauthImportRouteHistory: 'delete-sentinel',
+        oauthFlowExpiresAt: 'delete-sentinel',
+      },
       { merge: true },
     );
+  });
+
+  it('does not promote an OAuth credential while its root remains disconnect pending', async () => {
+    hoisted.tokenRootGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        activeOAuthCredentialGeneration: 'credential-generation',
+        oauthFlowGeneration: 'oauth-flow-generation',
+        disconnectState: 'disconnect_pending',
+        disconnectGeneration: 'disconnect-generation',
+      }),
+    });
+
+    await expect(markServiceConnected(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      null,
+      {
+        documentRef: hoisted.tokenRootRef as unknown as admin.firestore.DocumentReference,
+        fieldName: 'activeOAuthCredentialGeneration',
+        expectedGeneration: 'credential-generation',
+      },
+      {
+        documentRef: hoisted.tokenRootRef as unknown as admin.firestore.DocumentReference,
+        fieldName: 'oauthFlowGeneration',
+        expectedGeneration: 'oauth-flow-generation',
+      },
+    )).resolves.toBe(false);
+
+    expect(hoisted.metaSet).not.toHaveBeenCalled();
   });
 
   it('keeps the first opaque Wahoo refresh failure retryable without disabling routes', async () => {
@@ -986,6 +1061,110 @@ describe('service-connection-meta', () => {
       wahooReconnectReleasePending: true,
       wahooReconnectReleaseAttemptCount: 1,
     }), { merge: true });
+    expect(logger.info).toHaveBeenCalledWith('[CleanupHealth]', expect.objectContaining({
+      flow: 'recovery', provider: 'WahooAPI', lane: 'wahoo_release', outcome: 'retry',
+    }));
+  });
+
+  it('does not count bounded queue-release pagination as a recovery failure', async () => {
+    hoisted.releaseQueueItemsDeferredForReconnectRequired.mockRejectedValueOnce(
+      new DeferredQueueReleaseIncompleteError(ServiceNames.WahooAPI, 'reconnect_required'),
+    );
+    await expect(markServiceConnected('user-1', ServiceNames.WahooAPI)).resolves.toBe(true);
+    expect(logger.info).not.toHaveBeenCalledWith('[CleanupHealth]', expect.objectContaining({ outcome: 'retry' }));
+  });
+
+  it('does not count bounded route restoration as a Wahoo recovery failure', async () => {
+    hoisted.releaseQueueItemsDeferredForRouteRestore.mockRejectedValueOnce(
+      new RouteRestoreQueueReleaseIncompleteError(ServiceNames.WahooAPI),
+    );
+    await expect(markServiceConnected('user-1', ServiceNames.WahooAPI)).resolves.toBe(true);
+    expect(hoisted.metaSet).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
+      wahooReconnectReleasePending: true, wahooReconnectReleaseAttemptCount: 1,
+    }), { merge: true });
+    expect(logger.info).not.toHaveBeenCalledWith('[CleanupHealth]', expect.objectContaining({ outcome: 'retry' }));
+  });
+
+  it('commits the Wahoo repair claim with the exact connected generation before route or queue work', async () => {
+    await expect(markServiceConnected('user-1', ServiceNames.WahooAPI)).resolves.toBe(true);
+
+    const connectedWrite = hoisted.metaSet.mock.calls[0][1] as Record<string, unknown>;
+    expect(connectedWrite).toEqual(expect.objectContaining({
+      connectionState: 'connected',
+      routeRestoreConnectionGeneration: connectedWrite.connectionStateGeneration,
+      wahooReconnectReleasePending: true,
+      wahooReconnectReleaseConnectionGeneration: connectedWrite.connectionStateGeneration,
+      wahooReconnectReleaseLastAttemptAt: connectedWrite.routeRestoreLastAttemptAt,
+      wahooReconnectReleaseAttemptCount: 0,
+    }));
+    expect(hoisted.metaSet.mock.invocationCallOrder[0])
+      .toBeLessThan(hoisted.restoreActivitySyncRoutesForPendingDisconnectClear.mock.invocationCallOrder[0]);
+    expect(hoisted.metaSet.mock.invocationCallOrder[0])
+      .toBeLessThan(hoisted.releaseQueueItemsDeferredForReconnectRequired.mock.invocationCallOrder[0]);
+  });
+
+  it('cleans legacy Wahoo recovery fields for another service without running Wahoo release', async () => {
+    hoisted.metaData = {
+      wahooRefreshFailureCount: 2,
+      wahooRefreshFailureLastAt: 123,
+      wahooRefreshRetryAt: 456,
+      wahooReconnectReleasePending: true,
+      wahooReconnectReleaseLastAttemptAt: 123,
+      wahooReconnectReleaseAttemptCount: 2,
+      wahooReconnectReleaseConnectionGeneration: 'legacy-generation',
+    };
+    await expect(markServiceConnected('user-1', ServiceNames.SuuntoApp)).resolves.toBe(true);
+
+    expect(Object.keys(hoisted.metaData).filter(key => key.startsWith('wahoo'))).toEqual([]);
+    expect(hoisted.releaseQueueItemsDeferredForReconnectRequired).not.toHaveBeenCalled();
+    expect(hoisted.restoreActivitySyncRoutesForPendingDisconnectClear).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not start Wahoo restoration or release when the connected transaction is rejected', async () => {
+    hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({
+      userExists: false,
+      deletionInProgress: true,
+      shouldSkip: true,
+    });
+    await expect(markServiceConnected('user-1', ServiceNames.WahooAPI)).resolves.toBe(false);
+
+    expect(hoisted.metaSet).not.toHaveBeenCalled();
+    expect(hoisted.restoreActivitySyncRoutesForPendingDisconnectClear).not.toHaveBeenCalled();
+    expect(hoisted.releaseQueueItemsDeferredForReconnectRequired).not.toHaveBeenCalled();
+  });
+
+  it('retains an idempotent Wahoo repair when marker cleanup fails after successful release', async () => {
+    const persistMeta = hoisted.metaSet.getMockImplementation();
+    let failMarkerClear = true;
+    hoisted.metaSet.mockImplementation(async (ref: unknown, data: Record<string, unknown>) => {
+      if (failMarkerClear && data.wahooReconnectReleasePending === 'delete-sentinel') {
+        failMarkerClear = false;
+        throw new Error('marker cleanup write failed');
+      }
+      return persistMeta?.(ref, data);
+    });
+
+    await expect(markServiceConnected('user-1', ServiceNames.WahooAPI)).resolves.toBe(true);
+    expect(hoisted.metaData.wahooReconnectReleasePending).toBe(true);
+    expect(hoisted.releaseQueueItemsDeferredForReconnectRequired).toHaveBeenCalledTimes(1);
+
+    await expect(retryWahooReconnectQueueRelease('user-1')).resolves.toBe(true);
+    expect(hoisted.releaseQueueItemsDeferredForReconnectRequired).toHaveBeenCalledTimes(2);
+    expect(hoisted.metaData).not.toHaveProperty('wahooReconnectReleasePending');
+  });
+
+  it('does not release a Wahoo repair claim from a superseded connection generation', async () => {
+    hoisted.metaData = {
+      connectionState: 'connected',
+      connectionStateGeneration: 'new-generation',
+      wahooReconnectReleasePending: true,
+      wahooReconnectReleaseConnectionGeneration: 'old-generation',
+    };
+
+    await expect(retryWahooReconnectQueueRelease('user-1')).resolves.toBe(false);
+    expect(hoisted.metaSet).not.toHaveBeenCalled();
+    expect(hoisted.restoreActivitySyncRoutesForPendingDisconnectClear).not.toHaveBeenCalled();
+    expect(hoisted.releaseQueueItemsDeferredForReconnectRequired).not.toHaveBeenCalled();
   });
 
   it('continues a Wahoo reconnect queue release after routes were already restored', async () => {
@@ -1210,6 +1389,74 @@ describe('service-connection-meta', () => {
       pendingDisconnectQueueReleaseGeneration: 'pending-generation-1',
       pendingDisconnectQueueReleaseAttemptCount: 0,
     }));
+  });
+
+  it.each([ServiceNames.WahooAPI, ServiceNames.SuuntoApp])(
+    'clears Wahoo recovery fields atomically with guarded connection cleanup for %s',
+    async serviceName => {
+      hoisted.metaData = {
+        connectionState: 'disconnect_pending',
+        connectionStateGeneration: 'disconnect-generation-1',
+        disconnectGeneration: 'disconnect-generation-1',
+        wahooRefreshFailureCount: 3,
+        wahooRefreshFailureLastAt: 123,
+        wahooRefreshRetryAt: 456,
+        wahooReconnectReleasePending: true,
+        wahooReconnectReleaseLastAttemptAt: 123,
+        wahooReconnectReleaseAttemptCount: 2,
+        wahooReconnectReleaseConnectionGeneration: 'old-connection-generation',
+        pendingDisconnectQueueReleasePending: true,
+        pendingDisconnectQueueReleaseGeneration: 'disconnect-generation-1',
+      };
+
+      await expect(clearServiceConnectionState('user-1', serviceName, {
+        expectedPendingDisconnectGeneration: 'disconnect-generation-1',
+        preservePendingDisconnectQueueReleaseRepair: true,
+      })).resolves.toBe(true);
+
+      expect(hoisted.runTransaction).toHaveBeenCalledTimes(1);
+      expect(hoisted.metaSet).toHaveBeenCalledTimes(1);
+      expect(hoisted.metaSet).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
+        connectionState: 'delete-sentinel',
+        connectionStateGeneration: expect.any(String),
+        wahooRefreshFailureCount: 'delete-sentinel',
+        wahooRefreshFailureLastAt: 'delete-sentinel',
+        wahooRefreshRetryAt: 'delete-sentinel',
+        wahooReconnectReleasePending: 'delete-sentinel',
+        wahooReconnectReleaseLastAttemptAt: 'delete-sentinel',
+        wahooReconnectReleaseAttemptCount: 'delete-sentinel',
+        wahooReconnectReleaseConnectionGeneration: 'delete-sentinel',
+      }), { merge: true });
+      expect(Object.keys(hoisted.metaData).filter(key => key.startsWith('wahoo'))).toEqual([]);
+      expect(hoisted.metaData).toEqual(expect.objectContaining({
+        pendingDisconnectQueueReleasePending: true,
+        pendingDisconnectQueueReleaseGeneration: 'disconnect-generation-1',
+      }));
+      expect(hoisted.releaseQueueItemsDeferredForReconnectRequired).not.toHaveBeenCalled();
+    },
+  );
+
+  it('preserves Wahoo recovery when stale disconnect cleanup loses to a newer connection', async () => {
+    const currentMeta = {
+      connectionState: 'connected',
+      connectionStateGeneration: 'new-connection-generation',
+      wahooRefreshFailureCount: 1,
+      wahooRefreshFailureLastAt: 123,
+      wahooRefreshRetryAt: 456,
+      wahooReconnectReleasePending: true,
+      wahooReconnectReleaseLastAttemptAt: 123,
+      wahooReconnectReleaseAttemptCount: 2,
+      wahooReconnectReleaseConnectionGeneration: 'new-connection-generation',
+    };
+    hoisted.metaData = { ...currentMeta };
+
+    await expect(clearServiceConnectionState('user-1', ServiceNames.WahooAPI, {
+      expectedPendingDisconnectGeneration: 'old-disconnect-generation',
+    })).resolves.toBe(false);
+
+    expect(hoisted.metaSet).not.toHaveBeenCalled();
+    expect(hoisted.metaData).toEqual(currentMeta);
+    expect(hoisted.releaseQueueItemsDeferredForReconnectRequired).not.toHaveBeenCalled();
   });
 
   it('accepts a missing token root only when the guarded credential generation is null', async () => {

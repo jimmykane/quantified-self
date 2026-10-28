@@ -1,0 +1,190 @@
+import { describe, expect, it, vi } from 'vitest';
+import { TRAINING_PREVIEW_TOOLS } from './training-plans.schemas';
+import {
+  buildTrainingPreviewLoopGuardBucketId,
+  consumeInvalidTrainingPreviewAttempt,
+  invalidTrainingPreviewTool,
+  type TrainingPreviewLoopGuardDependencies,
+} from './training-preview-loop-guard';
+
+const validStructure = {
+  version: 1,
+  sport: 'Running',
+  nodes: [{
+    kind: 'step', id: 'easy', purpose: 'work',
+    ending: { kind: 'time', seconds: 1800 }, targets: [],
+  }],
+};
+
+describe('Training preview loop guard', () => {
+  it.each(TRAINING_PREVIEW_TOOLS)('guards malformed %s through its authoritative advertised schema', toolName => {
+    const invalid = invalidTrainingPreviewTool({ method: 'tools/call', params: { name: toolName, arguments: {} } });
+    expect(invalid).toMatchObject({ toolName, validationIssues: expect.any(Array) });
+    expect(invalid!.validationIssues.length).toBeGreaterThan(0);
+  });
+  it('accepts complete bulk recipes without treating early Lap as a malformed attempt', () => {
+    const change = { kind: 'create-workout', localKey: 'run', plan: null, localDate: '2026-10-12', title: 'Private title',
+      structure: { ...validStructure, nodes: [{ ...validStructure.nodes[0], ending: { kind: 'time', seconds: 1200, allowEarlyLap: true } }] } };
+    const call = { method: 'tools/call', params: { name: 'preview_planned_workout_v3_changes',
+      arguments: { expectedScheduleRevision: 1, changes: [change] } } };
+    expect(invalidTrainingPreviewTool(call)).toBeNull();
+    const invalid = invalidTrainingPreviewTool({ ...call, params: { ...call.params, arguments: {
+      ...call.params.arguments, changes: [{ ...change, structure: { ...change.structure, remoteId: 'private-artifact' } }],
+    } } });
+    expect(invalid).toMatchObject({ toolName: 'preview_planned_workout_v3_changes' });
+    expect(JSON.stringify(invalid)).not.toMatch(/Private title|private-artifact/);
+  });
+  it('guards missing deletion choices without logging authored references', () => {
+    const call = { method: 'tools/call', params: { name: 'preview_training_deletion',
+      arguments: { expectedScheduleRevision: 1, change: { kind: 'delete-workout', workout: { ref: 'PRIVATE' } } } } };
+    expect(invalidTrainingPreviewTool(call)).toMatchObject({ toolName: 'preview_training_deletion' });
+    expect(JSON.stringify(invalidTrainingPreviewTool(call))).not.toContain('PRIVATE');
+    expect(invalidTrainingPreviewTool({ ...call, params: { ...call.params, arguments: {
+      ...call.params.arguments, change: { ...call.params.arguments.change, removePastProviderCopies: false },
+    } } })).toBeNull();
+  });
+  it('recognizes only malformed Training preview calls', () => {
+    const invalidBatch = invalidTrainingPreviewTool({ method: 'tools/call', params: {
+      name: 'preview_training_changes',
+      arguments: { expectedScheduleRevision: 1, changes: [{ kind: 'invented' }] },
+    } });
+    expect(invalidBatch).toMatchObject({
+      toolName: 'preview_training_changes',
+      validationIssues: expect.arrayContaining([
+        expect.objectContaining({ path: ['changes', 0, 'kind'] }),
+      ]),
+    });
+    expect(JSON.stringify(invalidBatch)).not.toContain('invented');
+    expect(invalidTrainingPreviewTool({ method: 'tools/call', params: {
+      name: 'preview_create_planned_workout',
+      arguments: { expectedScheduleRevision: 1 },
+    } })).toMatchObject({
+      toolName: 'preview_create_planned_workout',
+      validationIssues: expect.any(Array),
+    });
+    expect(invalidTrainingPreviewTool({ method: 'tools/call', params: {
+      name: 'preview_create_planned_workout',
+      arguments: {
+        expectedScheduleRevision: 1,
+        localDate: '2026-09-19',
+        title: 'Easy run',
+        structure: validStructure,
+        delivery: { providers: ['garmin'], timeZone: 'Europe/Helsinki' },
+      },
+    } })).toBeNull();
+    expect(invalidTrainingPreviewTool({ method: 'tools/call', params: {
+      name: 'preview_planned_workout_v2_change',
+      arguments: { expectedScheduleRevision: 1, change: {
+        kind: 'create-workout', localKey: 'pool', localDate: '2026-09-19', title: 'Pool swim',
+        structure: { ...validStructure, sport: 'Swimming', poolLength: {
+          meters: 25, presentation: 'meters', unexpected: 'private value',
+        } },
+      } },
+    } })).toMatchObject({ toolName: 'preview_planned_workout_v2_change', validationIssues: expect.any(Array) });
+    expect(invalidTrainingPreviewTool({ method: 'tools/call', params: {
+      name: 'preview_planned_workout_v2_change',
+      arguments: { expectedScheduleRevision: 1, change: {
+        kind: 'create-workout', localKey: 'pool', localDate: '2026-09-19', title: 'Pool swim',
+        structure: { ...validStructure, sport: 'Swimming', poolLength: { meters: 25, presentation: 'meters' } },
+      } },
+    } })).toBeNull();
+    expect(invalidTrainingPreviewTool({ method: 'tools/call', params: {
+      name: 'preview_saved_workout_change',
+      arguments: { expectedScheduleRevision: 1, expectedLibraryRevision: 0,
+        change: { kind: 'create', title: 'Easy run', structure: validStructure, uid: 'attacker' } },
+    } })).toMatchObject({ toolName: 'preview_saved_workout_change', validationIssues: expect.any(Array) });
+    expect(invalidTrainingPreviewTool({ method: 'tools/call', params: {
+      name: 'preview_saved_workout_change',
+      arguments: { expectedScheduleRevision: 1, expectedLibraryRevision: 0,
+        change: { kind: 'create', title: 'Easy run', structure: validStructure } },
+    } })).toBeNull();
+    expect(invalidTrainingPreviewTool({ method: 'tools/call', params: {
+      name: 'query_planned_workouts', arguments: {},
+    } })).toBeNull();
+  });
+
+  it('uses opaque stable bucket IDs without exposing owner or connection values', () => {
+    const id = buildTrainingPreviewLoopGuardBucketId(
+      'connection', 'private-user', 'private-connection',
+    );
+    expect(id).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(id).not.toContain('private');
+    expect(id).toBe(buildTrainingPreviewLoopGuardBucketId(
+      'connection', 'private-user', 'private-connection',
+    ));
+  });
+
+  it('permits three malformed attempts and rejects the fourth in one minute', async () => {
+    const documents = new Map<string, Record<string, unknown>>();
+    const runTransaction: TrainingPreviewLoopGuardDependencies['runTransaction'] = async operation => operation({
+      get: async (reference: string) => ({
+        exists: documents.has(reference),
+        data: () => documents.get(reference),
+      }),
+      set: (reference: string, value: Record<string, unknown>) => documents.set(reference, value),
+      assertUserAvailable: vi.fn().mockResolvedValue(undefined),
+    });
+    const dependencies = {
+      now: () => 125_000,
+      document: (id: string) => id,
+      runTransaction,
+      timestampFromMillis: (value: number) => value,
+    };
+
+    await consumeInvalidTrainingPreviewAttempt('user', 'connection', dependencies);
+    await consumeInvalidTrainingPreviewAttempt('user', 'connection', dependencies);
+    await consumeInvalidTrainingPreviewAttempt('user', 'connection', dependencies);
+    await expect(consumeInvalidTrainingPreviewAttempt('user', 'connection', dependencies))
+      .rejects.toMatchObject({
+        name: 'McpTrainingPreviewLoopGuardError',
+        blockedForSeconds: 600,
+        shouldLog: true,
+      });
+    expect([...documents.values()]).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        uid: 'user',
+        connectionId: 'connection',
+        rateLimitType: 'training_preview_validation',
+        count: 3,
+        blockedUntilMs: 725_000,
+      }),
+      expect.objectContaining({
+        uid: 'user',
+        rateLimitType: 'training_preview_validation',
+        count: 4,
+        blockedUntilMs: 0,
+      }),
+    ]));
+
+    await expect(consumeInvalidTrainingPreviewAttempt('user', 'connection', {
+      ...dependencies,
+      now: () => 130_000,
+    })).rejects.toMatchObject({ blockedForSeconds: 595, shouldLog: false });
+  });
+
+  it('logs an owner-wide cooldown once when failures are spread across connections', async () => {
+    const documents = new Map<string, Record<string, unknown>>();
+    const runTransaction: TrainingPreviewLoopGuardDependencies['runTransaction'] = async operation => operation({
+      get: async (reference: string) => ({
+        exists: documents.has(reference),
+        data: () => documents.get(reference),
+      }),
+      set: (reference: string, value: Record<string, unknown>) => documents.set(reference, value),
+      assertUserAvailable: vi.fn().mockResolvedValue(undefined),
+    });
+    const dependencies = {
+      now: () => 250_000,
+      document: (id: string) => id,
+      runTransaction,
+      timestampFromMillis: (value: number) => value,
+    };
+
+    for (const connectionId of ['a', 'b', 'c', 'd', 'e', 'f']) {
+      await consumeInvalidTrainingPreviewAttempt('user', connectionId, dependencies);
+    }
+    await expect(consumeInvalidTrainingPreviewAttempt('user', 'g', dependencies))
+      .rejects.toMatchObject({ blockedForSeconds: 600, shouldLog: true });
+    await expect(consumeInvalidTrainingPreviewAttempt('user', 'h', dependencies))
+      .rejects.toMatchObject({ blockedForSeconds: 600, shouldLog: false });
+  });
+});

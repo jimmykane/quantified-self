@@ -1,5 +1,12 @@
-import { DataDuration, DataRecoveryTime, type EventInterface } from '@sports-alliance/sports-lib';
+import type { EventRead } from '@shared/event-read';
+import {
+  DataDuration,
+  DataRecoveryTime,
+  type UserUnitSettingsInterface,
+} from '@sports-alliance/sports-lib';
 import { DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS } from '@shared/derived-metrics';
+import { formatUnitAwareDataValue } from '@shared/unit-aware-display';
+import { getDateTimeFormatter } from './date-time-format.helper';
 
 export const RECOVERY_NOW_REFRESH_INTERVAL_MS = 60 * 1000;
 
@@ -15,6 +22,25 @@ export interface DashboardRecoveryNowContext {
   latestWorkoutSeconds?: number | null;
   latestWorkoutEndTimeMs?: number | null;
   maxSupportedRecoverySeconds?: number;
+}
+
+export interface DashboardRecoveryPresentation {
+  activeTotalSeconds: number;
+  activeTotalText: string;
+  remainingSeconds: number;
+  remainingText: string;
+  remainingPercent: number;
+  finishTimeMs: number;
+  finishDateText: string;
+  finishClockText: string;
+  finishText: string;
+}
+
+export interface DashboardRecoveryPresentationOptions {
+  locale?: string;
+  nowMs?: number;
+  timeZone?: string;
+  unitSettings?: UserUnitSettingsInterface | null;
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -42,16 +68,16 @@ function toSupportedRecoverySeconds(value: unknown): number | null {
   return numericValue;
 }
 
-function resolveEventStatNumber(event: EventInterface, dataType: string): number | null {
+function resolveEventStatNumber(event: EventRead, dataType: string): number | null {
   const stat = event?.getStat?.(dataType) as { getValue?: () => unknown } | null | undefined;
   return toFiniteNumber(stat?.getValue?.());
 }
 
-function resolveRecoveryTotalSeconds(event: EventInterface): number | null {
+function resolveRecoveryTotalSeconds(event: EventRead): number | null {
   return toSupportedRecoverySeconds(resolveEventStatNumber(event, DataRecoveryTime.type));
 }
 
-function resolveEventStartTimeMs(event: EventInterface): number | null {
+function resolveEventStartTimeMs(event: EventRead): number | null {
   const startDate = event?.startDate;
   if (!(startDate instanceof Date)) {
     return null;
@@ -61,7 +87,7 @@ function resolveEventStartTimeMs(event: EventInterface): number | null {
   return Number.isFinite(startTimeMs) ? startTimeMs : null;
 }
 
-export function resolveRecoveryEventEndTimeMs(event: EventInterface): number | null {
+export function resolveRecoveryEventEndTimeMs(event: EventRead): number | null {
   const endDate = event?.endDate;
   if (endDate instanceof Date) {
     const endTimeMs = endDate.getTime();
@@ -91,7 +117,7 @@ export function resolveRecoveryEventEndTimeMs(event: EventInterface): number | n
 }
 
 export function resolveAggregatedRecoveryNowContext(
-  events: readonly EventInterface[] | null | undefined,
+  events: readonly EventRead[] | null | undefined,
 ): DashboardRecoveryNowContext | null {
   const safeEvents = Array.isArray(events) ? events : [];
   const segments: DashboardRecoveryNowSegment[] = [];
@@ -129,7 +155,7 @@ export function resolveAggregatedRecoveryNowContext(
  * @deprecated Use resolveAggregatedRecoveryNowContext instead.
  */
 export function resolveLatestRecoveryNowContext(
-  events: readonly EventInterface[] | null | undefined,
+  events: readonly EventRead[] | null | undefined,
 ): DashboardRecoveryNowContext | null {
   return resolveAggregatedRecoveryNowContext(events);
 }
@@ -198,6 +224,57 @@ export function resolveRecoveryFinishTimeMs(
 
   const finishTimeMs = nowMs + (remainingSeconds * 1000);
   return Number.isFinite(finishTimeMs) ? finishTimeMs : null;
+}
+
+export function buildDashboardRecoveryPresentation(
+  context: DashboardRecoveryNowContext | null | undefined,
+  options: DashboardRecoveryPresentationOptions = {},
+): DashboardRecoveryPresentation | null {
+  const nowMs = options.nowMs ?? Date.now();
+  const activeTotalSeconds = resolveActiveRecoveryTotalSeconds(context, nowMs);
+  const remainingSeconds = resolveRemainingRecoverySeconds(context, nowMs);
+  const finishTimeMs = resolveRecoveryFinishTimeMs(context, nowMs);
+  if (
+    activeTotalSeconds === null
+    || activeTotalSeconds <= 0
+    || remainingSeconds === null
+    || remainingSeconds <= 0
+    || finishTimeMs === null
+  ) {
+    return null;
+  }
+
+  const dateTimeOptions = options.timeZone ? { timeZone: options.timeZone } : {};
+  const finishDate = new Date(finishTimeMs);
+  const finishDateText = getDateTimeFormatter(options.locale, {
+    ...dateTimeOptions,
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  }).format(finishDate);
+  const finishClockText = getDateTimeFormatter(options.locale, {
+    ...dateTimeOptions,
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(finishDate);
+  const formatDuration = (seconds: number): string => formatUnitAwareDataValue(
+    DataDuration.type,
+    seconds,
+    options.unitSettings,
+    { compactDuration: true, stripRepeatedUnit: true },
+  ) || '--';
+
+  return {
+    activeTotalSeconds,
+    activeTotalText: formatDuration(activeTotalSeconds),
+    remainingSeconds,
+    remainingText: formatDuration(remainingSeconds),
+    remainingPercent: Math.min(100, Math.max(0, (remainingSeconds / activeTotalSeconds) * 100)),
+    finishTimeMs,
+    finishDateText,
+    finishClockText,
+    finishText: `${finishDateText} at ${finishClockText}`,
+  };
 }
 
 export function resolveActiveRecoveryTotalSeconds(

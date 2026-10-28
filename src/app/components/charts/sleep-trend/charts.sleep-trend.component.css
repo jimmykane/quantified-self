@@ -16,11 +16,29 @@
   overflow: hidden;
 }
 
+/* Embedded tiles already provide the title, controls and spacing above the stats. */
+.sleep-layout-embedded {
+  padding-top: 0;
+}
+
+/* Health overview cards align the normalized Sleep plot with scalar plots. */
+.sleep-layout-overview {
+  padding-bottom: 0;
+}
+
+.sleep-layout-overview .sleep-chart {
+  flex: none;
+  height: var(--health-overview-plot-height, 220px);
+  width: calc(100% - 2 * var(--qs-dashboard-chart-content-inset, 16px));
+  align-self: center;
+  margin-block-start: auto;
+}
+
 .sleep-header {
   display: grid;
   gap: 4px;
   min-width: 0;
-  padding: 0 10px;
+  padding: 0 var(--qs-dashboard-chart-content-inset, 10px);
 }
 
 .sleep-header.sleep-header-reserve-actions {
@@ -108,8 +126,43 @@
 .sleep-chart {
   width: 100%;
   flex: 1 1 auto;
-  min-height: 90px;
+  /* Do not let the previous ECharts canvas size determine the next flex layout. */
+  contain: size;
+  min-height: var(--sleep-trend-plot-min-height, 90px);
   min-width: 0;
+}
+
+.sleep-averages {
+  display: flex;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  gap: 4px 12px;
+  margin: 6px 0 0;
+  padding: 0 var(--qs-dashboard-chart-content-inset, 10px);
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.7rem;
+  line-height: 1.3;
+}
+
+.sleep-average,
+.sleep-average dt {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.sleep-average dd {
+  margin: 0;
+  color: var(--mat-sys-on-surface);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+}
+
+.sleep-average-marker {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 @media (max-width: 640px) {

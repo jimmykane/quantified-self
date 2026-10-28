@@ -28,9 +28,10 @@ import {
     ConfirmationDialogComponent,
     ConfirmationDialogData,
 } from '../../confirmation-dialog/confirmation-dialog.component';
-import { validateSportsLibReparseTargetUid } from '../../../../../shared/admin-queue-stats';
+import { QueueRetryHistogram, validateSportsLibReparseTargetUid } from '../../../../../shared/admin-queue-stats';
+import { getLocalDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 
-export type AdminQueueStatsView = 'all' | 'workout' | 'activity-sync' | 'route-delivery-sync' | 'route-sync' | 'sleep-sync' | 'reparse' | 'route-reparse' | 'derived';
+export type AdminQueueStatsView = 'all' | 'workout' | 'activity-sync' | 'training-delivery' | 'route-delivery-sync' | 'route-sync' | 'sleep-sync' | 'reparse' | 'route-reparse' | 'derived';
 
 type ReparseFailureRowView = ReparseFailurePreview & {
     outcome: 'active_failure' | 'historical_failure' | 'superseded';
@@ -232,13 +233,11 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         }
 
         const histogram = this.getActiveRetryHistogram();
-        const values = histogram
-            ? [
-                histogram['0-3'] ?? 0,
-                histogram['4-7'] ?? 0,
-                histogram['8-9'] ?? 0
-            ]
-            : [0, 0, 0];
+        const buckets: Array<keyof QueueRetryHistogram> = ['0-3', '4-7', '8-9'];
+        if (histogram?.['10-19'] !== undefined) {
+            buckets.push('10-19');
+        }
+        const values = buckets.map(bucket => histogram?.[bucket] ?? 0);
         const maxValue = Math.max(...values);
         this.hasRetryData = maxValue > 0;
 
@@ -267,7 +266,7 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
             },
             xAxis: {
                 type: 'category',
-                data: ['0-3 Retries', '4-7 Retries', '8-9 Retries'],
+                data: buckets.map(bucket => `${bucket} Retries`),
                 axisLabel: { color: textColor },
                 axisLine: { lineStyle: { color: gridColor } },
                 axisTick: { alignWithLabel: true }
@@ -316,7 +315,7 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         this.chartHost.scheduleResize();
     }
 
-    private getActiveRetryHistogram(): { '0-3': number; '4-7': number; '8-9': number } | null {
+    private getActiveRetryHistogram(): QueueRetryHistogram | null {
         if (this.queueView === 'activity-sync') {
             return this.stats?.activitySync?.advanced?.retryHistogram || null;
         }
@@ -750,6 +749,10 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         return this.queueView === 'all' || this.queueView === 'activity-sync';
     }
 
+    get showTrainingDeliverySection(): boolean {
+        return this.queueView === 'training-delivery' || (this.queueView === 'all' && !!this.stats?.trainingDelivery);
+    }
+
     get showRouteDeliverySyncSection(): boolean {
         return this.queueView === 'all' || this.queueView === 'route-delivery-sync';
     }
@@ -778,24 +781,25 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         if (!value) {
             return 'N/A';
         }
+        const formatter = getLocalDateTimeFormatter();
         if (typeof value === 'number' && Number.isFinite(value)) {
             const parsedFromEpoch = new Date(value);
             if (!Number.isNaN(parsedFromEpoch.getTime())) {
-                return parsedFromEpoch.toLocaleString();
+                return formatter.format(parsedFromEpoch);
             }
         }
         if (typeof (value as { toDate?: unknown }).toDate === 'function') {
             const tsDate = (value as { toDate: () => Date }).toDate();
-            return tsDate.toLocaleString();
+            return formatter.format(tsDate);
         }
         if (typeof (value as { toMillis?: unknown }).toMillis === 'function') {
             const tsMillis = (value as { toMillis: () => number }).toMillis();
             if (!Number.isNaN(tsMillis)) {
-                return new Date(tsMillis).toLocaleString();
+                return formatter.format(new Date(tsMillis));
             }
         }
         if (value instanceof Date) {
-            return value.toLocaleString();
+            return formatter.format(value);
         }
         if (typeof value === 'object' && value !== null) {
             const obj = value as Record<string, unknown>;
@@ -803,7 +807,7 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
             if (rawSeconds !== undefined && rawSeconds !== null) {
                 const tsSeconds = Number(rawSeconds);
                 if (!Number.isNaN(tsSeconds)) {
-                    return new Date(tsSeconds * 1000).toLocaleString();
+                    return formatter.format(new Date(tsSeconds * 1000));
                 }
             }
         }
@@ -811,6 +815,6 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         if (Number.isNaN(date.getTime())) {
             return `${value}`;
         }
-        return date.toLocaleString();
+        return formatter.format(date);
     }
 }

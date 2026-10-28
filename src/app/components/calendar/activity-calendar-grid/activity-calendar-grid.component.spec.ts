@@ -5,22 +5,258 @@ import { buildActivityCalendarViewModel } from '../../../helpers/activity-calend
 import { ActivityTypes, DataDuration, DaysOfTheWeek, type EventInterface } from '@sports-alliance/sports-lib';
 import { ActivityCalendarGridComponent } from './activity-calendar-grid.component';
 import { AppHapticsService } from '../../../services/app.haptics.service';
+import type { TimelineNote } from '@shared/timeline-notes';
+import { calendarTimelineNotesByDate } from '../../../helpers/calendar-timeline-notes.helper';
+import type { PlannedWorkoutCalendarOverlay } from '../../../helpers/planned-workout-calendar.helper';
 
 describe('ActivityCalendarGridComponent', () => {
-  it('renders activity days as buttons and emits the selected day', async () => {
+  it('distinguishes today from selection in every shared month surface', async () => {
+    const fixture = await renderGrid('month', false, []);
+    fixture.componentRef.setInput('calmMonth', true);
+    fixture.componentRef.setInput('selectedDateKey', '2026-08-04');
+    fixture.detectChanges();
+    const today = fixture.nativeElement.querySelector('.activity-calendar-day--today') as HTMLButtonElement;
+    const selected = fixture.nativeElement.querySelector('.activity-calendar-day--selected') as HTMLButtonElement;
+    expect(today).not.toBe(selected);
+    expect(today.getAttribute('aria-label')).toMatch(/^Today\. /);
+    expect(today.querySelector('.activity-calendar-today-corner')?.getAttribute('aria-hidden')).toBe('true');
+    expect(today.querySelector('.activity-calendar-today-dot')).toBeTruthy();
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-today-corner')).toHaveLength(1);
+
+    fixture.componentRef.setInput('compact', true);
+    fixture.componentRef.setInput('fillHeight', false);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.activity-calendar--picker .activity-calendar-day--today .activity-calendar-today-dot')).toBeTruthy();
+
+    fixture.componentRef.setInput('calmMonth', false);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-today-corner')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-day--today .activity-calendar-day-number')).toBeTruthy();
+  });
+  it('shows calm month dots and one note cue only when opted in', async () => {
+    const fixture = await renderGrid('month', false, [
+      createEvent('run-1', new Date(2026, 7, 3, 8), ActivityTypes.Running, 3600),
+    ]);
+    const note: TimelineNote = { id: 'a'.repeat(64), category: 'travel', title: 'Trip', startDate: '2026-08-03', endDate: '2026-08-03', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+    fixture.componentRef.setInput('timelineNotesByDate', calendarTimelineNotesByDate(fixture.componentInstance.model, [note]));
+    fixture.componentRef.setInput('calmMonth', true);
+    fixture.detectChanges();
+    const day = fixture.nativeElement.querySelector('[aria-label*="1 Timeline note"]') as HTMLElement;
+    expect(fixture.nativeElement.querySelector('.activity-calendar--calm-month')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-month--surface').classList).not.toContain('qs-glass-card-panel');
+    expect(day.querySelector('.activity-calendar-calm-note')).toBeTruthy();
+    expect(day.querySelector('.activity-calendar-note-indicator')).toBeNull();
+    expect(day.querySelector('.activity-calendar-marker')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-calm-legend')).toBeTruthy();
+    fixture.componentRef.setInput('calmMonth', false);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-calm-legend')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-month--surface').classList).toContain('qs-glass-card-panel');
+  });
+  it('does not advertise an adjacent-month note in the calm legend', async () => {
+    const fixture = await renderGrid('month', false, []);
+    const adjacentNote: TimelineNote = { id: 'b'.repeat(64), category: 'travel', title: 'Next month', startDate: '2026-09-01', endDate: '2026-09-01', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+    fixture.componentRef.setInput('timelineNotesByDate', calendarTimelineNotesByDate(fixture.componentInstance.model, [adjacentNote]));
+    fixture.componentRef.setInput('calmMonth', true);
+    fixture.componentRef.setInput('hideOutsideDays', true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-calm-note')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-calm-legend')).toBeNull();
+  });
+  it('includes visible adjoining dates and their markers in the legend without counting them in period totals', async () => {
+    const fixture = await renderGrid('month', false, [createEvent('context', new Date(2026, 6, 28), ActivityTypes.Cycling, 3600)]);
+    fixture.componentRef.setInput('calmMonth', true);
+    fixture.detectChanges();
+    const context = fixture.nativeElement.querySelector('.activity-calendar-day--outside') as HTMLButtonElement;
+    expect(context).toBeTruthy();
+    expect(context.querySelector('.activity-calendar-day-month')?.textContent).toContain('Jul');
+    expect(fixture.nativeElement.querySelector('.activity-calendar-calm-legend')?.textContent).toContain('Cycling');
+    expect(fixture.componentInstance.model.summary.totalDurationSeconds).toBe(0);
+  });
+
+  it('marks only the selected date without changing the today marker or day layout', async () => {
+    const fixture = await renderGrid('month', false, []);
+    fixture.componentRef.setInput('selectedDateKey', '2026-08-03'); fixture.detectChanges();
+    const selected = fixture.nativeElement.querySelector('.activity-calendar-day--selected') as HTMLButtonElement;
+    expect(selected).toBeTruthy();
+    expect(selected.getAttribute('aria-pressed')).toBe('true');
+    expect(selected.querySelector('.activity-calendar-day-number-value')?.textContent?.trim()).toBe('3');
+    expect(fixture.nativeElement.querySelectorAll('[aria-pressed="true"]')).toHaveLength(1);
+    const daySelected = vi.fn(); fixture.componentInstance.daySelected.subscribe(daySelected);
+    selected.click();
+    expect(daySelected).toHaveBeenCalledOnce();
+    expect(fixture.componentRef.injector.get(AppHapticsService).selection).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('selectedDateKey', '2026-08-04'); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('[aria-pressed="true"]')).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('.activity-calendar-day--selected .activity-calendar-day-number-value')?.textContent?.trim()).toBe('4');
+  });
+  it('omits planning announcements when hidden and retains empty-day announcements when enabled', async () => {
+    const fixture = await renderGrid('month', false, []);
+    expect(fixture.nativeElement.querySelector('[aria-label*="planned workout"]')).toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(42);
+    fixture.componentRef.setInput('plannedWorkoutsByDate', {}); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[aria-label*="No planned workouts."]')).toBeTruthy();
+    fixture.componentRef.setInput('plannedWorkoutsByDate', null); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[aria-label*="planned workout"]')).toBeNull();
+  });
+  it('keeps plan titles in the Calendar month while preserving compact and other-view markers', async () => {
+    const first = { workout: createWorkout('tempo', 'planned'), planName: 'Autumn build', color: 'purple' };
+    const second = { workout: createWorkout('rest', 'skipped'), planName: null, color: 'gray' };
+    const plannedWorkoutsByDate: PlannedWorkoutCalendarOverlay = {
+      '2026-08-03': {
+        entries: [first, second], visibleEntries: [first, second], overflowCount: 0,
+        hasSkipped: true, ariaLabel: '1 planned workout, 1 skipped workout',
+      },
+    };
+    const fixture = await renderGrid('month', false, [], DaysOfTheWeek.Monday, plannedWorkoutsByDate);
+    fixture.componentRef.setInput('calmMonth', true);
+    fixture.detectChanges();
+    const day = fixture.nativeElement.querySelector('[aria-label*="1 planned workout, 1 skipped workout"]') as HTMLButtonElement;
+    expect(day.getAttribute('aria-label')).toContain('First: tempo');
+    expect(day.querySelector('.activity-calendar-workout-preview')?.textContent).toContain('tempo');
+    expect(day.querySelector('.activity-calendar-workout-preview-more')?.textContent).toBe('+1');
+    expect(day.querySelectorAll('.planned-workout-markers mat-icon')).toHaveLength(2);
+    expect(day.querySelector('.activity-calendar-workout-preview')?.getAttribute('aria-hidden')).toBe('true');
+
+    fixture.componentRef.setInput('plannedWorkoutsByDate', {
+      '2026-08-03': {
+        entries: [{ ...first, completed: true, workout: { ...first.workout, lifecycle: 'skipped' } }],
+        visibleEntries: [{ ...first, completed: true, workout: { ...first.workout, lifecycle: 'skipped' } }],
+        overflowCount: 0, hasSkipped: false, ariaLabel: '1 completed workout, activity linked',
+      },
+    } satisfies PlannedWorkoutCalendarOverlay);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-workout-preview--completed')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-workout-preview--skipped')).toBeNull();
+
+    fixture.componentRef.setInput('calmMonth', false);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-workout-preview')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.planned-workout-markers')).toBeTruthy();
+
+    fixture.componentRef.setInput('compact', true);
+    fixture.componentRef.setInput('calmMonth', true);
+    fixture.componentRef.setInput('hideOutsideDays', true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.activity-calendar--dense-dashboard-month')).toBeTruthy();
+    fixture.componentRef.setInput('model', buildActivityCalendarViewModel([], {
+      view: 'month', anchorDate: new Date(2026, 8, 1), startOfWeek: DaysOfTheWeek.Monday,
+      now: new Date(2026, 8, 1),
+    }));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.activity-calendar--dense-dashboard-month')).toBeNull();
+  });
+  it.each(['week', 'month', 'year'] as const)('marks note-only days without activity markers in %s view', async view => {
+    const fixture = await renderGrid(view, false, []);
+    const note: TimelineNote = { id: 'a'.repeat(64), category: 'vacation', title: 'Vacation', startDate: '2026-08-03', endDate: '2026-08-03', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button').length).toBeGreaterThan(0);
+    fixture.componentRef.setInput('timelineNotesByDate', calendarTimelineNotesByDate(fixture.componentInstance.model, [note]));
+    fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('[aria-label*="1 Timeline note"]') as HTMLButtonElement;
+    expect(button.querySelector('.activity-calendar-note-indicator')?.textContent).toBe('beach_access');
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-note-indicator')).toHaveLength(1);
+    expect(button.querySelector('.activity-calendar-note-colors')?.getAttribute('aria-hidden')).toBe('true');
+    expect(button.querySelectorAll('.activity-calendar-note-color')).toHaveLength(1);
+    expect((button.querySelector('.activity-calendar-note-color') as HTMLElement).style.backgroundColor).toBe('rgb(125, 125, 125)');
+    expect((button.querySelector('.activity-calendar-note-indicator') as HTMLElement).style.color).toBe('rgb(125, 125, 125)');
+    expect(button.querySelector('.activity-calendar-marker')).toBeNull();
+    const selected = vi.fn(); fixture.componentInstance.daySelected.subscribe(selected);
+    expect(fixture.componentRef.injector.get(AppHapticsService).selection).not.toHaveBeenCalled();
+    button.click();
+    expect(selected).toHaveBeenCalledOnce();
+    expect(selected.mock.calls[0][0].eventCount).toBe(0);
+    expect(fixture.componentRef.injector.get(AppHapticsService).selection).toHaveBeenCalledOnce();
+    fixture.componentRef.setInput('timelineNotesByDate', new Map()); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button').length).toBeGreaterThan(0);
+    expect(fixture.nativeElement.querySelector('.activity-calendar-note-colors')).toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-note-indicator')).toHaveLength(0);
+  });
+  it.each(['week', 'month', 'year'] as const)('shows every note colour on %s days without recolouring activity markers', async view => {
+    const fixture = await renderGrid(view, false, [
+      createEvent('run-1', new Date(2026, 7, 3, 8), ActivityTypes.Running, 3600),
+    ]);
+    const activityMarker = fixture.nativeElement.querySelector('.activity-calendar-marker') as HTMLElement;
+    const originalMarkerStyle = activityMarker.getAttribute('style');
+    const note: TimelineNote = { id: 'a'.repeat(64), category: 'travel', color: 'purple', title: 'Trip', startDate: '2026-08-03', endDate: '2026-08-03', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+    fixture.componentRef.setInput('timelineNotesByDate', calendarTimelineNotesByDate(fixture.componentInstance.model, [note]));
+    fixture.detectChanges();
+    const icon = () => fixture.nativeElement.querySelector('.activity-calendar-note-indicator') as HTMLElement;
+    expect(icon().textContent).toBe('flight');
+    expect(icon().style.color).toBe('rgb(158, 108, 236)');
+    const colors = () => [...fixture.nativeElement.querySelectorAll('.activity-calendar-note-color')]
+      .map((element: HTMLElement) => element.style.backgroundColor);
+    expect(colors()).toEqual(['rgb(158, 108, 236)']);
+    fixture.componentRef.setInput('timelineNotesByDate', calendarTimelineNotesByDate(fixture.componentInstance.model, [note, { ...note, id: 'b'.repeat(64), color: 'blue' }]));
+    fixture.detectChanges();
+    expect(icon().textContent).toBe('event_note');
+    expect(icon().style.color).toBe('rgb(125, 125, 125)');
+    expect(colors()).toEqual(['rgb(158, 108, 236)', 'rgb(22, 180, 234)']);
+    expect(activityMarker.getAttribute('style')).toBe(originalMarkerStyle);
+  });
+
+  it('renders every visible day as a button and emits activity and empty days', async () => {
     const fixture = await renderGrid('month', false, [
       createEvent('run-1', new Date(2026, 7, 3, 8), ActivityTypes.Running, 3600),
     ]);
     const selected = vi.fn();
     fixture.componentInstance.daySelected.subscribe(selected);
-    const activeDay = fixture.debugElement.query(By.css('.activity-calendar-day-button'));
+    const buttons = fixture.debugElement.queryAll(By.css('.activity-calendar-day-button'));
+    const activityDayIndex = fixture.componentInstance.model.months[0].days
+      .findIndex(day => day.dateKey === '2026-08-03');
+    const emptyDayIndex = fixture.componentInstance.model.months[0].days
+      .findIndex(day => day.dateKey === '2026-08-04');
 
-    activeDay.triggerEventHandler('click');
+    buttons[activityDayIndex].triggerEventHandler('click');
+    buttons[emptyDayIndex].triggerEventHandler('click');
 
-    expect(selected).toHaveBeenCalledOnce();
+    expect(selected).toHaveBeenCalledTimes(2);
     expect(selected.mock.calls[0][0].dateKey).toBe('2026-08-03');
-    expect(fixture.componentRef.injector.get(AppHapticsService).selection).toHaveBeenCalledOnce();
-    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(1);
+    expect(selected.mock.calls[1][0].dateKey).toBe('2026-08-04');
+    expect(fixture.componentRef.injector.get(AppHapticsService).selection).toHaveBeenCalledTimes(2);
+    expect(buttons).toHaveLength(42);
+  });
+
+  it.each([
+    ['week', false, true], ['month', false, true], ['month', true, true], ['month', true, false], ['year', false, true],
+  ] as const)('renders both plan colors in %s view (compact: %s, fill: %s) without changing activity markers', async (view, compact, fillHeight) => {
+    const plannedWorkoutsByDate: PlannedWorkoutCalendarOverlay = {
+      '2026-08-03': {
+        entries: [],
+        visibleEntries: [
+          { workout: createWorkout('tempo', 'planned'), planName: 'Autumn build', color: 'purple' },
+          { workout: createWorkout('rest', 'skipped'), planName: null, color: 'gray' },
+        ],
+        overflowCount: 1,
+        hasSkipped: true,
+        ariaLabel: '2 planned workouts, 1 skipped workout',
+      },
+    };
+    const fixture = await renderGrid(view, compact, [
+      createEvent('run-1', new Date(2026, 7, 3, 8), ActivityTypes.Running, 3600),
+    ], DaysOfTheWeek.Monday, plannedWorkoutsByDate);
+    fixture.componentRef.setInput('fillHeight', fillHeight); fixture.detectChanges();
+    const plannedMarkers = fixture.nativeElement.querySelector('.planned-workout-markers');
+    const activityMarkers = fixture.nativeElement.querySelectorAll('.activity-calendar-marker');
+
+    expect(plannedMarkers.classList).toContain('planned-workout-markers--skipped');
+    expect([...plannedMarkers.querySelectorAll('mat-icon')].map((icon: Element) => icon.textContent?.trim()))
+      .toEqual(['event_note', 'event_busy']);
+    expect(plannedMarkers.textContent).toContain('+1');
+    expect([...plannedMarkers.querySelectorAll('mat-icon')].map((icon: HTMLElement) => icon.style.color)).toEqual(['purple', 'gray']);
+    expect(plannedMarkers.querySelector('.planned-workout-marker--skipped')?.textContent).toBe('event_busy');
+    expect(activityMarkers).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('[aria-label*="2 planned workouts, 1 skipped workout"]'))
+      .toBeTruthy();
+    const originalActivityStyle = activityMarkers[0].getAttribute('style');
+    const note: TimelineNote = { id: 'a'.repeat(64), category: 'vacation', color: 'purple', title: 'Vacation', startDate: '2026-08-03', endDate: '2026-08-03', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+    fixture.componentRef.setInput('timelineNotesByDate', calendarTimelineNotesByDate(fixture.componentInstance.model, [note]));
+    fixture.detectChanges();
+    const combinedDay = fixture.nativeElement.querySelector('[aria-label*="1 Timeline note"]') as HTMLElement;
+    expect(combinedDay.getAttribute('aria-label')).toContain('2 planned workouts, 1 skipped workout');
+    expect(combinedDay.querySelector('.planned-workout-markers')).toBe(plannedMarkers);
+    expect((combinedDay.querySelector('.activity-calendar-note-color') as HTMLElement).style.backgroundColor).toBe('rgb(158, 108, 236)');
+    expect(combinedDay.querySelector('.activity-calendar-note-indicator')?.textContent).toBe('beach_access');
+    expect(combinedDay.querySelector('.activity-calendar-marker')?.getAttribute('style')).toBe(originalActivityStyle);
   });
 
   it('renders same-center markers for compact calendars', async () => {
@@ -37,6 +273,71 @@ describe('ActivityCalendarGridComponent', () => {
     expect(markers[0].style.getPropertyValue('--calendar-marker-diameter')).toMatch(/px$/);
     expect(fixture.nativeElement.querySelector('.activity-calendar-month')?.classList)
       .not.toContain('qs-glass-card-panel');
+  });
+
+  it('opts only scrollable compact pickers out of height-filling without changing day selection', async () => {
+    const fixture = await renderGrid('month', true, [
+      createEvent('run-1', new Date(2026, 7, 3, 8), ActivityTypes.Running, 3600),
+    ]);
+    const grid = fixture.nativeElement.querySelector('.activity-calendar');
+    expect(grid.classList).toContain('activity-calendar--fill-height');
+    const markerStyle = fixture.nativeElement.querySelector('.activity-calendar-marker').getAttribute('style');
+    const selected = vi.fn(); fixture.componentInstance.daySelected.subscribe(selected);
+    fixture.componentRef.setInput('fillHeight', false); fixture.detectChanges();
+    expect(grid.classList).not.toContain('activity-calendar--fill-height');
+    expect(grid.classList).toContain('activity-calendar--compact');
+    expect(fixture.nativeElement.querySelector('.activity-calendar-marker').getAttribute('style')).toBe(markerStyle);
+    fixture.nativeElement.querySelector('[aria-label*="1 activity"]').click();
+    expect(selected.mock.calls[0][0].dateKey).toBe('2026-08-03');
+    expect(fixture.componentRef.injector.get(AppHapticsService).selection).toHaveBeenCalledOnce();
+    fixture.componentRef.setInput('fillHeight', true);
+    fixture.componentRef.setInput('compact', false); fixture.detectChanges();
+    expect(grid.classList).not.toContain('activity-calendar--fill-height');
+  });
+
+  it.each([
+    [2026, 1, DaysOfTheWeek.Sunday, 28],
+    [2027, 1, DaysOfTheWeek.Monday, 28],
+    [2026, 8, DaysOfTheWeek.Monday, 35],
+    [2026, 7, DaysOfTheWeek.Monday, 42],
+    [2026, 7, DaysOfTheWeek.Sunday, 42],
+  ])('shows only occupied weeks in compact tiles and pickers for %i/%i, week start %i', async (year, month, startOfWeek, count) => {
+    const fixture = await renderGrid('month', true, []);
+    const model = buildActivityCalendarViewModel([], {
+      view: 'month', anchorDate: new Date(year, month, 1), startOfWeek, now: new Date(year, month, 1),
+    });
+    fixture.componentRef.setInput('model', model);
+    fixture.componentRef.setInput('hideOutsideDays', true);
+    fixture.componentRef.setInput('fillHeight', false);
+    fixture.detectChanges();
+    const days = [...fixture.nativeElement.querySelectorAll('.activity-calendar-day')] as HTMLElement[];
+    expect(days).toHaveLength(count);
+    // Leading blanks preserve weekday alignment; every real date remains selectable.
+    const first = model.months[0].days.findIndex(day => day.inPrimaryPeriod);
+    expect(days[first].textContent.trim()).toBe('1');
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button'))
+      .toHaveLength(new Date(year, month + 1, 0).getDate());
+    expect(model.months[0].days).toHaveLength(count);
+    fixture.componentRef.setInput('fillHeight', true); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day')).toHaveLength(count);
+    expect(fixture.nativeElement.querySelector('.activity-calendar--picker')).toBeNull();
+    fixture.componentRef.setInput('fillHeight', false);
+    fixture.componentRef.setInput('hideOutsideDays', false); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(count);
+    fixture.componentRef.setInput('hideOutsideDays', true);
+    fixture.componentRef.setInput('compact', false); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day')).toHaveLength(count);
+  });
+
+  it('uses a separate right-edge color rail in compact cells without covering date, note, or activity icons', () => {
+    const styles = readFileSync(resolve(process.cwd(), 'src/app/components/calendar/activity-calendar-grid/activity-calendar-grid.component.scss'), 'utf8');
+    const rail = styles.match(/\.activity-calendar--compact \.planned-workout-markers\s*\{([^}]*)\}/)?.[1];
+    expect(rail).toContain('top: 18px;');
+    expect(rail).toContain('right: 2px;');
+    expect(rail).toContain('bottom: 3px;');
+    expect(rail).toContain('flex-direction: column;');
+    expect(styles).toContain('border-inline-end: 3px solid currentColor;');
+    expect(styles).toContain('border-inline-end-style: dashed;');
   });
 
   it('renders twelve glass month panels in yearly mode', async () => {
@@ -64,6 +365,25 @@ describe('ActivityCalendarGridComponent', () => {
     expect(firstWeek[0].classList).toContain('activity-calendar-day--weekend');
     expect(firstWeek[6].classList).toContain('activity-calendar-day--weekend');
     expect(firstWeek[1].classList).not.toContain('activity-calendar-day--weekend');
+  });
+
+  it('paints height-filling weekend columns continuously for either week start', async () => {
+    const fixture = await renderGrid('month', true, []);
+    const days = fixture.nativeElement.querySelector('.activity-calendar-days') as HTMLElement;
+    expect(days.style.backgroundImage).toContain('71.42857142857143%');
+    expect(days.style.backgroundImage).toContain('100%');
+
+    fixture.componentRef.setInput('model', buildActivityCalendarViewModel([], {
+      view: 'month', anchorDate: new Date(2026, 7, 1), startOfWeek: DaysOfTheWeek.Sunday,
+      now: new Date(2026, 7, 1),
+    }));
+    fixture.detectChanges();
+    expect(days.style.backgroundImage).toContain('0% 14.285714285714286%');
+    expect(days.style.backgroundImage).toContain('85.71428571428571% 100%');
+
+    fixture.componentRef.setInput('fillHeight', false);
+    fixture.detectChanges();
+    expect(days.style.backgroundImage).toBe('');
   });
 
   it('does not use calendar-specific gray surface fills', () => {
@@ -141,18 +461,17 @@ describe('ActivityCalendarGridComponent', () => {
     expect(compactStageRule).toContain('flex: 0 0 20px;');
   });
 
-  it('fits all six compact calendar weeks inside the available mobile tile height', () => {
+  it('distributes visible weeks across the tile height without limiting the layout to mobile', () => {
     const styles = readFileSync(
       resolve(process.cwd(), 'src/app/components/calendar/activity-calendar-grid/activity-calendar-grid.component.scss'),
       'utf8',
     );
-    const mobileStyles = styles.match(/@media \(max-width: 860px\)\s*\{([\s\S]*)\}\s*@media \(prefers-reduced-motion:/)?.[1];
-
-    expect(mobileStyles).toMatch(
-      /\.activity-calendar--compact \.activity-calendar-days\s*\{[^}]*min-height:\s*0;[^}]*grid-template-rows:\s*repeat\(6, minmax\(0, 1fr\)\);/s,
+    expect(styles).not.toContain('@media (max-width: 860px)');
+    expect(styles).toMatch(
+      /\.activity-calendar--fill-height \.activity-calendar-days\s*\{[^}]*min-height:\s*0;[^}]*grid-auto-rows:\s*minmax\(0, 1fr\);/s,
     );
-    expect(mobileStyles).toMatch(
-      /\.activity-calendar--compact \.activity-calendar-day\s*\{[^}]*min-height:\s*0;[^}]*padding-block:\s*0;/s,
+    expect(styles).toMatch(
+      /\.activity-calendar--fill-height \.activity-calendar-day\s*\{[^}]*min-height:\s*0;[^}]*padding-block:\s*0;/s,
     );
   });
 
@@ -172,6 +491,7 @@ async function renderGrid(
   compact: boolean,
   events: EventInterface[],
   startOfWeek: DaysOfTheWeek | number = DaysOfTheWeek.Monday,
+  plannedWorkoutsByDate: PlannedWorkoutCalendarOverlay | null = null,
 ) {
   const fixture = await import('@angular/core/testing').then(async ({ TestBed }) => {
     await TestBed.configureTestingModule({
@@ -196,8 +516,34 @@ async function renderGrid(
     now: new Date(2026, 7, 3),
   }));
   fixture.componentRef.setInput('compact', compact);
+  fixture.componentRef.setInput('plannedWorkoutsByDate', plannedWorkoutsByDate);
   fixture.detectChanges();
   return fixture;
+}
+
+function createWorkout(id: string, lifecycle: 'planned' | 'skipped') {
+  return {
+    schemaVersion: 1 as const,
+    id,
+    planId: id === 'tempo' ? 'plan-1' : null,
+    localDate: '2026-08-03',
+    lifecycle,
+    title: id,
+    structure: {
+      version: 1 as const,
+      sport: ActivityTypes.Running,
+      nodes: [{
+        kind: 'step' as const,
+        id: 'steady',
+        purpose: 'work' as const,
+        ending: { kind: 'time' as const, seconds: 1800 },
+        targets: [],
+      }],
+    },
+    revision: 1,
+    createdAtMs: 1,
+    updatedAtMs: 1,
+  };
 }
 
 function createEvent(

@@ -1,18 +1,66 @@
 # Wahoo Integration
 
-Wahoo is a Pro-only activity integration. Quantified Self receives completed workout summaries through Wahoo webhooks, can request a user-selected range of workout history, can send retained Wahoo FIT activities to Suunto or COROS, can deliver FIT activities plus user-selected GPX or FIT courses/routes to Wahoo, and can opt in to send saved Suunto routes to Wahoo. GPX and saved Suunto routes are converted in memory to the FIT course Wahoo accepts. It does not send plans, sleep, or other non-activity data between providers.
+Wahoo is a Pro-only integration. Quantified Self receives completed workout summaries through Wahoo webhooks, can request a user-selected range of workout history, can send retained Wahoo FIT activities to Suunto or COROS, can deliver FIT activities plus user-selected GPX or FIT courses/routes to Wahoo, and can opt in to send saved Suunto routes to Wahoo. GPX and saved Suunto routes are converted in memory to the FIT course Wahoo accepts. Training delivery lets connected Pro users explicitly send QS-authored workouts as app-owned Plans and dated Workouts; it does not import Wahoo's plan library or forward plans/sleep between providers.
 
 This is the Wahoo-specific architecture and release record. For the reusable implementation process, lifecycle requirements, operational checklist, and provider-wide pitfalls, see the [provider integration implementation guide](provider-integration-guide.md).
 
+## Planned sport profiles
+
+Training maps all 15 editor sports plus the six existing MCP running/cycling subprofiles through an explicit shared
+profile table, never the entire recorded-activity catalog. The exact Cloud Workout type, Plan family and indoor/outdoor
+location are separate fields and all are read back. See the complete table and evidence checklist in
+[Training workspace](training-workspace.md#wahoo-sport-profile-mappings-and-validation-789).
+Wahoo supports timed, untargeted pool/open-water swimming and outdoor/indoor rowing. All 21 profiles have account acceptance and owner-confirmed native profile/timed playback (#789, 1 October 2026). Distance endings and intensity targets remain unsupported for walking, hiking, swimming and rowing. Wahoo has no documented physical pool-length delivery field. QS does not support sending that setting; no local-setting check remains required for #789.
+Existing timed Strength remains Gym/indoor with type 42, instruction-only loads and no rep tracking. The public
+interval format documents only Biking/Running; Cloud catalog IDs do not establish interval-player support.
+Adding these mappings authorizes neither deployment nor account-side sends.
+
+## Recorded-activity sport profiles
+
+Recorded activity uploads use `shared/wahoo-activity-types.ts`, independently of Training's Plan profiles.
+The expanded Sports Lib names reuse these approved, existing Workout types:
+
+| QS sport names | Wahoo Workout type |
+| --- | --- |
+| Road / Track / Ultra / Crosscountry Running; Obstacle Racing | Running (`1`) |
+| Vertical Running | Trail Running (`4`) |
+| Indoor Track Running | Treadmill (`5`) |
+| Road / Gravel / Track / Recumbent Cycling; Cyclocross; BMX; Kickbiking | Biking (`0`) |
+| E-Mountain Biking; E-Enduro MTB | E-Biking (`64`) |
+| Mountain Bike Orienteering | Mountain Biking (`13`) |
+| Indoor Hand Cycle | Hand Cycle (`70`) |
+| LES MILLS RPM / SPRINT / THE TRIP | Indoor Biking (`12`) |
+| Speed Walking; Indoor Walking | Walking (`6`) |
+| Classic Crosscountry Skiing; Skate Skiing | Crosscountry Skiing (`30`) |
+| AMRAP; EMOM; Tabata | Cardio Class (`43`) |
+| Brick Training; Pool Triathlon; Offroad Triathlon; Offroad Duathlon | Multisport (`62`) |
+
+QS retains the source sport. Nordic Walking still uses native type `8`; virtual profiles and all other existing
+mappings retain their IDs. Unmapped sports, including LES MILLS BODYPUMP, retain Wahoo inference. Multiple distinct
+canonical sports retain the existing Multisport behavior. Automatic and direct activity uploads share this resolver;
+queued operations persist their type choice before I/O and resume it unchanged. This does not replay or correct
+historical provider copies.
+
+Route delivery has a separate family field: BMX, LES MILLS RPM / SPRINT / THE TRIP, Enduro MTB and E-Enduro MTB use
+Cycling (`0`); Obstacle Racing uses Running (`1`). Vertical Running retains Running (`1`). These are family mappings,
+not recorded Workout IDs or planned-workout profiles. Offroad Triathlon and Offroad Duathlon explicitly use Other
+(`31`) before keyword matching, preventing the road substring from selecting Cycling. Motorcycling retains Biking
+(`0`), matching its [documented Wahoo family](https://cloud-api.wahooligan.com/#workout-types). QS route sport names
+and retained files remain intact.
+
+Monitoring coverage is **unchanged**. Existing Wahoo recorded-activity and route worker/outcome labels cover these
+metadata aliases; no queue, retry, lease, lifecycle, telemetry dimension or alert threshold changes.
+
 ## Supported scope
 
-- OAuth 2.0 authorization with `user_read`, `workouts_read`, `workouts_write`, `routes_read`, `routes_write`, and `offline_data`.
+- OAuth 2.0 authorization with `user_read`, `workouts_read`, `workouts_write`, `routes_read`, `routes_write`, `plans_read`, `plans_write`, and `offline_data`. Existing users need explicit reconnect for the new Training grants; ordinary imports/routes do not require them.
 - Connection identity from `GET /v1/user`, stored on the server-only token document and resolved for webhooks through the shared token index.
 - New and updated completed workouts from `workout_summary` webhooks.
-- Manual history import from the descending, paginated `GET /v1/workouts` endpoint.
+- Exact completion linking uses the returned Workout/Plan/token association, or the Sports Lib 21.4.0 Wahoo app FIT reference when API association is absent. A file-scoped Plan must resolve one accepted, account-bound QS single-workout Plan with its deterministic app identity, consistent retained association and matching persisted session/activity. A missing scheduled Workout ID stays null; the saved recording's new ID is not substituted. Ambiguity, stale occurrences and reused markers fail closed; the first committed activity link wins. References stay private. No title/date/duration fallback is used.
+- Manual history import from the descending, paginated `GET /v1/workouts` endpoint, with the latest two calendar years selected by default and a user-editable range. Updated clients start a durable activity-only coordinator, retaining exact selected dates and progress across navigation.
 - FIT parsing through `@sports-alliance/sports-lib`, stable event IDs based on the Wahoo workout ID, and original FIT-file retention with the imported event.
 - FIT activity delivery from Wahoo imported events to Suunto or COROS through the shared activity-sync queue, with separate opt-in automatic delivery for new imports and date-range backfill for retained FIT files.
-- FIT activity delivery to Wahoo from Garmin, COROS, and Suunto imported events through the shared activity-sync queue.
+- FIT activity delivery to Wahoo from Garmin, COROS, and Suunto imported events, plus one-time sends of retained manual FIT/FIT.gz uploads, through the shared activity-sync queue.
 - Direct, user-selected FIT-file delivery from Wahoo Services. This sends the file only to Wahoo; it does not create or retain a Quantified Self event.
 - Direct, user-selected GPX or FIT course/route delivery from Wahoo Services. The callable parses the source route to provide Wahoo's required metadata, converts a GPX route to FIT in memory, looks up Quantified Self's deterministic external ID based on the selected source file, then creates or updates the Wahoo route. It does not create or retain a Quantified Self route.
 - Opt-in automatic and backfill delivery of Suunto routes already saved in Quantified Self. This uses the shared saved-route delivery queue and the same Wahoo uploader. The opaque external ID is derived from the Quantified Self saved-route ID, so a newer Suunto revision updates the corresponding Wahoo route instead of creating a duplicate.
@@ -20,22 +68,77 @@ This is the Wahoo-specific architecture and release record. For the reusable imp
 
 Workouts without an available FIT file are skipped. Wahoo records identified as originating from a third-party fitness application are also skipped. Existing imported events and their retained original files are not deleted when the connection is removed or Pro access expires.
 
+For one-time historical sends, a deleted event or changed/missing original before Wahoo upload is a skipped queue result. Temporary Storage failures retry, while an already accepted Wahoo upload retains its reconciliation state.
+
 ## Data flow
+
+Training delivery uses the shared queue, not the activity uploader or a new queue. Its
+single detailed implementation and operational contract is [Wahoo Training delivery](training-workspace.md#wahoo-plan-and-dated-workout-delivery-649):
+time-based Running/Cycling subprofiles, untargeted outdoor Walking/Hiking, account/device-tested timed/untargeted swim/rowing
+and companion-aware timed Strength/Gym, saved-zone seven-day window, separate Plan/Workout/association receipts, duplicate-safe
+recovery, positive-only cloud checks, scope migration and lifecycle fences. Device receipt remains provider-managed and
+is never inferred from cloud acceptance.
+Yoga, Elliptical Trainer and Cardio Training additionally support timed, untargeted steps through indoor Gym Plan
+family `6` and Workout types `66`, `20` and `43`; Cardio Training discloses the Cardio Class substitution for approval.
+Authorized direct cloud tests on 20 October 2026 read back each Plan, its full JSON prescription, its dated Workout and
+its Plan association, then verified removal of the temporary test records. This does not establish app/watch playback,
+distance/intensity support or integrated QS queue behavior. These probes performed no deployment.
+The production Plan validator requires `header.description` and a `targets` array on every non-repeat interval despite
+the published plan.json schema marking both optional. It also rejects an empty target array. QS supplies the bounded
+workout title for interval sports and an explicit instruction-only description for timed Gym. Every untargeted interval
+uses the documented full-domain RPE range 1–10; this does not add another editor
+field or narrow intended effort. Production Plan create/delete returns HTTP 200; create also remains compatible with 201.
+
+Timed Strength/Gym (#783) uses family `6`, indoor location `0`, and Workout type `42`. The full owner-scoped companion,
+not its old-client summary, supplies ordered timed sets/rests and exercise/load instructions. Repetition sets are
+unsupported and never estimated. Loads are kilogram instructions through Sports Lib display, not native tracking;
+actual rounding needs current-mapping approval. The QS editor and MCP details preserve exact kg storage and kg/lb display.
+A separately approved unloaded five-minute Gym recipe had complete cloud JSON readback and owner-confirmed Wahoo app
+player/interval behavior on 1 October 2026. A subsequent saved recording retained its exact uploaded Workout/Plan/token,
+Cloud type `42` and FIT `training/strength_training`, and imported successfully into QS with zero retries. These direct
+probes had no QS scheduled-workout ledger, so no QS completion badge was expected. The original Yoga/equipment prompt's
+root cause is unproven; Help advises checking/selecting the native Strength profile before starting, not sending Yoga.
+Those earlier direct probes did not establish the integrated lifecycle or a QS completion badge. Subsequent completed
+#783/#789 verification covers normal QS companion/Send/ledger delivery, edits/reschedules/retry/reconnect, exact
+automatic completion, eligible withdrawal and completed-copy Stop protection. The production frontend release was
+verified. These results do not establish native reps/load tracking or universal ELEMNT/watch receipt; future deployment
+and deletion still need separate approval.
+
+Walking/Hiking (#789) use outdoor Plan family `9`, with Workout types `6`/`9`. These are account-tested Plan mappings,
+not inferred from recorded-activity enums. Only timed steps without intensity targets are admitted; full-domain RPE
+1–10 is the production envelope for untargeted intervals. Other endings, intensity targets and indoor variants are
+unsupported. Both have full cloud readback and owner-confirmed native profile/timed playback. Completed #789 records
+the integrated edits/reschedules/retry/reconnect, eligible withdrawal and production frontend checks. Shared scopes, consent, owned identity, completion correlation,
+queue/horizon/recovery and deletion policy are unchanged. Existing v4 sport payloads/digests remain unchanged.
+The existing production app/account supplied the app-owned Plan/Workout cloud proof. Do not interpret the historical
+activity launch checklist below as a requirement to create a sandbox or apply for Wahoo-owned Plan-library entitlement.
 
 1. The Pro user starts OAuth from **Services**. Callable Functions enforce authentication, App Check, and Pro access.
 2. The backend exchanges the code, reads the stable Wahoo user ID, and stores rotating credentials in `wahooAPIAccessTokens/{firebaseUid}/tokens/{wahooUserId}`. Starting authorization assigns a server-owned OAuth-flow generation; the callback claims that flow and may persist its token only while the generation still matches. A newer authorization attempt or explicit disconnect invalidates the generation before cleanup, so a delayed provider exchange cannot recreate a disconnected credential. Each successful OAuth write also assigns a server-side credential generation. A reconnect-required connection retains and pins exactly one Wahoo user ID; OAuth through another Wahoo account is rejected until the retained connection is explicitly disconnected. Activity uploads, route delivery, history, inbound webhooks, and workout processing all resolve that same pinned token. The shared OAuth lifecycle queries the composite token index and removes stale tokens for the same external account from other Quantified Self users, matching the other provider adapters.
 3. Every provider request obtains credentials through the shared refresh coordinator. It transactionally claims a 90-second lease for an expired credential, while the provider refresh request is bounded to 60 seconds. Exactly one activity, route, history, or scheduled worker asks Wahoo to rotate it. The owner can persist only while its lease and credential generation still match and the user has not started account deletion; contenders use the winner's replacement or retry after the lease, and an expired lease is reclaimable after a worker crash. This prevents a late refresh from restoring an invalidated Wahoo token after reconnect, disconnect, or deletion.
 4. Wahoo posts completed workout summaries to `wahooAPIWebhook`. The shared webhook token is verified first. The backend then queries server-only token documents by `wahooUserID` and `serviceName`; exactly one structurally valid Wahoo token must match, and it must also be the owner's pinned active Wahoo account. No match or non-active retained token is treated as disconnected, while multiple owners fail closed with a retryable webhook response instead of choosing an arbitrary owner. The deletion guard, pending-disconnect state, and current Pro access are checked before queueing.
-5. History imports use the same queue path. A per-user lease prevents overlapping history requests, pages stop once the selected start date is reached, and Wahoo rate-limit reset metadata is returned on HTTP 429. Each page is bound to the pinned Wahoo account before the request, after the response, and inside every queue-write transaction; switching or disconnecting accounts cannot queue the previously fetched page.
+5. History imports use the same queue path. Manual `background: true` requests atomically bind the current account and credential/connection generations, reserve activity history and return a safe progress receipt without contacting Wahoo. The existing coordinator requests one page of at most 100 workouts, checkpoints its page cursor, and waits for committed child outcomes before continuing. Deferred Wahoo workout dispatch is unchanged. A per-user lease prevents overlapping page requests, pages stop once the selected start date is reached, and Wahoo rate-limit reset metadata is returned on HTTP 429. Each page is bound to the pinned Wahoo account before the request, after the response, and inside every queue-write transaction; switching or disconnecting accounts cannot queue the previously fetched page. Omitted/false `background` and unversioned legacy connections retain the old full-scan/stats contract.
 6. Immediate Cloud Tasks and the scheduled dispatcher both process `wahooAPIWorkoutQueue`. A revision-scoped processing lease serializes updates to the same workout. When a newer summary arrives during an active lease, the queue records the newer payload but preserves the current worker's lease. The newer task acknowledges the busy result, and the current worker releases the latest revision for redispatch after finishing. This prevents two revisions from interleaving the non-atomic event/activity writes. The lease is ten minutes while the worker runtime is capped at nine minutes. Before persistence, the worker rechecks that it still owns the lease and atomically revalidates the pinned Wahoo account plus connection generation; every event/activity write remains protected by the account-deletion guard, and the original FIT stays in backend-only staging until those writes succeed. The worker also checks Pro access, connection, and pending-disconnect state before claiming or downloading. A disconnect or account switch that wins before event persistence prevents the older inbound activity from being written.
-7. After a Wahoo FIT event is persisted, the common activity-sync handoff queues any enabled Wahoo-to-Suunto or Wahoo-to-COROS route from that retained original FIT. Both directions support manual date-range backfill. Before any provider delivery, the shared worker stores destination-namespaced exact and semantic FIT receipts so a provider-returned echo cannot create a duplicate event or fan-out. Wahoo also excludes workout summaries created by third-party fitness applications.
+7. After a Wahoo FIT event is persisted, the importer checks the inbound Workout ID, Plan ID, and deterministic `workout_token` against the current account's private Training-delivery ledger. Exactly one complete match creates the same safe workout-completion and reverse-link projections used by other providers; raw identifiers, the account digest, and summary evidence remain private. Missing identifiers, changed account generations, collisions, active delivery writes, and conflicting links fail closed. Repeated imports are idempotent, and deleting the event removes its link and marker-owned protection without clearing protection independently established by provider-summary inspection. The common activity-sync handoff then queues any enabled Wahoo-to-Suunto or Wahoo-to-COROS route from the retained original FIT. Both directions support manual date-range backfill. Before any provider delivery, the shared worker stores destination-namespaced exact and semantic FIT receipts so a provider-returned echo cannot create a duplicate event or fan-out. Wahoo also excludes workout summaries created by third-party fitness applications.
 8. For Garmin, COROS, and Suunto activity-sync routes whose destination is Wahoo, the shared worker downloads the already retained original FIT, creates the documented URL-encoded `POST /v1/workout_file_uploads` payload (`file`, optional `filename`, and optional `time_zone`), persists Wahoo's upload token before retrying, and polls `GET /v1/workout_file_uploads/:token` until it reaches `complete`, `duplicate`, or an error. A documented processing response is an expected asynchronous wait: the worker consumes the bounded queue polling budget, durably records the next poll due time, acknowledges the current Cloud Task, and schedules a status-only poll using the configured 15-minute-to-four-hour backoff. Early task retries reuse that schedule, while the reconciler pages past future polls so they cannot hide newer work. This path logs the planned poll at info level; task scheduling failures, exhausted polling, transport failures, and terminal Wahoo rejection remain warning/error or DLQ outcomes. Before the first provider call, the worker maps the persisted event's canonical Sports Lib `Activity Types` value to Wahoo's documented workout-type table and stores the selected ID (or an explicit unmapped marker) in the same guarded provider-claim transaction. Every resume reuses that durable choice. Once Wahoo returns a usable `workout_id`, the worker applies only `workout_type_id` through idempotent `PUT /v1/workouts/:id`; existing Wahoo workout titles are preserved. Multiple canonical types map to `MULTISPORT`. Types outside the explicit mapping are logged and retain Wahoo's inferred result; there is no fallback to cycling, `OTHER`, or an approximation. A transient status/type-update failure repeats only the status lookup and `PUT`; the worker does not post the FIT again after an asynchronous upload has started. Direct uploads first write a provisional outbound-echo receipt, promote it only after the final account guard and immediately before provider I/O, and remove only that operation's provisional claim if no request starts. An accepted receipt therefore survives a concurrent aborted attempt, while a pre-request failure cannot suppress a later genuine inbound activity. Every Wahoo activity or route API request revalidates the expected pinned account, connection generation, and exact credential immediately before I/O; multi-request route lookup/create/conflict/update flows cannot continue with an access token captured from a replaced account. A generic opaque Wahoo refresh `400` first applies a durable per-account 5- then 15-minute pause. Three consecutive failures within 24 hours mark the connection **Reconnect required**; a successful winning refresh resets that counter in the same transaction that stores the rotated credential. Connection transitions carry an opaque generation, and OAuth completion is guarded by both its flow and credential generations, so stale callbacks, terminal cleanup, and route disabling cannot overwrite a newer authorization. Pending-disconnect cleanup additionally carries the disconnect, credential, OAuth-flow, and explicit-operation generations through provider deauthorization, local deletion, failure recording, and metadata cleanup. New activity and saved-route delivery is parked rather than skipped. Reconnection restores only routes that had been enabled before the reconnect state, then releases that parked work. A worker finalizes `route_disabled` only in a transaction that reads the current route setting and both services' route-restoration markers; pending restoration parks the row outside the dispatcher query. Restoration uses four guarded phases: restore settings, close the parking barrier, reconcile every already parked row against those settings, and clear the generation-bound marker. Closing the barrier makes any later worker finalize or continue from the restored settings instead of adding work behind the release scan. A partial failure therefore remains visible to the 30-minute repair scheduler instead of stranding processed queue work. Partial reconnect-required releases retain their separate server-only repair marker and are retried in bounded, cursor-checkpointed pages with bounded concurrency.
-9. Direct FIT activity delivery uses the same Wahoo upload helper and bounded status callable, but no event or source file is persisted by Quantified Self. It retains Wahoo's inferred workout type because there is no durable Quantified Self queue item to carry a server-derived correction across asynchronous status polling.
+9. Direct FIT activity delivery uses the same Wahoo upload helper and bounded status callable, but no event or source file is persisted by Quantified Self. The initial callable reuses the outbound semantic-fingerprint parse to resolve the canonical Sports Lib activity types and the explicit Wahoo mapping. It returns the optional mapped ID with Wahoo's upload ID; the browser keeps both in its existing in-memory upload row and echoes them during status-only polling and retry. The status callable accepts only numeric IDs present in the explicit server-side mapping. Once Wahoo returns a usable `workout_id`, the backend applies the same idempotent type-only `PUT` as automatic delivery and preserves the Wahoo title. Unmapped or unparseable types retain Wahoo inference, and multiple canonical types map to `MULTISPORT`. A transient status or type-update failure retains both IDs and never repeats the FIT `POST`; a provider-confirmed failed upload is the only state that permits a fresh user retry. If Wahoo completes a mapped upload without a usable workout ID, the callable returns a terminal correction result while retaining the upload ID for safe status-only review. The browser can alter the echoed mapped ID, but the authenticated Pro/App Check boundary, explicit ID allowlist, same-user OAuth credential, and provider-returned workout association limit the effect to that user's own Wahoo workout type. No secret, signed continuation, FIT persistence, or Firestore continuation document is added.
 10. Direct GPX/FIT course/route delivery validates a 20 MB base64-bounded source request, parses the course/route server-side, and for GPX exports the parsed route as a FIT course in memory. GPX conversion requires exactly one route with valid coordinates; generated FIT is bounded to 20 MB. The flow derives Wahoo's required distance, ascent, start coordinate, activity-family, title, and deterministic external ID from the selected source file, then calls `GET /v1/routes?external_id=...` followed by `POST /v1/routes` or `PUT /v1/routes/:id`. It requires `routes_read` and `routes_write`; no browser token, source payload, generated FIT payload, or route document is persisted. Wahoo Cloud API routes sync to the Wahoo App and directly to an ELEMNT bike computer, not the ELEMNT App.
 11. Suunto-to-Wahoo saved-route delivery is opt-in in Suunto Services. Imported Suunto routes first exist in Quantified Self, then the shared route-delivery queue reparses the saved original source, converts the canonical route to FIT, verifies the Wahoo route scopes, and uses the opaque saved-route external ID to create or update the Wahoo route. Manual backfill uses the same queue while automatic delivery is off. Missing Wahoo connection or route scope is recorded as a skipped delivery with a reconnect instruction instead of a retry.
 12. Queue documents expire through the shared queue TTL policy. Disconnect and account deletion write cleanup tombstones before recursively removing matching operational documents.
 
 Webhook delivery and history are idempotent. The deterministic queue and event IDs use the Wahoo user and workout IDs; a newer workout-summary revision reopens the same queue item instead of creating a duplicate event.
+
+The history dialog reads the existing server-owned `historyImportLeaseExpiresAt` and `connectionHistoryImport` from the user's Wahoo service metadata. A finite future lease expiry or active coordinator disables submission, including after the dialog is closed and reopened. Accepted manual coordinators show live progress through child completion and discard optimistic receipts after reconnect; legacy scans retain their running/queue-statistics UI. Removing or expiring a lease alone cannot unlock an active coordinator. The usual cooldown still applies afterward. Closing the dialog does not cancel accepted server work. Metadata is a UI hint, and the callable transaction remains authoritative. If a competing tab wins before metadata arrives, Wahoo `functions/already-exists` (or `already-exists`) shows a wait message without a success event, error haptic, or Sentry report. Unexpected failures remain logged; destroyed dialogs receive no late UI feedback, and expiry timers are cleared on teardown.
+
+## Connection recovery ownership
+
+Connection recovery is implemented in `functions/src/wahoo/connection-recovery.ts`; the existing
+`service-connection-meta.ts` facade retains callers' APIs. Wahoo's initial reconnect-release claim
+is supplied to `service-connection-lifecycle.ts` and committed with the guarded connected state.
+Generic route restoration still completes before Wahoo's separate reconnect queue release, and
+the durable Wahoo marker is cleared only after that release succeeds. Opaque-refresh failure
+tracking and recovery-field cleanup share the Wahoo-owned module. This is a code-ownership
+refactor with unchanged fields, transaction guards, retries, and user-visible behavior.
 
 ## Configuration
 
@@ -57,8 +160,10 @@ Wahoo requires six composite indexes: one `tokens` collection-group index on `wa
 - Browser clients can read only the safe connection state and display-only Wahoo account ID under `users/{uid}/meta/Wahoo API`; access and refresh tokens are server-only in Firestore Rules. Existing connections recover the ID through an authenticated, App Check-protected callable that returns that identifier only.
 - `workouts_write` is enforced immediately before activity uploads, while direct course/route delivery requires both `routes_read` and `routes_write` before its external-ID lookup and create/update request. The final pre-request guard also rechecks deletion, disconnect-pending, and reconnect-required state. Connections created before either delivery capability must be reauthorized to receive the new scope; read-only imports remain available until then.
 - Outbound requests are URL-encoded, carry the FIT as Wahoo's documented base64 data value, and never log the source file, generated FIT, bearer token, or upload form body. Wahoo's asynchronous activity-upload token—not the FIT payload—is persisted on an activity-sync queue item. Direct GPX/FIT course/route delivery is synchronous and retains neither payload nor a Quantified Self route document.
+- Training Plan HTTP 422 responses are read through a separate 16 KiB/500 ms cap and reduced in memory to fixed response-shape, rejection-category, and known request-field enums. A confidently classified application/Plans access rejection uses the existing provider-unavailable state; validation rejections remain terminal. Raw provider bodies and messages are discarded and never enter errors, logs, or Firestore.
 - File downloads reject non-HTTPS URLs, credentials in URLs, IP literals, local hostnames, unapproved redirect targets, payloads over 20 MB, non-FIT content, and responses that exceed the bounded request deadline. Wahoo JSON API requests use a separate bounded deadline.
 - Wahoo FIT persistence relies on the queue's revision-scoped processing lease. A newer summary preserves an active lease and waits, preventing concurrent revisions from mixing writes to the same deterministic event. The worker verifies the lease, pinned provider identity, and connection generation immediately before persistence; account-deletion guards remain inside every Firestore write, and the original FIT remains in backend-only staging until all writes succeed.
+- Training completion correlation is exact and account-bound. The importer accepts only the delivered Workout/Plan/token tuple from the current connection generation, serializes against delivery attempts, and records only a digest of the workout token. It never infers a match from date, title, sport, duration, or target adherence.
 - Wahoo access tokens are refreshed only immediately before a Wahoo API request. The next API request activates the rotated token, matching Wahoo's token-lifecycle guidance.
 - Generic Wahoo refresh `400` responses are treated as an opaque provider anomaly, not as an immediate token deletion: a server-owned account cooldown protects the shared provider allowance, then a short consecutive-failure threshold requires user reconnection. A successful refresh atomically clears the failure counter with the winning rotated token. The recovery marker has no credentials or provider response body. OAuth flow completion, terminal cleanup, route disabling, reconnection, restoration, and release are bound to OAuth-flow, credential, explicit-disconnect-operation, or connection-state generations as appropriate. Explicit disconnect atomically fences OAuth and captures the token set, refuses to race a live refresh lease, and lets only its exact operation generation use the fenced credential. Subscription cleanup captures the token collection and token root in one transaction and compares the captured token document version inside deletion, so a same-ID replacement cannot be deleted by stale cleanup. Recovery must use the same pinned Wahoo account; changing accounts requires an explicit disconnect first. Route restoration keeps its generation-bound marker through settings restoration, parking-barrier closure, and parked-row reconciliation; the scheduler retries that marker after any partial failure. Reconnect-required multi-collection release retains a separate server-only repair marker and is retried in bounded cursor-checkpointed pages.
 - Direct activity delivery writes its outbound echo fingerprint before the Wahoo POST. If a final lifecycle/account check aborts before any provider request starts, the exact operation-owned receipt is rolled back; after the POST starts, the receipt is retained because delivery may be ambiguous.
@@ -66,12 +171,44 @@ Wahoo requires six composite indexes: one `tokens` collection-group index on `wa
 - Pro access is required to connect, receive new imports, and run history. Disconnect remains available after Pro access ends.
 - User deletion guards run before queue insertion, worker processing, and event persistence. Local cleanup remains authoritative if provider deauthorization is temporarily unavailable.
 
+### FIT download diagnostics
+
+`[WahooFITDownload] Request diagnostic.` records each started download request at INFO for a validated FIT
+or allowed redirect, and WARNING for `http_error`, `timeout`, or `request_error`. It includes request elapsed
+milliseconds, the existing deadline, HTTP status (null before a response), and `requestAttempt` (one-based
+HTTP request number within this download, including redirects; not the durable queue retry count).
+CloudFront cache text is reduced to fixed `hit`, `miss`, `error`, `refresh_hit`, `missing`, or `other` categories.
+`Age` and numeric `Retry-After` are retained only as nonnegative safe integers; absent or invalid values, including
+date-form Retry-After, are null.
+`x-amz-cf-id` and `x-amz-request-id` values of at most 256 characters are SHA-256 hashed, never logged raw.
+No URLs, filenames, user/workout identities, bodies, raw headers, exception text or credentials enter these logs.
+Correlate through the existing platform execution ID. A pre-request lifecycle rejection emits no request diagnostic,
+and logging failure cannot change download success or the original sanitized error. The 60-second deadline,
+redirect/size/FIT checks, request count and durable retry behavior are unchanged. After separate approval, deploy
+only `processWorkoutTask`; no cloud monitoring apply or replay is required.
+
 ## Release checklist
 
-1. Publish `@sports-alliance/sports-lib` 17.2.2 and verify both application lockfiles resolve the published artifact and integrity before running `npm ci` in release automation.
+1. Verify both application lockfiles resolve the approved published `@sports-alliance/sports-lib` version and integrity before running `npm ci` in release automation. The completed Training completion proof uses Sports Lib 21.4.0; do not revert to the original 17.2.2 launch dependency.
 2. Complete Wahoo's production-app review and approve the final Wahoo brand asset and consumer-facing copy.
 3. Register every production OAuth redirect URI and configure the production webhook URL/token in the Wahoo developer portal.
 4. Set the production credentials and exact FIT-file host allowlist.
 5. Deploy the Firestore indexes, Rules, queue TTL configuration, Functions, and Hosting artifacts through the normal release workflow.
-6. Exercise sandbox OAuth with activity and route write scopes, webhook, edited-workout deduplication, history pagination/rate limiting, automatic and manual Wahoo-to-Suunto/COROS delivery, destination-namespaced echo receipts, direct FIT activity delivery, direct FIT and GPX course/route create/update behavior, GPX conversion failures and output-size bounds, each source-to-Wahoo activity route, duplicate uploads, asynchronous activity-upload polling, disconnect, expired-Pro enforcement, and account deletion with test accounts.
-7. Monitor callable/webhook error rates, queue age/retries, skipped reasons, FIT download failures, Wahoo upload status failures, Wahoo 429 responses, and cleanup failures before enabling broadly.
+6. Exercise OAuth with activity, route, Plan and Workout scopes; webhook handling; edited-workout deduplication; history pagination/rate limiting; activity and route delivery; planned-workout create/update/reschedule/copy/Stop; duplicate recovery; saved-zone today/+6 behavior; disconnect; expired-Pro enforcement; and account deletion with authorized test accounts. Do not treat cloud acceptance as a device receipt.
+7. Monitor callable/webhook error rates, Training delivery outcomes and queue age/retries, reconnect prompts, skipped reasons, FIT download failures, Wahoo upload status failures, Wahoo 429 responses, and cleanup failures. Wahoo Training delivery is already live under approved enablement; #655 does not require code rollback work or disabling its source-controlled flag. Normal Stop, disconnect and deletion safeguards remain product behavior. Future deployment still needs separate approval.
+
+For manual background history, deploy the shared custom-range coordinator/retry support first, then the existing `addWahooAPIHistoryToQueue`, then the frontend. Wahoo adds no new Function, queue, Rules, indexes, credentials, consent or MCP/Training contract. Verify exact dates, concurrent admission, legacy responses, paged continuation, account changes, dialog reopen, completion cooldown, duplicate rejection and teardown. Rollback uses the previous frontend request shape; keep the coordinator/retry support until accepted runs drain. See [manual history release boundaries](connection-history-import.md#manual-activity-imports-suunto-coros-and-wahoo). No deployment is implicit in these code changes.
+
+Monitoring is **covered/unchanged**: the existing connection-history and recorded-import bundles already include Wahoo worker, dispatcher, backlog, committed outcomes and failure signals. No new telemetry labels, monitoring apply, dispatch tuning or replay is needed.
+
+## Optional history on connection
+
+Connections offers **Import history from this service**, selected by default for eligible Pro connections and reconnections, with **30 days** selected initially. Users can choose 90 days, 1 year, 2 years, or all eligible retained Wahoo history. Clearing the checkbox connects without starting history. The server accepts a durable run only after successful authorization; users can keep using the app or close the page. Progress and recoverable retries appear on Connections, independently of connection status. Existing cooldowns and permissions apply, and no automatic import continues earlier than the selected boundary.
+
+Wahoo imports eligible FIT-backed workouts only, one history page at a time. Route libraries and outbound delivery remain separate. Route-permission reconnect shortcuts open Connections before authorization so users can review the history checkbox.
+
+See [connection history import](connection-history-import.md) for the shared architecture, capability-registration requirements and backend-first release order. Manual History Import retains its existing date range and uses an additive background receipt for updated clients; old callers keep their stats response.
+
+## Activity sending workspace
+
+One-time recorded-activity sending now links from Connections to the dedicated, owner-only `/send-activities` workspace. It supports reviewed local FIT/FIT.gz and eligible retained QS originals, enforces Pro before new preparation/delivery, and retains results across navigation/reload. Existing automatic delivery and route tools keep their separate settings and contracts. See [the activity workspace lifecycle](activity-sending-workspace.md) for account pinning, bounded staging, recovery, stopping, deletion and release verification.

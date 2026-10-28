@@ -124,6 +124,20 @@ describe('Cloud Tasks Utils', () => {
     });
 
     describe('task dispatch', () => {
+        it.each(['normal', 'heavy'])('uses a separate deterministic task name for a replacement source (%s)', async tier => {
+            const { enqueueSportsLibReparseTask, enqueueSportsLibReparseHeavyTask } = await import('./cloud-tasks');
+            const enqueue = tier === 'heavy' ? enqueueSportsLibReparseHeavyTask : enqueueSportsLibReparseTask;
+            await expect(enqueue('job-1', { taskNameSuffix: 'source-2', scheduleDelaySeconds: 30 })).resolves.toBe(true);
+            expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith({ jobId: 'job-1' }, expect.objectContaining({
+                id: `${tier === 'heavy' ? 'reparse-heavy' : 'reparse'}-job-1-source-2`, scheduleDelaySeconds: 30,
+            }));
+            hoisted.mockTaskQueue.enqueue.mockRejectedValue({ code: 'functions/task-already-exists' });
+            await expect(enqueue('job-1', { taskNameSuffix: 'source-2' })).resolves.toBe(false);
+            expect(hoisted.mockTaskQueue.enqueue).toHaveBeenLastCalledWith({ jobId: 'job-1' }, expect.objectContaining({
+                id: `${tier === 'heavy' ? 'reparse-heavy' : 'reparse'}-job-1-source-2`,
+            }));
+        });
+
         it('enqueues workout work through the fully-qualified Firebase task queue', async () => {
             const { enqueueWorkoutTask } = await import('./cloud-tasks');
 
@@ -133,7 +147,7 @@ describe('Cloud Tasks Utils', () => {
                 'projects/test-project/locations/test-location/functions/processWorkoutTask',
             );
             expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith(
-                { queueItemId: 'item-123', serviceName: 'garminAPI' },
+                { queueItemId: 'item-123', serviceName: 'garminAPI', dispatchRecoveryGeneration: 0 },
                 { id: 'garminAPI-item-123-1000', scheduleDelaySeconds: 60 },
             );
         });
@@ -144,7 +158,7 @@ describe('Cloud Tasks Utils', () => {
             await expect(enqueueWorkoutTask('service.with.dots' as ServiceNames, 'item/with spaces', 7.8)).resolves.toBe(true);
 
             expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith(
-                { queueItemId: 'item/with spaces', serviceName: 'service.with.dots' },
+                { queueItemId: 'item/with spaces', serviceName: 'service.with.dots', dispatchRecoveryGeneration: 0 },
                 { id: 'service-with-dots-item-with-spaces-7', scheduleDelaySeconds: 1 },
             );
         });
@@ -154,6 +168,7 @@ describe('Cloud Tasks Utils', () => {
 
             await expect(enqueueWorkoutTask('corosAPI' as ServiceNames, 'stable-item', 1000, undefined, {
                 queueRevision: 'revision/2',
+                dispatchRecoveryGeneration: 3,
             })).resolves.toBe(true);
 
             expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith(
@@ -161,6 +176,7 @@ describe('Cloud Tasks Utils', () => {
                     queueItemId: 'stable-item',
                     serviceName: 'corosAPI',
                     queueRevision: 'revision/2',
+                    dispatchRecoveryGeneration: 3,
                 },
                 { id: 'corosAPI-stable-item-1000-revision-revision-2', scheduleDelaySeconds: 1 },
             );
@@ -176,10 +192,41 @@ describe('Cloud Tasks Utils', () => {
                 {
                     queueItemId: 'legacy-item',
                     serviceName: 'corosAPI',
+                    dispatchRecoveryGeneration: 0,
                     queueDateCreated: 1000,
                 },
                 { id: 'corosAPI-legacy-item-1000', scheduleDelaySeconds: 1 },
             );
+        });
+
+        it('enqueues a distinct delayed recovery task bound to a legacy queue incarnation', async () => {
+            const { enqueueWorkoutTask } = await import('./cloud-tasks');
+
+            await expect(enqueueWorkoutTask(
+                'suuntoApp' as ServiceNames,
+                'item-123',
+                1000,
+                95,
+                {
+                    recoveryTaskKey: 'token-refresh-1',
+                    dispatchRecoveryGeneration: 1,
+                    recoveryTaskOnly: true,
+                },
+            )).resolves.toBe(true);
+
+            expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith(
+                {
+                    queueItemId: 'item-123',
+                    serviceName: 'suuntoApp',
+                    queueDateCreated: 1000,
+                    dispatchRecoveryGeneration: 1,
+                },
+                {
+                    id: 'suuntoApp-item-123-1000-dedupe-recovery-token-refresh-1',
+                    scheduleDelaySeconds: 95,
+                },
+            );
+            expect(hoisted.mockCloudTasksClient.getTask).not.toHaveBeenCalled();
         });
 
         it('preserves the workout recovery path for a stale production task-name reservation', async () => {
@@ -198,11 +245,11 @@ describe('Cloud Tasks Utils', () => {
             })).resolves.toBe(true);
 
             expect(hoisted.mockTaskQueue.enqueue).toHaveBeenNthCalledWith(1,
-                { queueItemId: 'item-123', serviceName: 'suuntoApp' },
+                { queueItemId: 'item-123', serviceName: 'suuntoApp', dispatchRecoveryGeneration: 0 },
                 { id: 'suuntoApp-item-123-1000', scheduleDelaySeconds: 1 },
             );
             expect(hoisted.mockTaskQueue.enqueue).toHaveBeenNthCalledWith(2,
-                { queueItemId: 'item-123', serviceName: 'suuntoApp' },
+                { queueItemId: 'item-123', serviceName: 'suuntoApp', dispatchRecoveryGeneration: 0 },
                 { id: 'suuntoApp-item-123-1000-dedupe-recovery-7', scheduleDelaySeconds: 1 },
             );
             expect(hoisted.mockCloudTasksClient.getTask).toHaveBeenCalledWith({
@@ -277,7 +324,7 @@ describe('Cloud Tasks Utils', () => {
                 'item-recovery',
                 1000,
                 undefined,
-                { recoveryTaskKey: '2-1' },
+                { recoveryTaskKey: '2-1', dispatchRecoveryGeneration: 1 },
             );
         });
 
@@ -374,6 +421,26 @@ describe('Cloud Tasks Utils', () => {
                     scheduleDelaySeconds: 1,
                 },
             );
+        });
+
+        it.each(['live', 'missing', 'unknown'])('handles a %s duplicate task for revision-bound route history', async state => {
+            const { enqueueRouteSyncTask } = await import('./cloud-tasks');
+            hoisted.mockTaskQueue.enqueue.mockRejectedValueOnce(Object.assign(new Error('Already exists'), { code: 6 }));
+            if (state === 'live') hoisted.mockCloudTasksClient.getTask.mockResolvedValueOnce([{}]);
+            if (state === 'missing') hoisted.mockCloudTasksClient.getTask.mockRejectedValueOnce(Object.assign(new Error('NOT_FOUND'), { code: 5 }));
+            if (state === 'unknown') hoisted.mockCloudTasksClient.getTask.mockRejectedValueOnce(new Error('lookup unavailable'));
+            const pending = enqueueRouteSyncTask('route-history', 1000, undefined, {
+                queueRevision: 'revision-2', queueDateCreated: 1000, recoveryTaskKey: 'minute-123', recoveryScheduleDelaySeconds: 900,
+            });
+            if (state === 'unknown') await expect(pending).rejects.toThrow('lookup unavailable');
+            else await expect(pending).resolves.toBe(true);
+            expect(hoisted.mockTaskQueue.enqueue).toHaveBeenNthCalledWith(1,
+                { queueItemId: 'route-history', queueRevision: 'revision-2', queueDateCreated: 1000 },
+                { id: 'route-sync-route-history-1000-revision-revision-2', scheduleDelaySeconds: 1 });
+            expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledTimes(state === 'missing' ? 2 : 1);
+            if (state === 'missing') expect(hoisted.mockTaskQueue.enqueue).toHaveBeenNthCalledWith(2,
+                { queueItemId: 'route-history', queueRevision: 'revision-2', queueDateCreated: 1000 },
+                { id: 'route-sync-route-history-1000-revision-revision-2-dedupe-recovery-minute-123', scheduleDelaySeconds: 900 });
         });
 
         it('does not collide when two Sleep revisions share a creation millisecond', async () => {

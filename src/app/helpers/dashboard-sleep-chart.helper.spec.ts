@@ -1,4 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import {
+  groupCanonicalSleepNightFragments,
+  parseSleepDateTimeOffsetSeconds,
+  resolveSleepDisplayDate,
+  SLEEP_PROVIDERS,
+} from '@shared/sleep';
 import { buildDashboardSleepTrendContext, formatSleepDuration } from './dashboard-sleep-chart.helper';
 
 function expectedSleepDateLabel(sleepDate: string): string {
@@ -10,6 +16,58 @@ function expectedSleepDateLabel(sleepDate: string): string {
 }
 
 describe('dashboard-sleep-chart.helper', () => {
+  it('shares one bounded provider-night identity and wake-date rule', () => {
+    const base = {
+      provider: SLEEP_PROVIDERS.SuuntoApp,
+      providerUserId: 'suunto-user',
+      sleepDate: '2026-09-28',
+      isNap: false,
+    };
+    const input = [
+      { ...base, id: 'first', startTimeMs: 1_000, endTimeMs: 2_000 },
+      { ...base, id: 'second', startTimeMs: 2_000 + (30 * 60 * 1000), endTimeMs: 3_000 + (30 * 60 * 1000) },
+      { ...base, id: 'separate', startTimeMs: 3_000 + (61 * 60 * 1000), endTimeMs: 4_000 + (61 * 60 * 1000) },
+      { ...base, id: 'unidentified', providerUserId: null, startTimeMs: 1_500, endTimeMs: 2_500 },
+      { ...base, id: 'nap', isNap: true, startTimeMs: 1_500, endTimeMs: 2_500 },
+    ];
+
+    expect(groupCanonicalSleepNightFragments(input).map(group => group.map(item => item.id))).toEqual([
+      ['first', 'second'],
+      ['separate'],
+      ['unidentified'],
+      ['nap'],
+    ]);
+    const session = {
+      source: { provider: SLEEP_PROVIDERS.SuuntoApp, providerUserId: 'suunto-user', sourceSessionKey: 'sleep' },
+      sleepDate: '2026-09-27',
+      startTimeMs: Date.parse('2026-09-27T18:57:00Z'),
+      endTimeMs: Date.parse('2026-09-28T04:00:00Z'),
+      isNap: false,
+      timezoneOffsetSeconds: Number.MAX_SAFE_INTEGER,
+      providerFields: { suunto: { timestamp: '2026-09-28T07:00:00+03:00' } },
+    };
+    expect(resolveSleepDisplayDate(session)).toBe('2026-09-28');
+    expect(resolveSleepDisplayDate({
+      ...session,
+      sleepDate: '2026-09-27',
+      timezoneOffsetSeconds: null,
+      providerFields: null,
+    })).toBe('2026-09-27');
+    expect(parseSleepDateTimeOffsetSeconds('2026-09-28T07:00:00+19:00')).toBeNull();
+    expect(resolveSleepDisplayDate({
+      ...session,
+      sleepDate: 'not-a-date',
+      endTimeMs: Date.parse('2026-09-28T04:00:00Z'),
+      timezoneOffsetSeconds: null,
+      providerFields: null,
+    })).toBeNull();
+    expect(resolveSleepDisplayDate({
+      ...session,
+      sleepDate: '',
+      endTimeMs: Number.MAX_SAFE_INTEGER,
+    })).toBeNull();
+  });
+
   it('builds stacked sleep points for staged provider sessions', () => {
     const context = buildDashboardSleepTrendContext([{
       id: 'garmin-sleep-1',
@@ -117,7 +175,7 @@ describe('dashboard-sleep-chart.helper', () => {
             timestamp: '2026-05-25T21:29:00.000+03:00',
           },
         },
-        source: { provider: 'SuuntoApp', sourceSessionKey: 'suunto-previous-overnight-source' },
+        source: { provider: 'SuuntoApp', providerUserId: 'suunto-user', sourceSessionKey: 'suunto-previous-overnight-source' },
       },
       {
         id: 'suunto-nap',
@@ -136,7 +194,7 @@ describe('dashboard-sleep-chart.helper', () => {
             timestamp: '2026-05-26T05:00:00.000+03:00',
           },
         },
-        source: { provider: 'SuuntoApp', sourceSessionKey: 'suunto-nap-source' },
+        source: { provider: 'SuuntoApp', providerUserId: 'suunto-user', sourceSessionKey: 'suunto-nap-source' },
       },
       {
         id: 'suunto-next-overnight',
@@ -155,7 +213,7 @@ describe('dashboard-sleep-chart.helper', () => {
             timestamp: '2026-05-26T21:47:00.000+03:00',
           },
         },
-        source: { provider: 'SuuntoApp', sourceSessionKey: 'suunto-next-overnight-source' },
+        source: { provider: 'SuuntoApp', providerUserId: 'suunto-user', sourceSessionKey: 'suunto-next-overnight-source' },
       },
     ] as any[]);
 
@@ -244,6 +302,69 @@ describe('dashboard-sleep-chart.helper', () => {
     expect(reverse.points[0]).toMatchObject({ id: 'alpha|zulu', score: 90 });
   });
 
+  it('reconciles adjacent Suunto SleepIds to the canonical night shown by Suunto', () => {
+    const source = { provider: 'SuuntoApp', providerUserId: 'suunto-user' };
+    const context = buildDashboardSleepTrendContext([
+      {
+        id: 'part-1', source: { ...source, sourceSessionKey: 'sleep-id-1' }, sleepDate: '2026-09-28',
+        startTimeMs: Date.parse('2026-09-27T18:57:00Z'), endTimeMs: Date.parse('2026-09-27T23:54:00Z'),
+        timezoneOffsetSeconds: 3 * 3600,
+        durationSeconds: 15_840, inBedDurationSeconds: 17_820, isNap: false,
+        stageDurationsSeconds: { deep: 3_900, light: 10_200, rem: 1_740, awake: 1_620 },
+        score: { value: 62 },
+        vitals: { averageHeartRateBpm: 65, minimumHeartRateBpm: 61,
+          averageHrvMs: 29, hrvSampleCount: 46, maxSpo2Percent: 98 },
+        providerFields: { suunto: { SleepOnsetLatencyDuration: 360 } },
+      },
+      {
+        id: 'part-2', source: { ...source, sourceSessionKey: 'sleep-id-2' }, sleepDate: '2026-09-28',
+        startTimeMs: Date.parse('2026-09-28T00:01:00Z'), endTimeMs: Date.parse('2026-09-28T04:00:00Z'),
+        timezoneOffsetSeconds: 3 * 3600,
+        durationSeconds: 13_320, inBedDurationSeconds: 14_340, isNap: false,
+        stageDurationsSeconds: { deep: 2_280, light: 7_380, rem: 3_660, awake: 540 },
+        score: { value: 72 },
+        vitals: { averageHeartRateBpm: 61, minimumHeartRateBpm: 57,
+          averageHrvMs: 40, hrvSampleCount: 35, maxSpo2Percent: 99 },
+        providerFields: { suunto: { SleepOnsetLatencyDuration: 480 } },
+      },
+    ] as any[]);
+
+    expect(context.points).toHaveLength(1);
+    expect(context.points[0]).toMatchObject({
+      id: 'part-1|part-2',
+      startTimeMs: Date.parse('2026-09-27T19:03:00Z'),
+      endTimeMs: Date.parse('2026-09-28T04:00:00Z'),
+      totalSeconds: 29_160,
+      awakeSeconds: 3_060,
+      score: 72,
+      averageHeartRateBpm: 63,
+      minimumHeartRateBpm: 57,
+      hrvSampleCount: 81,
+      maxSpo2Percent: 99,
+    });
+    expect(context.points[0].averageHrvMs).toBeCloseTo(33.753086, 5);
+    expect(context.points[0].hrvObservations).toEqual([expect.objectContaining({
+      timestampMs: Date.parse('2026-09-28T04:00:00Z'),
+      calendarDate: '2026-09-28',
+      value: context.points[0].averageHrvMs,
+    })]);
+    expect(context.latestPoint).toBe(context.points[0]);
+    expect(context.latestPoint?.averageHrvMs).toBeCloseTo(33.753086, 5);
+  });
+
+  it('keeps non-adjacent Suunto sleeps separate even when their wake date matches', () => {
+    const source = { provider: 'SuuntoApp', providerUserId: 'suunto-user' };
+    const context = buildDashboardSleepTrendContext([
+      { id: 'first', source: { ...source, sourceSessionKey: 'first' }, sleepDate: '2026-09-28',
+        startTimeMs: 1_000, endTimeMs: 3_000, durationSeconds: 2, isNap: false },
+      { id: 'second', source: { ...source, sourceSessionKey: 'second' }, sleepDate: '2026-09-28',
+        startTimeMs: 3_000 + (31 * 60 * 1000), endTimeMs: 5_000 + (31 * 60 * 1000),
+        durationSeconds: 2, isNap: false },
+    ] as any[]);
+
+    expect(context.points.map(point => point.id)).toEqual(['first', 'second']);
+  });
+
   it('ignores invalid physiological fragments and bounds Suunto timezone offsets', () => {
     const startTimeMs = Date.UTC(2026, 0, 5, 22);
     const endTimeMs = Date.UTC(2026, 0, 6, 6);
@@ -257,7 +378,7 @@ describe('dashboard-sleep-chart.helper', () => {
         timezoneOffsetSeconds: Number.MAX_SAFE_INTEGER,
         vitals: { averageHeartRateBpm: -40, minimumHeartRateBpm: -30, averageHrvMs: -50 },
         providerFields: { suunto: { timestamp: '2026-01-06T00:00:00+02:00' } },
-        source: { provider: 'SuuntoApp', sourceSessionKey: 'invalid-fragment' },
+        source: { provider: 'SuuntoApp', providerUserId: 'suunto-user', sourceSessionKey: 'invalid-fragment' },
       },
       {
         id: 'valid-fragment',
@@ -267,7 +388,7 @@ describe('dashboard-sleep-chart.helper', () => {
         durationSeconds: 4 * 3600,
         timezoneOffsetSeconds: 2 * 60 * 60,
         vitals: { averageHeartRateBpm: 48, minimumHeartRateBpm: 44, averageHrvMs: 60 },
-        source: { provider: 'SuuntoApp', sourceSessionKey: 'valid-fragment' },
+        source: { provider: 'SuuntoApp', providerUserId: 'suunto-user', sourceSessionKey: 'valid-fragment' },
       },
     ] as any[]);
 
@@ -276,8 +397,22 @@ describe('dashboard-sleep-chart.helper', () => {
       sleepDate: '2026-01-06',
       averageHeartRateBpm: 48,
       minimumHeartRateBpm: 44,
-      averageHrvMs: 60,
+      averageHrvMs: null,
     });
+  });
+
+  it('does not reconcile Suunto fragments without a provider-account identity', () => {
+    const context = buildDashboardSleepTrendContext([
+      { id: 'unknown-a', source: { provider: 'SuuntoApp', sourceSessionKey: 'a' }, sleepDate: '2026-09-28',
+        startTimeMs: 1_000, endTimeMs: 3_000, durationSeconds: 2, isNap: false,
+        vitals: { averageHrvMs: 29, hrvSampleCount: 46 } },
+      { id: 'unknown-b', source: { provider: 'SuuntoApp', sourceSessionKey: 'b' }, sleepDate: '2026-09-28',
+        startTimeMs: 4_000, endTimeMs: 6_000, durationSeconds: 2, isNap: false,
+        vitals: { averageHrvMs: 40, hrvSampleCount: 35 } },
+    ] as any[]);
+
+    expect(context.points.map(point => point.id)).toEqual(['unknown-a', 'unknown-b']);
+    expect(context.points.every(point => point.averageHrvMs === null)).toBe(true);
   });
 
   it('normalizes non-positive vitals when a night has only one stored fragment', () => {
@@ -310,7 +445,7 @@ describe('dashboard-sleep-chart.helper', () => {
       id: 'invalid-time',
       startTimeMs: Number.MAX_SAFE_INTEGER - 1,
       endTimeMs: Number.MAX_SAFE_INTEGER,
-      sleepDate: '',
+      sleepDate: '2026-01-06',
       durationSeconds: 1,
       source: { provider: 'GarminAPI', sourceSessionKey: 'invalid-time' },
     }] as any[]);

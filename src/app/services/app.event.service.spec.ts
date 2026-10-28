@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { AppEventService } from './app.event.service';
-import { Firestore, doc, docData, collection, collectionData, deleteDoc, updateDoc, writeBatch, query, where, limit, getDocs, getDocsFromCache, onSnapshot, FieldPath } from 'app/firebase/firestore';
+import { Firestore, doc, docData, collection, collectionData, deleteDoc, updateDoc, writeBatch, query, where, limit, getDocFromServer, getDocs, getDocsFromServer, getDocsFromCache, onSnapshot, FieldPath, runTransaction } from 'app/firebase/firestore';
 import { Storage } from 'app/firebase/storage';
 import { Auth } from 'app/firebase/auth';
 import { AppAnalyticsService } from './app.analytics.service';
@@ -16,6 +16,8 @@ import { getMetadata } from 'app/firebase/storage';
 import { webcrypto } from 'node:crypto';
 import { POWER_CURVE_STAT_TYPE } from '@shared/power-curve';
 import { ActivityTypes, DataActivityTypes } from '@sports-alliance/sports-lib';
+import { sanitizeActivityFirestoreWritePayload } from '@shared/firestore-write-sanitizer';
+import { PerformanceCurveDataService } from './performance-curve-data.service';
 
 // Polyfill crypto for JSDOM environment
 if (!globalThis.crypto || !globalThis.crypto.subtle) {
@@ -118,10 +120,13 @@ vi.mock('app/firebase/firestore', async (importOriginal) => {
         where: vi.fn(),
         limit: vi.fn(),
         getDocs: vi.fn(),
+        getDocFromServer: vi.fn(),
+        getDocsFromServer: vi.fn(),
         getDocsFromCache: vi.fn(),
         onSnapshot: vi.fn(),
         deleteDoc: vi.fn(),
         updateDoc: vi.fn(),
+        runTransaction: vi.fn(),
         writeBatch: vi.fn(() => ({
             update: mocks.batchUpdate,
             commit: mocks.batchCommit,
@@ -270,9 +275,13 @@ describe('AppEventService', () => {
             getActivities: vi.fn().mockReturnValue([]),
             startDate: new Date()
         });
-        mocks.getActivityFromJSON.mockReturnValue({
-            setID: vi.fn().mockReturnThis(),
-            toJSON: vi.fn().mockReturnValue({})
+        mocks.getActivityFromJSON.mockImplementation(() => {
+            let id: string | null = null;
+            return {
+                setID: vi.fn(function (value: string) { id = value; return this; }),
+                getID: () => id,
+                toJSON: vi.fn().mockReturnValue({}),
+            };
         });
         mocks.getCountFromServer.mockResolvedValue({ data: () => ({ count: 0 }) });
         mocks.batchCommit.mockResolvedValue(undefined);
@@ -476,6 +485,44 @@ describe('AppEventService', () => {
 
         expect((service as any).buildEventDetailsFingerprint(previous))
             .not.toBe((service as any).buildEventDetailsFingerprint(current));
+    });
+
+    it('seeds lazy summaries independently of complete events and preserves QS metadata', async () => {
+        const user = { uid: 'summary-owner' } as any;
+        const eventDoc = createQueryDoc('summary-id', { name: 'Run', startDate: 1710000000000,
+            endDate: 1710001000000, stats: { Distance: 0, 'Activity Types': ['Running'], 'Vendor Metric': 42 },
+            tags: ['Easy'], originalFiles: [{ path: 'source.fit' }], mergeType: 'multi', });
+        (getDocs as Mock).mockResolvedValue({ docs: [eventDoc], size: 1, metadata: { fromCache: false } });
+        (onSnapshot as Mock).mockImplementation((_query, _options, next) => {
+            next(createQuerySnapshot([eventDoc], [{ type: 'added', doc: eventDoc, oldIndex: -1, newIndex: 0 }]));
+            return vi.fn();
+        });
+        const once = await firstValueFrom(service.getEventSummariesOnceByWithMeta(user, [], 'startDate', false, 0, { seedLiveQuery: true }));
+        const live = await firstValueFrom(service.getEventSummariesBy(user, [], 'startDate', false, 0));
+        expect(live[0]).toBe(once.events[0]);
+        expect(live[0].getID()).toBe('summary-id');
+        expect(live[0].tags).toEqual(['Easy']);
+        expect(live[0].originalFiles).toEqual([{ path: 'source.fit' }]);
+        expect(live[0].getDistance()?.getValue()).toBe(0);
+        expect(live[0].getSourceSnapshot?.().stats['Vendor Metric']).toBe(42);
+        expect('toJSON' in live[0]).toBe(false);
+        expect(mocks.getEventFromJSON).not.toHaveBeenCalled();
+        const full = await firstValueFrom(service.getEventsBy(user, [], 'startDate', false, 0));
+        expect(mocks.getEventFromJSON).toHaveBeenCalledTimes(1);
+        expect(full[0]).not.toBe(live[0]);
+    });
+
+    it.each(['file', 'provenance'])('includes source-only %s changes omitted by Sports Lib JSON in live fingerprints', change => {
+        const sourceIdentity = { version: 1, activityId: 'stable', startMs: 0, endMs: 1000, importedType: 'Running' };
+        const event = (updated: boolean) => ({
+            getID: () => 'event', toJSON: () => ({ name: 'Same summary' }),
+            originalFile: { path: 'original.fit', generation: updated && change === 'file' ? '2' : '1' },
+            getActivities: () => [{ getID: () => 'stable', toJSON: () => ({ type: 'Walking' }),
+                sourceIdentity: { ...sourceIdentity, importedType: updated && change === 'provenance' ? 'Cycling' : 'Running' } }],
+        });
+
+        expect((service as any).buildEventDetailsFingerprint(event(false)))
+            .not.toBe((service as any).buildEventDetailsFingerprint(event(true)));
     });
 
     it('should reuse one-shot event parsing for an identical initial live snapshot', async () => {
@@ -711,6 +758,59 @@ describe('AppEventService', () => {
         subscription.unsubscribe();
     });
 
+    it('waits for server event and child reads instead of taking an incomplete cached model', async () => {
+        const cached = { name: 'Cached', startDate: new Date(1000) };
+        (docData as Mock).mockReturnValue(of(cached));
+        (collectionData as Mock).mockReturnValue(of([]));
+        const eventRef = { kind: 'event' }, activitiesRef = { kind: 'activities' };
+        (doc as Mock).mockReturnValueOnce(eventRef);
+        (query as Mock).mockReturnValueOnce(activitiesRef);
+        (getDocFromServer as Mock).mockResolvedValue({ data: () => ({ ...cached, name: 'Server' }) });
+        let finishChildren!: (snapshot: unknown) => void;
+        (getDocsFromServer as Mock).mockReturnValue(new Promise(resolve => { finishChildren = resolve; }));
+        mocks.getEventFromJSON.mockImplementation(json => {
+            const event = createMockEvent(json);
+            let activities: any[] = [];
+            event.addActivities.mockImplementation(children => { activities = children; });
+            event.getActivities = () => activities;
+            return event;
+        });
+        mocks.getActivityFromJSON.mockImplementation(json => createMockEvent(json));
+        let settled = false;
+        const result = firstValueFrom(service.getEventAndActivitiesOnce({ uid: 'owner' } as any, 'event-id'))
+            .then(event => { settled = true; return event; });
+        await Promise.resolve();
+        expect(settled).toBe(false);
+        expect(doc).toHaveBeenCalledWith(expect.anything(), 'users', 'owner', 'events', 'event-id');
+        expect(collection).toHaveBeenCalledWith(expect.anything(), 'users', 'owner', 'activities');
+        expect(where).toHaveBeenCalledWith('eventID', '==', 'event-id');
+        expect(getDocFromServer).toHaveBeenCalledExactlyOnceWith(eventRef);
+        expect(getDocsFromServer).toHaveBeenCalledExactlyOnceWith(activitiesRef);
+        finishChildren({ docs: [createQueryDoc('server-leg', {})] });
+        const event = await result;
+        expect(event?.name).toBe('Server');
+        expect(event?.getActivities().map(activity => activity.getID())).toEqual(['server-leg']);
+        expect(docData).not.toHaveBeenCalled();
+        expect(collectionData).not.toHaveBeenCalled();
+    });
+
+    it.each(['event', 'activities'])('propagates a failed server %s read without using cached action data', async failedRead => {
+        const error = new Error('Server unavailable');
+        (getDocFromServer as Mock).mockResolvedValue({ data: () => ({ name: 'Server' }) });
+        (getDocsFromServer as Mock).mockResolvedValue({ docs: [] });
+        const failed = failedRead === 'event' ? getDocFromServer : getDocsFromServer;
+        (failed as Mock).mockRejectedValueOnce(error);
+        await expect(firstValueFrom(service.getEventAndActivitiesOnce({ uid: 'owner' } as any, 'event-id'))).rejects.toBe(error);
+        expect(docData).not.toHaveBeenCalled();
+        expect(collectionData).not.toHaveBeenCalled();
+    });
+
+    it('returns null when the server confirms that an action event was deleted', async () => {
+        (getDocFromServer as Mock).mockResolvedValue({ data: () => undefined });
+        (getDocsFromServer as Mock).mockResolvedValue({ docs: [] });
+        expect(await firstValueFrom(service.getEventAndActivitiesOnce({ uid: 'owner' } as any, 'deleted'))).toBeNull();
+    });
+
     it('should get event and activities correctly', async () => {
         const userId = 'user1';
         const eventId = 'event1';
@@ -734,6 +834,35 @@ describe('AppEventService', () => {
         expect(mockLogger.error).not.toHaveBeenCalled();
         expect(result).toBeTruthy();
         expect(result!.getID()).toBe('event1');
+    });
+
+    it.each([
+        { value: undefined, expected: 1000 },
+        { value: null, expected: 1000 },
+        { value: 'invalid-date', expected: 1000 },
+        { value: 0, expected: 0 },
+        { value: 2000, expected: 2000 },
+        { value: '2026-10-23T00:00:00Z', expected: Date.parse('2026-10-23T00:00:00Z') },
+        { value: { seconds: 3, nanoseconds: 500000000 }, expected: 3500 },
+        { value: { seconds: 3 }, expected: 3000 },
+        { value: { seconds: 3, nanoseconds: null }, expected: 3000 },
+        { value: { toDate: () => new Date(4000) }, expected: 4000 },
+    ])('loads full action models with legacy file date $value without mutating snapshots', async ({ value, expected }) => {
+        const sourceFile = Object.freeze({ path: 'source.fit', startDate: value });
+        const source = { name: 'Run', startDate: new Date(1000), originalFiles: [sourceFile] };
+        mocks.getEventFromJSON.mockImplementation(json => createMockEvent(json));
+        mockFileService.toDate.mockImplementation(AppFileService.prototype.toDate);
+        (docData as Mock).mockReturnValue(of(source));
+        (collectionData as Mock).mockReturnValue(of([]));
+
+        const event = await firstValueFrom(service.getEventAndActivities({ uid: 'owner' } as any, 'event-id'));
+
+        expect(event?.getID()).toBe('event-id');
+        expect(event?.originalFiles?.[0].path).toBe('source.fit');
+        expect(event?.originalFiles?.[0].startDate).toEqual(new Date(expected));
+        expect(event?.originalFiles?.[0]).not.toBe(sourceFile);
+        expect(sourceFile.startDate).toBe(value);
+        expect(mockLogger.error).not.toHaveBeenCalled();
     });
 
     it('should emit live event details updates when event metadata changes', async () => {
@@ -1429,6 +1558,103 @@ describe('AppEventService', () => {
         expect(result).toBe(true);
     });
 
+    it('emits live metadata-only benchmark updates even when Sports Lib JSON and activities stay the same', async () => {
+        const actual = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+        mocks.getEventFromJSON.mockImplementation(json => actual.EventImporterJSON.getEventFromJSON(json));
+        const snapshots$ = new Subject<Record<string, unknown>>();
+        (docData as Mock).mockReturnValue(snapshots$.asObservable());
+        (collectionData as Mock).mockReturnValue(of([]));
+        const base = { name: 'Comparison', startDate: Date.UTC(2026, 0, 1), endDate: Date.UTC(2026, 0, 1) + 1000,
+            srcFileType: actual.FileType.FIT, privacy: actual.Privacy.Private, stats: {}, activities: [] };
+        const report = { referenceId: 'ref', testId: 'test', timestamp: new Date(0), metrics: { gnss: null, streamMetrics: {} } };
+        const emissions: any[] = [];
+        const subscription = service.getEventDetailsLive({ uid: 'u1' } as any, 'e1').subscribe(event => emissions.push(event));
+        snapshots$.next({ ...base, benchmarkResults: { pair: report }, benchmarkSourceRevision: 0 });
+        snapshots$.next({ ...base, benchmarkResults: { pair: report }, benchmarkSourceRevision: 0, benchmarkSourceWritePending: true });
+        snapshots$.next({ ...base, benchmarkResults: { pair: { ...report, requiresRegeneration: true } }, benchmarkSourceRevision: 1 });
+        snapshots$.next({ ...base, benchmarkResults: { pair: { ...report, requiresRegeneration: true } }, benchmarkSourceRevision: 2 });
+        snapshots$.next({ ...base, benchmarkResults: { pair: { ...report, requiresRegeneration: true } }, benchmarkSourceRevision: 2 });
+        expect(emissions.map(event => event?.benchmarkSourceRevision)).toEqual([0, 0, 1, 2]);
+        expect(emissions[1].benchmarkSourceWritePending).toBe(true);
+        expect(emissions[2].benchmarkResults.pair.requiresRegeneration).toBe(true);
+        subscription.unsubscribe();
+    });
+
+    it('keeps the latest report date monotonic when another pair finishes saving later', async () => {
+        const newer = { referenceId: 'other-ref', testId: 'other-test', timestamp: { toDate: () => new Date(4000) } };
+        (runTransaction as Mock).mockImplementation(async (_db, callback) => callback({
+            get: vi.fn().mockResolvedValue({ exists: () => true, data: () => ({ benchmarkResults: { other: newer } }) }), update: vi.fn(),
+        }));
+        const saved = await service.saveBenchmarkResult({ uid: 'u1' } as any, 'e1', {
+            referenceId: 'ref', testId: 'test', timestamp: new Date(1000), metrics: { gnss: null, streamMetrics: {} },
+        });
+        expect(saved.benchmarkLatestAt).toEqual(new Date(4000));
+    });
+
+    it('normalizes timestamps on retained pairs before returning a saved report map to the UI', async () => {
+        const timestamp = { toDate: () => new Date(2000) };
+        const previous = { referenceId: 'other-ref', testId: 'other-test', timestamp,
+            metrics: { gnss: null, streamMetrics: {} },
+            qualityIssues: [{ type: 'dropout', streamType: 'HeartRate', severity: 'warning', timestamp }] };
+        (runTransaction as Mock).mockImplementation(async (_db, callback) => callback({
+            get: vi.fn().mockResolvedValue({ exists: () => true, data: () => ({ benchmarkResults: { other: previous } }) }), update: vi.fn(),
+        }));
+        const saved = await service.saveBenchmarkResult({ uid: 'u1' } as any, 'e1', {
+            referenceId: 'ref', testId: 'test', timestamp: new Date(1000), metrics: { gnss: null, streamMetrics: {} },
+        });
+        expect(saved.benchmarkResults.other.timestamp).toEqual(new Date(2000));
+        expect(saved.benchmarkResults.other.qualityIssues?.[0].timestamp).toEqual(new Date(2000));
+        expect(previous.timestamp).toBe(timestamp);
+    });
+
+    it('saves benchmark results transactionally while retaining other pairs and stripping streams', async () => {
+        const oldResult = { referenceId: 'other-ref', testId: 'other-test', timestamp: new Date(0) };
+        const report = { referenceId: 'ref', testId: 'test', referenceName: ' Device A ', testName: 'Device B', timestamp: new Date(1),
+            metrics: { gnss: null, streamMetrics: {} }, nested: { streams: [123] } } as any;
+        const update = vi.fn();
+        (runTransaction as Mock).mockImplementation(async (_db, callback) => callback({
+            get: vi.fn().mockResolvedValue({ exists: () => true, data: () => ({ benchmarkSourceRevision: 2, benchmarkSourceWritePending: false, benchmarkResults: { other: oldResult } }) }), update,
+        }));
+        const result = await service.saveBenchmarkResult({ uid: 'u1' } as any, 'e1', report, 2);
+        expect(result.benchmarkResults).toMatchObject({ other: oldResult, ref_test: { ...report, nested: {} } });
+        expect(hasStreamsKey(result)).toBe(false);
+        expect(result.benchmarkDevices).toEqual(['device a', 'device b']);
+        expect(hasStreamsKey(update.mock.calls[0][1])).toBe(false);
+        expect(update.mock.calls[0][1]).not.toHaveProperty('benchmarkSourceRevision');
+        expect(update.mock.calls[0][1]).not.toHaveProperty('benchmarkSourceWritePending');
+    });
+
+    it('retains a legacy report when saving a different pair with no prior source revision', async () => {
+        const legacy = { referenceId: 'old-ref', testId: 'old-test', timestamp: new Date(0) };
+        const report = { referenceId: 'ref', testId: 'test', timestamp: new Date(1) } as any;
+        (runTransaction as Mock).mockImplementation(async (_db, callback) => callback({
+            get: vi.fn().mockResolvedValue({ exists: () => true, data: () => ({ benchmarkResults: {}, benchmarkResult: legacy }) }), update: vi.fn(),
+        }));
+        const saved = await service.saveBenchmarkResult({ uid: 'u1' } as any, 'e1', report);
+        expect(saved.benchmarkResults).toEqual({ 'old-ref_old-test': legacy, ref_test: report });
+    });
+
+    it.each([undefined, 0, 3])('rejects benchmark saves during a source rewrite even at the matching revision (%s)', async revision => {
+        const update = vi.fn();
+        (runTransaction as Mock).mockImplementation(async (_db, callback) => callback({
+            get: vi.fn().mockResolvedValue({ exists: () => true,
+                data: () => ({ benchmarkSourceRevision: revision, benchmarkSourceWritePending: true }) }), update,
+        }));
+        await expect(service.saveBenchmarkResult({ uid: 'u1' } as any, 'e1', {} as any, revision ?? 0))
+            .rejects.toThrow('recordings changed');
+        expect(update).not.toHaveBeenCalled();
+    });
+
+    it.each([false, true])('rejects a benchmark save after the event changed or was deleted (%s)', async missing => {
+        const update = vi.fn();
+        (runTransaction as Mock).mockImplementation(async (_db, callback) => callback({
+            get: vi.fn().mockResolvedValue({ exists: () => !missing, data: () => ({ benchmarkSourceRevision: 3 }) }), update,
+        }));
+        await expect(service.saveBenchmarkResult({ uid: 'u1' } as any, 'e1', {} as any, 2))
+            .rejects.toThrow('recordings changed');
+        expect(update).not.toHaveBeenCalled();
+    });
+
     it('should sanitize updateEventProperties payload by stripping streams and top-level activities', async () => {
         const user = { uid: 'user1' } as any;
         const payload = {
@@ -1521,6 +1747,7 @@ describe('AppEventService', () => {
             userID: 'other-user',
             eventStartDate: new Date('2026-01-01T00:00:00.000Z'),
             sourceActivityKey: 'sha256:signature:0',
+            sourceIdentity: { version: 1, activityId: 'private-source-id' },
             details: {
                 streams: [{ type: 'Power', values: [100, 200] }],
             },
@@ -1538,6 +1765,7 @@ describe('AppEventService', () => {
         expect(writtenPayload.userID).toBeUndefined();
         expect(writtenPayload.eventStartDate).toBeUndefined();
         expect(writtenPayload.sourceActivityKey).toBeUndefined();
+        expect(writtenPayload.sourceIdentity).toBeUndefined();
         expect(hasStreamsKey(writtenPayload)).toBe(false);
     });
 
@@ -1549,6 +1777,7 @@ describe('AppEventService', () => {
             userID: 'other-user',
             eventStartDate: new Date('2026-01-01T00:00:00.000Z'),
             sourceActivityKey: 'sha256:signature:0',
+            sourceIdentity: { version: 1, activityId: 'private-source-id' },
             nested: {
                 streams: [{ type: 'Pace', values: [1, 2, 3] }],
             },
@@ -1588,6 +1817,7 @@ describe('AppEventService', () => {
         expect(writtenActivityPatch.userID).toBeUndefined();
         expect(writtenActivityPatch.eventStartDate).toBeUndefined();
         expect(writtenActivityPatch.sourceActivityKey).toBeUndefined();
+        expect(writtenActivityPatch.sourceIdentity).toBeUndefined();
         expect(hasStreamsKey(writtenActivityPatch)).toBe(false);
 
         const writtenEventPatch = mocks.batchUpdate.mock.calls[1][1];
@@ -1720,6 +1950,19 @@ describe('AppEventService', () => {
         expect(where).toHaveBeenCalledWith('privacy', '==', 'public');
     });
 
+    it('uses server-only reads for completeness-sensitive history pages without a cache fallback', async () => {
+        const user = { uid: 'user-page' } as any;
+        (query as Mock).mockReturnValue('page-query');
+        (getDocsFromServer as Mock).mockResolvedValueOnce({ docs: [], size: 0, metadata: { fromCache: false } });
+        const result = await firstValueFrom(service.getEventsPageOnceByWithMeta(user, [], 'startDate', false, 250, { requireServer: true }));
+        expect(getDocsFromServer).toHaveBeenCalledWith('page-query');
+        expect(getDocs).not.toHaveBeenCalled();
+        expect(result.hasMore).toBe(false);
+        (getDocsFromServer as Mock).mockRejectedValueOnce(new Error('offline'));
+        await expect(firstValueFrom(service.getEventsPageOnceByWithMeta(user, [], 'startDate', false, 250, { requireServer: true }))).rejects.toThrow('offline');
+        expect(getDocs).not.toHaveBeenCalled();
+    });
+
     it('should build Firestore query without limit/cursors when disabled', () => {
         const user = { uid: 'user-query' } as any;
 
@@ -1842,11 +2085,13 @@ describe('AppEventService', () => {
     });
 
     describe('activity ID transfer', () => {
+        const identity = (index = 0) => ({ startDate: new Date(1000 + index * 60000),
+            endDate: new Date(61000 + index * 60000), type: 'Cycling' });
         it('should transfer activity IDs from existing activities during client-side parsing (Single File)', async () => {
             const activityId = 'act1';
 
             // Mock activities from Firestore
-            const mockActivity = {
+            const mockActivity = { ...identity(),
                 getID: vi.fn().mockReturnValue(activityId),
                 setID: vi.fn().mockReturnThis(),
             } as any;
@@ -1858,7 +2103,7 @@ describe('AppEventService', () => {
             } as any;
 
             // Mock re-parsed activity (without ID)
-            const parsedActivity = {
+            const parsedActivity = { ...identity(),
                 getID: vi.fn().mockReturnValue(null),
                 setID: vi.fn().mockReturnThis(),
             } as any;
@@ -1879,7 +2124,7 @@ describe('AppEventService', () => {
         it('should preserve renamed creator name from existing activity during client-side parsing', async () => {
             const activityId = 'act1';
 
-            const existingActivity = {
+            const existingActivity = { ...identity(),
                 getID: vi.fn().mockReturnValue(activityId),
                 creator: { name: 'Renamed Device' },
             } as any;
@@ -1890,7 +2135,7 @@ describe('AppEventService', () => {
                 getID: vi.fn().mockReturnValue('event1')
             } as any;
 
-            const parsedActivity = {
+            const parsedActivity = { ...identity(),
                 getID: vi.fn().mockReturnValue(null),
                 setID: vi.fn().mockReturnThis(),
                 creator: { name: 'Original Parsed Name' },
@@ -1910,7 +2155,7 @@ describe('AppEventService', () => {
 
         it('should replace an existing Unknown creator during client-side parsing', async () => {
             const activityId = 'act1';
-            const existingActivity = {
+            const existingActivity = { ...identity(),
                 getID: vi.fn().mockReturnValue(activityId),
                 creator: { name: 'Unknown' },
             } as any;
@@ -1919,7 +2164,7 @@ describe('AppEventService', () => {
                 originalFile: { path: 'path/to/file.fit' },
                 getID: vi.fn().mockReturnValue('event1')
             } as any;
-            const parsedActivity = {
+            const parsedActivity = { ...identity(),
                 getID: vi.fn().mockReturnValue(null),
                 setID: vi.fn().mockReturnThis(),
                 creator: { name: 'Garmin Edge 1030 Plus' },
@@ -1939,8 +2184,8 @@ describe('AppEventService', () => {
 
         it('should transfer activity IDs in merged events scenario (Multiple Files)', async () => {
             // Firestore activities
-            const mockActivity1 = { getID: () => 'act1' } as any;
-            const mockActivity2 = { getID: () => 'act2' } as any;
+            const mockActivity1 = { ...identity(0), getID: () => 'act1' } as any;
+            const mockActivity2 = { ...identity(1), getID: () => 'act2' } as any;
 
             const mockEvent = {
                 getID: () => 'event1',
@@ -1949,11 +2194,11 @@ describe('AppEventService', () => {
             } as any;
 
             // Mock re-parsed activities (without IDs)
-            const parsedActivity1 = {
+            const parsedActivity1 = { ...identity(0),
                 getID: vi.fn().mockReturnValue(null),
                 setID: vi.fn().mockReturnThis(),
             } as any;
-            const parsedActivity2 = {
+            const parsedActivity2 = { ...identity(1),
                 getID: vi.fn().mockReturnValue(null),
                 setID: vi.fn().mockReturnThis(),
             } as any;
@@ -1982,15 +2227,15 @@ describe('AppEventService', () => {
         });
 
         it('should handle mismatched activity counts gracefully (More parsed than Firestore)', async () => {
-            const mockActivity1 = { getID: () => 'act1' } as any;
+            const mockActivity1 = { ...identity(0), getID: () => 'act1' } as any;
             const mockEvent = {
                 getActivities: () => [mockActivity1],
                 originalFile: { path: 'path/to/file.fit' },
                 getID: () => 'event1'
             } as any;
 
-            const parsedActivity1 = { getID: () => null, setID: vi.fn().mockReturnThis() } as any;
-            const parsedActivity2 = { getID: () => null, setID: vi.fn().mockReturnThis() } as any;
+            const parsedActivity1 = { ...identity(0), getID: () => null, setID: vi.fn().mockReturnThis() } as any;
+            const parsedActivity2 = { ...identity(1), getID: () => null, setID: vi.fn().mockReturnThis() } as any;
             const parsedEvent = {
                 getActivities: () => [parsedActivity1, parsedActivity2],
             } as any;
@@ -2005,15 +2250,15 @@ describe('AppEventService', () => {
         });
 
         it('should handle mismatched activity counts gracefully (Fewer parsed than Firestore)', async () => {
-            const mockActivity1 = { getID: () => 'act1' } as any;
-            const mockActivity2 = { getID: () => 'act2' } as any;
+            const mockActivity1 = { ...identity(0), getID: () => 'act1' } as any;
+            const mockActivity2 = { ...identity(1), getID: () => 'act2' } as any;
             const mockEvent = {
                 getActivities: () => [mockActivity1, mockActivity2],
                 originalFile: { path: 'path/to/file.fit' },
                 getID: () => 'event1'
             } as any;
 
-            const parsedActivity1 = { getID: () => null, setID: vi.fn().mockReturnThis() } as any;
+            const parsedActivity1 = { ...identity(0), getID: () => null, setID: vi.fn().mockReturnThis() } as any;
             const parsedEvent = {
                 getActivities: () => [parsedActivity1],
             } as any;
@@ -2026,6 +2271,15 @@ describe('AppEventService', () => {
             expect(parsedActivity1.setID).toHaveBeenCalledWith('act1');
         });
 
+        it('does not borrow the only saved ID for a different source window', async () => {
+            const saved = { ...identity(0), getID: () => 'saved-id' };
+            const parsed = { ...identity(1), getID: () => null, setID: vi.fn() };
+            vi.spyOn(service as any, 'fetchAndParseOneFile').mockResolvedValue({ getActivities: () => [parsed] });
+            await (service as any).calculateStreamsFromWithOrchestration({ getID: () => 'event',
+                originalFile: { path: 'synthetic.fit' }, getActivities: () => [saved] });
+            expect(parsed.setID).not.toHaveBeenCalled();
+        });
+
         it('should not crash if Firestore has no activities', async () => {
             const mockEvent = {
                 getActivities: () => [],
@@ -2033,7 +2287,7 @@ describe('AppEventService', () => {
                 getID: () => 'event1'
             } as any;
 
-            const parsedActivity1 = { getID: () => null, setID: vi.fn().mockReturnThis() } as any;
+            const parsedActivity1 = { ...identity(0), getID: () => null, setID: vi.fn().mockReturnThis() } as any;
             const parsedEvent = {
                 getActivities: () => [parsedActivity1],
             } as any;
@@ -2170,6 +2424,83 @@ describe('AppEventService', () => {
             )).rejects.toThrow('No positional data found for GPX export.');
         });
 
+        it.each(['missing', 'zero', 'timer-only', 'moving-only', 'duration-only'])(
+            'preserves durability eligibility and recorded TSS through saved JSON and source hydration: %s',
+            async (durationState) => {
+                const actual = await vi.importActual<typeof import('@sports-alliance/sports-lib')>('@sports-alliance/sports-lib');
+                const { EventJSONSanitizer } = await vi.importActual<typeof import('../utils/event-json-sanitizer')>('../utils/event-json-sanitizer');
+                const start = new Date('2026-01-01T10:00:00Z');
+                const end = new Date('2026-01-01T11:00:00Z');
+                const parsed = actual.EventImporterJSON.getActivityFromJSON({
+                    name: null, startDate: +start, endDate: +end, type: actual.ActivityTypes.Cycling,
+                    creator: { name: 'Test watch' }, powerMeter: true, trainer: false,
+                    stats: {}, streams: [], laps: [], intensityZones: [], events: [],
+                });
+                parsed.setID('leg-1');
+                parsed.setDuration(new actual.DataDuration(3600));
+                parsed.addStat(new actual.DataElapsedTime(3600));
+                parsed.addStat(new actual.DataTrainingStressScore(50));
+                parsed.addStat(new actual.DataTrainingStressScoreMethod(actual.TrainingStressScoreMethod.IMPORTED));
+                parsed.addStreams([
+                    new actual.Stream(actual.DataPower.type, Array(3600).fill(200)),
+                    new actual.Stream(actual.DataHeartRate.type, Array(3600).fill(150)),
+                ]);
+                const cachedSummary = actual.analyzeActivityDurability(parsed).summary;
+                expect(cachedSummary?.eligibility.eligible).toBe(true);
+                if (!cachedSummary) {
+                    throw new Error('Expected eligible synthetic durability evidence');
+                }
+                parsed.addStat(new actual.DataDurabilityEvidence(cachedSummary));
+                if (durationState !== 'duration-only') {
+                    parsed.removeStat(actual.DataDuration.type);
+                }
+                if (durationState === 'zero') {
+                    parsed.setDuration(new actual.DataDuration(0));
+                } else if (durationState === 'timer-only') {
+                    parsed.addStat(new actual.DataTimerTime(3600));
+                } else if (durationState === 'moving-only') {
+                    parsed.addStat(new actual.DataMovingTime(3600));
+                }
+
+                const saved = sanitizeActivityFirestoreWritePayload(JSON.parse(JSON.stringify(parsed.toJSON())));
+                expect(saved).not.toHaveProperty('streams');
+                mocks.sanitize.mockImplementation(EventJSONSanitizer.sanitize.bind(EventJSONSanitizer));
+                mocks.getActivityFromJSON.mockImplementation(actual.EventImporterJSON.getActivityFromJSON.bind(actual.EventImporterJSON));
+                const [restored] = service['parseActivitiesFromSnapshots']('event-1', [{ ...saved, id: 'leg-1' }]);
+                expect(restored.getAllStreams()).toEqual([]);
+                const recordedStats = JSON.parse(JSON.stringify(restored.toJSON().stats));
+                const eventJSON = {
+                    name: 'Saved workout', startDate: +start, endDate: +end, srcFileType: actual.FileType.FIT,
+                    privacy: actual.Privacy.Private, description: null, isMerge: false, stats: {}, activities: [],
+                };
+                const event = Object.assign(actual.EventImporterJSON.getEventFromJSON(eventJSON).setID('event-1'), {
+                    originalFile: { path: 'users/u1/events/event-1/original.fit' },
+                });
+                event.addActivity(restored);
+                const parsedEvent = actual.EventImporterJSON.getEventFromJSON(eventJSON);
+                parsedEvent.addActivity(parsed);
+                vi.spyOn(service['originalFileHydrationService'], 'parseEventFromOriginalFiles').mockResolvedValue({
+                    finalEvent: parsedEvent, parsedEvents: [parsedEvent], sourceFilesCount: 1, failedFiles: [],
+                });
+
+                const hydrated = await firstValueFrom(service.attachStreamsToEventWithActivities(
+                    { uid: 'u1' } as Parameters<AppEventService['attachStreamsToEventWithActivities']>[0],
+                    event,
+                ));
+                const chart = new PerformanceCurveDataService();
+                const result = chart.buildDurabilitySeriesWithMarkerSource(hydrated.getActivities());
+
+                expect(hydrated.getFirstActivity()).toBe(restored);
+                expect(restored.getAllStreams()).toHaveLength(2);
+                expect(result.renderSeries).toHaveLength(durationState === 'duration-only' ? 1 : 0);
+                expect(result.activitySummaries).toHaveLength(durationState === 'duration-only' ? 1 : 0);
+                expect(chart.getAvailability(hydrated.getActivities()).hasDurability).toBe(durationState === 'duration-only');
+                expect(restored.toJSON().stats).toEqual(recordedStats);
+                expect(restored.getStat(actual.DataTrainingStressScore.type)?.getValue()).toBe(50);
+                expect(restored.getStat(actual.DataDurabilityEvidence.type)?.getValue()).toEqual(cachedSummary);
+            },
+        );
+
         it('should delegate attachStreamsToEventWithActivities to parsing and attach source-hydrated activity data by default', async () => {
             const hydrationService = (service as any).originalFileHydrationService;
             const oldAscentStat = { getValue: () => 280.8 };
@@ -2180,6 +2511,7 @@ describe('AppEventService', () => {
                 tankUpdates: [{ pressure: 200 }],
             };
             const existingActivity = {
+                creator: { name: 'User label' },
                 getID: () => 'a-1',
                 clearStreams: vi.fn(),
                 addStreams: vi.fn(),
@@ -2187,6 +2519,7 @@ describe('AppEventService', () => {
                 getStat: vi.fn().mockImplementation((type: string) => type === 'Ascent' ? oldAscentStat : undefined),
             } as any;
             const parsedActivity = {
+                creator: { manufacturer: 'Suunto', serialNumber: 'private-serial' },
                 getID: () => 'a-1',
                 getAllStreams: vi.fn().mockReturnValue(parsedStreams),
                 getDiveSourceRecords: vi.fn().mockReturnValue(parsedDiveSourceRecords),
@@ -2221,6 +2554,7 @@ describe('AppEventService', () => {
                     mergeMultipleFiles: true,
                 }),
             );
+            expect(existingActivity.creator).toEqual({ name: 'User label', manufacturer: 'Suunto' });
             expect(existingActivity.clearStreams).toHaveBeenCalledTimes(1);
             expect(existingActivity.addStreams).toHaveBeenCalledWith(parsedStreams);
             expect(existingActivity.setDiveSourceRecords).toHaveBeenCalledWith(parsedDiveSourceRecords);

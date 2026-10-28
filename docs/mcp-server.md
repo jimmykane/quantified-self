@@ -1,19 +1,861 @@
-# Read-only MCP Server
+# MCP Server
+
+## Private workout reflections (Item 10)
+
+Three additive tools expose a deliberately separate athlete-context surface. `get_workout_reflection` requires both
+`activity-details:read` and independent `workout-reflections:read`; `save_workout_reflection` and
+`delete_workout_reflection` additionally require `workout-reflections:write`. OAuth request/approval/refresh/bearer
+validation, HTTP prechecks, registration, UI consent and transaction authority enforce the same dependencies.
+Requested permissions start checked and can be withheld; removing the activity parent removes both dependent grants.
+Existing tokens never gain them through refresh. Reauthorize and refresh the tool catalog after the separate release.
+
+Inputs are strict: opaque owner/connection-bound `activityRef`, explicit `target: recording | activity`, and for changes
+current `expectedRevision` plus UUID `mutationId`. Save requires one nonblank `note` of at most 2000 characters.
+Reflections contain no effort or RPE field. Workout RPE remains the existing recording stat, edited through QS Edit
+details; reflection tools cannot change it. No inference from injury text or provider payloads is permitted. Delete
+requires a present current reflection. Benchmarks and moved/missing activities fail closed. The backend uses explicit
+parent/membership and five-field leaf masks, never forwards stored documents.
+
+Read/save outputs contain only `activityRef`, target, revision, `present` and note; save
+adds `changed`. Absent content returns revision zero or a nonzero cleared revision with null note. Delete returns
+only reference, target, revision and deleted state. Replies are bounded by the fixed schema and 2000-character text limit.
+A same-UUID unchanged retry is idempotent; stale or changed retries conflict. Both writes advertise readOnly=false,
+destructive=true, idempotent=true, openWorld=false across all transports. The external host owns native approval; QS
+cannot detect automatic approval settings. Keep automatic approval off for individual review and disable reflection
+writes in unattended/Research modes. This never grants Training mutations or provider actions.
+
+The Assistant exposes the read and local prepare-only save/delete tools through its independent conversation choice,
+which starts on for fresh and New chats and can be disabled. Existing off choices and legacy missing flags stay off.
+Model writes are unavailable. Current-turn activity/date discovery and exact target/revision reads
+produce a bounded review, including current/new text and permanent-delete disclosure. Existing app Apply rechecks
+proposal, expiry, owner, generation, permission and revision through the same service. New chat restores the on default
+and invalidates old proposals. This Assistant default does not expand external MCP grants or change public tool schemas.
+Text is untrusted private context and may contain health or location information. Revocation cannot erase received
+copies; quoted Assistant context follows existing conversation retention. Private content is not included in normal
+activity metrics, descriptions, Timeline/Health reads, public shares, exports or provider deliveries.
+
+Storage, deletion/reparse behavior, planning no-impact rationale and pinned inspiration
+remain in [Training workspace](training-workspace.md#optional-post-workout-reflection-item-10). Registered schemas remain
+frozen. Review the additive candidate digest in `contracts/pending-change.json`, then separately release and refresh/rescan
+the registered app and sync the changed bundled skills. Source/PR validation does not deploy or install a real profile.
+
+## Training plans and planned workouts (#690)
+
+This is source implementation, not deployment, registered-client promotion or real-profile plugin installation. After a
+separately approved release, refresh the client catalog and explicitly reauthorize the independent
+`training-plans:read` scope (**Training plans and planned workouts**). Metrics, activities, Timeline notes and provider
+permissions never grant it. Any consenting owner may use it, with no pilot UID or Pro gate; manual planning is available
+to every signed-in account.
+Authored titles/notes may contain sensitive personal information. Legacy omitted selections and refresh exclude this new
+grant. HTTP prechecks, tool registration and data reads enforce it. Revocation cannot erase copies already received.
+
+| Tool | Current-record read |
+| --- | --- |
+| `list_training_plans` | Optional name/lifecycle filters; active, paused and archived metadata |
+| `list_saved_workouts` | Up to 25 undated owner-owned workout recipes per page, with optional title/status filters |
+| `get_workout_prescription_analysis` | Exact prescribed subtotals, explicit speed-based duration ranges, unknown contributions, authored purpose totals and repeat counts for one scheduled or saved recipe |
+| `get_saved_workout` | One full saved recipe, including complete Strength Training exercises when present |
+| `get_training_plan_phases` | Complete bounded authored phases with current plan/schedule revisions; legacy absence is empty |
+| `get_training_plan` | Metadata, range, revision and current workout count, without loading workouts |
+| `query_planned_workouts` | Legacy document-ordered inclusive-date query retained for registered-client compatibility |
+| `query_planned_workouts_by_date` | Inclusive dates in ascending local-date and stable reference order; calendar-visible (default standalone + active plan), standalone, selected plan or all |
+| `get_planned_workout` | Complete validated v1 canonical recipe, notes and owner-unit display text |
+| `get_training_sync_status` | Existing local per-service evidence for a plan/workout; never a live provider check |
+| `get_planned_workout_completion` | Exact stored completion link only; never similarity inference |
+| `get_planned_workout_completions` | Exact stored completion links for up to 25 referenced workouts, preserving input order |
+| `assess_planned_workout_compatibility` | Safe local exact/degraded/unsupported mapping assessment for selected or all providers |
+
+References bind owner, connection, entity and creation time. Structural node IDs are public recipe fields, not document
+IDs. No app links are returned from these planning projections. Plan lists and the legacy workout query use document-ID
+order. The additive chronological workout query orders by `localDate` and document ID, so bounded upcoming results cannot
+omit earlier matching dates merely because their document IDs sort later. Lists default to 25/max 100 results, use
+25-record scan pages and permit at most 1,000 scanned records per call. Inclusive windows permit 366 days. Skipped
+workouts are labelled, deleted excluded; historical dates read current authored records, not revisions. Explicit plan/all
+scopes include inactive plans. Cursors bind exact filters/limit, owner, connection and schedule revision; changed schedules
+require restarting. Dates remain calendar labels; no plan timezone is invented. Delivery retains its saved timezone.
+The 90-day deleted-workout recovery rule changes no MCP wire contract: these reads already exclude deleted workouts,
+and the registered Training write union includes neither standalone-history restore nor permanent single-workout
+deletion. The internal expiry worker uses the existing server mutation path and grants no MCP client cleanup authority.
+Increasing the worker's bounded daily throughput changes only when expired internal records are purged; it does not
+change MCP selection, projections, scopes, schemas, or proposal/confirmation behavior.
+Selected input includes every fetched page entry (even unused lookahead/tail entries) and cached records are counted
+once per fetch. It is bounded to 2 MiB, an individual record to 128 KiB and complete structured-plus-JSON-text responses to
+256 KiB. Oversized records fail without truncating instructions. Canonical values remain alongside Sports Lib display;
+manual/mixed-ending recipes receive no invented duration estimate.
+
+Interval editor ordering/duplication uses the same canonical ordered arrays: moves retain structural IDs, copies receive
+fresh IDs for the copied node and every repeat child. Planned-workout reads (v1/v2), their ordered display steps and full
+saved-recipe reads preserve that resulting prescription. Existing complete-recipe create/update proposals cover these
+edits through the unchanged scope, revision, preview/native-approval and idempotent-apply boundaries. This adds no tool,
+schema, consent, provider action or permission; editor-only exact-value caches never enter a saved or exposed recipe.
+Focused read/schema fixtures verify copied/reordered repeats, notes, fractional seconds, exact metres/m/s, fresh IDs,
+scope/reference fences and unknown-field rejection. No migration, registered contract update or local-plugin rebuild/
+refresh is needed; the existing focused Training, Activity and cross-domain workflows still discover runtime contracts.
+
+The bulk completion read accepts 1–25 unique opaque workout references and returns the same exact linked/unlinked
+projection as the single-workout tool in input order. It does not scan for similar activities. Completed-activity
+references remain independently gated by `activity-details:read`; provider/event/activity identities never leak when that
+grant is absent.
+
+Compatibility assessment reads one current stored recipe and applies the versioned local provider mapping rules. It
+returns only provider, exact/degraded/unsupported level, and bounded safe code/field/message issues. Wahoo's dated-workout
+duration requirement is included, so any non-time step makes delivery unsupported rather than prompting an invented
+duration. The assessment does not read a provider connection, Pro state, destination, mapping digest/version or delivery
+ledger; it does not contact providers, approve degradation, or promise provider-account/device readiness. The later
+delivery preview/apply remains authoritative.
+
+`training-plans.service.ts` owns explicit field masks and read-only Firestore snapshot transactions, not new persistence.
+
+Saved-workout reads are additive under the existing `training-plans:read` grant. Lists use opaque owner/connection-bound
+references, scan at most 200 library entries and return at most 25 per page; the cursor binds filters, limit and
+private library revision. An edit invalidates an older cursor. Exact reads validate the full recipe and strength draft;
+private receipts, tombstones, IDs and delivery records stay excluded. Library recipes carry no date, completion link
+or sync consent. Additive #780 `preview_saved_workout_change` and `apply_saved_workout_change` provide one strict
+library or placement operation per approval. They require both `training-plans:read` and `training-plans:write`, with
+no delivery grant. The preview takes exact schedule/library revisions and opaque source/item/plan references, checks
+capacity and plan range, and binds owner, connection, grant generation and a 15-minute expiry. The separate apply is
+idempotent and rechecks those conditions inside the existing sanitized mutation transaction. Copying a saved recipe
+creates a new library identity; placing one creates independent scheduled identities on 1–100 sorted distinct dates.
+Permanent library deletion removes only the saved recipe, never existing scheduled snapshots. Active-plan placements
+follow only that plan's pre-existing sync choice; Standalone placements do not acquire Send consent. The proposal,
+receipt and underlying mutation remain server-private; browser callables do not widen MCP authority. The built-in
+Assistant exposes only preview to the model and retains its app-owned confirmation gate. These additive tools require
+a separately approved Functions release and client catalog refresh before they are available to connected clients.
+Fresh schedule/account-deletion/plan-deletion fences run before and after results, as do external connection consent and
+grant-generation checks. Settings fingerprints are read only to correlate current delivery evidence and never returned.
+An oversized manual or separately approved MCP plan shift may temporarily hold the same internal bulk-operation fence
+while its immutable history is staged. During that interval, planning reads return the existing temporary-unavailability result instead of a
+partly staged schedule; after the atomic commit they read the new revision. This adds no MCP field, tool, scope,
+projection, provider action, or wider write authority. An oversized MCP shift uses the approved proposal's private
+owner/connection/grant binding; the worker rechecks it before publishing and cancels unpublished history and the old
+proposal if approval is lost. A restored grant requires a new preview and approval. Ordinary MCP shifts retain the
+bounded transaction path.
+No credentials, private ledgers, attempts, artifacts, approval digests, issue text, receipts or history are read. Reads do
+not import transports or write Training data; normal OAuth usage counters remain permitted infrastructure behavior.
+
+`shared/training-delivery-summary.ts` supplies machine-readable classification to MCP and separate presentation metadata
+to the UI. The plan UI may emphasize today and future workouts, summarize earlier workouts separately, consolidate the
+service projections into one entry and use an overview followed by a focused service-detail view. That presentation-only
+focus does not enter the returned `projection`: this tool retains its all-current-workout totals, outcomes, strict schema,
+consent and actions unchanged.
+Services appear only with existing settings/evidence. Outputs include saved timezone, copy/mismatch indicators, freshness
+timestamps and plan counts. `checkedAtMs` is local read time, not a provider check. Aggregates cover all current non-deleted
+plan workouts (max 400), never a day/page. Historical workout scans cap at 1,000; settings, overrides and retained statuses
+at 1,600 each with lookahead, all in pages of 25. Incomplete scans withhold total/synced/retained counts and mismatch certainty.
+Suppression, transfers, earlier accounts, stale confirmations, inactive plans and Pro pauses preserve UI semantics.
+Valid sync-off settings may have an empty destination before any account has been selected; this is not malformed data
+or delivery confirmation.
+Synced means confirmed provider-side workout delivery, not a native provider plan or watch receipt. Empty/missing/incomplete
+evidence is not success. Assistant consent/routing is described in [Assistant](assistant.md); planning semantics remain in
+[Training workspace](training-workspace.md).
+
+Two child scopes add mutations without broadening reads: `training-plans:write` covers the bounded safe plan/workout
+lifecycle and `training-delivery:write` covers provider delivery controls. Either requires `training-plans:read`; existing
+connections must reauthorize and refresh cannot add either scope. `preview_create_planned_workout` is the preferred
+single-workout path: it requires the current schedule revision plus one complete canonical recipe, while the server owns
+the proposal-local key. Its optional `delivery` object atomically adds an initial send to selected or all connected
+providers and therefore also requires `training-delivery:write` plus an explicit IANA time zone. It deliberately has no
+operation union. Connections without the delivery grant receive a scope-specific focused schema that omits the delivery
+field entirely. The existing
+`preview_training_changes` remains the batch/non-create path, accepts at most 25 strict ordered changes, and must not be
+retried unchanged after validation rejects it. Neither preview creates authored or provider state.
+`apply_training_changes` consumes the opaque proposal as a separately approval-gated write tool. ChatGPT, Claude and
+other MCP hosts own their native tool-approval UI; QS does not use MCP elicitation as a second confirmation round.
+The additive `get_training_change_status` recovers an uncertain apply reply using its exact opaque proposal reference
+and permission mode, with the same original read/child-write grants. It is read-only: no approval, lease renewal,
+resume, provider call or automatic retry. Finalized results are the retained strict apply result, not provider/watch
+receipt. Nonterminal checkpoint counts are a lower bound; `applying` means wait. Missing or unavailable receipts do not
+prove that nothing applied. Never create replacements, invent references, split an approved batch, or replay a
+declined/cancelled call through another interface. A still-approved retry must retain native client approval.
+The 25-change schema limit is not a host response-time guarantee. The redacted #791 server evidence, recovery states,
+30-day result lifetime and deployment/catalog boundary are detailed in
+[Training workspace](training-workspace.md#lost-mcp-apply-replies-791). This read is not added to the Assistant model's
+tools and does not widen consent. Source support requires separate deployment and registered-client discovery.
+Supplied-plan authoring must preserve source units, ordered work/recovery repeats and explicitly assigned numeric targets,
+not translate the first number in a title into distance or keep all guidance only in notes. Shared MCP/Assistant write
+instructions require clarification for ambiguity and bounded source-versus-saved-recipe verification. Schedule
+create/update/copy summaries expose actual definition/repeat-block, ending and target kinds and a budgeted owner-unit
+sample of ordered endings/numeric targets; omitted nodes are identified and full instructions still need review.
+New/replaced non-strength recipe previews reject narrow literal title contradictions before persisting a proposal:
+missing timed efforts, labelled numeric HR without an HR target, or an explicit race-unit mismatch in a single distance
+step. Notes/ambiguous titles are never translated into steps; unchanged legacy date/scope edits remain possible.
+Paused plan creation is explicit. Verify a small source-representative first batch before later batches, including
+changed numeric prescriptions rather than only similar shapes; stop on discrepancies and separate saved count from
+verified coverage. Successful storage and sampled checks never prove full prescription fidelity. This changes instructions and
+existing summary wording, not schemas, tools, scopes or approval. The pending digest preserves earlier additions; separate
+deployment/rescan and bundled-guidance sync are required, not new consent. See
+[Prescription fidelity](training-workspace.md#prescription-fidelity-when-translating-a-supplied-plan) for limits and tests.
+
+Write-enabled clients also receive shared next-step guidance: offer paused-plan activation once after confirmed creation,
+explain the previous active plan pause and existing sync resumption, then separately offer optional named-service sync.
+Use explicit destinations/timezone, existing grants and native approval; an ambiguous yes never grants both choices.
+Saved sync evidence is not live availability or watch receipt. No tool/schema/scope changes or reauthorization are added;
+the instruction digest requires separate release/rescan and bundled guidance sync. See
+[Plan next steps](training-workspace.md#plan-activation-and-optional-sync-next-steps).
+
+For **Duplicate to…**, the existing `copy-workout` batch change takes an exact source reference, fresh proposal-local
+key, explicit destination date and destination plan reference or `null` for Standalone. Clients should read the exact
+source and current schedule revision, preserve its scope by default and ask if the source or date is ambiguous. The
+proposal preview and approval remain required, including an out-of-range plan extension. The copied workout is a fresh
+planned identity without a completion link or standalone delivery opt-in; an existing active-plan setting may later send
+it. This UI/Assistant guidance update adds no MCP tool, schema, scope, consent or provider action and preserves the
+registered wire contract.
+For the undated Workout Library, read the exact saved recipe or source workout and both current revisions first.
+`preview_saved_workout_change` accepts one strict action: create, save from schedule, duplicate, edit, archive/restore,
+confirmed permanent recipe deletion, or placement on 1–100 explicit sorted dates. Placement requires an exact
+destination plan reference and revision, or `null` for Standalone. A plan-range extension must be explicitly confirmed
+in the preview; ambiguous source, plan or dates require a question rather than a guessed reference. The proposal
+changes nothing. Only `apply_saved_workout_change`, separately subject to the MCP host's native approval, commits the
+same owner/connection/grant/revision-bound operation. Its replay returns the committed result; it cannot add provider
+consent or rewrite an already scheduled copy when a library recipe changes.
+The host may let a user configure automatic tool approval, which the server cannot detect, so users who want to inspect
+every proposal must keep per-call approval enabled in their client. ChatGPT's destructive annotation triggers its
+native approval request. Claude users must not choose **Allow always**, and should disable Training write tools while
+using Research because Research may invoke connector tools without another approval. The server still requires the preview-created
+proposal and binds it to the owner, connection, grant, revision and expiry; replay returns its persisted terminal result.
+Plan deletion is available only as the sole proposal change and requires an explicit `convert-to-standalone` or
+`delete-workouts` choice. Its preview states that the plan and revision history are permanently removed, describes the
+workout effect, and distinguishes automatic eligible future-copy withdrawal from optional older-copy cleanup.
+The additive `preview_training_deletion` requires both child write grants plus the parent read grant, one exact current
+plan/workout reference, the current schedule revision and an explicit `removePastProviderCopies` boolean. Ask
+“Also remove older, uncompleted copies from your connected services?” unless the user already chose. A plan still
+requires its workout disposition. False preserves older copies; true requests best-effort removal through the existing
+mutation-bound cleanup marker and worker. It is not new sync consent, a live provider check, recorded-activity deletion
+or app/watch removal proof. Valid same-account access, disconnect epochs, provider restrictions and completed-copy
+protection remain authoritative. Preview performs no provider I/O; existing approval-gated `apply_training_changes`
+retains the choice and both grants through retries. Legacy batch input is frozen and still preserves older copies;
+never silently use it instead when the user requested full cleanup. For multiple targets, review separate focused
+deletions rather than extending that schema. No new callable, OAuth scope or cleanup model is introduced. Deploy and
+refresh client catalogs separately before use; no reauthorization is needed if all three grants already exist.
+If its resumable multi-transaction
+deletion or cleanup is interrupted after the lock is acquired, the proposal remains retryable and the same approved apply
+resumes the idempotent operation instead of recording a false terminal failure. Permanent single-workout deletion and
+history restoration remain deliberately absent.
+
+Compatible schedule operations are applied in one bounded Firestore transaction while retaining one immutable revision
+and idempotency receipt per operation. A write-budget overflow falls back to the existing sequential path; authority is
+still checked in every authored-write transaction. An oversized approved plan shift stages immutable history behind a
+private lock and atomically publishes current dates, the revision, receipts, and the proposal cursor. The same approved
+proposal is retryable after an interrupted apply: a direct retry resumes its own staged lock, or the worker can finish
+that staged shift without a new client call. Approval expiry is checked against retry time, independently of the stable
+workout-mutation timestamp; an expired retry cancels unpublished staging instead of extending its approval.
+Any later changes or provider actions in the proposal still require the same approved apply to be retried. Grant
+revocation, Assistant confirmation change, or proposal expiry before publication cancels the unpublished shift and
+prevents reuse of its approval. No new tool, scope, consent, schema, or provider action is exposed, so this
+implementation-only change does not require a plugin rebuild; deployment and registered-client availability remain
+separate. Apply diagnostics contain only operation counts, total/stage durations, terminal outcome and the slowest
+stage—never owner IDs, references, titles, notes or arguments. Applies taking at least five seconds emit one structured
+slow warning for operational investigation.
+
+Delivery actions resolve the destination account on the server and reuse the existing #646 command/reconciliation path.
+They never accept credentials or remote IDs. `all_connected` fans out only to connected, rollout-ready, compatible providers shown
+by preview; explicit providers return independent blocked/success results. Pro, compatibility approval, horizon,
+connection, completion and provider readiness checks remain authoritative. Provider failure never rolls back authored
+schedule changes, and MCP itself makes no direct provider HTTP request.
+For a degraded standalone create-and-send (for example, a Suunto step instruction that must be shortened), the public
+preview names the bounded, safe mapping warnings before the host's native approval. The approved Send proposal may carry
+the server-computed digest into the existing delivery command, which rechecks the current destination and payload in the
+write transaction; a changed mapping blocks delivery rather than silently approving new loss. This removes a second
+approval for the same unchanged workout. Browser Send without a digest and later plan-workout changes retain their
+existing per-workout review behavior. An applied Send result means consent and any disclosed adjustment were recorded
+and reconciliation was queued; it is not a provider acceptance or watch-receipt claim. For Suunto-bound new workouts,
+clients should omit unrequested step notes and keep necessary instructions watch-sized (40 characters alongside a
+duration/target, 54 for manual-only steps), without dropping a user-requested instruction merely to avoid review.
+If the full warning set cannot fit the bounded public preview, preview fails closed and directs the client to create
+without delivery or simplify the recipe before sending; a hidden warning is never covered by implicit approval.
+An unsupported workout is not an approvable degradation. Its provider preview says it cannot be sent, `all_connected`
+skips it, and explicit Send/Resume remains a blocked provider result without saving consent or calling that provider.
+The authored workout may still be created if the user confirms the clearly labelled partial proposal. The browser's
+direct Send confirmation is disabled for an unsupported workout. An earlier provider copy may remain unchanged when a
+new version is unsupported; neither preview nor a blocked result implies removal. Wahoo requires time endings throughout
+for Running/Cycling, untargeted outdoor Walking/Hiking and swim/rowing, or a complete matching timed-strength companion for Gym. Repetition-based strength, unsupported
+sports and distance-ending steps cannot be approved into compatibility.
+
+The built-in Assistant exposes only the applicable focused/batch previews to Gemini. It prefers the focused tool for one
+new workout, including a one-workout create-and-send request, and the batch tool for other or genuinely multi-change
+requests. One bounded proposal is stored with the current conversation and
+rendered in a compact review surface; a separate Auth + App Check callable applies or dismisses it after the user's click.
+The opaque reference and data-boundary authorization include the conversation generation and its three independent
+Training toggles. New chat and permission changes invalidate stale proposals.
+Its model-facing Genkit schema is a typed projection of the strict MCP input, not a replacement wire contract: local
+references and recipe/change unions are made legible to Gemini, while MCP still rejects invalid variants and
+unapproved writes. Include the full optional-permission tool catalogue in schema-compatibility tests when a Training
+or content input changes; otherwise one incompatible declaration can prevent every Assistant answer before a tool runs.
+The Assistant selects one relevant Training preview per turn rather than advertising all deeply nested proposals
+to Gemini together; public MCP clients continue to see all tools under their independent grants.
+Plan-level and provider-only actions select the batch preview before sport-specific recipe wording; one authored strength
+or pool-length change selects its focused preview. A combined comparison and workout recommendation retains live daily
+and completed-activity reads instead of inheriting a single-purpose analytical workflow. This is internal routing only:
+the public tool list, scopes, strict schemas and approval boundary do not change.
+The same dated workout recommendation deterministically collects a bounded context through the existing MCP session.
+It prepares and reads relevant ready Training snapshots, the daily report, canonical `Duration` buckets and today's
+activities. With separate consent it reads bounded dated Timeline notes and the requested day's planned workouts, followed by a
+bulk exact-completion read for the listed workouts. The server counts local weekday activity days and appends verified
+note dates, scan limits and completion states to the answer; an incomplete scan blocks a workout preview. User-authored
+text cannot instruct a provider or authorize a plan change. The internal model-only projection adds local date/weekday
+labels to numeric metric buckets using the request's IANA time zone, without changing the validated public metric
+response or registered contract. Gemini keeps its six model-selected calls for additional detail or one expressly
+requested focused preview; the deterministic context has a separate bounded read budget.
+First-party follow-ups preserve dated user-message context, target-day calendar/weekday semantics and compact server-owned
+Apply/Dismiss confirmation evidence. Current validated reads override prior answers; current readiness is not future
+readiness, and inherited conversation context never grants write or provider consent. These are internal Assistant
+corrections, not new MCP tools, scopes, schemas, exposed fields or approval behavior. The registered baseline, pending
+changes and bundled plugin remain unchanged. See [Assistant context and lifecycle](assistant.md) for retention and tests.
+
+Every future planning feature must review MCP impact in the same PR: explicit projections, schemas, consent, bounds, units,
+Assistant/plugin guidance and tests. Record a no-impact rationale or a focused epic-linked Project 2 deferral. Maintaining
+registered write actions never automatically expand when internal lifecycle or provider fields are added.
+
+Malformed preview arguments are bounded separately from ordinary MCP request quotas. After three invalid Training preview
+attempts from one connection in a minute, the server completes the invocation as a normal MCP tool result with
+`isError: true` over HTTP 200. It includes only bounded validation issue codes and safe schema paths, plus an explicit
+instruction not to retry the malformed call unchanged. It deliberately returns neither a JSON-RPC protocol error nor an
+HTTP retry signal: both can cause hosts to replay the same invalid tool call at the transport layer. The owner-wide ceiling
+is six and further malformed calls enter a ten-minute invalid-call cooldown. Correctly formed previews remain accepted
+immediately. The counter contains no authored request content and expires, and only the first transition into a cooldown
+is logged. This guard prevents a client tool-selection failure from producing an unbounded validation loop; it never
+repairs, applies, or silently degrades input.
+Coverage derives from the same reviewed `TRAINING_PREVIEW_TOOLS` catalog and each advertised strict input schema,
+including full-recipe bulk, latest single/library, phase and replacement previews. No independent name list can omit
+an additive editor. Correct early-Lap recipes do not consume malformed-call attempts. Recovery copy preserves the
+requested action: it never suggests replacing an edit with a create or dropping fields to fit an older tool.
+
+The manually mirrored public recipe schema has an exhaustive compile-time coverage map for the version, node/ending
+kinds, step purposes, target modes and kind/mode pairs, relative-target references and speed presentation. Focused
+fixtures iterate every shared step purpose and covered discriminant through both `get_planned_workout` output validation
+and `create-workout` input validation after a JSON round trip. A shared recipe addition therefore fails the build or tests
+until MCP exposure is deliberately reviewed; it is never exposed merely because it was persisted. MCP/Assistant guidance
+documents canonical units, stable node IDs, repeat shape and reference snapshots, and forbids inventing missing
+thresholds. This is contract hardening only: it adds no recipe kind, mutation, scope, provider action or transport call.
+
+Suunto Guide delivery (#650) uses these existing local sync projections without changing any registered tool or wire
+schema. Read tests cover delivered, scheduled-for-later and needs-attention Suunto states, truthful workout-derived plan
+counts, and strict rejection of private evidence injected into a public status. No Guide/account IDs, FIT completion
+evidence, watch receipts, live checks or write actions are exposed; consent and bundled skill routing remain unchanged.
+Sport/prescription-specific Suunto v5 screens add no wire impact: current HR and manual-lap-average pace,
+cycling power and swimming stroke rate are private Guide presentation fields. Countdown, authored targets/notes,
+recipe units, completion and safe sync projections remain unchanged. Strict read/write round-trip tests cover
+running/cycling/swimming target variants; negative fixtures reject averaging windows, aggregates, lap commands,
+stroke-rate fields, mapping versions and approval/recovery evidence. Source-recorded laps can appear through the
+existing independently granted activity-lap read, with unchanged schema and bounds. No tool, scope, consent,
+mutation, provider action, Assistant routing or bundled-plugin change; no catalog refresh or plugin rebuild is needed.
+Watch support/sensors, alerts and adherence cannot be inferred from delivery acceptance or these read projections.
+The #773 target-capability preparation does not widen those recipes. Swimming stroke-rate and SWOLF targets have
+no established partner-upload representation, while Guide ZoneSense targeting remains unsupported. Existing and
+latest strict recipe reads, full-workout previews and saved-library reads/previews reject these uncontracted kinds
+and arbitrary provider resource fields. They must not treat a measured reading as an authored prescription or
+reinterpret saved relative HR snapshots as watch-native percentages. Focused negative regressions preserve this
+boundary without changing a tool, schema, scope, consent, provider action, Assistant routing or bundled skill.
+The subsequent Suunto v7 pool-only `Avg SWOLF` screen is also private measured presentation, not an authored target
+or new returned metric. Strict scheduled/saved-workout reads and proposals reject injected `swolf` and `guideFields`;
+canonical recipes, scopes, consent, completion reads and provider actions are unchanged. Existing recorded-lap
+reads remain independently granted and unchanged. No contract promotion, client refresh or plugin rebuild is
+required. The separately approved Guide-only v7 QA passed exact readback and the athlete confirmed the measured-field
+watch check; it created no QS workout or completion link and used no MCP mutation. Normal QS delivery still needs
+merge and separately approved Functions deployment. #773 retains the native-target implementation/additive-contract
+decision once an exact partner format exists; measured-field evidence must not close native-target criteria.
+The pool-only v9 work/rest layout is likewise private Guide presentation: native step-window distance/elapsed
+fields and clearer countdown labels do not add returned metrics or authored recipe fields. Rest screens omit
+freshly reset swim averages; timing, targets, recorded-lap boundaries, completions and consent remain unchanged.
+Existing strict read/proposal contracts reject provider-field injection, and independently granted activity-lap
+reads need no extension because the recorded boundaries are unchanged. No new tool/scope/mutation/provider action,
+Assistant routing, contract promotion, catalog refresh or bundled-plugin change is required.
+The historical v10 mapping extends private swim presentation to pool and open water: clearer manual-step
+notifications and native cumulative recording distance on stationary Rest do not add a recipe/read field.
+Timing, target ranges, recorded-lap policy, completion, approval and consent stay unchanged; strict schemas still
+reject injected provider fields. V9 recovery remains frozen. This has no MCP wire/catalog/plugin impact and
+requires no new tool, mutation, returned metric, client refresh or contract promotion. See
+[the Training presentation and verification notes](training-workspace.md#swim-manual-instructions-and-cumulative-rest-distance).
+The private v11 non-swim manual notification/reminder clarification likewise changes no authored/returned data,
+target, timing, recorded-lap boundary, scope, consent, proposal or provider action. Numeric-only/authored-instruction
+digests, swim v10 and strength v8 remain unchanged. Strict Training read/proposal regressions and the compiled
+contract protect the same wire surface; no client refresh, contract promotion or plugin rebuild is required. See
+[manual instructions and recovery verification](training-workspace.md#manual-instructions-in-other-sports).
+The private v12 Rest-first layout adds no wire impact: countdown order, generated repeat counters and next-phase
+hints remain watch presentation, not authored targets, completion evidence or returned fields. Running/walking/
+cycling and swim Work/active Recovery preserve their current readings; all recipe, timing, scope, consent,
+proposal and provider-action contracts remain unchanged. Strict schemas continue to reject Guide fields and
+private mapping/recovery diagnostics. No contract promotion, catalog refresh, plugin rebuild or new activity-lap
+read is required. See [Rest-first presentation and verification](training-workspace.md#rest-first-interval-screens-v12).
+The private v13 Suunto app `richText` preview likewise has **no MCP wire impact**. Existing canonical steps/notes,
+targets and strength details supply the preview; the Guide text, immutable unit snapshots and approval-unit provenance
+remain private and are explicitly rejected by strict recipe/status regressions. Delivery proposals assess the same
+owner units as native apply, without adding inputs, outputs, scopes, consent, tools or provider actions. No contract
+promotion, client refresh or plugin rebuild is needed. See [app preview impact review](training-workspace.md#suunto-app-workout-preview-v13).
+Swimming v15's shared field allocation, compact interval headings and local Included/Heading/Omitted report are
+also private presentation only. Canonical recipes, planned/saved-workout reads, strict proposals/confirmations,
+scopes, consent and provider actions stay unchanged; Guide fields, allocation results and mapping/recovery metadata
+remain excluded. No catalog refresh, contract promotion or plugin rebuild is needed. See
+[swimming allocation and recovery](training-workspace.md#swimming-field-allocation-and-headings-v15).
+Timed-Rest v16 native Suunto countdown alerts likewise have **no wire impact**: they are private provider metadata,
+not a new recipe setting, target, read metric, provider action, tool, scope or consent. Canonical planned-workout reads
+remain unchanged; strict recipes/proposals/outputs reject injected `alerts` and `countdown` fields. No contract promotion,
+catalog refresh or plugin rebuild is needed. See [countdown evidence and recovery](training-workspace.md#native-timed-rest-countdown-alerts-v16).
+Swimming v17 previous-lap Rest readings are also **no wire impact**: owner-only display preferences and native
+`manualLap`/negative `windowOffset` payload fields are not recipe fields, metrics or read outputs. Existing strict
+plan/workout reads and proposal/confirmation schemas remain unchanged and reject injected private fields.
+No tool, scope, consent, provider action, Assistant authority, catalog refresh or plugin rebuild is added. See
+[previous Work lap scope and verification](training-workspace.md#previous-work-lap-rest-readings-v17).
+The native-app **Duplicate to…** shortcut in completed-workout sync details reuses the existing scheduled-workout copy contract; existing
+read projections expose the new planned copy without copying completion/delivery state. Native **Send a fresh Guide**
+is a new app-only explicit action, not an addition to the registered MCP/Assistant provider-action union. Strict
+proposals reject `fresh-guide` and reads exclude its private generation/retired-artifact metadata. External-client
+support would require its own deliberately reviewed approval contract, not inference from shared native types.
+No public tool, scope, schema, contract digest or bundled-plugin change is included.
+The manual editor's additional canonical running/cycling profiles also require no MCP contract change: the existing
+recipe schema already accepts the complete Sports Lib activity-type enum, and focused coverage proves an exact Mountain
+Biking sport survives the read projection. Suunto numeric activity recommendations and Garmin's broad
+`RUNNING`/`CYCLING` payload fold remain private adapter behavior; the MCP recipe keeps the authored exact sport. Garmin's
+explicit folds cover the QS running and cycling Training profiles, including indoor/virtual running, virtual cycling,
+velomobile, Enduro MTB and Downhill Cycling. Every non-base profile remains an approval-bound degradation; clients must
+not rewrite the authored sport just to satisfy a provider.
+
+The provider-name preservation preparation extends the pending Training recipe and prescription-analysis sport enums
+with the explicit canonical names in `shared/activity-type-compatibility.ts`, alongside all accepted installed canonical
+sports. The catalog's `Unknown Sport` placeholder remains invalid for workout recipes.
+Scheduled and saved recipe reads and complete-recipe proposals keep the exact authored sport through JSON round trips;
+unknown labels, provider profile fields and private source identifiers remain rejected. This does not imply delivery
+support for every catalog sport: existing local compatibility assessment and mapping approval still apply. The registered
+baseline contains no Training recipe tools, so these enum additions belong to the existing pending metadata transition;
+they do not alter a registered tool, mutation kind, grant, consent or provider action. Update the exact pending contract
+digest after integration and use the existing explicit deployment/client-refresh lifecycle.
+Root and Functions now install the same published Sports Lib 23.0.0 artifact, so the expanded 284-type catalog is
+available to the existing exact-sport discovery and recipe schemas. The updated pending digest records that adoption;
+the registered baseline/history and deployed client registrations remain unchanged. No new tool or permission is added.
+Core planned-workout preview inputs use local JSON Schema definitions for repeated recipe fields and proposal variants.
+The focused create registration generates draft-07 references directly; it must not also embed pre-generated
+2020-12 definitions. Both its schedule-only and delivery-enabled descriptors retain the exact finite sport vocabulary
+and strict runtime validation within a 16 KiB per-tool budget, including the expanded catalog. This metadata repair
+changes no recipe semantics, read projection, permission or provider action. The pending digest requires the usual
+separately approved release and registered-client refresh; the registered baseline and history remain intact.
+
+The subsequently approved fitness/mobility, endurance, aquatic and wheelchair Training classifications affect recorded analysis only. The compatibility
+bridge keeps its 124 recorded-only names separate from the original 29 approved future public recipe names. The installed
+canonical catalog continues to supply all other accepted recipe sports; adding analysis membership does not add a future
+name to the public enum before catalog adoption. Strict runtime and advertised JSON Schema checks cover every recorded-only
+bridge entry with both catalogs. Existing Training metric projections retain their frozen Running/Cycling/Swimming-plus-Other
+shape, identity redaction, scopes and bounds. No public schema, consent, proposal kind, provider action, metric token or
+plugin content changes, so the pending digest remains unchanged and no plugin rebuild or registered-contract promotion is
+required for these memberships. See [Training sport registry](training-workspace.md#training-sport-registry-and-contexts).
+
+Floor Climbing's Stair Climbing context also affects recorded Training analysis only. The sport already exists in the
+installed canonical catalog, so its existing recipe acceptance is unchanged. The context's elapsed-time/ascent metrics
+remain private to the workspace; public Training summaries omit Fitness & Gym and context details, while explanation
+folds its saved load into the existing Other total. Scopes, proposals, provider profiles and the pending contract digest
+remain unchanged. No plugin rebuild or contract promotion is required.
+
+The approved 50-sport recorded-analysis batch adds Snowshoeing and seven internal families: Climbing & Mountaineering,
+Mountain Snow Sports, Skating, Combat & Martial Arts, Dance, Team Sports and Racket Sports. All 50 keep separate contexts,
+exact canonical identities and saved TSS (including zero); the 23 unpublished names extend only the recorded bridge.
+Public Training summary/build projections still expose Running/Cycling/Swimming and omit private contexts/metrics.
+Explanation projections combine the seven families into the existing Other row and redact internal family labels in
+contributors. Installed/candidate tests cover that folding and all recorded-only recipe boundaries. No public schema,
+scope, mutation kind, provider action or plugin content changes; the pending digest remains unchanged.
+
+The second approved 50-sport batch adds Precision Sports, Water Sports and Diving, plus exact Team Sports and
+Rafting/Whitewater Rafting contexts. Its 28 unpublished names extend only the recorded bridge, now 100 entries; the
+original future public recipe bridge remains 29 entries. All 50 retain canonical identities and saved TSS including
+zero. The three new families and every context/profile metric remain private in summary/build projections; explanation
+folds their saved load and counts into Other and strips contributor labels. Installed/candidate tests cover all recorded
+recipe boundaries, all three new group leakage canaries and complete Other totals. Scopes, strict schemas, proposals,
+provider transport and the pending digest are unchanged. This requires no plugin rebuild or contract promotion.
+
+Manual pool and open-water swimming use the exact canonical sport strings `Swimming` and `Open Water Swimming`.
+Planned-workout summaries format swim distances in metres and pace with the owner's /100 m or /100 yd setting.
+The #733 recipe's optional physical pool length is independent of a distance step. The registered v1 read and write
+schemas stay frozen and omit it. The additive `get_planned_workout_v2` read returns an authored
+`poolLength: { meters, presentation }` for pool swims under the existing `training-plans:read` grant, without inferring
+one from step distance. `preview_planned_workout_v2_change` accepts one complete non-strength create/update with optional
+pool length under the existing parent read plus `training-plans:write` grants. It shares the owner-, connection-,
+grant-, revision- and expiry-bound proposal and approval-gated `apply_training_changes` path; it has no provider
+action. A registered v1 edit of a workout with selected pool length fails rather than clearing that setting. Invalid
+or non-pool lengths fail strict validation, and older pool recipes remain readable with length absent. The v2 preview
+states the selected canonical pool length and metre/yard presentation, or explicitly discloses removal,
+so approval does not hide a pool-setting change. The built-in Assistant routes an existing pool-swim edit through v2
+even when the user's prompt does not repeat the saved length; it must read and preserve that selection. These additive
+tools are the local implementation of #734 under #583; they need deployment and client catalog refresh before use.
+No existing schema, mutation kind, scope, consent, provider action or private delivery evidence changes. Existing
+provider compatibility assessment still governs writes; Garmin accepts compatible, explicitly consented pool-swim delivery after owner-account cloud CRUD/readback proof (not watch receipt), Wahoo supports account/device-tested timed, untargeted swims (selected pool length is not transmitted), COROS accepts only target-free pool recipes at its backend
+while new browser Send/sync actions remain unavailable, and Suunto maps pool and open-water profiles to distinct Guide
+activity recommendations. Owner read fixtures cover both swim sport strings and metre-based steps; no widened consent or
+provider action is implied by this read-only presentation change.
+
+Walking, Hiking, Rowing, and Indoor Rowing keep their exact canonical Sports Lib sport strings in the existing v1
+planned-workout reads and approval-gated proposals. Rowing speed remains m/s and owner-facing pace is a 500 m split;
+row distance is displayed in metres. The strict registered v1 recipe already permits these sport strings, so no
+tool, schema, scope, consent or mutation kind changes. Focused read fixtures cover exact sport retention and unit
+formatting; compatibility remains provider-local, with Suunto Guide activity recommendations, a degraded Garmin
+Generic fallback and explicit unsupported COROS results. Garmin also maps Open Water Swimming to Generic, never pool
+swimming. The existing `sport_profile_degraded` issue names the original sport, some-device-only Generic support and
+absence of guaranteed native sport tracking/display. Strict reads keep the authored recipe; existing Send proposals
+disclose the loss before native/app confirmation and bind approval to the current prescription and provider account.
+Generic supports time/distance/manual endings, fixed repeats and one primary target; unsupported endings or secondary
+targets fail closed, and unrelated catalog sports do not receive a Generic catch-all. Serializer and demo-emulator
+tests prove only local behavior, not live cloud or device acceptance. No registered wire contract or bundled skill changes.
+Wahoo assesses timed, untargeted outdoor Walking/Hiking, Rowing/Indoor Rowing and pool/open-water swimming as exact
+when no authored pool length is dropped. All 21 profiles have owner-confirmed native profile/timed playback (#789);
+obsolete validation warnings are removed. Distance/manual endings and intensity targets remain unsupported for these
+sports. An authored pool length still produces a degraded mapping requiring review because Wahoo cannot receive it.
+Existing substitutions and Strength losses remain disclosed.
+Running/cycling subprofiles use their native indoor/outdoor type where available. Indoor Running uses Treadmill, Velomobile uses Cycling, and Enduro MTB/Downhill Cycling use Mountain Biking, with a review warning; the saved QS sport is unchanged.
+Selected pool length remains canonical but is not sent to Wahoo. Strict compatibility and recipe reads cover all 21
+explicit planning profiles; unknown catalog sports still fail closed. Focused strict-output tests cover these results without adding fields, issue codes, tools, scopes,
+consent, mutations, provider actions, Assistant routes or bundled-skill instructions. Existing guidance still requires
+assessment before delivery; a local exact mapping never promises app/device receipt. Provider IDs and transport
+evidence remain private. This is a no-wire-impact extension;
+it does not authorize a new provider action or count a planned workout as completed training.
+
+The seven approved strength aliases (Weight Training, Kettlebell, Calisthenics, Core Training, LES MILLS CORE,
+LES MILLS GRIT Strength and LES MILLS BODYPUMP) use the same validated companion when exercises are present.
+Existing strength-detail/recipe/analysis reads preserve the authored sport and complete sets/load/rest. The strict
+strength update proposal retains the existing workout's sport; canonical new strength creates keep their existing
+Strength Training default. No sport field, schema, tool, consent or provider action was added. Tool descriptions, server instructions, the built-in
+Assistant and the bundled Training/cross-domain guidance explicitly cover all eight strength names. Complete details
+require the existing strength-details read; its unavailability cannot prove that an alias is interval-only. Use QS Edit
+when the full prescription cannot be read. The existing strength preview preserves an alias on updates, while new
+creates still use Strength Training; other new strength names use the app editor. The Assistant selects the full-strength
+preview for named strength edits, preserving provider/lifecycle routing and the current-revision/advertised-tool gate.
+Alias mentions in another sport's notes retain that sport's normal editor. A missing complete-strength preview never
+falls back to a generic Training writer. These first-party routing guards change no public tool metadata, schemas,
+scopes, grants, confirmation or delivery behavior and do not require an additional contract or plugin refresh.
+The private selector excludes quoted note text from every preview-kind decision and delivery-intent check, so a note
+mentioning the library, phases, replacement or Send cannot request those actions. Removing a note remains a recipe edit.
+It also excludes explicitly excluded workouts while recognizing direct named exercise/set/repetition edits.
+It preserves the complete original prompt and all note text for the model; this
+selection context is never a replacement recipe, permission or stored value.
+Paired-quote scanning recognizes notes before or after their text, preserves actual target labels and handles ordinary
+apostrophes. Independent follow-up actions use the existing batch where expressible. Combined complete-strength
+authoring and another action instead asks which action to review first, with no substitute preview. A bounded exact
+sport-choice reply to that immediate clarification selects only the full-strength schema; it never inherits provider
+consent or Apply authority. An explicit Stop-sync request cannot attach a create-only or Send proposal as its review:
+the existing preview must contain Stop. These private guards add no public shape, metadata, scope or mutation kind.
+This metadata-only clarification retains all registered shapes, scopes, grants and native/app approval rules; its digest
+is included in the pending developer-refresh record. Server deployment, registered-app rescan and bundled-plugin refresh
+remain separate. Local bundle sync/validation uses a temporary profile and fixture app ID. Legacy generic aliases
+without companions remain readable as intervals; Garmin/COROS/Wahoo strength delivery requires complete matching
+exercise data. Malformed or foreign companions fail before exposure. Saved-workout previews validate all eight
+companion-bearing source sports before issuing a proposal, and reject strength-library updates that omit existing
+exercise data. Legacy interval aliases remain supported without companions. New cardio/mobility substitutions use existing
+mapping issue codes. Wahoo compatibility additionally reports `scheduling_duration_unavailable` when the exact total
+is not a whole number of minutes: live API probes rejected fractional minutes. Neither read nor preview rounds steps.
+The whole-minute decision uses exact stored decimal arithmetic, including repeats; binary addition residue is not
+a fractional prescription. Tiny genuine fractions remain unsupported. This changes compatibility values through the
+existing issue contract, with no metadata, schema, scope, consent or provider-action change.
+Existing owner/grant/revision-bound confirmation applies to updates and sport-profile losses.
+
+Strength Training uses an owner-scoped versioned companion with ordered exercises and sets, optional external load in
+canonical kilograms, and optional rest seconds. The old v1 recipe is a derived compatibility summary, not a complete
+prescription. The additive `get_strength_workout_details` read uses only `training-plans:read`, resolves the same
+connection-bound opaque workout reference, validates its companion against the stored projection and fails closed if
+missing or mismatched. `preview_strength_workout_change` requires `training-plans:write` plus the parent read grant,
+accepts one complete create/update draft, derives the v1 summary server-side and uses the existing
+owner/grant/revision/expiry-bound proposal and approval-gated `apply_training_changes`. No provider action or wider
+consent is added. Exercise names are untrusted user text. Suunto Gym Guide compatibility is degraded because reps
+need manual transitions. The existing Send/Enable sync consent covers that standard limitation, disclosed in the
+delivery preview without separate per-workout/per-edit mapping approval; additional mapping loss still needs review.
+COROS compatibility reads use the full validated companion and report exact named/set/reps-or-time/rest/fixed-kg mappings.
+Missing, malformed, foreign or mismatched companions fail the read; they never return a partial prescription.
+Its delivery preview performs no provider I/O and apply keeps independent
+Training/delivery grants, native/app confirmation and idempotency. COROS delivery is disabled at the shared runtime
+boundary used by the app and MCP; local assessment and synthetic delivery tests are not entitlement, cloud, app/watch
+or completion evidence (#741). Normal owner/grant-bound MCP proposal confirmation and apply remain required for admitted
+providers. No registered schema, scope, permission, provider action or response field changes for this policy. Wahoo #783 uses the
+validated companion for timed Gym sets/rests, reporting degraded exercise/load instructions rather than native tracking.
+Repetition sets remain unsupported. Kilogram load instructions use Sports Lib display; actual rounding requires review.
+Send previews disclose the limitation and perform no provider I/O. Apply retains the existing independent delivery grant,
+owner/revision/expiry binding, native/app confirmation and idempotency. Existing strict mapping issue codes are reused;
+there is no new registered tool, schema, response field, scope, consent or provider action.
+#782 adds local Garmin strength compatibility using the validated owner-scoped companion and a small
+verified Appendix B exercise-name allowlist. Reps/time, exact kilogram load and rest map to native Training API fields;
+unknown names remain unsupported without substitution. Missing, foreign or projection-mismatched companions fail
+closed. Compatibility is local contract evidence, never provider/cloud/device acceptance. Existing provider Send and
+plan-sync previews use the full companion, including load-only changes, and retain their independent delivery grant
+and normal proposal confirmation. No registered tool, schema, issue-code enum, response field or permission changes;
+no client catalog refresh or plugin rebuild is required for this mapping-only change. Completed #782 records the
+deployed native Strength cloud lifecycle and owner-confirmed Garmin Connect/watch proof; local assessment alone
+does not claim that receipt.
+New additive tools need
+a client catalog refresh after release; the registered v1 recipe input/output stays unchanged. The app's strength
+editor may display or accept pounds using Sports Lib 21.3.0, but MCP external-load input and output remain canonical
+kilograms; the owner's display preference does not alter the wire contract.
+
+Sports Lib 21.2.1 FIT workout-reference adoption and the first exact Suunto activity link add no MCP metric, scope,
+provider action or registered wire field. Private FIT references, account digests and reverse-link records are excluded.
+The Garmin FIT correlation path writes the existing completion v1 projection only after account, unique delivery,
+scheduled occurrence and source-activity checks. Existing single/bulk completion reads and Assistant evidence already
+consume that exact projection, so this adds no MCP tool, scope, schema, consent, mutation or registered wire change.
+Private FIT identities and ledgers remain excluded; a conflicting second recording stays unlinked under the current v1
+one-source contract. The registered contract check and existing Garmin completion read fixtures cover the no-wire-impact
+boundary. A completion retains its at-link plan/date when a workout is later transferred or rescheduled; the stable
+workout reference remains linked, and `workoutChangedSinceCompletion` signals the current revision differs. Unlinked
+reads never infer a match. Both single and bounded bulk reads reject a foreign connection/owner reference, while the
+optional activity reference requires independent `activity-details:read` consent. No new field or scope is introduced.
+Existing sync status may truthfully become `completed` after an account-bound Guide marker is accepted, using the status
+already present in the frozen delivery schema. `get_training_sync_status` also applies an exact persisted workout
+completion to every confirmed destination copy of that workout: the evidence provider remains private provenance, while
+the existing `completed` outcome represents the authored workout across services. This changes no tool, field, scope,
+consent, enum or provider action, and no event/activity/provider identifier enters the sync projection. The separately
+authorized `get_planned_workout_completion` read remains the only Training MCP surface that reports the completion
+provider and optional opaque activity reference.
+
+Sports Lib 21.3.0 adds an optional kg/lb display preference, not a new MCP metric or wire unit. Existing
+`measurements:read` body-weight results and Training-derived `weightKg` fields remain canonical kilograms;
+the Health UI display may use pounds when selected. No tool, schema, scope, consent, provider action,
+or bundled skill changes. The Strength Training editor and Suunto Gym Guide load instructions use this preference
+for display; MCP strength input/output and recipe previews continue to use canonical kilograms. Suunto delivery
+previews, including simulated plan changes, use owner units when assessing instruction text. The private per-attempt
+unit snapshot is excluded from public projections. No registered tool, schema, scope, grant, mutation kind or provider
+action changes; no plugin rebuild or catalog refresh is needed. The
+[Training guide](training-workspace.md#strength-load-display-units) owns the mapping and recovery details.
+
+Garmin schedule-only remote repair and #769's explicit reviewed replacement preserve the registered v1 MCP contract.
+The existing sanitized delivery status stops a confirmed missing copy or a complete not-found Garmin Workout
+observation from counting as synced, using existing non-success outcomes rather than new fields.
+Artifact-specific inspection authority, retained provider IDs and repair evidence remain private; MCP sync reads
+perform no live provider check or repair and gain no tool, field, scope, consent or write authority. In particular, a
+`synced` MCP delivery outcome records the last accepted send, not a fresh Garmin cloud read; an unproved negative
+cannot be promoted to `confirmed_missing` and the frozen v1 tool exposes no verification-state field. The additive
+MCP replacement preview is implemented separately in #801, never through the v1 Send or Retry action.
+
+`preview_garmin_workout_replacement` is an additive, strict delivery preview under existing
+`training-plans:read` plus `training-delivery:write`. It accepts only an owner/connection-bound `workoutRef`,
+`expectedScheduleRevision` and `expectedWorkoutRevision`. A fresh same-account paired not-found Check is required;
+not-found does not prove deletion. It returns one Garmin workout replacement review identifying the workout/date,
+warning of possible duplicates, and an opaque 15-minute proposal. It performs no provider HTTP or delivery write.
+Private account/inspection identities, digests, old/new artifact IDs and repair journals never enter the output.
+The existing destructive, native-approval-gated `apply_training_changes` accepts that exact proposal in `delivery`
+mode; the registered batch action enum remains unchanged. Apply rechecks grants/generation, exact revisions,
+connection/account/epoch, inspection evidence, consent, Pro, locks, past/completion and uncertainty fences in the
+shared command transaction. It queues the existing journaled recovery, not receipt. The worker checks the original
+again, reuses a reappearing pair and never blindly repeats an uncertain root POST. Lost replies recover through
+`get_training_change_status` with the original reference; repeat Apply replays receipts, not a new replacement.
+The built-in Assistant exposes preparation only with its independent delivery toggle and an app-owned duplicate
+warning/confirmation. No new scope or v1 input/output field is introduced. Deployment and registered-client catalog
+refresh/rescan remain separate release actions; an older catalog must not substitute Send, Retry or a new workout.
+
+COROS Training delivery (#648) uses the shared provider-readiness boundary with no wire-contract change. COROS is
+currently disabled there for the app, Functions runtime and MCP; explicit COROS proposals report unavailable and
+`all_connected` excludes it. Training plan, workout and sync-history UI also omits retained COROS settings/statuses.
+Compatibility assessment remains local and available because it neither grants consent nor contacts COROS.
+Indoor/Virtual Running, Virtual Cycling, Velomobile, Enduro MTB and Downhill Cycling reuse the existing broad
+`run`/`bike` mapping alongside earlier subtypes. Strict recipe reads preserve their exact canonical sport strings;
+compatibility reads disclose the fold through the existing `sport_profile_degraded` issue. They are not native COROS
+sport profiles or newly eligible Send destinations. Walking, Hiking, Rowing, Indoor Rowing and Open Water Swimming
+remain unsupported under the partner contract. Regression tests cover all six folds, owner/connection isolation and
+transport-field exclusion. No tool, schema, scope, consent, Assistant instruction or bundled plugin changes; no
+registered-app refresh or plugin sync is needed for this mapping-only extension.
+The existing sync-status enum can report delivered, approval, retry, attention
+and completed states for COROS. Partner athlete/workout IDs, destination
+identity, batch journals, request outcomes, token authority and exact `planWorkoutId` evidence remain private and are
+rejected from browser/MCP projections. Plan totals continue to derive from individual workout statuses rather than a
+claimed native plan object. The exact provider marker can update the existing private completion link, which the single
+and bounded bulk completion tools expose only as their sanitized current projection. Completed #651 covers exact-marker
+reconciliation and duplicate/ambiguity handling. Candidate discovery, fallback matching and manual link/unlink/relink
+are explicitly out of scope, not deferred acceptance criteria. No provider identity, batch evidence or transport action
+is introduced.
+
+Sports Lib 21.4.0 also permits exact Wahoo app FIT Plan references to resolve one owned accepted single-workout Plan
+when API association fields are absent. QS verifies the trusted source account, one persisted session/activity, retained
+deterministic delivery identity and current occurrence. A nullable scheduled Workout ID is not replaced by the saved
+recording ID. The references remain private completion sidecars, outside DataStore, activity JSON and all MCP projections.
+Existing linked/unlinked completion reads already cover the result: no tool, schema, scope, consent, metric, provider
+action, Assistant route, contract refresh or bundled-plugin change is introduced by this consumer integration.
+
+Wahoo exact completion correlation follows the same no-wire-change boundary. An imported activity can move its existing
+sanitized delivery status to `completed` only after the private Workout ID, Plan ID and deterministic `workout_token`
+resolve one current account-bound delivery. Those identifiers, the account digest, workout-summary evidence and reverse
+link remain private and are rejected from MCP projections. The existing sanitized completion tools can report the exact
+current link. Completed #651 is exact-marker-only: fallback candidate discovery and manual link/unlink/relink
+are explicitly out of scope.
+No private Wahoo identity or live check is introduced.
+
+Wahoo Stop -> Send incarnation handling preserves that public contract. After confirmed withdrawal, the worker
+reserves a new private Plan identity once, reuses it through retries and validates it during FIT completion matching.
+An unproved deleted Plan maps to the existing Needs attention outcome, not a new provider action or automatic
+recreation permission. `wahooPlanGeneration`, artifact `planGeneration`, withdrawal receipts and provider identities
+remain excluded from strict sync and completion projections. Existing approval-gated Send/Stop preview/apply, Pro
+policy and owner/connection/deletion fences are unchanged; no plugin rebuild or registered-client refresh is needed.
+
+Public Garmin, Wahoo and Suunto Training delivery changes runtime availability, not the MCP wire contract. An already
+authorized client with `training-plans:read` and `training-delivery:write` may preview an explicit delivery change for
+any eligible connected Pro owner; there is no per-UID provider allowlist. COROS remains a valid compatibility/status
+enum member but is not an eligible delivery destination while its shared flag is disabled. The same bounded proposal, native client
+approval, short expiry, owner/connection/grant/revision binding, compatibility review and separate apply call remain
+mandatory. `all_connected` includes only providers for which the connection, permissions, configuration and workout are
+currently eligible. No new tool, action, field, scope, consent default, provider identifier, plugin artifact or
+registered-client refresh is introduced; connecting a provider alone never creates delivery consent or sends a workout.
+
+### Full recipes with optional early Lap
+
+The additive `preview_planned_workout_v3_changes` previews 1–25 complete non-strength creates/updates using that
+same current full recipe. It requires existing `training-plans:read` and `training-plans:write`, includes no plan,
+deletion or provider-consent actions, and reuses separately approved `apply_training_changes`. The registered legacy
+batch and focused schemas remain frozen and fail closed rather than erase pool length or an early-Lap flag.
+For plan-wide HR retargeting, read each current v3 recipe, obtain explicit new ranges and selected dates/sessions, and
+preserve all other canonical values, node IDs/order, repeats, recovery, notes, Lap settings and association. Profile
+zone changes do not automatically recalculate absolute targets or saved relative reference snapshots. Review and read
+back each changed recipe; over 25 requires fresh revisions and separately reviewed batches, not a claim of complete
+success from one sample. The Assistant selects the full bulk schema for multi-workout recipe edits, remains prepare-only,
+and does not fall back to a lossy legacy writer if the capability is missing. Its existing app review contains complete
+before/after recipes. The six-call Assistant budget is unchanged: normally at most three fully read updates after
+discovery fit one turn; explain and separately review remaining batches rather than fabricate recipes from a sample.
+Internal routing recognizes adjust/retarget and recipe-field removal/reordering across workouts. A bounded numeric
+reply to the immediately preceding HR clarification retains its original full single/bulk editor, not a legacy writer;
+cancellation, a new explicit action or intervening unrelated context cannot revive that selection. This is only a
+tool-schema hint, never inferred HR data, provider consent or Apply approval. Tool schemas and grants are unchanged.
+Existing opt-ins reconcile eligible edits without a new Send; outside-window and past/completed
+protection still apply. An authored save is not provider acceptance or watch receipt.
+
+This is local implementation until a separately approved MCP/Assistant backend release and client catalog refresh.
+No new OAuth grant, callable, stored recipe field, migration, automatic zone linking or provider transport is added.
+Existing granted plan-change access suffices; missing access still needs the normal independent consent flow.
+
+The additive `get_planned_workout_v3` and `get_saved_workout_v2` return the entire strict recipe, including pool length
+and `allowEarlyLap` on time/distance endings. Absent, false and true are preserved; manual/repetition/kJ endings reject
+the field. Old full reads fail closed on field presence instead of projecting it away. Optional ending fields have an
+explicit compile-time coverage gate alongside variant coverage.
+
+`preview_planned_workout_v3_change` and `preview_saved_workout_v2_change` accept the complete latest recipe under the
+existing read plus schedule-write grants and disclose enabling/removing early Lap. Old replacement previews cannot
+clear the setting. Apply uses the existing authority, revision, expiry, native approval and idempotency boundaries;
+there is no new scope, mutation or provider action. Assistant preserves unchanged settings, enables them only on
+explicit athlete request, and remains prepare-only with app confirmation. Latest focused workout creation does not
+include delivery; a separately authorized existing delivery proposal follows creation. Suunto supports the option;
+other destinations reject it before HTTP. Neither transitions nor local compatibility prove completion or watch receipt.
+
+Registered recipe schemas/baselines/history remain frozen. Deploy compatible backend code only after separate approval,
+then perform the exact pending developer refresh/rescan and client/plugin tool-catalog refresh before the updated UI.
+No activity reparse, persisted-data migration, wider consent or automatic provider requeue is needed. Detailed product,
+mapping and recovery rules live in [Training workspace](training-workspace.md#optional-early-lap-on-numeric-endings-784-training-07).
+
+### Workout prescription analysis (Training 04)
+
+The additive `get_workout_prescription_analysis` read accepts an explicit `source` (`scheduled` or `saved`) and its
+opaque `reference`. It requires only independent `training-plans:read`; metrics/activity access and provider connections
+never substitute. It returns record `revision`, applicable nullable `scheduleRevision` / `libraryRevision`, canonical
+`sport`, a recursively strict `analysis`, and owner-unit `displaySummary`. The shared calculation and complete field
+semantics live in [Training prescription analysis](training-workspace.md#shared-workout-prescription-analysis-training-04).
+
+Exact prescribed time/distance subtotals are distinct from complete exact totals. Distance with an explicit positive
+speed range permits an estimated duration range; relative speed uses only an authored saved threshold-speed reference.
+No athlete default, midpoint estimate, HR/power/cadence-to-speed inference, TSS, completed-activity evidence or provider
+transport enters the result. Manual/Lap, repetitions, energy, missing speed and unbounded speed remain explicit unknowns.
+A partial covered subtotal is never a complete duration. Counts distinguish stored nodes, leaf definitions and repeat
+executions; at most 100 definition rows are returned without expanding up to 9,900 executions. Purpose totals retain
+all six authored labels. No notes, titles, target/reference snapshot objects or private transport fields are echoed.
+Numeric totals describe nominal prescribed limits. Per-definition `allowEarlyLap` and multiplied summary
+`earlyLapSteps` preserve the allowance to end numeric steps sooner; display and Assistant guidance retain this caveat.
+Complete prescription coverage does not guarantee an athlete's actual elapsed time or distance.
+
+The read shares current recipe/library validation and complete matching strength-companion fences. Strength analysis
+covers only its compatibility projection's timing/counts; full exercise discussion still needs the strength-details
+read. Owner/connection and reference-kind checks, creation identity, account deletion, bulk-operation locks, current
+grant generation, schedule/library revision and complete-result byte limits remain enforced. Arithmetic beyond finite
+representation returns safe unavailability rather than a partial or non-finite total. No Firestore write, new Function,
+Rules, index, migration, derived schema or stored analysis cache is introduced.
+
+The registered recipe/library read and write schemas are unchanged. The Assistant admits this read only with its
+existing per-chat Training choice, preserves uncertainty in compact evidence and excludes reference/step identity from
+stored evidence. Training and cross-domain bundled skills prefer the discovered analysis capability for totals rather
+than calculating their own estimates. Contract fixtures cover every ending and both speed bases, strict neighboring-field
+rejection, permission/reference/revision/deletion fences and equivalent structured/JSON-text results on all transports.
+Release requires separately approved deployment, registered-app refresh/rescan and exact pending-digest verification;
+bundled guidance requires later local plugin sync. Prior pending changes are preserved and the registered baseline/history
+are not edited. Fixture validation does not install a real profile or prove deployed availability.
+
+
+The first-party Assistant's non-strength scheduled-workout review now loads complete, bounded before/after recipes
+privately from the same simulated proposal, plus local mapping assessments from the existing compatibility helper.
+These details enter only the strict app response/conversation contract; no registered preview/read schema, scope,
+mutation kind, provider action, digest or bundled guidance changes. MCP clients keep their existing complete v3 recipe,
+prescription-analysis and compatibility reads and their native approval UI. See
+[Training proposal review](training-workspace.md#assistant-workout-proposal-review-training-11).
+
+### Authored plan phases (Training 12)
+
+The additive `get_training_plan_phases` reads one opaque owner/connection-bound plan reference under existing
+`training-plans:read`. It returns schedule/plan revisions, plan start/end calendar labels and a strict version-1 phase
+list. Legacy absence returns an empty list. Phase IDs are stable plan-local structure; names, inclusive dates, optional
+descriptions and palette colors are authored private context, never model instructions or calculation inputs.
+At most 32 items and 32 KiB UTF-8 are admitted, sorted and non-overlapping within the plan range. A dedicated Firestore
+mask and transaction preserve neighboring-field exclusion and current owner/deletion/lock/grant/revision fences.
+Registered list/get plan responses remain unchanged.
+
+`preview_training_plan_phases` needs the parent read plus independent `training-plans:write`. It accepts exactly one
+full `set-plan-phases` change: opaque plan reference, exact plan revision, whole phase list, resulting plan dates and
+explicit extension confirmation, together with expected schedule revision. The preview performs no authored write or
+provider I/O and returns one schedule-only proposal with a required full before/after `phaseReview`, including both
+plan ranges, descriptions and colors. Removing every phase is explicit in that review. Range extension requires
+confirmation; shrinking cannot exclude current workouts or resulting phases. Existing `apply_training_changes` keeps
+native host approval, short expiry, owner/connection/grant binding, transactional revisions and idempotent receipt
+recovery. No new scope, registered union widening, provider action or callable is added.
+
+The Assistant receives only the focused preview and consented reads; app-owned Apply/Dismiss remains mandatory.
+Its daily context looks up the active phase for the requested local date and matches schedule/plan revisions before
+stating it. A gap is separate from unavailable evidence. Phase names never imply intensity, progression, rest,
+readiness or completion. Training, Activity and cross-domain bundled guidance discovers the runtime phase capabilities,
+asks for ambiguous dates and preserves existing IDs and unspecified metadata in a complete replacement.
+
+The detailed model, UI, history/shift/deletion behavior and reader-first backend rollout are owned by
+[Training plan phases](training-workspace.md#training-plan-phases-training-12). This source change requires separately
+approved backend release and registered-app refresh/rescan against the digest-bound pending record before clients can
+use the tools. Existing grants suffice once the catalog is refreshed; missing grants require reauthorization.
+Earlier pending additions and the frozen registered baseline/history are preserved. Bundled guidance validation/sync is
+separate; no real-profile installation, deployment or promotion is performed here.
 
 ## Purpose and boundary
 
-Quantified Self exposes a hosted, read-only Model Context Protocol endpoint at `/mcp`. It lets an MCP client read the
-authenticated user's persisted numeric activity metrics, first-class body-measurement history, ready Training-derived
+Quantified Self exposes a hosted, permission-scoped Model Context Protocol endpoint at `/mcp`. It lets an MCP client read the
+authenticated user's persisted numeric activity metrics, explicitly approved recorded Health metrics, first-class body-measurement history, ready Training-derived
 snapshots, normalized sleep summaries, explicitly authorized individual activity details, and saved-route previews
 without granting browser or Firestore access.
+
+Separately authorized Training plans, Timeline notes and activity descriptions can also supply full private user-reported context. They are never inferred from
+metric or Sleep access and never become calculation inputs or write authority.
 
 The server is a Firebase Functions v2 HTTP function behind the production and beta Hosting domains. Each request uses a
 stateless Streamable HTTP transport with bounded POST/JSON responses; standalone GET/SSE and DELETE sessions are not
 supported. The HTTP, OAuth, projection, and metric-catalog implementation lives under `functions/src/mcp/`.
 
-Functions pins `@modelcontextprotocol/sdk` and overrides its compatible `@hono/node-server` adapter to `2.0.11` so the
-runtime does not retain the older adapter's published path-traversal advisory. Keep the initialize-request adapter test
-and re-check this override whenever the MCP SDK changes.
+Functions pins the `@modelcontextprotocol/server`, `client`, and `node` packages to `2.0.0` and overrides their compatible
+`@hono/node-server` adapter to `2.0.11` so the runtime does not retain the older adapter's published path-traversal
+advisory. Keep the Function-boundary HTTP tests and re-check this override whenever the MCP SDK changes.
+
+### Protocol compatibility
+
+The authenticated endpoint supports the legacy 2024/2025 initialize handshake and the `2026-07-28` per-request protocol
+on the same URL. `transport.ts` uses the SDK's classifier, not a hand-maintained header allowlist. Modern requests carry
+the reserved protocol/client envelope and use `server/discover`; malformed envelopes, header/body mismatches, and
+unsupported revisions are rejected, never silently downgraded. Both paths create fresh servers through the same factory
+after bearer validation and the existing scope prechecks. Client-supplied identity metadata never supplies authorization.
+
+Legacy responses remain stateless JSON. Modern read handlers also return JSON and advertise no tool-change
+subscription support; long-lived subscriptions are disabled. The Node adapter receives Firebase's already-parsed body
+explicitly. Neither transport changes OAuth client identity, permissions, grants, token rotation, or account data.
+
+`register-tool.ts` preserves the existing Zod validators and their exact registered draft-07 advertisement instead of
+accepting SDK v2's default schema-dialect rewrite. Legacy tools retain `execution.taskSupport: "forbidden"`; the SDK's
+modern codec removes that retired field. Modern responses also use the revision's `resultType` and reserved metadata
+envelope. The output contract suite runs every tool and leakage fixture through in-memory, legacy HTTP, and modern HTTP
+paths. The Function-boundary tests cover authentication, scope denial, size/media/method bounds, and rejection logging.
+Expected transport rejections remain warnings with fixed reasons and sanitized protocol versions; invalid JSON-RPC
+messages/batches are distinguished from protocol-envelope failures, and unexpected failures remain errors.
+A rejected modern envelope version is logged when no protocol-version header was supplied, without
+logging any other envelope or request data.
+
+Completed HTTP 200 protocol requests emit `[MCP] Streamable HTTP request served` at INFO with only `clientFamily`,
+sanitized `protocolVersion`, and `protocolVersionSource`. The source is `sdk` for modern requests and successful legacy
+initialization, `request_header` for validated stateless legacy follow-up headers, or `legacy_default` when such a
+follow-up omits the header. Initialization logs the version the SDK selected, not an unsupported requested version.
+This is transport/protocol evidence, not a claim that a tool returned a successful business result: handled tool errors
+can also travel over HTTP 200. Rejected HTTP requests and failed initialization do not emit this INFO event. No request
+or response payloads, tool arguments, credentials, user/connection IDs, or raw client identity metadata are logged.
+
+The registered legacy candidate digest is unchanged by this upgrade. It adds no tool/schema/scope/instruction refresh or
+local plugin-sync requirement of its own; the pre-existing `pending-change.json` release still needs its separately
+verified live refresh and promotion. Do not consume that record just because protocol tests pass. If a later registered
+app rescan switches protocol eras, verify its actual negotiated contract before choosing a promotion workflow; a modern
+diagnostic capture is not evidence that the registered legacy baseline was refreshed.
 
 This is an outbound user-authorized data interface, not a fitness-provider integration. It does not import provider data,
 write activities, mutate Training state, or require a public `/integrations/<provider>` page.
@@ -27,6 +869,13 @@ existing `activity-location:read` scope and preferred nearby-activity search too
 Changing that setting replaces the conversation generation, and New chat returns it to coordinate-free. It does not
 call the hosted endpoint or mint OAuth credentials, but it still uses the same registration,
 scope checks, input schemas, strict output schemas, projections, data-service budgets, and Sports Lib-backed catalogs.
+The internal connection identity carries the server-owned conversation generation so opaque Training references cannot
+cross chats. Training read authority recognizes that complete first-party identity directly and never looks for an
+external OAuth connection document. This reliability correction changes no hosted MCP tool, scope, schema or grant.
+Separate default-off per-chat choices can also add tag-aware activity reads, editable Timeline-note reads, and local
+prepare-only content tools. Gemini never receives the public event/note write tools. An app-owned confirmation reuses the
+existing Assistant apply endpoint and the same sanitized MCP content mutation services, with the active generation,
+permission, exact proposal, expiry, owner, deletion fence, and optimistic precondition rechecked at the data boundary.
 Direct app URLs are removed before validated results reach Gemini, and generated answers cannot repeat exact opaque
 references or cursors returned by the current tool calls. The separate deterministic evidence projection can still
 offer a validated safe app link. The internal allowlist also includes the existing bounded activity chart catalog and
@@ -47,6 +896,12 @@ tool or response field still requires the digest-bound lifecycle below. Every su
 Assistant allowlist, routing instructions, deterministic evidence, Help, policies, and tests need an update. See
 `docs/assistant.md` for the exact internal boundary and maintenance checklist.
 
+Built-in instruction variants name only its consented tag/location capabilities and describe Training preparation
+followed by app-owned confirmation, not external apply tools. Preview descriptions use the same distinction. The
+Assistant's per-generation catalog/read-first guard remains authoritative, and rejected calls log only recognized
+catalog names, fixed reasons and bounded counters. External instructions, schemas, scopes and approval are unchanged;
+this correction requires no registered-app rescan or bundled-plugin rebuild.
+
 ## Public endpoints
 
 Hosting routes these paths to `mcpApi`:
@@ -59,10 +914,38 @@ Hosting routes these paths to `mcpApi`:
 | `/oauth/authorize` | Starts an authorization-code request |
 | `/oauth/token` | Exchanges or refreshes an OAuth token |
 | `/oauth/revoke` | Revokes an access or refresh token and its connection grant |
-| `/mcp` | Read-only MCP Streamable HTTP endpoint |
+| `/mcp` | Permission-scoped MCP Streamable HTTP endpoint |
 
 `/mcp/authorize` is the authenticated Angular consent page. The **Connections > MCP** tab lists connections only after
 the client successfully exchanges its authorization code for credentials, and lets the user revoke one immediately.
+Firebase sign-in alone does not create a QS profile. A new user must select **Complete account setup**, accept the
+required policies and finish free or paid setup before approval is available. Free setup returns to the same local
+consent route using only its opaque `request_id`; external OAuth callbacks are never onboarding destinations. Returning
+does not approve the request, issue credentials or preserve a hidden grant: the user reviews the requested permissions
+again and explicitly approves. Denial remains available without a profile. The original ten-minute request expiry and
+backend deletion/profile fences are unchanged; an expired request must be restarted from the client. This browser-only
+handoff changes no public tools, schemas, scopes, instructions or plugin metadata, so no registered-contract promotion,
+client rescan or plugin rebuild is needed.
+Each connection separates data access from optional Training changes and lists every supported permission with an explicit
+**Granted** or **Not granted** status. Missing permissions, including scopes added since authorization, remain not granted.
+This display does not expand grants. OAuth authorization must start in the MCP client so its identity, redirect URI and
+requested scopes remain bound; users authorize again from that client and review its choices to change permissions. The
+current connection remains active until the new authorization successfully completes. The authorization overview shows
+compact permission names with individually labelled info buttons. Each opens a
+standard Material dialog using the same permission description as consent, with its parent requirement and authorization
+guidance. Details remain accessible by touch and keyboard without repeating all descriptions in the page.
+
+Server instructions make missing-tool recovery explicit for every authorized client. A model must not treat an absent
+scope-dependent tool as proof that the owner has no matching data, substitute another data domain, or suggest reconnecting
+a fitness provider. It should direct the owner to reconnect or start authorization again from the Quantified Self app in
+their MCP client, approve the named permission and any parent, finish authorization, and then start a new chat or refresh
+the tool catalog. If the permission or tool is still absent, the client or workspace administrator must refresh/rescan the
+app catalog. Disconnect/reconnect is only a fallback when the client offers no reconnect action; uninstall/reinstall is
+reserved for a stale local plugin/app bundle. The HTTP insufficient-scope response carries the same bounded, generic
+recovery direction without returning account, connection, or request data.
+The internal Assistant receives a different instruction: missing optional capabilities are enabled under
+**Examples & data access**, which starts a fresh server-owned chat. It must never direct the user to reconnect or
+reinstall the built-in Assistant.
 
 ## Public discovery and indexing
 
@@ -98,7 +981,7 @@ download, and focused MCP/frontend tests aligned whenever any asset changes.
 ## Repository-local plugin
 
 The repository includes a local marketplace package that combines the registered Quantified Self MCP app, branding,
-starter prompts, and six bundled workflow skills. This is a development and local-installation surface, not a public
+starter prompts, and seven bundled workflow skills. This is a development and local-installation surface, not a public
 marketplace submission. It does not replace the hosted `/mcp` server or OAuth consent, and installing the plugin does
 not authorize a user automatically. Use the repo marketplace from the ChatGPT desktop app or Codex CLI; it is not a
 mobile installation path and does not publish anything to the universal plugin directory.
@@ -114,14 +997,17 @@ The bundled skills divide ownership deliberately:
 
 | Skill | Responsibility | Primary permission |
 | --- | --- | --- |
-| `analyze-quantified-self` | Comparisons that need two or more data domains | Every domain used by the comparison |
-| `analyze-quantified-self-training` | Training load, volume, performance trends, and Training-derived metrics | `metrics:read` |
+| `analyze-quantified-self` | Comparisons that need two or more data domains; explicit Timeline-note changes | Every domain used by the comparison; optional `timeline-notes:write` with its read parent |
+| `analyze-quantified-self-training` | Current plans/planned workouts and sync summaries; recorded load, volume, Training-derived metrics, and identity-safe completed-activity impact | `training-plans:read` for planning; `metrics:read` for recorded metrics; impact also needs `activity-details:read` |
 | `analyze-quantified-self-sleep` | Sleep sessions, stages, duration, safe aggregate vitals, naps, and sleep-oriented trends | `sleep:read` |
-| `analyze-quantified-self-measurements` | Recorded body-measurement history and trends | `measurements:read` |
-| `analyze-quantified-self-activity` | Individual activities, subrecords, metrics, charts, and optional locations | `activity-details:read`; optional metric/location grants |
+| `analyze-quantified-self-health` | Recorded all-day Health metrics and bounded representative sample trends | `health:read`; body composition also requires `measurements:read` |
+| `analyze-quantified-self-measurements` | Recorded measurement trends; explicit manual Health entry management | `measurements:read` for history; independent `measurements:write` for manual lookup/changes |
+| `analyze-quantified-self-activity` | Individual activities, identity-safe Training impact, subrecords, metrics, charts, optional descriptions/locations, and explicit shared-tag changes | `activity-details:read`; impact and selected metrics also need `metrics:read`; optional description/location/tag-write grants |
 | `explore-quantified-self-routes` | Saved-route summaries, geometry, waypoints, and nearby searches | `routes:read`; optional `route-location:read` |
 
-All six skills allow implicit or explicit invocation and declare the same hosted read-only MCP dependency. Their trigger
+All seven skills allow implicit or explicit invocation and declare the same hosted permission-scoped MCP dependency. Most
+domain tools are read-only; measurement management needs its own write grant, and Activity/cross-domain skills can use separately authorized focused event/note writes,
+and the Training skill can use separately authorized preview and approval-gated apply tools. Their trigger
 descriptions keep single-domain work out of the cross-domain skill. Each `agents/openai.yaml` owns one matching
 skill-level starter prompt; the plugin manifest retains only three representative interface prompts because that field
 is intentionally bounded. Skills discover the authenticated server's live tools and catalogs rather than copying tool
@@ -134,7 +1020,7 @@ metadata, while the official CLI ingestion path—not a community manifest-types
 compatibility authority.
 
 `BUNDLED_SKILL_NAMES` is the exhaustive source registry. Before generating account-bound files, validation requires the
-source skill directory to contain exactly those six real directories and validates every frontmatter identity, UI
+source skill directory to contain exactly those seven real directories and validates every frontmatter identity, UI
 label, prompt reference, MCP dependency, and invocation policy. Isolated installation then compares every file in the
 installed and source skill trees recursively; missing, modified, unexpected, or symlinked content fails closed.
 
@@ -229,21 +1115,37 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
 - `metrics:read` for event metrics, ready Training-derived snapshots, and selected per-activity metrics when
   `activity-details:read` is also granted;
 - `measurements:read` for bounded identity-free first-class body-measurement history;
+- `measurements:write` independently permits exact-time manual Health entry lookup and native-approval-gated
+  create, edit and permanent delete. It grants neither imported Health history nor identity-free measurement history;
+- `health:read` for source-separated recorded Health summaries and bounded normalized sample trends; body composition
+  additionally requires `measurements:read`, while Weight and normalized Sleep keep their existing contracts;
 - `sleep:read` for redacted sleep sessions and sleep summaries;
-- `activity-details:read` for bounded non-location activity summaries, laps, swim lengths, MTB jump measurements,
-  selected metrics, and on-demand chart series;
+- `training-plans:read` for current authored plans/workouts, complete instructions and existing sanitized service sync summaries;
+- `training-plans:write`, dependent on `training-plans:read`, for previewed, native-approval-gated safe plan/workout lifecycle changes;
+- `training-delivery:write`, dependent on `training-plans:read`, for previewed, native-approval-gated plan/workout provider delivery controls;
+- `timeline-notes:read` for full private Timeline note titles/details, category, fixed calendar dates and captured timezone;
+- `timeline-notes:write`, dependent on `timeline-notes:read`, for native-approval-gated create, edit and permanent delete;
+- `activity-details:read` for bounded non-location activity summaries, event tags and exact tag filtering, laps, swim
+  lengths, MTB jump measurements, selected metrics, and on-demand chart series;
+- `events:write`, dependent on `activity-details:read`, for focused parent-event tag and title changes with
+  host-controlled approval; description changes additionally require `activity-descriptions:read`. Exact current-value checks prevent
+  concurrent overwrites and benchmark events are excluded;
+- `activity-descriptions:read`, dependent on `activity-details:read`, for the full private parent event description shown in the QS.io event editor;
 - `activity-location:read`, dependent on `activity-details:read`, for exact activity start/end and jump coordinates,
   nearby activity search, and chart breadcrumbs;
 - `routes:read` for non-location saved-route summaries; and
 - `route-location:read`, dependent on `routes:read`, for exact bounds, preview geometry, nearby route search, segment
   endpoints, and waypoints.
 
-The location scopes cannot exist without their matching parent data scope. Consent disables a child until its parent is
+The location, activity-description, event-write and Timeline-note-write scopes cannot exist without their matching parent data scope. Consent disables a child until its parent is
 selected and removes the child when the parent is removed. Authorization approval, refresh narrowing, bearer
 validation, HTTP prechecks, and tool registration reject invalid child-only combinations. Activity and route location
 remain independent domains. Existing clients retain non-location data but must reconnect and approve a new location
 scope to regain coordinate-bearing tools. Consent explains that coordinates may reveal sensitive places and that
 place-name searches send only supplied location text to Mapbox; direct-coordinate searches do not call Mapbox.
+The consent page initializes its selection from the complete validated requested-scope list, so every current and future
+requested permission starts checked. The user can uncheck any independent permission before approval; removing a parent
+also removes its dependent children. Preselection never creates or expands a grant until the user explicitly approves.
 
 The `resource` value and token audience must exactly match the public `/mcp` URL. The authenticated Firebase UID is bound
 to server-side token records; a UID is never accepted from MCP input. OAuth access tokens are opaque, are stored only as
@@ -255,6 +1157,20 @@ Authorization codes are single-use and expire after five minutes. A valueless OA
 omitted; otherwise `state` must be 1–512 visible ASCII characters and is echoed exactly.
 The token endpoint accepts UTF-8 `application/x-www-form-urlencoded` request bodies only and rejects repeated
 parameters.
+
+Token exchanges emit one `[MCP OAuth] Token request served` INFO event on success, or one `Token request rejected`
+event at WARNING for expected OAuth rejections and ERROR for server failures. Fields are limited to a coarse
+`clientFamily`, allowlisted `grantType`, `resourceStatus` (matches, mismatch, missing/invalid or not parsed), handler
+`elapsedMs`, HTTP status and, on failure, the OAuth error code and a fixed internal reason. Refresh reuse has the
+explicit `refresh_token_reuse` reason and `connectionRevoked: true` only after the revocation transaction commits;
+false is not a statement that the connection is currently active, and unexpected failures use null for unknown state.
+Private assertion failures retain their fixed
+authentication stage in this same event rather than producing a duplicate warning.
+Firebase's logger attaches the request trace automatically. Compare handler duration with the correlated Cloud Run
+request latency and instance-start logs to distinguish OAuth work from cold-start delay; handler duration alone does
+not include container startup. Never log tokens, codes, assertions, parameter values, error descriptions, raw user
+agents, client/account/connection identifiers or request bodies. These diagnostics do not change OAuth responses,
+rotation/replay protection, scopes, consent, tools or the registered contract; no app rescan or plugin sync is needed.
 
 Token-endpoint discovery advertises both `none` and `private_key_jwt`, while PKCE S256 remains mandatory for every
 authorization-code client. Public CIMD clients such as Claude use `none`. Confidential CIMD clients such as ChatGPT
@@ -360,6 +1276,15 @@ record therefore invalidates the superseded access and refresh credentials witho
 fan-out. The hash-keyed credential documents remain inaccessible and expire through their existing TTLs; revocation
 never deletes or changes the CIMD client.
 
+An MCP request with no usable Authorization header still receives the required HTTP 401 bearer challenge pointing to the
+public protected-resource metadata. An absent or blank header has an INFO application diagnostic with the fixed
+`missing_bearer` reason; a nonempty malformed header and rejected credentials (including `superseded_grant`) remain
+WARNING. The fixed client family can identify Grok without logging its raw user agent, but this user-agent hint is not
+an authenticated client identity. No header value, token, client ID, account identity, or
+request body enters these diagnostics. Cloud Run request logs retain their HTTP 401 severity independently of the
+application log level; investigate repeated 401s by reason and client family rather than treating one initial challenge
+as a failed tool call.
+
 Connections > MCP remains the authoritative user control because an external client may not call the revocation
 endpoint when the user removes or uninstalls it. Bearer authentication performs the same account-deletion check before
 recording usage or running a tool, while account deletion recursively removes connection and OAuth state. OAuth cleanup
@@ -431,13 +1356,38 @@ The analytics and map entries follow the
 
 | Tool | Scope | Result |
 | --- | --- | --- |
+| `list_training_plans` | `training-plans:read` | Paginated current plan summaries across active, paused and archived lifecycles |
+| `list_saved_workouts` | `training-plans:read` | Bounded, revision-fenced list of saved recipes without dates or sync consent |
+| `get_saved_workout` | `training-plans:read` | Exact validated saved recipe and optional full strength draft |
+| `get_training_plan` | `training-plans:read` | Current plan metadata and workout count without loading all workouts |
+| `query_planned_workouts` | `training-plans:read` | Legacy document-ordered calendar-date summaries retained for compatible clients |
+| `query_planned_workouts_by_date` | `training-plans:read` | Chronological bounded calendar-date summaries; standalone plus active plan by default |
+| `get_planned_workout` | `training-plans:read` | Complete validated canonical v1 instructions plus owner-unit display text |
+| `get_training_sync_status` | `training-plans:read` | Existing local delivery evidence, with whole-plan counts only for complete reads |
+| `get_planned_workout_completion` | `training-plans:read`; optional activity ref also requires `activity-details:read` | Exact current persisted completion link; no inferred matching |
+| `get_planned_workout_completions` | `training-plans:read`; optional activity refs also require `activity-details:read` | Exact current completion links for 1–25 workouts in input order; no inferred matching |
+| `assess_planned_workout_compatibility` | `training-plans:read` | Local mapping fidelity for one current workout; no connection/provider call or delivery guarantee |
+| `preview_create_planned_workout` | `training-plans:read` + `training-plans:write`; optional delivery also requires `training-delivery:write` | Focused one-workout proposal with optional atomic initial send; server-owned local key |
+| `preview_training_plan_phases` | `training-plans:read` + `training-plans:write` | One phase replacement with full before/after review and explicit range-extension choice; existing approval-gated apply |
+| `preview_training_changes` | `training-plans:read` plus the relevant Training write scope(s) | Strict bounded proposal with authored and per-provider effects; no authored mutation |
+| `preview_training_deletion` | `training-plans:read` + `training-plans:write` + `training-delivery:write` | One deletion with explicit older uncompleted service-copy cleanup choice; existing approval-gated apply |
+| `preview_garmin_workout_replacement` | `training-plans:read` + `training-delivery:write` | One explicit duplicate-warning recovery review after fresh paired not-found Check; existing approval-gated apply |
+| `preview_saved_workout_change` | `training-plans:read` + `training-plans:write` | One revision-bound library edit or 1–100-date placement preview; no provider consent or authored mutation |
+| `apply_training_changes` | Same scopes bound into the proposal; native client approval gate | Idempotently applies a preview-created proposal and returns independent authored/provider outcomes |
+| `get_training_change_status` | Same original Training read and child-write grants bound into the proposal | Read-only retained apply result or lower-bound checkpoints after an uncertain reply; never applies or resumes |
+| `apply_saved_workout_change` | `training-plans:read` + `training-plans:write`; native client approval gate | Idempotently applies an exact library proposal through the existing sanitized mutation service |
+| `list_health_metrics` | `health:read` | Static allowlisted Health capabilities, Sports Lib types/units, range limits and additional body-composition permission requirements |
+| `query_health_metric` | `health:read`; also `measurements:read` for body composition | Source-separated stored scalars or bounded representative sample trends; identity-free calendar-day body composition |
+| `get_hrv_personal_range` | `health:read` + `sleep:read` | Shared rolling nightly HRV baseline, historical classifications and missing-day ranges, separated by source |
 | `list_measurement_types` | `measurements:read` | Supported first-class body-measurement types, units, aggregations, intervals, limits, and current-snapshot guidance |
 | `query_measurements` | `measurements:read` | Identity-free day/week/month body-measurement history and a bounded change summary |
 | `list_metrics` | `metrics:read` | Persisted numeric Sports Lib event metrics, derived kinds, and sleep capabilities |
 | `query_metric` | `metrics:read` | One event-stat aggregation by local date interval or activity type |
 | `query_metrics` | `metrics:read` | Up to four event-stat aggregations over one shared bounded read, date range, grouping, timezone, and activity filter |
 | `list_training_metrics` | `metrics:read` | Human-readable Training metric catalog with current snapshot availability metadata but no payloads or provenance |
+| `prepare_training_metrics` | `metrics:read` | Queue or join preparation for one to eight registered Training snapshots and return readiness with retry guidance, without metric values |
 | `get_training_metric` | `metrics:read` | One ready, redacted Training-derived snapshot |
+| `get_training_impact` | `metrics:read` + `activity-details:read` | TSS-based contribution and actual UTC Training-day outcome for one exact completed activity or one identity-free local-day aggregate |
 | `get_activity_metrics` | `metrics:read` + `activity-details:read` | Up to 25 explicitly selected canonical numeric Sports Lib metrics for one referenced activity |
 | `get_activity_overview` | `metrics:read` + `activity-details:read` | Coordinate-free activity type plus actual metric, detail, and chart-source availability |
 | `rank_activities_by_metric` | `metrics:read` + `activity-details:read` | Highest or lowest activities for one persisted numeric metric over an explicit bounded range or a bounded all-history scan |
@@ -445,18 +1395,32 @@ The analytics and map entries follow the
 | `list_sleep_vitals` | `sleep:read` | Bounded account-specific discovery of available safe aggregate sleep vitals and their session coverage |
 | `list_sleep_sessions` | `sleep:read` | Paginated redacted normalized session summaries |
 | `query_sleep_summary` | `sleep:read` | Day/week/month sleep aggregates in an explicit timezone |
-| `get_today_readiness` | `metrics:read` + `sleep:read` | Live Dashboard Today-equivalent readiness with Load, Sleep, HRV, and Overnight HR evidence |
+| `get_today_readiness` | `metrics:read` + `sleep:read` | Registered legacy formula-3 readiness; retained for compatibility |
+| `get_current_readiness` | `metrics:read` + `sleep:read` | Current app formula-4 readiness with the shared seven-day HRV average and 60-day range |
+| `get_readiness_history` | `metrics:read` + `sleep:read` + `health:read` | Ready current-formula 14-day UTC history with identity-free HRV range evidence |
 | `get_daily_report` | `metrics:read` + `sleep:read` | One-call latest sleep with safe HRV/heart-rate aggregates, live readiness, and current-versus-usual Training context |
 | `get_daily_briefing` | `metrics:read` + `sleep:read` | Compact timezone-aware latest completed sleep, current-versus-usual 28-day Training summary, and current UTC-day readiness status |
 | `list_activity_types` | Authenticated client; no data scope | Static canonical Sports Lib activity types with group and indoor hints for activity and route filters; no account read |
-| `list_activities` | `activity-details:read`; locations add `activity-location:read` | Frozen compatibility tool for bounded newest-first activity scans |
-| `query_activities` | `activity-details:read`; locations add `activity-location:read` | Preferred bounded activity query with structurally exclusive explicit, relative, and unbounded date modes |
+| `get_activity_description` | `activity-details:read` + `activity-descriptions:read` | Full private parent event description for one opaque activity reference; opt-in, bounded, no truncation |
+| `query_timeline_notes` | `timeline-notes:read` | Full private user-reported context overlapping inclusive calendar dates, including chart-hidden notes; bounded full-text continuation |
+| `query_editable_timeline_notes` | `timeline-notes:read` + `timeline-notes:write` | Complete current authored note fields with opaque reference and revision for an explicit edit or deletion |
+| `create_timeline_note` | `timeline-notes:read` + `timeline-notes:write`; native client approval gate | Idempotently creates one explicitly authored private note from a stable mutation UUID |
+| `update_timeline_note` | `timeline-notes:read` + `timeline-notes:write`; native client approval gate | Replaces one note at its expected revision; stale changes conflict |
+| `delete_timeline_note` | `timeline-notes:read` + `timeline-notes:write`; native client approval gate | Permanently removes one note at its expected revision and leaves a content-free deletion receipt |
+| `list_activities` | `activity-details:read`; locations add `activity-location:read` | Bounded newest-first activity scans; preferred across MCP hosts, including for today's completed workouts |
+| `query_activities` | `activity-details:read`; locations add `activity-location:read` | Equivalent activity query with structurally exclusive explicit, relative, and unbounded date modes for clients that support its `oneOf` schema |
+| `query_activities_with_tags` | `activity-details:read` | Coordinate-free activity summaries with their parent event tags and optional exact case-insensitive `any`/`all` tag filtering |
+| `update_event_tags` | `activity-details:read` + `events:write`; host-controlled approval | Replaces the complete parent-event tag list after an exact current-tag precondition; sibling activities share the result and benchmark events are excluded |
+| `get_event_title` | `activity-details:read` + `events:write` | Reads one editable parent-event title for an opaque activity reference before a rename; no internal event ID |
+| `update_event_title` | `activity-details:read` + `events:write`; host-controlled approval | Replaces the parent-event title with an exact current-title precondition; sibling activities share the result and benchmark events are excluded |
+| `update_event_description` | `activity-details:read` + `activity-descriptions:read` + `events:write`; host-controlled approval | Replaces the parent-event description with an exact current-description precondition from `get_activity_description`; returns no private text |
 | `find_activities_near_location` | `activity-details:read` + `activity-location:read` | Frozen compatibility tool for nearby activity scans |
 | `search_activities_near_location` | `activity-details:read` + `activity-location:read` | Preferred closed-world nearby activity search with structurally paired optional dates |
 | `list_activity_laps` | `activity-details:read` | Paginated allowlisted lap timing and performance fields |
 | `list_activity_jumps` | `activity-details:read` | Paginated MTB jump measurements; coordinates are present only with `activity-location:read` |
 | `list_activity_swim_lengths` | `activity-details:read` | Paginated allowlisted pool-length and stroke fields |
 | `list_activity_chart_metrics` | `activity-details:read` | Static chart metric, unit, axis, and point-limit catalog; no activity or source read |
+| `get_activity_samples` | `activity-details:read` | Paginated selected canonical samples on an elapsed-second grid, without chart downsampling |
 | `get_activity_chart_data` | `activity-details:read`; add `activity-location:read` when `includeLocation` is true | On-demand bounded chart series and optional breadcrumb trace |
 | `list_routes` | `routes:read` | Bounded newest-first scans with optional activity-type and case-insensitive name filters, opaque references, and signed-in app links; exact bounds require `route-location:read` |
 | `find_routes_near_location` | `routes:read` + `route-location:read` | Frozen compatibility tool for nearby saved-route scans |
@@ -464,13 +1428,18 @@ The analytics and map entries follow the
 | `get_route_geometry` | `routes:read` + `route-location:read` | Bounded persisted `polyline5` preview geometry with explicit segment endpoints |
 | `list_route_waypoints` | `routes:read` + `route-location:read` | Bounded allowlisted waypoint coordinates parsed from the saved FIT/GPX source |
 
-Every tool is annotated read-only, non-destructive, and idempotent. The preferred `search_*_near_location` tools are
+Every read tool is annotated read-only, non-destructive, and idempotent. Note creation is write-capable,
+non-destructive and idempotent through its stable mutation UUID. Note update/delete and tag replacement are explicitly
+write-capable and destructive, use optimistic concurrency, and are idempotent for lost-response retries. Their MCP host
+owns the native approval UI. Training preview is non-destructive; Training apply is separately approval-gated,
+explicitly write-capable and may be destructive only in the recoverable soft-delete/stop-sync sense.
+The preferred `search_*_near_location` tools are
 closed-world: a place-name input can make a bounded Mapbox geocoding read, but it cannot write to Mapbox or change
 publicly visible internet state. The already-registered `find_*_near_location` variants retain their frozen
 `openWorldHint: true` metadata for compatibility, while server instructions route new requests to the corrected
 additive tools. The HTTP layer checks every required scope before the tool call and only registers tools covered by the
 bearer token. `get_activity_metrics`, `get_activity_overview`, `rank_activities_by_metric`,
-`get_today_readiness`, `get_daily_report`, and `get_daily_briefing` are registered only when all of their respective
+`get_current_readiness`, `get_readiness_history`, `get_today_readiness`, `get_daily_report`, and `get_daily_briefing` are registered only when all of their respective
 scopes are present.
 
 ### Strict structured output
@@ -507,12 +1476,12 @@ and granting one location domain never widens the other.
 
 `functions/src/mcp/derived-output-schemas.ts` defines one exact redacted payload schema for every
 `DERIVED_METRIC_KINDS` value. The runtime `metricKind` refinement and advertised JSON Schema conditionals bind each kind
-to its payload. Shared definitions keep the large `get_training_metric` schema and the complete 32-tool `tools/list`
+to its payload. Shared definitions keep the large `get_training_metric` schema and the complete `tools/list`
 response bounded. The chart metric/unit schemas derive from the same `MCP_ACTIVITY_CHART_METRICS` catalog used by the
 parser implementation, so a metric and canonical unit cannot drift independently.
 
 `functions/src/mcp/tool-output-schemas.spec.ts` connects an in-memory MCP client and server with every canonical scope,
-inspects all advertised schemas, calls all 32 tools, and validates successful `structuredContent` with direct Ajv 8 and
+inspects all advertised schemas, calls every registered tool, and validates successful `structuredContent` with direct Ajv 8 and
 `ajv-formats` dependencies. It also exercises all Training kinds, both chart axes, populated/empty and
 continuing/terminal pagination states, nullable/optional fields, parent-only location variants, JSON-text equivalence,
 expected errors, output-contract failures, and identity/provenance leakage canaries.
@@ -575,6 +1544,18 @@ accepting the change. A server-only implementation or result fix needs no pendin
 remains byte-for-byte equivalent after canonicalization.
 Never edit the registered baseline or transition history directly; only the verified promotion command may update them.
 
+For a reproducible modern-protocol review artifact, run:
+
+```bash
+npm --prefix functions run mcp:contract:capture -- --protocol-version 2026-07-28 \
+  --output /tmp/quantified-self-mcp-2026-contract.json
+```
+
+This uses the real HTTP handler in-process, with no network or account-data reads, across the same authorization
+profiles. The snapshot records the negotiated modern version, schemas, metadata, and scope-specific tools. Capture
+defaults to `2025-11-25`; the registered compatibility gate and promotion commands continue to audit that legacy
+contract. The modern snapshot is review-only and cannot be used to bypass a breaking-contract finding.
+
 The repository-managed Lefthook pre-push hook runs `npm run hooks:mcp:pre-push` only when the pushed commits touch MCP
 Functions code, the contract command, or the Functions dependency manifests. The focused command runs the contract gate
 and the MCP output/server tests without running the full Functions suite. The npm-installed Lefthook package normally
@@ -600,6 +1581,51 @@ plugin sync remain explicit lifecycle actions.
    document whenever the public contract moves.
 
 ## Sports Lib metric discovery
+
+Sports Lib 23.7.1 accepts 13-digit Unix-millisecond GPX point times and rejects invalid times before stream allocation.
+Existing bounded original-file chart/sample hydration uses this parser without changing metrics, units, output schemas,
+privacy masks, scopes or consent. Persisted summaries remain authoritative; no historical reparse, derived refresh,
+registered-contract promotion, client rescan or plugin rebuild is required for this compatibility correction.
+
+Sports Lib 23.7.0 indexes existing constructors and aliases without changing catalog membership, canonical names/units,
+validators, persisted-only availability or sensitive-field exclusions. QS's dashboard/list readers use an explicit
+summary path while full event readers remain available. MCP selected-metric queries reuse the already validated
+persisted metric instances instead of constructing them again in a complete event. A per-request aggregation context
+reuses sorting, activity keys and timezone buckets across selectors. Existing field masks, cumulative stat/document/byte
+budgets, malformed-stat skipping, per-metric exclusions and output projections stay in force. Missing persisted pace
+is not inferred from a speed stat. See [the read-path guide](event-summary-reads.md) for maintenance and benchmarks.
+This performance change requires no historical reparse or derived refresh and changes no tool, field, schema, scope,
+consent, planning/provider capability or plugin contract. No registered-contract promotion, client rescan, plugin
+rebuild, historical reparse or derived-data refresh is required.
+
+Sports Lib 23.6.0 preserves catalog membership, canonical names/units, validators and existing JSON/output schemas.
+Its GPS calculation changes can affect generated distance, speed, pace and dependent summaries on new imports or
+authorized reparses; saved metric queries still read persisted values, while on-demand charts/samples use the current
+original-file parser without rewriting history. Deferred SML XML parser loading changes no public MCP projection.
+No tool, scope, consent, planning/provider capability, registered-contract promotion, client rescan or plugin rebuild
+is required by this adoption. See the reparse runbook and Training guide for historical-data and deployment boundaries.
+
+Sports Lib 23.5.1 corrects the existing `unitSystem` descriptor to `imperial` for feet-, mile- and yard-based variants.
+Catalog membership, identifiers, unit strings, validators and persisted-only availability are unchanged; corrected
+metadata does not synthesize a stat or expose raw data. The existing strict descriptor schema already permits both
+unit systems. No tool/schema, scope, consent, registered-contract promotion, client rescan or plugin change is needed.
+The separate per-yard swim-average calculation correction enters metric reads only after normal persistence; older
+incorrect saved derived values require the existing authorized source-backed reparse described in the runbook.
+
+Sports Lib 23.5.0 power adoption preserves this public contract. Corrected power, balance and multisport summary
+values enter metric reads only after normal persistence; an unavailable calculated summary stays absent and genuine zero
+remains available. On-demand charts/samples use the adopted original-file parser without rewriting history. Detailed
+samples preserve aligned nulls; chart reads retain measured points at their original offsets and report missing counts.
+No power-coverage field, metric alias, scope, schema, planning capability or mutation is added. Existing private Training
+evaluations/policies remain excluded. See the [Training adoption notes](training-workspace.md#sports-lib-2350-power-and-rr-adoption)
+and reparse runbook for the historical-data and deployment boundaries. This semantic correction requires no registered-contract
+promotion, client rescan or bundled-plugin change.
+
+Sports Lib 23.5.0 also registers 20 canonical R–R summary metrics. Available finite summaries become discoverable
+through the existing activity numeric-metric catalog after import/reparse persistence; missing statistics stay absent,
+and valid zero remains available. Raw beat intervals, sample timestamps and beat classifications are not exposed.
+These activity summaries do not enter Health/Sleep or Readiness. Multisport legs retain their summaries without an
+invented event-level aggregate. No new tool, scope, consent, registered schema, planning mutation or plugin is added.
 
 `metric-catalog.ts` enumerates public Sports Lib `DataStore` classes. A metric is eligible only when:
 
@@ -672,6 +1698,17 @@ existing retained Suunto or FIT source gains the new metrics. This changes neith
 scopes, nor bundled plugin instructions, so it does not itself add a registered-app refresh, contract promotion, or local
 plugin-sync requirement beyond any independently pending contract update.
 
+Sports Lib 21.6.13 corrects existing source data without adding metric tokens or changing registered contracts:
+COROS GPX ClueTrust HR becomes the existing Heart Rate stream, mixed-sport Suunto pace calibration requires applicable
+sport-owned thresholds, and corroborated pool distance avoids a cumulative final-lap double count. On-demand charts
+can expose corrected existing HR/distance streams after runtime adoption; recorded metric queries change only after
+source-backed import/reparse persists corrected summaries. Imported TSS and private load controls retain priority.
+Explicit non-workout FIT files are rejected during source hydration/reparse; completed activity-summary FIT files with
+an explicit session remain supported, including Wahoo summaries without sensor records. Historical summary reads remain
+unchanged until a separate authorized lifecycle action. A rejected reparse does not delete the saved event or route data into
+Health. No MCP scope, tool, reason, field, unit, schema, plugin instruction, or mutation capability is added; no contract
+promotion or registered-app refresh is needed solely for these source corrections.
+
 `query_metric` selects only the requested canonical stat and the activity-type stat from Firestore before applying its
 cumulative work budgets, imports that bounded projection through `EventImporterJSON`, and reuses the shared event-stat
 aggregation engine. It excludes benchmark-merge events and accepts an explicit IANA timezone for date buckets. Existing
@@ -709,8 +1746,11 @@ single-field indexes and require no new composite index. First-class body measur
 
 The optional `activityGroup` input takes an exact group value returned by `list_activity_types` and expands it through
 Sports Lib's `ActivityTypesHelper`. It is combined with any explicit activity types, canonicalized, deduplicated, and
-kept under the same 20-type input limit before Firestore access. This keeps sport-family membership in the shared
-library instead of relying on each Assistant or MCP client to maintain its own subtype list.
+the explicit caller list retains its 20-type input limit. Larger catalog groups use disjoint `in` queries of at most
+20 types for all-history rankings, with one shared 2,000-record and cumulative-byte budget across every batch and page.
+Date-range rankings scan the range once and apply the complete family filter. No group is clipped, and an over-budget
+family fails instead of returning a partial record. This keeps sport-family membership in the shared library instead
+of relying on each Assistant or MCP client to maintain its own subtype list. The tool schema and grants are unchanged.
 
 MTB jump superlatives reuse this generic metric path rather than introducing a second jump-ranking store or tool.
 Discover the Mountain Biking group value, pass it as `activityGroup` so the server expands every canonical type, and
@@ -722,10 +1762,60 @@ user asks for jump-level details. When reading those records, follow `nextCursor
 inspection is incomplete; the bounded built-in Assistant does not spend its required superlative workflow on redundant
 jump pagination. `jumpCount` is availability and volume evidence only; it never ranks jump quality.
 
-For a recent or latest jump detail request, use newest-first `query_activities`, choose the first returned activity with
+For a recent or latest jump detail request, use newest-first `list_activities`, choose the first returned activity with
 `jumpCount > 0`, then pass that opaque reference to `list_activity_jumps`. Continue the same query cursor only when the
 page contains no activity with jumps. With `activity-location:read`, only a jump-record coordinate may represent a jump
 on a map or in prose: an activity's start and end positions are distinct summary locations and must never be substituted.
+
+## Manual Health measurement management
+
+Implementation adds independent **Manage manual Health measurements** (`measurements:write`). Requested consent is
+prechecked like other current scopes, but approval is still required. Existing grants and token refresh cannot acquire
+it; legacy omitted consent selections exclude it. No UID gate, extra Pro requirement or provider permission applies.
+This source change is not a deployment or registered-client promotion. Clients need the released server, catalog
+refresh and reauthorization before using it; disconnect/reinstall is not the normal permission-recovery path.
+
+| Tool | Contract |
+| --- | --- |
+| `list_manual_measurement_types` | Eight deliberately supported UI types, explicit input units, owner-unit default, required metadata and server time. |
+| `query_manual_measurements` | Current manual entries newest-first; opaque references/revisions, exact instants and saved offsets. Defaults to 25, maximum 100; optional paired start/end instants within 366 days. |
+| `get_manual_measurement` | One complete validated manual entry, including paired blood pressure or VO2 metadata. |
+| `create_manual_measurement` | Explicit metric, value/unit, offset-bearing observation instant and stable UUID mutation ID. |
+| `update_manual_measurement` | Current reference/revision, value/unit; omitted time/metadata preserved. Explicit null clears optional paired pulse. Type cannot change. |
+| `delete_manual_measurement` | Current reference/revision; permanent whole-entry deletion, including paired values. |
+
+Types are Weight (kg/lb input, canonical kg), VO2 max (ml/kg/min with general/running/cycling context and lab/field/other
+method), body fat, body water and SpO2 (percentage), muscle/bone mass (kg), and systolic/diastolic blood pressure (mmHg,
+optional same-observation bpm pulse). Canonical validation/ceilings reuse the UI Health domain; they are not medical
+reference ranges. Sports Lib converts/prints owner units. Resolve “now” once using catalog server time and the user's
+timezone; retain that exact instant and UUID on retries. Do not guess required metadata or choose ambiguous entries.
+Public output validation also checks metric-specific canonical units/ceilings, required pressure pairing and VO2-only
+metadata, without widening the compact wire shape.
+
+All six tools require the independent write grant at HTTP, registration and data boundaries. Management reads select
+only manual point records through explicit field masks; imported readings, provider credentials, raw IDs, source keys,
+private metadata and terminal receipts never leave the projection. References bind owner, connection and grant;
+cursors also bind filters/limit and expire after 30 minutes. Sealed references bind the reviewed revision and omitted-field
+defaults so concurrent metadata/time changes cannot be mistaken for identical retries. Pagination reads current records, not a frozen historical
+snapshot: concurrent insertions or edits can change pages. Query scans use pages of 25 with lookahead, at most 500
+consumed records and 2 MiB selected input per call; individual selected records are bounded to 32 KiB and complete structured-plus-text
+output to 256 KiB, including a full 100-entry page with paired readings. Invalid records are skipped with counts and completeness, never silently treated as full coverage.
+Selected-input bytes include every fetched lookahead and repeated page read; scan counts describe consumed records.
+Bounded private cursors can continue past skipped malformed record IDs, which never become public measurement references.
+
+Connection authority and account-deletion fences are rechecked before releasing reads and inside every persistence
+transaction, including idempotent no-ops. Creates share deterministic IDs with the UI; a repeated UUID with different
+content conflicts. Exact immediate update retries are accepted; later changes conflict. Deletion retains only the
+existing content-free terminal marker and delayed creates cannot resurrect it. A retry after later edits returns
+current persisted data, not an obsolete creation receipt. No new callable, storage model, provider I/O or repair write
+is added. External writes use accurate destructive/idempotency annotations and host-native approval; the server cannot
+detect or override a host's auto-approval configuration.
+
+The built-in Assistant has an independent **Manual Health measurements** choice, on for fresh/New chats; legacy
+missing flags remain off. Gemini receives lookup and prepare-only tools, never public write tools. Exact edit/delete
+references and revisions must have been read in the current turn. One short-lived app review contains canonical
+before/after fields rendered in the owner's units, saved observation offset and permanent-delete wording. Only the
+existing Apply endpoint writes, with server-owned conversation/proposal checks in the shared Health transaction.
 
 ## First-class body measurements
 
@@ -734,15 +1824,20 @@ catalog. It does not decide whether a Sports Lib metric exists or is numerically
 `metric-catalog.ts`. It decides only which canonical metrics are safe and meaningful as personal body measurements.
 Adding a numeric Sports Lib class still does not silently expose it as a body measurement.
 
-The current first-class type is `body_weight`, backed by canonical Sports Lib `Weight` values in persisted event stats.
+The current first-class type is `body_weight`, backed by canonical Sports Lib `Weight` point measurements in
+`users/{uid}/healthSourceRecords`. Provider-imported and Quantified Self manual Weight share the same canonical metric
+while retaining separate internal provenance.
 `list_measurement_types` describes its kilogram storage unit, median default, supported median/average/minimum/maximum/
 latest aggregations, day/week/month intervals, 366-day range limit, and the optional ready
 `body_weight_trend` Training snapshot, including that snapshot's separate `metrics:read` requirement and UTC day
 boundary.
 
-`query_measurements` reads the same bounded event pages as `query_metric`, excludes benchmark merges, resolves the
-requested persisted value through its Sports Lib data class, rejects non-positive or non-finite body weight, and buckets
-records in an explicit IANA timezone. It returns only the semantic type, canonical metric metadata, query parameters,
+`query_measurements` executes an owner-scoped, metric-first Health query in bounded pages. Its internal field mask
+retains `calendarDate` for the ordered snapshot cursor; that field is not added to the public response. It filters the widened calendar
+envelope to the exact requested timestamps, accepts only canonical point measurements with `aggregation=measurement`,
+resolves each value through its Sports Lib data class, rejects non-positive or non-finite body weight, and buckets
+records in an explicit IANA timezone. Workout profile Weight is deliberately excluded because it is not a weigh-in. It
+returns only the semantic type, canonical metric metadata, query parameters,
 bucket start, aggregate value, bucket count, and first/latest change summary. It never returns the Firestore document
 ID, exact source measurement timestamp, activity type, event/activity identity, name, label, provider/device metadata,
 or source provenance. Multiple same-bucket values default to a median; `latest` means the chronologically latest value
@@ -754,11 +1849,16 @@ authorization for the new scope before the measurement tools are registered. The
 remains the fast 28-day Training view under the pre-existing Training metric permission, not the historical measurement
 API. No new Firestore collection, composite index, persistence format, reparse, or backfill is required.
 
+This source change does not alter a registered MCP tool name, input, output, scope, prompt, or bundled-skill contract.
+The strict derived projections explicitly remove the internal source-separated Weight series and manual VO2 reference
+before validating the frozen public schemas. The focused measurement, Training, and cross-domain skills therefore need
+no text change, and neither a registered ChatGPT app rescan nor a local plugin sync is required.
+
 To add another first-class measurement, add one explicit semantic definition backed by an already eligible canonical
 Sports Lib numeric type, define its value-validity rule, supported aggregations and intervals, and user-facing meaning,
 then update the tool-schema enum from the same exported ID tuple. Add positive catalog/query coverage, a negative
-sensitive-field leakage test, consent/Help/Policy/feature copy, and reconsider whether the existing 366-day event-read
-and 128 KiB response bounds remain appropriate. Do not infer measurement eligibility from a display name, unit, provider
+sensitive-field leakage test, consent/Help/Policy/feature copy, and reconsider whether the existing 366-day Health-record
+scan and 128 KiB response bounds remain appropriate. Do not infer measurement eligibility from a display name, unit, provider
 payload, or arbitrary persisted stat key.
 
 When a Sports Lib metric is added or changed:
@@ -788,13 +1888,25 @@ The response is a new allowlisted object. Summary and lap stats are limited to d
 average/maximum speed, heart rate, power, locomotion cadence, and energy. Canonical Stroke Rate is available through
 the selected numeric metric surface rather than being mislabeled in the fixed cadence summary field. Swim lengths expose
 only their normalized timing, distance, pool, stroke, SWOLF, energy, speed, cadence-shaped rate, and heart-rate fields.
+When the parser's optional pool `timingValidity` marker rejects a source timer/elapsed value, swim detail projections
+return `null` in the existing affected timing field; lap duration likewise stays `null` for a rejected timer, including
+when stale numeric stats coexist with the marker. Distance/strokes/rest rows remain available. The marker, its reason,
+and raw rejected values are never forwarded. No schema, consent, scope or mutation capability changes are introduced.
+The pending native JSON correction preserves valid source lap IDs, including zero and nonconsecutive values; the
+existing `lapNumber` projection carries those saved IDs, while pagination/indexes remain array-based. Complete
+multisport timer/elapsed totals and retained source-only parent distance/energy use existing canonical numeric fields.
+Per-leg values are not populated from parent totals. These repairs add no metric names, response fields, grants, scopes,
+or mutation capabilities, and expose no source provenance or private Training metadata.
+The matching Sports Lib declaration correction exposes existing optional time getters as `Data… | undefined`.
+It adds no persisted fields or public MCP fields: selected absent metrics remain unavailable, fixed nullable detail
+fields remain `null`, and measured zero remains zero. The typing correction alone needs no data migration or reparse.
 For swimming, the frozen `averageCadenceRpm` wire field contains the source stroke rate; its compatibility name cannot be
 renamed without a registered-contract transition. Jump records expose timestamp, distance,
 height, hang time, speed, rotations, and score. The jump `timestampMs` is an activity-relative elapsed offset in
 milliseconds, not an epoch timestamp. With `activity-location:read`, jump records may also expose latitude/longitude,
 and activity summaries may expose validated `startPosition` and `endPosition` coordinates. Without that scope,
 coordinate fields are omitted and `locationRedacted` is true. Per-activity metric requests expose only selected finite numeric values
-from the canonical Sports Lib catalog. Activity names and notes, raw streams, precise-position metrics, nonnumeric and
+from the canonical Sports Lib catalog. Activity names and notes remain excluded from these metric/detail projections. Only the separately authorized description tool below reads parent event text. Raw streams, precise-position metrics, nonnumeric and
 unrequested stats, internal ID fields, device/provider creator data, source keys, original files, nested position
 metadata, and parser extensions are excluded.
 
@@ -809,8 +1921,14 @@ cursors use authenticated encryption and are bound to the UID and MCP connection
 them. The separately requested direct app URL uses the existing `/user/{uid}/event/{eventId}` route and still requires
 the user's normal application sign-in; it contains no MCP credential or authorization bypass.
 
-Activity discovery metadata explicitly maps workout, exercise-session, today, yesterday, last, latest, most-recent, and
-named-sport requests to `query_activities`. `list_activity_types` returns the unique canonical Sports Lib activity types
+Activity discovery metadata maps workout, exercise-session, today, yesterday, last, latest, most-recent, and
+named-sport requests to `list_activities`. It has the same bounded, owner-scoped activity service as
+`query_activities` and avoids connectors that reject the latter's `oneOf` input before the request reaches QS.
+The existing strict tool remains available to compatible clients; a client-side schema rejection should fall back to
+`list_activities` with identical filters, never infer that the user has no completed workouts.
+The in-process built-in Assistant keeps `query_activities` in its curated allowlist because it does not use the
+affected external connector schema conversion.
+`list_activity_types` returns the unique canonical Sports Lib activity types
 plus their group and indoor hints; filters accept those values or aliases recognized by Sports Lib and canonicalize
 them before scanning. A request such as “latest run” therefore uses a server-side type filter with `limit: 1`, so a newer
 activity of another type is skipped instead of being mistaken for the requested workout.
@@ -824,10 +1942,64 @@ on runtime validation. A relative-period cursor retains the first page's resolve
 midnight between pages cannot move the query window. `search_activities_near_location` similarly advertises an explicit
 paired range or an unbounded mode.
 
-One filtered call scans at most 100 selected activity documents and can return fewer matches than requested.
+`query_activities_with_tags` is an additive coordinate-free tool because the existing activity-query input and output
+schemas are frozen. It reads only `tags` and the legacy `benchmarkReviewTags` field from the exact owned parent event
+documents referenced by the bounded activity scan, then normalizes them through the shared event-tag rules. Tags belong
+to an event, so sibling activities from that event return the same tags. An existing event with no tag fields returns
+an empty tag list; an activity whose parent event is unavailable is skipped rather than misreported as untagged. A
+caller may read tags without a filter or request 1–10 tags of at most 32 characters each. Matching is exact after
+whitespace normalization and is
+case-insensitive, with explicit `any` or `all` semantics. Tag filters, match mode, activity types, date mode, resolved
+range, UID, and connection are bound into the encrypted continuation cursor. The tool always returns
+`locationRedacted: true`; event names, descriptions, standalone event/activity ID fields, creator/source metadata, and
+coordinates remain excluded. The existing authenticated app link still uses the normal signed-in event route.
+Tag text is untrusted user- or provider-assigned label data, never instructions, verified facts, diagnoses, or authority
+to act, and it can itself contain personal, health, or location context.
+Its complete MCP result, including structured content and the JSON-text copy, is limited to 256 KiB.
+Tag reads use the existing `activity-details:read` grant and add no Firestore index, migration, or backfill. Existing
+external clients may need to refresh their tool catalog after the MCP release and registered-app rescan; no
+reauthorization is required for reads. The built-in Assistant exposes this read only after its independent per-chat
+**Activity tag changes** choice is enabled, so it can verify the current complete tag list before preparing—but never
+directly applying—a change.
+
+`events:write` is a separate dependent permission for focused event-owned changes. Both requested checkboxes start
+selected; removing Activity details removes and disables the child. Existing connections missing it must reauthorize;
+refresh cannot add it. For `update_event_tags`, the client first resolves one opaque `activityRef`
+with `query_activities_with_tags`, then submits the complete current `expectedTags` and complete replacement `tags`
+list. The server decrypts the owner- and connection-bound reference, verifies the activity still belongs to the
+referenced parent event, and transactionally rechecks the stored active MCP grant and account-deletion fence. It also
+reads the event's merge classification and rejects both explicit and legacy benchmark-event shapes before accepting a
+change or no-op. If the current normalized list differs from `expectedTags`, the write conflicts rather than
+overwriting a concurrent edit. Repeating an accepted replacement is a safe no-op. The canonical event field is written
+through the same shared sanitizer as the UI and the legacy tag field is removed; sibling activities inherit the result
+because tags remain event-owned. The focused write returns only the input opaque reference, normalized tags and whether
+storage changed, with no event/activity IDs. Newly assigned labels are added to the private per-user tag catalog in
+the same transaction. This changes no MCP tool schema, scope, consent, or approval step.
+
+An activity/workout rename edits the parent event's `name` through `update_event_title`. The client first reads
+`get_event_title` and submits its exact `expectedTitle`. A description edit first reads the full private text with
+`get_activity_description` and submits its exact `expectedDescription` to `update_event_description`; it requires
+the additional `activity-descriptions:read` grant. Missing/null values can be cleared with `null`; text is not trimmed.
+Title inputs are limited to 512 UTF-16 code units/2 KiB UTF-8 and one line; descriptions to 65,536 code units/64 KiB
+UTF-8. The description-update HTTP request alone allows up to 320 KiB for both exact-old and new text, including JSON
+escaping; the ordinary MCP and OAuth request caps remain unchanged. Both use the same owner/connection-bound activity
+reference and transaction checks as tag changes, recheck
+the parent association and benchmark classification, and write only the sanitized event field. A repeated accepted
+replacement is a no-op; a different current value conflicts. A description-write result contains no private text.
+Sibling activities share the new event title or description. No recorded activity metrics, source files, locations,
+provider records or remote services are touched. The MCP host controls per-call approval; users who want to inspect
+each edit must keep automatic approval disabled in that host. These tools
+are external-client only: the built-in Assistant's independent **Activity tag changes** choice still authorizes only
+tag proposals and does not expose title or description mutation. This adds no callable, index, collection or background
+job. Future editable event fields still require dedicated strict tools, projection and consent review, tests and docs;
+the broader permission name does not automatically expose newly stored fields.
+
+One filtered call, including a tag-filtered call, scans at most 100 selected activity documents and can return fewer
+matches than requested.
 `scannedActivityCount`, `skippedActivityCount`, `nextCursor`, and `scanComplete` distinguish a completed no-match result
 from a partial scan. Clients repeat the original activity types and date-selection inputs with `nextCursor` until a
-match is found or `scanComplete` is true. The encrypted cursor is bound to the connection, canonical activity-type set,
+match is found or `scanComplete` is true; tag-aware calls also repeat the original tags and match mode. The encrypted
+cursor is bound to the connection, canonical activity-type set,
 relative-period/timezone mode, and resolved or explicit date range; the type set is represented by a fixed SHA-256
 digest so the cursor remains within 512 characters even at the 20-filter maximum. Aggregate event metrics and Training
 snapshots are not evidence that an individual activity is unavailable.
@@ -863,6 +2035,14 @@ activity identity set, and validates every object path under `users/{uid}/events
 bucket. It streams at most four FIT, GPX, TCX, Suunto JSON/SML, or gzip source files. Sports Lib receives only requested
 streams plus derivation and axis dependencies. Multi-file events reuse `EventUtilities.mergeEvents`. The pure shared
 identity matcher tries source key and then progressively narrower unique identity signatures; ambiguity fails closed.
+After exact matching, the 53 direct import-name refinements verified by the corpus can match historical activities
+with equal start/end, finite rounded duration, equal rounded distance (or no distance on both sides), compatible source keys, and a unique
+candidate in each direction. It never treats arbitrary sports in a Training family as the same identity or enables the
+reparse-only single-remaining fallback. Different generated source keys are compatible only when both have the complete
+SHA:SHA:occurrence shape and the same source-content SHA-256 prefix; renamed sports can change the activity fingerprint.
+Different source hashes and conflicting arbitrary keys stay unmatched by the refinement rule. See
+[preserved provider names and historical compatibility](training-workspace.md#preserved-provider-sport-names-and-historical-compatibility).
+The original persisted identity and public tools, scopes, schemas and budgets remain unchanged.
 
 This path never calls reparse persistence, metadata auto-healing, ID assignment, regeneration, event/activity writers,
 or source writes. Parsed objects are discarded after projection. Scalar streams preserve endpoints and per-bucket
@@ -874,6 +2054,65 @@ Responses contain parallel chart arrays, canonical units, and source/returned/mi
 original files, internal IDs, source keys, provider/device metadata, parser extensions, absolute sample timestamps,
 unrequested streams, and full-resolution recordings. Historical availability depends on the original source remaining
 available and within budgets; no backfill or persistent cache is created.
+
+## Detailed activity samples
+
+`get_activity_samples` is additive. The registered chart tool, catalog, point limits and response shape remain unchanged.
+Use charts for compact visual overviews, persisted metrics for workout summaries, and samples for interval calculations or
+complete requested series. The same `activity-details:read` grant registers and authorizes this tool; there is no new
+OAuth scope, consent step, provider connection or reimport requirement. Clients with cached metadata must discover the
+new tool after a server/app refresh. Client-specific tool approvals are separate from QS OAuth grants.
+
+The input is `activityRef`, one to four metrics from `list_activity_chart_metrics`, optional `startOffsetSeconds`
+(inclusive, default zero), `endOffsetSeconds` (exclusive, default available stream end), `limit` (default 2,000, maximum
+10,000 aligned rows), and `cursor`. Limits and offsets are integers; offsets are bounded to 250,000 seconds. Canonical
+aliases are normalized and deduplicated. Repeat the same filters and limit with every continuation. Requesting a small
+interval reduces output but still requires parsing the bounded original source on a cache miss.
+
+The strict output contains `activityType`, `sampling: all_available`, `timeUnit: seconds`, `sampleIntervalSeconds: 1`,
+`range` and `page` with inclusive starts/exclusive ends and counts, one shared `elapsedTimeSeconds` array, `series`, and
+nullable `nextCursor`. Each series has a canonical metric/unit pair, `sourceSampleCount` (stream length including missing
+slots), `missingSampleCount` for this page, and aligned `values`. Null preserves a missing/non-finite reading or an absent
+stream; zero remains zero. The range is clamped to the longest selected available stream, including its final sample.
+All selected streams absent produces a zero-length range with empty value arrays. These are Sports Lib canonical
+parsed values, including supported derivations, not a promise of raw device packets or data absent from the source.
+Do not calculate full-range statistics until the continuation is null; exclude missing readings and disclose coverage.
+
+Both projections use `activity-stream.service.ts` for the single allowlisted metric catalog, selective parser options,
+file handling, budgets, multi-file merge and identity matching. `data.service.ts` shares owner-scoped event/activity
+context validation and approved source-path/download checks. There are no provider branches: current and future
+providers work when they retain a supported original file with supported streams. New formats or metrics require a
+separate parser/catalog change. The detailed projection never returns coordinates (even with a location grant), absolute
+sample timestamps, source metadata, device identity, arbitrary streams or original files.
+
+Pages fit a **256 KiB complete MCP result**, counting both structured content and its escaped JSON-text copy and reserving
+1 KiB for protocol metadata. The page shortens automatically to fit, and its cursor starts at the exact following second.
+The shared source limits remain four files, 12 MiB cumulative raw bytes, 64 MiB decompressed bytes, 250,000 selected/parser
+dependency samples and 20 seconds of parsing/projection. A hard source or runtime limit rejects the request; it never
+silently returns a partial parse.
+
+Pagination is stateless. Encrypted cursors are bound to owner, connection, activity, normalized query, source generations
+and a digest of selected canonical data; they expire 30 minutes after the first page. Source or parser-output changes
+require restarting instead of joining different revisions. Each page checks active-account state, current event and
+activity identity, approved Storage paths and the existence of exact object generations before and after projection.
+Sources without stored generations are pinned to the current immutable generation for each read. Malformed stored
+generations make the source unavailable rather than silently falling back to the latest file. A deleted object,
+changed parent or removed account cannot be served from cached data. Bearer revocation remains checked by the HTTP
+boundary on every request.
+
+`activity-sample-cache.ts` reuses only frozen selected numeric arrays and canonical descriptors in process memory:
+120-second TTL with active eviction, eight entries, 24 MiB conservatively accounted total, 12 MiB per entry, and two
+concurrent different cache builds. Identical concurrent requests share one build. The key includes owner, connection,
+activity, metrics and source revision. Raw files, parser objects and derivation-only streams are discarded. Nothing is
+written to Firestore or Storage except existing parse-rate counters. A warm page does not consume another parse allowance;
+a cold instance or expired/evicted entry safely reparses the pinned source and uses the existing six-per-connection /
+twelve-per-user-per-minute limiter. Cache reuse is best effort, not a session-affinity guarantee. Normal HTTP limits
+still apply to every page. No backfill, provider API call, migration or derived-schema change is required.
+
+The built-in Assistant retains its explicit compact-evidence allowlist and omits this tool and its routing instruction.
+Detailed sample pagination is currently an external MCP workflow. Deploying this additive public tool requires the normal
+digest-bound developer refresh/rescan; bundled activity and cross-domain skill changes require validation and a later
+explicit local `npm run plugin:sync`. Local tests do not deploy, promote the registered contract or install a real profile.
 
 ## Saved-route projection
 
@@ -950,23 +2189,51 @@ instead of being serialized. For example, `body_weight_trend` is discoverable th
 `get_training_metric` when ready; its safe payload contains only UTC day/value points, window coverage, medians, and
 change values—never source document or measurement identities.
 
-Internal derived schema 19 includes the original eight modeled families, the data-backed Fitness & Gym and Other
-training volume groups, and the context/profile summaries introduced in schema 16. It retains the reusable maximum
+Internal derived schema 22 includes all 25 registered Training groups: 23 benchmark-capable families plus the data-backed
+Fitness & Gym and Other training groups, with the context/profile summaries introduced in schema 16. It retains the reusable maximum
 aggregation used for MTB longest-jump distance in schema 17 and canonical swimming, rowing, and paddling stroke-rate
 profile metrics with bounded pre-19 Cadence read compatibility. The registered MCP contract maps
 current snapshots to its frozen wire schema version 15 and three-family shape through an explicit projection before
 redaction and strict validation:
 
+- `form` strips the internal Form payload version and exact per-day activity counts used by the owner-only Training
+  impact recap. Its frozen public daily rows remain exactly `{dayMs, load}`.
+- `intensity_distribution`, `easy_percent`, and `hard_percent` reconstruct their exact existing public fields, omitting
+  internal intensity-policy and weekly coverage metadata. The summary and Best Build projections also omit that policy.
 - `training_summary` and `training_build_comparison` retain only Running, Cycling, and Swimming and reconstruct their
   exact registered window objects, so internal `contexts`, profile IDs, and profile metrics cannot leak.
 - `training_explanation` retains those three named families, folds Rowing, Walking & Hiking, Nordic Skiing, Strength,
-  Fitness & Gym, Paddling, and Other training into Other for complete load/composition totals, and exposes rhythm only
+  Fitness & Gym, Paddling, Wheelchair Training, Climbing & Mountaineering, Mountain Snow Sports, Skating,
+  Combat & Martial Arts, Dance, Team Sports, Racket Sports, Precision Sports, Water Sports, Diving, Performance Sports, Outdoor Adventures, Aerial Sports, Motorized Activities and Other training into Other for complete load/composition totals, and exposes rhythm only
   for the registered three.
 - `training_durability` retains its existing Running, Cycling, Pool, and Open-water scopes. Its workspace-only exact
   supporting-workout start time is reduced to the existing UTC `startDayMs` public field.
+- `training_power_systems` retains registered policy 1 and its independent exact-sport fits. Internal policy 2 pools
+  only Cycling/Road Cycling and Running/Road Running evidence while preserving the actual sport labels. The worker
+  independently fits those four affected labels under policy 1 from the same bounded curve inputs and stores a private
+  `legacyPowerSystemsPolicy1` sidecar. MCP combines its validated entries with the unchanged types, then validates the
+  frozen public policy-1 payload. It requires matching window metadata, unique actual labels, complete affected-label
+  membership, at most four sidecar entries and 85 history points per entry, and a 128-KiB sidecar bound. A missing,
+  malformed or incomplete sidecar fails closed as not ready; pooled results are never relabelled as policy 1. Genuine
+  stored policy-1 payloads retain their original projection. The sidecar and source fingerprints never enter MCP output.
+  This preserves the existing tool, wire version, scopes and consent without adding a public policy-2 tool.
 
-The same projection protects the compact briefing and daily report Training summary. Negative fixtures include all
-all ten internal groups, general/gravity/rowing contexts, the internal maximum-jump and stroke-rate profile metrics, and
+Intensity uses existing recorded QS zone durations with approximate source-specific groups: HR Easy Z1–Z2, Moderate Z3,
+Hard Z4–Z5; power Easy Z1–Z2, Moderate Z3–Z4, Hard Z5–Z7. Auto selects power per joined child activity when its valid zone
+time is positive, otherwise HR; unusable activities contribute no intensity time. Weekly totals retain each multisport
+segment's source. The existing public weekly `source` enum indicates the dominant activity source (power on ties), while
+mixed weeks can include both sources. No source selector, thresholds, or zone-model detection is introduced.
+
+The five affected snapshots require private `intensityPolicyVersion` 1 through the existing ensure/queue lifecycle.
+Old snapshots and Best Build workout-cache seeds rebuild; unrelated kinds keep their versions. Public tool names,
+scopes, payload schemas, and wire version remain unchanged. Runtime metric descriptions explain the new grouping.
+Catalog availability checks project only the private policy field alongside ordinary snapshot metadata; old ready
+policies report `stale`, and no internal field is returned.
+The bundled Training and cross-domain workflows already discover these descriptions and require ready snapshots;
+their advertised guidance needs no change or plugin rebuild for this correction.
+
+The same projection protects the compact briefing and daily report Training summary. Negative fixtures include
+all twenty-five internal groups, general/gravity/rowing contexts, the internal maximum-jump and stroke-rate profile metrics, and
 undeclared private fields, then prove the public result validates and contains none of them. Because advertised tools, schemas,
 instructions, plugin metadata, and starter prompts do not change, this internal expansion needs neither a
 registered-app rescan nor a local plugin sync.
@@ -978,9 +2245,108 @@ descriptors, validates the snapshot entry type and metric identity, and reports 
 provenance. Clients should use it before deciding that a Training metric is unavailable, and call
 `get_training_metric` only for a ready kind.
 
+For a current or missing snapshot, call `prepare_training_metrics` with one to eight catalog kinds. The tool runs the
+same freshness check as the Training route, queues only stale kinds through the existing coordinator, waits at most
+five seconds, and returns `ready`, `preparing`, or `unavailable`, plus the kinds already ready and a retry delay when
+preparing. It is idempotent but can queue backend work (`readOnlyHint: false`, `destructiveHint: false`). Retry this
+tool after the suggested delay while it is preparing; once ready, call the unchanged `get_training_metric` read.
+The response exposes neither snapshot values nor private worker state. A failed or disabled queue reports
+`unavailable` rather than inventing a ready value. Existing clients need a deployed server update and tool-catalog
+refresh to discover this additive tool; the pending contract record does not make it available by itself.
+
+### Training impact
+
+`get_training_impact` is an additive read-only tool that requires both `metrics:read` and
+`activity-details:read`. It reuses the existing Form snapshot and canonical 42-day CTL / 7-day ATL model; it is not a
+new derived-metric kind and persists nothing. Clients must call `prepare_training_metrics` for Form first. Session mode
+accepts exactly one opaque, owner- and connection-bound activity reference. Day mode accepts 1–32 unique references
+already returned by one complete bounded activity read for an exact `localDate` and IANA `timeZone`. The server
+validates that every referenced activity started on that local date. Planned workouts and references from another date
+are invalid input.
+
+The service reads only those exact activity and parent-event documents, their owner-only Training load metadata, and
+`users/{uid}/derivedMetrics/form`; it does not query activity history. Its field masks retain the event link, start/end
+times, activity type, recorded stats needed for source-fingerprint validation, and event merge/benchmark flags. These
+source fields stay internal. Account deletion is checked before and after the reads. Activity and event documents are
+queried in Firestore `in` batches of at most 30, so the public 32-reference limit remains bounded without a composite
+index. The complete result is limited to 16 KiB and still uses the ordinary per-connection MCP request limit.
+
+The result exposes the selected sessions only as coverage counts. It never echoes opaque references and never returns
+event/activity IDs, titles, labels, exact start times, devices, provider names, or source provenance. Session mode may
+return one modeled role; day mode never returns per-session details. Day mode instead returns one summed TSS/CTL/ATL/Form
+contribution and one or two dated UTC Training-day outcomes, preserving the case where a local calendar date spans two
+UTC days. Each outcome reports prior/current/change values and whether CTL rose, held, or declined after normal decay.
+The model metadata fixes CTL to `TSS / 42`, ATL to `TSS / 7`, Form contribution to CTL minus ATL, and explicitly says
+that this does not measure physiological adaptation.
+
+Statuses distinguish `ready`, `partial`, `updating`, `unavailable`, and `excluded`. Reasons preserve partial coverage,
+missing TSS, benchmark/merge exclusion, incomplete activities, Form building/staleness/failure, no usable selected
+session, and a UTC Training day outside the retained snapshot. Zero TSS remains a valid modeled contribution.
+Recorded metric reads keep their original meaning: current TSS takes precedence over legacy Power Training Stress Score. Training impact instead resolves owner-modeled per-leg load from private event metadata, including zero overrides, saved method/inclusion policies and workout exclusions. It never distributes a parent-only score to legs. Excluded-by-owner records increment only `excludedSessionCount`, not benchmark or incomplete counts; the frozen reason remains `no_usable_sessions` when no selected sessions are usable. Policy revisions, control maps, calibration and source fingerprints never appear in the public projection. A load edit newer than Form reports updating. These implementation changes add no public fields, scopes or mutation capability. Full Training snapshot rebuilds use server-owned compact load buckets after a one-time metadata warmup; focused impact reads still fetch exact event metadata. Cache contents and import coordination fields remain private and do not enter MCP responses. Pending imports use the existing updating state through the shared load resolver; whole-workout exclusions retain the existing excluded state and Form-freshness checks. A ready Form payload must match the current
+internal Form payload version, identify the Form kind, and assert merged-event exclusion; otherwise the tool fails closed
+as updating.
+
+Output validation treats benchmark/merge and incomplete-session counts as subsets of the total exclusion count;
+owner exclusions must not be relabelled to satisfy the old equality. A source rewrite reports `updating` even when
+its cached score or leg match is temporarily unavailable. A retained identity awaiting owner review reports
+`unavailable` / `no_usable_sessions` (or partial day coverage), without exposing the private reason or counting it as
+missing TSS. Focused tests validate actual service results against the strict output schema and exercise owner
+exclusions on all three transports. Stale benchmark/incomplete selections cannot hold up other selected sessions;
+a recent owner exclusion still waits for Form to remove its previous contribution. These runtime checks preserve the
+registered JSON schemas and require no local plugin rebuild, catalog rescan, new consent or mutation capability.
+
+Optional private HR algorithm metadata distinguishes Banister from the sports-lib threshold-HR estimate in the owner
+editor. Training impact projects only the selected modeled score through its existing public contract; `hrAlgorithm`,
+`threshold-hr-fallback`, calibration and saved policies remain private. Legacy evaluations without the field remain
+readable. This adds no public field, metric token, scope, planning read, mutation or provider-delivery capability.
+Session and selected-day load comparisons share the app's machine-precision tolerance, scaled by load and summed
+term count. Numerically equivalent decimal totals do not falsely report `form_updating`; genuinely higher selected
+load still waits for Form. No stored scores, wire fields, read counts or refresh behavior change.
+
+The built-in Assistant allowlists the same tool. It resolves exact opaque references through its existing completed-
+activity workflow, prepares Form, preserves separate UTC outcomes, and renders compact deterministic evidence without
+references or provenance. The focused Activity and Training plugin skills plus the cross-domain skill carry the same
+routing and interpretation boundary. No mutation, approval step, provider request, persistence, or new OAuth grant is
+introduced. Because this is a public tool/schema/instruction addition, release still requires deploying the existing
+MCP Function, refreshing/rescanning the registered developer app, synchronizing the bundled plugin, and testing in a
+new conversation; clients that already have both grants need a tool-catalog refresh but no reauthorization.
+
+The owner-only Training impact recap adds an internal per-day activity count to Form, but the projection above removes
+it before public validation. The existing Training-impact service continues to derive coverage from its exact selected
+references rather than this count. The recap therefore changes no MCP tool, schema, scope, consent meaning, mutation,
+provider action, Assistant routing, registered-app contract, or bundled plugin and needs no additional rescan or sync.
+
 Training calculation, schema, invalidation, rebuild, and extension guidance remains in
 [`training-workspace.md`](training-workspace.md). Adding a kind requires its normal derived pipeline, exact safe MCP
 payload schema, structured-output fixture, and positive and negative redaction-contract tests.
+
+Sports Lib 21.6.9 corrects source timer events/duration, multisport record and zone ownership, and recorded-power
+coverage. Existing metric reads still return persisted statistics; corrected historical values require original-file
+reparse and the normal Training refresh. On-demand source reads remain transient and do not update saved statistics.
+Training impact continues to project the existing modeled-load resolver through its strict public schema. Private
+source evidence, calibration and saved controls stay excluded. No metric token, unit, tool, field, reason, scope,
+consent, plan/workout read, mutation or provider-delivery contract changes; no registered-contract promotion,
+catalog rescan or bundled-plugin sync is required for these parser corrections.
+
+Distance regeneration retains every finite positive canonical total from the fresh source parse. Monotonic or
+moving streams cannot prove complete coverage; stalled and truncated counters must not replace that total. Missing
+or zero totals still use existing generation. Sports Lib owns source interpretation, including pool evidence. The single-session FIT chronology
+correction is included in the aligned Sports Lib 22.0.0 dependencies; it preserves corroborated elapsed chronology
+without replacing recorded active duration. Existing persisted metric reads change only after authorized source-backed
+persistence and normal derived refresh. Source chart/sample reads remain transient, and their 250,000 materialized-sample
+limit still rejects oversized recordings rather than silently clipping them. These corrections add no metric token,
+unit, public field/reason, schema, scope, consent, mutation or Training planning/delivery capability. Source evidence,
+calibration, policies and controls remain private; no contract promotion, registered-app refresh or plugin sync is needed.
+The Suunto JSON/SML timing correction in 22.0.0 likewise uses existing canonical active/elapsed/pause fields.
+Unrecoverable contradictory active duration is absent, not zero. It needs source-backed
+persistence before saved MCP metrics change; source timing evidence stays private. No Training planning or delivery
+read/write contract is affected.
+
+Stats-only event-table merges preserve recorded per-leg TSS/method and transfer saved load evaluations, policies and
+controls through private transactional metadata. Training impact resolves the resulting included-leg total without
+adding the parent score; source workout exclusion becomes exclusion of its copied legs. Originals remain unchanged.
+These merge corrections add no public field, reason, schema, scope, mutation or planning capability. Private source
+snapshots and controls remain excluded from MCP projections; existing frozen-contract checks remain authoritative.
 
 ## Sleep projection
 
@@ -1009,13 +2375,16 @@ and aggregate vitals. Missing optional numeric measurements remain unavailable a
 averages. The lower-level `list_sleep_vitals` reports only the safe vital types that have at least one recorded session in the
 requested bounded period, their units, and session coverage. It lets clients discover HRV before querying nightly or
 grouped values without returning readings, raw samples, provider identity, or source provenance in the discovery result.
+All Sleep reads use the shared display-date resolver: a genuinely absent date falls back to the validated wake instant,
+while an explicitly malformed date or impossible session timestamp is excluded instead of being guessed.
 
 COROS daily ingestion also writes steps, its native calorie value, and detailed HRV/interval-heart-rate series to the
-separate unified Health collections. Existing MCP tools do not query `healthSourceRecords` or `healthSampleChunks`, and
-this adapter does not widen any registered schema. COROS aggregate sleep HRV and sleep heart rate remain available only
+separate unified Health collections. The existing Weight path reads only canonical Weight point measurements from
+`healthSourceRecords`. The separately scoped Health tools described below can read `healthSampleChunks`; they do not
+widen any existing registered schema. COROS aggregate sleep HRV and sleep heart rate remain available only
 through the same normalized Sleep allowlist described above. Negative fixtures include Health-shaped source metadata
 and sample payloads and prove they cannot enter Sleep tool output. No registered-app rescan or local plugin sync is
-required for this internal ingestion change.
+required for the internal ingestion change alone; the new Health tool surface has its own refresh/sync lifecycle.
 
 `get_sleep_trend` is the preferred one-call path for recent sleep or recovery-oriented questions. It returns the exact
 requested range, IANA timezone, grouping, recorded-vital coverage, and the same safe duration, score, stage, and
@@ -1031,6 +2400,19 @@ the same normalized sleep fields and safe value rules for its allowed latest-nig
 physiology stays absent/null and is never converted to zero. Server and bundled-skill instructions explicitly route
 multi-day physiology questions to `get_sleep_trend` and availability-only questions to `list_sleep_vitals`.
 
+With both `health:read` and `sleep:read`, these Sleep reads, `get_daily_report`, `get_current_readiness`, and `get_today_readiness` can also fill
+missing nightly HRV from a matching canonical Health overnight-average summary. Matching is by owner, provider/account,
+provider date, and overlapping main-sleep interval. Native Sleep HRV is preserved, each night is supplemented once,
+and a summary overlapping separate sleep groups for the same account and date is withheld rather than copied to both.
+Conflicts, spot/activity/manual HRV, and unidentified legacy accounts are excluded. Health is never read through
+Sleep permission alone. The backend scans complete summary pages (32 per read; at most 2,048 records and 16 MiB),
+using the existing metric/calendar-date/document-ID index with owner/deletion guards. Incomplete reads fail with a bounded
+or temporary-unavailability error rather than a partial value. No samples or provider API calls are needed. Existing
+history works without reimport. Internal source keys keep HRV baselines comparable and never enter public results.
+The internal readiness evidence version and recovery version can advance while the registered MCP formula/recovery
+versions and schemas remain frozen. This implementation-only fix needs no plugin rebuild or new grant beyond the
+existing Health permission; clients that previously omitted Health must authorize it to use the supplement.
+
 It never returns provider user IDs, provider session keys, callback URLs, provider-specific fields, score components, raw
 stage intervals, raw HRV samples, raw SpO2 samples, raw respiration samples, or the Firestore document ID. Adding a sleep
 provider or field therefore does not automatically expose it: update the safe projection and negative redaction tests
@@ -1038,11 +2420,63 @@ deliberately.
 
 ## Current readiness and daily report projections
 
-### Live today readiness
+### Current live readiness and history
 
-`get_today_readiness` is the one-call source for the current recovery-aware score and requires both `metrics:read` and
-`sleep:read`. It deliberately does not widen the frozen daily-briefing output. The caller supplies an IANA timezone for
-local-day context, while the score retains the Dashboard and Training UTC-day boundary.
+With both Health and Sleep grants, current live readiness and the daily report can fill missing Garmin sleep HR
+from existing canonical Daily 15-second samples within each main-sleep window. These are QS-calculated time-weighted
+averages and lowest representative readings, never Garmin-reported sleep aggregates. Native values win. The shared
+resolver requires exact owner/account identity, current parent revisions, at least 90% temporal coverage and no gap
+over five minutes. It reads at most 93 provider dates with a cumulative 512-chunk/550,000-point/16-MiB bound.
+No new provider calls, writes, scopes or public fields are added. Existing strict projections omit calculation flags,
+source keys and samples. Incomplete/read failures cannot produce a partial value. Ordinary Sleep tools and frozen
+legacy readiness do not add this HR calculation. Readiness history evidence version 4 rebuilds through the normal
+app ensure lifecycle and retains its existing Health requirement; legacy points omit calculated HR. Server guidance
+discloses the derivation. Tool schemas and bundled capability routing remain unchanged, so no plugin rebuild is needed. The runtime
+instruction update has a digest-bound pending developer refresh/rescan; the frozen baseline/history are unchanged.
+Separately approved Functions/frontend release is still required.
+
+`get_current_readiness` is the preferred live readiness tool. It requires `metrics:read` plus `sleep:read` and an explicit
+IANA timezone. Like Dashboard Today and Training, it uses current UTC-day Form/ramp and the shared formula-4 evaluator
+in `shared/readiness.ts`. A bounded 60-day projection reads at most 257 Sleep documents to enforce a 256-session limit.
+Load, Sleep and Overnight HR selection and weights are unchanged from the legacy contract described below.
+
+The HRV driver contains `weightPercent: 20`, `baselineWindowDays: 60`, `currentWindowDays: 7` and nullable `personalRange`.
+Range evidence explicitly contains baseline/current observed-day counts and required counts (14/3), baseline mean,
+seven-day average, numeric range in milliseconds, classification/tone, latest nightly milliseconds and observation
+timestamp. A missing source is null; building or insufficient history has null averages and range with explicit counts.
+Provider/account/measurement keys and original observations never leave the projection. The weekly average uses the
+same daily-median calculation as Health for matching overnight evidence and evaluation time, independent of the visible
+chart range. Latest nightly HRV remains distinct from the weekly average. See `docs/training-workspace.md` for the
+canonical formula, source matching, confidence, missing-data and scoring rules. The strict output boundary verifies the
+score, label, weights, count, confidence and HRV cutoff; private neighboring fields fail the whole output.
+Current HRV also requires a canonical latest main-sleep night no older than 48 hours with one authoritative HRV
+observation. Adjacent or overlapping Suunto records for the same provider account and wake date are reconciled when
+their gap is at most 30 minutes. Sleep duration and stages are summed, interruption time remains awake, the latest
+score wins, and average HRV is weighted by the recorded HRV sample counts. Missing weights for conflicting fragment
+values leave HRV unavailable rather than promoting the last fragment. Raw Sleep records and IDs remain unchanged for
+audit and paginated session reads. This read-time reconciliation preserves the registered tool schema and formula
+version; internal readiness evidence version 3 invalidates prior persisted history for rebuild.
+
+`get_readiness_history` has no inputs and requires `metrics:read`, `sleep:read` and `health:read`. Persisted history can
+contain absolute HRV values enriched from Health; it cannot safely reconstruct a Sleep-only alternative. Registration,
+HTTP prechecks and the data service enforce all three grants before reading. It reads one ready `training_readiness` snapshot
+and returns only validated formula-4 history: 14 contiguous UTC days, evaluation timestamps and identity-free signals,
+including each day's HRV range. `hrvRatio` here means seven-day average divided by the 60-day mean, not last-night HRV.
+Missing, old or inconsistent history returns `metric_not_ready`; this read-only tool never queues a rebuild. Internal
+`evidenceVersion` and `legacyPoints` are stripped. The response has the existing daily-report 16-KiB bound.
+
+These tools are additive because registered schemas are frozen. The pending contract record binds their candidate
+digest to a developer refresh; it does not promote the registered baseline. Server deployment and registered ChatGPT app
+rescan are required before clients can discover them. Updated bundled Training/Sleep/Health/cross-domain skills prefer
+the advertised current formula; validate and sync those bundles separately, without changing grants. The built-in
+Assistant allows the live tool and supplies its explicit timezone. It omits stored readiness history because its
+existing grants exclude Health; this change does not expand the Assistant's data permissions.
+
+### Legacy live today readiness
+
+`get_today_readiness` retains registered formula 3 and requires both `metrics:read` and `sleep:read`. It must not be
+presented as the current app's formula. The caller supplies an IANA timezone for local-day context, while the score
+retains its original UTC-day boundary.
 
 The tool reads exactly the ready `form`, `form_now`, and `ramp_rate` snapshot documents plus one bounded 30-day,
 readiness-only sleep projection. That dedicated Firestore field mask reads only provider grouping, sleep date,
@@ -1052,7 +2486,7 @@ The tool rebuilds the current zero-load decay series from Form's persisted daily
 seven-day CTL ramp, using the current-day compact snapshots only for a value the series cannot supply. This is the same
 source-selection contract as Dashboard Today. The load calculation shares the canonical CTL/ATL constants and daily-load
 builder with the dashboard, while scoring and sleep-evidence selection call the environment-neutral
-`shared/readiness.ts` evaluator.
+`shared/readiness-legacy.ts` evaluator.
 
 The response returns the score, label, confidence, total/available driver count, available original weight before
 missing-driver renormalization, aggregate baseline-evidence count, and four explicit driver groups:
@@ -1075,10 +2509,10 @@ use `get_sleep_trend` for trend questions.
 
 `get_daily_report` is the preferred one-call source for a good-morning request or current daily report. It requires both
 `metrics:read` and `sleep:read`, accepts one explicit IANA timezone, and preserves the same local-day-context versus
-UTC-readiness-boundary distinction as `get_today_readiness`.
+UTC-readiness-boundary distinction as `get_current_readiness`.
 
 The report reuses the live readiness loader, Form/ramp source selection, deterministic same-provider/date sleep grouping,
-and shared readiness evaluator rather than chaining public tool calls or defining another score. One projected 30-day
+and shared readiness evaluator rather than chaining public tool calls or defining another score. One projected 60-day
 sleep query supplies both the report and readiness. It reads at most 257 documents to enforce an at-most-256-session
 bound and selects only provider grouping, sleep date, start/end/duration, in-bed duration, normalized timezone offset,
 nap state, score value/qualifier, aggregate average/overnight HRV, and aggregate average/minimum sleep HR. Provider
@@ -1089,14 +2523,20 @@ explicit four-field aggregate-vital allowlist: average and overnight HRV in mill
 heart rate in beats per minute. Each missing value is `null`; a grouped sleep returns in-bed duration only when every
 fragment recorded it, preventing a partial sum from looking complete. Raw samples, SpO₂, respiration, provider identity,
 source metadata, and score components are absent. The duration comparison uses up to 14 earlier same-provider nights
-and requires at least three before returning an average or delta.
+within the last 30 days and requires at least three before returning an average or delta.
 
-The nested readiness object is the exact strict `get_today_readiness` result, including safe driver values, baselines,
+The nested readiness object is the exact strict `get_current_readiness` result, including safe driver values, baselines,
 ratios, evidence states, and freshness. The Training summary reuses the frozen briefing's strict current-versus-usual
 equivalent 28-day projection. Server instructions tell clients to lead with sleep and recorded HRV/heart-rate values,
 summarize readiness in one sentence using at most two relevant available drivers, then summarize Training. The report
 does not diagnose illness, prescribe a workout, or establish a multi-day trend; use `get_sleep_trend` when the question
 asks about change over time, SpO₂, or respiration.
+
+The daily-report tool is still additive to the registered baseline, so its nested current shape evolves in the same
+digest-bound pending change. Registered `get_training_metric(training_readiness)` and the compact briefing continue to
+project formula-3 `legacyPoints` when the internal snapshot is formula 4. The shared legacy validator rejects missing
+or inconsistent legacy evidence; never relabel formula-4 scores as formula 3. Internal formula-3 snapshots still use
+their original projection. No public legacy schema or annotation changes.
 
 ### Compact briefing
 
@@ -1109,6 +2549,12 @@ The usual period is an equivalent 28-day comparison normalized from the snapshot
 its workout count may be fractional. Provider identity, raw vitals, stages, score components, sessions, locations,
 activities, body measurements, and source fields are absent from this projection.
 
+The latest session and comparison use the same canonical Suunto-night reconciliation as sleep trends and the daily
+report. Adjacent same-account records are combined before choosing the latest night; the raw session-list tool remains
+the audit surface for the individual provider records, while their stored SleepIds remain unchanged. The shared
+`shared/sleep.ts` resolver supplies the same wake-date, effective-onset, identity, and adjacency rule to MCP reports,
+Training-derived metrics, Dashboard, and Health; it adds no query or provider call.
+
 It also reads the current `training_readiness` snapshot through its exact strict payload schema, but returns only its
 freshness, score, label, confidence, and aggregate evidence counts. Readiness itself remains UTC-day based. A snapshot
 whose `asOfDayMs` is not the current UTC day is reported as `stale` with score and evidence fields withheld; missing or
@@ -1116,8 +2562,233 @@ invalid snapshots use explicit `not_ready` or `no_signal` statuses. The tool pro
 workout plan, prescribe exercise, or provide medical advice. It uses the existing sleep-session query shape, so it
 requires no new Firestore composite index.
 
+## Recorded Health tools
+
+### Shared HRV personal range
+
+`get_hrv_personal_range` is additive and requires both `health:read` and `sleep:read`. It accepts explicit ISO `start`
+and `end` instants with timezone offsets, up to 366 days, and loads a bounded additional 60-day history. It uses
+`shared/personal-metric-range.ts`, also re-exported by the frontend helper, including shared HRV options and nightly
+semantic variants. Daily medians, mean/population deviation, 14-day minimum baseline, seven-day/three-day headline,
+historical classifications and missing-day baseline evaluation therefore share the Health chart's calculation.
+
+Only eligible canonical nightly Health scalars and normalized non-nap average/overnight Sleep HRV are used. Adjacent
+same-account Suunto SleepIds on one wake date are partitioned with the shared 30-minute/onset rule before entering the
+range: average HRV is sample-weighted only when every fragment has positive count evidence, and unidentified or
+ambiguous fragments are withheld. The Sleep field mask also includes canonical duration, required by the shared Sports
+Lib decoder; it is never returned by this tool. Health
+Sleep references are skipped; normalized sessions are read through the separately required Sleep grant. Health and
+Sleep remain separately labelled series, including provider, response-local account ordinal and fixed semantics.
+Identified Sleep uses the Health writer's exact owner/provider/account SHA-256 identity, so matching Health and Sleep
+share one account ordinal while retaining separate source/semantic series. Dates, values and statistics never establish
+an account match. Unidentified Sleep remains separate from identified accounts, including a literal `default` provider
+account. Internal identities never appear in output. This implementation correction preserves the registered schemas,
+tool metadata, grants, field masks and limits; it requires no plugin rebuild or registered-client rescan. No spot-check/activity HRV, raw
+samples, device fields, callback URLs or persisted personal-range state are exposed. Reading dates use the shared
+canonical wake-date rule: valid stored dates remain authoritative outside Suunto local-date correction, a missing date
+uses the validated wake instant, and malformed dates are rejected. Daily range instants follow the explicitly requested
+window, not an inferred UTC calendar date.
+
+Complete reads are required: 2,048 Health records plus 1,000 Sleep records in 32-record pages, 16 MiB selected input,
+8,192 readings, 32 series and 512 KiB output. An over-budget request fails instead of grading a partial history.
+Owner deletion is checked before and after reading. Baseline context stays out of visible readings. A missing-day band
+is not an HRV reading, and insufficient history remains null. This is neither a medical interpretation nor Suunto's
+unpublished proprietary calculation. The internal Assistant allowlist is unchanged.
+
+No new Function, migration, index or stored data is introduced. Release requires separately approved deployment of
+the existing MCP endpoint, registered-app refresh/rescan and digest verification, then local `npm run plugin:sync`
+for the updated Health, Sleep and cross-domain skills. Preserve prior pending changes; do not promote before live verification.
+
+`health.service.ts` is the explicit read-only Health projection boundary. `list_health_metrics` describes 34 approved
+canonical metrics; it does not scan user data or claim availability. It routes Weight to `query_measurements` and
+normalized Sleep to `get_sleep_trend`. Shared-catalog additions do not automatically become public MCP metrics.
+
+`query_health_metric` requires `health:read` and accepts one `metricId`, inclusive `startDate`/`endDate` calendar dates,
+`mode: summaries | samples`, and `maxPoints` (default 200, maximum 400 per series). Summary mode returns stored scalars,
+not a synthetic daily average. Sample mode reads normalized chunks and chooses evenly spaced representative points
+over each loaded series, preserving the first and last. It reports the original count and whether it downsampled.
+When under the requested point bound, every normalized point can be returned. These are not provider payloads or raw
+chunk documents, and representative output is not an exhaustive extrema or time-in-state calculation.
+
+Dates retain the provider's calendar day; there is no rebucketing into a caller-selected timezone. Summary points have
+`timeMs: null`; their private source-record end times order same-day observations before representative downsampling,
+including across database pages. Those timestamps are never serialized. Sample points have explicit UTC epoch
+milliseconds. Do not interpret the provider calendar date as UTC
+midnight or silently merge days across different source timezones. Each provider/account/aggregation/semantic variant/
+origin/recording-method combination stays separate. Provider names and response-local account/series ordinals are
+allowed; raw or opaque account keys, document/revision IDs, device data, native payloads and arbitrary strings are not.
+Known canonical semantics retain explicit fixed labels, including running/cycling VO₂ max, nightly HRV statistics,
+stress durations, fitness-age algorithms, Pulse Ox sampling modes, and Suunto interval/daily energy statistics.
+Unknown semantics use the fixed `other` label while remaining separate internally. Canonical categorical values use
+a fixed safe vocabulary, including Garmin's off-wrist/motion/insufficient-data/recovery availability states; these are
+not numeric stress readings. Arbitrary provider qualifiers remain excluded. The one approved native variant is Garmin Body Battery: finite 0–100 values with its exact
+provider/metric/unit/semantic allowlist, labelled `native_only` and `garmin_body_battery_points`. It is never converted
+to a percentage or combined with canonical resources. The catalog advertises this exception in `nativeVariants`.
+Other native-only/non-comparable values and Sleep references are counted and excluded. Empty
+summaries can coexist with sample-only metrics: query sample mode over a supported short range before claiming no data.
+
+Body mass index, body fat, body water, muscle mass and bone mass additionally require `measurements:read`. HTTP prechecks
+and the data boundary both enforce it before database work. Only canonical `point_measurement` / `measurement` / `point`
+entries are eligible. These return date buckets containing individual values, with no provider, account, device,
+source provenance or exact measurement timestamp; profile snapshots are not measurements. The runtime and advertised
+output schemas forbid source series for body-composition metrics. Existing Weight tools and schemas remain unchanged.
+
+Canonical numeric values retain their shared canonical units. Each reading also includes a Sports Lib `display`
+value/unit pair generated from the same converted instance using the owner's `settings.unitSettings`. Clients must
+not attach a display unit to an unconverted canonical number. The catalog identifies the authoritative Sports Lib type.
+For series calculations, pair each numeric value with that series' `unit` and `normalizationStatus`, not blindly with
+the catalog's canonical unit. The approved native Body Battery variant uses an explicit Garmin-labelled display fallback.
+
+Reads are owner-scoped and metric-first, ordered by calendar date/document ID, using existing indexes and field
+projections. Pages remain 32 source records and 8 chunks. Processing is capped at 2,048 records, 256 chunks, 100,000
+sample points and 16 MiB of selected serialized document data. A final one-document lookahead detects record/chunk
+overflow; the read counters describe processed documents, not billed Firestore reads. Limits return `complete: false` plus
+the reason; this is scan completeness, not a claim that the provider recorded every day. Samples are not read after an
+incomplete parent scan. A chunk must have a loaded same-owner/provider/account parent, be named in its current chunk
+list, and match revision order, token and digest. Missing/stale parents never authorize sample disclosure.
+
+Outputs are limited to 32 series, 400 points per series, 8,192 scalar readings, 2,048 body readings per date and 512 KiB;
+output/series limits fail with a safe `query_too_large` error. Narrow the date range rather than retrying unchanged
+oversized work. Returned coverage counts retain partial/unknown source days across pages. Unexpected errors are generic
+and never return backend messages or log payloads. The existing bearer, deletion/revocation and HTTP rate-limit checks
+remain in force. A bounded in-memory display cache is local to a single owner/metric request; no records, persistent
+caches, measurements, imports or backfills are created by these reads.
+
+### Health release follow-up
+
+The internal Assistant keeps its existing scopes and tool allowlist; this PR does not expand Gemini access. No new
+Functions, Rules, indexes, migration or provider ingestion are needed. Deployment remains separately authorized:
+release the updated consent/Connections/Help/Policies frontend before advertising Health access, and deploy the existing
+`mcpApi`, `getMcpAuthorizationRequest`, `decideMcpAuthorization`, `listMcpConnections` and `revokeMcpConnection` functions
+together so every OAuth path recognizes the grant. Then refresh/rescan the registered ChatGPT app against the exact
+pending contract, verify a new conversation and promote only the verified digest through the documented lifecycle.
+Existing clients must reconnect to grant Health access; old tokens cannot acquire it through refresh. Run
+`npm run plugin:sync` separately after the deployment/rescan; fixture validation is not installation into a real profile.
+The pending record retains earlier unpromoted changes, and this implementation never edits the registered baseline.
+
 ## Bounds and operational controls
 
+### Activity descriptions
+
+`get_activity_description({activityRef})` requires both `activity-details:read` and the new dependent
+`activity-descriptions:read` grant. The consent checkbox is selected by default when requested, including when all
+scopes are requested; the owner can uncheck it before approval.
+Legacy approvals that omit selected scopes exclude this grant. Removing activity details removes both descriptions
+and activity-location permission; approval, refresh, bearer validation, HTTP prechecks and tool registration enforce
+the dependencies. Existing clients must reauthorize; refresh cannot expand an old grant.
+
+The description is the parent event's `description` edited in QS.io, not an activity-level note or provider payload.
+Sibling activities in the same event therefore return the same text. Resolve an activity through existing discovery
+and pass its owner-and-connection-bound encrypted reference. The data boundary checks both grants before decoding or
+reading, verifies the current owner-scoped activity still points to the referenced event, and reads only the event's
+`description`. Firestore selects only `eventID` for the activity and `description` for the event, each by document ID
+with limit one. Owner existence and account-deletion tombstones are checked before the reads and before release.
+No new Function, collection, index, migration, original-file parse, or reparse is required. Existing stored descriptions
+are immediately readable after the separately approved release and consent.
+
+The strict output contains only `activityRef` and nullable `description`. Missing/null text returns null, empty text
+and whitespace are preserved, and malformed values or missing/stale documents fail safely. Full UTF-8 text is bounded
+to 64 KiB (also at most 65,536 UTF-16 code units), and the complete tool result to 128 KiB. The transport boundary
+counts both `structuredContent` and its JSON-text copy, including JSON escaping, with 1 KiB reserved for protocol
+metadata. The text-size ceiling alone does not guarantee that a description fits the response. Oversized descriptions fail without
+truncation; clients should direct the user to QS.io. Names, internal IDs, creator/device metadata and source fields
+remain excluded. Text itself may contain health, personal or location information even without activity-location
+permission. It is untrusted user-reported context, never instructions, verified diagnoses, causal proof, or authority to
+act. Descriptions never affect metric or readiness calculations. Logs/errors must not include text or backend identity.
+Revocation prevents future reads but cannot erase copies already received by an external client.
+
+The built-in Assistant retains its current scopes and allowlist; this change does not grant Gemini description access.
+The activity and cross-domain plugin skills discover the authorized tool only when the question needs this context.
+All seven bundled skills and their prompts were reviewed; other focused workflows, registry membership, hosted MCP
+dependencies and the three manifest starter prompts remain appropriate.
+
+Release the consent/Connections/Help/Policies frontend and updated existing MCP/OAuth Functions together before exposing
+the grant (`mcpApi`, `getMcpAuthorizationRequest`, `decideMcpAuthorization`, `listMcpConnections`,
+`revokeMcpConnection`). Deployment is separately authorized. Rescan the registered ChatGPT app, verify a new conversation
+and the exact pending digest, then promote through the documented lifecycle. The pending record preserves all earlier
+unpromoted changes. Run `npm run plugin:sync` separately after deployment/rescan; fixture validation does not install
+into a real profile.
+
+### Timeline notes
+
+`timeline-notes.service.ts` reads the owner's existing `timelineNotes` collection only after checking its independent
+scope. The external consent checkbox is selected by default when requested, including for a notes-only authorization
+request. The owner can uncheck it before approving; selection alone does not authorize access. Existing grants
+cannot gain this scope through refresh; the owner must reauthorize. External clients receive full private text, which
+may contain sensitive health or personal information. Revocation cannot erase copies already received.
+
+`query_timeline_notes({startDate,endDate,limit?,cursor?})` accepts inclusive fixed calendar labels spanning at most 366
+days, defaults to 32 notes, and permits 1–64. It reuses the collection-scoped `endDate ASC, startDate ASC, __name__ ASC`
+index: closed periods first (`endDate >= startDate` of the window), then ongoing periods (`endDate == null`), both with
+`startDate <= endDate` of the window. This is index order, not newest-first. Periods may begin before the requested
+window; bounded future notes are included. An ongoing period overlaps only through today in its captured timezone.
+First-page evaluation time is frozen in the cursor, so crossing midnight or changing the client's timezone while paging
+does not move the ongoing cutoff. It is not a Firestore snapshot: concurrent note edits can change subsequent pages.
+
+Output includes only category, title, nullable full details, actual start/end dates, captured `timeZone`, and
+`effectiveEndDate`. IDs, audit fields, revision, deletion receipts, visibility and color are excluded. Hidden notes are
+included because chart visibility is presentation, not authorization. Title/details remain unindexed.
+
+Each call reads 64-record pages, with caps of 512 scanned records, 2 MiB selected input and 128 KiB serialized output.
+`recordsScanned` counts fetched records (including fetched lookahead), `skippedRecords` counts consumed invalid or
+non-overlapping records, and `scanComplete`, `limitsReached`, and `nextCursor` distinguish completion from bounds.
+Output limits stop between notes without truncating details. The encrypted, authenticated cursor contains the last
+consumed index position, phase, window and evaluation time, is bound to owner and connection, and is at most 16 KiB.
+The next unreturned note is not consumed. Repeat the date window with the cursor; limit may change. Account deletion is
+checked before reading and before releasing a result. Failures and logs never include note content or identity.
+
+The dependent `timeline-notes:write` scope exposes four focused tools. When requested, it starts checked like every
+other permission; removing `timeline-notes:read` removes and disables it. Approval remains explicit. Existing
+connections, refresh, and legacy omitted-scope consent cannot acquire it silently.
+
+- `query_editable_timeline_notes` uses the same two indexed bounded scans but deliberately returns each note's complete
+  authored fields, visibility/color, current revision, and an encrypted owner-and-connection-bound `noteRef`. Its
+  continuation additionally binds the current stored grant generation, so reauthorization requires a fresh query.
+  The complete structured-plus-JSON-text result is capped at 256 KiB; text is never truncated.
+- `create_timeline_note` accepts explicit fields and a stable UUID `mutationId`. The existing deterministic owner-scoped
+  note ID makes a lost successful response retry idempotent, while a changed reuse conflicts.
+- `update_timeline_note` accepts the opaque reference, exact expected revision and complete authored fields. A concurrent
+  change conflicts; an identical lost-response retry is accepted only at the immediately following revision.
+- `delete_timeline_note` accepts the same reference/revision pair, permanently removes the content and retains the
+  existing content-free deletion receipt so delayed retries cannot recreate it.
+
+All three writes use the existing note mutation transactions, add the stored connection-authority read inside the same
+transaction, and retain the account-deletion fence. The client never supplies a raw document ID or UID. Outputs contain
+only the opaque reference, operation/revision/current public fields, or deletion result. Expected validation/conflict
+errors are safe and never log note text. The tools are accurately annotated as writes and depend on the MCP host's
+  native approval UI; no MCP elicitation, new callable, storage model, index or migration is introduced. Note content can
+  never authorize another mutation. The built-in Assistant deliberately receives none of these public write tools.
+
+The built-in Assistant grants the ordinary note read only to a notes-enabled server-owned conversation, with generation
+checks before and after private reads. Its separate note-change choice additionally exposes the editable read and local
+prepare-only tools. Gemini can prepare at most one short-lived change, which the app identifies and reviews before a
+human applies it. The existing content mutation service then rechecks the conversation generation, permission, exact
+proposal and expiry, owner/deletion fence, and current revision in its transaction. Notes are consulted for relevant
+questions, not every request. Their text is untrusted user-reported context, never instructions, verified diagnoses,
+causal proof or permission to act. Metric, Sleep, readiness and briefing outputs remain unchanged. See
+[Assistant](assistant.md) and [Timeline notes](timeline-notes.md).
+
+No new Function, storage, index, migration or callable is introduced. Release the changed existing MCP/OAuth backend
+paths and consent/Connections UI before enabling access. Then separately approve the registered-app rescan, verify the
+live digest before contract promotion, and sync the changed local plugin. Preserve every earlier pending contract
+change. This implementation and documentation do not deploy, rescan, promote, or install a real profile.
+
+The bundled cross-domain skill guides note-to-Health/Sleep comparisons with existing read tools: bounded
+before/during/after periods, captured timezones and provider/sleep-day conventions, same-response source separation,
+coverage counts, optional historical HRV classifications and association-only conclusions. Comparisons do not prorate
+coarse aggregates across note boundaries or require the additional personal-range grants for ordinary recorded HRV.
+Health and Sleep skills route such
+comparisons there. Notes never become baseline or readiness inputs. This guidance-only change needs local plugin sync
+after validation, but no additional server deployment or registered-app rescan of its own.
+
+### Other domains
+
+- Explicit public activity-type lists remain limited to 20. The built-in Assistant's fixed Cycling load and saved-route
+  workflows bind their approved family through first-party session context, outside tool input. All installed-catalog
+  family members participate in one ordinary bounded scan, with each metric event counted once. Route continuation
+  hashes bind the full family. This does not widen public schemas, scopes or work/response budgets; external clients
+  cannot select the internal family context. See the analytical-workflow description in the
+  [Assistant documentation](assistant.md).
 - Event and sleep date ranges are at most 366 days.
 - Body-measurement ranges are at most 366 days and return only day/week/month buckets. They share the event query's
   2,000-document, 4 MiB stats, and 20,000 stat-entry limits, then apply a separate 128 KiB response limit.
@@ -1133,9 +2804,11 @@ requires no new Firestore composite index.
   allowlisted type metadata and per-type session counts.
 - One-call sleep trends use that same at-most-1,000-session bounded read, return only fixed coverage metadata and strict
   summary buckets, and do not perform a separate discovery read.
-- Live readiness reads at most 257 projected sleep documents to enforce an at-most-256-session 30-day bound, reads
+- Live readiness reads at most 257 projected sleep documents to enforce an at-most-256-session 60-day bound (30 days for legacy readiness), reads
   exactly the three ready load snapshots in parallel, and returns at most 16 KiB. Its score uses only the latest
-  eligible main sleep plus up to 14 same-provider baseline nights after deterministic same-date aggregation.
+  eligible main sleep and source-matched overnight context. Current HRV uses the shared 60-day range and seven-day
+  average only when the latest eligible canonical night has one authoritative HRV observation; legacy HRV and
+  Overnight HR retain up to 14 prior same-provider nights within 30 days.
 - A daily report reuses that same bounded sleep/readiness work, reads only the additional ready `training_summary`
   snapshot, compares duration with at most 14 earlier same-provider nights, and returns at most 16 KiB.
 - Sleep pages are at most 100 sessions and use a per-connection encrypted cursor that does not expose the Firestore
@@ -1167,6 +2840,8 @@ requires no new Firestore composite index.
   raw/compressed bytes, 64 MiB cumulative decompressed bytes, and 250,000 selected samples, with a 20-second internal
   runtime and 256 KiB response limit. Larger valid streams are downsampled over the complete domain; hard point,
   source, sample, runtime, decompression, and response overruns fail the whole request.
+- Detailed activity samples share the source/parse limits, return at most 10,000 rows and 256 KiB including both MCP
+  result copies, and use bounded transient memory reuse and 30-minute query/revision-bound cursors as described above.
 - Route previews are limited to 20 segments, 5,000 decoded points, and 256 KiB. Route source reads are limited to 2 MiB,
   decompression to 8 MiB, and waypoint output to 500 entries and 256 KiB.
 - Metric discovery scans the latest 500 event documents, excludes benchmark merges, and reports whether the scan was
@@ -1195,6 +2870,46 @@ requires no new Firestore composite index.
 
 ## Local verification and release
 
+First-party Training review failures report only allowlisted stages: preview validation, complete-review loading,
+and review validation. MCP-schema failures use the MCP Zod error class, distinct from Genkit's model-output schema.
+Do not log exception messages, raw issues, authored fields, proposal references or owner identity. Bounded cause
+classification and masked schema-path summaries are documented in [Assistant operations](assistant.md#operations-and-rollout);
+they do not expose rejected values or arbitrary keys. These diagnostics and
+authority fixes preserve the public MCP contract, consent, projections and app help; they require no catalog refresh.
+Training write authority treats omitted optional switches as off, so schedule-only consent does not require provider
+delivery consent. Rechecks still reject changed permissions/generations and propagate revocation without retry.
+Explicit “No provider sync”, curly-apostrophe “don’t sync” and directly coordinated “don’t send or sync” phrases
+are not delivery requests. They do not force
+provider preview retries; a separate affirmative send/sync clause still retains its existing consent/review requirements.
+The first-party model reads a safe current Training revision before previews become visible (except the already-grounded
+daily-workout context). Its private Gemini projection retains schema-derived object-shape guidance when merging unions;
+the original MCP schema still validates every invocation. No new callable, public wire change or consent is introduced.
+A failed or revision-less read cannot trigger a forced preview with no available tools or release model-authored
+delivery-success claims; fixed no-proposal guidance is still subject to existing grounding checks. Successful-read
+correction uses the expressly requested schema action, never hard-coded Send for Stop sync or another action.
+Completion checks also run at the final continuation boundary without extending budgets. Verification covers refusal,
+successful read-to-preview, final-budget outcomes and the already-grounded daily context.
+These private fixes require neither public contract promotion nor plugin rebuilding or reauthorization.
+The private intent hint excludes common explanatory/advisory and sync-status/settings questions or problem reports from
+forced previews, requiring action/preview request phrasing without losing separately requested actions or splitting
+decimal numbers. It is not mutation or provider authority.
+Execution validates the exact tool-name set advertised for each model response, including read-first and preview-only
+correction requests; a read in the same response cannot unlock an unadvertised preview retroactively. Strict MCP
+validation, conversation consent and app-owned Apply remain unchanged. No public surface or Help update is needed.
+
+Garmin missing-copy recovery (#769) does not widen registered v1 Training provider actions. Existing
+`get_training_sync_status` reports `needs_attention` and zero synced workouts after a complete not-found Workout
+observation, retaining the historical accepted-send timestamp without private inspection or provider identities.
+Registered batch proposals still reject `replace` and client-supplied replacement authority. #801 implements a
+separate additive preview with the existing native Apply and Assistant prepare-only/app-confirmation path;
+do not emulate it with Send/Retry or let the broader app command enum grow the frozen registered contract.
+The Assistant treats the replacement preview's server-owned `invalid_request`/`detail_not_available` refusal as a
+terminal blocked review, not a request to force a successful preview. It emits fixed guidance without raw server text,
+creates no confirmation proposal, and does not substitute another provider action. Strict schema rejection remains
+correctable. This handling is private to the Assistant and changes no registered MCP schema or provider authority.
+Explicit eligibility-only replacement previews use that dedicated tool rather than the ordinary delivery preview.
+Forbidding Apply or Send does not cancel the requested review, and the review never supplies Apply authority.
+
 Use the Functions emulator and local Angular app for the OAuth/consent flow. At minimum run:
 
 ```bash
@@ -1212,3 +2927,71 @@ Production rollout is deliberately separate from implementation. Deploy Firestor
 and callable Functions, and Hosting rewrites only after reviewing the target Firebase project. Verify discovery metadata,
 OAuth login/consent, scope denial, token refresh/rotation, revocation, query limits, timezone/DST behavior, redaction, and
 account cleanup before enabling clients.
+
+### Sports Lib 21.6.14 consumer compatibility review
+
+Activity JSON name restoration, GPX creator attribution and unknown TCX sport fallback use the existing explicit
+read projections. Child names/notes and creator/device/provider metadata remain private; separately authorized parent
+event title/description reads are unchanged. TSS rejection diagnostics use the existing private
+`calculation-unavailable` token and do not add Training-impact reasons or fields. Recorded numeric queries and modeled
+load keep their existing meanings. There is no schema/digest, tool, scope, consent, mutation, plugin, Training planning
+or provider-delivery change; no contract promotion or MCP deferral is needed. Verify strict outputs and negative
+identity-leakage coverage when adopting the same published package in root and Functions.
+
+### Native Suunto multisport lap correction in Sports Lib 22.0.0
+
+The adopted Sports Lib 22.0.0 correction matches timestamped lap summaries to their sport and source boundary, including
+partial laps emitted at sport changes. It does not promote lap metrics to activity totals, add canonical tokens, or
+change the fixed activity-lap schema, grants, pagination or field masks. Genuine cross-sport laps retain their full
+interval; per-leg stream coverage cannot supply whole-lap averages. Existing saved lap reads change only after a
+coordinated package adoption and authorized source reparse. Source windows/matching evidence remain private. QS's
+deduplicated, labelled lap-table projection is presentation only and does not rewrite existing documents. No new
+Training planning, mutation or provider capability is added.
+
+## EnergySense and endurance streams (pending coordinated release)
+
+Sports Lib keeps `Stamina` and its existing summary tokens unchanged. The new numeric
+`Estimated Sustainable Distance` and `Minimum Estimated Sustainable Distance` classes are discovered from `DataStore`,
+not a parallel catalog. They become available to numeric reads only when a valid canonical value is persisted.
+Qualified EnergySense endurance aliases resolve to Stamina; qualified sustainable-distance aliases resolve to the
+new distance. Bare EnergySense and target-distance wording do not resolve. Provider-facing labels never create keys.
+
+Three additive read tools preserve the frozen registered tools: `list_activity_chart_metrics_v2`,
+`get_activity_chart_data_v2`, and `get_activity_samples_v2`. Their catalog adds `stamina` and `potential_stamina` in
+percent and `estimated_sustainable_distance` in metres to the existing stream choices. The strict output schemas
+bind each metric to its exact unit, reject private neighboring fields, and share a compact schema with a 24 KiB
+combined discovery budget. Legacy catalog, chart/sample schemas and overview capabilities stay frozen; legacy calls
+reject the new metrics before source reads. New clients must discover the additive tools rather than treating the
+legacy overview as an exhaustive list of new stream support.
+
+The existing Activity details grant, identity matching, selected-stream parsing, original-file byte/sample/runtime
+budgets, full-domain chart downsampling, detailed-sample pagination, cursor/source/access checks and cache limits
+apply unchanged. Coordinates still require the dependent location grant; samples never return coordinates, absolute
+timestamps, device/provider metadata, raw field names or original files. Nothing persists streams or calls a provider.
+A catalog entry describes support, not evidence that a particular file contains it. Missing FIT observations stay missing.
+
+Keep zero, null gaps and rebounds. Provider endings and minima are source observations and can differ from the last
+sample or sampled minimum. Sustainable distance is neither travelled distance nor distance remaining to a target;
+never sum estimates across legs/devices or interpret them as Training load. Suunto `EnduranceDistance` is provisionally
+interpreted as metres by explicit integration decision pending provider confirmation; `EnduranceValid` is undocumented.
+
+The built-in Assistant can discover and visualize the additive charts, with location fields stripped in coordinate-free
+chats. Detailed samples remain excluded from its tool allowlist. Activity and cross-domain bundled guidance distinguishes
+the two EnergySense dimensions and discovers runtime capabilities. No scopes, mutations, consent defaults, Firestore
+rules, Training planning/derived formulas, indexes, provider queue lifecycle or monitoring resources change.
+
+Root and Functions now pin published 23.0.0, retaining the 22.0.0 EnergySense support, in both manifests and lockfiles. The app still gates its new distance
+chart choice on class availability; existing Stamina keys and stored data remain compatible. No local tarball path is shipped. Separately approved backend/frontend
+release, digest-bound registered-app refresh/rescan and bundled plugin sync are required; no deployment, contract
+promotion, real-profile plugin install or historical reparse is performed by this implementation.
+
+## Stable activity source associations
+
+Chart/sample source reads use the common pure activity matcher and the validated server-owned `sourceIdentity`
+snapshot internally to identify the bound recording without borrowing another leg's data. The parsed file supplies
+the sport; no sport override is inferred. The allowlisted snapshot participates in the opaque source-context fingerprint so
+stale pagination/cache context cannot survive a source association change. Read-only consumers retain strict matching;
+provider-only cross-sport window authorization and write-reservation certificates never come from MCP inputs.
+`sourceIdentity`, internal activity IDs and provider/source metadata are not public output fields. Frozen tools,
+schemas, grants, units and original-file budgets are unchanged; no mutation or reparse capability is added. Negative
+activity projection fixtures cover the new stored field. Training plan/workout contracts have no impact.

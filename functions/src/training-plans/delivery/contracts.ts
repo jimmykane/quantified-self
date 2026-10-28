@@ -1,0 +1,311 @@
+import type { Firestore, Transaction } from 'firebase-admin/firestore';
+import type { WeightUnits, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import type { PlannedWorkoutProviderId } from '../../../../shared/planned-workout-providers';
+import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
+import type { StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
+import type { SuuntoSwimmingGuideSettings } from '../../../../shared/suunto-swimming-guide-settings';
+import type { TrainingDeliveryStatus, TrainingDeliverySettingsV1 } from '../../../../shared/training-provider-delivery';
+import type { DeliveryRepair, RemoteInspection, VerificationEvidence } from './verification-contracts';
+
+export const DELIVERY_QUEUE = 'trainingDeliveryQueue';
+export const DELIVERY_LEDGER = 'trainingDeliveryLedger';
+export const DELIVERY_STATE = 'trainingDeliveryState';
+export const DELIVERY_SCOPES = 'trainingDeliveryScopes';
+export const DELIVERY_RECEIPTS = 'receipts';
+export const DELIVERY_LEASE_MS = 180_000;
+export interface DeliveryConnection {
+  state: 'connected' | 'reconnect_required' | 'connection_repair';
+  destinationKey: string;
+  generation: string;
+  epoch: number;
+  issues?: string[];
+}
+export interface DeliveryAssessment {
+  level: 'exact' | 'degraded' | 'unsupported';
+  /** Internal policy only. Omission keeps degraded mappings approval-gated. */
+  requiresApproval?: boolean;
+  /** Private, adapter-proved equivalent approval for the identical prescription
+   * before a presentation-only mapping upgrade. Never exposed as a wire field. */
+  compatibleApprovalDigest?: string;
+  /** Same proof, for multiple frozen presentation versions. Internal only. */
+  compatibleApprovalDigests?: readonly string[];
+  issues: string[];
+  digest: string;
+  mappingVersion: string;
+}
+export function requiresDeliveryMappingApproval(assessment: DeliveryAssessment): boolean {
+  return assessment.level === 'degraded' && assessment.requiresApproval !== false;
+}
+export interface DeliveryArtifact {
+  ids: Record<string, string>;
+  localDate: string;
+  completed: boolean;
+  /** Private zone of the retained provider copy, independent from later settings edits. */
+  timeZone?: string;
+}
+export interface DeliveryOperation {
+  /** Explicit fresh Suunto copy identity; immutable once an attempt starts. */
+  suuntoGuideGeneration?: number;
+  /** Private bounded display snapshot; never an authored field or consent. */
+  suuntoSwimmingSettings?: SuuntoSwimmingGuideSettings;
+  /** Private Wahoo Plan incarnation, reserved only after confirmed withdrawal. */
+  wahooPlanGeneration?: number;
+  id: string;
+  kind: 'upsert' | 'remove';
+  deliveryId: string;
+  generation: number;
+  connectionGeneration: string;
+  destinationKey: string;
+  timeZone: string;
+  digest: string;
+  contentDigest: string | null;
+  workout: ScheduledWorkoutV1 | null;
+  strength?: StrengthWorkoutDetailsV1 | null;
+  /** Immutable owner preference for Suunto strength text, never an authored recipe field. */
+  suuntoWeightUnits?: WeightUnits;
+  /** Immutable private app-preview units, excluded from client/MCP projections. */
+  suuntoUnitSettings?: UserUnitSettingsInterface;
+  artifact: DeliveryArtifact | null;
+  /** One explicitly requested removal of a past, uncompleted owned copy. */
+  allowPastRemoval?: boolean;
+  /** Internal transport journal. null proves a new operation has made no request;
+   * absence is a legacy/unknown journal and must not authorize a non-idempotent retry. */
+  progress?: DeliveryTransportProgress | null;
+  /** Conflicting late acceptance is retained separately and needs operator inspection.
+   * Retry must not execute from a journal that may have been overtaken by another lease. */
+  recoveryBlocked?: boolean;
+  repair?: DeliveryRepair;
+  /** Stable provider-owned integer namespace reserved before a batch request.
+   * Private and independent from authored workout JSON and remote acceptance. */
+  providerIdentity?: Readonly<Record<string, string | number>>;
+  batchId?: string;
+}
+export interface DeliveryTransportProgress {
+  version: 1;
+  step: string;
+  state: 'ready' | 'started' | 'rejected' | 'accepted';
+  /** Adapter-proved no-op repairs must not consume the successful-repair limit. */
+  repairApplied?: boolean;
+  /** Private Wahoo REMOVE evidence: observed absence, not an acknowledged DELETE. */
+  removalOutcome?: 'already_absent';
+}
+export type DeliveryCheckpoint = (artifact: DeliveryArtifact | null, progress?: DeliveryTransportProgress | null) => Promise<void>;
+/** Recheck the exact attempt, lease, current intent and authority before EVERY request.
+ * Reads may inspect an obsolete operation; writes must still match current intent. */
+export type DeliveryRequestGuard = (mutating: boolean) => Promise<void>;
+export type DeliveryRecovery = { kind: 'accepted'; artifact: DeliveryArtifact | null }
+  | { kind: 'not-accepted' } | { kind: 'resume' } | { kind: 'uncertain' };
+
+export interface DeliveryBatchOutcome {
+  operationId: string;
+  state: 'accepted' | 'rejected' | 'unresolved';
+  artifact: DeliveryArtifact | null;
+}
+
+export interface TrainingDeliveryBatchTransport {
+  maxSize: number;
+  reserveIdentities(db: Firestore, tx: Transaction, uid: string, destinationKey: string,
+    workoutIds: readonly string[]): Promise<ReadonlyMap<string, Readonly<Record<string, string | number>>>>;
+  execute(operations: readonly DeliveryOperation[], beforeSend: () => Promise<void>,
+    guard: DeliveryRequestGuard): Promise<readonly DeliveryBatchOutcome[]>;
+}
+
+export type TrainingDeliveryProviderRejection = 'application_not_approved' | 'plan_access_unavailable'
+  | 'missing_parameter' | 'invalid_parameter' | 'unknown_validation' | 'empty_response'
+  | 'oversized_response' | 'unreadable_response';
+export type TrainingDeliveryProviderField = 'plan_file' | 'plan_filename' | 'plan_external_id'
+  | 'plan_provider_updated_at' | 'plan_description' | 'plan_payload'
+  | 'guide_repeat' | 'guide_step' | 'guide_transition' | 'guide_field'
+  | 'guide_activity' | 'guide_metadata' | 'guide_archive';
+export type TrainingDeliveryProviderValidation = 'invalid_step_type' | 'invalid_repeat_count'
+  | 'invalid_repeat_structure' | 'forbidden_repeat_step_id' | 'invalid_child_step' | 'invalid_field_type' | 'invalid_condition_type'
+  | 'invalid_transition' | 'invalid_guide_json' | 'unclassified';
+export type TrainingDeliveryProviderResponseShape = 'empty' | 'json' | 'text' | 'oversized' | 'unreadable';
+const WAHOO_CONTRACT_CHECKS = ['artifact_invalid', 'operation_invalid', 'journal_unknown', 'artifact_protected',
+  'plan_response_invalid', 'plan_identity_mismatch', 'plan_ownership_mismatch', 'plan_deleted', 'plan_deletion_state_unknown', 'plan_not_readable',
+  'workout_response_invalid', 'workout_identity_mismatch', 'workout_ownership_mismatch', 'workout_not_readable',
+  'workout_completion_unknown', 'workout_completed', 'workout_in_past', 'workout_date_invalid', 'workout_date_changed',
+  'workout_plan_mismatch', 'association_not_confirmed', 'read_response_invalid', 'workout_delete_not_found', 'plan_delete_not_found',
+  'retained_ownership_unknown', 'account_not_confirmed', 'plan_absence_not_confirmed'] as const;
+export type WahooTrainingContractCheck = typeof WAHOO_CONTRACT_CHECKS[number];
+export interface TrainingDeliveryTransportDiagnostics {
+  httpStatus?: number;
+  failurePhase?: 'request' | 'response' | 'decode' | 'contract';
+  providerRejection?: TrainingDeliveryProviderRejection;
+  providerField?: TrainingDeliveryProviderField;
+  providerValidation?: TrainingDeliveryProviderValidation;
+  providerResponseShape?: TrainingDeliveryProviderResponseShape;
+  /** Fixed private validation label, never provider content or an artifact identity. */
+  wahooContractCheck?: WahooTrainingContractCheck;
+}
+
+/** Adapters must checkpoint every accepted artifact (e.g. workout, then schedule).
+ * Final upsert acceptance requires a nonempty artifact identity; final removal requires null.
+ * Recovery must inspect or prove the SAME operation id idempotent before repeating it. */
+export interface TrainingDeliveryTransport {
+  batch?: TrainingDeliveryBatchTransport;
+  inspection?: RemoteInspection;
+  mappingVersion: string;
+  /** Optional pure diagnostic classification of the immutable operation, not the
+   * current adapter. No provider I/O or authority; callers allowlist the result. */
+  diagnosticMappingVersion?(operation: DeliveryOperation): string | null;
+  horizonDays: number;
+  /** Provider/product policy: withdraw an existing upcoming copy when moved beyond its window. */
+  withdrawOutsideHorizon?: boolean;
+  assess(workout: ScheduledWorkoutV1, destinationKey: string, timeZone: string,
+    strength?: StrengthWorkoutDetailsV1 | null, suuntoWeightUnits?: WeightUnits,
+    suuntoUnitSettings?: UserUnitSettingsInterface,
+    suuntoApprovalUnitSettings?: readonly UserUnitSettingsInterface[],
+    suuntoSwimmingSettings?: SuuntoSwimmingGuideSettings,
+    suuntoApprovalSwimmingSettings?: readonly SuuntoSwimmingGuideSettings[], suuntoGuideGeneration?: number): DeliveryAssessment;
+  canRemove(artifact: DeliveryArtifact, today: string, allowPastRemoval?: boolean): boolean;
+  execute(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryArtifact | null>;
+  recover(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryRecovery>;
+}
+export class TrainingDeliveryTransportError extends Error {
+  readonly diagnostics: TrainingDeliveryTransportDiagnostics;
+  constructor(public readonly kind: 'retryable' | 'auth' | 'permission' | 'provider_access' | 'terminal' | 'uncertain' | 'deferred',
+    public readonly retryAfterMs = 0,
+    diagnostics: TrainingDeliveryTransportDiagnostics = {}) {
+    super(kind);
+    // Allowlisted diagnostics only: never forward HTTP bodies, URLs, IDs or error messages.
+    const providerRejections: TrainingDeliveryProviderRejection[] = ['application_not_approved', 'plan_access_unavailable',
+      'missing_parameter', 'invalid_parameter', 'unknown_validation', 'empty_response', 'oversized_response', 'unreadable_response'];
+    const providerFields: TrainingDeliveryProviderField[] = ['plan_file', 'plan_filename', 'plan_external_id',
+      'plan_provider_updated_at', 'plan_description', 'plan_payload', 'guide_repeat', 'guide_step',
+      'guide_transition', 'guide_field', 'guide_activity', 'guide_metadata', 'guide_archive'];
+    const providerValidations: TrainingDeliveryProviderValidation[] = ['invalid_step_type', 'invalid_repeat_count',
+      'invalid_repeat_structure', 'forbidden_repeat_step_id', 'invalid_child_step', 'invalid_field_type', 'invalid_condition_type', 'invalid_transition',
+      'invalid_guide_json', 'unclassified'];
+    const providerResponseShapes: TrainingDeliveryProviderResponseShape[] = ['empty', 'json', 'text', 'oversized', 'unreadable'];
+    this.diagnostics = {
+      ...(Number.isInteger(diagnostics.httpStatus) && diagnostics.httpStatus! >= 100 && diagnostics.httpStatus! <= 599
+        ? { httpStatus: diagnostics.httpStatus } : {}),
+      ...(['request', 'response', 'decode', 'contract'].includes(diagnostics.failurePhase ?? '')
+        ? { failurePhase: diagnostics.failurePhase } : {}),
+      ...(providerRejections.includes(diagnostics.providerRejection as TrainingDeliveryProviderRejection)
+        ? { providerRejection: diagnostics.providerRejection } : {}),
+      ...(providerFields.includes(diagnostics.providerField as TrainingDeliveryProviderField)
+        ? { providerField: diagnostics.providerField } : {}),
+      ...(providerValidations.includes(diagnostics.providerValidation as TrainingDeliveryProviderValidation)
+        ? { providerValidation: diagnostics.providerValidation } : {}),
+      ...(providerResponseShapes.includes(diagnostics.providerResponseShape as TrainingDeliveryProviderResponseShape)
+        ? { providerResponseShape: diagnostics.providerResponseShape } : {}),
+      ...(WAHOO_CONTRACT_CHECKS.includes(diagnostics.wahooContractCheck as WahooTrainingContractCheck)
+        ? { wahooContractCheck: diagnostics.wahooContractCheck } : {}),
+    };
+  }
+}
+/** Batch transports expose whether a request was definitely rejected before
+ * provider acceptance. Anything else is treated as uncertain and never resent. */
+export class TrainingDeliveryBatchError extends TrainingDeliveryTransportError {
+  constructor(kind: TrainingDeliveryTransportError['kind'], public readonly rejected: boolean,
+    retryAfterMs = 0, diagnostics: TrainingDeliveryTransportError['diagnostics'] = {}) {
+    super(kind, retryAfterMs, diagnostics);
+  }
+}
+export class TrainingDeliveryBatchAdmissionChangedError extends TrainingDeliveryBatchError {
+  constructor() { super('deferred', true); }
+}
+export interface DeliveryRuntime {
+  requestNotBefore?(tx: Transaction, uid: string, provider: PlannedWorkoutProviderId, destination: string): Promise<number>;
+  db: Firestore;
+  now(): number;
+  hasPro(uid: string): Promise<boolean>;
+  connection(tx: Transaction, uid: string, provider: PlannedWorkoutProviderId): Promise<DeliveryConnection>;
+  /** Bind a future real adapter to the authenticated owner on the server, never in browser configuration. */
+  transport(provider: PlannedWorkoutProviderId, uid: string): TrainingDeliveryTransport | null;
+}
+export interface DeliveryLedgerV1 {
+  /** App-confirmed Guide incarnations. Older copies remain untouched, never automatically repaired. */
+  suuntoGuideGeneration?: number;
+  suuntoRetiredGuides?: Array<DeliveryArtifact & { planId: string | null }>;
+  /** Bounded reverse lookup for recordings made with a retained earlier Guide. */
+  suuntoRetiredExternalIds?: string[];
+  /** Wahoo's next/current Plan incarnation; preserved across reconciliation. */
+  wahooPlanGeneration?: number;
+  /** Private proof of exact approval equivalence across a presentation-only
+   * mapping upgrade. Independent of remote acceptance and retained when an
+   * obsolete attempt is retired. Does not grant consent or expose a wire field. */
+  mappingApprovalProof?: MappingApprovalProof;
+  /** Definite application-access rejection; distinct from temporarily paused transport/inspection readiness. */
+  providerAccessBlocked?: boolean;
+  verification?: VerificationEvidence;
+  repair?: DeliveryRepair | null;
+  /** Private reverse-link identity when `actual.completed` came from an imported
+   * activity marker. Remote provider completion observations leave this unset. */
+  completionLinkId?: string | null;
+  pastCleanup?: PastCleanupAuthorization | null;
+  schemaVersion: 1;
+  id: string;
+  workoutId: string;
+  planId: string | null;
+  provider: PlannedWorkoutProviderId;
+  destinationKey: string;
+  desiredGeneration: number;
+  connectionEpoch: number;
+  settingsRevision: number;
+  desiredDigest: string;
+  desired: 'present' | 'absent' | 'preserve';
+  status: TrainingDeliveryStatus;
+  timeZone: string;
+  issues: string[];
+  approvalDigest: string | null;
+  actual: DeliveryArtifact | null;
+  acceptedDigest: string | null;
+  contentDigest: string | null;
+  acceptedContentDigest: string | null;
+  attempt: DeliveryOperation | null;
+  lease: { id: string; expiresAtMs: number } | null;
+  retries: number;
+  retryAtMs: number;
+  /** Adapter-imposed minimum delay survives authored edits and explicit Retry.
+   * Optional only for older ledgers; this is not an account-wide quota scheduler. */
+  providerNotBeforeMs?: number;
+  blockedConnectionGeneration: string | null;
+  lastAttemptAtMs: number | null;
+  lastAcceptedAtMs: number | null;
+  updatedAtMs: number;
+}
+export interface MappingApprovalProof {
+  suuntoApprovedSwimmingSettings?: SuuntoSwimmingGuideSettings;
+  suuntoMappingSwimmingSettings?: SuuntoSwimmingGuideSettings;
+  /** Private bounded provenance for unchanged Suunto app-preview unit conversions. */
+  suuntoApprovedUnitSettings?: UserUnitSettingsInterface;
+  suuntoMappingUnitSettings?: UserUnitSettingsInterface;
+  approvedDigest: string;
+  mappingDigest: string;
+  contentDigest: string;
+}
+export interface PastCleanupAuthorization {
+  scope: 'plan' | 'workout';
+  scopeId: string;
+  mutationId: string;
+  requestedAtMs: number;
+  deletedAtMs?: number;
+}
+export interface DeliveryIntent {
+  mappingApprovalProof?: MappingApprovalProof;
+  desired: DeliveryLedgerV1['desired'];
+  status: TrainingDeliveryStatus;
+  timeZone: string;
+  digest: string;
+  issues: string[];
+  approvalDigest: string | null;
+}
+export interface DeliveryContext {
+  suuntoSwimmingSettings?: SuuntoSwimmingGuideSettings;
+  workout: ScheduledWorkoutV1 | null;
+  strength?: StrengthWorkoutDetailsV1 | null;
+  suuntoWeightUnits?: WeightUnits;
+  suuntoUnitSettings?: UserUnitSettingsInterface;
+  planActive: boolean;
+  setting: TrainingDeliverySettingsV1 | null;
+  override: TrainingDeliverySettingsV1 | null;
+  scopeGeneration: number;
+  connection: DeliveryConnection;
+  hasPro: boolean;
+  transport: TrainingDeliveryTransport | null;
+  nowMs: number;
+  pastCleanup: PastCleanupAuthorization | null;
+}

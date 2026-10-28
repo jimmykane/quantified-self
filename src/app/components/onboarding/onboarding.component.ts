@@ -1,6 +1,6 @@
-import { AfterViewInit, Component, DestroyRef, Input, OnChanges, OnInit, SimpleChanges, ViewChild, inject } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Router } from '@angular/router';
+import { AfterViewInit, Component, DestroyRef, Input, OnChanges, OnInit, SimpleChanges, ViewChild, computed, inject } from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { MatStepperModule, MatStepper } from '@angular/material/stepper';
 import { MatButtonModule } from '@angular/material/button';
@@ -16,7 +16,12 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { POLICY_CONTENT, PolicyItem } from '../../shared/policies.content';
 import { LoggerService } from '../../services/logger.service';
+import { ShellNavigationEffectsService } from '../../services/shell-navigation-effects.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppUserInterface } from '../../models/app-user.interface';
+import { membershipPriceIdFromReturnUrl } from '../../helpers/membership-selection.helper';
+import { serviceSetupFromReturnUrl } from '../../helpers/service-setup-redirect.helper';
+import { of } from 'rxjs';
 
 @Component({
     selector: 'app-onboarding',
@@ -44,13 +49,41 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
     termsFormGroup!: FormGroup;
     isPro = false;
 
+    protected readonly navigationEffects = inject(ShellNavigationEffectsService);
     private authService = inject(AppAuthService);
     private userService = inject(AppUserService);
     private router = inject(Router);
+    private route = inject(ActivatedRoute);
     private _formBuilder = inject(FormBuilder);
     private logger = inject(LoggerService);
     private analyticsService = inject(AppAnalyticsService);
     private destroyRef = inject(DestroyRef);
+    private readonly completionQueryParams = toSignal(
+        this.route.queryParamMap ?? of(this.route.snapshot.queryParamMap),
+        { initialValue: this.route.snapshot.queryParamMap },
+    );
+    private readonly completionTarget = computed(() => {
+        const params = this.completionQueryParams();
+        const returnUrl = params.get('returnUrl');
+        const priceId = membershipPriceIdFromReturnUrl(returnUrl);
+        const serviceSetup = serviceSetupFromReturnUrl(returnUrl);
+        const requestId = params.get('request_id') || '';
+        // Keep destinations explicit; never accept an external/client OAuth callback here.
+        const path = priceId ? '/subscriptions'
+            : serviceSetup ? '/services'
+            : returnUrl === '/tools/compare' || returnUrl === '/subscriptions'
+                ? returnUrl
+                : returnUrl === '/mcp/authorize' && /^[A-Za-z0-9_-]{1,256}$/.test(requestId)
+                    ? '/mcp/authorize' : '/dashboard';
+        const label = path === '/tools/compare' ? 'Compare'
+            : path === '/subscriptions' ? 'Subscriptions'
+                : path === '/services' ? 'Connections'
+                    : path === '/mcp/authorize' ? 'MCP connection' : 'Dashboard';
+        return { path, label, priceId, requestId, serviceName: serviceSetup?.serviceName ?? null };
+    });
+
+    get completionPath(): string { return this.completionTarget().path; }
+    get completionLabel(): string { return this.completionTarget().label; }
 
     ngOnInit() {
         // Log onboarding start
@@ -231,6 +264,12 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
     async finishOnboarding() {
         this.isLoading = true;
         try {
+            // A recovered existing account may still be on /onboarding. Leave
+            // without rewriting its profile or repeating completion analytics.
+            if ((this.user as AppUserInterface).onboardingCompleted === true) {
+                await this.navigateAfterOnboarding();
+                return;
+            }
             // Implicit Free Tier Selection:
             // If the user clicks continue but hasn't explicitly selected a plan (canFinish is false),
             // and they don't have paid access, we assume they want the Free Tier.
@@ -248,14 +287,26 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
             // Log onboarding completion
             this.analyticsService.logEvent('tutorial_complete');
 
-            // Navigate to dashboard. The OnboardingGuard will now allow this.
-            this.logger.log('[OnboardingComponent] Finishing onboarding, navigating to dashboard');
-            this.router.navigate(['/dashboard']);
+            await this.navigateAfterOnboarding();
         } catch (error) {
             this.logger.error('Error completing onboarding:', error);
         } finally {
             this.isLoading = false;
         }
+    }
+
+    private navigateAfterOnboarding(): Promise<boolean> {
+        const target = this.completionTarget();
+        if (target.priceId) {
+            return this.router.navigate(['/subscriptions'], { queryParams: { priceId: target.priceId } });
+        }
+        if (target.path === '/mcp/authorize') {
+            return this.router.navigate([target.path], { queryParams: { request_id: target.requestId } });
+        }
+        if (target.serviceName) {
+            return this.router.navigate(['/services'], { queryParams: { serviceName: target.serviceName } });
+        }
+        return this.router.navigate([target.path]);
     }
 
     togglePolicyDetails(policyId: string) {

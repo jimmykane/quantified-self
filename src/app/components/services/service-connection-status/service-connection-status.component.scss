@@ -3,6 +3,92 @@
     margin-bottom: 12px;
 }
 
+.membership-offer {
+    gap: 20px;
+}
+.membership-offer__provider {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.membership-offer__heading h2 {
+    margin: 0 0 8px;
+    font: var(--mat-sys-headline-small);
+    font-weight: 650;
+}
+.membership-offer__heading p {
+    margin: 0;
+    font: var(--mat-sys-body-medium);
+    color: var(--mat-sys-on-surface-variant);
+}
+.membership-offer__preview {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 18px 0;
+    border-block: 1px solid var(--mat-sys-outline-variant);
+}
+.membership-offer__preview > mat-icon {
+    flex: 0 0 auto;
+}
+.membership-offer__preview > span {
+    margin-left: auto;
+    font: var(--mat-sys-label-medium);
+    color: var(--mat-sys-on-surface-variant);
+}
+.membership-offer__benefits {
+    display: grid;
+    gap: 10px;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+.membership-offer__benefits li {
+    display: flex;
+    align-items: start;
+    gap: 10px;
+    font: var(--mat-sys-body-medium);
+}
+.membership-offer__benefits mat-icon {
+    flex: 0 0 auto;
+    width: 20px;
+    height: 20px;
+    font-size: 20px;
+    color: var(--mat-sys-primary);
+}
+.membership-offer__actions {
+    display: grid;
+    justify-items: start;
+    gap: 8px;
+}
+.membership-offer__actions p, .membership-offer__starter {
+    margin: 0;
+    font: var(--mat-sys-body-small);
+    color: var(--mat-sys-on-surface-variant);
+}
+@media (max-width: 640px) {
+    .membership-offer {
+        gap: 16px;
+    }
+    .membership-offer__heading h2 {
+        font: var(--mat-sys-title-large);
+        font-weight: 650;
+    }
+    .membership-offer__preview {
+        gap: 14px;
+        flex-wrap: wrap;
+        padding-block: 14px;
+    }
+    .membership-offer__preview > span {
+        margin-left: 0;
+        flex-basis: 100%;
+    }
+    .membership-offer__actions {
+        justify-items: stretch;
+        text-align: center;
+    }
+}
+
 .service-connection-status {
     width: 100%;
 }
@@ -14,7 +100,7 @@
     min-width: 0;
     max-width: 100%;
     padding: 20px;
-    border: 1px solid var(--mat-sys-outline-variant);
+    border: 1px solid var(--services-surface-border, var(--mat-sys-outline-variant));
     border-radius: 12px;
     background: var(--mat-sys-surface-container-lowest);
 }

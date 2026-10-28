@@ -3,6 +3,9 @@ import type * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER, QueueResult } from '../queue-utils';
 import { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
+import { buildHealthBackfillJobs } from '../scripts/health-backfill-plan';
+import { getTokenCredentialSnapshot } from '../token-refresh-coordinator';
+import { PROVIDER_MAX_RETRY_COUNT } from '../shared/queue-config';
 
 const hoisted = vi.hoisted(() => ({
     docGet: vi.fn(),
@@ -27,6 +30,8 @@ const hoisted = vi.hoisted(() => ({
     upsertSleepSessions: vi.fn(),
     buildSleepSessionDocumentId: vi.fn(),
     replaceHealthSourceRecord: vi.fn(),
+    replaceHealthSourceRecords: vi.fn(),
+    isHealthSourceRecordBatchSplittableError: vi.fn(() => false),
     updateHealthSyncState: vi.fn(),
     enqueueSleepSyncTask: vi.fn(),
     enqueueGarminHealthBackfillTask: vi.fn(),
@@ -42,10 +47,12 @@ const hoisted = vi.hoisted(() => ({
     getServiceConnectionMeta: vi.fn(),
     loggerWarn: vi.fn(),
     loggerError: vi.fn(),
+    loggerInfo: vi.fn(),
     claimSleepQueueRevision: vi.fn(),
     releaseSleepQueueRevision: vi.fn(),
     captureSuuntoHealthWriteLifecycleGuards: vi.fn(),
     processSuuntoHealthQueueItem: vi.fn(),
+    getSuuntoHealthFailureTelemetry: vi.fn(() => null),
     captureActiveSuuntoWebhookWriteLifecycleGuards: vi.fn(),
     captureCurrentSuuntoWebhookWriteLifecycleGuards: vi.fn(),
     ensureSuuntoWebhookAccountBindingForProviderVerifiedToken: vi.fn(),
@@ -56,7 +63,7 @@ const hoisted = vi.hoisted(() => ({
 }));
 
 vi.mock('firebase-functions/logger', () => ({
-    info: vi.fn(),
+    info: hoisted.loggerInfo,
     warn: hoisted.loggerWarn,
     error: hoisted.loggerError,
 }));
@@ -75,6 +82,7 @@ vi.mock('firebase-admin', () => {
         where: hoisted.tokenRootWhere,
         limit: hoisted.tokenRootLimit,
         get: hoisted.tokenRootGet,
+        select: vi.fn(() => tokenRootQuery),
         doc: vi.fn((id: string) => ({ id, __mockType: 'nested-document' })),
     };
     hoisted.tokenRootWhere.mockReturnValue(tokenRootQuery);
@@ -173,7 +181,10 @@ vi.mock('./writer', () => ({
 }));
 
 vi.mock('../health/writer', () => ({
+    HEALTH_SOURCE_RECORD_TRANSACTION_BATCH_SIZE: 8,
+    isHealthSourceRecordBatchSplittableError: hoisted.isHealthSourceRecordBatchSplittableError,
     replaceHealthSourceRecord: hoisted.replaceHealthSourceRecord,
+    replaceHealthSourceRecords: hoisted.replaceHealthSourceRecords,
     updateHealthSyncState: hoisted.updateHealthSyncState,
 }));
 
@@ -286,6 +297,7 @@ vi.mock('../service-connection-meta', () => ({
 vi.mock('../suunto/health-sync', () => ({
     captureSuuntoHealthWriteLifecycleGuards: hoisted.captureSuuntoHealthWriteLifecycleGuards,
     processSuuntoHealthQueueItem: hoisted.processSuuntoHealthQueueItem,
+    getSuuntoHealthFailureTelemetry: hoisted.getSuuntoHealthFailureTelemetry,
     sanitizeSuuntoHealthErrorForTelemetry: vi.fn(() => new Error('Suunto Health processing failed.')),
     suuntoCredentialFromSnapshot: vi.fn(() => ({
         accessToken: 'suunto-access-token',
@@ -323,7 +335,8 @@ vi.mock('../garmin/health-lifecycle', () => ({
     },
 }));
 
-vi.mock('../garmin/health-sync', () => ({
+vi.mock('../garmin/health-sync', async importOriginal => ({
+    ...(await importOriginal<typeof import('../garmin/health-sync')>()),
     processGarminHealthQueueItem: hoisted.processGarminHealthQueueItem,
     sanitizeGarminHealthErrorForTelemetry: vi.fn(() => new Error('Garmin Health callback request failed.')),
     GarminHealthPermissionError: class GarminHealthPermissionError extends Error {
@@ -338,13 +351,14 @@ vi.mock('../garmin/health-sync', () => ({
 
 import {
     addSleepSyncQueueItem,
+    getMalformedSleepQueueItemReason,
     GARMIN_HEALTH_CONTINUATION_BUDGET_MS,
     GARMIN_HEALTH_WRITE_BATCH_SIZE,
     processSleepSyncQueueItem,
     resolveGarminPingFirebaseUserIDs,
 } from './queue';
-import { GarminHealthPermissionError } from '../garmin/health-sync';
-import { GarminHealthValidationError } from '../garmin/health';
+import { GarminHealthPermissionError, GarminHealthRequestError } from '../garmin/health-sync';
+import { GarminHealthValidationError, mapGarminHealthSummaries } from '../garmin/health';
 import { TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
 import { ProviderQueueUserDeletedOrDeletingError, ProviderQueueUserNotConnectedError } from '../queue/provider-queue-errors';
 
@@ -377,6 +391,17 @@ describe('sleep queue', () => {
             chunksWritten: 0,
             chunksDeleted: 0,
         });
+        hoisted.replaceHealthSourceRecords.mockImplementation(async (
+            _userID: string,
+            values: readonly unknown[],
+        ) => values.map((_, index) => ({
+            status: 'written',
+            sourceRecordId: `health-record-id-${index}`,
+            sourceRecord: null,
+            chunksWritten: 0,
+            chunksDeleted: 0,
+        })));
+        hoisted.isHealthSourceRecordBatchSplittableError.mockReset().mockReturnValue(false);
         hoisted.updateHealthSyncState.mockResolvedValue(true);
         hoisted.claimSleepQueueRevision.mockResolvedValue('claimed');
         hoisted.releaseSleepQueueRevision.mockResolvedValue(undefined);
@@ -518,6 +543,52 @@ describe('sleep queue', () => {
                 'suunto-user-1',
                 expect.any(Number),
             );
+    });
+
+    it.each([false, true])('preserves an existing admin polling job transactionally (processed=%s)', async processed => {
+        hoisted.docGet.mockResolvedValueOnce({
+            exists: true,
+            data: () => ({ processed, retryCount: 4, queueRevision: 'original', dateCreated: 123 }),
+        });
+        await addSleepSyncQueueItem({
+            type: 'suunto_health_poll', provider: 'SuuntoApp', userID: 'test-user-uid',
+            providerUserId: 'suunto-user-1', rangeStartMs: 1000, rangeEndMs: 2000,
+            dedupeKey: 'admin-fixed-id', preserveExisting: true, dispatchImmediately: false,
+        });
+        expect(hoisted.docSet).not.toHaveBeenCalled();
+        expect(hoisted.docUpdate).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+    });
+
+    it.each([false, true])('does not reset or accelerate a retained immediate history job (processed=%s)', async processed => {
+        // The first read checks for duplicate immediate work; the transaction
+        // must still preserve an undispatched retry after an earlier enqueue failure.
+        hoisted.docGet.mockResolvedValue({
+            exists: true,
+            data: () => ({ processed, retryCount: 4, queueRevision: 'original', dateCreated: 123,
+                dispatchedToCloudTask: null }),
+        });
+        await addSleepSyncQueueItem({
+            type: 'suunto_health_poll', provider: 'SuuntoApp', userID: 'test-user-uid',
+            providerUserId: 'suunto-user-1', rangeStartMs: 1000, rangeEndMs: 2000,
+            connectionHistoryRunId: 'history-run',
+            dedupeKey: 'history-fixed-id', preserveExisting: true, dispatchImmediately: true,
+        });
+        expect(hoisted.docSet).not.toHaveBeenCalled();
+        expect(hoisted.docUpdate).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+    });
+
+    it.each(['GarminAPI', 'SuuntoApp', 'COROSAPI'] as const)('accepts the admin catch-up job shape for %s', provider => {
+        const jobs = buildHealthBackfillJobs(provider, 'test-user-uid', 'provider-account',
+            Date.parse('2026-07-01'), Date.parse('2026-09-01'), 'campaign');
+        expect(jobs.length).toBeGreaterThan(0);
+        for (const job of jobs) {
+            expect(getMalformedSleepQueueItemReason({
+                ...job.input, id: job.queueId, dateCreated: Date.now(),
+                processed: false, retryCount: 0, dispatchedToCloudTask: null,
+            })).toBeNull();
+        }
     });
 
     it('resolves Garmin Ping accounts in one bounded collection-group batch', async () => {
@@ -739,6 +810,336 @@ describe('sleep queue', () => {
             suuntoHealthRootOAuthCredentialGeneration: 'root-generation-2',
             suuntoHealthConnectionStateGeneration: 'connection-generation-1',
         }), { merge: false });
+    });
+
+    it('delays a coalesced Health webhook and reuses its scheduled queue row', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-09-26T11:02:00.000Z'));
+        try {
+            const dispatchAfterMs = Date.now() + 180_000;
+            const input = {
+                type: 'suunto_health_poll' as const,
+                provider: 'SuuntoApp' as const,
+                userID: 'test-user-uid',
+                providerUserId: 'suunto-user-1',
+                rangeStartMs: 1_777_392_000_000,
+                rangeEndMs: 1_777_478_400_000,
+                healthTrigger: 'webhook' as const,
+                suuntoHealthWebhookFeedMask: 1 as const,
+                dedupeKey: 'suunto-health-webhook:bucket',
+                dispatchImmediately: true,
+                dispatchAfterMs,
+                lateArrivalKey: 'a'.repeat(64),
+            };
+            await addSleepSyncQueueItem(input);
+            expect(hoisted.docSet).toHaveBeenCalledWith(expect.objectContaining({
+                dispatchAfterMs,
+            }), { merge: false });
+            expect(hoisted.enqueueSleepSyncTask).toHaveBeenCalledWith(
+                expect.any(String), Date.now(), 180,
+                expect.objectContaining({ queueRevision: expect.any(String) }),
+            );
+
+            hoisted.docSet.mockClear();
+            hoisted.enqueueSleepSyncTask.mockClear();
+            hoisted.docGet.mockResolvedValue({
+                exists: true,
+                data: () => ({ ...input, dispatchedToCloudTask: Date.now(), processed: false }),
+            });
+            await addSleepSyncQueueItem({ ...input, suuntoHealthWebhookFeedMask: 2,
+                lateArrivalKey: 'b'.repeat(64) });
+            expect(hoisted.docSet).not.toHaveBeenCalled();
+            expect(hoisted.docUpdate).toHaveBeenCalledWith({ suuntoHealthWebhookFeedMask: 3 });
+            expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('unions feed masks without replacing an undispatched webhook queue revision', async () => {
+        const createdAtMs = Date.now() - 1_000;
+        const input = {
+            type: 'suunto_health_poll' as const,
+            provider: 'SuuntoApp' as const,
+            userID: 'test-user-uid',
+            providerUserId: 'suunto-user-1',
+            rangeStartMs: 1_777_392_000_000,
+            rangeEndMs: 1_777_478_400_000,
+            healthTrigger: 'webhook' as const,
+            dispatchImmediately: true,
+            dispatchAfterMs: Date.now() + 180_000,
+            lateArrivalKey: 'b'.repeat(64),
+            dedupeKey: 'suunto-health-webhook:bucket',
+            suuntoHealthWebhookFeedMask: 2 as const,
+        };
+        hoisted.docGet.mockResolvedValue({ exists: true, data: () => ({
+            ...input, suuntoHealthWebhookFeedMask: 1,
+            dateCreated: createdAtMs, queueRevision: 'original',
+            processed: false, dispatchedToCloudTask: null,
+        }) });
+
+        await addSleepSyncQueueItem(input);
+
+        expect(hoisted.docSet).not.toHaveBeenCalled();
+        expect(hoisted.docUpdate).toHaveBeenCalledWith({ suuntoHealthWebhookFeedMask: 3 });
+        expect(hoisted.enqueueSleepSyncTask).toHaveBeenCalledWith(
+            expect.any(String), createdAtMs, expect.any(Number),
+            expect.objectContaining({ queueRevision: 'original' }),
+        );
+    });
+
+    it('does not add a transaction for a duplicate notification already in the feed mask', async () => {
+        const input = {
+            type: 'suunto_health_poll' as const,
+            provider: 'SuuntoApp' as const,
+            userID: 'test-user-uid',
+            providerUserId: 'suunto-user-1',
+            rangeStartMs: 1_777_392_000_000,
+            rangeEndMs: 1_777_478_400_000,
+            healthTrigger: 'webhook' as const,
+            dispatchImmediately: true,
+            dispatchAfterMs: Date.now() + 180_000,
+            lateArrivalKey: 'b'.repeat(64),
+            dedupeKey: 'suunto-health-webhook:bucket',
+            suuntoHealthWebhookFeedMask: 1 as const,
+        };
+        hoisted.docGet.mockResolvedValue({ exists: true, data: () => ({
+            ...input, suuntoHealthWebhookFeedMask: 3,
+            processed: false, dispatchedToCloudTask: Date.now(),
+        }) });
+
+        await addSleepSyncQueueItem(input);
+
+        expect(hoisted.runTransaction).not.toHaveBeenCalled();
+        expect(hoisted.docSet).not.toHaveBeenCalled();
+        expect(hoisted.docUpdate).not.toHaveBeenCalled();
+    });
+
+    it('does not merge a feed mask after account deletion starts', async () => {
+        const input = {
+            type: 'suunto_health_poll' as const,
+            provider: 'SuuntoApp' as const,
+            userID: 'test-user-uid',
+            providerUserId: 'suunto-user-1',
+            rangeStartMs: 1_777_392_000_000,
+            rangeEndMs: 1_777_478_400_000,
+            healthTrigger: 'webhook' as const,
+            dispatchImmediately: true,
+            dispatchAfterMs: Date.now() + 180_000,
+            lateArrivalKey: 'b'.repeat(64),
+            dedupeKey: 'suunto-health-webhook:bucket',
+            suuntoHealthWebhookFeedMask: 2 as const,
+        };
+        hoisted.docGet.mockResolvedValue({ exists: true, data: () => ({
+            ...input, suuntoHealthWebhookFeedMask: 1,
+            processed: false, dispatchedToCloudTask: Date.now(),
+        }) });
+        hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValueOnce({ shouldSkip: true });
+
+        await expect(addSleepSyncQueueItem(input)).rejects.toBeInstanceOf(
+            ProviderQueueUserDeletedOrDeletingError,
+        );
+        expect(hoisted.docUpdate).not.toHaveBeenCalled();
+    });
+
+    it('still merges a mixed-feed notification just before dispatch', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-09-26T11:04:57.000Z'));
+        try {
+            const input = {
+                type: 'suunto_health_poll' as const,
+                provider: 'SuuntoApp' as const,
+                userID: 'test-user-uid',
+                providerUserId: 'suunto-user-1',
+                rangeStartMs: 1_777_392_000_000,
+                rangeEndMs: 1_777_478_400_000,
+                healthTrigger: 'webhook' as const,
+                dispatchImmediately: true,
+                dispatchAfterMs: Date.now() + 4_000,
+                lateArrivalKey: 'b'.repeat(64),
+                dedupeKey: 'suunto-health-webhook:bucket',
+                suuntoHealthWebhookFeedMask: 2 as const,
+            };
+            const original = { ...input, suuntoHealthWebhookFeedMask: 1,
+                processed: false, dispatchedToCloudTask: Date.now() };
+            hoisted.docGet.mockResolvedValue({ exists: true, data: () => original });
+
+            await addSleepSyncQueueItem(input);
+
+            expect(hoisted.docUpdate).toHaveBeenCalledWith({ suuntoHealthWebhookFeedMask: 3 });
+            expect(hoisted.runTransaction).toHaveBeenCalledOnce();
+            expect(hoisted.docSet).not.toHaveBeenCalled();
+            expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('keeps a follow-up if dispatch starts during the feed-mask transaction', async () => {
+        vi.useFakeTimers();
+        const startedAtMs = Date.parse('2026-09-26T11:02:00.000Z');
+        vi.setSystemTime(startedAtMs);
+        try {
+            const input = {
+                type: 'suunto_health_poll' as const,
+                provider: 'SuuntoApp' as const,
+                userID: 'test-user-uid',
+                providerUserId: 'suunto-user-1',
+                rangeStartMs: 1_777_392_000_000,
+                rangeEndMs: 1_777_478_400_000,
+                healthTrigger: 'webhook' as const,
+                dispatchImmediately: true,
+                dispatchAfterMs: startedAtMs + 180_000,
+                lateArrivalKey: 'b'.repeat(64),
+                dedupeKey: 'suunto-health-webhook:bucket',
+                suuntoHealthWebhookFeedMask: 2 as const,
+            };
+            const original = { ...input, suuntoHealthWebhookFeedMask: 1,
+                processed: false, dispatchedToCloudTask: startedAtMs };
+            hoisted.docGet.mockResolvedValueOnce({ exists: true, data: () => original })
+                .mockResolvedValueOnce({ exists: true, data: () => original })
+                .mockResolvedValue({ exists: false, data: () => undefined });
+            hoisted.getUserDeletionGuardStateInTransaction.mockImplementationOnce(async () => {
+                vi.setSystemTime(startedAtMs + 180_000);
+                return { shouldSkip: false };
+            });
+
+            await addSleepSyncQueueItem(input);
+
+            expect(hoisted.docUpdate).not.toHaveBeenCalledWith({ suuntoHealthWebhookFeedMask: 3 });
+            expect(hoisted.docSet).toHaveBeenCalledWith(expect.objectContaining({
+                suuntoHealthWebhookFeedMask: 2,
+            }), { merge: false });
+            expect(hoisted.runTransaction).toHaveBeenCalledTimes(2);
+            expect(new Set(hoisted.docIdValues).size).toBe(2);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('queues a distinct deterministic follow-up for a webhook arriving after its bucket starts', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-09-26T11:05:02.000Z'));
+        try {
+            const input = {
+                type: 'suunto_health_poll' as const,
+                provider: 'SuuntoApp' as const,
+                userID: 'test-user-uid',
+                providerUserId: 'suunto-user-1',
+                rangeStartMs: 1_777_392_000_000,
+                rangeEndMs: 1_777_478_400_000,
+                healthTrigger: 'webhook' as const,
+                dedupeKey: 'suunto-health-webhook:old-bucket',
+                dispatchImmediately: true,
+                dispatchAfterMs: Date.now() - 1_000,
+                lateArrivalKey: 'a'.repeat(64),
+            };
+            hoisted.docGet
+                .mockResolvedValueOnce({ exists: true, data: () => ({ processed: false }) })
+                .mockResolvedValueOnce({ exists: false, data: () => undefined });
+            await addSleepSyncQueueItem(input);
+            expect(hoisted.docIdValues[0]).not.toBe(hoisted.docIdValues[1]);
+            expect(hoisted.docSet).toHaveBeenCalledWith(expect.objectContaining({
+                id: hoisted.docIdValues[1],
+                dispatchAfterMs: input.dispatchAfterMs,
+            }), { merge: false });
+            expect(hoisted.enqueueSleepSyncTask).toHaveBeenCalledWith(
+                hoisted.docIdValues[1], Date.now(), 1,
+                expect.objectContaining({ queueRevision: expect.any(String) }),
+            );
+
+            hoisted.docSet.mockClear();
+            hoisted.enqueueSleepSyncTask.mockClear();
+            hoisted.docGet
+                .mockResolvedValueOnce({ exists: true, data: () => ({ processed: true }) })
+                .mockResolvedValueOnce({ exists: true, data: () => input });
+            await addSleepSyncQueueItem(input);
+            expect(hoisted.docSet).not.toHaveBeenCalled();
+            expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+            expect(hoisted.loggerInfo).toHaveBeenCalledWith(
+                '[HealthSync][Suunto] Reused late webhook refetch.',
+                { duplicateIngressWindows: 1 },
+            );
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('keeps a follow-up when an earlier bucket task is already processing before its due time', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-09-26T11:02:00.000Z'));
+        try {
+            const input = {
+                type: 'suunto_health_poll' as const,
+                provider: 'SuuntoApp' as const,
+                userID: 'test-user-uid',
+                providerUserId: 'suunto-user-1',
+                rangeStartMs: 1_777_392_000_000,
+                rangeEndMs: 1_777_478_400_000,
+                healthTrigger: 'webhook' as const,
+                dedupeKey: 'suunto-health-webhook:early-worker',
+                dispatchImmediately: true,
+                dispatchAfterMs: Date.now() + 180_000,
+                lateArrivalKey: 'a'.repeat(64),
+            };
+            hoisted.docGet
+                .mockResolvedValueOnce({
+                    exists: true,
+                    data: () => ({
+                        processed: false,
+                        processingOwner: 'earlier-worker',
+                        processingRevision: 'revision:earlier-revision',
+                        processingLeaseExpiresAt: Date.now() + 60_000,
+                    }),
+                })
+                .mockResolvedValueOnce({ exists: false, data: () => undefined });
+            await addSleepSyncQueueItem(input);
+            expect(hoisted.docIdValues[0]).not.toBe(hoisted.docIdValues[1]);
+            expect(hoisted.docSet).toHaveBeenCalledWith(expect.objectContaining({
+                id: hoisted.docIdValues[1],
+            }), { merge: false });
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('keeps a follow-up when queue admission crosses the bucket deadline', async () => {
+        vi.useFakeTimers();
+        const admissionStartedAtMs = new Date('2026-09-26T11:04:59.000Z').getTime();
+        vi.setSystemTime(admissionStartedAtMs);
+        try {
+            const input = {
+                type: 'suunto_health_poll' as const,
+                provider: 'SuuntoApp' as const,
+                userID: 'test-user-uid',
+                providerUserId: 'suunto-user-1',
+                rangeStartMs: 1_777_392_000_000,
+                rangeEndMs: 1_777_478_400_000,
+                healthTrigger: 'webhook' as const,
+                dedupeKey: 'suunto-health-webhook:boundary',
+                dispatchImmediately: true,
+                dispatchAfterMs: admissionStartedAtMs + 2_000,
+                lateArrivalKey: 'b'.repeat(64),
+            };
+            hoisted.docGet
+                .mockImplementationOnce(async () => {
+                    vi.setSystemTime(admissionStartedAtMs + 3_000);
+                    return {
+                        exists: true,
+                        data: () => ({ dispatchedToCloudTask: admissionStartedAtMs }),
+                    };
+                })
+                .mockResolvedValueOnce({ exists: false, data: () => undefined });
+
+            await addSleepSyncQueueItem(input);
+
+            expect(hoisted.docIdValues[0]).not.toBe(hoisted.docIdValues[1]);
+            expect(hoisted.docSet).toHaveBeenCalledWith(expect.objectContaining({
+                id: hoisted.docIdValues[1],
+            }), { merge: false });
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('rejects Suunto Health webhook queue creation when a captured lifecycle document changed', async () => {
@@ -1433,19 +1834,15 @@ describe('sleep queue', () => {
                 }],
                 empty: false,
             });
-            const healthInput = {
-                provider: 'GarminAPI',
-                providerAccountId: 'garmin-user-1',
-                sourceRecordKey: 'source-key',
-                sourceRecordKind: 'daily_summary',
+            const [{ input: healthInput }] = mapGarminHealthSummaries('dailies', [{
+                summaryId: 'synthetic-daily',
                 calendarDate: '2026-04-29',
-                startTimeMs: 1_777_424_400_000,
-                endTimeMs: 1_777_510_800_000,
-                observedAtMs: 1_777_424_400_000,
-                timezoneOffsetSeconds: 0,
-                metrics: [],
-                sourceRevision: { order: 1, token: 'revision' },
-            };
+                startTimeInSeconds: 1_777_424_400,
+                durationInSeconds: 60,
+                steps: 123,
+                timeOffsetHeartRateSamples: { 15: 70, 60: 72, 72: 80 },
+            }], 'garmin-user-1', 1_777_424_460_000, Date.now());
+            expect(healthInput.sampleSeries[0].offsetMs).toEqual([15_000, 60_000]);
             hoisted.processGarminHealthQueueItem.mockResolvedValue({
                 healthResults: [{ input: healthInput, observedAtMs: 1_777_424_400_000 }],
                 lifecycleGuards: await hoisted.captureActiveGarminHealthWriteLifecycleGuards(),
@@ -1488,6 +1885,10 @@ describe('sleep queue', () => {
             );
             expect(hoisted.upsertSleepSessions).not.toHaveBeenCalled();
             expect(hoisted.updateSleepSyncState).not.toHaveBeenCalled();
+            expect(hoisted.loggerError).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).not.toHaveBeenCalledWith(
+                expect.objectContaining({ parent: { id: 'failed_jobs' } }), expect.anything(),
+            );
             expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
                 'test-user-uid',
                 'GarminAPI',
@@ -1704,7 +2105,7 @@ describe('sleep queue', () => {
 
             const result = await processSleepSyncQueueItem(queueItem);
 
-            expect(result).toBe(QueueResult.Deferred);
+            expect(result).toBe(QueueResult.HealthContinuationScheduled);
             expect(hoisted.replaceHealthSourceRecord).toHaveBeenCalledTimes(32);
             expect(queueState).toMatchObject({
                 garminHealthWriteCursor: 32,
@@ -1835,6 +2236,62 @@ describe('sleep queue', () => {
         }));
     });
 
+    it.each(['callback_request', 'health_write', 'sync_state_write'] as const)(
+        'logs the original Garmin %s failure separately from a failure-state write error and still retries', async stage => {
+            hoisted.tokenRootGet.mockResolvedValue({ docs: [{ id: 'garmin-token-1',
+                data: () => ({ serviceName: ServiceNames.GarminAPI, userID: 'garmin-user-1' }),
+                ref: { parent: { parent: { id: 'test-user-uid' } } },
+            }], empty: false });
+            const primaryError = stage === 'callback_request' ? new GarminHealthRequestError(503)
+                : Object.assign(new Error('private-primary-token/path'), { code: 10 });
+            if (stage === 'callback_request') {
+                hoisted.processGarminHealthQueueItem.mockImplementationOnce(async (...args: unknown[]) => {
+                    (args[5] as (stage: string) => void)(stage);
+                    throw primaryError;
+                });
+            } else if (stage === 'health_write') {
+                hoisted.processGarminHealthQueueItem.mockResolvedValueOnce({
+                    healthResults: [{ input: { sourceRecordKind: 'daily_summary', metrics: [] }, observedAtMs: 1_777_424_400_000 }],
+                    lifecycleGuards: await hoisted.captureActiveGarminHealthWriteLifecycleGuards(),
+                    continuation: null,
+                });
+                hoisted.replaceHealthSourceRecord.mockRejectedValueOnce(primaryError);
+            } else {
+                hoisted.updateHealthSyncState.mockRejectedValueOnce(primaryError);
+            }
+            hoisted.updateHealthSyncState.mockRejectedValueOnce(Object.assign(
+                new Error('private-secondary-health/path'), { code: 14, details: 'private-details', cause: primaryError },
+            ));
+            const update = vi.fn().mockResolvedValue(undefined);
+            const id = 'garmin-diagnostics-' + stage;
+            const result = await processSleepSyncQueueItem({
+                id, dateCreated: 1_700_000_000_000, dispatchedToCloudTask: 1_700_000_000_500,
+                processed: false, provider: 'GarminAPI', userID: 'test-user-uid', providerUserId: 'garmin-user-1',
+                retryCount: 0, type: 'garmin_ping', garminSummaryType: 'dailies',
+                callbackURL: 'https://apis.garmin.com/wellness-api/rest/dailies?uploadStartTimeInSeconds=1777424400&uploadEndTimeInSeconds=1777424460&token=private-callback-token',
+                ref: { update } as unknown as admin.firestore.DocumentReference,
+            });
+            expect(result).toBe(QueueResult.RetryIncremented);
+            expect(hoisted.loggerError).toHaveBeenCalledWith(
+                '[HealthSync] Failed to record provider Health sync failure.', expect.objectContaining({
+                    queueItemId: id, provider: 'GarminAPI', failure: 'garmin_health_state_write_failed',
+                    failureStage: 'failure_state_write', failureCategory: 'rpc_error', rpcStatusCode: 14,
+                }),
+            );
+            const primaryLog = hoisted.loggerError.mock.calls.find(([message]) => message === `[SleepSync] Queue item ${id} failed`);
+            expect(primaryLog?.[1]).toMatchObject({ queueItemId: id, provider: 'GarminAPI', failureStage: stage,
+                ...(stage === 'callback_request' ? { failureCategory: 'provider_http_error', providerStatusCode: 503 }
+                    : { failureCategory: 'rpc_error', rpcStatusCode: 10 }), processingElapsedMs: expect.any(Number) });
+            if (stage !== 'callback_request') expect(primaryLog?.[1]).not.toHaveProperty('providerStatusCode');
+            expect(update).toHaveBeenCalledWith(expect.objectContaining({ retryCount: 1,
+                dispatchedToCloudTask: null, errors: [expect.objectContaining({ error: 'Garmin Health callback request failed.' })] }));
+            expect(update).not.toHaveBeenCalledWith(expect.objectContaining({ processed: true }));
+            expect(hoisted.processGarminHealthQueueItem).toHaveBeenCalledOnce();
+            expect(hoisted.releaseSleepQueueRevision).toHaveBeenCalledOnce();
+            expect(JSON.stringify(hoisted.loggerError.mock.calls)).not.toContain('private');
+        },
+    );
+
     it('uses refreshed Garmin lifecycle guards when recording callback permission failure', async () => {
         const tokenRef = { parent: { parent: { id: 'test-user-uid' } } };
         hoisted.tokenRootGet.mockResolvedValue({
@@ -1898,7 +2355,24 @@ describe('sleep queue', () => {
         );
     });
 
-    it('records a lifecycle-guarded Health failure before DLQing an invalid Garmin response', async () => {
+    it.each([
+        undefined,
+        {
+            summaryType: 'dailies', summaryIndex: 2, field: 'averageStressLevel',
+            reason: 'out_of_range', valueType: 'number', numericValue: -2,
+            valueDisposition: 'included', sampleOffsetSeconds: null,
+        },
+        {
+            summaryType: 'stressDetails', summaryIndex: 6, field: 'timeOffsetStressLevelValues',
+            reason: 'unsupported_stress_code', valueType: 'number', numericValue: 0,
+            valueDisposition: 'included', sampleOffsetSeconds: 180,
+        },
+        {
+            summaryType: 'skinTemp', summaryIndex: 0, field: 'durationInSeconds',
+            reason: 'negative_duration', valueType: 'number', numericValue: -16_920,
+            valueDisposition: 'included', sampleOffsetSeconds: null,
+        },
+    ] as const)('logs only safe diagnostics and records a lifecycle-guarded Health failure before DLQ (%#)', async diagnostic => {
         const tokenRef = { parent: { parent: { id: 'test-user-uid' } } };
         hoisted.tokenRootGet.mockResolvedValue({
             docs: [{
@@ -1919,7 +2393,9 @@ describe('sleep queue', () => {
         hoisted.processGarminHealthQueueItem.mockImplementationOnce(
             async (...args: unknown[]) => {
                 (args[4] as (guards: unknown) => void)(refreshedGuards);
-                throw new GarminHealthValidationError('Invalid Garmin Health response.');
+                throw Object.assign(new GarminHealthValidationError('Invalid Garmin Health response.', diagnostic), {
+                    response: { accessToken: 'must-not-appear-in-logs' },
+                });
             },
         );
         const update = vi.fn().mockResolvedValue(undefined);
@@ -1933,12 +2409,24 @@ describe('sleep queue', () => {
             providerUserId: 'garmin-user-1',
             retryCount: 0,
             type: 'garmin_ping',
-            garminSummaryType: 'bodyComps',
-            callbackURL: 'https://apis.garmin.com/wellness-api/rest/bodyComps?uploadStartTimeInSeconds=1777424400&uploadEndTimeInSeconds=1777424460&token=garmin-token',
+            garminSummaryType: diagnostic?.summaryType ?? 'bodyComps',
+            callbackURL: `https://apis.garmin.com/wellness-api/rest/${diagnostic?.summaryType ?? 'bodyComps'}?uploadStartTimeInSeconds=1777424400&uploadEndTimeInSeconds=1777424460&token=garmin-token`,
             ref: { update } as unknown as admin.firestore.DocumentReference,
         });
 
         expect(result).toBe(QueueResult.MovedToDLQ);
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[HealthSync][Garmin] Queue item garmin-health-invalid-response contains an invalid provider response; moving to DLQ',
+            {
+                queueItemId: 'garmin-health-invalid-response',
+                code: 'garmin_health_invalid_response',
+                validation: diagnostic ?? null,
+            },
+        );
+        const loggedWarnings = JSON.stringify(hoisted.loggerWarn.mock.calls);
+        expect(loggedWarnings).not.toContain('must-not-appear-in-logs');
+        expect(loggedWarnings).not.toContain('refreshed-garmin-access-token');
+        expect(loggedWarnings).not.toContain('https://apis.garmin.com');
         expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
             'test-user-uid',
             'GarminAPI',
@@ -2166,6 +2654,55 @@ describe('sleep queue', () => {
             resultStatus: 'success',
         }));
     });
+
+    it.each(['401', '403', 'persistent_403', 'refresh_403', 'changed_lifecycle'] as const)(
+        'bounds Suunto Sleep OAuth recovery and fences persistence (%s)', async scenario => {
+            const tokenSnapshot = {
+                id: 'suunto-user-1',
+                data: () => ({ serviceName: ServiceNames.SuuntoApp, userName: 'suunto-user-1' }),
+                ref: { parent: { parent: { id: 'test-user-uid' } } },
+            };
+            hoisted.tokenRootGet.mockResolvedValue({ docs: [tokenSnapshot], empty: false });
+            const initialGuards = await hoisted.captureActiveSuuntoWebhookWriteLifecycleGuards();
+            hoisted.captureActiveSuuntoWebhookWriteLifecycleGuards.mockClear();
+            const rotatedGuards = { ...initialGuards, requiredExistingTokenCredential: {
+                ...initialGuards.requiredExistingTokenCredential, accessToken: 'new-token',
+            } };
+            hoisted.captureActiveSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(rotatedGuards)
+                .mockResolvedValueOnce(initialGuards).mockResolvedValueOnce(initialGuards);
+            hoisted.getTokenData.mockResolvedValueOnce({ accessToken: 'old-token', userName: 'suunto-user-1' })
+                .mockResolvedValue({ accessToken: 'new-token', userName: 'suunto-user-1' });
+            const statusCode = scenario === '401' ? 401 : 403;
+            hoisted.requestGet.mockRejectedValueOnce(Object.assign(new Error('resource rejected'), { statusCode }))
+                .mockResolvedValue({ samples: [] });
+            if (scenario === 'persistent_403') hoisted.requestGet.mockRejectedValue(Object.assign(new Error('rejected again'), { statusCode: 403 }));
+            if (scenario === 'refresh_403') hoisted.getTokenData.mockRejectedValueOnce(Object.assign(new Error('refresh rejected'), { statusCode: 403 }));
+            if (scenario === 'changed_lifecycle') hoisted.areSuuntoWebhookWriteLifecycleGuardsContinuous
+                .mockReturnValueOnce(true).mockReturnValue(false);
+            const update = vi.fn().mockResolvedValue(undefined);
+            const result = await processSleepSyncQueueItem({
+                id: 'suunto-auth-recovery', dateCreated: 1_700_000_000_000,
+                processed: false, provider: 'SuuntoApp', userID: 'test-user-uid', providerUserId: 'suunto-user-1',
+                retryCount: 0, type: 'suunto_poll', rangeStartMs: 1_777_392_000_000, rangeEndMs: 1_777_478_400_000,
+                ref: { update } as unknown as admin.firestore.DocumentReference,
+            });
+            expect(hoisted.getTokenData).toHaveBeenCalledTimes(2);
+            expect(hoisted.getTokenData).toHaveBeenNthCalledWith(2, tokenSnapshot, ServiceNames.SuuntoApp, true);
+            const success = scenario === '401' || scenario === '403';
+            expect(hoisted.requestGet).toHaveBeenCalledTimes(scenario === 'refresh_403' || scenario === 'changed_lifecycle' ? 1 : 2);
+            if (success) {
+                expect(result).toBe(QueueResult.Processed);
+                expect(hoisted.requestGet).toHaveBeenNthCalledWith(2, expect.objectContaining({
+                    headers: expect.objectContaining({ Authorization: 'Bearer new-token' }),
+                }));
+                expect(hoisted.upsertSleepSessions).toHaveBeenCalledWith('test-user-uid', [], expect.any(Number), rotatedGuards);
+                expect(update).toHaveBeenCalledWith(expect.objectContaining({ processed: true, resultStatus: 'success' }));
+            } else {
+                expect(hoisted.upsertSleepSessions).not.toHaveBeenCalled();
+                expect(result).toBe(scenario === 'changed_lifecycle' ? QueueResult.Processed : QueueResult.RetryIncremented);
+                expect(update).not.toHaveBeenCalledWith(expect.objectContaining({ resultStatus: 'success' }));
+            }
+        });
 
     it('rebases a same-generation Suunto credential rotation before finalizing an embedded Sleep webhook', async () => {
         const tokenSnapshot = {
@@ -2623,9 +3160,43 @@ describe('sleep queue', () => {
             context: 'NO_TOKEN_FOUND',
             error: 'No SuuntoApp token found',
         }));
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[SleepSync] Skipping provider work for queue item suunto-sleep-no-token: no matching connected SuuntoApp token; moving to failed_jobs (NO_TOKEN_FOUND).',
+        );
         expect(hoisted.loggerWarn.mock.calls.flat().join(' ')).not.toContain('unknown-suunto-user');
         expect(hoisted.batchDelete).toHaveBeenCalledWith(queueRef);
         expect(hoisted.docUpdate).not.toHaveBeenCalled();
+    });
+
+    it('describes missing-token Suunto Health work as skipped without changing its DLQ outcome', async () => {
+        const queueRef = { parent: { id: 'sleepSyncQueue' } };
+        const result = await processSleepSyncQueueItem({
+            id: 'suunto-health-no-token',
+            dateCreated: 1_700_000_000_000,
+            processed: false,
+            provider: 'SuuntoApp',
+            userID: 'test-user-uid',
+            providerUserId: 'private-suunto-account',
+            retryCount: 0,
+            type: 'suunto_health_poll',
+            healthTrigger: 'webhook',
+            rangeStartMs: 1_700_000_000_000,
+            rangeEndMs: 1_700_086_400_000,
+            ref: queueRef as unknown as admin.firestore.DocumentReference,
+        });
+
+        expect(result).toBe(QueueResult.MovedToDLQ);
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[SleepSync] Skipping provider work for queue item suunto-health-no-token: no matching connected SuuntoApp token; moving to failed_jobs (NO_TOKEN_FOUND).',
+        );
+        expect(hoisted.loggerWarn.mock.calls.flat().join(' ')).not.toContain('private-suunto-account');
+        expect(hoisted.processSuuntoHealthQueueItem).not.toHaveBeenCalled();
+        expect(hoisted.requestGet).not.toHaveBeenCalled();
+        expect(hoisted.batchSet).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
+            context: 'NO_TOKEN_FOUND',
+            processed: false,
+        }));
+        expect(hoisted.batchDelete).toHaveBeenCalledWith(queueRef);
     });
 
     it('drops a previously queued embedded Suunto webhook when its provider-authorized binding is absent', async () => {
@@ -3422,6 +3993,248 @@ describe('sleep queue', () => {
             context: 'NO_TOKEN_FOUND',
         }));
         expect(hoisted.batchDelete).toHaveBeenCalledWith(queueRef);
+    });
+
+    describe('owned Suunto work after completed disconnect', () => {
+        const disconnectedMeta = {
+            connectionStateGeneration: 'cleared-generation',
+            connectionAccountsRevisionKey: 'empty-accounts-revision',
+            connectionAccounts: [],
+        };
+        const queueRef = { parent: { id: 'sleepSyncQueue' }, get: vi.fn(), update: vi.fn() };
+        let item: SleepSyncQueueItemInterface;
+        const committedLogs = () => hoisted.loggerInfo.mock.calls.filter(([message, data]) =>
+            message === '[HealthSleep]' && data?.event === 'committed');
+
+        beforeEach(() => {
+            hoisted.getServiceConnectionMeta.mockResolvedValue(disconnectedMeta);
+            item = {
+                id: 'suunto-disconnected-work', dateCreated: 1_700_000_000_000,
+                dispatchedToCloudTask: 1_700_000_000_500, queueRevision: 'original-revision',
+                processed: false, provider: 'SuuntoApp', userID: 'test-user-uid',
+                providerUserId: 'old-suunto-account', retryCount: 0, type: 'suunto_health_poll',
+                healthTrigger: 'poll',
+                rangeStartMs: 1_777_392_000_000, rangeEndMs: 1_777_478_400_000,
+                ref: queueRef as unknown as NonNullable<SleepSyncQueueItemInterface['ref']>,
+            };
+            queueRef.get.mockReset().mockImplementation(async () => ({ exists: true, data: () => ({ ...item }) }));
+            queueRef.update.mockReset().mockResolvedValue(undefined);
+        });
+
+        it.each(['suunto_poll', 'suunto_webhook', 'suunto_health_poll'] as const)('commits an INFO skip for %s without domain writes or DLQ', async type => {
+            item.type = type;
+            if (type !== 'suunto_health_poll') item.healthTrigger = undefined;
+            if (type === 'suunto_webhook') {
+                item.payload = { samples: [{ SleepId: 123 }] };
+                item.suuntoWebhookAuthorityDigest = SUUNTO_WEBHOOK_AUTHORITY_DIGEST;
+            }
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Processed);
+            expect(queueRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: true, resultStatus: 'skipped', skippedReason: 'service_disconnected',
+                skippedContext: 'SERVICE_DISCONNECTED',
+            }));
+            expect(committedLogs()).toEqual([[expect.any(String), expect.objectContaining({ provider: 'SuuntoApp', outcome: 'skipped' })]]);
+            expect(hoisted.loggerWarn).not.toHaveBeenCalled();
+            expect(hoisted.loggerError).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(hoisted.collectionGroupGet).not.toHaveBeenCalled();
+            expect(hoisted.getTokenData).not.toHaveBeenCalled();
+            expect(hoisted.requestGet).not.toHaveBeenCalled();
+            expect(hoisted.upsertSleepSessions).not.toHaveBeenCalled();
+            expect(hoisted.replaceHealthSourceRecord).not.toHaveBeenCalled();
+            expect(hoisted.markSleepSyncError).not.toHaveBeenCalled();
+            expect(hoisted.updateHealthSyncState).not.toHaveBeenCalled();
+        });
+
+        it.each([null, {}, { ...disconnectedMeta, connectionState: 'connected' },
+            { ...disconnectedMeta, connectionState: 'reconnect_required' },
+            { ...disconnectedMeta, connectionState: 'disconnect_pending' },
+        ])('retains missing-token DLQ handling without a confirmed disconnect: %j', async meta => {
+            hoisted.getServiceConnectionMeta.mockResolvedValue(meta);
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.MovedToDLQ);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ context: 'NO_TOKEN_FOUND' }));
+        });
+
+        it('leaves legacy unowned work unchanged', async () => {
+            item.userID = undefined;
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.MovedToDLQ);
+            expect(hoisted.getServiceConnectionMeta).not.toHaveBeenCalled();
+        });
+
+        it('does not mistake a missing exact account for a completed service disconnect', async () => {
+            hoisted.tokenRootGet.mockResolvedValueOnce({ docs: [], empty: true })
+                .mockResolvedValueOnce({ docs: [{}], empty: false });
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.MovedToDLQ);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(hoisted.collectionGroupGet).not.toHaveBeenCalled();
+            expect(hoisted.getTokenData).not.toHaveBeenCalled();
+        });
+
+        it.each(['replaced', 'processed', 'removed', 'leased'])('does not write or count a %s row', async state => {
+            queueRef.get.mockResolvedValue({ exists: state !== 'removed', data: () => ({ ...item,
+                ...(state === 'replaced' ? { queueRevision: 'new-revision' }
+                    : state === 'leased' ? { processingOwner: 'another-worker', processingRevision: 'revision:original-revision', processingLeaseExpiresAt: Date.now() + 60_000 }
+                    : { processed: true }),
+            }) });
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Processed);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(committedLogs()).toEqual([]);
+        });
+
+        it('does not write or count a skip after account deletion wins', async () => {
+            hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({ shouldSkip: true });
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Processed);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(committedLogs()).toEqual([]);
+        });
+
+        it.each(['metadata', 'credentials'])('propagates %s read failure instead of making a terminal decision', async stage => {
+            const error = new Error('temporary Firestore failure');
+            if (stage === 'metadata') hoisted.getServiceConnectionMeta.mockRejectedValueOnce(error);
+            else hoisted.tokenRootGet.mockResolvedValueOnce({ docs: [], empty: true }).mockRejectedValueOnce(error);
+            await expect(processSleepSyncQueueItem(item)).rejects.toBe(error);
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(committedLogs()).toEqual([]);
+        });
+
+        it('keeps a failed completion retryable', async () => {
+            hoisted.runTransaction.mockRejectedValueOnce(new Error('temporary commit failure'));
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Failed);
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(committedLogs()).toEqual([]);
+        });
+    });
+
+    describe('COROS polls after completed disconnect', () => {
+        const disconnectedMeta = {
+            connectionStateGeneration: 'cleared-generation',
+            connectionAccountsRevisionKey: 'confirmed-empty-accounts',
+            connectionAccounts: [],
+        };
+        const queueRef = { parent: { id: 'sleepSyncQueue' }, get: vi.fn(), update: vi.fn() };
+        let item: SleepSyncQueueItemInterface;
+        const committedLogs = () => hoisted.loggerInfo.mock.calls.filter(([message, data]) =>
+            message === '[HealthSleep]' && data?.event === 'committed');
+
+        beforeEach(() => {
+            hoisted.disabledProviders.splice(0, hoisted.disabledProviders.length, 'GarminAPI');
+            hoisted.getServiceConnectionMeta.mockResolvedValue(disconnectedMeta);
+            item = {
+                id: 'coros-disconnected-poll', dateCreated: 1_700_000_000_000,
+                dispatchedToCloudTask: 1_700_000_000_500, queueRevision: 'original-revision',
+                processed: false, provider: 'COROSAPI', userID: 'test-user-uid',
+                providerUserId: 'old-coros-account', retryCount: 0, type: 'coros_poll',
+                rangeStartMs: 1_777_392_000_000, rangeEndMs: 1_777_478_400_000,
+                ref: queueRef as unknown as NonNullable<SleepSyncQueueItemInterface['ref']>,
+            };
+            queueRef.get.mockReset().mockImplementation(async () => ({ exists: true, data: () => item }));
+            queueRef.update.mockReset().mockResolvedValue(undefined);
+        });
+
+        it.each([undefined, 'original-revision'])('commits an INFO-only skip through existing completion guards (revision: %s)', async revision => {
+            item.queueRevision = revision;
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Processed);
+            expect(queueRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                processed: true, resultStatus: 'skipped', skippedReason: 'service_disconnected',
+                skippedContext: 'SERVICE_DISCONNECTED',
+            }));
+            expect(hoisted.loggerInfo).toHaveBeenCalledWith('[SleepSync][COROS] Skipping poll after completed disconnect.', {
+                queueItemId: item.id, reason: 'service_disconnected',
+            });
+            expect(committedLogs()).toEqual([[expect.any(String), expect.objectContaining({
+                provider: 'COROSAPI', workload: 'sleep_sync', outcome: 'skipped',
+            })]]);
+            expect(hoisted.loggerWarn).not.toHaveBeenCalled();
+            expect(hoisted.loggerError).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(hoisted.batchDelete).not.toHaveBeenCalled();
+            expect(hoisted.collectionGroupGet).not.toHaveBeenCalled();
+            expect(hoisted.getActiveCOROSTokenSnapshot).toHaveBeenCalledWith(item.userID, item.providerUserId);
+            expect(hoisted.getTokenData).not.toHaveBeenCalled();
+            expect(hoisted.requestGet).not.toHaveBeenCalled();
+            expect(hoisted.upsertSleepSessions).not.toHaveBeenCalled();
+            expect(hoisted.replaceHealthSourceRecord).not.toHaveBeenCalled();
+            expect(hoisted.markSleepSyncError).not.toHaveBeenCalled();
+            expect(hoisted.updateHealthSyncState).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            null, {},
+            { ...disconnectedMeta, connectionState: 'connected' },
+            { ...disconnectedMeta, connectionState: 'reconnect_required' },
+            { ...disconnectedMeta, connectionState: 'disconnect_pending' },
+            { ...disconnectedMeta, connectionStateGeneration: undefined },
+            { ...disconnectedMeta, connectionStateGeneration: 42 },
+            { ...disconnectedMeta, connectionStateGeneration: ' ' },
+            { ...disconnectedMeta, connectionAccountsRevisionKey: undefined },
+            { ...disconnectedMeta, connectionAccountsRevisionKey: 42 },
+            { ...disconnectedMeta, connectionAccounts: undefined },
+            { ...disconnectedMeta, connectionAccounts: [{ providerUserId: 'another-account' }] },
+        ])('preserves missing-token failures without confirmed disconnect evidence: %j', async meta => {
+            hoisted.getServiceConnectionMeta.mockResolvedValue(meta);
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.MovedToDLQ);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ context: 'NO_TOKEN_FOUND' }));
+            expect(committedLogs()).toEqual([[expect.any(String), expect.objectContaining({ outcome: 'dead_lettered' })]]);
+        });
+
+        it('preserves mismatch failures when a token root still exists despite an empty account projection', async () => {
+            hoisted.docGet.mockResolvedValue({ exists: true, data: () => ({}) });
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.MovedToDLQ);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ context: 'NO_TOKEN_FOUND' }));
+            expect(hoisted.collectionGroupGet).not.toHaveBeenCalled();
+        });
+
+        it('does not infer disconnect for a legacy poll without a recorded owner', async () => {
+            item.userID = undefined;
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.MovedToDLQ);
+            expect(hoisted.getServiceConnectionMeta).not.toHaveBeenCalled();
+            expect(queueRef.update).not.toHaveBeenCalled();
+        });
+
+        it.each(['replaced', 'processed', 'removed', 'leased'])('does not count or overwrite a %s queue row', async state => {
+            queueRef.get.mockResolvedValue({
+                exists: state !== 'removed',
+                data: () => ({ ...item, ...(state === 'replaced'
+                    ? { queueRevision: 'new-revision' }
+                    : state === 'leased' ? {
+                        processingOwner: 'another-worker', processingRevision: 'revision:original-revision',
+                        processingLeaseExpiresAt: Date.now() + 60_000,
+                    } : { processed: true }) }),
+            });
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Processed);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(committedLogs()).toEqual([]);
+        });
+
+        it('rechecks account deletion before committing a skip', async () => {
+            hoisted.getUserDeletionGuardStateInTransaction.mockResolvedValue({ shouldSkip: true });
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Processed);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(committedLogs()).toEqual([]);
+        });
+
+        it.each(['metadata', 'root'])('keeps %s read failures retryable without inventing a skip or DLQ', async stage => {
+            const error = new Error('temporary Firestore failure');
+            if (stage === 'metadata') hoisted.getServiceConnectionMeta.mockRejectedValueOnce(error);
+            else hoisted.docGet.mockRejectedValueOnce(error);
+            await expect(processSleepSyncQueueItem(item)).rejects.toBe(error);
+            expect(queueRef.update).not.toHaveBeenCalled();
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(committedLogs()).toEqual([]);
+        });
+
+        it('keeps failed completion retryable and does not count an uncommitted skip', async () => {
+            hoisted.runTransaction.mockRejectedValueOnce(new Error('temporary commit failure'));
+            await expect(processSleepSyncQueueItem(item)).resolves.toBe(QueueResult.Failed);
+            expect(hoisted.batchSet).not.toHaveBeenCalled();
+            expect(committedLogs()).toEqual([]);
+        });
     });
 
     it('does not process a COROS sleep queue item for an inactive legacy account', async () => {
@@ -5038,6 +5851,13 @@ describe('sleep queue', () => {
                     sourceRecordKey: '2026-08-26:0',
                 },
                 observedAtMs: Date.parse('2026-08-26T12:00:00.000Z'),
+            }, {
+                input: {
+                    provider: 'SuuntoApp',
+                    sourceRecordType: 'suunto_247_recovery',
+                    sourceRecordKey: '2026-08-26:0',
+                },
+                observedAtMs: Date.parse('2026-08-26T13:00:00.000Z'),
             }],
             lifecycleGuards,
         });
@@ -5054,6 +5874,7 @@ describe('sleep queue', () => {
             retryCount: 0,
             type: 'suunto_health_poll',
             healthTrigger,
+            ...(healthTrigger === 'webhook' ? { suuntoHealthWebhookFeedMask: 1 } : {}),
             rangeStartMs: Date.parse('2026-08-26T00:00:00.000Z'),
             rangeEndMs: Date.parse('2026-08-27T00:00:00.000Z'),
             ref: { update } as unknown as NonNullable<SleepSyncQueueItemInterface['ref']>,
@@ -5061,11 +5882,20 @@ describe('sleep queue', () => {
 
         expect(result).toBe(QueueResult.Processed);
         expect(hoisted.processSuuntoHealthQueueItem).toHaveBeenCalled();
-        expect(hoisted.replaceHealthSourceRecord).toHaveBeenCalledWith(
+        expect(hoisted.replaceHealthSourceRecords).toHaveBeenCalledOnce();
+        expect(hoisted.replaceHealthSourceRecords).toHaveBeenCalledWith(
             healthUserID,
-            expect.objectContaining({ sourceRecordType: 'suunto_247_activity' }),
+            [
+                expect.objectContaining({ sourceRecordType: 'suunto_247_activity' }),
+                expect.objectContaining({ sourceRecordType: 'suunto_247_recovery' }),
+            ],
             expect.any(Number),
-            lifecycleGuards,
+            expect.objectContaining({ ...lifecycleGuards, additionalRequiredDocumentFieldValues:
+                expect.arrayContaining([...lifecycleGuards.additionalRequiredDocumentFieldValues,
+                    expect.objectContaining({ expectedFields: expect.objectContaining({
+                        processed: false, userID: healthUserID, processingOwner: expect.any(String),
+                    }) }),
+                ]) }),
         );
         expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
             healthUserID,
@@ -5077,15 +5907,285 @@ describe('sleep queue', () => {
                 lastErrorCode: null,
             }),
             expect.any(Number),
-            lifecycleGuards,
+            expect.objectContaining({ ...lifecycleGuards, additionalRequiredDocumentFieldValues:
+                expect.arrayContaining(lifecycleGuards.additionalRequiredDocumentFieldValues) }),
         );
         expect(hoisted.upsertSleepSessions).not.toHaveBeenCalled();
         expect(hoisted.updateSleepSyncState).not.toHaveBeenCalled();
         expect(update).toHaveBeenCalledWith(expect.objectContaining({
             resultStatus: 'success',
             sessionsWritten: 0,
-            healthRecordsWritten: 1,
+            healthRecordsWritten: 2,
         }));
+        expect(hoisted.loggerInfo).toHaveBeenCalledWith('[HealthSync][Suunto] Feed telemetry',
+            expect.objectContaining({
+                healthTrigger,
+                webhookFeedMask: healthTrigger === 'webhook' ? 1 : 0,
+                feeds: expect.objectContaining({
+                    activity: expect.objectContaining({ written: 1 }),
+                    recovery: expect.objectContaining({ written: 1 }),
+                }),
+            }));
+    });
+
+    it('rebases only the uncommitted half when a split Suunto Health batch sees credential rotation', async () => {
+        const healthUserID = 'suunto-health-user';
+        const tokenRef = {
+            path: `suuntoAppAccessTokens/${healthUserID}/tokens/suunto-user-1`,
+            parent: { parent: { id: healthUserID } },
+        };
+        const tokenSnapshot = {
+            id: 'suunto-user-1',
+            data: () => ({
+                userName: 'suunto-user-1',
+                accessToken: 'suunto-access-token',
+                tokenCredentialGeneration: 'suunto-credential-generation-1',
+            }),
+            ref: tokenRef,
+        };
+        const lifecycleGuards = {
+            requiredExistingDocumentRef: tokenRef,
+            requiredExistingTokenCredential: {
+                accessToken: 'suunto-access-token',
+                credentialGeneration: 'suunto-credential-generation-1',
+            },
+            requiredDocumentFieldValues: {
+                documentRef: { path: 'suuntoHealthWebhookAccountBindings/binding-1' },
+                expectedFields: { authorizationSource: 'oauth_callback' },
+            },
+            additionalRequiredDocumentFieldValues: [],
+        };
+        const rotatedGuards = {
+            ...lifecycleGuards,
+            requiredExistingTokenCredential: {
+                accessToken: 'rotated-access-token',
+                credentialGeneration: 'suunto-credential-generation-1',
+            },
+        };
+        const healthResults = [{
+            input: {
+                provider: 'SuuntoApp',
+                sourceRecordType: 'suunto_247_activity',
+                sourceRecordKey: '2026-08-26:0',
+            },
+            observedAtMs: Date.parse('2026-08-26T12:00:00.000Z'),
+        }, {
+            input: {
+                provider: 'SuuntoApp',
+                sourceRecordType: 'suunto_247_recovery',
+                sourceRecordKey: '2026-08-26:0',
+            },
+            observedAtMs: Date.parse('2026-08-26T13:00:00.000Z'),
+        }];
+        const writeResult = (sourceRecordId: string, status: 'written' | 'skipped_lifecycle_guard') => ({
+            status,
+            sourceRecordId,
+            sourceRecord: null,
+            chunksWritten: 0,
+            chunksDeleted: 0,
+        });
+        const splitRequired = new Error('split required');
+        hoisted.isHealthSourceRecordBatchSplittableError.mockImplementation(error => error === splitRequired);
+        hoisted.tokenRootGet.mockResolvedValue({ docs: [tokenSnapshot], empty: false });
+        hoisted.captureActiveSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(lifecycleGuards);
+        hoisted.captureCurrentSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(rotatedGuards);
+        hoisted.processSuuntoHealthQueueItem.mockResolvedValue({ healthResults, lifecycleGuards });
+        hoisted.replaceHealthSourceRecords
+            .mockRejectedValueOnce(splitRequired)
+            .mockResolvedValueOnce([writeResult('activity', 'written')])
+            .mockResolvedValueOnce([writeResult('recovery', 'skipped_lifecycle_guard')])
+            .mockResolvedValueOnce([writeResult('recovery', 'written')]);
+        const update = vi.fn().mockResolvedValue(undefined);
+
+        const result = await processSleepSyncQueueItem({
+            id: 'suunto-health-split-credential-rotation',
+            dateCreated: 1_700_000_000_000,
+            dispatchedToCloudTask: 1_700_000_000_500,
+            processed: false,
+            provider: 'SuuntoApp',
+            userID: healthUserID,
+            providerUserId: 'suunto-user-1',
+            retryCount: 0,
+            type: 'suunto_health_poll',
+            healthTrigger: 'webhook',
+            rangeStartMs: Date.parse('2026-08-26T00:00:00.000Z'),
+            rangeEndMs: Date.parse('2026-08-27T00:00:00.000Z'),
+            ref: { update } as unknown as NonNullable<SleepSyncQueueItemInterface['ref']>,
+        });
+
+        expect(result).toBe(QueueResult.Processed);
+        expect(hoisted.replaceHealthSourceRecords.mock.calls.map(call => (
+            (call[1] as Array<{ sourceRecordType: string }>).map(input => input.sourceRecordType)
+        ))).toEqual([
+            ['suunto_247_activity', 'suunto_247_recovery'],
+            ['suunto_247_activity'],
+            ['suunto_247_recovery'],
+            ['suunto_247_recovery'],
+        ]);
+        expect(hoisted.captureCurrentSuuntoWebhookWriteLifecycleGuards).toHaveBeenCalledOnce();
+        expect(hoisted.replaceHealthSourceRecords.mock.calls[3]?.[3]).toEqual(expect.objectContaining({
+            requiredExistingTokenCredential: rotatedGuards.requiredExistingTokenCredential,
+        }));
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({
+            resultStatus: 'success',
+            healthRecordsWritten: 2,
+            healthRecordsUnchanged: 0,
+        }));
+    });
+
+    it.each(['success', 'enqueue_rejected', 'enqueue_failure', 'marker_deleted', 'marker_stale', 'marker_failure', 'write_failure', 'checkpoint_failure'])(
+        'durably hands off Suunto windows and resumes safely after %s', async failure => {
+            const start = Date.parse('2026-08-01T00:00:00Z');
+            const day = 86_400_000;
+            const tokenData = { serviceName: ServiceNames.SuuntoApp, userName: 'suunto-user-1',
+                accessToken: 'suunto-access-token', tokenCredentialGeneration: 'generation' };
+            const tokenRef = { path: 'token', parent: { parent: { id: 'test-user-uid' } },
+                get: async () => ({ exists: true, data: () => tokenData }) };
+            const guards = { requiredExistingDocumentRef: tokenRef,
+                requiredExistingTokenCredential: getTokenCredentialSnapshot(tokenData),
+                requiredDocumentFieldValues: { documentRef: { path: 'binding',
+                    get: async () => ({ exists: true, data: () => ({ generation: 'one' }) }) },
+                expectedFields: { generation: 'one' } }, additionalRequiredDocumentFieldValues: [] };
+            hoisted.tokenRootGet.mockResolvedValue({ docs: [{ id: 'suunto-user-1', ref: tokenRef,
+                data: () => tokenData }], empty: false });
+            hoisted.captureActiveSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(guards);
+            hoisted.captureCurrentSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(guards);
+            const continuation = { nextStartMs: start + day, targetWindowMs: day, authorityDigest: 'a'.repeat(64) };
+            hoisted.processSuuntoHealthQueueItem.mockResolvedValue({ lifecycleGuards: guards, continuation,
+                healthResults: [{ input: { sourceRecordType: 'suunto_247_activity', sourceRecordKey: 'opaque' },
+                    observedAtMs: start + 3_600_000 }] });
+            const state: Record<string, unknown> = { id: 'suunto-continuation', dateCreated: 1_700_000_000_000,
+                queueRevision: 'original', type: 'suunto_health_poll', provider: 'SuuntoApp',
+                providerUserId: 'suunto-user-1', userID: 'test-user-uid', healthTrigger: 'backfill',
+                rangeStartMs: start, rangeEndMs: start + 2 * day, processed: false, retryCount: 7,
+                dispatchedToCloudTask: 1_700_000_000_500 };
+            const update = vi.fn(async (data: Record<string, unknown>) => { Object.assign(state, data); });
+            const ref = { path: 'sleepSyncQueue/suunto-continuation', parent: { id: 'sleepSyncQueue' }, update,
+                get: async () => ({ exists: true, data: () => ({ ...state }) }) } as unknown as admin.firestore.DocumentReference;
+            hoisted.claimSleepQueueRevision.mockImplementation(async (_item, _user, owner) => {
+                state.processingOwner = owner;
+                state.processingRevision = `revision:${state.queueRevision}`;
+                return 'claimed';
+            });
+            if (failure === 'enqueue_rejected') hoisted.enqueueSleepSyncTask.mockResolvedValueOnce(false);
+            if (failure === 'enqueue_failure') hoisted.enqueueSleepSyncTask.mockRejectedValueOnce(Error('unavailable'));
+            if (failure === 'marker_deleted') hoisted.markQueueItemDispatchedIfUserActive.mockResolvedValueOnce('skipped_deleted_user');
+            if (failure === 'marker_stale') hoisted.markQueueItemDispatchedIfUserActive.mockResolvedValueOnce('not_current');
+            if (failure === 'marker_failure') hoisted.markQueueItemDispatchedIfUserActive.mockRejectedValueOnce(Error('unavailable'));
+            if (failure === 'write_failure') hoisted.replaceHealthSourceRecords.mockRejectedValueOnce(Error('unavailable'));
+            if (failure === 'checkpoint_failure') hoisted.transactionUpdate.mockImplementationOnce(() => { throw Error('unavailable'); });
+
+            const result = await processSleepSyncQueueItem({ ...state, ref } as unknown as SleepSyncQueueItemInterface);
+            if (failure === 'write_failure' || failure === 'checkpoint_failure') {
+                expect(state.suuntoHealthProgress).toBeUndefined();
+                expect(state.queueRevision).toBe('original');
+                expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+                expect(state.processed).toBe(false);
+                return;
+            }
+            expect(result).toBe(failure === 'success' ? QueueResult.HealthContinuationScheduled
+                : failure === 'marker_deleted' ? QueueResult.Processed : QueueResult.Deferred);
+            expect(state).toMatchObject({ processed: false, retryCount: 0,
+                suuntoHealthProgress: { ...continuation, recordsWritten: 1, lastObservedAtMs: start + 3_600_000 } });
+            expect(state.queueRevision).not.toBe('original');
+            expect(hoisted.updateHealthSyncState).not.toHaveBeenCalled();
+            expect(hoisted.enqueueSleepSyncTask).toHaveBeenCalledWith('suunto-continuation', state.dateCreated,
+                undefined, { queueRevision: state.queueRevision, queueDateCreated: state.dateCreated });
+            // The next task (or dispatcher recovery) reads the durable cursor.
+            hoisted.processSuuntoHealthQueueItem.mockResolvedValueOnce({ lifecycleGuards: guards,
+                continuation: null, healthResults: [] });
+            const final = await processSleepSyncQueueItem({ ...state, ref } as unknown as SleepSyncQueueItemInterface);
+            expect(final).toBe(QueueResult.Processed);
+            expect(hoisted.processSuuntoHealthQueueItem).toHaveBeenLastCalledWith(
+                expect.objectContaining({ suuntoHealthProgress: expect.objectContaining(continuation) }),
+                expect.anything(), 'test-user-uid', expect.anything(), expect.any(Function), expect.any(Function),
+                expect.any(Function));
+            expect(state).toMatchObject({ processed: true, resultStatus: 'success', healthRecordsWritten: 1 });
+            expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith('test-user-uid', 'SuuntoApp',
+                expect.objectContaining({ lastObservedAtMs: start + 3_600_000 }), expect.any(Number), expect.anything());
+        },
+    );
+
+    it.each([
+        ['GarminAPI', 'pending'], ['SuuntoApp', 'pending'], ['COROSAPI', 'pending'],
+        ['GarminAPI', 'exhausted'], ['SuuntoApp', 'exhausted'], ['COROSAPI', 'exhausted'],
+        ['GarminAPI', 'refreshed'], ['SuuntoApp', 'refreshed'], ['COROSAPI', 'refreshed'],
+        ['GarminAPI', 'replaced'], ['SuuntoApp', 'replaced'], ['COROSAPI', 'replaced'],
+        ['GarminAPI', 'read_failed'], ['SuuntoApp', 'read_failed'], ['COROSAPI', 'read_failed'],
+    ] as const)('reports %s Health retries from the existing queue transition: %s', async (provider, outcome) => {
+        hoisted.disabledProviders.splice(0);
+        const account = `${provider}-account`;
+        const accountField = provider === 'GarminAPI' ? 'userID' : provider === 'SuuntoApp' ? 'userName' : 'openId';
+        const tokenData = { [accountField]: account, accessToken: 'original-token', tokenCredentialGeneration: 'original-generation' };
+        let tokenReadFailed = false;
+        const tokenRef = { path: `${provider}/test-user-uid/tokens/account`, parent: { parent: { id: 'test-user-uid' } },
+            get: async () => {
+                if (tokenReadFailed) throw new Error('PRIVATE_TOKEN_DOCUMENT_PATH');
+                return { exists: true, data: () => tokenData };
+            } };
+        const token = { id: account, exists: true, ref: tokenRef, data: () => tokenData };
+        const guards = { requiredExistingDocumentRef: tokenRef,
+            requiredExistingTokenCredential: getTokenCredentialSnapshot(tokenData),
+            requiredDocumentFieldValues: { documentRef: { path: 'connection' }, expectedFields: { connectionStateGeneration: 'connection-1' } },
+            additionalRequiredDocumentFieldValues: [] };
+        hoisted.tokenRootGet.mockResolvedValue({ docs: [token], empty: false });
+        hoisted.getActiveCOROSTokenSnapshot.mockResolvedValue(token);
+        hoisted.getServiceConnectionMeta.mockResolvedValue({ providerUserId: account, connectionState: 'connected', connectionStateGeneration: 'connection-1' });
+        hoisted.captureActiveGarminHealthWriteLifecycleGuards.mockResolvedValue(guards);
+        hoisted.captureSuuntoHealthWriteLifecycleGuards.mockResolvedValue(guards);
+        hoisted.captureActiveSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(guards);
+        hoisted.captureCurrentSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(guards);
+        if (provider === 'GarminAPI') hoisted.processGarminHealthQueueItem.mockRejectedValue(new Error('provider unavailable'));
+        else if (provider === 'SuuntoApp') hoisted.processSuuntoHealthQueueItem.mockRejectedValue(new Error('provider unavailable'));
+        else hoisted.requestGet.mockRejectedValue(new Error('provider unavailable'));
+        hoisted.updateHealthSyncState.mockImplementationOnce(async () => {
+            if (outcome === 'refreshed') tokenData.accessToken = 'refreshed-token';
+            if (outcome === 'replaced') tokenData.tokenCredentialGeneration = 'replacement-generation';
+            if (outcome === 'read_failed') tokenReadFailed = true;
+            return true;
+        });
+        const state: Record<string, unknown> = {
+            provider, providerUserId: account, userID: 'test-user-uid', dateCreated: 1_700_000_000_000,
+            processed: false, queueRevision: 'retry-status', retryCount: outcome === 'pending' ? 0 : PROVIDER_MAX_RETRY_COUNT - 1,
+            type: provider === 'GarminAPI' ? 'garmin_ping' : provider === 'SuuntoApp' ? 'suunto_health_poll' : 'coros_poll',
+            ...(provider === 'GarminAPI' ? { garminSummaryType: 'dailies',
+                callbackURL: 'https://apis.garmin.com/wellness-api/rest/dailies?uploadStartTimeInSeconds=1777424400&uploadEndTimeInSeconds=1777424460&token=fixture-token',
+            } : { ...(provider === 'SuuntoApp' ? { healthTrigger: 'poll' } : {}),
+                rangeStartMs: Date.parse('2026-04-28T00:00:00Z'), rangeEndMs: Date.parse('2026-04-29T00:00:00Z'),
+            }),
+        };
+        let claimedOwner = '';
+        hoisted.claimSleepQueueRevision.mockImplementation(async (_item, _uid, owner) => {
+            claimedOwner = owner;
+            Object.assign(state, { processingOwner: owner, processingRevision: 'revision:retry-status' });
+            return 'claimed';
+        });
+        const ref = { parent: { id: 'sleepSyncQueue' }, update: async (patch: object) => { Object.assign(state, patch); },
+            get: async () => ({ exists: true, data: () => ({ ...state }) }) };
+        // The live transaction, not this stale input count, owns exhaustion.
+        if (outcome === 'pending') delete state.userID; // Legacy durable row; the worker has resolved its owner.
+        const result = await processSleepSyncQueueItem({ ...state, userID: 'test-user-uid', retryCount: 0, id: 'health-retry', ref } as unknown as SleepSyncQueueItemInterface);
+        expect(result, JSON.stringify(hoisted.loggerWarn.mock.calls)).toBe(outcome === 'pending' ? QueueResult.RetryIncremented
+            : outcome === 'read_failed' ? QueueResult.Failed : QueueResult.MovedToDLQ);
+        expect(hoisted.updateHealthSyncState.mock.calls[0][2]).toMatchObject({ status: 'failed', retryPending: true });
+        expect(hoisted.updateHealthSyncState.mock.calls[0][4].additionalRequiredDocumentFieldValues).toContainEqual({
+            documentRef: ref, expectedFields: { processed: false, queueRevision: 'retry-status',
+                processingOwner: claimedOwner, processingRevision: 'revision:retry-status' },
+        });
+        if (outcome === 'pending' || outcome === 'replaced' || outcome === 'read_failed') {
+            expect(hoisted.updateHealthSyncState).toHaveBeenCalledOnce();
+            if (outcome === 'read_failed') {
+                expect(hoisted.batchDelete).not.toHaveBeenCalled();
+                expect(JSON.stringify(hoisted.loggerError.mock.calls)).not.toContain('PRIVATE_TOKEN_DOCUMENT_PATH');
+            }
+        } else {
+            expect(hoisted.updateHealthSyncState).toHaveBeenCalledTimes(2);
+            expect(hoisted.updateHealthSyncState.mock.calls[1][2]).toMatchObject({ status: 'failed', retryPending: false });
+            expect(hoisted.updateHealthSyncState.mock.calls[1][4]).toMatchObject({
+                transaction: expect.anything(), requiredExistingTokenCredential: getTokenCredentialSnapshot(tokenData),
+            });
+            expect(hoisted.updateHealthSyncState.mock.calls[1][3]).toBe(hoisted.updateHealthSyncState.mock.calls[0][3]);
+        }
     });
 
     it('rebases a credential-only rotation before recording a Suunto Health failure', async () => {
@@ -5126,7 +6226,16 @@ describe('sleep queue', () => {
         hoisted.tokenRootGet.mockResolvedValue({ docs: [tokenSnapshot], empty: false });
         hoisted.captureActiveSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(initialGuards);
         hoisted.captureCurrentSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(rotatedGuards);
-        hoisted.processSuuntoHealthQueueItem.mockRejectedValueOnce(new Error('provider unavailable'));
+        const originalError = new Error('private-provider-error');
+        hoisted.processSuuntoHealthQueueItem.mockImplementationOnce(async (_item, _token, _uid, _guards, _onGuards, onStage) => {
+            onStage('statistics_request');
+            throw originalError;
+        });
+        hoisted.getSuuntoHealthFailureTelemetry.mockReturnValueOnce({
+            errorName: 'SuuntoHealthRequestError',
+            errorCode: 'suunto_health_request_failed',
+            providerStatusCode: 429,
+        });
         hoisted.updateHealthSyncState
             .mockResolvedValueOnce(false)
             .mockResolvedValueOnce(true);
@@ -5149,6 +6258,9 @@ describe('sleep queue', () => {
         });
 
         expect(result).toBe(QueueResult.RetryIncremented);
+        expect(hoisted.getSuuntoHealthFailureTelemetry).toHaveBeenCalledWith(
+            originalError, 'statistics_request', expect.any(Number),
+        );
         expect(hoisted.updateHealthSyncState).toHaveBeenCalledTimes(2);
         expect(hoisted.updateHealthSyncState).toHaveBeenNthCalledWith(
             1,
@@ -5159,7 +6271,12 @@ describe('sleep queue', () => {
                 lastErrorCode: 'suunto_health_sync_failed',
             }),
             expect.any(Number),
-            initialGuards,
+            { ...initialGuards, additionalRequiredDocumentFieldValues: [{
+                documentRef: expect.objectContaining({ update }), expectedFields: {
+                    processed: false, dateCreated: 1_700_000_000_000,
+                    processingOwner: expect.any(String), processingRevision: expect.any(String),
+                },
+            }] },
         );
         expect(hoisted.updateHealthSyncState).toHaveBeenNthCalledWith(
             2,
@@ -5170,12 +6287,25 @@ describe('sleep queue', () => {
                 lastErrorCode: 'suunto_health_sync_failed',
             }),
             expect.any(Number),
-            rotatedGuards,
+            { ...rotatedGuards, additionalRequiredDocumentFieldValues: [{
+                documentRef: expect.objectContaining({ update }), expectedFields: {
+                    processed: false, dateCreated: 1_700_000_000_000,
+                    processingOwner: expect.any(String), processingRevision: expect.any(String),
+                },
+            }] },
         );
         expect(update).toHaveBeenCalledWith(expect.objectContaining({
             retryCount: 1,
             dispatchedToCloudTask: null,
         }));
+        expect(hoisted.loggerError).toHaveBeenCalledWith(
+            expect.stringContaining('Queue item suunto-health-failure-after-credential-rotation failed'),
+            {
+                errorName: 'SuuntoHealthRequestError',
+                errorCode: 'suunto_health_request_failed',
+                providerStatusCode: 429,
+            },
+        );
     });
 
     it('skips a failed Suunto Health item when rebasing finds changed account authority', async () => {

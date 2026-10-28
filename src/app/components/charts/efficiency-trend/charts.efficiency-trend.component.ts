@@ -1,3 +1,4 @@
+import { dashboardChartFrameGrid } from '../../../helpers/dashboard-chart-layout.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -31,6 +32,7 @@ import {
   isDerivedMetricPendingStatus,
 } from '../../../helpers/derived-metric-status.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
+import { getDateTimeFormatter } from '../../../helpers/date-time-format.helper';
 import type {
   DashboardEfficiencyTrendContext,
   DashboardEfficiencyTrendPoint,
@@ -99,6 +101,7 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
     private logger: LoggerService,
   ) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsEfficiencyTrendComponent]',
@@ -190,8 +193,9 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
       : { show: false };
 
     const values = points.map(point => point.value);
-    const valueAxis = buildDashboardValueAxisConfig(values);
+    const valueAxis = buildDashboardValueAxisConfig(values, { rangeMode: 'data' });
     const labelMode = this.resolveXAxisLabelMode(points);
+    const xAxisSplitNumber = style.isCompactLayout ? 4 : 7;
 
     return {
       animation: false,
@@ -204,8 +208,10 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
         left: 6,
         right: 6,
         top: 8,
-        bottom: 22,
-        containLabel: false,
+        bottom: 6,
+        outerBoundsMode: 'same',
+        outerBoundsContain: 'axisLabel',
+        ...dashboardChartFrameGrid(this.chartDiv.nativeElement),
       },
       tooltip: {
         show: true,
@@ -228,6 +234,7 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
       },
       xAxis: {
         type: 'time',
+        splitNumber: xAxisSplitNumber,
         axisPointer: {
           show: true,
           snap: true,
@@ -242,6 +249,7 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
           color: style.textColor,
           fontSize: style.axisFontSize,
           hideOverlap: true,
+          margin: 3,
           formatter: (value: number) => this.formatXAxisLabel(Number(value), labelMode),
         },
       },
@@ -254,7 +262,10 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
         axisLine: { show: false },
         splitLine: { lineStyle: { color: style.gridColor } },
         axisLabel: {
-          show: false,
+          show: true,
+          color: style.secondaryTextColor,
+          fontSize: style.axisFontSize,
+          hideOverlap: true,
         },
       },
       series: [
@@ -262,8 +273,11 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
           name: 'Efficiency',
           type: 'line',
           data: points.map(point => [point.weekStartMs, point.value] as const),
-          showSymbol: false,
-          symbol: 'none',
+          // A single observed week has no segment to draw. Keep it visible.
+          showSymbol: points.length === 1,
+          symbol: points.length === 1 ? 'circle' : 'none',
+          symbolSize: 6,
+          itemStyle: { color: style.trendLineColor },
           lineStyle: {
             width: 1.3,
             color: style.trendLineColor,
@@ -299,12 +313,12 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
     }
     const date = new Date(value);
     if (mode === 'year') {
-      return date.toLocaleDateString(undefined, { year: 'numeric' });
+      return getDateTimeFormatter(undefined, { year: 'numeric' }).format(date);
     }
     if (mode === 'month-year') {
-      return date.toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
+      return getDateTimeFormatter(undefined, { month: 'short', year: '2-digit' }).format(date);
     }
-    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return getDateTimeFormatter(undefined, { month: 'short', day: 'numeric' }).format(date);
   }
 
   private formatValue(value: unknown): string {

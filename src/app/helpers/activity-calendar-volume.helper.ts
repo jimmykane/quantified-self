@@ -79,7 +79,8 @@ export function buildActivityCalendarFamilyVolumeRows(
     const metricStatus = hasData
       ? `${barMetric.label} ${valueLabel}`
       : `${barMetric.label} unavailable`;
-    const stats = buildActivityCalendarVolumeStats(family.metrics, unitSettings, locale);
+    // Duration already labels the bar; the supporting strip contains only other metrics.
+    const stats = buildActivityCalendarVolumeStats(family.metrics, unitSettings, locale, { includeDuration: false });
 
     return {
       id: family.id,

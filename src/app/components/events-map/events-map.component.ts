@@ -1,3 +1,4 @@
+import type { EventRead } from '@shared/event-read';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -29,7 +30,6 @@ import {
   DataStartPosition,
   DataSwimPaceAvg,
   DataDuration,
-  EventInterface,
   User,
 } from '@sports-alliance/sports-lib';
 import { MapAbstractDirective } from '../map/map-abstract.directive';
@@ -113,7 +113,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   private static readonly SELECTED_TRACKS_LAYER_ID = 'events-map-selected-event-tracks-layer';
 
   @ViewChild('mapDiv', { static: false }) mapDiv?: ElementRef<HTMLDivElement>;
-  @Input() events: EventInterface[] = [];
+  @Input() events: EventRead[] = [];
   @Input() user?: User;
   @Input() clusterMarkers = true;
   @Input() focusLocation?: EventsMapFocusLocation | null;
@@ -132,7 +132,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   public showMapEmptyState = false;
   public mapEmptyStateTitle = '';
   public mapEmptyStateHint = '';
-  public selectedEvent?: EventInterface;
+  public selectedEvent?: EventRead;
   public selectedEventPopupContent: MapEventPopupContent | null = null;
   public selectedEventPositionsByActivity: Array<{
     activity: ActivityInterface;
@@ -149,7 +149,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   private styleLoadHandlerCleanup: (() => void) | null = null;
   private styleReadyHandlerCleanup: (() => void) | null = null;
   private layerClickBindings: LayerBindingRegistry = [];
-  private eventsById = new Map<string, EventInterface>();
+  private eventsById = new Map<string, EventRead>();
   private currentSourceClusterMode: boolean | null = null;
   private pendingEventsFitBounds = true;
   private lastPopupDebugFingerprint: string | null = null;
@@ -250,7 +250,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     this.clearSelectedEvent();
   }
 
-  public getSelectedEventPopupContent(event: EventInterface | null | undefined): MapEventPopupContent {
+  public getSelectedEventPopupContent(event: EventRead | null | undefined): MapEventPopupContent {
     return this.popupContentService.buildFromEvent(event);
   }
 
@@ -593,7 +593,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     ).adjustedColor;
   }
 
-  private resolvePrimaryEventActivityType(event: EventInterface): ActivityTypes {
+  private resolvePrimaryEventActivityType(event: EventRead): ActivityTypes {
     const activityTypes = event.getActivityTypesAsArray?.() || [];
     if (activityTypes.length > 1) {
       return ActivityTypes.Multisport;
@@ -648,7 +648,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   private async hydrateSelectedEventTracks(
     eventId: string,
     requestSequence: number,
-    fallbackEvent: EventInterface
+    fallbackEvent: EventRead
   ): Promise<void> {
     const user = this.user;
     if (!user) {
@@ -902,7 +902,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     return this.resolveCameraBoundsFromCoordinates(coordinates);
   }
 
-  private resolveEventStartCoordinates(event: EventInterface): [number, number] | null {
+  private resolveEventStartCoordinates(event: EventRead): [number, number] | null {
     const startPositionStat = event.getStat(DataStartPosition.type) as DataStartPosition;
     const location = startPositionStat?.getValue?.();
     if (!Number.isFinite(location?.longitudeDegrees) || !Number.isFinite(location?.latitudeDegrees)) {
@@ -1003,7 +1003,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
 
   private logPopupStatSnapshot(
     stage: string,
-    event: EventInterface | null | undefined,
+    event: EventRead | null | undefined,
     popupContent?: MapEventPopupContent
   ): void {
     if (!event) {

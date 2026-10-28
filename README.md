@@ -38,10 +38,10 @@ The main repository areas are:
 
 ## Prerequisites
 
-For the frontend and the repository's CI-compatible workflow, install:
+For frontend tests and the repository's full development workflow, install:
 
 - Git.
-- Node.js 20.19 or later in the Node 20 line. The committed `.nvmrc` selects Node 20, so `nvm use` is the easiest way to match CI.
+- Node.js 22, matching the CI test jobs and Cloud Functions runtime.
 - npm, which is included with Node.js.
 - [Gitleaks](https://github.com/gitleaks/gitleaks), used by the pre-commit credential scan.
 - A [Mapbox public access token](https://docs.mapbox.com/help/getting-started/access-tokens/) for maps and geocoding.
@@ -52,7 +52,7 @@ For Firebase emulators and Rules tests, also install:
 - Java 21, matching the CI environment.
 
 > [!NOTE]
-> `functions/package.json` declares Node.js 22 as the Cloud Functions runtime. Installing Functions dependencies under Node 20 may show an engine warning. Use Node 22 when developing or deploying Functions runtime behavior; the root `.nvmrc` remains the frontend and CI default.
+> The root `.nvmrc` still selects Node 20 for local frontend development. Select Node 22 explicitly with `nvm use 22` for frontend tests and Functions development; the CI test jobs use Node 22 and `functions/package.json` declares the same runtime.
 
 ## Quick start
 
@@ -61,7 +61,8 @@ For Firebase emulators and Rules tests, also install:
 ```bash
 git clone https://github.com/jimmykane/quantified-self.git
 cd quantified-self
-nvm use
+nvm install 22
+nvm use 22
 npm ci
 npm --prefix functions ci
 ```
@@ -97,6 +98,14 @@ firebase emulators:start --only auth,functions,firestore,storage
 ```
 
 The Functions emulator loads compiled output from `functions/lib`, so the build must finish before the emulators start.
+
+For the default browser configuration, which keeps hosted Auth, Firestore, and Storage, run just the Functions emulator:
+
+```bash
+firebase emulators:start --only functions
+```
+
+Admin impersonation in this mode signs tokens with an existing, Git-ignored `quantified-self-io-firebase-adminsdk.json` at the repository root, outside `functions/`. The key must match the emulator's project and is used only for custom-token signing; the default Admin app keeps ADC. Alternatively, set `GOOGLE_APPLICATION_CREDENTIALS` to an external service-account JSON file before starting the emulator. See [Functions-only emulation with hosted Auth](docs/function-secret-management.md#functions-only-emulation-with-hosted-auth) for credential precedence and isolation.
 
 ### 5. Start Angular
 
@@ -136,9 +145,10 @@ Operational scripts that intentionally access managed Google Cloud or Firebase r
 | --- | --- |
 | Garmin | `GARMINAPI_CLIENT_ID`, `GARMINAPI_CLIENT_SECRET` |
 | Suunto | `SUUNTOAPP_CLIENT_ID`, `SUUNTOAPP_CLIENT_SECRET`, `SUUNTOAPP_SUBSCRIPTION_KEY`, `SUUNTOAPP_NOTIFICATION_SECRET` |
+| Suunto Training Guides | Reuses the existing Suunto OAuth credentials and `SUUNTOAPP_SUBSCRIPTION_KEY` with Guides access; `SUUNTOAPP_GUIDE_OWNER` stores the exact existing OAuth application name through Secret Manager (or `.secret.local` for emulators). See [Training delivery](docs/training-workspace.md#suuntoplus-guide-delivery-650). |
 | COROS | `COROSAPI_CLIENT_ID`, `COROSAPI_CLIENT_SECRET` |
 | Wahoo | `WAHOOAPI_CLIENT_ID`, `WAHOOAPI_CLIENT_SECRET`, `WAHOOAPI_WEBHOOK_TOKEN`, `WAHOOAPI_ALLOWED_FILE_HOSTS` |
-| Stripe | `STRIPE_SECRET_KEY`, `STRIPE_ADMIN_BILLING_KEY` |
+| Stripe | `STRIPE_SECRET_KEY`, `STRIPE_ADMIN_BILLING_KEY`, `STRIPE_BILLING_KEY`, `STRIPE_BILLING_WEBHOOK_SECRET` |
 | Built-in Assistant | `GEMINI_API_KEY` |
 | Backend Mapbox access | `MAPBOX_ACCESS_TOKEN` |
 | Optional task emulator | `CLOUD_TASKS_EMULATOR_HOST` |
@@ -157,9 +167,22 @@ Never commit environment files, service-account JSON, API tokens, private keys, 
 | Firestore and Storage Rules tests | `npm run test:rules` | Uses the isolated `demo-test` emulator project |
 | Frontend build | `npm run build` | Development build |
 | Production build | `npm run build-production` | Builds locally; does not deploy |
-| Functions tests | `npm --prefix functions test` | One-shot Vitest suite |
+| Functions tests | `npm --prefix functions test` | One-shot unit suite; registered emulator files run separately |
 | Functions coverage | `npm --prefix functions run test:coverage` | Writes the Functions coverage report |
 | Functions build | `npm --prefix functions run build` | Compiles TypeScript to `functions/lib` |
+| Functions emulator tests | `npm run test:functions-emulators -- lifecycle` | Builds first; use no argument for all four isolated demo groups |
+| Emulator CI coverage guard | `npm run test:emulator-coverage` | Rejects missing/duplicate suites, unsafe environments and skipped coverage |
+| CI workflow regression tests | `npm run test:workflows` | Fork/internal trigger routing and the required aggregate test result |
+| Training monitoring configuration | `npm run test:training-monitoring` | Offline metric/dashboard/alert definitions and safe, idempotent provisioning |
+| Activity import monitoring configuration | `npm run test:import-monitoring` | Offline four-provider dashboard/policies; no production changes by default |
+| Health/Sleep monitoring configuration | `npm run test:health-sleep-monitoring` | Offline ordinary-ingestion/serialized-backfill dashboard and policies; no production changes by default |
+| Recorded-activity delivery monitoring configuration | `npm run test:activity-delivery-monitoring` | Offline outbound delivery dashboard/policies, including pending and manual-reconciliation outcomes; no production changes by default |
+| Route import/delivery monitoring configuration | `npm run test:route-monitoring` | Offline route dashboard, bounded labels, eight policies and safe provisioning; no cloud changes by default |
+| Connection-history monitoring configuration | `npm run test:connection-history-monitoring` | Offline coordinator dashboard/six policies, bounded observations and safe provisioning; activation needs separate approval |
+| Email delivery monitoring configuration | `npm run test:email-monitoring` | Offline Firestore-mail/extension/marketing dashboard and seven policies; no extra queue or monitoring collection; activation needs separate approval |
+| Derived-metrics monitoring configuration | `npm run test:derived-metrics-monitoring` | Offline ingress/calculation dashboard and six policies; bounded pending-generation observation; activation needs separate approval |
+| Sports Lib reprocessing monitoring | `npm run test:reparse-monitoring` | Offline normal/heavy/route dashboard and seven policies; existing scanners only; activation needs separate approval |
+| Account cleanup monitoring | `npm run test:cleanup-monitoring` | Offline cleanup/disconnect dashboard and seven policies, including failed partner-revocation email; no added Firestore reads, indexes or Function; activation needs separate approval |
 | Functions lint | `npm --prefix functions run lint` | Runs ESLint with `--fix` and may edit files |
 | Install Git hooks | `npm run hooks:install` | Reinstalls the repository Lefthook hooks; `npm ci` normally installs them automatically |
 | Test the local credential guard | `npm run credentials:test` | Checks the staged-file rejection policy without reading credential values |
@@ -169,8 +192,10 @@ Never commit environment files, service-account JSON, API tokens, private keys, 
 | Local plugin validation | `npm run plugin:validate` | Uses an isolated temporary Codex profile |
 | Local plugin refresh | `npm run plugin:sync` | Explicitly rebuilds and reinstalls; normal app builds never do this |
 
-The repository-local Quantified Self plugin bundles the registered read-only MCP app with six discoverable workflows
-for cross-domain analysis, training, sleep, body measurements, activities, and saved routes. Configure its
+The repository-local Quantified Self plugin bundles the registered permission-scoped MCP app with seven discoverable workflows
+for cross-domain analysis, all-day Health, training, sleep, body measurements, activities, and saved routes. Manual Health
+entry lookup/logging/editing/permanent deletion needs independent `measurements:write` authorization and client approval;
+historical read permissions never grant writes and imports remain immutable. Configure its
 account-specific ChatGPT technical app ID once by setting `QS_CHATGPT_APP_ID` and running
 `npm run plugin:configure`, then run `npm run plugin:setup`. Generated app mappings and cache-busted manifests are
 ignored. Restart the ChatGPT desktop app after setup or sync, then test in a new conversation. See the
@@ -213,24 +238,53 @@ The hosted project uses Firestore TTL policies for short-lived operational data:
 
 These policies are infrastructure configuration; starting local emulators does not create or deploy production TTL policies.
 
+Training delivery jobs/ledgers are an exception to short-lived queues: unfinished delivery/withdrawal evidence has no TTL.
+Account deletion cleans them recursively, including UID-associated top-level jobs. Delivery receipts carry a 30-day expiry;
+their production TTL setup and rollout remain separate approval-gated work. See the
+[Training delivery foundation](docs/training-workspace.md#provider-delivery-foundation-646).
+
 Unified health history under `users/{uid}/healthSourceRecords` and `healthSampleChunks` has no time-based TTL. It is bounded per document, atomic replacement, and query; provider disconnect retains imported history, while recursive account deletion removes the complete user-scoped health subtree. See [Unified health data foundation](docs/unified-health-data.md).
 
 ## Architecture documentation
 
+- [Analytics collection, attribution boundaries, and rollout checks](docs/analytics-attribution.md)
+- [Firestore stats index allowlist, query audit and two-phase rollout](docs/firestore-stats-indexes.md)
+- [Benchmark comparison generation and reparse preservation](docs/benchmark-comparisons.md)
+- [CI test coverage and emulator isolation](docs/ci-testing.md)
+- [Helper test environment benchmark](docs/ci-helper-test-benchmark.md)
+- [Component fixture benchmark](docs/ci-component-fixture-benchmark.md)
+- [Reusable event tag catalog and backfill](docs/event-tag-catalog.md)
+- [Firebase Functions target-aware entrypoint loading](docs/functions-entrypoint-loading.md)
+- [Temporary Garmin dispatch cost measurements](docs/garmin-dispatch-cost-measurements.md)
+- [Optional connection history import and shared header/Dashboard progress](docs/connection-history-import.md)
 - [Admin dashboard aggregate user history](docs/admin-dashboard-history.md)
 - [Unified health data foundation](docs/unified-health-data.md)
+- [Private Timeline notes](docs/timeline-notes.md)
+- [Existing-user Health backfill operations](docs/health-backfill-operations.md)
 - [Garmin Health integration](docs/garmin-integration.md)
 - [Provider integration implementation guide](docs/provider-integration-guide.md)
+- [Stripe billing architecture, local testing and cutover](docs/stripe-billing.md)
+- [Stripe-backed first payments, trial conversion and paid retention](docs/paid-growth-measurement.md)
 - [Suunto 24/7 Health integration and rollout](docs/suunto-integration.md)
 - [COROS integration architecture and release checklist](docs/coros-integration.md)
 - [Wahoo integration architecture and release checklist](docs/wahoo-integration.md)
 - [Training workspace architecture and maintenance](docs/training-workspace.md)
+- [Derived-metrics queue monitoring and activation](docs/training-workspace.md#derived-metrics-cloud-monitoring-831)
+- [Sports Lib activity and route reprocessing monitoring](docs/reparse-monitoring.md)
+- [Account cleanup and disconnect recovery monitoring](docs/account-cleanup-monitoring.md)
+- [Recorded activity import monitoring and activation](docs/activity-import-monitoring.md)
+- [Activity ascent/descent corrections and source preservation](docs/activity-ascent-corrections.md)
+- [Activity sending workspace and recovery](docs/activity-sending-workspace.md)
+- [Recorded activity delivery monitoring and activation](docs/activity-delivery-monitoring.md)
+- [Route import and delivery monitoring](docs/route-monitoring.md)
+- [Connection-history imports and coordinator monitoring](docs/connection-history-import.md)
 - [Frontend UI composition and shared route headers](docs/frontend-ui.md)
+- [Event summary readers and performance](docs/event-summary-reads.md)
 - [Event chart sport defaults and visibility persistence](docs/event-chart-visibility.md)
 - [Supported activities and metrics catalog](docs/supported-activities.md)
 - [MCP-backed built-in Assistant](docs/assistant.md)
 - [Activity Calendar architecture and maintenance](docs/activity-calendar.md)
-- [Read-only MCP server](docs/mcp-server.md)
+- [MCP server](docs/mcp-server.md)
 - [Firebase Function secret management](docs/function-secret-management.md)
 - [Queue processing architecture](docs/queue-processing.md)
 - [Sleep sync operations](docs/sleep-sync-operations.md)
@@ -241,6 +295,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 - [Pricing and usage limits](docs/PRICING_AND_LIMITS.md)
 - [Public pricing prerendering](docs/public-pricing-prerender.md)
 - [User deletion workflow](docs/user-deletion-workflow.html)
+- [Delete User Data extension replacement and recovery](docs/delete-user-data-migration.md)
 
 ## Contributing
 

@@ -1,5 +1,6 @@
 import { DataInterface, DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { normalizeUnitDerivedStatLabel, normalizeUnitDerivedTypeLabel } from './stat-label.helper';
+import { EnduranceLabelContext, getEnduranceMetricLabel, SUSTAINABLE_DISTANCE_TYPE, SUSTAINABLE_DISTANCE_MIN_TYPE } from '@shared/endurance-metrics';
 
 export type HeaderStatValueKind = 'avg' | 'min' | 'max' | 'single';
 
@@ -126,7 +127,8 @@ const createSingleCard = (stat: DataInterface): HeaderStatCard => {
 export const buildHeaderStatCards = (
   displayedStats: DataInterface[],
   expandedStatsMap: Map<string, DataInterface>,
-  singleValueTypes: string[] = []
+  singleValueTypes: string[] = [],
+  labelContext?: EnduranceLabelContext
 ): HeaderStatCard[] => {
   if (!displayedStats.length) {
     return [];
@@ -134,7 +136,8 @@ export const buildHeaderStatCards = (
 
   const cards: HeaderStatCard[] = [];
   const processedKeys = new Set<string>();
-  const singleValueTypeSet = new Set(singleValueTypes);
+  const singleValueTypeSet = new Set([...singleValueTypes, SUSTAINABLE_DISTANCE_TYPE, SUSTAINABLE_DISTANCE_MIN_TYPE,
+    `${SUSTAINABLE_DISTANCE_TYPE} in miles`, `${SUSTAINABLE_DISTANCE_MIN_TYPE} in miles`]);
   const singleValueFamilySet = new Set<string>();
   const familyMatches = (familyType: string): boolean => {
     const normalizedFamilyType = familyType.toLowerCase();
@@ -224,7 +227,14 @@ export const buildHeaderStatCards = (
     });
   });
 
-  return cards;
+  return cards.map(card => ({
+    ...card,
+    label: getEnduranceMetricLabel(card.isComposite ? card.label : card.valueItems[0]?.type,
+      { ...labelContext, surface: card.isComposite ? 'stream' : 'stat' }) ?? card.label,
+    valueItems: card.valueItems.map(item => ({ ...item,
+      displayType: getEnduranceMetricLabel(item.type, { ...labelContext, surface: 'stat' }) ?? item.displayType
+    }))
+  }));
 };
 
 export const expandStatsTypesForCompositeDiff = (statsTypes: string[]): string[] => {

@@ -8,11 +8,11 @@ This is the COROS-specific architecture and release record. For shared provider 
 
 - OAuth 2.0 connection and refresh using the COROS `openId` as the stable provider identity.
 - Server-side binding-state verification when a connected account is shown in the Services connection grid.
-- One active COROS account per Quantified Self user. New OAuth connects pin the account in safe service metadata. Legacy multi-token roots select the most recently refreshed token deterministically and pin it on first server use; a missing pinned token fails closed and requires reconnect.
-- Recent COROS activity-history import within the provider's rolling three-month limit.
+- One active COROS account per Quantified Self user. New OAuth connects pin the account in safe service metadata. Older unpinned multi-token roots select the most recently refreshed token deterministically and pin it on first server use; a missing pinned token fails closed and requires reconnect.
+- Recent COROS activity-history import with the provider's full rolling three-month limit selected by default; users can choose a shorter range before submitting.
 - Daily Health and sleep polling plus a user-requested three-month replay in 30-day windows, subject to the existing cooldown. It stores steps, the native COROS calorie value, resting/sleep heart rate, overnight HRV, and bounded detailed HRV/interval-heart-rate samples when supplied. COROS does not supply sleep stages through this integration.
 - Direct FIT activity delivery with asynchronous provider status polling.
-- Automatic and date-range FIT activity delivery from Garmin, Suunto, or Wahoo to COROS through the shared activity-sync queue.
+- Automatic FIT activity delivery from Garmin, Suunto, or Wahoo, plus one-time paged preview/send of retained FIT imports and manual FIT/FIT.gz uploads to COROS through the shared activity-sync queue.
 - Existing COROS-to-Suunto and COROS-to-Wahoo automatic/date-range activity routes.
 - Direct GPX/FIT route delivery from COROS Services without creating a saved Quantified Self route.
 - Saved-route delivery from the Routes row action, selected-row bulk toolbar, and route detail.
@@ -20,12 +20,57 @@ This is the COROS-specific architecture and release record. For shared provider 
 
 Every automatic activity and saved-route direction is off by default. Empty rollout allowlists make the corresponding routes available to all eligible Pro users; a user must still connect the required services and explicitly enable each direction. COROS direct/saved route upload and Suunto-to-COROS route delivery reuse the same empty production allowlist in `shared/coros-rollout.ts`; populating it provides a narrow emergency rollback. A date-range or saved-route backfill does not turn on future delivery.
 
+The Connections overview exposes the daily replay as a dedicated **Sleep & daily Health history** card with an **Import history** action, separate from the COROS activity-history card. Both cards open the shared History import tool, where activity ranges and the three-month Sleep/Health replay remain distinct controls.
+
+The tool locks each request immediately and keeps its pending/result state across dialog reopenings in the same app, separately for the current user's COROS activities and Sleep/Health. Sleep/Health stays disabled until its cooldown status is read successfully; failed reads show **Retry status check**. Existing callable cooldown timestamps are shown as normal next-available dates, retained on reopening, without a frontend error report or error haptic. Closing a dispatched request leaves it running; late responses update shared status without notifying a destroyed or changed account/provider view. Activity history also reads the finite future server lease and treats `already-exists` as normal **Import already running** feedback across clients.
+
+### Manual activity-history admission
+
+The synchronous/legacy COROS callable reserves one activity-history import per Firebase user across all date ranges.
+The shared `withActivityHistoryImportReservation` transaction checks deletion, active manual/connection-history
+reservations and cooldown before provider work. Active contention returns `already-exists`; cooldown returns
+`permission-denied` with its exact next-allowed ISO timestamp. The random owner holds a bounded 30-minute lease,
+longer than this callable's 300-second runtime. No lease renewal or new queue is needed.
+
+Missing credentials at admission return `unauthenticated` with reconnect guidance; pending disconnect or account
+deletion returns `failed-precondition`. These trusted admission errors remain callable-safe through the shared
+COROS/Suunto wrappers, including the exact cooldown deadline. Expired or superseded imports return
+`failed-precondition` with retry guidance. A generic database error carrying an `already-exists` code remains an
+observable failure; only typed callable contention receives normal **Import already running** treatment.
+The manual reservation also translates typed deletion/disconnect refusals from token lookup, refresh or the active-account
+recheck, including inactive credential generations, before the callable classifies failures. These refusals stop provider reads and
+queue/history writes without producing an internal-error response or an ERROR import log.
+
+The owner, finite future expiry and captured connection generation fence provider reads, every queue/metadata
+commit and successful finalization. The captured COROS token-root credential generation and pending disconnect
+state are rechecked too; ordinary token refresh within the same credential generation remains valid. Existing
+active-account checks, rolling three-month calendar windows and queue revision/processing-lease protections remain.
+Expired ownership can recover, but an older response cannot write against its replacement. Cleanup removes only
+the matching owner's lease, including after failure, and never recreates a missing/deleting user's metadata.
+
+Every committed batch retains its count and cooldown if a later batch/window fails. Empty trailing windows retain
+the cumulative count; an entirely empty scan records zero without imposing a cooldown. None of these counts,
+lease removal or callable success implies completed activity ingestion. The newer durable background path keeps
+its separate coordinator reservations and execution fences.
+
+Regression coverage includes real Firestore concurrent calls for equal/different ranges, independent users,
+cooldown/lease ordering, expiry/takeover, owner-only cleanup, stale reads/writes/finalization, account/credential
+replacement, legacy absent generations, ordinary token refresh, disconnect/deletion races, callable error contracts,
+token-resolution refusals, provider/queue failures and partial/empty windows. The suite is registered once in the
+isolated `mcp-data` emulator
+group; existing frontend tests cover COROS lease reopen/removal/expiry and
+silent expected contention. Monitoring is **covered/unchanged** by the existing import bundle: contention and stale
+admission are not worker failures, while committed queued work retains normal backlog/retry/DLQ coverage.
+No MCP/Training contract, Rule, index, migration, scheduler or provider scope changes. After separate approval,
+deploy compatible Functions before Hosting. Because the reservation helper is shared, include both existing
+`addCOROSAPIHistoryToQueue` and `addSuuntoAppHistoryToQueue` callables; rollback restores their prior revisions.
+
 ## Account identity
 
 All COROS imports and deliveries resolve the same active token through `functions/src/coros/account.ts`.
 
 1. If `users/{uid}/meta/COROS API.providerUserId` exists, only that exact `openId` token is accepted.
-2. If legacy metadata is not pinned, tokens are ordered by `dateRefreshed`, then `dateCreated`, then document ID, all descending.
+2. If existing metadata is not pinned, tokens are ordered by `dateRefreshed`, then `dateCreated`, then document ID, all descending.
 3. The selected `openId` is persisted through the deletion-safe service-metadata writer before it is used.
 4. Once pinned, a missing or mismatched token never falls back to another COROS account.
 
@@ -34,6 +79,12 @@ A multi-window activity-history request resolves that account once and passes th
 When the connected COROS card is opened, the authenticated `getCOROSAPIBindingState` callable checks `GET /coros/bindState` with the active server-side token. A bound response records only the safe binding status and check timestamp. An unbound response atomically marks the connection reconnect-required and disables every COROS activity-sync and route-delivery setting so no automatic route remains active for a revoked provider account. The transaction proves the token, pinned `openId`, connection lifecycle, and account-deletion state are still current; a stale response is ignored. Before returning a stale result, the callable atomically replaces only its own lease with a per-account cooldown and gives the browser the retry time. Provider outages and malformed responses show a retry state and do not mark an account disconnected.
 
 Binding checks are protected on the server rather than relying on one browser's request coalescing. A result is reused for five minutes, each account can hold only one 45-second provider-call lease, and a recent result can be served while that lease is active. Uncached calls also consume a transactionally enforced shared COROS budget of 60 checks per fixed minute. Exhausting either control returns a retryable callable error before contacting COROS, while structured budget-exhaustion logs provide aggregate monitoring. The decoded provider response is capped at 16 KiB before JSON parsing. A handled provider failure or stale result atomically replaces only that request's lease with a 15-second per-account cooldown; the cooldown is checked before the shared budget is read or debited. The callable returns `retryAt`, the Services grid coalesces state changes while waiting, and at most one delayed automatic retry is attempted for a stale result. The upstream attempt still consumes the shared budget, and many distinct accounts remain bounded by the global limit. Reconnect and disconnect cleanup remove obsolete lease and cooldown state.
+
+The Services card pauses binding checks during connect/disconnect actions and treats a retained connection-state generation with a cleared lifecycle state as disconnected, even before the asynchronous account projection empties. A successful local disconnect also keeps that exact user/account/generation disconnected while metadata catches up; a new connection generation resumes checks. Existing connections without a lifecycle generation retain their legacy account-selection behavior. Local request coalescing includes the connection generation, so a same-account reconnect cannot reuse an earlier in-flight request. A per-check revision and current user/account/generation check discard obsolete successes and failures before updating retry state or reporting to Sentry; an older request cannot clear a newer request's loading state. Starting disconnect confirmation invalidates the earlier check immediately. Cancelling confirmation resumes an eligible check; a successful disconnect does not restart it. Current-connection failures still show Retry and remain reportable. Manual Retry gives selection feedback; background checks and discarded failures are silent.
+
+OAuth callback parameters also pause checks before the metadata subscription locks connection processing. After callback navigation removes those parameters, the component reevaluates the current metadata so an eligible check resumes even if no further snapshot arrives. Completing an earlier disconnect similarly reevaluates a newer connection generation while keeping the disconnected generation ineligible. Completion does not emit UI state after view teardown.
+
+These guards change only frontend state and local coalescing. Callable input, server authorization/cleanup, provider requests, stored metadata, and MCP contracts are unchanged. Release through the normal Hosting workflow after approval; no Functions deployment, migration, or data cleanup is required. Reverting the frontend change restores the prior UI behavior.
 
 COROS route multipart requests require a partner-platform `openUserId`. Quantified Self derives a stable 128-bit, provider-scoped digest from the Firebase UID rather than sending the UID itself. The value is stable for a Quantified Self account but cannot be used as a browser credential.
 
@@ -73,6 +124,18 @@ Each provider date becomes `coros_daily` / `daily_summary` with raw `happenDay` 
 
 Connecting COROS marks Health ready, a current terminal authentication loss marks reconnect required with an opaque error code, and deleting the COROS token root marks Health disconnected unless the service state read in the guarded transaction is reconnect-required. Browser clients can read their existing connection for compatibility but cannot create, update, or delete the root; server-owned OAuth and disconnect callables create it and remove token children before deleting it. This prevents an empty client-created root from reviving a legacy orphaned child, while every active-account lookup and downstream daily write also fails closed if the root is absent or owns a different credential generation. Pre-generation COROS connections remain compatible only while the existing root and selected token child both omit generation metadata; a generation on only one side or unequal generations fails closed. They do not require a credential migration or reconnect solely because both fields are absent. Connect and terminal-auth mirrors require the exact current service-connection generation and pending projection claim, while the delete trigger transactionally supersedes any pending claim only while the token root remains absent before selecting its Health state from current service metadata. Each connect or terminal-auth transition also commits a generation-keyed projection marker with the authoritative service state; the bounded lifecycle scheduler retries a failed Health mirror and clears only the exact marker after success. Clearing the claim invalidates an in-flight stale projection, and a concurrent reconnect preserves its newer claim. Delayed lifecycle work therefore cannot overwrite a newer reconnect or a completed disconnect. Disconnect never deletes imported Sleep or Health history. Recursive account deletion removes both domains and all Health sample chunks below `users/{uid}`.
 
+An owned `coros_poll` that finds no active token after a completed disconnect becomes a terminal
+`processed=true`, `resultStatus=skipped`, `skippedReason=service_disconnected` through the existing guarded Sleep
+completion helper. This requires a cleared connection state with a nonempty generation, an explicit revisioned empty
+account projection, and an absent token root for that same owner. A present root, unknown/legacy metadata, connected,
+reconnect-required or disconnect-pending state retains the existing `NO_TOKEN_FOUND` warning/DLQ behavior; account and
+credential mismatches are not inferred to be disconnects. No token from another owner is tried, and no Sleep/Health
+failure state is written for a confirmed disconnect. The INFO diagnostic contains only the opaque queue ID and fixed
+reason; skipped telemetry is emitted only after the existing deletion/revision/lease-guarded completion commits.
+Firestore reads or failed completion remain retryable. Reconnect does not reopen completed skips, and this change
+neither replays nor cleans up historical failed jobs. Only `processSleepSyncTask` needs an approved deployment;
+provider requests, retry policy, runtime options, schedulers, Rules, indexes and other providers are unchanged.
+
 The supported operator replay command is `npm --prefix functions run backfill-coros-daily-health`. Its dedupe generation ensures an older sleep-only operator run does not suppress the Health replay. The completed one-off legacy Sleep-to-Health migration tooling has been retired after a full production dry run found no remaining candidates.
 
 ### Imported event metadata
@@ -91,15 +154,15 @@ A successful initialization must return an integer-shaped upload ID. JavaScript 
 
 - provider status `1` remains pending;
 - provider status `2` is success;
-- provider status `-1` is a terminal processing failure;
+- provider status `-1` confirms that this upload failed; direct clients retain their explicit failed-file restart action;
 - duplicate result `5082` is completed duplicate-as-success;
-- an unknown status or mismatched upload ID fails closed as a provider-contract error.
+- an unknown or non-scalar status, or a mismatched upload ID, fails closed as a provider-contract error. Numeric-string statuses remain compatible; arrays/booleans cannot authorize a restart or completion.
 
-After COROS issues an upload ID, status retries resume that operation and do not post the FIT again. A completed upload increments the COROS upload counter through an idempotency record keyed by the provider operation or queue item.
+After COROS issues an upload ID, pending status retries resume that operation and do not post the FIT again. A completed upload increments the COROS upload counter through an idempotency record keyed by the provider operation or queue item.
 
 ### Shared automatic and backfill delivery
 
-The following FIT-only routes use `shared/activity-sync-routes.ts`, the common date-range backfill callable, and the same COROS upload/status helpers:
+The following FIT-only routes use `shared/activity-sync-routes.ts`, the common historical send callable, and the same COROS upload/status helpers:
 
 | Source | Destination |
 | --- | --- |
@@ -109,9 +172,141 @@ The following FIT-only routes use `shared/activity-sync-routes.ts`, the common d
 | COROS | Suunto |
 | COROS | Wahoo |
 
+The destination card in Services offers a server-owned preview/send scan over a selected date range and sources, including manual uploads. This one-time path does not enable automatic routes or require a saved import's source connection to remain active. It verifies upload provenance and original file generation before queueing and again before delivery; a changed or unavailable file is skipped. The older single-source backfill request remains compatible.
+
+If the event or retained original changes or disappears after scheduling, the worker completes that COROS-bound historical row as skipped before upload. Temporary Storage failures retry, and an already accepted COROS upload remains subject to provider-status reconciliation.
+
 The worker downloads the retained original FIT, verifies entitlement, both connection states, the active destination account, pending disconnect, and account deletion, then persists resume state before provider continuation. It never derives a replacement activity from event statistics.
 
 For COROS-bound shared rows, provider status `1` is an expected asynchronous wait rather than a Cloud Task failure. The worker retains the upload ID, consumes the bounded polling budget, durably records the next poll's due time, acknowledges the current task, and schedules the next status-only poll using the configured Cloud Tasks backoff (15 minutes through four hours). The queue reconciler respects that due time instead of bypassing it with an immediate task, pages past future scheduled polls so they cannot hide newer work, and an early retry re-enqueues the same planned task rather than polling COROS ahead of schedule. It emits an info-level structured poll-scheduled log; the next worker never posts the FIT again. Scheduler/transport failures, exhausted polling, and status `-1` remain warning/error paths.
+
+A matching status response with result `0000` and status `-1` uses the existing queued `restart` retry path, not immediate DLQ. The worker clears the confirmed-failed upload identifiers while retaining the original account in `destinationRestartProviderUserID`; a later task may resend the retained FIT only to that still-active account. It does not reset the shared retry count or add an adapter retry loop. Pending polls and restart failures consume the same ten-increment durable budget, so this is not ten new uploads. At exhaustion the last failed upload/account identifiers remain available for DLQ reconciliation. Structured failure logs retain each failed operation ID and status. Explicit unsupported-file result `5096`, unknown status, and mismatched operation IDs remain permanent; a pending or uncertain operation is never blindly resent. Direct callable error codes and manual retry controls are unchanged.
+
+### Empty FIT field compatibility
+
+Direct uploads and new/restarted queued uploads use the same COROS-only outgoing
+copy repair in `functions/src/coros/activity-fit.ts`. It removes **zero-byte native
+definitions only** for Event `data` (message 21, field 3) and Lap `total_cycles`
+(message 19, field 10), both with base type `0x86`. These definitions contain no
+data bytes. Definition counts, file length and CRCs are updated; every nonempty
+native field, developer field, data record and timestamp header retains its bytes.
+Populated values are never removed, and the retained original is not modified.
+
+The original header, length and CRCs must pass the strict reader first. Repair
+requires one activity File ID and one existing Session, bounded input and a
+strictly valid result. Unknown empty fields, duplicate definitions, corrupt files,
+multisession files and files missing a Session pass through unchanged. No summary,
+GPS, sport mapping or sensor value is reconstructed.
+
+A separately authorized synthetic A/B test on 10 October 2026 reproduced terminal
+COROS status `-1` with these two empty definitions and status `2` after removing
+them from the otherwise identical file. This establishes the tested defect, not
+universal acceptance or Walking support. Regression fixtures are entirely synthetic.
+
+Fingerprints use the actual sent copy, including the existing guarded replacement
+of an old exact-file marker on fresh/restarted queue uploads. Accepted uploads keep
+their receipts and status-only reconciliation. The repair emits INFO with only the
+removed-definition count; it is not evidence of provider acceptance. Existing
+delivery monitoring is **covered/unchanged**: the same COROS worker, destination,
+retry, pending and committed outcomes remain in the #832 metrics and policies.
+There are no new functions, schedules, retries, credentials or persistence paths.
+Help/category contracts are unchanged; this is binary compatibility, not a new
+supported activity type. Deployment and any replay require separate approval.
+
+### Missing FIT Session compatibility
+
+`functions/src/shared/fit-activity-session-repair.ts` owns the provider-neutral
+`FitActivitySessionRepair` class. COROS's existing shared preparation boundary
+uses it only when a strictly valid activity FIT has no Session messages. Direct
+and fresh/restarted queue uploads therefore send and fingerprint the same copy;
+already accepted uploads remain status-only. Other providers are not opted in.
+
+Recovery requires one manual Activity footer, one complete start/stop timer,
+contiguous same-sport laps with complete start/end/elapsed/timer/distance evidence,
+and timestamped samples inside that interval. Any supplied lap indexes must be
+sequential. The footer must declare one session or the lap count; explicit
+multisport, inconsistent times/totals, missing required evidence, corrupt CRCs and
+ambiguous files pass through unchanged. No existing Session is ever replaced.
+
+The copy adds one Session with the lap-derived totals and lap association, and
+corrects only the footer's session count to one. Optional calories are summed
+only when every lap supplies them. No GPS, sensor samples, sport fallback or
+average is invented. The original native/developer messages remain byte-for-byte
+apart from that footer count; the retained Storage original is never overwritten.
+`fit-file-parser` supplies strict validation, summary encoding, profile lookup
+and CRC calculation; binary span handling stays inside the shared repair class.
+The resulting summary follows the required fields in the official
+[FIT Activity specification](https://developer.garmin.com/fit/articles/file-types/activity.html).
+
+A separately authorized real-account test on 10 October 2026 reached final COROS
+status `2` on the first repaired swimming upload. That proves this repair case,
+not universal acceptance or watch/app visibility. Regression fixtures use invented
+data only, including big-endian fields, compressed records and developer bytes.
+The INFO log contains only the restored-session count, not files or identifiers.
+Existing #832 delivery monitoring is **covered/unchanged**: the same COROS
+pending/failure/DLQ/committed outcomes remain authoritative. Help/supported sports,
+MCP, Training, retries, credentials, queues and runtime options are unchanged.
+Deployment and recovery of the original user's queue job require separate approval.
+
+### Recorded-activity category fallbacks (#600)
+
+Both direct FIT uploads and new/restarted queued uploads call
+`functions/src/coros/activity-fit.ts` before writing the outbound fingerprint and
+sending the file. The fixed mappings are:
+
+| Source FIT sport | Sent FIT sport / sub_sport | COROS category |
+| --- | --- | --- |
+| Snorkeling (`82`) | Swimming / Open Water (`5` / `18`) | Open Water Swim |
+| Sailing (`32`) | Generic / Generic (`0` / `0`) | GPS Cardio |
+
+The adapter only converts structurally valid, single-session activity FITs with
+consistent category fields. Snorkeling converts with or without recorded GPS;
+Sailing still requires at least one valid recorded latitude/longitude pair.
+Apart from the empty-field repair above, GPS-less Sailing, mixed/multi-session,
+malformed and unrelated files pass through unchanged for the existing provider
+inference/rejection behavior; no support for those cases is claimed.
+FIT sub_sport `17` is pool swimming, not open water.
+COROS's API `mode=18/subMode=1` is not a FIT sport enum or an upload parameter.
+
+Only Session, Lap and optional Sport classification fields change, with missing
+enum fields inserted and header/file CRCs recalculated. Original files and QS
+activity types stay unchanged. Recorded timing, distance, GPS, depth, sensor,
+unknown/vendor and developer fields retain their bytes; no metrics are fabricated.
+COROS may not display every retained field. Synthetic regression fixtures contain
+no private exports.
+
+On 9 October 2026, separately authorized controlled imports of one retained
+Snorkeling and one Sailing activity both reached status `2`. The owner confirmed
+Open Water Swim and matching snorkeling details, then GPS Cardio, matching sailing
+summary and its visible route. Sailing took about two hours and an explicitly
+authorized single same-copy resend returned the same upload ID while pending.
+Neither imported copy appeared in the inspected history API responses, so category
+confirmation came from the owner's app checks, not inferred API readback.
+This proves the two tested files, not universal COROS acceptance. No test identifiers,
+files, screenshots or credentials belong in this repository.
+
+On 10 October 2026, a separately authorized owner-account test of one GPS-less
+Snorkeling copy reached terminal status `2`. Its sport/sub_sport were changed to
+swimming/open-water without adding GPS or changing timing, duration, distance or
+the retained original. This extends the tested mapping to GPS-less Snorkeling,
+not Sailing or universal acceptance; app category confirmation is separate.
+
+Fingerprint receipts are computed from the actual sent copy. A converted fresh
+send/restart replaces a legacy original-file queue fingerprint marker through the
+existing guarded update; previously accepted operations keep their receipt and
+status-only reconciliation without conversion or another POST. Same-account
+pinning, Pro, deletion/disconnect checks, polling, duplicates and bounded retries
+are unchanged. INFO `[COROS] Applied activity FIT category fallback.` logs only one
+fixed mapping label, never files, coordinates or account identifiers. App Help
+discloses the category change and unsupported cases.
+
+Monitoring coverage is **unchanged**: the #832 bundle/runbook already includes
+COROS, committed delivery/pending/retry/DLQ outcomes and overdue status-only polls.
+No metric dimensions, scheduler, queue policy, Rules, indexes, secrets, persistent
+schema, Training or MCP contracts change. Functions deployment and any historical
+replay require separate explicit approval; this implementation does not deploy,
+replay or complete old queue records. Roll back by reverting the adapter wiring,
+preserving all accepted operation IDs and their polling state.
 
 ## Echo suppression
 
@@ -125,7 +320,9 @@ Provider-to-provider activity delivery can otherwise return through a destinatio
 
 Receipts contain hashes, destination identity, timestamps, and TTL metadata—not the activity file. Browser access is denied. They expire after 120 days through Firestore TTL and are also removed by recursive account deletion. Wahoo independently omits third-party-app workouts from its import API, while the shared receipt still protects outbound deliveries consistently.
 
-Inbound COROS FIT URLs are treated as untrusted provider input. The worker accepts only HTTPS downloads and redirects on `oss.coros.com` or a `*.cloudfront.net` distribution, and requires COROS's bounded `/fit/<account>/<workout>.fit` path shape. COROS's API reference describes `fitUrl` as a provider-returned download URL and uses `oss.coros.com` in examples without defining a fixed-host contract; production also returns rotating CloudFront distribution hosts. The worker applies a 60-second deadline and the shared 30 MB activity limit, validates the FIT signature before parsing, and reduces transport failures to errors that do not expose signed URL query values.
+Inbound COROS FIT URLs are treated as untrusted provider input. The worker accepts only HTTPS downloads and redirects on `oss.coros.com` or a `*.cloudfront.net` distribution. Provider-returned paths are opaque: production includes additional directories, and neither folder depth nor filename shape proves origin or FIT content. COROS's API reference describes `fitUrl` as a provider-returned download URL and uses `oss.coros.com` in examples without defining a fixed-host contract; production also returns rotating CloudFront distribution hosts. The existing shared-CDN suffix policy does not by itself prove COROS ownership; this compatibility fix does not broaden it. Credentials/custom ports and IP/local destinations remain rejected, every redirect is checked, and the worker retains its 60-second deadline, shared 30 MB activity limit, FIT-signature validation and signed-URL error redaction.
+
+The path-only compatibility fix is consumed by `processWorkoutTask`; the COROS scheduled dispatcher only enqueues tasks and needs no deployment. Monitoring is **covered/unchanged** by #829's existing COROS commit, worker-failure, DLQ and queue-health filters. No retry, lifecycle, entitlement, persistence, Help, MCP/Training, host-list or monitoring configuration changes are required. Deploy only the workout worker after verification; reverting that worker revision restores the earlier validator. A retained failed job does not replay automatically on deployment, and any approved replay must verify actual queue completion and the saved event rather than a task acknowledgement.
 
 ## Route delivery
 
@@ -144,17 +341,78 @@ Route type inference is intentionally broad because COROS accepts only two types
 - cycling-family types—including bike, MTB, road cycling, gravel, cycling, velo, and spin—map to bike (`1`);
 - every other or missing activity type maps to running (`2`).
 
+The explicit refined-name route aliases additionally send BMX and LES MILLS RPM / SPRINT / THE TRIP as Bike (`1`).
+Obstacle Racing and Vertical Running retain Running (`2`); Enduro MTB and E-Enduro MTB retain Bike (`1`). These are
+route metadata profiles, not activity-upload or planned-workout modes. QS keeps the original route sport and file.
+Monitoring coverage is unchanged because these sends use the same COROS route worker, outcome labels and lifecycle.
+
 The provider route ID is a deterministic digest of the Quantified Self user, active COROS account, stable source key, and exact generated GPX revision. Repeating the same revision uses the same ID; changed geometry produces a new revision ID. COROS duplicate result `13001` is success. Direct selected-file delivery creates no Quantified Self route, while saved delivery persists provider route/account metadata before a multi-route batch continues.
 
 HTTP 408, 429, 5xx, and transient transport failures are retryable. Authentication failures require reconnect, and HTTP 403 or provider code `30009` is a permission-required failure. Invalid parameters, missing required distance, invalid provider responses, and rejected content are terminal and sanitized before reaching the browser or DLQ.
+
+## Training delivery
+
+The ignored local COROS API Reference V2.0.6 (February 2026) is available for development but is never committed. The
+versioned capability matrix, serializer and transport live under `functions/src/training-plans/`. COROS Training delivery
+has no per-UID backend allowlist. It is disabled for every account at the shared frontend/backend admission boundary:
+the production runtime binds no COROS Training transport, MCP delivery previews report it unavailable, and the browser
+omits COROS from plan, workout and sync-history controls/summaries. Existing preferences, ledgers and status projections
+remain stored but inactive; reconciliation cannot send, update, retry or remove a COROS planned workout until a deliberate
+rollout re-enables the shared boundary. This does not change COROS activity/history, Sleep, Health, FIT activity upload,
+activity sync or route delivery. Connecting COROS alone never opts in, and implementation does not authorize a provider
+call or deployment.
+
+The adapter sends form-encoded requests only to `POST /coros/tp/list/push` and
+`POST /coros/tp/workout/deleteById`, using the existing COROS OAuth client ID/secret and canonical pinned account.
+The existing dispatcher groups due work for the same destination and operation, while the shared worker keeps one ledger,
+lease, consent and status per workout. Its bounded recovery scan pages past same-group leaves instead of letting them
+consume task capacity or hide another due provider/destination. It claims at most 30 workouts and journals batch start
+plus per-item acceptance below the existing private delivery state. A timeout, malformed acknowledgement, incomplete
+accepted range or conflicting delete result is uncertain and is not resent blindly.
+
+One collision-checked positive partner AthleteId is bound to the QS user and never derived from `openId`. Each
+destination/workout receives a separate stable positive ID that survives edits, reschedules and plan transfers. The
+mapping remains available after workout deletion for withdrawal/completion correlation and is recursively deleted with
+the account. Today-through-365-day scheduling uses the saved delivery time zone and deterministic LastModifiedDate.
+Running, Trail Running and Cycling use the native wire values `run`, `trailRun` and `bike`. Treadmill, Indoor Running
+and Virtual Running fold to broad `run`; Mountain Biking, Indoor Cycling, Virtual Cycling, E-Biking, Hand Cycle,
+Velomobile, Enduro MTB and Downhill Cycling fold to broad `bike` only after explicit mapping approval. The authored QS
+sport is unchanged. A second target, recovery-to-rest mapping, fractional values and frozen relative references retain
+the normal degradation approval, while cycling cadence is unsupported.
+
+The partner Training Plan contract (§6.1.3, pp. 45–49) supports only `run`, `trailRun`, `bike`, `swim` (pool) and
+`strength`. Walking, Hiking, Rowing, Indoor Rowing and Open Water Swimming remain unsupported, with no Generic fallback.
+The broader inbound activity `mode`/`subMode` catalog is not an outbound workout contract. COROS's
+[custom-workout help](https://support.coros.com/hc/en-us/articles/47285577958932-Create-Custom-Workouts-in-Your-COROS-App)
+also lists newer native app modes, but does not supply partner `WorkoutType` mappings for them. Serializer approval,
+mixed-batch payload and strict MCP read tests cover the six new running/cycling subtype folds. They do not prove
+account-side acceptance, app/watch receipt or completion, and leave the disabled delivery boundary unchanged.
+
+Push acceptance requires a returned date range covering the submitted batch. Delete success/failure lists are applied
+per workout. Result `30009` reports unavailable COROS Training access without asking for reconnect; `5006` requires
+reconnect. Actual retry delays are honored only when COROS returns them; the Training adapter adds no speculative quota
+or throttling layer. Existing connections with both credential-generation fields absent remain valid, as do equal
+present generations; one-sided or conflicting generations fail closed.
+
+Inbound webhook and history queue items preserve `planWorkoutId`. When it equals exactly one stable ID under the same
+active account and credential authority, the root imported event writes the existing safe completion projection and a
+private reverse link, then marks that artifact completed/protected. Duplicates are idempotent; multisport components,
+collisions, account changes and conflicting links remain unlinked. Event deletion removes its own link/evidence and
+requeues reconciliation. Fallback/manual matching and MCP completion-link exposure remain #651.
+
+COROS documents no planned-workout read/list endpoint. There is no Check COROS action, deletion inference or automatic
+recreation. Separately authorized live evidence is still required for Training entitlement, repeated-ID update,
+overlapping-window preservation, reschedule, eligible delete, callback/history correlation and app/watch behavior; those
+post-release findings remain in #645/#648. The user-facing watch behavior follows
+[COROS's Training Plan guidance](https://support.coros.com/hc/en-us/articles/360048955151-Creating-and-Using-Training-Plans).
 
 ## Security and lifecycle controls
 
 - Access/refresh tokens remain in the existing `COROSAPIAccessTokens` tree. The production projection backfill completed and converged in September 2026. The frontend reads the bounded owner-readable connection-account projection exclusively, containing the account identity and connection time needed by existing connection and route UX; an explicit empty projection remains authoritative. OAuth exchange, refresh, disconnect, and projection writes use the Admin SDK. Firestore Rules deny every browser read and write against the COROS token root and descendants. The delivery callables and workers do not return credentials; their browser responses contain only bounded upload/status identifiers and messages.
 - User-triggered import and delivery callables require authentication, App Check, and Pro access. Binding verification requires authentication and App Check but intentionally remains available after entitlement ends, as does disconnect.
-- Activity and route providers are called only after account-deletion and disconnect-pending checks; the checks repeat immediately before the provider request.
+- Activity, route and Training providers are called only after account-deletion and disconnect-pending checks; Training additionally rechecks current consent, entitlement, exact destination and per-workout leases immediately before the provider request.
 - Token refresh extends the same COROS access token for 30 days from successful refresh completion and stores an expiry five minutes early as an operational buffer. The refresh token is retained because COROS documents it as non-expiring. A provider operation retries refresh once after a terminal COROS authentication signal; a changed or missing active account fails closed.
-- Activity initialization/status and route-push requests have a 30-second provider deadline; timeout outcomes retain the operation's safe restart/resume policy.
+- Activity initialization/status and route-push requests have a 30-second provider deadline. Training requests have a 10-second deadline and treat a request with unknown acceptance as attention-required rather than safe to repeat.
 - Multipart values remove CR/LF characters, names are bounded, source/generated files and provider payloads are never logged, and provider errors are reduced to allowlisted messages and typed dispositions.
 - Activity fingerprints, queue state, service metadata, and provider tokens live under existing recursive account-deletion ownership. Browser Rules explicitly deny fingerprint access.
 
@@ -162,7 +420,7 @@ HTTP 408, 429, 5xx, and transient transport failures are retryable. Authenticati
 
 The implementation adds no new COROS credential secret. It reuses `COROSAPI_CLIENT_ID` and `COROSAPI_CLIENT_SECRET`.
 
-`activitySyncOutboundFingerprints.expireAt` requires the Firestore TTL field override in `firestore.indexes.json`; the collection's hash/routing fields have automatic indexes disabled. Deploy indexes and Rules before Functions and Hosting so receipt writes and browser denial are active before users can start delivery.
+`activitySyncOutboundFingerprints.expireAt` requires the Firestore TTL field override in `firestore.indexes.json`; the collection's hash/routing fields have automatic indexes disabled. COROS Training batching adds the delivery-queue composite index over kind, uid, provider, destination, operation and due time. Deploy indexes and Rules before Functions and Hosting so receipt writes, bounded grouping and browser denial are active before users can start delivery.
 
 The affected callable exports are:
 
@@ -172,6 +430,11 @@ The affected callable exports are:
 - `importRouteToCOROSAPI`.
 
 The inbound COROS webhook (`insertCOROSAPIWorkoutDataToQueue`), activity-history callable (`addCOROSAPIHistoryToQueue`), activity worker (`parseCOROSAPIWorkoutQueue`), COROS sleep polling/backfill paths, token refresh scheduler, and existing shared activity-sync/route-delivery functions also contain changed behavior. Include those affected exports in the normal Functions deployment rather than deploying only the callable names above.
+
+Training delivery also affects `previewTrainingProviderDelivery`, `mutateTrainingProviderDelivery`,
+`processTrainingDeliveryTask`, `onTrainingDeliveryQueued`, and `dispatchTrainingDelivery`. Only the task worker binds the
+existing COROS OAuth secrets. `parseCOROSAPIWorkoutQueue` owns exact completion correlation for both webhook and history
+imports. Deployment remains a separate explicitly approved operation.
 
 ## Release checklist
 
@@ -187,3 +450,15 @@ The inbound COROS webhook (`insertCOROSAPIWorkoutDataToQueue`), activity-history
 ## Rollback
 
 Automatic routes remain user-opt-in. If provider errors rise after release, populate the shared COROS route allowlist with approved internal accounts and deploy that narrow rollback while preserving disconnect and status reconciliation for already accepted uploads. A route-entitlement failure should roll back the COROS route UI/callable and Suunto-to-COROS route availability without disabling COROS activity import, sleep, or confirmed activity delivery. Never delete accepted upload IDs or live queue state as a rollback mechanism.
+
+## Optional history on connection
+
+Connections offers **Import history from this service**, selected by default for eligible Pro connections and reconnections, with **30 days** selected initially. Users can choose 60 days or COROS's maximum rolling 3 months. Clearing the checkbox connects without starting history. The server accepts a durable run only after successful authorization; users can keep using the app or close the page. Progress and recoverable retries appear on Connections, independently of connection status. Existing cooldowns and permissions apply, and no automatic import continues earlier than the selected boundary.
+
+COROS imports activities and uses one combined daily operation for Sleep and Health. The run binds the single newly authorized active account and stays within the provider’s existing date limits.
+
+See [connection history import](connection-history-import.md) for the shared architecture, capability-registration requirements and backend-first release order. Manual History Import retains its existing range and response contract.
+
+## Activity sending workspace
+
+One-time recorded-activity sending now links from Connections to the dedicated, owner-only `/send-activities` workspace. It supports reviewed local FIT/FIT.gz and eligible retained QS originals, enforces Pro before new preparation/delivery, and retains results across navigation/reload. Existing automatic delivery and route tools keep their separate settings and contracts. See [the activity workspace lifecycle](activity-sending-workspace.md) for account pinning, bounded staging, recovery, stopping, deletion and release verification.

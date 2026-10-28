@@ -1,0 +1,8 @@
+.training-card-guidance { display: grid; gap: 5px; margin: 0 0 14px; padding: 0 0 13px; border-bottom: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }
+.training-card-guidance > p { margin: 0; color: var(--mat-sys-on-surface); font-size: var(--training-inter-body-font-size); line-height: 1.45; }
+.training-card-guidance > p > strong { margin-right: 6px; font-size: var(--training-inter-caption-font-size); font-weight: 700; }
+.training-card-guidance > small { color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); line-height: 1.4; }
+.training-card-guidance-next { color: var(--mat-sys-on-surface-variant) !important; }
+.training-card-guidance-next > strong { color: var(--mat-sys-primary); }
+.training-card-guidance--section { margin-bottom: 16px; }
+.training-card-guidance--compact { margin-bottom: 14px; }

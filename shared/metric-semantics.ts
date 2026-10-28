@@ -1,4 +1,4 @@
-import { ChartDataCategoryTypes } from '@sports-alliance/sports-lib';
+import { ChartDataCategoryTypes } from '@sports-alliance/sports-lib/metrics';
 
 export type MetricSemanticsDirection = 'direct' | 'inverse';
 

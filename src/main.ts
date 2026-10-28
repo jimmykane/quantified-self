@@ -6,51 +6,51 @@ import { platformBrowserDynamic } from '@angular/platform-browser-dynamic';
 import { environment } from './environments/environment';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import * as Sentry from '@sentry/angular';
-import { registerAppLocales } from './app/shared/adapters/date-locale.config';
+import { registerAppLocale } from './app/shared/adapters/date-locale.config';
 import { redirectFromFirebaseHostingAlias } from './app/shared/adapters/firebase-hosting-redirect';
 import { SYSTEM_THEME_PREFERENCE } from './app/models/app-theme-preference.type';
+import { appCheckBeforeBreadcrumb } from './app/helpers/app-check-console-diagnostics.helper';
+import { appCheckBeforeSend } from './app/helpers/app-check-sentry-filter.helper';
 
-// Register locales immediately
-registerAppLocales();
+// Navigation is asynchronous: do not start App Check on the alias while leaving it.
+if (!redirectFromFirebaseHostingAlias(environment.localhost, environment.appUrl)) {
+  // Only initialize Sentry in non-localhost environments
+  if (!environment.localhost) {
+    Sentry.init({
+      dsn: 'https://e6aa6074f13d49c299f8c81bf162d88c@o147925.ingest.sentry.io/1194244',
+      environment: environment.production ? 'Production' : environment.beta ? 'Beta' : 'Development',
+      release: environment.appVersion,
+      debug: false,
+      beforeBreadcrumb: appCheckBeforeBreadcrumb,
+      beforeSend: appCheckBeforeSend,
+      integrations: [
+        Sentry.browserTracingIntegration(),
+      ],
+      // ResizeObserver loop limit exceeded is a benign warning in browsers
+      ignoreErrors: [
+        'ResizeObserver loop limit exceeded',
+        'Network Error',
+        'Non-Error promise rejection captured'
+      ],
 
-redirectFromFirebaseHostingAlias(environment.localhost, environment.appUrl);
+      // We recommend adjusting this value in production, or using tracesSampler
+      // for finer control
+      tracesSampleRate: 0.2,
+    });
+  }
 
+  if (environment.production) {
+    enableProdMode();
+  }
 
-// Only initialize Sentry in non-localhost environments
-if (!environment.localhost) {
-  Sentry.init({
-    dsn: 'https://e6aa6074f13d49c299f8c81bf162d88c@o147925.ingest.sentry.io/1194244',
-    environment: environment.production ? 'Production' : environment.beta ? 'Beta' : 'Development',
-    release: environment.appVersion,
-    debug: false,
-    integrations: [
-      Sentry.browserTracingIntegration(),
-    ],
-    // ResizeObserver loop limit exceeded is a benign warning in browsers
-    ignoreErrors: [
-      'ResizeObserver loop limit exceeded',
-      'Network Error',
-      'Non-Error promise rejection captured'
-    ],
+  // Set the theme before app is running
+  const storedThemePreference = localStorage.getItem('appTheme');
+  const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const followsSystem = !storedThemePreference || storedThemePreference === SYSTEM_THEME_PREFERENCE;
+  const shouldUseDarkTheme = storedThemePreference === AppThemes.Dark || (followsSystem && systemPrefersDark);
+  document.body.classList.toggle('dark-theme', shouldUseDarkTheme);
 
-    // We recommend adjusting this value in production, or using tracesSampler
-    // for finer control
-    tracesSampleRate: 0.2,
-  });
+  Promise.all([registerAppLocale(), import('./app/app.module')])
+    .then(([, appModule]) => platformBrowserDynamic().bootstrapModule(appModule.AppModule))
+    .catch(err => console.error(err));
 }
-
-if (environment.production) {
-  enableProdMode();
-}
-
-// Set the theme before app is running
-const storedThemePreference = localStorage.getItem('appTheme');
-const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-const followsSystem = !storedThemePreference || storedThemePreference === SYSTEM_THEME_PREFERENCE;
-const shouldUseDarkTheme = storedThemePreference === AppThemes.Dark || (followsSystem && systemPrefersDark);
-document.body.classList.toggle('dark-theme', shouldUseDarkTheme);
-
-import('./app/app.module')
-  .then(x => platformBrowserDynamic().bootstrapModule(x.AppModule))
-  .catch(err => console.error(err));
-// platformBrowserDynamic().bootstrapModule(AppModule);

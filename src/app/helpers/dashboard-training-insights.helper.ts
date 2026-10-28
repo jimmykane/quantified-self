@@ -4,6 +4,7 @@ import {
   READINESS_SLEEP_LOOKBACK_MS,
   READINESS_SLEEP_MAX_AGE_MS,
   type ReadinessConfidence,
+  type ReadinessHrvPersonalRange,
   type ReadinessSleepEvidencePoint,
 } from '@shared/readiness';
 import type {
@@ -53,9 +54,11 @@ export interface DashboardReadinessSignalsContext {
   sleepScore: number | null;
   latestSleepAtMs: number | null;
   hrvRatio: number | null;
+  hrvPersonalRange: ReadinessHrvPersonalRange | null;
   averageHeartRateRatio: number | null;
   minimumHeartRateRatio: number | null;
   overnightHeartRateRatio: number | null;
+  overnightHeartRateCalculatedByQs?: boolean;
   loadAtMs?: number | null;
   trend: DashboardInsightTrendPoint[];
 }
@@ -84,7 +87,7 @@ export function resolveDashboardReadinessSleepRefreshAtMs(
   const safeNowMs = toFiniteNumber(nowMs) ?? Date.now();
   const sleepEndTimes = (sleepTrend?.points || [])
     .filter(point => point.isPlaceholder !== true && point.isNap !== true)
-    .map(resolveSleepPointTime)
+    .flatMap(point => [resolveSleepPointTime(point), ...(point.hrvObservations ?? []).map(value => value.timestampMs)])
     .filter(pointTime => pointTime > 0);
   const completedSleepEndTimes = sleepEndTimes.filter(pointTime => (
     pointTime <= safeNowMs
@@ -92,7 +95,7 @@ export function resolveDashboardReadinessSleepRefreshAtMs(
   ));
   const futureRefreshTimes = sleepEndTimes.filter(pointTime => pointTime > safeNowMs);
   const baselineExpiryTimes = completedSleepEndTimes
-    .map(pointTime => pointTime + DASHBOARD_READINESS_SLEEP_LOOKBACK_MS + 1)
+    .flatMap(pointTime => [7, 30, 60].map(days => pointTime + days * 86400000 + 1))
     .filter(refreshAtMs => refreshAtMs > safeNowMs);
   const latestCompletedSleepEndMs = completedSleepEndTimes.length
     ? Math.max(...completedSleepEndTimes)
@@ -225,6 +228,10 @@ export function buildDashboardReadinessSignalsContext(input: {
       id: point.id,
       sleepDate: point.sleepDate,
       provider: point.provider,
+      sourceKey: point.sourceKey,
+      hrvSourceKey: point.hrvSourceKey,
+      hrvSampleCount: point.hrvSampleCount,
+      hrvObservations: point.hrvObservations,
       startTimeMs: toFiniteNumber(point.startTimeMs),
       endTimeMs: toFiniteNumber(point.endTimeMs),
       totalSeconds: toFiniteNumber(point.totalSeconds),
@@ -232,6 +239,8 @@ export function buildDashboardReadinessSignalsContext(input: {
       averageHrvMs: toFiniteNumber(point.averageHrvMs),
       averageHeartRateBpm: toFiniteNumber(point.averageHeartRateBpm),
       minimumHeartRateBpm: toFiniteNumber(point.minimumHeartRateBpm),
+      averageHeartRateSourceKey: point.averageHeartRateSourceKey,
+      minimumHeartRateSourceKey: point.minimumHeartRateSourceKey,
     }));
   const context = buildReadinessSignals({
     form: input.formNow?.value,
@@ -241,6 +250,8 @@ export function buildDashboardReadinessSignalsContext(input: {
   });
   return context ? {
     ...context,
+    overnightHeartRateCalculatedByQs: (input.sleepTrend?.points || []).some(point => point.heartRateCalculatedByQs
+      && (point.endTimeMs ?? point.startTimeMs) === context.latestSleepAtMs),
     loadAtMs: [input.formNow?.latestDayMs, input.rampRate?.latestDayMs]
       .map(toFiniteNumber)
       .filter((value): value is number => value !== null)

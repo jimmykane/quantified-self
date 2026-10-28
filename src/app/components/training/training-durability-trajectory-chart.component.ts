@@ -1,3 +1,6 @@
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { TrainingMetricTextComponent } from './training-metric-text.component';
+import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -19,6 +22,7 @@ import {
   formatDashboardWeeklyAxisLabel,
   formatDashboardWeekRangeLabel,
 } from '../../helpers/dashboard-chart-data.helper';
+import { getNumberFormatter } from '../../helpers/number-format.helper';
 import type { DashboardDerivedMetricStatus } from '../../helpers/derived-metric-status.helper';
 import { isDerivedMetricPendingStatus } from '../../helpers/derived-metric-status.helper';
 import {
@@ -46,12 +50,14 @@ interface TrajectoryTooltipParam {
   templateUrl: './training-durability-trajectory-chart.component.html',
   styleUrls: ['./training-durability-trajectory-chart.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: false,
+  standalone: true,
+  imports: [MatProgressSpinnerModule, TrainingMetricTextComponent],
 })
 export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() trajectory: TrainingDurabilityTrajectoryViewModel | null = null;
   @Input() status: DashboardDerivedMetricStatus = 'missing';
   @Input() darkTheme = false;
+  @Input() timelineNotes: TimelineNoteChartContext | null = null;
   public chartDiv: ElementRef<HTMLDivElement> | null = null;
 
   @ViewChild('chartDiv')
@@ -80,6 +86,7 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
 
   constructor(eChartsLoader: EChartsLoaderService, logger: LoggerService) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader,
       logger,
       logPrefix: '[TrainingDurabilityTrajectoryChartComponent]',
@@ -92,7 +99,11 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes.trajectory || changes.status || changes.darkTheme) {
+    if (changes.timelineNotes && Object.keys(changes).length === 1) {
+      this.chartHost.updateTimelineNotes(this.timelineNotes);
+      return;
+    }
+    if (changes.trajectory || changes.status || changes.darkTheme || changes.timelineNotes) {
       void this.refresh();
     }
   }
@@ -119,6 +130,7 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
       return;
     }
     this.chartHost.hideTooltip();
+    this.chartHost.setTimelineNotes(this.timelineNotes, { bucketDays: 7 });
     this.chartHost.setOption(this.buildOption(), ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
   }
@@ -322,7 +334,7 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
 }
 
 function formatNumber(value: number): string {
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value);
+  return getNumberFormatter(undefined, { maximumFractionDigits: 1 }).format(value);
 }
 
 function formatActivityCount(value: number): string {

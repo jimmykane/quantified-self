@@ -1,0 +1,27 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.garmin-permissions p {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+  margin: 0 0 0.5rem;
+}
+
+.garmin-permissions h3 {
+  font: var(--mat-sys-title-small);
+  margin: 0 0 0.25rem;
+}
+
+.garmin-permissions__account {
+  overflow-wrap: anywhere;
+}
+
+.garmin-permissions__status {
+  display: inline-block;
+  inline-size: 6.5em;
+  font: var(--mat-sys-body-small);
+  text-align: end;
+  white-space: nowrap;
+}

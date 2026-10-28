@@ -7,6 +7,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import * as serviceOAuthAccess from '../../service-oauth-access';
 
 const hoisted = vi.hoisted(() => ({
+    callableOptions: new Map<unknown, { memory?: string; maxInstances?: number }>(),
     logger: {
         error: vi.fn(),
         info: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock('firebase-functions/logger', () => hoisted.logger);
 vi.mock('firebase-functions/v2/https', () => {
     return {
         onCall: (options: any, handler: any) => {
+            hoisted.callableOptions.set(handler, options);
             return handler;
         },
         HttpsError: class HttpsError extends Error {
@@ -103,10 +105,20 @@ describe('Suunto Auth Wrapper', () => {
         (serviceOAuthAccess.hasServiceOAuthConnectAccess as any).mockResolvedValue(true);
     });
 
+    it.each([
+        ['getSuuntoAPIAuthRequestTokenRedirectURI', getSuuntoAPIAuthRequestTokenRedirectURI],
+        ['requestAndSetSuuntoAPIAccessToken', requestAndSetSuuntoAPIAccessToken],
+    ])('configures %s with 512 MiB while preserving its instance limit', (_name, callable) => {
+        expect(hoisted.callableOptions.get(callable)).toMatchObject({
+            memory: '512MiB',
+            maxInstances: 10,
+        });
+    });
+
     describe('getSuuntoAPIAuthRequestTokenRedirectURI', () => {
         it('should return redirect URI for pro user', async () => {
             const request = createMockRequest({
-                data: { redirectUri: 'https://app.com/callback' }
+                data: { redirectUri: 'https://app.com/callback', importRecentHistory: true, importHistoryRange: 'maximum', importRouteHistory: true }
             });
 
             const result = await getSuuntoAPIAuthRequestTokenRedirectURI(request as any);
@@ -115,7 +127,10 @@ describe('Suunto Auth Wrapper', () => {
             expect(oauth2.getServiceOAuth2CodeRedirectAndSaveStateToUser).toHaveBeenCalledWith(
                 'testUserID',
                 ServiceNames.SuuntoApp,
-                'https://app.com/callback'
+                'https://app.com/callback',
+                true,
+                'maximum',
+                true
             );
             expect(result).toEqual({ redirect_uri: 'https://mock-redirect.com' });
         });
@@ -183,6 +198,10 @@ describe('Suunto Auth Wrapper', () => {
 
     describe('requestAndSetSuuntoAPIAccessToken', () => {
         it('should validate state and set tokens', async () => {
+            vi.mocked(oauth2.getAndSetServiceOAuth2AccessTokenForUser).mockResolvedValueOnce({
+                connected: true,
+                outcome: 'connected',
+            });
             const request = createMockRequest({
                 data: {
                     state: 'validState',
@@ -191,7 +210,10 @@ describe('Suunto Auth Wrapper', () => {
                 }
             });
 
-            await requestAndSetSuuntoAPIAccessToken(request as any);
+            await expect(requestAndSetSuuntoAPIAccessToken(request as any)).resolves.toEqual({
+                connected: true,
+                outcome: 'connected',
+            });
 
             expect(serviceOAuthAccess.hasServiceOAuthConnectAccess).toHaveBeenCalledWith('testUserID', ServiceNames.SuuntoApp);
             expect(oauth2.validateOAuth2State).toHaveBeenCalledWith('testUserID', ServiceNames.SuuntoApp, 'validState');

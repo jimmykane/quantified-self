@@ -1,5 +1,6 @@
 <div class="provider-data-flow-matrix" [class.provider-data-flow-matrix--compact]="compact()">
-  <div class="provider-data-flow-matrix__scroll">
+  <div class="provider-data-flow-matrix__scroll" tabindex="0"
+    [attr.aria-label]="caption() + ', scroll horizontally to see all providers'">
     <table class="provider-data-flow-matrix__table">
       <caption>{{ caption() }}</caption>
       <thead>

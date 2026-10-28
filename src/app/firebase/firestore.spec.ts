@@ -1,13 +1,18 @@
-import { NgZone } from '@angular/core';
+import { inject, NgZone } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FirebaseApp } from './app';
-import { Firestore, collectionData, docData, onSnapshot, provideFirestore } from './firestore';
+import {
+  Firestore, collectionData, docData, getCountFromServer, getDoc, getDocFromServer,
+  getDocs, getDocsFromCache, getDocsFromServer, onSnapshot, provideFirestore,
+} from './firestore';
 import type { DocumentReference, FirebaseFirestoreType, Query } from './firestore';
 
 const firebaseFirestoreMocks = vi.hoisted(() => {
   return {
-    onSnapshot: vi.fn()
+    onSnapshot: vi.fn(),
+    getDoc: vi.fn(), getDocFromServer: vi.fn(), getDocs: vi.fn(),
+    getDocsFromCache: vi.fn(), getDocsFromServer: vi.fn(), getCountFromServer: vi.fn(),
   };
 });
 
@@ -15,7 +20,7 @@ vi.mock('firebase/firestore', async (importOriginal) => {
   const actual = await importOriginal<typeof import('firebase/firestore')>();
   return {
     ...actual,
-    onSnapshot: firebaseFirestoreMocks.onSnapshot
+    ...firebaseFirestoreMocks,
   };
 });
 
@@ -47,6 +52,152 @@ describe('Firebase firestore observables', () => {
 
   afterEach(() => {
     TestBed.resetTestingModule();
+  });
+
+  it('initializes Firestore outside Angular while preserving the factory injection context', () => {
+    const app = {};
+    const firestore = {} as FirebaseFirestoreType;
+    const factory = vi.fn(() => {
+      expect(NgZone.isInAngularZone()).toBe(false);
+      expect(inject(FirebaseApp)).toBe(app);
+      return firestore;
+    });
+    TestBed.configureTestingModule({ providers: [
+      { provide: FirebaseApp, useValue: app }, provideFirestore(factory),
+    ] });
+    const zone = TestBed.inject(NgZone);
+    expect(zone.run(() => TestBed.inject(Firestore))).toBe(firestore);
+    expect(factory).toHaveBeenCalledOnce();
+  });
+
+  it.each(['collectionData', 'docData', 'callbacks', 'observer', 'observer with options'] as const)(
+    'registers and tears down %s outside Angular, delivering snapshots inside Angular', (kind) => {
+      const firestore = {} as FirebaseFirestoreType;
+      TestBed.configureTestingModule({ providers: [
+        { provide: FirebaseApp, useValue: {} }, provideFirestore(() => firestore),
+      ] });
+      TestBed.inject(Firestore);
+      const zone = TestBed.inject(NgZone);
+      const source = { firestore } as Query & DocumentReference;
+      let nextListener: (snapshot: unknown) => void;
+      let completeListener: (() => void) | undefined;
+      const teardownStates: boolean[] = [];
+      firebaseFirestoreMocks.onSnapshot.mockImplementation((_source: unknown, ...args: unknown[]) => {
+        expect(NgZone.isInAngularZone()).toBe(false);
+        const observerOrCallback = args.find(arg => typeof arg === 'function' || (arg && typeof arg === 'object' && 'next' in arg));
+        if (typeof observerOrCallback === 'function') {
+          nextListener = observerOrCallback as (snapshot: unknown) => void;
+          completeListener = args[args.indexOf(observerOrCallback) + 2] as (() => void) | undefined;
+        } else {
+          const observer = observerOrCallback as { next: (snapshot: unknown) => void; complete: () => void };
+          nextListener = observer.next;
+          completeListener = observer.complete;
+        }
+        return () => teardownStates.push(NgZone.isInAngularZone());
+      });
+      const deliveredStates: boolean[] = [];
+      const observer = {
+        next: () => deliveredStates.push(NgZone.isInAngularZone()),
+        error: vi.fn(),
+        complete: () => deliveredStates.push(NgZone.isInAngularZone()),
+      };
+      const unsubscribe = zone.run(() => {
+        if (kind === 'collectionData') {
+          const subscription = collectionData(source).subscribe(observer);
+          return () => subscription.unsubscribe();
+        }
+        if (kind === 'docData') {
+          const subscription = docData(source).subscribe(observer);
+          return () => subscription.unsubscribe();
+        }
+        if (kind === 'callbacks') return onSnapshot(source, observer.next, observer.error, observer.complete);
+        if (kind === 'observer with options') return onSnapshot(source, { includeMetadataChanges: true }, observer);
+        return onSnapshot(source, observer);
+      });
+      zone.runOutsideAngular(() => nextListener({
+        id: 'doc', exists: () => true, data: () => ({ value: 1 }),
+        docs: [{ id: 'doc', data: () => ({ value: 1 }) }],
+      }));
+      expect(deliveredStates).toEqual([true]);
+      if (kind !== 'collectionData' && kind !== 'docData') {
+        zone.runOutsideAngular(() => completeListener?.());
+        expect(deliveredStates).toEqual([true, true]);
+      }
+      zone.run(unsubscribe);
+      expect(teardownStates).toEqual([false]);
+    },
+  );
+
+  it('delivers docData failures inside Angular and tears the failed listener down outside it', () => {
+    const zone = TestBed.inject(NgZone);
+    let errorListener: ErrorListener;
+    const teardownStates: boolean[] = [];
+    firebaseFirestoreMocks.onSnapshot.mockImplementation((_source, _next, error: ErrorListener) => {
+      expect(NgZone.isInAngularZone()).toBe(false);
+      errorListener = error;
+      return () => teardownStates.push(NgZone.isInAngularZone());
+    });
+    const failure = new Error('unavailable');
+    const errorStates: boolean[] = [];
+    const errors: unknown[] = [];
+    TestBed.runInInjectionContext(() => zone.run(() => docData({} as DocumentReference).subscribe({
+      error: error => { errors.push(error); errorStates.push(NgZone.isInAngularZone()); },
+    })));
+    zone.runOutsideAngular(() => errorListener(failure));
+    expect(errors).toEqual([failure]);
+    expect(errorStates).toEqual([true]);
+    expect(teardownStates).toEqual([false]);
+  });
+
+  describe.each([
+    { name: 'getDoc', read: getDoc, sdk: firebaseFirestoreMocks.getDoc },
+    { name: 'getDocFromServer', read: getDocFromServer, sdk: firebaseFirestoreMocks.getDocFromServer },
+    { name: 'getDocs', read: getDocs, sdk: firebaseFirestoreMocks.getDocs },
+    { name: 'getDocsFromCache', read: getDocsFromCache, sdk: firebaseFirestoreMocks.getDocsFromCache },
+    { name: 'getDocsFromServer', read: getDocsFromServer, sdk: firebaseFirestoreMocks.getDocsFromServer },
+    { name: 'getCountFromServer', read: getCountFromServer, sdk: firebaseFirestoreMocks.getCountFromServer },
+  ])('$name', ({ read, sdk }) => {
+    const sourceForRegisteredZone = () => {
+      const firestore = {} as FirebaseFirestoreType;
+      TestBed.configureTestingModule({ providers: [
+        { provide: FirebaseApp, useValue: {} }, provideFirestore(() => firestore),
+      ] });
+      TestBed.inject(Firestore);
+      return { firestore } as Query & DocumentReference;
+    };
+
+    it('starts the SDK read outside Angular and preserves the caller continuation zone', async () => {
+      const source = sourceForRegisteredZone();
+      const result = { value: 'snapshot' };
+      sdk.mockImplementation(() => {
+        expect(NgZone.isInAngularZone()).toBe(false);
+        return Promise.resolve(result);
+      });
+      const continuationStates: boolean[] = [];
+      const returned = TestBed.inject(NgZone).run(() => read(source).then(snapshot => {
+        continuationStates.push(NgZone.isInAngularZone());
+        return snapshot;
+      }));
+      expect(await returned).toBe(result);
+      expect(continuationStates).toEqual([true]);
+      expect(sdk).toHaveBeenCalledExactlyOnceWith(source);
+    });
+
+    it('preserves SDK failures and the caller error continuation zone', async () => {
+      const source = sourceForRegisteredZone();
+      const failure = new Error('permission-denied');
+      sdk.mockImplementation(() => {
+        expect(NgZone.isInAngularZone()).toBe(false);
+        return Promise.reject(failure);
+      });
+      const continuationStates: boolean[] = [];
+      const returned = TestBed.inject(NgZone).run(() => read(source).catch(error => {
+        continuationStates.push(NgZone.isInAngularZone());
+        return error;
+      }));
+      expect(await returned).toBe(failure);
+      expect(continuationStates).toEqual([true]);
+    });
   });
 
   it('emits collectionData values inside Angular zone', () => {
@@ -263,6 +414,18 @@ describe('Firebase firestore observables', () => {
       metadata: { fromCache: false, hasPendingWrites: false }
     });
     expect(emittedValues).toEqual([{ name: 'Authoritative value' }]);
+
+    // A later cached miss must not turn already confirmed settings into "off".
+    nextListener?.({
+      id: 'doc-cached-missing', exists: () => false, data: () => undefined,
+      metadata: { fromCache: true, hasPendingWrites: false }
+    });
+    expect(emittedValues).toEqual([{ name: 'Authoritative value' }]);
+    nextListener?.({
+      id: 'doc-server-missing', exists: () => false, data: () => undefined,
+      metadata: { fromCache: false, hasPendingWrites: false }
+    });
+    expect(emittedValues).toEqual([{ name: 'Authoritative value' }, undefined]);
 
     subscription.unsubscribe();
   });

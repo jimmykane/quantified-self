@@ -1,0 +1,87 @@
+import { describe, expect, it } from 'vitest';
+import { HEALTH_METRIC_IDS, type HealthSourceRecord } from '@shared/health';
+import { projectHealthRange } from '@shared/health-query';
+import { SLEEP_PROVIDERS, type SleepSession } from '@shared/sleep';
+import { buildDashboardHrvContext, dashboardHrvWindows } from './dashboard-hrv-context.helper';
+import { buildHealthHrvPersonalRangeStatus, buildHealthMetricWorkspaceView } from './health-workspace.helper';
+import { buildHealthHrvChartStatusOverlay } from './health-metric-chart.helper';
+import { DistanceUnits } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
+
+const end = new Date(2026, 8, 10, 12).getTime();
+const windows = dashboardHrvWindows('14d', end);
+const result = (startDate: string, endDate: string) => projectHealthRange([], [], { startDate, endDate, metricIds: [HEALTH_METRIC_IDS.HeartRateVariability], includeSamples: false });
+export const exampleHrvSessions = (days = 74): SleepSession[] => Array.from({ length: days }, (_, i) => {
+  const endTimeMs = end - i * 86400000;
+  return { id: `example-${i}`, userID: 'example-owner', source: { provider: SLEEP_PROVIDERS.SuuntoApp, providerUserId: 'example', sourceSessionKey: `night-${i}` },
+    sleepDate: new Date(endTimeMs).toISOString().slice(0, 10), startTimeMs: endTimeMs - 8 * 3600000, endTimeMs,
+    durationSeconds: 8 * 3600, isNap: false, stages: [], stageDurationsSeconds: {}, vitals: { averageHrvMs: 40 + i % 11 }, createdAtMs: endTimeMs, updatedAtMs: endTimeMs };
+});
+
+describe('dashboard Health HRV context', () => {
+  it.each(['visible', 'history'])(
+    'shares a typed Sleep reference account from the %s window with the entire personal-range history', location => {
+      const sessions = exampleHrvSessions();
+      const session = sessions[location === 'visible' ? 0 : 14];
+      const reference: HealthSourceRecord = { schemaVersion: 1, id: 'sleep-reference', userID: session.userID,
+        kind: 'daily_summary', calendarDate: session.sleepDate, startTimeMs: session.startTimeMs, endTimeMs: session.endTimeMs,
+        source: { provider: session.source.provider, accountKey: 'opaque-health-account', sourceRecordType: 'sleep',
+          sourceRecordKey: 'sleep-reference', revision: { order: 1, token: '1', digest: '1' }, receivedAtMs: session.endTimeMs },
+        metricIds: [HEALTH_METRIC_IDS.HeartRateVariability], metrics: [{ kind: 'sleep_reference',
+          metricId: HEALTH_METRIC_IDS.HeartRateVariability, valueType: 'number', aggregation: 'average',
+          semanticVariant: 'sleep_session_average_hrv', origin: 'provider_summary', recordingMethod: 'provider_calculated',
+          quality: { status: 'valid' }, reference: { domain: 'sleep', documentId: session.id!, field: 'vitals.averageHrvMs' } }],
+        coverage: { status: 'complete' }, sampleChunkIds: [], createdAtMs: session.endTimeMs, updatedAtMs: session.endTimeMs };
+      const query = (startDate: string, endDate: string) => projectHealthRange([reference], [],
+        { startDate, endDate, metricIds: [HEALTH_METRIC_IDS.HeartRateVariability], includeSamples: false });
+      const context = buildDashboardHrvContext(query(windows.visible.startDate, windows.visible.endDate),
+        query(windows.history.startDate, windows.history.endDate), sessions, windows.visible);
+      const full = buildHealthMetricWorkspaceView(query(windows.history.startDate, windows.visible.endDate), sessions).series[0];
+      const expected = buildHealthHrvPersonalRangeStatus(full, windows.visible.endTimeMs, null,
+        context.charts[0].model.series.points.map(point => point.timestampMs), windows.visible.startTimeMs);
+      expect(context.charts).toHaveLength(1);
+      expect(context.charts[0].status).toEqual(expected);
+      expect(context.charts[0].status?.normalRange).not.toBeNull();
+      expect(context.charts[0].model.series.sourceLabel).toBe('Suunto');
+    },
+  );
+  it.each([null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })])('uses exactly Health’s source model, historical range and canonical display (%s)', units => {
+    const sessions = exampleHrvSessions();
+    const visible = result(windows.visible.startDate, windows.visible.endDate);
+    const history = result(windows.history.startDate, windows.history.endDate);
+    const context = buildDashboardHrvContext(visible, history, sessions, windows.visible, units);
+    const full = buildHealthMetricWorkspaceView(result(windows.history.startDate, windows.visible.endDate), sessions, [], units).series[0];
+    const status = buildHealthHrvPersonalRangeStatus(full, windows.visible.endTimeMs, units, context.charts[0].model.series.points.map(p => p.timestampMs), windows.visible.startTimeMs);
+    expect(context.charts[0].model.displayedPointCount).toBe(14);
+    expect(context.charts[0].status).toEqual(status);
+    expect(context.charts[0].statusOverlay).toEqual(buildHealthHrvChartStatusOverlay(status));
+    expect(context.charts[0].status?.normalRange).not.toBeNull();
+    expect(context.charts[0].latestValueText).toBe('40 ms');
+  });
+  it('keeps sources separate and excludes naps and missing HRV', () => {
+    const sessions = exampleHrvSessions(2);
+    sessions.push({ ...sessions[0], id: 'garmin', source: { ...sessions[0].source, provider: SLEEP_PROVIDERS.GarminAPI }, vitals: { averageHrvMs: 100 } });
+    sessions.push({ ...sessions[0], id: 'nap', isNap: true, vitals: { averageHrvMs: 200 } });
+    const missingEndTimeMs = end - 2 * 86400000;
+    sessions.push({
+      ...sessions[0],
+      id: 'missing',
+      source: { ...sessions[0].source, sourceSessionKey: 'missing-night' },
+      sleepDate: new Date(missingEndTimeMs).toISOString().slice(0, 10),
+      startTimeMs: missingEndTimeMs - 8 * 3600000,
+      endTimeMs: missingEndTimeMs,
+      vitals: {},
+      createdAtMs: missingEndTimeMs,
+      updatedAtMs: missingEndTimeMs,
+    });
+    const context = buildDashboardHrvContext(result(windows.visible.startDate, windows.visible.endDate), result(windows.history.startDate, windows.history.endDate), sessions, windows.visible);
+    expect(context.charts).toHaveLength(2);
+    expect(context.charts.map(c => c.model.series.points.length).sort()).toEqual([1,2]);
+    expect(context.charts.every(c => c.status?.label === 'Building personal range')).toBe(true);
+  });
+  it('keeps the 1-year query bounded and supplies 60 earlier calendar days', () => {
+    const value = dashboardHrvWindows('1y', end);
+    expect(() => result(value.visible.startDate, value.visible.endDate)).not.toThrow();
+    expect((Date.parse(value.visible.startDate) - Date.parse(value.history.startDate)) / 86400000).toBe(60);
+  });
+});

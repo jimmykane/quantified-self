@@ -1,15 +1,17 @@
+import { User } from '@sports-alliance/sports-lib';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { PricingComponent } from './pricing.component';
 import { AppUserService } from '../../services/app.user.service';
-import { AppPaymentService, StripePrice, StripeProduct, StripeSubscription } from '../../services/app.payment.service';
+import { AppPaymentService, CheckoutStartError, StripePrice, StripeProduct, StripeSubscription } from '../../services/app.payment.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
-import { Subject, of, throwError } from 'rxjs';
+import { BehaviorSubject, Subject, of, throwError } from 'rxjs';
 import { Auth } from 'app/firebase/auth';
 import { Analytics } from 'app/firebase/analytics';
-import { Router } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import { By } from '@angular/platform-browser';
 
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { ASSISTANT_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '@shared/limits';
 import { UpcomingRenewalAmountResult } from '@shared/stripe-renewal';
 import { LoggerService } from '../../services/logger.service';
@@ -63,8 +65,10 @@ class MockMatDialog {
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 describe('PricingComponent', () => {
+    let routeParams: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
     let component: PricingComponent;
     let fixture: ComponentFixture<PricingComponent>;
+    let haptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
     const acceptedPoliciesUser = {
         uid: 'test-uid',
         acceptedPrivacyPolicy: true,
@@ -78,12 +82,15 @@ describe('PricingComponent', () => {
 
 
     beforeEach(async () => {
+        routeParams = new BehaviorSubject(convertToParamMap({}));
+        haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
         authServiceMock.user$ = of(acceptedPoliciesUser as any);
         authServiceMock.currentUser = { uid: 'test-uid' };
 
         await TestBed.configureTestingModule({
             imports: [PricingComponent],
             providers: [
+                { provide: AppHapticsService, useValue: haptics },
                 { provide: AppPaymentService, useClass: MockAppPaymentService },
                 { provide: AppUserService, useClass: MockAppUserService },
                 {
@@ -91,6 +98,7 @@ describe('PricingComponent', () => {
                     useValue: authServiceMock
                 },
                 { provide: MatDialog, useClass: MockMatDialog },
+                { provide: ActivatedRoute, useValue: { queryParamMap: routeParams } },
                 {
                     provide: Auth,
                     useValue: {
@@ -127,6 +135,104 @@ describe('PricingComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+        expect(haptics.selection).not.toHaveBeenCalled();
+        expect(haptics.success).not.toHaveBeenCalled();
+        expect(haptics.error).not.toHaveBeenCalled();
+    });
+
+    it.each([false, true])('puts Pro and its billing choices first by default (onboarding: %s)', async isOnboarding => {
+        await fixture.whenStable();
+        const paymentService = TestBed.inject(AppPaymentService);
+        const products: StripeProduct[] = (['basic', 'pro'] as const).map(role => ({
+            id: `product_${role}`, active: true, name: role, description: role, role, images: [], metadata: { role },
+            prices: [{ id: `price_${role}_monthly`, active: true, currency: 'eur', unit_amount: 299,
+                description: 'Monthly', type: 'recurring', interval: 'month', interval_count: 1,
+                trial_period_days: null, recurring: { interval: 'month' } }],
+        }));
+        vi.spyOn(paymentService, 'getProducts').mockReturnValue(of(products));
+        const checkout = vi.spyOn(paymentService, 'appendCheckoutSession');
+        component.isOnboarding = isOnboarding;
+        await component.ngOnInit();
+        fixture.detectChanges();
+        expect(Array.from(fixture.nativeElement.querySelectorAll('.plan-title') as NodeListOf<HTMLElement>)
+            .map(heading => heading.textContent?.trim())).toEqual(['Pro', 'Basic', 'Starter']);
+        const firstCard = fixture.nativeElement.querySelector('.product-card') as HTMLElement;
+        const billing = firstCard.querySelector('.plan-billing')!;
+        const features = firstCard.querySelector('.features-list')!;
+        expect(billing.compareDocumentPosition(features) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(billing.querySelector('button')?.textContent).toContain('Choose Monthly');
+        expect(features.textContent).toContain('Unlimited saved routes');
+        expect(products.map(product => product.role)).toEqual(['basic', 'pro']);
+        expect(checkout).not.toHaveBeenCalled();
+        expect(haptics.selection).not.toHaveBeenCalled();
+    });
+
+    it('preserves an explicit Basic selection ahead of the default Pro recommendation', async () => {
+        await fixture.whenStable();
+        const paymentService = TestBed.inject(AppPaymentService);
+        const products: StripeProduct[] = (['basic', 'pro'] as const).map(role => ({
+            id: `product_${role}`, active: true, name: role, description: role, role, images: [], metadata: { role },
+            prices: [{ id: `price_${role}_monthly`, active: true, currency: 'eur', unit_amount: 299,
+                description: 'Monthly', type: 'recurring', interval: 'month', interval_count: 1,
+                trial_period_days: null, recurring: { interval: 'month' } }],
+        }));
+        vi.spyOn(paymentService, 'getProducts').mockReturnValue(of(products));
+        routeParams.next(convertToParamMap({ priceId: 'price_basic_monthly' }));
+        await component.ngOnInit();
+        fixture.detectChanges();
+        const headings = Array.from(fixture.nativeElement.querySelectorAll('.plan-title') as NodeListOf<HTMLElement>);
+        expect(headings.map(heading => heading.textContent?.trim())).toEqual(['Basic', 'Pro', 'Starter']);
+        expect(component.selectedPriceId()).toBe('price_basic_monthly');
+        expect(headings[0].closest('mat-card')?.textContent).toContain('Your selection');
+        expect(haptics.selection).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        { priceId: 'price_pro_yearly' },
+        { returnUrl: '/subscriptions?priceId=price_pro_yearly' },
+    ])('shows the requested billing option first for %j without starting checkout', async (params) => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const price = (id: string, interval: 'month' | 'year'): StripePrice => ({
+            id, active: true, currency: 'eur', unit_amount: interval === 'year' ? 4000 : 400,
+            description: interval, type: 'recurring', interval, interval_count: 1,
+            recurring: { interval }, trial_period_days: 14,
+        });
+        const pro: StripeProduct = {
+            id: 'prod_pro', active: true, name: 'Pro', description: 'Connected services',
+            role: 'pro', metadata: { role: 'pro' }, images: [],
+            prices: [price('price_pro_monthly', 'month'), price('price_pro_yearly', 'year')],
+        };
+        vi.spyOn(paymentService, 'getProducts').mockReturnValue(of([pro]));
+        const checkout = vi.spyOn(paymentService, 'appendCheckoutSession');
+        routeParams.next(convertToParamMap(params));
+
+        await component.ngOnInit();
+        fixture.detectChanges();
+
+        const cards = fixture.nativeElement.querySelectorAll('.product-card');
+        const firstPrice = cards[0].querySelector('.plan-price-section');
+        expect(cards[0].textContent).toContain('Pro');
+        expect(firstPrice.textContent).toContain('Your selection');
+        const selectionNote = firstPrice.querySelector('.selected-price-note')!;
+        const priceHeading = firstPrice.querySelector('.price')!;
+        const action = firstPrice.querySelector('button')!;
+        expect(selectionNote.compareDocumentPosition(priceHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(priceHeading.compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(firstPrice.textContent).toContain('Choose Yearly');
+        expect(fixture.nativeElement.querySelectorAll('.selected-price-note')).toHaveLength(1);
+        expect(component.selectedPriceId()).toBe('price_pro_yearly');
+        expect(checkout).not.toHaveBeenCalled();
+        expect(haptics.selection).not.toHaveBeenCalled();
+        expect(haptics.success).not.toHaveBeenCalled();
+        expect(haptics.error).not.toHaveBeenCalled();
+
+        routeParams.next(convertToParamMap({ priceId: 'price_retired' }));
+        fixture.detectChanges();
+
+        expect(component.selectedPriceId()).toBeNull();
+        expect(fixture.nativeElement.textContent).toContain('no longer available');
+        expect(fixture.nativeElement.querySelectorAll('.selected-price-note')).toHaveLength(0);
+        expect(checkout).not.toHaveBeenCalled();
     });
 
     it('should not attach a subscription listener after destruction during initialization', async () => {
@@ -299,7 +405,39 @@ describe('PricingComponent', () => {
         expect(component.getAssistantLimitLabel('pro')).toBe(`Assistant up to ${ASSISTANT_REQUEST_LIMITS.pro} requests per billing period`);
     });
 
-    it('should show cross-device sync in the Pro plan feature list without service names', async () => {
+    it('should include manual training planning in every membership tier', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const products: StripeProduct[] = (['basic', 'pro'] as const).map((role, index) => ({
+            id: `product_${role}`,
+            active: true,
+            name: role,
+            description: role,
+            role,
+            images: [],
+            metadata: { role },
+            prices: [{
+                id: `price_${role}`,
+                active: true,
+                currency: 'usd',
+                unit_amount: (index + 1) * 500,
+                description: role,
+                type: 'recurring',
+                interval: 'month',
+                interval_count: 1,
+                trial_period_days: null,
+                recurring: { interval: 'month' as const },
+            }],
+        }));
+        vi.spyOn(paymentService, 'getProducts').mockReturnValue(of(products));
+
+        await component.ngOnInit();
+        fixture.detectChanges();
+
+        expect((fixture.nativeElement.textContent as string)
+            .match(/Manual training plans and standalone workouts/g)).toHaveLength(3);
+    });
+
+    it('should show public provider workout delivery and cross-device sync in the Pro plan feature list', async () => {
         const paymentService = TestBed.inject(AppPaymentService);
         const userService = TestBed.inject(AppUserService);
         const proProduct: StripeProduct = {
@@ -332,9 +470,10 @@ describe('PricingComponent', () => {
         fixture.detectChanges();
 
         const content = fixture.nativeElement.textContent as string;
+        expect(content).toContain('Provider planned-workout delivery');
         expect(content).toContain('Cross-device sync');
         expect(content).toContain('Unlimited saved routes');
-        expect(content.match(/Read-only MCP access/g)).toHaveLength(2);
+        expect(content.match(/MCP data access/g)).toHaveLength(2);
         expect(content).not.toContain('Garmin/COROS');
         expect(fixture.nativeElement.querySelectorAll('.product-card-shell')).toHaveLength(2);
         expect(fixture.nativeElement.querySelector('.plan-badge')?.textContent?.trim()).toBe('Recommended');
@@ -653,6 +792,50 @@ describe('PricingComponent', () => {
         expect(fixture.nativeElement.textContent as string).not.toContain('Choose Monthly');
     });
 
+    describe.each([
+        ['manageSubscription', 'Failed to redirect to subscription management. Please try again.'],
+        ['changePlanAndBilling', 'Failed to open billing portal. Please try again.'],
+    ] as const)('%s failures', (action, fallbackMessage) => {
+        it.each([true, false])('handles a known maintenance error: %s', async (isMaintenance) => {
+            await fixture.whenStable();
+            component.currentRole = 'pro';
+            const maintenanceMessage = 'Billing is temporarily unavailable. Your existing subscription continues normally. Please try again later.';
+            const error = isMaintenance
+                ? new CheckoutStartError(maintenanceMessage)
+                : new Error('Internal provider details must not be displayed');
+            vi.spyOn(TestBed.inject(AppPaymentService), 'manageSubscriptions').mockRejectedValue(error);
+            const logger = vi.spyOn(TestBed.inject(LoggerService), 'error').mockImplementation(() => undefined);
+            const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+
+            try {
+                await component[action]();
+
+                expect(alert).toHaveBeenCalledExactlyOnceWith(isMaintenance ? maintenanceMessage : fallbackMessage);
+                expect(logger).toHaveBeenCalledTimes(isMaintenance ? 0 : 1);
+                expect(component.isLoading).toBe(false);
+                expect(haptics.error).toHaveBeenCalledOnce();
+                expect(haptics.success).not.toHaveBeenCalled();
+            } finally {
+                alert.mockRestore();
+                logger.mockRestore();
+            }
+        });
+
+        it('does not report an error when the confirmation is cancelled', async () => {
+            await fixture.whenStable();
+            component.currentRole = 'pro';
+            vi.spyOn(TestBed.inject(MatDialog), 'open').mockReturnValue({ afterClosed: () => of(false) } as ReturnType<MatDialog['open']>);
+            const portal = vi.spyOn(TestBed.inject(AppPaymentService), 'manageSubscriptions');
+
+            await component[action]();
+
+            expect(portal).not.toHaveBeenCalled();
+            expect(component.isLoading).toBe(false);
+            expect(haptics.error).not.toHaveBeenCalled();
+            expect(haptics.success).not.toHaveBeenCalled();
+        });
+    });
+
     it('should show downgrade warning for pro users', async () => {
         component.currentRole = 'pro';
         const dialog = TestBed.inject(MatDialog);
@@ -785,12 +968,13 @@ describe('PricingComponent', () => {
 
         expect(navigateSpy).toHaveBeenCalledWith(
             ['/onboarding'],
-            { queryParams: { returnUrl: '/subscriptions' } }
+            { queryParams: { returnUrl: '/subscriptions?priceId=price_123' } }
         );
         expect(checkoutSpy).not.toHaveBeenCalled();
         expect(beginCheckoutSpy).not.toHaveBeenCalled();
         expect(component.isLoading).toBe(false);
         expect(component.loadingPriceId).toBeNull();
+        expect(haptics.selection).not.toHaveBeenCalled();
     });
 
     it('should redirect to onboarding and skip free-tier selection when required legal policies are missing', async () => {
@@ -817,6 +1001,20 @@ describe('PricingComponent', () => {
         expect(setFreeTierSpy).not.toHaveBeenCalled();
         expect(selectFreeTierSpy).not.toHaveBeenCalled();
         expect(component.isLoading).toBe(false);
+    });
+
+    it.each(['acceptedPrivacyPolicy', 'acceptedDataPolicy', 'acceptedTos'] as const)('blocks checkout and free completion when the supplied onboarding profile lacks %s', async missingPolicy => {
+        await fixture.whenStable();
+        component.isOnboarding = true;
+        component.onboardingUser = Object.assign(new User('test-uid'), acceptedPoliciesUser, { [missingPolicy]: false });
+        const checkout = vi.spyOn(TestBed.inject(AppPaymentService), 'appendCheckoutSession');
+        const free = vi.spyOn(TestBed.inject(AppUserService), 'setFreeTier');
+        await component.subscribe({ id: 'price_test', currency: 'eur', unit_amount: 299 });
+        await component.selectFreeTier();
+        expect(checkout).not.toHaveBeenCalled();
+        expect(free).not.toHaveBeenCalled();
+        expect(component.isLoading).toBe(false);
+        expect(haptics.selection).not.toHaveBeenCalled();
     });
 
     it('should stay on onboarding and skip free-tier selection when required legal policies are missing in onboarding mode', async () => {
@@ -920,6 +1118,10 @@ describe('PricingComponent', () => {
         expect(planSelectedSpy).not.toHaveBeenCalled();
         expect(alertSpy).toHaveBeenCalledWith('Failed to select free tier. Please try again.');
         expect(component.isLoading).toBe(false);
+        expect(component.loadingPriceId).toBeNull();
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        expect(haptics.error).toHaveBeenCalledTimes(1);
+        expect(haptics.success).not.toHaveBeenCalled();
     });
 
     it('should log manage_subscription event on manageSubscription', async () => {
@@ -994,17 +1196,17 @@ describe('PricingComponent', () => {
         expect(component.getEligibleTrialDays(product, recurringPrice)).toBeNull();
     });
 
-    it('should render trial copy with the configured trial days on paid plans for eligible users', async () => {
+    it.each(['basic', 'pro'])('renders the configured trial and correct payment terms for eligible %s members', async role => {
         const paymentService = TestBed.inject(AppPaymentService);
         const userService = TestBed.inject(AppUserService);
         const recurringPaidProduct: StripeProduct = {
-            id: 'prod_basic',
+            id: `prod_${role}`,
             active: true,
             name: 'Basic',
             description: 'Basic plan',
-            role: 'basic',
+            role,
             images: [],
-            metadata: { role: 'basic' },
+            metadata: { role },
             prices: [{
                 id: 'price_basic',
                 active: true,
@@ -1029,7 +1231,14 @@ describe('PricingComponent', () => {
 
         const content = fixture.nativeElement.textContent as string;
         expect(content).toContain('30-day free trial for eligible new members');
-        expect(content).toContain('No card needed.');
+        if (role === 'pro') {
+            expect(content).toContain('Payment method required.');
+            expect(content).toContain('Cancel before your trial ends to avoid payment.');
+            expect(content).not.toContain('No card needed.');
+        } else {
+            expect(content).toContain('No card needed.');
+            expect(content).not.toContain('Payment method required.');
+        }
     });
 
     it('should not render trial copy for returning users with paid history', async () => {
@@ -1222,7 +1431,157 @@ describe('PricingComponent', () => {
         expect(continueForFreeButtons.length).toBe(1);
     });
 
-    it('should show a spinner inside the onboarding Continue for Free CTA while loading', () => {
+    describe('plan action progress', () => {
+        const products: StripeProduct[] = (['free', 'basic', 'pro'] as const).map(role => ({
+            id: role,
+            active: true,
+            name: role === 'free' ? 'Starter' : role === 'basic' ? 'Basic' : 'Pro',
+            description: role,
+            role,
+            images: [],
+            metadata: { role },
+            prices: (role === 'free' ? ['month'] as const : ['month', 'year'] as const).map((interval): StripePrice => ({
+                id: role === 'free' ? 'free_price' : `${role}_${interval}`,
+                active: true,
+                currency: 'eur',
+                unit_amount: role === 'free' ? 0 : interval === 'month' ? 299 : 2999,
+                description: interval,
+                type: 'recurring',
+                interval,
+                interval_count: 1,
+                trial_period_days: 30,
+                recurring: { interval, interval_count: 1 }
+            }))
+        }));
+        const prices = products.flatMap(product => product.prices ?? []);
+        const getButtons = () => Array.from((fixture.nativeElement as HTMLElement)
+            .querySelectorAll<HTMLButtonElement>('.plan-price-section button'));
+
+        beforeEach(async () => {
+            await fixture.whenStable();
+            component.isOnboarding = true;
+            component.currentRole = null;
+            component.isLoadingRole = false;
+            component.products$ = of(products);
+            fixture.detectChanges();
+        });
+
+        it.each(prices)('shows progress only for $id and disables competing choices', async price => {
+            let complete!: () => void;
+            const pending = new Promise<void>(resolve => { complete = resolve; });
+            const checkout = vi.spyOn(TestBed.inject(AppPaymentService), 'appendCheckoutSession').mockReturnValue(pending);
+            const selectFree = vi.spyOn(TestBed.inject(AppUserService), 'setFreeTier').mockReturnValue(pending);
+            const buttons = getButtons();
+            const labels = buttons.map(button => button.textContent?.trim());
+            const selectedIndex = prices.findIndex(candidate => candidate.id === price.id);
+            const isFree = price.unit_amount === 0;
+            const request = isFree ? component.selectFreeTier(price.id) : component.subscribe(price);
+
+            await vi.waitFor(() => expect(isFree ? selectFree : checkout).toHaveBeenCalledTimes(1));
+            fixture.detectChanges();
+
+            expect(buttons).toHaveLength(5);
+            expect(fixture.nativeElement.querySelectorAll('.plan-price-section mat-spinner')).toHaveLength(1);
+            buttons.forEach((button, index) => {
+                expect(button.disabled).toBe(true);
+                expect(button.getAttribute('aria-busy')).toBe(String(index === selectedIndex));
+                expect(button.getAttribute('aria-label')).toContain(labels[index]);
+                if (index === selectedIndex) {
+                    expect(button.querySelector('.plan-action-content mat-spinner')).toBeTruthy();
+                } else {
+                    expect(button.textContent?.trim()).toBe(labels[index]);
+                    expect(button.querySelector('mat-spinner')).toBeNull();
+                }
+            });
+
+            await component.selectFreeTier();
+            await component.subscribe(prices[1]);
+            expect(selectFree).toHaveBeenCalledTimes(isFree ? 1 : 0);
+            expect(checkout).toHaveBeenCalledTimes(isFree ? 0 : 1);
+            expect(haptics.selection).toHaveBeenCalledTimes(1);
+            expect(haptics.success).not.toHaveBeenCalled();
+            expect(haptics.error).not.toHaveBeenCalled();
+            if (!isFree) {
+                expect(fixture.nativeElement.querySelector('[role="status"]').textContent).toContain('Preparing your checkout');
+                checkout.mock.calls[0][4]?.('updating'); fixture.detectChanges();
+                expect(fixture.nativeElement.querySelector('[role="status"]').textContent).toContain('Updating your checkout');
+                expect(haptics.selection).toHaveBeenCalledTimes(1);
+            }
+
+            complete();
+            await request;
+            expect(haptics.success).toHaveBeenCalledTimes(isFree ? 1 : 0);
+            if (!isFree) {
+                // Checkout keeps its indicator until navigation or returning from Stripe.
+                expect(component.isLoading).toBe(true);
+                Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+                document.dispatchEvent(new Event('visibilitychange'));
+            }
+            fixture.detectChanges();
+            expect(component.loadingPriceId).toBeNull();
+            expect(getButtons().every(button => !button.disabled)).toBe(true);
+            expect(fixture.nativeElement.querySelectorAll('.plan-price-section mat-spinner')).toHaveLength(0);
+        });
+
+        it.each([
+            ['Checkout failed', true],
+            ['User cancelled redirection to portal.', false],
+        ] as const)('clears the selected indicator after %s', async (message, isError) => {
+            const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+            vi.spyOn(TestBed.inject(AppPaymentService), 'appendCheckoutSession').mockRejectedValue(new Error(message));
+
+            await component.subscribe(prices[3]);
+            fixture.detectChanges();
+
+            expect(component.isLoading).toBe(false);
+            expect(component.loadingPriceId).toBeNull();
+            expect(getButtons().every(button => !button.disabled && button.getAttribute('aria-busy') === 'false')).toBe(true);
+            expect(fixture.nativeElement.querySelectorAll('.plan-price-section mat-spinner')).toHaveLength(0);
+            expect(haptics.selection).toHaveBeenCalledTimes(1);
+            expect(haptics.error).toHaveBeenCalledTimes(isError ? 1 : 0);
+            expect(haptics.success).not.toHaveBeenCalled();
+            expect(alert).toHaveBeenCalledTimes(isError ? 1 : 0);
+            alert.mockRestore();
+        });
+
+        it('clears checkout progress and shows the timeout message', async () => {
+            const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+            const message = 'Checkout is taking longer than expected. Please try again.';
+            vi.spyOn(TestBed.inject(AppPaymentService), 'appendCheckoutSession')
+                .mockRejectedValue(new CheckoutStartError(message));
+
+            await component.subscribe(prices[3]);
+            fixture.detectChanges();
+
+            expect(component.isLoading).toBe(false);
+            expect(component.loadingPriceId).toBeNull();
+            expect(getButtons().every(button => !button.disabled && button.getAttribute('aria-busy') === 'false')).toBe(true);
+            expect(haptics.error).toHaveBeenCalledTimes(1);
+            expect(alert).toHaveBeenCalledOnce();
+            expect(alert).toHaveBeenCalledWith(message);
+            alert.mockRestore();
+        });
+
+        it('does not show a checkout error after the pricing page is destroyed', async () => {
+            const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+            let rejectCheckout!: (error: Error) => void;
+            const pendingCheckout = new Promise<void>((_resolve, reject) => { rejectCheckout = reject; });
+            vi.spyOn(TestBed.inject(AppPaymentService), 'appendCheckoutSession')
+                .mockReturnValue(pendingCheckout);
+
+            const checkoutPromise = component.subscribe(prices[3]);
+            await vi.waitFor(() => expect(rejectCheckout).toBeDefined());
+            fixture.destroy();
+            rejectCheckout(new Error('Network unavailable'));
+            await checkoutPromise;
+
+            expect(alert).not.toHaveBeenCalled();
+            expect(haptics.error).not.toHaveBeenCalled();
+            alert.mockRestore();
+        });
+    });
+
+    it('should show a spinner inside the onboarding Continue for Free CTA while selecting free', () => {
         const freeProduct = {
             id: 'free_tier',
             active: true,
@@ -1250,6 +1609,7 @@ describe('PricingComponent', () => {
         component.isLoadingRole = false;
         component.isLoading = true;
         component.products$ = of([freeProduct]);
+        component.loadingPriceId = 'free_price';
 
         fixture.detectChanges();
 
@@ -1303,7 +1663,7 @@ describe('PricingComponent', () => {
         continueForFreeButton?.click();
         await fixture.whenStable();
 
-        expect(selectFreeTierSpy).toHaveBeenCalled();
+        expect(selectFreeTierSpy).toHaveBeenCalledWith('free_price');
     });
 
     it('should keep showing the disabled Current Plan button outside onboarding when the role is null', async () => {

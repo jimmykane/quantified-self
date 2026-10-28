@@ -14,15 +14,10 @@ import {
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { buildDiffMapForStats, buildStatDisplayList } from '../../helpers/stats-diff.helper';
 import { BenchmarkQualityIssue, BenchmarkResult } from '@shared/app-event.interface';
-import { BenchmarkAtAGlanceItem, BenchmarkReviewerSummary } from '../../helpers/benchmark-review.helper';
+import { BenchmarkAtAGlanceItem, BenchmarkReviewerSummary, BenchmarkGrade, resolveBenchmarkGnssGrade, resolveBenchmarkCorrelationGrade, resolveBenchmarkOverallGrade } from '../../helpers/benchmark-review.helper';
 import { BenchmarkReviewService } from '../../services/benchmark-review.service';
-
-// Grade thresholds for GNSS accuracy (CEP50 in meters)
-const GNSS_THRESHOLDS = {
-    excellent: 2,
-    good: 5,
-    fair: 10
-};
+import { RR_METRICS } from '../../constants/rr-metrics';
+import { buildBenchmarkRRReportRows, type BenchmarkRRReportRow } from '../../helpers/benchmark-rr.helper';
 
 // Grade thresholds for correlation (0-1)
 const CORRELATION_THRESHOLDS = {
@@ -30,8 +25,9 @@ const CORRELATION_THRESHOLDS = {
     good: 0.95,
     fair: 0.90
 };
+const RR_METRIC_TYPES = new Set<string>(RR_METRICS.map(metric => metric.type));
 
-type Grade = 'excellent' | 'good' | 'fair' | 'poor';
+type Grade = BenchmarkGrade;
 
 interface BenchmarkDiffChip {
     label: string;
@@ -65,6 +61,15 @@ interface InsightItem {
     selector: 'app-benchmark-report',
     template: `
     <div class="benchmark-container" *ngIf="result">
+
+      <section *ngIf="result.requiresRegeneration" class="metric-card qs-overlay-section" role="status">
+        <div class="metric-card-content">
+          <mat-icon>refresh</mat-icon>
+          <strong>Regeneration required</strong>
+          <p>This previous report was retained after reprocessing. Rerun the benchmark to compare the current recordings.</p>
+          <p *ngIf="result.activityLinksResolved === false">The previous participants could not be matched safely. Choose the reference and test recordings again.</p>
+        </div>
+      </section>
 
       <!-- Header -->
       <div class="report-header">
@@ -148,8 +153,52 @@ interface InsightItem {
         </div>
       </div>
 
+      <section class="metric-card rr-summary-card qs-overlay-section" *ngIf="rrRows.length > 0">
+        <div class="metric-card-header">
+          <div class="grade-avatar"><mat-icon>ecg_heart</mat-icon></div>
+          <div class="metric-card-heading">
+            <div class="metric-card-title">R–R &amp; HRV</div>
+            <div class="metric-card-subtitle">Full-recording summaries · excluded from the agreement grade</div>
+          </div>
+        </div>
+        <div class="metric-card-content">
+          <div class="rr-table-region qs-scrollbar" tabindex="0" role="region" aria-label="R–R and HRV recording comparison">
+            <table class="rr-summary-table">
+              <thead>
+                <tr>
+                  <th scope="col">Statistic</th>
+                  <th scope="col">
+                    <span class="rr-recording-label" [style.color]="referenceColor || 'var(--mat-sys-primary)'">{{ result.referenceName || 'Device A' }}</span>
+                    <span class="rr-detail">Reference</span>
+                  </th>
+                  <th scope="col">
+                    <span class="rr-recording-label" [style.color]="testColor || 'var(--mat-sys-tertiary)'">{{ result.testName || 'Device B' }}</span>
+                    <span class="rr-detail">Test</span>
+                  </th>
+                  <th scope="col">Absolute difference</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of rrRows">
+                  <th scope="row">{{ row.label }}</th>
+                  <td *ngFor="let cell of row.cells" [class.rr-unavailable]="cell.display === null">
+                    <span class="rr-value rr-recording-value">{{ cell.display ?? 'Unavailable' }}</span>
+                    <span class="rr-detail" *ngIf="cell.detail">{{ cell.detail }}</span>
+                  </td>
+                  <td [class.rr-unavailable]="row.difference === null">
+                    <span class="rr-value">{{ row.difference?.display ?? 'Unavailable' }}</span>
+                    <span class="rr-detail" *ngIf="row.difference as difference">{{ difference.percent | number:'1.1-1' }}%</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="rr-scroll-hint">Scroll horizontally to compare recordings.</p>
+        </div>
+      </section>
+
       <!-- GNSS Section -->
-      <section class="metric-card gnss-card qs-overlay-section">
+      <section class="metric-card gnss-card qs-overlay-section" *ngIf="result.metrics.gnss as gnss; else noGps">
         <div class="metric-card-header">
             <div class="grade-avatar" [ngClass]="getGnssGrade()">
                 <mat-icon>{{ getGradeIcon(getGnssGrade()) }}</mat-icon>
@@ -162,22 +211,28 @@ interface InsightItem {
         <div class="metric-card-content stats-grid">
             <div class="stat-item">
                 <span class="label">CEP 50%</span>
-                <span class="value">{{ result.metrics.gnss.cep50 | number:'1.2-2' }}m</span>
+                <span class="value">{{ gnss.cep50 | number:'1.2-2' }}m</span>
             </div>
             <div class="stat-item">
                 <span class="label">CEP 95%</span>
-                <span class="value">{{ result.metrics.gnss.cep95 | number:'1.2-2' }}m</span>
+                <span class="value">{{ gnss.cep95 | number:'1.2-2' }}m</span>
             </div>
             <div class="stat-item">
                 <span class="label">RMSE</span>
-                <span class="value">{{ result.metrics.gnss.rmse | number:'1.2-2' }}m</span>
+                <span class="value">{{ gnss.rmse | number:'1.2-2' }}m</span>
             </div>
              <div class="stat-item">
                 <span class="label">Max Dev</span>
-                <span class="value highlight">{{ result.metrics.gnss.maxDeviation | number:'1.1-1' }}m</span>
+                <span class="value highlight">{{ gnss.maxDeviation | number:'1.1-1' }}m</span>
             </div>
         </div>
       </section>
+
+      <ng-template #noGps>
+        <section class="metric-card qs-overlay-section">
+          <div class="metric-card-content">No shared GPS data. GNSS is excluded from the overall grade.</div>
+        </section>
+      </ng-template>
 
       <section class="metric-card info-card qs-overlay-section" *ngIf="result && (result.alignmentApplied || (result.qualityIssues && result.qualityIssues.length > 0))">
         <div class="metric-card-header">
@@ -249,7 +304,7 @@ interface InsightItem {
                 </div>
             </div>
             <div class="metric-card-content">
-                <div class="correlation-meter">
+                <div class="correlation-meter" *ngIf="result.metrics.streamMetrics[stream].pearsonCorrelation !== null">
                     <div class="bar-bg">
                         <div class="bar-fill" 
                              [style.width.%]="result.metrics.streamMetrics[stream].pearsonCorrelation * 100"
@@ -283,6 +338,7 @@ export class BenchmarkReportComponent implements OnChanges {
     @Input() benchmarkReviewTags: string[] = [];
     objectKeys = Object.keys;
     diffChips: BenchmarkDiffChip[] = [];
+    rrRows: BenchmarkRRReportRow[] = [];
     qualityIssueGroups: BenchmarkIssueGroup[] = [];
     expandedIssueGroups = new Set<string>();
     reviewerSummary: BenchmarkReviewerSummary | null = null;
@@ -296,6 +352,7 @@ export class BenchmarkReportComponent implements OnChanges {
     ngOnChanges(changes: SimpleChanges) {
         if (changes['result'] || changes['event'] || changes['unitSettings'] || changes['summariesSettings']) {
             this.updateDiffChips();
+            this.updateRRRows();
             this.updateQualityIssueGroups();
         }
         if (changes['result'] || changes['benchmarkReviewTags']) {
@@ -311,12 +368,7 @@ export class BenchmarkReportComponent implements OnChanges {
     }
 
     getGnssGrade(): Grade {
-        if (!this.result) return 'poor';
-        const cep50 = this.result.metrics.gnss.cep50;
-        if (cep50 <= GNSS_THRESHOLDS.excellent) return 'excellent';
-        if (cep50 <= GNSS_THRESHOLDS.good) return 'good';
-        if (cep50 <= GNSS_THRESHOLDS.fair) return 'fair';
-        return 'poor';
+        return resolveBenchmarkGnssGrade(this.result?.metrics?.gnss?.cep50);
     }
 
     getStatGapGrade(): Grade | null {
@@ -328,40 +380,18 @@ export class BenchmarkReportComponent implements OnChanges {
         return 'poor';
     }
 
-    getCorrelationGrade(correlation: number): Grade {
-        if (correlation >= CORRELATION_THRESHOLDS.excellent) return 'excellent';
-        if (correlation >= CORRELATION_THRESHOLDS.good) return 'good';
-        if (correlation >= CORRELATION_THRESHOLDS.fair) return 'fair';
-        return 'poor';
+    getCorrelationGrade(correlation: number | null): Grade {
+        return resolveBenchmarkCorrelationGrade(correlation);
     }
 
     getOverallGrade(): Grade {
-        const streamGrades = this.getStreamGrades();
-        const gnssGrade = this.getGnssGrade();
-        const statGrade = this.getStatGapGrade();
-        const allGrades = statGrade ? [gnssGrade, ...streamGrades, statGrade] : [gnssGrade, ...streamGrades];
-
-        if (allGrades.length === 0) return 'fair';
-
-        // Weighted scoring: Excellent=3, Good=2, Fair=1, Poor=0
-        const scoreMap: Record<Grade, number> = { excellent: 3, good: 2, fair: 1, poor: 0 };
-        const totalScore = allGrades.reduce((acc, g) => acc + scoreMap[g], 0);
-        const average = totalScore / allGrades.length;
-
-        // >= 2.5 (mostly excellent) -> Excellent
-        // >= 1.5 (mostly good) -> Good
-        // >= 0.5 (mostly fair) -> Fair
-        // < 0.5 (mostly poor) -> Poor
-        if (average >= 2.5) return 'excellent';
-        if (average >= 1.5) return 'good';
-        if (average >= 0.5) return 'fair';
-        return 'poor';
+        return this.result ? resolveBenchmarkOverallGrade(this.result, this.getStatGapGrade()) : 'unavailable';
     }
 
     getStreamGrades(): Grade[] {
-        if (!this.result) return [];
-        return Object.values(this.result.metrics.streamMetrics)
-            .map(m => this.getCorrelationGrade(m.pearsonCorrelation));
+        return Object.values(this.result?.metrics.streamMetrics || {})
+            .map(m => this.getCorrelationGrade(m.pearsonCorrelation))
+            .filter(grade => grade !== 'unavailable');
     }
 
     getGradeIcon(grade: Grade): string {
@@ -370,6 +400,7 @@ export class BenchmarkReportComponent implements OnChanges {
             case 'good': return 'check_circle';
             case 'fair': return 'warning';
             case 'poor': return 'error';
+            case 'unavailable': return 'info';
         }
     }
 
@@ -379,6 +410,7 @@ export class BenchmarkReportComponent implements OnChanges {
             case 'good': return 'Good Agreement';
             case 'fair': return 'Fair Agreement';
             case 'poor': return 'Poor Agreement';
+            case 'unavailable': return this.result?.requiresRegeneration ? 'Regeneration required' : 'Insufficient measurements';
         }
     }
 
@@ -387,10 +419,12 @@ export class BenchmarkReportComponent implements OnChanges {
 
         const insights: InsightItem[] = [];
         const gnssGrade = this.getGnssGrade();
-        const cep50 = this.result.metrics.gnss.cep50;
+        const cep50 = this.result.metrics.gnss?.cep50;
 
         // GNSS insights
-        if (gnssGrade === 'excellent') {
+        if (gnssGrade === 'unavailable') {
+            insights.push({ label: 'No shared GPS data', grade: 'unavailable' });
+        } else if (gnssGrade === 'excellent') {
             insights.push({ label: 'GNSS accuracy is excellent', value: `${cep50.toFixed(1)}m CEP50`, grade: 'excellent' });
         } else if (gnssGrade === 'good') {
             insights.push({ label: 'GNSS accuracy is good', value: `${cep50.toFixed(1)}m CEP50`, grade: 'good' });
@@ -404,6 +438,7 @@ export class BenchmarkReportComponent implements OnChanges {
         for (const [name, metrics] of Object.entries(this.result.metrics.streamMetrics)) {
             const correlation = metrics.pearsonCorrelation;
             const streamGrade = this.getCorrelationGrade(correlation);
+            if (streamGrade === 'unavailable') continue;
 
             if (streamGrade === 'excellent') {
                 insights.push({ label: `${name} correlation is excellent`, value: `${(correlation * 100).toFixed(1)}%`, grade: 'excellent' });
@@ -518,7 +553,8 @@ export class BenchmarkReportComponent implements OnChanges {
         return new Date(val);
     }
 
-    getCorrelationLabel(score: number): string {
+    getCorrelationLabel(score: number | null): string {
+        if (score === null || !Number.isFinite(score)) return 'Correlation unavailable';
         const absScore = Math.abs(score);
         if (absScore >= CORRELATION_THRESHOLDS.excellent) return 'Excellent Match';
         if (absScore >= CORRELATION_THRESHOLDS.good) return 'Strong Correlation';
@@ -538,8 +574,21 @@ export class BenchmarkReportComponent implements OnChanges {
         return this.expandedIssueGroups.has(key);
     }
 
+    private updateRRRows(): void {
+        this.rrRows = [];
+        const result = this.result;
+        if (!result || !this.event || result.requiresRegeneration || result.activityLinksResolved === false
+            || !result.referenceId || !result.testId || result.referenceId === result.testId) return;
+
+        const activities = this.event.getActivities();
+        const references = activities.filter(activity => activity.getID() === result.referenceId);
+        const tests = activities.filter(activity => activity.getID() === result.testId);
+        if (references.length !== 1 || tests.length !== 1) return;
+        this.rrRows = buildBenchmarkRRReportRows(references[0], tests[0], this.unitSettings);
+    }
+
     private updateDiffChips() {
-        if (!this.result || !this.event) {
+        if (!this.result || !this.event || this.result.requiresRegeneration) {
             this.diffChips = [];
             return;
         }
@@ -576,9 +625,9 @@ export class BenchmarkReportComponent implements OnChanges {
             }
         });
 
-        const statsList = Array.from(statsByType.values());
+        const statsList = Array.from(statsByType.values()).filter(stat => !RR_METRIC_TYPES.has(stat.getType()));
         const displayedStatsToShow = statsList.map(stat => stat.getType());
-        const displayList = buildStatDisplayList(statsList, displayedStatsToShow, unitSettings);
+        const displayList = buildStatDisplayList(statsList, displayedStatsToShow, unitSettings, compareActivities.map(activity => activity.type));
         const diffMap = buildDiffMapForStats(statsList, displayedStatsToShow, compareActivities, unitSettings);
 
         this.diffChips = displayList

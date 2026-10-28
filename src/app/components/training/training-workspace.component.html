@@ -1,28 +1,40 @@
 <main class="training-workspace qs-workspace-page" aria-labelledby="training-title">
+  <!-- Keep the bounded chart-note context without exposing its manager controls on Training. -->
+  <app-timeline-notes-workspace #timelineNotes class="training-notes-context" hidden />
   <app-page-header
     class="training-page-header"
     title="Training"
     titleId="training-title"
     leadingIcon="monitoring"
-    [eyebrow]="derivedMetricsRouteStatus ? null : '28-day training analysis'"
-    [subtitle]="derivedMetricsRouteStatus ? null : trainingDataAsOfText">
-    @if (derivedMetricsRouteStatus) {
-      <div
-        pageHeaderContext
-        class="training-derived-metrics-status"
-        [class.warning]="derivedMetricsRouteStatus.type === 'warning'"
-        [attr.role]="derivedMetricsRouteStatus.type === 'warning' ? 'alert' : 'status'"
-        [attr.aria-label]="derivedMetricsRouteStatus.title + '. ' + derivedMetricsRouteStatus.description">
-        @if (derivedMetricsRouteStatus.type === 'pending') {
-          <mat-icon aria-hidden="true">sync</mat-icon>
-        } @else {
-          <mat-icon aria-hidden="true">error_outline</mat-icon>
-        }
-        <span><strong>{{ derivedMetricsRouteStatus.title }}</strong> · {{ derivedMetricsRouteStatus.description }}</span>
-      </div>
-    }
-    <div pageHeaderActions class="training-page-actions">
-      @if (derivedMetricsRouteStatus?.showRetry) {
+    eyebrow="28-day training analysis"
+    [subtitle]="trainingDataAsOfText">
+    <div pageHeaderTitleActions class="training-update-control">
+      @if (derivedMetricsRouteStatus) {
+        <button
+          mat-icon-button
+          type="button"
+          class="training-update-toggle"
+          [class.warning]="derivedMetricsRouteStatus.type === 'warning'"
+          [attr.aria-label]="derivedMetricsRouteStatus.title + (derivedMetricsStatusExpanded() ? '. Hide details' : '. Show details')"
+          [attr.aria-expanded]="derivedMetricsStatusExpanded()"
+          aria-controls="training-update-details"
+          [matTooltip]="derivedMetricsRouteStatus.title"
+          (click)="toggleDerivedMetricsStatusDetails()">
+          <mat-icon
+            aria-hidden="true"
+            [class.training-update-spinning]="derivedMetricsRouteStatus.type === 'pending'">
+            {{ derivedMetricsRouteStatus.type === 'pending' ? 'sync' : 'error_outline' }}
+          </mat-icon>
+        </button>
+        <span
+          class="training-derived-metrics-status cdk-visually-hidden"
+          [attr.role]="derivedMetricsRouteStatus.type === 'warning' ? 'alert' : 'status'">
+          {{ derivedMetricsRouteStatus.title }}. {{ derivedMetricsRouteStatus.description }}
+        </span>
+      }
+    </div>
+    @if (derivedMetricsRouteStatus?.showRetry) {
+      <div pageHeaderActions class="training-page-actions">
         <button
           mat-stroked-button
           type="button"
@@ -33,36 +45,19 @@
           <mat-icon aria-hidden="true">refresh</mat-icon>
           <span class="training-derived-metrics-retry-label">Retry</span>
         </button>
-      }
-      <a
-        mat-button
-        class="training-feedback-action"
-        [href]="trainingFeedbackMailtoHref"
-        aria-label="Send feedback about Training to support"
-      >
-        <mat-icon aria-hidden="true">feedback</mat-icon>
-        <span class="training-feedback-action-label">Feedback</span>
-      </a>
-      <a
-        mat-button
-        class="training-calendar-action"
-        routerLink="/calendar"
-        aria-label="Open activity calendar"
-      >
-        <mat-icon aria-hidden="true">calendar_month</mat-icon>
-        <span class="training-calendar-action-label">Calendar</span>
-      </a>
-      <a
-        mat-button
-        class="training-dashboard-action"
-        routerLink="/dashboard"
-        aria-label="Return to dashboard"
-      >
-        <mat-icon aria-hidden="true">dashboard</mat-icon>
-        <span class="training-dashboard-action-label">Dashboard</span>
-      </a>
-    </div>
+      </div>
+    }
   </app-page-header>
+
+  @if (derivedMetricsRouteStatus) {
+    <div
+      id="training-update-details"
+      class="training-update-details"
+      [hidden]="!derivedMetricsStatusExpanded()">
+      <strong>{{ derivedMetricsRouteStatus.title }}</strong>
+      <p>{{ derivedMetricsRouteStatus.description }}</p>
+    </div>
+  }
 
   <nav class="training-destination-navigation" aria-label="Training analysis destination">
     <div class="training-destination-desktop">
@@ -90,32 +85,36 @@
         }
       </mat-button-toggle-group>
 
-      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="training-all-sports-selector">
-        <mat-label>All sports</mat-label>
-        <mat-select
-          #desktopAllSportsSelect
-          [value]="desktopAllSportsSelectorValue"
-          (selectionChange)="selectDesktopTrainingDestination($event.value, desktopAllSportsSelect)">
-          @for (option of trainingDestinationOptions; track option.id) {
-            @if (option.id !== 'overview') {
-              <mat-option [value]="option.id">
-                <span class="training-destination-option">
-                  @if (option.sport; as sport) {
-                    <app-activity-type-icon
-                      [activityType]="sport.iconActivityType"
-                      size="18px"
-                      aria-hidden="true">
-                    </app-activity-type-icon>
-                  } @else if (option.materialIcon) {
-                    <mat-icon aria-hidden="true">{{ option.materialIcon }}</mat-icon>
-                  }
-                  <span>{{ option.label }}</span>
-                </span>
-              </mat-option>
+      <button
+        mat-button
+        type="button"
+        appHapticTap
+        class="training-all-sports-selector"
+        [matMenuTriggerFor]="desktopAllSportsMenu"
+        [attr.aria-label]="'Choose training sport. Current view: ' + trainingDestinationLabel">
+        <mat-icon aria-hidden="true" [style.color]="selectedTrainingDestinationOption?.iconColor">
+          {{ selectedTrainingDestinationOption?.materialIcon || 'monitoring' }}
+        </mat-icon>
+        <span>{{ isOverviewDestination ? 'All sports' : trainingDestinationLabel }}</span>
+        <mat-icon iconPositionEnd aria-hidden="true">expand_more</mat-icon>
+      </button>
+      <mat-menu #desktopAllSportsMenu="matMenu" class="qs-menu-panel" xPosition="before">
+        @for (option of trainingDestinationOptions; track option.id) {
+          <button
+            mat-menu-item
+            type="button"
+            role="menuitemradio"
+            [attr.aria-label]="'View ' + option.label"
+            [attr.aria-checked]="option.id === selectedTrainingDestination"
+            [class.training-destination-current-option]="option.id === selectedTrainingDestination"
+            (click)="selectTrainingDestination(option.id, 'desktop_selector')">
+            @if (option.materialIcon) {
+              <mat-icon aria-hidden="true" [style.color]="option.iconColor">{{ option.materialIcon }}</mat-icon>
             }
-          }
-        </mat-select>
-      </mat-form-field>
+            <span>{{ option.label }}</span>
+          </button>
+        }
+      </mat-menu>
 
       <button
         mat-button
@@ -193,6 +192,8 @@
     </div>
   </nav>
 
+  <app-active-sickness-note #sicknessContext [context]="timelineNotes.context()" />
+
   @if (isLoading) {
     <div class="training-loading" role="status"><mat-spinner diameter="28"></mat-spinner></div>
   } @else {
@@ -205,7 +206,8 @@
         </div>
         <span class="training-section-note">All training</span>
       </div>
-      <app-training-summary-cards [cards]="trainingSummaryCards" ariaLabel="Current Training comparison">
+      <app-training-summary-cards [cards]="trainingSummaryCards" ariaLabel="Current Training comparison"
+        [stateCaptionOverride]="sicknessContext.hasActiveSickness() && trainingStatus.stateLabel === 'Fresh' ? 'Low training load' : null">
         @if (useTrainingStateDetailsDialog()) {
           <button
             trainingSummaryStateAction
@@ -300,6 +302,7 @@
               </header>
               @if (trainingReadiness.historyPoints.length) {
                 <app-training-readiness-trend-chart
+                  [timelineNotes]="timelineNotes.context()"
                   [points]="trainingReadiness.historyPoints"
                   [ariaLabel]="trainingReadiness.historyAriaLabel"
                   [darkTheme]="isDarkTheme()"
@@ -355,7 +358,7 @@
                   <span class="training-metric-label">Recovery left</span>
                   <div class="training-readiness-imported-recovery-value">
                     <strong><app-training-metric-text [text]="estimate.valueText"></app-training-metric-text></strong>
-                    <span>remaining · until {{ estimate.finishTimeMs | date:'shortTime' }}</span>
+                    <span>remaining · expected by {{ estimate.finishText }}</span>
                   </div>
                   <p>{{ estimate.detailText }}</p>
                 </div>
@@ -482,17 +485,7 @@
               @if (card.emptyMessage) {
                 <p class="training-build-empty">{{ card.emptyMessage }}</p>
               }
-              <dl class="training-build-table">
-                <div class="training-build-table-heading"><dt>Metric</dt><dd>Now</dd><dd>Benchmark</dd><dd>Change</dd></div>
-                @for (row of card.metricRows; track row.label) {
-                  <div [class.training-build-intensity-row]="row.isIntensity">
-                    <dt>{{ row.label }}</dt>
-                    <dd><app-training-metric-text [text]="row.currentText"></app-training-metric-text></dd>
-                    <dd><app-training-metric-text [text]="row.benchmarkText"></app-training-metric-text></dd>
-                    <dd class="training-build-delta" [attr.data-tone]="row.deltaTone"><app-training-metric-text [text]="row.deltaText"></app-training-metric-text></dd>
-                  </div>
-                }
-              </dl>
+              <app-training-build-metrics [rows]="card.metricRows"></app-training-build-metrics>
               @if (card.recovery; as recovery) {
                 <section class="training-build-recovery" [attr.aria-label]="card.label + ' sleep comparison'">
                   <div class="training-build-recovery-summary">
@@ -617,9 +610,15 @@
         }
       </div>
       <div class="training-load-grid">
+        <app-training-impact-recap
+          [points]="derivedState.formPoints"
+          [formStatus]="derivedState.formStatus"
+          [darkTheme]="isDarkTheme()"
+          [nowMs]="trainingImpactRecapNowMs"
+        ></app-training-impact-recap>
         @if (derivedState.formStatus === 'ready' || derivedState.formPoints?.length) {
           <article class="training-chart-panel training-chart-panel-wide qs-glass-card-panel">
-            <app-form-chart [data]="derivedState.formPoints" [formStatus]="derivedState.formStatus" [darkTheme]="isDarkTheme()" [infoTooltip]="loadTrajectoryInfoTooltip" timelineWindow="m"></app-form-chart>
+            <app-form-chart [timelineNotes]="timelineNotes.context()" [data]="derivedState.formPoints" [formStatus]="derivedState.formStatus" [darkTheme]="isDarkTheme()" [infoTooltip]="loadTrajectoryInfoTooltip" timelineWindow="m"></app-form-chart>
           </article>
         } @else {
           <article class="training-chart-state training-chart-state-form qs-glass-card-panel" role="status">
@@ -633,7 +632,7 @@
         }
         @if (derivedState.freshnessForecastStatus === 'ready' || derivedState.freshnessForecast?.points?.length) {
           <article class="training-chart-panel qs-glass-card-panel">
-            <app-freshness-forecast-chart [forecast]="derivedState.freshnessForecast" [status]="derivedState.freshnessForecastStatus" [darkTheme]="isDarkTheme()" [infoTooltip]="freshnessForecastInfoTooltip"></app-freshness-forecast-chart>
+            <app-freshness-forecast-chart [timelineNotes]="timelineNotes.context()" [forecast]="derivedState.freshnessForecast" [status]="derivedState.freshnessForecastStatus" [darkTheme]="isDarkTheme()" [infoTooltip]="freshnessForecastInfoTooltip"></app-freshness-forecast-chart>
           </article>
         } @else {
           <article class="training-chart-state training-chart-state-forecast qs-glass-card-panel" role="status">
@@ -647,6 +646,7 @@
         }
         <app-training-metric-grid
           [metrics]="trainingLoadMetricItems"
+          [darkTheme]="isDarkTheme()"
           ariaLabel="Training load metrics"
         ></app-training-metric-grid>
       </div>
@@ -692,60 +692,8 @@
                 </dl>
               </article>
             } @else {
-            <article class="training-mix-panel qs-glass-card-panel" [class.training-mix-panel--single]="trainingMixDisciplines.length === 1">
-              <header><h3 class="qs-dashboard-chart-title">{{ discipline.label }}</h3><span>28d / normalized 84d</span></header>
-              <div class="training-mix-summary"><strong><app-training-metric-text [text]="discipline.activityCountText"></app-training-metric-text></strong><span>workouts · usual {{ discipline.baselineActivityCountText }}</span><strong><app-training-metric-text [text]="discipline.durationText"></app-training-metric-text></strong><span>time · usual {{ discipline.baselineDurationText }}</span></div>
-              <div class="training-card-guidance training-card-guidance--compact">
-                <p><strong>What this means:</strong>&nbsp;{{ discipline.guidance.conclusionText }}</p>
-                <small>{{ discipline.guidance.evidenceText }}</small>
-                @if (discipline.guidance.nextStepText) {
-                  <p class="training-card-guidance-next"><strong>What to look at next:</strong>&nbsp;{{ discipline.guidance.nextStepText }}</p>
-                }
-              </div>
-              @if (discipline.zones.length) {
-                @if (trainingMixDisciplines.length === 1) {
-                  <div class="training-mix-zone-comparison">
-                    <div class="training-mix-zone-heading"><span>Intensity balance</span><span>Now / usual</span></div>
-                    <dl>
-                      @for (zone of discipline.zones; track zone.label) {
-                        <div class="training-mix-zone-row">
-                          <div class="training-mix-zone-row-heading"><dt>{{ zone.label }}</dt><dd><app-training-metric-text [text]="zone.currentText"></app-training-metric-text> <span>/ <app-training-metric-text [text]="zone.baselineText"></app-training-metric-text></span></dd></div>
-                          <div class="training-mix-zone-track" aria-hidden="true">
-                            @if (zone.currentPercent !== null) {
-                              <span class="training-mix-zone-current" [style.width.%]="zone.currentPercent"></span>
-                            }
-                            @if (zone.baselinePercent !== null) {
-                              <span class="training-mix-zone-baseline" [style.left.%]="zone.baselinePercent"></span>
-                            }
-                          </div>
-                        </div>
-                      }
-                    </dl>
-                  </div>
-                } @else {
-                  <dl class="training-mix-compact-zones">
-                    @for (zone of discipline.zones; track zone.label) {
-                      <div><dt>{{ zone.label }}</dt><dd><app-training-metric-text [text]="zone.currentText"></app-training-metric-text> <span>/ <app-training-metric-text [text]="zone.baselineText"></app-training-metric-text></span></dd></div>
-                    }
-                  </dl>
-                }
-              } @else if (discipline.intensityEvidenceText) {
-                <p class="training-mix-intensity-note">{{ discipline.intensityEvidenceText }}</p>
-              }
-              @if (discipline.contexts.length) {
-                <div class="training-mix-contexts">
-                  @for (context of discipline.contexts; track context.context) {
-                    <section>
-                      <header><strong>{{ context.label }}</strong><span>Now / usual</span></header>
-                      <dl>
-                        @for (metric of context.metrics; track metric.metric) {
-                          <div><dt>{{ metric.label }}</dt><dd><app-training-metric-text [text]="metric.currentText"></app-training-metric-text> <span>/ <app-training-metric-text [text]="metric.referenceText"></app-training-metric-text></span></dd></div>
-                        }
-                      </dl>
-                    </section>
-                  }
-                </div>
-              }
+            <article class="training-mix-panel qs-glass-card-panel">
+              <app-training-mix-details [view]="discipline" [single]="trainingMixDisciplines.length === 1"></app-training-mix-details>
             </article>
             }
           } @empty {
@@ -754,7 +702,7 @@
         }
         @if (isOverviewDestination && (derivedState.intensityDistributionStatus === 'ready' || derivedState.intensityDistribution?.weeks?.length)) {
           <article class="training-chart-panel training-intensity-chart qs-glass-card-panel">
-            <app-intensity-distribution-chart [distribution]="derivedState.intensityDistribution" [status]="derivedState.intensityDistributionStatus" [darkTheme]="isDarkTheme()" range="6m"></app-intensity-distribution-chart>
+            <app-intensity-distribution-chart [distribution]="derivedState.intensityDistribution" [status]="derivedState.intensityDistributionStatus" [darkTheme]="isDarkTheme()" [unitSettings]="unitSettings" range="6m"></app-intensity-distribution-chart>
           </article>
         } @else if (isOverviewDestination) {
           <article class="training-chart-state training-chart-state-wide qs-glass-card-panel" role="status">
@@ -855,6 +803,7 @@
               <section class="training-power-systems-trend">
                 <header><strong>{{ trend.label }}</strong><span>{{ trend.unit }}</span></header>
                 <app-training-power-systems-trend-chart
+                  [timelineNotes]="timelineNotes.context()"
                   [trend]="trend"
                   [darkTheme]="isDarkTheme()">
                 </app-training-power-systems-trend-chart>
@@ -919,6 +868,13 @@
                     <small>{{ importedVo2Max.detailText }}</small>
                   </div>
                 }
+                @if (discipline.referenceVo2Max; as referenceVo2Max) {
+                  <div class="training-capacity-marker training-capacity-aerobic-marker">
+                    <span>{{ referenceVo2Max.label }}</span>
+                    <strong><app-training-metric-text [text]="referenceVo2Max.valueText"></app-training-metric-text></strong>
+                    <small>{{ referenceVo2Max.detailText }}</small>
+                  </div>
+                }
               </div>
 
             </article>
@@ -936,6 +892,7 @@
           @if (derivedState.trainingSwimPerformanceStatus === 'ready' || derivedState.trainingSwimPerformance) {
             <article class="training-chart-panel training-swim-performance-panel qs-glass-card-panel">
               <app-training-swim-performance-chart
+                [timelineNotes]="timelineNotes.context()"
                 [performance]="derivedState.trainingSwimPerformance"
                 [status]="derivedState.trainingSwimPerformanceStatus"
                 [darkTheme]="isDarkTheme()"
@@ -1011,6 +968,7 @@
                           <p class="training-empty-state">No comparable durability metric for this context.</p>
                         }
                         <app-training-durability-trajectory-chart
+                          [timelineNotes]="timelineNotes.context()"
                           [trajectory]="context.trajectory"
                           [status]="derivedState.trainingDurabilityStatus"
                           [darkTheme]="isDarkTheme()"
@@ -1106,69 +1064,6 @@
     </section>
     }
 
-    @if (isOverviewDestination) {
-    <section class="training-section training-body-context-section" aria-labelledby="training-body-context-title">
-      <div class="training-section-heading">
-        <div>
-          <p>Body context</p>
-          <h2 id="training-body-context-title">Recorded body weight</h2>
-        </div>
-        <span class="training-section-note">Separate from training load and readiness</span>
-      </div>
-      <article class="training-body-weight-panel qs-glass-card-panel" aria-labelledby="training-body-weight-title">
-        <header>
-          <div>
-            <h3 id="training-body-weight-title" class="qs-dashboard-chart-title">Body-weight trend</h3>
-            <p>Recorded measurements only</p>
-          </div>
-          <span>28-day view</span>
-        </header>
-        @if (bodyWeightTrend.state === 'unavailable') {
-          <p class="training-empty-state">{{ bodyWeightTrend.statusText }}</p>
-        } @else if (bodyWeightTrend.state === 'preparing') {
-          <div class="training-capacity-loading" role="status">
-            <mat-spinner diameter="24"></mat-spinner>
-            <div><strong>Preparing body-weight trend</strong><p>{{ bodyWeightTrend.statusText }}</p></div>
-          </div>
-        } @else {
-          @if (bodyWeightTrend.isUpdating) {
-            <p class="training-recovery-update" role="status">Updating recorded measurements…</p>
-          }
-          <div class="training-body-weight-summary">
-            <div>
-              <span>Latest</span>
-              <strong><app-training-metric-text [text]="bodyWeightTrend.latestWeightText"></app-training-metric-text></strong>
-              <small>{{ bodyWeightTrend.latestRecordedText }}</small>
-            </div>
-            <div>
-              <span>7-day median</span>
-              <strong><app-training-metric-text [text]="bodyWeightTrend.median7dText"></app-training-metric-text></strong>
-              <small>{{ bodyWeightTrend.change7dText }}</small>
-            </div>
-            <div>
-              <span>28-day median</span>
-              <strong><app-training-metric-text [text]="bodyWeightTrend.median28dText"></app-training-metric-text></strong>
-              <small>{{ bodyWeightTrend.change28dText }}</small>
-            </div>
-          </div>
-          @if (bodyWeightTrend.chartPoints.length) {
-            <app-training-body-weight-trend-chart
-              [points]="bodyWeightTrend.chartPoints"
-              [ariaLabel]="bodyWeightTrend.chartAriaLabel"
-              [darkTheme]="isDarkTheme()"
-              [unitSettings]="unitSettings"
-            ></app-training-body-weight-trend-chart>
-            <div class="training-body-weight-trend-dates">
-              <span>{{ bodyWeightTrend.chartStartLabel }}</span>
-              <span>{{ bodyWeightTrend.chartEndLabel }}</span>
-            </div>
-          }
-          <p class="training-body-weight-coverage">{{ bodyWeightTrend.coverageText }} · {{ bodyWeightTrend.statusText }}</p>
-          <p class="training-body-weight-source">{{ bodyWeightTrend.sourceText }}</p>
-        }
-      </article>
-    </section>
-    }
   }
 </main>
 

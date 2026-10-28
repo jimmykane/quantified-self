@@ -1,0 +1,211 @@
+import { AppEventSummary } from '@shared/event-summary';
+import type { EventRead } from '@shared/event-read';
+import { dashboardChartHasRecordedData, resolveDashboardChartAvailability, type DashboardChartAvailability } from './dashboard-chart-availability.helper';
+import type { DashboardDerivedMetricStatus } from './derived-metric-status.helper';
+import { normalizeDashboardTileEventFilters } from './dashboard-tile-event-filters.helper';
+import { getDashboardPowerCurveScopeDefinition, resolveDashboardPowerCurveTileDisplayScope } from './dashboard-power-curve-scope.helper';
+import { ActivityTypes, DataActivityTypes, DataAscent, DataDistance, DataDuration, DataEnergy, DataHeartRateAvg, DataStartPosition, FileType, Privacy, TileChartSettingsInterface, TileSettingsInterface, TileTypes, encodeRoutePolyline5 } from '@sports-alliance/sports-lib';
+import type { FirestoreRouteJSON } from '@shared/app-route.interface';
+import { DERIVED_METRIC_KINDS as M, DerivedMetricKind } from '@shared/derived-metrics';
+import * as C from './dashboard-special-chart-types';
+import { buildDashboardTileViewModels, DashboardChartTileViewModel, DashboardTileViewModel } from './dashboard-tile-view-model.helper';
+import { buildHomeSignalChartsPreviewData, HOME_SIGNAL_CHARTS_PREVIEW_ANCHOR_MS as ANCHOR } from './dashboard-chart-example-signals.helper';
+import { buildDashboardHrvContext, dashboardHrvWindows } from './dashboard-hrv-context.helper';
+import { HEALTH_METRIC_IDS } from '@shared/health';
+import { projectHealthRange } from '@shared/health-query';
+import type { SleepSession } from '@shared/sleep';
+import { SLEEP_PROVIDERS } from '@shared/sleep';
+import type { DashboardSleepTrendPoint } from './dashboard-sleep-chart.helper';
+
+export type DashboardPreviewLoadState = 'loading' | 'ready' | 'error';
+export type DashboardPreviewInput = Parameters<typeof buildDashboardTileViewModels>[0] & {
+  tileEventAnchorsByOrder?: Record<number, number | null>;
+  previewStates?: Record<string, DashboardPreviewLoadState>;
+  previewEventsByRange?: Record<string, EventRead[]>;
+  previewMetricStatuses?: Partial<Record<DerivedMetricKind, DashboardDerivedMetricStatus>>;
+};
+export function dashboardPreviewSourceKeys(tile: TileSettingsInterface): string[] {
+  const kinds = dashboardPreviewMetricKinds(tile);
+  if (kinds.length) return kinds.map(kind => `derived:${kind}`);
+  if (C.isDashboardHrvTrendChartType(tile['chartType'])) return ['hrv'];
+  if (C.isDashboardSleepBackedChartType(tile['chartType'])) return ['sleep'];
+  if (tile.type === TileTypes.Map && tile['mapSource'] === 'routes') return ['routes'];
+  return [`events:${normalizeDashboardTileEventFilters(tile['eventFilters']).range}`];
+}
+export function dashboardPreviewIsManaged(tile: TileSettingsInterface, seed: DashboardPreviewInput): boolean {
+  return dashboardPreviewSourceKeys(tile).every(key => !!seed.previewStates?.[key]);
+}
+/** Reuse only a current window; saved orders cannot be used for candidate previews. */
+export function buildDashboardPreviewSeed(tile: TileSettingsInterface, seed: DashboardPreviewInput, now = Date.now()): DashboardPreviewInput {
+  const range = normalizeDashboardTileEventFilters(tile['eventFilters']).range;
+  const saved = seed.tiles.find(candidate => !seed.tileEventAnchorsByOrder?.[candidate.order]
+    && normalizeDashboardTileEventFilters(candidate['eventFilters']).range === range
+    && seed.tileEventsByOrder?.[candidate.order]);
+  const input: DashboardPreviewInput = { ...seed, tiles: [tile], events: seed.previewEventsByRange?.[range] ?? (saved ? seed.tileEventsByOrder?.[saved.order] || [] : []), tileEventsByOrder: null };
+  const window = seed.sleepTrendWindow;
+  if (!window || Math.abs(now - window.endMs) > 86400000 || Math.abs(window.endMs - window.startMs - 14*86400000) > 86400000) input.sleepSessions = [];
+  const hrvWindow = dashboardHrvWindows('14d', now).visible;
+  if (seed.hrvTrend?.window.startDate !== hrvWindow.startDate || seed.hrvTrend?.window.endDate !== hrvWindow.endDate) input.hrvTrend = null;
+  return input;
+}
+
+export interface DashboardChartPreview {
+  tile: DashboardTileViewModel;
+  source: 'user' | 'example';
+  availability?: DashboardChartAvailability;
+  loading: boolean;
+  note: string;
+  calendarEvents: EventRead[];
+  anchorMs: number;
+  startOfWeek?: number | null;
+}
+
+/** List and detail previews share the picker’s current data. Missing sources stay explicit examples. */
+export function buildDashboardThumbnailPreview(tile: TileSettingsInterface, seed: DashboardPreviewInput): DashboardChartPreview {
+  const input = buildDashboardPreviewSeed(tile, seed);
+  const existing = buildDashboardTileViewModels(input)[0];
+  const availability = resolveDashboardChartAvailability(existing, input,
+    dashboardPreviewSourceKeys(tile).map(key => input.previewStates?.[key]),
+    dashboardPreviewMetricKinds(tile).map(kind => input.previewMetricStatuses?.[kind]));
+  const preview: DashboardChartPreview = availability.hasData
+    ? { tile: existing, source: 'user', loading: false, note: '', calendarEvents: input.events || [], anchorMs: Date.now() }
+    : buildDashboardExamplePreview(tile);
+  return { ...preview, startOfWeek: seed.startOfWeek, availability,
+    loading: availability.state === 'loading' || availability.state === 'updating',
+    note: availability.reason };
+
+}
+
+export function dashboardPreviewSourceLabel(preview: DashboardChartPreview): string {
+  const source = preview.source === 'user' ? 'Your data' : 'Example data';
+  return preview.loading ? `${source} · Loading your data…` : source;
+}
+
+const DAY = 86400000;
+const K = C;
+const contexts: Record<string, keyof DashboardChartTileViewModel> = {
+  [K.DASHBOARD_RECOVERY_NOW_CHART_TYPE]: 'recoveryNow', [K.DASHBOARD_FORM_CHART_TYPE]: 'absoluteLatestFormPoint',
+  [K.DASHBOARD_ACWR_KPI_CHART_TYPE]: 'acwr', [K.DASHBOARD_RAMP_RATE_KPI_CHART_TYPE]: 'rampRate',
+  [K.DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE]: 'monotonyStrain', [K.DASHBOARD_FORM_NOW_KPI_CHART_TYPE]: 'formNow',
+  [K.DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE]: 'formNow', [K.DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE]: 'fitnessCtl',
+  [K.DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE]: 'fitnessCtl', [K.DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE]: 'fatigueAtl',
+  [K.DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE]: 'fatigueAtl', [K.DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE]: 'formNow',
+  [K.DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE]: 'formPlus7d', [K.DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE]: 'easyPercent',
+  [K.DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE]: 'hardPercent', [K.DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE]: 'intensityDistribution',
+  [K.DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE]: 'efficiencyDelta4w', [K.DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE]: 'freshnessForecast',
+  [K.DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'intensityDistribution', [K.DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'efficiencyTrend',
+  [K.DASHBOARD_SLEEP_TREND_CHART_TYPE]: 'sleepTrend', [K.DASHBOARD_HRV_TREND_CHART_TYPE]: 'hrvTrend', [K.DASHBOARD_POWER_CURVE_CHART_TYPE]: 'powerCurve',
+  [K.DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE]: 'aerobicCapacity', [K.DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE]: 'aerobicDurability',
+};
+const metricKinds: Partial<Record<keyof DashboardChartTileViewModel, DerivedMetricKind[]>> = {
+  recoveryNow: [M.RecoveryNow], absoluteLatestFormPoint: [M.Form], acwr: [M.Acwr], rampRate: [M.RampRate],
+  monotonyStrain: [M.MonotonyStrain], formNow: [M.FormNow, M.Form, M.RampRate], fitnessCtl: [M.Form], fatigueAtl: [M.Form],
+  formPlus7d: [M.FormPlus7d], easyPercent: [M.EasyPercent], hardPercent: [M.HardPercent], efficiencyDelta4w: [M.EfficiencyDelta4w],
+  freshnessForecast: [M.FreshnessForecast], intensityDistribution: [M.IntensityDistribution], efficiencyTrend: [M.EfficiencyTrend],
+  powerCurve: [M.PowerCurve], aerobicCapacity: [M.TrainingCapacity], aerobicDurability: [M.TrainingDurability],
+};
+export function dashboardPreviewMetricKinds(tile: TileSettingsInterface): DerivedMetricKind[] {
+  if (`${tile['chartType']}` === K.DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE) return [M.FormNow, M.FreshnessForecast, M.FormPlus7d];
+  if (`${tile['chartType']}` === K.DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE) return [M.IntensityDistribution, M.EasyPercent, M.HardPercent];
+  return metricKinds[contexts[(tile as TileChartSettingsInterface).chartType]] || [];
+}
+/** Snapshot context keys used by the picker; these are read-only dependencies, never rebuild requests. */
+export const DASHBOARD_PREVIEW_METRIC_CONTEXTS: Partial<Record<DerivedMetricKind, keyof NonNullable<DashboardPreviewInput['derivedMetrics']>>> = {
+  [M.Form]: 'formPoints', [M.FormNow]: 'formNow', [M.RecoveryNow]: 'recoveryNow', [M.Acwr]: 'acwr',
+  [M.RampRate]: 'rampRate', [M.MonotonyStrain]: 'monotonyStrain', [M.FormPlus7d]: 'formPlus7d',
+  [M.EasyPercent]: 'easyPercent', [M.HardPercent]: 'hardPercent', [M.EfficiencyDelta4w]: 'efficiencyDelta4w',
+  [M.FreshnessForecast]: 'freshnessForecast', [M.IntensityDistribution]: 'intensityDistribution',
+  [M.EfficiencyTrend]: 'efficiencyTrend', [M.PowerCurve]: 'powerCurve',
+  [M.TrainingCapacity]: 'trainingCapacity', [M.TrainingDurability]: 'trainingDurability',
+};
+export function dashboardPreviewMissingMetricKinds(tiles: readonly TileSettingsInterface[], seed: DashboardPreviewInput): DerivedMetricKind[] {
+  return [...new Set(tiles.flatMap(dashboardPreviewMetricKinds))].filter(kind => {
+    const value = seed.derivedMetrics?.[DASHBOARD_PREVIEW_METRIC_CONTEXTS[kind]];
+    return value == null || Array.isArray(value) && !value.length
+      || ['stale', 'building', 'queued', 'processing', 'failed', 'missing'].includes(seed.previewMetricStatuses?.[kind]);
+  });
+}
+export function dashboardPreviewHasData(tile: DashboardTileViewModel, input: DashboardPreviewInput): boolean {
+  return dashboardChartHasRecordedData(tile, input);
+}
+
+export function buildDashboardExampleEvents(anchorMs = ANCHOR): EventRead[] {
+  return Array.from({ length: 18 }, (_, index) => {
+    const start = new Date(anchorMs - index * DAY * 2);
+    const seconds = 2400 + index * 180;
+    const end = new Date(+start + seconds * 1000);
+    const stats = { [DataActivityTypes.type]: [index % 2 ? ActivityTypes.Running : ActivityTypes.Cycling], [DataDuration.type]: seconds, [DataDistance.type]: 5000 + index * 1700, [DataAscent.type]: 80 + index * 20,
+      [DataEnergy.type]: 350 + index * 30, [DataHeartRateAvg.type]: 135 + index % 15,
+      [DataStartPosition.type]: { latitudeDegrees: 60.17 + index % 4 * .002, longitudeDegrees: 24.94 + index % 5 * .003 } };
+    return new AppEventSummary({ id: `example-${index}`, name: 'Example activity', startDate: +start, endDate: +end,
+      srcFileType: 'json' as FileType, privacy: Privacy.Private, description: null, isMerge: false, stats,
+    });
+  });
+}
+export function buildDashboardExampleRoutes(): FirestoreRouteJSON[] {
+  const points = [[60.170,24.940],[60.173,24.942],[60.175,24.947],[60.171,24.953],[60.168,24.947],[60.170,24.940]];
+  return [{ id: 'example-route', userID: '', name: 'Example route', srcFileType: 'gpx', createdAt: null,
+    routes: [], routeCount: 1, waypointCount: 0, pointCount: points.length, activityTypes: [ActivityTypes.Running], streamTypes: [],
+    preview: { version: 1, encoding: 'polyline5', precision: 5, sourcePointCount: points.length, pointCount: points.length,
+      segments: [{ id: 'example-segment', name: 'Example route', sourcePointCount: points.length, pointCount: points.length,
+        encodedPolyline: encodeRoutePolyline5(points.map(([latitudeDegrees,longitudeDegrees]) => ({latitudeDegrees,longitudeDegrees}))) }] } }];
+}
+
+// Shared deterministic read-only seeds; wall-clock contexts below are rebuilt per preview.
+let exampleSeeds: { examples: ReturnType<typeof buildHomeSignalChartsPreviewData>; events: EventRead[]; routes: FirestoreRouteJSON[] } | undefined;
+
+export function buildDashboardExamplePreview(tile: TileSettingsInterface): DashboardChartPreview {
+  const { examples, events, routes } = exampleSeeds ??= { examples: buildHomeSignalChartsPreviewData(ANCHOR), events: buildDashboardExampleEvents(), routes: buildDashboardExampleRoutes() };
+  const input: DashboardPreviewInput = { tiles: [tile], events, routePreviews: routes, derivedMetrics: { formPoints: examples.formTimeline } };
+  const vm = buildDashboardTileViewModels(input)[0];
+  const trend = (value: number) => Array.from({ length: 8 }, (_, i) => ({ time: ANCHOR - (7-i)*7*DAY, value: value * (.8+i*.03) }));
+  const current = (value: number) => ({ value, latestDayMs: ANCHOR, trend8Weeks: trend(value) });
+  if (vm.type === TileTypes.Chart) Object.assign(vm, {
+    acwr: { ratio: 1.12, acuteLoad7: 430, chronicLoad28: 384, latestDayMs: ANCHOR, trend8Weeks: trend(1.12) },
+    rampRate: { ctlToday: 62, ctl7DaysAgo: 58, rampRate: 4, latestDayMs: ANCHOR, trend8Weeks: trend(4) },
+    monotonyStrain: { weeklyLoad7: 430, monotony: 1.3, strain: 559, latestDayMs: ANCHOR, trend8Weeks: trend(559) },
+    formNow: current(8), fitnessCtl: current(62), fatigueAtl: current(54),
+    formPlus7d: { ...current(21), projectedDayMs: ANCHOR + 7*DAY },
+    easyPercent: { ...current(72), latestWeekStartMs: ANCHOR }, hardPercent: { ...current(12), latestWeekStartMs: ANCHOR },
+    efficiencyDelta4w: { latestWeekStartMs: ANCHOR, latestValue: 1.6, baselineValue: 1.5, baselineWeekCount: 4, deltaAbs: .1, deltaPct: 6.7, trend8Weeks: trend(1.6) },
+    freshnessForecast: examples.freshnessForecast, intensityDistribution: examples.intensityDistribution, efficiencyTrend: examples.efficiencyTrend,
+    powerCurve: examples.powerCurve,
+    aerobicCapacity: { value: 52, discipline: 'running', sourceKey: null, sourceLabel: 'Example source', observationCount: 8, changePct: 4, lastSeenAtMs: ANCHOR, trend: trend(52) },
+    aerobicDurability: { value: 3.2, metric: 'decoupling', scopeLabel: 'Cycling', contextLabel: 'Example long rides', sampleCount: 8, eligibilityRatio: .8, trend: trend(3.2) },
+    // Recovery renderer uses wall-clock decay: keep this isolated synthetic context relative to now.
+    recoveryNow: { totalSeconds: 86400, endTimeMs: Date.now() + 36000000, latestWorkoutSeconds: 86400, latestWorkoutEndTimeMs: Date.now() + 36000000 },
+  } satisfies Partial<DashboardChartTileViewModel>);
+  if (vm.type === TileTypes.Chart && `${(vm as DashboardChartTileViewModel).chartType}` === K.DASHBOARD_POWER_CURVE_CHART_TYPE) {
+    const label = getDashboardPowerCurveScopeDefinition(resolveDashboardPowerCurveTileDisplayScope(tile)).latestSeriesLabel;
+    (vm as DashboardChartTileViewModel).powerCurve = { ...examples.powerCurve, latestSeriesLabel: label, comparisonSeriesLabel: label,
+      series: examples.powerCurve.series.map(series => series.seriesKey === 'latest' ? { ...series, label } : series) };
+  }
+  if (vm.type === TileTypes.Chart && C.isDashboardSleepTrendChartType((vm as DashboardChartTileViewModel).chartType)) {
+    const points: DashboardSleepTrendPoint[] = Array.from({ length: 14 }, (_, i) => ({
+      id: `example-sleep-${i}`, sourceSessionIds: [`example-sleep-${i}`], sleepDate: new Date(ANCHOR-(13-i)*DAY).toISOString().slice(0,10), provider: SLEEP_PROVIDERS.GarminAPI, providerLabel: 'Example source', categoryLabel: '',
+      startTimeMs: ANCHOR-(13-i)*DAY-28000000, endTimeMs: ANCHOR-(13-i)*DAY, totalSeconds: 26000+i%3*1200,
+      deepSeconds: 5400, lightSeconds: 14000+i%3*1200, remSeconds: 6600, awakeSeconds: 900, unknownSeconds: 0,
+      score: null, averageHeartRateBpm: null, minimumHeartRateBpm: null, restingHeartRateBpm: null,
+      averageHrvMs: null, maxSpo2Percent: null, averageRespirationBrpm: null,
+      isNap: false, napSeconds: 0, napCount: 0, napAverageHrvMs: null, napAverageHeartRateBpm: null, napStartTimeMs: null, napEndTimeMs: null,
+    }));
+    (vm as DashboardChartTileViewModel).sleepTrend = { points, latestPoint: points.at(-1)!, hasRealPoints: true };
+  }
+  if (vm.type === TileTypes.Chart && C.isDashboardHrvTrendChartType((vm as DashboardChartTileViewModel).chartType)) {
+    const windows = dashboardHrvWindows('14d', ANCHOR);
+    const sessions: SleepSession[] = Array.from({ length: 74 }, (_, i) => {
+      const endTimeMs = ANCHOR - i * DAY;
+      return { id: `example-hrv-${i}`, userID: '', source: { provider: SLEEP_PROVIDERS.SuuntoApp, providerUserId: 'example', sourceSessionKey: `example-${i}` },
+        sleepDate: new Date(endTimeMs).toISOString().slice(0, 10), startTimeMs: endTimeMs - 8 * 3600000, endTimeMs,
+        durationSeconds: 8 * 3600, isNap: false, stages: [], stageDurationsSeconds: {}, vitals: { averageHrvMs: 40 + i % 11 },
+        createdAtMs: endTimeMs, updatedAtMs: endTimeMs };
+    });
+    const emptyResult = (window: { startDate: string; endDate: string }) => projectHealthRange([], [], {
+      startDate: window.startDate, endDate: window.endDate, metricIds: [HEALTH_METRIC_IDS.HeartRateVariability], includeSamples: false,
+    });
+    const chartVm = vm as DashboardChartTileViewModel;
+    chartVm.hrvTrend = buildDashboardHrvContext(emptyResult(windows.visible), emptyResult(windows.history), sessions, windows.visible);
+    chartVm.hrvTrend.charts = chartVm.hrvTrend.charts.map(chart => ({ ...chart, model: { ...chart.model, series: { ...chart.model.series, sourceLabel: 'Example source' }, ariaLabel: chart.model.ariaLabel.replace('Suunto', 'Example source') } }));
+  }
+  return { tile: vm, source: 'example', loading: false, note: 'Your data is not available for this chart yet.', availability: { state: 'no-data', label: 'Example data', reason: 'Your data is not available for this chart yet.', hasData: false }, calendarEvents: events, anchorMs: ANCHOR };
+}

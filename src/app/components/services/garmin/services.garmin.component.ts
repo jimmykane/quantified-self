@@ -7,7 +7,6 @@ import { AppFileService } from '../../../services/app.file.service';
 import { AppEventService } from '../../../services/app.event.service';
 import { AppAuthService } from '../../../authentication/app.auth.service';
 import { AppUserService } from '../../../services/app.user.service';
-import { ActivitySyncBackfillSummary } from '../../../services/app.user.service';
 import { AppWindowService } from '../../../services/app.window.service';
 import { AppDeepLinkService } from '../../../services/app.deeplink.service';
 import { ServicesAbstractComponentDirective } from '../services-abstract-component.directive';
@@ -15,6 +14,7 @@ import { GARMIN_REQUIRED_PERMISSIONS } from '../../../../../functions/src/garmin
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 import { isActivitySyncRouteUIDAllowlisted } from '@shared/activity-sync-rollout';
 import { Subscription } from 'rxjs';
+import { GARMIN_PERMISSION_DETAILS } from '../../../helpers/garmin-permissions.helper';
 import {
   buildSuuntoServiceConnectionViewModel,
   SuuntoServiceConnectionViewModel,
@@ -23,6 +23,7 @@ import { GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS } from '@shared/sleep-backfi
 import {
   GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS,
   getGarminProviderUserIdFromTokenLike,
+  getGarminPermissionsFromTokenLike,
   hasConnectedGarminToken,
   selectPreferredGarminTokenLike,
 } from '@shared/garmin-service-token';
@@ -43,30 +44,11 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
 
   public serviceName: ServiceNames = ServiceNames.GarminAPI;
 
-  public readonly permissionLabels: { [key: string]: string } = {
-    'HISTORICAL_DATA_EXPORT': 'History Importer',
-    'ACTIVITY_EXPORT': 'Activity Sync',
-    'WORKOUT_IMPORT': 'Workout Import',
-    'HEALTH_EXPORT': 'Health Export',
-    'COURSE_IMPORT': 'Course Import',
-    'MCT_EXPORT': 'Menstrual Cycle Tracking Export'
-  };
-
-  public readonly permissionExplanations: { [key: string]: string } = {
-    'HISTORICAL_DATA_EXPORT': 'Without this, you cannot import your past activities from Garmin Connect.',
-    'ACTIVITY_EXPORT': 'Without this, your new activities will not automatically sync to Quantified Self.',
-    'WORKOUT_IMPORT': 'Coming soon: This will be used to sync training plans to your device.',
-    'HEALTH_EXPORT': 'Required for Garmin Sleep and supported Health summary imports.',
-    'COURSE_IMPORT': 'Required to send saved routes and manually selected GPX or FIT routes to Garmin Connect.',
-    'MCT_EXPORT': 'Coming soon: This will be used for health tracking data.'
-  };
+  public readonly permissionLabels = Object.fromEntries(GARMIN_PERMISSION_DETAILS.map(permission => [permission.id, permission.label]));
+  public readonly permissionExplanations = Object.fromEntries(GARMIN_PERMISSION_DETAILS.map(permission => [permission.id, permission.description]));
 
   public readonly garminToSuuntoRouteID = ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp;
   public isSavingSyncRoute = false;
-  public isBackfillingSync = false;
-  public backfillStartDate: Date = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000));
-  public backfillEndDate: Date = new Date();
-  public backfillSummary: ActivitySyncBackfillSummary | null = null;
   public activeActivitySyncDestination: 'suunto' | 'wahoo' | 'coros' = 'suunto';
   @Input() initialActivitySyncDestination: 'suunto' | 'wahoo' | 'coros' | null = null;
 
@@ -88,12 +70,9 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     super(http, fileService, eventService, authService, userService, route, windowService, snackBar);
   }
 
-  async requestAndSetToken() {
-    const state = this.route.snapshot.queryParamMap.get('state');
-    const code = this.route.snapshot.queryParamMap.get('code');
-    if (state && code) {
-      await this.userService.requestAndSetCurrentUserGarminAPIAccessToken(state, code);
-    }
+  async requestAndSetToken(params = this.route.snapshot.queryParamMap) {
+    const { state, code } = this.getOAuthCallbackParameters(params);
+    return this.userService.requestAndSetCurrentUserGarminAPIAccessToken(state, code);
   }
 
   isConnectedToService(): boolean {
@@ -117,12 +96,12 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
   }
 
   get shouldShowConnectAction(): boolean {
-    return (!this.isConnectedToService() || this.isReconnectRequired || this.isDisconnectManualReviewRequired)
+    return (this.reconnectRequested || !this.isConnectedToService() || this.isReconnectRequired || this.isDisconnectManualReviewRequired)
       && (!this.isDisconnectPending || this.isDisconnectManualReviewRequired);
   }
 
   get connectButtonLabel(): string {
-    return this.isReconnectRequired || this.isDisconnectManualReviewRequired ? 'Reconnect' : 'Connect';
+    return this.reconnectRequested || this.isConnectedToService() || this.isReconnectRequired || this.isDisconnectManualReviewRequired ? 'Reconnect' : 'Connect';
   }
 
   get connectionDescription(): string {
@@ -202,7 +181,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
   }
 
   get isHistoryImportLoading(): boolean {
-    return this.isLoading || !this.hasPermissionsLoaded;
+    return this.isLoading;
   }
 
   get hasGarminCourseImportPermission(): boolean {
@@ -221,6 +200,8 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
    * Attempts to open Garmin Connect mobile app, falls back to web
    */
   openGarminConnectApp(): void {
+    if (!this.user || this.isLoading || this.isConnecting || this.isDisconnecting || this.isDisconnectPending) return;
+    this.hapticsService.selection();
     this.deepLinkService.openGarminConnectApp();
   }
 
@@ -229,6 +210,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
       this.activeActivitySyncDestination = this.initialActivitySyncDestination;
     }
     await super.ngOnChanges();
+    if (this.connectionViewDestroyed) return;
     this.watchSuuntoConnectionState();
   }
 
@@ -282,6 +264,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     return this.garminTokens
       .filter((token): token is Record<string, unknown> & { permissions: unknown[] } => (
         Array.isArray(token.permissions)
+        && token.permissions.every(permission => typeof permission === 'string' && permission.trim().length > 0)
         && !!getGarminProviderUserIdFromTokenLike(token)
       ));
   }
@@ -314,12 +297,8 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
   }
 
   private missingPermissionsForToken(token: { permissions: unknown[] }, requiredPermissions: readonly string[]): string[] {
-    const permissionSet = new Set(token.permissions.map(permission => `${permission}`));
+    const permissionSet = new Set(getGarminPermissionsFromTokenLike(token));
     return requiredPermissions.filter(permission => !permissionSet.has(permission));
-  }
-
-  get isBackfillDateRangeInvalid(): boolean {
-    return this.backfillStartDate > this.backfillEndDate;
   }
 
   async onGarminToSuuntoRouteToggle(enabled: boolean): Promise<void> {
@@ -358,55 +337,4 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     }
   }
 
-  async runGarminToSuuntoBackfill(event: Event): Promise<void> {
-    event.preventDefault();
-
-    if (!this.user || this.isBackfillingSync) {
-      return;
-    }
-
-    if (!this.isGarminToSuuntoRouteAvailableForUser) {
-      this.snackBar.open('Activity sync is not available for this account.', undefined, { duration: 4000 });
-      return;
-    }
-
-    if (this.isSuuntoReconnectRequired) {
-      this.snackBar.open('Reconnect Suunto before syncing past Garmin activities.', undefined, { duration: 4000 });
-      return;
-    }
-
-    if (!this.isConnectedToService() || !this.isSuuntoConnected) {
-      this.snackBar.open('Connect Garmin and Suunto before syncing past activities.', undefined, { duration: 4000 });
-      return;
-    }
-
-    if (this.isBackfillDateRangeInvalid) {
-      this.snackBar.open('The start date must be before the end date.', undefined, { duration: 3500 });
-      return;
-    }
-
-    this.isBackfillingSync = true;
-    try {
-      const summary = await this.userService.backfillActivitySyncRouteForCurrentUser(
-        ServiceNames.GarminAPI,
-        ServiceNames.SuuntoApp,
-        this.backfillStartDate,
-        this.backfillEndDate,
-      );
-
-      this.backfillSummary = summary;
-      this.analyticsService.logActivitySyncRouteBackfill(this.garminToSuuntoRouteID, {
-        scanned: summary.scanned,
-        queued: summary.queued,
-        failedCount: summary.failedCount,
-      });
-      const failureSuffix = summary.failedCount > 0 ? ` Could not schedule: ${summary.failedCount}.` : '';
-      this.snackBar.open(`Activity sync started for ${summary.queued} ${summary.queued === 1 ? 'activity' : 'activities'}.${failureSuffix}`, undefined, { duration: 4000 });
-    } catch (error: any) {
-      this.logger.error(error);
-      this.snackBar.open(`Could not start activity sync: ${error?.message || 'Unknown error'}`, undefined, { duration: 5000 });
-    } finally {
-      this.isBackfillingSync = false;
-    }
-  }
 }

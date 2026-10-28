@@ -1,7 +1,7 @@
+import { getUserChartDataTypesToUse } from '../helpers/app-chart-data-types.helper';
 import { inject } from '@angular/core';
 import { ActivatedRouteSnapshot, ResolveFn, Router, RouterStateSnapshot } from '@angular/router';
 import { AppEventService } from '../services/app.event.service';
-import { AppUserService } from '../services/app.user.service';
 import { EventInterface, User } from '@sports-alliance/sports-lib';
 import {
     DataAltitude,
@@ -55,7 +55,6 @@ export const eventResolver: ResolveFn<EventResolverData> = (
     _state: RouterStateSnapshot
 ) => {
     const eventService = inject(AppEventService);
-    const userService = inject(AppUserService);
     const authService = inject(AppAuthService);
     const router = inject(Router);
     const snackBar = inject(MatSnackBar);
@@ -97,7 +96,7 @@ export const eventResolver: ResolveFn<EventResolverData> = (
             ];
 
             if (user) {
-                const userChartDataTypes = userService.getUserChartDataTypesToUse(user);
+                const userChartDataTypes = getUserChartDataTypesToUse(user);
                 const nonUnitBasedDataTypes = getAppNonUnitBasedChartDataTypes(
                     user.settings.chartSettings.showAllData,
                     userChartDataTypes

@@ -1,6 +1,7 @@
+import type { EventRead } from '@shared/event-read';
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
-import type { EventInterface, User } from '@sports-alliance/sports-lib';
+import type { User } from '@sports-alliance/sports-lib';
 import { catchError, distinctUntilChanged, map, of, startWith, switchMap } from 'rxjs';
 import { isNormalActivityEvent } from '../../helpers/normal-activity-event.helper';
 import type { ActivityRange } from '../../models/activity-range.interface';
@@ -10,7 +11,7 @@ import { AppEventService } from '../../services/app.event.service';
 
 interface ActivityRangeTableState {
   status: 'idle' | 'loading' | 'ready' | 'error';
-  events: EventInterface[];
+  events: EventRead[];
 }
 
 interface ActivityRangeTableRequest {
@@ -57,7 +58,7 @@ export class ActivityRangeTableSectionComponent {
         return of({ status: 'idle', events: [] } as ActivityRangeTableState);
       }
 
-      return this.eventService.getEventsBy(request.queryUser, [{
+      return this.eventService.getEventSummariesBy(request.queryUser, [{
         fieldPath: 'startDate',
         opStr: '>=',
         value: request.range.startMs,

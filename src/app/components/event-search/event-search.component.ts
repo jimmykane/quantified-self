@@ -3,6 +3,8 @@ import {
   ChangeDetectorRef,
   Component,
   EventEmitter,
+  ElementRef,
+  ViewChild,
   Input,
   OnChanges,
   OnInit,
@@ -12,11 +14,15 @@ import {
 import { AbstractControl, UntypedFormControl, UntypedFormGroup, ValidationErrors, ValidatorFn } from '@angular/forms';
 import { DaysOfTheWeek } from '@sports-alliance/sports-lib';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { MatSelect } from '@angular/material/select';
+import { activityExplorerSports } from '../../helpers/activity-explorer.helper';
+import { getActivityTypeFamilyFilterOptions, isSameActivityTypeSelection, normalizeActivityTypeSelection } from '../../helpers/activity-type-family-filter.helper';
+import type { ActivityFilterPickerOption, ActivityFilterPickerShortcut } from '../shared/activity-filter-picker/activity-filter-picker.component';
 import { MatButtonToggleChange } from '@angular/material/button-toggle';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 import { DateRanges } from '@sports-alliance/sports-lib';
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
-import { MatDatepickerInputEvent } from '@angular/material/datepicker';
+import { MatDatepickerInputEvent, MatDateRangePicker } from '@angular/material/datepicker';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { MatDialog } from '@angular/material/dialog';
@@ -26,7 +32,6 @@ import { take } from 'rxjs/operators';
 import { AppHapticsService } from '../../services/app.haptics.service';
 
 interface DateRangeShortcutOption {
-  ariaLabel: string;
   label: string;
   value: DateRanges;
 }
@@ -53,8 +58,8 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   @Input() compact = false;
   @Input() toolbarRangeLayout = false;
   @Input() mergedEventsToggleDisabled = false;
-  @Input() mergedEventsToggleLabel = 'Merged events';
-  @Input() mergedEventsToggleHint = 'Merged events are excluded';
+  @Input() mergedEventsToggleLabel = 'Merged activities';
+  @Input() mergedEventsToggleHint = 'Merged activities are excluded';
   @Input() dateRangesToShow: DateRanges[] = [
     DateRanges.thisWeek,
     DateRanges.lastWeek,
@@ -73,9 +78,23 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   public searchFormGroup!: UntypedFormGroup;
   public dateRanges = DateRanges;
   public currentYear = new Date().getFullYear();
-  public primaryToolbarDateRangeOptions: DateRangeShortcutOption[] = [];
-  public secondaryToolbarDateRangeOptions: DateRangeShortcutOption[] = [];
-  public secondaryDateRangeButtonLabel = 'More';
+  public toolbarDateRangeOptions: DateRangeShortcutOption[] = [];
+  public toolbarSportOptions: ActivityFilterPickerOption[] = [];
+  public toolbarSportShortcuts: ActivityFilterPickerShortcut[] = [];
+  public toolbarSelectedSports: string[] = [];
+  public customRangeOpen = false;
+  private focusDateControl = false;
+  private datePresetsControl?: MatSelect;
+  private customStartDateControl?: ElementRef<HTMLInputElement>;
+  @ViewChild('toolbarPicker') private toolbarPicker?: MatDateRangePicker<Dayjs>;
+  @ViewChild('datePresets') set datePresets(control: MatSelect | undefined) {
+    this.datePresetsControl = control;
+    if (control && this.focusDateControl) { this.focusDateControl = false; control.focus(); }
+  }
+  @ViewChild('customStartDate') set customStartDate(control: ElementRef<HTMLInputElement> | undefined) {
+    this.customStartDateControl = control;
+    if (control && this.focusDateControl) { this.focusDateControl = false; control.nativeElement.focus(); }
+  }
   constructor(
     changeDetector: ChangeDetectorRef,
     private dialog?: MatDialog,
@@ -88,12 +107,29 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     return this.searchFormGroup.get('startDate') as UntypedFormControl;
   }
 
+  openToolbarDateFilter(): void {
+    if (this.isLoading || !this.showDatePicker || !this.toolbarRangeLayout) return;
+    if (this.customRangeOpen || this.selectedDateRange === DateRanges.custom) {
+      const picker = this.toolbarPicker;
+      if (!picker || picker.disabled || picker.opened) return;
+      this.customStartDateControl?.nativeElement.focus();
+      picker.open(); // The existing opened handler owns feedback.
+      return;
+    }
+    const presets = this.datePresetsControl;
+    if (!presets || presets.disabled || presets.panelOpen) return;
+    presets.focus();
+    presets.open();
+    if (presets.panelOpen) this.hapticsService?.selection();
+  }
+
   get endDateControl(): UntypedFormControl {
     return this.searchFormGroup.get('endDate') as UntypedFormControl;
   }
 
   ngOnInit(): void {
     this.syncToolbarDateRangeOptions();
+    this.syncToolbarSports();
     const { startDate, endDate } = this.resolveCurrentRangeDates();
     this.searchFormGroup = new UntypedFormGroup({
       search: new UntypedFormControl(null, [
@@ -115,6 +151,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes.selectedActivityTypes || changes.availableActivityTypes) this.syncToolbarSports();
     if (changes['selectedDateRange'] || changes['dateRangesToShow'] || changes['compact']) {
       this.syncToolbarDateRangeOptions();
     }
@@ -145,14 +182,15 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     return !(control?.valid && control?.touched);
   }
 
-  async search() {
-    if (!this.searchFormGroup.valid) {
+  async search(includeMergedEvents = this.includeMergedEvents) {
+    if (!this.toolbarRangeLayout && !this.searchFormGroup.valid) {
       this.validateAllFormFields(this.searchFormGroup);
       return;
     }
 
-    const startDate = this.coerceDate(this.startDateControl.value);
-    const endDate = this.coerceDate(this.endDateControl.value);
+    const { startDate, endDate } = this.toolbarRangeLayout ? this.resolveCurrentRangeDates() : {
+      startDate: this.coerceDate(this.startDateControl.value), endDate: this.coerceDate(this.endDateControl.value),
+    };
 
     this.selectedStartDate = startDate ? this.normalizeStartDate(startDate) : (null as any);
     this.selectedEndDate = endDate ? this.normalizeEndDate(endDate) : (null as any);
@@ -163,7 +201,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
       endDate: this.selectedEndDate,
       activityTypes: this.selectedActivityTypes,
       dateRange: this.selectedDateRange,
-      includeMergedEvents: this.includeMergedEvents
+      includeMergedEvents
     });
   }
 
@@ -178,10 +216,6 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   async dateToggleChange(event: MatButtonToggleChange) {
     const nextRange = event.value ?? event.source?.value;
     return this.selectDateRange(nextRange);
-  }
-
-  async onSecondaryDateRangeSelection(dateRange: DateRanges) {
-    return this.selectDateRange(dateRange);
   }
 
   private async selectDateRange(nextRange: DateRanges) {
@@ -236,20 +270,99 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     this.syncToolbarDateRangeOptions();
   }
 
-  async onActivityTypesChange(activityTypes) {
+  private syncToolbarSports(): void {
+    this.toolbarSelectedSports = normalizeActivityTypeSelection(this.selectedActivityTypes || []);
+    const sports = Array.isArray(this.availableActivityTypes)
+      ? normalizeActivityTypeSelection([...this.availableActivityTypes, ...this.toolbarSelectedSports])
+      : activityExplorerSports([], this.toolbarSelectedSports, true);
+    this.toolbarSportOptions = sports.map(sport => ({ value: sport, label: sport, activityType: sport }));
+    this.toolbarSportShortcuts = getActivityTypeFamilyFilterOptions(this.toolbarSelectedSports, sports)
+      .map(family => ({ label: family.label, values: family.activityTypes }));
+  }
+
+  async onToolbarSportsChange(values: string[]): Promise<void> {
+    const next = normalizeActivityTypeSelection(values);
+    if (isSameActivityTypeSelection(next, normalizeActivityTypeSelection(this.selectedActivityTypes || []))) return;
     this.hapticsService?.selection();
+    await this.onActivityTypesChange(next);
+    this.syncToolbarSports();
+  }
+
+  async onToolbarDateRangeChange(value: DateRanges, source?: MatSelect): Promise<void> {
+    if (value === DateRanges.custom) {
+      if (this.customRangeOpen || this.selectedDateRange === DateRanges.custom) return;
+      const { startDate, endDate } = this.resolveCurrentRangeDates();
+      // Presets use an exclusive midnight bound; the editor shows inclusive calendar dates.
+      const inclusiveEnd = endDate && endDate.getHours() === 0 && endDate.getMinutes() === 0
+        && endDate.getSeconds() === 0 && endDate.getMilliseconds() === 0 ? new Date(endDate.getTime() - 1) : endDate;
+      this.searchFormGroup.patchValue({ startDate, endDate: inclusiveEnd }, { emitEvent: false });
+      this.customRangeOpen = true;
+      this.focusDateControl = true;
+      this.hapticsService?.selection();
+    } else if (value !== this.selectedDateRange) {
+      await this.selectDateRange(value);
+    }
+    if (source) source.value = this.selectedDateRange;
+  }
+
+  async applyToolbarCustomRange(): Promise<void> {
+    const start = this.coerceDate(this.startDateControl.value);
+    const end = this.coerceDate(this.endDateControl.value);
+    if (!start || !end || !this.searchFormGroup.valid) {
+      this.searchFormGroup.markAllAsTouched();
+      return;
+    }
+    const unchanged = this.selectedDateRange === DateRanges.custom
+      && this.normalizeStartDate(start).getTime() === this.selectedStartDate?.getTime()
+      && this.normalizeEndDate(end).getTime() === this.selectedEndDate?.getTime();
+    this.customRangeOpen = false;
+    if (unchanged) return;
+    this.selectedDateRange = DateRanges.custom;
+    this.selectedStartDate = this.normalizeStartDate(start);
+    this.selectedEndDate = this.normalizeEndDate(end);
+    this.hapticsService?.selection();
+    await this.search();
+  }
+
+  onToolbarPickerOpened(): void { this.hapticsService?.selection(); }
+
+  cancelToolbarCustomRange(): void {
+    this.customRangeOpen = false;
+    this.focusDateControl = this.selectedDateRange !== DateRanges.custom;
+    const { startDate, endDate } = this.resolveCurrentRangeDates();
+    this.searchFormGroup.patchValue({ startDate, endDate }, { emitEvent: false });
+    this.hapticsService?.selection();
+  }
+
+  async clearToolbarCustomRange(): Promise<void> {
+    if (this.customRangeOpen && this.selectedDateRange !== DateRanges.custom) {
+      this.cancelToolbarCustomRange();
+      return;
+    }
+    this.customRangeOpen = false;
+    this.focusDateControl = true;
+    const fallback = this.dateRangesToShow.includes(DateRanges.lastThirtyDays) ? DateRanges.lastThirtyDays
+      : this.dateRangesToShow.find(value => value !== DateRanges.custom && value !== DateRanges.all) ?? DateRanges.lastThirtyDays;
+    await this.selectDateRange(fallback);
+  }
+
+  async onActivityTypesChange(activityTypes) {
     this.selectedActivityTypes = activityTypes;
     return this.search();
   }
 
   async onMergedEventsToggleChange(event: MatButtonToggleChange) {
-    if (this.mergedEventsToggleDisabled) {
+    const selected = Array.isArray(event.value) ? event.value : [];
+    return this.onMergedEventsChange(selected.includes('merged'));
+  }
+
+  async onMergedEventsChange(includeMergedEvents: boolean) {
+    if (this.mergedEventsToggleDisabled || this.includeMergedEvents === includeMergedEvents) {
       return;
     }
     this.hapticsService?.selection();
-    const selected = Array.isArray(event.value) ? event.value : [];
-    this.includeMergedEvents = selected.includes('merged');
-    return this.search();
+    // The parent owns the accepted filter state, including save-failure rollback.
+    return this.search(includeMergedEvents);
   }
 
   private resolveCurrentRangeDates(): { startDate: Date | null; endDate: Date | null } {
@@ -269,37 +382,18 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   private syncToolbarDateRangeOptions(): void {
     const visibleDateRanges = new Set(this.dateRangesToShow ?? []);
 
-    this.primaryToolbarDateRangeOptions = [
-      this.createDateRangeShortcut(DateRanges.thisWeek, 'This week', 'This wk', 'This week'),
-      this.createDateRangeShortcut(DateRanges.lastWeek, 'Last week', 'Last wk', 'Last week'),
-      this.createDateRangeShortcut(DateRanges.lastSevenDays, '7 days', '7d', '7 days'),
-      this.createDateRangeShortcut(DateRanges.thisMonth, 'This month', 'This mo', 'This month'),
-      this.createDateRangeShortcut(DateRanges.lastMonth, 'Last month', 'Last mo', 'Last month'),
-      this.createDateRangeShortcut(DateRanges.lastThirtyDays, '30 days', '30d', '30 days'),
+    this.toolbarDateRangeOptions = [
+      { value: DateRanges.lastThirtyDays, label: 'Last 30 days' },
+      { value: DateRanges.lastSevenDays, label: 'Last 7 days' },
+      { value: DateRanges.thisWeek, label: 'This week' },
+      { value: DateRanges.lastWeek, label: 'Last week' },
+      { value: DateRanges.thisMonth, label: 'This month' },
+      { value: DateRanges.lastMonth, label: 'Last month' },
+      { value: DateRanges.thisYear, label: 'This year' },
+      { value: DateRanges.lastYear, label: 'Last year' },
+      { value: DateRanges.custom, label: 'Custom dates' },
+      { value: DateRanges.all, label: 'All dates' },
     ].filter(option => visibleDateRanges.has(option.value));
-
-    this.secondaryToolbarDateRangeOptions = [
-      this.createDateRangeShortcut(DateRanges.thisYear, `${this.currentYear}`, `${this.currentYear}`, 'This year'),
-      this.createDateRangeShortcut(DateRanges.lastYear, `${this.currentYear - 1}`, `${this.currentYear - 1}`, 'Last year'),
-      this.createDateRangeShortcut(DateRanges.all, 'All', 'All', 'All'),
-    ].filter(option => visibleDateRanges.has(option.value));
-
-    this.secondaryDateRangeButtonLabel = this.secondaryToolbarDateRangeOptions.find(
-      option => option.value === this.selectedDateRange,
-    )?.label ?? 'More';
-  }
-
-  private createDateRangeShortcut(
-    value: DateRanges,
-    label: string,
-    compactLabel: string,
-    ariaLabel: string,
-  ): DateRangeShortcutOption {
-    return {
-      ariaLabel,
-      label: this.compact ? compactLabel : label,
-      value,
-    };
   }
 
   private coerceDate(value: unknown): Date | null {
@@ -345,8 +439,8 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
 
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       data: {
-        title: 'Load all events?',
-        message: 'Selecting All may degrade app performance and increase loading times. Continue?',
+        title: 'Load all activities?',
+        message: 'Loading every activity may slow down the app and take longer. Continue?',
         confirmLabel: 'OK',
         cancelLabel: 'Cancel',
         confirmColor: 'warn',

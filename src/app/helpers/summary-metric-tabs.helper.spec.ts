@@ -1,4 +1,7 @@
 import {
+  DataBatteryCharge,
+  DataRRRMSSD,
+  DataRRArtifactPercentage,
   DataAbsolutePressure,
   DataAvgFlow,
   DataAirPower,
@@ -68,6 +71,17 @@ import { describe, expect, it } from 'vitest';
 import { buildSummaryMetricTabs } from './summary-metric-tabs.helper';
 
 describe('buildSummaryMetricTabs', () => {
+  it('places R–R and HRV immediately before Device while retaining category IDs', () => {
+    const tabs = buildSummaryMetricTabs([DataBatteryCharge.type, DataRRRMSSD.type, DataDuration.type, DataRPE.type]);
+    expect(tabs.map(tab => tab.id)).toEqual(['overall', 'physiological', 'rr', 'device']);
+  });
+  it('keeps R–R and HRV in their own category rather than Device or Physiological', () => {
+    const tabs = buildSummaryMetricTabs([DataRRRMSSD.type, DataRRArtifactPercentage.type]);
+    expect(tabs.map(tab => tab.id)).toEqual(['rr']);
+    expect(tabs[0].label).toBe('R–R & HRV');
+    expect(tabs[0].metricTypes).toEqual([DataRRArtifactPercentage.type, DataRRRMSSD.type]);
+  });
+
   it('should return tabs in configured group order', () => {
     const tabs = buildSummaryMetricTabs([
       DataPowerAvg.type,

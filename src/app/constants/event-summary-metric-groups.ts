@@ -194,6 +194,7 @@ import {
   DataWeight,
   DataWPrime,
 } from '@sports-alliance/sports-lib';
+import { RR_METRICS } from './rr-metrics';
 
 export type EventSummaryMetricGroupId =
   | 'overall'
@@ -202,6 +203,7 @@ export type EventSummaryMetricGroupId =
   | 'altitude'
   | 'environment'
   | 'device'
+  | 'rr'
   | 'physiological'
   | 'other';
 
@@ -279,6 +281,8 @@ const PHYSIOLOGICAL_EXTRA_TYPE_STRINGS: string[] = [
 ];
 
 const PHYSIOLOGICAL_STAMINA_TYPE_STRINGS: string[] = [
+  'Estimated Sustainable Distance',
+  'Minimum Estimated Sustainable Distance',
   DataStamina.type,
   DataStaminaAvg.type,
   DataStaminaMin.type,
@@ -563,6 +567,12 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
     metricTypes: [],
   },
   {
+    id: 'rr',
+    label: 'R–R & HRV',
+    metricTypes: RR_METRICS.map(metric => metric.type),
+    singleValueTypes: RR_METRICS.map(metric => metric.type),
+  },
+  {
     id: 'device',
     label: 'Device',
     metricTypes: [
@@ -573,6 +583,7 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
 ];
 
 export const EVENT_SUMMARY_DEFAULT_STAT_TYPES: string[] = [
+  ...RR_METRICS.map(metric => metric.type),
   DataDuration.type,
   DataMovingTime.type,
   DataDistance.type,

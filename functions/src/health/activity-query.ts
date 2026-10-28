@@ -3,6 +3,7 @@ import * as admin from 'firebase-admin';
 import {
     DataVO2Max,
     DataWeight,
+    ServiceNames,
 } from '@sports-alliance/sports-lib';
 import { FieldPath, Timestamp } from 'firebase-admin/firestore';
 import {
@@ -79,6 +80,22 @@ export interface ActivityHealthQueryPageDocument {
     id: string;
     data: Record<string, unknown>;
     cursor: unknown;
+    trustedProviderMetadata?: ActivityHealthTrustedProviderMetadata;
+}
+
+export type ActivityHealthTrustedProviderMetadata =
+    | {
+        status: 'resolved';
+        provider: HealthProvider;
+        sourceAccountSeed: readonly string[];
+    }
+    | {
+        status: 'ambiguous';
+    };
+
+export interface ActivityHealthProviderMetadataReadRequest {
+    userID: string;
+    documents: readonly ActivityHealthQueryPageDocument[];
 }
 
 export interface ActivityHealthQueryPageRequest extends ActivityHealthQueryPlan {
@@ -92,12 +109,33 @@ export interface ActivityHealthQueryPageRequest extends ActivityHealthQueryPlan 
 export interface ActivityHealthQueryDependencies {
     db?: admin.firestore.Firestore;
     readPage?: (request: ActivityHealthQueryPageRequest) => Promise<ActivityHealthQueryPageDocument[]>;
+    readProviderMetadata?: (
+        request: ActivityHealthProviderMetadataReadRequest,
+    ) => Promise<ReadonlyMap<string, ActivityHealthTrustedProviderMetadata>>;
     limits?: Partial<{
         pageSize: number;
         maxCandidates: number;
         maxProjectedOutputBytes: number;
     }>;
 }
+
+const EVENT_PROVIDER_METADATA = Object.freeze([
+    { documentID: ServiceNames.GarminAPI, provider: HEALTH_PROVIDERS.GarminAPI },
+    { documentID: ServiceNames.SuuntoApp, provider: HEALTH_PROVIDERS.SuuntoApp },
+    { documentID: ServiceNames.COROSAPI, provider: HEALTH_PROVIDERS.COROSAPI },
+    { documentID: ServiceNames.WahooAPI, provider: HEALTH_PROVIDERS.WahooAPI },
+] satisfies readonly { documentID: string; provider: HealthProvider }[]);
+const EVENT_PROVIDER_ACCOUNT_FIELDS = Object.freeze([
+    'userID',
+    'serviceUserID',
+    'serviceUserName',
+    'serviceOpenId',
+]);
+const EVENT_PROVIDER_METADATA_READ_BATCH_SIZE = 512;
+const EVENT_PROVIDER_METADATA_FIELD_MASK = Object.freeze([
+    'serviceName',
+    ...EVENT_PROVIDER_ACCOUNT_FIELDS,
+]);
 
 export class ActivityHealthQueryValidationError extends Error {
     public readonly name = 'ActivityHealthQueryValidationError';
@@ -198,6 +236,26 @@ function safeString(value: unknown): string {
     return typeof value === 'string' ? value.trim().slice(0, 256) : '';
 }
 
+function safeMetadataIdentifier(value: unknown): string {
+    if (typeof value === 'number' && Number.isSafeInteger(value)) return `${value}`;
+    return safeString(value);
+}
+
+function providerFromValues(values: readonly string[]): HealthProvider | null {
+    for (const value of values) {
+        const normalized = value.toLowerCase();
+        if (normalized.includes('garmin')) return HEALTH_PROVIDERS.GarminAPI;
+        if (normalized.includes('suunto')) return HEALTH_PROVIDERS.SuuntoApp;
+        if (normalized.includes('coros')) return HEALTH_PROVIDERS.COROSAPI;
+        if (normalized.includes('wahoo')) return HEALTH_PROVIDERS.WahooAPI;
+    }
+    return null;
+}
+
+function explicitServiceValues(data: Record<string, unknown>): string[] {
+    return [safeString(data.sourceServiceName), safeString(data.serviceName)].filter(Boolean);
+}
+
 function sourceValues(data: Record<string, unknown>): string[] {
     const creator = isPlainObject(data.creator) ? data.creator : {};
     return [
@@ -209,17 +267,100 @@ function sourceValues(data: Record<string, unknown>): string[] {
     ].filter(Boolean);
 }
 
-function providerFromSource(data: Record<string, unknown>): HealthProvider | null {
-    // Preserve provenance priority: a recognized source service is more
-    // authoritative than a lower-priority device manufacturer or name.
-    for (const value of sourceValues(data)) {
-        const normalized = value.toLowerCase();
-        if (normalized.includes('garmin')) return HEALTH_PROVIDERS.GarminAPI;
-        if (normalized.includes('suunto')) return HEALTH_PROVIDERS.SuuntoApp;
-        if (normalized.includes('coros')) return HEALTH_PROVIDERS.COROSAPI;
-        if (normalized.includes('wahoo')) return HEALTH_PROVIDERS.WahooAPI;
+function providerSource(document: ActivityHealthQueryPageDocument): {
+    provider: HealthProvider;
+    sourceAccountSeed: readonly string[];
+} | null {
+    const explicitProvider = providerFromValues(explicitServiceValues(document.data));
+    if (explicitProvider) {
+        return { provider: explicitProvider, sourceAccountSeed: sourceValues(document.data) };
     }
-    return null;
+
+    if (document.trustedProviderMetadata?.status === 'resolved') {
+        return {
+            provider: document.trustedProviderMetadata.provider,
+            sourceAccountSeed: document.trustedProviderMetadata.sourceAccountSeed,
+        };
+    }
+    if (document.trustedProviderMetadata?.status === 'ambiguous') return null;
+
+    const creator = isPlainObject(document.data.creator) ? document.data.creator : {};
+    const creatorValues = [
+        safeString(creator.manufacturer),
+        safeString(creator.name),
+        safeString(creator.serialNumber),
+    ].filter(Boolean);
+    const creatorProvider = providerFromValues(creatorValues);
+    return creatorProvider
+        ? { provider: creatorProvider, sourceAccountSeed: creatorValues }
+        : null;
+}
+
+function providerMetadataSourceAccountSeed(
+    provider: HealthProvider,
+    data: Record<string, unknown>,
+): readonly string[] {
+    const accountValues = EVENT_PROVIDER_ACCOUNT_FIELDS
+        .map(field => safeMetadataIdentifier(data[field]))
+        .filter(Boolean);
+    return ['event_provider_metadata', provider, ...accountValues];
+}
+
+export async function readTrustedEventProviderMetadata(
+    db: admin.firestore.Firestore,
+    request: ActivityHealthProviderMetadataReadRequest,
+): Promise<ReadonlyMap<string, ActivityHealthTrustedProviderMetadata>> {
+    const unresolvedDocuments = request.documents.filter(document => (
+        providerFromValues(explicitServiceValues(document.data)) === null
+    ));
+    if (unresolvedDocuments.length === 0) return new Map();
+
+    const candidates = unresolvedDocuments.flatMap(document => EVENT_PROVIDER_METADATA.map(metadata => ({
+        eventID: document.id,
+        metadata,
+        ref: db
+            .collection('users')
+            .doc(request.userID)
+            .collection('events')
+            .doc(document.id)
+            .collection('metaData')
+            .doc(metadata.documentID),
+    })));
+    const snapshots: admin.firestore.DocumentSnapshot[] = [];
+    for (let index = 0; index < candidates.length; index += EVENT_PROVIDER_METADATA_READ_BATCH_SIZE) {
+        const refs = candidates
+            .slice(index, index + EVENT_PROVIDER_METADATA_READ_BATCH_SIZE)
+            .map(candidate => candidate.ref);
+        snapshots.push(...await db.getAll(...refs, {
+            fieldMask: [...EVENT_PROVIDER_METADATA_FIELD_MASK],
+        }));
+    }
+
+    const matches = new Map<string, {
+        provider: HealthProvider;
+        sourceAccountSeed: readonly string[];
+    }[]>();
+    candidates.forEach((candidate, index) => {
+        const snapshot = snapshots[index];
+        if (!snapshot?.exists) return;
+        const data = snapshot.data() || {};
+        const declaredServiceName = safeString(data.serviceName);
+        if (declaredServiceName && declaredServiceName !== candidate.metadata.documentID) return;
+        const eventMatches = matches.get(candidate.eventID) || [];
+        eventMatches.push({
+            provider: candidate.metadata.provider,
+            sourceAccountSeed: providerMetadataSourceAccountSeed(candidate.metadata.provider, data),
+        });
+        matches.set(candidate.eventID, eventMatches);
+    });
+
+    const result = new Map<string, ActivityHealthTrustedProviderMetadata>();
+    matches.forEach((eventMatches, eventID) => {
+        result.set(eventID, eventMatches.length === 1
+            ? { status: 'resolved', ...eventMatches[0] }
+            : { status: 'ambiguous' });
+    });
+    return result;
 }
 
 function digest(...values: readonly string[]): string {
@@ -240,10 +381,10 @@ function projectDocument(
     const value = finitePositiveMetricValue(metricId, nestedValue(document.data, `stats.${plan.statisticKey}`));
     if (observedAtMs === null || value === null) return null;
 
-    const provider = providerFromSource(document.data);
-    if (!provider) return null;
-    const sourceSeed = sourceValues(document.data);
-    const sourceAccountKey = `workout_${digest(userID, provider, ...sourceSeed)}`;
+    const source = providerSource(document);
+    if (!source) return null;
+    const provider = source.provider;
+    const sourceAccountKey = `workout_${digest(userID, provider, ...source.sourceAccountSeed)}`;
     const discipline = metricId === HEALTH_METRIC_IDS.Vo2Max
         ? resolveTrainingDisciplineFromActivityType(document.data.type) || 'other'
         : null;
@@ -300,6 +441,10 @@ export async function readActivityHealthRange(
     const plan = ACTIVITY_HEALTH_QUERY_PLANS[request.metricId];
     const db = dependencies.db || admin.firestore();
     const readPage = dependencies.readPage || (pageRequest => defaultReadPage(db, pageRequest));
+    const readProviderMetadata = dependencies.readProviderMetadata
+        || (dependencies.readPage
+            ? async () => new Map<string, ActivityHealthTrustedProviderMetadata>()
+            : metadataRequest => readTrustedEventProviderMetadata(db, metadataRequest));
     const pageSize = dependencies.limits?.pageSize || ACTIVITY_HEALTH_QUERY_PAGE_SIZE;
     const maxCandidates = dependencies.limits?.maxCandidates || ACTIVITY_HEALTH_MAX_CANDIDATES;
     const maxProjectedOutputBytes = dependencies.limits?.maxProjectedOutputBytes
@@ -318,7 +463,11 @@ export async function readActivityHealthRange(
             cursor,
             fetchLimit: pageSize,
         });
-        for (const document of documents) {
+        const documentsWithinCandidateBudget = documents.slice(0, Math.max(0, maxCandidates - candidateCount));
+        const providerMetadata = request.metricId === HEALTH_METRIC_IDS.BodyWeight
+            ? await readProviderMetadata({ userID: uid, documents: documentsWithinCandidateBudget })
+            : new Map<string, ActivityHealthTrustedProviderMetadata>();
+        for (const rawDocument of documents) {
             if (candidateCount >= maxCandidates) {
                 return buildResult(
                     observations,
@@ -327,6 +476,9 @@ export async function readActivityHealthRange(
                     candidateCount,
                 );
             }
+            const document = providerMetadata.has(rawDocument.id)
+                ? { ...rawDocument, trustedProviderMetadata: providerMetadata.get(rawDocument.id) }
+                : rawDocument;
             candidateCount += 1;
             cursor = document.cursor;
             const observation = projectDocument(uid, request.metricId, plan, document);

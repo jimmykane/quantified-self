@@ -9,7 +9,6 @@ mat-icon {
   --qs-event-search-toggle-height: 34px;
 }
 
-
 .big {
   width: auto;
   /* Fallback */
@@ -188,8 +187,10 @@ mat-button-toggle:active {
 }
 
 :host(.compact-filter-layout) .activity-filter-field {
-  align-self: center;
-  flex: 0 0 auto;
+  align-self: flex-start;
+  flex: 0 1 170px;
+  width: 170px;
+  min-width: 0;
 }
 
 :host(.compact-filter-layout) .date-range-field {
@@ -259,50 +260,6 @@ mat-button-toggle:active {
   font-size: 0.8rem !important;
 }
 
-:host(.table-toolbar-layout) form {
-  gap: 0;
-  width: 100%;
-}
-
-:host(.table-toolbar-layout) ::ng-deep app-loading-overlay.search-overlay .loading-overlay-container {
-  align-content: center;
-  align-items: center;
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 6px 10px;
-  min-width: 0;
-}
-
-:host(.table-toolbar-layout) .filters-row {
-  align-items: center;
-  flex: 0 0 auto;
-  gap: 6px;
-  min-width: 0;
-}
-
-:host(.table-toolbar-layout) .date-range-field {
-  flex: 0 0 216px;
-  width: 216px;
-}
-
-:host(.table-toolbar-layout) .button-groups {
-  align-content: center;
-  align-items: center;
-  flex: 1 1 420px;
-  justify-content: flex-start;
-  min-height: var(--qs-event-search-control-height);
-  min-width: 0;
-}
-
-:host(.table-toolbar-layout) .toolbar-range-group {
-  flex: 0 1 auto;
-  max-width: 100%;
-}
-
-:host(.table-toolbar-layout) .secondary-ranges-button {
-  flex: 0 0 auto;
-}
-
 /* Tablet: Reduce gap and padding to prevent overflow */
 @include bp.handset-or-tablet-portrait {
   .button-groups {
@@ -355,7 +312,7 @@ mat-button-toggle:active {
   :host(.compact-filter-layout) .filters-row {
     align-items: center;
     flex-direction: row;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
   }
 
   :host(.compact-filter-layout) .date-range-field {
@@ -365,8 +322,8 @@ mat-button-toggle:active {
   }
 
   :host(.compact-filter-layout) .activity-filter-field {
-    align-self: center;
-    flex: 0 0 auto;
+    flex: 1 1 140px;
+    width: auto;
   }
 
   :host(.compact-filter-layout) .button-groups {
@@ -380,52 +337,28 @@ mat-button-toggle:active {
     width: 100%;
   }
 
-  :host(.table-toolbar-layout) ::ng-deep app-loading-overlay.search-overlay .loading-overlay-container {
-    align-items: center;
-    flex-direction: row;
-    flex-wrap: wrap;
-  }
+}
 
-  :host(.table-toolbar-layout) .filters-row {
-    align-items: center;
-    flex-direction: row;
-    flex-wrap: nowrap;
-  }
+.toolbar-controls mat-form-field {
+  --mat-form-field-container-height: var(--qs-table-filter-height, 46px);
+  --mat-form-field-container-text-size: var(--qs-table-filter-text-size, 0.95rem);
+  --mat-select-trigger-text-size: var(--qs-table-filter-text-size, 0.95rem);
+  --mat-form-field-container-vertical-padding: var(--qs-table-filter-padding, 10px);
+  min-width: 0;
+}
+.toolbar-date-filter { width: 210px; }
+.toolbar-custom-date-field { width: 310px; max-width: 100%; }
+.toolbar-controls app-activity-filter-picker { width: 170px; min-width: 0; }
+@include bp.max-768 {
+  .toolbar-controls mat-form-field, .toolbar-controls app-activity-filter-picker { flex: 1 1 140px; width: auto; }
+  .toolbar-controls .toolbar-custom-date-field { flex-basis: 100%; }
+}
+@include bp.max-480 { .toolbar-calendar-toggle { display: none; } }
 
-  :host(.table-toolbar-layout) .date-range-field {
-    flex: 1 1 auto;
-    width: auto;
-  }
+:host(.table-toolbar-layout) { width: auto; flex: 1 1 380px; }
+:host(.table-toolbar-layout) .toolbar-controls { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 12px; min-width: 0; width: 100%; }
 
-  :host(.table-toolbar-layout) .button-groups {
-    align-items: center;
-    flex-direction: row;
-    flex-wrap: wrap;
-    flex: 1 1 100%;
-    gap: 6px;
-    min-width: 0;
-    overflow-x: visible;
-    width: 100%;
-  }
-
-  :host(.table-toolbar-layout) mat-button-toggle-group {
-    flex: 0 0 auto;
-    width: auto;
-  }
-
-  :host(.table-toolbar-layout) .toolbar-range-group {
-    display: grid;
-    flex: 1 1 100%;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    width: 100%;
-  }
-
-  :host(.table-toolbar-layout) .toolbar-range-group mat-button-toggle {
-    min-width: 0;
-    width: 100%;
-  }
-
-  :host(.table-toolbar-layout) .secondary-ranges-button {
-    flex: 0 0 auto;
-  }
+@include bp.xsmall {
+  // The table stacks filters vertically here; a desktop flex basis becomes height.
+  :host(.table-toolbar-layout) { width: 100%; flex: 0 0 auto; }
 }

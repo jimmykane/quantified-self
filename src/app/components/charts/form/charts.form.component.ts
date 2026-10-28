@@ -1,3 +1,6 @@
+import { dashboardChartPanelGrids } from '../../../helpers/dashboard-chart-layout.helper';
+import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
+import { TRAINING_STATE_PLOT_BOTTOM, TRAINING_STATE_AXIS_LABEL } from '../../../helpers/training-state-chart-layout.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -25,7 +28,7 @@ import {
   buildDashboardEChartsStyleTokens,
   renderDashboardEChartsTooltipCard,
 } from '../../../helpers/dashboard-echarts-style.helper';
-import { buildDashboardValueAxisConfig } from '../../../helpers/dashboard-echarts-yaxis.helper';
+import { buildDashboardFormValueAxes } from '../../../helpers/dashboard-form-y-axis.helper';
 import {
   type EChartsMobileTapFeedbackOptions,
   isEChartsMobileTooltipViewport,
@@ -80,6 +83,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
   ];
 
   @Input() darkTheme = false;
+  @Input() timelineNotes: TimelineNoteChartContext | null = null;
   @Input() useAnimations = false;
   @Input() isLoading = false;
   @Input() formStatus?: DashboardDerivedMetricStatus | null;
@@ -113,6 +117,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
   private readonly chartHost: EChartsHostController;
+  private panelLayoutHeight: number | null = null;
   private readonly pointsSignal = signal<DashboardFormPoint[]>([]);
   private readonly absoluteLatestPointSignal = signal<DashboardFormPoint | null>(null);
   private readonly selectedTimelineWindowSignal = signal<DashboardFormTimelineWindow>('w');
@@ -151,10 +156,19 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
     private logger: LoggerService,
   ) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsFormComponent]',
       mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
+      onContainerResize: ({ height }) => {
+        if (height === this.panelLayoutHeight) return;
+        const grid = dashboardChartPanelGrids(this.chartDiv?.nativeElement, height);
+        if (!grid) return;
+        this.panelLayoutHeight = height;
+        // Merge geometry only: keep series, axes, notes and interaction state.
+        this.chartHost.setOption({ grid }, { notMerge: false, lazyUpdate: false, silent: true });
+      },
     });
   }
 
@@ -163,12 +177,16 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes.timelineNotes && Object.keys(changes).length === 1) {
+      this.chartHost.updateTimelineNotes(this.timelineNotes);
+      return;
+    }
     this.updateNoDataOverlayState();
     if (!this.chartDiv?.nativeElement) {
       return;
     }
 
-    if (changes.darkTheme || changes.useAnimations || changes.isLoading || changes.formStatus || changes.showMobileAxisPointerHandle) {
+    if (changes.darkTheme || changes.useAnimations || changes.isLoading || changes.formStatus || changes.showMobileAxisPointerHandle || changes.timelineNotes) {
       void this.refreshChart();
     }
   }
@@ -193,6 +211,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
 
     this.chartHost.hideTooltip();
     const refreshContext = this.buildChartOption();
+    this.chartHost.setTimelineNotes(this.timelineNotes);
     this.chartHost.setOption(refreshContext.option, ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
   }
@@ -239,15 +258,13 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       viewBounds.minTime,
       viewBounds.maxTime,
       viewBounds.visiblePointCount,
+      chartStyle.isCompactLayout ? 4 : 7,
     );
     const hasSingleVisiblePoint = viewBounds.visiblePointCount <= 1;
 
     const ctlSeriesValues = points.map(point => [point.time, point.ctl] as const);
     const atlSeriesValues = points.map(point => [point.time, point.atl] as const);
     const formSeriesValues = points.map(point => [point.time, resolveDashboardFormValue(point, ChartsFormComponent.FORM_MODE)] as const);
-    const ctlAxisValues = points.map(point => point.ctl);
-    const atlAxisValues = points.map(point => point.atl);
-    const formAxisValues = points.map(point => resolveDashboardFormValue(point, ChartsFormComponent.FORM_MODE));
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
     const mobileAxisPointerHandle = isMobileTooltipViewport && this.showMobileAxisPointerHandle
       ? {
@@ -259,9 +276,11 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       }
       : { show: false };
 
-    const topAxisConfig = buildDashboardValueAxisConfig([...ctlAxisValues, ...atlAxisValues]);
-    const bottomAxisConfig = buildDashboardValueAxisConfig(
-      [...formAxisValues, 0].filter((value): value is number => Number.isFinite(value)),
+    const { load: topAxisConfig, form: bottomAxisConfig } = buildDashboardFormValueAxes(
+      points.map(point => ({ time: point.time, ctl: point.ctl, atl: point.atl,
+        form: resolveDashboardFormValue(point, ChartsFormComponent.FORM_MODE) })),
+      viewBounds.minTime,
+      viewBounds.maxTime,
     );
 
     const topXAxis = {
@@ -269,6 +288,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       min: viewBounds.minTime,
       max: viewBounds.maxTime,
       minInterval: labelConfig.minIntervalMs,
+      interval: labelConfig.tickIntervalMs,
       splitNumber: labelConfig.splitNumber,
       axisPointer: {
         show: true,
@@ -289,6 +309,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       min: viewBounds.minTime,
       max: viewBounds.maxTime,
       minInterval: labelConfig.minIntervalMs,
+      interval: labelConfig.tickIntervalMs,
       splitNumber: labelConfig.splitNumber,
       axisPointer: {
         show: true,
@@ -299,10 +320,9 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       },
       axisLabel: {
         show: true,
-        color: chartStyle.textColor,
-        fontSize: chartStyle.axisFontSize,
+        color: chartStyle.secondaryTextColor,
         hideOverlap: true,
-        margin: isMobileTooltipViewport ? 3 : 8,
+        ...TRAINING_STATE_AXIS_LABEL,
         formatter: (value: number) => formatDashboardFormXAxisLabel(Number(value), labelConfig.mode),
         rotate: 0,
       },
@@ -360,7 +380,8 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
     const gridRight = chartStyle.isCompactLayout ? 14 : 16;
     const panelHeight = isMobileTooltipViewport ? '36%' : chartStyle.isCompactLayout ? '39%' : '40%';
     const topPanelTop = isMobileTooltipViewport ? '3%' : '4%';
-    const bottomPanelTop = isMobileTooltipViewport ? '49%' : chartStyle.isCompactLayout ? '52%' : '51%';
+    const dashboardPanels = dashboardChartPanelGrids(this.chartDiv.nativeElement);
+    if (dashboardPanels) this.panelLayoutHeight = this.chartDiv.nativeElement.clientHeight;
 
     return {
       option: {
@@ -376,13 +397,15 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
             right: gridRight,
             top: topPanelTop,
             height: panelHeight,
+            ...dashboardPanels?.[0],
             outerBoundsMode: 'none',
           },
           {
             left: gridLeft,
             right: gridRight,
-            top: bottomPanelTop,
+            bottom: TRAINING_STATE_PLOT_BOTTOM,
             height: panelHeight,
+            ...dashboardPanels?.[1],
             outerBoundsMode: 'none',
           },
         ],
