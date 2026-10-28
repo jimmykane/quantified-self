@@ -711,6 +711,66 @@ meaning of `/training`. Manual planning is available without a provider connecti
 plan or remain standalone, so a user can add a workout without creating a plan. Provider delivery is an opt-in Pro action
 and must never be inferred from merely connecting a service.
 
+### Generate a workout from a Calendar day
+
+The owned Calendar day sheet and full day page expose **Generate with AI** in **Add workout** for today or a
+future date. This opens an unsaved review workflow. Main controls are date, supported manual sport (including
+strength aliases), available minutes, purpose and destination. Thirty minutes is an explicit editable starting
+value; a fitting active plan is preselected, otherwise Standalone. Strength shows equipment, initially Bodyweight.
+More options include strict endurance timing, target preference, simple/automatic structure, strength focus,
+matching previous planned weights, and separate default-off Training-plan and Timeline-note context choices.
+These choices belong to this draft and never modify chat grants, provider consent or stored feedback.
+
+`generateDayWorkout` is a private first-party callable using the existing Assistant model, legal/access checks,
+App Check and quota. It receives a strict allowlisted `shared/day-workout.ts` request and cannot mutate a schedule.
+The model has no tools. The server parses a canonical prescription, allows one bounded correction, rejects
+unsupported editor endings, and enforces strict time across all timed steps and repeat passes. Targets require
+an exact, unambiguous saved athlete reference; absent references lead to effort guidance rather than invented
+thresholds. Rest returns no workout. A strength planning-time range is labelled as an AI estimate for review only;
+repetition endings, rests and unknown canonical duration remain unchanged.
+
+The existing daily collector supplies current readiness, recovery, Training snapshots, a 28-day recording pattern,
+and actual Feeling/RPE minimum/maximum buckets. Local-date normalization includes the entire first local day;
+empty metric buckets stay missing even when activities matched the range. Imported and QS-edited feedback are
+not distinguishable here. This adds no feedback fields, punctuality/adherence score, check-in, or inferred skipped
+training. Current readiness is explicitly an observation, not a forecast for a future workout.
+
+With Training context enabled, complete selected-day schedule/completion checks and stable schedule revisions
+are required. A private adapter reads date-bounded summaries within seven days of the target, caps each query at
+401 to detect overflow, and loads at most the nearest 25 full prescriptions. It includes the selected plan's phase.
+Optional previous-weight context reads up to five recent full strength companions in the existing 28-day window,
+validates companion revision/projection, and matches normalized exercise names plus the complete set/rest
+prescription. Equipment words remain significant. Only a unique most recent date match can supply stored loads;
+zero and fractional kilograms survive, while every model-invented load is removed. The review labels the source
+as previously planned with its date, never performed or progressed. Optional missing/truncated evidence is
+disclosed; incomplete required schedule reads block generation.
+
+Generation replay state is isolated at `users/{uid}/assistantConversations/day-workout`, separate from chat.
+It reuses the existing browser-denied collection, index exemptions, seven-day TTL and account erasure. One
+four-minute lease, at most 128 recent receipts and four full responses, and a 400 kB serialized cap bound it.
+An exact retry replays a cached response without another quota charge. Expired/evicted/failed request IDs cannot
+silently generate again. Explicit **Generate again** creates a new request. Quota is reserved before context,
+released on pre-model failure, and charged once before the model attempts. No provider secrets or actions are
+available to this callable. It is synchronous and introduces no queue or provider lifecycle.
+
+Review includes the complete interval/strength prescription in owner units, rationale, used/missing context,
+observation time, selected day/destination, existing workouts and inherited plan-sync disclosure. Paused plans
+are labelled. **Edit workout** passes the full unsaved draft and save identity through owner-bound memory to the
+existing editor; auth changes clear it. **Add workout** uses the existing revision-bound `create-workout`
+mutation. Extending plan dates requires confirmation. A lost save reply retains the exact request and workout
+identity; the dialog locks changes until **Retry Add** resolves it. Definitive revision conflicts retain the draft
+and require review of the current schedule. This is always an additional workout. It never replaces a session,
+creates new sync consent, or invokes Send; existing plan sync may process an eligible new plan workout normally.
+
+MCP impact review: existing public read schemas, mutation kinds, proposal/confirmation contracts and scopes are
+unchanged. Generated workouts persist the same canonical root and full strength companion used by manual editing.
+`assistant/day-workout.emulator.spec.ts` verifies their read-back through `get_planned_workout_v3` and
+`get_strength_workout_details`, including exact repeated recoveries, zero/fractional loads and complete sets.
+No read coverage is deferred and no public generation tool is introduced. The private callable is registered in
+full/lazy entrypoints, endpoint metadata checks, the shared manifest and least-privilege secret policy. Release the
+backend endpoint before its frontend under separate deployment approval; no new Rules, index, secret value or
+schema migration is needed.
+
 ### Remembered Plans view
 
 The Plans/Standalone selector saves the last explicit choice in the owner settings document at

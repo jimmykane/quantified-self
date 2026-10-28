@@ -162,6 +162,7 @@ export {
   resetAssistantConversation,
   applyAssistantTrainingProposal,
 } from './assistant/callable';
+export { generateDayWorkout } from './assistant/day-workout-callable';
 export { ensureDerivedMetrics } from './derived-metrics/ensure-derived-metrics';
 export { observeDerivedMetricsHealth } from './derived-metrics/monitoring-schedule';
 export { queryHealthRange } from './health/callable';

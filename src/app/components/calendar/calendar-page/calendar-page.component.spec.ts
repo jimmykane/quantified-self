@@ -1,3 +1,4 @@
+import { DayWorkoutService } from '../../../services/day-workout.service';
 import { writeFileSync } from 'node:fs';
 import { Component, Input, signal } from '@angular/core';
 import { ViewportScroller } from '@angular/common';
@@ -117,6 +118,7 @@ describe('CalendarPageComponent', () => {
     await TestBed.configureTestingModule({
       imports: [CalendarPageComponent],
       providers: [
+        { provide: DayWorkoutService, useValue: { canGenerate: () => false, open: vi.fn() } },
         provideRouter([]),
         { provide: ActivatedRoute, useValue: activatedRoute },
         { provide: AppUserService, useValue: { user: signal(user), user$: of(user) } },

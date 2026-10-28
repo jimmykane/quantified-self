@@ -131,6 +131,7 @@ describe('function target loader', () => {
       'addSuuntoAppHistoryToQueue',
       'addSuuntoAppRoutesToQueue',
       'addWahooAPIHistoryToQueue',
+      'generateDayWorkout',
       'assistantChat',
       'backfillActivitySyncRoute',
       'backfillCorosAPISleep',
