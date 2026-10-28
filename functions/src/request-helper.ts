@@ -20,6 +20,8 @@ export interface BinaryResponse {
 export interface ResponseMetadata {
     statusCode: number;
     contentType: string | null;
+    /** Actual decoded bytes, available only after a bounded body read succeeds. */
+    responseBytes?: number;
 }
 
 function normalizeMaxResponseBytes(value: unknown): number | null {
@@ -178,18 +180,23 @@ async function request(urlOrOptions: string | any, options: any = {}) {
         }
 
         const response = await fetch(url, fetchOptions);
-        // Optional diagnostics must not change response/error handling or expose headers/bodies.
-        if (typeof opts.onResponseMetadata === 'function') {
-            try {
-                opts.onResponseMetadata({
-                    statusCode: response.status,
-                    contentType: response.headers?.get('content-type') ?? null,
-                } satisfies ResponseMetadata);
-            } catch { /* Observability failure must not fail the request. */ }
+        let boundedResponseBody: Buffer | null = null;
+        try {
+            if (maxResponseBytes !== null) {
+                boundedResponseBody = await readResponseBodyWithinLimit(response, maxResponseBytes);
+            }
+        } finally {
+            // Optional diagnostics must not change response/error handling or expose headers/bodies.
+            if (typeof opts.onResponseMetadata === 'function') {
+                try {
+                    opts.onResponseMetadata({
+                        statusCode: response.status,
+                        contentType: response.headers?.get('content-type') ?? null,
+                        ...(boundedResponseBody !== null ? { responseBytes: boundedResponseBody.length } : {}),
+                    } satisfies ResponseMetadata);
+                } catch { /* Observability failure must not fail the request. */ }
+            }
         }
-        const boundedResponseBody = maxResponseBytes === null
-            ? null
-            : await readResponseBodyWithinLimit(response, maxResponseBytes);
 
         if (!response.ok) {
             const err: any = new Error(`StatusCodeError: ${response.status} - ${response.statusText}`);
