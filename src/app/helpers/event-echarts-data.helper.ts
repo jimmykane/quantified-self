@@ -103,6 +103,8 @@ export interface EventChartLapMarker extends EventChartMarkerBase {
 
 export interface EventChartSwimLengthMarker extends EventChartMarkerBase {
   markerType: 'swimLength';
+  /** Recorded span on time axes only; unavailable timing must not create a timeline block. */
+  timelineStartXValue?: number;
   swimLengthIndex: number;
   swimLengthType: string;
   isIdle: boolean;
@@ -1191,6 +1193,7 @@ export function buildEventSwimLengthMarkers(input: {
       const label = `Length ${swimLength.index}`;
       markers.push({
         markerType: 'swimLength',
+        ...getSwimLengthTimelineStart(activity, swimLength, input.xAxisType),
         xValue,
         label,
         color: activityColor,
@@ -1207,6 +1210,19 @@ export function buildEventSwimLengthMarkers(input: {
   });
 
   return markers.sort((left, right) => left.xValue - right.xValue);
+}
+
+function getSwimLengthTimelineStart(
+  activity: ActivityInterface, length: AppSwimLength, axis: XAxisTypes,
+): Pick<EventChartSwimLengthMarker, 'timelineStartXValue'> {
+  if (axis === XAxisTypes.Distance || getRejectedSwimTiming(length)) return {};
+  const start = length.startDate.getTime();
+  const end = length.endDate.getTime();
+  const activityStart = activity.startDate?.getTime();
+  const activityEnd = activity.endDate?.getTime();
+  if (![start, end, activityStart, activityEnd].every(Number.isFinite)
+    || end <= start || start < activityStart || end > activityEnd) return {};
+  return { timelineStartXValue: axis === XAxisTypes.Time ? start : (start - activityStart) / 1000 };
 }
 
 function getFilteredStreams(input: {

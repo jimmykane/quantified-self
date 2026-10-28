@@ -396,6 +396,22 @@ pace in the user's swim units, omitting pace for rest or unavailable timing inst
 Chart boundaries and lap identities remain recorded; shared multisport/across-leg laps retain generic metrics.
 This changes frontend tooltip content only, with no new controls, event writes, Training or MCP changes.
 
+The **Show Swim Lengths** setting also controls the swim/rest strip above each metric plot on duration/time axes.
+`buildEventSwimLengthMarkers` supplies an optional recorded start coordinate only for positive, unrejected spans
+contained by the activity's timestamps. `buildSwimTimelineLanes` groups by activity, orders each lane, and excludes
+overlapping clusters and unknown states. It never fills gaps, infers rest from zero cadence, or substitutes timer
+duration for recorded start/end boundaries. Distance axes retain boundary markers but omit the strip, since rest
+has no distance width. Only activities represented by that metric panel receive lanes.
+
+`buildSwimTimelineSeries` uses the existing lazy-registered ECharts custom series and the metric's x axis. The
+plot reserves space for each lane; native zoom/resize transforms its x coordinates, with horizontal clipping and
+no contribution to the metric y axis or range statistics. Filled active blocks and dashed hollow rest blocks match
+the accessible legend, with separate numbered lanes for compared watches. Hollow blocks retain an invisible filled
+hit target. Local hover/click tooltips reuse the length formatter and `escapeConnect`, preventing ECharts from
+replaying series indices in another panel. The existing shared chart feedback owns tap haptics; no feedback is
+emitted by timeline hydration, and non-interactive previews stay silent. This adds no stored metric, setting,
+Training behavior, MCP contract, import change or provider action.
+
 Swimming lap defaults also include the categorical **Stroke** column, selectable through the existing per-sport
 Laps column picker. Explicit saved lists, including empty lists, take precedence over the defaults. Stroke labels
 come from recorded non-rest swim lengths using their one-based `lapIndex` in the complete activity lap list, before

@@ -2119,6 +2119,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Power **3s** still requires complete sample windows');
     expect(gettingStartedSection?.content).toContain('Right-clicking an event chart copies a themed image of the full chart panel');
     expect(gettingStartedSection?.content).toContain('**Show Swim Lengths** chart option');
+    expect(gettingStartedSection?.content).toContain('**Swim / rest timeline**');
+    expect(gettingStartedSection?.content).toContain('Gaps are not assumed to be rest');
     expect(gettingStartedSection?.content).toContain('Swim length chart tooltips use the same distance and pace rules as the length table');
     expect(gettingStartedSection?.content).toContain('Swim lap tooltips show **Avg Swim Pace**');
     expect(gettingStartedSection?.content).toContain('swim length end boundaries');

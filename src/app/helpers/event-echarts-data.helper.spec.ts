@@ -109,6 +109,24 @@ describe('swim chart tooltip consistency', () => {
     }
   });
 
+  it.each([XAxisTypes.Duration, XAxisTypes.Time])('retains recorded swim/rest bounds on %s axes', axis => {
+    const activity = makeActivity([length({ startDate: 10000, endDate: 40000, type: 'idle' })]);
+    const marker = buildEventSwimLengthMarkers({ selectedActivities: [activity], allActivities: [activity],
+      xAxisType: axis, eventColorService: colorService })[0];
+    expect(marker.timelineStartXValue).toBe(axis === XAxisTypes.Time ? 10000 : 10);
+    expect(marker.xValue).toBe(axis === XAxisTypes.Time ? 40000 : 40);
+  });
+
+  it.each([
+    { startDate: -1000 }, { endDate: 130000 }, { endDate: 0 }, { startDate: 31000 },
+    { timingValidity: { version: 1, reason: 'exceeds-workout-envelope', timerTime: 4000000 } },
+  ])('omits timeline blocks with unreliable recorded bounds: %j', overrides => {
+    const activity = makeActivity([length(overrides)]);
+    const marker = buildEventSwimLengthMarkers({ selectedActivities: [activity], allActivities: [activity],
+      xAxisType: XAxisTypes.Duration, eventColorService: colorService })[0];
+    expect(marker.timelineStartXValue).toBeUndefined();
+  });
+
   it('prefers independently recorded length speed over inferred pace', () => {
     const details = lengthDetails(length({ avgSpeed: 1, distance: Number.NaN }));
     expect(details.find(row => row.label === 'Swim Pace')?.value.replace(/\s/g, '')).toBe('01:40min/100m');
@@ -2973,6 +2991,7 @@ describe('event-echarts-data.helper', () => {
 
     expect(markers).toHaveLength(1);
     expect(markers[0].xValue).toBe(75);
+    expect(markers[0].timelineStartXValue).toBeUndefined();
   });
 
   it('formats swim length marker distances in meters regardless of distance unit preference', () => {
