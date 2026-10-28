@@ -55,7 +55,9 @@
     @if (showNavigation()) {
     <mat-sidenav #sidenav [mode]="'over'" [fixedInViewport]="true" [fixedTopGap]="layoutTopOffsetPx"
       [autoFocus]="false">
+      @defer (on idle; when sidenav.opened) {
       <app-sidenav></app-sidenav>
+      }
     </mat-sidenav>
     }
 

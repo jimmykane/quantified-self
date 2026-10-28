@@ -5,18 +5,12 @@ import {
 } from '@sports-alliance/sports-lib';
 import { getRejectedSwimTiming, resolveSwimTiming } from '@shared/swim-timing';
 import { AppSwimLength, getActivitySwimLengths, isRestSwimLength } from './event-swim-length.helper';
-import { getSwimLengthDistance, getSwimLengthDuration, sumSwimValues } from './event-swim-analytics.helper';
+import { getCompleteSwimLengthSum, getSwimLengthDistance, getSwimLengthDuration, getSwimLengthHeartRateAverage } from './event-swim-analytics.helper';
 import { setDerivedSwimIntervalLengths } from './event-swim-interval-metadata.helper';
 
 function value(stat: DataInterface | void | null): number | null {
   const number = stat ? stat.getValue() : null;
   return typeof number === 'number' && Number.isFinite(number) && number >= 0 ? number : null;
-}
-
-function total(lengths: readonly AppSwimLength[], read: (length: AppSwimLength) => number | null): number | null {
-  const values = lengths.map(read);
-  return values.every(number => number !== null && Number.isFinite(number) && number >= 0)
-    ? sumSwimValues(values) : null;
 }
 
 /**
@@ -42,7 +36,7 @@ export function getSwimIntervalActivity(activity: ActivityInterface): ActivityIn
       || +length.endDate > +activity.endDate + 1000
       || (index > 0 && (+length.startDate <= +lengths[index - 1].startDate
         || Math.abs(+lengths[index - 1].endDate - +length.startDate) > 1000))
-      || (isRestSwimLength(length) && length.distance && value(length.distance) !== 0))) return null;
+      || (isRestSwimLength(length) && (length.distanceIsInvalid || (length.distance && value(length.distance) !== 0))))) return null;
 
   const nativeLaps = activity.getLaps?.() || [];
   // Missing rest membership does not invalidate the watch's active set boundaries.
@@ -73,11 +67,11 @@ export function getSwimIntervalActivity(activity: ActivityInterface): ActivityIn
     setDerivedSwimIntervalLengths(lap, group);
     lap.addStat(new DataActiveLap(!rest));
     lap.addStat(new DataActiveLengths(rest ? 0 : group.length));
-    const duration = total(group, getSwimLengthDuration);
-    const elapsed = total(group, length => resolveSwimTiming(length).elapsedTime);
-    const distance = rest ? 0 : total(group, getSwimLengthDistance);
-    const strokes = rest ? null : total(group, length => length.strokes);
-    const energy = total(group, length => value(length.calories));
+    const duration = getCompleteSwimLengthSum(group, getSwimLengthDuration);
+    const elapsed = getCompleteSwimLengthSum(group, length => resolveSwimTiming(length).elapsedTime);
+    const distance = rest ? 0 : getCompleteSwimLengthSum(group, getSwimLengthDistance);
+    const strokes = rest ? null : getCompleteSwimLengthSum(group, length => length.strokes);
+    const energy = getCompleteSwimLengthSum(group, length => value(length.calories));
     if (duration !== null) lap.addStat(new DataDuration(duration));
     if (elapsed !== null) lap.addStat(new DataElapsedTime(elapsed));
     if (distance !== null) lap.addStat(new DataDistance(distance));
@@ -85,10 +79,8 @@ export function getSwimIntervalActivity(activity: ActivityInterface): ActivityIn
     if (energy !== null) lap.addStat(new DataEnergy(energy));
     const rejected = group.map(getRejectedSwimTiming).find(Boolean);
     if (rejected) lap.timingValidity = rejected;
-    const heartRates = group.map(length => ({ heartRate: value(length.avgHeartRate), duration: getSwimLengthDuration(length) }));
-    if (duration > 0 && heartRates.every(item => item.heartRate !== null && item.duration !== null)) {
-      lap.addStat(new DataHeartRateAvg(sumSwimValues(heartRates.map(item => item.heartRate * item.duration)) / duration));
-    }
+    const heartRate = getSwimLengthHeartRateAverage(group);
+    if (heartRate !== null) lap.addStat(new DataHeartRateAvg(heartRate));
     const maxima = group.map(length => value(length.maxHeartRate));
     if (maxima.every(number => number !== null)) lap.addStat(new DataHeartRateMax(Math.max(...maxima)));
     laps.push(lap);

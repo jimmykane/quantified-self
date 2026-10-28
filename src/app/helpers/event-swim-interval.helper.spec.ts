@@ -26,6 +26,27 @@ describe('swim interval display projection', () => {
     expect(source.getSwimLengths().every(length => length.lapIndex === null)).toBe(true);
   });
 
+  it('keeps invalid length distance unavailable through derived interval normalization', () => {
+    const source = swimIntervalFixture();
+    const rawLengths = source.getSwimLengths().map(length => ({ ...length, distance: length.distance?.getValue() }));
+    rawLengths[1].distance = Number.NaN;
+    const input = Object.create(source, { getSwimLengths: { value: () => rawLengths } });
+    const display = getSwimIntervalActivity(input)!;
+    const first = display.getLaps()[0];
+    expect(first.getDistance()).toBeUndefined();
+    expect(getSwimLapAnalytics(display).get(first)).toMatchObject({ activeDistance: null, pace: null, swolf: null });
+    expect(rawLengths[1].distance).toBeNaN();
+    expect(source.getSwimLengths()[1].distance.getValue()).toBe(25);
+  });
+
+  it('rejects derived interval projection when a rest has an invalid recorded distance', () => {
+    const source = swimIntervalFixture();
+    const rawLengths = source.getSwimLengths().map(length => ({ ...length, distance: length.distance?.getValue() }));
+    rawLengths[4].distance = Number.NaN;
+    const input = Object.create(source, { getSwimLengths: { value: () => rawLengths } });
+    expect(getSwimIntervalActivity(input)).toBeNull();
+  });
+
   it('also replaces old arbitrary memberships when parallel lap schemes remain', () => {
     const source = swimIntervalFixture();
     source.getSwimLengths().forEach(length => length.lapIndex = 1);

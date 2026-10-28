@@ -7537,7 +7537,15 @@ it shows the reference without a numerical comparison. Neither value is averaged
 - CSS is not inferred from ordinary workouts.
 
 The chart has a full-height layout and an inverted pace axis, because lower seconds per 100 m/yd means faster swimming.
-Units follow the user's swim pace settings.
+Units follow the user's first valid swim pace preference, defaulting to metres. Weekly pool/open-water tooltip
+distances and the comparable SWOLF pool-length label use `createSwimDistanceDisplayStat` and
+`resolveUnitAwareDisplayStat`, so their values and units come from the same Sports Lib display instance.
+The general kilometres/miles preference does not override swimming. A recorded 22.86 m pool displays as 25 yd;
+an actual 25 m pool displays as 27.34 yd, without inventing a nominal yard pool. Missing/invalid distance stays
+unavailable and explicit zero stays zero. Unit changes rebuild the display model without changing canonical metres,
+pace inputs, weekly aggregation, SWOLF values or the selected physical stroke/pool comparison context.
+MCP impact: none. This frontend formatting correction changes no Training snapshot/read projection, planning recipe,
+tool, schema, consent, mutation or provider action; no additional planning read coverage or deferral is needed.
 
 Its header states whether pool and open-water pace are both available or only one environment has evidence, then states
 the number of explicit-pace weeks. The x-axis uses the shared compact `W35` marker convention; the visible key defines
