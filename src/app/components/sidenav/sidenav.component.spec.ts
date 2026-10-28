@@ -18,7 +18,7 @@ import { By } from '@angular/platform-browser';
 import { provideRouter, Router, RouterLink, RouterLinkActive } from '@angular/router';
 
 import { AppWhatsNewService } from '../../services/app.whats-new.service';
-import { signal } from '@angular/core';
+import { computed, signal } from '@angular/core';
 import { AppThemes, User } from '@sports-alliance/sports-lib';
 import { SYSTEM_THEME_PREFERENCE } from '../../models/app-theme-preference.type';
 const TRAINING_PLANNING_NAVIGATION_ALLOWED_UID = 'planning-user';
@@ -371,6 +371,42 @@ describe('SideNavComponent', () => {
 
         expect(healthItem).toBeUndefined();
         expect(fixture.nativeElement.querySelector('.sidenav-notes-item')).toBeNull();
+    });
+
+    it('keeps one prepared view current through sign-in, account changes and sign-out', () => {
+        const currentUser = signal<{ uid: string; displayName: string; email: string; stripeRole: string } | null>(null);
+        mockUserService.user = currentUser;
+        mockUserService.isProSignal = computed(() => currentUser()?.stripeRole === 'pro');
+        mockUserService.isBasicSignal = computed(() => currentUser()?.stripeRole === 'basic');
+        mockUserService.hasPaidAccessSignal = computed(() => currentUser() !== null);
+        fixture.detectChanges();
+        const view = fixture.nativeElement;
+        expect(view.querySelector('.sidenav-profile')).toBeNull();
+
+        currentUser.set({ uid: 'pro-owner', displayName: 'Pro Owner', email: 'pro@example.test', stripeRole: 'pro' });
+        fixture.detectChanges();
+        expect(view.querySelector('.sidenav-user-email')?.textContent).toContain('pro@example.test');
+        expect(view.querySelector('.sidenav-pro-badge')).toBeTruthy();
+        expect(view.querySelector('.sidenav-basic-badge')).toBeNull();
+
+        currentUser.set({ uid: 'basic-owner', displayName: 'Basic Owner', email: 'basic@example.test', stripeRole: 'basic' });
+        fixture.detectChanges();
+        expect(fixture.nativeElement).toBe(view);
+        expect(view.querySelector('.sidenav-user-email')?.textContent).toContain('basic@example.test');
+        expect(view.textContent).not.toContain('pro@example.test');
+        expect(view.querySelector('.sidenav-pro-badge')).toBeNull();
+        expect(view.querySelector('.sidenav-basic-badge')).toBeTruthy();
+        const connectivity = fixture.debugElement.queryAll(By.directive(RouterLink))
+            .find(link => link.nativeElement.textContent.includes('Connectivity'));
+        expect(connectivity?.injector.get(RouterLink).urlTree?.toString()).toBe('/services?serviceName=mcp');
+
+        currentUser.set(null);
+        fixture.detectChanges();
+        expect(view.querySelector('.sidenav-profile, .sidenav-pro-badge, .sidenav-basic-badge')).toBeNull();
+        expect(view.querySelector('[routerlink="/dashboard"], [routerlink="/health"], [routerlink="/send-activities"]')).toBeNull();
+        expect(view.textContent).not.toContain('basic@example.test');
+        expect(view.textContent).toContain('Login');
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
     });
 
     it('links Timeline notes to comparisons as a full-level route after Health, hidden from guests', () => {
