@@ -337,8 +337,12 @@ the normalized baseline and candidate must cover each requested Sleep/Health int
 adaptive continuations and retries. Do not claim the no-slowdown requirement is satisfied from aggregate completion
 alone. `node --test tools/benchmarks/suunto-history-windows.test.mjs` verifies the acceptance gate, request/continuation
 accounting, delayed arrivals and millisecond boundary coverage independently of the production tests.
-Keep the change in draft pending resolution or explicit acceptance of that tradeoff. No real provider traffic is
-part of this verification. Post-release assessment must compare per-import completion/short-import latency,
+On 2026-10-28 the repository owner explicitly accepted this congestion tradeoff for PR #966 after reviewing the
+modeled request/execution savings and adverse latency cases. Four-window batching proceeds through normal review
+with this known limitation; the strict `--require-no-slowdown` diagnostic remains unchanged and fails on the
+documented cases. Complete selected-range coverage, all Health feeds and lifecycle/retry correctness remain required.
+Acceptance does not authorize merging or deployment. No real provider traffic is part of this verification.
+Post-release assessment must compare per-import completion/short-import latency,
 normal webhook lag, request counts, failures, queue age and billed runtime separately.
 
 ### Compatibility and release boundary
