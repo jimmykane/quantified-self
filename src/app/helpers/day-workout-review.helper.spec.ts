@@ -5,11 +5,18 @@ import { analyzeWorkoutStructureV1 } from '@shared/planned-workout-analysis';
 import { dayWorkoutReview } from './day-workout-review.helper';
 
 describe('Calendar workout draft review', () => {
-  it('starts with explicit time and independent disabled context choices across sports', () => {
+  it('starts with explicit time and independent enabled context choices across sports', () => {
     const controls = defaultDayWorkoutControls('2026-10-28', 'Europe/Helsinki');
-    expect(controls).toMatchObject({ minutes: 30, trainingContext: false, timelineContext: false, sport: ActivityTypes.Running });
+    expect(controls).toMatchObject({ minutes: 30, trainingContext: true, timelineContext: true, usePreviousWeights: true, sport: ActivityTypes.Running });
     expect(parseGenerateDayWorkoutRequest({ requestId: 'request-123', controls }, new Date('2026-10-27T23:00Z'))).toEqual({ requestId: 'request-123', controls });
     expect(defaultDayWorkoutControls('2026-10-28', 'UTC', ActivityTypes.StrengthTraining)).toMatchObject({ equipment: ['bodyweight'], target: 'none' });
+  });
+  it('preserves explicit context opt-outs and requires every choice in incoming requests', () => {
+    const controls = { ...defaultDayWorkoutControls('2026-10-28', 'UTC'), trainingContext: false, timelineContext: false, usePreviousWeights: false };
+    expect(parseGenerateDayWorkoutRequest({ requestId: 'request-123', controls }, new Date('2026-10-28T12:00Z')).controls).toEqual(controls);
+    const missingChoice: Partial<typeof controls> = { ...controls };
+    delete missingChoice.timelineContext;
+    expect(() => parseGenerateDayWorkoutRequest({ requestId: 'request-123', controls: missingChoice }, new Date('2026-10-28T12:00Z'))).toThrow('Explicit context choices');
   });
   it('shows every strength set, rest, zero/fractional load and an explicitly separate estimate in user units', () => {
     const strength = { version: 1 as const, exercises: [{ id: 'squat', name: 'Dumbbell squat', sets: [

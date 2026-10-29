@@ -17,6 +17,15 @@ import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 
 describe('help.content', () => {
+  it('explains default-on workout generation context and independent draft opt-outs', () => {
+    const help = HELP_SECTIONS.map(section => section.content).join('\n');
+    expect(help).toContain('**Training plans and workouts** and **Timeline notes** start enabled for every new draft');
+    expect(help).toContain('turn off either context independently');
+    expect(help).toContain('Turning off Training context also disables matching previous planned weights');
+    expect(help).toContain('matching **previously planned** loads (enabled by default)');
+    expect(help).not.toContain('separate default-off Training-plan/Timeline context');
+  });
+
   it('distinguishes scheduled history and cooldowns from completion estimates', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
     expect(copy).toContain('Scheduled activity counts confirm queued work, not completed imports');

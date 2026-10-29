@@ -70,9 +70,9 @@ describe('DayWorkoutDialogComponent', () => {
   async function render() { const fixture = TestBed.createComponent(DayWorkoutDialogComponent);
     vi.spyOn((fixture.componentInstance as unknown as { dialogs: MatDialog }).dialogs, 'open').mockImplementation(dialogOpen);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); return fixture; }
-  it('renders explicit defaults, separate consent and full reviewed strength without writing', async () => {
+  it('renders enabled defaults, independent opt-outs and full reviewed strength without writing', async () => {
     const fixture = await render(); const component = fixture.componentInstance;
-    expect(component.controls()).toMatchObject({ minutes: 30, destinationPlanId: 'plan', equipment: ['bodyweight'], trainingContext: false, timelineContext: false });
+    expect(component.controls()).toMatchObject({ minutes: 30, destinationPlanId: 'plan', equipment: ['bodyweight'], trainingContext: true, timelineContext: true, usePreviousWeights: true });
     expect(haptics.selection).not.toHaveBeenCalled();
     await component.generate(); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('8 reps');
@@ -129,6 +129,26 @@ describe('DayWorkoutDialogComponent', () => {
     expect(close).toHaveBeenCalledWith(expect.objectContaining({ ownerUid: 'owner', draft: response('').draft,
       saveRequest: expect.objectContaining({ operation: expect.objectContaining({ strength }) }) }));
   });
+  it('renders enabled context choices and sends independent opt-outs with a new generation', async () => {
+    const fixture = await render(); const component = fixture.componentInstance;
+    component.more.set(true); fixture.detectChanges();
+    const inputs = [...fixture.nativeElement.querySelectorAll('#day-workout-more mat-checkbox input')] as HTMLInputElement[];
+    expect(inputs).toHaveLength(3);
+    expect(inputs.every(input => input.checked && !input.disabled)).toBe(true);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    await component.generate(); fixture.detectChanges();
+    expect(generate.mock.calls[0][1].controls).toMatchObject({ trainingContext: true, timelineContext: true, usePreviousWeights: true });
+    component.showSettings.set(true); fixture.detectChanges(); haptics.selection.mockClear();
+    inputs[1].click(); fixture.detectChanges();
+    expect(component.controls()).toMatchObject({ trainingContext: true, timelineContext: false });
+    expect(component.result()).toBeNull(); expect(haptics.selection).toHaveBeenCalledOnce();
+    await component.generate(); fixture.detectChanges();
+    expect(generate.mock.calls[1][1].controls).toMatchObject({ trainingContext: true, timelineContext: false });
+    expect(generate.mock.calls[1][1].requestId).not.toBe(generate.mock.calls[0][1].requestId);
+    component.showSettings.set(true); fixture.detectChanges(); inputs[0].click(); fixture.detectChanges();
+    expect(component.controls()).toMatchObject({ trainingContext: false, timelineContext: false });
+    expect(inputs[2].disabled).toBe(true); expect(mutate).not.toHaveBeenCalled();
+  });
   it('focuses review on the prescription while keeping options and context inspectable without discarding it', async () => {
     const fixture = await render(); const component = fixture.componentInstance;
     const element = fixture.nativeElement as HTMLElement;
@@ -140,7 +160,7 @@ describe('DayWorkoutDialogComponent', () => {
     for (const signal of ['freshness', 'training load', 'HRV', 'sleep', 'overnight heart rate', 'readiness', 'Feeling/RPE']) {
       expect(personalization.textContent).toContain(signal);
     }
-    expect(component.controls()).toMatchObject({ trainingContext: false, timelineContext: false });
+    expect(component.controls()).toMatchObject({ trainingContext: true, timelineContext: true, usePreviousWeights: true });
     expect(element.querySelector('input[type="date"]')).toBeNull();
     expect(element.querySelector('.review-destination')!.textContent).toContain('Oct 28, 2026');
     expect(element.querySelector('mat-dialog-actions')!.textContent).toContain('Generate workout');

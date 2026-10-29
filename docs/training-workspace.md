@@ -721,8 +721,11 @@ single-selection mode, with sport icons and only `DAY_WORKOUT_SPORTS` options. C
 the existing reset/validation and busy/uncertain-save guards still apply. Thirty minutes is an explicit editable starting
 value; a fitting active plan is preselected, otherwise Standalone. Strength shows equipment, initially Bodyweight.
 More options include strict endurance timing, target preference, simple/automatic structure, strength focus,
-matching previous planned weights, and separate default-off Training-plan and Timeline-note context choices.
-These choices belong to this draft and never modify chat grants, provider consent or stored feedback.
+matching previous planned weights, and independent Training-plan and Timeline-note context choices.
+All three context choices start enabled for each new draft. Users can turn each off before generating; disabling
+Training context also disables matching planned weights. The setup names the enabled defaults before generation,
+and changing a choice invalidates the old draft/request. Explicit false values remain false at the server; missing
+choices are rejected rather than inferred. These choices never modify chat grants, provider consent or stored feedback.
 
 `generateDayWorkout` is a private first-party callable using the existing Assistant model, legal/access checks,
 App Check and quota. It receives a strict allowlisted `shared/day-workout.ts` request and cannot mutate a schedule.
@@ -798,7 +801,9 @@ unchanged. Generated workouts persist the same canonical root and full strength 
 Review-note rendering, compact UI disclosures and private cache/quota fixes preserve these same public contracts
 and read-back coverage. The shared day-context entry-point menu has no MCP wire or authority impact: it opens the
 same owner/date-guarded generation service. Reusing the Activities sport picker also changes no supported recipe
-sports, MCP read coverage, scopes or proposal/confirmation contracts. Explicit recovery guidance and signal-level
+sports, MCP read coverage, scopes or proposal/confirmation contracts. Default-on context affects only explicit
+first-party generation controls submitted from the reviewed dialog; independent opt-outs and the same read scope
+checks remain enforced. External MCP grants and Assistant chat settings are unchanged. Explicit recovery guidance and signal-level
 availability use the existing validated daily-report payload only; no public schema, calculation, read coverage or
 consent changes are needed. The same canonical prescription and MCP read-back tests still apply. Presentation changes
 do not alter stored prescriptions, consent or provider delivery.

@@ -4,7 +4,7 @@ import { collectDayWorkoutContext, type DayWorkoutTrainingContext } from './day-
 import type { AssistantMcpToolName } from './mcp-session';
 
 const now = new Date('2026-10-28T12:00:00Z');
-const controls = defaultDayWorkoutControls('2026-11-02', 'Europe/Helsinki');
+const controls = { ...defaultDayWorkoutControls('2026-11-02', 'Europe/Helsinki'), trainingContext: false, timelineContext: false };
 const training: DayWorkoutTrainingContext = { scheduleRevision: 7, nearby: [], phase: null, previousStrength: [], references: [], missing: [] };
 function session(fail?: string) {
   return { callTool: vi.fn(async (name: AssistantMcpToolName) => {
@@ -97,6 +97,17 @@ describe('Calendar generation context boundaries', () => {
     expect(result.missingContext).toContain('Overnight heart rate has too little baseline history for comparison.');
   });
 
+  it('uses Training and Timeline context by default, while keeping each opt-out independent', async () => {
+    const defaults = defaultDayWorkoutControls('2026-11-02', 'Europe/Helsinki');
+    for (const choices of [defaults, { ...defaults, trainingContext: false }, { ...defaults, timelineContext: false }]) {
+      const source = session(); const readTraining = vi.fn().mockResolvedValue(training);
+      await collectDayWorkoutContext(choices, now, source, readTraining);
+      expect(readTraining).toHaveBeenCalledTimes(choices.trainingContext ? 1 : 0);
+      const called = source.callTool.mock.calls.map(call => call[0]);
+      expect(called.includes('query_planned_workouts_by_date')).toBe(choices.trainingContext);
+      expect(called.includes('query_timeline_notes')).toBe(choices.timelineContext);
+    }
+  });
   it('never reads plans or notes without their independent opt-ins', async () => {
     const source = session(); const readTraining = vi.fn().mockResolvedValue(training);
     const result = await collectDayWorkoutContext(controls, now, source, readTraining);

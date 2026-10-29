@@ -67,7 +67,7 @@ export function defaultDayWorkoutControls(localDate: string, timeZone: string, s
   return { localDate, timeZone, sport, minutes: 30, purpose: 'suggest', timing: 'approximate',
     target: isStrengthWorkoutSportV1(sport) ? 'none' : 'auto', structure: 'auto', destinationPlanId: null,
     equipment: ['bodyweight'], strengthFocus: 'full-body', usePreviousWeights: true,
-    trainingContext: false, timelineContext: false };
+    trainingContext: true, timelineContext: true };
 }
 
 function object(value: unknown, keys: string[]): Record<string, unknown> {

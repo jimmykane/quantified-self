@@ -11,7 +11,7 @@
   </div>
   @if (!result()) { <p class="hint">Review before adding. Uses your Assistant allowance.</p> }
   <fieldset id="day-workout-settings" [hidden]="!!result() && !showSettings()" [disabled]="!!busy() || saveUncertain()">
-    <p id="day-workout-personalization" class="hint"><strong>Personalized automatically.</strong> Checks freshness, training load, HRV, sleep, overnight heart rate and readiness, plus recent activities and existing Feeling/RPE, when available.</p>
+    <p id="day-workout-personalization" class="hint"><strong>Personalized automatically.</strong> Checks freshness, training load, HRV, sleep, overnight heart rate and readiness, plus recent activities and existing Feeling/RPE, when available. Training plans and Timeline notes start enabled; change them in More options.</p>
     <div class="controls-grid">
       <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Time available</mat-label>
         <input matInput type="number" min="5" max="240" [ngModel]="controls().minutes" (ngModelChange)="set('minutes', $event, false)"><span matTextSuffix>min</span>
@@ -38,7 +38,7 @@
         <mat-checkbox [checked]="controls()[choice.key]" (change)="set(choice.key, $event.checked)"
           [disabled]="!!busy() || saveUncertain() || (choice.key === 'usePreviousWeights' && !controls().trainingContext)">{{ choice.label }}</mat-checkbox>
       }
-      <p class="hint">Optional for this draft. Your freshness and recovery data are checked automatically.</p>
+      <p class="hint">Enabled by default for this draft; turn off any context you do not want used. Freshness and recovery are checked automatically.</p>
     </div>
   </fieldset>
   @if (scheduleFailed()) {

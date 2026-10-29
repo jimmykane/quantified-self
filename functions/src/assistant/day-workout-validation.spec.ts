@@ -14,7 +14,7 @@ const strength = () => ({ version: 1 as const, exercises: [{ id: 'squat', name: 
 describe('day workout contract and prescription validation', () => {
   it('requires explicit independent consent, supported controls and today/future dates in the selected zone', () => {
     const now = new Date('2026-10-27T23:00:00Z');
-    expect(parseGenerateDayWorkoutRequest({ requestId: 'request-123', controls }, now).controls.trainingContext).toBe(false);
+    expect(parseGenerateDayWorkoutRequest({ requestId: 'request-123', controls }, now).controls).toMatchObject({ trainingContext: true, timelineContext: true });
     for (const changed of [{ localDate: '2026-10-27' }, { localDate: '2027-10-29' }, { trainingContext: undefined },
       { minutes: 0 }, { sport: 'Sky Diving' }, { equipment: ['bodyweight', 'bodyweight'] }, { uid: 'foreign' }]) {
       expect(() => parseGenerateDayWorkoutRequest({ requestId: 'request-123', controls: { ...controls, ...changed } }, now)).toThrow();
