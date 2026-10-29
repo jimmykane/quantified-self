@@ -713,8 +713,9 @@ and must never be inferred from merely connecting a service.
 
 ### Generate a workout from a Calendar day
 
-The owned Calendar day sheet and full day page expose **Generate with AI** in **Add workout** for today or a
-future date. This opens an unsaved review workflow. The date stays on the selected Calendar day. Main controls are supported manual sport (including
+Owned Calendar and Dashboard selected-day previews, the day sheet and the full day page expose
+**Generate with AI** in **Add workout** for today through 365 days ahead. All day-context presentations share one
+menu, including empty days; manual plan, standalone and library options remain available for past dates. This opens an unsaved review workflow. The date stays on the selected Calendar day. Main controls are supported manual sport (including
 strength aliases), available minutes, purpose and destination. Thirty minutes is an explicit editable starting
 value; a fitting active plan is preselected, otherwise Standalone. Strength shows equipment, initially Bodyweight.
 More options include strict endurance timing, target preference, simple/automatic structure, strength focus,
@@ -779,7 +780,8 @@ unchanged. Generated workouts persist the same canonical root and full strength 
 `assistant/day-workout.emulator.spec.ts` verifies their read-back through `get_planned_workout_v3` and
 `get_strength_workout_details`, including exact repeated recoveries, zero/fractional loads and complete sets.
 Review-note rendering, compact UI disclosures and private cache/quota fixes preserve these same public contracts
-and read-back coverage. Presentation changes do not alter stored prescriptions, consent or provider delivery.
+and read-back coverage. The shared day-context entry-point menu has no MCP wire or authority impact: it opens the
+same owner/date-guarded generation service. Presentation changes do not alter stored prescriptions, consent or provider delivery.
 No read coverage is deferred and no public generation tool is introduced. The private callable is registered in
 full/lazy entrypoints, endpoint metadata checks, the shared manifest and least-privilege secret policy. Release the
 backend endpoint before its frontend under separate deployment approval; no new Rules, index, secret value or

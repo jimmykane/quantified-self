@@ -32,12 +32,16 @@ function data(dateKey: string): CalendarDayDetailsData {
 const emptyEvidence = { sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, readinessError: false, recoveryError: false };
 
 describe('CalendarDayContextComponent', () => {
-  it.each(['preview', 'dashboard', 'day'])('opens the saved-workout library for an owned empty %s day with its calendar date and return context', async surface => {
+  it.each(['preview', 'dashboard', 'calendar', 'day'].flatMap(surface =>
+    [false, true].map(hasPhase => ({ surface, hasPhase }))))(
+    'opens AI generation and the library from the $surface day menu (phase: $hasPhase)', async ({ surface, hasPhase }) => {
     const viewer = signal<{ uid: string } | null>({ uid: 'owner' });
     const haptics = { selection: vi.fn() };
+    const generationAllowed = signal(true);
+    const dayWorkouts = { canGenerate: vi.fn(() => generationAllowed()), open: vi.fn() };
     await TestBed.configureTestingModule({ imports: [CalendarDayContextComponent], providers: [
       provideRouter([]),
-      { provide: DayWorkoutService, useValue: { canGenerate: () => false, open: vi.fn() } },
+      { provide: DayWorkoutService, useValue: dayWorkouts },
       { provide: ViewportScroller, useValue: { scrollToAnchor: vi.fn() } },
       { provide: AppUserService, useValue: { user: viewer } },
       { provide: CalendarDayHealthService, useValue: { watch: () => of(emptyEvidence) } },
@@ -51,20 +55,29 @@ describe('CalendarDayContextComponent', () => {
     const fixture = TestBed.createComponent(CalendarDayContextComponent);
     const calendarReturn = { view: 'month' as const, anchor: '2026-10-01' };
     fixture.componentRef.setInput('data', { ...data('2026-10-25'), calendarReturn, scheduleSource: () => ({
-      state: { activePlanId: 'plan' }, plans: [{ id: 'plan', name: 'Autumn', lifecycle: 'active',
-        phases: { version: 1, items: [{ id: 'base', name: 'Base', startLocalDate: '2026-10-24', endLocalDate: '2026-10-25', description: 'Phase-only day' }] } }],
+      state: { activePlanId: hasPhase ? 'plan' : null }, plans: hasPhase ? [{ id: 'plan', name: 'Autumn', lifecycle: 'active',
+        phases: { version: 1, items: [{ id: 'base', name: 'Base', startLocalDate: '2026-10-24', endLocalDate: '2026-10-25', description: 'Phase-only day' }] } }] : [],
     }) as never });
     if (surface === 'dashboard') fixture.componentRef.setInput('dashboardTile', true);
     if (surface === 'day') fixture.componentRef.setInput('standaloneDayPage', true);
+    if (surface === 'calendar') fixture.componentRef.setInput('calmMonth', true);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     expect(haptics.selection).not.toHaveBeenCalled();
-    expect(fixture.nativeElement.textContent).toContain('Phase-only day');
-    expect(fixture.componentInstance.dashboardDayIsEmpty()).toBe(false);
-    if (surface !== 'preview') {
-      const add = [...fixture.nativeElement.querySelectorAll('button')]
-        .find((button: HTMLButtonElement) => button.textContent?.includes('Add workout')) as HTMLButtonElement;
-      add.click(); fixture.detectChanges(); await fixture.whenStable();
+    expect(fixture.nativeElement.textContent.includes('Phase-only day')).toBe(hasPhase);
+    if (surface === 'dashboard' || surface === 'calendar') {
+      expect(fixture.componentInstance.dashboardDayIsEmpty()).toBe(!hasPhase);
     }
+    const addButton = () => [...fixture.nativeElement.querySelectorAll('button')]
+      .find((button: HTMLButtonElement) => button.textContent?.includes('Add workout')) as HTMLButtonElement | undefined;
+    const openMenu = async () => {
+      expect(addButton()).toBeDefined();
+      addButton()!.click(); fixture.detectChanges(); await fixture.whenStable();
+    };
+    const generateButton = () => [...document.querySelectorAll('button')]
+      .find(button => button.textContent?.includes('Generate with AI'));
+    await openMenu();
+    expect(dayWorkouts.canGenerate).toHaveBeenCalledWith('2026-10-25');
+    expect(generateButton()).toBeDefined();
     const library = document.querySelector('a[href="/training/plans/library?date=2026-10-25"]') as HTMLAnchorElement;
     expect(library?.textContent).toContain('Add from library');
     const prepareReturn = vi.spyOn(TestBed.inject(CalendarDayDetailsNavigationService), 'prepareReturn');
@@ -73,10 +86,23 @@ describe('CalendarDayContextComponent', () => {
     library.click(); await fixture.whenStable();
     expect(prepareReturn).toHaveBeenCalledWith('/', '2026-10-25', undefined, calendarReturn);
     expect(haptics.selection).toHaveBeenCalledOnce();
-    fixture.componentInstance.generateWorkout();
-    expect(TestBed.inject(DayWorkoutService).open).toHaveBeenCalledWith('owner', '2026-10-25', undefined);
+    await openMenu();
+    haptics.selection.mockClear();
+    generateButton()!.click(); fixture.detectChanges(); await fixture.whenStable();
+    expect(dayWorkouts.open).toHaveBeenCalledWith('owner', '2026-10-25', undefined);
+    expect(prepareReturn).toHaveBeenLastCalledWith('/', '2026-10-25', undefined, calendarReturn);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    generationAllowed.set(false);
+    fixture.detectChanges(); await openMenu();
+    expect(generateButton()).toBeUndefined();
+    expect(document.querySelector('a[href="/training/plans/library?date=2026-10-25"]')).not.toBeNull();
+    generationAllowed.set(true);
+    fixture.detectChanges();
+    expect(generateButton()).toBeDefined();
     viewer.set({ uid: 'other' }); fixture.detectChanges();
     expect(fixture.componentInstance.canPlan()).toBe(false);
+    expect(addButton()).toBeUndefined();
+    expect(generateButton()).toBeUndefined();
     expect(fixture.nativeElement.textContent).not.toContain('Phase-only day');
     expect(fixture.nativeElement.querySelector('a[href*="/training/plans/library"]')).toBeNull();
     fixture.componentInstance.generateWorkout();
@@ -345,7 +371,7 @@ describe('CalendarDayContextComponent', () => {
     expect(fixture.nativeElement.querySelector('a[aria-label="Open selected day page"]')?.textContent).toContain('Full day');
     fixture.componentRef.setInput('calmMonth', false);
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelectorAll('.calendar-day-context-section button')).toHaveLength(3);
+    expect(fixture.nativeElement.querySelectorAll('[aria-label="Timeline notes on selected day"] button')).toHaveLength(3);
     fixture.componentRef.setInput('calmMonth', true);
     const emptyDay = data('2026-09-13');
     fixture.componentRef.setInput('data', {

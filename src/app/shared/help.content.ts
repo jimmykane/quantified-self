@@ -336,7 +336,7 @@ When a numeric step allows **early Lap**, the summary labels its totals as **pre
 
 ## Generate a workout for a day
 
-- Calendar → **Add workout → Generate with AI** uses the selected day. Choose sport, time, purpose and destination (defaults: **30 minutes**, fitting active plan or Standalone).
+- In Calendar or the Dashboard calendar, select today or a future day (up to 365 days ahead), then **Add workout → Generate with AI**. It is also available in the day sheet and full day page. Choose sport, time, purpose and destination (defaults: **30 minutes**, fitting active plan or Standalone).
 - **More options** adds timing, targets, structure and separate default-off Training/Timeline context. Readiness reflects now; missing feedback stays unknown.
 - Strength offers equipment, focus and **previously planned** loads, not verified performed weights. Duration is an estimate.
 - Review all steps/sets. **Change options** reopens settings; changes require regeneration. **Context → Show details** explains evidence. Choose **Edit workout**, **Generate again**, or **Add workout**. Rest saves nothing.
