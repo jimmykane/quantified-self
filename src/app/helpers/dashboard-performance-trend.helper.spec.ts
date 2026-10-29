@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DataCriticalPower, DataPowerMax, DataPowerWork, DistanceUnits, WeightUnits, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib/metrics';
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 import { TRAINING_PREVIEW_DURABILITY, TRAINING_PREVIEW_POWER } from '../components/public-seo/training-explorer-preview.data';
@@ -11,6 +11,8 @@ import { formatTrainingPowerSystemsTrendValue, type TrainingPowerSystemsActivity
 import type { TrainingDurabilityScopeViewModel } from './training-durability-view.helper';
 import { buildDashboardManagerPresetTile } from './dashboard-manager-presets.helper';
 import { dashboardPreviewMetricKinds, buildDashboardThumbnailPreview } from './dashboard-chart-preview.helper';
+import * as powerModels from './training-power-systems.helper';
+import * as durabilityModels from './training-durability-view.helper';
 
 
 const power = (activityType: string): TrainingPowerSystemsActivityTypeViewModel => ({ activityType,
@@ -24,6 +26,49 @@ const durability = (): TrainingDurabilityScopeViewModel => ({ scope: 'cycling', 
 });
 
 describe('dashboard performance integration', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it.each(['CriticalPowerHistory', 'WPrimeHistory', 'MaximumPowerHistory', 'DurabilityTrend'])(
+    'keeps real context controls when a %s selection has no plottable evidence', type => {
+      const entries = [power('Cycling'), power('Mountain Biking')];
+      entries[1].trends.forEach(trend => trend.points.forEach(point => point.value = null));
+      const scopes = [durability()];
+      const empty = structuredClone(scopes[0].contexts[0]);
+      empty.contextKey = 'swimming|speed|m/s|25|freestyle';
+      empty.label = 'Pool swimming · 25 m · Freestyle';
+      empty.trajectory.points.forEach(point => { point.value = null; point.candidateActivityCount = 0; });
+      scopes[0].contexts.push(empty);
+      vi.spyOn(powerModels, 'buildTrainingPowerSystemsActivityTypeViewModels').mockReturnValue(entries);
+      vi.spyOn(durabilityModels, 'buildTrainingDurabilityScopeViewModels').mockReturnValue(scopes);
+      const presetId = type === 'CriticalPowerHistory' ? 'curated-critical-power' : type === 'WPrimeHistory' ? 'curated-w-prime'
+        : type === 'MaximumPowerHistory' ? 'curated-maximum-power' : 'curated-durability';
+      const tile = buildDashboardManagerPresetTile({ presetId, order: 0, size: { columns: 1, rows: 1 } });
+      const selectedKey = type === 'DurabilityTrend' ? empty.contextKey : 'Mountain Biking';
+      tile['displaySettings'] = { performanceContext: selectedKey };
+      const preview = buildDashboardThumbnailPreview(tile, { tiles: [] });
+      expect(preview.source).toBe('user');
+      expect(preview.availability).toMatchObject({ state: 'history', hasData: false });
+      expect(preview.note).not.toContain('example');
+      const context = preview.tile['performanceTrend'];
+      expect(context.selectedKey).toBe(selectedKey);
+      expect(context.options).toHaveLength(2);
+      expect(context.options[0].value).not.toBe('example');
+      // Returning to the context with usable evidence must still be possible.
+      tile['displaySettings'] = { performanceContext: context.options[0].value };
+      expect(buildDashboardThumbnailPreview(tile, { tiles: [] })).toMatchObject({ source: 'user', availability: { state: 'ready', hasData: true } });
+    });
+
+  it.each(['stale', 'missing', 'failed', 'ready'] as const)('retains a missing saved context while its metric is %s', status => {
+    const tile = buildDashboardManagerPresetTile({ presetId: 'curated-critical-power', order: 0, size: { columns: 1, rows: 1 } });
+    tile['displaySettings'] = { performanceContext: 'Mountain Biking' };
+    const preview = buildDashboardThumbnailPreview(tile, { tiles: [], previewMetricStatuses: { training_power_systems: status } });
+    expect(preview.source).toBe('user');
+    expect(preview.availability?.hasData).toBe(false);
+    expect(preview.tile['performanceTrend']).toMatchObject({ selectedKey: 'Mountain Biking', powerTrend: null,
+      options: [{ value: 'Mountain Biking', label: 'Selected context unavailable' }] });
+    expect(preview.note).not.toContain('example');
+  });
+
   it.each([
     ['CriticalPowerHistory', 'criticalPowerWatts'], ['WPrimeHistory', 'wPrimeJoules'], ['MaximumPowerHistory', 'maximumPowerWatts'],
   ])('reuses the exact Training %s history without recomputing or combining sports', (type, key) => {

@@ -1773,6 +1773,9 @@ preview dependencies and deterministic Training examples, with user/example and 
 `displaySettings.performanceContext` saves an exact capacity activity type or durability context key, independently
 per tile. Missing saved contexts stay unavailable instead of silently changing sport. Library edits stage that setting
 until Save; card selectors use the existing dashboard configuration persistence and rollback path.
+Account context controls stay available when a selected metric has no ready values, so users can choose another
+sport without being replaced by an example preview. Example data is used only when no account context is available.
+Save-button and theme changes do not restart preview reads; data inputs and owner changes still release subscriptions.
 
 The dashboard wrapper owns titles, accessible Material context menus and accepted-action haptics. Existing Training
 renderers opt into the shared dashboard plot sizing/alignment contract; their normal Training and public-preview

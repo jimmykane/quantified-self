@@ -1,7 +1,7 @@
 import { TRAINING_PREVIEW_POWER, TRAINING_PREVIEW_DURABILITY } from '../components/public-seo/training-explorer-preview.data';
 import { AppEventSummary } from '@shared/event-summary';
 import type { EventRead } from '@shared/event-read';
-import { dashboardChartHasRecordedData, resolveDashboardChartAvailability, type DashboardChartAvailability } from './dashboard-chart-availability.helper';
+import { dashboardChartHasPerformanceContext, dashboardChartHasRecordedData, resolveDashboardChartAvailability, type DashboardChartAvailability } from './dashboard-chart-availability.helper';
 import type { DashboardDerivedMetricStatus } from './derived-metric-status.helper';
 import { normalizeDashboardTileEventFilters } from './dashboard-tile-event-filters.helper';
 import { getDashboardPowerCurveScopeDefinition, resolveDashboardPowerCurveTileDisplayScope } from './dashboard-power-curve-scope.helper';
@@ -68,7 +68,7 @@ export function buildDashboardThumbnailPreview(tile: TileSettingsInterface, seed
   const availability = resolveDashboardChartAvailability(existing, input,
     dashboardPreviewSourceKeys(tile).map(key => input.previewStates?.[key]),
     dashboardPreviewMetricKinds(tile).map(kind => input.previewMetricStatuses?.[kind]));
-  const preview: DashboardChartPreview = availability.hasData
+  const preview: DashboardChartPreview = availability.hasData || dashboardChartHasPerformanceContext(existing)
     ? { tile: existing, source: 'user', loading: false, note: '', calendarEvents: input.events || [], anchorMs: Date.now() }
     : buildDashboardExamplePreview(tile);
   return { ...preview, startOfWeek: seed.startOfWeek, availability,
