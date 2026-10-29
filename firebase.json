@@ -9,6 +9,10 @@
         "**/node_modules/**"
       ],
       "headers": [
+        {
+          "regex": "^/media/[^/]+-[A-Z0-9]{8}\\.(woff2?|ttf|otf|eot|svg|png|jpe?g|gif|webp|avif|cur|ani)$",
+          "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+        },
         { "source": "/email/unsubscribe", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }, { "key": "Cache-Control", "value": "no-store" }] },
         {
           "source": "/mcp/authorize",
@@ -474,6 +478,10 @@
         "**/node_modules/**"
       ],
       "headers": [
+        {
+          "regex": "^/media/[^/]+-[A-Z0-9]{8}\\.(woff2?|ttf|otf|eot|svg|png|jpe?g|gif|webp|avif|cur|ani)$",
+          "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+        },
         { "source": "/email/unsubscribe", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }, { "key": "Cache-Control", "value": "no-store" }] },
         {
           "source": "/mcp/authorize",

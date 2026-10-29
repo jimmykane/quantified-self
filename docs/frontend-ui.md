@@ -29,6 +29,24 @@ away during preparation. Record whether the actual example is prepared below the
 whether a visible placeholder still paints a fill. Keep the production startup/combined-preview budgets and SSR
 snippet exclusions intact; these visual checks do not establish field INP, Search Console recovery or growth lift.
 
+## Font and icon caching across releases
+
+Bundled Fontsource fonts and the Material Symbols icon font are emitted under `/media/` with content-hashed
+filenames. Include `/media/**` in the service worker's `assets` group with `installMode: lazy` and
+`updateMode: prefetch`: only requested assets enter the cache, and unchanged hashes can be reused across releases.
+Do not prefetch every language subset and font weight on installation.
+
+Production and beta Hosting apply `Cache-Control: public, max-age=31536000, immutable` only to font/image files
+under `/media/` whose filenames end with the build's eight-character content hash. A changed file gets a new URL.
+Unhashed assets, HTML, `manifest.json`, `ngsw.json` and the worker script retain their existing cache behavior.
+Keep release `outputHashing: all`; do not give the whole `/assets/` directory an immutable policy.
+
+`src/firebase-hosting.config.spec.ts` verifies the Hosting URL boundary and uses Angular's manifest generator to
+check lazy media coverage and stable font hashes when a release changes. After release builds, run
+`npm run verify:service-worker-output` and check that emitted `/media/` fonts appear in `ngsw.json`'s `hashTable`.
+Browser cache eviction, cleared site data and a first visit still require downloads; a network revalidation does
+not necessarily transfer the font body. This changes no user controls or workflows and needs no app-help update.
+
 ## Public hero font loading
 
 The homepage hero keeps Inter as its first-choice font. Its heading and paragraphs use the local

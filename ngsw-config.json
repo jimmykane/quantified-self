@@ -23,6 +23,7 @@
       "resources": {
         "files": [
           "/assets/**",
+          "/media/**",
           "/*.(eot|svg|cur|jpg|png|webp|gif|otf|ttf|woff|woff2|ani)"
         ]
       }

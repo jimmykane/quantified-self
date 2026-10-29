@@ -1,5 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
+import { Generator, type Config as ServiceWorkerConfig } from '@angular/service-worker/config';
 import { describe, expect, it } from 'vitest';
 import {
   CLIENT_RENDERED_APP_ROUTES,
@@ -13,7 +15,8 @@ interface FirebaseHostingTarget {
   target: string;
   public: string;
   headers?: Array<{
-    source: string;
+    source?: string;
+    regex?: string;
     headers: Array<{
       key: string;
       value: string;
@@ -44,6 +47,7 @@ interface AngularBuildOptions {
 }
 
 interface AngularBuildConfiguration {
+  outputHashing?: string;
   budgets?: Array<{ type: string; maximumWarning?: string; maximumError?: string }>;
   optimization?: boolean | {
     styles?: {
@@ -63,10 +67,6 @@ interface AngularConfig {
       };
     };
   };
-}
-
-interface ServiceWorkerConfig {
-  navigationUrls: string[];
 }
 
 const firebaseConfig = JSON.parse(
@@ -211,6 +211,76 @@ function getCspDirective(policy: string, directiveName: string): string | undefi
 }
 
 describe('Firebase Hosting configuration', () => {
+  it.each(['production', 'beta'])('caches only fingerprinted media immutably on %s', configuration => {
+    const target = firebaseConfig.hosting.find(hosting => hosting.target === configuration);
+    const immutableHeaders = target.headers.filter(entry => entry.headers.some(header =>
+      header.key.toLowerCase() === 'cache-control' && header.value.includes('immutable')));
+
+    expect(angularConfig.projects['track-tools'].architect.build.configurations[configuration].outputHashing).toBe('all');
+    expect(immutableHeaders).toHaveLength(1);
+    expect(immutableHeaders[0].source).toBeUndefined();
+    expect(immutableHeaders[0].regex).toBeDefined();
+    expect(immutableHeaders[0].headers).toEqual([
+      { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+    ]);
+
+    const pattern = new RegExp(immutableHeaders[0].regex);
+    for (const path of [
+      '/media/inter-latin-400-normal-55WT6UWF.woff2',
+      '/media/material-symbols-rounded-latin-400-normal-FQYDMJ5A.woff2',
+      '/media/inter-latin-400-normal-1234ABCD.woff',
+      '/media/icon-1234ABCD.svg',
+      '/media/icon-1234ABCD.png',
+    ]) {
+      expect(pattern.test(path), path).toBe(true);
+    }
+    for (const path of [
+      '/media/inter.woff2', '/media/icon.svg', '/assets/favicons/favicon-32x32.png',
+      '/index.html', '/index.csr.html', '/help/index.html', '/manifest.json',
+      '/ngsw.json', '/ngsw-worker.js', '/media/index-1234ABCD.html',
+      '/media/icon-1234ABCD.svg.html', '/media/nested/icon-1234ABCD.svg',
+    ]) {
+      expect(pattern.test(path), path).toBe(false);
+    }
+  });
+
+  it('includes emitted media in the lazy asset cache with stable font hashes across releases', async () => {
+    const fontPaths = [
+      '/media/inter-latin-400-normal-55WT6UWF.woff2',
+      '/media/material-symbols-rounded-latin-400-normal-FQYDMJ5A.woff2',
+    ];
+    const files: Record<string, string> = {
+      '/index.csr.html': 'first release',
+      [fontPaths[0]]: 'font bytes',
+      [fontPaths[1]]: 'icon font bytes',
+      '/media/icon-1234ABCD.svg': '<svg/>',
+    };
+    const generator = new Generator({
+      async list() { return Object.keys(files); },
+      async read(path) { return files[path]; },
+      async hash(path) { return createHash('sha1').update(files[path]).digest('hex'); },
+      async write() { throw new Error('Unexpected fixture write'); },
+    }, '/');
+    type Manifest = {
+      hashTable: Record<string, string>;
+      assetGroups: Array<{ name: string; installMode: string; updateMode: string; urls: string[] }>;
+    };
+    const first = await generator.process(serviceWorkerConfig) as Manifest;
+    files['/index.csr.html'] = 'second release';
+    const second = await generator.process(serviceWorkerConfig) as Manifest;
+
+    expect(first.hashTable['/index.csr.html']).not.toBe(second.hashTable['/index.csr.html']);
+    for (const manifest of [first, second]) {
+      const assets = manifest.assetGroups.find(group => group.name === 'assets');
+      expect(assets).toMatchObject({ installMode: 'lazy', updateMode: 'prefetch' });
+      expect(assets.urls).toEqual(expect.arrayContaining([...fontPaths, '/media/icon-1234ABCD.svg']));
+      for (const path of fontPaths) {
+        expect(manifest.assetGroups.find(group => group.name === 'app').urls).not.toContain(path);
+        expect(manifest.hashTable[path]).toBe(createHash('sha1').update(files[path]).digest('hex'));
+      }
+    }
+  });
+
   it('serves pre-release Plans at its Training URL without retaining /plans as a redirect, rewrite, or offline fallback', () => {
     for (const hosting of firebaseConfig.hosting) {
       const rewriteSources = (hosting.rewrites ?? []).map(rewrite => rewrite.source);
