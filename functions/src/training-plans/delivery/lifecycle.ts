@@ -81,7 +81,9 @@ export const onTrainingDeliveryConnectionChanged = onDocumentWritten({
   // Compare everything else conservatively, including unknown future fields.
   const authority = (value: FirebaseFirestore.DocumentData | undefined) => {
     if (!value) return value;
-    const { uploadedActivitiesCount: _count, connectionHistoryImport: _history, ...rest } = value;
+    const rest = { ...value };
+    delete rest.uploadedActivitiesCount;
+    delete rest.connectionHistoryImport;
     return rest;
   };
   if (event.data?.before && event.data?.after
