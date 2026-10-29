@@ -27,6 +27,9 @@ describe('help.content', () => {
     expect(help).toContain('**Personalization** starts expanded with every data option selected');
     expect(help).toContain('Uncheck any source to exclude its evidence');
     expect(help).toContain('turning off any of those also turns off the combined score');
+    expect(help).toContain('**Training routine** starts selected and requires **Recent activities**');
+    expect(help).toContain('previous 28 complete local days, excluding today');
+    expect(help).toContain('missing recordings do not mean missed training');
     expect(help).toContain('The modal footer shows your shared **Assistant allowance**');
     expect(help).toContain('after each generation attempt');
   });

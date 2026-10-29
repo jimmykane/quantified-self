@@ -36,6 +36,7 @@
             [disabled]="!!busy() || saveUncertain() || choice.disabled">{{ choice.label }}</mat-checkbox>
         }
       </div>
+      @if (controls().activityContext === false) { <p class="hint">Training routine requires Recent activities.</p> }
       @if (!readinessSourcesEnabled()) { <p class="hint">Readiness combines freshness, HRV, sleep and overnight heart rate. Enable all four to include it.</p> }
     </div>
     <button mat-button appHapticTap type="button" [attr.aria-expanded]="more()" aria-controls="day-workout-more" (click)="more.set(!more())">

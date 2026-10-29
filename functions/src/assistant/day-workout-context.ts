@@ -8,6 +8,7 @@ import { parseTrainingPlanPhasesV1 } from '../../../shared/training-plans';
 import { isStrengthWorkoutSportV1, parseStrengthWorkoutDetailsV1, strengthProjectionMatchesDetails } from '../../../shared/strength-workout';
 import { createFirestoreTrainingReads } from '../mcp/training-plans.service';
 import { collectDailyWorkoutContext } from './daily-workout-context';
+import { readDayWorkoutRoutine } from './day-workout-routine';
 import type { AssistantMcpSession, AssistantMcpToolName } from './mcp-session';
 import type { PreviousStrengthPrescription } from './day-workout-validation';
 
@@ -144,7 +145,8 @@ export async function collectDayWorkoutContext(controls: DayWorkoutControls, now
   };
   const read = async (name: AssistantMcpToolName, input: RecordValue): Promise<RecordValue> => {
     if (name === 'query_timeline_notes' && !controls.timelineContext) throw new Error('Timeline context is disabled.');
-    if ((name === 'query_activities' || name === 'query_metric') && controls.activityContext === false) return {};
+    // The generator's sport-specific routine replaces the old all-sport recording-day buckets.
+    if (name === 'query_metric' || name === 'query_activities' && controls.activityContext === false) return {};
     if (name === 'prepare_training_metrics') {
       const metricKinds = [
         ...(controls.freshnessContext !== false ? [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.RampRate] : []),
@@ -160,7 +162,7 @@ export async function collectDayWorkoutContext(controls: DayWorkoutControls, now
       if (name === 'get_daily_report') return selectReport(value);
       if (name === 'prepare_training_metrics') return { ...value,
         readyMetricKinds: Array.isArray(value.readyMetricKinds) ? value.readyMetricKinds.filter(kind => (input.metricKinds as unknown[]).includes(kind)) : [] };
-      return name === 'query_metric' ? datedMetric(value, controls.timeZone) : value;
+      return value;
     }
     catch (error) {
       if (['query_planned_workouts_by_date', 'get_planned_workout_completions'].includes(name)) throw error;
@@ -239,7 +241,19 @@ export async function collectDayWorkoutContext(controls: DayWorkoutControls, now
     usedContext.push('Existing recording-level Feeling/RPE ranges; imported and QS-edited values are not distinguished');
   } else missingContext.push('No usable existing Feeling/RPE feedback was found.');
   const selectedDaily: RecordValue = { ...daily };
-  if (controls.activityContext === false) { delete selectedDaily.weekdayConsistency; delete selectedDaily.activitiesToday; }
+  delete selectedDaily.weekdayConsistency;
+  if (controls.activityContext === false) delete selectedDaily.activitiesToday;
+  if (controls.activityContext !== false && controls.routineContext !== false) {
+    const routine = await readDayWorkoutRoutine(controls, now,
+      async input => (await session.callTool('query_activities', input)).structuredContent);
+    if (routine) {
+      selectedDaily.trainingRoutine = routine;
+      if (routine.recordedDayCount > 0) usedContext.push('Recorded ' + routine.sport + ' on ' + routine.recordedDayCount + ' of the previous '
+        + routine.weekdayOpportunities + ' ' + routine.weekday + 's');
+      if (routine.status === 'insufficient') missingContext.push('Training routine: too few matching recorded days to establish a usual pattern.');
+      if (routine.typicalDurationSeconds === null) missingContext.push('Training routine: usual session duration is unknown.');
+    } else missingContext.push('Training routine could not be checked completely; no weekday habit was inferred.');
+  } else missingContext.push('Training routine: turned off (requires Recent activities).');
   const evidence: RecordValue = { daily: selectedDaily, ...(controls.feedbackContext !== false ? { feedback } : {}), nearby: training?.nearby ?? null, phase: training?.phase ?? null,
     previousStrength: training?.previousStrength ?? [], references: training?.references ?? [] };
   if (JSON.stringify(evidence).length > 160_000) throw new Error('The context exceeds the safe generation limit. Try a simpler selection.');

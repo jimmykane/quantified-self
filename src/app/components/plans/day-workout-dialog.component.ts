@@ -125,7 +125,8 @@ export class DayWorkoutDialogComponent {
     { key: 'timelineContext' as const, label: 'Timeline notes' },
     ...(this.strength() ? [{ key: 'usePreviousWeights' as const, label: 'Reuse planned weights' }] : []),
   ].map(choice => {
-    const disabled = choice.key === 'readinessContext' && !this.readinessSourcesEnabled()
+    const disabled = choice.key === 'routineContext' && this.controls().activityContext === false
+      || choice.key === 'readinessContext' && !this.readinessSourcesEnabled()
       || choice.key === 'usePreviousWeights' && !this.controls().trainingContext;
     return { ...choice, disabled, checked: !disabled && this.controls()[choice.key] !== false };
   }));

@@ -189,21 +189,23 @@ describe('DayWorkoutDialogComponent', () => {
     const fixture = await render(); const component = fixture.componentInstance;
     component.more.set(true); fixture.detectChanges();
     const inputs = [...fixture.nativeElement.querySelectorAll('#day-workout-personalization mat-checkbox input')] as HTMLInputElement[];
-    expect(inputs).toHaveLength(10);
+    expect(inputs).toHaveLength(11);
     expect(inputs.every(input => input.checked && !input.disabled)).toBe(true);
     expect(haptics.selection).not.toHaveBeenCalled();
     await component.generate(); fixture.detectChanges();
     expect(generate.mock.calls[0][1].controls).toMatchObject({ trainingContext: true, timelineContext: true, usePreviousWeights: true });
     component.showSettings.set(true); fixture.detectChanges(); haptics.selection.mockClear();
-    inputs[8].click(); fixture.detectChanges();
+    const choice = (label: string) => [...fixture.nativeElement.querySelectorAll('#day-workout-personalization mat-checkbox')]
+      .find((element: HTMLElement) => element.textContent?.trim() === label)!.querySelector('input') as HTMLInputElement;
+    choice('Timeline notes').click(); fixture.detectChanges();
     expect(component.controls()).toMatchObject({ trainingContext: true, timelineContext: false });
     expect(component.result()).toBeNull(); expect(haptics.selection).toHaveBeenCalledOnce();
     await component.generate(); fixture.detectChanges();
     expect(generate.mock.calls[1][1].controls).toMatchObject({ trainingContext: true, timelineContext: false });
     expect(generate.mock.calls[1][1].requestId).not.toBe(generate.mock.calls[0][1].requestId);
-    component.showSettings.set(true); fixture.detectChanges(); inputs[7].click(); fixture.detectChanges();
+    component.showSettings.set(true); fixture.detectChanges(); choice('Training plans & workouts').click(); fixture.detectChanges();
     expect(component.controls()).toMatchObject({ trainingContext: false, timelineContext: false });
-    expect(inputs[9].disabled).toBe(true); expect(mutate).not.toHaveBeenCalled();
+    expect(choice('Reuse planned weights').disabled).toBe(true); expect(mutate).not.toHaveBeenCalled();
   });
   it('shows every data choice selected initially and disables derived readiness when a source is turned off', async () => {
     const fixture = await render(); const component = fixture.componentInstance;
@@ -221,6 +223,20 @@ describe('DayWorkoutDialogComponent', () => {
     expect(generate.mock.calls[0][1].controls).toMatchObject({ hrvContext: false, readinessContext: false, sleepContext: true, timelineContext: true });
     component.set('hrvContext', true); fixture.detectChanges();
     expect(inputs[4].disabled).toBe(false); expect(inputs[4].checked).toBe(false);
+  });
+  it('starts Training routine selected, preserves its opt-out and requires activity evidence', async () => {
+    const fixture = await render(); const component = fixture.componentInstance;
+    const routine = () => [...fixture.nativeElement.querySelectorAll('mat-checkbox')]
+      .find((element: HTMLElement) => element.textContent?.trim() === 'Training routine')!.querySelector('input') as HTMLInputElement;
+    expect(routine().checked).toBe(true); expect(routine().disabled).toBe(false);
+    haptics.selection.mockClear(); routine().click(); fixture.detectChanges();
+    expect(component.controls().routineContext).toBe(false); expect(haptics.selection).toHaveBeenCalledOnce();
+    await component.generate(); expect(generate.mock.calls[0][1].controls.routineContext).toBe(false);
+    component.set('routineContext', true); component.set('activityContext', false); fixture.detectChanges();
+    expect(routine().disabled).toBe(true); expect(routine().checked).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('Training routine requires Recent activities.');
+    component.set('activityContext', true); fixture.detectChanges();
+    expect(routine().checked).toBe(true); expect(routine().disabled).toBe(false);
   });
   it('focuses new reviews and errors without stealing focus during unrelated option changes', async () => {
     const fixture = await render(); const component = fixture.componentInstance;

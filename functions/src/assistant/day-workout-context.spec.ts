@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { DAY_WORKOUT_SIGNAL_OPTIONS, defaultDayWorkoutControls } from '../../../shared/day-workout';
 import { collectDayWorkoutContext, type DayWorkoutTrainingContext } from './day-workout-context';
 import type { AssistantMcpToolName } from './mcp-session';
@@ -7,7 +8,7 @@ const now = new Date('2026-10-28T12:00:00Z');
 const controls = { ...defaultDayWorkoutControls('2026-11-02', 'Europe/Helsinki'), trainingContext: false, timelineContext: false };
 const training: DayWorkoutTrainingContext = { scheduleRevision: 7, nearby: [], phase: null, previousStrength: [], references: [], missing: [] };
 function session(fail?: string) {
-  return { callTool: vi.fn(async (name: AssistantMcpToolName) => {
+  return { callTool: vi.fn<(name: AssistantMcpToolName, input?: Record<string, unknown>) => Promise<{ structuredContent: Record<string, unknown> }>>(async name => {
     if (name === fail) throw new Error('Synthetic read failure');
     const values: Record<string, Record<string, unknown>> = {
       prepare_training_metrics: { status: 'preparing', readyMetricKinds: [] },
@@ -96,6 +97,40 @@ describe('Calendar generation context boundaries', () => {
     const result = await collectDayWorkoutContext(off, now, source, vi.fn());
     expect(source.callTool).not.toHaveBeenCalled();
     expect(result.usedContext).toEqual([]);
+  });
+  it('supplies selected-sport weekday habits without sending activity identities or redundant all-sport buckets', async () => {
+    const source = session(); const original = source.callTool.getMockImplementation()!;
+    source.callTool.mockImplementation(async (name, input) => name === 'query_activities' && input?.start
+      ? { structuredContent: { scanComplete: true, activities: ['2026-10-12', '2026-10-19', '2026-10-26'].map(date => ({
+        activityRef: 'PRIVATE-REF-' + date, activityType: ActivityTypes.StrengthTraining,
+        startTimeMs: Date.parse(date + 'T10:00Z'), stats: { durationSeconds: 3600 }, title: 'PRIVATE-TITLE',
+      })) } } : original(name));
+    const result = await collectDayWorkoutContext({ ...controls, sport: ActivityTypes.StrengthTraining }, now, source, vi.fn());
+    expect(result.evidence.daily).toMatchObject({ trainingRoutine: { sport: ActivityTypes.StrengthTraining, weekday: 'Monday',
+      recordedDayCount: 3, weekdayOpportunities: 4, typicalDurationSeconds: 3600 } });
+    expect(result.evidence.daily).not.toHaveProperty('weekdayConsistency');
+    expect(JSON.stringify(result.evidence)).not.toMatch(/PRIVATE-REF|PRIVATE-TITLE/);
+    expect(result.usedContext).toContain('Recorded Strength Training on 3 of the previous 4 Mondays');
+    expect(source.callTool.mock.calls.map(([name]) => name)).not.toContain('query_metric');
+  });
+  it('makes the routine opt-out independent of recovery and stops its historical reads when activities are off', async () => {
+    for (const overrides of [{ routineContext: false }, { activityContext: false }]) {
+      const source = withReport(recoveryReport);
+      const result = await collectDayWorkoutContext({ ...controls, ...overrides }, now, source, vi.fn());
+      expect(source.callTool.mock.calls.filter(([name, input]) => name === 'query_activities' && input?.start)).toEqual([]);
+      expect(result.evidence.daily).not.toHaveProperty('trainingRoutine');
+      expect(result.evidence.daily).not.toHaveProperty('weekdayConsistency');
+      expect(result.usedContext).toContain('Current freshness (Form)');
+    }
+  });
+  it('discloses incomplete routine history without claiming an empty weekday pattern', async () => {
+    const source = session(); const original = source.callTool.getMockImplementation()!;
+    source.callTool.mockImplementation(async (name, input) => name === 'query_activities' && input?.start
+      ? { structuredContent: { scanComplete: false, nextCursor: 'more', activities: [] } } : original(name));
+    const result = await collectDayWorkoutContext(controls, now, source, vi.fn());
+    expect(result.evidence.daily).not.toHaveProperty('trainingRoutine');
+    expect(result.missingContext).toContain('Training routine could not be checked completely; no weekday habit was inferred.');
+    expect(result.usedContext.some(text => text.includes('previous 4'))).toBe(false);
   });
   it('always supplies current freshness, HRV, sleep, heart rate and readiness with optional access off', async () => {
     const source = withReport(recoveryReport);

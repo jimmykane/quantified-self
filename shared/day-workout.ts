@@ -18,6 +18,7 @@ export const DAY_WORKOUT_SIGNAL_OPTIONS = [
   { key: 'readinessContext', label: 'Readiness' },
   { key: 'activityContext', label: 'Recent activities' },
   { key: 'feedbackContext', label: 'Feeling / RPE' },
+  { key: 'routineContext', label: 'Training routine' },
 ] as const;
 export type DayWorkoutSignalKey = typeof DAY_WORKOUT_SIGNAL_OPTIONS[number]['key'];
 // Omitted signal choices preserve automatic use and request fingerprints for older clients.
@@ -83,7 +84,7 @@ export function defaultDayWorkoutControls(localDate: string, timeZone: string, s
     target: isStrengthWorkoutSportV1(sport) ? 'none' : 'auto', structure: 'auto', destinationPlanId: null,
     equipment: ['bodyweight'], strengthFocus: 'full-body', usePreviousWeights: true,
     trainingContext: true, timelineContext: true, freshnessContext: true, hrvContext: true, sleepContext: true,
-    overnightHeartRateContext: true, readinessContext: true, activityContext: true, feedbackContext: true };
+    overnightHeartRateContext: true, readinessContext: true, activityContext: true, feedbackContext: true, routineContext: true };
 }
 
 function object(value: unknown, keys: string[]): Record<string, unknown> {

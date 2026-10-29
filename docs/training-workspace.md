@@ -725,7 +725,7 @@ The separate **Personalization** section starts expanded, using two compact Mate
 and phones from 360 px, and one column below that width to preserve readable labels. An 8 px row gap and 4 px
 outer padding keep Material's 48 px touch targets separate without changing Material internals. The heading and
 selection count share a row with the disclosure control; a short caption avoids repeating the default selection. Every applicable option starts selected: freshness/training load, HRV, sleep, overnight heart rate,
-readiness, recent activities, existing Feeling/RPE, Training plans/workouts, Timeline notes and matching previously
+readiness, recent activities, Training routine, existing Feeling/RPE, Training plans/workouts, Timeline notes and matching previously
 planned strength weights. The heading summarizes the selection count and its Show/Hide control preserves choices.
 Users can turn each off before generating. Disabling Training context also disables matching planned weights.
 Turning off freshness, HRV, sleep or overnight heart rate clears and disables combined Readiness; after re-enabling
@@ -753,7 +753,8 @@ Validation corrections include only server-authored reasons. Failure diagnostics
 error category and validation issue codes, never raw model replies, prompts, recovery evidence or Timeline text.
 
 The existing daily collector supplies the same current recovery evidence used by Assistant chat, Training snapshots,
-a 28-day recording pattern, and actual Feeling/RPE minimum/maximum buckets. The modal names the automatic inputs
+and actual Feeling/RPE minimum/maximum buckets. The generator replaces its all-sport recording-day buckets with
+the selected-sport Training routine described below; Assistant chat retains its existing weekday-count behavior. The modal names the automatic inputs
 before generation through its selected checkboxes: freshness (Form), training load, HRV, sleep, overnight heart rate, readiness and recent activities.
 Selected signal reads run independently of the Training-plan and Timeline choices. The daily report owns current Form
 and ramp rate (including its existing current-day/fallback rules), sleep and comparison, HRV's personal range,
@@ -767,6 +768,33 @@ prompt explicitly uses the selected signals to choose intensity, volume or rest,
 compares the requested sport with its recorded baseline where available, treats minutes as a budget, and explains
 which evidence affected the choice. It does not count readiness twice with its own drivers or assume higher HRV
 always means better recovery. Future suggestions require rechecking recovery closer to the selected day.
+
+**Training routine** is selected by default and requires **Recent activities**. Its private reader reuses existing
+`query_activities` projections and server-side sport filtering, with at most two pages of 100 summaries. The query pads
+its UTC start to cover the complete first local day; the reducer keeps only the previous 28 complete local dates,
+excluding today, and uses the selected workout date's weekday. A distant future workout still uses current recorded
+history, not a forecast. Strength Training and Weight Training share this generic strength pattern; other strength
+and endurance disciplines stay exact, so calisthenics or trail running cannot silently become a gym/running habit.
+Repeated references are deduplicated and multiple sessions on one date count as one weekday occurrence. The usual
+session duration is the median positive persisted `stats.durationSeconds` for matching sessions, withheld unless
+usable durations occur on at least two separate dates. Fewer than two matching recorded dates is insufficient for a
+usual pattern. Empty/missing duration remains unknown rather than elapsed-time derivation or zero.
+
+The model receives only an identity-free sport/weekday summary: window dates, recorded-day count, four weekday
+opportunities, session count, optional median duration and an explicit missing-days-are-unknown flag. Partial scans,
+looping/missing cursors, overlarge pages or tool failures withhold the entire routine and disclose the gap. Recorded
+weekday frequency appears under review Context; it never proves location, start-time punctuality, missed training or
+adherence. The prompt uses the routine as descriptive preference context within explicit sport, equipment, purpose
+and minutes, subordinate to recovery and existing planned sessions. Turning off Training routine removes its history
+reads and model evidence; turning off Recent activities also disables it. No new stored feedback, scores, provider
+calls or model calls are added. The old all-sport duration-bucket query is skipped for this generator.
+
+MCP impact review for Training routine: **no public contract or authority impact**. The existing activity summary
+already exposes sport, dates and persisted duration under existing read grants. This first-party-only aggregation
+adds no MCP tool, output field, stored metric, mutation, consent, provider action or bundled instruction. Focused
+routine/context tests cover selected-sport/date boundaries, pagination, opt-outs and identity redaction; existing
+plan/workout read and proposal/confirmation contracts are unchanged. No reparse, migration, registered-client refresh
+or plugin rebuild is required. Deploying the changed generation callable requires separate approval.
 
 Review context distinguishes available signals, missing values and explicitly turned-off choices; its collapsed
 summary identifies context that is off or unavailable without presenting every opt-out as a failed read. A nonempty daily-report object or overall
