@@ -34,6 +34,7 @@
   "scripts": {
     "lint": "eslint . --fix",
     "build": "rm -rf lib && tsc && mkdir -p lib/functions && cp -R templates lib/functions/templates",
+    "build:watch": "tsc --watch --preserveWatchOutput",
     "serve": "npm run build && firebase serve --only functions",
     "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",

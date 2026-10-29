@@ -805,7 +805,10 @@ do not alter stored prescriptions, consent or provider delivery.
 No read coverage is deferred and no public generation tool is introduced. The private callable is registered in
 full/lazy entrypoints, endpoint metadata checks, the shared manifest and least-privilege secret policy. Release the
 backend endpoint before its frontend under separate deployment approval; no new Rules, index, secret value or
-schema migration is needed.
+schema migration is needed. For local development, the Functions emulator must load a build containing
+`generateDayWorkout`; a stale `functions/lib` can make this new endpoint fail preflight while Assistant chat works.
+Use the initial build and ongoing `build:watch` workflow in README and `.agent/workflows/start-emulators.md`.
+This local build workflow changes no MCP contract or authorization policy.
 
 ### Remembered Plans view
 
