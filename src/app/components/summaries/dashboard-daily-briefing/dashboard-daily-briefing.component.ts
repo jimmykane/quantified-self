@@ -23,10 +23,9 @@ export class DashboardDailyBriefingComponent {
   private readonly haptics = inject(AppHapticsService);
   readonly owner = computed(() => this.user()?.uid && this.users.user()?.uid === this.user().uid ? this.user().uid : null);
   readonly briefing = computed(() => buildDashboardDailyBriefing(this.signals()));
-  readonly sentence = computed(() => {
-    const headline = this.briefing().headline;
-    return this.greeting() ? headline.charAt(0).toLowerCase() + headline.slice(1) : headline;
-  });
+  readonly sentenceParts = computed(() => this.briefing().parts.map((part, index) => this.greeting() && index === 0
+    ? { ...part, text: part.text.charAt(0).toLowerCase() + part.text.slice(1) } : part));
+  readonly sentence = computed(() => this.sentenceParts().map(part => part.text).join(''));
   readonly fullSentence = computed(() => this.greeting() ? `${this.greeting()} — ${this.sentence()}` : this.sentence());
 
   toggleDetails(): void {

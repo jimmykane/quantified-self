@@ -266,7 +266,8 @@ and a mounted hidden region when details are available. Preserve 44px button tar
 change without feedback or persistence. Do not add raised cards or expansion panels.
 
 Dashboard's **At a glance** continues the owner's greeting in one flowing Material text button: the greeting stays
-neutral and the assessment uses its semantic foreground color. Keep both inline, with a sentence separator, no status
+neutral and each assessment phrase uses its own semantic foreground color. Positive phrases remain green beside
+caution or unavailable phrases; punctuation stays neutral. Keep both inline, with a sentence separator, no status
 dot, chevron, extra row, card or visible heading. Let the sentence wrap naturally on narrow screens. Selecting it
 expands the existing Today metrics in a mounted hidden region; details start closed and reset on owner changes.
 The sentence owns `aria-expanded`, `aria-controls` and one selection haptic, with a 44px minimum touch target.

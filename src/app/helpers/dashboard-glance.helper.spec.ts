@@ -35,6 +35,15 @@ describe('Dashboard existing-assessment projection', () => {
     expect(result.attentionSignals.find(signal => signal.id === 'sleep')?.sourceLabel).toBe('Suunto');
     expect(result.attentionSignals.find(signal => signal.id === 'hrv')?.sourceLabel).toBe('Garmin · Overnight HRV');
   });
+  it('preserves the existing assessment colors independently from availability', () => {
+    const mixed = project({ ...normal(), label: 'Mixed', overnightHeartRateTone: 'neutral' }, { ...training, scaleTone: 'neutral' });
+    expect(mixed.find(signal => signal.id === 'training-load')).toMatchObject({ state: 'available', tone: 'neutral' });
+    expect(mixed.find(signal => signal.id === 'readiness')?.tone).toBe('caution');
+    expect(mixed.find(signal => signal.id === 'overnight-hr')).toMatchObject({ state: 'available', tone: 'neutral' });
+    const recover = project({ ...normal(), label: 'Recover' }, { ...training, scaleTone: 'negative' });
+    expect(recover.find(signal => signal.id === 'readiness')?.tone).toBe('error');
+    expect(recover.find(signal => signal.id === 'training-load')?.tone).toBe('error');
+  });
   it('keeps a still-loading driver visible in a Mixed assessment rather than implying complete evidence', () => {
     const result = buildDashboardGlanceSummary(project({ ...normal(), label: 'Mixed' }, training, 'loading'));
     expect(result.headline).toBe('Readiness is Mixed.');

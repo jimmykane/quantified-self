@@ -1,5 +1,11 @@
 import type { HealthChangeSignal, HealthChangeState } from './health-change-summary.helper';
 
+export type DashboardAssessmentTone = 'neutral' | 'positive' | 'caution' | 'error';
+export interface DashboardAssessmentSignal extends HealthChangeSignal {
+  /** Existing assessment color; availability alone does not make a neutral Training state positive. */
+  tone?: DashboardAssessmentTone;
+}
+
 /** Already-assessed and already-formatted Today presentation; this helper does not calculate a score or threshold. */
 export interface DashboardGlanceReadiness {
   loading: boolean;
@@ -30,7 +36,7 @@ export function buildDashboardGlanceSignals(
   view: DashboardGlanceReadiness,
   training: DashboardGlanceTrainingState,
   loadAvailability: 'available' | 'loading' | 'unavailable' | 'insufficient',
-): HealthChangeSignal[] {
+): DashboardAssessmentSignal[] {
   const evidenceState = view.loading ? 'loading' : view.warningText ? 'unavailable' : 'insufficient';
   const sleep = view.changeSignals.find(signal => signal.id === 'sleep');
   const hrv = view.changeSignals.find(signal => signal.id === 'hrv');
@@ -61,11 +67,14 @@ export function buildDashboardGlanceSignals(
   const loadStatus = loadState === 'loading' ? 'Loading training load' : loadState === 'unavailable' ? 'Training load unavailable'
     : loadState === 'insufficient' ? 'No current training-load assessment' : training.label;
   return [
-    { id: 'readiness', label: 'Readiness', sourceLabel: 'Derived training load + recorded sleep signals', state: readinessState,
+    { id: 'readiness', label: 'Readiness',
+      tone: readinessState === 'unavailable' ? 'error' : readinessState === 'attention' ? (view.label === 'Recover' ? 'error' : 'caution')
+        : readinessState === 'available' ? 'positive' : 'neutral', sourceLabel: 'Derived training load + recorded sleep signals', state: readinessState,
       statusText: readinessState === 'available' || readinessState === 'attention' ? `${view.label} · ${view.scoreText}` : readinessText,
       detailText: view.warningText || (view.loading ? 'Waiting for current load and sleep evidence.'
         : view.awaitingSleep ? view.sleepContextText : `${view.confidenceText} · ${view.evidenceText}`), summaryText: readinessText },
-    { id: 'training-load', label: 'Training load', sourceLabel: 'TSS-backed training · independent of sleep', state: loadState,
+    { id: 'training-load', label: 'Training load',
+      tone: hasLoadAssessment ? (training.scaleTone === 'negative' ? 'error' : training.scaleTone) : loadState === 'unavailable' ? 'error' : 'neutral', sourceLabel: 'TSS-backed training · independent of sleep', state: loadState,
       statusText: loadStatus, summaryText: loadState === 'available' || loadState === 'attention'
         ? `training state is ${training.label}` : loadStatus,
       detailText: hasLoadAssessment ? [training.caption, view.loadText.includes('--') ? '' : `Form / ramp ${view.loadText}`, training.contextText].filter(Boolean).join(' · ')
@@ -84,7 +93,9 @@ export function buildDashboardGlanceSignals(
         : hrvState === 'within-range' ? 'Your 7-day HRV average is within your usual range'
         : hrvState === 'unavailable' ? 'HRV is unavailable' : hrvState === 'loading' ? 'HRV is still loading'
         : 'HRV needs more comparable readings' },
-    { id: 'overnight-hr', label: 'Overnight HR', sourceLabel: sleep?.sourceLabel || 'No eligible current sleep source',
+    { id: 'overnight-hr', label: 'Overnight HR',
+      tone: heartRateState === 'unavailable' || heartRateState === 'attention' ? 'error'
+        : heartRateState === 'available' && view.overnightHeartRateTone === 'positive' ? 'positive' : 'neutral', sourceLabel: sleep?.sourceLabel || 'No eligible current sleep source',
       state: heartRateState, statusText: heartRateStatus,
       detailText: [view.overnightHeartRateText === '--' ? '' : `${view.overnightHeartRateText} vs recorded sleep-source baseline`,
         view.overnightHeartRateContextText, view.warningText].filter(Boolean).join(' · ') || 'No current comparable overnight HR evidence.',

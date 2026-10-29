@@ -44,6 +44,24 @@ describe('Dashboard daily briefing', () => {
     expect(button.getAttribute('aria-label')).toBe('Show Today details: Good morning, Morgan — readiness is Mixed.');
     expect(haptics.selection).not.toHaveBeenCalled();
   });
+  it('renders green, caution and unavailable phrases independently in the same sentence', () => {
+    const { fixture, host } = render();
+    fixture.componentRef.setInput('greeting', 'Good morning, Morgan');
+    fixture.componentRef.setInput('signals', [
+      { ...evidence[0], id: 'training-load', state: 'available', summaryText: 'Training state is Balanced' },
+      evidence[0],
+      { ...evidence[0], id: 'hrv', state: 'within-range' },
+    ]); fixture.detectChanges();
+    const phrases = () => [...host.querySelectorAll<HTMLElement>('.dashboard-briefing-phrase')]
+      .filter(phrase => phrase.dataset.tone !== 'neutral');
+    expect(phrases().map(phrase => phrase.dataset.tone)).toEqual(['positive', 'caution', 'positive']);
+    expect(host.querySelector('[role=status]')?.textContent).toBe('training state is Balanced, readiness is Mixed, and 7-day HRV is within your usual range.');
+    fixture.componentRef.setInput('signals', [
+      { ...evidence[0], id: 'training-load', state: 'available', summaryText: 'Training state is Balanced' },
+      { ...evidence[0], state: 'unavailable', summaryText: 'Readiness is unavailable' },
+    ]); fixture.detectChanges();
+    expect(phrases().map(phrase => phrase.dataset.tone)).toEqual(['positive', 'error']);
+  });
   it('requests disclosure once per accepted tap and reflects the parent’s expanded state', () => {
     const { fixture, host, haptics } = render();
     const toggle = vi.fn(); fixture.componentInstance.detailsToggle.subscribe(toggle);
