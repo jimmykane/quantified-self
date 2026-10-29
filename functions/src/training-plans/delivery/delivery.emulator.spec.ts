@@ -1117,6 +1117,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
       const before = await ledgers();
       const callsBefore = transport.calls.length;
       now += 1000;
+      const requestedAtMs = now;
       let mutationReads: number;
       const targetId = action === 'create' ? 'new-workout' : 'w';
       if (action === 'edit' || action === 'create') {
@@ -1136,9 +1137,27 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
         mutationReads = await measureReads(() => trainingDeliveryCommand(runtime, uid, request, false));
         expect(mutationReads).toBeLessThan(40);
       }
-      // No manual marker here: only the production entry point may wake this work.
-      const reconciliationReads = await measureReads(drain);
+      // Exercise the outbox deadline and real task reservations, too. Calling drain
+      // directly would hide a broken wake-up because it intentionally bypasses dispatch.
+      const job = db.collection(DELIVERY_QUEUE).doc(reconciliationJobId(uid));
+      const enqueue = vi.fn().mockResolvedValue(true);
+      const reconciliationReads = await measureReads(async () => {
+        expect(await dispatchTrainingDeliveryJob(runtime, job.id, enqueue)).toBe(false);
+        expect(enqueue).not.toHaveBeenCalled();
+        const deadline = requestedAtMs + RECONCILIATION_BATCH_MS;
+        expect((await job.get()).data()).toMatchObject({ batchNotBeforeMs: deadline, dueAtMs: deadline });
+        now = deadline;
+        for (let page = 0; page < 150; page++) {
+          expect(await dispatchTrainingDeliveryJob(runtime, job.id, enqueue)).toBe(true);
+          const [queueItemId, reservation] = enqueue.mock.calls.at(-1)!;
+          expect(queueItemId).toBe(job.id);
+          expect(reservation).toEqual(expect.any(String));
+          if (!await reconcileTrainingDeliveryPage(runtime, uid, reservation)) return;
+        }
+        throw new Error('Unbounded dispatched reconciliation');
+      });
       expect(reconciliationReads).toBeLessThan(100);
+      expect((await reconciliationTargets(db, uid).get()).empty).toBe(true);
       const after = (await ledgers()).sort((a, b) => a.id.localeCompare(b.id));
       const target = after.find(row => row.workoutId === targetId)!;
       expect(target).toBeDefined();
@@ -1147,7 +1166,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
         .toEqual(before.filter(row => row.workoutId !== targetId).sort((a, b) => a.id.localeCompare(b.id)));
       const pending = (await db.collection(DELIVERY_QUEUE).doc(target.id).get()).data();
       if (action === 'check') {
-        expect(target.verification).toMatchObject({ manualPending: true, requestedAtMs: now });
+        expect(target.verification).toMatchObject({ manualPending: true, requestedAtMs });
         expect(pending).toMatchObject({ kind: 'verification', priority: 'manual' });
       } else {
         expect(target).toMatchObject({ desired: action === 'stop' ? 'absent' : 'present' });

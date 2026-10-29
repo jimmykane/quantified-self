@@ -2492,21 +2492,29 @@ The repair interval changes its scheduled ceiling from 48 to four repairs per da
 their own work. These are local read counts and scheduling bounds, not measured production CPU or euro savings.
 
 The same emulator suite also budgets work after the actual `mutateTrainingScheduleForUser` and
-`trainingDeliveryCommand` entry points. The measured path never stages its own reconciliation marker. Edit, create,
-Send, Stop and Check must each reconcile with fewer than 100 transaction document-read observations in a
-183-workout fixture, preserve unrelated ledgers, enqueue the expected delivery/check and match a subsequent full
-repair. The source save has its own budget: fewer than 233 reads for edit/create (including the existing schedule
+`trainingDeliveryCommand` entry points. The measured path never stages its own reconciliation marker. It uses the
+real dispatcher and its task reservations, asserts the fixed batching deadline, then advances the synthetic clock
+to that deadline. Edit, create, Send, Stop and Check must each dispatch and reconcile with fewer than 100 transaction
+document-read observations in a 183-workout fixture, preserve unrelated ledgers, enqueue the expected delivery/check,
+consume their targets before the full-repair comparison and match that subsequent repair.
+The source save has its own budget: fewer than 233 reads for edit/create (including the existing schedule
 validation), and fewer than 40 for a delivery command. Fixture setup, client revision discovery, Auth and real provider
 binding reads are outside these synthetic transaction counts; they are not a claim about total billed production reads.
 The observer covers transaction `get` and `getAll` without double-counting SDK-internal calls.
 
-| Entry point | Source mutation reads | Reconciliation reads |
+| Entry point | Source mutation reads | Dispatch + reconciliation reads |
 | --- | ---: | ---: |
-| Edit workout | 190 | 26 |
-| Create workout | 191 | 32 |
-| Send | 10 | 26 |
-| Stop | 10 | 25 |
-| Check | 11 | 26 |
+| Edit workout | 190 | 32 |
+| Create workout | 191 | 38 |
+| Send | 10 | 32 |
+| Stop | 10 | 31 |
+| Check | 11 | 32 |
+
+A follow-up review reproduced a test gap by deliberately postponing the reconciliation outbox deadline indefinitely.
+All five original entry-point budgets passed because they called the reconciler directly, bypassing dispatch. With the
+dispatcher included, all five reject that same fault at the batching-deadline assertion. The production marker was
+restored byte-for-byte before passing verification. The six additional reads per case above measure the dispatcher;
+this test change adds no production reads or delay.
 
 A local mutation check on 29 October 2026 deliberately reintroduced each failure independently. It required the
 named regression assertions to fail; a timeout, missing emulator or compilation error was not accepted as detection.
