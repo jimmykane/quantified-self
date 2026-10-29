@@ -43,11 +43,9 @@ import { buildReadinessHrvDisplay } from '../../helpers/readiness-hrv-display.he
 import { personalRangeChangeState, resolveHealthChangeSourceLabel, type HealthChangeSignal } from '../../helpers/health-change-summary.helper';
 import { buildDashboardGlanceSignals } from '../../helpers/dashboard-glance.helper';
 import {
-  dashboardAcwrComparison,
   resolveDashboardFormNowContextFromPoints,
   resolveDashboardRampRateContextFromPoints,
 } from '../../helpers/dashboard-derived-metrics.helper';
-import { dashboardBriefingSleepDuration, type DashboardBriefingLoadComparison } from '../../helpers/dashboard-daily-briefing.helper';
 import {
   isDerivedMetricPendingStatus,
   type DashboardDerivedMetricStatus,
@@ -424,8 +422,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private libraryRefresh = Promise.resolve();
   private libraryFocusOrder: number | null = null;
   public showTodaySummary = true;
-  // Temporarily unmount At a glance, including its additional data listeners.
-  public showDailyBriefing = false;
   public sleepTrendRange: AppDashboardSleepTrendRange = DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
   public hrvTrendRange: AppDashboardSleepTrendRange = DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
   public hrvTrendCanNavigateNewer = false;
@@ -518,8 +514,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public dashboardTodayTrainingState = createEmptyDashboardTodayTrainingStateViewModel();
   public dashboardGlanceSignals = buildDashboardGlanceSignals(
     createEmptyDashboardTodayReadinessViewModel(true), createEmptyDashboardTodayTrainingStateViewModel(), 'loading');
-  public dashboardBriefingSleepText = '';
-  public dashboardBriefingLoadComparison: DashboardBriefingLoadComparison | null = null;
   public readonly dashboardTodayTrainingStateScaleSegments = [0, 1, 2, 3, 4, 5];
 
   private readonly onDocumentVisibilityChange = (): void => {
@@ -2134,8 +2128,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.derivedTrainingCapacityStatus = 'missing';
     this.derivedTrainingDurabilityStatus = 'missing';
     this.dashboardTodayReadiness = createEmptyDashboardTodayReadinessViewModel(true);
-    this.dashboardBriefingSleepText = '';
-    this.dashboardBriefingLoadComparison = null;
     this.dashboardTodayTrainingState = createEmptyDashboardTodayTrainingStateViewModel();
     this.dashboardGlanceSignals = buildDashboardGlanceSignals(this.dashboardTodayReadiness, this.dashboardTodayTrainingState, 'loading');
     this.refreshDerivedMetricsBannerState();
@@ -2174,9 +2166,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     });
     const sleepStatus = buildDashboardTodaySleepStatus(context?.latestSleepAtMs, { nowMs, locale: this.locale });
     const awaitingSleep = !warningText && sleepStatus.awaitingSleep;
-    if (!awaitingSleep && !warningText) {
-      this.dashboardBriefingSleepText = dashboardBriefingSleepDuration(sleepTrend.points, context?.latestSleepAtMs, this.user?.settings?.unitSettings);
-    }
     const recovery = buildDashboardRecoveryPresentation(
       this.derivedRecoveryNowStatus === 'ready' ? this.derivedRecoveryNowContext : null, {
       locale: this.locale,
@@ -2302,8 +2291,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private refreshDashboardTodaySignals(): void {
-    this.dashboardBriefingSleepText = '';
-    this.dashboardBriefingLoadComparison = null;
     this.dashboardTodayTrainingState = this.buildDashboardTodayTrainingState();
     this.dashboardTodayReadiness = this.buildDashboardTodayReadiness();
     const uid = `${this.user?.uid || ''}`.trim();
@@ -2312,12 +2299,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const loadAvailability = !loadHydrated ? 'loading' : this.dashboardTodayTrainingState.scalePosition !== null ? 'available'
       : loadStatuses.includes('failed') ? 'unavailable' : loadStatuses.some(isDerivedMetricPendingStatus) ? 'loading' : 'insufficient';
     this.dashboardGlanceSignals = buildDashboardGlanceSignals(this.dashboardTodayReadiness, this.dashboardTodayTrainingState, loadAvailability);
-    const now = new Date();
-    const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-    if (loadHydrated && this.derivedAcwrStatus === 'ready' && this.derivedAcwrContext?.latestDayMs === todayUtc) {
-      const direction = dashboardAcwrComparison(this.derivedAcwrContext.ratio);
-      this.dashboardBriefingLoadComparison = direction ? { direction, utcDayMs: this.derivedAcwrContext.latestDayMs } : null;
-    }
   }
 
   private formatDashboardTodayMetric(value: number | null | undefined, signed = false): string {

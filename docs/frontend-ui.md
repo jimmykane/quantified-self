@@ -250,36 +250,37 @@ creation dialog. The lazy landing page reuses the owner-scoped paginated note se
 header, without a second CRUD implementation. It keeps the regular row highlight on both the landing and selected-note
 routes; the Health overview link uses exact-path matching.
 
-Health All and the owner Dashboard Today share the surface-free summary from
-`components/shared/health-change-summary/`. Its presentation delegates to
-`components/shared/summary-disclosure/`, shared with the saved-note and public-example
-`components/shared/note-comparison-summary/`. The shell owns headings, flat/rail layout, Material disclosure, haptics
-and local scope resets only; its plain variant keeps just the disclosure control and accessible region label without
-visible headings or a surrounding border. Domain adapters retain their existing calculations. Note comparisons keep source-labelled
-differences and coverage visible and put the median table under **Show details**, without hiding the history chart.
-Their rail stays neutral regardless of the sign of a difference. Health keeps **Your recovery** with established changes visible while evidence details are collapsed.
+Health All's `components/shared/health-change-summary/`, Dashboard Today's
+`components/summaries/dashboard-daily-briefing/`, and saved-note/public-example
+`components/shared/note-comparison-summary/` share `components/shared/summary-disclosure/` for presentation.
+The shell owns headings, flat/rail layout, Material disclosure, haptics and local scope resets only; domain adapters
+retain their existing calculations. Its plain variant keeps the disclosure control and accessible region label without
+visible headings or a surrounding border. Rail callers can set `showTitle=false` for one colored headline with an
+accessible region label; no empty heading is left behind. Existing callers retain visible headings by default.
+
+Note comparisons keep source-labelled differences and coverage visible and put the median table under **Show details**,
+without hiding the history chart. Their rail stays neutral regardless of the sign of a difference. Health keeps
+**Your recovery** with comparison counts and outside-range readings visible while source/range evidence is collapsed.
 Health and note comparisons use the existing Material Show/Hide button pattern with `aria-expanded`, `aria-controls`
-and a mounted hidden region when details are available; Dashboard does not mount a details region.
-do not add a raised card or expansion panel. Evidence rows stack at narrow phone widths, preserving 44px button targets.
-The local disclosure resets on owner change without feedback or persistence. This overview is additive: saved Dashboard
-charts remain mounted and controlled by their existing settings, including the Show/Hide Today choice.
-Keep the collapsed copy brief and use athlete-facing wording about readings and the user's usual range. On Health,
-comparison counts stay visible alongside the headline and any outside-range readings; Show details contains the
-source and range breakdown. The visible scope names Sleep and nightly HRV. Dashboard uses the component's compact
-**At a glance** mode: a surface-free accent rail, compact stacked label and one sentence using the existing Readiness,
-training state, Sleep, HRV and overnight-HR assessments, wrapping
-naturally on mobile, without extra metadata rows or disclaimer copy. The 3px logical-start rail uses the same dominant
-evidence state as the sentence, without a standalone status icon or an empty icon column. Available/within-range uses the app success token;
-existing caution/outside-range uses the Material accent, unavailable uses the error token, and loading, insufficient or merely recorded
-evidence stays neutral. Pair color with the explicit sentence, never an implied all-metrics all-clear.
-Dashboard is sentence-only in every state, including Mixed/Recover, unavailable, missing and loading evidence. It has
-no disclosure button, extra touch-target row or mounted evidence breakdown: Today already contains the metrics and context.
-Do not add a box, fill, shadow or bottom divider to this compact presentation. Normal days combine
-the existing Ready label, training-state label and recorded sleep in one sentence, without a second score. Sleep has no
-new good/bad threshold, and overnight HR is distinct from daily resting HR. Do not summarize unassessed metrics
-as normal. On Dashboard, the heading's bottom margin and the summary's top padding do not stack. Preserve the reserved
-status line and source/error distinctions; Health retains its disclosure's 44px touch target. This is presentation only; no metric,
-readiness calculation, query, persistence, or MCP/Assistant contract changes.
+and a mounted hidden region when details are available. Preserve 44px button targets and reset disclosures on owner
+change without feedback or persistence. Do not add raised cards or expansion panels.
+
+Dashboard's **At a glance** is a headline-only accent rail inside the existing Today panel, above Training state and
+Readiness. Use that panel's spacing and divider, with no separate card, visible label, disclosure or duplicate metrics.
+One short sentence combines the existing training state and Readiness assessments with the most relevant supporting
+Sleep, seven-day HRV or overnight-HR signal; unavailable, attention, missing and loading evidence precede an ordinary
+HRV range result. Detailed scores and source context remain immediately below. The sentence wraps at narrow widths,
+without truncation, standalone icons or extra metadata rows. Hiding Today also hides the sentence; saved charts remain
+controlled by their existing settings. See `training-workspace.md#dashboard-daily-briefing` for composition rules.
+
+Headline-only rails use shared semantic foreground tokens `--qs-status-positive` and `--qs-status-caution` from the
+Material green and existing amber tonal palettes (40 in light, 80 in dark), keeping text legible independently of the
+app's blue dark-theme accent. Unavailable uses the Material error token; loading/missing uses on-surface-variant text
+and an outline rail. The text always states the assessment so meaning does not depend on color. A positive sentence
+requires available Training/Ready assessments without missing or attention evidence; recorded sleep alone is not an
+all-clear. Sleep gains no good/bad threshold, and overnight HR remains distinct from daily resting HR. Preserve the
+existing Today status line, metrics, source/error distinctions and refresh behavior. The sentence adds no data readers,
+score, persistence, AI request or MCP/Assistant contract.
 
 Authenticated product workspaces, except Settings, use the shared `qs-workspace-page` shell from `src/styles.scss`. It
 owns the 1440 px maximum page width, border-box sizing, and common responsive inline gutters. Apply it on the route root

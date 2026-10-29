@@ -11,11 +11,12 @@ import { SummaryDisclosureComponent } from './summary-disclosure.component';
     <div class="inline-overview"><span>Source and coverage stay visible</span><ng-container [ngTemplateOutlet]="detailsControl" /></div>
   </ng-template>
   <app-summary-disclosure title="Before & after" summaryId="sample" [scopeKey]="scope()" headline="Recorded differences"
-    [variant]="variant()" [headingLevel]="headingLevel()" [detailsAvailable]="details()" [plainOverviewTemplate]="inline() ? overview : null">
+    [showTitle]="showTitle()" [variant]="variant()" [headingLevel]="headingLevel()" [detailsAvailable]="details()" [plainOverviewTemplate]="inline() ? overview : null">
     <p summaryOverview>Source and coverage stay visible</p>
     <p summaryDetails>Before and after readings</p>
   </app-summary-disclosure>` })
 class ProjectedSummaryHost {
+  readonly showTitle = signal(true);
   readonly scope = signal('fixture');
   readonly details = signal(true);
   readonly variant = signal<'flat' | 'rail' | 'plain'>('rail');
@@ -94,6 +95,18 @@ describe('shared summary disclosure shell', () => {
     expect(host.querySelector('h2')).toBeNull();
     expect(host.querySelectorAll('h4')).toHaveLength(1);
     expect(host.querySelector('h4')?.id).toBe('sample-title');
+  });
+  it('renders a headline-only rail with an accessible label and no duplicate heading or control', async () => {
+    const { fixture, host, haptics } = await render();
+    fixture.componentInstance.showTitle.set(false); fixture.componentInstance.details.set(false); fixture.detectChanges();
+    const section = host.querySelector('section')!;
+    expect(section.getAttribute('aria-label')).toBe('Before & after');
+    expect(section.hasAttribute('aria-labelledby')).toBe(false);
+    expect(section.classList.contains('summary-disclosure-headline-only')).toBe(true);
+    expect(host.querySelector('h2, h3, h4, button')).toBeNull();
+    expect(host.querySelectorAll('[role="status"]')).toHaveLength(1);
+    expect(host.querySelector('[role="status"]')?.getAttribute('aria-atomic')).toBe('true');
+    expect(haptics.selection).not.toHaveBeenCalled();
   });
   it('keeps only the disclosure control and projected readings in plain mode', async () => {
     const { fixture, host, haptics } = await render();

@@ -64,14 +64,11 @@
   </div>
   }
   @if (showTodaySummary) {
-  @if (isOwnerDashboard && showDailyBriefing) {
-    <app-dashboard-daily-briefing [user]="user" [signals]="dashboardGlanceSignals"
-      [notesContext]="timelineNotes()" [notesStatus]="timelineNotesStatus()"
-      [recoveryFinishTimeMs]="dashboardTodayReadiness.recoveryFinishTimeMs"
-      [sleepText]="dashboardBriefingSleepText" [loadComparison]="dashboardBriefingLoadComparison" />
-  }
   <section class="dashboard-current-state-row" aria-label="Current training state and readiness signals"
     [class.has-recovery]="dashboardTodayReadiness.loading || (dashboardTodayReadiness.recoveryText !== '--' && dashboardTodayReadiness.recoveryFinishText)">
+    @if (isOwnerDashboard) {
+      <app-dashboard-daily-briefing [user]="user" [signals]="dashboardGlanceSignals" />
+    }
     <div class="dashboard-current-state-top">
       <div class="dashboard-current-state-primary dashboard-training-state-primary">
         <span>Training state</span>

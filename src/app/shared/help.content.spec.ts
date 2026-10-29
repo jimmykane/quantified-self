@@ -1036,14 +1036,12 @@ describe('help.content', () => {
     expect(health).toContain('**All** starts with **Your recent Health** in this order');
     expect(health).toContain('**Your recovery** appears above the existing metrics');
     expect(health).toContain('Dashboard **Today** uses a compact **At a glance** instead: one sentence');
-    expect(health).toContain('**At a glance is currently hidden on Dashboard.** Today and your saved charts remain available.');
+    expect(health).toContain('It appears inside Today above Training state and Readiness, with no separate heading or card');
+    expect(health).not.toContain('At a glance is currently hidden');
+    expect(health).toContain('does not consume your AI quota');
     expect(health).toContain('On Health, comparison counts and outside-range readings stay visible');
     expect(health).toContain('Dashboard **At a glance** is always sentence-only');
-    expect(health).toContain('**Daily context in At a glance:**');
-    expect(health).toContain('Weekly plan progress uses exact stored activity links');
-    expect(health).toContain('looks ahead seven calendar days');
-    expect(health).toContain('Partial reads never become a claim that no workouts or notes exist');
-    expect(health).toContain('respect **Show on charts and calendar**');
+    expect(health).toContain('Missing or unavailable evidence takes priority over a reassuring HRV result');
     expect(health).toContain('no expand button or repeated metric breakdown');
     expect(health).toContain('including **Mixed** and **Recover** days');
     expect(health).toContain('existing **Today** card keeps the scores, charts and supporting context');
