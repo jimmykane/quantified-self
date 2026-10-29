@@ -393,7 +393,11 @@ async function addHistoryToQueueOperation(
       throw e;
     }
 
-    // Filter on dates
+    const retainedFailures = options.execution?.retainedFailedChildPaths;
+    if (retainedFailures?.size) {
+      workoutQueueItems = workoutQueueItems.filter((item: { id: string }) =>
+        !retainedFailures.has(`${getServiceWorkoutQueueName(serviceName)}/${item.id}`));
+    }
     if (workoutQueueItems.length === 0) {
       logger.info(`No workouts to add to history for token ${tokenQueryDocumentSnapshot.id} for user ${userID} and for the dates of ${startDate} to ${endDate}`);
       if (options.cumulativeMetadata) {

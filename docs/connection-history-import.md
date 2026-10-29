@@ -299,7 +299,10 @@ Suunto activity history uses the same Firebase-owner-scoped queue identity as we
 
 Once an active batch has settled, failed child records verified against this exact run and original queue are retained
 privately in `failedChildPaths`. The coordinator continues the remaining pages/windows and independent resource steps.
-It does not re-read earlier failures on every page or replay them automatically. Still-pending children continue waiting;
+It does not re-read earlier failures on every page or replay them automatically. The server-only execution context
+snapshots retained failure paths in memory; Suunto/COROS window admission and Wahoo page admission exclude those exact
+paths when provider results overlap, without extra database reads. Explicit recovery clears those exclusions as it
+restores the selected records. Still-pending children continue waiting;
 missing/unverifiable DLQ records, authorization loss, disconnect, deletion and other lifecycle skips do not qualify for isolation.
 No identity-conflict guard, provider-copy recognition, saved activity or user edit is changed.
 
@@ -308,7 +311,9 @@ the failed-record count. The run is finished with issues, never falsely successf
 only the retained failed records plus any unfinished failed batch, preserving completed pages, range/cursor and successful
 records. It rechecks owner, Pro, current connection, cooldown/reservations and exact DLQ ownership, and never replaces a
 newer run's live row. A retained same-run live terminal failure gets a new queue revision; an already recovered live
-record remains untouched. Missing expired recovery evidence requires reconnect/manual recovery rather than guessing.
+record remains untouched. A later authorization/lifecycle stop retains its active batch when earlier isolated failures
+make that scope retryable; Retry cannot silently recover only the earlier records and forget the stopped batch.
+Missing expired recovery evidence requires reconnect/manual recovery rather than guessing.
 
 The run retains at most 100 isolated references. At that bound (or an overflowing next batch) further admission pauses
 with Retry guidance, retaining the active batch too. With the existing 100-child admission cap this bounds new-run

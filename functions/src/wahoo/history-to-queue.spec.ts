@@ -402,6 +402,28 @@ describe('importWahooHistory account fencing', () => {
     expect(execution.onQueued).toHaveBeenLastCalledWith('wahooAPIWorkoutQueue/wahoo-user-1-101');
   });
 
+  it.each([false, true])('does not requeue retained failures from an overlapping history page (all failed: %s)', async allFailed => {
+    const start = new Date('2026-07-10T00:00:00.000Z'), end = new Date('2026-07-18T23:59:59.999Z');
+    const execution = { runId: 'manual-run', beforeRequest: vi.fn(), inTransaction: vi.fn(), onQueued: vi.fn() } as unknown as HistoryExecution;
+    historyMocks.generateIDFromParts.mockImplementation(async parts => parts.join('-'));
+    const size = allFailed ? 100 : 2;
+    const failedChildPaths = Array.from({ length: allFailed ? size : 1 }, (_, i) => `wahooAPIWorkoutQueue/wahoo-user-1-${i + 1}`);
+    // Another queue's same-ID path must not exclude this page's healthy record.
+    failedChildPaths.push('otherQueue/wahoo-user-1-2');
+    execution.retainedFailedChildPaths = new Set(failedChildPaths);
+    historyMocks.requestWahooAPI.mockResolvedValueOnce({ data: {
+      workouts: Array.from({ length: size }, (_, i) => workout(i + 1, '2026-07-18T10:00:00.000Z')), total: 201,
+    } });
+    const result = await importWahooHistory('user-1', start, end, {
+      execution, singlePage: true, page: 2,
+    });
+    expect(result).toMatchObject({ pagesFetched: 1, successCount: allFailed ? 0 : 1, skippedCount: allFailed ? 100 : 1 });
+    expect(result.nextPage).toBe(allFailed ? 3 : undefined);
+    expect(historyMocks.upsertWahooWorkoutQueueItem).toHaveBeenCalledTimes(allFailed ? 0 : 1);
+    expect(execution.onQueued).toHaveBeenCalledTimes(allFailed ? 0 : 1);
+    if (!allFailed) expect(execution.onQueued).toHaveBeenCalledWith('wahooAPIWorkoutQueue/wahoo-user-1-2');
+    expect(historyMocks.requestWahooAPI).toHaveBeenCalledOnce();
+  });
   it('stops before queue insertion when the Wahoo account changes after a page fetch', async () => {
     historyMocks.assertWahooActiveAccountGuardCurrent
       .mockResolvedValueOnce(undefined)

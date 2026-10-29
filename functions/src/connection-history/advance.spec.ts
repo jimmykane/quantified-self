@@ -70,7 +70,7 @@ describe('history continuation', () => {
     expect(job.processed).toBe(true); expect(deps.execute).not.toHaveBeenCalled();
     expect(job.steps[0].status).toBe(observed === 'failed' ? 'failed' : 'skipped');
     expect(job.steps[0].message).toContain(observed === 'failed' ? 'Retry failed imports' : 'Reconnect');
-    if (observed === 'failed') expect(job.steps[0].childPaths).toEqual(['queue/item']);
+    expect(job.steps[0].childPaths).toEqual(observed === 'failed' ? ['queue/item'] : []);
   });
   it('isolates failed records while scanning later pages, then reports a completed scan with failures', async () => {
     const job = run(); const step = job.steps[0]; const deps = dependencies();
@@ -106,14 +106,15 @@ describe('history continuation', () => {
       expect(job.steps[1].done).toBe(true);
     } else expect(job.processed).toBe(true);
   });
-  it('does not turn later authorization loss into successful completion or discard earlier failures', async () => {
+  it.each(['authorization', 'skipped'] as const)('keeps all recovery references after a later %s stop', async observed => {
     const job = run(); const step = job.steps[0]; const deps = dependencies();
     step.failedChildPaths = ['queue/earlier']; step.childPaths = ['queue/auth'];
-    deps.observe = vi.fn(async () => 'authorization');
+    deps.observe = vi.fn(async () => observed);
     await advanceHistoryRun(job, deps, now);
     expect(deps.execute).not.toHaveBeenCalled();
-    expect(step).toMatchObject({ done: true, status: 'failed', failedChildPaths: ['queue/earlier'] });
-    expect(step.message).toContain('Reconnect'); expect(step.message).toContain('earlier records also failed');
+    expect(step).toMatchObject({ done: true, status: 'failed', failedChildPaths: ['queue/earlier'], childPaths: ['queue/auth'] });
+    expect(step.message).toContain(observed === 'authorization' ? 'Reconnect' : 'connection changed');
+    expect(step.message).toContain('earlier records also failed');
   });
   it('keeps retained failures when the next provider page needs authorization', async () => {
     const job = run(); const deps = dependencies(); job.steps[0].failedChildPaths = ['queue/earlier'];

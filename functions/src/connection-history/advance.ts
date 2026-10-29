@@ -56,7 +56,8 @@ export async function advanceHistoryRun(run: ConnectionHistoryRun, deps: History
       if (observed === 'skipped') {
         step.status = 'skipped'; step.message = 'Some records were unavailable or the connection changed.'; step.done = true;
       }
-      step.childPaths = [];
+      // A stopped batch stays part of recovery when earlier failures make this scope retryable.
+      if (!step.done || !step.failedChildPaths?.length) step.childPaths = [];
     }
     if (!step.done && step.nextStartMs > run.endMs) {
       finishHistoryStep(step);

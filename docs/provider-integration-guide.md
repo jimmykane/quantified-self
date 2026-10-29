@@ -1373,7 +1373,9 @@ release/rollback boundary. Help, MCP/Assistant and Training contracts are unchan
 Shared connection-history coordination isolates verified per-record failures after the active child batch settles,
 then continues later pages and resources. A finished scan with retained failures reports issues and an explicit failed-record
 count; the existing Retry action restores only failed/unfinished records with all ownership, Pro, connection and reservation
-guards. Authorization/lifecycle or unverifiable missing rows still stop their scope. Private failure references are bounded;
+guards. Overlapping activity pages/windows exclude already retained failures using the existing server-only execution
+context and no extra database reads; only explicit recovery reopens those records. A later authorization/lifecycle
+stop retains its active batch alongside earlier failures. Unverifiable missing rows still stop their scope. Private failure references are bounded;
 extensive failures pause admission rather than growing the run or recovery transaction without limit. No provider-copy
 recognition, identity matching, child retry budget or saved content changes. See
 [isolated record failures](connection-history-import.md#isolated-record-failures) for recovery bounds and release scope.

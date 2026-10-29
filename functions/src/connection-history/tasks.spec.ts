@@ -221,6 +221,32 @@ describe('durable history coordinator', () => {
     expect(saved()).toMatchObject({ processed: true, failed: false, steps: [{ status: 'processed', childPaths: [] }] });
     expect(mocks.execute).toHaveBeenCalledTimes(1);
   });
+  it('retains a later authorization batch when earlier isolated failures make the scope retryable', async () => {
+    const step = run.steps[0]; step.nextStartMs = run.endMs + 1000;
+    step.failedChildPaths = ['workoutQueue/earlier']; step.childPaths = ['workoutQueue/auth'];
+    for (const [id, context] of [['earlier', 'ACTIVITY_IDENTITY_CONFLICT'], ['auth', 'AUTH_RECONNECT_REQUIRED']]) {
+      mocks.rows.set(`failed_jobs/${id}`, { connectionHistoryRunId: run.id, originalCollection: 'workoutQueue', context });
+    }
+    await processConnectionHistoryRun(run.id, '0');
+    expect(saved()).toMatchObject({ processed: true, failed: true,
+      steps: [{ status: 'failed', failedChildPaths: ['workoutQueue/earlier'], childPaths: ['workoutQueue/auth'] }] });
+    expect(mocks.execute).not.toHaveBeenCalled();
+    const retry = retryConnectionHistoryImport as unknown as (request: { auth: { uid: string }; data: { runId: string } }) => Promise<unknown>;
+    const meta = mocks.rows.get(`users/owner/meta/${run.serviceName}`);
+    meta.connectionState = 'reconnect_required';
+    await expect(retry({ auth: { uid: 'owner' }, data: { runId: run.id } })).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect(mocks.rows.has('workoutQueue/earlier')).toBe(false); expect(mocks.rows.has('workoutQueue/auth')).toBe(false);
+    meta.connectionState = 'connected';
+    await retry({ auth: { uid: 'owner' }, data: { runId: run.id } });
+    expect(saved().steps[0].childPaths).toEqual(['workoutQueue/auth', 'workoutQueue/earlier']);
+    expect(mocks.rows.get('workoutQueue/auth')).toMatchObject({ processed: false, retryCount: 0 });
+    expect(mocks.rows.get('workoutQueue/earlier')).toMatchObject({ processed: false, retryCount: 0 });
+    expect(mocks.rows.has('failed_jobs/auth')).toBe(false);
+    for (const id of ['auth', 'earlier']) mocks.rows.get(`workoutQueue/${id}`).processed = true;
+    await processConnectionHistoryRun(run.id, String(saved().revision));
+    expect(saved()).toMatchObject({ processed: true, failed: false, steps: [{ status: 'processed' }] });
+    expect(mocks.execute).not.toHaveBeenCalled();
+  });
   it('keeps active history checkpoints active while a later page is pending despite retained failures', async () => {
     run.steps[0].childPaths = ['workoutQueue/bad'];
     mocks.rows.set('failed_jobs/bad', { connectionHistoryRunId: run.id, originalCollection: 'workoutQueue', context: 'MAX_RETRY_REACHED' });
@@ -299,6 +325,14 @@ describe('durable history coordinator', () => {
     mocks.rows.set('failed_jobs/auth', { connectionHistoryRunId: run.id, originalCollection: 'queue', context: 'PERMISSION_MISSING' });
     mocks.rows.set('queue/pending', { processed: false });
     expect(await observeHistoryChildren(['queue/auth', 'queue/pending'], run.id)).toBe('pending');
+  });
+  it('snapshots retained failure exclusions per run and clears them on explicit recovery', () => {
+    run.steps[0].failedChildPaths = ['workoutQueue/earlier'];
+    const execution = historyExecution(run, []);
+    expect(execution.retainedFailedChildPaths).toEqual(new Set(['workoutQueue/earlier']));
+    delete run.steps[0].failedChildPaths;
+    expect(historyExecution(run, []).retainedFailedChildPaths).toEqual(new Set());
+    expect(execution.retainedFailedChildPaths).toEqual(new Set(['workoutQueue/earlier']));
   });
   it('keeps invocation contexts isolated and checks replacement credentials inside writes', async () => {
     const execution = historyExecution(run, []); expect(currentHistoryExecution()).toBeUndefined();
