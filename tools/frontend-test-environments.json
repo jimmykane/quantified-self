@@ -81,6 +81,7 @@
     "src/app/helpers/dashboard-today-visuals.helper.spec.ts",
     "src/app/helpers/dashboard-training-insights.helper.spec.ts",
     "src/app/helpers/date-time-format.helper.spec.ts",
+    "src/app/helpers/day-workout-review.helper.spec.ts",
     "src/app/helpers/derived-metric-status.helper.spec.ts",
     "src/app/helpers/device-chart-appearance.helper.spec.ts",
     "src/app/helpers/echarts-registrations.helper.spec.ts",

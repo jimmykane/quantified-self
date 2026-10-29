@@ -67,6 +67,7 @@ export const FUNCTION_SECRET_BINDINGS = {
   addSuuntoAppHistoryToQueue: SUUNTO_API,
   addSuuntoAppRoutesToQueue: SUUNTO_API,
   addWahooAPIHistoryToQueue: WAHOO,
+  generateDayWorkout: [SECRET_PARAMS.GEMINI_API_KEY],
   assistantChat: [SECRET_PARAMS.GEMINI_API_KEY, SECRET_PARAMS.SUUNTOAPP_GUIDE_OWNER],
   applyAssistantTrainingProposal: [SECRET_PARAMS.SUUNTOAPP_GUIDE_OWNER],
   backfillCorosAPISleep: COROS,

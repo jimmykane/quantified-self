@@ -1,3 +1,4 @@
+import { DayWorkoutService } from '../../../services/day-workout.service';
 import type { EventRead } from '@shared/event-read';
 import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { Router } from '@angular/router';
@@ -58,6 +59,7 @@ interface HealthState {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CalendarDayContextComponent {
+  readonly dayWorkouts = inject(DayWorkoutService);
   private readonly users = inject(AppUserService);
   private readonly health = inject(CalendarDayHealthService);
   private readonly theme = inject(AppThemeService);
@@ -257,6 +259,12 @@ export class CalendarDayContextComponent {
 
   showSleepStages(): void {
     this.viewportScroller.scrollToAnchor('day-sleep-stages');
+  }
+
+  generateWorkout(): void {
+    if (!this.canPlan()) return;
+    this.prepareNavigation();
+    void this.dayWorkouts.open(this.data().userId, this.data().day.dateKey, this.plannedWorkouts()[0]?.workout.structure.sport);
   }
 
   prepareNavigation(): void {

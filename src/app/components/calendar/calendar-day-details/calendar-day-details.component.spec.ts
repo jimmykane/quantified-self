@@ -1,3 +1,4 @@
+import { DayWorkoutService } from '../../../services/day-workout.service';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { signal } from '@angular/core';
@@ -30,6 +31,20 @@ import { buildTrainingLoadPoints } from '@shared/training-load';
 const planningUserUid = 'planning-user';
 
 describe('CalendarDayDetailsComponent', () => {
+  it('opens AI generation from the owned day menu and dismisses the sheet with one action haptic', async () => {
+    const fixture = await renderDayDetails([], { returnToDashboard: true });
+    vi.spyOn(TestBed.inject(DayWorkoutService), 'canGenerate').mockReturnValue(true);
+    const prepareReturn = vi.spyOn(TestBed.inject(CalendarDayDetailsNavigationService), 'prepareReturn');
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('[aria-label="Add workout for selected day"]').click();
+    fixture.detectChanges(); await fixture.whenStable();
+    const generate = [...document.querySelectorAll('button')].find(button => button.textContent?.includes('Generate with AI'))!;
+    vi.mocked(TestBed.inject(AppHapticsService).selection).mockClear(); generate.click();
+    expect(TestBed.inject(DayWorkoutService).open).toHaveBeenCalledWith(planningUserUid, '2026-08-03', undefined);
+    expect(prepareReturn).toHaveBeenCalledWith('/', '2026-08-03', 'today-sheet', undefined);
+    expect(TestBed.inject(MatBottomSheetRef).dismiss).toHaveBeenCalledOnce();
+    expect(TestBed.inject(AppHapticsService).selection).toHaveBeenCalledOnce();
+  });
   it('shows read-only tags beneath linked and unlinked activity titles without adding tap targets', async () => {
     const fixture = await renderDayDetails([
       Object.assign(createEvent(), { tags: [' Race ', 'race', 'Autumn build'], benchmarkReviewTags: ['Old tag'] }),
@@ -520,6 +535,7 @@ async function renderDayDetails(eventOrEvents: EventInterface | EventInterface[]
     imports: [CalendarDayDetailsComponent],
     providers: [
       provideRouter([]),
+      { provide: DayWorkoutService, useValue: { canGenerate: () => false, open: vi.fn() } },
       { provide: MAT_BOTTOM_SHEET_DATA, useValue: data },
       { provide: AppUserService, useValue: { user: signal({ uid: data.userId }) } },
       { provide: MatBottomSheetRef, useValue: { dismiss: vi.fn() } },

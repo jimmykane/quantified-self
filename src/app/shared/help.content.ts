@@ -334,6 +334,14 @@ When a numeric step allows **early Lap**, the summary labels its totals as **pre
 
 **Subtotal** means part of the workout is known. Manual/Lap, repetition, and energy endings do not supply a duration. For example, a 10-minute warmup plus four 1 km efforts at 4–5 min/km and four manual recoveries has **26–30 minutes covered, plus four steps with unknown duration** and a **4 km distance subtotal**. The recoveries make the complete duration unknown. Missing information never counts as zero. HR, power, and cadence targets do not establish speed. Summaries follow your unit preferences and do not change your saved workout, completed activity totals, or Wahoo's exact timed-duration requirement.
 
+## Generate a workout for a day
+
+- Calendar → **Add workout → Generate with AI** uses the selected day. Choose sport, time, purpose and destination (defaults: **30 minutes**, fitting active plan or Standalone).
+- **More options** adds timing, targets, structure and separate default-off Training/Timeline context. Readiness reflects now; missing feedback stays unknown.
+- Strength offers equipment, focus and **previously planned** loads, not verified performed weights. Duration is an estimate.
+- Review all steps/sets. **Change options** reopens settings; changes require regeneration. **Context → Show details** explains evidence. Choose **Edit workout**, **Generate again**, or **Add workout**. Rest saves nothing.
+- Generation uses the Assistant allowance; exact retries are free. After a lost save reply, keep the dialog open and **Retry Add**. Conflicts retain the draft. Enabled plan sync may send automatically.
+
 ## Organize plans and standalone workouts
 
 - An account can keep multiple plans but only one can be active. Activating a plan pauses the previous active plan. Archived plans remain available without contributing workouts to Calendar overlays.

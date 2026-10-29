@@ -136,6 +136,7 @@ export const FUNCTIONS_MANIFEST = {
         region: 'europe-west2',
         clientTimeoutMs: 190_000,
     },
+    generateDayWorkout: { name: 'generateDayWorkout', region: 'europe-west2', clientTimeoutMs: 190_000 },
     getAssistantQuotaStatus: { name: 'getAssistantQuotaStatus', region: 'europe-west2' },
     getAssistantConversation: { name: 'getAssistantConversation', region: 'europe-west2' },
     resetAssistantConversation: { name: 'resetAssistantConversation', region: 'europe-west2' },
