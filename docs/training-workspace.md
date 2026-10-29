@@ -720,12 +720,19 @@ strength aliases), available minutes, purpose and destination. Sport uses the sh
 single-selection mode, with sport icons and only `DAY_WORKOUT_SPORTS` options. Choosing a sport returns to the draft;
 the existing reset/validation and busy/uncertain-save guards still apply. Thirty minutes is an explicit editable starting
 value; a fitting active plan is preselected, otherwise Standalone. Strength shows equipment, initially Bodyweight.
-More options include strict endurance timing, target preference, simple/automatic structure, strength focus,
-matching previous planned weights, and independent Training-plan and Timeline-note context choices.
-All three context choices start enabled for each new draft. Users can turn each off before generating; disabling
-Training context also disables matching planned weights. The setup names the enabled defaults before generation,
-and changing a choice invalidates the old draft/request. Explicit false values remain false at the server; missing
-choices are rejected rather than inferred. These choices never modify chat grants, provider consent or stored feedback.
+More options include strict endurance timing, target preference, simple/automatic structure and strength focus.
+The separate **Personalization** section starts expanded, using compact Material checkbox columns on desktop and one
+column on phones. Every applicable option starts selected: freshness/training load, HRV, sleep, overnight heart rate,
+readiness, recent activities, existing Feeling/RPE, Training plans/workouts, Timeline notes and matching previously
+planned strength weights. The heading summarizes the selection count and its Show/Hide control preserves choices.
+Users can turn each off before generating. Disabling Training context also disables matching planned weights.
+Turning off freshness, HRV, sleep or overnight heart rate clears and disables combined Readiness; after re-enabling
+all sources, the user can select Readiness again. The server independently withholds the combined score whenever any
+source is excluded, rather than inventing a differently weighted score. Changing a choice invalidates the draft/request.
+Explicit signal false values remain false at the server and malformed values fail validation. Older requests omitting
+new signal choices preserve the original automatic behavior and stable fingerprint/replay identity; the original
+Training/Timeline/weight choices still require explicit booleans. These draft-only options never modify chat grants,
+provider consent, stored metrics or feedback.
 
 `generateDayWorkout` is a private first-party callable using the existing Assistant model, legal/access checks,
 App Check and quota. It receives a strict allowlisted `shared/day-workout.ts` request and cannot mutate a schedule.
@@ -745,16 +752,21 @@ error category and validation issue codes, never raw model replies, prompts, rec
 
 The existing daily collector supplies the same current recovery evidence used by Assistant chat, Training snapshots,
 a 28-day recording pattern, and actual Feeling/RPE minimum/maximum buckets. The modal names the automatic inputs
-before generation: freshness (Form), training load, HRV, sleep, overnight heart rate, readiness and recent activities.
-These reads run independently of the optional Training-plan and Timeline choices. The daily report owns current Form
+before generation through its selected checkboxes: freshness (Form), training load, HRV, sleep, overnight heart rate, readiness and recent activities.
+Selected signal reads run independently of the Training-plan and Timeline choices. The daily report owns current Form
 and ramp rate (including its existing current-day/fallback rules), sleep and comparison, HRV's personal range,
 overnight heart-rate baseline, readiness score/confidence, and recent/usual Training volume. No extra reads or
-new feedback fields are added. The generation prompt explicitly uses these signals to choose intensity, volume or rest,
+new feedback fields are added. The private generation reader projects only selected report fields and readiness
+drivers, including removal of duplicate HRV/heart-rate vitals from a selected sleep summary. It skips deselected
+activity, feedback and Training-snapshot reads and omits disabled activities/patterns and feedback rather than sending
+zero counts. When every signal is off, no recovery/activity tools are read. Selected Timeline prose and authored
+workout notes stay untrusted; the model must not reconstruct an unchecked signal from that text. The generation
+prompt explicitly uses the selected signals to choose intensity, volume or rest,
 compares the requested sport with its recorded baseline where available, treats minutes as a budget, and explains
 which evidence affected the choice. It does not count readiness twice with its own drivers or assume higher HRV
 always means better recovery. Future suggestions require rechecking recovery closer to the selected day.
 
-Review context names available signals separately from missing values. A nonempty daily-report object or overall
+Review context distinguishes available signals, missing values and explicitly turned-off choices. A nonempty daily-report object or overall
 snapshot preparation status cannot establish readiness/freshness availability. Zero Form and negative ramp rate remain
 valid; HRV or overnight heart-rate readings with insufficient baseline remain recorded evidence, with the unavailable
 comparison disclosed. Historical load snapshots are not substituted for missing current freshness.
@@ -809,8 +821,10 @@ unchanged. Generated workouts persist the same canonical root and full strength 
 `assistant/day-workout.emulator.spec.ts` verifies their read-back through `get_planned_workout_v3` and
 `get_strength_workout_details`, including exact repeated recoveries, zero/fractional loads and complete sets.
 Review-note rendering, compact UI disclosures and private cache/quota fixes preserve these same public contracts
-and read-back coverage. Private request-ID validation and sport-specific model output reuse those contracts without
-changing public tools, scopes, stored workout fields or mutation authority. The shared day-context entry-point menu has no MCP wire or authority impact: it opens the
+and read-back coverage. Private request-ID validation, signal-selection controls and sport-specific model output reuse those contracts without
+changing public tools, scopes, stored workout fields or mutation authority. Per-draft signal projections do not change
+the shared daily collector or the public daily-report response. Existing canonical workout read-back coverage remains
+applicable because these controls do not enter saved prescriptions. The shared day-context entry-point menu has no MCP wire or authority impact: it opens the
 same owner/date-guarded generation service. Reusing the Activities sport picker also changes no supported recipe
 sports, MCP read coverage, scopes or proposal/confirmation contracts. Default-on context affects only explicit
 first-party generation controls submitted from the reviewed dialog; independent opt-outs and the same read scope

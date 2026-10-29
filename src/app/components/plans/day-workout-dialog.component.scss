@@ -3,6 +3,8 @@ fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .controls-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; margin-block: 8px; }
 mat-form-field { width: 100%; min-width: 0; }
 mat-checkbox { display: block; margin-block: 8px; }
+.context-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 12px; }
+.context-grid mat-checkbox { margin-block: 0; }
 .hint { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
 .review-destination, .review-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
 .review-destination p { flex: 1 1 240px; margin: 0; font: var(--mat-sys-body-small); }
@@ -17,4 +19,4 @@ ol, ul { padding-inline-start: 24px; }
 ul.sets { padding: 0; }
 li { margin-block: 4px; }
 mat-dialog-actions { gap: 4px; }
-@media (max-width: 600px) { .controls-grid { grid-template-columns: minmax(0, 1fr); } mat-dialog-content { max-height: none; } }
+@media (max-width: 600px) { .controls-grid, .context-grid { grid-template-columns: minmax(0, 1fr); } mat-dialog-content { max-height: none; } }

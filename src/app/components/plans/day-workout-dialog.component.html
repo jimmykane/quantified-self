@@ -11,7 +11,6 @@
   </div>
   @if (!result()) { <p class="hint">Review before adding. Uses your Assistant allowance.</p> }
   <fieldset id="day-workout-settings" [hidden]="!!result() && !showSettings()" [disabled]="!!busy() || saveUncertain()">
-    <p id="day-workout-personalization" class="hint"><strong>Personalized automatically.</strong> Checks freshness, training load, HRV, sleep, overnight heart rate and readiness, plus recent activities and existing Feeling/RPE, when available. Training plans and Timeline notes start enabled; change them in More options.</p>
     <div class="controls-grid">
       <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Time available</mat-label>
         <input matInput type="number" min="5" max="240" [ngModel]="controls().minutes" (ngModelChange)="set('minutes', $event, false)"><span matTextSuffix>min</span>
@@ -24,6 +23,21 @@
         <ng-container [ngTemplateOutlet]="choiceField" [ngTemplateOutletContext]="{ choice: choice }"></ng-container>
       }
     </div>
+    <div class="review-destination">
+      <p><strong>Personalization</strong> · {{ contextSelection() }}</p>
+      <button mat-button appHapticTap type="button" [attr.aria-expanded]="showPersonalization()" aria-controls="day-workout-personalization"
+        (click)="showPersonalization.set(!showPersonalization())">{{ showPersonalization() ? 'Hide data options' : 'Show data options' }}</button>
+    </div>
+    <div id="day-workout-personalization" [hidden]="!showPersonalization()" role="group" aria-label="Personalization data">
+      <p class="hint">All data options start selected. Use the recorded evidence available for this draft.</p>
+      <div class="context-grid">
+        @for (choice of contextChoices(); track choice.key) {
+          <mat-checkbox [checked]="choice.checked" (change)="set(choice.key, $event.checked)"
+            [disabled]="!!busy() || saveUncertain() || choice.disabled">{{ choice.label }}</mat-checkbox>
+        }
+      </div>
+      @if (!readinessSourcesEnabled()) { <p class="hint">Readiness combines freshness, HRV, sleep and overnight heart rate. Enable all four to include it.</p> }
+    </div>
     <button mat-button appHapticTap type="button" [attr.aria-expanded]="more()" aria-controls="day-workout-more" (click)="more.set(!more())">
       <mat-icon>{{ more() ? 'expand_less' : 'expand_more' }}</mat-icon>{{ more() ? 'Fewer options' : 'More options' }}
     </button>
@@ -34,11 +48,6 @@
         }
       </div>
       @if (!strength()) { <p class="hint">Targets need saved athlete references. Strict timing includes all steps.</p> }
-      @for (choice of contextChoices(); track choice.key) {
-        <mat-checkbox [checked]="controls()[choice.key]" (change)="set(choice.key, $event.checked)"
-          [disabled]="!!busy() || saveUncertain() || (choice.key === 'usePreviousWeights' && !controls().trainingContext)">{{ choice.label }}</mat-checkbox>
-      }
-      <p class="hint">Enabled by default for this draft; turn off any context you do not want used. Freshness and recovery are checked automatically.</p>
     </div>
   </fieldset>
   @if (scheduleFailed()) {

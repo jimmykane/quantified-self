@@ -24,6 +24,9 @@ describe('help.content', () => {
     expect(help).toContain('Turning off Training context also disables matching previous planned weights');
     expect(help).toContain('matching **previously planned** loads (enabled by default)');
     expect(help).not.toContain('separate default-off Training-plan/Timeline context');
+    expect(help).toContain('**Personalization** starts expanded with every data option selected');
+    expect(help).toContain('Uncheck any source to exclude its evidence');
+    expect(help).toContain('turning off any of those also turns off the combined score');
   });
 
   it('distinguishes scheduled history and cooldowns from completion estimates', () => {

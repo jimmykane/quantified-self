@@ -10,7 +10,18 @@ export const DAY_WORKOUT_EQUIPMENT = ['bodyweight', 'dumbbells', 'barbell', 'ket
 export type DayWorkoutEquipment = typeof DAY_WORKOUT_EQUIPMENT[number];
 export type DayWorkoutPurpose = 'suggest' | 'recovery' | 'endurance' | 'intervals' | 'general-strength' | 'muscle-building' | 'muscular-endurance';
 export type DayWorkoutTarget = 'auto' | 'heart-rate' | 'power' | 'speed' | 'none';
-export interface DayWorkoutControls {
+export const DAY_WORKOUT_SIGNAL_OPTIONS = [
+  { key: 'freshnessContext', label: 'Freshness & training load' },
+  { key: 'hrvContext', label: 'HRV' },
+  { key: 'sleepContext', label: 'Sleep' },
+  { key: 'overnightHeartRateContext', label: 'Overnight heart rate' },
+  { key: 'readinessContext', label: 'Readiness' },
+  { key: 'activityContext', label: 'Recent activities' },
+  { key: 'feedbackContext', label: 'Existing Feeling / RPE' },
+] as const;
+export type DayWorkoutSignalKey = typeof DAY_WORKOUT_SIGNAL_OPTIONS[number]['key'];
+// Omitted signal choices preserve automatic use and request fingerprints for older clients.
+export interface DayWorkoutControls extends Partial<Record<DayWorkoutSignalKey, boolean>> {
   localDate: string;
   timeZone: string;
   sport: ActivityTypes;
@@ -27,6 +38,10 @@ export interface DayWorkoutControls {
   timelineContext: boolean;
 }
 export interface GenerateDayWorkoutRequest { requestId: string; controls: DayWorkoutControls }
+export function dayWorkoutReadinessSourcesEnabled(controls: DayWorkoutControls): boolean {
+  return controls.freshnessContext !== false && controls.hrvContext !== false
+    && controls.sleepContext !== false && controls.overnightHeartRateContext !== false;
+}
 export interface DayWorkoutLoadSource { exerciseId: string; localDate: string }
 export interface DayWorkoutDraft {
   title: string;
@@ -67,7 +82,8 @@ export function defaultDayWorkoutControls(localDate: string, timeZone: string, s
   return { localDate, timeZone, sport, minutes: 30, purpose: 'suggest', timing: 'approximate',
     target: isStrengthWorkoutSportV1(sport) ? 'none' : 'auto', structure: 'auto', destinationPlanId: null,
     equipment: ['bodyweight'], strengthFocus: 'full-body', usePreviousWeights: true,
-    trainingContext: true, timelineContext: true };
+    trainingContext: true, timelineContext: true, freshnessContext: true, hrvContext: true, sleepContext: true,
+    overnightHeartRateContext: true, readinessContext: true, activityContext: true, feedbackContext: true };
 }
 
 function object(value: unknown, keys: string[]): Record<string, unknown> {
@@ -98,6 +114,12 @@ export function parseGenerateDayWorkoutRequest(value: unknown, now = new Date())
   for (const key of ['usePreviousWeights', 'trainingContext', 'timelineContext']) {
     if (typeof c[key] !== 'boolean') throw new Error('Explicit context choices are required.');
   }
+  const signals: Partial<Record<DayWorkoutSignalKey, boolean>> = {};
+  for (const { key } of DAY_WORKOUT_SIGNAL_OPTIONS) {
+    if (!Object.prototype.hasOwnProperty.call(c, key)) continue;
+    if (typeof c[key] !== 'boolean') throw new Error('Choose valid personalization options.');
+    signals[key] = c[key] as boolean;
+  }
   // Construct an allowlisted, stable-key object for request fingerprinting.
   return { requestId: request.requestId, controls: {
     localDate, timeZone: c.timeZone, sport, minutes: c.minutes as number, purpose: c.purpose as DayWorkoutPurpose,
@@ -106,5 +128,6 @@ export function parseGenerateDayWorkoutRequest(value: unknown, now = new Date())
     equipment: [...c.equipment].sort(), strengthFocus: c.strengthFocus as DayWorkoutControls['strengthFocus'],
     usePreviousWeights: c.usePreviousWeights as boolean, trainingContext: c.trainingContext as boolean,
     timelineContext: c.timelineContext as boolean,
+    ...signals,
   } };
 }

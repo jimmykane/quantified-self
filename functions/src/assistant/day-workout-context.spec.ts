@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { defaultDayWorkoutControls } from '../../../shared/day-workout';
+import { DAY_WORKOUT_SIGNAL_OPTIONS, defaultDayWorkoutControls } from '../../../shared/day-workout';
 import { collectDayWorkoutContext, type DayWorkoutTrainingContext } from './day-workout-context';
 import type { AssistantMcpToolName } from './mcp-session';
 
@@ -38,6 +38,65 @@ describe('Calendar generation context boundaries', () => {
       ? { structuredContent: report } : original(name));
     return source;
   }
+  const reportWithVitals = () => ({ ...recoveryReport, sleep: { ...recoveryReport.sleep, latestSession: {
+    durationSeconds: 28800, vitals: { averageHrvMs: 8787.01, overnightHrvMs: 8787.02,
+      averageHeartRateBpm: 8989.01, minimumHeartRateBpm: 8989.02 },
+  } } });
+  it.each(['hrvContext', 'sleepContext', 'overnightHeartRateContext', 'freshnessContext'] as const)('omits unchecked %s evidence and the combined readiness score', async key => {
+      const source = withReport(reportWithVitals());
+      const original = source.callTool.getMockImplementation()!;
+      source.callTool.mockImplementation(async name => name === 'prepare_training_metrics'
+        ? { structuredContent: { status: 'ready', readyMetricKinds: ['form', 'ramp_rate', 'training_summary'] } }
+        : name === 'get_training_metric' ? { structuredContent: { payload: { dailyLoads: [{ load: 5757.01 }] } } }
+          : original(name));
+      const result = await collectDayWorkoutContext({ ...controls, [key]: false }, now, source, vi.fn());
+      const daily = result.evidence.daily as { dailyReport: {
+        sleep?: { latestSession: { vitals: Record<string, unknown> } };
+        readiness: { score?: number; drivers: Record<string, unknown> };
+      }; trainingSnapshots: { form: unknown; rampRate: unknown } };
+      const report = daily.dailyReport;
+      expect(report.readiness.score).toBeUndefined();
+      const driver = { hrvContext: 'hrv', sleepContext: 'sleep', overnightHeartRateContext: 'overnightHeartRate', freshnessContext: 'load' }[key];
+      expect(report.readiness.drivers[driver]).toBeUndefined();
+      if (key === 'sleepContext') expect(report.sleep).toBeUndefined();
+      else {
+        expect(report.sleep?.latestSession).toBeDefined();
+        if (key === 'hrvContext') expect(JSON.stringify(result.evidence)).not.toContain('8787.');
+        if (key === 'overnightHeartRateContext') expect(JSON.stringify(result.evidence)).not.toContain('8989.');
+      }
+      if (key === 'freshnessContext') {
+        expect(daily.trainingSnapshots.form).toBeNull(); expect(daily.trainingSnapshots.rampRate).toBeNull();
+        expect(source.callTool).toHaveBeenCalledWith('prepare_training_metrics', { metricKinds: ['training_summary'] });
+        expect(source.callTool).not.toHaveBeenCalledWith('get_training_metric', { metricKind: 'form' });
+        expect(source.callTool).not.toHaveBeenCalledWith('get_training_metric', { metricKind: 'ramp_rate' });
+      }
+      expect(result.missingContext.some(message => message.includes('turned off'))).toBe(true);
+    });
+  it('omits an unchecked combined readiness score while keeping independently selected drivers', async () => {
+    const result = await collectDayWorkoutContext({ ...controls, readinessContext: false }, now, withReport(reportWithVitals()), vi.fn());
+    expect(result.evidence.daily).toMatchObject({ dailyReport: { readiness: { status: 'disabled', drivers: {
+      hrv: recoveryReport.readiness.drivers.hrv, load: recoveryReport.readiness.drivers.load,
+    } } } });
+    expect((result.evidence.daily as { dailyReport: { readiness: unknown } }).dailyReport.readiness).not.toHaveProperty('score');
+  });
+  it('skips unchecked activity and feedback queries and omits their evidence instead of reporting zero', async () => {
+    const source = withReport(reportWithVitals());
+    const result = await collectDayWorkoutContext({ ...controls, activityContext: false, feedbackContext: false }, now, source, vi.fn());
+    const names = source.callTool.mock.calls.map(call => call[0]);
+    for (const name of ['query_activities', 'query_metric', 'query_metrics']) expect(names).not.toContain(name);
+    expect(result.evidence.daily).not.toHaveProperty('activitiesToday');
+    expect(result.evidence.daily).not.toHaveProperty('weekdayConsistency');
+    expect(result.evidence.daily).not.toHaveProperty('dailyReport.trainingSummary');
+    expect(result.evidence).not.toHaveProperty('feedback');
+    expect(result.usedContext).not.toContain('Today’s recorded activities');
+  });
+  it('does not read recovery or activity tools when every data option is off', async () => {
+    const source = session();
+    const off = { ...controls, ...Object.fromEntries(DAY_WORKOUT_SIGNAL_OPTIONS.map(({ key }) => [key, false])) };
+    const result = await collectDayWorkoutContext(off, now, source, vi.fn());
+    expect(source.callTool).not.toHaveBeenCalled();
+    expect(result.usedContext).toEqual([]);
+  });
   it('always supplies current freshness, HRV, sleep, heart rate and readiness with optional access off', async () => {
     const source = withReport(recoveryReport);
     const result = await collectDayWorkoutContext(controls, now, source, vi.fn());

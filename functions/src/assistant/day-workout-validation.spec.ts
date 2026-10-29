@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { defaultDayWorkoutControls, parseGenerateDayWorkoutRequest } from '../../../shared/day-workout';
+import { DAY_WORKOUT_SIGNAL_OPTIONS, defaultDayWorkoutControls, parseGenerateDayWorkoutRequest } from '../../../shared/day-workout';
 import { analyzeWorkoutStructureV1 } from '../../../shared/planned-workout-analysis';
 import { validateDayWorkoutSuggestion } from './day-workout-validation';
 
@@ -12,6 +12,20 @@ const strength = () => ({ version: 1 as const, exercises: [{ id: 'squat', name: 
   sets: [{ id: 'one', ending: { kind: 'repetitions' as const, repetitions: 8 }, restAfterSeconds: 60, externalLoadKg: 999 }] }] });
 
 describe('day workout contract and prescription validation', () => {
+  it('defaults every signal on, preserves explicit opt-outs and old request fingerprints, and rejects malformed choices', () => {
+    const now = new Date('2026-10-28T12:00Z');
+    const legacy = { ...controls };
+    for (const { key } of DAY_WORKOUT_SIGNAL_OPTIONS) {
+      expect(controls[key]).toBe(true);
+      expect(parseGenerateDayWorkoutRequest({ requestId: 'request-123', controls: { ...controls, [key]: false } }, now).controls[key]).toBe(false);
+      for (const value of [undefined, null, 'false', 0]) {
+        expect(() => parseGenerateDayWorkoutRequest({ requestId: 'request-123', controls: { ...controls, [key]: value } }, now)).toThrow(/personalization/);
+      }
+      delete legacy[key];
+    }
+    const parsed = parseGenerateDayWorkoutRequest({ requestId: 'request-123', controls: legacy }, now);
+    expect(JSON.stringify(parsed.controls)).toBe(JSON.stringify(legacy));
+  });
   it('requires explicit independent consent, supported controls and today/future dates in the selected zone', () => {
     const now = new Date('2026-10-27T23:00:00Z');
     expect(parseGenerateDayWorkoutRequest({ requestId: 'request-123', controls }, now).controls).toMatchObject({ trainingContext: true, timelineContext: true });

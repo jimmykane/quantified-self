@@ -92,7 +92,10 @@ describe('DayWorkoutDialogComponent', () => {
       const exportView = (name: string) => {
         const markup = fixture.nativeElement.cloneNode(true) as HTMLElement;
         const inputs: HTMLInputElement[] = [...fixture.nativeElement.querySelectorAll('input')];
-        markup.querySelectorAll('input').forEach((input, index) => input.setAttribute('value', inputs[index].value));
+        markup.querySelectorAll('input').forEach((input, index) => {
+          input.setAttribute('value', inputs[index].value);
+          if (input.type === 'checkbox') input.toggleAttribute('checked', inputs[index].checked);
+        });
         for (const dark of [false, true]) writeFileSync(join(process.env.DAY_WORKOUT_QA_DIR!, `${name}${dark ? '-dark' : ''}.html`),
           '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
           + '<link rel="stylesheet" href="styles.css">' + [...document.head.querySelectorAll('style')].map(style => style.outerHTML).join('')
@@ -132,22 +135,39 @@ describe('DayWorkoutDialogComponent', () => {
   it('renders enabled context choices and sends independent opt-outs with a new generation', async () => {
     const fixture = await render(); const component = fixture.componentInstance;
     component.more.set(true); fixture.detectChanges();
-    const inputs = [...fixture.nativeElement.querySelectorAll('#day-workout-more mat-checkbox input')] as HTMLInputElement[];
-    expect(inputs).toHaveLength(3);
+    const inputs = [...fixture.nativeElement.querySelectorAll('#day-workout-personalization mat-checkbox input')] as HTMLInputElement[];
+    expect(inputs).toHaveLength(10);
     expect(inputs.every(input => input.checked && !input.disabled)).toBe(true);
     expect(haptics.selection).not.toHaveBeenCalled();
     await component.generate(); fixture.detectChanges();
     expect(generate.mock.calls[0][1].controls).toMatchObject({ trainingContext: true, timelineContext: true, usePreviousWeights: true });
     component.showSettings.set(true); fixture.detectChanges(); haptics.selection.mockClear();
-    inputs[1].click(); fixture.detectChanges();
+    inputs[8].click(); fixture.detectChanges();
     expect(component.controls()).toMatchObject({ trainingContext: true, timelineContext: false });
     expect(component.result()).toBeNull(); expect(haptics.selection).toHaveBeenCalledOnce();
     await component.generate(); fixture.detectChanges();
     expect(generate.mock.calls[1][1].controls).toMatchObject({ trainingContext: true, timelineContext: false });
     expect(generate.mock.calls[1][1].requestId).not.toBe(generate.mock.calls[0][1].requestId);
-    component.showSettings.set(true); fixture.detectChanges(); inputs[0].click(); fixture.detectChanges();
+    component.showSettings.set(true); fixture.detectChanges(); inputs[7].click(); fixture.detectChanges();
     expect(component.controls()).toMatchObject({ trainingContext: false, timelineContext: false });
-    expect(inputs[2].disabled).toBe(true); expect(mutate).not.toHaveBeenCalled();
+    expect(inputs[9].disabled).toBe(true); expect(mutate).not.toHaveBeenCalled();
+  });
+  it('shows every data choice selected initially and disables derived readiness when a source is turned off', async () => {
+    const fixture = await render(); const component = fixture.componentInstance;
+    const region = fixture.nativeElement.querySelector('#day-workout-personalization') as HTMLElement;
+    expect(region.hidden).toBe(false);
+    expect(component.contextSelection()).toBe('All selected');
+    const inputs = [...region.querySelectorAll('mat-checkbox input')] as HTMLInputElement[];
+    expect(inputs.every(input => input.checked && !input.disabled)).toBe(true);
+    haptics.selection.mockClear(); inputs[1].click(); fixture.detectChanges();
+    expect(component.controls()).toMatchObject({ hrvContext: false, readinessContext: false, timelineContext: true });
+    expect(inputs[4].checked).toBe(false); expect(inputs[4].disabled).toBe(true);
+    expect(region.textContent).toContain('Enable all four');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    await component.generate();
+    expect(generate.mock.calls[0][1].controls).toMatchObject({ hrvContext: false, readinessContext: false, sleepContext: true, timelineContext: true });
+    component.set('hrvContext', true); fixture.detectChanges();
+    expect(inputs[4].disabled).toBe(false); expect(inputs[4].checked).toBe(false);
   });
   it('focuses review on the prescription while keeping options and context inspectable without discarding it', async () => {
     const fixture = await render(); const component = fixture.componentInstance;
@@ -157,7 +177,7 @@ describe('DayWorkoutDialogComponent', () => {
     const personalization = element.querySelector('#day-workout-personalization')!;
     expect(personalization.closest('[hidden]')).toBeNull();
     expect(personalization.closest('#day-workout-more')).toBeNull();
-    for (const signal of ['freshness', 'training load', 'HRV', 'sleep', 'overnight heart rate', 'readiness', 'Feeling/RPE']) {
+    for (const signal of ['Freshness', 'training load', 'HRV', 'Sleep', 'Overnight heart rate', 'Readiness', 'Feeling / RPE']) {
       expect(personalization.textContent).toContain(signal);
     }
     expect(component.controls()).toMatchObject({ trainingContext: true, timelineContext: true, usePreviousWeights: true });

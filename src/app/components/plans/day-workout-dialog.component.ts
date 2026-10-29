@@ -12,7 +12,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { firstValueFrom, Subscription } from 'rxjs';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { DAY_WORKOUT_EQUIPMENT, DAY_WORKOUT_SPORTS, defaultDayWorkoutControls, dayWorkoutLocalDate, dayWorkoutDateOffset,
-  dayWorkoutPurposes, dayWorkoutTargets,
+  dayWorkoutPurposes, dayWorkoutTargets, DAY_WORKOUT_SIGNAL_OPTIONS, dayWorkoutReadinessSourcesEnabled,
   type DayWorkoutControls, type GenerateDayWorkoutRequest, type GenerateDayWorkoutResponse } from '@shared/day-workout';
 import { isStrengthWorkoutSportV1 } from '@shared/strength-workout';
 import { isTrainingLocalDateWithinPlan, normalizeTrainingLocalDate, type MutateTrainingScheduleRequestV1 } from '@shared/training-plans';
@@ -52,6 +52,7 @@ export class DayWorkoutDialogComponent {
   readonly latestDate = dayWorkoutDateOffset(this.today, 365);
   readonly controls = signal(defaultDayWorkoutControls(this.data.localDate, this.timeZone, this.data.sport));
   readonly more = signal(false);
+  readonly showPersonalization = signal(true);
   readonly showSettings = signal(false);
   readonly busy = signal<'generate' | 'save' | null>(null);
   readonly error = signal<string | null>(null);
@@ -98,11 +99,22 @@ export class DayWorkoutDialogComponent {
     ? [this.choice('strengthFocus', 'Strength focus', ['full-body', 'upper-body', 'lower-body', 'core'])]
     : [this.choice('timing', 'Timing', ['approximate', 'strict']), this.choice('target', 'Targets', dayWorkoutTargets(this.controls().sport)),
       this.choice('structure', 'Session structure', ['auto', 'simple'])]);
+  readonly readinessSourcesEnabled = computed(() => dayWorkoutReadinessSourcesEnabled(this.controls()));
   readonly contextChoices = computed(() => [
+    ...DAY_WORKOUT_SIGNAL_OPTIONS,
     { key: 'trainingContext' as const, label: 'Use Training plans and workouts' },
     { key: 'timelineContext' as const, label: 'Use Timeline notes' },
     ...(this.strength() ? [{ key: 'usePreviousWeights' as const, label: 'Reuse matching planned weights' }] : []),
-  ]);
+  ].map(choice => {
+    const disabled = choice.key === 'readinessContext' && !this.readinessSourcesEnabled()
+      || choice.key === 'usePreviousWeights' && !this.controls().trainingContext;
+    return { ...choice, disabled, checked: !disabled && this.controls()[choice.key] !== false };
+  }));
+  readonly contextSelection = computed(() => {
+    const choices = this.contextChoices();
+    const count = choices.filter(choice => choice.checked).length;
+    return count === choices.length ? 'All selected' : `${count} of ${choices.length} selected`;
+  });
   readonly primaryLabel = computed(() => {
     if (this.busy()) return this.busy() === 'save' ? 'Adding…' : 'Generating…';
     if (this.result()?.draft) return this.saveUncertain() ? 'Retry Add' : 'Add workout';
@@ -158,6 +170,7 @@ export class DayWorkoutDialogComponent {
         next.purpose = 'suggest'; next.target = isStrengthWorkoutSportV1(next.sport) ? 'none' : 'auto'; next.timing = 'approximate';
         if (!next.equipment.length) next.equipment = ['bodyweight'];
       }
+      if (!dayWorkoutReadinessSourcesEnabled(next)) next.readinessContext = false;
       return next;
     });
     this.sequence++; this.result.set(null); this.request = null; this.command = null; this.reviewedSchedule = null;
