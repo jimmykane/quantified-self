@@ -1,4 +1,5 @@
 import { ActivityIdentityConflictError } from '../shared/activity-identity-conflict';
+import { ProviderImportDuplicateError } from '../shared/provider-import-duplicate';
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { UsageLimitExceededError } from '../utils';
@@ -1331,6 +1332,19 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 1,
                 undefined
             );
+        });
+
+        it('completes a verified duplicate without importing, fan-out, debug capture or retry', async () => {
+            mockSetEvent.mockRejectedValueOnce(new ProviderImportDuplicateError('saved-event'));
+            await processGarminAPIActivityQueueItem(queueItem);
+            expect(mockUpdateToProcessed).toHaveBeenCalledWith(queueItem, undefined, {
+                resultStatus: 'skipped', skippedReason: 'cross_provider_duplicate', duplicateEventID: 'saved-event',
+            });
+            expect(mockRetainGarminFITWorkoutReferences).not.toHaveBeenCalled();
+            expect(mockEnqueueActivitySyncJobsForImportedEvent).not.toHaveBeenCalled();
+            expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+            expect(mockUploadDebugFile).not.toHaveBeenCalled();
+            expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
         });
 
         it('dead-letters a permanent source identity conflict without retrying or labelling it a parse failure', async () => {

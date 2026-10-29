@@ -1076,6 +1076,22 @@ without another outbound send. No provider association is added to the retained 
 Training contract is introduced. Existing Help remains accurate: this changes internal copy recognition, not a user
 workflow or import capability. Existing failed jobs require separately approved targeted replay after deployment.
 
+An otherwise conflicting outdoor-running recording from another provider can use the same duplicate-skip outcome.
+This fallback checks only the already selected event; it does not change the 100 ms time buckets, provider collision
+reservations, Wahoo IDs or manual-upload content IDs, and does not search for or create another event. Normal matched
+writes and same-provider revisions retain their existing behavior. Require one completed saved activity with a valid
+server-owned source identity, one FIT original inside that owner's event prefix, no incoming-provider provenance, and
+exactly one valid other-provider provenance record. Garmin provenance on either side must identify FIT. Both sports
+must be outdoor-running family members (excluding indoor/virtual running), with identical positive start/end windows,
+positive durations within one second and positive distances within 2% of the larger distance. Neither duration may
+exceed elapsed time by more than one second. Only a failed activity binding can enter this fallback; unsafe correction
+carryover remains an identity conflict. Multisport, multiple sources/originals, unfinished imports, missing evidence and
+metadata-read failures are not duplicate acknowledgements. Candidate verification reads at most three additional
+owner/event metadata documents, reusing any legacy Garmin provenance read. The saved event, activities, edits,
+original references and Training controls remain unchanged; workers use their existing guarded queue completions
+and emit an INFO diagnostic, without Training completion linking or outbound fan-out. Existing Help, MCP and Training
+contracts are unchanged; monitoring remains covered by the existing committed `skipped` outcome for all four providers.
+
 Verified assignments pass only in memory from the committed reservation to Training finalization, preserving zero
 overrides, exclusions and dated policies without trusting arbitrary reused IDs. Guarded source transactions preserve
 live event edits and custom device names. Repeat manual uploads use the same preparation. An unmatchable upload

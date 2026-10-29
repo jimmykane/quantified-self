@@ -6,10 +6,10 @@ import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePaylo
 import { getActivitySourceWindow, resolveActivityIdentityAssignments, type ActivityIdentityLike } from './activity-identity-matcher';
 import { readActivitySourceIdentity } from '../../../shared/activity-source-identity';
 import { prepareActivitySourceBindings, savedActivityIdentity, type SavedActivitySource, type ActivityBindingPlan } from './activity-source-binding';
-import { ActivityIdentityConflictError } from './activity-identity-conflict';
+import { ActivityIdentityConflictError, isActivityIdentityConflict } from './activity-identity-conflict';
 import { isSameProviderRecording, providerRecordingService } from './provider-recording-identity';
 import { retainedSourceReferences, retainedSourceRevision } from './retained-activity-source';
-import { isGarminActivityCopy, ProviderImportDuplicateError } from './provider-import-duplicate';
+import { isCrossProviderRunCopy, isGarminActivityCopy, ProviderImportDuplicateError } from './provider-import-duplicate';
 import { prepareTrainingLoadMetadata } from '../training-load/training-load-metadata';
 import { EventWriteSkippedForDeletedEventError, type PreparedTrainingLoadWrite } from '../training-load/training-load-source-write';
 import type { TrainingLoadMetadata } from '../../../shared/training-load-policy';
@@ -185,19 +185,45 @@ async function prepareImportedActivityIdentities(
   const verifiedProvider = !!providerMetadata && isSameProviderRecording(provider?.data(), providerMetadata);
   const originals = retainedSourceReferences(parent.data() ?? {});
   const original = originals.length === 1 ? originals[0] : null;
-  if (!firstImport && !metadata.data()?.sourceWritePending && !parent.data()?.benchmarkSourceWritePending
-    && service === ServiceNames.SuuntoApp && !provider?.exists && documents.length === 1 && event.getActivities().length === 1
+  const canCheckCopy = !firstImport && !metadata.data()?.sourceWritePending && !parent.data()?.benchmarkSourceWritePending
+    && !provider?.exists && documents.length === 1 && event.getActivities().length === 1
     && typeof original?.path === 'string' && original.path.startsWith(`users/${uid}/events/${eventId}/`)
-    && /\.fit$/i.test(original.path)
+    && /\.fit$/i.test(original.path);
+  // Reuse any provenance read made by the older exact-copy rule.
+  const provenance = new Map<string, admin.firestore.DocumentSnapshot>();
+  const readProvenance = async (name: string) => {
+    if (!provenance.has(name)) provenance.set(name,
+      await transaction.get(db.doc(`users/${uid}/events/${eventId}/metaData/${name}`)));
+    return provenance.get(name)!;
+  };
+  if (canCheckCopy && service === ServiceNames.SuuntoApp
     && isGarminActivityCopy(savedActivityIdentity(documents[0]), event.getActivities()[0] as ActivityIdentityLike)) {
     // Only likely duplicates incur this one extra, owner-scoped provenance read.
-    const garmin = (await transaction.get(db.doc(`users/${uid}/events/${eventId}/metaData/${ServiceNames.GarminAPI}`))).data();
+    const garmin = (await readProvenance(ServiceNames.GarminAPI)).data();
     if (`${garmin?.serviceActivityFileType || ''}`.toLowerCase() === 'fit'
       && isSameProviderRecording(garmin, { ...garmin, serviceName: ServiceNames.GarminAPI }))
       throw new ProviderImportDuplicateError(eventId);
   }
-  const plan = prepareActivitySourceBindings(event, documents, { allowSourceWindowMatch: verifiedProvider,
-    allowNewActivities: firstImport || !documents.length });
+  let plan: ActivityBindingPlan;
+  try {
+    plan = prepareActivitySourceBindings(event, documents, { allowSourceWindowMatch: verifiedProvider,
+      allowNewActivities: firstImport || !documents.length });
+  } catch (error) {
+    // Normal matched writes and same-provider revisions keep their existing behavior.
+    if (!isActivityIdentityConflict(error) || !canCheckCopy || !service || !providerMetadata
+      || !isSameProviderRecording(providerMetadata, providerMetadata)
+      || (service === ServiceNames.GarminAPI && `${providerMetadata.serviceActivityFileType || ''}`.toLowerCase() !== 'fit')
+      || !isCrossProviderRunCopy(savedActivityIdentity(documents[0]), event.getActivities()[0] as ActivityIdentityLike)) throw error;
+    const sources = await Promise.all([ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI]
+      .filter(name => name !== service).map(async name => ({ name, snapshot: await readProvenance(name) })));
+    const retained = sources.filter(source => source.snapshot.exists);
+    const source = retained.length === 1 ? retained[0] : null;
+    const data = source?.snapshot.data();
+    if (source && isSameProviderRecording(data, { ...data, serviceName: source.name })
+      && (source.name !== ServiceNames.GarminAPI || `${data?.serviceActivityFileType || ''}`.toLowerCase() === 'fit'))
+      throw new ProviderImportDuplicateError(eventId);
+    throw error;
+  }
   const applyAscent = prepareAscentCarryover(event, documents, plan, verifiedProvider);
   return { ...plan, apply: () => { plan.apply(); applyAscent(); } };
 }

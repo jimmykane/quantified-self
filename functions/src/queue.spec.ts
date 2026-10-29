@@ -2988,6 +2988,36 @@ describe('queue', () => {
             expect(mockBatch.set).not.toHaveBeenCalled();
         });
 
+        it.each(['current', 'replaced', 'deleting'])(
+            'completes a COROS duplicate only through its guarded revision: %s', async scenario => {
+                const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                    ...suuntoQueueItem, openId: 'corosOpenId', workoutID: 'coros-workout',
+                    firebaseUserID: 'mock-user-id', queueRevision: 'revision-1', FITFileURI: 'https://oss.coros.com/run.fit',
+                };
+                mockRef.parent.id = 'COROSAPIWorkoutQueue';
+                let live = { ...corosItem } as Record<string, unknown>;
+                mockRef.get.mockImplementation(async () => ({ exists: true, data: () => ({ ...live }) }));
+                mockRef.update.mockImplementation(async update => { live = { ...live, ...update }; });
+                vi.mocked(getTokenData).mockResolvedValue({ accessToken: 'token', openId: 'corosOpenId' } as any);
+                vi.mocked(utils.setEvent).mockImplementationOnce(async () => {
+                    if (scenario === 'replaced') live.queueRevision = 'revision-2';
+                    if (scenario === 'deleting') mockGetUserDeletionGuardStateInTransaction.mockResolvedValue({
+                        userExists: true, deletionInProgress: true, shouldSkip: true,
+                    });
+                    throw new ProviderImportDuplicateError('saved-event');
+                });
+                await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem)).resolves.toBe(QueueResult.Processed);
+                if (scenario === 'current') expect(live).toMatchObject({
+                    processed: true, resultStatus: 'skipped', skippedReason: 'cross_provider_duplicate', duplicateEventID: 'saved-event',
+                });
+                else {
+                    expect(live.processed).toBe(false);
+                    expect(live.resultStatus).toBeUndefined();
+                }
+                expect(mockRetainCOROSTrainingCompletion).not.toHaveBeenCalled();
+                expect(mockBatch.set).not.toHaveBeenCalled();
+            });
+
         it('dead-letters a verified Suunto identity conflict without another parse retry', async () => {
             vi.mocked(utils.setEvent).mockRejectedValueOnce(new ActivityIdentityConflictError());
             const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);

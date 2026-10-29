@@ -32,6 +32,7 @@ import { enqueueActivitySyncJobsForImportedEvent } from '../activity-sync/enqueu
 import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 import { resolveProviderImportEventID } from '../queue/provider-event-id';
 import { isActivityIdentityConflict } from '../shared/activity-identity-conflict';
+import { ProviderImportDuplicateError } from '../shared/provider-import-duplicate';
 import {
   deferWorkoutQueueItemForTokenRefreshContention,
 } from '../queue/token-refresh-contention';
@@ -523,6 +524,14 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
     // For each ended so we can set it to processed
     return updateToProcessed(queueItem, bulkWriter);
   } catch (e: unknown) {
+    if (e instanceof ProviderImportDuplicateError) {
+      logger.info('Skipping a verified cross-provider recording of an existing activity.', {
+        serviceName: ServiceNames.GarminAPI, queueItemId: queueItem.id, eventID: e.eventID,
+      });
+      return updateToProcessed(queueItem, bulkWriter, {
+        resultStatus: 'skipped', skippedReason: 'cross_provider_duplicate', duplicateEventID: e.eventID,
+      });
+    }
     if (isActivityIdentityConflict(e)) {
       return moveToDeadLetterQueue(queueItem, e, bulkWriter, e.code);
     }
