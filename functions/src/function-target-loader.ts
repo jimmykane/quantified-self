@@ -202,6 +202,7 @@ const TARGET_LOADERS: Readonly<Record<string, ModuleLoader>> = Object.freeze({
   addSuuntoAppHistoryToQueue: () => module.require('./suunto/history-to-queue') as FunctionModule,
   addSuuntoAppRoutesToQueue: () => module.require('./suunto/route-sync') as FunctionModule,
   addWahooAPIHistoryToQueue: () => module.require('./wahoo/history-to-queue') as FunctionModule,
+  generateDayWorkout: () => module.require('./assistant/day-workout-callable') as FunctionModule,
   assistantChat: () => module.require('./assistant/callable') as FunctionModule,
   backfillActivitySyncRoute: () => module.require('./activity-sync/backfill') as FunctionModule,
   backfillCorosAPISleep: () => module.require('./sleep/backfill') as FunctionModule,

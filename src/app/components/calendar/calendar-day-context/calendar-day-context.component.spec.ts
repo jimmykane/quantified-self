@@ -1,3 +1,4 @@
+import { DayWorkoutService } from '../../../services/day-workout.service';
 import { signal } from '@angular/core';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -36,6 +37,7 @@ describe('CalendarDayContextComponent', () => {
     const haptics = { selection: vi.fn() };
     await TestBed.configureTestingModule({ imports: [CalendarDayContextComponent], providers: [
       provideRouter([]),
+      { provide: DayWorkoutService, useValue: { canGenerate: () => false, open: vi.fn() } },
       { provide: ViewportScroller, useValue: { scrollToAnchor: vi.fn() } },
       { provide: AppUserService, useValue: { user: viewer } },
       { provide: CalendarDayHealthService, useValue: { watch: () => of(emptyEvidence) } },
@@ -71,10 +73,14 @@ describe('CalendarDayContextComponent', () => {
     library.click(); await fixture.whenStable();
     expect(prepareReturn).toHaveBeenCalledWith('/', '2026-10-25', undefined, calendarReturn);
     expect(haptics.selection).toHaveBeenCalledOnce();
+    fixture.componentInstance.generateWorkout();
+    expect(TestBed.inject(DayWorkoutService).open).toHaveBeenCalledWith('owner', '2026-10-25', undefined);
     viewer.set({ uid: 'other' }); fixture.detectChanges();
     expect(fixture.componentInstance.canPlan()).toBe(false);
     expect(fixture.nativeElement.textContent).not.toContain('Phase-only day');
     expect(fixture.nativeElement.querySelector('a[href*="/training/plans/library"]')).toBeNull();
+    fixture.componentInstance.generateWorkout();
+    expect(TestBed.inject(DayWorkoutService).open).toHaveBeenCalledOnce();
   });
   it('centers timeline time, mixed icons, and titles in a shared 44px row', () => {
     const styles = readFileSync(resolve(process.cwd(),
@@ -95,6 +101,7 @@ describe('CalendarDayContextComponent', () => {
     const haptics = { selection: vi.fn() };
     await TestBed.configureTestingModule({ imports: [CalendarDayContextComponent], providers: [
       provideRouter([]),
+      { provide: DayWorkoutService, useValue: { canGenerate: () => false, open: vi.fn() } },
       { provide: AppUserService, useValue: { user: signal(null) } },
       { provide: CalendarDayHealthService, useValue: { watch: healthWatch } },
       { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Light) } },
@@ -189,6 +196,7 @@ describe('CalendarDayContextComponent', () => {
     });
     await TestBed.configureTestingModule({ imports: [CalendarDayContextComponent], providers: [
       provideRouter([]),
+      { provide: DayWorkoutService, useValue: { canGenerate: () => false, open: vi.fn() } },
       { provide: ViewportScroller, useValue: { scrollToAnchor: vi.fn() } },
       { provide: AppUserService, useValue: { user: viewer } },
       { provide: CalendarDayHealthService, useValue: { watch } },

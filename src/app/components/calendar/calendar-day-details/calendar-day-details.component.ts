@@ -1,3 +1,4 @@
+import { DayWorkoutService } from '../../../services/day-workout.service';
 import type { EventRead } from '@shared/event-read';
 import { ChangeDetectionStrategy, Component, computed, inject, type Signal } from '@angular/core';
 import { TIMELINE_NOTE_LABELS, timelineNoteDates, type TimelineNote } from '@shared/timeline-notes';
@@ -97,6 +98,7 @@ interface CalendarDayEventDetailPart {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CalendarDayDetailsComponent {
+  readonly dayWorkouts = inject(DayWorkoutService);
   private readonly bottomSheetRef = inject(MatBottomSheetRef<CalendarDayDetailsComponent, CalendarDayDetailsResult>);
   private readonly router = inject(Router);
   private readonly navigation = inject(CalendarDayDetailsNavigationService);
@@ -164,6 +166,13 @@ export class CalendarDayDetailsComponent {
     this.navigation.prepareReturn(this.router.url, this.data.day.dateKey,
       this.data.returnToDashboard ? 'today-sheet' : undefined, this.data.calendarReturn);
     this.dismiss();
+  }
+
+  generateWorkout(): void {
+    if (!this.hasTrainingPlanningUIAccess()) return;
+    this.prepareWorkoutNavigation();
+    void this.dayWorkouts.open(this.data.userId, this.data.day.dateKey,
+      (this.data.plannedWorkoutsSource?.() ?? this.data.plannedWorkouts)?.[0]?.workout.structure.sport);
   }
 
   prepareWorkoutNavigation(): void {

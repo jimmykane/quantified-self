@@ -11,6 +11,11 @@ still require separate approval; this documentation update changes no secret bin
 
 `processConnectionHistoryTask` binds the existing Garmin, Suunto API, COROS and Wahoo client credentials because it coordinates their shared history operations. `onConnectionHistoryImportWritten`, `recoverConnectionHistoryImports`, and `retryConnectionHistoryImport` have no provider-secret bindings. Downstream workers retain their existing least-privilege bindings. Deploy this compatible backend before the connection-history checkbox frontend; see [the release checklist](connection-history-import.md#release-and-operations).
 
+The Calendar `generateDayWorkout` callable binds only the existing `GEMINI_API_KEY`, using the same Assistant
+model. It receives no fitness-provider, delivery, OAuth, signing or billing credentials. Its direct target loader
+and resource/secret metadata are checked with the existing entrypoint and secret checks. No new secret value is
+required; deploying this additional binding/endpoint still requires separate deployment approval.
+
 ## Managed inventory
 
 | Area | Secret Manager names |

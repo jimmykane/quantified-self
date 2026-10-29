@@ -1,3 +1,5 @@
+import { DayWorkoutService } from '../../services/day-workout.service';
+import { defaultDayWorkoutControls } from '@shared/day-workout';
 import { createManualWorkoutEditorTarget } from '../../helpers/planned-workout-target-editor.helper';
 import { WorkoutTargetsEditorComponent } from './workout-targets-editor.component';
 import { signal } from '@angular/core';
@@ -127,6 +129,7 @@ describe('PlansWorkspaceComponent', () => {
         { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
         { provide: EChartsLoaderService, useValue: { init: vi.fn().mockResolvedValue(null), dispose: vi.fn() } },
         provideRouter([]),
+        { provide: DayWorkoutService, useValue: { takeEditorDraft: vi.fn().mockReturnValue(null), isOwner: () => true } },
         { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
         { provide: ActivatedRoute, useValue: route },
         { provide: AppUserService, useValue: { user: userSignal, user$: userSubject } },
@@ -969,6 +972,27 @@ describe('PlansWorkspaceComponent', () => {
     component.updateEditorField('sport', ActivityTypes.Swimming);
     component.updateEditorField('title', 'Undated swim recipe');
     await exportEditor('library-editor');
+  });
+
+  it('opens an unsaved AI strength draft and retries a lost save with the same complete prescription and identities', async () => {
+    const controls = defaultDayWorkoutControls('2026-09-09', 'Europe/Helsinki', ActivityTypes.StrengthTraining);
+    const strength = { version: 1 as const, exercises: [{ id: 'squat', name: 'Dumbbell squat', sets: [
+      { id: 'one', ending: { kind: 'repetitions' as const, repetitions: 8 }, externalLoadKg: 12.5, restAfterSeconds: 90 },
+    ] }] };
+    const draft = { title: 'Generated strength', strength, structure: projectStrengthWorkoutToV1({ ...strength, workoutId: 'draft', revision: 1 }) };
+    vi.mocked(TestBed.inject(DayWorkoutService).takeEditorDraft).mockReturnValueOnce({ ownerUid: user.uid, controls, draft,
+      saveRequest: { mutationId: 'generated-save', expectedRevisions: [{ scope: 'state', id: 'current', revision: 4 }],
+        operation: { kind: 'create-workout', workoutId: 'generated-workout', planId: null, localDate: controls.localDate,
+          title: draft.title, structure: draft.structure, strength, confirmPlanRangeExtension: false } } });
+    setRouteState({ mode: 'create', scope: 'standalone', date: controls.localDate });
+    const fixture = await renderPlans(true); const component = fixture.componentInstance;
+    expect(component.editor()?.strength).toEqual(strength); expect(mutate).not.toHaveBeenCalled();
+    mutate.mockRejectedValueOnce({ code: 'functions/unavailable', message: 'Lost response' });
+    await component.saveWorkout(); expect(component.editor()?.strength).toEqual(strength);
+    await component.saveWorkout();
+    expect(mutate.mock.calls[1][0]).toEqual(mutate.mock.calls[0][0]);
+    expect(mutate.mock.calls[0][0].operation).toMatchObject({ workoutId: 'generated-workout', strength });
+    expect(mutate.mock.calls[0][1]).toEqual(expect.any(Function));
   });
 
   function setRouteState(options: {

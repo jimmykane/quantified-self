@@ -262,8 +262,9 @@ describe('Firebase Hosting configuration', () => {
     // Pool-swim help covers interval chart focus, data coverage, recorded membership and keyboard header explanations.
     // Training swim help also covers Rest text priority, automatic same-Guide updates and explicit additional copies.
     // Training editor help covers explicit duration summaries, new-Rest defaults and non-blocking duration comparisons.
+    // Calendar generation help covers compact draft review, context details and safe retries (2026-10-29).
     // It applies swim units to weekly distances and the SWOLF pool-length label.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-28');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-29');
   });
 
   it('rewrites only known CSR app routes so unknown URLs can fall through to 404.html', () => {
@@ -388,7 +389,7 @@ describe('Firebase Hosting configuration', () => {
     // Startup recovery help covers the 15-second deadline and reload without clearing browser storage.
     // Checkout help covers the 20-second access check, confirmed Pro setup and recovery before another payment.
     // Event chart help covers compact option submenus and scrolling to reach every menu setting.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-28');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-29');
     // Homepage keeps the provider introduction near the hero and moves integration details after the product features.
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-28');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
@@ -453,7 +454,7 @@ describe('Firebase Hosting configuration', () => {
     // Swimming Guide help explains inline omissions, visible layout-limit warnings and the HR-target field budget.
     // Form/TSS axes fit the displayed period without changing training values or hiding the neutral baseline.
     // Swimming Automatic prioritizes CSS before HR/MET and excludes calculated power TSS.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-28');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-29');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');

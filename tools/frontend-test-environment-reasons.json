@@ -13,7 +13,7 @@
   },
   "src/app/components/benchmark/benchmark-rr.component.spec.ts": {
     "environment": "angular",
-    "reason": "Compiles the benchmark R–R panel and Material controls in TestBed to verify per-source summary bindings, lazy component-scoped analysis, chart host lifecycle, source changes, linked zoom and single-owner haptics."
+    "reason": "Compiles the benchmark R\u2013R panel and Material controls in TestBed to verify per-source summary bindings, lazy component-scoped analysis, chart host lifecycle, source changes, linked zoom and single-owner haptics."
   },
   "src/app/components/event/laps/event.card.laps.picker.spec.ts": {
     "environment": "angular",
@@ -30,6 +30,10 @@
   "src/app/components/home/home-reveal.directive.spec.ts": {
     "environment": "angular",
     "reason": "Compiles a directive host with TestBed to verify host class bindings, afterNextRender viewport handling, SSR behavior and DestroyRef teardown."
+  },
+  "src/app/components/plans/day-workout-dialog.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the Calendar generation dialog and real Material controls in TestBed to verify consent defaults, prescription review, retained retry IDs, plan extension confirmation and owner changes during pending requests."
   },
   "src/app/components/plans/suunto-swimming-guide-settings.component.spec.ts": {
     "environment": "angular",
@@ -105,7 +109,11 @@
   },
   "src/app/services/benchmark-rr-analysis.service.spec.ts": {
     "environment": "angular",
-    "reason": "Exercises worker completion, cancellation, timeout and provider teardown through the browser compatibility service, whose runtime dependency graph imports Angular Material dialog components. Component-scoped injection and destruction are covered in the R–R panel fixture suite."
+    "reason": "Exercises worker completion, cancellation, timeout and provider teardown through the browser compatibility service, whose runtime dependency graph imports Angular Material dialog components. Component-scoped injection and destruction are covered in the R\u2013R panel fixture suite."
+  },
+  "src/app/services/day-workout.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses Angular dependency injection and DestroyRef with the dialog and router to verify single-use unsaved draft handoff, Firebase owner changes and the delayed callable execution fence."
   },
   "src/app/services/history-import-progress.service.spec.ts": {
     "environment": "angular",
