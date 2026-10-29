@@ -43,15 +43,15 @@
           <mat-icon aria-hidden="true">add</mat-icon>Add workout<mat-icon iconPositionEnd aria-hidden="true">arrow_drop_down</mat-icon>
         </button>
         <mat-menu #addDayWorkoutMenu="matMenu" class="qs-menu-panel">
-            @if (dayWorkouts.canGenerate(data.day.dateKey)) {
-              <button mat-menu-item appHapticTap type="button" (click)="generateWorkout()"><mat-icon>auto_awesome</mat-icon>Generate with AI</button>
-            }
           <a mat-menu-item appHapticTap [routerLink]="['/training/plans/new']"
             [queryParams]="{ date: data.day.dateKey }" (click)="prepareWorkoutNavigation()">Plan workout</a>
           <a mat-menu-item appHapticTap [routerLink]="['/training/plans/standalone/new']"
             [queryParams]="{ date: data.day.dateKey }" (click)="prepareWorkoutNavigation()">Standalone workout</a>
           <a mat-menu-item appHapticTap [routerLink]="['/training/plans/library']"
             [queryParams]="{ date: data.day.dateKey }" (click)="prepareWorkoutNavigation()">Add from library</a>
+          @if (dayWorkouts.canGenerate(data.day.dateKey)) {
+            <button mat-menu-item appHapticTap type="button" (click)="generateWorkout()"><mat-icon>auto_awesome</mat-icon>Generate with AI</button>
+          }
         </mat-menu>
       </div>
       @if (plannedWorkoutsStatus() === 'loading') {

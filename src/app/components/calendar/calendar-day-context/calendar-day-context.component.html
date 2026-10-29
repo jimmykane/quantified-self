@@ -15,15 +15,15 @@
 
   <mat-menu #addDayWorkoutMenu="matMenu" class="qs-menu-panel">
     @if (canPlan()) {
-      @if (dayWorkouts.canGenerate(data().day.dateKey)) {
-        <button mat-menu-item appHapticTap type="button" (click)="generateWorkout()"><mat-icon>auto_awesome</mat-icon>Generate with AI</button>
-      }
       <a mat-menu-item appHapticTap [routerLink]="['/training/plans/new']"
         [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Plan workout</a>
       <a mat-menu-item appHapticTap [routerLink]="['/training/plans/standalone/new']"
         [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Standalone workout</a>
       <a mat-menu-item appHapticTap [routerLink]="['/training/plans/library']"
         [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Add from library</a>
+      @if (dayWorkouts.canGenerate(data().day.dateKey)) {
+        <button mat-menu-item appHapticTap type="button" (click)="generateWorkout()"><mat-icon>auto_awesome</mat-icon>Generate with AI</button>
+      }
     }
   </mat-menu>
 
