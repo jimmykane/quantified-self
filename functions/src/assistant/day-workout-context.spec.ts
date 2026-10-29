@@ -22,6 +22,81 @@ function session(fail?: string) {
   }) };
 }
 describe('Calendar generation context boundaries', () => {
+  const recoveryReport = {
+    sleep: { status: 'available', latestSession: { durationSeconds: 28800 } },
+    readiness: { status: 'available', score: 61, confidence: 'medium', drivers: {
+      load: { status: 'available', form: 0, rampRate: -2 },
+      hrv: { personalRange: { latestMs: 45, reason: 'outside_range', currentAverage: 42,
+        normalRange: { min: 50, max: 65 }, observationDayCount: 30 } },
+      overnightHeartRate: { status: 'available', combinedRatio: 1.1 },
+    } },
+    trainingSummary: { status: 'available', current28d: { sessionCount: 10 } },
+  };
+  function withReport(report: Record<string, unknown>) {
+    const source = session(); const original = source.callTool.getMockImplementation()!;
+    source.callTool.mockImplementation(async name => name === 'get_daily_report'
+      ? { structuredContent: report } : original(name));
+    return source;
+  }
+  it('always supplies current freshness, HRV, sleep, heart rate and readiness with optional access off', async () => {
+    const source = withReport(recoveryReport);
+    const result = await collectDayWorkoutContext(controls, now, source, vi.fn());
+    expect(source.callTool).toHaveBeenCalledWith('get_daily_report', { timeZone: 'Europe/Helsinki' });
+    expect(result.evidence.daily).toMatchObject({ dailyReport: recoveryReport,
+      localDate: '2026-10-28', recommendation: { targetDate: '2026-11-02' } });
+    // Another snapshot can still be preparing without hiding usable current signals, including zero Form.
+    expect(result.usedContext).toEqual(expect.arrayContaining(['Current freshness (Form)',
+      'Current training load ramp rate', 'Recent sleep', 'Recorded HRV', 'HRV compared with your personal range',
+      'Recorded overnight heart rate', 'Overnight heart rate compared with your personal baseline',
+      'Readiness observed on 2026-10-28', 'Training summary: recent 28 days and usual volume']));
+    expect(result.missingContext).not.toContain('Current freshness (Form) is unavailable.');
+    expect(source.callTool.mock.calls.map(call => call[0])).not.toContain('query_planned_workouts_by_date');
+  });
+  it('retains available historical loads without calling them current freshness when the daily report fails', async () => {
+    const source = session('get_daily_report'); const original = source.callTool.getMockImplementation()!;
+    source.callTool.mockImplementation(async name => {
+      if (name === 'prepare_training_metrics') return { structuredContent: { status: 'ready', readyMetricKinds: ['form'] } };
+      if (name === 'get_training_metric') return { structuredContent: { metricKind: 'form', payload: {
+        dailyLoads: [{ dayMs: Date.parse('2026-10-27T00:00Z'), load: 75 }],
+      } } };
+      return original(name);
+    });
+    const result = await collectDayWorkoutContext(controls, now, source, async () => training);
+    expect(result.usedContext).toContain('Training load history');
+    expect(result.usedContext).not.toContain('Current freshness (Form)');
+    expect(result.missingContext).toContain('Current freshness (Form) is unavailable.');
+    expect(result.missingContext).toContain('Current readiness is unavailable.');
+  });
+  it('does not claim recovery evidence from nonempty wrappers with missing values', async () => {
+    const result = await collectDayWorkoutContext(controls, now, withReport({
+      sleep: { status: 'no_completed_session', latestSession: null },
+      readiness: { status: 'no_signal', score: null, drivers: { load: { status: 'not_ready', form: null, rampRate: null },
+        hrv: { personalRange: null }, overnightHeartRate: { status: 'not_recorded' } } },
+      trainingSummary: { status: 'stale' },
+    }), async () => training);
+    expect(result.usedContext).toEqual(['Today’s recorded activities']);
+    expect(result.missingContext).toEqual(expect.arrayContaining(['Current freshness (Form) is unavailable.',
+      'Current readiness is unavailable.', 'Recent sleep is unavailable.', 'Recent HRV is unavailable.',
+      'Recent overnight heart rate is unavailable.', 'The current 28-day Training summary is unavailable.']));
+  });
+  it.each([
+    ['building_baseline', 'HRV personal baseline is still building.'],
+    ['insufficient_current', 'HRV has too few recent observations for a personal-range comparison.'],
+  ])('keeps recorded values but discloses unavailable HRV comparison: %s', async (reason, message) => {
+    const report = { ...recoveryReport, readiness: { ...recoveryReport.readiness,
+      drivers: { ...recoveryReport.readiness.drivers,
+        hrv: { personalRange: { latestMs: 45, reason } },
+        overnightHeartRate: { status: 'insufficient_baseline' },
+      } } };
+    const result = await collectDayWorkoutContext(controls, now, withReport(report), async () => training);
+    expect(result.usedContext).toContain('Recorded HRV');
+    expect(result.usedContext).not.toContain('HRV compared with your personal range');
+    expect(result.usedContext).toContain('Recorded overnight heart rate');
+    expect(result.usedContext).not.toContain('Overnight heart rate compared with your personal baseline');
+    expect(result.missingContext).toContain(message);
+    expect(result.missingContext).toContain('Overnight heart rate has too little baseline history for comparison.');
+  });
+
   it('never reads plans or notes without their independent opt-ins', async () => {
     const source = session(); const readTraining = vi.fn().mockResolvedValue(training);
     const result = await collectDayWorkoutContext(controls, now, source, readTraining);

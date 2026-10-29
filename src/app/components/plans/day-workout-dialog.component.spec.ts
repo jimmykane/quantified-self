@@ -29,7 +29,8 @@ const strength = { version: 1 as const, exercises: [{ id: 'squat', name: 'Dumbbe
 function response(requestId: string): GenerateDayWorkoutResponse {
   return { requestId, kind: 'workout', observedAt: '2026-10-28T12:00:00Z', rationale: 'Keep this controlled.',
     draft: { title: 'Strength session', strength, structure: projectStrengthWorkoutToV1({ ...strength, workoutId: 'draft', revision: 1 }), estimatedMinutes: { minimum: 20, maximum: 30 } },
-    usedContext: ['Previously planned strength'], missingContext: ['No usable existing Feeling/RPE feedback was found.'],
+    usedContext: ['Previously planned strength', 'Current freshness (Form)', 'Recorded HRV'],
+    missingContext: ['No usable existing Feeling/RPE feedback was found.', 'HRV personal baseline is still building.'],
     previousLoads: [{ exerciseId: 'squat', localDate: '2026-10-25' }] };
 }
 describe('DayWorkoutDialogComponent', () => {
@@ -133,6 +134,13 @@ describe('DayWorkoutDialogComponent', () => {
     const element = fixture.nativeElement as HTMLElement;
     const button = (label: string) => [...element.querySelectorAll('button')].find(item => item.textContent?.trim() === label)!;
     expect(element.querySelector('fieldset')!.hidden).toBe(false);
+    const personalization = element.querySelector('#day-workout-personalization')!;
+    expect(personalization.closest('[hidden]')).toBeNull();
+    expect(personalization.closest('#day-workout-more')).toBeNull();
+    for (const signal of ['freshness', 'training load', 'HRV', 'sleep', 'overnight heart rate', 'readiness', 'Feeling/RPE']) {
+      expect(personalization.textContent).toContain(signal);
+    }
+    expect(component.controls()).toMatchObject({ trainingContext: false, timelineContext: false });
     expect(element.querySelector('input[type="date"]')).toBeNull();
     expect(element.querySelector('.review-destination')!.textContent).toContain('Oct 28, 2026');
     expect(element.querySelector('mat-dialog-actions')!.textContent).toContain('Generate workout');
@@ -148,6 +156,9 @@ describe('DayWorkoutDialogComponent', () => {
     expect(context.hidden).toBe(true);
     haptics.selection.mockClear(); (element.querySelector('.summary-disclosure-control') as HTMLButtonElement).click(); fixture.detectChanges();
     expect(context.hidden).toBe(false); expect(context.textContent).toContain('No usable existing Feeling/RPE');
+    expect(context.textContent).toContain('Current freshness (Form)');
+    expect(context.textContent).toContain('Recorded HRV');
+    expect(context.textContent).toContain('HRV personal baseline is still building.');
     expect(haptics.selection).toHaveBeenCalledOnce();
     component.set('minutes', 45, false); fixture.detectChanges();
     expect(component.result()).toBeNull(); expect(element.querySelector('fieldset')!.hidden).toBe(false);

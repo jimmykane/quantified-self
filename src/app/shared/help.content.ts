@@ -337,7 +337,8 @@ When a numeric step allows **early Lap**, the summary labels its totals as **pre
 ## Generate a workout for a day
 
 - In Calendar or the Dashboard calendar, select today or a future day (up to 365 days ahead), then **Add workout → Generate with AI**. It is also available in the day sheet and full day page. Search and choose one sport, then set time, purpose and destination (defaults: **30 minutes**, fitting active plan or Standalone).
-- **More options** adds timing, targets, structure and separate default-off Training/Timeline context. Readiness reflects now; missing feedback stays unknown.
+- Freshness (Form), training load and ramp rate, HRV against your personal range, sleep, overnight heart rate, readiness and recent activities are checked automatically when available, along with existing Feeling/RPE. **Context → Show details** lists available evidence and gaps, including an HRV baseline that is still building. Readiness reflects now; future suggestions depend on checking recovery again closer to the day. Missing feedback stays unknown.
+- **More options** adds timing, targets, structure and separate default-off Training-plan/Timeline context. These optional choices do not turn off the automatic freshness and recovery checks. Available time is a budget; recovery evidence may lead to a shorter, easier session or rest.
 - Strength offers equipment, focus and **previously planned** loads, not verified performed weights. Duration is an estimate.
 - Review all steps/sets. **Change options** reopens settings; changes require regeneration. **Context → Show details** explains evidence. Choose **Edit workout**, **Generate again**, or **Add workout**. Rest saves nothing.
 - Generation uses the Assistant allowance; exact retries are free. After a lost save reply, keep the dialog open and **Retry Add**. Conflicts retain the draft. Enabled plan sync may send automatically.

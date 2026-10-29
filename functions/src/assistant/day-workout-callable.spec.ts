@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { defaultDayWorkoutControls } from '../../../shared/day-workout';
-import { runGenerateDayWorkout, type DayWorkoutDependencies } from './day-workout-callable';
+import { DAY_WORKOUT_SYSTEM, runGenerateDayWorkout, type DayWorkoutDependencies } from './day-workout-callable';
 import type { AssistantQuotaReservation } from './quota';
 vi.mock('../utils', () => ({ ALLOWED_CORS_ORIGINS: [], enforceAppCheck: (context: { app?: unknown }) => {
   if (!context.app) throw new Error('App Check required');
@@ -20,6 +20,17 @@ function dependencies(): DayWorkoutDependencies {
 const request = { requestId: 'request-1234', controls: defaultDayWorkoutControls('2026-10-28', 'UTC') };
 const auth = { auth: { uid: 'owner' }, app: {} };
 describe('generateDayWorkout callable', () => {
+  it('instructs generation to use automatic recovery evidence without treating missing or future signals as known', () => {
+    for (const signal of ['freshness (Form)', 'ramp rate', 'sleep duration/quality', 'HRV personalRange',
+      'overnightHeartRate', 'readiness score/confidence', 'activities already completed today']) {
+      expect(DAY_WORKOUT_SYSTEM).toContain(signal);
+    }
+    expect(DAY_WORKOUT_SYSTEM).toContain('even when optional Training-plan or Timeline context is off');
+    expect(DAY_WORKOUT_SYSTEM).toContain('never assume higher is always better');
+    expect(DAY_WORKOUT_SYSTEM).toContain('time budget, not a requirement to fill it');
+    expect(DAY_WORKOUT_SYSTEM).toContain('conditional on rechecking recovery');
+    expect(DAY_WORKOUT_SYSTEM).toContain('do not claim an unavailable signal');
+  });
   it('checks authentication, App Check and legal acceptance before any context/model call', async () => {
     const deps = dependencies();
     await expect(runGenerateDayWorkout(request, {}, deps)).rejects.toThrow(/Sign in/);

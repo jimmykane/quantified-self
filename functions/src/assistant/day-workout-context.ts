@@ -136,9 +136,40 @@ export async function collectDayWorkoutContext(controls: DayWorkoutControls, now
   const daily = await collectDailyWorkoutContext({ now, timeZone: controls.timeZone,
     timelineNotesEnabled: controls.timelineContext, trainingPlansEnabled: controls.trainingContext, read,
     request: { targetDate: controls.localDate, hypotheticalWithoutPlan: false, noAdditionalWorkoutToday: false } });
-  if (daily.trainingSnapshots.preparationStatus === 'ready') usedContext.push('Current Training load and the 28-day summary');
-  else missingContext.push('Training snapshots are missing or preparing.');
-  if (Object.keys(daily.dailyReport).length) usedContext.push(`Readiness and recovery observed on ${daily.localDate}`);
+  // The daily report is the same current, validated recovery evidence used by Assistant chat.
+  // Plan/Timeline opt-ins do not disable these core signals. A ready wrapper alone is not a value.
+  const report = daily.dailyReport;
+  const readiness = record(report.readiness);
+  const drivers = record(readiness.drivers);
+  const load = record(drivers.load);
+  const hasNumber = (value: unknown): boolean => typeof value === 'number' && Number.isFinite(value);
+  const describe = (available: boolean, label: string, missing: string) =>
+    (available ? usedContext : missingContext).push(available ? label : missing);
+  describe(load.status === 'available' && hasNumber(load.form),
+    'Current freshness (Form)', 'Current freshness (Form) is unavailable.');
+  describe(load.status === 'available' && hasNumber(load.rampRate),
+    'Current training load ramp rate', 'Current training load ramp rate is unavailable.');
+  describe(records(record(record(daily.trainingSnapshots.form).payload).dailyLoads).length > 0,
+    'Training load history', 'Training load history is unavailable.');
+  describe(record(report.trainingSummary).status === 'available',
+    'Training summary: recent 28 days and usual volume', 'The current 28-day Training summary is unavailable.');
+  describe(readiness.status === 'available' && hasNumber(readiness.score),
+    `Readiness observed on ${daily.localDate}`, 'Current readiness is unavailable.');
+  describe(record(report.sleep).status === 'available',
+    'Recent sleep', 'Recent sleep is unavailable.');
+  const hrv = record(record(drivers.hrv).personalRange);
+  const hasHrv = hasNumber(hrv.latestMs);
+  describe(hasHrv, 'Recorded HRV', 'Recent HRV is unavailable.');
+  if (hasHrv) {
+    if (hrv.reason === 'building_baseline') missingContext.push('HRV personal baseline is still building.');
+    else if (hrv.reason === 'insufficient_current') missingContext.push('HRV has too few recent observations for a personal-range comparison.');
+    else usedContext.push('HRV compared with your personal range');
+  }
+  const overnightHeartRate = record(drivers.overnightHeartRate);
+  describe(overnightHeartRate.status === 'available' || overnightHeartRate.status === 'insufficient_baseline',
+    'Recorded overnight heart rate', 'Recent overnight heart rate is unavailable.');
+  if (overnightHeartRate.status === 'available') usedContext.push('Overnight heart rate compared with your personal baseline');
+  else if (overnightHeartRate.status === 'insufficient_baseline') missingContext.push('Overnight heart rate has too little baseline history for comparison.');
   if (daily.activitiesToday.scanComplete) usedContext.push('Today’s recorded activities');
   if (!controls.timelineContext) missingContext.push('Timeline notes: access is off.');
   else if (daily.timelineNotes.scanComplete) usedContext.push('Existing Timeline notes, with their actual dates');

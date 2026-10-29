@@ -732,8 +732,22 @@ an exact, unambiguous saved athlete reference; absent references lead to effort 
 thresholds. Rest returns no workout. A strength planning-time range is labelled as an AI estimate for review only;
 repetition endings, rests and unknown canonical duration remain unchanged.
 
-The existing daily collector supplies current readiness, recovery, Training snapshots, a 28-day recording pattern,
-and actual Feeling/RPE minimum/maximum buckets. Local-date normalization includes the entire first local day;
+The existing daily collector supplies the same current recovery evidence used by Assistant chat, Training snapshots,
+a 28-day recording pattern, and actual Feeling/RPE minimum/maximum buckets. The modal names the automatic inputs
+before generation: freshness (Form), training load, HRV, sleep, overnight heart rate, readiness and recent activities.
+These reads run independently of the optional Training-plan and Timeline choices. The daily report owns current Form
+and ramp rate (including its existing current-day/fallback rules), sleep and comparison, HRV's personal range,
+overnight heart-rate baseline, readiness score/confidence, and recent/usual Training volume. No extra reads or
+new feedback fields are added. The generation prompt explicitly uses these signals to choose intensity, volume or rest,
+compares the requested sport with its recorded baseline where available, treats minutes as a budget, and explains
+which evidence affected the choice. It does not count readiness twice with its own drivers or assume higher HRV
+always means better recovery. Future suggestions require rechecking recovery closer to the selected day.
+
+Review context names available signals separately from missing values. A nonempty daily-report object or overall
+snapshot preparation status cannot establish readiness/freshness availability. Zero Form and negative ramp rate remain
+valid; HRV or overnight heart-rate readings with insufficient baseline remain recorded evidence, with the unavailable
+comparison disclosed. Historical load snapshots are not substituted for missing current freshness.
+Local-date normalization includes the entire first local day;
 empty metric buckets stay missing even when activities matched the range. Imported and QS-edited feedback are
 not distinguishable here. This adds no feedback fields, punctuality/adherence score, check-in, or inferred skipped
 training. Current readiness is explicitly an observation, not a forecast for a future workout.
@@ -784,7 +798,10 @@ unchanged. Generated workouts persist the same canonical root and full strength 
 Review-note rendering, compact UI disclosures and private cache/quota fixes preserve these same public contracts
 and read-back coverage. The shared day-context entry-point menu has no MCP wire or authority impact: it opens the
 same owner/date-guarded generation service. Reusing the Activities sport picker also changes no supported recipe
-sports, MCP read coverage, scopes or proposal/confirmation contracts. Presentation changes do not alter stored prescriptions, consent or provider delivery.
+sports, MCP read coverage, scopes or proposal/confirmation contracts. Explicit recovery guidance and signal-level
+availability use the existing validated daily-report payload only; no public schema, calculation, read coverage or
+consent changes are needed. The same canonical prescription and MCP read-back tests still apply. Presentation changes
+do not alter stored prescriptions, consent or provider delivery.
 No read coverage is deferred and no public generation tool is introduced. The private callable is registered in
 full/lazy entrypoints, endpoint metadata checks, the shared manifest and least-privilege secret policy. Release the
 backend endpoint before its frontend under separate deployment approval; no new Rules, index, secret value or
