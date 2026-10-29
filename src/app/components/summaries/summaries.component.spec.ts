@@ -791,6 +791,7 @@ describe('SummariesComponent', () => {
     component.eventUser = { uid: 'owner-user' } as any;
     component.showActions = false;
 
+    mockUserService.user.set(component.user);
     fixture.detectChanges();
 
     expect(component.isOwnerDashboard).toBe(true);
@@ -811,6 +812,7 @@ describe('SummariesComponent', () => {
     } as any;
     component.showActions = true;
 
+    mockUserService.user.set(component.user);
     fixture.detectChanges();
 
     expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-today-greeting')?.textContent?.trim())
@@ -859,6 +861,7 @@ describe('SummariesComponent', () => {
       settings: { dashboardSettings: { tiles: [formTile], showTodaySummary: showToday } },
     } as unknown as SummariesComponent['user'];
     component.eventUser = { uid: 'owner-user' } as SummariesComponent['eventUser'];
+    mockUserService.user.set(component.user);
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
     const header = host.querySelector('.dashboard-summary-header');
@@ -882,7 +885,7 @@ describe('SummariesComponent', () => {
       expect(host.querySelector('.dashboard-summary-header')).toBe(header);
       expect(host.querySelector('.dashboard-summary-status')).toBe(status);
       expect(host.querySelector('.qs-page-header__subtitle')?.textContent).toBe(date);
-      expect(status?.getAttribute('role')).toBe(effectiveBanner?.type === 'warning' ? 'alert' : 'status');
+      expect(status?.getAttribute('role')).toBe(effectiveBanner ? (effectiveBanner.type === 'warning' ? 'alert' : 'status') : null);
       expect(!!status?.querySelector('mat-spinner')).toBe(effectiveBanner?.type === 'pending');
       if (showToday) {
         expect(host.querySelector('#dashboard-today-title')?.textContent).toBe('Today');
@@ -909,6 +912,7 @@ describe('SummariesComponent', () => {
     fixture.componentRef.setInput('user', previousUser);
     fixture.componentRef.setInput('eventUser', previousUser);
     fixture.componentRef.setInput('showActions', true);
+    mockUserService.user.set(previousUser);
     fixture.detectChanges();
 
     const currentUser = {
@@ -1279,7 +1283,7 @@ describe('SummariesComponent', () => {
     expect(template).not.toContain('dashboard-health-link');
     expect(template).toContain('class="dashboard-today-calendar-button"');
     expect(template).toContain('class="dashboard-summary-heading"');
-    expect(template).toContain('class="dashboard-today-greeting"');
+    expect(template).toContain('[greeting]="todayGreeting"');
     expect(template).not.toContain('class="dashboard-calendar-link"');
     expect(styles).toContain('@media (max-width: 600px)');
     expect(styles).toContain('.dashboard-derived-metrics-retry-label');
@@ -1696,7 +1700,7 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('app-dashboard-daily-briefing')).toBeNull();
   });
 
-  it('integrates At a glance below the greeting and toggles existing Today details without extra readers', () => {
+  it('integrates At a glance into the greeting sentence and toggles existing Today details without extra readers', () => {
     const savedTiles = [getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile];
     component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: savedTiles } } } as SummariesComponent['user'];
     mockUserService.user.set(component.user);
@@ -1749,7 +1753,7 @@ describe('SummariesComponent', () => {
     const host = fixture.nativeElement as HTMLElement;
     fixture.detectChanges();
     const summary = host.querySelector('app-dashboard-daily-briefing')!;
-    expect(summary.querySelector('section')?.getAttribute('aria-label')).toBe('At a glance');
+    expect(summary.querySelector('[aria-label="At a glance"]')?.getAttribute('aria-label')).toBe('At a glance');
     expect(summary.querySelector('.health-change-coverage')).toBeNull();
     expect(host.querySelector('.dashboard-summary-heading')?.classList.contains('dashboard-summary-heading--with-recovery')).toBe(true);
     expect(summary.querySelectorAll('button')).toHaveLength(1);
@@ -1780,7 +1784,7 @@ describe('SummariesComponent', () => {
     fixture.detectChanges();
     const summary = (fixture.nativeElement as HTMLElement).querySelector('app-dashboard-daily-briefing')!;
     expect(summary.querySelector('h2')).toBeNull();
-    expect(summary.querySelector('[role="status"]')?.textContent).toBe('Training state is Balanced, readiness is Ready, and 7-day HRV is within your usual range.');
+    expect(summary.querySelector('[role="status"]')?.textContent).toBe('training state is Balanced, readiness is Ready, and 7-day HRV is within your usual range.');
     expect(summary.querySelector('[role="status"]')?.textContent).not.toContain('/100');
     expect(summary.querySelectorAll('button')).toHaveLength(1);
     expect(summary.querySelector('.health-change-scope')).toBeNull();
@@ -1802,7 +1806,7 @@ describe('SummariesComponent', () => {
     }, { label: 'Balanced', caption: 'Stable load', scalePosition: 2, scaleTone: 'positive' }, 'available');
     fixture.detectChanges();
     const summary = (fixture.nativeElement as HTMLElement).querySelector('app-dashboard-daily-briefing')!;
-    expect(summary.querySelector('[role="status"]')?.textContent).toBe(`Training state is Balanced, readiness is ${label}, and 7-day HRV is within your usual range.`);
+    expect(summary.querySelector('[role="status"]')?.textContent).toBe(`training state is Balanced, readiness is ${label}, and 7-day HRV is within your usual range.`);
     expect(summary.querySelectorAll('button')).toHaveLength(1);
     expect(summary.querySelector('#dashboard-today-changes-details')).toBeNull();
     expect(summary.querySelector('dl')).toBeNull();

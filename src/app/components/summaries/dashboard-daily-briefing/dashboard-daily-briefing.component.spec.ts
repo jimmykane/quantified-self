@@ -25,12 +25,23 @@ describe('Dashboard daily briefing', () => {
   it('renders one colored sentence as an accessible Today details control without duplicate metrics', () => {
     const { host, haptics } = render();
     expect(host.querySelector('[role=status]')?.textContent).toBe('Readiness is Mixed.');
-    expect(host.querySelector('section')?.getAttribute('aria-label')).toBe('At a glance');
-    expect(host.querySelector('section')?.getAttribute('data-tone')).toBe('caution');
+    expect(host.querySelector('[aria-label="At a glance"]')?.getAttribute('aria-label')).toBe('At a glance');
+    expect(host.querySelector('[aria-label="At a glance"]')?.getAttribute('data-tone')).toBe('caution');
     expect(host.querySelector('h2, h3, dl')).toBeNull();
     expect(host.querySelector('button')?.getAttribute('aria-expanded')).toBe('false');
     expect(host.querySelector('button')?.getAttribute('aria-controls')).toBe('dashboard-today-details');
     expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Show Today details: Readiness is Mixed.');
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('joins the greeting and assessment in one continuous sentence with no separate row or status icon', () => {
+    const { fixture, host, haptics } = render();
+    fixture.componentRef.setInput('greeting', 'Good morning, Morgan'); fixture.detectChanges();
+    const button = host.querySelector('button')!;
+    expect(button.textContent?.trim()).toBe('Good morning, Morgan — readiness is Mixed.');
+    expect(button.querySelector('.dashboard-today-greeting')?.textContent).toBe('Good morning, Morgan');
+    expect(button.querySelector('[role=status]')?.textContent).toBe('readiness is Mixed.');
+    expect(host.querySelector('section, p, br, mat-icon, .dashboard-briefing-dot')).toBeNull();
+    expect(button.getAttribute('aria-label')).toBe('Show Today details: Good morning, Morgan — readiness is Mixed.');
     expect(haptics.selection).not.toHaveBeenCalled();
   });
   it('requests disclosure once per accepted tap and reflects the parent’s expanded state', () => {
@@ -45,15 +56,15 @@ describe('Dashboard daily briefing', () => {
   });
   it('does not render another owner and clears on sign-out', () => {
     const { fixture, authenticated, host } = render({ ...owner, uid: 'other' });
-    expect(host.querySelector('section')).toBeNull();
-    fixture.componentRef.setInput('user', owner); fixture.detectChanges(); expect(host.querySelector('section')).not.toBeNull();
-    authenticated.set(null); fixture.detectChanges(); expect(host.querySelector('section')).toBeNull();
+    expect(host.querySelector('[aria-label="At a glance"]')).toBeNull();
+    fixture.componentRef.setInput('user', owner); fixture.detectChanges(); expect(host.querySelector('[aria-label="At a glance"]')).not.toBeNull();
+    authenticated.set(null); fixture.detectChanges(); expect(host.querySelector('[aria-label="At a glance"]')).toBeNull();
   });
   it('updates from Today assessment resets without keeping a stale caution message', () => {
     const { fixture, host, haptics } = render();
     fixture.componentRef.setInput('signals', evidence.map(signal => ({ ...signal, state: 'loading' }))); fixture.detectChanges();
     expect(host.querySelector('[role=status]')?.textContent).toBe('Today’s training and recovery signals are still loading.');
-    expect(host.querySelector('section')?.getAttribute('data-tone')).toBe('neutral');
+    expect(host.querySelector('[aria-label="At a glance"]')?.getAttribute('data-tone')).toBe('neutral');
     expect(haptics.selection).not.toHaveBeenCalled();
   });
 });

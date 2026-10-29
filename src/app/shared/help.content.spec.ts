@@ -1045,11 +1045,11 @@ describe('help.content', () => {
     expect(health).toContain('**All** starts with **Your recent Health** in this order');
     expect(health).toContain('**Your recovery** appears above the existing metrics');
     expect(health).toContain('Dashboard **Today** uses a compact **At a glance** instead: one sentence');
-    expect(health).toContain('It appears directly beneath your greeting, with a colored status dot and no separate heading or card');
+    expect(health).toContain('It continues your greeting as one sentence, with the assessment in its status color and no separate line, status dot or card');
     expect(health).not.toContain('At a glance is currently hidden');
     expect(health).toContain('does not consume your AI quota');
     expect(health).toContain('On Health, comparison counts and outside-range readings stay visible');
-    expect(health).toContain('Dashboard **At a glance** keeps one sentence in the greeting');
+    expect(health).toContain('Dashboard **At a glance** continues the greeting in one sentence');
     expect(health).toContain('Missing or unavailable evidence takes priority over a reassuring HRV result');
     expect(health).toContain('Select the sentence to show or hide Today’s Training state, Readiness, scores and supporting context');
     expect(health).toContain('those details start closed');

@@ -1,13 +1,12 @@
 @if (owner()) {
-  <section aria-label="At a glance" [attr.data-tone]="briefing().tone">
+  <span role="group" aria-label="At a glance" [attr.data-tone]="briefing().tone">
     <button mat-button type="button" class="dashboard-briefing-action"
-      [attr.aria-label]="(detailsExpanded() ? 'Hide' : 'Show') + ' Today details: ' + briefing().headline"
+      [attr.aria-label]="(detailsExpanded() ? 'Hide' : 'Show') + ' Today details: ' + fullSentence()"
       [attr.aria-expanded]="detailsExpanded()" [attr.aria-controls]="detailsId()" (click)="toggleDetails()">
-      <span class="dashboard-briefing-content">
-        <span class="dashboard-briefing-dot" aria-hidden="true"></span>
-        <span class="dashboard-briefing-sentence" role="status" aria-atomic="true">{{ briefing().headline }}</span>
-        <mat-icon aria-hidden="true">{{ detailsExpanded() ? 'expand_less' : 'expand_more' }}</mat-icon>
-      </span>
+      @if (greeting()) {
+        <span class="dashboard-today-greeting">{{ greeting() }}</span><span aria-hidden="true"> — </span>
+      }
+      <span class="dashboard-briefing-sentence" role="status" aria-atomic="true">{{ sentence() }}</span>
     </button>
-  </section>
+  </span>
 }

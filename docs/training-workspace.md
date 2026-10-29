@@ -5548,8 +5548,9 @@ provider action changes. No reparse, migration, registered-client refresh or bac
 
 #### Dashboard daily briefing
 
-The owner-only **At a glance** is one short colored sentence directly beneath the **Today** greeting, with a decorative
-status dot and no separate heading or card. The Material text button opens the existing Training state, Readiness,
+The owner-only **At a glance** continues the **Today** greeting in one sentence and one Material text button. The
+greeting stays neutral and the assessment takes its existing status color. Both are inline, separated by an em dash,
+with natural wrapping and no separate row, status dot, chevron, heading or card. The button opens Training state, Readiness,
 scores and source context below it. These mounted details start closed and reset on owner changes, without persistence.
 The control exposes its expanded state and target, preserves live status text, and owns one selection haptic per tap.
 The sentence wraps naturally on phones. Saved chart configuration stays unchanged; hiding Today also unmounts the sentence.
@@ -5566,7 +5567,7 @@ assessments, missing evidence and loading before an ordinary HRV range result. A
 It does not infer causes, prescribe training, add thresholds or introduce a new score. Seven-day HRV is explicitly named
 so it cannot be confused with the latest nightly value. Missing today's sleep remains pending, not a positive assessment.
 
-The sentence and status dot use existing theme tokens: positive only with available Training/Ready assessments and no missing
+The assessment text uses existing theme tokens: positive only with available Training/Ready assessments and no missing
 or attention signal, caution for an existing attention/outside-range assessment, error for unavailable evidence, and
 neutral for loading or insufficient evidence. Missing/unavailable inputs are stated rather than hidden behind a reassuring
 HRV result. All-loading and empty states get one neutral message. Text carries the meaning independently of color.
