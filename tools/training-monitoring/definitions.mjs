@@ -58,7 +58,7 @@ export function buildTrainingMonitoring(project, channel) {
   metric('queue_probe_failures', `${delivery} jsonPayload.telemetryVersion=1 (jsonPayload.event="queue_health_unavailable" OR (jsonPayload.event="queue_health" AND jsonPayload.immediateAgeKnown=false))`,
     'Unavailable or incomplete queue observations; never interpreted as an empty queue.');
   metric('dispatch_failures', `${delivery} jsonPayload.event="dispatch_failure"`, 'Failed enqueue reservations.');
-  metric('lifecycle_failures', `${base} jsonPayload.message="[TrainingDeliveryLifecycle]" jsonPayload.event="failed" jsonPayload.trigger=("connection" OR "entitlement" OR "guide-settings")`,
+  metric('lifecycle_failures', `${base} jsonPayload.message="[TrainingDeliveryLifecycle]" jsonPayload.event="failed" jsonPayload.trigger=("connection" OR "entitlement" OR "guide-settings" OR "owner-units")`,
     'Failed reconciliation wake-ups; successful lifecycle skips are excluded.', ['trigger']);
   // Firebase logger.error adds an Error stack to message; substring matching
   // preserves sweep_failed detection without extracting the stack into labels.

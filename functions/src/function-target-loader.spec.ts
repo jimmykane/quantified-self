@@ -119,6 +119,7 @@ describe('function target loader', () => {
       'onTrainingDeliveryConnectionChanged',
       'onTrainingDeliveryEntitlementChanged',
       'onTrainingDeliveryGuideSettingsChanged',
+      'onTrainingDeliveryOwnerUnitsChanged',
       'onDashboardDerivedMetricsActivityWrite',
       'onDashboardDerivedMetricsEventWrite',
       'onDashboardDerivedMetricsSleepWrite',

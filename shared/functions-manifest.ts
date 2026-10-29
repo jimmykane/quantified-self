@@ -153,6 +153,7 @@ export const FUNCTIONS_MANIFEST = {
     onTrainingDeliveryQueued: { name: 'onTrainingDeliveryQueued', region: 'europe-west2' },
     onTrainingDeliveryConnectionChanged: { name: 'onTrainingDeliveryConnectionChanged', region: 'europe-west2' },
     onTrainingDeliveryEntitlementChanged: { name: 'onTrainingDeliveryEntitlementChanged', region: 'europe-west2' },
+    onTrainingDeliveryOwnerUnitsChanged: { name: 'onTrainingDeliveryOwnerUnitsChanged', region: 'europe-west2' },
     getTrainingScheduleHistory: { name: 'getTrainingScheduleHistory', region: 'europe-west2' },
     previewTrainingScheduleRestore: { name: 'previewTrainingScheduleRestore', region: 'europe-west2' },
     restoreTrainingScheduleRevision: { name: 'restoreTrainingScheduleRevision', region: 'europe-west2' },

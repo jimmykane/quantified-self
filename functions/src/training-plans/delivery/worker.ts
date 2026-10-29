@@ -98,7 +98,10 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
     if (!ledger.attempt) {
       const kind = intent.desired === 'present' && ledger.acceptedDigest !== intent.digest ? 'upsert'
         : intent.desired === 'absent' && (ledger.actual || ledger.repair) ? 'remove' : null;
-      if (!kind) { writeDelivery(runtime, tx, uid, ledger); tx.delete(jobRef); return null; }
+      if (!kind) {
+        writeDelivery(runtime, tx, uid, ledger); tx.delete(jobRef);
+        stageTrainingDeliveryReconciliation(tx, db, uid, [ledger.workoutId]); return null;
+      }
       if (kind === 'upsert' && ledger.repair?.continuation) {
         const policy = transport.inspection?.policy;
         if (!ledger.actual || !policy || !canExecuteDeliveryRepair(policy, ledger.repair)) {
@@ -304,9 +307,12 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       }
       ledger.updatedAtMs = runtime.now();
       writeDelivery(runtime, tx, uid, ledger);
+      // Protective provider readback can discover completion/a past date without a
+      // successful write. Reconcile that new evidence even if the operation then defers.
+      if (protectiveReadback) stageTrainingDeliveryReconciliation(tx, db, uid, [ledger.workoutId]);
       if (complete) {
         tx.delete(jobRef);
-        stageTrainingDeliveryReconciliation(tx, db, uid);
+        stageTrainingDeliveryReconciliation(tx, db, uid, [ledger.workoutId]);
       }
       return true;
     }), { mapping: diagnosticMapping, phase: diagnosticPhase });
@@ -330,7 +336,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       }
       tx.set(ledgerRef.collection('attempts').doc(operation.id), { state: partial ? 'superseded' : 'not-accepted' }, { merge: true });
       writeDelivery(runtime, tx, uid, ledger);
-      stageTrainingDeliveryReconciliation(tx, db, uid);
+      stageTrainingDeliveryReconciliation(tx, db, uid, [ledger.workoutId]);
     });
   };
 
@@ -456,6 +462,9 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       if (operation.repair && ledger.verification) ledger.verification.state = failure.kind === 'deferred' ? 'deferred'
         : operation.repair.manualReplacement ? 'unknown' : 'confirmed_missing';
       writeDelivery(runtime, tx, uid, ledger);
+      // Admission may have changed while a request/recovery was running (for example
+      // grace expiry). Refresh this workout's public state without an account scan.
+      stageTrainingDeliveryReconciliation(tx, db, uid, [ledger.workoutId]);
       if (ledger.status === 'retrying') tx.set(jobRef, { uid, kind: 'delivery', deliveryId: id,
         provider: ledger.provider, destinationKey: ledger.destinationKey, operationKind: operation.kind,
         dueAtMs: ledger.retryAtMs, dispatchToken: randomUUID() });

@@ -1,6 +1,6 @@
 import * as admin from 'firebase-admin';
 import { isTrainingProviderDeliveryEnabled } from '../../../../shared/training-delivery-rollout';
-import { hasProAccess } from '../../utils';
+import { getUserRoleAndGracePeriod, hasProAccess } from '../../utils';
 import type { DeliveryOperation, DeliveryRuntime, TrainingDeliveryTransport } from './contracts';
 import { readTrainingDeliveryAuthority } from './connection';
 import { GarminTrainingTransport } from './garmin/transport';
@@ -91,6 +91,12 @@ function wahooTransport(db: admin.firestore.Firestore, uid: string): TrainingDel
 export function productionDeliveryRuntime(db = admin.firestore()): DeliveryRuntime {
   return {
     db, now: Date.now, hasPro: hasProAccess,
+    entitlement: async uid => {
+      const { role, gracePeriodUntil } = await getUserRoleAndGracePeriod(uid);
+      const graceActive = !!gracePeriodUntil && gracePeriodUntil > Date.now();
+      return { hasPro: role === 'pro' || graceActive,
+        ...(role !== 'pro' && graceActive ? { nextChangeAtMs: gracePeriodUntil } : {}) };
+    },
     requestNotBefore: (tx, uid, provider, destination) => provider === 'garmin'
       ? productionRequestCapacity(db, uid, provider, destination, GARMIN_PRODUCTION_WINDOWS).notBefore(tx)
       : provider === 'wahoo' ? productionRequestCapacity(db, uid, provider, destination, WAHOO_PRODUCTION_WINDOWS).notBefore(tx) : Promise.resolve(0),

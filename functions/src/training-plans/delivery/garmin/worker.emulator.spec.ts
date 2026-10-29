@@ -102,6 +102,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     }, () => now, inspectionPolicy());
     const policy = new GarminTrainingTransport(server.request, () => now);
     runtime = { ...productionDeliveryRuntime(db), now: () => now, hasPro: async () => pro,
+      entitlement: async () => ({ hasPro: pro }),
       transport: provider => provider !== 'garmin' ? null : {
         mappingVersion: policy.mappingVersion, horizonDays: policy.horizonDays,
         inspection: { policy: inspectionPolicy(), inspect: (request, guard) => bind(request).inspection.inspect(request, guard) },

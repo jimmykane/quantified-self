@@ -185,7 +185,7 @@ export { previewTrainingProviderDelivery, mutateTrainingProviderDelivery } from 
 export { processTrainingDeliveryTask, onTrainingDeliveryQueued, dispatchTrainingDelivery } from './training-plans/delivery/tasks';
 export { reconcileTrainingPlanCleanup, reconcileTrainingWorkoutExpiry } from './training-plans/cleanup-worker';
 export { reconcileTrainingBulkShift } from './training-plans/bulk-shift-worker';
-export { onTrainingDeliveryConnectionChanged, onTrainingDeliveryEntitlementChanged, onTrainingDeliveryGuideSettingsChanged } from './training-plans/delivery/lifecycle';
+export { onTrainingDeliveryConnectionChanged, onTrainingDeliveryEntitlementChanged, onTrainingDeliveryGuideSettingsChanged, onTrainingDeliveryOwnerUnitsChanged } from './training-plans/delivery/lifecycle';
 export {
   onDashboardDerivedMetricsActivityWrite,
   onDashboardDerivedMetricsEventWrite,

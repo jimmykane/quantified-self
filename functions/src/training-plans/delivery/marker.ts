@@ -9,6 +9,10 @@ import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
 import type { DeliveryDocumentReader } from './reconciliation-reads';
 
 const PAST_CLEANUP = 'pastCleanup';
+export const RECONCILIATION_TARGET_LIMIT = 25;
+export function reconciliationTargets(db: Firestore, uid: string) {
+  return db.collection('users').doc(uid).collection(DELIVERY_STATE).doc('current').collection('reconciliationTargets');
+}
 
 function pastCleanupRef(db: Firestore, uid: string, scope: 'plan' | 'workout', scopeId: string) {
   return db.collection('users').doc(uid).collection(DELIVERY_STATE).doc('current')
@@ -74,9 +78,18 @@ export function reconciliationJobId(uid: string): string {
   return `reconcile_${createHash('sha256').update(uid).digest('hex')}`;
 }
 /** Write-only transactional outbox; never assembles provider payloads in an authoring transaction. */
-export function stageTrainingDeliveryReconciliation(tx: Transaction, db: Firestore, uid: string): void {
+export function stageTrainingDeliveryReconciliation(tx: Transaction, db: Firestore, uid: string,
+  workoutIds?: readonly string[]): void {
+  const targets = [...new Set(workoutIds ?? [])];
+  const targeted = targets.length > 0 && targets.length <= RECONCILIATION_TARGET_LIMIT;
+  if (targeted) for (const workoutId of targets) {
+    tx.set(reconciliationTargets(db, uid).doc(workoutId), {
+      generation: FieldValue.increment(1), requestedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  }
   tx.set(db.collection(DELIVERY_QUEUE).doc(reconciliationJobId(uid)), {
     uid, kind: 'reconcile', generation: FieldValue.increment(1), dueAtMs: 0,
+    ...(targeted ? { targetedGeneration: FieldValue.increment(1) } : {}),
   }, { merge: true });
 }
 export function invalidateTrainingWorkoutConsent(tx: Transaction, db: Firestore, uid: string, workoutId: string): void {

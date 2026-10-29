@@ -2410,8 +2410,12 @@ Data ownership:
 `trainingDeliveryQueue` is a top-level server-only collection of compact **leaf** jobs. Schedule mutations, restore, plan
 deletion and delivery commands write a reconciliation marker in the same transaction, not a batch of provider payloads.
 The reconciler scans 25 current workouts per page (up to four destinations each), then 25 existing ledger identities per
-page, including deleted/historical sources. Each page rechecks schedule/settings revisions, plan-deletion locks and the
-account-deletion fence; obsolete scans restart. At most 100 compact ledgers/projections/jobs are considered in a current
+page, including deleted/historical sources. Each page checks plan-deletion locks, current consent and the
+account-deletion fence. A full scan retains its cursor through concurrent edits; newer global invalidations request a
+follow-up scan. Bounded workout edits, consent commands and delivery acknowledgements instead retain private targets
+under `trainingDeliveryState/current/reconciliationTargets/{workoutId}`. A target visits the current identities and
+pages every retained ledger for that workout, including former destinations and deleted recipes. Plan-wide operations,
+restore, disconnect and legacy marker writers still request full coverage. At most 100 compact ledgers/projections/jobs are considered in a current
 workout page. It never writes 400 workout payloads into a single document or transaction. Never-enrolled users have their
 marker removed without recurring scans. The pre-existing large manual-operation hardening remains #657.
 
@@ -2419,9 +2423,18 @@ marker removed without recurring scans. The pre-existing large manual-operation 
 and `dispatchTrainingDelivery` recovers at most 25 due reservations each minute using the existing Cloud Tasks enqueue
 and queue-depth helpers. Each priority class scans bounded pages of 25, with a hard 100-row bound, so coalesced COROS
 siblings do not consume dispatch capacity or hide another due destination/provider. Reservation precedes enqueue, so
-lost acknowledgements and crashes are recoverable. A finished
-scan becomes eligible again after 30 minutes to pick up saved-zone day boundaries, adapter horizons and entitlement
-changes. `onTrainingDeliveryConnectionChanged`, `onTrainingDeliveryEntitlementChanged`, and
+lost acknowledgements and crashes are recoverable. Reconciliation uses a fixed 60-second first-event batching
+deadline; the minute dispatcher normally adds up to another minute, plus existing queue/provider delays. Continued
+edits cannot slide that deadline. Each page first acquires a private 180-second account lease; duplicate or consumed
+reservations return before Auth, connection and recipe reads. Enqueue recovery retains the pending account reservation
+and uses a fresh Cloud Task name, so queue delays longer than the recovery interval cannot repeatedly invalidate the
+oldest waiting task. The first successful claim consumes that reservation; retries from that page cannot claim the next
+page. Expired claims recover through the same dispatcher.
+A finished full repair becomes eligible again after six hours. Earlier durable wake-ups cover saved-zone midnight
+(including DST/horizon changes) and active grace expiry; delivery retries and verification keep their own due jobs.
+Effective owner unit changes wake through `onTrainingDeliveryOwnerUnitsChanged` on `users/{uid}`.
+Connection events ignore only `uploadedActivitiesCount` and `connectionHistoryImport` changes; other metadata, including
+unknown fields and credential/account authority, remains conservatively eligible. `onTrainingDeliveryConnectionChanged`, `onTrainingDeliveryEntitlementChanged`, and
 `onTrainingDeliveryQueued` each use 512 MiB for their bounded Firestore and queue work; this adds process headroom
 only and does not change queue limits, retries, or delivery semantics. Tasks may be duplicated; stable
 per-user/provider/account/workout identities, independent desired generations,
@@ -2539,14 +2552,72 @@ This trades two projection reads per considered identity for up to three avoided
 The deterministic 25-workout/single-plan/four-provider fixture reduces connection resolutions from 100 to 4 and
 context document reads from 425 to 131. Those document counts exclude connection internals, ledger/projection reads
 and queue overhead; they are local operation counts, not measured production CPU or monetary savings. Both current
-workout and historical-ledger phases, 25-item pages, 30-minute recovery, delivery/verification enqueueing, Retry-After,
-leases, revisions, consent and deletion fences retain their existing behavior.
+workout and historical-ledger phases, 25-item pages, delivery/verification enqueueing, Retry-After, revisions, consent
+and deletion fences remain covered. The account coordinator described above supersedes the former 30-minute full
+scan and restart-on-edit behavior. Its six-hour repair is a fallback; event targets and explicit timers handle normal work.
 
-MCP impact review: no wire, scope, consent, approval, recipe, completion, safe-read projection or provider-action
+The coordinator's synthetic Firestore benchmark changes one workout in a 183-workout account: 30 document reads
+versus approximately 3,000 for a full repair, with identical final ledgers. The separate 400-workout/four-provider fixture retains
+all 1,600 current identities and historical-ledger coverage. Ten overlapping same-account tasks admit one page;
+another account remains independently eligible. Fixed debounce, delayed queues, lost enqueue acknowledgements,
+consumed reservations, expired claims, mid-scan edits,
+legacy cursors, grace expiry, saved-zone day changes and deleted-source targets have emulator regression coverage.
+The repair interval changes its scheduled ceiling from 48 to four repairs per day; explicit events/day boundaries add
+their own work. These are local read counts and scheduling bounds, not measured production CPU or euro savings.
+
+The same emulator suite also budgets work after the actual `mutateTrainingScheduleForUser` and
+`trainingDeliveryCommand` entry points. The measured path never stages its own reconciliation marker. It uses the
+real dispatcher and its task reservations, asserts the fixed batching deadline, then advances the synthetic clock
+to that deadline. Edit, create, Send, Stop and Check must each dispatch and reconcile with fewer than 100 transaction
+document-read observations in a 183-workout fixture, preserve unrelated ledgers, enqueue the expected delivery/check,
+consume their targets before the full-repair comparison and match that subsequent repair.
+The source save has its own budget: fewer than 233 reads for edit/create (including the existing schedule
+validation), and fewer than 40 for a delivery command. Fixture setup, client revision discovery, Auth and real provider
+binding reads are outside these synthetic transaction counts; they are not a claim about total billed production reads.
+The observer covers transaction `get` and `getAll` without double-counting SDK-internal calls.
+
+| Entry point | Source mutation reads | Dispatch + reconciliation reads |
+| --- | ---: | ---: |
+| Edit workout | 190 | 32 |
+| Create workout | 191 | 38 |
+| Send | 10 | 32 |
+| Stop | 10 | 31 |
+| Check | 11 | 32 |
+
+A follow-up review reproduced a test gap by deliberately postponing the reconciliation outbox deadline indefinitely.
+All five original entry-point budgets passed because they called the reconciler directly, bypassing dispatch. With the
+dispatcher included, all five reject that same fault at the batching-deadline assertion. The production marker was
+restored byte-for-byte before passing verification. The six additional reads per case above measure the dispatcher;
+this test change adds no production reads or delay.
+
+A local mutation check on 29 October 2026 deliberately reintroduced each failure independently. It required the
+named regression assertions to fail; a timeout, missing emulator or compilation error was not accepted as detection.
+
+| Deliberate regression | Test that rejected it | Expected failures |
+| --- | --- | ---: |
+| Bypass the metadata-only equality filter in `lifecycle.ts` | `ignores an 830-upload burst` | 1 |
+| Remove the active-account-lease check in `reconciliation-coordinator.ts` | `admits one account page under 10 overlapping tasks` | 1 |
+| Omit workout targets from the outbox call in `persistence.ts` | Real edit/create read budgets | 2 |
+| Omit workout targets from both outbox calls in `commands.ts` | Real Send/Stop/Check read budgets | 3 |
+| Replace the pending reservation on every dispatch in `tasks.ts` | Delayed-task recovery, with and without a lost enqueue acknowledgement | 2 |
+
+All five deliberate regressions were rejected, and every modified production file was restored byte-for-byte before
+the final passing verification. These faults are a local test-strength audit, not runtime switches or disabled safeguards
+committed to the repository. To repeat the audit, make one temporary fault at a time in an isolated checkout, run its
+named test with the existing unit/emulator configuration, verify the specific assertion failure, restore the source and
+rerun passing tests. The ordinary regression assertions run in the existing Functions unit and delivery-emulator CI
+jobs; no new workflow, dependency or production work is added. This test-only follow-up does not change Help, MCP,
+monitoring, provider behavior or deployment requirements.
+
+MCP impact review: the account lease, dispatch reservation, target generations and repair/day/entitlement deadlines
+are backend-only coordination fields. The existing recursive Rules denial covers the private target descendants;
+account recursive deletion removes them. No wire, scope, consent, approval, recipe, completion, safe-read projection or provider-action
 change. Existing strict sync reads use the same source-freshness acknowledgement and private-field exclusions; no
 new planning read or bundled-plugin update is needed. Help's delivery and Check instructions remain applicable.
-Monitoring decision: **unchanged**. The existing provider outcomes, dispatch/backlog and unavailable-observation
-coverage still observes the same queues, worker events and committed outcomes. Read-only production review on
+Monitoring decision: **covered** by the existing provider outcomes, dispatch/backlog and unavailable-observation
+signals, with `owner-units` added to the source-controlled lifecycle-failure filter for the new trigger. Queue names,
+worker events and committed outcomes remain unchanged; applying the filter and deployment still require separate
+approval. Read-only production review on
 21 October 2026 found fourteen `qs_training_*_v1` metrics, six enabled Training alert policies and the QS Training
 Delivery dashboard. Queue-health age derives from queue writes, so skipping ledger/projection writes does not change
 its age signal. Verification covers read counts, fresh transaction attempts, unchanged document update times,
@@ -2994,7 +3065,7 @@ Delivery commands, MCP simulated-plan previews, reconciliation and request guard
 Each new strength attempt privately snapshots `suuntoWeightUnits`; its mapping digest binds that snapshot and the
 full prescription. Later preference changes cannot reinterpret a started attempt. Exact historical v2–v7 recovery
 completes first, then the normal worker updates the retained Guide in place. Interval/swim payloads and digests
-remain v7. Unit-only settings changes are picked up by the existing 30-minute reconciliation scan; Stop, Pro,
+remain v7. Unit-only settings changes wake the account coordinator through `onTrainingDeliveryOwnerUnitsChanged`; Stop, Pro,
 account/deletion, horizon, completion and additional text-loss approval checks remain authoritative. App/watch sync
 is provider-managed, and no watch receipt is inferred.
 
@@ -4625,7 +4696,8 @@ take precedence over older check/restoration labels in the UI.
 `mutateTrainingProviderDelivery` accepts `check`, retaining Auth/App Check, Pro/grace, owner, deletion-lock, expected
 schedule/scope/settings revisions and mutation receipts. It returns a typed queued/coalesced/deferred receipt and stores
 a compact request under `trainingDeliveryState/current/checks`, never consent or a new settings/history revision.
-Manual requests coalesce for 15 minutes and join the same resumable 25-workout/25-ledger scan as periodic work. The
+Manual requests coalesce for 15 minutes. Workout checks stage the bounded target for that workout and all its retained
+identities; plan checks use the resumable 25-workout/25-ledger scan. The
 dispatcher admits delivery/reconciliation before manual verification before ordinary verification. Checks target 24
 hours, but production capacity can extend the cycle. There is no evaluation environment, runner, request cap or setup
 wizard. Verification uses the existing delivery lease; every request and post-I/O persistence rechecks authority,
@@ -8727,7 +8799,7 @@ definitions live in `tools/training-monitoring/definitions.mjs`; this is operati
 or a replacement for `/admin/queues/training-delivery`. No product enablement, UID gate, provider behavior, retention
 limit, schedule or rollback switch changes. Garmin/Wahoo/Suunto remain live; COROS new sends remain Coming soon.
 
-The `lifecycle_failures` metric additionally observes failed connection, entitlement and Guide-settings reconciliation
+The `lifecycle_failures` metric additionally observes failed connection, entitlement, Guide-settings and owner-unit reconciliation
 wake-ups before a queue job exists. It excludes successful account-deletion/no-state skips; the fixed `trigger` label
 identifies the source. Check `[TrainingDeliveryLifecycle]` transaction stages when a settings edit is slow to update.
 Do not use **Create another Guide** as an update retry. This added metric/condition needs explicit monitoring activation.
