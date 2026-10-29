@@ -2491,6 +2491,42 @@ legacy cursors, grace expiry, saved-zone day changes and deleted-source targets 
 The repair interval changes its scheduled ceiling from 48 to four repairs per day; explicit events/day boundaries add
 their own work. These are local read counts and scheduling bounds, not measured production CPU or euro savings.
 
+The same emulator suite also budgets work after the actual `mutateTrainingScheduleForUser` and
+`trainingDeliveryCommand` entry points. The measured path never stages its own reconciliation marker. Edit, create,
+Send, Stop and Check must each reconcile with fewer than 100 transaction document-read observations in a
+183-workout fixture, preserve unrelated ledgers, enqueue the expected delivery/check and match a subsequent full
+repair. The source save has its own budget: fewer than 233 reads for edit/create (including the existing schedule
+validation), and fewer than 40 for a delivery command. Fixture setup, client revision discovery, Auth and real provider
+binding reads are outside these synthetic transaction counts; they are not a claim about total billed production reads.
+The observer covers transaction `get` and `getAll` without double-counting SDK-internal calls.
+
+| Entry point | Source mutation reads | Reconciliation reads |
+| --- | ---: | ---: |
+| Edit workout | 190 | 26 |
+| Create workout | 191 | 32 |
+| Send | 10 | 26 |
+| Stop | 10 | 25 |
+| Check | 11 | 26 |
+
+A local mutation check on 29 October 2026 deliberately reintroduced each failure independently. It required the
+named regression assertions to fail; a timeout, missing emulator or compilation error was not accepted as detection.
+
+| Deliberate regression | Test that rejected it | Expected failures |
+| --- | --- | ---: |
+| Bypass the metadata-only equality filter in `lifecycle.ts` | `ignores an 830-upload burst` | 1 |
+| Remove the active-account-lease check in `reconciliation-coordinator.ts` | `admits one account page under 10 overlapping tasks` | 1 |
+| Omit workout targets from the outbox call in `persistence.ts` | Real edit/create read budgets | 2 |
+| Omit workout targets from both outbox calls in `commands.ts` | Real Send/Stop/Check read budgets | 3 |
+| Replace the pending reservation on every dispatch in `tasks.ts` | Delayed-task recovery, with and without a lost enqueue acknowledgement | 2 |
+
+All five deliberate regressions were rejected, and every modified production file was restored byte-for-byte before
+the final passing verification. These faults are a local test-strength audit, not runtime switches or disabled safeguards
+committed to the repository. To repeat the audit, make one temporary fault at a time in an isolated checkout, run its
+named test with the existing unit/emulator configuration, verify the specific assertion failure, restore the source and
+rerun passing tests. The ordinary regression assertions run in the existing Functions unit and delivery-emulator CI
+jobs; no new workflow, dependency or production work is added. This test-only follow-up does not change Help, MCP,
+monitoring, provider behavior or deployment requirements.
+
 MCP impact review: the account lease, dispatch reservation, target generations and repair/day/entitlement deadlines
 are backend-only coordination fields. The existing recursive Rules denial covers the private target descendants;
 account recursive deletion removes them. No wire, scope, consent, approval, recipe, completion, safe-read projection or provider-action

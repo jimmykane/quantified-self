@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Firestore, type Transaction } from 'firebase-admin/firestore';
+import { Firestore } from 'firebase-admin/firestore';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import type { ExpectedTrainingScheduleRevision, ScheduledWorkoutV1, TrainingScheduleMutationOperationV1 } from '../../../../shared/training-plans';
@@ -50,6 +50,26 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
   const ledgers = async () => (await db.collection('users').doc(uid).collection(DELIVERY_LEDGER).get()).docs.map(doc => doc.data() as DeliveryLedgerV1);
   const send = async () => { await trainingDeliveryCommand(runtime, uid, command(), false); await drain(); return (await ledgers())[0]; };
   const mark = () => db.runTransaction(async tx => { stageTrainingDeliveryReconciliation(tx, db, uid); });
+  // Observe public transaction reads, including getAll, without counting SDK-internal
+  // calls twice. Fixture/revision discovery and Auth are outside this document-read budget.
+  const measureReads = async (action: () => Promise<unknown>) => {
+    let count = 0;
+    const run = db.runTransaction.bind(db);
+    const spy = vi.spyOn(db, 'runTransaction').mockImplementation((update, options) => run(async tx => {
+      const observed = new Proxy(tx, { get(target, property) {
+        const value = Reflect.get(target, property);
+        if (typeof value !== 'function') return value;
+        if (property !== 'get' && property !== 'getAll') return value.bind(target);
+        return async (...args: unknown[]) => {
+          const result = await Reflect.apply(value, target, args);
+          count += Array.isArray(result) ? result.length : 'size' in result ? Math.max(1, result.size) : 1;
+          return result;
+        };
+      } });
+      return update(observed);
+    }, options));
+    try { await action(); return count; } finally { spy.mockRestore(); }
+  };
   const revisions = async (): Promise<ExpectedTrainingScheduleRevision[]> => {
     const user = db.collection('users').doc(uid);
     const state = await user.collection('trainingPlanState').doc('current').get();
@@ -1058,20 +1078,6 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     await seed.commit();
     await trainingDeliveryCommand(runtime, uid, command({ scope: 'plan', scopeId: 'p', action: 'configure' }), false);
     await drain();
-    const measureReads = async (action: () => Promise<void>) => {
-      let count = 0;
-      const run = db.runTransaction.bind(db);
-      const spy = vi.spyOn(db, 'runTransaction').mockImplementation((update, options) => run(async tx => {
-        const get = tx.get.bind(tx);
-        tx.get = (async (ref: FirebaseFirestore.DocumentReference | FirebaseFirestore.Query) => {
-          const result = await get(ref as FirebaseFirestore.DocumentReference);
-          count += 'size' in result ? Math.max(1, result.size as number) : 1;
-          return result;
-        }) as Transaction['get'];
-        return update(tx);
-      }, options));
-      try { await action(); return count; } finally { spy.mockRestore(); }
-    };
     now += 1000;
     await user.collection('scheduledWorkouts').doc('s91').update({ title: 'Updated prescription', revision: 2, updatedAtMs: now });
     await db.runTransaction(async tx => stageTrainingDeliveryReconciliation(tx, db, uid, ['s91']));
@@ -1088,6 +1094,78 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     console.info('[TrainingReconciliationSyntheticBenchmark]', { workouts: 183, targetedReads, fullReads,
       periodicRepairsBefore: 48, periodicRepairsAfter: 4 });
   }, 90_000);
+
+  it.each(['edit', 'create', 'send', 'stop', 'check'] as const)(
+    'keeps reconciliation within its read budget after the real %s entry point', async action => {
+      const user = db.collection('users').doc(uid);
+      await createPlan();
+      const seed = db.batch();
+      for (let index = 0; index < 182; index++) seed.set(user.collection('scheduledWorkouts').doc(`s${index}`), {
+        ...workout(`s${index}`), planId: 'p',
+      });
+      seed.update(user.collection('trainingPlans').doc('p'), { workoutCount: 182 });
+      seed.update(user.collection('trainingPlanState').doc('current'), { currentWorkoutCount: 183 });
+      await seed.commit();
+      await configurePlan(); await drain();
+      inspection();
+      if (action !== 'send') {
+        await trainingDeliveryCommand(runtime, uid, await currentCommand({ action: 'send' }), false);
+        await drain();
+        await processTrainingDelivery(runtime, uid, deliveryIdentity(uid, 'garmin', account, 'w'));
+        await drain();
+      }
+      const before = await ledgers();
+      const callsBefore = transport.calls.length;
+      now += 1000;
+      let mutationReads: number;
+      const targetId = action === 'create' ? 'new-workout' : 'w';
+      if (action === 'edit' || action === 'create') {
+        const expectedRevisions = await revisions();
+        mutationReads = await measureReads(() => mutateTrainingScheduleForUser(uid, {
+          mutationId: randomUUID(), expectedRevisions,
+          operation: { kind: action === 'edit' ? 'update-workout' : 'create-workout', workoutId: targetId,
+            planId: action === 'create' ? 'p' : null, localDate: workout().localDate,
+            title: 'Saved through the real mutation service', structure: workout().structure, confirmPlanRangeExtension: false },
+        }, { db, nowMs: now }));
+        // Authoring already validates the schedule. Do not confuse that existing
+        // single read with repeated downstream full-account reconciliation scans.
+        expect(mutationReads).toBeLessThan(183 + 50);
+      } else {
+        const request = await currentCommand({ action });
+        if (action !== 'send') delete request.timeZone;
+        mutationReads = await measureReads(() => trainingDeliveryCommand(runtime, uid, request, false));
+        expect(mutationReads).toBeLessThan(40);
+      }
+      // No manual marker here: only the production entry point may wake this work.
+      const reconciliationReads = await measureReads(drain);
+      expect(reconciliationReads).toBeLessThan(100);
+      const after = (await ledgers()).sort((a, b) => a.id.localeCompare(b.id));
+      const target = after.find(row => row.workoutId === targetId)!;
+      expect(target).toBeDefined();
+      expect(target.updatedAtMs).toBeGreaterThanOrEqual(now);
+      expect(after.filter(row => row.workoutId !== targetId))
+        .toEqual(before.filter(row => row.workoutId !== targetId).sort((a, b) => a.id.localeCompare(b.id)));
+      const pending = (await db.collection(DELIVERY_QUEUE).doc(target.id).get()).data();
+      if (action === 'check') {
+        expect(target.verification).toMatchObject({ manualPending: true, requestedAtMs: now });
+        expect(pending).toMatchObject({ kind: 'verification', priority: 'manual' });
+      } else {
+        expect(target).toMatchObject({ desired: action === 'stop' ? 'absent' : 'present' });
+        expect(pending).toMatchObject({ kind: 'delivery', operationKind: action === 'stop' ? 'remove' : 'upsert' });
+        if (action === 'edit' || action === 'create') {
+          const saved = (await user.collection('scheduledWorkouts').doc(targetId).get()).data()!;
+          expect(saved.title).toBe('Saved through the real mutation service');
+          expect(target.desiredDigest).toBe(transport.assess(saved as ScheduledWorkoutV1, account, target.timeZone).digest);
+        }
+      }
+      expect(transport.calls).toHaveLength(callsBefore);
+      // A full repair is the coverage oracle, not the source of the target marker.
+      await mark(); await drain();
+      expect((await ledgers()).sort((a, b) => a.id.localeCompare(b.id))).toEqual(after);
+      expect((await reconciliationTargets(db, uid).get()).empty).toBe(true);
+      console.info('[TrainingReconciliationEntryPointBudget]', { action, workouts: 183, mutationReads, reconciliationReads });
+    }, 90_000);
+
   it('pages 400 workouts across all four providers without oversized transactions', async () => {
     const user = db.collection('users').doc(uid);
     await user.collection('scheduledWorkouts').doc('w').delete(); // Synthetic seed has no descendants.
