@@ -289,6 +289,7 @@ caution or unavailable phrases; punctuation stays neutral. Keep both inline, wit
 dot, chevron, extra row, card or visible heading. Let the sentence wrap naturally on narrow screens. Selecting it
 collapses or reopens the existing Today metrics; details start open and reset to open on owner changes.
 The sentence owns `aria-expanded`, `aria-controls` and one selection haptic, with a 44px minimum touch target.
+Disable its ripple and filled interaction state through Material’s public APIs; preserve a neutral keyboard focus outline.
 One short sentence combines the existing training state and Readiness assessments with the most relevant supporting
 Sleep, seven-day HRV or overnight-HR signal; unavailable, attention, missing and loading evidence precede an ordinary
 HRV range result. The sentence and detailed scores/source context are both visible by default; collapsing leaves

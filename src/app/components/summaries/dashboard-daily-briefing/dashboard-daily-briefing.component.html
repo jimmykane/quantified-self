@@ -1,6 +1,6 @@
 @if (owner()) {
   <span role="group" aria-label="At a glance" [attr.data-tone]="briefing().tone">
-    <button mat-button type="button" class="dashboard-briefing-action"
+    <button mat-button [disableRipple]="true" type="button" class="dashboard-briefing-action"
       [attr.aria-label]="(detailsExpanded() ? 'Hide' : 'Show') + ' Today details: ' + fullSentence()"
       [attr.aria-expanded]="detailsExpanded()" [attr.aria-controls]="detailsId()" (click)="toggleDetails()">
       @if (greeting()) {

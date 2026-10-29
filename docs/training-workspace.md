@@ -5591,6 +5591,7 @@ with natural wrapping and no separate row, status dot, chevron, heading or card.
 scores and source context below it. The sentence and mounted details both start visible. Selecting the sentence
 collapses or reopens the details; they reset to open on owner changes, without persistence.
 The control exposes its expanded state and target, preserves live status text, and owns one selection haptic per tap.
+Its ripple and filled interaction state are disabled through Material’s public APIs; keyboard focus retains a neutral outline.
 The sentence wraps naturally on phones. Saved chart configuration stays unchanged; hiding Today also unmounts the sentence.
 
 `dashboard-daily-briefing.component.ts` only presents the existing `dashboardGlanceSignals` and keeps the actual
