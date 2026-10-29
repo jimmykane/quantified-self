@@ -337,6 +337,67 @@ describe('SummariesComponent', () => {
     expect(TestBed.inject(AppHapticsService).success).not.toHaveBeenCalled();
   });
 
+  it('does not emit performance save feedback after the owner changes during the chart refresh', async () => {
+    const tile = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-critical-power')!.tile);
+    tile.order = 0;
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [tile] } } } as SummariesComponent['user'];
+    component.eventUser = component.user;
+    vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save').mockResolvedValue();
+    const internals = component as unknown as { rebuildTilesFromCurrentState(): Promise<void> };
+    let finishRefresh!: () => void;
+    const rebuild = vi.spyOn(internals, 'rebuildTilesFromCurrentState').mockImplementation(() => new Promise(resolve => finishRefresh = resolve));
+    const changing = component.onTilePerformanceContextChange(0, 'Mountain Biking');
+    await vi.waitFor(() => expect(rebuild).toHaveBeenCalledOnce());
+    component.user = { uid: 'different-owner', settings: { dashboardSettings: { tiles: [] } } } as SummariesComponent['user'];
+    component.eventUser = component.user;
+    finishRefresh(); await changing;
+    expect(component.user.settings.dashboardSettings.tiles).toEqual([]);
+    expect(TestBed.inject(AppHapticsService).success).not.toHaveBeenCalled();
+    expect(TestBed.inject(AppHapticsService).error).not.toHaveBeenCalled();
+  });
+
+  it('distinguishes a saved performance context from a failed chart refresh without retrying the write', async () => {
+    const tile = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-critical-power')!.tile);
+    tile.order = 0;
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [tile] } } } as SummariesComponent['user'];
+    component.eventUser = component.user;
+    const save = vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save').mockResolvedValue();
+    const refreshError = new Error('chart could not render');
+    const notice = vi.spyOn(TestBed.inject(MatSnackBar), 'open').mockReturnValue(null);
+    buildDashboardTileViewModelsSpy.mockImplementationOnce(() => { throw refreshError; });
+    await component.onTilePerformanceContextChange(0, 'Mountain Biking');
+    expect(save).toHaveBeenCalledOnce();
+    expect(component.user.settings.dashboardSettings.tiles[0]['displaySettings']).toEqual({ performanceContext: 'Mountain Biking' });
+    expect(component.performanceSavingOrders.size).toBe(0);
+    expect(notice).toHaveBeenCalledWith(
+      'Chart context saved, but the chart could not refresh. Reload the dashboard to see it.', 'Dismiss', { duration: 6000 });
+    expect(mockLogger.error).toHaveBeenCalledWith('[SummariesComponent] Could not refresh the saved performance chart context.', refreshError);
+    expect(TestBed.inject(AppHapticsService).error).toHaveBeenCalledOnce();
+    expect(TestBed.inject(AppHapticsService).success).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('ignores a late performance save completion after teardown during refresh=%s', async duringRefresh => {
+    const tile = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-critical-power')!.tile);
+    tile.order = 0;
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [tile] } } } as SummariesComponent['user'];
+    component.eventUser = component.user;
+    let finish!: () => void;
+    const pending = new Promise<void>(resolve => finish = resolve);
+    vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save').mockImplementation(() => duringRefresh ? Promise.resolve() : pending);
+    const internals = component as unknown as { rebuildTilesFromCurrentState(): Promise<void> };
+    const rebuild = vi.spyOn(internals, 'rebuildTilesFromCurrentState').mockImplementation(() => duringRefresh ? pending : Promise.resolve());
+    const notice = vi.spyOn(TestBed.inject(MatSnackBar), 'open').mockReturnValue(null);
+    const changing = component.onTilePerformanceContextChange(0, 'Mountain Biking');
+    if (duringRefresh) await vi.waitFor(() => expect(rebuild).toHaveBeenCalledOnce());
+    fixture.destroy();
+    finish(); await changing;
+    expect(rebuild).toHaveBeenCalledTimes(duringRefresh ? 1 : 0);
+    expect(component.performanceSavingOrders.size).toBe(0);
+    expect(TestBed.inject(AppHapticsService).success).not.toHaveBeenCalled();
+    expect(TestBed.inject(AppHapticsService).error).not.toHaveBeenCalled();
+    expect(notice).not.toHaveBeenCalled();
+  });
+
   it('restores Health selectors after a failed save and keeps other tiles unchanged', async () => {
     const tile = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile);
     tile.order = 0;

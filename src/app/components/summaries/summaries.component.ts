@@ -654,6 +654,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   ngOnDestroy(): void {
+    this.performanceSaveRequests.clear();
+    this.performanceSavingOrders.clear();
     this.calendarReturnSubscription?.unsubscribe();
     this.tileRebuild.dispose();
     this.librarySubscription?.unsubscribe();
@@ -1622,16 +1624,21 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.performanceSavingOrders.add(order);
     this.performanceSaveRequests.set(order, request);
     this.changeDetector.markForCheck();
+    let saved = false;
     try {
       await this.configuration.save(uid, baseline, { tiles });
+      saved = true;
       if (this.resolveOwnDashboardUID() !== uid || this.performanceSaveRequests.get(order) !== request) return;
       this.user.settings.dashboardSettings = { ...this.user.settings.dashboardSettings, tiles };
       await this.rebuildTilesFromCurrentState();
+      if (this.resolveOwnDashboardUID() !== uid || this.performanceSaveRequests.get(order) !== request) return;
       this.healthHaptics.success();
     } catch (error) {
       if (this.resolveOwnDashboardUID() !== uid || this.performanceSaveRequests.get(order) !== request) return;
+      if (saved) this.logger.error('[SummariesComponent] Could not refresh the saved performance chart context.', error);
       this.healthHaptics.error();
-      this.healthSnack.open(error instanceof Error ? error.message : 'Could not save chart context.', 'Dismiss', { duration: 6000 });
+      this.healthSnack.open(saved ? 'Chart context saved, but the chart could not refresh. Reload the dashboard to see it.'
+        : error instanceof Error ? error.message : 'Could not save chart context.', 'Dismiss', { duration: 6000 });
     } finally {
       if (this.performanceSaveRequests.get(order) === request) {
         this.performanceSaveRequests.delete(order);

@@ -1776,6 +1776,8 @@ until Save; card selectors use the existing dashboard configuration persistence 
 Account context controls stay available when a selected metric has no ready values, so users can choose another
 sport without being replaced by an example preview. Example data is used only when no account context is available.
 Save-button and theme changes do not restart preview reads; data inputs and owner changes still release subscriptions.
+Card saves distinguish a failed write from a completed write whose chart refresh failed, and late completion feedback
+is suppressed after the owner or save request changes or the dashboard is destroyed.
 
 The dashboard wrapper owns titles, accessible Material context menus and accepted-action haptics. Existing Training
 renderers opt into the shared dashboard plot sizing/alignment contract; their normal Training and public-preview
