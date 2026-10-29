@@ -8,6 +8,7 @@ import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-
 
 const RETENTION_MS = TTL_CONFIG.ASSISTANT_CONVERSATIONS_IN_DAYS * 86_400_000;
 const LEASE_MS = 4 * 60_000;
+const MAX_STATE_BYTES = 400_000;
 interface Receipt { requestId: string; fingerprint: string; createdAtMs: number; status: 'running' | 'done' | 'failed' }
 interface State {
   version: 'day-workout-v1';
@@ -41,7 +42,10 @@ export function createDayWorkoutStore(db: () => FirebaseFirestore.Firestore = ()
       const result = action(state, now);
       if (result.write) {
         state.expireAt = Timestamp.fromMillis(now + RETENTION_MS);
-        if (Buffer.byteLength(JSON.stringify(state), 'utf8') > 400_000) throw new HttpsError('resource-exhausted', 'Generation state is full. Try again later.');
+        const size = () => Buffer.byteLength(JSON.stringify(state), 'utf8');
+        // Evict older full replies before rejecting new work. Receipts still prevent re-generation.
+        while (state.messages.length > 1 && size() > MAX_STATE_BYTES) state.messages.shift();
+        if (size() > MAX_STATE_BYTES) throw new HttpsError('resource-exhausted', 'Generation state is full. Try again later.');
         tx.set(ref, state);
       }
       return result.value;

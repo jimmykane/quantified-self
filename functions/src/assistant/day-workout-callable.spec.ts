@@ -48,4 +48,24 @@ describe('generateDayWorkout callable', () => {
     expect(deps.generate).toHaveBeenCalledTimes(2); expect(deps.finalize).toHaveBeenCalledTimes(1);
     expect(deps.release).not.toHaveBeenCalled();
   });
+  it('releases an unused reservation if quota finalization fails before the model starts', async () => {
+    const deps = dependencies(); vi.mocked(deps.finalize).mockRejectedValue(new Error('Quota write failed'));
+    await expect(runGenerateDayWorkout(request, auth, deps)).rejects.toThrow();
+    expect(deps.generate).not.toHaveBeenCalled();
+    expect(deps.finalize).toHaveBeenCalledTimes(1);
+    expect(deps.release).toHaveBeenCalledWith({ reservationID: 'quota' });
+    expect(deps.store.finish).toHaveBeenCalledWith('owner', request.requestId, 'lease', null);
+  });
+  it('counts separate generations and failed model attempts, but not a rejected quota reservation', async () => {
+    const deps = dependencies();
+    await runGenerateDayWorkout(request, auth, deps);
+    vi.mocked(deps.generate).mockRejectedValueOnce(new Error('Model unavailable'));
+    await expect(runGenerateDayWorkout({ ...request, requestId: 'new-request-1234' }, auth, deps)).rejects.toThrow();
+    expect(deps.finalize).toHaveBeenCalledTimes(2);
+    expect(deps.release).not.toHaveBeenCalled();
+    vi.mocked(deps.reserve).mockRejectedValueOnce(new Error('Quota exhausted'));
+    await expect(runGenerateDayWorkout({ ...request, requestId: 'blocked-request' }, auth, deps)).rejects.toThrow();
+    expect(deps.generate).toHaveBeenCalledTimes(2);
+    expect(deps.finalize).toHaveBeenCalledTimes(2);
+  });
 });

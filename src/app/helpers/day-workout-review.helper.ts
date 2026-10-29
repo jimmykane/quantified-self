@@ -18,7 +18,8 @@ export function dayWorkoutReview(draft: DayWorkoutDraft, units?: UserUnitSetting
     })) ?? [],
     intervals: draft.strength ? [] : draft.structure.nodes.map(node => ({ id: node.id,
       repeat: node.kind === 'repeat' ? `${node.count} passes` : null,
-      steps: (node.kind === 'step' ? [node] : node.steps).map(step => formatWorkoutStepV1(step, units, undefined, draft.structure.sport)),
+      steps: (node.kind === 'step' ? [node] : node.steps).map(step => formatWorkoutStepV1(step, units, undefined, draft.structure.sport)
+        + (step.note ? ` · ${step.note}` : '')),
     })),
   };
 }

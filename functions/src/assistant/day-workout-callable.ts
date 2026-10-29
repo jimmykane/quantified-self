@@ -73,8 +73,8 @@ export async function runGenerateDayWorkout(value: unknown, context: { auth?: { 
     const evidence = await dependencies.context(uid, request, now);
     await dependencies.store.assertActive(uid, request.requestId, started.token);
     // Charge once before the first model attempt, including failed model attempts, as in Assistant chat.
-    billable = true;
     await dependencies.finalize(reservation);
+    billable = true;
     let suggestion;
     let correction: string | undefined;
     for (let attempt = 0; attempt < 2; attempt += 1) {

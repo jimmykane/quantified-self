@@ -25,6 +25,7 @@ const EXPECTED_BINDINGS: Record<string, string[]> = {
   addSuuntoAppRoutesToQueue: SUUNTO_API,
   addWahooAPIHistoryToQueue: WAHOO,
   assistantChat: ['GEMINI_API_KEY', 'SUUNTOAPP_GUIDE_OWNER'],
+  generateDayWorkout: ['GEMINI_API_KEY'],
   applyAssistantTrainingProposal: ['SUUNTOAPP_GUIDE_OWNER'],
   backfillCorosAPISleep: COROS,
   backfillGarminAPIActivities: GARMIN,

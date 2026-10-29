@@ -40,4 +40,16 @@ describe('Calendar workout draft review', () => {
     expect(review.intervals[0].steps).toHaveLength(2);
     expect(review.intervals[0].steps[1]).toMatch(/recovery/i);
   });
+  it('includes effort notes in standalone and repeated steps before the user saves the workout', () => {
+    const review = dayWorkoutReview({ title: 'Effort guidance', structure: { version: 1, sport: ActivityTypes.Running, nodes: [
+      { kind: 'step', id: 'warmup', purpose: 'warmup', ending: { kind: 'time', seconds: 300 }, targets: [], note: 'Conversational effort' },
+      { kind: 'repeat', id: 'repeat', count: 3, steps: [
+        { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 120 }, targets: [], note: 'Controlled, not an all-out sprint' },
+        { kind: 'step', id: 'recover', purpose: 'recovery', ending: { kind: 'time', seconds: 60 }, targets: [], note: 'Walk until comfortable' },
+      ] },
+    ] } });
+    expect(review.intervals[0].steps[0]).toContain('Conversational effort');
+    expect(review.intervals[1].steps[0]).toContain('Controlled, not an all-out sprint');
+    expect(review.intervals[1].steps[1]).toContain('Walk until comfortable');
+  });
 });

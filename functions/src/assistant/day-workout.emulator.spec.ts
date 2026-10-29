@@ -93,4 +93,26 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     await user.collection('trainingPlanState').doc('current').collection('planDeletionLocks').doc('plan').set({});
     await expect(readDayWorkoutTrainingContext(uid, selected, new Date('2026-10-28T12:00Z'), db)).rejects.toThrow();
   }, 30_000);
+  it('retains the latest large UTF-8 response by evicting older replies while preserving replay receipts', async () => {
+    const uid = `day-large-${randomUUID()}`; await db.doc(`users/${uid}`).set({});
+    const store = createDayWorkoutStore(() => db);
+    const suggestion = validateDayWorkoutSuggestion({ kind: 'workout', title: 'Detailed intervals', rationale: 'Review each effort.',
+      structure: { version: 1, sport: ActivityTypes.Running, nodes: Array.from({ length: 100 }, (_, index) => ({
+        kind: 'step', id: `step-${index}`, purpose: 'work', ending: { kind: 'time', seconds: 10 }, targets: [], note: '漢'.repeat(400),
+      })) } }, controls);
+    let latest!: GenerateDayWorkoutResponse;
+    for (let index = 0; index < 4; index++) {
+      const requestId = `large-request-${index}`;
+      const begun = await store.begin(uid, { requestId, controls });
+      if (!('token' in begun)) throw Error('Missing generation lease');
+      latest = { ...response(requestId), ...suggestion };
+      await store.finish(uid, requestId, begun.token, latest);
+    }
+    const persisted = (await db.doc(`users/${uid}/assistantConversations/day-workout`).get()).data()!;
+    expect(Buffer.byteLength(JSON.stringify(persisted), 'utf8')).toBeLessThanOrEqual(400_000);
+    expect(persisted.replayReceipts).toHaveLength(4);
+    expect(persisted.messages.length).toBeLessThan(4);
+    expect(await store.begin(uid, { requestId: latest.requestId, controls })).toEqual({ response: latest });
+    await expect(store.begin(uid, { requestId: 'large-request-0', controls })).rejects.toMatchObject({ code: 'failed-precondition' });
+  }, 30_000);
 });

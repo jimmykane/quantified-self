@@ -749,13 +749,20 @@ disclosed; incomplete required schedule reads block generation.
 Generation replay state is isolated at `users/{uid}/assistantConversations/day-workout`, separate from chat.
 It reuses the existing browser-denied collection, index exemptions, seven-day TTL and account erasure. One
 four-minute lease, at most 128 recent receipts and four full responses, and a 400 kB serialized cap bound it.
-An exact retry replays a cached response without another quota charge. Expired/evicted/failed request IDs cannot
-silently generate again. Explicit **Generate again** creates a new request. Quota is reserved before context,
-released on pre-model failure, and charged once before the model attempts. No provider secrets or actions are
-available to this callable. It is synchronous and introduces no queue or provider lifecycle.
+Older full responses are evicted as needed to stay within the UTF-8 byte cap while retaining their replay receipts;
+large earlier replies must not prevent a new valid result from being saved.
+An exact retry replays a cached response without another quota charge. Within the seven-day retention window,
+expired leases and evicted/failed replies cannot silently generate again. Explicit **Generate again** creates a
+new request. Quota is reserved before context and charged once before the model attempts. Unused reservations
+are released on pre-model failure, including a failed quota finalization.
+Each new generation shares the Assistant chat allowance: rest suggestions, failed model attempts and the bounded
+correction consume one request total. Exact retries, editing and saving do not consume another request.
+No fitness-provider secrets or delivery actions are available to this callable. It is synchronous and introduces
+no queue or provider lifecycle.
 
-Review includes the complete interval/strength prescription in owner units, rationale, used/missing context,
-observation time, selected day/destination, existing workouts and inherited plan-sync disclosure. Paused plans
+Review includes the complete interval/strength prescription in owner units, including interval effort notes,
+rationale, used/missing context, observation time, selected day/destination, existing workouts and inherited
+plan-sync disclosure. Paused plans
 are labelled. **Edit workout** passes the full unsaved draft and save identity through owner-bound memory to the
 existing editor; auth changes clear it. **Add workout** uses the existing revision-bound `create-workout`
 mutation. Extending plan dates requires confirmation. A lost save reply retains the exact request and workout
@@ -767,6 +774,7 @@ MCP impact review: existing public read schemas, mutation kinds, proposal/confir
 unchanged. Generated workouts persist the same canonical root and full strength companion used by manual editing.
 `assistant/day-workout.emulator.spec.ts` verifies their read-back through `get_planned_workout_v3` and
 `get_strength_workout_details`, including exact repeated recoveries, zero/fractional loads and complete sets.
+Review-note rendering and private cache/quota fixes preserve these same public contracts and read-back coverage.
 No read coverage is deferred and no public generation tool is introduced. The private callable is registered in
 full/lazy entrypoints, endpoint metadata checks, the shared manifest and least-privilege secret policy. Release the
 backend endpoint before its frontend under separate deployment approval; no new Rules, index, secret value or
