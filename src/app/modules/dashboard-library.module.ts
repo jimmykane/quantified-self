@@ -1,3 +1,4 @@
+import { DashboardPerformanceTrendComponent } from '../components/charts/performance-trend/dashboard-performance-trend.component';
 import { DashboardHealthChartComponent } from '../components/charts/health/dashboard-health-chart.component';
 import { DashboardDailyBriefingComponent } from '../components/summaries/dashboard-daily-briefing/dashboard-daily-briefing.component';
 import { TimelineNotesWorkspaceComponent } from '../components/timeline-notes/timeline-notes-workspace.component';
@@ -33,6 +34,7 @@ import { EventTableModule } from './event-table.module';
     imports: [
         CommonModule,
         DashboardHealthChartComponent,
+        DashboardPerformanceTrendComponent,
         DashboardDailyBriefingComponent,
         DashboardChartThumbnailComponent,
         SharedModule,

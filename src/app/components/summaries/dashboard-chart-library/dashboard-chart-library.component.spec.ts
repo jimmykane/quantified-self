@@ -16,7 +16,10 @@ import { MatDialog } from '@angular/material/dialog';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EMPTY, of, Subject } from 'rxjs';
 import { DashboardHrvService } from '../../../services/dashboard-hrv.service';
-import { createDashboardDerivedMetricsMissingState } from '../../../services/dashboard-derived-metrics.service';
+import {
+  createDashboardDerivedMetricsMissingState,
+  DashboardDerivedMetricsService,
+} from '../../../services/dashboard-derived-metrics.service';
 import { MaterialModule } from '../../../modules/material.module';
 import { DashboardChartLibraryComponent } from './dashboard-chart-library.component';
 import { DashboardChartLibraryState } from './dashboard-chart-library-state.service';
@@ -25,7 +28,7 @@ import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppEventService } from '../../../services/app.event.service';
 import { AppSleepService } from '../../../services/app.sleep.service';
 import { AppRouteService } from '../../../services/app.route.service';
-import { DashboardDerivedMetricsService } from '../../../services/dashboard-derived-metrics.service';
+
 import { AppUserInterface } from '../../../models/app-user.interface';
 import { buildDashboardExampleEvents } from '../../../helpers/dashboard-chart-preview.helper';
 import { getDashboardChartCatalog } from '../../../helpers/dashboard-chart-catalog.helper';
@@ -89,7 +92,8 @@ describe('responsive chart picker interactions', () => {
     const refreshed = { ...user, settings: { ...user.settings, appSettings: { dashboardChartLibrarySeen: { 'section:health': 2 } } } };
     fixture.componentRef.setInput('user', refreshed); await settle();
     await component.openSection('section:health', true); await settle();
-    expect(component.unseen()).toHaveLength(0);
+    expect(component.unseen()).toHaveLength(5);
+    expect(component.unseen().map(entry => entry.definition.id)).toEqual(expect.arrayContaining(['curated-critical-power', 'curated-w-prime', 'curated-maximum-power', 'curated-durability', 'health:vo2_max']));
     expect(component.rowPreviews().some(entry => entry.isNew)).toBe(true);
     expect(discovery.acknowledge).toHaveBeenCalledTimes(1);
     expect(haptics.selection).toHaveBeenCalledTimes(3);

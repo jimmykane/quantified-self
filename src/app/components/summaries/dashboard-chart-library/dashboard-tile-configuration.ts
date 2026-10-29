@@ -1,3 +1,49 @@
+import {
+  isDashboardPerformanceChartType,
+  DASHBOARD_CRITICAL_POWER_CHART_TYPE,
+  DASHBOARD_W_PRIME_CHART_TYPE,
+  DASHBOARD_MAXIMUM_POWER_CHART_TYPE,
+  DASHBOARD_DURABILITY_CHART_TYPE,
+  DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
+  DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
+  DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
+  DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
+  DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
+  DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+  DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
+  DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE,
+  DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
+  DASHBOARD_FORM_CHART_TYPE,
+  DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
+  DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
+  DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
+  DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+  DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
+  DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
+  DASHBOARD_POWER_CURVE_CHART_TYPE,
+  DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
+  DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
+  DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+  DASHBOARD_SLEEP_TREND_CHART_TYPE,
+  DASHBOARD_HRV_TREND_CHART_TYPE,
+  DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
+  type DashboardCuratedChartType,
+  type DashboardKpiGroup,
+  getDashboardCuratedChartDefinitions,
+  type DashboardKpiChartType,
+  getDashboardKpiChartDefinitions,
+  isDashboardKpiChartType,
+  isDashboardCuratedChartType,
+  isDashboardEventBackedSpecialChartType,
+  isDashboardRecoveryNowChartType,
+  isRetiredDashboardReadinessConfidenceKpiChartType,
+  isDashboardSpecialChartType,
+  resolveDashboardChartCategory,
+} from '../../../helpers/dashboard-special-chart-types';
+
 import { dashboardHealthMetric, dashboardHealthSettings, dashboardHealthPresetId } from '../../../helpers/dashboard-health-tile.helper';
 import { dismissAllDashboardChartSuggestions, syncDashboardChartSuggestionStates } from '../../../helpers/dashboard-chart-discovery.helper';
 import { DashboardConfigurationConflict } from '../../../services/dashboard-configuration.service';
@@ -76,46 +122,7 @@ import type {
   AppDashboardTileEventFilterRange,
   AppDashboardTileEventFiltersInterface,
 } from '../../../models/app-user.interface';
-import {
-  DASHBOARD_ACWR_KPI_CHART_TYPE,
-  DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
-  DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
-  DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
-  DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
-  DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
-  DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
-  DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
-  DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE,
-  DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
-  DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE,
-  DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
-  DASHBOARD_FORM_CHART_TYPE,
-  DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
-  DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
-  DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
-  DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
-  DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
-  DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
-  DASHBOARD_POWER_CURVE_CHART_TYPE,
-  DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
-  DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
-  DASHBOARD_RECOVERY_NOW_CHART_TYPE,
-  DASHBOARD_SLEEP_TREND_CHART_TYPE,
-  DASHBOARD_HRV_TREND_CHART_TYPE,
-  DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
-  type DashboardCuratedChartType,
-  type DashboardKpiGroup,
-  getDashboardCuratedChartDefinitions,
-  type DashboardKpiChartType,
-  getDashboardKpiChartDefinitions,
-  isDashboardKpiChartType,
-  isDashboardCuratedChartType,
-  isDashboardEventBackedSpecialChartType,
-  isDashboardRecoveryNowChartType,
-  isRetiredDashboardReadinessConfidenceKpiChartType,
-  isDashboardSpecialChartType,
-  resolveDashboardChartCategory,
-} from '../../../helpers/dashboard-special-chart-types';
+
 import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import type { MapStyleName } from '../../../services/map/map-style.types';
 import {
@@ -339,6 +346,11 @@ export class DashboardTileConfiguration {
     [DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE]: 'trending_up',
     [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'bar_chart',
     [DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'show_chart',
+    [DASHBOARD_CRITICAL_POWER_CHART_TYPE]: 'speed',
+    [DASHBOARD_W_PRIME_CHART_TYPE]: 'battery_charging_full',
+    [DASHBOARD_MAXIMUM_POWER_CHART_TYPE]: 'bolt',
+    [DASHBOARD_DURABILITY_CHART_TYPE]: 'timeline',
+
     [DASHBOARD_SLEEP_TREND_CHART_TYPE]: 'hotel',
     [DASHBOARD_HRV_TREND_CHART_TYPE]: 'monitor_heart',
     [DASHBOARD_POWER_CURVE_CHART_TYPE]: 'speed',
@@ -350,6 +362,11 @@ export class DashboardTileConfiguration {
     [DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE]: '7-day projected freshness from current CTL/ATL decay.',
     [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'Weekly easy/moderate/hard zone time (Power or HR fallback).',
     [DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'Weekly duration-weighted power/heart-rate efficiency trend.',
+    [DASHBOARD_CRITICAL_POWER_CHART_TYPE]: 'Critical power history using existing Training evidence.',
+    [DASHBOARD_W_PRIME_CHART_TYPE]: 'W′ capacity history using existing Training evidence.',
+    [DASHBOARD_MAXIMUM_POWER_CHART_TYPE]: 'Maximum power history using existing Training evidence.',
+    [DASHBOARD_DURABILITY_CHART_TYPE]: 'Durability history using existing Training evidence.',
+
     [DASHBOARD_SLEEP_TREND_CHART_TYPE]: 'Sleep duration and stages by connected source.',
     [DASHBOARD_HRV_TREND_CHART_TYPE]: 'Overnight heart rate variability by connected source.',
     [DASHBOARD_POWER_CURVE_CHART_TYPE]: 'Best power envelope with latest activity or recent-best comparison.',
@@ -417,6 +434,7 @@ export class DashboardTileConfiguration {
   public editTileOrder: number | null = null;
   public curatedChartType: DashboardCuratedChartType = DASHBOARD_RECOVERY_NOW_CHART_TYPE;
   public curatedPowerCurveScope: DashboardPowerCurveScope = 'cycling';
+  public performanceContext: string | undefined;
   public kpiChartType: DashboardKpiChartType = DASHBOARD_ACWR_KPI_CHART_TYPE;
   public kpiGroup: DashboardKpiGroup = 'load';
   public presetKpiGroup: DashboardKpiGroup = 'load';
@@ -1137,6 +1155,7 @@ export class DashboardTileConfiguration {
 
     if (isDashboardCuratedChartType(chartTile.chartType)) {
       this.curatedChartType = chartTile.chartType;
+      this.performanceContext = (chartTile as AppDashboardChartTileSettingsInterface).displaySettings?.performanceContext;
       if (chartTile.chartType === DASHBOARD_POWER_CURVE_CHART_TYPE) {
         this.curatedPowerCurveScope = resolveDashboardPowerCurveTileScope(chartTile) || 'cycling';
       }
@@ -1454,7 +1473,11 @@ export class DashboardTileConfiguration {
       tile = buildDashboardCuratedAutoTile(chartType as DashboardDefaultCuratedChartType, order, size);
     }
 
-    return this.mergeExistingDisplaySettingsForSameChart(tile, existingTile) as TileChartSettingsInterface;
+    const merged = this.mergeExistingDisplaySettingsForSameChart(tile, existingTile) as AppDashboardChartTileSettingsInterface;
+    if (isDashboardPerformanceChartType(chartType) && this.performanceContext) {
+      merged.displaySettings = { ...merged.displaySettings, performanceContext: this.performanceContext };
+    }
+    return merged;
   }
 
   private buildKpiTile(

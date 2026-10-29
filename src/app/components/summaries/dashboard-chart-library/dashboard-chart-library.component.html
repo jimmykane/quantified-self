@@ -60,7 +60,7 @@
     <div #detail class="chart-library-detail qs-scrollbar" [class.is-configuring]="state.configuring()" tabindex="-1">
       <div class="chart-library-detail-heading" [class.chart-library-preview-heading]="!state.configuring()">
         <button class="chart-library-back" mat-button [disabled]="state.busy()" (click)="back()"><mat-icon>arrow_back</mat-icon>{{ backLabel() }}</button>
-        @if (!state.configuring() && state.canConfigure() && !state.healthSettings()) {
+        @if (!state.configuring() && state.canConfigure() && !state.healthSettings() && !state.performanceSettings()) {
           <button class="chart-library-settings" mat-stroked-button (click)="configure()" [disabled]="state.busy()"><mat-icon>tune</mat-icon>{{ draftPresentation().settings }}</button>
         }
       </div>
@@ -76,7 +76,7 @@
           @if (state.healthSettings(); as settings) {
             @if (state.pinnedFromHealth()) { <p class="chart-library-destination">Uses the {{ settings.range === 'today' ? '1d' : settings.range }} range, starting with the latest period.</p> }
             <app-dashboard-health-chart class="chart-library-health-preview" [preview]="true" [hideTitle]="true" [user]="user()" [settings]="settings" [darkTheme]="darkTheme()" [providerFilter]="providerFilter()" [priority]="100" [timelineNotes]="timelineNotes()" [disabled]="state.busy()" (settingsChange)="state.updateHealthSettings($event.settings, $event.initial)" />
-          } @else { <app-dashboard-chart-preview [user]="user()" [tile]="draft" [seed]="previewSeed()" [darkTheme]="darkTheme()"></app-dashboard-chart-preview> }
+          } @else { <app-dashboard-chart-preview [user]="user()" [tile]="draft" [seed]="previewSeed()" [darkTheme]="darkTheme()" [disabled]="state.busy()" (performanceContextChange)="state.updatePerformanceContext($event)"></app-dashboard-chart-preview> }
           @if (!creatingCustom()) {
             <div class="chart-library-explanation">
               @for (paragraph of explanationParagraphs(); track $index) { <p>{{ paragraph }}</p> }

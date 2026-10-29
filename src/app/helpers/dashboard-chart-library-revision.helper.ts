@@ -3,7 +3,7 @@ import type { DashboardTileLaneKey } from './dashboard-tile-section.helper';
 /** Increase CURRENT only for new chart types, and stamp their introducedIn revision.
  * Keep BASELINE stable so upgrading does not announce the original catalog. */
 export const DASHBOARD_CHART_LIBRARY_BASELINE_REVISION = 1;
-export const DASHBOARD_CHART_LIBRARY_CURRENT_REVISION = 2;
+export const DASHBOARD_CHART_LIBRARY_CURRENT_REVISION = 3;
 export type DashboardChartLibrarySeen = Partial<Record<DashboardTileLaneKey, number>>;
 
 export function dashboardChartLibraryRevision(value: unknown): number {

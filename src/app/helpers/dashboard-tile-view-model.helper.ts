@@ -1,5 +1,64 @@
+import { buildDashboardPerformanceTrend, type DashboardPerformanceTrendContext } from './dashboard-performance-trend.helper';
+import { buildTrainingPowerSystemsActivityTypeViewModels } from './training-power-systems.helper';
+import { buildTrainingDurabilityScopeViewModels } from './training-durability-view.helper';
+import {
+  isDashboardPerformanceChartType,
+  isDashboardPowerCapacityChartType,
+  DASHBOARD_DURABILITY_CHART_TYPE,
+  DASHBOARD_HEALTH_METRIC_CHART_TYPE,
+  DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
+  DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
+  DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
+  DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
+  DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
+  DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+  DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
+  DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE,
+  DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
+  DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
+  DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
+  DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
+  DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
+  DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
+  DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
+  DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
+  DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+  DASHBOARD_POWER_CURVE_CHART_TYPE,
+  DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
+  DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+  isDashboardAcwrKpiChartType,
+  isDashboardActivityCalendarChartType,
+  isDashboardAerobicCapacityKpiChartType,
+  isDashboardAerobicDurabilityKpiChartType,
+  isDashboardEasyPercentKpiChartType,
+  isDashboardEfficiencyDelta4wKpiChartType,
+  isDashboardEfficiencyTrendChartType,
+  isDashboardFatigueAtlKpiChartType,
+  isDashboardFatigueTrendKpiChartType,
+  isDashboardFitnessCtlKpiChartType,
+  isDashboardFitnessTrendKpiChartType,
+  isDashboardFreshnessForecastChartType,
+  isDashboardFormChartType,
+  isDashboardFormNowKpiChartType,
+  isDashboardFormPlus7dKpiChartType,
+  isDashboardHardPercentKpiChartType,
+  isDashboardIntensityDistributionChartType,
+  isDashboardLoadStatusKpiChartType,
+  isDashboardMonotonyStrainKpiChartType,
+  isDashboardRampRateKpiChartType,
+  isDashboardRecoveryDebtKpiChartType,
+  isDashboardRecoveryNowChartType,
+  isRetiredDashboardReadinessConfidenceKpiChartType,
+  isDashboardSleepBackedChartType,
+  isDashboardPowerCurveChartType,
+  isDashboardTrainingBalanceKpiChartType,
+} from './dashboard-special-chart-types';
+import type { DerivedTrainingPowerSystemsMetricPayload } from '@shared/derived-metrics';
 import type { EventRead } from '@shared/event-read';
-import { DASHBOARD_HEALTH_METRIC_CHART_TYPE } from './dashboard-special-chart-types';
+
 import type { DashboardHrvContext } from './dashboard-hrv-context.helper';
 
 import {
@@ -83,57 +142,7 @@ import {
   filterDashboardTileEventsByActivityTypes,
   normalizeDashboardTileEventFilters,
 } from './dashboard-tile-event-filters.helper';
-import {
-  DASHBOARD_ACWR_KPI_CHART_TYPE,
-  DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
-  DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
-  DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
-  DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
-  DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
-  DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
-  DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
-  DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE,
-  DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
-  DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE,
-  DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
-  DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
-  DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
-  DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
-  DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
-  DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
-  DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
-  DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
-  DASHBOARD_RECOVERY_NOW_CHART_TYPE,
-  DASHBOARD_POWER_CURVE_CHART_TYPE,
-  DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
-  DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
-  isDashboardAcwrKpiChartType,
-  isDashboardActivityCalendarChartType,
-  isDashboardAerobicCapacityKpiChartType,
-  isDashboardAerobicDurabilityKpiChartType,
-  isDashboardEasyPercentKpiChartType,
-  isDashboardEfficiencyDelta4wKpiChartType,
-  isDashboardEfficiencyTrendChartType,
-  isDashboardFatigueAtlKpiChartType,
-  isDashboardFatigueTrendKpiChartType,
-  isDashboardFitnessCtlKpiChartType,
-  isDashboardFitnessTrendKpiChartType,
-  isDashboardFreshnessForecastChartType,
-  isDashboardFormChartType,
-  isDashboardFormNowKpiChartType,
-  isDashboardFormPlus7dKpiChartType,
-  isDashboardHardPercentKpiChartType,
-  isDashboardIntensityDistributionChartType,
-  isDashboardLoadStatusKpiChartType,
-  isDashboardMonotonyStrainKpiChartType,
-  isDashboardRampRateKpiChartType,
-  isDashboardRecoveryDebtKpiChartType,
-  isDashboardRecoveryNowChartType,
-  isRetiredDashboardReadinessConfidenceKpiChartType,
-  isDashboardSleepBackedChartType,
-  isDashboardPowerCurveChartType,
-  isDashboardTrainingBalanceKpiChartType,
-} from './dashboard-special-chart-types';
+
 import type { SleepSession } from '@shared/sleep';
 import type { FirestoreRouteJSON } from '@shared/app-route.interface';
 import type {
@@ -162,6 +171,7 @@ export interface DashboardChartTileViewModel extends AppDashboardChartTileSettin
   sleepTrend?: DashboardSleepTrendContext | null;
   hrvTrend?: DashboardHrvContext | null;
   powerCurve?: DashboardPowerCurveContext | null;
+  performanceTrend?: DashboardPerformanceTrendContext | null;
   aerobicCapacity?: DashboardAerobicCapacityContext | null;
   aerobicDurability?: DashboardAerobicDurabilityContext | null;
 }
@@ -192,6 +202,7 @@ interface BuildDashboardTileViewModelsInput {
   preferences?: EventStatAggregationPreferences;
   logger?: EventStatAggregationLogger;
   startOfWeek?: number | null;
+  unitSettings?: import('@sports-alliance/sports-lib').UserUnitSettingsInterface | null;
   derivedMetrics?: {
     formPoints?: DashboardFormPoint[] | null;
     recoveryNow?: DashboardRecoveryNowContext | null;
@@ -209,6 +220,7 @@ interface BuildDashboardTileViewModelsInput {
     powerCurve?: DerivedPowerCurveMetricPayload | null;
     trainingCapacity?: DashboardTrainingCapacityContext | null;
     trainingDurability?: DerivedTrainingDurabilityMetricPayload | null;
+    trainingPowerSystems?: DerivedTrainingPowerSystemsMetricPayload | null;
   } | null;
 }
 
@@ -329,6 +341,10 @@ export function buildDashboardTileViewModels(
   });
   const aerobicCapacityContext = buildDashboardAerobicCapacityContext(input.derivedMetrics?.trainingCapacity);
   const aerobicDurabilityContext = buildDashboardAerobicDurabilityContext(input.derivedMetrics?.trainingDurability);
+  const powerViews = input.tiles.some(tile => isDashboardPowerCapacityChartType(tile['chartType']))
+    ? buildTrainingPowerSystemsActivityTypeViewModels(input.derivedMetrics?.trainingPowerSystems || null) : [];
+  const durabilityViews = input.tiles.some(tile => tile['chartType'] === DASHBOARD_DURABILITY_CHART_TYPE)
+    ? buildTrainingDurabilityScopeViewModels(input.derivedMetrics?.trainingDurability, ['running', 'cycling', 'swimming']) : [];
   return (input.tiles || []).reduce<DashboardTileViewModel[]>((viewModels, tile) => {
     if (tile.type === TileTypes.Map) {
       const mapTile = tile as DashboardMapTileSettings;
@@ -353,6 +369,12 @@ export function buildDashboardTileViewModels(
     // Readiness is a fixed part of Dashboard Today. Ignore stale saved copies so
     // users never see the same signal twice while settings are cleaned on save.
     if (isRetiredDashboardReadinessConfidenceKpiChartType(chartTile.chartType)) {
+      return viewModels;
+    }
+    if (isDashboardPerformanceChartType(chartTile.chartType)) {
+      viewModels.push({ ...chartTile, timeInterval: TimeIntervals.Weekly, data: [],
+        performanceTrend: buildDashboardPerformanceTrend(chartTile.chartType, powerViews, durabilityViews, chartTile.displaySettings?.performanceContext, input.unitSettings),
+      });
       return viewModels;
     }
     if (`${chartTile.chartType}` === DASHBOARD_HEALTH_METRIC_CHART_TYPE) {

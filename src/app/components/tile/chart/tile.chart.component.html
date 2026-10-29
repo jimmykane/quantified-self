@@ -175,6 +175,12 @@
     [unitSettings]="user?.settings?.unitSettings" [reserveTitleActionSpace]="showHeaderControls"
     [preferredSource]="$any(user)?.settings?.appSettings?.healthWorkspace?.highlightSources?.heart_rate_variability" />
   }
+  @if (isPerformanceTrend) {
+    <app-dashboard-performance-trend [title]="tileName" [info]="chartInfoTooltip" [context]="performanceTrend" [status]="performanceStatus"
+      [darkTheme]="darkTheme" [disabled]="isLoading || isTileActionSaving || performanceSettingsSaving || performanceControlsDisabled" [saving]="performanceSettingsSaving" [reserveActions]="showActions"
+      [unitSettings]="user?.settings?.unitSettings" [timelineNotes]="previewMode ? null : notesContext()"
+      (contextChange)="performanceContextChange.emit($event)" />
+  }
   @if (chartType === powerCurveChartType) {
   <app-power-curve-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
     [title]="tileName || 'Power Curve'"

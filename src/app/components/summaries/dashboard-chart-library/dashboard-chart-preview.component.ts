@@ -1,4 +1,4 @@
-import { Component, LOCALE_ID, Input, OnChanges, OnDestroy, computed, inject, signal } from '@angular/core';
+import { Component, LOCALE_ID, Input, Output, EventEmitter, OnChanges, OnDestroy, SimpleChanges, computed, inject, signal } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { TileSettingsInterface, TileTypes } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../../../models/app-user.interface';
@@ -16,6 +16,12 @@ export class DashboardChartPreviewComponent implements OnChanges, OnDestroy {
   @Input() seed: DashboardPreviewInput = { tiles: [] };
   @Input() thumbnail = false;
   @Input() darkTheme = false;
+  @Input() disabled = false;
+  @Output() performanceContextChange = new EventEmitter<string>();
+  readonly performanceStatus = computed(() => {
+    const model = this.preview();
+    return model?.availability?.state === 'error' ? 'failed' as const : model?.loading ? 'building' as const : 'ready' as const;
+  });
   readonly preview = signal<DashboardChartPreview | null>(null);
   readonly sourceLabel = computed(() => this.preview() ? dashboardPreviewSourceLabel(this.preview()!) : '');
   readonly chart = computed(() => this.preview()?.tile.type === TileTypes.Chart ? this.preview()!.tile as DashboardChartTileViewModel : null);
@@ -25,9 +31,13 @@ export class DashboardChartPreviewComponent implements OnChanges, OnDestroy {
   readonly calendar = computed(() => `${this.chart()?.chartType}` === DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE
     ? buildActivityCalendarViewModel(this.preview()!.calendarEvents, { view: 'month', anchorDate: new Date(this.preview()!.anchorMs), now: new Date(this.preview()!.anchorMs), startOfWeek: this.user?.settings?.unitSettings?.startOfTheWeek, locale: this.locale }) : null);
   private subscription = new Subscription();
-  ngOnChanges(): void {
+  ngOnChanges(changes: SimpleChanges): void {
+    if (!changes['user'] && !changes['tile'] && !changes['seed'] && !changes['thumbnail']) return;
     this.subscription.unsubscribe();
-    if (!this.tile || !this.user) return;
+    if (!this.tile || !this.user) {
+      this.preview.set(null);
+      return;
+    }
     if (this.thumbnail) {
       this.preview.set(buildDashboardThumbnailPreview(this.tile, this.seed));
       return;

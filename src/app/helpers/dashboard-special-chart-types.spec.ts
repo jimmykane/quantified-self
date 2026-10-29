@@ -65,10 +65,18 @@ describe('dashboard-special-chart-types', () => {
     expect(resolveDashboardChartCategory(ChartTypes.ColumnsVertical)).toBe('custom');
   });
 
+  it.each(['CriticalPowerHistory', 'WPrimeHistory', 'MaximumPowerHistory', 'DurabilityTrend'])('recognizes %s as a snapshot-backed curated chart', type => {
+    expect(isDashboardCuratedChartType(type)).toBe(true);
+    expect(isDashboardSpecialChartType(type)).toBe(true);
+    expect(isDashboardEventBackedSpecialChartType(type)).toBe(false);
+    expect(resolveDashboardChartCategory(type)).toBe('curated');
+  });
+
   it('returns curated chart definitions', () => {
     const definitions = getDashboardCuratedChartDefinitions();
 
     expect(definitions.map(definition => definition.chartType)).toEqual([
+      'CriticalPowerHistory', 'WPrimeHistory', 'MaximumPowerHistory', 'DurabilityTrend',
       DASHBOARD_RECOVERY_NOW_CHART_TYPE,
       DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
       DASHBOARD_FORM_CHART_TYPE,
