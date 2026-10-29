@@ -12,7 +12,7 @@ const NO_TARGET = '__NO_TARGET__';
 // Exercise a property inherited from Object.prototype so the fallback check
 // also guards against accidental prototype-based routing.
 const UNKNOWN_TARGET = 'toString';
-const EXPECTED_FULL_EXPORT_COUNT = 190;
+const EXPECTED_FULL_EXPORT_COUNT = 191;
 const BILLING_TARGETS = ["createStripeCheckoutSession", "createStripePortalLink", "ext-firestore-stripe-payments-createPortalLink", "stripeBillingWebhook", "dispatchStripeBillingJob", "recoverStripeBillingJobs", "processStripeBillingTask", "deleteStripeCustomerOnDocumentDeleted"];
 const ACCOUNT_CLEANUP_SECRETS = [
   'COROSAPI_CLIENT_ID', 'COROSAPI_CLIENT_SECRET', 'GARMINAPI_CLIENT_ID', 'GARMINAPI_CLIENT_SECRET',
