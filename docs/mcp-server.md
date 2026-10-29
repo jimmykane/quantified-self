@@ -685,6 +685,12 @@ mandatory. `all_connected` includes only providers for which the connection, per
 currently eligible. No new tool, action, field, scope, consent default, provider identifier, plugin artifact or
 registered-client refresh is introduced; connecting a provider alone never creates delivery consent or sends a workout.
 
+Training reconciliation uses a private account lease, fixed batching deadline, bounded workout targets and explicit
+day/grace/check timers, with a six-hour full repair. These scheduling fields and target descendants never enter MCP
+results. Existing consent, proposal approval, source-freshness checks, bounded sync reads and provider actions remain
+unchanged. The 400-workout/four-provider MCP fixture includes private coordinator canaries and retains the same safe
+output; this change requires no tool schema, scope, plugin or registered-client metadata update.
+
 ### Full recipes with optional early Lap
 
 The additive `preview_planned_workout_v3_changes` previews 1–25 complete non-strength creates/updates using that

@@ -868,7 +868,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     expect((await user().collection('trainingDeliverySettings').get()).docs.map(doc => doc.data())).toEqual(retriedConsent);
     const queued = (await db.collection(DELIVERY_QUEUE).where('uid', '==', uid).get()).docs.map(doc => doc.data());
     // Sending is complete; only the existing periodic reconciliation job remains.
-    expect(queued).toEqual([expect.objectContaining({ kind: 'reconcile', dueAtMs: now + 30 * 60_000 })]);
+    expect(queued).toEqual([expect.objectContaining({ kind: 'reconcile', dueAtMs: now + 6 * 60 * 60_000 })]);
     await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, original.id); await drain();
     expect((await ledger()).status).toBe('delivered');
     expect(server.guides.size).toBe(1);

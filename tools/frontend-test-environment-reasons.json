@@ -15,6 +15,10 @@
     "environment": "angular",
     "reason": "Compiles the benchmark R\u2013R panel and Material controls in TestBed to verify per-source summary bindings, lazy component-scoped analysis, chart host lifecycle, source changes, linked zoom and single-owner haptics."
   },
+  "src/app/components/charts/performance-trend/dashboard-performance-trend.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the real dashboard wrapper and shared Training renderers, exercises Material menu selection, input-driven rendering, haptics and teardown."
+  },
   "src/app/components/event/laps/event.card.laps.picker.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the lap column picker with real Material dialogs, selection lists, checkboxes and buttons to verify keyboard selection, focus restoration, save outcomes and haptic ownership."

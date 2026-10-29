@@ -1,6 +1,7 @@
 <div
   #chartDiv
   class="training-power-systems-trend-chart"
+  [attr.data-dashboard-chart-plot]="dashboardMode ? '' : null"
   role="img"
   [attr.aria-label]="chartAriaLabel">
 </div>

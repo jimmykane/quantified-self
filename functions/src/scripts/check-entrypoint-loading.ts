@@ -297,6 +297,7 @@ const TRAINING_TARGET_METADATA: Readonly<Record<string, {
   onTrainingDeliveryConnectionChanged: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/meta/{service}' },
   onTrainingDeliveryEntitlementChanged: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/system/status' },
   onTrainingDeliveryGuideSettingsChanged: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/config/settings' },
+  onTrainingDeliveryOwnerUnitsChanged: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}' },
   onDashboardDerivedMetricsActivityWrite: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/activities/{activityId}', concurrency: 1, maxInstances: 50 },
   onDashboardDerivedMetricsEventWrite: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/events/{eventId}', concurrency: 1, maxInstances: 50 },
   onDashboardDerivedMetricsSleepWrite: { memoryMb: 512, timeoutSeconds: null, trigger: 'event', eventDocument: 'users/{uid}/sleepSessions/{sleepSessionId}', concurrency: 1, maxInstances: 50 },

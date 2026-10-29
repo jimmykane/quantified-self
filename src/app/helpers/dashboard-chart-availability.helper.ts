@@ -16,6 +16,13 @@ export interface DashboardChartAvailability {
 }
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 
+/** Keep the account's context selector usable even when that context has no ready fit. */
+export function dashboardChartHasPerformanceContext(tile: DashboardTileViewModel): boolean {
+  return tile?.type === TileTypes.Chart
+    && C.isDashboardPerformanceChartType(tile['chartType'])
+    && ((tile as DashboardChartTileViewModel).performanceTrend?.options.length || 0) > 0;
+}
+
 /** Check the actual plotted fields, not truthy context objects or provider connections. */
 export function dashboardChartHasRecordedData(tile: DashboardTileViewModel, input: DashboardPreviewInput): boolean {
   if (!tile) return false;
@@ -33,6 +40,11 @@ export function dashboardChartHasRecordedData(tile: DashboardTileViewModel, inpu
   const range = normalizeDashboardDerivedChartRange(chart.displaySettings?.derivedChartRange);
   const intensity = () => filterDashboardDerivedWeeklyRange(chart.intensityDistribution?.weeks || [], range)
     .some(week => [week.easySeconds, week.moderateSeconds, week.hardSeconds].some(value => finite(value) && value > 0));
+  if (C.isDashboardPerformanceChartType(type)) {
+    const context = chart.performanceTrend;
+    return context?.powerTrend?.points.some(point => finite(point.value)) === true
+      || context?.trajectory?.points.some(point => finite(point.value) || point.candidateActivityCount > 0) === true;
+  }
   switch (type) {
     case C.DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE: {
       const now = new Date();
@@ -85,13 +97,15 @@ export function resolveDashboardChartAvailability(tile: DashboardTileViewModel, 
   metrics: readonly (DashboardDerivedMetricStatus | undefined)[] = [],
 ): DashboardChartAvailability {
   const hasData = dashboardChartHasRecordedData(tile, input);
+  const hasContext = dashboardChartHasPerformanceContext(tile);
   const result = (state: DashboardChartAvailability['state'], label: string, reason: string): DashboardChartAvailability => ({ state, label, reason, hasData });
   const hrv = tile?.type === TileTypes.Chart && C.isDashboardHrvTrendChartType(tile['chartType']) ? (tile as DashboardChartTileViewModel).hrvTrend : null;
-  if (sources.includes('error') || metrics.includes('failed') || hrv?.error) return result('error', 'Could not load your data', hasData ? 'Showing your last available data. Reopen the library to try again.' : 'Reopen the library to try again. The preview shows example data.');
+  if (sources.includes('error') || metrics.includes('failed') || hrv?.error) return result('error', 'Could not load your data', hasData ? 'Showing your last available data. Reopen the library to try again.' : hasContext ? 'Your selected context is retained. Reopen the library to try again.' : 'Reopen the library to try again. The preview shows example data.');
   if (sources.includes('loading') || hrv?.loading) return result(hasData ? 'updating' : 'loading', hasData ? 'Updating your data' : 'Loading your data', '');
-  if (metrics.some(isDerivedMetricPendingStatus)) return result('updating', 'Updating chart data', hasData ? 'Showing your last available data while this chart updates.' : 'Your chart data is being prepared. The preview shows example data.');
+  if (metrics.some(isDerivedMetricPendingStatus)) return result('updating', 'Updating chart data', hasData ? 'Showing your last available data while this chart updates.' : hasContext ? 'Your chart data is being prepared. Your selected context is retained.' : 'Your chart data is being prepared. The preview shows example data.');
   if (hasData) return result('ready', 'Ready with your data', '');
   if (tile?.type === TileTypes.Chart && needsHistory(tile as DashboardChartTileViewModel)) return result('history', 'Needs more history', 'Some readings are available. More history is needed for this comparison.');
-  if (metrics.includes('missing')) return result('updating', 'Waiting for chart data', 'This chart does not have prepared data yet. The preview shows example data.');
+  if (metrics.includes('missing')) return result('updating', 'Waiting for chart data', hasContext ? 'This chart does not have prepared data yet. Your selected context is retained.' : 'This chart does not have prepared data yet. The preview shows example data.');
+  if (hasContext) return result('history', 'Needs more evidence', 'The selected context does not have enough eligible evidence to plot this metric yet.');
   return result('no-data', 'No data in this period', 'No matching data was found for this preview period. The preview shows example data.');
 }

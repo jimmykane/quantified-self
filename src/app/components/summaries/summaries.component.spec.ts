@@ -1,3 +1,6 @@
+import {
+  getDashboardChartCatalog,
+} from '../../helpers/dashboard-chart-catalog.helper';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { provideRouter, Router, RouterModule } from '@angular/router';
 import { TimelineNotesWorkspaceComponent } from '../timeline-notes/timeline-notes-workspace.component';
@@ -7,10 +10,16 @@ import { By } from '@angular/platform-browser';
 import { dashboardHrvWindows, type DashboardHrvContext } from '../../helpers/dashboard-hrv-context.helper';
 import { DashboardHrvService } from '../../services/dashboard-hrv.service';
 import { buildDashboardExamplePreview } from '../../helpers/dashboard-chart-preview.helper';
-import { getDashboardChartCatalog } from '../../helpers/dashboard-chart-catalog.helper';
+
 import { buildDashboardGlanceSignals } from '../../helpers/dashboard-glance.helper';
 import type { DashboardChartTileViewModel } from '../../helpers/dashboard-tile-view-model.helper';
-import { EMPTY } from 'rxjs';
+import {
+  EMPTY,
+  Observable,
+  of,
+  Subject,
+  Subscription,
+} from 'rxjs';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
@@ -21,7 +30,7 @@ import { CalendarDayDetailsNavigationService } from '../../services/calendar-day
 import { LOCALE_ID, NO_ERRORS_SCHEMA, signal, type WritableSignal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
-import { Observable, of, Subject, Subscription } from 'rxjs';
+
 import type { EventInterface } from '@sports-alliance/sports-lib';
 import type { AppDashboardChartTileSettingsInterface } from '../../models/app-user.interface';
 import { MatDialog } from '@angular/material/dialog';
@@ -290,6 +299,103 @@ describe('SummariesComponent', () => {
     await component.undoDashboardChange();
     expect(notice).toHaveBeenCalledWith(message, 'Dismiss', { duration: 6000 });
     expect(component.user.settings.dashboardSettings.tiles).toEqual([]);
+  });
+
+  it.each([false, true])('saves performance context once, retains the existing plot while pending and handles failure=%s', async fails => {
+    const tile = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-critical-power')!.tile);
+    tile.order = 0;
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [tile] } } } as SummariesComponent['user'];
+    component.eventUser = component.user;
+    let settle!: () => void;
+    const save = vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save').mockImplementation(() => new Promise((resolve, reject) => {
+      settle = () => fails ? reject(new Error('offline')) : resolve();
+    }));
+    const changing = component.onTilePerformanceContextChange(0, 'Mountain Biking');
+    expect(component.performanceSavingOrders.has(0)).toBe(true);
+    expect(component.user.settings.dashboardSettings.tiles[0]['displaySettings']).toBeUndefined();
+    await component.onTilePerformanceContextChange(0, 'Running');
+    expect(save).toHaveBeenCalledOnce();
+    settle(); await changing;
+    expect(component.performanceSavingOrders.size).toBe(0);
+    expect(component.user.settings.dashboardSettings.tiles[0]['displaySettings']?.performanceContext).toBe(fails ? undefined : 'Mountain Biking');
+    expect(TestBed.inject(AppHapticsService)[fails ? 'error' : 'success']).toHaveBeenCalledOnce();
+    expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
+  });
+
+  it('does not apply a performance save result to a different owner', async () => {
+    const tile = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-durability')!.tile);
+    tile.order = 0;
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [tile] } } } as SummariesComponent['user'];
+    component.eventUser = component.user;
+    let settle!: () => void;
+    vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save').mockImplementation(() => new Promise(resolve => settle = resolve));
+    const changing = component.onTilePerformanceContextChange(0, 'cycling|power|W|-|-');
+    component.user = { uid: 'different-owner', settings: { dashboardSettings: { tiles: [] } } } as SummariesComponent['user'];
+    component.eventUser = component.user;
+    settle(); await changing;
+    expect(component.user.settings.dashboardSettings.tiles).toEqual([]);
+    expect(TestBed.inject(AppHapticsService).success).not.toHaveBeenCalled();
+  });
+
+  it('does not emit performance save feedback after the owner changes during the chart refresh', async () => {
+    const tile = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-critical-power')!.tile);
+    tile.order = 0;
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [tile] } } } as SummariesComponent['user'];
+    component.eventUser = component.user;
+    vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save').mockResolvedValue();
+    const internals = component as unknown as { rebuildTilesFromCurrentState(): Promise<void> };
+    let finishRefresh!: () => void;
+    const rebuild = vi.spyOn(internals, 'rebuildTilesFromCurrentState').mockImplementation(() => new Promise(resolve => finishRefresh = resolve));
+    const changing = component.onTilePerformanceContextChange(0, 'Mountain Biking');
+    await vi.waitFor(() => expect(rebuild).toHaveBeenCalledOnce());
+    component.user = { uid: 'different-owner', settings: { dashboardSettings: { tiles: [] } } } as SummariesComponent['user'];
+    component.eventUser = component.user;
+    finishRefresh(); await changing;
+    expect(component.user.settings.dashboardSettings.tiles).toEqual([]);
+    expect(TestBed.inject(AppHapticsService).success).not.toHaveBeenCalled();
+    expect(TestBed.inject(AppHapticsService).error).not.toHaveBeenCalled();
+  });
+
+  it('distinguishes a saved performance context from a failed chart refresh without retrying the write', async () => {
+    const tile = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-critical-power')!.tile);
+    tile.order = 0;
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [tile] } } } as SummariesComponent['user'];
+    component.eventUser = component.user;
+    const save = vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save').mockResolvedValue();
+    const refreshError = new Error('chart could not render');
+    const notice = vi.spyOn(TestBed.inject(MatSnackBar), 'open').mockReturnValue(null);
+    buildDashboardTileViewModelsSpy.mockImplementationOnce(() => { throw refreshError; });
+    await component.onTilePerformanceContextChange(0, 'Mountain Biking');
+    expect(save).toHaveBeenCalledOnce();
+    expect(component.user.settings.dashboardSettings.tiles[0]['displaySettings']).toEqual({ performanceContext: 'Mountain Biking' });
+    expect(component.performanceSavingOrders.size).toBe(0);
+    expect(notice).toHaveBeenCalledWith(
+      'Chart context saved, but the chart could not refresh. Reload the dashboard to see it.', 'Dismiss', { duration: 6000 });
+    expect(mockLogger.error).toHaveBeenCalledWith('[SummariesComponent] Could not refresh the saved performance chart context.', refreshError);
+    expect(TestBed.inject(AppHapticsService).error).toHaveBeenCalledOnce();
+    expect(TestBed.inject(AppHapticsService).success).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('ignores a late performance save completion after teardown during refresh=%s', async duringRefresh => {
+    const tile = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-critical-power')!.tile);
+    tile.order = 0;
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [tile] } } } as SummariesComponent['user'];
+    component.eventUser = component.user;
+    let finish!: () => void;
+    const pending = new Promise<void>(resolve => finish = resolve);
+    vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save').mockImplementation(() => duringRefresh ? Promise.resolve() : pending);
+    const internals = component as unknown as { rebuildTilesFromCurrentState(): Promise<void> };
+    const rebuild = vi.spyOn(internals, 'rebuildTilesFromCurrentState').mockImplementation(() => duringRefresh ? pending : Promise.resolve());
+    const notice = vi.spyOn(TestBed.inject(MatSnackBar), 'open').mockReturnValue(null);
+    const changing = component.onTilePerformanceContextChange(0, 'Mountain Biking');
+    if (duringRefresh) await vi.waitFor(() => expect(rebuild).toHaveBeenCalledOnce());
+    fixture.destroy();
+    finish(); await changing;
+    expect(rebuild).toHaveBeenCalledTimes(duringRefresh ? 1 : 0);
+    expect(component.performanceSavingOrders.size).toBe(0);
+    expect(TestBed.inject(AppHapticsService).success).not.toHaveBeenCalled();
+    expect(TestBed.inject(AppHapticsService).error).not.toHaveBeenCalled();
+    expect(notice).not.toHaveBeenCalled();
   });
 
   it('restores Health selectors after a failed save and keeps other tiles unchanged', async () => {
@@ -2215,6 +2321,18 @@ describe('SummariesComponent', () => {
     expect((component as any).buildDashboardTodayReadiness().loadText).toBe('-- / --');
   });
 
+  it('adds only the two existing performance snapshot dependencies and never treats them as activity-query charts', () => {
+    const ids = ['curated-critical-power', 'curated-w-prime', 'curated-maximum-power', 'curated-durability'];
+    const tiles = getDashboardChartCatalog().filter(entry => ids.includes(entry.definition.id)).map(entry => entry.tile);
+    component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
+    const internals = component as unknown as { resolveDashboardDerivedMetricKinds(): string[]; isEventDataSettingsTile(tile: unknown): boolean };
+    const baseline = internals.resolveDashboardDerivedMetricKinds();
+    component.user.settings.dashboardSettings.tiles = tiles;
+    const added = internals.resolveDashboardDerivedMetricKinds().filter(kind => !baseline.includes(kind));
+    expect(added).toEqual(['training_power_systems', 'training_durability']);
+    expect(tiles.every(tile => !internals.isEventDataSettingsTile(tile))).toBe(true);
+  });
+
   it('should delegate tile building with dashboard tiles, events, preferences, and logger on input changes', async () => {
     const builtTiles = [{
       type: TileTypes.Chart,
@@ -2278,6 +2396,7 @@ describe('SummariesComponent', () => {
       }),
       startOfWeek: null,
       logger: mockLogger,
+      unitSettings: undefined,
       derivedMetrics: {
         formPoints: null,
         recoveryNow: null,
@@ -2295,6 +2414,7 @@ describe('SummariesComponent', () => {
         powerCurve: null,
         trainingCapacity: null,
         trainingDurability: null,
+        trainingPowerSystems: null,
       },
     });
     expect(component.tiles).toBe(builtTiles);

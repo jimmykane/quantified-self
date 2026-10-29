@@ -80,7 +80,7 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
         requestedAtMs: coalesced ? prior.data()!.requestedAtMs : now, notBeforeMs };
       if (!coalesced) {
         tx.set(checkRef, { requestedAtMs: now });
-        stageTrainingDeliveryReconciliation(tx, runtime.db, uid);
+        stageTrainingDeliveryReconciliation(tx, runtime.db, uid, command.scope === 'workout' ? [command.scopeId] : undefined);
       }
       tx.create(receiptRef, { hash, result, createdAtMs: now, expireAt: Timestamp.fromMillis(now + 30 * 86_400_000) });
       return result;
@@ -270,7 +270,7 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
     tx.set(settingRef, result);
     tx.set(privateState, { revision }, { merge: true });
     tx.create(receiptRef, { hash, result, createdAtMs: runtime.now(), expireAt: Timestamp.fromMillis(runtime.now() + 30 * 86_400_000) });
-    stageTrainingDeliveryReconciliation(tx, runtime.db, uid);
+    stageTrainingDeliveryReconciliation(tx, runtime.db, uid, command.scope === 'workout' ? [command.scopeId] : undefined);
     return result;
   });
 }

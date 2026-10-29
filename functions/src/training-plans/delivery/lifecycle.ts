@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import * as logger from 'firebase-functions/logger';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { getUserDeletionGuardStateInTransaction } from '../../shared/user-deletion-guard';
@@ -6,8 +7,9 @@ import { stageTrainingDeliveryReconciliation } from './marker';
 import { DELIVERY_SERVICES, productionDeliveryRuntime } from './runtime';
 import { DELIVERY_STATE } from './contracts';
 import { normalizeSuuntoSwimmingGuideSettings } from '../../../../shared/suunto-swimming-guide-settings';
+import { normalizeUserUnitSettings } from '../../../../shared/unit-aware-display';
 
-type LifecycleEvent = { id: string; trigger: 'connection' | 'entitlement' | 'guide-settings' };
+type LifecycleEvent = { id: string; trigger: 'connection' | 'entitlement' | 'guide-settings' | 'owner-units' };
 type LifecycleStage = 'runtime' | 'transaction' | 'deletion_guard' | 'delivery_state' | 'commit';
 type LifecycleOutcome = 'reconciliation_staged' | 'deletion_guard_skipped' | 'no_delivery_state';
 
@@ -75,6 +77,17 @@ export const onTrainingDeliveryConnectionChanged = onDocumentWritten({
   document: 'users/{uid}/meta/{service}', region: 'europe-west2', memory: '512MiB', retry: true,
 }, async event => {
   if (!Object.values(DELIVERY_SERVICES).some(service => service.name === event.params.service)) return;
+  // Activity ingestion and history progress do not change Training authority.
+  // Compare everything else conservatively, including unknown future fields.
+  const authority = (value: FirebaseFirestore.DocumentData | undefined) => {
+    if (!value) return value;
+    const rest = { ...value };
+    delete rest.uploadedActivitiesCount;
+    delete rest.connectionHistoryImport;
+    return rest;
+  };
+  if (event.data?.before && event.data?.after
+    && isDeepStrictEqual(authority(event.data.before.data()), authority(event.data.after.data()))) return;
   await reconcileTrainingDeliveryLifecycle(event.params.uid, { id: event.id, trigger: 'connection' });
 });
 export const onTrainingDeliveryEntitlementChanged = onDocumentWritten({
@@ -82,13 +95,23 @@ export const onTrainingDeliveryEntitlementChanged = onDocumentWritten({
 }, async event => { await reconcileTrainingDeliveryLifecycle(event.params.uid, { id: event.id, trigger: 'entitlement' }); });
 
 // Only wake existing delivery consent; the worker rereads current settings and retains Guide identities.
-// Never process deletion or use the event's preference snapshot to upload a stale Guide.
+// Never use the event's preference snapshot to upload a stale Guide.
 export const onTrainingDeliveryGuideSettingsChanged = onDocumentWritten({
   document: 'users/{uid}/config/settings', region: 'europe-west2', memory: '512MiB', retry: true,
 }, async event => {
-  if (!event.data?.after.exists) return;
+  if (!event.data) return;
   const before = normalizeSuuntoSwimmingGuideSettings(event.data.before.data()?.suuntoSwimmingGuide);
   const after = normalizeSuuntoSwimmingGuideSettings(event.data.after.data()?.suuntoSwimmingGuide);
   if (JSON.stringify(before) === JSON.stringify(after)) return;
   await reconcileTrainingDeliveryLifecycle(event.params.uid, { id: event.id, trigger: 'guide-settings' });
+});
+
+export const onTrainingDeliveryOwnerUnitsChanged = onDocumentWritten({
+  document: 'users/{uid}', region: 'europe-west2', memory: '512MiB', retry: true,
+}, async event => {
+  if (!event.data?.after.exists) return;
+  const before = normalizeUserUnitSettings(event.data.before.data()?.settings?.unitSettings);
+  const after = normalizeUserUnitSettings(event.data.after.data()?.settings?.unitSettings);
+  if (isDeepStrictEqual(before, after)) return;
+  await reconcileTrainingDeliveryLifecycle(event.params.uid, { id: event.id, trigger: 'owner-units' });
 });

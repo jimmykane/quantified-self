@@ -1,3 +1,11 @@
+import {
+  isDashboardPerformanceChartType,
+  isDashboardActivityCalendarChartType,
+  isDashboardEfficiencyTrendChartType,
+  isDashboardFormChartType,
+  isDashboardIntensityDistributionChartType,
+  isDashboardPowerCurveChartType,
+} from './dashboard-special-chart-types';
 import type {
   AppDashboardChartTileDisplaySettingsInterface,
   AppDashboardDerivedChartRange,
@@ -8,17 +16,16 @@ import {
   DASHBOARD_DERIVED_CHART_DEFAULT_RANGE,
   normalizeDashboardDerivedChartRange,
 } from './dashboard-derived-chart-range.helper';
-import {
-  isDashboardActivityCalendarChartType,
-  isDashboardEfficiencyTrendChartType,
-  isDashboardFormChartType,
-  isDashboardIntensityDistributionChartType,
-  isDashboardPowerCurveChartType,
-} from './dashboard-special-chart-types';
+
 import {
   DASHBOARD_POWER_CURVE_DEFAULT_COMPARE_MODE,
   normalizeDashboardPowerCurveCompareMode,
 } from './dashboard-power-curve.helper';
+
+export function normalizeDashboardPerformanceContext(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= 512 && !Array.from(value).some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)
+    ? value.trim() : undefined;
+}
 
 export const DASHBOARD_FORM_TIMELINE_DEFAULT_WINDOW: AppDashboardFormTimelineWindow = 'w';
 
@@ -26,6 +33,7 @@ const DASHBOARD_FORM_TIMELINE_WINDOWS = new Set<AppDashboardFormTimelineWindow>(
 
 interface NormalizeDashboardChartTileDisplaySettingsOptions {
   includeCalendarView?: boolean;
+  includePerformanceContext?: boolean;
   includeDerivedChartRange?: boolean;
   includeFormTimelineWindow?: boolean;
   includePowerCurveCompareMode?: boolean;
@@ -79,6 +87,10 @@ export function normalizeDashboardChartTileDisplaySettings(
     ) as AppDashboardPowerCurveCompareMode;
   }
 
+  if (options.includePerformanceContext) {
+    const context = normalizeDashboardPerformanceContext(source.performanceContext);
+    if (context) normalized.performanceContext = context;
+  }
   return Object.keys(normalized).length > 0 ? normalized : undefined;
 }
 
@@ -89,6 +101,7 @@ export function normalizeDashboardChartTileDisplaySettingsForChartType(
 ): AppDashboardChartTileDisplaySettingsInterface | undefined {
   return normalizeDashboardChartTileDisplaySettings(value, {
     includeCalendarView: isDashboardActivityCalendarChartType(chartType),
+    includePerformanceContext: isDashboardPerformanceChartType(chartType),
     includeDerivedChartRange: isDashboardIntensityDistributionChartType(chartType)
       || isDashboardEfficiencyTrendChartType(chartType),
     includeFormTimelineWindow: isDashboardFormChartType(chartType),
