@@ -1,6 +1,8 @@
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
+import * as logger from 'firebase-functions/logger';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
-import { hasDerivedMetricSourceChange, type DerivedMetricSource } from './derived-metrics-source-change';
+import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
+import { hasDerivedMetricSourceChange, hasDerivedMetricsHealthSource, type DerivedMetricSource } from './derived-metrics-source-change';
 
 const DERIVED_METRICS_SOURCE_TRIGGER_MEMORY = '512MiB';
 
@@ -28,6 +30,21 @@ async function dispatchSourceWrite(
         source, event.data?.before?.data?.(), event.data?.after?.data?.(),
     )) {
         return;
+    }
+    if (source === 'health' && !hasDerivedMetricsHealthSource(before, after)) return;
+    if (beforeExists && !afterExists) {
+        // Account cleanup emits one delivery per deleted document. Avoid loading cache/calculation code for it.
+        const { firestore } = await import('firebase-admin');
+        const deletionGuard = await getUserDeletionGuardState(firestore(), uid);
+        if (deletionGuard.shouldSkip) {
+            logger.info('[derived-metrics] Skipping ingress enqueue because user deletion is in progress or user root is missing.', {
+                uid, source,
+                sourceId: event.params?.eventId ?? event.params?.activityId ?? event.params?.sleepSessionId ?? event.params?.sourceRecordId,
+                userExists: deletionGuard.userExists,
+                deletionInProgress: deletionGuard.deletionInProgress,
+            });
+            return;
+        }
     }
     // No-op deliveries must not load Sports Lib, cache builders or Cloud Tasks.
     // Import failures propagate to the trigger's existing retry policy.

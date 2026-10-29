@@ -6,7 +6,7 @@ import { HEALTH_METRIC_IDS } from '../../../shared/health';
 import { isDerivedMetricsUidAllowed } from './derived-metrics-uid-gate';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 import { trainingLoadSourceFingerprint, trainingLoadWriteTime } from '../training-load/training-load-source-fingerprint';
-import { hasGarminSleepHeartRateSource, type DerivedMetricSource } from './derived-metrics-source-change';
+import { hasDerivedMetricsHealthSource, hasGarminSleepHeartRateSource, type DerivedMetricSource } from './derived-metrics-source-change';
 
 async function refreshTrainingLoadSummary(uid: string, eventId: string): Promise<void> {
     const cache = await import('../training-load/training-load-cache');
@@ -89,8 +89,7 @@ export async function handleDerivedMetricsSourceWrite(
             return Array.isArray(metricIds) ? metricIds.filter(value => typeof value === 'string') : [];
         }))
         : null;
-    if (healthMetricIds && ![HEALTH_METRIC_IDS.BodyWeight, HEALTH_METRIC_IDS.HeartRateVariability, HEALTH_METRIC_IDS.Vo2Max]
-        .some(id => healthMetricIds.has(id)) && ![before, after].some(hasGarminSleepHeartRateSource)) return;
+    if (source === 'health' && !hasDerivedMetricsHealthSource(before, after)) return;
     const { DERIVED_METRIC_KINDS } = await import('../../../shared/derived-metrics');
 
     // Debounce mutation ingress by uid + short time bucket.
