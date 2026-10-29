@@ -2516,6 +2516,9 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Garmin supports up to its latest rolling five years');
     expect(serviceConnectionsSection?.content).toContain('COROS up to its latest rolling three months');
     expect(serviceConnectionsSection?.content).toContain('Suunto and Wahoo offer all history the provider makes available');
+    expect(serviceConnectionsSection?.content).toContain('Individual record failures normally do not stop the remaining history pages');
+    expect(serviceConnectionsSection?.content).toContain('retries those records without restarting completed pages');
+    expect(serviceConnectionsSection?.content).toContain('Authorization or connection changes still stop the affected work');
     expect(serviceConnectionsSection?.content).toContain('never expands automatically');
     expect(serviceConnectionsSection?.content).toContain('one-time dashboard prompt');
     expect(serviceConnectionsSection?.content).toContain('only the latest rolling **5 years** of activity data');

@@ -4,6 +4,8 @@ import { connectionHistoryRange, historyCapabilities, type ConnectionHistoryRang
 
 import { suuntoHistoryBatchDays } from '../suunto/history-windows';
 
+// Bound the private failure checkpoint and explicit retry transaction (one active batch is at most 100).
+export const MAX_ISOLATED_HISTORY_FAILURES = 100;
 export const CONNECTION_HISTORY_COLLECTION = 'connectionHistoryImports';
 export const OAUTH_HISTORY_FIELD = 'oauthImportRecentHistory';
 export const OAUTH_HISTORY_RANGE_FIELD = 'oauthImportHistoryRange';
@@ -20,6 +22,8 @@ export interface HistoryStep extends ConnectionHistoryStepStatus {
   retryCount: number;
   done: boolean;
   childPaths: string[];
+  // Settled failures from earlier pages, never observed again while scanning later pages.
+  failedChildPaths?: string[];
 }
 export interface ConnectionHistoryRun {
   id: string;

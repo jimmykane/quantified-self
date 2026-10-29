@@ -69,24 +69,31 @@ export async function observeHistoryChildren(paths: string[], runId?: string, ex
     }
     return 'pending';
   }
-  const liveFailure = live.some(row => row.data()?.resultStatus === 'failed');
-  const liveAuthorization = live.some(row => row.ref.parent.id === ROUTE_SYNC_QUEUE_COLLECTION_NAME
-    && row.data()?.skippedReason === 'provider_auth_required');
-  if (liveAuthorization) return missing.length || liveFailure ? 'mixed' : 'authorization';
+  const authorizationContexts = new Set(['PERMISSION_MISSING', 'GARMIN_HEALTH_PERMISSION_MISSING', 'GARMIN_HEALTH_BACKFILL_PERMISSION_MISSING', 'GARMIN_HEALTH_BACKFILL_AUTH_REQUIRED', 'INVALID_GRANT', 'AUTH_RECONNECT_REQUIRED', 'NO_TOKEN_FOUND']);
+  const liveFailures = live.filter(row => row.data()?.resultStatus === 'failed');
+  const liveFailure = liveFailures.length > 0;
+  const liveAuthorization = live.filter(row => row.ref.parent.id === ROUTE_SYNC_QUEUE_COLLECTION_NAME
+    && row.data()?.skippedReason === 'provider_auth_required'
+    || row.data()?.resultStatus === 'failed' && authorizationContexts.has(row.data()?.context));
+  if (liveAuthorization.length) return missing.length || liveFailures.some(row => !liveAuthorization.includes(row)) ? 'mixed' : 'authorization';
+  let verifiedFailures = liveFailures.every(row => row.data()?.connectionHistoryRunId === runId) && !!runId;
   if (missing.length) {
+    verifiedFailures = false;
     if (runId) {
       const dead = await db.getAll(...missing.map(row => db.collection('failed_jobs').doc(row.ref.id)));
-      const authorizationContexts = new Set(['PERMISSION_MISSING', 'GARMIN_HEALTH_PERMISSION_MISSING', 'GARMIN_HEALTH_BACKFILL_PERMISSION_MISSING', 'GARMIN_HEALTH_BACKFILL_AUTH_REQUIRED', 'INVALID_GRANT', 'AUTH_RECONNECT_REQUIRED', 'NO_TOKEN_FOUND']);
       const authorizationFailures = dead.filter((row, index) => row.data()?.connectionHistoryRunId === runId
         && row.data()?.originalCollection === missing[index].ref.parent.id && authorizationContexts.has(row.data()?.context)).length;
       if (authorizationFailures > 0) {
         if (authorizationFailures < missing.length || liveFailure) return 'mixed';
         return 'authorization';
       }
+      verifiedFailures = dead.every((row, index) => row.data()?.connectionHistoryRunId === runId
+        && row.data()?.originalCollection === missing[index].ref.parent.id)
+        && liveFailures.every(row => row.data()?.connectionHistoryRunId === runId);
     }
-    return 'failed';
+    if (!verifiedFailures) return 'failed';
   }
-  if (liveFailure) return 'failed';
+  if (liveFailure && !verifiedFailures) return 'failed';
   if (live.some(row => {
     const data = row.data();
     // A verified Garmin copy already satisfies this Suunto import. Other skips
@@ -96,8 +103,14 @@ export async function observeHistoryChildren(paths: string[], runId?: string, ex
     if (row.ref.parent.id === ROUTE_SYNC_QUEUE_COLLECTION_NAME
       && data?.resultStatus === 'skipped'
       && ['provider_route_up_to_date', 'provider_route_content_unchanged', 'provider_route_not_found'].includes(data.skippedReason)) return false;
+    if (data?.resultStatus === 'failed') return false;
     return data?.skippedReason || (data?.resultStatus && data.resultStatus !== 'success');
-  })) return 'skipped';
+  })) return missing.length || liveFailure ? 'failed' : 'skipped';
+  if (missing.length || liveFailure) return {
+    failedPaths: [...missing, ...liveFailures].map(row => row.ref.path),
+    hadUnavailableRoutes: live.some(row => row.ref.parent.id === ROUTE_SYNC_QUEUE_COLLECTION_NAME
+      && row.data()?.skippedReason === 'provider_route_not_found'),
+  };
   // A route removed since listing must not abandon the rest of the library.
   return live.some(row => row.ref.parent.id === ROUTE_SYNC_QUEUE_COLLECTION_NAME
     && row.data()?.resultStatus === 'skipped' && row.data()?.skippedReason === 'provider_route_not_found')
@@ -333,29 +346,40 @@ export const retryConnectionHistoryImport = onCall({ region, cors: ALLOWED_CORS_
       }
     }
     // Read every candidate before staging writes. Never overwrite a replacement queue revision.
-    const children = await Promise.all(failed.flatMap(step => step.childPaths).map(async path => {
+    const retainedPaths = new Set(failed.flatMap(step => step.failedChildPaths ?? []));
+    const retryPaths = [...new Set(failed.flatMap(step => [...step.childPaths, ...(step.failedChildPaths ?? [])]))];
+    const children = await Promise.all(retryPaths.map(async path => {
       const ref = db.doc(path); const [live, dead] = await Promise.all([tx.get(ref), tx.get(db.collection('failed_jobs').doc(ref.id))]);
       return { ref, live, dead };
     }));
     if (retriesActivities) tx.set(metaRef, { connectionHistoryReservation: run.id, connectionHistoryReservationExpiresAt: Date.now() + 7 * 86400000 }, { merge: true });
     if (sleepRef) tx.set(sleepRef, { connectionHistoryReservation: run.id, connectionHistoryReservationExpiresAt: Date.now() + 35 * 86400000 }, { merge: true });
     for (const child of children) {
-      if (child.live.exists) continue;
-      const data = child.dead.data();
-      if (!data || data.connectionHistoryRunId !== run.id || data.originalCollection !== child.ref.parent.id) {
+      const live = child.live.data();
+      if (child.live.exists) {
+        if (retainedPaths.has(child.ref.path) && live?.connectionHistoryRunId !== run.id) {
+          throw new HttpsError('failed-precondition', 'Some history now belongs to another import. Reconnect or use History Import.');
+        }
+        if (live?.connectionHistoryRunId !== run.id || !live.processed || live.resultStatus !== 'failed') continue;
+      }
+      const data = child.live.exists ? live : child.dead.data();
+      if (!data || data.connectionHistoryRunId !== run.id || (!child.live.exists && data.originalCollection !== child.ref.parent.id)) {
         throw new HttpsError('failed-precondition', 'Some history is no longer available to retry. Use History Import or reconnect.');
       }
       // Every canonical history queue uses null for an unissued task; false
       // would leave restored activity rows outside the dispatcher's query.
       const restored = { ...data, retryCount: 0, processed: false, dispatchedToCloudTask: null, queueRevision: randomUUID(), dateCreated: Date.now(), expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS) };
       for (const field of ['error', 'failedAt', 'context', 'originalCollection', 'processingOwner', 'processingRevision', 'processingLeaseExpiresAt']) delete restored[field as keyof typeof restored];
-      if (child.ref.parent.id === ROUTE_SYNC_QUEUE_COLLECTION_NAME) {
-        for (const field of ['resultStatus', 'skippedReason', 'processedAt']) delete restored[field as keyof typeof restored];
-      }
+      for (const field of ['resultStatus', 'skippedReason', 'processedAt']) delete restored[field as keyof typeof restored];
       // Queue and DLQ rows are leaves by contract; there are no descendants to restore.
-      tx.set(child.ref, restored); tx.delete(child.dead.ref);
+      tx.set(child.ref, restored);
+      if (!child.live.exists) tx.delete(child.dead.ref);
     }
-    for (const step of failed) { step.done = false; step.status = 'queued'; step.retryCount = 0; delete step.message; }
+    for (const step of failed) {
+      step.childPaths = [...new Set([...step.childPaths, ...(step.failedChildPaths ?? [])])];
+      delete step.failedChildPaths;
+      step.done = false; step.status = 'queued'; step.retryCount = 0; delete step.message;
+    }
     run.processed = false; run.failed = false; run.revision++; run.nextAttemptAt = Date.now(); run.updatedAtMs = Date.now();
     delete run.leaseOwner; delete run.leaseExpiresAt;
     tx.set(ref, run); tx.set(db.doc(`users/${run.userID}/meta/${run.serviceName}`), { connectionHistoryImport: historyProjection(run) }, { merge: true });

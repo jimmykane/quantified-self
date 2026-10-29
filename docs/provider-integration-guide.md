@@ -1370,6 +1370,16 @@ cannot invalidate admission or interrupt other started enqueues. Monitoring is
 See [coordination and recovery](connection-history-import.md#coordination-persistence-and-retries) for the backend-only
 release/rollback boundary. Help, MCP/Assistant and Training contracts are unchanged.
 
+Shared connection-history coordination isolates verified per-record failures after the active child batch settles,
+then continues later pages and resources. A finished scan with retained failures reports issues and an explicit failed-record
+count; the existing Retry action restores only failed/unfinished records with all ownership, Pro, connection and reservation
+guards. Authorization/lifecycle or unverifiable missing rows still stop their scope. Private failure references are bounded;
+extensive failures pause admission rather than growing the run or recovery transaction without limit. No provider-copy
+recognition, identity matching, child retry budget or saved content changes. See
+[isolated record failures](connection-history-import.md#isolated-record-failures) for recovery bounds and release scope.
+Monitoring remains **covered/unchanged** by #847's active/terminal checkpoints and #829/#830's committed child outcomes;
+no new monitoring resource, provider scope, MCP or Training contract is introduced.
+
 New Suunto connection-history snapshots can group four aligned 28-day Sleep or 26-day Health targets per bounded admission. The private versioned plan preserves legacy in-flight ranges/receipts, exact selected-date coverage, full-feed Health context, adaptive continuation and partial-admission recovery. Receipt identity uses the planner's same default batch size; incompatible versions or resource/provider snapshots stop before admission. The offline stress model finds lower aggregate work and completion time but slower short imports under saturation. The repository owner explicitly accepted this congestion tradeoff for PR #966 on 2026-10-28; coverage and lifecycle/retry requirements remain in force. See [Suunto batch evidence and release boundaries](connection-history-import.md#batched-suunto-sleephealth-targets). Existing #830/#847 monitoring is covered and unchanged; no manual callable, public/MCP/Training contract or Help behavior changes. Deploy compatible coordinator/recovery consumers before the Suunto callback producer only after separate approval; do not roll back the consumers while batched runs remain.
 
 Connection-history Sleep/Health children dispatch through the existing immediate, revision-bound queue path after

@@ -49,7 +49,7 @@ vi.mock('firebase-admin', () => {
 });
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import * as logger from 'firebase-functions/logger';
-import { CONNECTION_HISTORY_COLLECTION, createHistoryRun, type ConnectionHistoryRun } from './model';
+import { CONNECTION_HISTORY_COLLECTION, MAX_ISOLATED_HISTORY_FAILURES, createHistoryRun, historyOperationKey, type ConnectionHistoryRun } from './model';
 import { processConnectionHistoryRun, observeHistoryChildren, dispatchConnectionHistoryRun, retryConnectionHistoryImport, classifyHistoryFailure, processConnectionHistoryTask, recoverConnectionHistoryImports, onConnectionHistoryImportWritten } from './tasks';
 import { historyExecution, HistoryLifecycleChangedError, withHistoryQueueExecution } from './execution';
 import type { QueueItemInterface } from '../queue/queue-item.interface';
@@ -106,6 +106,16 @@ describe('durable history coordinator', () => {
     await processConnectionHistoryRun(run.id, '0'); expect(mocks.execute).not.toHaveBeenCalled(); expect(saved().steps[0].count).toBe(4);
     expect(mocks.depth).not.toHaveBeenCalled(); expect(saved().processed).toBe(true);
     expect(signals()).toEqual([{ telemetryVersion: 1, event: 'checkpoint', provider: 'wahoo', outcome: 'processed' }]);
+  });
+  it('adopts an already committed admission receipt even at the isolated-failure bound', async () => {
+    const step = run.steps[0];
+    step.failedChildPaths = Array.from({ length: MAX_ISOLATED_HISTORY_FAILURES }, (_, i) => `workoutQueue/failed-${i}`);
+    run.lastOperation = { key: historyOperationKey(step), result: { count: 1, nextStartMs: now + 1000, nextPage: 2,
+      childPaths: ['workoutQueue/admitted'] } };
+    mocks.depth.mockResolvedValue(500);
+    await processConnectionHistoryRun(run.id, '0');
+    expect(mocks.execute).not.toHaveBeenCalled(); expect(mocks.depth).not.toHaveBeenCalled();
+    expect(saved()).toMatchObject({ processed: false, steps: [{ status: 'queued', count: 1, childPaths: ['workoutQueue/admitted'] }] });
   });
   it.each(['root', 'token', 'meta', 'disconnect', 'deleted', 'pro'])('stops before provider work after %s lifecycle changes', async kind => {
     if (kind === 'root') mocks.rows.set(run.rootPath, { activeOAuthCredentialGeneration: 'replacement' });
@@ -182,11 +192,101 @@ describe('durable history coordinator', () => {
     mocks.rows.set('suuntoAppWorkoutQueue/pending', { processed: true, resultStatus: 'skipped', skippedReason: 'connection_history_superseded' });
     expect(await observeHistoryChildren(['suuntoAppWorkoutQueue/copy', 'suuntoAppWorkoutQueue/pending'])).toBe('skipped');
   });
+  it('continues later history pages after a run-owned child fails and retries only that record after the scan', async () => {
+    const step = run.steps[0]; step.page = 2; step.count = 2;
+    step.childPaths = ['workoutQueue/good', 'workoutQueue/bad'];
+    mocks.rows.set('workoutQueue/good', { processed: true, connectionHistoryRunId: run.id });
+    mocks.rows.set('failed_jobs/bad', { connectionHistoryRunId: run.id, originalCollection: 'workoutQueue',
+      context: 'ACTIVITY_IDENTITY_CONFLICT', retryCount: 0, resultStatus: 'failed', error: 'PRIVATE_DETAILS' });
+    await processConnectionHistoryRun(run.id, '0');
+    expect(saved()).toMatchObject({ processed: true, failed: true, revision: 1,
+      steps: [{ status: 'failed', count: 2, childPaths: [], failedChildPaths: ['workoutQueue/bad'], nextStartMs: now + 1000 }] });
+    expect(mocks.execute).toHaveBeenCalledTimes(1);
+    expect(mocks.rows.has('failed_jobs/bad')).toBe(true);
+    const projection = mocks.rows.get(`users/owner/meta/${run.serviceName}`).connectionHistoryImport;
+    expect(projection).toMatchObject({ active: false, canRetry: true });
+    expect(projection.steps[0].message).toContain('History scan finished');
+    expect(JSON.stringify(projection)).not.toMatch(/PRIVATE|workoutQueue|failedChildPaths/);
+    expect(signals()).toContainEqual(expect.objectContaining({ event: 'checkpoint', outcome: 'failed' }));
+
+    const retry = retryConnectionHistoryImport as unknown as (request: { auth: { uid: string }; data: { runId: string } }) => Promise<unknown>;
+    await retry({ auth: { uid: 'owner' }, data: { runId: run.id } });
+    expect(saved().steps[0]).toMatchObject({ childPaths: ['workoutQueue/bad'], page: 1, nextStartMs: now + 1000 });
+    expect(saved().steps[0]).not.toHaveProperty('failedChildPaths');
+    expect(mocks.rows.get('workoutQueue/bad')).toMatchObject({ processed: false, retryCount: 0, dispatchedToCloudTask: null });
+    expect(mocks.rows.get('workoutQueue/bad')).not.toHaveProperty('resultStatus');
+    expect(mocks.rows.get('workoutQueue/good')).toEqual({ processed: true, connectionHistoryRunId: run.id });
+    mocks.rows.get('workoutQueue/bad').processed = true;
+    await processConnectionHistoryRun(run.id, '2');
+    expect(saved()).toMatchObject({ processed: true, failed: false, steps: [{ status: 'processed', childPaths: [] }] });
+    expect(mocks.execute).toHaveBeenCalledTimes(1);
+  });
+  it('keeps active history checkpoints active while a later page is pending despite retained failures', async () => {
+    run.steps[0].childPaths = ['workoutQueue/bad'];
+    mocks.rows.set('failed_jobs/bad', { connectionHistoryRunId: run.id, originalCollection: 'workoutQueue', context: 'MAX_RETRY_REACHED' });
+    mocks.execute.mockResolvedValue({ count: 1, nextStartMs: run.startMs + 1000, nextPage: 2 });
+    await processConnectionHistoryRun(run.id, '0');
+    expect(saved()).toMatchObject({ processed: false, failed: false,
+      steps: [{ status: 'queued', failedChildPaths: ['workoutQueue/bad'] }] });
+    expect(signals()).toEqual([{ telemetryVersion: 1, event: 'checkpoint', provider: 'wahoo', outcome: 'active' }]);
+  });
+  it('isolates only exact run and original-collection failures and still waits for unfinished children', async () => {
+    const path = 'workoutQueue/bad';
+    mocks.rows.set('failed_jobs/bad', { connectionHistoryRunId: run.id, originalCollection: 'workoutQueue', context: 'MAX_RETRY_REACHED' });
+    expect(await observeHistoryChildren([path], run.id)).toMatchObject({ failedPaths: [path] });
+    expect(await observeHistoryChildren([path])).toBe('failed');
+    expect(await observeHistoryChildren([path], 'different-run')).toBe('failed');
+    expect(await observeHistoryChildren(['otherQueue/bad'], run.id)).toBe('failed');
+    mocks.rows.set('workoutQueue/pending', { processed: false, connectionHistoryRunId: run.id });
+    expect(await observeHistoryChildren([path, 'workoutQueue/pending'], run.id)).toBe('pending');
+    mocks.rows.set('workoutQueue/pending', { processed: true, skippedReason: 'connection_history_superseded' });
+    expect(await observeHistoryChildren([path, 'workoutQueue/pending'], run.id)).toBe('failed');
+  });
+  it('retries a retained live failure with a fresh queue revision and preserves successful live rows', async () => {
+    run.processed = true; const step = run.steps[0]; step.status = 'failed'; step.done = true;
+    step.failedChildPaths = ['routeSyncQueue/failed', 'routeSyncQueue/recovered'];
+    mocks.rows.set('routeSyncQueue/failed', { processed: true, resultStatus: 'failed', connectionHistoryRunId: run.id, queueRevision: 'old' });
+    mocks.rows.set('routeSyncQueue/recovered', { processed: true, resultStatus: 'success', connectionHistoryRunId: run.id, queueRevision: 'good' });
+    expect(await observeHistoryChildren(step.failedChildPaths, run.id)).toMatchObject({ failedPaths: ['routeSyncQueue/failed'] });
+    const retry = retryConnectionHistoryImport as unknown as (request: { auth: { uid: string }; data: { runId: string } }) => Promise<unknown>;
+    await retry({ auth: { uid: 'owner' }, data: { runId: run.id } });
+    expect(mocks.rows.get('routeSyncQueue/failed')).toMatchObject({ processed: false, retryCount: 0, dispatchedToCloudTask: null });
+    expect(mocks.rows.get('routeSyncQueue/failed').queueRevision).not.toBe('old');
+    expect(mocks.rows.get('routeSyncQueue/failed')).not.toHaveProperty('resultStatus');
+    expect(mocks.rows.get('routeSyncQueue/recovered')).toMatchObject({ processed: true, resultStatus: 'success', queueRevision: 'good' });
+  });
+  it.each(['missing', 'foreign-run', 'foreign-collection', 'replacement'])('does not restore a retained %s record without exact recovery evidence', async kind => {
+    run.processed = true; const step = run.steps[0]; step.status = 'failed'; step.done = true;
+    step.failedChildPaths = ['workoutQueue/bad'];
+    if (kind !== 'missing') mocks.rows.set('failed_jobs/bad', { connectionHistoryRunId: kind === 'foreign-run' ? 'other' : run.id,
+      originalCollection: kind === 'foreign-collection' ? 'otherQueue' : 'workoutQueue' });
+    if (kind === 'replacement') mocks.rows.set('workoutQueue/bad', { processed: false, connectionHistoryRunId: 'other', queueRevision: 'new' });
+    const before = structuredClone(mocks.rows.get('workoutQueue/bad'));
+    const retry = retryConnectionHistoryImport as unknown as (request: { auth: { uid: string }; data: { runId: string } }) => Promise<unknown>;
+    await expect(retry({ auth: { uid: 'owner' }, data: { runId: run.id } })).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect(mocks.rows.get('workoutQueue/bad')).toEqual(before);
+    expect(saved().processed).toBe(true);
+  });
+  it.each(['disconnect', 'deleted', 'pro'])('does not restore isolated failures after %s', async kind => {
+    run.processed = true; const step = run.steps[0]; step.status = 'failed'; step.done = true; step.failedChildPaths = ['workoutQueue/bad'];
+    mocks.rows.set('failed_jobs/bad', { connectionHistoryRunId: run.id, originalCollection: 'workoutQueue' });
+    if (kind === 'disconnect') mocks.rows.get(run.rootPath).disconnectOperationGeneration = 'disconnect';
+    if (kind === 'deleted') mocks.rows.set('userDeletionTombstones/owner', { expireAt: now + 60000 });
+    if (kind === 'pro') mocks.pro.mockResolvedValue(false);
+    const retry = retryConnectionHistoryImport as unknown as (request: { auth: { uid: string }; data: { runId: string } }) => Promise<unknown>;
+    await expect(retry({ auth: { uid: 'owner' }, data: { runId: run.id } })).rejects.toBeDefined();
+    expect(mocks.rows.has('workoutQueue/bad')).toBe(false);
+    expect(mocks.rows.has('failed_jobs/bad')).toBe(true);
+  });
   it.each(['PERMISSION_MISSING', 'GARMIN_HEALTH_BACKFILL_PERMISSION_MISSING', 'GARMIN_HEALTH_BACKFILL_AUTH_REQUIRED'])('recognizes only the current run’s matching %s failure without exposing DLQ details', async context => {
     mocks.rows.set('failed_jobs/missing', { connectionHistoryRunId: run.id, originalCollection: 'queue', context, error: 'private provider details' });
     expect(await observeHistoryChildren(['queue/missing'], run.id)).toBe('authorization');
     expect(await observeHistoryChildren(['queue/missing'], 'different-run')).toBe('failed');
     expect(await observeHistoryChildren(['otherQueue/missing'], run.id)).toBe('failed');
+  });
+  it('does not isolate terminal live authorization failures', async () => {
+    mocks.rows.set('queue/auth', { processed: true, resultStatus: 'failed', context: 'AUTH_RECONNECT_REQUIRED', connectionHistoryRunId: run.id });
+    expect(await observeHistoryChildren(['queue/auth'], run.id)).toBe('authorization');
   });
   it('keeps mixed authorization and recoverable child failures retryable', async () => {
     mocks.rows.set('failed_jobs/auth', { connectionHistoryRunId: run.id, originalCollection: 'queue', context: 'PERMISSION_MISSING' });

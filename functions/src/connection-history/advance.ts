@@ -1,12 +1,24 @@
 import { getCloudTaskRetryBackoffSeconds, PROVIDER_MAX_RETRY_COUNT } from '../shared/queue-config';
-import type { ConnectionHistoryRun, HistoryStep } from './model';
+import { MAX_ISOLATED_HISTORY_FAILURES, historyOperationKey, type ConnectionHistoryRun, type HistoryStep } from './model';
 
-export type HistoryChildObservation = 'pending' | 'processed' | 'unavailable' | 'failed' | 'skipped' | 'authorization' | 'mixed';
+export type HistoryChildObservation = 'pending' | 'processed' | 'unavailable' | 'failed' | 'skipped' | 'authorization' | 'mixed'
+  | { failedPaths: string[]; hadUnavailableRoutes?: boolean };
 
 export interface HistoryAdvanceDependencies {
   execute(step: HistoryStep): Promise<{ count: number; nextStartMs: number; nextPage: number; routeAfterId?: string; childPaths: string[] }>;
   observe(paths: string[]): Promise<HistoryChildObservation>;
   classify(error: unknown): { kind: 'split' | 'skip' | 'retry' | 'wait'; message: string; nextAllowedAtMs?: number; retryAt?: number };
+}
+function finishHistoryStep(step: HistoryStep): void {
+  step.done = true;
+  if (step.failedChildPaths?.length) {
+    step.status = 'failed';
+    step.message = `History scan finished. ${step.failedChildPaths.length} record${step.failedChildPaths.length === 1 ? '' : 's'} failed. Retry failed imports to recover only those records.`;
+  } else step.status = step.capability.completion === 'requested' ? 'requested' : 'processed';
+}
+function retainedFailureCount(run: ConnectionHistoryRun, additionalPaths: string[] = []): number {
+  return new Set([...run.steps.flatMap(step => [...(step.failedChildPaths ?? []),
+    ...(step.done && step.status === 'failed' ? step.childPaths : [])]), ...additionalPaths]).size;
 }
 /** One bounded unit, independently testable from Firebase and provider adapters. */
 export async function advanceHistoryRun(run: ConnectionHistoryRun, deps: HistoryAdvanceDependencies, now: number): Promise<void> {
@@ -14,7 +26,18 @@ export async function advanceHistoryRun(run: ConnectionHistoryRun, deps: History
   if (!step) { run.processed = true; return; }
   try {
     if (step.childPaths.length) {
-      const observed = await deps.observe(step.childPaths);
+      let observed = await deps.observe(step.childPaths);
+      let failureLimitReached = false;
+      if (typeof observed === 'object') {
+        const failedPaths = [...new Set([...(step.failedChildPaths ?? []), ...observed.failedPaths])];
+        if (retainedFailureCount(run, failedPaths) > MAX_ISOLATED_HISTORY_FAILURES) {
+          // Keep this entire active batch reachable for Retry instead of growing the checkpoint without a bound.
+          observed = 'failed'; failureLimitReached = true;
+        } else {
+          step.failedChildPaths = failedPaths;
+          if (observed.hadUnavailableRoutes) step.hadUnavailableRoutes = true;
+        }
+      }
       if (observed === 'pending') { run.nextAttemptAt = now + 60_000; return; }
       if (observed === 'unavailable' && step.resources.includes('routes')) step.hadUnavailableRoutes = true;
       if (observed === 'failed' || observed === 'mixed') {
@@ -22,7 +45,8 @@ export async function advanceHistoryRun(run: ConnectionHistoryRun, deps: History
         // retry immediately instead of spending another full parent retry cycle.
         step.status = 'failed'; step.message = observed === 'mixed'
           ? 'Some background imports failed and another needs authorization. Retry unfinished work or reconnect.'
-          : 'Some background imports failed. Retry failed imports to resume unfinished work.'; step.done = true;
+          : failureLimitReached ? 'History paused after many failed records. Retry failed imports to recover them and continue the remaining history.'
+            : 'Some background imports failed. Retry failed imports to resume unfinished work.'; step.done = true;
         run.nextAttemptAt = now + 2_000; run.processed = run.steps.every(x => x.done); run.updatedAtMs = now;
         return;
       }
@@ -35,7 +59,12 @@ export async function advanceHistoryRun(run: ConnectionHistoryRun, deps: History
       step.childPaths = [];
     }
     if (!step.done && step.nextStartMs > run.endMs) {
-      step.status = step.capability.completion === 'requested' ? 'requested' : 'processed'; step.done = true;
+      finishHistoryStep(step);
+    }
+    if (!step.done && retainedFailureCount(run) >= MAX_ISOLATED_HISTORY_FAILURES
+      && run.lastOperation?.key !== historyOperationKey(step)) {
+      step.done = true; step.status = 'failed';
+      step.message = 'History paused after many failed records. Retry failed imports to recover them and continue the remaining history.';
     }
     if (!step.done) {
       step.status = 'requesting';
@@ -45,7 +74,7 @@ export async function advanceHistoryRun(run: ConnectionHistoryRun, deps: History
       step.retryCount = 0; delete step.message;
       step.childPaths = result.childPaths;
       if (step.nextStartMs > run.endMs && !step.childPaths.length) {
-        step.done = true; step.status = step.capability.completion === 'requested' ? 'requested' : 'processed';
+        finishHistoryStep(step);
       } else step.status = 'queued';
     }
     run.nextAttemptAt = now + (step.childPaths.length ? 60_000 : 2_000);
@@ -66,6 +95,14 @@ export async function advanceHistoryRun(run: ConnectionHistoryRun, deps: History
       step.done = failure.kind === 'split' || step.retryCount >= PROVIDER_MAX_RETRY_COUNT;
       step.status = step.done ? 'failed' : 'retrying';
       run.nextAttemptAt = step.done ? now + 2_000 : Math.max(failure.retryAt || 0, now + getCloudTaskRetryBackoffSeconds(step.retryCount) * 1000);
+    }
+  }
+  if (step.failedChildPaths?.length) {
+    if (step.done && step.status === 'skipped') {
+      step.status = 'failed';
+      step.message += ` ${step.failedChildPaths.length} earlier records also failed. Retry failed imports after resolving this issue.`;
+    } else if (!step.done && !step.message) {
+      step.message = `${step.failedChildPaths.length} record${step.failedChildPaths.length === 1 ? '' : 's'} failed. Continuing the remaining history.`;
     }
   }
   if (step.hadUnavailableRoutes && (step.status === 'queued' && !step.message || step.status === 'processed')) {
