@@ -7195,6 +7195,14 @@ Cache refresh and Cloud Tasks modules load only when needed. Import or handler e
 propagate for retry. Compiled entrypoint checks prevent Sports Lib, cache builders and Cloud Tasks from returning
 to the eager trigger import graph.
 
+Eligible source deletions check the account root and deletion tombstone before loading that handler. Account-cleanup
+deliveries acknowledge without cache refresh, metadata reads or enqueueing. Non-Health deletions also defer snapshot
+decoding until after this guard; unrelated Health records still exit with no Firestore reads. An ordinary source
+deletion adds this two-document preflight and retains cache maintenance and
+the later deletion/transaction guards, including a deletion that starts during handling. Guard lookup failures retry.
+Trigger delivery still occurs; concurrency, deletion pacing, resources and retry settings are unchanged. Help, MCP
+contracts/planning reads and monitoring coverage are unchanged: this only short-circuits an existing lifecycle skip.
+
 Preparation, finalization and trigger cache refresh batch the account root, deletion tombstone and already-known
 source/metadata references into one transaction read. Finalization includes its expected child references in that
 batch. Every transaction retry rereads them; authorization, attempt ownership, current controls, source fingerprints,

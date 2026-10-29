@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
+import { HEALTH_METRIC_IDS } from '../../../shared/health';
 import {
     DERIVED_METRICS_ACTIVITY_FIELDS, DERIVED_METRICS_EVENT_FIELDS,
     DERIVED_METRICS_TRAINING_READINESS_SLEEP_FIELDS, DERIVED_METRICS_TRAINING_SLEEP_FIELDS,
@@ -26,6 +27,14 @@ export function hasGarminSleepHeartRateSource(data: unknown): boolean {
     return field(data, 'source.provider') === 'GarminAPI' && field(data, 'source.sourceRecordType') === 'garmin_daily'
         && Array.isArray(field(data, 'metricIds')) && (field(data, 'metricIds') as unknown[]).includes('heart_rate')
         && Array.isArray(field(data, 'sampleChunkIds')) && (field(data, 'sampleChunkIds') as unknown[]).length > 0;
+}
+
+export function hasDerivedMetricsHealthSource(before: unknown, after: unknown): boolean {
+    return [before, after].some(data => {
+        const metricIds = field(data, 'metricIds');
+        return (Array.isArray(metricIds) && [HEALTH_METRIC_IDS.BodyWeight, HEALTH_METRIC_IDS.HeartRateVariability,
+            HEALTH_METRIC_IDS.Vo2Max].some(id => metricIds.includes(id))) || hasGarminSleepHeartRateSource(data);
+    });
 }
 
 export function hasDerivedMetricSourceChange(source: DerivedMetricSource, before: unknown, after: unknown): boolean {
