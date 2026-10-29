@@ -2336,8 +2336,12 @@ Data ownership:
 `trainingDeliveryQueue` is a top-level server-only collection of compact **leaf** jobs. Schedule mutations, restore, plan
 deletion and delivery commands write a reconciliation marker in the same transaction, not a batch of provider payloads.
 The reconciler scans 25 current workouts per page (up to four destinations each), then 25 existing ledger identities per
-page, including deleted/historical sources. Each page rechecks schedule/settings revisions, plan-deletion locks and the
-account-deletion fence; obsolete scans restart. At most 100 compact ledgers/projections/jobs are considered in a current
+page, including deleted/historical sources. Each page checks plan-deletion locks, current consent and the
+account-deletion fence. A full scan retains its cursor through concurrent edits; newer global invalidations request a
+follow-up scan. Bounded workout edits, consent commands and delivery acknowledgements instead retain private targets
+under `trainingDeliveryState/current/reconciliationTargets/{workoutId}`. A target visits the current identities and
+pages every retained ledger for that workout, including former destinations and deleted recipes. Plan-wide operations,
+restore, disconnect and legacy marker writers still request full coverage. At most 100 compact ledgers/projections/jobs are considered in a current
 workout page. It never writes 400 workout payloads into a single document or transaction. Never-enrolled users have their
 marker removed without recurring scans. The pre-existing large manual-operation hardening remains #657.
 
@@ -2345,9 +2349,15 @@ marker removed without recurring scans. The pre-existing large manual-operation 
 and `dispatchTrainingDelivery` recovers at most 25 due reservations each minute using the existing Cloud Tasks enqueue
 and queue-depth helpers. Each priority class scans bounded pages of 25, with a hard 100-row bound, so coalesced COROS
 siblings do not consume dispatch capacity or hide another due destination/provider. Reservation precedes enqueue, so
-lost acknowledgements and crashes are recoverable. A finished
-scan becomes eligible again after 30 minutes to pick up saved-zone day boundaries, adapter horizons and entitlement
-changes. `onTrainingDeliveryConnectionChanged`, `onTrainingDeliveryEntitlementChanged`, and
+lost acknowledgements and crashes are recoverable. Reconciliation uses a fixed 60-second first-event batching
+deadline; the minute dispatcher normally adds up to another minute, plus existing queue/provider delays. Continued
+edits cannot slide that deadline. Each page first acquires a private 180-second account lease; duplicate or superseded
+reservations return before Auth, connection and recipe reads. Expired claims recover through the same dispatcher.
+A finished full repair becomes eligible again after six hours. Earlier durable wake-ups cover saved-zone midnight
+(including DST/horizon changes) and active grace expiry; delivery retries and verification keep their own due jobs.
+Effective owner unit changes wake through `onTrainingDeliveryOwnerUnitsChanged` on `users/{uid}`.
+Connection events ignore only `uploadedActivitiesCount` and `connectionHistoryImport` changes; other metadata, including
+unknown fields and credential/account authority, remains conservatively eligible. `onTrainingDeliveryConnectionChanged`, `onTrainingDeliveryEntitlementChanged`, and
 `onTrainingDeliveryQueued` each use 512 MiB for their bounded Firestore and queue work; this adds process headroom
 only and does not change queue limits, retries, or delivery semantics. Tasks may be duplicated; stable
 per-user/provider/account/workout identities, independent desired generations,
@@ -2465,10 +2475,21 @@ This trades two projection reads per considered identity for up to three avoided
 The deterministic 25-workout/single-plan/four-provider fixture reduces connection resolutions from 100 to 4 and
 context document reads from 425 to 131. Those document counts exclude connection internals, ledger/projection reads
 and queue overhead; they are local operation counts, not measured production CPU or monetary savings. Both current
-workout and historical-ledger phases, 25-item pages, 30-minute recovery, delivery/verification enqueueing, Retry-After,
-leases, revisions, consent and deletion fences retain their existing behavior.
+workout and historical-ledger phases, 25-item pages, delivery/verification enqueueing, Retry-After, revisions, consent
+and deletion fences remain covered. The account coordinator described above supersedes the former 30-minute full
+scan and restart-on-edit behavior. Its six-hour repair is a fallback; event targets and explicit timers handle normal work.
 
-MCP impact review: no wire, scope, consent, approval, recipe, completion, safe-read projection or provider-action
+The coordinator's synthetic Firestore benchmark changes one workout in a 183-workout account: 30 document reads
+versus approximately 3,000 for a full repair, with identical final ledgers. The separate 400-workout/four-provider fixture retains
+all 1,600 current identities and historical-ledger coverage. Ten overlapping same-account tasks admit one page;
+another account remains independently eligible. Fixed debounce, stale reservations, expired claims, mid-scan edits,
+legacy cursors, grace expiry, saved-zone day changes and deleted-source targets have emulator regression coverage.
+The repair interval changes its scheduled ceiling from 48 to four repairs per day; explicit events/day boundaries add
+their own work. These are local read counts and scheduling bounds, not measured production CPU or euro savings.
+
+MCP impact review: the account lease, dispatch reservation, target generations and repair/day/entitlement deadlines
+are backend-only coordination fields. The existing recursive Rules denial covers the private target descendants;
+account recursive deletion removes them. No wire, scope, consent, approval, recipe, completion, safe-read projection or provider-action
 change. Existing strict sync reads use the same source-freshness acknowledgement and private-field exclusions; no
 new planning read or bundled-plugin update is needed. Help's delivery and Check instructions remain applicable.
 Monitoring decision: **unchanged**. The existing provider outcomes, dispatch/backlog and unavailable-observation
@@ -2920,7 +2941,7 @@ Delivery commands, MCP simulated-plan previews, reconciliation and request guard
 Each new strength attempt privately snapshots `suuntoWeightUnits`; its mapping digest binds that snapshot and the
 full prescription. Later preference changes cannot reinterpret a started attempt. Exact historical v2–v7 recovery
 completes first, then the normal worker updates the retained Guide in place. Interval/swim payloads and digests
-remain v7. Unit-only settings changes are picked up by the existing 30-minute reconciliation scan; Stop, Pro,
+remain v7. Unit-only settings changes wake the account coordinator through `onTrainingDeliveryOwnerUnitsChanged`; Stop, Pro,
 account/deletion, horizon, completion and additional text-loss approval checks remain authoritative. App/watch sync
 is provider-managed, and no watch receipt is inferred.
 
@@ -8635,7 +8656,7 @@ definitions live in `tools/training-monitoring/definitions.mjs`; this is operati
 or a replacement for `/admin/queues/training-delivery`. No product enablement, UID gate, provider behavior, retention
 limit, schedule or rollback switch changes. Garmin/Wahoo/Suunto remain live; COROS new sends remain Coming soon.
 
-The `lifecycle_failures` metric additionally observes failed connection, entitlement and Guide-settings reconciliation
+The `lifecycle_failures` metric additionally observes failed connection, entitlement, Guide-settings and owner-unit reconciliation
 wake-ups before a queue job exists. It excludes successful account-deletion/no-state skips; the fixed `trigger` label
 identifies the source. Check `[TrainingDeliveryLifecycle]` transaction stages when a settings edit is slow to update.
 Do not use **Create another Guide** as an update retry. This added metric/condition needs explicit monitoring activation.

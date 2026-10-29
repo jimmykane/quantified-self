@@ -31,6 +31,7 @@ vi.mock('../config', () => ({
             activitySyncQueue: 'processActivitySyncTask',
             routeDeliverySyncQueue: 'processRouteDeliverySyncTask',
             routeSyncQueue: 'processRouteSyncTask',
+            trainingDeliveryQueue: 'processTrainingDeliveryTask',
             sleepSyncQueue: 'processSleepSyncTask',
             garminHealthBackfillQueue: 'processGarminHealthBackfillTask',
             sportsLibReparseQueue: 'processSportsLibReparseTask',
@@ -64,6 +65,17 @@ describe('Cloud Tasks Utils', () => {
         delete process.env.CLOUD_TASKS_EMULATOR_HOST;
         vi.unstubAllGlobals();
         vi.useRealTimers();
+    });
+
+    it('carries the Training reservation to the worker as well as the task name', async () => {
+        const { enqueueTrainingDeliveryTask } = await import('./cloud-tasks');
+        await enqueueTrainingDeliveryTask('reconcile_account', 'reservation-one');
+        await enqueueTrainingDeliveryTask('reconcile_account', 'reservation-two');
+        expect(hoisted.mockTaskQueue.enqueue.mock.calls.map(([payload]) => payload)).toEqual([
+            { queueItemId: 'reconcile_account', reservation: 'reservation-one' },
+            { queueItemId: 'reconcile_account', reservation: 'reservation-two' },
+        ]);
+        expect(new Set(hoisted.mockTaskQueue.enqueue.mock.calls.map(([, options]) => options.id)).size).toBe(2);
     });
 
     describe('queue monitoring', () => {

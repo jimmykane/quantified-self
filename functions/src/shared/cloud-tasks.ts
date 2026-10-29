@@ -581,7 +581,7 @@ export async function enqueueTrainingDeliveryTask(queueItemId: string, reservati
     return enqueueTaskWithRetry({
         projectId, location, functionName: trainingDeliveryQueue,
         taskId: `training-${sanitizeTaskNamePart(queueItemId)}-${sanitizeTaskNamePart(reservation)}`,
-        payload: { queueItemId },
+        payload: { queueItemId, reservation },
         alreadyExistsLogMessage: '[TrainingDelivery] Dispatch reservation already exists.',
         failedLogPrefix: '[TrainingDelivery] Dispatch failed:',
     });

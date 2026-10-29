@@ -231,7 +231,7 @@ test('settings wake-up failures are monitored before a queue job exists, excludi
   const metric = config.metrics.find(item => item.name === 'qs_training_lifecycle_failures_v1');
   assert.ok(metric.filter.includes('jsonPayload.message="[TrainingDeliveryLifecycle]"'));
   assert.ok(metric.filter.includes('jsonPayload.event="failed"'));
-  assert.ok(metric.filter.includes('jsonPayload.trigger=("connection" OR "entitlement" OR "guide-settings")'));
+  assert.ok(metric.filter.includes('jsonPayload.trigger=("connection" OR "entitlement" OR "guide-settings" OR "owner-units")'));
   assert.deepEqual(Object.keys(metric.labelExtractors), ['trigger']);
   assert.doesNotMatch(metric.filter, /completed|deletion_guard_skipped|no_delivery_state/);
   const policy = config.policies.find(item => item.userLabels.policy_id === 'dispatch');

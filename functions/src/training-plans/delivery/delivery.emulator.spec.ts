@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Firestore } from 'firebase-admin/firestore';
+import { Firestore, type Transaction } from 'firebase-admin/firestore';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import type { ExpectedTrainingScheduleRevision, ScheduledWorkoutV1, TrainingScheduleMutationOperationV1 } from '../../../../shared/training-plans';
@@ -8,7 +8,8 @@ import { DELIVERY_LEDGER, DELIVERY_QUEUE, TrainingDeliveryTransportError, type D
 import { trainingDeliveryCommand } from './commands';
 import { reconcileTrainingDeliveryPage } from './store';
 import { processTrainingDelivery } from './worker';
-import { stageTrainingDeliveryReconciliation, stageTrainingDeliveryDisconnect, reconciliationJobId } from './marker';
+import { stageTrainingDeliveryReconciliation, stageTrainingDeliveryDisconnect, reconciliationJobId, reconciliationTargets } from './marker';
+import { claimTrainingReconciliation, RECONCILIATION_BATCH_MS, RECONCILIATION_REPAIR_MS } from './reconciliation-coordinator';
 import { FakeTrainingTransport } from './test-support/fake-transport';
 import { mutateTrainingScheduleForUser } from '../persistence';
 import { restoreTrainingScheduleRevisionForUser } from '../restore';
@@ -147,7 +148,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     else expect((await db.collection(DELIVERY_QUEUE).doc(ledger.id).get()).exists).toBe(false);
     expect(transport.calls).toHaveLength(1);
     expect((await db.collection(DELIVERY_QUEUE).doc(reconciliationJobId(uid)).get()).data()?.dueAtMs)
-      .toBe(now + 30 * 60_000);
+      .toBe(now + 6 * 60 * 60_000);
   });
 
   it.each(['status', 'verification'] as const)('repairs missing %s and stale sibling projections without rewriting the ledger', async missing => {
@@ -854,9 +855,205 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     transport.horizonDays = 0;
     await db.collection('users').doc(uid).collection('scheduledWorkouts').doc('w').update({ localDate: '2026-09-11' });
     const ledger = await send(); expect(ledger.status).toBe('outside_horizon');
-    now = Date.parse('2026-09-10T21:01:00Z'); await mark(); await drain();
+    expect((await db.collection(DELIVERY_QUEUE).doc(reconciliationJobId(uid)).get()).data()?.nextTimeWakeAtMs)
+      .toBe(Date.parse('2026-09-10T21:00:00Z'));
+    now += RECONCILIATION_REPAIR_MS; await drain();
+    expect((await ledgers())[0].status).toBe('outside_horizon');
+    expect((await db.collection(DELIVERY_QUEUE).doc(reconciliationJobId(uid)).get()).data()?.dueAtMs)
+      .toBe(Date.parse('2026-09-10T21:00:00Z'));
+    now = Date.parse('2026-09-10T21:01:00Z'); await drain();
     await processTrainingDelivery(runtime, uid, ledger.id); expect(transport.calls).toHaveLength(1);
   });
+
+  it('coalesces real edits to a fixed deadline and fences duplicated, replaced and legacy tasks', async () => {
+    await send(); await mark();
+    const job = db.collection(DELIVERY_QUEUE).doc(reconciliationJobId(uid));
+    const enqueue = vi.fn().mockResolvedValue(true);
+    expect(await dispatchTrainingDeliveryJob(runtime, job.id, enqueue)).toBe(false);
+    const deadline = now + RECONCILIATION_BATCH_MS;
+    for (let index = 0; index < 10; index++) {
+      now += 3000; await mark();
+      expect(await dispatchTrainingDeliveryJob(runtime, job.id, enqueue)).toBe(false);
+      expect((await job.get()).data()?.dueAtMs).toBe(deadline);
+    }
+    now = deadline;
+    expect(await dispatchTrainingDeliveryJob(runtime, job.id, enqueue)).toBe(true);
+    const reservation = enqueue.mock.calls[0][1];
+    await job.update({ dueAtMs: 0 }); // An old enqueue can arrive after reservation recovery.
+    expect(await dispatchTrainingDeliveryJob(runtime, job.id, enqueue)).toBe(true);
+    const current = enqueue.mock.calls[1][1];
+    const hasPro = vi.spyOn(runtime, 'hasPro');
+    expect(await reconcileTrainingDeliveryPage(runtime, uid, reservation)).toBe(false);
+    expect(await reconcileTrainingDeliveryPage(runtime, uid, '')).toBe(false);
+    expect(hasPro).not.toHaveBeenCalled();
+    expect(await reconcileTrainingDeliveryPage(runtime, uid, current)).toBe(true);
+    expect(await reconcileTrainingDeliveryPage(runtime, uid, current)).toBe(false);
+    expect(hasPro).toHaveBeenCalledOnce();
+    await drain();
+  });
+
+  it('retires pending targets for never-enrolled authors without leaving a polling job', async () => {
+    await db.runTransaction(async tx => stageTrainingDeliveryReconciliation(tx, db, uid,
+      Array.from({ length: 25 }, (_, index) => `w${index}`)));
+    const hasPro = vi.spyOn(runtime, 'hasPro');
+    await drain();
+    expect(hasPro).toHaveBeenCalledOnce();
+    expect((await reconciliationTargets(db, uid).get()).empty).toBe(true);
+    expect((await db.collection(DELIVERY_QUEUE).doc(reconciliationJobId(uid)).get()).exists).toBe(false);
+  });
+
+  it.each([0, 1])('restarts a legacy cursor safely during worker rollout (coordinator version %s)', async coordinatorVersion => {
+    await send();
+    const job = db.collection(DELIVERY_QUEUE).doc(reconciliationJobId(uid));
+    await job.update({ coordinatorVersion, scanKey: 'legacy:1:1', phase: 'ledger', cursor: 'zzzz' });
+    await reconcileTrainingDeliveryPage(runtime, uid);
+    expect((await job.get()).data()).toMatchObject({ scanKey: 'coordinated:0', phase: 'ledger', cursor: '' });
+    await drain();
+  });
+
+  it('admits one account page under 10 overlapping tasks while another account can progress', async () => {
+    await send(); await mark();
+    let entered!: () => void; let release!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const paused = new Promise<void>(resolve => { release = resolve; });
+    const hasPro = vi.spyOn(runtime, 'hasPro').mockImplementationOnce(async () => { entered(); await paused; return true; });
+    const first = reconcileTrainingDeliveryPage(runtime, uid);
+    await started;
+    try {
+      expect(await Promise.all(Array.from({ length: 10 }, () => reconcileTrainingDeliveryPage(runtime, uid))))
+        .toEqual(Array(10).fill(false));
+      expect(hasPro).toHaveBeenCalledOnce();
+      const other = `delivery-test-${randomUUID()}`; users.push(other);
+      await db.collection('users').doc(other).set({ test: true });
+      await db.runTransaction(async tx => stageTrainingDeliveryReconciliation(tx, db, other));
+      expect(await claimTrainingReconciliation(runtime, other)).toEqual(expect.any(String));
+    } finally { release(); }
+    await first; await drain();
+  });
+
+  it('recovers a crashed claim and an Auth failure without losing the pending generation', async () => {
+    await send(); await mark();
+    const ref = db.collection(DELIVERY_QUEUE).doc(reconciliationJobId(uid));
+    const token = await claimTrainingReconciliation(runtime, uid);
+    expect(token).toEqual(expect.any(String));
+    expect(await reconcileTrainingDeliveryPage(runtime, uid)).toBe(false);
+    now = (await ref.get()).data()!.reconciliationLease.expiresAtMs;
+    vi.spyOn(runtime, 'hasPro').mockRejectedValueOnce(new Error('synthetic Auth outage'));
+    await expect(reconcileTrainingDeliveryPage(runtime, uid)).rejects.toThrow('synthetic Auth outage');
+    expect((await ref.get()).data()?.reconciliationLease).toBeNull();
+    await drain();
+    expect((await ref.get()).data()).toMatchObject({ scanKey: '', completedGlobalGeneration: 1 });
+  });
+
+  it('continues a full scan through edits, then revisits changes behind its cursor', async () => {
+    await send();
+    const user = db.collection('users').doc(uid);
+    const seed = db.batch();
+    for (let index = 0; index < 60; index++) seed.set(user.collection('scheduledWorkouts').doc(`z${String(index).padStart(3, '0')}`), workout(`z${String(index).padStart(3, '0')}`));
+    await seed.commit(); await mark();
+    await reconcileTrainingDeliveryPage(runtime, uid);
+    const job = db.collection(DELIVERY_QUEUE).doc(reconciliationJobId(uid));
+    const first = (await job.get()).data()!;
+    expect(first.cursor).toBe('z023');
+    const previousDigest = (await ledgers())[0].desiredDigest;
+    await user.collection('scheduledWorkouts').doc('w').update({ title: 'Changed behind cursor', revision: 2 });
+    await db.runTransaction(async tx => stageTrainingDeliveryReconciliation(tx, db, uid, ['w']));
+    await mark(); // A simultaneous connection change must also survive this sweep.
+    await reconcileTrainingDeliveryPage(runtime, uid);
+    expect((await job.get()).data()).toMatchObject({ cursor: 'z048', scanKey: first.scanKey });
+    await drain();
+    const result = (await job.get()).data()!;
+    expect(result.completedGlobalGeneration).toBe(2);
+    expect((await reconciliationTargets(db, uid).get()).empty).toBe(true);
+    expect((await ledgers())[0].desiredDigest).not.toBe(previousDigest);
+  });
+
+  it('wakes at grace expiry without an Auth write or provider request', async () => {
+    await delivered();
+    const expiry = now + 5 * 60_000;
+    runtime.entitlement = async () => ({ hasPro: now < expiry, ...(now < expiry ? { nextChangeAtMs: expiry } : {}) });
+    await mark(); await drain();
+    expect((await db.collection(DELIVERY_QUEUE).doc(reconciliationJobId(uid)).get()).data()?.dueAtMs).toBe(expiry);
+    now = expiry; pro = false; await drain();
+    expect((await ledgers())[0].status).toBe('paused_pro');
+    expect(transport.calls).toHaveLength(1);
+  });
+
+  it('also wakes at the earlier saved day boundary of a retained provider copy', async () => {
+    now = Date.parse('2026-09-10T09:00:00Z');
+    const row = await delivered();
+    await db.collection('users').doc(uid).collection(DELIVERY_LEDGER).doc(row.id)
+      .update({ 'actual.timeZone': 'Pacific/Kiritimati' });
+    await mark(); await drain();
+    expect((await db.collection(DELIVERY_QUEUE).doc(reconciliationJobId(uid)).get()).data()?.dueAtMs)
+      .toBe(Date.parse('2026-09-10T10:00:00Z'));
+    now = Date.parse('2026-09-10T10:00:00Z'); await drain();
+    expect((await ledgers())[0].status).toBe('past');
+    expect(transport.calls).toHaveLength(1);
+  });
+
+  it('reconciles all retained identities for a deleted targeted recipe across multiple pages', async () => {
+    const original = await delivered();
+    const user = db.collection('users').doc(uid);
+    const seed = db.batch();
+    for (let index = 0; index < 53; index++) {
+      const destinationKey = `old-account-${index}`;
+      const id = deliveryIdentity(uid, 'garmin', destinationKey, 'w');
+      seed.set(user.collection(DELIVERY_LEDGER).doc(id), { ...original, id, destinationKey,
+        actual: { ids: { workout: id }, localDate: '2026-09-01', completed: false } });
+    }
+    await seed.commit();
+    // The fixture recipe is a leaf. Retained private ledgers are deliberately independent.
+    await user.collection('scheduledWorkouts').doc('w').delete();
+    await db.runTransaction(async tx => stageTrainingDeliveryReconciliation(tx, db, uid, ['w']));
+    expect(await reconcileTrainingDeliveryPage(runtime, uid)).toBe(true);
+    // Another edit during the targeted ledger scan must not get erased on completion.
+    await db.runTransaction(async tx => stageTrainingDeliveryReconciliation(tx, db, uid, ['w']));
+    await drain();
+    expect((await ledgers())).toHaveLength(54);
+    expect((await ledgers()).filter(row => row.destinationKey.startsWith('old-account-')).every(row => row.status === 'past')).toBe(true);
+    expect((await reconciliationTargets(db, uid).get()).empty).toBe(true);
+  });
+
+  it('reduces a one-workout edit to bounded reads while matching a complete 183-workout repair', async () => {
+    const user = db.collection('users').doc(uid);
+    await user.collection('scheduledWorkouts').doc('w').delete(); // Unconsented synthetic leaf from beforeEach.
+    await user.collection('trainingPlans').doc('p').set({ id: 'p', lifecycle: 'active', revision: 1 });
+    const seed = db.batch();
+    for (let index = 0; index < 183; index++) seed.set(user.collection('scheduledWorkouts').doc(`s${index}`), { ...workout(`s${index}`), planId: 'p' });
+    await seed.commit();
+    await trainingDeliveryCommand(runtime, uid, command({ scope: 'plan', scopeId: 'p', action: 'configure' }), false);
+    await drain();
+    const measureReads = async (action: () => Promise<void>) => {
+      let count = 0;
+      const run = db.runTransaction.bind(db);
+      const spy = vi.spyOn(db, 'runTransaction').mockImplementation((update, options) => run(async tx => {
+        const get = tx.get.bind(tx);
+        tx.get = (async (ref: FirebaseFirestore.DocumentReference | FirebaseFirestore.Query) => {
+          const result = await get(ref as FirebaseFirestore.DocumentReference);
+          count += 'size' in result ? Math.max(1, result.size as number) : 1;
+          return result;
+        }) as Transaction['get'];
+        return update(tx);
+      }, options));
+      try { await action(); return count; } finally { spy.mockRestore(); }
+    };
+    now += 1000;
+    await user.collection('scheduledWorkouts').doc('s91').update({ title: 'Updated prescription', revision: 2, updatedAtMs: now });
+    await db.runTransaction(async tx => stageTrainingDeliveryReconciliation(tx, db, uid, ['s91']));
+    const targetedReads = await measureReads(drain);
+    const targeted = (await ledgers()).sort((a, b) => a.id.localeCompare(b.id));
+    await mark();
+    const fullReads = await measureReads(drain);
+    expect((await ledgers()).sort((a, b) => a.id.localeCompare(b.id))).toEqual(targeted);
+    expect(targeted).toHaveLength(183);
+    expect(targetedReads).toBeLessThan(100);
+    expect(fullReads / targetedReads).toBeGreaterThan(20);
+    expect((await db.collection(DELIVERY_QUEUE).doc(reconciliationJobId(uid)).get()).data()?.dueAtMs)
+      .toBe(now + RECONCILIATION_REPAIR_MS);
+    console.info('[TrainingReconciliationSyntheticBenchmark]', { workouts: 183, targetedReads, fullReads,
+      periodicRepairsBefore: 48, periodicRepairsAfter: 4 });
+  }, 90_000);
   it('pages 400 workouts across all four providers without oversized transactions', async () => {
     const user = db.collection('users').doc(uid);
     await user.collection('scheduledWorkouts').doc('w').delete(); // Synthetic seed has no descendants.

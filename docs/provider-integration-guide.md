@@ -836,6 +836,16 @@ or infer entitlement from reuse. See [Suunto delivery](training-workspace.md#suu
 seven-day window, absence limitations, FIT retention and deployment boundaries. No assumed Suunto quotas, evaluation
 budgets, new project or setup wizard are added.
 
+Training delivery reconciliation now batches account changes for a fixed 60 seconds, with minute-dispatch recovery,
+and permits one active account page. Ordinary workout edits and delivery acknowledgements use bounded private
+workout targets; global authority/plan changes retain the full current-workout and historical-ledger scans. Active
+scan cursors survive new edits. Activity upload counters and connection-history progress alone do not invalidate
+Training. Six-hour full repairs supplement explicit saved-zone midnight, grace-expiry, retry and verification timers.
+Owner unit changes have the new `onTrainingDeliveryOwnerUnitsChanged` root-user trigger, so unit-dependent Guides
+no longer depend on a half-hour scan. Provider request admission, exact consent, identities and journals are unchanged.
+These are ordinary scheduling changes, with no allowlist or second implementation stage. Local stress tests use
+synthetic accounts and fake transports; production cost reduction requires post-deployment measurement.
+
 Swimming Guide screen saves wake the existing Training reconciliation queue through
 `onTrainingDeliveryGuideSettingsChanged`; effective preference changes use the same deletion/state guards as other
 lifecycle events. Eligible updates retain the Suunto identity. **Create another Guide** remains an explicit,
