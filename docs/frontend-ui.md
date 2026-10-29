@@ -289,6 +289,10 @@ caution or unavailable phrases; punctuation stays neutral. Keep both inline, wit
 dot, chevron, extra row, card or visible heading. Let the sentence wrap naturally on narrow screens. Selecting it
 collapses or reopens the existing Today metrics; details start open and reset to open on owner changes.
 The sentence owns `aria-expanded`, `aria-controls` and one selection haptic, with a 44px minimum touch target.
+The owner’s greeting/status slot reserves the same height while the update banner, loading copy and completed
+assessment replace each other. Its wrapping allowance follows the header container width, so mobile layouts and
+sidebars keep the Today card anchored. Text can still grow naturally for exceptional copy or accessibility settings;
+never truncate the assessment or add loading-driven animations, observers or haptics to stabilize it.
 Disable its ripple and filled interaction state through Material’s public APIs; preserve a neutral keyboard focus outline.
 One short sentence combines the existing training state and Readiness assessments with the most relevant supporting
 Sleep, seven-day HRV or overnight-HR signal; unavailable, attention, missing and loading evidence precede an ordinary

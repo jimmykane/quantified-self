@@ -22,6 +22,33 @@
   min-height: 1.5em;
 }
 
+/* Keep the owner greeting slot steady from the update banner through hydrated assessments.
+   Reserve wrapping space using the actual header width, including when a sidebar is open. */
+.dashboard-today-welcome {
+  container-type: inline-size;
+}
+
+.dashboard-summary-heading--with-recovery .dashboard-summary-status {
+  min-block-size: max(48px, var(--today-assessment-reserve, 2lh));
+}
+
+.dashboard-summary-status app-dashboard-daily-briefing {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+@container (max-width: 639px) {
+  .dashboard-summary-status { --today-assessment-reserve: 3lh; }
+}
+
+@container (max-width: 399px) {
+  .dashboard-summary-status { --today-assessment-reserve: 4lh; }
+}
+
+@container (max-width: 319px) {
+  .dashboard-summary-status { --today-assessment-reserve: 5lh; }
+}
+
 .dashboard-summary-message {
   min-width: 0;
   overflow: hidden;
