@@ -93,6 +93,7 @@
         [disabled]="!user || isLoading || isConnecting || !hasProAccess"
         (checkedChange)="importRecentHistory = $event" (rangeChange)="importHistoryRange = $event"></app-connection-history-option>
       <button mat-flat-button class="qs-mat-primary"
+        [attr.aria-describedby]="canConnectServiceWithCurrentAccess ? 'suunto-sign-in-hint' : null"
         [disabled]="!user || isLoading || isConnecting" (click)="connectWithService($event)">
         @if (isConnecting) {
         <span class="connection-action-content">
@@ -106,6 +107,11 @@
         </span>
         }
       </button>
+      @if (canConnectServiceWithCurrentAccess) {
+      <p id="suunto-sign-in-hint" class="suunto-sign-in-hint">
+        Sign in to Suunto with email and password. Avoid Facebook sign-in, which can cause connection errors.
+      </p>
+      }
       }
 
     </div>

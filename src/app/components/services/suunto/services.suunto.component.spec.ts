@@ -136,6 +136,33 @@ describe('ServicesSuuntoComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it.each([
+        { state: 'connect', pro: true, connected: false, reconnect: false, summary: true, visible: true },
+        { state: 'reconnect', pro: true, connected: true, reconnect: true, summary: true, visible: true },
+        { state: 'connected', pro: true, connected: true, reconnect: false, summary: true, visible: false },
+        { state: 'upgrade', pro: false, connected: false, reconnect: false, summary: true, visible: false },
+        { state: 'tools only', pro: true, connected: false, reconnect: false, summary: false, visible: false },
+    ])('shows Suunto sign-in guidance only beside an available connection action: $state', ({ pro, connected, reconnect, summary, visible }) => {
+        component.hasProAccess = pro;
+        component.forceConnected = connected;
+        component.reconnectRequested = reconnect;
+        component.showConnectionSummary = summary;
+        component.showAdvancedTools = false;
+        fixture.detectChanges();
+
+        const hint = fixture.nativeElement.querySelector('#suunto-sign-in-hint') as HTMLElement | null;
+        expect(!!hint).toBe(visible);
+        if (hint) {
+            expect(hint.textContent.replace(/\s+/g, ' ').trim()).toBe(
+                'Sign in to Suunto with email and password. Avoid Facebook sign-in, which can cause connection errors.',
+            );
+            const actions = hint.closest('[connection-actions]');
+            expect(actions).toBeTruthy();
+            expect(actions.querySelector('button')?.getAttribute('aria-describedby')).toBe(hint.id);
+            expect(fixture.nativeElement.querySelector('.service-connection-status--compact')).toBeTruthy();
+        }
+    });
+
     it('does not restart secondary listeners after teardown during initialization', async () => {
         component.user = { uid: 'user-1', settings: {} } as typeof component.user;
         const pending = component.ngOnChanges();
