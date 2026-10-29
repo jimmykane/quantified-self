@@ -22,12 +22,26 @@ describe('Dashboard daily briefing', () => {
     fixture.componentRef.setInput('user', user); fixture.componentRef.setInput('signals', evidence); fixture.detectChanges();
     return { fixture, authenticated, haptics, host: fixture.nativeElement as HTMLElement };
   }
-  it('renders one colored sentence with an accessible label and no heading, control or duplicate metrics', () => {
+  it('renders one colored sentence as an accessible Today details control without duplicate metrics', () => {
     const { host, haptics } = render();
     expect(host.querySelector('[role=status]')?.textContent).toBe('Readiness is Mixed.');
     expect(host.querySelector('section')?.getAttribute('aria-label')).toBe('At a glance');
     expect(host.querySelector('section')?.getAttribute('data-tone')).toBe('caution');
-    expect(host.querySelector('h2, h3, button, dl')).toBeNull(); expect(haptics.selection).not.toHaveBeenCalled();
+    expect(host.querySelector('h2, h3, dl')).toBeNull();
+    expect(host.querySelector('button')?.getAttribute('aria-expanded')).toBe('false');
+    expect(host.querySelector('button')?.getAttribute('aria-controls')).toBe('dashboard-today-details');
+    expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Show Today details: Readiness is Mixed.');
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('requests disclosure once per accepted tap and reflects the parent’s expanded state', () => {
+    const { fixture, host, haptics } = render();
+    const toggle = vi.fn(); fixture.componentInstance.detailsToggle.subscribe(toggle);
+    host.querySelector<HTMLButtonElement>('button')!.click();
+    expect(toggle).toHaveBeenCalledOnce(); expect(haptics.selection).toHaveBeenCalledOnce();
+    fixture.componentRef.setInput('detailsExpanded', true); fixture.detectChanges();
+    expect(host.querySelector('button')?.getAttribute('aria-expanded')).toBe('true');
+    expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Hide Today details: Readiness is Mixed.');
+    expect(haptics.selection).toHaveBeenCalledOnce();
   });
   it('does not render another owner and clears on sign-out', () => {
     const { fixture, authenticated, host } = render({ ...owner, uid: 'other' });

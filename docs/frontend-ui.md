@@ -265,12 +265,14 @@ Health and note comparisons use the existing Material Show/Hide button pattern w
 and a mounted hidden region when details are available. Preserve 44px button targets and reset disclosures on owner
 change without feedback or persistence. Do not add raised cards or expansion panels.
 
-Dashboard's **At a glance** is a headline-only accent rail inside the existing Today panel, above Training state and
-Readiness. Use that panel's spacing and divider, with no separate card, visible label, disclosure or duplicate metrics.
+Dashboard's **At a glance** sits directly beneath the owner's greeting as one Material text button, with a small
+status dot and the same semantic foreground colors. It has no separate card or visible heading. Selecting the sentence
+expands the existing Today metrics in a mounted hidden region; details start closed and reset on owner changes.
+The sentence owns `aria-expanded`, `aria-controls` and one selection haptic, with a 44px minimum touch target.
 One short sentence combines the existing training state and Readiness assessments with the most relevant supporting
 Sleep, seven-day HRV or overnight-HR signal; unavailable, attention, missing and loading evidence precede an ordinary
-HRV range result. Detailed scores and source context remain immediately below. The sentence wraps at narrow widths,
-without truncation, standalone icons or extra metadata rows. Hiding Today also hides the sentence; saved charts remain
+HRV range result. Detailed scores and source context remain directly below when expanded. The sentence wraps at narrow
+widths without truncation; its dot is decorative and its chevron indicates the disclosure state. Hiding Today also hides the sentence; saved charts remain
 controlled by their existing settings. See `training-workspace.md#dashboard-daily-briefing` for composition rules.
 
 Headline-only rails use shared semantic foreground tokens `--qs-status-positive` and `--qs-status-caution` from the

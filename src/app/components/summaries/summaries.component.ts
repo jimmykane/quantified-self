@@ -80,6 +80,7 @@ import {
   OnDestroy,
   OnInit,
   SimpleChanges,
+  signal,
   viewChild,
 } from '@angular/core';
 import { defer, filter, firstValueFrom, map, Observable, ReplaySubject, share, Subscription, take } from 'rxjs';
@@ -432,6 +433,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public sleepTrendCanNavigateNewer = false;
   public todayDateSubtitle = '';
   public todayGreeting = '';
+  readonly todayDetailsExpanded = signal(false);
+  private todayDetailsOwnerUID: string | null = null;
   public isOwnerDashboard = false;
   public calendarSelectedDateKey: string | null = null;
 
@@ -693,7 +696,12 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private refreshTodayHeader(date: Date): void {
-    this.isOwnerDashboard = this.resolveDashboardOwnerUID() !== null;
+    const ownerUID = this.resolveDashboardOwnerUID();
+    if (ownerUID !== this.todayDetailsOwnerUID) {
+      this.todayDetailsOwnerUID = ownerUID;
+      this.todayDetailsExpanded.set(false);
+    }
+    this.isOwnerDashboard = ownerUID !== null;
     this.todayDateSubtitle = this.formatTodayDateSubtitle(date);
     this.todayGreeting = formatDashboardGreeting(
       date,

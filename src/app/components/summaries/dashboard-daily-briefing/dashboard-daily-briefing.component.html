@@ -1,4 +1,13 @@
 @if (owner()) {
-  <app-summary-disclosure title="At a glance" summaryId="dashboard-today-changes" [scopeKey]="owner()!"
-    variant="rail" [showTitle]="false" [tone]="briefing().tone" [headline]="briefing().headline" />
+  <section aria-label="At a glance" [attr.data-tone]="briefing().tone">
+    <button mat-button type="button" class="dashboard-briefing-action"
+      [attr.aria-label]="(detailsExpanded() ? 'Hide' : 'Show') + ' Today details: ' + briefing().headline"
+      [attr.aria-expanded]="detailsExpanded()" [attr.aria-controls]="detailsId()" (click)="toggleDetails()">
+      <span class="dashboard-briefing-content">
+        <span class="dashboard-briefing-dot" aria-hidden="true"></span>
+        <span class="dashboard-briefing-sentence" role="status" aria-atomic="true">{{ briefing().headline }}</span>
+        <mat-icon aria-hidden="true">{{ detailsExpanded() ? 'expand_less' : 'expand_more' }}</mat-icon>
+      </span>
+    </button>
+  </section>
 }

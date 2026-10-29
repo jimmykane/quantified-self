@@ -42,6 +42,7 @@
     </div>
     }
   </app-page-header>
+  <div class="dashboard-today-welcome">
   <p class="dashboard-summary-status"
     [class.dashboard-summary-status--warning]="derivedMetricsBanner?.type === 'warning'"
     [attr.role]="derivedMetricsBanner?.type === 'warning' ? 'alert' : 'status'" aria-atomic="true">
@@ -61,14 +62,17 @@
       }
     </span>
   </p>
+  @if (showTodaySummary && isOwnerDashboard && todayGreeting && !derivedMetricsBanner) {
+    <app-dashboard-daily-briefing [user]="user" [signals]="dashboardGlanceSignals"
+      [detailsExpanded]="todayDetailsExpanded()" (detailsToggle)="todayDetailsExpanded.set(!todayDetailsExpanded())" />
+  }
+  </div>
   </div>
   }
   @if (showTodaySummary) {
-  <section class="dashboard-current-state-row" aria-label="Current training state and readiness signals"
+  <section id="dashboard-today-details" class="dashboard-current-state-row" aria-label="Current training state and readiness signals"
+    [hidden]="isOwnerDashboard && !todayDetailsExpanded()"
     [class.has-recovery]="dashboardTodayReadiness.loading || (dashboardTodayReadiness.recoveryText !== '--' && dashboardTodayReadiness.recoveryFinishText)">
-    @if (isOwnerDashboard) {
-      <app-dashboard-daily-briefing [user]="user" [signals]="dashboardGlanceSignals" />
-    }
     <div class="dashboard-current-state-top">
       <div class="dashboard-current-state-primary dashboard-training-state-primary">
         <span>Training state</span>

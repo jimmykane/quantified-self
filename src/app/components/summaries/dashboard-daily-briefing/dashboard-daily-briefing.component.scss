@@ -1,5 +1,54 @@
+@use '@angular/material' as mat;
+
 :host {
   display: block;
   min-width: 0;
+}
+
+section {
+  --briefing-accent: var(--mat-sys-on-surface-variant);
+  &[data-tone='positive'] { --briefing-accent: var(--qs-status-positive); }
+  &[data-tone='caution'] { --briefing-accent: var(--qs-status-caution); }
+  &[data-tone='error'] { --briefing-accent: var(--mat-sys-error); }
+}
+
+.dashboard-briefing-action {
+  @include mat.button-overrides((
+    text-label-text-color: var(--briefing-accent),
+    text-state-layer-color: var(--briefing-accent),
+    text-horizontal-padding: 0,
+    text-with-icon-horizontal-padding: 0,
+    text-container-height: auto,
+  ));
+  min-height: 44px;
+  max-width: 100%;
+  text-align: start;
+  white-space: normal;
+}
+
+.dashboard-briefing-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dashboard-briefing-dot {
+  background: currentColor;
+  border-radius: 50%;
+  flex: 0 0 8px;
+  height: 8px;
+}
+
+.dashboard-briefing-sentence {
+  font: var(--mat-sys-body-medium);
   overflow-wrap: anywhere;
+}
+
+mat-icon {
+  flex: 0 0 18px;
+  font-size: 18px;
+  height: 18px;
+  width: 18px;
 }
