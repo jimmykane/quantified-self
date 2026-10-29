@@ -837,7 +837,9 @@ seven-day window, absence limitations, FIT retention and deployment boundaries. 
 budgets, new project or setup wizard are added.
 
 Training delivery reconciliation now batches account changes for a fixed 60 seconds, with minute-dispatch recovery,
-and permits one active account page. Ordinary workout edits and delivery acknowledgements use bounded private
+and permits one active account page. Enqueue recovery uses a fresh task name while retaining the pending account
+reservation until a worker claims it, so delayed tasks can still progress and duplicates cannot claim a later page.
+Ordinary workout edits and delivery acknowledgements use bounded private
 workout targets; global authority/plan changes retain the full current-workout and historical-ledger scans. Active
 scan cursors survive new edits. Activity upload counters and connection-history progress alone do not invalidate
 Training. Six-hour full repairs supplement explicit saved-zone midnight, grace-expiry, retry and verification timers.

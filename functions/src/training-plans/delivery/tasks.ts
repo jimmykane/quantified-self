@@ -24,7 +24,7 @@ const MAX_RECOVERY_SCAN_PER_PRIORITY = 100;
 export async function dispatchTrainingDeliveryJob(runtime: DeliveryRuntime, id: string,
   enqueue = enqueueTrainingDeliveryTask): Promise<boolean> {
   const ref = runtime.db.collection(DELIVERY_QUEUE).doc(id);
-  const reservation = randomUUID();
+  const dispatchId = randomUUID();
   const claimed = await runtime.db.runTransaction(async tx => {
     const snapshot = await tx.get(ref);
     if (!snapshot.exists) return false;
@@ -51,12 +51,16 @@ export async function dispatchTrainingDeliveryJob(runtime: DeliveryRuntime, id: 
         tx.set(ref, { dueAtMs: job.batchNotBeforeMs }, { merge: true }); return false;
       }
     }
+    // Recovery must not invalidate tasks still waiting in the queue. Keep the account
+    // reservation until one task claims it; use a fresh enqueue ID to recover lost tasks.
+    const reservation = job.kind === 'reconcile' && typeof job.dispatchReservation === 'string' && job.dispatchReservation
+      ? job.dispatchReservation : dispatchId;
     tx.set(ref, { dispatchReservation: reservation, dueAtMs: runtime.now() + 60_000 }, { merge: true });
-    return true;
+    return reservation;
   });
   if (!claimed) return false;
   // Reservation first: crashes before/after enqueue are both recovered by the due scan.
-  await enqueue(id, reservation);
+  await enqueue(id, claimed, dispatchId);
   return true;
 }
 

@@ -78,6 +78,19 @@ describe('Cloud Tasks Utils', () => {
         expect(new Set(hoisted.mockTaskQueue.enqueue.mock.calls.map(([, options]) => options.id)).size).toBe(2);
     });
 
+    it('recovers a Training enqueue with a new task name and the same account reservation', async () => {
+        const { enqueueTrainingDeliveryTask } = await import('./cloud-tasks');
+        await enqueueTrainingDeliveryTask('reconcile_account', 'pending-page', 'dispatch-one');
+        await enqueueTrainingDeliveryTask('reconcile_account', 'pending-page', 'dispatch-two');
+        expect(hoisted.mockTaskQueue.enqueue.mock.calls.map(([payload]) => payload)).toEqual([
+            { queueItemId: 'reconcile_account', reservation: 'pending-page' },
+            { queueItemId: 'reconcile_account', reservation: 'pending-page' },
+        ]);
+        expect(hoisted.mockTaskQueue.enqueue.mock.calls.map(([, options]) => options.id)).toEqual([
+            'training-reconcile_account-dispatch-one', 'training-reconcile_account-dispatch-two',
+        ]);
+    });
+
     describe('queue monitoring', () => {
         it('reads and caches production queue state through the Cloud Tasks client', async () => {
             const { getCloudTaskQueueStatsForQueue } = await import('./cloud-tasks');

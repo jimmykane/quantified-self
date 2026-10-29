@@ -865,7 +865,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     await processTrainingDelivery(runtime, uid, ledger.id); expect(transport.calls).toHaveLength(1);
   });
 
-  it('coalesces real edits to a fixed deadline and fences duplicated, replaced and legacy tasks', async () => {
+  it('coalesces real edits to a fixed deadline and fences duplicated, consumed and legacy tasks', async () => {
     await send(); await mark();
     const job = db.collection(DELIVERY_QUEUE).doc(reconciliationJobId(uid));
     const enqueue = vi.fn().mockResolvedValue(true);
@@ -879,11 +879,12 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     now = deadline;
     expect(await dispatchTrainingDeliveryJob(runtime, job.id, enqueue)).toBe(true);
     const reservation = enqueue.mock.calls[0][1];
-    await job.update({ dueAtMs: 0 }); // An old enqueue can arrive after reservation recovery.
+    await job.update({ dueAtMs: 0 }); // A delayed enqueue can arrive after dispatch recovery.
     expect(await dispatchTrainingDeliveryJob(runtime, job.id, enqueue)).toBe(true);
     const current = enqueue.mock.calls[1][1];
+    expect(current).toBe(reservation);
     const hasPro = vi.spyOn(runtime, 'hasPro');
-    expect(await reconcileTrainingDeliveryPage(runtime, uid, reservation)).toBe(false);
+    expect(await reconcileTrainingDeliveryPage(runtime, uid, 'never-dispatched')).toBe(false);
     expect(await reconcileTrainingDeliveryPage(runtime, uid, '')).toBe(false);
     expect(hasPro).not.toHaveBeenCalled();
     expect(await reconcileTrainingDeliveryPage(runtime, uid, current)).toBe(true);
@@ -900,6 +901,39 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     expect(hasPro).toHaveBeenCalledOnce();
     expect((await reconciliationTargets(db, uid).get()).empty).toBe(true);
     expect((await db.collection(DELIVERY_QUEUE).doc(reconciliationJobId(uid)).get()).exists).toBe(false);
+  });
+
+  it.each([false, true])('allows a delayed reconciliation task to progress after repeated enqueue recovery (lost acknowledgement=%s)', async lostAck => {
+    await send(); await mark();
+    const job = db.collection(DELIVERY_QUEUE).doc(reconciliationJobId(uid));
+    const enqueue = vi.fn().mockResolvedValue(true);
+    expect(await dispatchTrainingDeliveryJob(runtime, job.id, enqueue)).toBe(false);
+    now += RECONCILIATION_BATCH_MS;
+    if (lostAck) {
+      enqueue.mockRejectedValueOnce(new Error('Lost acknowledgement'));
+      await expect(dispatchTrainingDeliveryJob(runtime, job.id, enqueue)).rejects.toThrow('Lost acknowledgement');
+    } else expect(await dispatchTrainingDeliveryJob(runtime, job.id, enqueue)).toBe(true);
+    const first = enqueue.mock.calls[0][1];
+    for (let index = 0; index < 3; index++) {
+      now += 61_000;
+      expect(await dispatchTrainingDeliveryJob(runtime, job.id, enqueue)).toBe(true);
+    }
+    expect(new Set(enqueue.mock.calls.map(([, reservation]) => reservation)).size).toBe(1);
+    expect(new Set(enqueue.mock.calls.map(([, , dispatchId]) => dispatchId)).size).toBe(4);
+    const hasPro = vi.spyOn(runtime, 'hasPro');
+    expect(await reconcileTrainingDeliveryPage(runtime, uid, first)).toBe(true);
+    expect(hasPro).toHaveBeenCalledOnce();
+    for (const [, reservation] of enqueue.mock.calls) {
+      expect(await reconcileTrainingDeliveryPage(runtime, uid, reservation)).toBe(false);
+    }
+    expect(hasPro).toHaveBeenCalledOnce();
+    expect(await dispatchTrainingDeliveryJob(runtime, job.id, enqueue)).toBe(true);
+    const next = enqueue.mock.calls.at(-1)![1];
+    expect(next).not.toBe(first);
+    expect(await reconcileTrainingDeliveryPage(runtime, uid, first)).toBe(false);
+    expect(await reconcileTrainingDeliveryPage(runtime, uid, next)).toBe(false);
+    expect(hasPro).toHaveBeenCalledTimes(2);
+    expect((await job.get()).data()?.dueAtMs).toBe(now + RECONCILIATION_REPAIR_MS);
   });
 
   it.each([0, 1])('restarts a legacy cursor safely during worker rollout (coordinator version %s)', async coordinatorVersion => {

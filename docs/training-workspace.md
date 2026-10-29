@@ -2351,8 +2351,11 @@ and queue-depth helpers. Each priority class scans bounded pages of 25, with a h
 siblings do not consume dispatch capacity or hide another due destination/provider. Reservation precedes enqueue, so
 lost acknowledgements and crashes are recoverable. Reconciliation uses a fixed 60-second first-event batching
 deadline; the minute dispatcher normally adds up to another minute, plus existing queue/provider delays. Continued
-edits cannot slide that deadline. Each page first acquires a private 180-second account lease; duplicate or superseded
-reservations return before Auth, connection and recipe reads. Expired claims recover through the same dispatcher.
+edits cannot slide that deadline. Each page first acquires a private 180-second account lease; duplicate or consumed
+reservations return before Auth, connection and recipe reads. Enqueue recovery retains the pending account reservation
+and uses a fresh Cloud Task name, so queue delays longer than the recovery interval cannot repeatedly invalidate the
+oldest waiting task. The first successful claim consumes that reservation; retries from that page cannot claim the next
+page. Expired claims recover through the same dispatcher.
 A finished full repair becomes eligible again after six hours. Earlier durable wake-ups cover saved-zone midnight
 (including DST/horizon changes) and active grace expiry; delivery retries and verification keep their own due jobs.
 Effective owner unit changes wake through `onTrainingDeliveryOwnerUnitsChanged` on `users/{uid}`.
@@ -2482,7 +2485,8 @@ scan and restart-on-edit behavior. Its six-hour repair is a fallback; event targ
 The coordinator's synthetic Firestore benchmark changes one workout in a 183-workout account: 30 document reads
 versus approximately 3,000 for a full repair, with identical final ledgers. The separate 400-workout/four-provider fixture retains
 all 1,600 current identities and historical-ledger coverage. Ten overlapping same-account tasks admit one page;
-another account remains independently eligible. Fixed debounce, stale reservations, expired claims, mid-scan edits,
+another account remains independently eligible. Fixed debounce, delayed queues, lost enqueue acknowledgements,
+consumed reservations, expired claims, mid-scan edits,
 legacy cursors, grace expiry, saved-zone day changes and deleted-source targets have emulator regression coverage.
 The repair interval changes its scheduled ceiling from 48 to four repairs per day; explicit events/day boundaries add
 their own work. These are local read counts and scheduling bounds, not measured production CPU or euro savings.
@@ -2492,8 +2496,10 @@ are backend-only coordination fields. The existing recursive Rules denial covers
 account recursive deletion removes them. No wire, scope, consent, approval, recipe, completion, safe-read projection or provider-action
 change. Existing strict sync reads use the same source-freshness acknowledgement and private-field exclusions; no
 new planning read or bundled-plugin update is needed. Help's delivery and Check instructions remain applicable.
-Monitoring decision: **unchanged**. The existing provider outcomes, dispatch/backlog and unavailable-observation
-coverage still observes the same queues, worker events and committed outcomes. Read-only production review on
+Monitoring decision: **covered** by the existing provider outcomes, dispatch/backlog and unavailable-observation
+signals, with `owner-units` added to the source-controlled lifecycle-failure filter for the new trigger. Queue names,
+worker events and committed outcomes remain unchanged; applying the filter and deployment still require separate
+approval. Read-only production review on
 21 October 2026 found fourteen `qs_training_*_v1` metrics, six enabled Training alert policies and the QS Training
 Delivery dashboard. Queue-health age derives from queue writes, so skipping ledger/projection writes does not change
 its age signal. Verification covers read counts, fresh transaction attempts, unchanged document update times,
@@ -4572,7 +4578,8 @@ take precedence over older check/restoration labels in the UI.
 `mutateTrainingProviderDelivery` accepts `check`, retaining Auth/App Check, Pro/grace, owner, deletion-lock, expected
 schedule/scope/settings revisions and mutation receipts. It returns a typed queued/coalesced/deferred receipt and stores
 a compact request under `trainingDeliveryState/current/checks`, never consent or a new settings/history revision.
-Manual requests coalesce for 15 minutes and join the same resumable 25-workout/25-ledger scan as periodic work. The
+Manual requests coalesce for 15 minutes. Workout checks stage the bounded target for that workout and all its retained
+identities; plan checks use the resumable 25-workout/25-ledger scan. The
 dispatcher admits delivery/reconciliation before manual verification before ordinary verification. Checks target 24
 hours, but production capacity can extend the cycle. There is no evaluation environment, runner, request cap or setup
 wizard. Verification uses the existing delivery lease; every request and post-I/O persistence rechecks authority,
