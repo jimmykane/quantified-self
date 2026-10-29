@@ -77,7 +77,7 @@ function object(value: unknown, keys: string[]): Record<string, unknown> {
 }
 export function parseGenerateDayWorkoutRequest(value: unknown, now = new Date()): GenerateDayWorkoutRequest {
   const request = object(value, ['requestId', 'controls']);
-  if (typeof request.requestId !== 'string' || !/^[a-zA-Z0-9_-]{8,100}$/.test(request.requestId)) throw new Error('Invalid request identifier.');
+  if (typeof request.requestId !== 'string' || !/^[a-zA-Z0-9:_-]{8,100}$/.test(request.requestId)) throw new Error('Invalid request identifier.');
   const c = object(request.controls, Object.keys(defaultDayWorkoutControls('2000-01-01', 'UTC')));
   if (typeof c.timeZone !== 'string' || c.timeZone.length > 100) throw new Error('Choose a valid time zone.');
   const today = dayWorkoutLocalDate(now, c.timeZone);

@@ -735,6 +735,14 @@ an exact, unambiguous saved athlete reference; absent references lead to effort 
 thresholds. Rest returns no workout. A strength planning-time range is labelled as an AI estimate for review only;
 repetition endings, rests and unknown canonical duration remain unchanged.
 
+Model output uses a sport-specific JSON shape derived from the existing MCP Training recipe/strength schemas.
+Endurance replies cannot include strength-only fields or null placeholders; the requested sport is fixed in the
+shape. Decoder-only numeric, length, pattern and array bounds are omitted to avoid Gemini's nested-schema
+complexity limit; the canonical parsers and generation validator still enforce all of those limits after generation.
+See [Gemini structured-output limits](https://ai.google.dev/gemini-api/docs/structured-output#limitations).
+Validation corrections include only server-authored reasons. Failure diagnostics record the stage, billable flag,
+error category and validation issue codes, never raw model replies, prompts, recovery evidence or Timeline text.
+
 The existing daily collector supplies the same current recovery evidence used by Assistant chat, Training snapshots,
 a 28-day recording pattern, and actual Feeling/RPE minimum/maximum buckets. The modal names the automatic inputs
 before generation: freshness (Form), training load, HRV, sleep, overnight heart rate, readiness and recent activities.
@@ -771,6 +779,8 @@ It reuses the existing browser-denied collection, index exemptions, seven-day TT
 four-minute lease, at most 128 recent receipts and four full responses, and a 400 kB serialized cap bound it.
 Older full responses are evicted as needed to stay within the UTF-8 byte cap while retaining their replay receipts;
 large earlier replies must not prevent a new valid result from being saved.
+Generation accepts the existing `TrainingPlansService.createMutationId` prefix/colon ID format (UUID and fallback),
+with the same bounded safe-character validation and no path characters. IDs remain opaque stored values, never paths.
 An exact retry replays a cached response without another quota charge. Within the seven-day retention window,
 expired leases and evicted/failed replies cannot silently generate again. Explicit **Generate again** creates a
 new request. Quota is reserved before context and charged once before the model attempts. Unused reservations
@@ -799,7 +809,8 @@ unchanged. Generated workouts persist the same canonical root and full strength 
 `assistant/day-workout.emulator.spec.ts` verifies their read-back through `get_planned_workout_v3` and
 `get_strength_workout_details`, including exact repeated recoveries, zero/fractional loads and complete sets.
 Review-note rendering, compact UI disclosures and private cache/quota fixes preserve these same public contracts
-and read-back coverage. The shared day-context entry-point menu has no MCP wire or authority impact: it opens the
+and read-back coverage. Private request-ID validation and sport-specific model output reuse those contracts without
+changing public tools, scopes, stored workout fields or mutation authority. The shared day-context entry-point menu has no MCP wire or authority impact: it opens the
 same owner/date-guarded generation service. Reusing the Activities sport picker also changes no supported recipe
 sports, MCP read coverage, scopes or proposal/confirmation contracts. Default-on context affects only explicit
 first-party generation controls submitted from the reviewed dialog; independent opt-outs and the same read scope

@@ -1,7 +1,7 @@
 import { signal } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { ActivityFilterPickerComponent } from '../shared/activity-filter-picker/activity-filter-picker.component';
-import { DAY_WORKOUT_SPORTS } from '@shared/day-workout';
+import { DAY_WORKOUT_SPORTS, parseGenerateDayWorkoutRequest } from '@shared/day-workout';
 import { SummaryDisclosureComponent } from '../shared/summary-disclosure/summary-disclosure.component';
 import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogContainer, MatDialogRef } from '@angular/material/dialog';
@@ -49,7 +49,7 @@ describe('DayWorkoutDialogComponent', () => {
       plans: [{ schemaVersion: 1, id: 'plan', name: 'Autumn', lifecycle: 'active', startLocalDate: '2026-10-01',
         endLocalDate: '2026-10-31', revision: 2, lastCheckpointRevision: 1, workoutCount: 0, createdAtMs: 1, updatedAtMs: 2 }], workouts: [],
     });
-    generate = vi.fn(async (_uid, request) => response(request.requestId));
+    generate = vi.fn(async (_uid, request) => response(parseGenerateDayWorkoutRequest(request).requestId));
     mutate = vi.fn().mockResolvedValue({}); close = vi.fn(); dialogOpen = vi.fn().mockReturnValue({ afterClosed: () => of(true) });
     haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() }; let counter = 0;
     const user = { uid: 'owner', settings: { unitSettings: {} } };
@@ -62,7 +62,7 @@ describe('DayWorkoutDialogComponent', () => {
       { provide: MatDialogRef, useValue: { close, disableClose: false } }, { provide: MatDialog, useValue: { open: dialogOpen } },
       { provide: DayWorkoutService, useValue: { generate, isOwner: () => auth.value?.uid === 'owner' } },
       { provide: TrainingPlansService, useValue: { watchSchedule: () => schedule, mutate,
-        createMutationId: () => `mutation-${++counter}`, createEntityId: () => `workout-${++counter}` } },
+        createMutationId: (prefix: string) => `${prefix}:00000000-0000-4000-8000-${String(++counter).padStart(12, '0')}`, createEntityId: () => `workout-${++counter}` } },
       { provide: TrainingDeliveryService, useValue: { watchScope: () => of({ settings: [{ provider: 'garmin', enabled: true }] }) } },
     ] }).compileComponents();
   });
@@ -188,7 +188,7 @@ describe('DayWorkoutDialogComponent', () => {
   });
   it('uses one primary action and one selection feedback when requesting an easy session from rest', async () => {
     const fixture = await render(); const component = fixture.componentInstance;
-    generate.mockResolvedValueOnce({ ...response('mutation-1'), kind: 'rest', draft: null, previousLoads: [] });
+    generate.mockImplementationOnce(async (_uid, request) => ({ ...response(request.requestId), kind: 'rest', draft: null, previousLoads: [] }));
     await component.generate(); fixture.detectChanges(); haptics.selection.mockClear();
     expect(fixture.nativeElement.querySelector('mat-dialog-actions').textContent).toContain('Suggest an easy session');
     expect(fixture.nativeElement.querySelector('mat-dialog-actions').textContent).not.toContain('Add workout');
@@ -268,7 +268,7 @@ describe('DayWorkoutDialogComponent', () => {
   });
   it('does not save a rest suggestion or use a late generation after the owner changes', async () => {
     const fixture = await render(); const component = fixture.componentInstance;
-    generate.mockResolvedValueOnce({ ...response('mutation-1'), kind: 'rest', draft: null, previousLoads: [] });
+    generate.mockImplementationOnce(async (_uid, request) => ({ ...response(request.requestId), kind: 'rest', draft: null, previousLoads: [] }));
     await component.generate(); await component.add(); expect(mutate).not.toHaveBeenCalled();
     let resolve!: (value: GenerateDayWorkoutResponse) => void;
     generate.mockImplementationOnce(() => new Promise(done => { resolve = done; }));

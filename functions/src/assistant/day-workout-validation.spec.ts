@@ -20,6 +20,15 @@ describe('day workout contract and prescription validation', () => {
       expect(() => parseGenerateDayWorkoutRequest({ requestId: 'request-123', controls: { ...controls, ...changed } }, now)).toThrow();
     }
   });
+  it('accepts the app’s prefixed request IDs while rejecting paths and unbounded identifiers', () => {
+    const now = new Date('2026-10-28T12:00:00Z');
+    for (const requestId of ['day-workout:71f1e982-b718-4c5b-a3c7-c45eebdefc84', 'day-workout:mh9z41kd-6ws9updb']) {
+      expect(parseGenerateDayWorkoutRequest({ requestId, controls }, now).requestId).toBe(requestId);
+    }
+    for (const requestId of ['day-workout/foreign', 'day-workout:../foreign', 'short', 'a'.repeat(101)]) {
+      expect(() => parseGenerateDayWorkoutRequest({ requestId, controls }, now)).toThrow('Invalid request identifier');
+    }
+  });
   it('counts every repeated recovery and warmup against strict time', () => {
     const value = endurance();
     value.structure.nodes = [{ kind: 'repeat', id: 'repeats', count: 4, steps: [step()] }] as never;
@@ -27,6 +36,11 @@ describe('day workout contract and prescription validation', () => {
     expect(validateDayWorkoutSuggestion(value, { ...controls, minutes: 40, timing: 'strict' }).draft).not.toBeNull();
     value.structure.nodes = [{ ...step(), ending: { kind: 'distance', meters: 1000 } }] as never;
     expect(() => validateDayWorkoutSuggestion(value, { ...controls, timing: 'strict' })).toThrow(/timed/);
+  });
+  it('rejects strength-only fields on endurance suggestions, including null placeholders', () => {
+    for (const fields of [{ strength: null }, { estimatedMinutes: null }, { estimatedMinutes: { minimum: 25, maximum: 30 } }]) {
+      expect(() => validateDayWorkoutSuggestion({ ...endurance(), ...fields }, controls)).toThrow('Strength fields require a strength sport.');
+    }
   });
   it('rejects invented athlete references and preserves rest as no draft', () => {
     const value = endurance();

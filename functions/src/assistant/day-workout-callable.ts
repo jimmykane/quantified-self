@@ -1,4 +1,9 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import * as logger from 'firebase-functions/logger';
+import { z } from 'zod';
+import { WorkoutStructureValidationError } from '../../../shared/planned-workout';
+import { isStrengthWorkoutSportV1 } from '../../../shared/strength-workout';
+import { TRAINING_RECIPE_WITH_POOL_SCHEMA, TRAINING_STRENGTH_DRAFT_SCHEMA } from '../mcp/training-plans.schemas';
 import { parseGenerateDayWorkoutRequest, type GenerateDayWorkoutRequest, type GenerateDayWorkoutResponse } from '../../../shared/day-workout';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
@@ -10,7 +15,7 @@ import { createDayWorkoutStore, type DayWorkoutStore } from './day-workout-store
 import { collectDayWorkoutContext, readDayWorkoutTrainingContext, type DayWorkoutContext } from './day-workout-context';
 import { createAssistantMcpSession } from './mcp-session';
 import { assistantGenkit } from './model';
-import { validateDayWorkoutSuggestion } from './day-workout-validation';
+import { DayWorkoutSuggestionValidationError, validateDayWorkoutSuggestion } from './day-workout-validation';
 
 export interface DayWorkoutDependencies {
   store: DayWorkoutStore;
@@ -30,13 +35,40 @@ Use the selected sport's recorded per-session duration/load where available to j
 Readiness is observed now, not a forecast for a future date. For a future workout, make intensity conditional on rechecking recovery closer to that day. Missing evidence is unknown, not zero, missed training or poor adherence. Weekday recording counts are descriptive only.
 Use existing recording-level Feeling/RPE as context, never invent feedback or claim it was entered in QS. Ended notes are historical; upcoming notes are not current illness.
 Respect existing scheduled sessions and linked completions; a suggestion is an additional workout, never a replacement. Rest may be appropriate. Purpose recovery requests a gentle alternative when reasonable.
-Return only JSON: {kind:'rest',rationale:string}, or {kind:'workout',title:string,rationale:string,structure:WorkoutStructureV1} for endurance.
+Return only JSON: {kind:'rest',rationale:string}, or {kind:'workout',title:string,rationale:string,structure:WorkoutStructureV1} for endurance. Endurance must omit strength and estimatedMinutes entirely, including null placeholders. Its duration is derived from the structure.
 WorkoutStructureV1 is {version:1,sport:the exact requested sport,nodes:[steps or repeats]}. A step is {kind:'step',id:safe unique ID,purpose:'warmup'|'work'|'recovery'|'cooldown'|'rest'|'other',ending:{kind:'time',seconds:positive integer} or {kind:'distance',meters:positive number} or {kind:'manual'},targets:[],note?:string}. A repeat is {kind:'repeat',id:safe unique ID,count:total passes,steps:[steps]}. At most 100 total nodes, no nested repeats.
 Prefer timed endurance sessions. Strict timing includes ALL warmup, work, repetitions, recoveries and cooldown, at most the requested minutes. Simple structure has no repeats.
 Targets may use only the explicit relative athlete reference objects in evidence.references, with exactly matching kind, mode:'relative', reference and suitable minimumPercent/maximumPercent. Speed targets also need presentation:'pace' or 'speed'. Follow the target preference; when no suitable reference exists use targets:[] and clear plain effort notes. Never infer a threshold or maximum from age, performance, averages or population defaults.
 For strength return {kind:'workout',title,rationale,strength:{version:1,exercises:[{id,name,sets:[{id,ending:{kind:'repetitions',repetitions:positive integer} or {kind:'time',seconds:positive integer},restAfterSeconds?:positive integer}]}]},estimatedMinutes?:{minimum:number,maximum:number}}. Do not return structure for strength. Keep repetitions and rests, never convert them to guessed seconds. The optional time range is an AI planning estimate only.
 Use only selected equipment, name equipment explicitly where it distinguishes an exercise, and honor strengthFocus. Default bodyweight means no equipment required. Do not invent or progress external loads: the server reuses previous planned weights only for exact exercise/set matches and labels their date. Previous prescriptions do not prove performed weights.
 Keep rationale under 1200 characters and title under 120. Use a short explanation of the choice and its limits, no diagnosis or invented data.`;
+
+export async function generateDayWorkoutSuggestion(request: GenerateDayWorkoutRequest, context: DayWorkoutContext,
+  correction?: string): Promise<unknown> {
+  const { destinationPlanId: _destination, ...controls } = request.controls;
+  const rationale = z.string().min(1).max(1200);
+  const workout = { kind: z.literal('workout'), title: z.string().min(1).max(120), rationale };
+  const schema = z.union([
+    z.strictObject({ kind: z.literal('rest'), rationale }),
+    isStrengthWorkoutSportV1(controls.sport)
+      ? z.strictObject({ ...workout, strength: TRAINING_STRENGTH_DRAFT_SCHEMA,
+        estimatedMinutes: z.strictObject({ minimum: z.number().min(1).max(480), maximum: z.number().min(1).max(480) }).optional() })
+      : z.strictObject({ ...workout, structure: z.strictObject({
+        ...TRAINING_RECIPE_WITH_POOL_SCHEMA.shape, sport: z.literal(controls.sport),
+      }) }),
+  ]);
+  const response = await assistantGenkit.generate({ system: DAY_WORKOUT_SYSTEM,
+    prompt: JSON.stringify({ controls, evidence: context.evidence, missingContext: context.missingContext,
+      ...(correction ? { correction } : {}) }),
+    output: { format: 'json', jsonSchema: z.toJSONSchema(schema, { target: 'draft-7', override: ({ jsonSchema }) => {
+      // Nested repetition/target bounds exceed Gemini's decoder complexity limit. Constrain the shape here;
+      // validateDayWorkoutSuggestion and the canonical parsers still enforce every value and size limit.
+      for (const key of ['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum',
+        'minItems', 'maxItems', 'minLength', 'maxLength', 'pattern'] as const) delete jsonSchema[key];
+    } }) },
+    config: { maxOutputTokens: 8192 } });
+  return response.output;
+}
 
 const defaults: DayWorkoutDependencies = {
   store: createDayWorkoutStore(), now: () => new Date(), legal: assertAssistantLegalAccess,
@@ -48,14 +80,7 @@ const defaults: DayWorkoutDependencies = {
       () => readDayWorkoutTrainingContext(uid, request.controls, now)); }
     finally { await session.close(); }
   },
-  generate: async (request, context, correction) => {
-    const { destinationPlanId: _destination, ...controls } = request.controls;
-    const response = await assistantGenkit.generate({ system: DAY_WORKOUT_SYSTEM,
-      prompt: JSON.stringify({ controls, evidence: context.evidence, missingContext: context.missingContext,
-        ...(correction ? { correction } : {}) }),
-      output: { format: 'json' }, config: { maxOutputTokens: 8192 } });
-    return response.output;
-  },
+  generate: generateDayWorkoutSuggestion,
 };
 export async function runGenerateDayWorkout(value: unknown, context: { auth?: { uid: string } | null; app?: unknown },
   dependencies: DayWorkoutDependencies = defaults): Promise<GenerateDayWorkoutResponse> {
@@ -71,6 +96,7 @@ export async function runGenerateDayWorkout(value: unknown, context: { auth?: { 
   if ('response' in started) return started.response;
   let reservation: AssistantQuotaReservation | undefined;
   let billable = false;
+  let stage = 'context';
   try {
     reservation = await dependencies.reserve(uid);
     const evidence = await dependencies.context(uid, request, now);
@@ -78,20 +104,37 @@ export async function runGenerateDayWorkout(value: unknown, context: { auth?: { 
     // Charge once before the first model attempt, including failed model attempts, as in Assistant chat.
     await dependencies.finalize(reservation);
     billable = true;
+    stage = 'model';
     let suggestion;
     let correction: string | undefined;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const generated = await dependencies.generate(request, evidence, correction);
       await dependencies.store.assertActive(uid, request.requestId, started.token);
       try { suggestion = validateDayWorkoutSuggestion(generated, request.controls, evidence.previousStrength, evidence.references); break; }
-      catch { correction = 'The previous response failed strict prescription validation. Return a complete valid JSON prescription matching the schema and every selected constraint; omit targets without available references and omit all external loads.'; }
+      catch (error) {
+        logger.warn('[DayWorkout] Invalid model prescription.', {
+          attempt: attempt + 1,
+          errorName: error instanceof Error ? error.name : 'unknown',
+          validationReason: error instanceof DayWorkoutSuggestionValidationError ? error.message : 'Invalid prescription schema.',
+          issueCodes: error instanceof WorkoutStructureValidationError ? [...new Set(error.issues.map(issue => issue.code))] : [],
+        });
+        correction = `${error instanceof DayWorkoutSuggestionValidationError ? error.message : 'Invalid prescription schema.'} The previous response failed strict prescription validation. Return a complete valid JSON prescription matching the schema and every selected constraint; omit targets without available references and omit all external loads.`;
+      }
     }
     if (!suggestion) throw new HttpsError('failed-precondition', 'AI could not produce a valid prescription. Generate again or use the manual editor.');
     const response: GenerateDayWorkoutResponse = { requestId: request.requestId, observedAt: now.toISOString(), ...suggestion,
       usedContext: evidence.usedContext, missingContext: evidence.missingContext };
+    stage = 'save-result';
     await dependencies.store.finish(uid, request.requestId, started.token, response);
     return response;
   } catch (error) {
+    // Deliberately omit the raw error, prompt, evidence and model output from diagnostics.
+    logger.error('[DayWorkout] Generation failed.', {
+      stage, billable,
+      errorName: error instanceof Error ? error.name : 'unknown',
+      errorStatus: error instanceof HttpsError ? error.code
+        : error instanceof Error && 'status' in error && typeof error.status === 'string' ? error.status : 'unknown',
+    });
     if (reservation && !billable) await dependencies.release(reservation).catch(() => undefined);
     await dependencies.store.finish(uid, request.requestId, started.token, null).catch(() => undefined);
     if (error instanceof HttpsError) throw error;
