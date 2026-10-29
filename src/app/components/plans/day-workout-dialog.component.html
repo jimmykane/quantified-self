@@ -1,20 +1,27 @@
-<h2 mat-dialog-title>Generate a workout</h2>
+<h2 mat-dialog-title>{{ result() ? 'Review workout' : 'Generate a workout' }}</h2>
 <mat-dialog-content>
-  <p>Review your workout before adding. Generation uses your Assistant allowance.</p>
-  <fieldset [disabled]="!!busy() || saveUncertain()">
+  <div class="review-destination">
+    <p>{{ controls().localDate | date:'EEE, MMM d, y' }}@if (result()) { · {{ selectedPlan()?.name ?? 'Standalone' }} · {{ controls().sport }} }</p>
+    @if (result()) {
+      <button mat-button appHapticTap type="button" [disabled]="!!busy() || saveUncertain()"
+        [attr.aria-expanded]="showSettings()" aria-controls="day-workout-settings" (click)="showSettings.set(!showSettings())">
+        {{ showSettings() ? 'Hide options' : 'Change options' }}
+      </button>
+    }
+  </div>
+  @if (!result()) { <p class="hint">Review before adding. Uses your Assistant allowance.</p> }
+  <fieldset id="day-workout-settings" [hidden]="!!result() && !showSettings()" [disabled]="!!busy() || saveUncertain()">
     <div class="controls-grid">
-      <mat-form-field appearance="outline"><mat-label>Date</mat-label>
-        <input matInput type="date" [min]="today" [max]="latestDate" [ngModel]="controls().localDate" (ngModelChange)="set('localDate', $event, false)">
-      </mat-form-field>
-      <mat-form-field appearance="outline"><mat-label>{{ strength() ? 'Time available (approximate)' : 'Time available' }}</mat-label>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Time available</mat-label>
         <input matInput type="number" min="5" max="240" [ngModel]="controls().minutes" (ngModelChange)="set('minutes', $event, false)"><span matTextSuffix>min</span>
+        <mat-hint>5–240 whole minutes{{ strength() ? ' · approximate' : '' }}</mat-hint>
       </mat-form-field>
       @for (choice of mainChoices(); track choice.key) {
         <ng-container [ngTemplateOutlet]="choiceField" [ngTemplateOutletContext]="{ choice: choice }"></ng-container>
       }
     </div>
     <button mat-button appHapticTap type="button" [attr.aria-expanded]="more()" aria-controls="day-workout-more" (click)="more.set(!more())">
-      <mat-icon>{{ more() ? 'expand_less' : 'expand_more' }}</mat-icon>More options
+      <mat-icon>{{ more() ? 'expand_less' : 'expand_more' }}</mat-icon>{{ more() ? 'Fewer options' : 'More options' }}
     </button>
     <div id="day-workout-more" [hidden]="!more()">
       <div class="controls-grid">
@@ -22,64 +29,71 @@
           <ng-container [ngTemplateOutlet]="choiceField" [ngTemplateOutletContext]="{ choice: choice }"></ng-container>
         }
       </div>
-      <p class="hint">Targets require a saved athlete reference; otherwise use effort guidance. Strict timing includes warmup and recovery. Elapsed time may vary.</p>
-      <mat-checkbox [checked]="controls().trainingContext" (change)="set('trainingContext', $event.checked)" [disabled]="!!busy() || saveUncertain()">Use my Training plans and planned workouts</mat-checkbox>
-      <mat-checkbox [checked]="controls().timelineContext" (change)="set('timelineContext', $event.checked)" [disabled]="!!busy() || saveUncertain()">Use my existing Timeline notes</mat-checkbox>
-      @if (strength()) {
-        <mat-checkbox [checked]="controls().usePreviousWeights" (change)="set('usePreviousWeights', $event.checked)" [disabled]="!controls().trainingContext || !!busy() || saveUncertain()">Reuse matching previously planned weights</mat-checkbox>
+      @if (!strength()) { <p class="hint">Targets need saved athlete references. Strict timing includes all steps.</p> }
+      @for (choice of contextChoices(); track choice.key) {
+        <mat-checkbox [checked]="controls()[choice.key]" (change)="set(choice.key, $event.checked)"
+          [disabled]="!!busy() || saveUncertain() || (choice.key === 'usePreviousWeights' && !controls().trainingContext)">{{ choice.label }}</mat-checkbox>
       }
-      <p class="hint">Draft-only choices, separate from chat. Recorded training, readiness and Feeling/RPE may be used; missing feedback stays unknown.</p>
+      <p class="hint">For this draft only. May also use recent activity, readiness and Feeling/RPE.</p>
     </div>
   </fieldset>
   @if (scheduleFailed()) {
     <p role="alert">Your schedule could not be loaded.</p><button mat-button appHapticTap (click)="loadSchedule()">Reload schedule</button>
   } @else if (!schedule()) { <p role="status">Loading your schedule…</p> }
-  @if (schedule()?.restoreUnavailable) { <p role="alert">Schedule restoration is in progress. Try again when it finishes.</p> }
+  @if (schedule()?.restoreUnavailable) { <p role="alert">Schedule is being restored. Try again when finished.</p> }
   @if (existing().length) {
-    <h3>Already on this day</h3><ul>@for (workout of existing(); track workout.id) { <li>{{ workout.title }} · {{ workout.lifecycle }}</li> }</ul>
+    <h3 class="section-title">Already on this day</h3><ul>@for (workout of existing(); track workout.id) { <li>{{ workout.title }} · {{ workout.lifecycle }}</li> }</ul>
     <p class="hint">Adding creates another workout on this day.</p>
   }
-  <p>{{ syncLabel() }}</p>
-  @if (selectedPlan()?.lifecycle === 'paused') { <p>This plan is paused. Its workout stays in Plans until the plan is active.</p> }
-  @if (busy()) { <p role="status">{{ busy() === 'generate' ? 'Checking your context and generating…' : 'Adding your workout…' }}</p><mat-progress-bar mode="indeterminate"></mat-progress-bar> }
+  <p class="hint">{{ syncLabel() }}</p>
+  @if (selectedPlan()?.lifecycle === 'paused') { <p>Paused plan: this workout appears in Calendar after activation.</p> }
+  @if (busy()) { <p role="status">{{ busy() === 'generate' ? 'Checking your context and generating…' : 'Adding your workout…' }}</p> }
   @if (error()) { <p role="alert">{{ error() }}</p> }
   @if (result(); as result) {
     <section class="review" aria-label="Workout review" aria-live="polite">
-      <h3>{{ result.draft?.title ?? 'Rest suggestion' }}</h3><p>{{ result.rationale }}</p>
+      <h3 class="section-title">{{ result.draft?.title ?? 'Rest suggestion' }}</h3><p>{{ result.rationale }}</p>
       @if (review(); as review) {
-        <p>{{ controls().localDate }} · {{ selectedPlan()?.name ?? 'Standalone' }} · {{ controls().sport }}</p>
-        <p>{{ review.summary }}</p>@if (review.estimate) { <p>{{ review.estimate }}</p> }
+        <p>{{ review.summary }}</p>@if (review.estimate) { <p class="hint">{{ review.estimate }}</p> }
         @for (exercise of review.exercises; track exercise.id) {
-          <h4>{{ exercise.name }}</h4><ol>@for (set of exercise.sets; track $index) { <li>{{ set }}</li> }</ol>
-          @for (source of result.previousLoads; track source.exerciseId) { @if (source.exerciseId === exercise.id) { <p class="hint">Previously planned on {{ source.localDate }}; performed weight is unknown.</p> } }
+          <app-compact-row [title]="exercise.name" [headingLevel]="4" layout="stacked" density="compact"
+            [summary]="exercise.previouslyPlannedOn ? 'Previously planned on ' + exercise.previouslyPlannedOn + '; performed weight is unknown.' : null">
+            <ul class="sets">@for (set of exercise.sets; track $index) { <li>{{ set }}</li> }</ul>
+          </app-compact-row>
         }
         @for (interval of review.intervals; track interval.id) {
-          @if (interval.repeat) { <h4>{{ interval.repeat }}</h4> }<ol>@for (step of interval.steps; track $index) { <li>{{ step }}</li> }</ol>
+          @if (interval.repeat) { <h4 class="section-title">{{ interval.repeat }}</h4> }<ol>@for (step of interval.steps; track $index) { <li>{{ step }}</li> }</ol>
         }
-      } @else { <p>No workout will be added for this rest suggestion.</p><button mat-button [disabled]="!!busy()" (click)="easy()">Suggest an easy session</button> }
-      <h4>Context used</h4><ul>@for (context of result.usedContext; track context) { <li>{{ context }}</li> }</ul>
-      <p class="hint">Observed {{ result.observedAt | date:'medium' }}. Current readiness is not a forecast for a future workout.</p>
-      @if (result.missingContext.length) { <h4>Context limits</h4><ul>@for (context of result.missingContext; track context) { <li>{{ context }}</li> }</ul> }
+      } @else { <p>Rest adds no workout.</p> }
+      <app-summary-disclosure title="Context" [headingLevel]="4" summaryId="day-workout-context"
+        [scopeKey]="result.requestId" [detailsAvailable]="true">
+        <p summaryOverview class="hint">{{ result.missingContext.length ? 'Some context was unavailable. ' : '' }}Readiness reflects now, not the workout date.</p>
+        <div summaryDetails>
+          <ul>@for (context of contextDetails(); track $index) { <li>{{ context }}</li> }</ul>
+          <p class="hint">Observed {{ result.observedAt | date:'medium' }}.</p>
+        </div>
+      </app-summary-disclosure>
     </section>
   }
+  @if (result() || error()) {
+    <div class="review-actions">
+      @if (result()?.draft) { <button mat-button appHapticTap [disabled]="!!busy() || staleReview() || saveUncertain()" (click)="edit()">Edit workout</button> }
+      <button mat-button [disabled]="!!busy() || !valid() || saveUncertain()" (click)="generate()">Generate again</button>
+    </div>
+  }
   @if (staleReview() && !saveUncertain()) {
-    <p role="alert">Schedule changed. Review the current day and destination above before adding this draft.</p>
-    <button mat-button [disabled]="!!busy() || !valid()" (click)="refreshReview()">Use current schedule for this draft</button>
+    <p role="alert">Schedule changed. Review the day and destination before adding.</p>
+    <button mat-button [disabled]="!!busy() || !valid()" (click)="refreshReview()">Use updated schedule</button>
   }
 </mat-dialog-content>
 <mat-dialog-actions align="end">
   <button mat-button appHapticTap mat-dialog-close [disabled]="!!busy() || saveUncertain()">Cancel</button>
-  @if (error() && !result()) { <button mat-button [disabled]="!!busy() || !valid()" (click)="generate(true)">Retry generation</button> }
-  <button mat-button [disabled]="!!busy() || !valid() || saveUncertain()" (click)="generate()">{{ result() || error() ? 'Generate again' : 'Generate workout' }}</button>
-  @if (result()?.draft) {
-    <button mat-button appHapticTap [disabled]="!!busy() || staleReview() || saveUncertain()" (click)="edit()">Edit workout</button>
-    <button mat-flat-button [disabled]="!!busy() || (!saveUncertain() && (staleReview() || !valid()))" (click)="add()">{{ saveUncertain() ? 'Retry Add' : 'Add workout' }}</button>
-  }
+  <button mat-flat-button [disabled]="!!busy() || (!saveUncertain() && (!valid() || (!!result()?.draft && staleReview())))"
+    (click)="primaryAction()">{{ primaryLabel() }}</button>
 </mat-dialog-actions>
 
 <ng-template #choiceField let-choice="choice">
-  <mat-form-field appearance="outline"><mat-label>{{ choice.label }}</mat-label>
-    <mat-select [multiple]="choice.key === 'equipment'" [canSelectNullableOptions]="true" [value]="choiceValue(choice)" (selectionChange)="set(choice.key, $event.value)" [disabled]="!!busy() || saveUncertain()">
+  <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>{{ choice.label }}</mat-label>
+    <mat-select [multiple]="choice.key === 'equipment'" [canSelectNullableOptions]="true" [value]="controls()[choice.key]" (selectionChange)="set(choice.key, $event.value)" [disabled]="!!busy() || saveUncertain()">
       @for (option of choice.options; track option.value) { <mat-option [value]="option.value">{{ option.label }}</mat-option> }
     </mat-select>
   </mat-form-field>

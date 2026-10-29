@@ -1,4 +1,6 @@
 import { signal } from '@angular/core';
+import { By } from '@angular/platform-browser';
+import { SummaryDisclosureComponent } from '../shared/summary-disclosure/summary-disclosure.component';
 import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogContainer, MatDialogRef } from '@angular/material/dialog';
 import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
@@ -79,8 +81,11 @@ describe('DayWorkoutDialogComponent', () => {
     if (process.env.DAY_WORKOUT_QA_DIR) {
       const sass = createRequire(createRequire(resolve('package.json')).resolve('@angular/build/package.json'))('sass');
       const css = (MatDialogContainer as unknown as { ɵcmp: { styles: string[] } }).ɵcmp.styles.join('\n')
-        + sass.compileString(`#${fixture.nativeElement.id} {` + readFileSync('src/app/components/plans/day-workout-dialog.component.scss', 'utf8')
-          .replace(/:host/g, '&') + '}').css;
+        + [[`#${fixture.nativeElement.id}`, 'plans/day-workout-dialog'],
+          ['app-compact-row', 'shared/compact-row/compact-row'],
+          ['app-summary-disclosure', 'shared/summary-disclosure/summary-disclosure']]
+          .map(([selector, path]) => sass.compileString(`${selector} {`
+            + readFileSync(`src/app/components/${path}.component.scss`, 'utf8').replace(/:host\(([^)]+)\)/g, '&$1').replace(/:host/g, '&') + '}').css).join('\n');
       const exportView = (name: string) => {
         const markup = fixture.nativeElement.cloneNode(true) as HTMLElement;
         const inputs: HTMLInputElement[] = [...fixture.nativeElement.querySelectorAll('input')];
@@ -93,14 +98,83 @@ describe('DayWorkoutDialogComponent', () => {
           + '<mat-dialog-container class="mat-mdc-dialog-container mdc-dialog mdc-dialog--open"><div class="mat-mdc-dialog-inner-container mdc-dialog__container">'
           + '<div class="mat-mdc-dialog-surface mdc-dialog__surface">' + markup.outerHTML + '</div></div></mat-dialog-container></div></body></html>');
       };
-      exportView('strength-review'); component.more.set(true); fixture.detectChanges(); exportView('strength-options');
-      component.set('sport', ActivityTypes.Running); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); exportView('endurance-options');
+      exportView('strength-review');
+      component.busy.set('save'); fixture.detectChanges(); exportView('saving'); component.busy.set(null);
+      component.saveUncertain.set(true); component.error.set('Save confirmation lost. Keep this dialog open and Retry Add to check the same workout.');
+      fixture.detectChanges(); exportView('save-retry'); component.saveUncertain.set(false); component.error.set(null);
+      component.staleReview.set(true); fixture.detectChanges(); exportView('stale-review'); component.staleReview.set(false);
+      const details = fixture.debugElement.query(By.directive(SummaryDisclosureComponent)).componentInstance as SummaryDisclosureComponent;
+      details.toggleDetails(); fixture.detectChanges(); exportView('strength-context');
+      component.showSettings.set(true); component.more.set(true); fixture.detectChanges(); exportView('strength-options');
+      component.result.set(null); component.more.set(false); fixture.detectChanges(); exportView('strength-setup');
+      component.busy.set('generate'); fixture.detectChanges(); exportView('generating'); component.busy.set(null);
+      component.result.set({ ...response('rest-review'), kind: 'rest', draft: null, previousLoads: [] });
+      component.showSettings.set(false); fixture.detectChanges(); exportView('rest-review');
+      const longStrength = { ...strength, exercises: Array.from({ length: 6 }, (_, index) => ({ ...strength.exercises[0],
+        id: `exercise-${index}`, name: `Exercise ${index + 1}`, sets: Array.from({ length: 4 }, (_, set) => ({ ...strength.exercises[0].sets[0], id: `set-${index}-${set}` })) })) };
+      component.result.set({ ...response('long-review'), draft: { ...response('').draft!, strength: longStrength,
+        structure: projectStrengthWorkoutToV1({ ...longStrength, workoutId: 'draft', revision: 1 }) }, previousLoads: [] });
+      fixture.detectChanges(); exportView('long-review');
+      component.result.set(null); component.error.set('Generation failed. Retry checks this request; Generate again uses a new AI request.');
+      fixture.detectChanges(); exportView('generation-error');
+      component.more.set(true);
+      component.set('sport', ActivityTypes.Running); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); exportView('endurance-options'); component.more.set(false); fixture.detectChanges(); exportView('endurance-setup');
       component.set('sport', ActivityTypes.StrengthTraining); component.result.set(response(generate.mock.calls[0][1].requestId));
-      component.refreshReview(); fixture.detectChanges();
+      component.showSettings.set(false); component.refreshReview(); fixture.detectChanges();
     }
     component.edit();
     expect(close).toHaveBeenCalledWith(expect.objectContaining({ ownerUid: 'owner', draft: response('').draft,
       saveRequest: expect.objectContaining({ operation: expect.objectContaining({ strength }) }) }));
+  });
+  it('focuses review on the prescription while keeping options and context inspectable without discarding it', async () => {
+    const fixture = await render(); const component = fixture.componentInstance;
+    const element = fixture.nativeElement as HTMLElement;
+    const button = (label: string) => [...element.querySelectorAll('button')].find(item => item.textContent?.trim() === label)!;
+    expect(element.querySelector('fieldset')!.hidden).toBe(false);
+    expect(element.querySelector('input[type="date"]')).toBeNull();
+    expect(element.querySelector('.review-destination')!.textContent).toContain('Oct 28, 2026');
+    expect(element.querySelector('mat-dialog-actions')!.textContent).toContain('Generate workout');
+    await component.generate(); fixture.detectChanges();
+    const draft = component.result();
+    expect(element.querySelector('fieldset')!.hidden).toBe(true);
+    expect([...element.querySelectorAll('mat-dialog-actions button')].map(item => item.textContent?.trim())).toEqual(['Cancel', 'Add workout']);
+    button('Change options').click(); fixture.detectChanges();
+    expect(element.querySelector('fieldset')!.hidden).toBe(false);
+    expect(button('Hide options').getAttribute('aria-expanded')).toBe('true');
+    expect(component.result()).toBe(draft);
+    const context = element.querySelector('#day-workout-context-details') as HTMLElement;
+    expect(context.hidden).toBe(true);
+    haptics.selection.mockClear(); (element.querySelector('.summary-disclosure-control') as HTMLButtonElement).click(); fixture.detectChanges();
+    expect(context.hidden).toBe(false); expect(context.textContent).toContain('No usable existing Feeling/RPE');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    component.set('minutes', 45, false); fixture.detectChanges();
+    expect(component.result()).toBeNull(); expect(element.querySelector('fieldset')!.hidden).toBe(false);
+    await component.generate(); fixture.detectChanges();
+    expect(element.querySelector('fieldset')!.hidden).toBe(true);
+    expect((element.querySelector('#day-workout-context-details') as HTMLElement).hidden).toBe(true);
+  });
+  it('uses one primary action and one selection feedback when requesting an easy session from rest', async () => {
+    const fixture = await render(); const component = fixture.componentInstance;
+    generate.mockResolvedValueOnce({ ...response('mutation-1'), kind: 'rest', draft: null, previousLoads: [] });
+    await component.generate(); fixture.detectChanges(); haptics.selection.mockClear();
+    expect(fixture.nativeElement.querySelector('mat-dialog-actions').textContent).toContain('Suggest an easy session');
+    expect(fixture.nativeElement.querySelector('mat-dialog-actions').textContent).not.toContain('Add workout');
+    await component.easy();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(generate.mock.calls[1][1].controls.purpose).toBe('general-strength');
+    expect(mutate).not.toHaveBeenCalled();
+  });
+  it('shows a disabled pending primary action and wires the error primary action to the same request', async () => {
+    const fixture = await render(); const component = fixture.componentInstance;
+    let reject!: (error: unknown) => void;
+    generate.mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; }));
+    const pending = component.generate(); fixture.detectChanges();
+    const action = fixture.nativeElement.querySelector('mat-dialog-actions button[mat-flat-button]') as HTMLButtonElement;
+    expect(action.textContent).toContain('Generating…'); expect(action.disabled).toBe(true);
+    reject(new Error('Response lost')); await pending; fixture.detectChanges();
+    expect(action.textContent).toContain('Retry generation'); expect(action.disabled).toBe(false);
+    action.click(); await fixture.whenStable(); fixture.detectChanges();
+    expect(generate.mock.calls[1][1]).toEqual(generate.mock.calls[0][1]);
   });
   it('restores a usable equipment default when switching sports after clearing the strength selection', async () => {
     const fixture = await render(); const component = fixture.componentInstance;
@@ -120,7 +194,9 @@ describe('DayWorkoutDialogComponent', () => {
     const fixture = await render(); const component = fixture.componentInstance;
     component.set('localDate', '2026-11-02'); await component.generate();
     mutate.mockRejectedValueOnce({ code: 'functions/unavailable' }); await component.add();
-    expect(component.saveUncertain()).toBe(true);
+    expect(component.saveUncertain()).toBe(true); fixture.detectChanges();
+    const retry = fixture.nativeElement.querySelector('mat-dialog-actions button[mat-flat-button]') as HTMLButtonElement;
+    expect(retry.textContent).toContain('Retry Add'); expect(retry.disabled).toBe(false);
     const command = mutate.mock.calls[0][0]; expect(command.operation.confirmPlanRangeExtension).toBe(true);
     schedule.next({ ...schedule.value, state: { ...schedule.value.state, revision: 8 } });
     component.set('minutes', 50); expect(component.controls().minutes).toBe(30);

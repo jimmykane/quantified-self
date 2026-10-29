@@ -336,11 +336,11 @@ When a numeric step allows **early Lap**, the summary labels its totals as **pre
 
 ## Generate a workout for a day
 
-- Calendar → today or a future day → **Add workout → Generate with AI**. Set sport, time, purpose and destination. Defaults are **30 minutes** and a fitting active plan or Standalone.
-- **More options** includes strict timing, targets and structure. Training-plan and Timeline-note context start off, separately from chat. Missing feedback stays unknown; readiness is observed now, not forecast.
-- For strength, choose equipment, focus and matching previous weights. Reused loads are **previously planned**, not verified performed weights. Time estimates stay separate from repetitions.
-- Review every step/set, then **Edit workout**, **Generate again**, or **Add workout**. Rest adds nothing. Plan-date extensions need confirmation; existing plan sync may send new workouts automatically.
-- Generation uses the Assistant allowance; exact retries are free. For lost save replies, keep the dialog open and **Retry Add**. Conflicts retain your draft for review.
+- Calendar → **Add workout → Generate with AI** uses the selected day. Choose sport, time, purpose and destination (defaults: **30 minutes**, fitting active plan or Standalone).
+- **More options** adds timing, targets, structure and separate default-off Training/Timeline context. Readiness reflects now; missing feedback stays unknown.
+- Strength offers equipment, focus and **previously planned** loads, not verified performed weights. Duration is an estimate.
+- Review all steps/sets. **Change options** reopens settings; changes require regeneration. **Context → Show details** explains evidence. Choose **Edit workout**, **Generate again**, or **Add workout**. Rest saves nothing.
+- Generation uses the Assistant allowance; exact retries are free. After a lost save reply, keep the dialog open and **Retry Add**. Conflicts retain the draft. Enabled plan sync may send automatically.
 
 ## Organize plans and standalone workouts
 

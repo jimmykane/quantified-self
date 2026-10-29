@@ -19,7 +19,9 @@ describe('Calendar workout draft review', () => {
     ] }] };
     const structure = projectStrengthWorkoutToV1({ ...strength, workoutId: 'draft', revision: 1 });
     const draft = { title: 'Strength', structure, strength, estimatedMinutes: { minimum: 20, maximum: 30 } };
-    const metric = dayWorkoutReview(draft);
+    const metric = dayWorkoutReview(draft, undefined, [{ exerciseId: 'squat', localDate: '2026-10-25' }]);
+    expect(metric.exercises[0].previouslyPlannedOn).toBe('2026-10-25');
+    expect(dayWorkoutReview(draft, undefined, [{ exerciseId: 'other', localDate: '2026-10-24' }]).exercises[0].previouslyPlannedOn).toBeNull();
     expect(metric.exercises[0].sets).toHaveLength(3);
     expect(metric.exercises[0].sets[0]).toContain('0.0 kg');
     expect(metric.exercises[0].sets[1]).toContain('12.5 kg');

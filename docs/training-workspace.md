@@ -714,7 +714,7 @@ and must never be inferred from merely connecting a service.
 ### Generate a workout from a Calendar day
 
 The owned Calendar day sheet and full day page expose **Generate with AI** in **Add workout** for today or a
-future date. This opens an unsaved review workflow. Main controls are date, supported manual sport (including
+future date. This opens an unsaved review workflow. The date stays on the selected Calendar day. Main controls are supported manual sport (including
 strength aliases), available minutes, purpose and destination. Thirty minutes is an explicit editable starting
 value; a fitting active plan is preselected, otherwise Standalone. Strength shows equipment, initially Bodyweight.
 More options include strict endurance timing, target preference, simple/automatic structure, strength focus,
@@ -762,8 +762,12 @@ no queue or provider lifecycle.
 
 Review includes the complete interval/strength prescription in owner units, including interval effort notes,
 rationale, used/missing context, observation time, selected day/destination, existing workouts and inherited
-plan-sync disclosure. Paused plans
-are labelled. **Edit workout** passes the full unsaved draft and save identity through owner-bound memory to the
+plan-sync disclosure. After generation, settings collapse behind **Change options** without discarding the draft;
+changing a value requires a new generation. Context evidence uses the shared flat summary disclosure, with missing
+context and current-readiness limits visible while collapsed. Strength prescriptions reuse shared compact rows;
+all sets and interval steps remain visible. The global dialog surface, Material controls and QS scrollbar skin
+apply without per-dialog skins. The footer has Cancel and one primary action; Edit and Generate again sit with
+the prescription. Paused plans are labelled. **Edit workout** passes the full unsaved draft and save identity through owner-bound memory to the
 existing editor; auth changes clear it. **Add workout** uses the existing revision-bound `create-workout`
 mutation. Extending plan dates requires confirmation. A lost save reply retains the exact request and workout
 identity; the dialog locks changes until **Retry Add** resolves it. Definitive revision conflicts retain the draft
@@ -774,7 +778,8 @@ MCP impact review: existing public read schemas, mutation kinds, proposal/confir
 unchanged. Generated workouts persist the same canonical root and full strength companion used by manual editing.
 `assistant/day-workout.emulator.spec.ts` verifies their read-back through `get_planned_workout_v3` and
 `get_strength_workout_details`, including exact repeated recoveries, zero/fractional loads and complete sets.
-Review-note rendering and private cache/quota fixes preserve these same public contracts and read-back coverage.
+Review-note rendering, compact UI disclosures and private cache/quota fixes preserve these same public contracts
+and read-back coverage. Presentation changes do not alter stored prescriptions, consent or provider delivery.
 No read coverage is deferred and no public generation tool is introduced. The private callable is registered in
 full/lazy entrypoints, endpoint metadata checks, the shared manifest and least-privilege secret policy. Release the
 backend endpoint before its frontend under separate deployment approval; no new Rules, index, secret value or

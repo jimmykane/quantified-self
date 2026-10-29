@@ -1,6 +1,14 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
-import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { DatePipe, NgTemplateOutlet } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
+import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { firstValueFrom, Subscription } from 'rxjs';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { DAY_WORKOUT_EQUIPMENT, DAY_WORKOUT_SPORTS, defaultDayWorkoutControls, dayWorkoutLocalDate, dayWorkoutDateOffset,
@@ -8,7 +16,7 @@ import { DAY_WORKOUT_EQUIPMENT, DAY_WORKOUT_SPORTS, defaultDayWorkoutControls, d
   type DayWorkoutControls, type GenerateDayWorkoutRequest, type GenerateDayWorkoutResponse } from '@shared/day-workout';
 import { isStrengthWorkoutSportV1 } from '@shared/strength-workout';
 import { isTrainingLocalDateWithinPlan, normalizeTrainingLocalDate, type MutateTrainingScheduleRequestV1 } from '@shared/training-plans';
-import { SharedModule } from '../../modules/shared.module';
+import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppUserService } from '../../services/app.user.service';
 import { DayWorkoutService, type DayWorkoutEditorDraft } from '../../services/day-workout.service';
@@ -17,11 +25,15 @@ import { TrainingDeliveryService } from '../../services/training-delivery.servic
 import { dayWorkoutReview } from '../../helpers/day-workout-review.helper';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { Auth, authState } from 'app/firebase/auth';
+import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
+import { SummaryDisclosureComponent } from '../shared/summary-disclosure/summary-disclosure.component';
 
 export interface DayWorkoutDialogData { ownerUid: string; localDate: string; sport: ActivityTypes }
 type ChoiceKey = 'sport' | 'purpose' | 'destinationPlanId' | 'equipment' | 'timing' | 'target' | 'structure' | 'strengthFocus';
 interface Choice { key: ChoiceKey; label: string; options: { value: string | null; label: string }[] }
-@Component({ selector: 'app-day-workout-dialog', standalone: true, imports: [SharedModule],
+@Component({ selector: 'app-day-workout-dialog', standalone: true, imports: [DatePipe, NgTemplateOutlet, FormsModule, MatDialogModule, MatButtonModule, MatCheckboxModule,
+  MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule, AppChartSharedModule,
+  CompactRowComponent, SummaryDisclosureComponent],
   templateUrl: './day-workout-dialog.component.html', styleUrls: ['./day-workout-dialog.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush })
 export class DayWorkoutDialogComponent {
@@ -39,6 +51,7 @@ export class DayWorkoutDialogComponent {
   readonly latestDate = dayWorkoutDateOffset(this.today, 365);
   readonly controls = signal(defaultDayWorkoutControls(this.data.localDate, this.timeZone, this.data.sport));
   readonly more = signal(false);
+  readonly showSettings = signal(false);
   readonly busy = signal<'generate' | 'save' | null>(null);
   readonly error = signal<string | null>(null);
   readonly result = signal<GenerateDayWorkoutResponse | null>(null);
@@ -46,7 +59,7 @@ export class DayWorkoutDialogComponent {
   readonly scheduleFailed = signal(false);
   readonly staleReview = signal(false);
   readonly saveUncertain = signal(false);
-  readonly syncLabel = signal('Standalone workouts are sent separately after saving.');
+  readonly syncLabel = signal('');
   readonly strength = computed(() => isStrengthWorkoutSportV1(this.controls().sport));
   readonly planOptions = computed(() => this.schedule()?.plans.filter(plan => plan.lifecycle !== 'archived') ?? []);
   readonly selectedPlan = computed(() => this.planOptions().find(plan => plan.id === this.controls().destinationPlanId) ?? null);
@@ -55,7 +68,8 @@ export class DayWorkoutDialogComponent {
     && [null, this.schedule()?.state.activePlanId, this.controls().destinationPlanId].includes(workout.planId)) ?? []);
   readonly user = toSignal(this.users.user$, { initialValue: this.users.user() });
   readonly review = computed(() => { const draft = this.result()?.draft;
-    return draft ? dayWorkoutReview(draft, this.user()?.settings?.unitSettings) : null; });
+    return draft ? dayWorkoutReview(draft, this.user()?.settings?.unitSettings, this.result()?.previousLoads) : null; });
+  readonly contextDetails = computed(() => [...(this.result()?.usedContext ?? []), ...(this.result()?.missingContext ?? [])]);
   readonly valid = computed(() => { try {
     const controls = this.controls(); const date = normalizeTrainingLocalDate(controls.localDate);
     return date >= this.today && date <= this.latestDate && Number.isSafeInteger(controls.minutes)
@@ -64,17 +78,13 @@ export class DayWorkoutDialogComponent {
       && (!this.controls().destinationPlanId || !!this.selectedPlan());
   } catch { return false; } });
   readonly labels: Record<string, string> = {
-    suggest: 'Suggest for me', recovery: 'Recovery / easy', endurance: 'Endurance', intervals: 'Harder intervals',
-    'general-strength': 'General strength', 'muscle-building': 'Muscle building', 'muscular-endurance': 'Muscular endurance',
-    auto: 'Automatic', none: 'No targets', 'heart-rate': 'Heart rate', power: 'Power', speed: 'Pace / speed',
-    'full-body': 'Full body', 'upper-body': 'Upper body', 'lower-body': 'Lower body', core: 'Core',
-    bodyweight: 'Bodyweight', dumbbells: 'Dumbbells', barbell: 'Barbell', kettlebell: 'Kettlebell', bands: 'Bands', machines: 'Machines',
-    approximate: 'Approximately this long', strict: 'Finish within this time', simple: 'Simple session',
+    suggest: 'Suggest for me', recovery: 'Recovery / easy',
+    none: 'No targets', speed: 'Pace / speed',
+    strict: 'Finish within this time',
   };
   private choice(key: ChoiceKey, label: string, values: readonly string[]): Choice {
-    return { key, label, options: values.map(value => ({ value, label: this.labels[value] ?? value })) };
+    return { key, label, options: values.map(value => ({ value, label: this.labels[value] ?? value.charAt(0).toUpperCase() + value.slice(1).replaceAll('-', ' ') })) };
   }
-  choiceValue(choice: Choice): DayWorkoutControls[ChoiceKey] { return this.controls()[choice.key]; }
   readonly mainChoices = computed<Choice[]>(() => [this.choice('sport', 'Sport', DAY_WORKOUT_SPORTS),
     this.choice('purpose', 'Purpose', dayWorkoutPurposes(this.controls().sport)),
     { key: 'destinationPlanId', label: 'Add to', options: [{ value: null, label: 'Standalone' },
@@ -84,11 +94,27 @@ export class DayWorkoutDialogComponent {
     ? [this.choice('strengthFocus', 'Strength focus', ['full-body', 'upper-body', 'lower-body', 'core'])]
     : [this.choice('timing', 'Timing', ['approximate', 'strict']), this.choice('target', 'Targets', dayWorkoutTargets(this.controls().sport)),
       this.choice('structure', 'Session structure', ['auto', 'simple'])]);
+  readonly contextChoices = computed(() => [
+    { key: 'trainingContext' as const, label: 'Use Training plans and workouts' },
+    { key: 'timelineContext' as const, label: 'Use Timeline notes' },
+    ...(this.strength() ? [{ key: 'usePreviousWeights' as const, label: 'Reuse matching planned weights' }] : []),
+  ]);
+  readonly primaryLabel = computed(() => {
+    if (this.busy()) return this.busy() === 'save' ? 'Adding…' : 'Generating…';
+    if (this.result()?.draft) return this.saveUncertain() ? 'Retry Add' : 'Add workout';
+    if (this.result()) return 'Suggest an easy session';
+    return this.error() ? 'Retry generation' : 'Generate workout';
+  });
+  async primaryAction(): Promise<void> {
+    if (this.result()?.draft) return this.add();
+    if (this.result()) return this.easy();
+    return this.generate(!!this.error());
+  }
   private request: GenerateDayWorkoutRequest | null = null;
   private command: MutateTrainingScheduleRequestV1 | null = null;
   private reviewedSchedule: CurrentTrainingScheduleV1 | null = null;
   private syncSubscription?: Subscription;
-  private syncKey: string | null = null;
+  private syncKey: string | null | undefined;
   private initializedDestination = false;
   private sequence = 0;
   private scheduleSubscription?: Subscription;
@@ -134,14 +160,14 @@ export class DayWorkoutDialogComponent {
     const key = this.controls().destinationPlanId;
     if (key === this.syncKey) return;
     this.syncKey = key; this.syncSubscription?.unsubscribe();
-    if (!key) { this.syncLabel.set('Standalone workouts are sent separately after saving.'); return; }
-    this.syncLabel.set('Checking inherited plan sync…');
+    if (!key) { this.syncLabel.set('Standalone: send separately after saving.'); return; }
+    this.syncLabel.set('Checking plan sync…');
     this.syncSubscription = this.delivery.watchScope(this.data.ownerUid, 'plan', key, 1, false).subscribe({ next: view => {
       if (!this.generation.isOwner(this.data.ownerUid) || this.syncKey !== key) return;
       const names = view.settings.filter(item => item.enabled && !item.suppressed).map(item => item.provider);
-      this.syncLabel.set(names.length ? `Inherits plan sync: ${names.join(', ')}. Eligible workouts may be sent automatically.`
-        : 'Plan sync is off. Send separately after saving.');
-    }, error: () => this.syncLabel.set('Sync status unavailable. Existing plan sync may send this workout automatically.') });
+      this.syncLabel.set(names.length ? `Inherits plan sync: ${names.join(', ')}. May send automatically.`
+        : 'Plan sync is off; send after saving.');
+    }, error: () => this.syncLabel.set('Sync unavailable. Existing plan sync may send automatically.') });
   }
   async generate(retry = false): Promise<void> {
     if (!this.valid() || this.busy() || this.saveUncertain()) return;
@@ -154,19 +180,19 @@ export class DayWorkoutDialogComponent {
       const result = await this.generation.generate(this.data.ownerUid, this.request, () => this.current(sequence));
       if (!this.current(sequence)) return;
       if (result.requestId !== this.request.requestId) throw new Error('The generation response does not match this request.');
-      this.result.set(result);
+      this.result.set(result); this.showSettings.set(false);
       this.staleReview.set(this.reviewedSchedule?.state.revision !== this.schedule()?.state.revision);
       this.haptics.success();
     } catch (error) { if (this.current(sequence)) {
       const code = String((error as { code?: string }).code).replace('functions/', '');
-      this.error.set(code === 'resource-exhausted' ? 'Generation request limit reached. Try again after your allowance resets.'
+      this.error.set(code === 'resource-exhausted' ? 'AI allowance reached. Try again after it resets.'
         : code === 'permission-denied' ? 'Assistant access is unavailable. Check your account setup.'
           : 'Generation failed. Retry checks this request; Generate again uses a new AI request.');
       this.haptics.error();
     } }
     finally { if (this.current(sequence)) { this.busy.set(null); this.ref.disableClose = false; } }
   }
-  async easy(): Promise<void> { this.set('purpose', this.strength() ? 'general-strength' : 'recovery'); await this.generate(); }
+  async easy(): Promise<void> { this.set('purpose', this.strength() ? 'general-strength' : 'recovery', false); await this.generate(); }
   refreshReview(): void {
     if (!this.schedule() || this.busy() || this.saveUncertain()) return;
     this.reviewedSchedule = this.schedule(); this.command = null; this.staleReview.set(false); this.error.set(null); this.haptics.selection();
@@ -213,7 +239,7 @@ export class DayWorkoutDialogComponent {
         .some(value => code === value || code === `functions/${value}`);
       this.saveUncertain.set(!rejected);
       if (rejected) { this.staleReview.set(true); this.command = null; }
-      this.error.set(rejected ? 'Save rejected. Your draft is retained; review the current day and destination before retrying.'
+      this.error.set(rejected ? 'Save rejected. Your draft is kept; review the updated schedule before retrying.'
         : 'Save confirmation lost. Keep this dialog open and Retry Add to check the same workout.');
       this.haptics.error();
     } finally { if (this.current(sequence)) { this.busy.set(null); this.ref.disableClose = this.saveUncertain(); } }
