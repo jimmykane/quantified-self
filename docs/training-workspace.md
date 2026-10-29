@@ -7190,8 +7190,9 @@ propagate for retry. Compiled entrypoint checks prevent Sports Lib, cache builde
 to the eager trigger import graph.
 
 Eligible source deletions check the account root and deletion tombstone before loading that handler. Account-cleanup
-deliveries acknowledge without cache refresh, metadata reads or enqueueing; unrelated Health records still exit with
-no Firestore reads. An ordinary source deletion adds this two-document preflight and retains cache maintenance and
+deliveries acknowledge without cache refresh, metadata reads or enqueueing. Non-Health deletions also defer snapshot
+decoding until after this guard; unrelated Health records still exit with no Firestore reads. An ordinary source
+deletion adds this two-document preflight and retains cache maintenance and
 the later deletion/transaction guards, including a deletion that starts during handling. Guard lookup failures retry.
 Trigger delivery still occurs; concurrency, deletion pacing, resources and retry settings are unchanged. Help, MCP
 contracts/planning reads and monitoring coverage are unchanged: this only short-circuits an existing lifecycle skip.

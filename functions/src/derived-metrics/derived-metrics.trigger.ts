@@ -15,24 +15,26 @@ async function dispatchSourceWrite(
         return;
     }
 
-    const before = event.data?.before?.data?.();
-    const after = event.data?.after?.data?.();
-    // Preparation only reserves the import. Owner edits made during it are projected below.
-    if (source === 'training-load' && after?.sourceWritePending &&
-        (!before || !hasDerivedMetricSourceChange(source, before, after)) && !Object.keys(after.controls ?? {}).length) return;
-    // Creates, updates, and deletes can all change the derived comparison.
     const beforeExists = !!event.data?.before?.exists;
     const afterExists = !!event.data?.after?.exists;
     if (!beforeExists && !afterExists) {
         return;
     }
+    const isDeletion = beforeExists && !afterExists;
+    // Only Health needs deleted data before the guard, to ignore irrelevant records without a lookup.
+    const before = isDeletion && source !== 'health' ? undefined : event.data?.before?.data?.();
+    const after = afterExists ? event.data?.after?.data?.() : undefined;
+    // Preparation only reserves the import. Owner edits made during it are projected below.
+    if (source === 'training-load' && after?.sourceWritePending &&
+        (!before || !hasDerivedMetricSourceChange(source, before, after)) && !Object.keys(after.controls ?? {}).length) return;
+    // Creates, updates, and deletes can all change the derived comparison.
     if (beforeExists && afterExists && !hasDerivedMetricSourceChange(
-        source, event.data?.before?.data?.(), event.data?.after?.data?.(),
+        source, before, after,
     )) {
         return;
     }
     if (source === 'health' && !hasDerivedMetricsHealthSource(before, after)) return;
-    if (beforeExists && !afterExists) {
+    if (isDeletion) {
         // Account cleanup emits one delivery per deleted document. Avoid loading cache/calculation code for it.
         const { firestore } = await import('firebase-admin');
         const deletionGuard = await getUserDeletionGuardState(firestore(), uid);

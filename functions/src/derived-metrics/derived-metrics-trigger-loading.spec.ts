@@ -47,6 +47,19 @@ describe('lazy derived source triggers', () => {
             expect(lazy.handle).not.toHaveBeenCalled();
         });
 
+    it.each(['onDashboardDerivedMetricsEventWrite', 'onDashboardDerivedMetricsActivityWrite',
+        'onTrainingLoadMetadataWrite', 'onDashboardDerivedMetricsSleepWrite'] as const)(
+        'skips cleanup without decoding deleted snapshots (%s)', async target => {
+            const decode = vi.fn(() => { throw new Error('Deleted snapshot must not be decoded during cleanup.'); });
+            await (triggers[target] as unknown as (event: unknown) => Promise<void>)({
+                params: { uid: 'owner', eventId: 'workout' },
+                data: { before: { exists: true, data: decode }, after: { exists: false, data: decode } },
+            });
+            expect(decode).not.toHaveBeenCalled();
+            expect(lazy.loaded).not.toHaveBeenCalled();
+            expect(lazy.handle).not.toHaveBeenCalled();
+        });
+
     it('propagates deletion lookup failures for retry without loading the handler', async () => {
         const failure = new Error('deletion state unavailable');
         lazy.guard.mockRejectedValueOnce(failure);
