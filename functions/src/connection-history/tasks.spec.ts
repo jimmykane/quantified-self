@@ -161,17 +161,23 @@ describe('durable history coordinator', () => {
     mocks.rows.set('queue/item', { processed: true, resultStatus });
     expect(await observeHistoryChildren(['queue/item'])).toBe('skipped');
   });
-  it('continues Suunto history past a completed batch containing a verified Garmin copy', async () => {
-    run = createHistoryRun('owner', ServiceNames.SuuntoApp, { requested: true, rangePreset: '30_days', runId,
-      tokenPath: 'suuntoAppAccessTokens/owner/tokens/account', rootPath: 'suuntoAppAccessTokens/owner',
+  const duplicateWorkoutQueues = [
+    { service: ServiceNames.SuuntoApp, collection: 'suuntoAppWorkoutQueue', tokenRoot: 'suuntoAppAccessTokens' },
+    { service: ServiceNames.COROSAPI, collection: 'COROSAPIWorkoutQueue', tokenRoot: 'COROSAPIAccessTokens' },
+    { service: ServiceNames.WahooAPI, collection: 'wahooAPIWorkoutQueue', tokenRoot: 'wahooAPIAccessTokens' },
+    { service: ServiceNames.GarminAPI, collection: 'garminAPIActivityQueue', tokenRoot: 'garminAPITokens' },
+  ];
+  it.each(duplicateWorkoutQueues)('continues $service history past a completed batch containing a verified cross-provider copy', async ({ service, collection, tokenRoot }) => {
+    run = createHistoryRun('owner', service, { requested: true, rangePreset: '30_days', runId,
+      tokenPath: `${tokenRoot}/owner/tokens/account`, rootPath: `${tokenRoot}/owner`,
       providerUserId: 'account', credentialGeneration: 'credential' }, 'connection', now);
     run.steps = run.steps.filter(step => step.id === 'activities');
-    run.steps[0].childPaths = ['suuntoAppWorkoutQueue/copy', 'suuntoAppWorkoutQueue/import'];
+    run.steps[0].childPaths = [`${collection}/copy`, `${collection}/import`];
     mocks.rows.set(path(), run); mocks.rows.set(run.rootPath, { activeOAuthCredentialGeneration: 'credential' });
     mocks.rows.set(run.tokenPath, { tokenCredentialGeneration: 'credential' });
     mocks.rows.set(`users/owner/meta/${run.serviceName}`, { connectionState: 'connected', connectionStateGeneration: 'connection' });
-    mocks.rows.set('suuntoAppWorkoutQueue/copy', { processed: true, resultStatus: 'skipped', skippedReason: 'cross_provider_duplicate' });
-    mocks.rows.set('suuntoAppWorkoutQueue/import', { processed: true });
+    mocks.rows.set(`${collection}/copy`, { processed: true, resultStatus: 'skipped', skippedReason: 'cross_provider_duplicate' });
+    mocks.rows.set(`${collection}/import`, { processed: true });
     mocks.execute.mockResolvedValueOnce({ count: 1, nextStartMs: run.startMs + 30000, nextPage: 2 });
 
     await processConnectionHistoryRun(run.id, '0');
@@ -180,17 +186,18 @@ describe('durable history coordinator', () => {
     expect(saved()).toMatchObject({ processed: false, steps: [{ status: 'queued', done: false,
       count: 1, nextStartMs: run.startMs + 30000, page: 2, childPaths: [] }] });
   });
-  it.each(['sleepSyncQueue', 'activitySyncQueue', 'wahooAPIWorkoutQueue'])('does not broaden duplicate completion to %s', async collection => {
+  it.each(['sleepSyncQueue', 'activitySyncQueue', 'routeSyncQueue', 'queue'])('does not broaden duplicate completion to %s', async collection => {
     const child = `${collection}/copy`;
     mocks.rows.set(child, { processed: true, resultStatus: 'skipped', skippedReason: 'cross_provider_duplicate' });
     expect(await observeHistoryChildren([child])).toBe('skipped');
   });
-  it('still waits for unfinished children when another Suunto child is a verified copy', async () => {
-    mocks.rows.set('suuntoAppWorkoutQueue/copy', { processed: true, resultStatus: 'skipped', skippedReason: 'cross_provider_duplicate' });
-    mocks.rows.set('suuntoAppWorkoutQueue/pending', { processed: false });
-    expect(await observeHistoryChildren(['suuntoAppWorkoutQueue/copy', 'suuntoAppWorkoutQueue/pending'])).toBe('pending');
-    mocks.rows.set('suuntoAppWorkoutQueue/pending', { processed: true, resultStatus: 'skipped', skippedReason: 'connection_history_superseded' });
-    expect(await observeHistoryChildren(['suuntoAppWorkoutQueue/copy', 'suuntoAppWorkoutQueue/pending'])).toBe('skipped');
+  it.each(duplicateWorkoutQueues)('still waits for pending $service children and stops on lifecycle skips beside a verified copy', async ({ collection }) => {
+    const paths = [`${collection}/copy`, `${collection}/pending`];
+    mocks.rows.set(paths[0], { processed: true, resultStatus: 'skipped', skippedReason: 'cross_provider_duplicate' });
+    mocks.rows.set(paths[1], { processed: false });
+    expect(await observeHistoryChildren(paths)).toBe('pending');
+    mocks.rows.set(paths[1], { processed: true, resultStatus: 'skipped', skippedReason: 'connection_history_superseded' });
+    expect(await observeHistoryChildren(paths)).toBe('skipped');
   });
   it('continues later history pages after a run-owned child fails and retries only that record after the scan', async () => {
     const step = run.steps[0]; step.page = 2; step.count = 2;

@@ -330,7 +330,12 @@ the ingestion bundles. Existing due-age, dispatch/processing failure and unknown
 there are no new labels or monitoring resources to apply. Local regressions cover continuation, targeted recovery,
 authorization/lifecycle refusal, private projections, bounds and committed checkpoint classifications.
 
-Verified `cross_provider_duplicate` skips in `suuntoAppWorkoutQueue` satisfy their history child checkpoint: the activity already exists from Garmin, so the coordinator continues the remaining date range without another import. Pending children still wait, and lifecycle/authorization skips and other queues retain their existing stop behavior. This only changes child observation in `processConnectionHistoryTask`; existing stopped runs require an explicitly approved resume. Monitoring is **covered/unchanged** by the coordinator's existing committed checkpoint and queue-health signals; no labels, queries, policies or monitoring deployment change.
+Verified `cross_provider_duplicate` skips in the Suunto, COROS, Garmin and Wahoo workout queues satisfy their history
+child checkpoint: the activity already exists from another provider, so the coordinator continues the remaining date
+range without another import. Pending children still wait, and lifecycle/authorization skips and non-workout queues
+retain their existing stop behavior. This only changes child observation in `processConnectionHistoryTask`; existing
+stopped runs require an explicitly approved resume. Monitoring is **covered/unchanged** by the coordinator's existing
+committed checkpoint and queue-health signals; no labels, queries, policies or monitoring deployment change.
 
 ## Batched Suunto Sleep/Health targets
 

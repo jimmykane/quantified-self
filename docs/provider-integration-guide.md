@@ -1091,6 +1091,9 @@ owner/event metadata documents, reusing any legacy Garmin provenance read. The s
 original references and Training controls remain unchanged; workers use their existing guarded queue completions
 and emit an INFO diagnostic, without Training completion linking or outbound fan-out. Existing Help, MCP and Training
 contracts are unchanged; monitoring remains covered by the existing committed `skipped` outcome for all four providers.
+The history coordinator accepts this committed duplicate outcome for those four workout queues so later pages
+continue. Pending children still wait, lifecycle/authorization skips still stop their scope, and the same reason on
+non-workout queues is not accepted as a successful import. Existing history checkpoint monitoring remains covered.
 
 Verified assignments pass only in memory from the committed reservation to Training finalization, preserving zero
 overrides, exclusions and dated policies without trusting arbitrary reused IDs. Guarded source transactions preserve
