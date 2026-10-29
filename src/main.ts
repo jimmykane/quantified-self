@@ -4,6 +4,7 @@
 import { enableProdMode } from '@angular/core';
 import { platformBrowserDynamic } from '@angular/platform-browser-dynamic';
 import { environment } from './environments/environment';
+import { assertEnvironmentSafety } from './environments/environment-safety';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import * as Sentry from '@sentry/angular';
 import { registerAppLocale } from './app/shared/adapters/date-locale.config';
@@ -12,10 +13,12 @@ import { SYSTEM_THEME_PREFERENCE } from './app/models/app-theme-preference.type'
 import { appCheckBeforeBreadcrumb } from './app/helpers/app-check-console-diagnostics.helper';
 import { appCheckBeforeSend } from './app/helpers/app-check-sentry-filter.helper';
 
+assertEnvironmentSafety(environment);
+
 // Navigation is asynchronous: do not start App Check on the alias while leaving it.
 if (!redirectFromFirebaseHostingAlias(environment.localhost, environment.appUrl)) {
   // Only initialize Sentry in non-localhost environments
-  if (!environment.localhost) {
+  if (environment.observabilityEnabled) {
     Sentry.init({
       dsn: 'https://e6aa6074f13d49c299f8c81bf162d88c@o147925.ingest.sentry.io/1194244',
       environment: environment.production ? 'Production' : environment.beta ? 'Beta' : 'Development',

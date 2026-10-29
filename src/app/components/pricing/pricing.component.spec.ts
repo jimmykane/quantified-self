@@ -15,6 +15,8 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { ASSISTANT_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '@shared/limits';
 import { UpcomingRenewalAmountResult } from '@shared/stripe-renewal';
 import { LoggerService } from '../../services/logger.service';
+import { environment } from '../../../environments/environment';
+import type { AppEnvironment } from '../../../environments/environment.interface';
 
 class MockAppPaymentService {
     getProducts() {
@@ -62,7 +64,7 @@ class MockMatDialog {
     }
 }
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 describe('PricingComponent', () => {
     let routeParams: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
@@ -82,6 +84,7 @@ describe('PricingComponent', () => {
 
 
     beforeEach(async () => {
+        (environment as AppEnvironment).billingMode = 'stripe';
         routeParams = new BehaviorSubject(convertToParamMap({}));
         haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
         authServiceMock.user$ = of(acceptedPoliciesUser as any);
@@ -131,6 +134,10 @@ describe('PricingComponent', () => {
         fixture = TestBed.createComponent(PricingComponent);
         component = fixture.componentInstance;
         fixture.detectChanges();
+    });
+
+    afterEach(() => {
+        (environment as AppEnvironment).billingMode = 'disabled';
     });
 
     it('should create', () => {
@@ -233,6 +240,22 @@ describe('PricingComponent', () => {
         expect(fixture.nativeElement.textContent).toContain('no longer available');
         expect(fixture.nativeElement.querySelectorAll('.selected-price-note')).toHaveLength(0);
         expect(checkout).not.toHaveBeenCalled();
+    });
+
+    it('should explain the synthetic role workflow when local billing is disabled', async () => {
+        fixture.destroy();
+        (environment as AppEnvironment).billingMode = 'disabled';
+        fixture = TestBed.createComponent(PricingComponent);
+        component = fixture.componentInstance;
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const notice = fixture.nativeElement.querySelector('.local-billing-notice');
+        expect(component.billingDisabled).toBe(true);
+        expect(notice?.textContent).toContain('Stripe and billing are disabled');
+        expect(notice?.textContent).toContain('npm run local:role');
+        expect(fixture.nativeElement.querySelector('.manage-actions')).toBeNull();
     });
 
     it('should not attach a subscription listener after destruction during initialization', async () => {

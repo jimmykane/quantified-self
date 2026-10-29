@@ -51,6 +51,14 @@ vi.mock('../../environments/environment', () => ({
         get useFunctionsEmulator() {
             return mocks.getUseFunctionsEmulator();
         },
+        get backendMode() {
+            return mocks.getLocalhost() && mocks.getUseFunctionsEmulator() ? 'emulator' : 'hosted';
+        },
+        emulatorConfig: {
+            projectId: 'demo-test',
+            host: '127.0.0.1',
+            ports: { functions: 5001 },
+        },
     },
 }));
 

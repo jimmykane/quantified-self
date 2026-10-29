@@ -3,6 +3,7 @@
     "src/app/components/event/chart/event.card.chart.template.spec.ts",
     "src/app/components/shared/compact-row/compact-row.styles.spec.ts",
     "src/app/components/shared/reviewer-benchmark-preview/reviewer-benchmark-rr-preview.data.spec.ts",
+    "src/app/firebase/firebase-emulator.config.spec.ts",
     "src/app/helpers/activity-ascent.helper.spec.ts",
     "src/app/helpers/activity-calendar-volume.helper.spec.ts",
     "src/app/helpers/activity-calendar.helper.spec.ts",
@@ -213,7 +214,8 @@
     "src/app/shared/adapters/firebase-hosting-redirect.spec.ts",
     "src/app/shared/help.content.spec.ts",
     "src/app/shared/training-disciplines.shared.spec.ts",
-    "src/app/utils/app.user.utilities.spec.ts"
+    "src/app/utils/app.user.utilities.spec.ts",
+    "src/environments/environment-safety.spec.ts"
   ],
   "dom": [
     "src/app/firebase/firestore-http-response-guard.spec.ts",

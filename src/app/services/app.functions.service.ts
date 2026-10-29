@@ -32,8 +32,6 @@ export class AppFunctionsService {
     private appCheckReadiness = inject(AppCheckReadinessService);
     private logger = inject(LoggerService);
     private readonly appCheckDiagnostics = inject(AppCheckDiagnosticsService);
-    private static readonly LOCAL_FUNCTIONS_EMULATOR_HOST = '127.0.0.1';
-    private static readonly LOCAL_FUNCTIONS_EMULATOR_PORT = 5001;
     private functionsByRegion = new Map<string, FirebaseFunctions>();
     private readonly reportedEnsureFailures = new Map<string, number>();
     private static readonly FAILURE_REPORT_COOLDOWN_MS = 5 * 60 * 1000;
@@ -208,10 +206,14 @@ export class AppFunctionsService {
 
         const functions = getFunctions(this.app, region);
         if (this.shouldUseFunctionsEmulator()) {
+            const emulatorConfig = environment.emulatorConfig;
+            if (!emulatorConfig) {
+                throw new Error('Functions emulator configuration is missing.');
+            }
             connectFunctionsEmulator(
                 functions,
-                AppFunctionsService.LOCAL_FUNCTIONS_EMULATOR_HOST,
-                environment.firebase?.projectId === 'demo-stripe-billing' ? 5101 : AppFunctionsService.LOCAL_FUNCTIONS_EMULATOR_PORT,
+                emulatorConfig.host,
+                emulatorConfig.ports.functions,
             );
         }
 
@@ -220,7 +222,7 @@ export class AppFunctionsService {
     }
 
     private shouldUseFunctionsEmulator(): boolean {
-        return environment.localhost === true && environment.useFunctionsEmulator === true;
+        return environment.backendMode === 'emulator' && environment.useFunctionsEmulator === true;
     }
 
     private shouldRetryAfterAppCheckFailure(error: unknown): boolean {

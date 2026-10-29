@@ -1,0 +1,14 @@
+{
+  "projectId": "demo-quantified-self-local",
+  "host": "127.0.0.1",
+  "ports": {
+    "app": 4200,
+    "auth": 9099,
+    "functions": 5001,
+    "firestore": 8081,
+    "storage": 9199,
+    "tasks": 9499,
+    "ui": 4000,
+    "hub": 4400
+  }
+}

@@ -1,5 +1,3 @@
-import { connectFirestoreEmulator } from 'firebase/firestore';
-import { connectStorageEmulator } from 'firebase/storage';
 import { ErrorHandler, LOCALE_ID, NgModule, PLATFORM_ID, inject, provideAppInitializer } from '@angular/core';
 import { GlobalErrorHandler } from './services/global-error-handler.service';
 import { BrowserModule, provideClientHydration, withNoHttpTransferCache } from '@angular/platform-browser';
@@ -15,7 +13,6 @@ import { provideFirebaseApp, initializeApp } from 'app/firebase/app';
 import { provideAuth, getAuth } from 'app/firebase/auth';
 import { provideFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'app/firebase/firestore';
 import { getApp } from 'app/firebase/app';
-import { provideFunctions, getFunctions } from 'app/firebase/functions';
 import { provideAppCheck, initializeAppCheck, ReCaptchaV3Provider } from 'app/firebase/app-check';
 import { providePerformance, getPerformance } from 'app/firebase/performance';
 import { provideAnalytics, initializeAnalytics } from 'app/firebase/analytics';
@@ -30,6 +27,8 @@ import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
 import { MAT_MENU_DEFAULT_OPTIONS, MatMenuDefaultOptions } from '@angular/material/menu';
 import { ServiceWorkerModule } from '@angular/service-worker';
 import { maybeConnectAuthEmulator } from './authentication/auth-emulator.config';
+import { maybeConnectFirestoreEmulator, maybeConnectStorageEmulator } from './firebase/firebase-emulator.config';
+import { assertEnvironmentSafety } from '../environments/environment-safety';
 
 import { AppUpdateService } from './services/app.update.service';
 import { AppCheckDiagnosticsService } from './services/app-check-diagnostics.service';
@@ -60,8 +59,10 @@ export const QS_MENU_DEFAULT_OPTIONS: MatMenuDefaultOptions = {
   backdropClass: 'cdk-overlay-transparent-backdrop'
 };
 
+assertEnvironmentSafety(environment);
+
+const enableAppCheck = environment.appCheckEnabled;
 const billingTest = environment.firebase.projectId === 'demo-stripe-billing';
-const enableAppCheck = !billingTest && (environment.production || environment.beta || environment.localhost);
 // `useFetchStreams` is an internal/unsupported Firestore Web SDK option.
 // We scope it behind this local type instead of `@ts-ignore` so usage is explicit and searchable.
 // If Firebase drops or changes this flag in a future release, remove it and re-validate Firestore-heavy flows.
@@ -106,12 +107,13 @@ const hydrationProviders = shouldProvideClientHydrationForRuntime(appDocument, t
     provideHttpClient(withInterceptorsFromDi()),
     provideFirebaseApp(() => initializeApp(environment.firebase)),
     provideAppInitializer(() => {
-      if (!billingTest) return;
+      if (environment.backendMode !== 'emulator' || !environment.emulatorConfig) return;
+      const { host, ports } = environment.emulatorConfig;
       const app = getApp();
       // Profile verification and payment recovery share a separate Lite client.
       // Connect it before authenticated services start reading during bootstrap.
       return import('firebase/firestore/lite').then(({ getFirestore, connectFirestoreEmulator }) => {
-        connectFirestoreEmulator(getFirestore(app), '127.0.0.1', 8181);
+        connectFirestoreEmulator(getFirestore(app), host, ports.firestore);
       });
     }),
     ...(enableAppCheck ? [provideAppCheck(() => {
@@ -148,30 +150,17 @@ const hydrationProviders = shouldProvideClientHydrationForRuntime(appDocument, t
         });
       }
 
-      const firestore = initializeFirestore(getApp(), firestoreSettings);
-      if (billingTest) connectFirestoreEmulator(firestore, '127.0.0.1', 8181);
-      return firestore;
+      return maybeConnectFirestoreEmulator(initializeFirestore(getApp(), firestoreSettings));
     }),
-    provideStorage(() => {
-      const storage = getStorage();
-      if (billingTest) connectStorageEmulator(storage, '127.0.0.1', 9291);
-      return storage;
-    }),
-    provideFunctions(() => {
-      const functions = getFunctions(undefined, 'europe-west2');
-      if (environment.localhost) {
-        // connectFunctionsEmulator(functions, 'localhost', 5001); // Temp disable for now
-      }
-      return functions;
-    }),
-    providePerformance(() => {
-      if (billingTest || !isPlatformBrowser(inject(PLATFORM_ID))) {
+    provideStorage(() => maybeConnectStorageEmulator(getStorage())),
+    ...(environment.performanceEnabled ? [providePerformance(() => {
+      if (!isPlatformBrowser(inject(PLATFORM_ID))) {
         return null as unknown as ReturnType<typeof getPerformance>;
       }
 
       return getPerformance();
-    }),
-    provideAnalytics(() => {
+    })] : []),
+    ...(environment.analyticsEnabled ? [provideAnalytics(() => {
       const browser = isPlatformBrowser(inject(PLATFORM_ID));
       const document = inject(DOCUMENT);
       return initializeProductionAnalytics(environment, {
@@ -179,14 +168,14 @@ const hydrationProviders = shouldProvideClientHydrationForRuntime(appDocument, t
         href: browser ? document.location?.href ?? '' : '',
         referrer: browser ? document.referrer : '',
       }, settings => initializeAnalytics(getApp(), settings)) as ReturnType<typeof initializeAnalytics>;
-    }),
-    provideRemoteConfig(() => {
+    })] : []),
+    ...(environment.remoteConfigEnabled ? [provideRemoteConfig(() => {
       if (billingTest || !isPlatformBrowser(inject(PLATFORM_ID))) {
         return null as unknown as ReturnType<typeof getRemoteConfig>;
       }
 
       return getRemoteConfig();
-    }),
+    })] : []),
     { provide: OverlayContainer, useClass: FullscreenOverlayContainer },
     { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } },
     { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },

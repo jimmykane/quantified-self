@@ -95,6 +95,27 @@ describe('initializeFirebase', () => {
     expect(mocks.cert).not.toHaveBeenCalled();
   });
 
+  it('validates isolated emulator routing before initializing Admin', async () => {
+    vi.stubEnv('QS_ISOLATED_LOCAL_RUNTIME', 'true');
+    vi.stubEnv('FUNCTIONS_EMULATOR', 'true');
+    vi.stubEnv('GCLOUD_PROJECT', 'demo-quantified-self-local');
+    vi.stubEnv('FIREBASE_CONFIG', JSON.stringify({ projectId: 'demo-quantified-self-local' }));
+    vi.stubEnv('FIREBASE_AUTH_EMULATOR_HOST', '127.0.0.1:9099');
+    vi.stubEnv('FIREBASE_STORAGE_EMULATOR_HOST', '127.0.0.1:9199');
+    vi.stubEnv('CLOUD_TASKS_EMULATOR_HOST', '127.0.0.1:9499');
+    vi.stubEnv('FIRESTORE_EMULATOR_HOST', 'remote.example.test:8081');
+    const { initializeFirebase } = await import('./bootstrap');
+    expect(() => initializeFirebase()).toThrow(/FIRESTORE.*must point to a loopback emulator/);
+    expect(mocks.initializeApp).not.toHaveBeenCalled();
+    vi.stubEnv('FIRESTORE_EMULATOR_HOST', '127.0.0.1:8081');
+    initializeFirebase();
+    expect(mocks.initializeApp).toHaveBeenCalledWith({
+      projectId: 'demo-quantified-self-local',
+      databaseURL: 'https://demo-quantified-self-local.firebaseio.com',
+      storageBucket: 'demo-quantified-self-local.appspot.com',
+    });
+  });
+
   it('uses the ignored repository-root key for Functions emulation with hosted Auth', async () => {
     vi.stubEnv('FUNCTIONS_EMULATOR', 'true');
     const keyPath = resolve('/repo/quantified-self-io-firebase-adminsdk.json');
