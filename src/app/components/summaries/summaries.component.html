@@ -42,33 +42,36 @@
     </div>
     }
   </app-page-header>
+  <div class="dashboard-today-welcome">
   <p class="dashboard-summary-status"
     [class.dashboard-summary-status--warning]="derivedMetricsBanner?.type === 'warning'"
-    [attr.role]="derivedMetricsBanner?.type === 'warning' ? 'alert' : 'status'" aria-atomic="true">
-    <span class="dashboard-summary-message">
-      @if (derivedMetricsBanner) {
-        {{ derivedMetricsBanner.title }}
-        <span class="cdk-visually-hidden">{{ derivedMetricsBanner.description }}</span>
-      } @else if (showTodaySummary && isOwnerDashboard && todayGreeting) {
-        <span class="dashboard-today-greeting">{{ todayGreeting }}</span>
-      }
-    </span>
-    <span class="dashboard-summary-status-icon" aria-hidden="true">
-      @if (derivedMetricsBanner?.type === 'pending') {
-        <mat-spinner [diameter]="16"></mat-spinner>
-      } @else if (derivedMetricsBanner?.type === 'warning') {
-        <mat-icon>error_outline</mat-icon>
-      }
-    </span>
+    [attr.role]="derivedMetricsBanner ? (derivedMetricsBanner.type === 'warning' ? 'alert' : 'status') : null" aria-atomic="true">
+    @if (showTodaySummary && isOwnerDashboard && todayGreeting && !derivedMetricsBanner) {
+      <app-dashboard-daily-briefing [user]="user" [signals]="dashboardGlanceSignals" [greeting]="todayGreeting"
+        [detailsExpanded]="todayDetailsExpanded()" (detailsToggle)="todayDetailsExpanded.set(!todayDetailsExpanded())" />
+    } @else {
+      <span class="dashboard-summary-message">
+        @if (derivedMetricsBanner) {
+          {{ derivedMetricsBanner.title }}
+          <span class="cdk-visually-hidden">{{ derivedMetricsBanner.description }}</span>
+        }
+      </span>
+      <span class="dashboard-summary-status-icon" aria-hidden="true">
+        @if (derivedMetricsBanner?.type === 'pending') {
+          <mat-spinner [diameter]="16"></mat-spinner>
+        } @else if (derivedMetricsBanner?.type === 'warning') {
+          <mat-icon>error_outline</mat-icon>
+        }
+      </span>
+    }
   </p>
+  </div>
   </div>
   }
   @if (showTodaySummary) {
-  <section class="dashboard-current-state-row" aria-label="Current training state and readiness signals"
+  <section id="dashboard-today-details" class="dashboard-current-state-row" aria-label="Current training state and readiness signals"
+    [hidden]="isOwnerDashboard && !todayDetailsExpanded()"
     [class.has-recovery]="dashboardTodayReadiness.loading || (dashboardTodayReadiness.recoveryText !== '--' && dashboardTodayReadiness.recoveryFinishText)">
-    @if (isOwnerDashboard) {
-      <app-dashboard-daily-briefing [user]="user" [signals]="dashboardGlanceSignals" />
-    }
     <div class="dashboard-current-state-top">
       <div class="dashboard-current-state-primary dashboard-training-state-primary">
         <span>Training state</span>
