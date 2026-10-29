@@ -716,7 +716,9 @@ and must never be inferred from merely connecting a service.
 Owned Calendar and Dashboard selected-day previews, the day sheet and the full day page expose
 **Generate with AI** last in **Add workout**, after **Add from library**, for today through 365 days ahead. All day-context presentations share one
 menu, including empty days; manual plan, standalone and library options remain available for past dates. This opens an unsaved review workflow. The date stays on the selected Calendar day. Main controls are supported manual sport (including
-strength aliases), available minutes, purpose and destination. Thirty minutes is an explicit editable starting
+strength aliases), available minutes, purpose and destination. Sport uses the shared searchable Activities picker in
+single-selection mode, with sport icons and only `DAY_WORKOUT_SPORTS` options. Choosing a sport returns to the draft;
+the existing reset/validation and busy/uncertain-save guards still apply. Thirty minutes is an explicit editable starting
 value; a fitting active plan is preselected, otherwise Standalone. Strength shows equipment, initially Bodyweight.
 More options include strict endurance timing, target preference, simple/automatic structure, strength focus,
 matching previous planned weights, and separate default-off Training-plan and Timeline-note context choices.
@@ -781,7 +783,8 @@ unchanged. Generated workouts persist the same canonical root and full strength 
 `get_strength_workout_details`, including exact repeated recoveries, zero/fractional loads and complete sets.
 Review-note rendering, compact UI disclosures and private cache/quota fixes preserve these same public contracts
 and read-back coverage. The shared day-context entry-point menu has no MCP wire or authority impact: it opens the
-same owner/date-guarded generation service. Presentation changes do not alter stored prescriptions, consent or provider delivery.
+same owner/date-guarded generation service. Reusing the Activities sport picker also changes no supported recipe
+sports, MCP read coverage, scopes or proposal/confirmation contracts. Presentation changes do not alter stored prescriptions, consent or provider delivery.
 No read coverage is deferred and no public generation tool is introduced. The private callable is registered in
 full/lazy entrypoints, endpoint metadata checks, the shared manifest and least-privilege secret policy. Release the
 backend endpoint before its frontend under separate deployment approval; no new Rules, index, secret value or

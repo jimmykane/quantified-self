@@ -347,6 +347,38 @@ checks verify control wiring, wrapping, focus and scroll ownership; actual vibra
 These changes affect presentation and local feedback only; event, plan/workout, provider and MCP contracts remain
 unchanged.
 
+## Searchable sport and tag selection
+
+Reuse `ActivityFilterPickerComponent` (`app-activity-filter-picker`) for sport catalogs and searchable tag choices,
+including form fields such as the AI workout sport. It is the same component used by Activities, event search and
+table tag filters. Import the standalone component directly; it owns its narrow Material imports, shared dialog
+surface, search field, sport icons, wrapping option labels, thin scrollbars and keyboard/focus behavior.
+Do not create another searchable sport dialog or embed a search input inside a `mat-select` option.
+
+Use `ActivityTypesMultiSelectComponent` for canonical sport catalogs with family shortcuts, selected aliases and
+locked choices; use `ActivityTypesFilterMenuComponent` for the equivalent compact toolbar trigger. Both delegate
+to the same picker. Direct callers provide `{ value, label, activityType? }` options, `selectedValues`, visible and
+accessible labels, and handle `selectionChange`. Keep values canonical and constrain options to the caller's actual
+supported sports; sharing UI must not widen a workout recipe or provider's capabilities.
+
+- Multiple selection is the default. It preserves selections hidden by search, keeps the dialog open, offers family
+  shortcuts and Clear selection, and retains disabled/locked choices. Done returns focus to the trigger.
+- Set `[multiple]="false"` for one required sport and bind a zero/one-element `selectedValues` array. Choosing an
+  enabled option replaces the previous value, closes the picker and returns focus. Bulk shortcuts and clearing are
+  absent; closing without choosing preserves the current value. `allLabel` supplies the initial empty-state text.
+  Single-choice fields inherit normal form density; multi-select filters retain their existing compact field tokens.
+- The caller validates emitted values, commits its local selection, and owns one accepted-change haptic. The picker
+  owns opening, explicit closing and clear-search feedback. Hydration, typing, disabled and unchanged selections
+  must stay silent. Disable the picker while the enclosing workflow is busy or its save outcome is uncertain.
+
+Keep ordinary Material selects for short static choices such as workout purpose or timing, and segmented controls
+for a small set of immediate alternatives. This guideline targets catalogs that benefit from search, icons or
+multiple selection; it does not require migrating unrelated controls in a feature change.
+
+Verify search, selected-state retention, single-choice replacement, disabled choices, keyboard opening/Escape,
+focus return and one haptic owner. For nested usage, closing the sport picker must leave the parent dialog open.
+Check phone-width wrapping and bounded scrolling in light and dark themes with the actual Material overlay.
+
 ## Dashboard unit setup
 
 The Dashboard Default units prompt uses `appSettings.unitSetupCompleted === false` and is owner-only, including

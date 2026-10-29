@@ -1,10 +1,11 @@
 :host { display: block; min-width: 0; }
 
-.activity-picker-field {
+.activity-picker-field { width: 100%; }
+
+.activity-picker-field--filter {
   --mat-form-field-container-height: var(--qs-table-filter-height, 46px);
   --mat-form-field-container-text-size: var(--qs-table-filter-text-size, 0.95rem);
   --mat-form-field-container-vertical-padding: var(--qs-table-filter-padding, 10px);
-  width: 100%;
 }
 
 .activity-picker-field input { cursor: pointer; }

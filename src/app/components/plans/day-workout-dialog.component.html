@@ -16,6 +16,9 @@
         <input matInput type="number" min="5" max="240" [ngModel]="controls().minutes" (ngModelChange)="set('minutes', $event, false)"><span matTextSuffix>min</span>
         <mat-hint>5–240 whole minutes{{ strength() ? ' · approximate' : '' }}</mat-hint>
       </mat-form-field>
+      <app-activity-filter-picker label="Sport" allLabel="Choose sport" searchLabel="Search sports"
+        [multiple]="false" [options]="sportOptions" [selectedValues]="selectedSports()"
+        [disabled]="!!busy() || saveUncertain()" (selectionChange)="selectSport($event)"></app-activity-filter-picker>
       @for (choice of mainChoices(); track choice.key) {
         <ng-container [ngTemplateOutlet]="choiceField" [ngTemplateOutletContext]="{ choice: choice }"></ng-container>
       }

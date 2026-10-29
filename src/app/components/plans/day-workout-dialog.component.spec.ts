@@ -1,5 +1,7 @@
 import { signal } from '@angular/core';
 import { By } from '@angular/platform-browser';
+import { ActivityFilterPickerComponent } from '../shared/activity-filter-picker/activity-filter-picker.component';
+import { DAY_WORKOUT_SPORTS } from '@shared/day-workout';
 import { SummaryDisclosureComponent } from '../shared/summary-disclosure/summary-disclosure.component';
 import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogContainer, MatDialogRef } from '@angular/material/dialog';
@@ -176,10 +178,31 @@ describe('DayWorkoutDialogComponent', () => {
     action.click(); await fixture.whenStable(); fixture.detectChanges();
     expect(generate.mock.calls[1][1]).toEqual(generate.mock.calls[0][1]);
   });
-  it('restores a usable equipment default when switching sports after clearing the strength selection', async () => {
+  it('uses the shared single-sport picker and preserves draft resets, allowed sports and busy guards', async () => {
     const fixture = await render(); const component = fixture.componentInstance;
-    component.set('equipment', []); expect(component.valid()).toBe(false);
-    component.set('sport', ActivityTypes.Running); expect(component.valid()).toBe(true);
+    const picker = fixture.debugElement.query(By.directive(ActivityFilterPickerComponent)).componentInstance as ActivityFilterPickerComponent;
+    expect(picker.multiple()).toBe(false);
+    expect(picker.selectedValues()).toEqual([ActivityTypes.StrengthTraining]);
+    expect(new Set(picker.options().map(option => option.value))).toEqual(new Set(DAY_WORKOUT_SPORTS));
+    expect(picker.options().every(option => option.activityType === option.value)).toBe(true);
+    haptics.selection.mockClear();
+    for (const invalid of [[], ['unsupported'], [ActivityTypes.Running, ActivityTypes.Cycling], [ActivityTypes.StrengthTraining]]) {
+      picker.selectionChange.emit(invalid);
+    }
+    expect(component.controls().sport).toBe(ActivityTypes.StrengthTraining); expect(haptics.selection).not.toHaveBeenCalled();
+    component.set('equipment', [], false); expect(component.valid()).toBe(false);
+    component.result.set(response('previous-review'));
+    picker.selectionChange.emit([ActivityTypes.Running]); fixture.detectChanges();
+    expect(component.controls()).toMatchObject({ sport: ActivityTypes.Running, purpose: 'suggest', target: 'auto', equipment: ['bodyweight'] });
+    expect(component.result()).toBeNull(); expect(component.valid()).toBe(true);
+    expect(picker.selectedValues()).toEqual([ActivityTypes.Running]); expect(haptics.selection).toHaveBeenCalledOnce();
+    for (const state of ['busy', 'uncertain'] as const) {
+      component.busy.set(state === 'busy' ? 'generate' : null); component.saveUncertain.set(state === 'uncertain'); fixture.detectChanges();
+      expect(picker.disabled()).toBe(true); picker.selectionChange.emit([ActivityTypes.Cycling]);
+      expect(component.controls().sport).toBe(ActivityTypes.Running);
+    }
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    component.busy.set(null); component.saveUncertain.set(false);
     await component.generate();
     expect(generate.mock.calls[0][1].controls).toMatchObject({ sport: ActivityTypes.Running, equipment: ['bodyweight'] });
   });

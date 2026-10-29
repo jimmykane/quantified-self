@@ -26,14 +26,15 @@ import { dayWorkoutReview } from '../../helpers/day-workout-review.helper';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { Auth, authState } from 'app/firebase/auth';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
+import { ActivityFilterPickerComponent } from '../shared/activity-filter-picker/activity-filter-picker.component';
 import { SummaryDisclosureComponent } from '../shared/summary-disclosure/summary-disclosure.component';
 
 export interface DayWorkoutDialogData { ownerUid: string; localDate: string; sport: ActivityTypes }
-type ChoiceKey = 'sport' | 'purpose' | 'destinationPlanId' | 'equipment' | 'timing' | 'target' | 'structure' | 'strengthFocus';
+type ChoiceKey = 'purpose' | 'destinationPlanId' | 'equipment' | 'timing' | 'target' | 'structure' | 'strengthFocus';
 interface Choice { key: ChoiceKey; label: string; options: { value: string | null; label: string }[] }
 @Component({ selector: 'app-day-workout-dialog', standalone: true, imports: [DatePipe, NgTemplateOutlet, FormsModule, MatDialogModule, MatButtonModule, MatCheckboxModule,
   MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule, AppChartSharedModule,
-  CompactRowComponent, SummaryDisclosureComponent],
+  CompactRowComponent, SummaryDisclosureComponent, ActivityFilterPickerComponent],
   templateUrl: './day-workout-dialog.component.html', styleUrls: ['./day-workout-dialog.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush })
 export class DayWorkoutDialogComponent {
@@ -85,7 +86,10 @@ export class DayWorkoutDialogComponent {
   private choice(key: ChoiceKey, label: string, values: readonly string[]): Choice {
     return { key, label, options: values.map(value => ({ value, label: this.labels[value] ?? value.charAt(0).toUpperCase() + value.slice(1).replaceAll('-', ' ') })) };
   }
-  readonly mainChoices = computed<Choice[]>(() => [this.choice('sport', 'Sport', DAY_WORKOUT_SPORTS),
+  readonly sportOptions = DAY_WORKOUT_SPORTS.map(sport => ({ value: sport, label: sport, activityType: sport }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+  readonly selectedSports = computed(() => [this.controls().sport]);
+  readonly mainChoices = computed<Choice[]>(() => [
     this.choice('purpose', 'Purpose', dayWorkoutPurposes(this.controls().sport)),
     { key: 'destinationPlanId', label: 'Add to', options: [{ value: null, label: 'Standalone' },
       ...this.planOptions().map(plan => ({ value: plan.id, label: `${plan.name}${plan.lifecycle === 'paused' ? ' (paused)' : ''}` }))] },
@@ -141,6 +145,10 @@ export class DayWorkoutDialogComponent {
       if (this.reviewedSchedule && this.result() && this.reviewedSchedule.state.revision !== schedule.state.revision) this.staleReview.set(true);
       this.watchSync();
     }, error: () => { this.scheduleFailed.set(true); this.schedule.set(null); } });
+  }
+  selectSport(values: readonly string[]): void {
+    const sport = values.length === 1 ? DAY_WORKOUT_SPORTS.find(sport => sport === values[0]) : undefined;
+    if (sport) this.set('sport', sport);
   }
   set<K extends keyof DayWorkoutControls>(key: K, value: DayWorkoutControls[K], feedback = true): void {
     if (this.busy() || this.saveUncertain() || JSON.stringify(this.controls()[key]) === JSON.stringify(value)) return;

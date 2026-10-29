@@ -3,7 +3,7 @@
     [disabled]="disabled()" aria-haspopup="dialog" [attr.aria-label]="accessibleTriggerLabel()" [attr.aria-expanded]="pickerOpen()"
     [attr.aria-controls]="pickerOpen() ? dialogId : null" (click)="openPicker()"><mat-icon>filter_list</mat-icon></button>
 } @else {
-<mat-form-field class="activity-picker-field" appearance="outline" subscriptSizing="dynamic" (click)="openPicker()">
+<mat-form-field class="activity-picker-field" [class.activity-picker-field--filter]="multiple()" appearance="outline" subscriptSizing="dynamic" (click)="openPicker()">
   <mat-label>{{ label() }}</mat-label>
   <input matInput readonly [disabled]="disabled()" role="combobox" aria-haspopup="dialog" [attr.aria-label]="label()"
     [attr.aria-expanded]="pickerOpen()" [attr.aria-controls]="pickerOpen() ? dialogId : null" [value]="summary()"
@@ -25,21 +25,23 @@
           <button mat-icon-button matIconSuffix type="button" aria-label="Clear search" (click)="clearSearch(searchInput)"><mat-icon>close</mat-icon></button>
         } @else { <mat-icon matIconSuffix>search</mat-icon> }
       </mat-form-field>
-      <div class="activity-picker-summary">
-        <span>{{ selectedValues().length ? selectedValues().length + ' selected' : allLabel() }}</span>
-        <button mat-button type="button" [disabled]="disabled() || !canClear()" (click)="clearSelection()">Clear selection</button>
-      </div>
-      @if (visibleShortcuts().length) {
-        <div class="activity-picker-shortcuts" aria-label="Sport families" role="group">
-          @for (shortcut of visibleShortcuts(); track shortcut.label) {
-            <mat-checkbox [checked]="shortcut.selected" [indeterminate]="shortcut.partial" [disabled]="disabled() || shortcut.disabled"
-              (change)="toggleShortcut(shortcut, $event.checked)">{{ shortcut.label }}</mat-checkbox>
-          }
+      @if (multiple()) {
+        <div class="activity-picker-summary">
+          <span>{{ selectedValues().length ? selectedValues().length + ' selected' : allLabel() }}</span>
+          <button mat-button type="button" [disabled]="disabled() || !canClear()" (click)="clearSelection()">Clear selection</button>
         </div>
-        <mat-divider></mat-divider>
+        @if (visibleShortcuts().length) {
+          <div class="activity-picker-shortcuts" aria-label="Sport families" role="group">
+            @for (shortcut of visibleShortcuts(); track shortcut.label) {
+              <mat-checkbox [checked]="shortcut.selected" [indeterminate]="shortcut.partial" [disabled]="disabled() || shortcut.disabled"
+                (change)="toggleShortcut(shortcut, $event.checked)">{{ shortcut.label }}</mat-checkbox>
+            }
+          </div>
+          <mat-divider></mat-divider>
+        }
       }
       @if (loading()) { <p role="status">Loading choices…</p> }
-      <mat-selection-list [multiple]="true" [aria-label]="label()" (selectionChange)="changeSelection($event)">
+      <mat-selection-list [multiple]="multiple()" [aria-label]="label()" (selectionChange)="changeSelection($event)">
         @for (option of visibleOptions(); track option.value) {
           <mat-list-option class="activity-picker-option" [value]="option.value" [selected]="option.selected" [disabled]="disabled() || option.disabled" [attr.aria-label]="option.label"
             [attr.aria-describedby]="option.description ? dialogId + '-option-description-' + $index : null">

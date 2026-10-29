@@ -6,6 +6,10 @@ Frontend-only rules:
 - `../.agent/rules/rules.md`
 - `../.agent/rules/material-design-strict.md`
 - `../.agent/rules/frontend-test-environments.md` when adding/changing specs or helper runtime imports
+- Reuse `ActivityFilterPickerComponent` for searchable sport/tag choices. Use its single-selection mode for one sport,
+  and `ActivityTypesMultiSelectComponent` / `ActivityTypesFilterMenuComponent` when sport-family filtering is needed.
+  Keep each caller’s supported catalog and validation; do not create another sport-search dialog. See
+  `docs/frontend-ui.md#searchable-sport-and-tag-selection` for applicability, selection, accessibility and haptic rules.
 - When changing lazy ECharts module registration, update the loader spec's explicit module mocks and registration
   expectations together. Run both `echarts-registrations.helper.spec.ts` and `echarts-loader.service.spec.ts`.
 - Non-interactive chart tests must distinguish render lifecycle listeners such as `finished` from input handlers.
