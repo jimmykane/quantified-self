@@ -99,6 +99,7 @@
   }
 </mat-dialog-content>
 <mat-dialog-actions align="end">
+  <p class="hint allowance" role="status" aria-live="polite">{{ quotaText() }}</p>
   <button mat-button appHapticTap mat-dialog-close [disabled]="!!busy() || saveUncertain()">Cancel</button>
   <button mat-flat-button [disabled]="!!busy() || (!saveUncertain() && (!valid() || (!!result()?.draft && staleReview())))"
     (click)="primaryAction()">{{ primaryLabel() }}</button>

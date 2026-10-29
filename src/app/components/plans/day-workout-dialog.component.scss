@@ -19,4 +19,5 @@ ol, ul { padding-inline-start: 24px; }
 ul.sets { padding: 0; }
 li { margin-block: 4px; }
 mat-dialog-actions { gap: 4px; }
-@media (max-width: 600px) { .controls-grid, .context-grid { grid-template-columns: minmax(0, 1fr); } mat-dialog-content { max-height: none; } }
+.allowance { flex: 1 1 180px; margin: 0; text-align: start; }
+@media (max-width: 600px) { .controls-grid, .context-grid { grid-template-columns: minmax(0, 1fr); } mat-dialog-content { max-height: none; } .allowance { flex-basis: 100%; } }

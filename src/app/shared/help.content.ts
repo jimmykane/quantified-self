@@ -339,7 +339,7 @@ When a numeric step allows **early Lap**, the summary labels its totals as **pre
 - **Training plans and workouts** and **Timeline notes** start enabled for every new draft. Under **Personalization**, turn off either context independently. **More options** adjusts timing, targets or structure. Turning off Training context also disables matching previous planned weights. Freshness and recovery have their own independent choices in Personalization. Available time is a budget; recovery evidence may lead to a shorter, easier session or rest.
 - Strength offers equipment, focus and matching **previously planned** loads (enabled by default), not verified performed weights. Duration is an estimate.
 - Review all steps/sets. **Change options** reopens settings; changes require regeneration. **Context → Show details** explains evidence. Choose **Edit workout**, **Generate again**, or **Add workout**. Rest saves nothing.
-- Generation uses the Assistant allowance; exact retries are free. After a lost save reply, keep the dialog open and **Retry Add**. Conflicts retain the draft. Enabled plan sync may send automatically.
+- The modal footer shows your shared **Assistant allowance**, with requests remaining out of your limit. It refreshes when you open the modal and after each generation attempt; a failed quota read shows unavailable. Generation uses the Assistant allowance; exact retries are free. After a lost save reply, keep the dialog open and **Retry Add**. Conflicts retain the draft. Enabled plan sync may send automatically.
 
 ## Organize plans and standalone workouts
 

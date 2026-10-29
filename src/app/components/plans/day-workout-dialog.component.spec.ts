@@ -14,6 +14,8 @@ import { projectStrengthWorkoutToV1 } from '@shared/strength-workout';
 import { AppUserService } from '../../services/app.user.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { DayWorkoutService } from '../../services/day-workout.service';
+import { AssistantQuotaService } from '../../services/assistant-quota.service';
+import type { AssistantQuotaStatus } from '@shared/assistant.types';
 import { TrainingPlansService, type CurrentTrainingScheduleV1 } from '../../services/training-plans.service';
 import { TrainingDeliveryService } from '../../services/training-delivery.service';
 import { DayWorkoutDialogComponent } from './day-workout-dialog.component';
@@ -26,6 +28,9 @@ vi.mock('app/firebase/auth', async original => ({ ...await original<typeof impor
 const strength = { version: 1 as const, exercises: [{ id: 'squat', name: 'Dumbbell squat', sets: [
   { id: 'one', ending: { kind: 'repetitions' as const, repetitions: 8 }, externalLoadKg: 12.5, restAfterSeconds: 90 },
 ] }] };
+const quotaStatus: AssistantQuotaStatus = { role: 'pro', limit: 100, successfulRequestCount: 12,
+  activeRequestCount: 0, remainingCount: 88, periodStart: '2026-10-01T00:00:00Z', periodEnd: '2026-11-01T00:00:00Z',
+  periodKind: 'subscription', resetMode: 'date', isEligible: true, blockedReason: null };
 function response(requestId: string): GenerateDayWorkoutResponse {
   return { requestId, kind: 'workout', observedAt: '2026-10-28T12:00:00Z', rationale: 'Keep this controlled.',
     draft: { title: 'Strength session', strength, structure: projectStrengthWorkoutToV1({ ...strength, workoutId: 'draft', revision: 1 }), estimatedMinutes: { minimum: 20, maximum: 30 } },
@@ -40,6 +45,7 @@ describe('DayWorkoutDialogComponent', () => {
   let mutate: ReturnType<typeof vi.fn>;
   let close: ReturnType<typeof vi.fn>;
   let dialogOpen: ReturnType<typeof vi.fn>;
+  let loadQuotaStatus: ReturnType<typeof vi.fn>;
   let haptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
   beforeEach(async () => {
     vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-28T12:00:00Z'));
@@ -50,6 +56,7 @@ describe('DayWorkoutDialogComponent', () => {
         endLocalDate: '2026-10-31', revision: 2, lastCheckpointRevision: 1, workoutCount: 0, createdAtMs: 1, updatedAtMs: 2 }], workouts: [],
     });
     generate = vi.fn(async (_uid, request) => response(parseGenerateDayWorkoutRequest(request).requestId));
+    loadQuotaStatus = vi.fn().mockResolvedValue(quotaStatus);
     mutate = vi.fn().mockResolvedValue({}); close = vi.fn(); dialogOpen = vi.fn().mockReturnValue({ afterClosed: () => of(true) });
     haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() }; let counter = 0;
     const user = { uid: 'owner', settings: { unitSettings: {} } };
@@ -61,6 +68,7 @@ describe('DayWorkoutDialogComponent', () => {
       { provide: AppHapticsService, useValue: haptics },
       { provide: MatDialogRef, useValue: { close, disableClose: false } }, { provide: MatDialog, useValue: { open: dialogOpen } },
       { provide: DayWorkoutService, useValue: { generate, isOwner: () => auth.value?.uid === 'owner' } },
+      { provide: AssistantQuotaService, useValue: { loadQuotaStatus } },
       { provide: TrainingPlansService, useValue: { watchSchedule: () => schedule, mutate,
         createMutationId: (prefix: string) => `${prefix}:00000000-0000-4000-8000-${String(++counter).padStart(12, '0')}`, createEntityId: () => `workout-${++counter}` } },
       { provide: TrainingDeliveryService, useValue: { watchScope: () => of({ settings: [{ provider: 'garmin', enabled: true }] }) } },
@@ -70,6 +78,51 @@ describe('DayWorkoutDialogComponent', () => {
   async function render() { const fixture = TestBed.createComponent(DayWorkoutDialogComponent);
     vi.spyOn((fixture.componentInstance as unknown as { dialogs: MatDialog }).dialogs, 'open').mockImplementation(dialogOpen);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); return fixture; }
+  it('shows the shared Assistant allowance before generation and refreshes authoritative counts after attempts', async () => {
+    const fixture = await render(); const component = fixture.componentInstance;
+    const text = () => fixture.nativeElement.querySelector('.allowance').textContent;
+    expect(text()).toContain('88 of 100 remaining');
+    expect(loadQuotaStatus).toHaveBeenCalledOnce(); expect(generate).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    loadQuotaStatus.mockResolvedValueOnce({ ...quotaStatus, successfulRequestCount: 13, remainingCount: 87 });
+    await component.generate(); await fixture.whenStable(); fixture.detectChanges();
+    expect(text()).toContain('87 of 100 remaining');
+    loadQuotaStatus.mockResolvedValueOnce({ ...quotaStatus, successfulRequestCount: 13, remainingCount: 87 });
+    generate.mockRejectedValueOnce(new Error('Generation failed before billing'));
+    await component.generate(); await fixture.whenStable(); fixture.detectChanges();
+    expect(text()).toContain('87 of 100 remaining');
+    expect(loadQuotaStatus).toHaveBeenCalledTimes(3); expect(mutate).not.toHaveBeenCalled();
+  });
+  it('distinguishes exhausted allowance from an unavailable read and still lets a reviewed workout be saved', async () => {
+    const fixture = await render();
+    loadQuotaStatus.mockResolvedValueOnce({ ...quotaStatus, successfulRequestCount: 100, remainingCount: 0, blockedReason: 'limit_reached' });
+    await fixture.componentInstance.generate(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.allowance').textContent).toContain('0 of 100 remaining');
+    const add = [...fixture.nativeElement.querySelectorAll('mat-dialog-actions button')]
+      .find((button: HTMLButtonElement) => button.textContent?.trim() === 'Add workout') as HTMLButtonElement;
+    expect(add.disabled).toBe(false);
+    loadQuotaStatus.mockResolvedValueOnce(null);
+    await fixture.componentInstance.generate(); await fixture.whenStable(); fixture.detectChanges();
+    const text = fixture.nativeElement.querySelector('.allowance').textContent;
+    expect(text).toContain('Assistant allowance unavailable');
+    expect(text).not.toContain('88'); expect(text).not.toContain('0 of');
+  });
+  it('shows loading and rejects stale quota replies and replies for a previous account', async () => {
+    let initial!: (value: AssistantQuotaStatus) => void;
+    loadQuotaStatus.mockReturnValueOnce(new Promise(resolve => { initial = resolve; }));
+    const fixture = TestBed.createComponent(DayWorkoutDialogComponent); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.allowance').textContent).toContain('loading');
+    loadQuotaStatus.mockResolvedValueOnce({ ...quotaStatus, successfulRequestCount: 13, remainingCount: 87 });
+    await fixture.componentInstance.generate(); await fixture.whenStable(); fixture.detectChanges();
+    initial(quotaStatus); await Promise.resolve(); await Promise.resolve(); fixture.detectChanges();
+    expect(fixture.componentInstance.quota()?.remainingCount).toBe(87);
+    let late!: (value: AssistantQuotaStatus) => void;
+    loadQuotaStatus.mockReturnValueOnce(new Promise(resolve => { late = resolve; }));
+    await fixture.componentInstance.generate();
+    auth.next({ uid: 'different-owner' }); late(quotaStatus);
+    await Promise.resolve(); await Promise.resolve(); fixture.detectChanges();
+    expect(fixture.componentInstance.quota()).toBeNull();
+  });
   it('renders enabled defaults, independent opt-outs and full reviewed strength without writing', async () => {
     const fixture = await render(); const component = fixture.componentInstance;
     expect(component.controls()).toMatchObject({ minutes: 30, destinationPlanId: 'plan', equipment: ['bodyweight'], trainingContext: true, timelineContext: true, usePreviousWeights: true });

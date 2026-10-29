@@ -28,6 +28,8 @@ import { Auth, authState } from 'app/firebase/auth';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { ActivityFilterPickerComponent } from '../shared/activity-filter-picker/activity-filter-picker.component';
 import { SummaryDisclosureComponent } from '../shared/summary-disclosure/summary-disclosure.component';
+import { AssistantQuotaService } from '../../services/assistant-quota.service';
+import type { AssistantQuotaStatus } from '@shared/assistant.types';
 
 export interface DayWorkoutDialogData { ownerUid: string; localDate: string; sport: ActivityTypes }
 type ChoiceKey = 'purpose' | 'destinationPlanId' | 'equipment' | 'timing' | 'target' | 'structure' | 'strengthFocus';
@@ -42,6 +44,7 @@ export class DayWorkoutDialogComponent {
   readonly haptics = inject(AppHapticsService);
   private readonly users = inject(AppUserService);
   private readonly generation = inject(DayWorkoutService);
+  private readonly quotaService = inject(AssistantQuotaService);
   private readonly plansService = inject(TrainingPlansService);
   private readonly delivery = inject(TrainingDeliveryService);
   private readonly destroyRef = inject(DestroyRef);
@@ -62,6 +65,14 @@ export class DayWorkoutDialogComponent {
   readonly staleReview = signal(false);
   readonly saveUncertain = signal(false);
   readonly syncLabel = signal('');
+  readonly quota = signal<AssistantQuotaStatus | null>(null);
+  readonly quotaLoading = signal(true);
+  readonly quotaText = computed(() => {
+    if (this.quotaLoading()) return 'Assistant allowance: loading…';
+    const status = this.quota();
+    return status ? `Assistant: ${status.remainingCount} of ${status.limit} remaining${status.isEligible ? '' : ' · Pro required'}`
+      : 'Assistant allowance unavailable';
+  });
   readonly strength = computed(() => isStrengthWorkoutSportV1(this.controls().sport));
   readonly planOptions = computed(() => this.schedule()?.plans.filter(plan => plan.lifecycle !== 'archived') ?? []);
   readonly selectedPlan = computed(() => this.planOptions().find(plan => plan.id === this.controls().destinationPlanId) ?? null);
@@ -133,6 +144,7 @@ export class DayWorkoutDialogComponent {
   private syncKey: string | null | undefined;
   private initializedDestination = false;
   private sequence = 0;
+  private quotaSequence = 0;
   private scheduleSubscription?: Subscription;
 
   constructor() {
@@ -140,7 +152,16 @@ export class DayWorkoutDialogComponent {
       if (user?.uid !== this.data.ownerUid) { this.sequence++; this.ref.close(); }
     });
     this.loadSchedule();
+    void this.refreshQuota();
     this.destroyRef.onDestroy(() => { this.sequence++; this.scheduleSubscription?.unsubscribe(); this.syncSubscription?.unsubscribe(); });
+  }
+  private async refreshQuota(): Promise<void> {
+    if (this.destroyRef.destroyed || !this.generation.isOwner(this.data.ownerUid)) return;
+    const sequence = ++this.quotaSequence;
+    this.quotaLoading.set(true); this.quota.set(null);
+    const status = await this.quotaService.loadQuotaStatus().catch(() => null);
+    if (this.destroyRef.destroyed || sequence !== this.quotaSequence || !this.generation.isOwner(this.data.ownerUid)) return;
+    this.quota.set(status); this.quotaLoading.set(false);
   }
   private current(sequence: number): boolean { return !this.destroyRef.destroyed && sequence === this.sequence && this.generation.isOwner(this.data.ownerUid); }
   loadSchedule(): void {
@@ -211,7 +232,9 @@ export class DayWorkoutDialogComponent {
           : 'Generation failed. Retry checks this request; Generate again uses a new AI request.');
       this.haptics.error();
     } }
-    finally { if (this.current(sequence)) { this.busy.set(null); this.ref.disableClose = false; } }
+    finally { if (this.current(sequence)) {
+      this.busy.set(null); this.ref.disableClose = false; void this.refreshQuota();
+    } }
   }
   async easy(): Promise<void> { this.set('purpose', this.strength() ? 'general-strength' : 'recovery', false); await this.generate(); }
   refreshReview(): void {

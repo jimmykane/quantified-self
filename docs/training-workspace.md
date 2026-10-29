@@ -799,6 +799,12 @@ new request. Quota is reserved before context and charged once before the model 
 are released on pre-model failure, including a failed quota finalization.
 Each new generation shares the Assistant chat allowance: rest suggestions, failed model attempts and the bounded
 correction consume one request total. Exact retries, editing and saving do not consume another request.
+The modal's fixed action footer displays the shared Assistant allowance as remaining requests out of the limit, using
+`AssistantQuotaService` and the existing `getAssistantQuotaStatus` callable. It reads on open and refreshes after every
+generation attempt, including failed attempts and exact retries; it never decrements an optimistic local counter.
+Loading and unavailable states stay distinct from zero remaining. Per-read sequencing, owner checks and destruction
+checks discard stale/account-switched replies. The footer stays visible with a reviewed draft and wraps above the
+buttons on phones. Reading/displaying allowance does not consume it; the existing backend remains authoritative.
 No fitness-provider secrets or delivery actions are available to this callable. It is synchronous and introduces
 no queue or provider lifecycle.
 
@@ -830,8 +836,8 @@ sports, MCP read coverage, scopes or proposal/confirmation contracts. Default-on
 first-party generation controls submitted from the reviewed dialog; independent opt-outs and the same read scope
 checks remain enforced. External MCP grants and Assistant chat settings are unchanged. Explicit recovery guidance and signal-level
 availability use the existing validated daily-report payload only; no public schema, calculation, read coverage or
-consent changes are needed. The same canonical prescription and MCP read-back tests still apply. Presentation changes
-do not alter stored prescriptions, consent or provider delivery.
+consent changes are needed. The same canonical prescription and MCP read-back tests still apply. Presentation changes, including reuse of the existing first-party Assistant quota-status read in the modal footer,
+do not alter public MCP contracts, stored prescriptions, consent or provider delivery.
 No read coverage is deferred and no public generation tool is introduced. The private callable is registered in
 full/lazy entrypoints, endpoint metadata checks, the shared manifest and least-privilege secret policy. Release the
 backend endpoint before its frontend under separate deployment approval; no new Rules, index, secret value or
