@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, afterRenderEffect, computed, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { DatePipe, NgTemplateOutlet } from '@angular/common';
@@ -73,6 +73,14 @@ export class DayWorkoutDialogComponent {
     return status ? `Assistant: ${status.remainingCount} of ${status.limit} remaining${status.isEligible ? '' : ' · Pro required'}`
       : 'Assistant allowance unavailable';
   });
+  private readonly reviewHeading = viewChild<ElementRef<HTMLElement>>('reviewHeading');
+  private readonly generationError = viewChild<ElementRef<HTMLElement>>('generationError');
+  private readonly outcomeFocus = afterRenderEffect(() => {
+    const target = this.error() ? this.generationError()?.nativeElement
+      : this.result() ? this.reviewHeading()?.nativeElement : null;
+    target?.focus({ preventScroll: true });
+    target?.scrollIntoView?.({ block: 'nearest' });
+  });
   readonly strength = computed(() => isStrengthWorkoutSportV1(this.controls().sport));
   readonly planOptions = computed(() => this.schedule()?.plans.filter(plan => plan.lifecycle !== 'archived') ?? []);
   readonly selectedPlan = computed(() => this.planOptions().find(plan => plan.id === this.controls().destinationPlanId) ?? null);
@@ -113,9 +121,9 @@ export class DayWorkoutDialogComponent {
   readonly readinessSourcesEnabled = computed(() => dayWorkoutReadinessSourcesEnabled(this.controls()));
   readonly contextChoices = computed(() => [
     ...DAY_WORKOUT_SIGNAL_OPTIONS,
-    { key: 'trainingContext' as const, label: 'Use Training plans and workouts' },
-    { key: 'timelineContext' as const, label: 'Use Timeline notes' },
-    ...(this.strength() ? [{ key: 'usePreviousWeights' as const, label: 'Reuse matching planned weights' }] : []),
+    { key: 'trainingContext' as const, label: 'Training plans & workouts' },
+    { key: 'timelineContext' as const, label: 'Timeline notes' },
+    ...(this.strength() ? [{ key: 'usePreviousWeights' as const, label: 'Reuse planned weights' }] : []),
   ].map(choice => {
     const disabled = choice.key === 'readinessContext' && !this.readinessSourcesEnabled()
       || choice.key === 'usePreviousWeights' && !this.controls().trainingContext;
@@ -129,7 +137,7 @@ export class DayWorkoutDialogComponent {
   readonly primaryLabel = computed(() => {
     if (this.busy()) return this.busy() === 'save' ? 'Adding…' : 'Generating…';
     if (this.result()?.draft) return this.saveUncertain() ? 'Retry Add' : 'Add workout';
-    if (this.result()) return 'Suggest an easy session';
+    if (this.result()) return 'Try easy session';
     return this.error() ? 'Retry generation' : 'Generate workout';
   });
   async primaryAction(): Promise<void> {

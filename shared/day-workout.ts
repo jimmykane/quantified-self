@@ -17,7 +17,7 @@ export const DAY_WORKOUT_SIGNAL_OPTIONS = [
   { key: 'overnightHeartRateContext', label: 'Overnight heart rate' },
   { key: 'readinessContext', label: 'Readiness' },
   { key: 'activityContext', label: 'Recent activities' },
-  { key: 'feedbackContext', label: 'Existing Feeling / RPE' },
+  { key: 'feedbackContext', label: 'Feeling / RPE' },
 ] as const;
 export type DayWorkoutSignalKey = typeof DAY_WORKOUT_SIGNAL_OPTIONS[number]['key'];
 // Omitted signal choices preserve automatic use and request fingerprints for older clients.

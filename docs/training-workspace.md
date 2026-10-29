@@ -721,8 +721,10 @@ single-selection mode, with sport icons and only `DAY_WORKOUT_SPORTS` options. C
 the existing reset/validation and busy/uncertain-save guards still apply. Thirty minutes is an explicit editable starting
 value; a fitting active plan is preselected, otherwise Standalone. Strength shows equipment, initially Bodyweight.
 More options include strict endurance timing, target preference, simple/automatic structure and strength focus.
-The separate **Personalization** section starts expanded, using compact Material checkbox columns on desktop and one
-column on phones. Every applicable option starts selected: freshness/training load, HRV, sleep, overnight heart rate,
+The separate **Personalization** section starts expanded, using two compact Material checkbox columns on desktop
+and phones from 360 px, and one column below that width to preserve readable labels. An 8 px row gap and 4 px
+outer padding keep Material's 48 px touch targets separate without changing Material internals. The heading and
+selection count share a row with the disclosure control; a short caption avoids repeating the default selection. Every applicable option starts selected: freshness/training load, HRV, sleep, overnight heart rate,
 readiness, recent activities, existing Feeling/RPE, Training plans/workouts, Timeline notes and matching previously
 planned strength weights. The heading summarizes the selection count and its Show/Hide control preserves choices.
 Users can turn each off before generating. Disabling Training context also disables matching planned weights.
@@ -766,7 +768,8 @@ compares the requested sport with its recorded baseline where available, treats 
 which evidence affected the choice. It does not count readiness twice with its own drivers or assume higher HRV
 always means better recovery. Future suggestions require rechecking recovery closer to the selected day.
 
-Review context distinguishes available signals, missing values and explicitly turned-off choices. A nonempty daily-report object or overall
+Review context distinguishes available signals, missing values and explicitly turned-off choices; its collapsed
+summary identifies context that is off or unavailable without presenting every opt-out as a failed read. A nonempty daily-report object or overall
 snapshot preparation status cannot establish readiness/freshness availability. Zero Form and negative ramp rate remain
 valid; HRV or overnight heart-rate readings with insufficient baseline remain recorded evidence, with the unavailable
 comparison disclosed. Historical load snapshots are not substituted for missing current freshness.
@@ -804,7 +807,8 @@ The modal's fixed action footer displays the shared Assistant allowance as remai
 generation attempt, including failed attempts and exact retries; it never decrements an optimistic local counter.
 Loading and unavailable states stay distinct from zero remaining. Per-read sequencing, owner checks and destruction
 checks discard stale/account-switched replies. The footer stays visible with a reviewed draft and wraps above the
-buttons on phones. Reading/displaying allowance does not consume it; the existing backend remains authoritative.
+buttons on phones. The rest action uses **Try easy session** so Cancel and the primary action stay on the same
+row at 320 px, including short screens. Reading/displaying allowance does not consume it; the existing backend remains authoritative.
 No fitness-provider secrets or delivery actions are available to this callable. It is synchronous and introduces
 no queue or provider lifecycle.
 
@@ -813,7 +817,9 @@ rationale, used/missing context, observation time, selected day/destination, exi
 plan-sync disclosure. After generation, settings collapse behind **Change options** without discarding the draft;
 changing a value requires a new generation. Context evidence uses the shared flat summary disclosure, with missing
 context and current-readiness limits visible while collapsed. Strength prescriptions reuse shared compact rows;
-all sets and interval steps remain visible. The global dialog surface, Material controls and QS scrollbar skin
+all sets and interval steps remain visible. New reviews and generation/save errors receive programmatic focus
+and scroll into view after rendering, following the Training workspace pattern; unrelated option/quota updates do
+not steal focus. The global dialog surface, Material controls and QS scrollbar skin
 apply without per-dialog skins. The footer has Cancel and one primary action; Edit and Generate again sit with
 the prescription. Paused plans are labelled. **Edit workout** passes the full unsaved draft and save identity through owner-bound memory to the
 existing editor; auth changes clear it. **Add workout** uses the existing revision-bound `create-workout`

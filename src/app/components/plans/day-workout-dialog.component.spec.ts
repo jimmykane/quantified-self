@@ -222,6 +222,19 @@ describe('DayWorkoutDialogComponent', () => {
     component.set('hrvContext', true); fixture.detectChanges();
     expect(inputs[4].disabled).toBe(false); expect(inputs[4].checked).toBe(false);
   });
+  it('focuses new reviews and errors without stealing focus during unrelated option changes', async () => {
+    const fixture = await render(); const component = fixture.componentInstance;
+    await component.generate(); fixture.detectChanges(); await fixture.whenStable();
+    expect(document.activeElement).toBe(fixture.nativeElement.querySelector('.review > h3'));
+    const edit = [...fixture.nativeElement.querySelectorAll('button')]
+      .find((button: HTMLButtonElement) => button.textContent?.trim() === 'Edit workout') as HTMLButtonElement;
+    edit.focus(); component.showSettings.set(true); fixture.detectChanges(); await fixture.whenStable();
+    expect(document.activeElement).toBe(edit);
+    generate.mockRejectedValueOnce(new Error('Unavailable'));
+    await component.generate(); fixture.detectChanges(); await fixture.whenStable();
+    expect(document.activeElement).toBe(fixture.nativeElement.querySelector('p[role="alert"]'));
+    expect(mutate).not.toHaveBeenCalled();
+  });
   it('focuses review on the prescription while keeping options and context inspectable without discarding it', async () => {
     const fixture = await render(); const component = fixture.componentInstance;
     const element = fixture.nativeElement as HTMLElement;
@@ -263,7 +276,7 @@ describe('DayWorkoutDialogComponent', () => {
     const fixture = await render(); const component = fixture.componentInstance;
     generate.mockImplementationOnce(async (_uid, request) => ({ ...response(request.requestId), kind: 'rest', draft: null, previousLoads: [] }));
     await component.generate(); fixture.detectChanges(); haptics.selection.mockClear();
-    expect(fixture.nativeElement.querySelector('mat-dialog-actions').textContent).toContain('Suggest an easy session');
+    expect(fixture.nativeElement.querySelector('mat-dialog-actions').textContent).toContain('Try easy session');
     expect(fixture.nativeElement.querySelector('mat-dialog-actions').textContent).not.toContain('Add workout');
     await component.easy();
     expect(haptics.selection).toHaveBeenCalledOnce();

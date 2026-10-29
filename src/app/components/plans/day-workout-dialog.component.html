@@ -23,13 +23,13 @@
         <ng-container [ngTemplateOutlet]="choiceField" [ngTemplateOutletContext]="{ choice: choice }"></ng-container>
       }
     </div>
-    <div class="review-destination">
+    <div class="review-destination personalization-heading">
       <p><strong>Personalization</strong> · {{ contextSelection() }}</p>
       <button mat-button appHapticTap type="button" [attr.aria-expanded]="showPersonalization()" aria-controls="day-workout-personalization"
         (click)="showPersonalization.set(!showPersonalization())">{{ showPersonalization() ? 'Hide data options' : 'Show data options' }}</button>
     </div>
     <div id="day-workout-personalization" [hidden]="!showPersonalization()" role="group" aria-label="Personalization data">
-      <p class="hint">All data options start selected. Use the recorded evidence available for this draft.</p>
+      <p class="hint">Use selected data when available.</p>
       <div class="context-grid">
         @for (choice of contextChoices(); track choice.key) {
           <mat-checkbox [checked]="choice.checked" (change)="set(choice.key, $event.checked)"
@@ -61,10 +61,10 @@
   <p class="hint">{{ syncLabel() }}</p>
   @if (selectedPlan()?.lifecycle === 'paused') { <p>Paused plan: this workout appears in Calendar after activation.</p> }
   @if (busy()) { <p role="status">{{ busy() === 'generate' ? 'Checking your context and generating…' : 'Adding your workout…' }}</p> }
-  @if (error()) { <p role="alert">{{ error() }}</p> }
+  @if (error()) { <p #generationError role="alert" tabindex="-1">{{ error() }}</p> }
   @if (result(); as result) {
     <section class="review" aria-label="Workout review" aria-live="polite">
-      <h3 class="section-title">{{ result.draft?.title ?? 'Rest suggestion' }}</h3><p>{{ result.rationale }}</p>
+      <h3 #reviewHeading class="section-title" tabindex="-1">{{ result.draft?.title ?? 'Rest suggestion' }}</h3><p>{{ result.rationale }}</p>
       @if (review(); as review) {
         <p>{{ review.summary }}</p>@if (review.estimate) { <p class="hint">{{ review.estimate }}</p> }
         @for (exercise of review.exercises; track exercise.id) {
@@ -79,7 +79,7 @@
       } @else { <p>Rest adds no workout.</p> }
       <app-summary-disclosure title="Context" [headingLevel]="4" summaryId="day-workout-context"
         [scopeKey]="result.requestId" [detailsAvailable]="true">
-        <p summaryOverview class="hint">{{ result.missingContext.length ? 'Some context was unavailable. ' : '' }}Readiness reflects now, not the workout date.</p>
+        <p summaryOverview class="hint">{{ result.missingContext.length ? 'Some context is off or unavailable. ' : '' }}Readiness reflects now, not the workout date.</p>
         <div summaryDetails>
           <ul>@for (context of contextDetails(); track $index) { <li>{{ context }}</li> }</ul>
           <p class="hint">Observed {{ result.observedAt | date:'medium' }}.</p>
