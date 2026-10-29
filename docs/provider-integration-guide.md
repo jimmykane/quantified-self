@@ -836,6 +836,18 @@ or infer entitlement from reuse. See [Suunto delivery](training-workspace.md#suu
 seven-day window, absence limitations, FIT retention and deployment boundaries. No assumed Suunto quotas, evaluation
 budgets, new project or setup wizard are added.
 
+Training delivery reconciliation now batches account changes for a fixed 60 seconds, with minute-dispatch recovery,
+and permits one active account page. Enqueue recovery uses a fresh task name while retaining the pending account
+reservation until a worker claims it, so delayed tasks can still progress and duplicates cannot claim a later page.
+Ordinary workout edits and delivery acknowledgements use bounded private
+workout targets; global authority/plan changes retain the full current-workout and historical-ledger scans. Active
+scan cursors survive new edits. Activity upload counters and connection-history progress alone do not invalidate
+Training. Six-hour full repairs supplement explicit saved-zone midnight, grace-expiry, retry and verification timers.
+Owner unit changes have the new `onTrainingDeliveryOwnerUnitsChanged` root-user trigger, so unit-dependent Guides
+no longer depend on a half-hour scan. Provider request admission, exact consent, identities and journals are unchanged.
+These are ordinary scheduling changes, with no allowlist or second implementation stage. Local stress tests use
+synthetic accounts and fake transports; production cost reduction requires post-deployment measurement.
+
 Swimming Guide screen saves wake the existing Training reconciliation queue through
 `onTrainingDeliveryGuideSettingsChanged`; effective preference changes use the same deletion/state guards as other
 lifecycle events. Eligible updates retain the Suunto identity. **Create another Guide** remains an explicit,
@@ -1063,6 +1075,25 @@ without another outbound send. No provider association is added to the retained 
 **covered/unchanged** by #829's existing committed `skipped` outcome; no new worker, retry, metric, Help, MCP or
 Training contract is introduced. Existing Help remains accurate: this changes internal copy recognition, not a user
 workflow or import capability. Existing failed jobs require separately approved targeted replay after deployment.
+
+An otherwise conflicting outdoor-running recording from another provider can use the same duplicate-skip outcome.
+This fallback checks only the already selected event; it does not change the 100 ms time buckets, provider collision
+reservations, Wahoo IDs or manual-upload content IDs, and does not search for or create another event. Normal matched
+writes and same-provider revisions retain their existing behavior. Require one completed saved activity with a valid
+server-owned source identity, one FIT original inside that owner's event prefix, no incoming-provider provenance, and
+exactly one valid other-provider provenance record. Garmin provenance on either side must identify FIT. Both sports
+must be outdoor-running family members (excluding indoor/virtual running), with identical positive start/end windows,
+positive durations within one second and positive distances within 2% of the larger distance. Neither duration may
+exceed elapsed time by more than one second. Only a failed activity binding can enter this fallback; unsafe correction
+carryover remains an identity conflict. Multisport, multiple sources/originals, unfinished imports, missing evidence and
+metadata-read failures are not duplicate acknowledgements. Candidate verification reads at most three additional
+owner/event metadata documents, reusing any legacy Garmin provenance read. The saved event, activities, edits,
+original references and Training controls remain unchanged; workers use their existing guarded queue completions
+and emit an INFO diagnostic, without Training completion linking or outbound fan-out. Existing Help, MCP and Training
+contracts are unchanged; monitoring remains covered by the existing committed `skipped` outcome for all four providers.
+The history coordinator accepts this committed duplicate outcome for those four workout queues so later pages
+continue. Pending children still wait, lifecycle/authorization skips still stop their scope, and the same reason on
+non-workout queues is not accepted as a successful import. Existing history checkpoint monitoring remains covered.
 
 Verified assignments pass only in memory from the committed reservation to Training finalization, preserving zero
 overrides, exclusions and dated policies without trusting arbitrary reused IDs. Guarded source transactions preserve
@@ -1369,6 +1400,18 @@ cannot invalidate admission or interrupt other started enqueues. Monitoring is
 #847's coordinator observations; prompt fallback warnings do not claim ingestion or scheduled-dispatch failure.
 See [coordination and recovery](connection-history-import.md#coordination-persistence-and-retries) for the backend-only
 release/rollback boundary. Help, MCP/Assistant and Training contracts are unchanged.
+
+Shared connection-history coordination isolates verified per-record failures after the active child batch settles,
+then continues later pages and resources. A finished scan with retained failures reports issues and an explicit failed-record
+count; the existing Retry action restores only failed/unfinished records with all ownership, Pro, connection and reservation
+guards. Overlapping activity pages/windows exclude already retained failures using the existing server-only execution
+context and no extra database reads; only explicit recovery reopens those records. A later authorization/lifecycle
+stop retains its active batch alongside earlier failures. Unverifiable missing rows still stop their scope. Private failure references are bounded;
+extensive failures pause admission rather than growing the run or recovery transaction without limit. No provider-copy
+recognition, identity matching, child retry budget or saved content changes. See
+[isolated record failures](connection-history-import.md#isolated-record-failures) for recovery bounds and release scope.
+Monitoring remains **covered/unchanged** by #847's active/terminal checkpoints and #829/#830's committed child outcomes;
+no new monitoring resource, provider scope, MCP or Training contract is introduced.
 
 New Suunto connection-history snapshots can group four aligned 28-day Sleep or 26-day Health targets per bounded admission. The private versioned plan preserves legacy in-flight ranges/receipts, exact selected-date coverage, full-feed Health context, adaptive continuation and partial-admission recovery. Receipt identity uses the planner's same default batch size; incompatible versions or resource/provider snapshots stop before admission. The offline stress model finds lower aggregate work and completion time but slower short imports under saturation. The repository owner explicitly accepted this congestion tradeoff for PR #966 on 2026-10-28; coverage and lifecycle/retry requirements remain in force. See [Suunto batch evidence and release boundaries](connection-history-import.md#batched-suunto-sleephealth-targets). Existing #830/#847 monitoring is covered and unchanged; no manual callable, public/MCP/Training contract or Help behavior changes. Deploy compatible coordinator/recovery consumers before the Suunto callback producer only after separate approval; do not roll back the consumers while batched runs remain.
 

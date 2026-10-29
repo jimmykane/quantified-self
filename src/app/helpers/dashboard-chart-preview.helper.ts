@@ -1,6 +1,7 @@
+import { TRAINING_PREVIEW_POWER, TRAINING_PREVIEW_DURABILITY } from '../components/public-seo/training-explorer-preview.data';
 import { AppEventSummary } from '@shared/event-summary';
 import type { EventRead } from '@shared/event-read';
-import { dashboardChartHasRecordedData, resolveDashboardChartAvailability, type DashboardChartAvailability } from './dashboard-chart-availability.helper';
+import { dashboardChartHasPerformanceContext, dashboardChartHasRecordedData, resolveDashboardChartAvailability, type DashboardChartAvailability } from './dashboard-chart-availability.helper';
 import type { DashboardDerivedMetricStatus } from './derived-metric-status.helper';
 import { normalizeDashboardTileEventFilters } from './dashboard-tile-event-filters.helper';
 import { getDashboardPowerCurveScopeDefinition, resolveDashboardPowerCurveTileDisplayScope } from './dashboard-power-curve-scope.helper';
@@ -67,7 +68,7 @@ export function buildDashboardThumbnailPreview(tile: TileSettingsInterface, seed
   const availability = resolveDashboardChartAvailability(existing, input,
     dashboardPreviewSourceKeys(tile).map(key => input.previewStates?.[key]),
     dashboardPreviewMetricKinds(tile).map(kind => input.previewMetricStatuses?.[kind]));
-  const preview: DashboardChartPreview = availability.hasData
+  const preview: DashboardChartPreview = availability.hasData || dashboardChartHasPerformanceContext(existing)
     ? { tile: existing, source: 'user', loading: false, note: '', calendarEvents: input.events || [], anchorMs: Date.now() }
     : buildDashboardExamplePreview(tile);
   return { ...preview, startOfWeek: seed.startOfWeek, availability,
@@ -105,6 +106,8 @@ const metricKinds: Partial<Record<keyof DashboardChartTileViewModel, DerivedMetr
   powerCurve: [M.PowerCurve], aerobicCapacity: [M.TrainingCapacity], aerobicDurability: [M.TrainingDurability],
 };
 export function dashboardPreviewMetricKinds(tile: TileSettingsInterface): DerivedMetricKind[] {
+  if (C.isDashboardPowerCapacityChartType(tile['chartType'])) return [M.TrainingPowerSystems];
+  if (tile['chartType'] === C.DASHBOARD_DURABILITY_CHART_TYPE) return [M.TrainingDurability];
   if (`${tile['chartType']}` === K.DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE) return [M.FormNow, M.FreshnessForecast, M.FormPlus7d];
   if (`${tile['chartType']}` === K.DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE) return [M.IntensityDistribution, M.EasyPercent, M.HardPercent];
   return metricKinds[contexts[(tile as TileChartSettingsInterface).chartType]] || [];
@@ -116,6 +119,7 @@ export const DASHBOARD_PREVIEW_METRIC_CONTEXTS: Partial<Record<DerivedMetricKind
   [M.EasyPercent]: 'easyPercent', [M.HardPercent]: 'hardPercent', [M.EfficiencyDelta4w]: 'efficiencyDelta4w',
   [M.FreshnessForecast]: 'freshnessForecast', [M.IntensityDistribution]: 'intensityDistribution',
   [M.EfficiencyTrend]: 'efficiencyTrend', [M.PowerCurve]: 'powerCurve',
+  [M.TrainingPowerSystems]: 'trainingPowerSystems',
   [M.TrainingCapacity]: 'trainingCapacity', [M.TrainingDurability]: 'trainingDurability',
 };
 export function dashboardPreviewMissingMetricKinds(tiles: readonly TileSettingsInterface[], seed: DashboardPreviewInput): DerivedMetricKind[] {
@@ -175,6 +179,15 @@ export function buildDashboardExamplePreview(tile: TileSettingsInterface): Dashb
     // Recovery renderer uses wall-clock decay: keep this isolated synthetic context relative to now.
     recoveryNow: { totalSeconds: 86400, endTimeMs: Date.now() + 36000000, latestWorkoutSeconds: 86400, latestWorkoutEndTimeMs: Date.now() + 36000000 },
   } satisfies Partial<DashboardChartTileViewModel>);
+  if (vm.type === TileTypes.Chart && C.isDashboardPerformanceChartType(vm['chartType'])) {
+    const chart = vm as DashboardChartTileViewModel;
+    const key = `${chart.chartType}` === C.DASHBOARD_CRITICAL_POWER_CHART_TYPE ? 'criticalPowerWatts' : `${chart.chartType}` === C.DASHBOARD_W_PRIME_CHART_TYPE ? 'wPrimeJoules' : 'maximumPowerWatts';
+    chart.performanceTrend = { options: [{ value: 'example', label: 'Example · Cycling' }], selectedKey: 'example',
+      powerTrend: `${chart.chartType}` === C.DASHBOARD_DURABILITY_CHART_TYPE ? null : TRAINING_PREVIEW_POWER.find(trend => trend.key === key)!,
+      trajectory: `${chart.chartType}` === C.DASHBOARD_DURABILITY_CHART_TYPE ? TRAINING_PREVIEW_DURABILITY : null,
+      valueText: 'Example data', detailText: 'Illustration only', evidenceText: 'Fictional example; these are not your readings.',
+    };
+  }
   if (vm.type === TileTypes.Chart && `${(vm as DashboardChartTileViewModel).chartType}` === K.DASHBOARD_POWER_CURVE_CHART_TYPE) {
     const label = getDashboardPowerCurveScopeDefinition(resolveDashboardPowerCurveTileDisplayScope(tile)).latestSeriesLabel;
     (vm as DashboardChartTileViewModel).powerCurve = { ...examples.powerCurve, latestSeriesLabel: label, comparisonSeriesLabel: label,

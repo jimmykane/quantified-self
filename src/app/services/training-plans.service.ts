@@ -315,9 +315,9 @@ export class TrainingPlansService {
     return `${normalizedPrefix}-${unique}`.slice(0, 128);
   }
 
-  async mutate(request: MutateTrainingScheduleRequestV1): Promise<MutateTrainingScheduleResponseV1> {
+  async mutate(request: MutateTrainingScheduleRequestV1, canExecute?: () => boolean): Promise<MutateTrainingScheduleResponseV1> {
     return (await this.functions.call<MutateTrainingScheduleRequestV1, MutateTrainingScheduleResponseV1>(
-      'mutateTrainingSchedule', request,
+      'mutateTrainingSchedule', request, ...(canExecute ? [{ canExecute }] : []),
     )).data;
   }
 

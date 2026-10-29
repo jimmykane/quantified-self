@@ -1,9 +1,15 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, TemplateRef, computed, inject, input, output, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { MatSelectionListChange } from '@angular/material/list';
+import { MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { MatListModule, MatSelectionListChange } from '@angular/material/list';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatDividerModule } from '@angular/material/divider';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
+import { MatInputModule } from '@angular/material/input';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { take } from 'rxjs';
-import { MaterialModule } from '../../../modules/material.module';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { ActivityTypeIconComponent } from '../../activity-type-icon/activity-type-icon.component';
 
@@ -24,7 +30,8 @@ export interface ActivityFilterPickerShortcut {
 @Component({
   selector: 'app-activity-filter-picker',
   standalone: true,
-  imports: [MaterialModule, ActivityTypeIconComponent],
+  imports: [MatButtonModule, MatCheckboxModule, MatDialogModule, MatDividerModule, MatFormFieldModule,
+    MatIconModule, MatInputModule, MatListModule, MatTooltipModule, ActivityTypeIconComponent],
   templateUrl: './activity-filter-picker.component.html',
   styleUrl: './activity-filter-picker.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -34,6 +41,7 @@ export class ActivityFilterPickerComponent {
   readonly allLabel = input.required<string>();
   readonly searchLabel = input.required<string>();
   readonly options = input.required<readonly ActivityFilterPickerOption[]>();
+  readonly multiple = input(true);
   readonly selectedValues = input<readonly string[]>([]);
   readonly shortcuts = input<readonly ActivityFilterPickerShortcut[]>([]);
   readonly loading = input(false);
@@ -43,7 +51,7 @@ export class ActivityFilterPickerComponent {
   readonly hint = input('');
   readonly canClear = computed(() => this.selectedValues().some(value => !this.options().find(option => option.value === value)?.disabled));
   readonly accessibleTriggerLabel = computed(() => `${this.triggerLabel() || this.label()}: ${this.summary()}`);
-  // The filter owner validates the selection and owns its accepted-action feedback.
+  // The owner validates the selection and owns its accepted-action feedback.
   readonly selectionChange = output<string[]>();
   readonly opened = output<void>();
   readonly search = signal('');
@@ -97,6 +105,13 @@ export class ActivityFilterPickerComponent {
   }
 
   changeSelection(event: MatSelectionListChange): void {
+    if (!this.multiple()) {
+      const option = event.options.find(item => item.selected && !item.disabled);
+      if (this.disabled() || !option || !this.options().some(choice => choice.value === option.value && !choice.disabled)) return;
+      if (this.selectedValues().length !== 1 || this.selectedValues()[0] !== option.value) this.selectionChange.emit([option.value]);
+      this.dialogRef?.close();
+      return;
+    }
     const selected = new Set(this.selectedValues());
     for (const option of event.options) {
       if (option.selected) selected.add(option.value);
@@ -106,6 +121,7 @@ export class ActivityFilterPickerComponent {
   }
 
   toggleShortcut(shortcut: ActivityFilterPickerShortcut, checked: boolean): void {
+    if (!this.multiple()) return;
     const selected = new Set(this.selectedValues());
     for (const value of shortcut.values) {
       if (checked) selected.add(value);
@@ -115,7 +131,7 @@ export class ActivityFilterPickerComponent {
   }
 
   clearSelection(): void {
-    this.emitSelection([]);
+    if (this.multiple()) this.emitSelection([]);
   }
 
   private emitSelection(values: readonly string[]): void {

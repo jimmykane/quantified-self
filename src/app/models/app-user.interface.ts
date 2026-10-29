@@ -1,17 +1,18 @@
 import type { DashboardChartLibrarySeen } from '../helpers/dashboard-chart-library-revision.helper';
 import {
-    User,
-    ChartThemes,
-    UserChartSettingsInterface,
-    UserMyTracksSettingsInterface,
-    UserSettingsInterface,
-    ActivityTypes,
-    UserAppSettingsInterface,
-    UserDashboardSettingsInterface,
-    UserMapSettingsInterface,
-    DateRanges,
-    TileChartSettingsInterface,
-    TileMapSettingsInterface,
+  User,
+  ChartThemes,
+  UserChartSettingsInterface,
+  UserMyTracksSettingsInterface,
+  UserSettingsInterface,
+  ActivityTypes,
+  UserAppSettingsInterface,
+  UserDashboardSettingsInterface,
+  UserMapSettingsInterface,
+  DateRanges,
+  TileChartSettingsInterface,
+  TileMapSettingsInterface,
+  UserServiceMetaInterface,
 } from '@sports-alliance/sports-lib';
 import { Timestamp } from 'app/firebase/firestore';
 import { StripeRole } from './stripe-role.model';
@@ -23,7 +24,7 @@ import { ServiceConnectionMetaFields } from '@shared/service-connection';
 import type { TrainingSettings } from '@shared/derived-metrics';
 import { HEALTH_METRIC_IDS, type HealthMetricId } from '@shared/health';
 import type { TrainingDestinationId, TrainingSportId } from '@shared/training-disciplines';
-import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
+
 import type { AppFormatLocalePreference } from '../shared/adapters/app-locale';
 import type { SuuntoSwimmingGuideSettings } from '@shared/suunto-swimming-guide-settings';
 
@@ -91,6 +92,10 @@ export type AppDashboardAutoTileId =
     | 'curatedFreshnessForecast'
     | 'curatedIntensityDistribution'
     | 'curatedEfficiencyTrend'
+    | 'curatedCriticalPower'
+    | 'curatedWPrime'
+    | 'curatedMaximumPower'
+    | 'curatedDurability'
     | 'powerCurve'
     | 'runningPowerCurve'
     | 'routePreview'
@@ -180,6 +185,8 @@ export interface AppDashboardChartTileDisplaySettingsInterface {
     derivedChartRange?: AppDashboardDerivedChartRange;
     formTimelineWindow?: AppDashboardFormTimelineWindow;
     powerCurveCompareMode?: AppDashboardPowerCurveCompareMode;
+    /** Exact capacity activity type or durability comparison context; never combines sports. */
+    performanceContext?: string;
 }
 
 export interface AppDashboardChartTileSettingsInterface extends TileChartSettingsInterface {

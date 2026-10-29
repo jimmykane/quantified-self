@@ -1,4 +1,12 @@
 @if (owner()) {
-  <app-summary-disclosure title="At a glance" summaryId="dashboard-today-changes" [scopeKey]="owner()!"
-    variant="rail" [tone]="briefing().tone" [headline]="briefing().headline" [detailsAvailable]="false" />
+  <span role="group" aria-label="At a glance" [attr.data-tone]="briefing().tone">
+    <button mat-button type="button" class="dashboard-briefing-action"
+      [attr.aria-label]="(detailsExpanded() ? 'Hide' : 'Show') + ' Today details: ' + fullSentence()"
+      [attr.aria-expanded]="detailsExpanded()" [attr.aria-controls]="detailsId()" (click)="toggleDetails()">
+      @if (greeting()) {
+        <span class="dashboard-today-greeting">{{ greeting() }}</span><span aria-hidden="true"> — </span>
+      }
+      <span class="dashboard-briefing-sentence" role="status" aria-atomic="true">@for (part of sentenceParts(); track $index) {<span class="dashboard-briefing-phrase" [attr.data-tone]="part.tone">{{ part.text }}</span>}</span>
+    </button>
+  </span>
 }

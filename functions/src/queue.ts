@@ -1495,10 +1495,20 @@ async function parseHistoryGuardedWorkoutQueueItem(
       oneSuccess = true;
       break;
     } catch (e: any) {
-      if (serviceName === ServiceNames.SuuntoApp && e instanceof ProviderImportDuplicateError) {
-        logger.info('Skipping a verified Suunto copy of a saved Garmin activity.', { queueItemId: queueItem.id, eventID: e.eventID });
+      if (e instanceof ProviderImportDuplicateError) {
+        logger.info('Skipping a verified cross-provider recording of an existing activity.', {
+          serviceName, queueItemId: queueItem.id, eventID: e.eventID,
+        });
+        const completionData = { resultStatus: 'skipped', skippedReason: 'cross_provider_duplicate', duplicateEventID: e.eventID };
+        if (serviceName === ServiceNames.COROSAPI) {
+          if (!corosClaimState?.processingOwner) throw new Error('COROS duplicate completion requires its revision claim.');
+          const result = await completeCOROSEventWriteRevision(queueItem as COROSAPIWorkoutQueueItemInterface,
+            parentID, corosClaimState.processingOwner, completionData);
+          corosClaimState.processingOwner = null;
+          return result;
+        }
         oneSuccess = true;
-        processedAdditionalData = { resultStatus: 'skipped', skippedReason: 'cross_provider_duplicate', duplicateEventID: e.eventID };
+        processedAdditionalData = completionData;
         break;
       }
       if (isActivityIdentityConflict(e)) {

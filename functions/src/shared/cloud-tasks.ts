@@ -573,15 +573,16 @@ export async function enqueueRouteDeliverySyncTask(
     });
 }
 
-/** A fresh dispatch reservation can recover a lost acknowledgement or an expired task name.
+/** Fresh enqueue IDs recover lost acknowledgements without invalidating a waiting account reservation.
  * The durable ledger/lease, not the task name, enforces operation idempotency. */
-export async function enqueueTrainingDeliveryTask(queueItemId: string, reservation: string): Promise<boolean> {
+export async function enqueueTrainingDeliveryTask(queueItemId: string, reservation: string,
+    dispatchId = reservation): Promise<boolean> {
     const { projectId, location, trainingDeliveryQueue } = config.cloudtasks;
     if (!projectId) throw new Error('Project ID is not defined in config');
     return enqueueTaskWithRetry({
         projectId, location, functionName: trainingDeliveryQueue,
-        taskId: `training-${sanitizeTaskNamePart(queueItemId)}-${sanitizeTaskNamePart(reservation)}`,
-        payload: { queueItemId },
+        taskId: `training-${sanitizeTaskNamePart(queueItemId)}-${sanitizeTaskNamePart(dispatchId)}`,
+        payload: { queueItemId, reservation },
         alreadyExistsLogMessage: '[TrainingDelivery] Dispatch reservation already exists.',
         failedLogPrefix: '[TrainingDelivery] Dispatch failed:',
     });

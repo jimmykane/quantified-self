@@ -1,4 +1,8 @@
 import {
+  DASHBOARD_CRITICAL_POWER_CHART_TYPE,
+  DASHBOARD_W_PRIME_CHART_TYPE,
+  DASHBOARD_MAXIMUM_POWER_CHART_TYPE,
+  DASHBOARD_DURABILITY_CHART_TYPE,
   DASHBOARD_ACWR_KPI_CHART_TYPE,
   DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
   DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
@@ -30,7 +34,13 @@ import {
   type DashboardSpecialChartType,
 } from './dashboard-special-chart-types';
 
+
 const DASHBOARD_CHART_INFO_COPY: Record<DashboardSpecialChartType, string> = {
+  [DASHBOARD_CRITICAL_POWER_CHART_TYPE]: 'Shows the modeled sustained-power boundary using the same 42-day power evidence and 12-week history as Training. Choose an activity type; missing or rejected fits remain unavailable. This is not FTP.',
+  [DASHBOARD_W_PRIME_CHART_TYPE]: 'Shows modeled work capacity above critical power using the same 42-day evidence and 12-week history as Training. Each sport stays separate. Missing or rejected fits remain unavailable.',
+  [DASHBOARD_MAXIMUM_POWER_CHART_TYPE]: 'Shows the modeled short-duration power ceiling using the same 42-day evidence and 12-week history as Training. It is not your highest recorded sample. Missing or rejected fits remain unavailable.',
+  [DASHBOARD_DURABILITY_CHART_TYPE]: 'Shows the same weekly durability evidence as Training. Choose a sport and comparison context. Bars show the selected context’s workout evidence; the line shows comparable-workout durability. Missing weeks stay gaps. Pool swimming uses pace retention; other supported contexts use aerobic decoupling.',
+
   HealthMetric: 'Recorded Health history, with each source and reading kept separate. Choose a source and date range to explore its readings.',
   [DASHBOARD_RECOVERY_NOW_CHART_TYPE]: 'Shows how much of your recorded recovery time remains. The remaining portion counts down as time passes; the elapsed portion shows how much has already passed.\n\nThis chart follows active recovery estimates and is independent of activity filters.',
   [DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE]: 'Shows your recorded activity time by day and sport group for the displayed month. Larger circles mean more time; compact layouts nest the circles.\n\nThe calendar has its own month selection, independent of the activity list and other charts.',

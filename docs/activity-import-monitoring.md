@@ -115,6 +115,12 @@ signals apply; the saved-event reference stays outside telemetry labels. The exp
 Virtual Running/Running copy checks reuse these outcomes and the existing bounded metadata reads. No worker, queue,
 retry budget, metric/filter, dashboard or alert threshold changes. See the provider guide's identity rules.
 
+Conflicting outdoor-running recordings from a different provider reuse that same committed `skipped` outcome after
+the shared bounded provenance/window/stat checks. Coverage is **covered/unchanged**: the existing Garmin, Suunto,
+COROS and Wahoo filters include these skips, and ambiguous recordings still produce the existing failure/dead-letter
+outcomes. COROS and Wahoo completion retains revision/lease/deletion fencing; stale or denied completions emit no
+committed skip. No new metric, alert, scheduler, ID scheme, Training completion or outbound send is introduced.
+
 Garmin activity jobs skipped after a confirmed completed disconnect use the existing committed `skipped` outcome,
 not `imported` or `dead_lettered`. Their INFO diagnostic contains the opaque queue ID and fixed
 `service_disconnected` reason, without credentials or provider payloads. Stale/deletion-denied completions emit no

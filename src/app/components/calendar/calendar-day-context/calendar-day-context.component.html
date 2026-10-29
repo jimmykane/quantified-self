@@ -13,6 +13,20 @@
   </header>
   }
 
+  <mat-menu #addDayWorkoutMenu="matMenu" class="qs-menu-panel">
+    @if (canPlan()) {
+      <a mat-menu-item appHapticTap [routerLink]="['/training/plans/new']"
+        [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Plan workout</a>
+      <a mat-menu-item appHapticTap [routerLink]="['/training/plans/standalone/new']"
+        [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Standalone workout</a>
+      <a mat-menu-item appHapticTap [routerLink]="['/training/plans/library']"
+        [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Add from library</a>
+      @if (dayWorkouts.canGenerate(data().day.dateKey)) {
+        <button mat-menu-item appHapticTap type="button" (click)="generateWorkout()"><mat-icon>auto_awesome</mat-icon>Generate with AI</button>
+      }
+    }
+  </mat-menu>
+
   <div class="calendar-day-context-body" [attr.role]="calmMonth() ? 'region' : null"
     [attr.aria-label]="calmMonth() ? 'Selected day entries' : null"
     [attr.tabindex]="calmMonth() ? 0 : null"
@@ -109,14 +123,6 @@
           <button mat-button appHapticTap type="button" [matMenuTriggerFor]="addDayWorkoutMenu">
             <mat-icon aria-hidden="true">add</mat-icon>Add workout<mat-icon iconPositionEnd aria-hidden="true">arrow_drop_down</mat-icon>
           </button>
-          <mat-menu #addDayWorkoutMenu="matMenu" class="qs-menu-panel">
-            <a mat-menu-item appHapticTap [routerLink]="['/training/plans/new']"
-              [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Plan workout</a>
-            <a mat-menu-item appHapticTap [routerLink]="['/training/plans/standalone/new']"
-              [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Standalone workout</a>
-            <a mat-menu-item appHapticTap [routerLink]="['/training/plans/library']"
-              [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Add from library</a>
-          </mat-menu>
         }
       </div>
       @if (activityState().status === 'loading') { <p role="status">Loading activities…</p> }
@@ -183,20 +189,12 @@
 
   @if (!compact() && !standaloneDayPage()) {
   @if (dashboardTile() || calmMonth()) {
-  <mat-menu #dashboardWorkoutMenu="matMenu" class="qs-menu-panel">
-    <a mat-menu-item appHapticTap [routerLink]="['/training/plans/new']"
-      [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Plan workout</a>
-    <a mat-menu-item appHapticTap [routerLink]="['/training/plans/standalone/new']"
-      [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Standalone workout</a>
-    <a mat-menu-item appHapticTap [routerLink]="['/training/plans/library']"
-      [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Add from library</a>
-  </mat-menu>
   @if (dashboardDayIsEmpty()) {
     <div class="calendar-day-context-empty">
       <strong role="status">Nothing recorded yet</strong>
       <p>Activities, notes, and planned workouts will appear here.</p>
       @if (canPlan()) {
-        <button mat-button appHapticTap type="button" [matMenuTriggerFor]="dashboardWorkoutMenu">
+        <button mat-button appHapticTap type="button" [matMenuTriggerFor]="addDayWorkoutMenu">
           <mat-icon aria-hidden="true">add</mat-icon>Add workout<mat-icon iconPositionEnd aria-hidden="true">arrow_drop_down</mat-icon>
         </button>
       }
@@ -275,7 +273,7 @@
       }
       @if (canPlan() && plannedStatus() === 'ready') {
           <button mat-button appHapticTap type="button" class="calendar-day-context-preview-add"
-            [matMenuTriggerFor]="dashboardWorkoutMenu">
+            [matMenuTriggerFor]="addDayWorkoutMenu">
             <mat-icon aria-hidden="true">add</mat-icon>Add workout<mat-icon iconPositionEnd aria-hidden="true">arrow_drop_down</mat-icon>
           </button>
       }
@@ -316,11 +314,9 @@
     <section class="calendar-day-context-section" aria-label="Planned workouts on selected day">
       <div class="calendar-day-context-section-header"><h3>Planned workouts</h3>
         <div class="calendar-day-context-plan-actions">
-          <a mat-button appHapticTap [routerLink]="['/training/plans/new']" [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">
-            <mat-icon aria-hidden="true">add</mat-icon>Add workout
-          </a>
-          <a mat-button appHapticTap [routerLink]="['/training/plans/standalone/new']" [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Standalone</a>
-          <a mat-button appHapticTap [routerLink]="['/training/plans/library']" [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Add from library</a>
+          <button mat-button appHapticTap type="button" [matMenuTriggerFor]="addDayWorkoutMenu">
+            <mat-icon aria-hidden="true">add</mat-icon>Add workout<mat-icon iconPositionEnd aria-hidden="true">arrow_drop_down</mat-icon>
+          </button>
         </div>
       </div>
       @if (plannedStatus() === 'loading') { <p role="status">Loading planned workouts…</p> }

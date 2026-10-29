@@ -1,0 +1,38 @@
+<section class="performance-layout">
+  <header [class.reserve-actions]="reserveActions()">
+    <div class="performance-title-row">
+      <span class="qs-dashboard-chart-title">{{ title() }}</span>
+      @if (info()) {
+        <button mat-icon-button appHapticTap appTooltipTap [matTooltip]="info()" matTooltipPosition="below" aria-label="How this chart is calculated"><mat-icon>info</mat-icon></button>
+      }
+    </div>
+    <span class="performance-period">12-week history</span>
+  </header>
+  <div class="performance-context">
+    @if ((context()?.options.length || 0) > 1) {
+      <button mat-button appHapticTap [matMenuTriggerFor]="contexts" [disabled]="disabled()" [attr.aria-label]="'Select sport and comparison context: ' + selectedLabel()">
+        <span>{{ selectedLabel() }}</span><mat-icon iconPositionEnd>keyboard_arrow_down</mat-icon>
+      </button>
+    } @else { <span>{{ selectedLabel() }}</span> }
+    @if (saving()) { <span role="status">Saving…</span> }
+    @if (updating()) { <span role="status">Updating…</span> }
+    @if (status() === 'failed') { <span role="status">Could not refresh · showing available evidence</span> }
+  </div>
+  @if (context(); as view) {
+    @if (view.powerTrend; as trend) {
+      <div class="performance-value">{{ view.valueText }}</div>
+      <p class="performance-detail">{{ view.detailText }}</p>
+      <app-training-power-systems-trend-chart [dashboardMode]="true" [trend]="trend" [darkTheme]="darkTheme()" [unitSettings]="unitSettings()" [timelineNotes]="timelineNotes()" [mobileTapFeedbackOptions]="feedbackOptions" />
+    } @else if (view.trajectory; as trajectory) {
+      <app-training-durability-trajectory-chart [dashboardMode]="true" [trajectory]="trajectory" [status]="status() || 'missing'" [darkTheme]="darkTheme()" [timelineNotes]="timelineNotes()" [mobileTapFeedbackOptions]="feedbackOptions" />
+    } @else {
+      <p class="performance-empty">{{ updating() ? 'Preparing recorded training evidence…' : status() === 'failed' ? 'Could not load this chart. Try refreshing the dashboard.' : 'No evidence for this context yet. This chart uses the same eligible workouts as Training.' }}</p>
+    }
+    @if (view.evidenceText) { <p class="performance-evidence">{{ view.evidenceText }}</p> }
+  }
+</section>
+<mat-menu #contexts="matMenu" class="qs-menu-panel">
+  @for (option of context()?.options || []; track option.value) {
+    <button mat-menu-item [disabled]="disabled() || option.value === context()?.selectedKey" (click)="selectContext(option.value)">{{ option.label }}</button>
+  }
+</mat-menu>

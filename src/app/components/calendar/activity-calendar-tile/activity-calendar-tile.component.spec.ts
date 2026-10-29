@@ -1,3 +1,4 @@
+import { DayWorkoutService } from '../../../services/day-workout.service';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { TestBed } from '@angular/core/testing';
@@ -61,6 +62,7 @@ describe('ActivityCalendarTileComponent', () => {
     await TestBed.configureTestingModule({
       imports: [ActivityCalendarTileComponent],
       providers: [
+        { provide: DayWorkoutService, useValue: { canGenerate: () => false, open: vi.fn() } },
         provideRouter([]),
         { provide: AppUserService, useValue: { user: viewer, user$: viewer$ } },
         { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },

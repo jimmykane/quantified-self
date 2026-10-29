@@ -1,3 +1,36 @@
+import {
+  isDashboardPerformanceChartType,
+  DASHBOARD_ACWR_KPI_CHART_TYPE,
+  DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
+  DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
+  DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
+  DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
+  DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
+  DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
+  DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
+  DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
+  DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE,
+  DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
+  DASHBOARD_FORM_CHART_TYPE,
+  DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
+  DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
+  DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
+  DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
+  DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
+  DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
+  DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
+  DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
+  DASHBOARD_RECOVERY_NOW_CHART_TYPE,
+  DASHBOARD_SLEEP_TREND_CHART_TYPE,
+  DASHBOARD_HRV_TREND_CHART_TYPE,
+  DASHBOARD_POWER_CURVE_CHART_TYPE,
+  DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
+  type DashboardChartType,
+  isDashboardEventBackedSpecialChartType,
+  isDashboardSpecialChartType,
+} from '../../../helpers/dashboard-special-chart-types';
+import type { DashboardPerformanceTrendContext } from '../../../helpers/dashboard-performance-trend.helper';
 import type { AppDashboardHealthMetricSettings } from '../../../models/app-user.interface';
 import type { DashboardHrvContext } from '../../../helpers/dashboard-hrv-context.helper';
 import { ChangeDetectionStrategy, Component, computed, EventEmitter, input, Input, Output, type Signal } from '@angular/core';
@@ -35,37 +68,7 @@ import type {
 import type {
   DashboardSleepTrendNavigationDirection,
 } from '../../../helpers/dashboard-sleep-range.helper';
-import {
-  DASHBOARD_ACWR_KPI_CHART_TYPE,
-  DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
-  DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
-  DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE,
-  DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE,
-  DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE,
-  DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
-  DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE,
-  DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE,
-  DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE,
-  DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE,
-  DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE,
-  DASHBOARD_FORM_CHART_TYPE,
-  DASHBOARD_FORM_NOW_KPI_CHART_TYPE,
-  DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE,
-  DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE,
-  DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
-  DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE,
-  DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE,
-  DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
-  DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
-  DASHBOARD_RECOVERY_NOW_CHART_TYPE,
-  DASHBOARD_SLEEP_TREND_CHART_TYPE,
-  DASHBOARD_HRV_TREND_CHART_TYPE,
-  DASHBOARD_POWER_CURVE_CHART_TYPE,
-  DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
-  type DashboardChartType,
-  isDashboardEventBackedSpecialChartType,
-  isDashboardSpecialChartType,
-} from '../../../helpers/dashboard-special-chart-types';
+
 import {
   DASHBOARD_DERIVED_CHART_DEFAULT_RANGE,
   DASHBOARD_DERIVED_CHART_RANGE_OPTIONS,
@@ -162,6 +165,12 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() efficiencyTrend?: DashboardEfficiencyTrendContext | null;
   @Input() hrvTrend?: DashboardHrvContext | null;
   @Input() sleepTrend?: DashboardSleepTrendContext | null;
+  @Input() performanceSettingsSaving = false;
+  @Input() performanceControlsDisabled = false;
+  @Input() performanceTrend?: DashboardPerformanceTrendContext | null;
+  @Input() performanceStatus?: DashboardDerivedMetricStatus | null;
+  @Output() performanceContextChange = new EventEmitter<string>();
+  get isPerformanceTrend(): boolean { return isDashboardPerformanceChartType(this.chartType); }
   @Input() powerCurve?: DashboardPowerCurveContext | null;
   @Input() aerobicCapacity?: DashboardAerobicCapacityContext | null;
   @Input() aerobicDurability?: DashboardAerobicDurabilityContext | null;

@@ -711,6 +711,147 @@ meaning of `/training`. Manual planning is available without a provider connecti
 plan or remain standalone, so a user can add a workout without creating a plan. Provider delivery is an opt-in Pro action
 and must never be inferred from merely connecting a service.
 
+### Generate a workout from a Calendar day
+
+Owned Calendar and Dashboard selected-day previews, the day sheet and the full day page expose
+**Generate with AI** last in **Add workout**, after **Add from library**, for today through 365 days ahead. All day-context presentations share one
+menu, including empty days; manual plan, standalone and library options remain available for past dates. This opens an unsaved review workflow. The date stays on the selected Calendar day. Main controls are supported manual sport (including
+strength aliases), available minutes, purpose and destination. Sport uses the shared searchable Activities picker in
+single-selection mode, with sport icons and only `DAY_WORKOUT_SPORTS` options. Choosing a sport returns to the draft;
+the existing reset/validation and busy/uncertain-save guards still apply. Thirty minutes is an explicit editable starting
+value; a fitting active plan is preselected, otherwise Standalone. Strength shows equipment, initially Bodyweight.
+More options include strict endurance timing, target preference, simple/automatic structure and strength focus.
+The separate **Personalization** section starts expanded, using two compact Material checkbox columns on desktop
+and phones from 360 px, and one column below that width to preserve readable labels. An 8 px row gap and 4 px
+outer padding keep Material's 48 px touch targets separate without changing Material internals. The heading and
+selection count share a row with the disclosure control; a short caption avoids repeating the default selection. Every applicable option starts selected: freshness/training load, HRV, sleep, overnight heart rate,
+readiness, recent activities, existing Feeling/RPE, Training plans/workouts, Timeline notes and matching previously
+planned strength weights. The heading summarizes the selection count and its Show/Hide control preserves choices.
+Users can turn each off before generating. Disabling Training context also disables matching planned weights.
+Turning off freshness, HRV, sleep or overnight heart rate clears and disables combined Readiness; after re-enabling
+all sources, the user can select Readiness again. The server independently withholds the combined score whenever any
+source is excluded, rather than inventing a differently weighted score. Changing a choice invalidates the draft/request.
+Explicit signal false values remain false at the server and malformed values fail validation. Older requests omitting
+new signal choices preserve the original automatic behavior and stable fingerprint/replay identity; the original
+Training/Timeline/weight choices still require explicit booleans. These draft-only options never modify chat grants,
+provider consent, stored metrics or feedback.
+
+`generateDayWorkout` is a private first-party callable using the existing Assistant model, legal/access checks,
+App Check and quota. It receives a strict allowlisted `shared/day-workout.ts` request and cannot mutate a schedule.
+The model has no tools. The server parses a canonical prescription, allows one bounded correction, rejects
+unsupported editor endings, and enforces strict time across all timed steps and repeat passes. Targets require
+an exact, unambiguous saved athlete reference; absent references lead to effort guidance rather than invented
+thresholds. Rest returns no workout. A strength planning-time range is labelled as an AI estimate for review only;
+repetition endings, rests and unknown canonical duration remain unchanged.
+
+Model output uses a sport-specific JSON shape derived from the existing MCP Training recipe/strength schemas.
+Endurance replies cannot include strength-only fields or null placeholders; the requested sport is fixed in the
+shape. Decoder-only numeric, length, pattern and array bounds are omitted to avoid Gemini's nested-schema
+complexity limit; the canonical parsers and generation validator still enforce all of those limits after generation.
+See [Gemini structured-output limits](https://ai.google.dev/gemini-api/docs/structured-output#limitations).
+Validation corrections include only server-authored reasons. Failure diagnostics record the stage, billable flag,
+error category and validation issue codes, never raw model replies, prompts, recovery evidence or Timeline text.
+
+The existing daily collector supplies the same current recovery evidence used by Assistant chat, Training snapshots,
+a 28-day recording pattern, and actual Feeling/RPE minimum/maximum buckets. The modal names the automatic inputs
+before generation through its selected checkboxes: freshness (Form), training load, HRV, sleep, overnight heart rate, readiness and recent activities.
+Selected signal reads run independently of the Training-plan and Timeline choices. The daily report owns current Form
+and ramp rate (including its existing current-day/fallback rules), sleep and comparison, HRV's personal range,
+overnight heart-rate baseline, readiness score/confidence, and recent/usual Training volume. No extra reads or
+new feedback fields are added. The private generation reader projects only selected report fields and readiness
+drivers, including removal of duplicate HRV/heart-rate vitals from a selected sleep summary. It skips deselected
+activity, feedback and Training-snapshot reads and omits disabled activities/patterns and feedback rather than sending
+zero counts. When every signal is off, no recovery/activity tools are read. Selected Timeline prose and authored
+workout notes stay untrusted; the model must not reconstruct an unchecked signal from that text. The generation
+prompt explicitly uses the selected signals to choose intensity, volume or rest,
+compares the requested sport with its recorded baseline where available, treats minutes as a budget, and explains
+which evidence affected the choice. It does not count readiness twice with its own drivers or assume higher HRV
+always means better recovery. Future suggestions require rechecking recovery closer to the selected day.
+
+Review context distinguishes available signals, missing values and explicitly turned-off choices; its collapsed
+summary identifies context that is off or unavailable without presenting every opt-out as a failed read. A nonempty daily-report object or overall
+snapshot preparation status cannot establish readiness/freshness availability. Zero Form and negative ramp rate remain
+valid; HRV or overnight heart-rate readings with insufficient baseline remain recorded evidence, with the unavailable
+comparison disclosed. Historical load snapshots are not substituted for missing current freshness.
+Local-date normalization includes the entire first local day;
+empty metric buckets stay missing even when activities matched the range. Imported and QS-edited feedback are
+not distinguishable here. This adds no feedback fields, punctuality/adherence score, check-in, or inferred skipped
+training. Current readiness is explicitly an observation, not a forecast for a future workout.
+
+With Training context enabled, complete selected-day schedule/completion checks and stable schedule revisions
+are required. A private adapter reads date-bounded summaries within seven days of the target, caps each query at
+401 to detect overflow, and loads at most the nearest 25 full prescriptions. It includes the selected plan's phase.
+Optional previous-weight context reads up to five recent full strength companions in the existing 28-day window,
+validates companion revision/projection, and matches normalized exercise names plus the complete set/rest
+prescription. Equipment words remain significant. Only a unique most recent date match can supply stored loads;
+zero and fractional kilograms survive, while every model-invented load is removed. Bodyweight-only selections
+never inherit positive external weights, even for ambiguous exercise names; explicit zero remains valid. The review labels the source
+as previously planned with its date, never performed or progressed. Optional missing/truncated evidence is
+disclosed; incomplete required schedule reads block generation.
+
+Generation replay state is isolated at `users/{uid}/assistantConversations/day-workout`, separate from chat.
+It reuses the existing browser-denied collection, index exemptions, seven-day TTL and account erasure. One
+four-minute lease, at most 128 recent receipts and four full responses, and a 400 kB serialized cap bound it.
+Older full responses are evicted as needed to stay within the UTF-8 byte cap while retaining their replay receipts;
+large earlier replies must not prevent a new valid result from being saved.
+Generation accepts the existing `TrainingPlansService.createMutationId` prefix/colon ID format (UUID and fallback),
+with the same bounded safe-character validation and no path characters. IDs remain opaque stored values, never paths.
+An exact retry replays a cached response without another quota charge. Within the seven-day retention window,
+expired leases and evicted/failed replies cannot silently generate again. Explicit **Generate again** creates a
+new request. Quota is reserved before context and charged once before the model attempts. Unused reservations
+are released on pre-model failure, including a failed quota finalization.
+Each new generation shares the Assistant chat allowance: rest suggestions, failed model attempts and the bounded
+correction consume one request total. Exact retries, editing and saving do not consume another request.
+The modal's fixed action footer displays the shared Assistant allowance as remaining requests out of the limit, using
+`AssistantQuotaService` and the existing `getAssistantQuotaStatus` callable. It reads on open and refreshes after every
+generation attempt, including failed attempts and exact retries; it never decrements an optimistic local counter.
+Loading and unavailable states stay distinct from zero remaining. Per-read sequencing, owner checks and destruction
+checks discard stale/account-switched replies. The footer stays visible with a reviewed draft and wraps above the
+buttons on phones. The rest action uses **Try easy session** so Cancel and the primary action stay on the same
+row at 320 px, including short screens. Reading/displaying allowance does not consume it; the existing backend remains authoritative.
+No fitness-provider secrets or delivery actions are available to this callable. It is synchronous and introduces
+no queue or provider lifecycle.
+
+Review includes the complete interval/strength prescription in owner units, including interval effort notes,
+rationale, used/missing context, observation time, selected day/destination, existing workouts and inherited
+plan-sync disclosure. After generation, settings collapse behind **Change options** without discarding the draft;
+changing a value requires a new generation. Context evidence uses the shared flat summary disclosure, with missing
+context and current-readiness limits visible while collapsed. Strength prescriptions reuse shared compact rows;
+all sets and interval steps remain visible. New reviews and generation/save errors receive programmatic focus
+and scroll into view after rendering, following the Training workspace pattern; unrelated option/quota updates do
+not steal focus. The global dialog surface, Material controls and QS scrollbar skin
+apply without per-dialog skins. The footer has Cancel and one primary action; Edit and Generate again sit with
+the prescription. Paused plans are labelled. **Edit workout** passes the full unsaved draft and save identity through owner-bound memory to the
+existing editor; auth changes clear it. **Add workout** uses the existing revision-bound `create-workout`
+mutation. Extending plan dates requires confirmation. A lost save reply retains the exact request and workout
+identity; the dialog locks changes until **Retry Add** resolves it. Definitive revision conflicts retain the draft
+and require review of the current schedule. This is always an additional workout. It never replaces a session,
+creates new sync consent, or invokes Send; existing plan sync may process an eligible new plan workout normally.
+
+MCP impact review: existing public read schemas, mutation kinds, proposal/confirmation contracts and scopes are
+unchanged. Generated workouts persist the same canonical root and full strength companion used by manual editing.
+`assistant/day-workout.emulator.spec.ts` verifies their read-back through `get_planned_workout_v3` and
+`get_strength_workout_details`, including exact repeated recoveries, zero/fractional loads and complete sets.
+Review-note rendering, compact UI disclosures and private cache/quota fixes preserve these same public contracts
+and read-back coverage. Private request-ID validation, signal-selection controls and sport-specific model output reuse those contracts without
+changing public tools, scopes, stored workout fields or mutation authority. Per-draft signal projections do not change
+the shared daily collector or the public daily-report response. Existing canonical workout read-back coverage remains
+applicable because these controls do not enter saved prescriptions. The shared day-context entry-point menu has no MCP wire or authority impact: it opens the
+same owner/date-guarded generation service. Reusing the Activities sport picker also changes no supported recipe
+sports, MCP read coverage, scopes or proposal/confirmation contracts. Default-on context affects only explicit
+first-party generation controls submitted from the reviewed dialog; independent opt-outs and the same read scope
+checks remain enforced. External MCP grants and Assistant chat settings are unchanged. Explicit recovery guidance and signal-level
+availability use the existing validated daily-report payload only; no public schema, calculation, read coverage or
+consent changes are needed. The same canonical prescription and MCP read-back tests still apply. Presentation changes, including reuse of the existing first-party Assistant quota-status read in the modal footer,
+do not alter public MCP contracts, stored prescriptions, consent or provider delivery.
+No read coverage is deferred and no public generation tool is introduced. The private callable is registered in
+full/lazy entrypoints, endpoint metadata checks, the shared manifest and least-privilege secret policy. Release the
+backend endpoint before its frontend under separate deployment approval; no new Rules, index, secret value or
+schema migration is needed. For local development, the Functions emulator must load a build containing
+`generateDayWorkout`; a stale `functions/lib` can make this new endpoint fail preflight while Assistant chat works.
+Use the initial build and ongoing `build:watch` workflow in README and `.agent/workflows/start-emulators.md`.
+This local build workflow changes no MCP contract or authorization policy.
+
 ### Remembered Plans view
 
 The Plans/Standalone selector saves the last explicit choice in the owner settings document at
@@ -2336,8 +2477,12 @@ Data ownership:
 `trainingDeliveryQueue` is a top-level server-only collection of compact **leaf** jobs. Schedule mutations, restore, plan
 deletion and delivery commands write a reconciliation marker in the same transaction, not a batch of provider payloads.
 The reconciler scans 25 current workouts per page (up to four destinations each), then 25 existing ledger identities per
-page, including deleted/historical sources. Each page rechecks schedule/settings revisions, plan-deletion locks and the
-account-deletion fence; obsolete scans restart. At most 100 compact ledgers/projections/jobs are considered in a current
+page, including deleted/historical sources. Each page checks plan-deletion locks, current consent and the
+account-deletion fence. A full scan retains its cursor through concurrent edits; newer global invalidations request a
+follow-up scan. Bounded workout edits, consent commands and delivery acknowledgements instead retain private targets
+under `trainingDeliveryState/current/reconciliationTargets/{workoutId}`. A target visits the current identities and
+pages every retained ledger for that workout, including former destinations and deleted recipes. Plan-wide operations,
+restore, disconnect and legacy marker writers still request full coverage. At most 100 compact ledgers/projections/jobs are considered in a current
 workout page. It never writes 400 workout payloads into a single document or transaction. Never-enrolled users have their
 marker removed without recurring scans. The pre-existing large manual-operation hardening remains #657.
 
@@ -2345,9 +2490,18 @@ marker removed without recurring scans. The pre-existing large manual-operation 
 and `dispatchTrainingDelivery` recovers at most 25 due reservations each minute using the existing Cloud Tasks enqueue
 and queue-depth helpers. Each priority class scans bounded pages of 25, with a hard 100-row bound, so coalesced COROS
 siblings do not consume dispatch capacity or hide another due destination/provider. Reservation precedes enqueue, so
-lost acknowledgements and crashes are recoverable. A finished
-scan becomes eligible again after 30 minutes to pick up saved-zone day boundaries, adapter horizons and entitlement
-changes. `onTrainingDeliveryConnectionChanged`, `onTrainingDeliveryEntitlementChanged`, and
+lost acknowledgements and crashes are recoverable. Reconciliation uses a fixed 60-second first-event batching
+deadline; the minute dispatcher normally adds up to another minute, plus existing queue/provider delays. Continued
+edits cannot slide that deadline. Each page first acquires a private 180-second account lease; duplicate or consumed
+reservations return before Auth, connection and recipe reads. Enqueue recovery retains the pending account reservation
+and uses a fresh Cloud Task name, so queue delays longer than the recovery interval cannot repeatedly invalidate the
+oldest waiting task. The first successful claim consumes that reservation; retries from that page cannot claim the next
+page. Expired claims recover through the same dispatcher.
+A finished full repair becomes eligible again after six hours. Earlier durable wake-ups cover saved-zone midnight
+(including DST/horizon changes) and active grace expiry; delivery retries and verification keep their own due jobs.
+Effective owner unit changes wake through `onTrainingDeliveryOwnerUnitsChanged` on `users/{uid}`.
+Connection events ignore only `uploadedActivitiesCount` and `connectionHistoryImport` changes; other metadata, including
+unknown fields and credential/account authority, remains conservatively eligible. `onTrainingDeliveryConnectionChanged`, `onTrainingDeliveryEntitlementChanged`, and
 `onTrainingDeliveryQueued` each use 512 MiB for their bounded Firestore and queue work; this adds process headroom
 only and does not change queue limits, retries, or delivery semantics. Tasks may be duplicated; stable
 per-user/provider/account/workout identities, independent desired generations,
@@ -2465,14 +2619,72 @@ This trades two projection reads per considered identity for up to three avoided
 The deterministic 25-workout/single-plan/four-provider fixture reduces connection resolutions from 100 to 4 and
 context document reads from 425 to 131. Those document counts exclude connection internals, ledger/projection reads
 and queue overhead; they are local operation counts, not measured production CPU or monetary savings. Both current
-workout and historical-ledger phases, 25-item pages, 30-minute recovery, delivery/verification enqueueing, Retry-After,
-leases, revisions, consent and deletion fences retain their existing behavior.
+workout and historical-ledger phases, 25-item pages, delivery/verification enqueueing, Retry-After, revisions, consent
+and deletion fences remain covered. The account coordinator described above supersedes the former 30-minute full
+scan and restart-on-edit behavior. Its six-hour repair is a fallback; event targets and explicit timers handle normal work.
 
-MCP impact review: no wire, scope, consent, approval, recipe, completion, safe-read projection or provider-action
+The coordinator's synthetic Firestore benchmark changes one workout in a 183-workout account: 30 document reads
+versus approximately 3,000 for a full repair, with identical final ledgers. The separate 400-workout/four-provider fixture retains
+all 1,600 current identities and historical-ledger coverage. Ten overlapping same-account tasks admit one page;
+another account remains independently eligible. Fixed debounce, delayed queues, lost enqueue acknowledgements,
+consumed reservations, expired claims, mid-scan edits,
+legacy cursors, grace expiry, saved-zone day changes and deleted-source targets have emulator regression coverage.
+The repair interval changes its scheduled ceiling from 48 to four repairs per day; explicit events/day boundaries add
+their own work. These are local read counts and scheduling bounds, not measured production CPU or euro savings.
+
+The same emulator suite also budgets work after the actual `mutateTrainingScheduleForUser` and
+`trainingDeliveryCommand` entry points. The measured path never stages its own reconciliation marker. It uses the
+real dispatcher and its task reservations, asserts the fixed batching deadline, then advances the synthetic clock
+to that deadline. Edit, create, Send, Stop and Check must each dispatch and reconcile with fewer than 100 transaction
+document-read observations in a 183-workout fixture, preserve unrelated ledgers, enqueue the expected delivery/check,
+consume their targets before the full-repair comparison and match that subsequent repair.
+The source save has its own budget: fewer than 233 reads for edit/create (including the existing schedule
+validation), and fewer than 40 for a delivery command. Fixture setup, client revision discovery, Auth and real provider
+binding reads are outside these synthetic transaction counts; they are not a claim about total billed production reads.
+The observer covers transaction `get` and `getAll` without double-counting SDK-internal calls.
+
+| Entry point | Source mutation reads | Dispatch + reconciliation reads |
+| --- | ---: | ---: |
+| Edit workout | 190 | 32 |
+| Create workout | 191 | 38 |
+| Send | 10 | 32 |
+| Stop | 10 | 31 |
+| Check | 11 | 32 |
+
+A follow-up review reproduced a test gap by deliberately postponing the reconciliation outbox deadline indefinitely.
+All five original entry-point budgets passed because they called the reconciler directly, bypassing dispatch. With the
+dispatcher included, all five reject that same fault at the batching-deadline assertion. The production marker was
+restored byte-for-byte before passing verification. The six additional reads per case above measure the dispatcher;
+this test change adds no production reads or delay.
+
+A local mutation check on 29 October 2026 deliberately reintroduced each failure independently. It required the
+named regression assertions to fail; a timeout, missing emulator or compilation error was not accepted as detection.
+
+| Deliberate regression | Test that rejected it | Expected failures |
+| --- | --- | ---: |
+| Bypass the metadata-only equality filter in `lifecycle.ts` | `ignores an 830-upload burst` | 1 |
+| Remove the active-account-lease check in `reconciliation-coordinator.ts` | `admits one account page under 10 overlapping tasks` | 1 |
+| Omit workout targets from the outbox call in `persistence.ts` | Real edit/create read budgets | 2 |
+| Omit workout targets from both outbox calls in `commands.ts` | Real Send/Stop/Check read budgets | 3 |
+| Replace the pending reservation on every dispatch in `tasks.ts` | Delayed-task recovery, with and without a lost enqueue acknowledgement | 2 |
+
+All five deliberate regressions were rejected, and every modified production file was restored byte-for-byte before
+the final passing verification. These faults are a local test-strength audit, not runtime switches or disabled safeguards
+committed to the repository. To repeat the audit, make one temporary fault at a time in an isolated checkout, run its
+named test with the existing unit/emulator configuration, verify the specific assertion failure, restore the source and
+rerun passing tests. The ordinary regression assertions run in the existing Functions unit and delivery-emulator CI
+jobs; no new workflow, dependency or production work is added. This test-only follow-up does not change Help, MCP,
+monitoring, provider behavior or deployment requirements.
+
+MCP impact review: the account lease, dispatch reservation, target generations and repair/day/entitlement deadlines
+are backend-only coordination fields. The existing recursive Rules denial covers the private target descendants;
+account recursive deletion removes them. No wire, scope, consent, approval, recipe, completion, safe-read projection or provider-action
 change. Existing strict sync reads use the same source-freshness acknowledgement and private-field exclusions; no
 new planning read or bundled-plugin update is needed. Help's delivery and Check instructions remain applicable.
-Monitoring decision: **unchanged**. The existing provider outcomes, dispatch/backlog and unavailable-observation
-coverage still observes the same queues, worker events and committed outcomes. Read-only production review on
+Monitoring decision: **covered** by the existing provider outcomes, dispatch/backlog and unavailable-observation
+signals, with `owner-units` added to the source-controlled lifecycle-failure filter for the new trigger. Queue names,
+worker events and committed outcomes remain unchanged; applying the filter and deployment still require separate
+approval. Read-only production review on
 21 October 2026 found fourteen `qs_training_*_v1` metrics, six enabled Training alert policies and the QS Training
 Delivery dashboard. Queue-health age derives from queue writes, so skipping ledger/projection writes does not change
 its age signal. Verification covers read counts, fresh transaction attempts, unchanged document update times,
@@ -2920,7 +3132,7 @@ Delivery commands, MCP simulated-plan previews, reconciliation and request guard
 Each new strength attempt privately snapshots `suuntoWeightUnits`; its mapping digest binds that snapshot and the
 full prescription. Later preference changes cannot reinterpret a started attempt. Exact historical v2–v7 recovery
 completes first, then the normal worker updates the retained Guide in place. Interval/swim payloads and digests
-remain v7. Unit-only settings changes are picked up by the existing 30-minute reconciliation scan; Stop, Pro,
+remain v7. Unit-only settings changes wake the account coordinator through `onTrainingDeliveryOwnerUnitsChanged`; Stop, Pro,
 account/deletion, horizon, completion and additional text-loss approval checks remain authoritative. App/watch sync
 is provider-managed, and no watch receipt is inferred.
 
@@ -4551,7 +4763,8 @@ take precedence over older check/restoration labels in the UI.
 `mutateTrainingProviderDelivery` accepts `check`, retaining Auth/App Check, Pro/grace, owner, deletion-lock, expected
 schedule/scope/settings revisions and mutation receipts. It returns a typed queued/coalesced/deferred receipt and stores
 a compact request under `trainingDeliveryState/current/checks`, never consent or a new settings/history revision.
-Manual requests coalesce for 15 minutes and join the same resumable 25-workout/25-ledger scan as periodic work. The
+Manual requests coalesce for 15 minutes. Workout checks stage the bounded target for that workout and all its retained
+identities; plan checks use the resumable 25-workout/25-ledger scan. The
 dispatcher admits delivery/reconciliation before manual verification before ordinary verification. Checks target 24
 hours, but production capacity can extend the cycle. There is no evaluation environment, runner, request cap or setup
 wizard. Verification uses the existing delivery lease; every request and post-I/O persistence rechecks authority,
@@ -5352,66 +5565,57 @@ profile Weight as fallback context.
 
 ### Shared Dashboard and Training insight reuse
 
+Dashboard Performance & Power can add separate Critical power, W′ capacity and Maximum power tiles, and a Durability
+trajectory tile. They reuse the existing `training_power_systems` and `training_durability` snapshots, shared Training
+view-model builders and the same chart components. The three capacity tiles share one snapshot dependency; picker
+reads never request a rebuild. The adapter does not fit models, aggregate sports, read streams or change Training
+visibility preferences. Each tile saves its exact activity-type or durability context selector separately. A saved
+context that loses evidence stays explicit and unavailable. Current unavailable fits never borrow historical values.
+The existing Health VO₂ max history preset is placed alongside them, retaining its source, reading and date controls.
+
+The chart components have a dashboard presentation opt-in for plot-height alignment, narrow-width labels and chart-tap
+feedback. Training/public preview defaults, UTC cutoffs, 42-day fitting windows, 84-day capacity history, weekly durability
+protocols and eligibility/gap semantics are unchanged. Canonical capacity values use Sports Lib display classes; W′
+trend values are already kJ, so the work display class is used rather than calorie-based `DataWPrime`.
+
+MCP impact review: none. This is a dashboard presentation and settings integration over existing snapshots and Health
+reads. No metric kind, backend payload, model, tool, strict projection/schema, scope, consent, planning capability or
+provider action changes. No reparse, migration, registered-client refresh or backend deployment is required.
+
+
 #### Dashboard daily briefing
 
-**Currently hidden:** Dashboard does not mount At a glance or start its additional listeners. Today and saved charts
-remain unchanged. The implementation below is retained behind the local `showDailyBriefing = false` presentation gate;
-this is not a persisted user preference or a change to MCP contracts.
+The owner-only **At a glance** continues the **Today** greeting in one sentence and one Material text button. The
+greeting stays neutral and each assessment phrase takes its own existing status color. Both are inline, separated by an em dash,
+with natural wrapping and no separate row, status dot, chevron, heading or card. The button opens Training state, Readiness,
+scores and source context below it. These mounted details start closed and reset on owner changes, without persistence.
+The control exposes its expanded state and target, preserves live status text, and owns one selection haptic per tap.
+The sentence wraps naturally on phones. Saved chart configuration stays unchanged; hiding Today also unmounts the sentence.
 
-The owner-only **At a glance** above Today uses the shared accent-rail summary shell with one sentence and no disclosure,
-extra score, metric rows or new controls. Today and saved chart configuration remain unchanged; hiding Today unmounts the
-briefing and its readers. It prioritizes local-today recordings and planned workouts, visible active Timeline notes and
-existing attention assessments, then fills up to four short clauses with relevant load comparison, weekly link progress,
-the next scheduled workout, imported recovery remaining or current source-labelled sleep duration. It does not promise to
-show every candidate simultaneously, prescribe a key workout, infer repeated short nights or attribute changes to a note.
+`dashboard-daily-briefing.component.ts` only presents the existing `dashboardGlanceSignals` and keeps the actual
+authenticated-owner fence. It starts no Calendar, Training-plan, completion or Timeline-note readers and no timer.
+Current-day refresh, loading/reset behavior, eligibility, source selection and assessment calculations remain owned by
+Today. The previously hidden contextual briefing's dedicated readers, date clock and optional context inputs were
+removed; planned sessions, weekly link counts and note titles are not added to this compact assessment sentence.
 
-`dashboard-daily-briefing.component.ts` owns the bounded read lifecycle, actual authenticated-owner fence and local-date
-clock. It reuses `ActivityCalendarService.watchSummaryEvents` for today only (1,000 parents plus lookahead),
-`TrainingPlansService.watchCalendarSchedule` from the configured week's start through seven local days ahead (400 workouts
-plus lookahead), and exact-ID `watchWorkoutCompletionsForWorkouts`. Existing server confirmation, first-read timeouts,
-restore fences and partial-read flags stay intact. It never subscribes to account-wide schedule/completion history,
-provider transport or raw activity streams. Schedule revisions cancel old completion readers; owner/day changes cancel
-all readers, and read-key/generation checks discard late results. The one-minute date clock pauses when hidden; focus
-catches up after midnight/timezone changes and retries failed reads without polling. Local calendar arithmetic preserves
-DST and the account's week-start setting, independently of Training's UTC snapshot cutoff.
-When ownership becomes available after authentication was pending, the clock catches up before the first bounded read;
-an inactive clock from the previous day must not start yesterday's queries or duplicate the current-day subscriptions.
+`dashboard-daily-briefing.helper.ts` composes at most three clauses: Training state, Readiness and one relevant supporting
+Sleep, seven-day HRV or overnight-HR signal. Supporting evidence prioritizes unavailable data, attention/outside-range
+assessments, missing evidence and loading before an ordinary HRV range result. All detailed metrics remain below the greeting’s disclosure.
+It does not infer causes, prescribe training, add thresholds or introduce a new score. Seven-day HRV is explicitly named
+so it cannot be confused with the latest nightly value. Missing today's sleep remains pending, not a positive assessment.
 
-`dashboard-daily-briefing.helper.ts` keeps actual local-today recorded parent events distinct from planned sessions.
-Future recordings are excluded and duplicate parents count once. It uses canonical duration formatting only when every
-loaded parent has a finite duration, and partial reads say “at least” without presenting a complete total. Weekly progress
-and next-session selection require complete schedule/link coverage. Link validity is checked independently for today,
-the configured week and non-skipped upcoming sessions: an invalid link outside one scope cannot hide its valid evidence.
-Failed or partial completion reads still invalidate every affected scope. Active-plan and standalone selection plus completion
-validity reuse Calendar rules, including revision-changed links, ambiguous links and skipped/deleted/inactive workouts.
-A stored activity link is described as a link, not same-day completion or current-prescription adherence. The next session
-must be unlinked, non-skipped and later than today within the seven-day lookahead; it has no inferred priority.
+Each phrase uses existing theme tokens independently: positive Training/Ready/within-range evidence stays green,
+Mixed and outside-range evidence uses caution, and Recover, negative Training/overnight-HR or unavailable evidence
+uses error. Neutral classifications, loading, insufficient and recorded-only context stay neutral. The existing
+assessment color is carried separately from availability so an available neutral Training state is not made positive.
+A neighboring caution/error phrase never recolors positive phrases; punctuation and the greeting remain neutral. Missing/unavailable inputs are stated rather than hidden behind a reassuring
+HRV result. All-loading and empty states get one neutral message. Text carries the meaning independently of color.
 
-Notes come from the existing owner-fenced Timeline workspace, registering today's range even without a nearby chart;
-registration also follows the workspace callback identity so replacing that workspace for the same owner transfers the
-range and cleans up the old registration, while ordinary note edits do not restart it.
-No second note store/query is added. Per-note/global visibility, overlap dates, ongoing-note timezone, edits, deletion and
-workspace error/loading states remain authoritative. Only a bounded literal title and additional-visible-note count enter
-the sentence. The briefing does not claim a complete absence when note coverage is partial. Recovery and sleep reuse
-Today's already-loaded current evidence; no new sleep threshold/baseline or readiness formula is introduced. Recovery
-passes Today's existing finish timestamp rather than a preformatted duration. The briefing clock/focus refresh formats
-the remaining seconds through the same canonical compact-duration formatter and omits missing, invalid or elapsed
-deadlines, so a suspended tab cannot resume with an old recovery duration. No additional source read or recovery model
-is introduced. Load copy
-reuses `dashboardAcwrComparison`, extracted without changing the existing 0.8/1.3 Dashboard presentation bands, and is
-withheld unless the ready ACWR context is current for the UTC day. Its source day is carried only in local presentation
-state and checked again on the briefing clock, so an open page expires yesterday's comparison without waiting for another
-snapshot emission. The rail retains existing assessment tones; failures and missing evidence never become “all normal.”
-Loading, unavailable or insufficient assessments stay verbal even on a quiet day with only optional context, and an
-unavailable assessment retains its error rail rather than being downgraded by a load-comparison clause.
-Caution from an optional load comparison applies only when that clause fits the sentence budget and is actually shown.
-
-MCP impact review: **no public contract/authority impact**. Existing `query_planned_workouts_by_date`,
-`get_planned_workout_completions`, Training metric reads and independently consented Timeline-note reads already expose
-the underlying bounded inputs. This is local Dashboard composition, not a new metric, planned-workout field, public
-daily-report schema or mutation. No tool, scope, consent, Assistant/plugin instructions or provider action is widened.
-The existing MCP chronological-query/exact-completion regression coverage remains applicable; frontend fixtures cover
-the new composition and owner/read-boundary behavior. No cloud rules, functions or deployment are required.
+MCP impact review: **no public contract/authority impact**. This is local presentation of the existing Today assessments;
+Training and consented Health/Sleep reads already expose their underlying evidence. No metric, stored field, schema, tool,
+scope, consent, Assistant/plugin instruction, planning mutation or provider action changes. Frontend fixtures cover the
+composition, owner fence, inherited assessment resets and absence of new readers. No cloud rules, functions or deployment
+are required, and this deterministic summary makes no AI request or quota charge.
 
 The configurable Dashboard can present a narrow, read-only view of selected Training evidence, while the current
 Training state and Readiness are fixed inside the optional Today summary:
@@ -7000,6 +7204,14 @@ check current metadata before loading the calculation registry; irrelevant Healt
 Cache refresh and Cloud Tasks modules load only when needed. Import or handler errors still
 propagate for retry. Compiled entrypoint checks prevent Sports Lib, cache builders and Cloud Tasks from returning
 to the eager trigger import graph.
+
+Eligible source deletions check the account root and deletion tombstone before loading that handler. Account-cleanup
+deliveries acknowledge without cache refresh, metadata reads or enqueueing. Non-Health deletions also defer snapshot
+decoding until after this guard; unrelated Health records still exit with no Firestore reads. An ordinary source
+deletion adds this two-document preflight and retains cache maintenance and
+the later deletion/transaction guards, including a deletion that starts during handling. Guard lookup failures retry.
+Trigger delivery still occurs; concurrency, deletion pacing, resources and retry settings are unchanged. Help, MCP
+contracts/planning reads and monitoring coverage are unchanged: this only short-circuits an existing lifecycle skip.
 
 Preparation, finalization and trigger cache refresh batch the account root, deletion tombstone and already-known
 source/metadata references into one transaction read. Finalization includes its expected child references in that
@@ -8635,7 +8847,7 @@ definitions live in `tools/training-monitoring/definitions.mjs`; this is operati
 or a replacement for `/admin/queues/training-delivery`. No product enablement, UID gate, provider behavior, retention
 limit, schedule or rollback switch changes. Garmin/Wahoo/Suunto remain live; COROS new sends remain Coming soon.
 
-The `lifecycle_failures` metric additionally observes failed connection, entitlement and Guide-settings reconciliation
+The `lifecycle_failures` metric additionally observes failed connection, entitlement, Guide-settings and owner-unit reconciliation
 wake-ups before a queue job exists. It excludes successful account-deletion/no-state skips; the fixed `trigger` label
 identifies the source. Check `[TrainingDeliveryLifecycle]` transaction stages when a settings edit is slow to update.
 Do not use **Create another Guide** as an update retry. This added metric/condition needs explicit monitoring activation.

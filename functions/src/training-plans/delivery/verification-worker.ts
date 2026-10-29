@@ -39,7 +39,7 @@ export async function processTrainingVerification(runtime: DeliveryRuntime, uid:
     const inspection = context.transport?.inspection;
     if (!inspection || inspection.policy.mode === 'unavailable' || !ledger.actual || ledger.attempt
       || intent.desired !== 'present' || !canInspectIntent(ledger, intent) || ledger.desiredDigest !== intent.digest) {
-      tx.delete(job); stageTrainingDeliveryReconciliation(tx, runtime.db, uid); return null;
+      tx.delete(job); stageTrainingDeliveryReconciliation(tx, runtime.db, uid, [ledger.workoutId]); return null;
     }
     const evidence = ledger.verification ?? emptyVerification(runtime.now());
     evidence.nextCheckAtMs = Math.max(evidence.nextCheckAtMs, ledger.providerNotBeforeMs ?? 0);
@@ -108,7 +108,7 @@ export async function processTrainingVerification(runtime: DeliveryRuntime, uid:
     if (!current) {
       ledger.verification = { ...(ledger.verification ?? emptyVerification(runtime.now())), state: 'pending', nextCheckAtMs: runtime.now() };
       writeDelivery(runtime, tx, uid, ledger);
-      tx.delete(job); stageTrainingDeliveryReconciliation(tx, runtime.db, uid); return;
+      tx.delete(job); stageTrainingDeliveryReconciliation(tx, runtime.db, uid, [ledger.workoutId]); return;
     }
     const evidence = observeInspection(ledger.verification, claim.binding, claim.inspection.policy, observation, runtime.now());
     if (failure) {

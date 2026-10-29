@@ -98,6 +98,16 @@ firebase emulators:start --only auth,functions,firestore,storage
 ```
 
 The Functions emulator loads compiled output from `functions/lib`, so the build must finish before the emulators start.
+Keep the TypeScript compiler running in another terminal while editing Functions or shared backend code:
+
+```bash
+npm --prefix functions run build:watch
+```
+
+The emulator reloads the emitted JavaScript; it does not compile TypeScript source changes itself. After switching
+branches or changing templates, rerun the full build. A new callable missing from a stale build can appear as a browser
+CORS/preflight failure while existing callables still work. Check the emulator's initialized endpoint list and rebuild
+before changing CORS policy. Angular's hot reload does not refresh the Functions build.
 
 For the default browser configuration, which keeps hosted Auth, Firestore, and Storage, run just the Functions emulator:
 

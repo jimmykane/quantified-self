@@ -43,7 +43,7 @@ export function stageVerification(runtime: DeliveryRuntime, tx: Transaction, uid
     evidence.state = evidence.nextCheckAtMs > runtime.now() ? 'deferred' : 'pending';
   }
   record.verification = evidence;
-  if (evidence.nextCheckAtMs > runtime.now() && !manual) return;
+  // Retain the timer even before it is due; verification cannot rely on a frequent full scan.
   tx.set(runtime.db.collection(DELIVERY_QUEUE).doc(record.id), { uid, deliveryId: record.id,
     kind: 'verification', priority: evidence.manualPending ? 'manual' : 'ordinary',
     dueAtMs: Math.max(evidence.nextCheckAtMs, record.lease?.expiresAtMs ?? 0), dispatchToken: randomUUID() });

@@ -32,9 +32,9 @@ describe('dashboard-manager-presets.helper', () => {
   it('exposes the expanded preset catalog with unique definitions for all Health metrics', () => {
     const definitions = getDashboardManagerPresetDefinitions();
 
-    expect(definitions).toHaveLength(70);
-    expect(new Set(definitions.map(definition => definition.id)).size).toBe(70);
-    expect(definitions.filter(definition => definition.category === 'curated')).toHaveLength(10);
+    expect(definitions).toHaveLength(74);
+    expect(new Set(definitions.map(definition => definition.id)).size).toBe(74);
+    expect(definitions.filter(definition => definition.category === 'curated')).toHaveLength(14);
     expect(definitions.filter(definition => definition.category === 'kpi')).toHaveLength(17);
     expect(definitions.filter(definition => definition.category === 'custom')).toHaveLength(8);
     expect(definitions.filter(definition => definition.category === 'map')).toHaveLength(2);

@@ -1,5 +1,12 @@
 import { DashboardHrvService } from './dashboard-hrv.service';
-import { buildDashboardExamplePreview } from '../helpers/dashboard-chart-preview.helper';
+import {
+  buildDashboardExamplePreview,
+  buildDashboardExampleEvents,
+  buildDashboardExampleRoutes,
+  buildDashboardThumbnailPreview,
+  DashboardPreviewInput,
+  DashboardChartPreview,
+} from '../helpers/dashboard-chart-preview.helper';
 import { dashboardHrvWindows } from '../helpers/dashboard-hrv-context.helper';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -11,7 +18,7 @@ import { AppSleepService } from './app.sleep.service';
 import { AppRouteService } from './app.route.service';
 import { getDashboardChartCatalog } from '../helpers/dashboard-chart-catalog.helper';
 import { AppUserInterface } from '../models/app-user.interface';
-import { buildDashboardExampleEvents, buildDashboardExampleRoutes, buildDashboardThumbnailPreview, DashboardPreviewInput, DashboardChartPreview } from '../helpers/dashboard-chart-preview.helper';
+
 
 describe('read-only chart preview data', () => {
  const events = { getEventSummariesBy: vi.fn() }; const derived = { watch: vi.fn(), ensureForDashboard: vi.fn() };
@@ -21,6 +28,19 @@ describe('read-only chart preview data', () => {
  beforeEach(() => {
   vi.clearAllMocks(); hrv.watch.mockReturnValue(of(null)); events.getEventSummariesBy.mockReturnValue(of([])); derived.watch.mockReturnValue(of(createDashboardDerivedMetricsMissingState())); sleep.watchForDashboard.mockReturnValue(of([])); routes.watchRecentRoutePreviews.mockReturnValue(of([]));
   TestBed.configureTestingModule({ providers: [DashboardChartPreviewService, { provide: DashboardHrvService, useValue: hrv }, { provide: AppEventService, useValue: events }, { provide: DashboardDerivedMetricsService, useValue: derived }, { provide: AppSleepService, useValue: sleep }, { provide: AppRouteService, useValue: routes }] });
+ });
+ it('shares one existing capacity snapshot across all three new charts and releases both performance dependencies', () => {
+  const service = TestBed.inject(DashboardChartPreviewService);
+  const ids = ['curated-critical-power', 'curated-w-prime', 'curated-maximum-power', 'curated-durability'];
+  const tiles = getDashboardChartCatalog().filter(entry => ids.includes(entry.definition.id)).map(entry => entry.tile);
+  const cleanup = vi.fn();
+  derived.watch.mockReturnValue(new Observable(subscriber => { subscriber.next(createDashboardDerivedMetricsMissingState()); return cleanup; }));
+  const subscription = service.watchLibraryContexts(user, tiles, { tiles: [] }).subscribe();
+  expect(derived.watch).toHaveBeenCalledExactlyOnceWith(user, { metricKinds: ['training_power_systems', 'training_durability'], reportReadErrors: true });
+  expect(derived.ensureForDashboard).not.toHaveBeenCalled();
+  expect(events.getEventSummariesBy).not.toHaveBeenCalled();
+  expect(sleep.watchForDashboard).not.toHaveBeenCalled();
+  subscription.unsubscribe(); expect(cleanup).toHaveBeenCalledOnce();
  });
  it('loads only missing deduplicated KPI snapshots and does not let them overwrite unrelated seeded contexts', () => {
   const service = TestBed.inject(DashboardChartPreviewService);

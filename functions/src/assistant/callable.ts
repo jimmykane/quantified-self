@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import {
@@ -105,22 +104,8 @@ export interface AssistantCallableDependencies {
   now: () => Date;
 }
 
-export async function assertAssistantLegalAccess(
-  uid: string,
-  db: Pick<FirebaseFirestore.Firestore, 'doc'> = admin.firestore(),
-): Promise<void> {
-  const snapshot = await db.doc(`users/${uid}/legal/agreements`).get();
-  const agreements = snapshot.data();
-  if (!snapshot.exists
-    || agreements?.acceptedPrivacyPolicy !== true
-    || agreements?.acceptedDataPolicy !== true
-    || agreements?.acceptedTos !== true) {
-    throw new HttpsError(
-      'permission-denied',
-      'Complete onboarding before using the Assistant.',
-    );
-  }
-}
+import { assertAssistantLegalAccess } from './access';
+export { assertAssistantLegalAccess } from './access';
 
 const defaultDependencies: AssistantCallableDependencies = {
   assertLegalAccess: assertAssistantLegalAccess,

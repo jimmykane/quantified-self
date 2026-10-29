@@ -3,9 +3,8 @@ import { APPROVED_WATER_TEAM_SPORT_CASES } from '@shared/testing/training-water-
 import { describe, expect, it } from 'vitest';
 import { HELP_ACTIONS, HELP_SECTIONS, HelpSectionId } from './help.content';
 import { searchHelpSections } from '../helpers/help-search.helper';
-import { CONNECTED_SERVICES_POLICY_SECTION } from './policies.content';
-import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 import {
+  CONNECTED_SERVICES_POLICY_SECTION,
   POLICIES_AI_AND_PROCESSORS_FRAGMENT,
   POLICIES_CONNECTED_SERVICES_FRAGMENT,
   POLICIES_COROS_DATA_FRAGMENT,
@@ -14,8 +13,24 @@ import {
   POLICIES_SUUNTO_DATA_FRAGMENT,
   POLICIES_WAHOO_DATA_FRAGMENT,
 } from './policies.content';
+import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
+
 
 describe('help.content', () => {
+  it('explains default-on workout generation context and independent draft opt-outs', () => {
+    const help = HELP_SECTIONS.map(section => section.content).join('\n');
+    expect(help).toContain('**Training plans and workouts** and **Timeline notes** start enabled for every new draft');
+    expect(help).toContain('turn off either context independently');
+    expect(help).toContain('Turning off Training context also disables matching previous planned weights');
+    expect(help).toContain('matching **previously planned** loads (enabled by default)');
+    expect(help).not.toContain('separate default-off Training-plan/Timeline context');
+    expect(help).toContain('**Personalization** starts expanded with every data option selected');
+    expect(help).toContain('Uncheck any source to exclude its evidence');
+    expect(help).toContain('turning off any of those also turns off the combined score');
+    expect(help).toContain('The modal footer shows your shared **Assistant allowance**');
+    expect(help).toContain('after each generation attempt');
+  });
+
   it('distinguishes scheduled history and cooldowns from completion estimates', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
     expect(copy).toContain('Scheduled activity counts confirm queued work, not completed imports');
@@ -880,7 +895,7 @@ describe('help.content', () => {
     expect(content).toContain('Additional mapping losses, such as shortened exercise instructions, still need review');
     expect(content).toContain('Sent Guide status does not prove app/watch receipt or workout completion');
     expect(content).toContain('Suunto load instructions follow your kg or lb choice in **Settings → Units & formatting**');
-    expect(content).toContain('QS checks for unit changes about every 30 minutes and updates eligible synced Guides');
+    expect(content).toContain('QS queues unit changes automatically, usually within a couple of minutes, and updates eligible synced Guides');
     expect(content).toContain('changing units keeps an existing approval only when those losses are unchanged');
   });
 
@@ -1035,17 +1050,17 @@ describe('help.content', () => {
     expect(health).toContain('**All** starts with **Your recent Health** in this order');
     expect(health).toContain('**Your recovery** appears above the existing metrics');
     expect(health).toContain('Dashboard **Today** uses a compact **At a glance** instead: one sentence');
-    expect(health).toContain('**At a glance is currently hidden on Dashboard.** Today and your saved charts remain available.');
+    expect(health).toContain('It continues your greeting as one sentence, with each assessment phrase in its own status color and no separate line, status dot or card');
+    expect(health).not.toContain('At a glance is currently hidden');
+    expect(health).toContain('does not consume your AI quota');
+    expect(health).toContain('A green phrase stays green when another phrase needs attention');
     expect(health).toContain('On Health, comparison counts and outside-range readings stay visible');
-    expect(health).toContain('Dashboard **At a glance** is always sentence-only');
-    expect(health).toContain('**Daily context in At a glance:**');
-    expect(health).toContain('Weekly plan progress uses exact stored activity links');
-    expect(health).toContain('looks ahead seven calendar days');
-    expect(health).toContain('Partial reads never become a claim that no workouts or notes exist');
-    expect(health).toContain('respect **Show on charts and calendar**');
-    expect(health).toContain('no expand button or repeated metric breakdown');
+    expect(health).toContain('Dashboard **At a glance** continues the greeting in one sentence');
+    expect(health).toContain('Missing or unavailable evidence takes priority over a reassuring HRV result');
+    expect(health).toContain('Select the sentence to show or hide Today’s Training state, Readiness, scores and supporting context');
+    expect(health).toContain('those details start closed');
     expect(health).toContain('including **Mixed** and **Recover** days');
-    expect(health).toContain('existing **Today** card keeps the scores, charts and supporting context');
+    expect(health).toContain('sentence opens the existing **Today** details');
     expect(health).toContain('existing Readiness, training load, Sleep, HRV and overnight HR assessments');
     expect(health).toContain('not daily resting HR');
     expect(health).toContain('no new sleep-score threshold is added');
@@ -2516,6 +2531,9 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Garmin supports up to its latest rolling five years');
     expect(serviceConnectionsSection?.content).toContain('COROS up to its latest rolling three months');
     expect(serviceConnectionsSection?.content).toContain('Suunto and Wahoo offer all history the provider makes available');
+    expect(serviceConnectionsSection?.content).toContain('Individual record failures normally do not stop the remaining history pages');
+    expect(serviceConnectionsSection?.content).toContain('retries those records without restarting completed pages');
+    expect(serviceConnectionsSection?.content).toContain('Authorization or connection changes still stop the affected work');
     expect(serviceConnectionsSection?.content).toContain('never expands automatically');
     expect(serviceConnectionsSection?.content).toContain('one-time dashboard prompt');
     expect(serviceConnectionsSection?.content).toContain('only the latest rolling **5 years** of activity data');
@@ -2960,5 +2978,15 @@ describe('nightly HRV history help', () => {
     for (const phrase of ['**HRV history** opens one **Overnight HRV** source', '**Latest night**',
       '**60-day personal range**', '**Learning your range**', 'Spot check: overall variation',
       'These are different measurements with separate histories', 'accounts and baselines separate']) expect(health).toContain(phrase);
+  });
+});
+
+
+describe('dashboard performance history guidance', () => {
+  it('documents reused history, context isolation and recorded VO2 semantics', () => {
+    const content = JSON.stringify(HELP_SECTIONS);
+    expect(content).toContain('preceding 42 completed UTC days');
+    expect(content).toContain('A saved context is retained when its evidence disappears');
+    expect(content).toContain('provider estimates and manually recorded tests retain their separate meanings');
   });
 });

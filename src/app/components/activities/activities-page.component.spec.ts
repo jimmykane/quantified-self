@@ -848,6 +848,41 @@ describe('ActivitiesPageComponent', () => {
 });
 
 describe('Activity filter picker Material integration', () => {
+  it('searches single choices, replaces the selection, closes and restores keyboard focus without bulk actions', async () => {
+    const haptics = { selection: vi.fn() };
+    TestBed.configureTestingModule({ imports: [ActivityFilterPickerComponent, NoopAnimationsModule], providers: [
+      { provide: AppHapticsService, useValue: haptics },
+      { provide: AppEventColorService, useValue: { getColorForActivityTypeByActivityTypeGroup: () => '#123456' } },
+    ] });
+    const fixture = TestBed.createComponent(ActivityFilterPickerComponent);
+    fixture.componentRef.setInput('label', 'Sport'); fixture.componentRef.setInput('allLabel', 'Choose sport');
+    fixture.componentRef.setInput('searchLabel', 'Search sports'); fixture.componentRef.setInput('multiple', false);
+    fixture.componentRef.setInput('options', ['Running', 'Cycling'].map(value => ({ value, label: value, activityType: value })));
+    fixture.componentRef.setInput('shortcuts', [{ label: 'All sports', values: ['Running', 'Cycling'] }]);
+    fixture.componentRef.setInput('selectedValues', ['Cycling']);
+    const selected = vi.fn((values: string[]) => fixture.componentRef.setInput('selectedValues', values));
+    fixture.componentInstance.selectionChange.subscribe(selected);
+    const settle = async () => { fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); };
+    await settle();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    const trigger = fixture.nativeElement.querySelector('input') as HTMLInputElement;
+    trigger.focus(); trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await settle();
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    expect(overlay.querySelector('mat-selection-list')?.getAttribute('aria-multiselectable')).toBe('false');
+    expect(overlay.querySelector('mat-checkbox')).toBeNull();
+    expect(overlay.textContent).not.toContain('Clear selection');
+    fixture.componentInstance.clearSelection(); fixture.componentInstance.toggleShortcut({ label: 'All', values: ['Running'] }, true);
+    expect(selected).not.toHaveBeenCalled();
+    const search = overlay.querySelector<HTMLInputElement>('input[aria-label="Search sports"]')!;
+    search.value = 'run'; search.dispatchEvent(new Event('input', { bubbles: true })); await settle();
+    expect(overlay.querySelectorAll('mat-list-option')).toHaveLength(1);
+    overlay.querySelector<HTMLElement>('mat-list-option[aria-label="Running"]')!.click(); await settle();
+    expect(selected).toHaveBeenCalledExactlyOnceWith(['Running']);
+    expect(trigger.value).toBe('Running'); expect(document.activeElement).toBe(trigger);
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(haptics.selection).toHaveBeenCalledOnce(); // The caller owns accepted-selection feedback.
+  });
+
   it('shows partial sport families and changes only that family when its checkbox is toggled', async () => {
     TestBed.configureTestingModule({
       imports: [ActivityFilterPickerComponent, NoopAnimationsModule],

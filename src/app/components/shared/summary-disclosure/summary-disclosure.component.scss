@@ -25,3 +25,11 @@
   .summary-disclosure-heading button { grid-column: 1 / -1; justify-self: start; padding-inline: 0; }
   .summary-disclosure-title { font: var(--mat-sys-title-small); }
 }
+
+.summary-disclosure-rail.summary-disclosure-headline-only {
+  &[data-tone='positive'] { --summary-accent: var(--qs-status-positive); }
+  &[data-tone='caution'] { --summary-accent: var(--qs-status-caution); }
+  margin-bottom: 0;
+  .summary-disclosure-headline { color: var(--summary-accent); }
+  &[data-tone='neutral'] .summary-disclosure-headline { color: var(--mat-sys-on-surface-variant); }
+}

@@ -162,6 +162,7 @@ export {
   resetAssistantConversation,
   applyAssistantTrainingProposal,
 } from './assistant/callable';
+export { generateDayWorkout } from './assistant/day-workout-callable';
 export { ensureDerivedMetrics } from './derived-metrics/ensure-derived-metrics';
 export { observeDerivedMetricsHealth } from './derived-metrics/monitoring-schedule';
 export { queryHealthRange } from './health/callable';
@@ -184,7 +185,7 @@ export { previewTrainingProviderDelivery, mutateTrainingProviderDelivery } from 
 export { processTrainingDeliveryTask, onTrainingDeliveryQueued, dispatchTrainingDelivery } from './training-plans/delivery/tasks';
 export { reconcileTrainingPlanCleanup, reconcileTrainingWorkoutExpiry } from './training-plans/cleanup-worker';
 export { reconcileTrainingBulkShift } from './training-plans/bulk-shift-worker';
-export { onTrainingDeliveryConnectionChanged, onTrainingDeliveryEntitlementChanged, onTrainingDeliveryGuideSettingsChanged } from './training-plans/delivery/lifecycle';
+export { onTrainingDeliveryConnectionChanged, onTrainingDeliveryEntitlementChanged, onTrainingDeliveryGuideSettingsChanged, onTrainingDeliveryOwnerUnitsChanged } from './training-plans/delivery/lifecycle';
 export {
   onDashboardDerivedMetricsActivityWrite,
   onDashboardDerivedMetricsEventWrite,

@@ -18,7 +18,7 @@ import {
 import { getTokenData } from '../tokens';
 import { ALLOWED_CORS_ORIGINS, enforceAppCheck, generateIDFromParts, hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
 import { requestWahooAPI, WahooAPIRequestError } from './auth/api';
-import { SERVICE_NAME } from './constants';
+import { SERVICE_NAME, WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME } from './constants';
 import { upsertWahooWorkoutQueueItem } from './queue-store';
 import { parseWahooWorkout } from './workout-payload';
 import { ParsedWahooWorkout } from './workout-payload';
@@ -274,6 +274,9 @@ export async function importWahooHistory(
         reachedStart = selectedPage.reachedStart;
         for (const parsed of selectedPage.items) {
           const id = await generateIDFromParts([parsed.wahooUserID, parsed.workoutID]);
+          if (options.execution?.retainedFailedChildPaths?.has(`${WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME}/${id}`)) {
+            stats.skippedCount++; continue;
+          }
           try {
             const queued = await upsertWahooWorkoutQueueItem({
               ...parsed,

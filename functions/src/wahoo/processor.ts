@@ -1,5 +1,6 @@
 import * as crypto from 'crypto';
 import { isActivityIdentityConflict } from '../shared/activity-identity-conflict';
+import { ProviderImportDuplicateError } from '../shared/provider-import-duplicate';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import {
@@ -241,6 +242,14 @@ export async function processWahooWorkoutQueueItem(
     }
     return completeWahooWorkoutQueueRevision(queueItem, processingOwner, {}, true);
   } catch (error) {
+    if (error instanceof ProviderImportDuplicateError) {
+      logger.info('Skipping a verified cross-provider recording of an existing activity.', {
+        serviceName: ServiceNames.WahooAPI, queueItemId: queueItem.id, eventID: error.eventID,
+      });
+      return completeWahooWorkoutQueueRevision(queueItem, processingOwner, {
+        resultStatus: 'skipped', skippedReason: 'cross_provider_duplicate', duplicateEventID: error.eventID,
+      });
+    }
     if (isActivityIdentityConflict(error)) {
       return failWahooWorkoutQueueRevision(queueItem, processingOwner, error);
     }

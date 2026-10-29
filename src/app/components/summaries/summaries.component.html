@@ -42,35 +42,35 @@
     </div>
     }
   </app-page-header>
+  <div class="dashboard-today-welcome">
   <p class="dashboard-summary-status"
     [class.dashboard-summary-status--warning]="derivedMetricsBanner?.type === 'warning'"
-    [attr.role]="derivedMetricsBanner?.type === 'warning' ? 'alert' : 'status'" aria-atomic="true">
-    <span class="dashboard-summary-message">
-      @if (derivedMetricsBanner) {
-        {{ derivedMetricsBanner.title }}
-        <span class="cdk-visually-hidden">{{ derivedMetricsBanner.description }}</span>
-      } @else if (showTodaySummary && isOwnerDashboard && todayGreeting) {
-        <span class="dashboard-today-greeting">{{ todayGreeting }}</span>
-      }
-    </span>
-    <span class="dashboard-summary-status-icon" aria-hidden="true">
-      @if (derivedMetricsBanner?.type === 'pending') {
-        <mat-spinner [diameter]="16"></mat-spinner>
-      } @else if (derivedMetricsBanner?.type === 'warning') {
-        <mat-icon>error_outline</mat-icon>
-      }
-    </span>
+    [attr.role]="derivedMetricsBanner ? (derivedMetricsBanner.type === 'warning' ? 'alert' : 'status') : null" aria-atomic="true">
+    @if (showTodaySummary && isOwnerDashboard && todayGreeting && !derivedMetricsBanner) {
+      <app-dashboard-daily-briefing [user]="user" [signals]="dashboardGlanceSignals" [greeting]="todayGreeting"
+        [detailsExpanded]="todayDetailsExpanded()" (detailsToggle)="todayDetailsExpanded.set(!todayDetailsExpanded())" />
+    } @else {
+      <span class="dashboard-summary-message">
+        @if (derivedMetricsBanner) {
+          {{ derivedMetricsBanner.title }}
+          <span class="cdk-visually-hidden">{{ derivedMetricsBanner.description }}</span>
+        }
+      </span>
+      <span class="dashboard-summary-status-icon" aria-hidden="true">
+        @if (derivedMetricsBanner?.type === 'pending') {
+          <mat-spinner [diameter]="16"></mat-spinner>
+        } @else if (derivedMetricsBanner?.type === 'warning') {
+          <mat-icon>error_outline</mat-icon>
+        }
+      </span>
+    }
   </p>
+  </div>
   </div>
   }
   @if (showTodaySummary) {
-  @if (isOwnerDashboard && showDailyBriefing) {
-    <app-dashboard-daily-briefing [user]="user" [signals]="dashboardGlanceSignals"
-      [notesContext]="timelineNotes()" [notesStatus]="timelineNotesStatus()"
-      [recoveryFinishTimeMs]="dashboardTodayReadiness.recoveryFinishTimeMs"
-      [sleepText]="dashboardBriefingSleepText" [loadComparison]="dashboardBriefingLoadComparison" />
-  }
-  <section class="dashboard-current-state-row" aria-label="Current training state and readiness signals"
+  <section id="dashboard-today-details" class="dashboard-current-state-row" aria-label="Current training state and readiness signals"
+    [hidden]="isOwnerDashboard && !todayDetailsExpanded()"
     [class.has-recovery]="dashboardTodayReadiness.loading || (dashboardTodayReadiness.recoveryText !== '--' && dashboardTodayReadiness.recoveryFinishText)">
     <div class="dashboard-current-state-top">
       <div class="dashboard-current-state-primary dashboard-training-state-primary">
@@ -257,6 +257,8 @@
           [hrvTrend]="getChartTile(tile).hrvTrend" [hrvTrendRange]="hrvTrendRange" [hrvTrendCanNavigateNewer]="hrvTrendCanNavigateNewer" [sleepTrend]="getChartTile(tile).sleepTrend" [sleepTrendRange]="sleepTrendRange"
           [sleepTrendWindowLabel]="sleepTrendWindowLabel" [sleepTrendCanNavigateOlder]="sleepTrendCanNavigateOlder"
           [sleepTrendCanNavigateNewer]="sleepTrendCanNavigateNewer"
+          [performanceSettingsSaving]="performanceSavingOrders.has(tile.order)" [performanceTrend]="getChartTile(tile).performanceTrend" [performanceStatus]="getPerformanceStatusForTile(tile)"
+          (performanceContextChange)="onTilePerformanceContextChange(tile.order, $event)"
           [powerCurve]="getChartTile(tile).powerCurve"
           [absoluteLatestFormPoint]="getChartTile(tile).absoluteLatestFormPoint"
           [size]="tile.size" [order]="tile.order" [enableDesktopDrag]="desktopTileDragEnabled && kpiLaneTiles.length > 1"
@@ -362,7 +364,9 @@
             [hrvTrend]="getChartTile(tile).hrvTrend" [hrvTrendRange]="hrvTrendRange" [hrvTrendCanNavigateNewer]="hrvTrendCanNavigateNewer" [sleepTrend]="getChartTile(tile).sleepTrend" [sleepTrendRange]="sleepTrendRange"
             [sleepTrendWindowLabel]="sleepTrendWindowLabel" [sleepTrendCanNavigateOlder]="sleepTrendCanNavigateOlder"
             [sleepTrendCanNavigateNewer]="sleepTrendCanNavigateNewer"
-            [powerCurve]="getChartTile(tile).powerCurve"
+            [performanceSettingsSaving]="performanceSavingOrders.has(tile.order)" [performanceTrend]="getChartTile(tile).performanceTrend" [performanceStatus]="getPerformanceStatusForTile(tile)"
+          (performanceContextChange)="onTilePerformanceContextChange(tile.order, $event)"
+          [powerCurve]="getChartTile(tile).powerCurve"
             [absoluteLatestFormPoint]="getChartTile(tile).absoluteLatestFormPoint"
             [size]="tile.size" [order]="tile.order" [enableDesktopDrag]="desktopTileDragEnabled && section.tiles.length > 1"
             (editTile)="openTileEditor($event)"

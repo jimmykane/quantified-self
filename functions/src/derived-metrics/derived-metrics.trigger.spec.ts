@@ -89,6 +89,56 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
         hoisted.isDerivedMetricsUidAllowed.mockReturnValue(true);
     });
 
+    const deletionTriggers = [
+        ['event', onDashboardDerivedMetricsEventWrite],
+        ['activity', onDashboardDerivedMetricsActivityWrite],
+        ['training-load', onTrainingLoadMetadataWrite],
+        ['sleep', onDashboardDerivedMetricsSleepWrite],
+        ['health', onDashboardDerivedMetricsHealthWrite],
+    ] as const;
+    const deletionEvent = () => ({
+        params: { uid: 'user-1', eventId: 'event-1', activityId: 'leg', sleepSessionId: 'sleep-1', sourceRecordId: 'health-1' },
+        data: { before: { exists: true, data: () => ({ eventID: 'event-1', metricIds: ['body_weight'] }) },
+            after: { exists: false, data: () => undefined } },
+    });
+
+    describe.each(['tombstone', 'missing root'])('account deletion (%s)', state => {
+        it.each(deletionTriggers)('skips %s deletion before cache or metadata work', async (_source, handler) => {
+            hoisted.getAll.mockResolvedValueOnce([
+                { exists: state === 'tombstone', data: () => ({}) },
+                { exists: state === 'tombstone', data: () => ({}) },
+            ]);
+            await (handler as unknown as (event: unknown) => Promise<void>)(deletionEvent());
+            expect(hoisted.getAll).toHaveBeenCalledTimes(1);
+            expect(hoisted.refresh).not.toHaveBeenCalled();
+            expect(hoisted.metadata).not.toHaveBeenCalled();
+            expect(hoisted.enqueueDerivedMetricsIngressTask).not.toHaveBeenCalled();
+        });
+    });
+
+    it.each(deletionTriggers)('keeps ordinary %s deletion invalidation for active accounts', async (source, handler) => {
+        hoisted.metadata.mockResolvedValue({ data: () => ({ controls: { leg: { override: 0 } } }) });
+        await (handler as unknown as (event: unknown) => Promise<void>)(deletionEvent());
+        expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledTimes(1);
+        if (['event', 'activity', 'training-load'].includes(source)) {
+            expect(hoisted.refresh).toHaveBeenCalledExactlyOnceWith('user-1', 'event-1');
+        } else {
+            expect(hoisted.refresh).not.toHaveBeenCalled();
+        }
+    });
+
+    it('still checks deletion after cache work if account deletion starts during an ordinary delete', async () => {
+        hoisted.refresh.mockImplementationOnce(async () => {
+            hoisted.getAll.mockResolvedValueOnce([
+                { exists: true, data: () => ({}) }, { exists: true, data: () => ({}) },
+            ]);
+        });
+        await (onDashboardDerivedMetricsEventWrite as unknown as (event: unknown) => Promise<void>)(deletionEvent());
+        expect(hoisted.refresh).toHaveBeenCalledTimes(1);
+        expect(hoisted.getAll).toHaveBeenCalledTimes(2);
+        expect(hoisted.enqueueDerivedMetricsIngressTask).not.toHaveBeenCalled();
+    });
+
     it('defers pending imports and suppresses delayed source triggers after final persistence', async () => {
         const event = { params: { uid: 'user-1', eventId: 'e' }, data: {
             before: { exists: false }, after: { exists: true, data: () => ({}), updateTime: { seconds: 2, nanoseconds: 3 } } } };
@@ -454,9 +504,10 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
         expect(hoisted.enqueueDerivedMetricsIngressTask).not.toHaveBeenCalled();
     });
 
-    it('does not read deletion state for an unrelated Health create', async () => {
+    it.each([false, true])('does not read deletion state for unrelated Health records (deleted: %s)', async deleted => {
         await (onDashboardDerivedMetricsHealthWrite as any)({ params: { uid: 'user-1' }, data: {
-            before: { exists: false, data: () => undefined }, after: { exists: true, data: () => ({ metricIds: ['steps'] }) },
+            before: { exists: deleted, data: () => deleted ? { metricIds: ['steps'] } : undefined },
+            after: { exists: !deleted, data: () => deleted ? undefined : { metricIds: ['steps'] } },
         } });
         expect(hoisted.getAll).not.toHaveBeenCalled();
         expect(hoisted.enqueueDerivedMetricsIngressTask).not.toHaveBeenCalled();

@@ -1,27 +1,9 @@
-import { DASHBOARD_HEALTH_GROUPS } from './dashboard-health-tile.helper';
-import { healthMetricIcon } from './health-metric-icon.helper';
-import { DASHBOARD_HEALTH_METRIC_CHART_TYPE } from './dashboard-special-chart-types';
-import { type HealthMetricId, type HealthMetricDefinition, HEALTH_METRIC_IDS } from '@shared/health';
 import {
-  ChartDataCategoryTypes,
-  ChartDataValueTypes,
-  ChartTypes,
-  DataAscent,
-  DataDistance,
-  DataDuration,
-  DataEnergy,
-  DataHeartRateAvg,
-  DataSleepHRVAvg,
-  DataRecoveryTime,
-  MapThemes,
-  TileChartSettingsInterface,
-  TileMapSettingsInterface,
-  TileSettingsInterface,
-  TileTypes,
-  TimeIntervals,
-} from '@sports-alliance/sports-lib';
-import type { MapStyleName } from '../services/map/map-style.types';
-import {
+  DASHBOARD_CRITICAL_POWER_CHART_TYPE,
+  DASHBOARD_W_PRIME_CHART_TYPE,
+  DASHBOARD_MAXIMUM_POWER_CHART_TYPE,
+  DASHBOARD_DURABILITY_CHART_TYPE,
+  DASHBOARD_HEALTH_METRIC_CHART_TYPE,
   DASHBOARD_ACWR_KPI_CHART_TYPE,
   DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
   DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE,
@@ -54,6 +36,30 @@ import {
   type DashboardKpiGroup,
   type DashboardKpiChartType,
 } from './dashboard-special-chart-types';
+import { DASHBOARD_HEALTH_GROUPS } from './dashboard-health-tile.helper';
+import { healthMetricIcon } from './health-metric-icon.helper';
+
+import { type HealthMetricId, type HealthMetricDefinition, HEALTH_METRIC_IDS } from '@shared/health';
+import {
+  ChartDataCategoryTypes,
+  ChartDataValueTypes,
+  ChartTypes,
+  DataAscent,
+  DataDistance,
+  DataDuration,
+  DataEnergy,
+  DataHeartRateAvg,
+  DataSleepHRVAvg,
+  DataRecoveryTime,
+  MapThemes,
+  TileChartSettingsInterface,
+  TileMapSettingsInterface,
+  TileSettingsInterface,
+  TileTypes,
+  TimeIntervals,
+} from '@sports-alliance/sports-lib';
+import type { MapStyleName } from '../services/map/map-style.types';
+
 import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from './dashboard-form.helper';
 import { getDefaultDashboardChartTileDisplaySettingsForChartType } from './dashboard-chart-display-settings.helper';
 import type {
@@ -75,6 +81,10 @@ export const DASHBOARD_MANAGER_PRESET_IDS = {
   CURATED_EFFICIENCY_TREND: 'curated-efficiency-trend',
   CURATED_SLEEP: 'curated-sleep',
   CURATED_HRV: 'curated-hrv',
+  CURATED_CRITICAL_POWER: 'curated-critical-power',
+  CURATED_W_PRIME: 'curated-w-prime',
+  CURATED_MAXIMUM_POWER: 'curated-maximum-power',
+  CURATED_DURABILITY: 'curated-durability',
   CURATED_POWER_CURVE: 'curated-power-curve',
   CURATED_RUNNING_POWER_CURVE: 'curated-running-power-curve',
   KPI_ACWR: 'kpi-acwr',
@@ -177,6 +187,11 @@ export interface BuildDashboardManagerPresetTileInput {
 type DashboardManagerPresetMapTileSettings = TileMapSettingsInterface & { mapStyle?: MapStyleName };
 
 const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] = [
+  { id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_CRITICAL_POWER, introducedIn: 3, label: 'Critical power', tileName: 'Critical power', description: 'Modeled sustained-power boundary over 12 weeks, using the preceding 42 days of power evidence.', icon: 'speed', category: 'curated', curatedChartType: DASHBOARD_CRITICAL_POWER_CHART_TYPE },
+  { id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_W_PRIME, introducedIn: 3, label: 'W′ capacity', tileName: 'W′ capacity', description: 'Modeled work capacity above critical power over 12 weeks.', icon: 'battery_charging_full', category: 'curated', curatedChartType: DASHBOARD_W_PRIME_CHART_TYPE },
+  { id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_MAXIMUM_POWER, introducedIn: 3, label: 'Maximum power', tileName: 'Maximum power', description: 'Modeled short-duration power ceiling over 12 weeks.', icon: 'bolt', category: 'curated', curatedChartType: DASHBOARD_MAXIMUM_POWER_CHART_TYPE },
+  { id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_DURABILITY, introducedIn: 3, label: 'Durability', tileName: 'Durability', description: 'Weekly durability and comparable-workout coverage, with separate sport and output contexts.', icon: 'timeline', category: 'curated', curatedChartType: DASHBOARD_DURABILITY_CHART_TYPE },
+
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_RECOVERY,
     introducedIn: 1,
@@ -607,7 +622,7 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
 
 export function getDashboardManagerPresetDefinitions(): DashboardManagerPresetDefinition[] {
   return [...DASHBOARD_MANAGER_PRESET_DEFINITIONS, ...DASHBOARD_HEALTH_GROUPS.flatMap(group => group.metrics.filter(metric => metric.id !== HEALTH_METRIC_IDS.HeartRateVariability).map(metric => ({
-    id: `health:${metric.id}` as const, category: 'health' as const, introducedIn: 2, metricId: metric.id, healthGroup: group.id,
+    id: `health:${metric.id}` as const, category: 'health' as const, introducedIn: metric.id === HEALTH_METRIC_IDS.Vo2Max ? 3 : 2, metricId: metric.id, healthGroup: group.id,
     label: metric.label, tileName: metric.label, icon: healthMetricIcon(metric.id),
     description: `${metric.label} from your Health history. Choose a source and reading; each keeps its original meaning.`,
   })))];

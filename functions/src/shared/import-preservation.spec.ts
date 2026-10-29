@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({
   activities: new Map<string, Record<string, unknown>>(), metadata: {} as Record<string, unknown>, parentExists: true,
   parent: {} as Record<string, unknown>, provider: {} as Record<string, unknown>,
   garminProvider: {} as Record<string, unknown>,
+  otherProviders: {} as Record<string, Record<string, unknown>>,
   get: vi.fn(), prepare: vi.fn(), commit: vi.fn(), collection: vi.fn(), select: vi.fn(), where: vi.fn(), limit: vi.fn(),
 }));
 vi.mock('../training-load/training-load-metadata', () => ({ prepareTrainingLoadMetadata: state.prepare }));
@@ -33,7 +34,7 @@ function event(activities = [activity()]) {
 describe('shared import preservation', () => {
   let authorize: ReturnType<typeof vi.fn>;
   beforeEach(() => {
-    vi.clearAllMocks(); state.activities.clear(); state.metadata = {}; state.parentExists = true; state.parent = {}; state.provider = {}; state.garminProvider = {};
+    vi.clearAllMocks(); state.activities.clear(); state.metadata = {}; state.parentExists = true; state.parent = {}; state.provider = {}; state.garminProvider = {}; state.otherProviders = {};
     const query = { where: state.where, select: state.select, limit: state.limit };
     state.collection.mockReturnValue(query); state.where.mockReturnValue(query);
     state.select.mockReturnValue(query); state.limit.mockReturnValue(query);
@@ -43,6 +44,8 @@ describe('shared import preservation', () => {
         data: () => state.activities.get(ref.path.split('/').at(-1)) }
       : ref.path.endsWith(`/${ServiceNames.SuuntoApp}`) ? { exists: !!Object.keys(state.provider).length, data: () => state.provider }
       : ref.path.endsWith(`/${ServiceNames.GarminAPI}`) ? { exists: !!Object.keys(state.garminProvider).length, data: () => state.garminProvider }
+      : [ServiceNames.COROSAPI, ServiceNames.WahooAPI].some(name => ref.path.endsWith(`/${name}`))
+        ? { exists: !!state.otherProviders[ref.path.split('/').at(-1)], data: () => state.otherProviders[ref.path.split('/').at(-1)] }
       : ref.path.endsWith('/trainingLoad') ? { data: () => state.metadata } : { exists: state.parentExists, data: () => state.parent });
     state.prepare.mockImplementation(async (_uid, _event, authorize) => {
       const doc = (path: string) => ({ path, collection: (name: string) => ({ doc: (id: string) => doc(`${path}/${name}/${id}`) }) });
@@ -110,7 +113,7 @@ describe('shared import preservation', () => {
       if (scenario === 'non-fit-original') state.parent.originalFiles = [{ path: 'users/owner/events/event/original.gpx' }];
       if (scenario === 'sml-original') state.parent.originalFiles = [{ path: 'users/owner/events/event/original.json' }];
       if (scenario === 'first-import') state.metadata = { sourceFirstImport: true };
-      if (scenario === 'different-distance') state.activities.get('saved-id')!.stats = { Duration: 3600, Distance: 9999 };
+      if (scenario === 'different-distance') state.activities.get('saved-id')!.stats = { Duration: 3600, Distance: type === 'Running' ? 9000 : 9999 };
       if (scenario === 'missing-provenance') state.garminProvider = {};
       if (scenario === 'wrong-provenance') state.garminProvider.serviceName = ServiceNames.WahooAPI;
       if (scenario === 'non-fit') state.garminProvider.serviceActivityFileType = 'TCX';
@@ -131,6 +134,117 @@ describe('shared import preservation', () => {
     expect(incoming.getID()).toBe('saved-id');
     expect(state.get.mock.calls.filter(([ref]) => ref.path?.endsWith(`/${ServiceNames.GarminAPI}`))).toHaveLength(0);
   });
+
+  function conflictingRun() {
+    const incoming = activity(0, 'Running'), startMs = +incoming.startDate;
+    incoming.getStat = key => ({ getValue: () => key === 'Duration' ? 3599.7 : 9900 });
+    state.parent = { name: 'Owner title', notes: 'Owner notes', tags: ['retained'],
+      originalFiles: [{ path: 'users/owner/events/event/original.fit' }] };
+    store('saved-id', activity(0, 'Trail Running'), {
+      sourceIdentity: { version: 1, activityId: 'saved-id', startMs, endMs: +incoming.endDate, importedType: 'Trail Running' },
+      ascentCorrection: { value: 75, sourceValue: 100 },
+    });
+    state.metadata = { controls: { 'saved-id': { override: 0 } } };
+    state.garminProvider = { serviceName: ServiceNames.GarminAPI, serviceUserID: 'account',
+      serviceActivityFileID: 'file', serviceActivityFileType: 'FIT' };
+    const provider = { serviceName: ServiceNames.COROSAPI, serviceOpenId: 'account', serviceWorkoutID: 'workout',
+      serviceWorkoutComponentKey: 'root' };
+    return { incoming, provider };
+  }
+
+  it('skips a conflicting second-provider run repeatedly without changing the saved workout, source or edits', async () => {
+    const { incoming, provider } = conflictingRun();
+    const before = structuredClone({ parent: state.parent, activities: [...state.activities], metadata: state.metadata });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await expect(prepareImportedEventWrite('owner', event([incoming]), authorize, provider))
+        .rejects.toMatchObject({ name: 'ProviderImportDuplicateError', eventID: 'event' });
+      expect({ parent: state.parent, activities: [...state.activities], metadata: state.metadata }).toEqual(before);
+      expect(incoming.getID()).toBe('legacy-0');
+    }
+    expect(state.commit).not.toHaveBeenCalled();
+    expect([...state.activities.keys()]).toEqual(['saved-id']);
+  });
+
+  it('propagates the duplicate through the real writer before any document or original-file upload', async () => {
+    const { incoming, provider } = conflictingRun();
+    const setDoc = vi.fn(), uploadFile = vi.fn(), log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const writer = new EventWriter({ setDoc, createBlob: data => data, generateID: () => 'unexpected',
+      prepareTrainingLoad: parsed => prepareImportedEventWrite('owner', parsed, authorize, provider),
+    }, { uploadFile }, undefined, log);
+    await expect(writer.writeAllEventData('owner', event([incoming]), {
+      data: new Uint8Array(), extension: 'fit', startDate: incoming.startDate,
+    })).rejects.toMatchObject({ name: 'ProviderImportDuplicateError', eventID: 'event' });
+    expect(setDoc).not.toHaveBeenCalled();
+    expect(uploadFile).not.toHaveBeenCalled();
+    expect(state.commit).not.toHaveBeenCalled();
+    expect(log.error).not.toHaveBeenCalled();
+  });
+
+  const recordingProviders: Record<string, Record<string, unknown>> = {
+    [ServiceNames.GarminAPI]: { serviceName: ServiceNames.GarminAPI, serviceUserID: 'account', serviceActivityFileID: 'file', serviceActivityFileType: 'FIT' },
+    [ServiceNames.SuuntoApp]: { serviceName: ServiceNames.SuuntoApp, serviceUserName: 'account', serviceWorkoutID: 'workout' },
+    [ServiceNames.COROSAPI]: { serviceName: ServiceNames.COROSAPI, serviceOpenId: 'account', serviceWorkoutID: 'workout', serviceWorkoutComponentKey: 'root' },
+    [ServiceNames.WahooAPI]: { serviceName: ServiceNames.WahooAPI, serviceUserID: 'account', serviceWorkoutID: 'workout' },
+  };
+  it.each(Object.keys(recordingProviders).flatMap(source => Object.keys(recordingProviders)
+    .filter(incoming => incoming !== source).map(incoming => ({ source, incoming }))))(
+    'verifies retained $source provenance before skipping a conflicting $incoming recording', async ({ source, incoming }) => {
+      const { incoming: parsed } = conflictingRun();
+      state.garminProvider = source === ServiceNames.GarminAPI ? recordingProviders[source] : {};
+      state.provider = source === ServiceNames.SuuntoApp ? recordingProviders[source] : {};
+      if (source === ServiceNames.COROSAPI || source === ServiceNames.WahooAPI) state.otherProviders[source] = recordingProviders[source];
+      await expect(prepareImportedEventWrite('owner', event([parsed]), authorize, recordingProviders[incoming]))
+        .rejects.toMatchObject({ name: 'ProviderImportDuplicateError', eventID: 'event' });
+      expect(state.commit).not.toHaveBeenCalled();
+    });
+
+  it('keeps an ordinary matched cross-provider update on the existing write path without extra provenance reads', async () => {
+    const { incoming, provider } = conflictingRun();
+    incoming.type = 'Trail Running';
+    delete state.activities.get('saved-id')!.ascentCorrection;
+    await prepareImportedEventWrite('owner', event([incoming]), authorize, provider);
+    expect(state.commit).toHaveBeenCalledOnce();
+    expect(incoming.getID()).toBe('saved-id');
+    expect(state.get.mock.calls.some(([ref]) => ref.path?.endsWith(`/${ServiceNames.GarminAPI}`))).toBe(false);
+  });
+
+  it('does not convert an unsafe correction carryover on a matched recording into a duplicate skip', async () => {
+    const { incoming, provider } = conflictingRun();
+    incoming.type = 'Trail Running';
+    await expect(prepareImportedEventWrite('owner', event([incoming]), authorize, provider))
+      .rejects.toMatchObject({ code: 'ACTIVITY_IDENTITY_CONFLICT' });
+    expect(state.commit).not.toHaveBeenCalled();
+  });
+
+  it.each(['source', 'same-provider', 'manual', 'incomplete-provider', 'pending', 'first-import', 'pending-parent',
+    'multiple-sources', 'multiple-originals', 'multisport',
+    'foreign-original', 'non-fit-original', 'missing-provenance', 'wrong-provenance', 'distance', 'metadata-read-failure'])(
+    'keeps an unverified second-provider run blocked: %s', async scenario => {
+      const { incoming, provider } = conflictingRun();
+      if (scenario === 'source') delete state.activities.get('saved-id')!.sourceIdentity;
+      if (scenario === 'same-provider') state.otherProviders[ServiceNames.COROSAPI] = { ...provider, serviceWorkoutID: 'different' };
+      if (scenario === 'incomplete-provider') delete (provider as Record<string, unknown>).serviceOpenId;
+      if (scenario === 'pending') state.metadata.sourceWritePending = true;
+      if (scenario === 'first-import') state.metadata.sourceFirstImport = true;
+      if (scenario === 'pending-parent') state.parent.benchmarkSourceWritePending = true;
+      if (scenario === 'multiple-sources') state.provider = { serviceName: ServiceNames.SuuntoApp, serviceUserName: 'account', serviceWorkoutID: 'other' };
+      if (scenario === 'multiple-originals') state.parent.originalFiles = [{ path: 'users/owner/events/event/a.fit' }, { path: 'users/owner/events/event/b.fit' }];
+      if (scenario === 'foreign-original') state.parent.originalFiles = [{ path: 'users/other/events/event/original.fit' }];
+      if (scenario === 'non-fit-original') state.parent.originalFiles = [{ path: 'users/owner/events/event/original.json' }];
+      if (scenario === 'missing-provenance') state.garminProvider = {};
+      if (scenario === 'wrong-provenance') state.garminProvider.serviceName = ServiceNames.COROSAPI;
+      if (scenario === 'distance') incoming.getStat = key => ({ getValue: () => key === 'Duration' ? 3599.7 : 9000 });
+      if (scenario === 'metadata-read-failure') {
+        const get = state.get.getMockImplementation()!;
+        state.get.mockImplementation(ref => ref.path?.endsWith(`/${ServiceNames.GarminAPI}`)
+          ? Promise.reject(new Error('metadata unavailable')) : get(ref));
+      }
+      const error = scenario === 'metadata-read-failure' ? { message: 'metadata unavailable' } : { code: 'ACTIVITY_IDENTITY_CONFLICT' };
+      await expect(prepareImportedEventWrite('owner', event(scenario === 'multisport' ? [incoming, activity(1)] : [incoming]),
+        authorize, scenario === 'manual' ? undefined : provider)).rejects.toMatchObject(error);
+      expect(state.commit).not.toHaveBeenCalled();
+      expect(incoming.getID()).toBe('legacy-0');
+    });
 
   it('recognizes a valid legacy original-file reference without requiring a generation', async () => {
     const { incoming, provider } = garminCopy();

@@ -1,6 +1,7 @@
 // Custom Theming for Angular Material
 // For more information: https://material.angular.io/guide/theming
 @use '@angular/material' as mat;
+@use 'sass:map';
 @use 'styles/theme-colors-dark' as app-dark-colors;
 @use 'styles/theme-colors-light' as app-light-colors;
 @use 'styles/forms';
@@ -243,6 +244,9 @@ section.component-container {
   --qs-theme-accent: #ffd740;
   --qs-theme-on-accent: rgba(0, 0, 0, 0.87);
   --qs-theme-success: #10b981;
+  // Semantic text colors retain their meaning and contrast when the app accent changes theme.
+  --qs-status-positive: #{map.get(mat.$green-palette, 40)};
+  --qs-status-caution: #{map.get(app-light-colors.$tertiary-palette, 40)};
   --mat-sys-background: #fafafa;
   --mat-sys-surface: rgba(255, 255, 255, 0.90);
   --mat-sys-on-surface: rgba(0, 0, 0, 0.87);
@@ -262,6 +266,8 @@ section.component-container {
 
 .dark-theme {
   --qs-theme-primary: #607d8b;
+  --qs-status-positive: #{map.get(mat.$green-palette, 80)};
+  --qs-status-caution: #{map.get(app-light-colors.$tertiary-palette, 80)};
   --qs-theme-on-primary: #ffffff;
   --qs-theme-accent: #40c4ff;
   --qs-theme-on-accent: rgba(0, 0, 0, 0.87);

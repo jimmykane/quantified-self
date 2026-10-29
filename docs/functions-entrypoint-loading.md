@@ -264,6 +264,15 @@ On 2026-10-09, three fresh Node 22.23.3 imports per target on the rebased PR mea
 Other local verification was running concurrently, so these timings are a startup sanity check rather than a
 controlled performance comparison. Keep runtime limits unchanged and verify production memory/startup separately.
 
+## Training owner-unit wake-up (2026-10-29)
+
+`onTrainingDeliveryOwnerUnitsChanged` loads directly from `training-plans/delivery/lifecycle` and watches
+`users/{uid}` (Gen 2, `europe-west2`, 512 MiB, retries, no secrets). Normalized unit changes stage the existing
+account coordinator after deletion/enrollment guards. Other profile writes and user deletion return without reads.
+The compiled entrypoint check covers the handler identity, path and resource options. Three fresh local Node 22
+imports measured 405 ms / 136.8 MiB median RSS for this one-export target versus 1,156 ms / 251.2 MiB for full
+discovery (190 exports). These are local startup observations, not production billing measurements.
+
 ## Guide preference wake-up (2026-10-28)
 
 `onTrainingDeliveryGuideSettingsChanged` loads directly from `training-plans/delivery/lifecycle` and watches

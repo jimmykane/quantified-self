@@ -34,7 +34,7 @@ import {
     type TrainingScheduleSnapshotV1,
 } from './mutation';
 import { assertNoTrainingPlanDeletionInProgress } from './deletion-lock';
-import { invalidateTrainingWorkoutConsent, stagePastWorkoutCleanup, stageTrainingDeliveryReconciliation } from './delivery/marker';
+import { invalidateTrainingWorkoutConsent, stagePastWorkoutCleanup, stageTrainingDeliveryReconciliation, RECONCILIATION_TARGET_LIMIT } from './delivery/marker';
 import { TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID } from '../../../shared/training-workout-completion';
 import { finishTrainingCleanupJob, trainingCleanupJob, trainingCleanupJobRef } from './cleanup-job-contract';
 import { cleanupPermanentlyDeletedWorkoutData } from './cleanup-workout';
@@ -520,6 +520,15 @@ function uniqueDocumentCount(values: readonly string[]): number {
     return new Set(values).size;
 }
 
+function reconciliationWorkoutTargets(items: readonly AppliedBatchItem[]): string[] | undefined {
+    // Plan lifecycle/activation can change untouched workouts. Keep that path a full scan.
+    const workoutOperations = new Set(['create-workout', 'bulk-create-workouts', 'update-workout', 'move-workout',
+        'copy-workout', 'set-workout-lifecycle', 'delete-workout', 'permanently-delete-workout']);
+    if (items.some(item => !workoutOperations.has(item.request.operation.kind))) return undefined;
+    const ids = [...new Set(items.flatMap(item => [...item.applied.changedWorkoutIds, ...item.applied.permanentlyDeletedWorkoutIds]))];
+    return ids.length > 0 && ids.length <= RECONCILIATION_TARGET_LIMIT ? ids : undefined;
+}
+
 function estimateBatchWriteCount(
     items: readonly AppliedBatchItem[],
     additionalWriteBudget: number,
@@ -546,6 +555,7 @@ function estimateBatchWriteCount(
         + [...item.revisions.planRevisionChunks.values()].reduce((sum, chunks) => sum + chunks.length, 0)
         + item.revisions.standaloneWorkoutRevisions.size, 0);
     return 2 // Final state plus one reconciliation marker.
+        + (reconciliationWorkoutTargets(items)?.length ?? 0)
         + uniqueDocumentCount(affectedPlans.filter(id => final.plans.has(id)))
         + uniqueDocumentCount(changedWorkouts.filter(id => final.workouts.has(id)))
         + uniqueDocumentCount(changedWorkouts.filter(id => items.some(item => !valuesEqual(
@@ -563,7 +573,8 @@ function assertBoundedBatchWritePayload(items: readonly AppliedBatchItem[], addi
     const final = items[items.length - 1]?.applied.after;
     if (!final) return;
     const bytes = (value: unknown): number => Buffer.byteLength(JSON.stringify(value), 'utf8') + 1024;
-    let estimated = 8 * 1024 + bytes(final.state) + additionalWriteBudget * 1024;
+    let estimated = 8 * 1024 + bytes(final.state) + additionalWriteBudget * 1024
+        + (reconciliationWorkoutTargets(items)?.length ?? 0) * 1024;
     const patchShiftedWorkouts = items.length === 1 && items[0].request.operation.kind === 'shift-plan';
     for (const planId of new Set(items.flatMap(item => item.applied.affectedPlanIds))) {
         const plan = final.plans.get(planId);
@@ -682,7 +693,7 @@ export async function mutateTrainingScheduleBatchForUser(
         }
         assertBoundedBatchWritePayload(items, additionalWriteBudget);
 
-        stageTrainingDeliveryReconciliation(transaction, db, uid);
+        stageTrainingDeliveryReconciliation(transaction, db, uid, reconciliationWorkoutTargets(items));
         const invalidatedWorkoutIds = new Set<string>();
         for (const item of items) {
             for (const id of [...item.applied.changedWorkoutIds, ...item.applied.permanentlyDeletedWorkoutIds]) {

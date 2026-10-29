@@ -295,7 +295,47 @@ Queued children from a superseded connection finish through the existing revisio
 
 Suunto activity history uses the same Firebase-owner-scoped queue identity as webhooks. Existing canonical queue revisions are preserved by automatic admission. A new connection replaces only its owner’s unfinished work from a superseded history run, with a new queue revision; completed records remain intact. Child rows must have explicit terminal outcomes; missing rows never count as success. Failed child items can be restored only from the same run's matching DLQ entry, without overwriting a replacement row. Retry resumes failed steps and preserves completed steps and dates, renewing restored queue rows’ retention. Automatic cooldown timestamps remain anchored to the original connection, including across pages and retries; retry checks reservations again before restoring failed queue work. Lost authorization is explained separately and leads to reconnect options.
 
-Verified `cross_provider_duplicate` skips in `suuntoAppWorkoutQueue` satisfy their history child checkpoint: the activity already exists from Garmin, so the coordinator continues the remaining date range without another import. Pending children still wait, and lifecycle/authorization skips and other queues retain their existing stop behavior. This only changes child observation in `processConnectionHistoryTask`; existing stopped runs require an explicitly approved resume. Monitoring is **covered/unchanged** by the coordinator's existing committed checkpoint and queue-health signals; no labels, queries, policies or monitoring deployment change.
+### Isolated record failures
+
+Once an active batch has settled, failed child records verified against this exact run and original queue are retained
+privately in `failedChildPaths`. The coordinator continues the remaining pages/windows and independent resource steps.
+It does not re-read earlier failures on every page or replay them automatically. The server-only execution context
+snapshots retained failure paths in memory; Suunto/COROS window admission and Wahoo page admission exclude those exact
+paths when provider results overlap, without extra database reads. Explicit recovery clears those exclusions as it
+restores the selected records. Still-pending children continue waiting;
+missing/unverifiable DLQ records, authorization loss, disconnect, deletion and other lifecycle skips do not qualify for isolation.
+No identity-conflict guard, provider-copy recognition, saved activity or user edit is changed.
+
+At the end of a scanned resource, retained failures use the existing `failed` status with **History scan finished** and
+the failed-record count. The run is finished with issues, never falsely successful. **Retry failed imports** restores
+only the retained failed records plus any unfinished failed batch, preserving completed pages, range/cursor and successful
+records. It rechecks owner, Pro, current connection, cooldown/reservations and exact DLQ ownership, and never replaces a
+newer run's live row. A retained same-run live terminal failure gets a new queue revision; an already recovered live
+record remains untouched. A later authorization/lifecycle stop retains its active batch when earlier isolated failures
+make that scope retryable; Retry cannot silently recover only the earlier records and forget the stopped batch.
+Missing expired recovery evidence requires reconnect/manual recovery rather than guessing.
+
+The run retains at most 100 isolated references. At that bound (or an overflowing next batch) further admission pauses
+with Retry guidance, retaining the active batch too. With the existing 100-child admission cap this bounds new-run
+recovery to at most 200 distinct candidates and 400 queue/DLQ writes, plus the existing run/reservation metadata writes.
+This exceptional safety stop prevents an unbounded parent document/transaction; it does not change child retry budgets.
+Older stopped runs are not resumed automatically. Deployment of `processConnectionHistoryTask` and
+`retryConnectionHistoryImport` needs separate approval; the Help copy is a separate frontend release. No new Function,
+queue, collection, index, Rules, provider request or cleanup policy is introduced. Retained paths follow existing run/DLQ
+retention and account cleanup, and stay out of owner projections, logs, MCP and Assistant contracts.
+
+Monitoring is **covered/unchanged** after reviewing #847/#829/#830 definitions and runbooks: active continuation emits
+`checkpoint/active`; a completed run with failures still emits `checkpoint/failed`. Child dead letters remain covered by
+the ingestion bundles. Existing due-age, dispatch/processing failure and unknown-observation policies remain applicable;
+there are no new labels or monitoring resources to apply. Local regressions cover continuation, targeted recovery,
+authorization/lifecycle refusal, private projections, bounds and committed checkpoint classifications.
+
+Verified `cross_provider_duplicate` skips in the Suunto, COROS, Garmin and Wahoo workout queues satisfy their history
+child checkpoint: the activity already exists from another provider, so the coordinator continues the remaining date
+range without another import. Pending children still wait, and lifecycle/authorization skips and non-workout queues
+retain their existing stop behavior. This only changes child observation in `processConnectionHistoryTask`; existing
+stopped runs require an explicitly approved resume. Monitoring is **covered/unchanged** by the coordinator's existing
+committed checkpoint and queue-health signals; no labels, queries, policies or monitoring deployment change.
 
 ## Batched Suunto Sleep/Health targets
 

@@ -1,3 +1,4 @@
+import { DayWorkoutService } from '../../services/day-workout.service';
 import { formatWorkoutPrescriptionSummaryV1 } from '@shared/planned-workout-analysis-display';
 import {
   ChangeDetectionStrategy,
@@ -202,6 +203,8 @@ export class PlansWorkspaceComponent {
   private readonly userService = inject(AppUserService);
   private readonly userSettings = inject(AppUserSettingsQueryService);
   private readonly plansService = inject(TrainingPlansService);
+  private readonly dayWorkouts = inject(DayWorkoutService);
+  private generatedSaveRequest: MutateTrainingScheduleRequestV1 | null = null;
   private readonly duplicateService = inject(TrainingWorkoutDuplicateService);
   private readonly libraryService = inject(WorkoutLibraryService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
@@ -1117,14 +1120,20 @@ export class PlansWorkspaceComponent {
   private startNewWorkoutEditor(destinationPlanId: string | null, localDate: string): void {
     this.advanceEditorGeneration();
     this.workoutDateInputInvalid.set(false);
+    const generated = this.dayWorkouts.takeEditorDraft(this.currentUser()?.uid ?? '', destinationPlanId, localDate);
+    const units = normalizeUserUnitSettings(this.currentUser()?.settings?.unitSettings);
+    this.generatedSaveRequest = generated?.saveRequest ?? null;
     this.editor.set({
       mode: 'create',
       original: null,
       originalWorkoutRevision: null,
       destinationPlanId,
       unitSettings: normalizeUserUnitSettings(this.currentUser()?.settings?.unitSettings),
-      value: createManualWorkoutEditorValue(localDate, this.nextNodeId('step')),
-      strength: null,
+      value: generated ? (generated.draft.strength
+        ? { ...createManualWorkoutEditorValue(localDate), title: generated.draft.title, sport: generated.draft.structure.sport as ManualWorkoutSport, nodes: [] }
+        : workoutStructureToManualEditor(generated.draft.title, localDate, generated.draft.structure, units))
+        : createManualWorkoutEditorValue(localDate, this.nextNodeId('step')),
+      strength: generated?.draft.strength ?? null,
       strengthLoading: false,
       strengthLoadFailed: false,
     });
@@ -1425,6 +1434,7 @@ export class PlansWorkspaceComponent {
 
   private advanceEditorGeneration(): void {
     this.editorGeneration += 1;
+    this.generatedSaveRequest = null;
     this.editorProfileSelection.set(null);
     this.editorDrag = null;
     this.editorMenuFocus = null;
@@ -1644,23 +1654,27 @@ export class PlansWorkspaceComponent {
       return;
     }
     if (session.mode === 'create') {
-      const workoutId = this.plansService.createEntityId('workout');
-      const response = await this.runMutation({
+      const retained = this.generatedSaveRequest;
+      const operation = {
+        kind: 'create-workout' as const,
+        workoutId: retained?.operation.kind === 'create-workout' ? retained.operation.workoutId : this.plansService.createEntityId('workout'),
+        planId: session.destinationPlanId, localDate: session.value.localDate, title, structure,
+        ...(session.strength ? { strength: session.strength } : {}),
+        confirmPlanRangeExtension: retained?.operation.kind === 'create-workout'
+          && retained.operation.planId === session.destinationPlanId && retained.operation.localDate === session.value.localDate
+          ? retained.operation.confirmPlanRangeExtension : false,
+      };
+      const unchanged = retained && JSON.stringify(retained.operation) === JSON.stringify(operation);
+      const request: MutateTrainingScheduleRequestV1 = unchanged ? retained : {
         mutationId: this.plansService.createMutationId('create-workout'),
-        expectedRevisions: this.expectedRevisions({
-          planIds: session.destinationPlanId ? [session.destinationPlanId] : [],
-        }),
-        operation: {
-          kind: 'create-workout',
-          workoutId,
-          planId: session.destinationPlanId,
-          localDate: session.value.localDate,
-          title,
-          structure,
-          ...(session.strength ? { strength: session.strength } : {}),
-          confirmPlanRangeExtension: false,
-        },
-      }, 'save-workout');
+        expectedRevisions: retained?.operation.kind === 'create-workout' && retained.operation.planId === operation.planId
+          ? retained.expectedRevisions : this.expectedRevisions({ planIds: session.destinationPlanId ? [session.destinationPlanId] : [] }),
+        operation,
+      };
+      if (retained) this.generatedSaveRequest = request;
+      const response = await this.runMutation(request, 'save-workout', () => !this.destroyRef.destroyed
+        && generation === this.editorGeneration && uid === this.currentUser()?.uid
+        && (!retained || (!!uid && this.dayWorkouts.isOwner(uid))));
       if (!response || this.destroyRef.destroyed || generation !== this.editorGeneration || uid !== this.currentUser()?.uid) return;
       this.selectWorkoutScope(session.destinationPlanId, session.value.localDate);
       this.editor.set(null);
@@ -2191,20 +2205,29 @@ export class PlansWorkspaceComponent {
   ): Promise<MutateTrainingScheduleResponseV1 | null> {
     this.busyAction.set(action);
     try {
-      const response = await this.plansService.mutate(request);
+      const response = await this.plansService.mutate(request,
+        ...(this.generatedSaveRequest?.mutationId === request.mutationId ? [feedbackAllowed] : []));
       if (feedbackAllowed()) this.haptics.success();
       return response;
     } catch (error) {
       if (!feedbackAllowed()) return null;
       const message = errorMessage(error);
+      if (this.generatedSaveRequest?.mutationId === request.mutationId
+        && ['aborted', 'functions/aborted'].includes(String((error as { code?: string }).code))) {
+        this.generatedSaveRequest = { ...request, mutationId: this.plansService.createMutationId('create-workout'),
+          expectedRevisions: this.expectedRevisions({ planIds: request.operation.kind === 'create-workout' && request.operation.planId ? [request.operation.planId] : [] }) };
+      }
       if (/requires extending/i.test(message) && 'confirmPlanRangeExtension' in request.operation) {
         const confirmed = await this.confirm('Extend plan dates?', message, 'Extend and continue');
         if (confirmed && feedbackAllowed()) {
           try {
-            const response = await this.plansService.mutate({
+            const extendedRequest = {
               ...request,
               operation: { ...request.operation, confirmPlanRangeExtension: true },
-            } as MutateTrainingScheduleRequestV1);
+            } as MutateTrainingScheduleRequestV1;
+            if (this.generatedSaveRequest?.mutationId === request.mutationId) this.generatedSaveRequest = extendedRequest;
+            const response = await this.plansService.mutate(extendedRequest,
+              ...(this.generatedSaveRequest?.mutationId === request.mutationId ? [feedbackAllowed] : []));
             if (feedbackAllowed()) this.haptics.success();
             return response;
           } catch (retryError) {
