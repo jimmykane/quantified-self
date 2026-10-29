@@ -1700,7 +1700,7 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('app-dashboard-daily-briefing')).toBeNull();
   });
 
-  it('integrates At a glance into the greeting sentence and toggles existing Today details without extra readers', () => {
+  it('shows the greeting sentence and Today details together by default and lets the owner collapse and reopen them', () => {
     const savedTiles = [getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile];
     component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: savedTiles } } } as SummariesComponent['user'];
     mockUserService.user.set(component.user);
@@ -1712,14 +1712,21 @@ describe('SummariesComponent', () => {
     const summary = welcome.querySelector('app-dashboard-daily-briefing')!;
     expect(welcome.querySelector('.dashboard-today-greeting')).not.toBeNull();
     expect(panel.querySelector('app-dashboard-daily-briefing')).toBeNull();
-    expect(panel.hasAttribute('hidden')).toBe(true);
+    expect(panel.hasAttribute('hidden')).toBe(false);
     const button = summary.querySelector<HTMLButtonElement>('button')!;
     expect(button.getAttribute('aria-controls')).toBe(panel.id);
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(panel.textContent).toContain('Training state');
+    expect(panel.textContent).toContain('Readiness');
+    expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
+    button.click(); fixture.detectChanges();
+    expect(panel.hasAttribute('hidden')).toBe(true);
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    expect(summary.hidden).toBe(false);
+    expect(summary.querySelector('[role="status"]')).not.toBeNull();
     button.click(); fixture.detectChanges();
     expect(panel.hasAttribute('hidden')).toBe(false);
     expect(button.getAttribute('aria-expanded')).toBe('true');
-    button.click(); fixture.detectChanges();
-    expect(panel.hasAttribute('hidden')).toBe(true);
     expect(TestBed.inject(AppHapticsService).selection).toHaveBeenCalledTimes(2);
     expect(host.querySelector('.dashboard-current-state-row')).not.toBeNull();
     expect(TestBed.inject(ActivityCalendarService).watchSummaryEvents).not.toHaveBeenCalled();
@@ -1728,15 +1735,16 @@ describe('SummariesComponent', () => {
     expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
   });
 
-  it('closes Today details when the dashboard owner changes without feedback or persistence', async () => {
+  it('restores visible Today details when the dashboard owner changes without feedback or persistence', async () => {
     const user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [], showTodaySummary: true } } } as SummariesComponent['user'];
     fixture.componentRef.setInput('user', user); fixture.componentRef.setInput('eventUser', user);
     mockUserService.user.set(user); fixture.detectChanges();
-    component.todayDetailsExpanded.set(true); fixture.detectChanges();
+    component.todayDetailsExpanded.set(false); fixture.detectChanges();
     const next = { ...user, uid: 'next-owner' };
     mockUserService.user.set(next);
     fixture.componentRef.setInput('user', next); fixture.componentRef.setInput('eventUser', next); fixture.detectChanges();
-    expect(component.todayDetailsExpanded()).toBe(false);
+    expect(component.todayDetailsExpanded()).toBe(true);
+    expect((fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('.dashboard-current-state-row')?.hidden).toBe(false);
     expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
     expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
   });

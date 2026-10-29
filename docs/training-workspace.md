@@ -5588,7 +5588,8 @@ provider action changes. No reparse, migration, registered-client refresh or bac
 The owner-only **At a glance** continues the **Today** greeting in one sentence and one Material text button. The
 greeting stays neutral and each assessment phrase takes its own existing status color. Both are inline, separated by an em dash,
 with natural wrapping and no separate row, status dot, chevron, heading or card. The button opens Training state, Readiness,
-scores and source context below it. These mounted details start closed and reset on owner changes, without persistence.
+scores and source context below it. The sentence and mounted details both start visible. Selecting the sentence
+collapses or reopens the details; they reset to open on owner changes, without persistence.
 The control exposes its expanded state and target, preserves live status text, and owns one selection haptic per tap.
 The sentence wraps naturally on phones. Saved chart configuration stays unchanged; hiding Today also unmounts the sentence.
 
@@ -5600,7 +5601,8 @@ removed; planned sessions, weekly link counts and note titles are not added to t
 
 `dashboard-daily-briefing.helper.ts` composes at most three clauses: Training state, Readiness and one relevant supporting
 Sleep, seven-day HRV or overnight-HR signal. Supporting evidence prioritizes unavailable data, attention/outside-range
-assessments, missing evidence and loading before an ordinary HRV range result. All detailed metrics remain below the greeting’s disclosure.
+assessments, missing evidence and loading before an ordinary HRV range result. All detailed metrics remain below
+the greeting and are visible until the user collapses them.
 It does not infer causes, prescribe training, add thresholds or introduce a new score. Seven-day HRV is explicitly named
 so it cannot be confused with the latest nightly value. Missing today's sleep remains pending, not a positive assessment.
 
