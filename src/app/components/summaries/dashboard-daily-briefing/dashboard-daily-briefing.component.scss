@@ -15,7 +15,7 @@
 .dashboard-briefing-action {
   @include mat.button-overrides((
     text-label-text-color: var(--mat-sys-on-surface-variant),
-    text-state-layer-color: var(--briefing-accent),
+    text-state-layer-color: transparent,
     text-horizontal-padding: 0,
     text-container-height: auto,
   ));
@@ -24,6 +24,11 @@
   text-align: start;
   white-space: normal;
   overflow-wrap: anywhere;
+
+  &:focus-visible {
+    outline: 2px solid var(--mat-sys-outline);
+    outline-offset: 2px;
+  }
 }
 
 .dashboard-today-greeting,

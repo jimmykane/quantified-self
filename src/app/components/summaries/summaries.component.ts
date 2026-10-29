@@ -433,7 +433,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public sleepTrendCanNavigateNewer = false;
   public todayDateSubtitle = '';
   public todayGreeting = '';
-  readonly todayDetailsExpanded = signal(false);
+  readonly todayDetailsExpanded = signal(true);
   private todayDetailsOwnerUID: string | null = null;
   public isOwnerDashboard = false;
   public calendarSelectedDateKey: string | null = null;
@@ -699,7 +699,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const ownerUID = this.resolveDashboardOwnerUID();
     if (ownerUID !== this.todayDetailsOwnerUID) {
       this.todayDetailsOwnerUID = ownerUID;
-      this.todayDetailsExpanded.set(false);
+      this.todayDetailsExpanded.set(true);
     }
     this.isOwnerDashboard = ownerUID !== null;
     this.todayDateSubtitle = this.formatTodayDateSubtitle(date);

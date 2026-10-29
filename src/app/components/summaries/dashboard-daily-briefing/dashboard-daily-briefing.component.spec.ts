@@ -28,9 +28,9 @@ describe('Dashboard daily briefing', () => {
     expect(host.querySelector('[aria-label="At a glance"]')?.getAttribute('aria-label')).toBe('At a glance');
     expect(host.querySelector('[aria-label="At a glance"]')?.getAttribute('data-tone')).toBe('caution');
     expect(host.querySelector('h2, h3, dl')).toBeNull();
-    expect(host.querySelector('button')?.getAttribute('aria-expanded')).toBe('false');
+    expect(host.querySelector('button')?.getAttribute('aria-expanded')).toBe('true');
     expect(host.querySelector('button')?.getAttribute('aria-controls')).toBe('dashboard-today-details');
-    expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Show Today details: Readiness is Mixed.');
+    expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Hide Today details: Readiness is Mixed.');
     expect(haptics.selection).not.toHaveBeenCalled();
   });
   it('joins the greeting and assessment in one continuous sentence with no separate row or status icon', () => {
@@ -41,7 +41,7 @@ describe('Dashboard daily briefing', () => {
     expect(button.querySelector('.dashboard-today-greeting')?.textContent).toBe('Good morning, Morgan');
     expect(button.querySelector('[role=status]')?.textContent).toBe('readiness is Mixed.');
     expect(host.querySelector('section, p, br, mat-icon, .dashboard-briefing-dot')).toBeNull();
-    expect(button.getAttribute('aria-label')).toBe('Show Today details: Good morning, Morgan — readiness is Mixed.');
+    expect(button.getAttribute('aria-label')).toBe('Hide Today details: Good morning, Morgan — readiness is Mixed.');
     expect(haptics.selection).not.toHaveBeenCalled();
   });
   it('renders green, caution and unavailable phrases independently in the same sentence', () => {
@@ -67,9 +67,9 @@ describe('Dashboard daily briefing', () => {
     const toggle = vi.fn(); fixture.componentInstance.detailsToggle.subscribe(toggle);
     host.querySelector<HTMLButtonElement>('button')!.click();
     expect(toggle).toHaveBeenCalledOnce(); expect(haptics.selection).toHaveBeenCalledOnce();
-    fixture.componentRef.setInput('detailsExpanded', true); fixture.detectChanges();
-    expect(host.querySelector('button')?.getAttribute('aria-expanded')).toBe('true');
-    expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Hide Today details: Readiness is Mixed.');
+    fixture.componentRef.setInput('detailsExpanded', false); fixture.detectChanges();
+    expect(host.querySelector('button')?.getAttribute('aria-expanded')).toBe('false');
+    expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Show Today details: Readiness is Mixed.');
     expect(haptics.selection).toHaveBeenCalledOnce();
   });
   it('does not render another owner and clears on sign-out', () => {

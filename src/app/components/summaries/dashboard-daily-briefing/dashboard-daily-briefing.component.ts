@@ -16,7 +16,7 @@ export class DashboardDailyBriefingComponent {
   readonly user = input.required<AppUserInterface>();
   readonly signals = input.required<readonly HealthChangeSignal[]>();
   readonly greeting = input('');
-  readonly detailsExpanded = input(false);
+  readonly detailsExpanded = input(true);
   readonly detailsId = input('dashboard-today-details');
   readonly detailsToggle = output<void>();
   private readonly users = inject(AppUserService);

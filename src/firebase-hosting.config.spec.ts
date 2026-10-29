@@ -332,7 +332,7 @@ describe('Firebase Hosting configuration', () => {
     // Pool-swim help covers interval chart focus, data coverage, recorded membership and keyboard header explanations.
     // Training swim help also covers Rest text priority, automatic same-Guide updates and explicit additional copies.
     // Training editor help covers explicit duration summaries, new-Rest defaults and non-blocking duration comparisons.
-    // Dashboard help joins individually colored assessment phrases to the greeting sentence; selecting it expands Today details (2026-10-29).
+    // Dashboard help keeps the greeting assessment and Today details visible by default; selecting the sentence collapses or reopens the details (2026-10-29).
     // Calendar generation help covers default-on Training/Timeline context with independent opt-outs, Calendar/Dashboard entry points, searchable sport selection, expanded default-on Personalization choices for freshness/HRV/recovery, the shared Assistant allowance footer, eligible dates and safe retries (2026-10-29).
     // It applies swim units to weekly distances and the SWOLF pool-length label.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-29');

@@ -1058,7 +1058,7 @@ describe('help.content', () => {
     expect(health).toContain('Dashboard **At a glance** continues the greeting in one sentence');
     expect(health).toContain('Missing or unavailable evidence takes priority over a reassuring HRV result');
     expect(health).toContain('Select the sentence to show or hide Today’s Training state, Readiness, scores and supporting context');
-    expect(health).toContain('those details start closed');
+    expect(health).toContain('those details start open alongside the sentence');
     expect(health).toContain('including **Mixed** and **Recover** days');
     expect(health).toContain('sentence opens the existing **Today** details');
     expect(health).toContain('existing Readiness, training load, Sleep, HRV and overnight HR assessments');
