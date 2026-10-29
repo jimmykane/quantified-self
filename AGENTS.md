@@ -17,6 +17,12 @@ Always-on rules:
 - `.agent/rules/queue-monitoring-coverage.md` for provider/service integrations and queue lifecycle changes
 - `.agent/rules/firestore-write-sanitization.md` for any frontend/functions write path that persists event or activity data
 - Never patch or directly modify files under `node_modules/`.
+- Preserve one canonical QS workout across provider copies and reimports, including its saved activity IDs and user
+  edits. Do not propose or implement a second entry or provider-specific event ID as a workaround for
+  same-workout identity conflicts, sport-name differences, or provider-normalized metrics. Verify duplicate evidence
+  before skipping a copy; unresolved matches stay blocked for investigation. Changing this product policy requires
+  explicit user approval. Import/deduplication changes must test that replays and reimports do not create a second
+  entry or overwrite user edits; genuinely distinct workouts remain distinct.
 - Never install or add the official Garmin FIT SDK as a project dependency, development dependency, optional dependency,
   or vendored project code. Its license prevents its use as a dependency in Quantified Self, sports-lib, and fit-parser.
   When needed for investigation, run it only as a standalone tool outside those repositories and their dependency trees.
