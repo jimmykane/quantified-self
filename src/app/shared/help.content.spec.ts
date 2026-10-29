@@ -249,8 +249,8 @@ describe('help.content', () => {
       'saved tag remains available', '**Refresh activities**', 'Generated timestamp names are hidden',
       '**All dates** is the last option and shows a warning', '**Keep current range** to cancel without reloading',
       'Saved All dates links also require confirmation', '**Custom dates**', 'Both dates are included',
-      'replaces the date preset selector in place', 'The field shows your selected dates', '**×** clear button',
-      'Clearing an unapplied custom range keeps the previous preset',
+      'compact date button opens the presets', 'The button shows your selected dates', '**×** clear button',
+      '**Cancel** keeps the previous range',
       'only applying a valid changed range starts a new date-range query', 'Custom dates stay fixed as days pass',
       'custom names remain visible', 'older /tags links open Activities']) expect(copy).toContain(phrase);
   });

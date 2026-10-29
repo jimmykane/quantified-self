@@ -1,12 +1,12 @@
 import type { EventRead } from '@shared/event-read';
-import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, Injector, OnInit, afterNextRender, computed, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, HostListener, Injector, OnInit, afterNextRender, computed, inject, signal, viewChild } from '@angular/core';
 import { DOCUMENT } from '@angular/common';
 import { FormControl, FormGroup, Validators } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MatSelect } from '@angular/material/select';
-import { MatDateRangePicker } from '@angular/material/datepicker';
+import { TableDateFilterComponent } from '../shared/table-date-filter/table-date-filter.component';
 import { combineLatest, Subscription, take } from 'rxjs';
 import dayjs, { type Dayjs } from 'dayjs';
 import { normalizeEventTagSuggestions } from '@shared/event-tags';
@@ -49,9 +49,7 @@ export class ActivitiesPageComponent implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);
   private readonly document = inject(DOCUMENT);
-  private readonly datePresets = viewChild<MatSelect>('datePresets');
-  private readonly customPicker = viewChild<MatDateRangePicker<Dayjs>>('customPicker');
-  private readonly customStartDate = viewChild<ElementRef<HTMLInputElement>>('customStartDate');
+  private readonly dateFilter = viewChild<TableDateFilterComponent<ActivityExplorerPeriod>>(TableDateFilterComponent);
   private readonly localDayStartMs = signal(new Date().setHours(0, 0, 0, 0));
   private owner: FirebaseUserType | null = null;
   private generation = 0;
@@ -238,12 +236,10 @@ export class ActivitiesPageComponent implements OnInit {
 
   selectPeriod(period: ActivityExplorerPeriod, select?: MatSelect): void {
     if (period === 'custom') {
-      if (this.showCustomRange()) return;
+      if (this.customRangeOpen()) return;
       this.closeAllDatesWarning();
       this.resetCustomDateForm();
       this.customRangeOpen.set(true);
-      this.focusDateControl();
-      this.haptics.selection();
       return;
     }
     if (period === this.period()) {
@@ -309,18 +305,7 @@ export class ActivitiesPageComponent implements OnInit {
 
   openDateFilter(): void {
     if (this.loading() || !this.owner || this.owner !== this.auth.currentUser || this.user()?.uid !== this.owner.uid) return;
-    if (this.showCustomRange()) {
-      const picker = this.customPicker();
-      if (!picker || picker.disabled || picker.opened) return;
-      this.customStartDate()?.nativeElement.focus();
-      picker.open(); // The existing opened handler owns feedback.
-      return;
-    }
-    const presets = this.datePresets();
-    if (!presets || presets.disabled || presets.panelOpen) return;
-    presets.focus();
-    presets.open();
-    if (presets.panelOpen) this.haptics.selection();
+    this.dateFilter()?.open();
   }
 
   clearCustomRange(): void {
@@ -333,8 +318,7 @@ export class ActivitiesPageComponent implements OnInit {
 
   private focusDateControl(): void {
     afterNextRender(() => {
-      this.datePresets()?.focus();
-      this.customStartDate()?.nativeElement.focus();
+      this.dateFilter()?.focus();
     }, { injector: this.injector });
   }
 

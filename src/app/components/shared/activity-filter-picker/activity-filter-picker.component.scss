@@ -1,4 +1,8 @@
+@use '../../../../styles/table-filters' as filters;
+
 :host { display: block; min-width: 0; }
+:host(.is-text-button) { max-width: 100%; }
+.activity-picker-text-trigger { @include filters.text-button; }
 
 .activity-picker-field { width: 100%; }
 

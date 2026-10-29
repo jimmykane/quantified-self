@@ -335,6 +335,7 @@ describe('Firebase Hosting configuration', () => {
     // Dashboard help keeps the greeting assessment and Today details visible by default; selecting the sentence collapses or reopens the details (2026-10-29).
     // Calendar generation help covers default-on Training/Timeline context with independent opt-outs, Calendar/Dashboard entry points, searchable sport selection, expanded default-on Personalization choices for freshness/HRV/recovery, selected-sport weekday routines from complete prior local days, the shared Assistant allowance footer, eligible dates and safe retries (2026-10-29).
     // It applies swim units to weekly distances and the SWOLF pool-length label.
+    // Table-filter help covers compact text buttons, the calendar dialog, selected dates and per-filter clearing (2026-10-29).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-29');
   });
 

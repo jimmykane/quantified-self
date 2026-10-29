@@ -383,6 +383,19 @@ table tag filters. Import the standalone component directly; it owns its narrow 
 surface, search field, sport icons, wrapping option labels, thin scrollbars and keyboard/focus behavior.
 Do not create another searchable sport dialog or embed a search input inside a `mat-select` option.
 
+Table headers opt into `[textButton]="true"` with a `triggerIcon` on the same picker. The compact text button shows
+one selected name or a sport/tag count, keeps sport icons and opens the unchanged searchable dialog. Other form
+fields and icon-only tile triggers keep their existing presentation. The shared `styles/_table-filters.scss` mixin
+owns button density and icon/text alignment; touch targets expand on coarse pointers.
+
+`TableDateFilterComponent` provides the matching preset menu and native Material range-calendar dialog. Each owner
+passes its existing range form and handles preset, Apply, Cancel and Clear outputs; the control never queries or
+persists activities. Draft dates stay in Material's pending selection until Apply. Applied custom dates remain in
+the trigger with a separate clear action. All dates stays last with its warning, and the owner still confirms it
+before loading history. The control owns menu-opening feedback; the owner owns calendar opening and accepted
+filter changes. Closing or clearing returns focus to the visible date button. Dashboard projects its merged toggle
+after Tags so visual and native keyboard order both remain Date, Sports, Tags, Merged activities.
+
 Use `ActivityTypesMultiSelectComponent` for canonical sport catalogs with family shortcuts, selected aliases and
 locked choices; use `ActivityTypesFilterMenuComponent` for the equivalent compact toolbar trigger. Both delegate
 to the same picker. Direct callers provide `{ value, label, activityType? }` options, `selectedValues`, visible and

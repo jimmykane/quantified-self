@@ -75,6 +75,10 @@
     "environment": "angular",
     "reason": "Compiles the shared Material summary shell with projected evidence/details to verify accessible disclosure, owner/scope resets, neutral presentation and single-owner haptic feedback."
   },
+  "src/app/components/shared/table-date-filter/table-date-filter.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the shared table date control with real Material menus and range-picker portals to verify calendar selection, deferred Apply versus Cancel, focus restoration, disabled controls and haptic ownership."
+  },
   "src/app/components/summaries/dashboard-daily-briefing/dashboard-daily-briefing.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the real sentence-only Dashboard rail to verify authenticated-owner fencing, accessible headline-only rendering, assessment input resets and silent display updates without independent data readers."

@@ -12,9 +12,9 @@
 }
 
 .table-toolbar {
-  --qs-table-filter-height: 46px;
-  --qs-table-filter-text-size: 0.95rem;
-  --qs-table-filter-padding: 10px;
+  --qs-table-filter-height: 36px;
+  --qs-table-filter-text-size: 0.8125rem;
+  --qs-table-filter-padding: 6px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -24,9 +24,9 @@
 }
 
 .table-toolbar-main {
-  display: grid;
-  align-items: start;
-  grid-template-columns: minmax(180px, 1fr) auto auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   min-width: 0;
 }
@@ -35,28 +35,10 @@
   --mat-form-field-container-height: var(--qs-table-filter-height);
   --mat-form-field-container-text-size: var(--qs-table-filter-text-size);
   --mat-form-field-container-vertical-padding: var(--qs-table-filter-padding);
-  width: 100%;
-  min-width: 0;
-}
-
-.table-toolbar-main .qs-search-field ::ng-deep .mat-mdc-form-field-infix {
-  min-height: 46px;
-  padding-top: 10px !important;
-  padding-bottom: 10px !important;
-}
-
-.table-toolbar-main .qs-search-field ::ng-deep .mat-mdc-icon-button {
-  width: 38px;
-  height: 38px;
-  padding: 7px;
-}
-
-.table-toolbar-main .qs-search-field ::ng-deep .mat-mdc-form-field-flex {
-  min-height: 46px;
-}
-
-.table-toolbar-main .qs-search-field ::ng-deep input.mat-mdc-input-element {
-  font-size: 0.95rem;
+  flex: 1 1 240px;
+  width: auto;
+  max-width: none;
+  min-width: 180px;
 }
 
 .table-toolbar-main .qs-search-field mat-icon {
@@ -66,25 +48,27 @@
 }
 
 .table-toolbar-filters {
-  align-items: flex-start;
+  align-items: center;
   display: flex;
+  flex: 0 1 auto;
   justify-content: flex-start;
   min-width: 0;
   min-height: 0;
   overflow: visible;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
 .table-toolbar-actions {
   min-height: var(--qs-table-filter-height);
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
 }
 
 .tag-filter-field {
-  flex: 0 0 170px;
-  width: 170px;
+  flex: 0 0 auto;
+  width: auto;
   min-width: 0;
 }
 
@@ -248,23 +232,10 @@
     padding: 10px 12px;
   }
 
-  .table-toolbar-main {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px;
-  }
-
-  .table-toolbar-main .qs-search-field {
-    grid-column: 1 / -1;
-  }
-
-  .table-toolbar-filters {
-    grid-column: 1;
-  }
-
-  .table-toolbar-actions {
-    grid-column: 2;
-    align-self: start;
-  }
+  .table-toolbar-main { gap: 8px; }
+  .table-toolbar-main .qs-search-field { flex-basis: 100%; }
+  .table-toolbar-filters { flex: 1 1 0%; }
+  .table-toolbar-actions { align-self: flex-start; }
 
   .table-selection-toolbar {
     align-items: stretch;
@@ -426,21 +397,6 @@
 
 @include bp.xsmall {
 
-  .table-toolbar-main .qs-search-field { grid-column: 1; }
-  .table-toolbar-actions { grid-column: 2; grid-row: 1; }
-
-  .table-toolbar-filters {
-    grid-column: 1 / -1;
-    align-items: stretch;
-    flex-direction: column;
-    width: 100%;
-  }
-
-  .tag-filter-field {
-    flex: 0 0 auto;
-    width: 100%;
-  }
-
   .mat-column-Checkbox,
   .mat-column-Privacy,
   .mat-column-Actions {
@@ -516,13 +472,6 @@ mat-icon {
   overflow: auto;
   max-height: min(60vh, 720px);
   width: 100%;
-}
-
-// Layout-only adaptations; all presentations share the table's visual rules.
-.table-toolbar-main--compact {
-  grid-template-columns: minmax(0, 1fr) auto;
-  .table-toolbar-filters { grid-column: auto; width: auto; flex-direction: row; }
-  .qs-search-field { grid-column: auto; max-width: none; }
 }
 
 .event-activity-cell {

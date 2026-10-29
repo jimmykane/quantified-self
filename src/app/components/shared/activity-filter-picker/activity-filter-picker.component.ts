@@ -35,6 +35,7 @@ export interface ActivityFilterPickerShortcut {
   templateUrl: './activity-filter-picker.component.html',
   styleUrl: './activity-filter-picker.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[class.is-text-button]': 'textButton()' },
 })
 export class ActivityFilterPickerComponent {
   readonly label = input.required<string>();
@@ -47,6 +48,8 @@ export class ActivityFilterPickerComponent {
   readonly loading = input(false);
   readonly disabled = input(false);
   readonly compact = input(false);
+  readonly textButton = input(false);
+  readonly triggerIcon = input('filter_list');
   readonly triggerLabel = input<string>();
   readonly hint = input('');
   readonly canClear = computed(() => this.selectedValues().some(value => !this.options().find(option => option.value === value)?.disabled));
@@ -61,6 +64,8 @@ export class ActivityFilterPickerComponent {
       ? this.options().find(option => option.value === this.selectedValues()[0])?.label || this.selectedValues()[0]
       : `${this.selectedValues().length} selected`);
   readonly selectedLabels = computed(() => this.options().filter(option => this.selectedValues().includes(option.value)).map(option => option.label).join(', '));
+  readonly textSummary = computed(() => this.selectedValues().length > 1 ? `${this.selectedValues().length} ${this.label().toLowerCase()}` : this.summary());
+  readonly selectedSport = computed(() => this.options().find(option => this.selectedValues().includes(option.value) && option.activityType)?.activityType);
   readonly visibleOptions = computed(() => {
     const search = this.search().trim().toLowerCase();
     const selected = new Set(this.selectedValues());

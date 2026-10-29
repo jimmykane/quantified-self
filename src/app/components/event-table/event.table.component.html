@@ -4,26 +4,28 @@
   <div class="table-toolbar">
     <div class="table-toolbar-main" [class.table-toolbar-main--compact]="isLibraryPresentation">
       <mat-form-field appearance="outline" class="qs-search-field" subscriptSizing="dynamic">
+        <mat-icon matPrefix aria-hidden="true">search</mat-icon>
         <input matInput [value]="searchTerm" (input)="onSearchInput($event)" placeholder="Search activities"
           aria-label="Search activities"
           autocomplete="off">
-        <mat-icon matSuffix *ngIf="!searchTerm">search</mat-icon>
         <button mat-icon-button matSuffix *ngIf="searchTerm" (click)="clearSearch()" aria-label="Clear">
           <mat-icon>close</mat-icon>
         </button>
       </mat-form-field>
 
       <div class="table-toolbar-filters">
+        <ng-content select="[event-table-filters]"></ng-content>
+        @if (showTagFilter) {
+        <app-activity-filter-picker class="tag-filter-field" label="Tags" allLabel="All tags" searchLabel="Search tags"
+          [textButton]="true" triggerIcon="sell"
+          [options]="tagPickerOptions" [selectedValues]="tagPickerValues" [loading]="tagCatalogIsLoading"
+          (opened)="onTagFilterOpened(true)" (selectionChange)="updateTagFilters($event)"></app-activity-filter-picker>
+        }
+        <ng-content select="[event-table-trailing-filters]"></ng-content>
         @if (isLibraryPresentation) {
           <app-event-table-actions [selectedDataTypes]="selectedColumns" [dataTypes]="libraryAvailableColumns" icon="tune"
             (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
         }
-        @if (showTagFilter) {
-        <app-activity-filter-picker class="tag-filter-field" label="Tags" allLabel="All tags" searchLabel="Search tags"
-          [options]="tagPickerOptions" [selectedValues]="tagPickerValues" [loading]="tagCatalogIsLoading"
-          (opened)="onTagFilterOpened(true)" (selectionChange)="updateTagFilters($event)"></app-activity-filter-picker>
-        }
-        <ng-content select="[event-table-filters]"></ng-content>
       </div>
       @if (canManageEvents && !isLibraryPresentation) {
         <div class="table-toolbar-actions">

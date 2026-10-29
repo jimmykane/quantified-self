@@ -416,6 +416,7 @@ describe('EventTableComponent', () => {
         expect(mainRow).toBeTruthy();
         expect(filtersRow).toBeTruthy();
         expect(searchField).toBeTruthy();
+        expect(searchField.querySelector('mat-icon[matPrefix]')?.textContent).toBe('search');
         expect(mainRow.contains(filtersRow)).toBe(true);
         component.showActions = true;
         fixture.detectChanges();
@@ -1322,7 +1323,7 @@ describe('EventTableComponent', () => {
         expect(row['Tags Accessible Label']).toBe('Activity tags for Test Run: Race, Long run, 2026');
     });
 
-    it('should provide compact mobile tag markup and stack toolbar filters on small screens', () => {
+    it('should retain compact mobile tags and wrap text filters below search on small screens', () => {
         const template = readFileSync(
             join(process.cwd(), 'src/app/components/event-table/event.table.component.html'),
             'utf8'
@@ -1335,7 +1336,8 @@ describe('EventTableComponent', () => {
         expect(template).toContain('event-tags-mobile-summary');
         expect(template).toContain('event-tags-add-text');
         expect(template).toContain("[attr.aria-label]=\"row['Tags Accessible Label']\"");
-        expect(styles).toMatch(/@include bp\.xsmall[\s\S]*\.table-toolbar-filters\s*{[\s\S]*flex-direction:\s*column;/);
+        expect(styles).toMatch(/\.table-toolbar-filters\s*{[^}]*flex-wrap:\s*wrap;/);
+        expect(styles).toMatch(/@include bp\.handset-or-tablet-portrait[\s\S]*?\.table-toolbar-main \.qs-search-field\s*{\s*flex-basis:\s*100%;/);
         expect(styles).toMatch(/@include bp\.xsmall[\s\S]*\.mat-column-Tags[\s\S]*width:\s*52px !important;/);
     });
 

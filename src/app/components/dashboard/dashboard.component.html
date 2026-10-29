@@ -81,10 +81,13 @@
           [selectedStartDate]="searchStartDate" [selectedEndDate]="searchEndDate" [startOfTheWeek]="startOfTheWeek"
           [selectedActivityTypes]="eventTableFilters.activityTypes"
           [toolbarRangeLayout]="true"
-          [showMergedEventsToggle]="hasMergedEvents"
           [includeMergedEvents]="eventTableFilters.includeMergedEvents !== false"
           (searchChange)="search($event)">
         </app-event-search>
+        @if (hasMergedEvents) {
+          <app-merged-activities-toggle event-table-trailing-filters [checked]="eventTableFilters.includeMergedEvents !== false"
+            [disabled]="isLoading" (checkedChange)="eventTableSearch.onMergedEventsChange($event)"></app-merged-activities-toggle>
+        }
         <button event-table-empty-action mat-button type="button" (click)="eventTableSearch.openToolbarDateFilter()">
           <mat-icon aria-hidden="true">date_range</mat-icon>Change dates
         </button>
