@@ -121,7 +121,7 @@ export class MorningWorkoutComponent {
         this.morning.event(uid, 'added', 'ready');
         if (!this.destroy.destroyed && this.morning.isOwner(uid) && this.ownerUid() === uid
           && this.localDate() === screenDate && this.preferences().controls.localDate === value.localDate) {
-          this.status.set({ localDate: value.localDate, state: value.result!.kind === 'rest' ? 'rest-day' : 'planned' });
+          this.status.set({ localDate: value.localDate, state: 'planned' });
         }
       },
     });

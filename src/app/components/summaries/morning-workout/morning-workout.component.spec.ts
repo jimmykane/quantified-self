@@ -92,18 +92,27 @@ describe('compact morning workout in Today', () => {
     expect(fixture.componentInstance.status()).toBeNull();
     fixture.destroy(); await vi.advanceTimersByTimeAsync(1600); expect(request).toHaveBeenCalledOnce();
   });
-  it('shows a saved rest day and prevents an older review from replacing a new day', async () => {
-    const { fixture, open, preferences, event } = setup();
+  it.each(['day', 'account'] as const)('shows an added workout and fences its callback after a %s change', async change => {
+    const { fixture, open, preferences, owner, event } = setup();
     await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    const ready = fixture.componentInstance.status()!;
+    fixture.componentInstance.status.set({ ...ready, result: { ...ready.result!, kind: 'workout', draft: {
+      title: 'Easy run', structure: { version: 1, sport: ready.controls!.sport, nodes: [{ kind: 'step', id: 'easy', purpose: 'work',
+        ending: { kind: 'time', seconds: 1800 }, targets: [] }] },
+    } } });
     await fixture.componentInstance.review();
     const onAdded = open.mock.calls[0][3].onAdded;
     onAdded();
-    expect(fixture.componentInstance.status()).toEqual({ localDate: '2026-10-30', state: 'rest-day' });
-    preferences.update(value => ({ ...value, controls: { ...value.controls, localDate: '2026-10-31' } }));
-    fixture.componentRef.setInput('localDate', '2026-10-31'); fixture.detectChanges();
-    fixture.componentInstance.status.set({ localDate: '2026-10-31', state: 'completed' });
+    expect(fixture.componentInstance.status()).toEqual({ localDate: '2026-10-30', state: 'planned' });
+    const nextDate = change === 'day' ? '2026-10-31' : '2026-10-30';
+    if (change === 'day') {
+      preferences.update(value => ({ ...value, controls: { ...value.controls, localDate: nextDate } }));
+      fixture.componentRef.setInput('localDate', nextDate);
+    } else { owner.set('other'); fixture.componentRef.setInput('ownerUid', 'other'); }
+    fixture.detectChanges();
+    fixture.componentInstance.status.set({ localDate: nextDate, state: 'completed' });
     onAdded();
-    expect(fixture.componentInstance.status()).toEqual({ localDate: '2026-10-31', state: 'completed' });
+    expect(fixture.componentInstance.status()).toEqual({ localDate: nextDate, state: 'completed' });
     expect(event).toHaveBeenCalledWith('owner', 'added', 'ready');
   });
   it('uses saved source opt-outs in preferences and keeps disable available after dismissal', async () => {

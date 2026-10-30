@@ -5707,8 +5707,9 @@ bounded independently; no frontend history query, attendance, location, usual st
 
 The existing Auth/App-Check callable `generateDayWorkout` dispatches a strict private `mode: morning` with only
 `status`, `prepare` and `dismiss` actions. Pro and legal access are checked server-side; the mode never accepts client
-controls, dates, user IDs or model configuration. It uses the same context, model, strict canonical validation and
-single correction budget as manual generation. Complete current-day activity, schedule/completion and rest-day evidence
+controls, user IDs or model configuration. Only dismissal accepts the displayed local date as a rollover fence;
+status/preparation dates come from the saved time zone and server clock. It uses the same context, model, strict
+canonical validation and single correction budget as manual generation. Complete current-day activity, schedule/completion and rest-day evidence
 is required before a model call. Existing planned sessions, recorded sessions and authored rest days take priority.
 Missing or failed context remains unknown rather than an empty day. A model rest result is allowed without any mutation.
 
@@ -5721,8 +5722,8 @@ The existing seven-day conversation TTL/index exemptions and recursive account e
 owner-readable; private leases, hashes and raw model context are never browser-readable. Dismissal fences in-flight
 work and binds the displayed local date, rejecting a rollover instead of dismissing another day. Read refresh
 cancellation stays separate from user-action completion so settings acknowledgements cannot swallow disable errors,
-haptics or analytics. Late Add callbacks cannot replace another day's card state; a saved rest suggestion displays
-the rest-day state.
+haptics or analytics. Late Add callbacks cannot replace another day or account's card state. A model rest suggestion
+creates neither a workout nor an authored rest marker; only an explicitly saved workout invokes the Add callback.
 
 Reviewing generates nothing. Explicit Add uses the existing revision-bound create-workout command and normal inherited
 sync rules; editor handoff remains unsaved. A cached initial review captures the current schedule and becomes stale on
