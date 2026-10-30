@@ -14,7 +14,7 @@ import {
   startAfter,
   where,
 } from 'app/firebase/firestore';
-import { catchError, combineLatest, from, map, Observable, of, retry, shareReplay, switchMap, throwError, timeout } from 'rxjs';
+import { catchError, combineLatest, from, map, Observable, of, retry, shareReplay, startWith, switchMap, throwError, timeout } from 'rxjs';
 import {
   SCHEDULED_WORKOUTS_COLLECTION_ID,
   DELETED_WORKOUT_RECOVERY_MS,
@@ -126,10 +126,16 @@ export class TrainingPlansService {
           return docData(doc(this.firestore, 'users', userId, TRAINING_PLANS_COLLECTION_ID, id), { waitForServer: true }).pipe(
             timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
             map(data => {
+              if (data === undefined) return null;
               const plan = parseTrainingPlanV1(data);
-              if (plan.id !== id || plan.lifecycle !== 'active') throw new Error('The active plan identity is inconsistent.');
-              return plan;
+              if (plan.id !== id) throw new Error('The active plan identity is inconsistent.');
+              // Plan and state snapshots can arrive in either order during pause/activation.
+              return plan.lifecycle === 'active' ? plan : null;
             }),
+            // Never retain the previous plan while a replacement document is loading.
+            startWith(null),
+            // A failed plan read withholds context, but must not end the state listener.
+            catchError(() => of(null)),
           );
         }),
       )),

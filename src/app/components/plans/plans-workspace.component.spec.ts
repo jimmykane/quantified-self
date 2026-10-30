@@ -2380,7 +2380,7 @@ describe('PlansWorkspaceComponent', () => {
     expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
       operation: { kind: 'set-plan-rest-days', planId: plan.id, restDays: [date] },
       expectedRevisions: expect.arrayContaining([{ scope: 'plan', id: plan.id, revision: plan.revision }]),
-    }));
+    }), expect.any(Function));
     expect(haptics.selection).toHaveBeenCalledOnce(); expect(haptics.success).toHaveBeenCalledOnce();
     live.next({ ...schedule, plans: [{ ...plan, revision: plan.revision + 1, restDays: [date] }] }); fixture.detectChanges();
     expect(component.selectedDayIsRest()).toBe(true);
@@ -2389,7 +2389,7 @@ describe('PlansWorkspaceComponent', () => {
     expect(add.disabled).toBe(true);
     exportLibraryQa(fixture, 'plan-rest-day', '.workout-list');
     await component.toggleSelectedRestDay();
-    expect(mutate).toHaveBeenLastCalledWith(expect.objectContaining({ operation: { kind: 'set-plan-rest-days', planId: plan.id, restDays: [] } }));
+    expect(mutate).toHaveBeenLastCalledWith(expect.objectContaining({ operation: { kind: 'set-plan-rest-days', planId: plan.id, restDays: [] } }), expect.any(Function));
     expect(mutate.mock.calls.every(([request]) => request.operation.kind === 'set-plan-rest-days')).toBe(true);
   });
 
@@ -2399,6 +2399,72 @@ describe('PlansWorkspaceComponent', () => {
     component.selectScheduleDate(workout.localDate); fixture.detectChanges();
     expect(component.selectedDayHasPlannedWorkout()).toBe(true);
     await component.toggleSelectedRestDay(); expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('cancels a rest-day save awaiting callable readiness even after returning to the same account', async () => {
+    schedule.workouts = [];
+    let ready!: () => void;
+    const readiness = new Promise<void>(resolve => { ready = resolve; }), dispatch = vi.fn();
+    mutate.mockImplementationOnce(async (request, canExecute) => {
+      expect(canExecute).toEqual(expect.any(Function)); expect(canExecute()).toBe(true);
+      await readiness;
+      if (!canExecute()) throw new Error('Request cancelled before dispatch.');
+      return dispatch(request);
+    });
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    const pending = component.toggleSelectedRestDay();
+    userSignal.set({ ...user, uid: 'different-owner' }); userSubject.next(userSignal()); fixture.detectChanges();
+    expect(component.busyAction()).toBeNull();
+    userSignal.set(user); userSubject.next(user); fixture.detectChanges();
+    expect(mutate.mock.calls[0][1]()).toBe(false);
+    ready(); await pending;
+    expect(dispatch).not.toHaveBeenCalled(); expect(snackBarOpen).not.toHaveBeenCalled();
+    expect(haptics.success).not.toHaveBeenCalled(); expect(haptics.error).not.toHaveBeenCalled();
+  });
+
+  it.each(['owner', 'view', 'destroy'] as const)('suppresses late rest-day save outcomes after %s changes', async change => {
+    schedule.workouts = [];
+    let finish!: (value: unknown) => void, fail!: (error: Error) => void;
+    mutate.mockImplementation(() => new Promise((resolve, reject) => { finish = resolve; fail = reject; }));
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    const leave = () => {
+      if (change === 'owner') {
+        userSignal.set({ ...user, uid: 'different-owner' }); userSubject.next(userSignal()); fixture.detectChanges();
+        userSignal.set(user); userSubject.next(user); fixture.detectChanges();
+      } else if (change === 'view') {
+        setRouteState({ scope: 'standalone' }, true); fixture.detectChanges();
+        setRouteState({}, true); fixture.detectChanges();
+      } else fixture.destroy();
+    };
+    const pending = component.toggleSelectedRestDay();
+    expect(mutate.mock.calls[0][1]()).toBe(true); leave();
+    expect(mutate.mock.calls[0][1]()).toBe(false);
+    finish({ state: schedule.state, plans: [], workouts: [] }); await pending;
+    expect(haptics.success).not.toHaveBeenCalled(); expect(snackBarOpen).not.toHaveBeenCalled();
+    if (change === 'destroy') { expect(haptics.error).not.toHaveBeenCalled(); return; }
+    expect(component.busyAction()).toBeNull();
+    const failed = component.toggleSelectedRestDay(); leave();
+    fail(new Error('Offline')); await failed;
+    expect(haptics.error).not.toHaveBeenCalled(); expect(snackBarOpen).not.toHaveBeenCalled();
+  });
+
+  it('does not let an old rest-day save clear the next owner’s pending save for the same plan', async () => {
+    schedule.workouts = [];
+    let finishOld!: (value: unknown) => void, finishNew!: (value: unknown) => void;
+    mutate.mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; }))
+      .mockImplementationOnce(() => new Promise(resolve => { finishNew = resolve; }));
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    const oldSave = component.toggleSelectedRestDay();
+    userSignal.set({ ...user, uid: 'different-owner' }); userSubject.next(userSignal()); fixture.detectChanges();
+    expect(component.busyAction()).toBeNull();
+    const newSave = component.toggleSelectedRestDay();
+    const currentAction = component.busyAction(); expect(currentAction).toMatch(/^rest-/);
+    finishOld({ state: schedule.state, plans: [], workouts: [] }); await oldSave;
+    expect(component.busyAction()).toBe(currentAction); expect(snackBarOpen).not.toHaveBeenCalled();
+    expect(haptics.success).not.toHaveBeenCalled();
+    finishNew({ state: schedule.state, plans: [], workouts: [] }); await newSave;
+    expect(component.busyAction()).toBeNull(); expect(haptics.success).toHaveBeenCalledOnce();
+    expect(snackBarOpen).toHaveBeenCalledExactlyOnceWith('Rest day added.', 'Dismiss', { duration: 3000 });
   });
 
   it('revision-checks color changes, disables pending controls, and recolors from the live plan', async () => {

@@ -979,6 +979,19 @@ plan document. It does not query workout history, recipes, activity documents or
 immediately withhold earlier-owner context. Calendar reuses its existing bounded schedule read and shared overlay;
 there is no extra per-day query, timer or polling loop.
 
+The active-plan-only context clears when a replacement plan starts loading. Paused, archived or temporarily missing
+plan snapshots withhold the badge without ending the state subscription: plan/state snapshots can arrive in either
+order during activation. A failed or inconsistent exact-plan read also withholds context, with a later verified state
+emission able to start a fresh read. The stream remains shared and releases listeners after its last subscriber leaves.
+Rest-day authoring binds dispatch and feedback to the captured owner and workspace generation, including callable
+readiness/retry waits. Leaving that account or view releases its busy state; an old result cannot clear a newer save,
+revive after returning to the same account/view, or display late success/error feedback.
+
+This lifecycle follow-up has no MCP impact: it changes only frontend subscription/cancellation behavior. Stored plan
+fields, revision checks, read projections, preview/confirmation schemas, consent, provider behavior and contract digest
+remain unchanged. Existing Help instructions still apply. Focused tests cover ordered plan transitions, delayed reads,
+shared listener cleanup, replacement badge rendering and account/view/destroy cancellation with overlapping saves.
+
 AI workout generation checks the selected destination plan (otherwise the active plan) under its existing optional
 Training context and schedule revision fence. A declared rest day returns a deterministic rest response, without a
 model call or generation charge. Training context off does not read plan rest dates. The chat Assistant reads active

@@ -994,14 +994,18 @@ export class PlansWorkspaceComponent {
 
   async toggleSelectedRestDay(): Promise<void> {
     const plan = this.selectedPlan(), date = this.planScheduleDate();
-    if (!plan || !date || !this.currentUser()?.uid || this.busyAction() || !this.browsing()
+    const uid = this.currentUser()?.uid;
+    if (!plan || !date || !uid || this.busyAction() || !this.browsing()
       || (!this.selectedDayIsRest() && this.selectedDayHasPlannedWorkout())) return;
+    const generation = this.editorGeneration, routeKey = trainingPlansRouteKey(uid, this.routeState());
+    const isCurrent = () => !this.destroyRef.destroyed && uid === this.currentUser()?.uid
+      && generation === this.editorGeneration && routeKey === trainingPlansRouteKey(uid, this.routeState());
     const restDays = this.selectedDayIsRest() ? (plan.restDays ?? []).filter(value => value !== date)
       : [...(plan.restDays ?? []), date].sort();
     const response = await this.runMutation({ mutationId: this.plansService.createMutationId('set-plan-rest-days'),
       expectedRevisions: this.expectedRevisions({ planIds: [plan.id], planRevisionOverrides: new Map([[plan.id, plan.revision]]) }),
-      operation: { kind: 'set-plan-rest-days', planId: plan.id, restDays } }, `rest-${plan.id}`);
-    if (response) this.snackBar.open(restDays.includes(date) ? 'Rest day added.' : 'Rest day removed.', 'Dismiss', { duration: 3000 });
+      operation: { kind: 'set-plan-rest-days', planId: plan.id, restDays } }, `rest-${plan.id}`, isCurrent, isCurrent);
+    if (response && isCurrent()) this.snackBar.open(restDays.includes(date) ? 'Rest day added.' : 'Rest day removed.', 'Dismiss', { duration: 3000 });
   }
 
   async renamePlan(plan: TrainingPlanV1): Promise<void> {
@@ -1448,6 +1452,8 @@ export class PlansWorkspaceComponent {
 
   private advanceEditorGeneration(): void {
     this.editorGeneration += 1;
+    // The old rest save no longer owns this view; its completion must not clear a new action.
+    if (this.busyAction()?.startsWith('rest-')) this.busyAction.set(null);
     this.generatedSaveRequest = null;
     this.editorProfileSelection.set(null);
     this.editorDrag = null;
@@ -2216,11 +2222,13 @@ export class PlansWorkspaceComponent {
     request: MutateTrainingScheduleRequestV1,
     action: string,
     feedbackAllowed: () => boolean = () => true,
+    canExecute?: () => boolean,
   ): Promise<MutateTrainingScheduleResponseV1 | null> {
+    const executionGuard = canExecute ?? (this.generatedSaveRequest?.mutationId === request.mutationId ? feedbackAllowed : undefined);
     this.busyAction.set(action);
     try {
       const response = await this.plansService.mutate(request,
-        ...(this.generatedSaveRequest?.mutationId === request.mutationId ? [feedbackAllowed] : []));
+        ...(executionGuard ? [executionGuard] : []));
       if (feedbackAllowed()) this.haptics.success();
       return response;
     } catch (error) {
@@ -2241,7 +2249,7 @@ export class PlansWorkspaceComponent {
             } as MutateTrainingScheduleRequestV1;
             if (this.generatedSaveRequest?.mutationId === request.mutationId) this.generatedSaveRequest = extendedRequest;
             const response = await this.plansService.mutate(extendedRequest,
-              ...(this.generatedSaveRequest?.mutationId === request.mutationId ? [feedbackAllowed] : []));
+              ...(executionGuard ? [executionGuard] : []));
             if (feedbackAllowed()) this.haptics.success();
             return response;
           } catch (retryError) {
@@ -2254,7 +2262,7 @@ export class PlansWorkspaceComponent {
       this.showError(error);
       return null;
     } finally {
-      this.busyAction.set(null);
+      if (!canExecute || canExecute()) this.busyAction.set(null);
     }
   }
 

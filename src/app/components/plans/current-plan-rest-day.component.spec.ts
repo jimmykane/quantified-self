@@ -29,6 +29,13 @@ describe('Current plan rest day', () => {
     fixture.nativeElement.querySelector('button').click();
     expect(router.navigate).toHaveBeenCalledExactlyOnceWith(['/training/plans/plan', 'plan'], { queryParams: { date: '2026-10-30' } });
     expect(haptics.selection).toHaveBeenCalledOnce();
+    source.next(null); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('button')).toBeNull();
+    expect(fixture.componentInstance.isRestDay()).toBe(false);
+    source.next({ ...plan, id: 'replacement', name: 'Winter' }); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Rest day · Winter');
+    expect(fixture.componentInstance.isRestDay()).toBe(true);
+    expect(haptics.selection).toHaveBeenCalledOnce();
     fixture.componentRef.setInput('localDate', '2026-10-31'); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('button')).toBeNull();
     expect(plans.watchActivePlan).toHaveBeenCalledOnce();
