@@ -859,6 +859,7 @@ describe('help.content', () => {
     expect(content).toContain('Adding and deleting workouts never resets the daily allowance');
     expect(content).toContain('at any time that day');
     expect(content).toContain('each local day, at any time');
+    expect(content).toContain('Your saved time zone defines each day');
     expect(content).not.toContain('5 am and noon');
   });
 

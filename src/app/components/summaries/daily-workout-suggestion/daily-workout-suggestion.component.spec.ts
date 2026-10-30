@@ -1,7 +1,7 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
-import { defaultDayWorkoutControls } from '@shared/day-workout';
+import { dayWorkoutLocalDate, defaultDayWorkoutControls } from '@shared/day-workout';
 import type { DailyWorkoutSuggestionStatus } from '@shared/daily-workout-suggestion';
 import { DailyWorkoutSuggestionComponent } from './daily-workout-suggestion.component';
 import { DailyWorkoutSuggestionService } from '../../../services/daily-workout-suggestion.service';
@@ -32,7 +32,7 @@ function exportQa(element: HTMLElement, name: string) {
     + '<link rel="stylesheet" href="styles.css">' + [...document.head.querySelectorAll('style')].map(style => style.outerHTML).join('')
     + '<style>' + css + '</style></head><body class="app-hydrated' + (dark ? ' dark-theme' : '')
     + '"><main class="qs-workspace-page"><h2>Today</h2><p>Friday, 30 October 2026</p>'
-    + '<p>Good daily — training state is Fresh, readiness is Mixed.</p><p>Training state · Fresh &nbsp; Readiness · Mixed</p>'
+    + '<p>Good morning — training state is Fresh, readiness is Mixed.</p><p>Training state · Fresh &nbsp; Readiness · Mixed</p>'
     + element.outerHTML + '</main></body></html>');
 }
 
@@ -69,7 +69,7 @@ function setup(enabled = true, cachedStatus: DailyWorkoutSuggestionStatus | null
 }
 afterEach(() => { vi.useRealTimers(); restoreVisibility(); });
 describe('compact daily workout in Today', () => {
-  it('shares the real service cache across hidden, destroyed and recreated Today rows', async () => {
+  it('shares the real service cache across Today rows and refreshes the saved-zone day on foreground return', async () => {
     vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
     vi.setSystemTime(new Date('2026-10-30T07:00Z'));
     const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
@@ -83,7 +83,7 @@ describe('compact daily workout in Today', () => {
     let finish!: (value: { data: DailyWorkoutSuggestionStatus }) => void;
     const call = vi.fn(async (_name: string, request: { action: string }) => request.action === 'prepare'
       ? new Promise<{ data: DailyWorkoutSuggestionStatus }>(resolve => { finish = resolve; })
-      : { data: { localDate: '2026-10-30', state: 'waiting-sleep' } as DailyWorkoutSuggestionStatus });
+      : { data: { localDate: dayWorkoutLocalDate(new Date(), controls.timeZone), state: 'waiting-sleep' } as DailyWorkoutSuggestionStatus });
     const values = new Map<string, string>();
     TestBed.configureTestingModule({ imports: [DailyWorkoutSuggestionComponent], providers: [DailyWorkoutSuggestionService,
       { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
@@ -115,6 +115,23 @@ describe('compact daily workout in Today', () => {
     const third = mount(); expect(third.nativeElement.textContent).toContain('A recovery day');
     expect(third.componentInstance.busy()).toBe(false);
     await vi.advanceTimersByTimeAsync(1600); expect(call).toHaveBeenCalledTimes(2);
+    // Helsinki rolls over while the parent's browser-local day can still be Oct 30.
+    third.componentInstance.visible.set(false); third.detectChanges();
+    vi.setSystemTime(new Date('2026-10-30T22:01Z'));
+    third.componentInstance.visible.set(true); third.detectChanges();
+    expect(third.componentInstance.localDate()).toBe('2026-10-30');
+    expect(third.componentInstance.preferences().controls.localDate).toBe('2026-10-31');
+    expect(third.componentInstance.status()).toBeNull();
+    await vi.advanceTimersByTimeAsync(1600); third.detectChanges();
+    expect(call.mock.calls.map(args => args[1].action)).toEqual(['status', 'prepare', 'status', 'prepare']);
+    const nextReady: DailyWorkoutSuggestionStatus = { ...ready, localDate: '2026-10-31',
+      controls: { ...controls, localDate: '2026-10-31' },
+      result: { ...ready.result!, requestId: 'daily-suggestion:2026-10-31', observedAt: new Date().toISOString() } };
+    finish({ data: nextReady }); await vi.advanceTimersByTimeAsync(0); third.detectChanges();
+    expect(third.componentInstance.status()).toEqual(nextReady);
+    third.componentInstance.visible.set(false); third.detectChanges();
+    third.componentInstance.visible.set(true); third.detectChanges();
+    await vi.advanceTimersByTimeAsync(1600); expect(call).toHaveBeenCalledTimes(4);
   });
   it('restores a cached covered day immediately without a loading flash or API read', async () => {
     const { fixture, request } = setup(true, { localDate: '2026-10-30', state: 'planned' });

@@ -5726,7 +5726,9 @@ unproven allowance metadata cannot be reclaimed. This keeps a retry from losing 
 Temporary workout/rest-day coverage also retains that unspent deferral: current coverage still takes priority, but
 removing it restores the same dated fallback. Today hydration reloads and tab visibility changes do not retire an
 in-flight read for the same owner, day and preferences; changes to that scope still invalidate stale replies. A checked
-row stays visible without another status request or loading flash on foreground return or repeated hydration. An unstarted
+row stays visible without another status request or loading flash on same-day foreground return or repeated hydration.
+Foreground return re-evaluates the date in the saved time zone even when the parent's browser-local date has not changed.
+Equal same-day preferences preserve the cache scope; a new saved-zone date resets it without adding a timer or listener. An unstarted
 visit can prepare on a later foreground return at any hour. Sleep evidence received
 while hidden coalesces into one revision-bound check on return, and explicit **Check again** remains available. A read
 that finishes while hidden retains its result, but its shown event waits until the row is visible. A status read that

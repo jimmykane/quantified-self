@@ -31,7 +31,9 @@ export class DailyWorkoutSuggestionComponent {
   private readonly destroy = inject(DestroyRef);
   private readonly document = inject(DOCUMENT);
   readonly eligible = computed(() => this.daily.eligible(this.ownerUid()));
-  readonly preferences = computed(() => { this.localDate(); return this.daily.preferences(); },
+  readonly visible = signal(this.document.visibilityState !== 'hidden');
+  // Re-evaluate the saved-zone date on foreground return; equal same-day values retain the cache scope.
+  readonly preferences = computed(() => { this.localDate(); this.visible(); return this.daily.preferences(); },
     { equal: (a, b) => JSON.stringify(a) === JSON.stringify(b) });
   readonly status = signal<DailyWorkoutSuggestionStatus | null>(null);
   private readonly loading = signal(false);
@@ -39,7 +41,6 @@ export class DailyWorkoutSuggestionComponent {
   readonly actionError = signal<string | null>(null);
   readonly busy = computed(() => this.loading() || this.actionBusy() || this.daily.saving());
   readonly error = signal(false);
-  readonly visible = signal(this.document.visibilityState !== 'hidden');
   readonly summary = computed(() => {
     const value = this.status();
     if (value?.state === 'ready' && value.result) {
