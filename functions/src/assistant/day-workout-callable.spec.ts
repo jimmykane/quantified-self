@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as logger from 'firebase-functions/logger';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { GenkitError, genkit } from 'genkit';
+import { GenkitError, genkit, type GenerateResponseData } from 'genkit';
 import { ValidationError } from 'genkit/schema';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { assistantGenkit } from './model';
@@ -27,7 +27,7 @@ function dependencies(): DayWorkoutDependencies {
 function mockSdkOutputs(...outputs: (string | Error)[]) {
   const ai = genkit({});
   let attempt = 0;
-  const provider = vi.fn(async () => {
+  const provider = vi.fn(async (): Promise<GenerateResponseData> => {
     const output = outputs[attempt++];
     if (output instanceof Error) throw output;
     return { finishReason: 'stop' as const, message: { role: 'model' as const, content: [{ text: output }] } };
@@ -122,9 +122,9 @@ describe('generateDayWorkout callable', () => {
     }) : '{"kind":"workout","rationale":PRIVATE_MODEL_REPLY}';
     const { provider, generate } = mockSdkOutputs(malformed, JSON.stringify(reply));
     deps.generate = generateDayWorkoutSuggestion;
+    const generationRequest = { ...request, controls: defaultDayWorkoutControls('2026-10-28', 'UTC', ActivityTypes.StrengthTraining) };
     try {
-      const response = await runGenerateDayWorkout({ ...request,
-        controls: defaultDayWorkoutControls('2026-10-28', 'UTC', ActivityTypes.StrengthTraining) }, auth, deps);
+      const response = await runGenerateDayWorkout(generationRequest, auth, deps);
       expect(response.draft?.strength).toEqual(reply.strength);
       expect(provider).toHaveBeenCalledTimes(2);
       expect(JSON.parse((generate.mock.calls[1][0] as { prompt: string }).prompt).correction)
@@ -132,7 +132,7 @@ describe('generateDayWorkout callable', () => {
       expect(deps.finalize).toHaveBeenCalledTimes(1);
       expect(deps.release).not.toHaveBeenCalled();
       vi.mocked(deps.store.begin).mockResolvedValue({ response });
-      await expect(runGenerateDayWorkout(request, auth, deps)).resolves.toEqual(response);
+      await expect(runGenerateDayWorkout(generationRequest, auth, deps)).resolves.toEqual(response);
       expect(provider).toHaveBeenCalledTimes(2);
       expect(deps.finalize).toHaveBeenCalledTimes(1);
     } finally { generate.mockReset(); }
@@ -169,6 +169,32 @@ describe('generateDayWorkout callable', () => {
       expect(deps.finalize).toHaveBeenCalledTimes(1);
       expect(deps.release).not.toHaveBeenCalled();
     } finally { generate.mockReset(); }
+  });
+  it('shares one correction budget across JSON parsing and canonical prescription failures', async () => {
+    const deps = dependencies();
+    const { provider, generate } = mockSdkOutputs('{"kind":"rest","rationale":INVALID}',
+      JSON.stringify({ kind: 'rest', rationale: '' }));
+    deps.generate = generateDayWorkoutSuggestion;
+    try {
+      await expect(runGenerateDayWorkout(request, auth, deps)).rejects.toMatchObject({ code: 'failed-precondition' });
+      expect(provider).toHaveBeenCalledTimes(2);
+      expect(deps.finalize).toHaveBeenCalledTimes(1);
+      expect(deps.release).not.toHaveBeenCalled();
+    } finally { generate.mockReset(); }
+  });
+  it('does not retry a safety-blocked model response or log its private reason', async () => {
+    const deps = dependencies();
+    const { provider, generate } = mockSdkOutputs();
+    provider.mockResolvedValueOnce({ finishReason: 'blocked', finishMessage: 'PRIVATE_BLOCK_REASON' });
+    deps.generate = generateDayWorkoutSuggestion;
+    const failure = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+    try {
+      await expect(runGenerateDayWorkout(request, auth, deps)).rejects.toMatchObject({ code: 'unavailable' });
+      expect(provider).toHaveBeenCalledTimes(1);
+      expect(deps.finalize).toHaveBeenCalledTimes(1);
+      expect(deps.release).not.toHaveBeenCalled();
+      expect(JSON.stringify(failure.mock.calls)).not.toContain('PRIVATE_BLOCK_REASON');
+    } finally { failure.mockRestore(); generate.mockReset(); }
   });
   it.each(['UNAVAILABLE', 'UNAUTHENTICATED', 'PERMISSION_DENIED', 'INVALID_ARGUMENT'] as const)(
     'does not treat a provider %s failure as correctable model output', async status => {
