@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 vi.unmock('@sports-alliance/sports-lib');
-import { DataRRIntervalCount, DataRRMeanInterval, DataRRRMSSD, EventImporterJSON } from '@sports-alliance/sports-lib';
+import {
+    DataHeartRate, DataHeartRateAvg, DataRRArtifactCount, DataRRIntervalCount,
+    DataRRMeanInterval, DataRRRMSSD, EventImporterJSON,
+} from '@sports-alliance/sports-lib';
 import { parseActivityFilePayload } from './activity-file-parser';
 import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '../../../shared/firestore-write-sanitizer';
 import { resolveAvailableSportsLibMetrics } from '../mcp/metric-catalog';
@@ -13,6 +16,28 @@ const sml = `<sml><DeviceLog><Device><Name>Synthetic</Name><Info><HW>1</HW><SW>1
 <R-R><Data>1000 1000 1000 1000 1000 1000 1000 1000 1000 1000</Data></R-R></DeviceLog></sml>`;
 
 describe('Sports Lib R-R adoption at QS source/persistence boundaries', () => {
+    it('uses the released HR filter without changing raw intervals, HRV quality or sanitized MCP availability', async () => {
+        const source = sml.replace(/<Data>[^<]+<\/Data>/, `<Data>${Array(20).fill(250).join(' ')}</Data>`);
+        const event = await parseActivityFilePayload(Buffer.from(source), 'synthetic.sml');
+        const activity = event.getFirstActivity();
+        expect(activity.getStream(DataHeartRate.type).getData(true)).toEqual(Array(5).fill(240));
+        expect(activity.getStream('IBI').getData()).toEqual(Array(20).fill(250));
+        expect(activity.getStat(DataRRArtifactCount.type)?.getValue()).toBe(20);
+        expect(activity.getStat(DataRRRMSSD.type)).toBeUndefined();
+
+        const activityWrite = sanitizeActivityFirestoreWritePayload(activity.toJSON());
+        const eventWrite = sanitizeEventFirestoreWritePayload(event.toJSON());
+        expect(activityWrite).not.toHaveProperty('streams');
+        expect(eventWrite).not.toHaveProperty('activities');
+        expect(eventWrite.stats[DataHeartRateAvg.type]).toBe(240);
+        expect(resolveAvailableSportsLibMetrics([eventWrite.stats]).map(metric => metric.type))
+            .toContain(DataHeartRateAvg.type);
+        const restored = EventImporterJSON.getActivityFromJSON(JSON.parse(JSON.stringify(activityWrite)));
+        expect(restored.getAllStreams()).toHaveLength(0);
+        expect(restored.getStat(DataHeartRateAvg.type)?.getValue()).toBe(240);
+        expect(restored.getStat(DataRRArtifactCount.type)?.getValue()).toBe(20);
+    });
+
     it('parses SML beat statistics on the UTC clock and saves summaries without raw intervals', async () => {
         const event = await parseActivityFilePayload(Buffer.from(sml), 'synthetic.sml');
         const activity = event.getFirstActivity();

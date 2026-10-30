@@ -7,6 +7,26 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 23.9.0 R–R heart-rate adoption
+
+Root and Functions pin the same published 23.9.0 artifact with matching lockfile integrity. The runtime version and
+strict activity/route reparse targets follow the installed package. No scanner, queue, retry, lease, monitoring or
+deployment configuration changes. Review already-enabled scanners before a separately approved backend deployment;
+an installed-version increase can make older records eligible. This adoption does not enable or launch a campaign.
+
+Suunto JSON/SML R–R-derived HR uses a causal 40-interval filter with missed-beat protection and two-stage smoothing.
+More than ten in-range intervals with available estimates must justify source-HR replacement; held out-of-range outputs
+do not count. Filter state resets at gaps/invalid observations. FIT recorded HR, raw IBI, HRV/quality summaries and the
+separate R–R mean/rolling HR definitions remain unchanged. No new canonical stat, persisted field or route behavior is added.
+
+New imports and on-demand original-file charts/samples use the adopted parser, without rewriting historical summaries
+on read. To correct older Suunto-derived HR, separately authorize an original-file reparse and normal reconciliation of
+affected derived HR summaries/calculated-load candidates and eligible HR-based durability evidence. Durability protocols
+and load formulas are unchanged; filtered-HR inputs can change. Preserve imported scores, strict identities, current controls,
+dated policies, source reservations, retry/deletion guards and sanitized persistence. Training snapshots refresh through
+existing source invalidation; no derived-schema bump or new backfill path is required. MCP schemas, grants, catalog,
+safe projections and planning/provider actions are unchanged; no registered-client refresh or plugin rebuild is needed.
+
 ### Sports Lib 23.8.0 swimming CSS policy adoption
 
 CSS applies through the existing immutable policy for each leg's recorded start time. Reparse refreshes the additive

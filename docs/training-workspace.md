@@ -451,7 +451,7 @@ range registration without charts, owner changes, stale clicks, disposal, Materi
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `22`
-- Installed `@sports-alliance/sports-lib`: `23.5.0` in both app and Functions
+- Installed `@sports-alliance/sports-lib`: `23.9.0` in both app and Functions
 - Training sport groups: twenty-three benchmark-capable families plus data-backed Fitness & Gym and Other training groups
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every canonical activity type with usable persisted power curves; only Cycling/Road Cycling and Running/Road Running share histories
@@ -6885,6 +6885,31 @@ contracts remain frozen. Root and Functions pin the same published Sports Lib 23
 CSS evaluation API and swimming selection order. Runtime version detection and activity/route reparse targets follow
 that installed version; strict mismatch checks and scanner settings stay unchanged. Local packed builds are validation
 only. No deployment or historical reparse is authorized by this feature.
+
+### Sports Lib 23.9.0 R–R heart-rate adoption
+
+Root and Functions pin the same published 23.9.0 artifact. Suunto JSON/SML imports use the library's causal
+40-interval consistency filter, missed-beat protection and two-stage smoothing for their existing R–R-derived HR
+replacement path. More than ten in-range intervals with available estimates are required; held out-of-range outputs
+cannot supply that eligibility. Recording gaps and invalid observations reset filter state. The original beat intervals,
+HRV and quality calculations, R–R mean/rolling HR statistics and recorded FIT HR retain their definitions.
+
+New imports and bounded original-file chart/sample hydration use the adopted parser. Reading a chart does not rewrite
+saved summaries or private load evaluations. Historical Suunto-derived HR corrections require a separately approved
+original-file reparse, regenerated affected HR summaries/calculated-load candidates and eligible HR-based durability
+evidence, followed by normal Training invalidation. Durability protocols and load formulas are unchanged; their inputs
+can change when filtered HR changes.
+Preserve imported scores, latest owner controls, immutable dated policies, strict leg identities, source reservations,
+retry/deletion fences and stream-stripping sanitizers. A Training refresh alone cannot recover source intervals.
+There is no derived-schema bump, route correction, new stream/stat field or automatic historical campaign.
+
+MCP impact: canonical catalog membership, numeric units, persisted-only metric availability, strict chart/sample
+projections, permissions, consent, planning read/mutation contracts and provider delivery are unchanged. Existing HR
+projections can carry normally persisted updated values without exposing filter state or raw beats. No registered-client
+refresh, contract promotion or plugin rebuild is required. Monitoring is unchanged: the same parser/import/reparse
+workers, failure diagnostics and lifecycle remain in use. Runtime version detection and both reparse targets follow the
+installed package; scanner configuration is unchanged. Review already-enabled scanners before any separately approved
+backend deployment. This dependency adoption does not deploy or start a production reparse.
 
 ### File-only TSS evaluation and owner load controls
 

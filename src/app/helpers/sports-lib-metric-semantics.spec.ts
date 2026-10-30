@@ -1,5 +1,6 @@
 import {
   type ActivityInterface,
+  ActivityParsingOptions,
   ActivityTypes,
   DataActivityTypes,
   DataAltitudeAvg,
@@ -14,10 +15,13 @@ import {
   DataGradeAvg,
   DataGradeMax,
   DataGradeMin,
+  DataHeartRate,
+  DataRRArtifactCount,
   DataPause,
   DataStrokeRate,
   DataStrokeRateAvg,
   EventImporterJSON,
+  EventImporterSuuntoJSON,
   EventUtilities,
   FileType,
   LapTypes,
@@ -32,6 +36,28 @@ import {
 } from '@shared/sports-lib-metric-semantics';
 
 describe('persisted Sports Lib metric semantics', () => {
+  it('uses the released R–R HR filter in browser parsing while retaining independent raw-beat quality', async () => {
+    const start = '2026-01-01T10:00:00Z', end = '2026-01-01T10:00:10Z';
+    const source = { DeviceLog: {
+      Device: { Name: 'Synthetic', Info: { HW: '1', SW: '1' } },
+      Header: { DateTime: start, Duration: 10 }, Windows: [],
+      Samples: [
+        { TimeISO8601: start, Events: [{ Activity: { ActivityType: 3 } }] },
+        { TimeISO8601: end, Events: [{ Lap: { Type: 'Stop' } }] },
+      ],
+      'R-R': { Data: Array(20).fill(250) },
+    } };
+    const event = await EventImporterSuuntoJSON.getFromJSONString(JSON.stringify(source),
+      new ActivityParsingOptions({ generateUnitStreams: false }));
+    const activity = event.getFirstActivity();
+    expect(activity.getStreamData(DataHeartRate.type).filter(value => value != null)).toEqual(Array(5).fill(240));
+    expect(activity.getStream('IBI').getData()).toEqual(Array(20).fill(250));
+    expect(activity.getStat(DataRRArtifactCount.type)?.getValue()).toBe(20);
+    const restored = EventImporterJSON.getActivityFromJSON(JSON.parse(JSON.stringify(activity.toJSON())));
+    expect(restored.getStreamData(DataHeartRate.type).filter(value => value != null)).toEqual(Array(5).fill(240));
+    expect(restored.getStream('IBI').getData()).toEqual(Array(20).fill(250));
+  });
+
   it('hydrates pre-19 activity streams and laps as canonical Stroke Rate', () => {
     const activity = EventImporterJSON.getActivityFromJSON({
       name: 'Stored open-water swim',

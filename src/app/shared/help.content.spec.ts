@@ -114,6 +114,14 @@ describe('help.content', () => {
     expect(copy).toContain('a lower percentage alone does not prove that a device is more accurate');
     expect(copy).toContain('Suspected ectopic pairs, invalid intervals and recording gaps are tracked separately');
   });
+  it('distinguishes filtered Suunto HR from raw beat statistics and historical stored values', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Activity beat-interval statistics'))!.content;
+    expect(copy).toContain('Suunto JSON/SML recordings can derive a filtered heart-rate trace');
+    expect(copy).toContain('retaining source HR when there are too few usable estimates');
+    expect(copy).toContain('Original intervals and HRV/artifact calculations stay separate');
+    expect(copy).toContain('FIT imports keep recorded heart rate');
+    expect(copy).toContain('older saved HR summaries and calculated Training load need an original-file reparse');
+  });
   it('explains source updates, saved leg preferences and the retained-original boundary', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Updated recordings and saved preferences'))!.content.replace(/\s+/g, ' ');
     expect(copy).toContain('Training load override, exclusion and saved policy stay with');

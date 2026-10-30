@@ -856,6 +856,8 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 
 ### Activity beat-interval statistics
 
+Suunto JSON/SML recordings can derive a filtered heart-rate trace from original beat intervals. The filter checks recent interval consistency and smooths changes, while retaining source HR when there are too few usable estimates. Original intervals and HRV/artifact calculations stay separate; FIT imports keep recorded heart rate. New imports and original-file charts use the updated parser, but older saved HR summaries and calculated Training load need an original-file reparse to refresh them.
+
 When an original file contains beat-to-beat R–R intervals, newly imported or reparsed activities can include **R–R RMSSD**, **R–R SDNN**, **R–R pNN50**, recording coverage and artifact statistics. Ordinary heart-rate readings cannot supply these statistics. They describe the activity recording and are separate from overnight HRV and Readiness. Missing statistics stay unavailable. Older saved summaries need an original-file reparse; opening a chart alone does not update them. Multisport legs keep their own values rather than an invented workout average.
 
 **Artifacts** is the percentage of analyzed R–R intervals flagged as potential artifacts by QS’s detection rules; **Artifact count** shows their number. The same rules apply to each recording, making this useful for comparing devices within QS. Other apps may use different algorithms or thresholds, so their artifact values are not directly comparable. Flags are not confirmed strap errors, and a lower percentage alone does not prove that a device is more accurate. Suspected ectopic pairs, invalid intervals and recording gaps are tracked separately.

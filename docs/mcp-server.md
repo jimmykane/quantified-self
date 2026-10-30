@@ -1615,6 +1615,13 @@ plugin sync remain explicit lifecycle actions.
 
 ## Sports Lib metric discovery
 
+Sports Lib 23.9.0 updates Suunto JSON/SML R–R-derived heart-rate filtering. Normal persisted HR values and bounded
+original-file chart/sample projections can reflect the new parser, without exposing filter state, raw intervals or
+new fields. FIT recorded HR and existing HRV/quality definitions remain unchanged. Numeric catalog membership, units,
+persisted-only availability, scopes, consent, strict outputs, planning/delivery contracts and registered schemas are
+unchanged; no registered-client refresh, contract promotion or plugin rebuild is required. Historical stored values
+change only through the separately authorized source-backed reparse lifecycle described in the runbook.
+
 Sports Lib 23.7.1 accepts 13-digit Unix-millisecond GPX point times and rejects invalid times before stream allocation.
 Existing bounded original-file chart/sample hydration uses this parser without changing metrics, units, output schemas,
 privacy masks, scopes or consent. Persisted summaries remain authoritative; no historical reparse, derived refresh,
