@@ -26,7 +26,7 @@ describe('Timeline notes workspace ownership', () => {
   let component: TimelineNotesWorkspaceComponent;
   const flush = async () => { TestBed.flushEffects(); await Promise.resolve(); await Promise.resolve(); };
   beforeEach(() => {
-    vi.clearAllMocks(); service.uid.set('owner'); service.showOnCharts.set(true); service.loadRange.mockResolvedValue({ notes: [note], incomplete: null });
+    vi.clearAllMocks(); service.uid.set('owner'); service.showOnCharts.set(true); service.loadRange.mockReset().mockResolvedValue({ notes: [note], incomplete: null });
     service.cachedRange.mockReturnValue(null);
     service.invalidate.mockImplementation(() => service.changes$.next());
     TestBed.configureTestingModule({ providers: [{ provide: AppTimelineNotesService, useValue: service }, { provide: MatDialog, useValue: dialogs }, { provide: AppHapticsService, useValue: haptics }] });
@@ -71,6 +71,48 @@ describe('Timeline notes workspace ownership', () => {
       finish({ notes: [], incomplete: null }); await flush();
       expect(component.context().notes).toEqual([]);
     });
+  it.each(['records', 'bytes'] as const)('keeps an incomplete %s cache pending until the bounded current read settles', async incomplete => {
+    const range = { startDate: '2026-01-01', endDate: '2026-01-10' };
+    const currentRange = { startDate: '2026-01-02', endDate: '2026-01-03' };
+    const cached = { notes: [note], incomplete };
+    service.cachedRange.mockReturnValue(cached);
+    let finishUnion!: (value: unknown) => void;
+    let finishCurrent!: (value: unknown) => void;
+    service.loadRange.mockImplementationOnce(() => new Promise(resolve => { finishUnion = resolve; }));
+    service.loadRange.mockImplementationOnce(() => new Promise(resolve => { finishCurrent = resolve; }));
+    component.context().reportRange({}, range);
+    component.context().reportCurrentRange!({}, () => currentRange);
+    await flush();
+    expect(component.context().notes).toEqual([note]);
+    expect(component.incomplete()).toBe(incomplete);
+    expect(component.loading()).toBe(true);
+    finishUnion(cached); await flush();
+    expect(service.loadRange).toHaveBeenLastCalledWith('owner', currentRange, false);
+    expect(component.loading()).toBe(true);
+    finishCurrent({ notes: [], incomplete: null }); await flush();
+    expect(component.loading()).toBe(false);
+    expect(component.context().currentNotes).toEqual([]);
+  });
+  it('keeps a newer quiet refresh deduplicated when an older window finishes first', async () => {
+    visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    const range = { startDate: '2026-01-01', endDate: '2026-01-10' };
+    const key = {};
+    component.context().reportRange(key, range); await flush();
+    let finishOlder!: (value: unknown) => void;
+    let finishCurrent!: (value: unknown) => void;
+    service.loadRange.mockImplementationOnce(() => new Promise(resolve => { finishOlder = resolve; }));
+    component.context().reportRange(key, { startDate: '2026-02-01', endDate: '2026-02-10' }); await flush();
+    service.cachedRange.mockReturnValue({ notes: [note], incomplete: null });
+    service.loadRange.mockImplementationOnce(() => new Promise(resolve => { finishCurrent = resolve; }));
+    component.context().reportRange(key, range); await flush();
+    expect(component.loading()).toBe(false);
+    finishOlder({ notes: [], incomplete: null }); await flush();
+    window.dispatchEvent(new Event('focus')); await flush();
+    expect(service.loadRange).toHaveBeenCalledTimes(3);
+    expect(component.context().notes).toEqual([note]);
+    finishCurrent({ notes: [], incomplete: null }); await flush();
+    expect(component.context().notes).toEqual([]);
+  });
   it('retains notes after a failed foreground refresh and allows an explicit retry', async () => {
     visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
     component.context().reportRange({}, { startDate: '2026-01-01', endDate: '2026-01-10' }); await flush();

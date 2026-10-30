@@ -185,9 +185,9 @@ export class TimelineNotesWorkspaceComponent {
     this.pending = true;
     try {
       const cached = this.service.cachedRange(uid, range);
-      // Cached empty results are usable too. Passive revalidation should not announce another
-      // load or mark downstream calendar context pending; explicit retries keep visible progress.
-      this.loading.set(forceRefresh || !cached);
+      // Complete cached results, including empty ones, can revalidate quietly. A truncated
+      // cache must keep downstream calendar context pending until its bounded read settles.
+      this.loading.set(forceRefresh || !cached || !!cached.incomplete);
       if (cached) { this.notes.set(cached.notes); this.incomplete.set(cached.incomplete); acceptCurrent(cached); }
       this.updateOngoingDates();
       const result = await this.service.loadRange(uid, range, forceRefresh);

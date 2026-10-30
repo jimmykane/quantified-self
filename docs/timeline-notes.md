@@ -187,8 +187,9 @@ results must be requeried for a narrower window. Successful note mutations and a
 fence outstanding reads immediately.
 Window focus and visible-tab events perform passive revalidation, preserving annotations and avoiding duplicate pending
 loads. They do not invalidate the service. Unchanged notes retain the same chart context; ongoing periods reproject only
-when their captured-zone date changes. A covered cached result, including an empty result, revalidates quietly without
-progress or a loading announcement. First reads, uncovered windows, and explicit Retry notes keep visible progress.
+when their captured-zone date changes. A covered, complete cached result, including an empty result, revalidates quietly
+without progress or a loading announcement. First reads, uncovered windows, incomplete cached results, and explicit
+Retry notes keep visible progress until their reads settle.
 Pending-request deduplication is independent of that UI loading state. An explicit Retry notes bypasses freshness
 without clearing known annotations.
 Failed refreshes keep the last completed snapshot and expose retry. Notes failing to load never block metric rendering. Provider/sport filters do not filter
