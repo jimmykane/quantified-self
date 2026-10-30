@@ -710,6 +710,7 @@ describe('ActivitiesPageComponent', () => {
     expect(row).toBeTruthy(); expect(root.querySelector('.merged-events-button')).toBeTruthy();
     expect(root.querySelectorAll('.activity-table-skeleton')).toHaveLength(0);
     expect(paginator.length).toBe(1);
+    table.search('ride'); await render(c);
     c.component.refresh(); await settle();
     expect(root.querySelector('tr.activity-row')).toBe(row);
     expect(root.querySelector('.event-table-header')).toBe(header);
@@ -717,10 +718,15 @@ describe('ActivitiesPageComponent', () => {
     expect(root.querySelector('.activity-table-loading-status')?.textContent).toContain('Updating activities');
     expect(root.querySelector('.activity-table-loading-status')?.textContent).toContain('Showing previous results');
     expect(root.querySelectorAll('mat-progress-bar')).toHaveLength(1);
+    const clearSearch = root.querySelector<HTMLButtonElement>('.table-search-clear');
+    expect(clearSearch.disabled).toBe(true);
+    clearSearch.click();
+    expect(table.searchTerm).toBe('ride');
     expect(root.querySelector('.merged-events-button')).toBeTruthy(); expect(root.querySelector('.merge-toggle-hint')).toBeNull();
     stream.next([makeRecord('refreshed')]); await render(c);
     expect(table.data.data.map(row => row.Event.getID())).toEqual(['refreshed']);
     expect(paginator.disabled).toBe(false); expect(root.querySelector('mat-progress-bar')).toBeNull();
+    expect(clearSearch.disabled).toBe(false);
     expect(root.querySelector('table[mat-table]')?.hasAttribute('inert')).toBe(false);
     expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
     expect(c.events.getEventCount).not.toHaveBeenCalled(); expect(c.events.getEventCountBy).not.toHaveBeenCalled();

@@ -403,6 +403,9 @@ The table defers input-driven row rebuilds and filter-context resets during that
 event collection or start a query. Changing the viewer or target owner clears the retained rows immediately and waits
 for the new owner's event input before displaying data. Activities keeps the merged-control position during loading
 and leaves the shared table responsible for the activity-loading indicator.
+Bulk-action loading is separate from the parent-owned history input: either can finish first without unlocking the
+other or leaving a pending input stuck. Search clearing is disabled while busy; queued text/catalog filters apply
+after loading instead of changing the retained results, and deferred filter-context resets settle when the action ends.
 
 Use `ActivityTypesMultiSelectComponent` for canonical sport catalogs with family shortcuts, selected aliases and
 locked choices; use `ActivityTypesFilterMenuComponent` for the equivalent compact toolbar trigger. Both delegate

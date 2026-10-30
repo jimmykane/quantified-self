@@ -15,7 +15,8 @@ import {
   Output,
   SimpleChanges,
   ViewChild,
-  inject
+  inject,
+  signal
 } from '@angular/core';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { AppBreakpoints } from '../../constants/breakpoints';
@@ -142,8 +143,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   ];
   displayedColumns: string[] = [];
   readonly loadingRows = [null, null, null, null];
+  private readonly mutationLoading = signal(false);
   private pendingLoadingInputs = false;
   private pendingFilterContextReset = false;
+  private pendingTableFilter = false;
   private renderedOwnerKey: string | null = null;
   private readonly eventInputOwners = new WeakMap<EventRead[], string>();
 
@@ -157,7 +160,18 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   get tableIsLoading(): boolean {
-    return !!this.isLoading || !this.events || this.pendingLoadingInputs || this.awaitingOwnerEvents;
+    return !!this.isLoading || this.mutationLoading() || !this.events || this.pendingLoadingInputs || this.awaitingOwnerEvents;
+  }
+
+  override loading(): void {
+    this.mutationLoading.set(true);
+  }
+
+  override loaded(): void {
+    this.mutationLoading.set(false);
+    // Local actions must never complete the parent's history request. Settle
+    // deferred filters without restarting any read or changing its loading input.
+    this.settleDeferredFilters();
   }
 
   get showInitialLoading(): boolean {
@@ -289,6 +303,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.data.data = [];
       this.rowCache.clear();
       this.selection.clear();
+      this.mutationLoading.set(false);
     }
     if (simpleChanges.events || preferencesChanged || simpleChanges.hideGeneratedNames || simpleChanges.targetUser || this.pendingLoadingInputs) {
       this.pendingLoadingInputs = !!this.isLoading || !this.events || this.awaitingOwnerEvents;
@@ -321,7 +336,15 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (simpleChanges.filterContext) {
       this.pendingFilterContextReset = true;
     }
-    if (this.pendingFilterContextReset && !this.tableIsLoading) {
+    this.settleDeferredFilters();
+    if (simpleChanges.user || simpleChanges.targetUser || simpleChanges.presentation) {
+      void this.loadAllHistoryTags();
+    }
+  }
+
+  private settleDeferredFilters(): void {
+    if (this.tableIsLoading) return;
+    if (this.pendingFilterContextReset) {
       this.pendingFilterContextReset = false;
       if (!this.preserveSearchOnFilterChange) {
         this.searchTerm = '';
@@ -336,8 +359,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.libraryPageIndex = 0;
       this.applyTableFilter();
     }
-    if (simpleChanges.user || simpleChanges.targetUser || simpleChanges.presentation) {
-      void this.loadAllHistoryTags();
+    if (this.pendingTableFilter) {
+      this.applyTableFilter();
     }
   }
 
@@ -1308,7 +1331,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   clearSearch() {
-    if (!this.searchTerm) return;
+    if (this.tableIsLoading || !this.searchTerm) return;
     this.searchTerm = '';
     this.searchSubject.next('');
     this.search('');
@@ -1316,6 +1339,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   private applyTableFilter(): void {
+    if (this.tableIsLoading) {
+      this.pendingTableFilter = true;
+      return;
+    }
+    this.pendingTableFilter = false;
     this.tagPickerValues = [...this.tagFilters.map(tag => `tag:${tag.toLowerCase()}`), ...(this.untaggedFilter ? ['untagged'] : [])];
     this.data.filter = JSON.stringify({
       text: this.searchTerm.trim().toLowerCase(), tags: this.tagFilters, untagged: this.untaggedFilter,

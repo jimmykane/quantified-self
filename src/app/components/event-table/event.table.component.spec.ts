@@ -883,9 +883,26 @@ describe('EventTableComponent', () => {
         expect(mockHapticsService.selection).not.toHaveBeenCalled();
     });
 
+    it('defers a search queued before refresh until the new results arrive', async () => {
+        const previousFilter = component.data.filter;
+        component.onSearchInput({ target: { value: 'new search' } } as unknown as Event);
+        component.isLoading = true;
+        component.events = [];
+        component.ngOnChanges({ events: new SimpleChange(null, [], false) });
+        await new Promise(resolve => setTimeout(resolve, 300));
+        expect(component.data.filter).toBe(previousFilter);
+
+        component.isLoading = false;
+        component.events = [new MockEvent('refreshed') as any];
+        component.ngOnChanges({ isLoading: new SimpleChange(true, false, false), events: new SimpleChange([], component.events, false) });
+        expect(JSON.parse(component.data.filter).text).toBe('new search');
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+    });
+
     it.each(['viewer', 'target'])('clears retained rows immediately when the %s changes and waits for that owner’s events', changed => {
         const oldEvents = component.events;
         component.selection.select(component.data.data[0]);
+        component.loading();
         component.isLoading = true;
         if (changed === 'viewer') component.user = { ...component.user, uid: 'other-owner' } as User;
         else component.targetUser = { ...component.user, uid: 'other-owner' } as User;
@@ -1852,6 +1869,60 @@ describe('EventTableComponent', () => {
     });
 
     describe('deleteSelection', () => {
+        it('unlocks after cancelling a bulk action when a live result arrives during confirmation', async () => {
+            const closed = new Subject<boolean>();
+            mockDialog.open.mockReturnValueOnce({ afterClosed: () => closed });
+            component.selection.select(component.data.data[0]);
+            await component.deleteSelection();
+            component.events = [new MockEvent('live-result') as any];
+            component.ngOnChanges({ events: new SimpleChange(null, component.events, false), filterContext: new SimpleChange('previous', 'current', false) });
+            expect(component.paginator.firstPage).not.toHaveBeenCalled();
+            closed.next(false);
+            expect(component.tableIsLoading).toBe(false);
+            expect(component.data.data.map(row => row.Event.getID())).toEqual(['live-result']);
+            expect(component.paginator.firstPage).toHaveBeenCalledOnce();
+            expect(mockEventService.deleteAllEventData).not.toHaveBeenCalled();
+        });
+
+        it('keeps a parent refresh active when a bulk action finishes', async () => {
+            const closed = new Subject<boolean>();
+            mockDialog.open.mockReturnValueOnce({ afterClosed: () => closed });
+            component.selection.select(component.data.data[0]);
+            await component.deleteSelection();
+            component.isLoading = true;
+            component.events = [];
+            component.ngOnChanges({ isLoading: new SimpleChange(false, true, false), events: new SimpleChange(null, [], false) });
+            closed.next(false);
+            expect(component.isLoading).toBe(true);
+            expect(component.tableIsLoading).toBe(true);
+            component.events = [new MockEvent('fresh-result') as any];
+            component.isLoading = false;
+            component.ngOnChanges({ isLoading: new SimpleChange(true, false, false), events: new SimpleChange([], component.events, false) });
+            expect(component.tableIsLoading).toBe(false);
+            expect(component.data.data.map(row => row.Event.getID())).toEqual(['fresh-result']);
+            expect(mockEventService.deleteAllEventData).not.toHaveBeenCalled();
+        });
+
+        it('keeps a bulk action pending when a parent refresh completes first', async () => {
+            let resolveDelete: (value: boolean) => void;
+            mockEventService.deleteAllEventData.mockReturnValueOnce(new Promise<boolean>(resolve => { resolveDelete = resolve; }));
+            mockDialog.open.mockReturnValueOnce({ afterClosed: () => of(true) });
+            component.selection.select(component.data.data[0]);
+            await component.deleteSelection();
+            component.isLoading = true;
+            component.events = [];
+            component.ngOnChanges({ isLoading: new SimpleChange(false, true, false), events: new SimpleChange(null, [], false) });
+            component.isLoading = false;
+            component.events = [new MockEvent('live-result') as any];
+            component.ngOnChanges({ isLoading: new SimpleChange(true, false, false), events: new SimpleChange([], component.events, false) });
+            expect(component.tableIsLoading).toBe(true);
+            resolveDelete(true);
+            await new Promise(resolve => setTimeout(resolve, 0));
+            expect(component.tableIsLoading).toBe(false);
+            expect(component.data.data.map(row => row.Event.getID())).toEqual(['live-result']);
+            expect(mockEventTagCatalogService.listAllTags).toHaveBeenCalledOnce();
+        });
+
         it('removes a row deleted through its action menu', () => {
             const changes = vi.fn();
             component.eventsChange.subscribe(changes);
@@ -1913,7 +1984,7 @@ describe('EventTableComponent', () => {
             expect(processChangesSpy).toHaveBeenCalledWith('after_delete_selection');
             expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('delete_events');
             expect(mockSnackBar.open).toHaveBeenCalledWith('Activities deleted', undefined, { duration: 2000 });
-            expect(component.isLoading).toBe(false);
+            expect(component.tableIsLoading).toBe(false);
         });
 
         it('reconciles confirmed deletions even when another selected activity fails to delete', async () => {
@@ -1934,7 +2005,7 @@ describe('EventTableComponent', () => {
             expect(changes).toHaveBeenCalledWith({ userID: mockUser.uid, updatedTags: {}, deletedEventIDs: ['event1'] });
             expect(mockHapticsService.error).toHaveBeenCalledOnce();
             expect(mockHapticsService.success).not.toHaveBeenCalled();
-            expect(component.isLoading).toBe(false);
+            expect(component.tableIsLoading).toBe(false);
         });
 
         it('keeps activity search and sort persistence active after bulk deletion', async () => {

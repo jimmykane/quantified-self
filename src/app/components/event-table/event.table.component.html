@@ -9,7 +9,7 @@
           aria-label="Search activities"
           autocomplete="off">
         <button mat-icon-button matSuffix type="button" class="table-search-clear" *ngIf="searchTerm"
-          (click)="clearSearch(); activitySearchInput.focus()" aria-label="Clear">
+          [disabled]="tableIsLoading" (click)="clearSearch(); activitySearchInput.focus()" aria-label="Clear">
           <mat-icon>close</mat-icon>
         </button>
       </mat-form-field>
