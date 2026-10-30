@@ -792,7 +792,7 @@ describe('admin subscription gift callables', () => {
         expect(mockStripeUpdate).toHaveBeenCalledTimes(1);
     });
 
-    it('does not resolve the recipient again while deterministic mail is queued', async () => {
+    it.each(['PENDING', 'PROCESSING', 'RETRY', 'SUCCESS'])('preserves legacy %s gift mail without resending', async state => {
         const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
         const request = callableRequest({
             uid: 'target-user',
@@ -804,17 +804,29 @@ describe('admin subscription gift callables', () => {
         });
         expect((await grantGift(request)).notificationStatus).toBe('queued');
 
+        const [mailPath, mail] = [...db.store.entries()].find(([path]) => path.startsWith('mail/'))!;
+        const legacyMail: Record<string, unknown> = {
+            ...mail,
+            toUids: ['target-user'],
+            delivery: { ...(mail.delivery as Record<string, unknown>), state },
+        };
+        delete legacyMail.uid;
+        db.store.set(mailPath, legacyMail);
+
         const operationPath = `users/target-user/adminSubscriptionGifts/${operationId}`;
         const authReadsBeforeRetry = mockAuthGetUser.mock.calls.length;
+        const notificationStatus = state === 'SUCCESS' ? 'delivered' : 'queued';
 
         const retried = await grantGift(request);
 
-        expect(retried.notificationStatus).toBe('queued');
+        expect(retried.notificationStatus).toBe(notificationStatus);
         expect(mockAuthGetUser).toHaveBeenCalledTimes(authReadsBeforeRetry + 1);
         expect(db.store.get(operationPath)).toMatchObject({
-            notificationStatus: 'queued',
-            notificationResultCode: 'already_queued',
+            notificationStatus,
+            notificationResultCode: state === 'SUCCESS' ? 'delivered' : 'already_queued',
         });
+        expect(db.store.get(mailPath)).toEqual(legacyMail);
+        expect([...db.store.keys()].filter(path => path.startsWith('mail/'))).toHaveLength(1);
         expect(mockStripeUpdate).toHaveBeenCalledTimes(1);
     });
 
