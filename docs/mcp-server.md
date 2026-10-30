@@ -792,6 +792,11 @@ Planned workouts in the same plan/date conflict; skipped/standalone/recorded act
 Normal native-approved idempotent `apply_training_changes` rechecks authority and revisions. The Assistant advertises
 only the focused preview and requires its app-owned complete review/Apply; no apply tool is available to the model.
 
+Rest-day reading guidance is available with `training-plans:read`; editing guidance names the preview only when
+`training-plans:write` is granted. Read-only and provider-delivery-only connections must not recommend the unavailable
+rest-day editing tool. This applies to both external clients and the built-in Assistant; it does not widen consent,
+tool registration, schemas or Apply authority.
+
 Unscheduled dates are not declared rest days. Daily suggestions read explicit intent separately and do not fill
 it automatically; missing reads remain unknown. Markers shift/restore with their plan but never count as workouts,
 change modeled metrics, grant sync consent or produce provider artifacts. No new scope or deployed Function is

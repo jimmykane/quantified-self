@@ -1016,6 +1016,13 @@ Apply recheck authority/revisions; the model is prepare-only. No provider action
 migration or metrics schema change is introduced. Training, Activity and cross-domain bundled guidance explains the
 distinction. The registered baseline/history is unchanged; the pending compatible contract digest requires the
 normal separately authorized backend release, client catalog refresh and plugin refresh. No deployment is implied.
+
+Rest-day server guidance follows the same independent grants: reading intent remains available with Training reads,
+while naming the editing preview requires plan/workout changes permission. Provider-delivery permission alone cannot
+enable that guidance or tool. Regression coverage checks external no-access, read-only, delivery-only, editing and
+combined connections plus the Assistant permission matrix. This instruction correction preserves all read/write
+schemas, projections and approval contracts; its pending digest follows the existing server-instruction refresh lifecycle.
+
 Release the affected Training backend readers/writers before exposing authoring in the frontend: older strict plan
 parsers do not recognize the optional field. Keep rest-day support when rolling back a backend that has already
 authored markers; do not remove stored dates or deploy an older strict parser as an implicit rollback migration.
