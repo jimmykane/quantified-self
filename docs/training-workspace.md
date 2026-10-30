@@ -5723,8 +5723,13 @@ qualification in the model/review context. It uses the same one daily allowance;
 The private uncharged deferral receipt survives context failures and expired preparation leases; charged or
 unproven allowance metadata cannot be reclaimed. This keeps a retry from losing the fallback after noon.
 Temporary workout/rest-day coverage also retains that unspent deferral: current coverage still takes priority, but
-removing it restores the same dated fallback. Today hydration reloads do not retire an in-flight read for the same
-owner, day, preferences and foreground scope; those scope changes still invalidate stale replies.
+removing it restores the same dated fallback. Today hydration reloads and tab visibility changes do not retire an
+in-flight read for the same owner, day and preferences; changes to that scope still invalidate stale replies. A checked
+row stays visible without another status request or loading flash on foreground return or repeated hydration. A visit
+before 05:00 can still start preparation on a foreground return within the morning window. Sleep evidence received
+while hidden coalesces into one revision-bound check on return, and explicit **Check again** remains available. A read
+that finishes while hidden retains its result, but its shown event waits until the row is visible. A status read that
+returns after hiding cannot start a new automatic model preparation until foreground return.
 An ordinary afternoon visit cannot start a new included suggestion. **Check again** remains in the options menu while
 waiting. This is not a sleep-ingestion trigger or a promise that every provider has finished syncing. No queue, scheduler, notification
 or background model request is added. Later evidence/preferences do not silently regenerate a cached draft. Status
@@ -5777,7 +5782,9 @@ platform, cloud dashboard or metric resource is provisioned here. Queue monitori
 
 MCP impact review: no public contract or authority impact. Morning generation/preferences/cache are private first-party
 state, not a new recipe, planning mutation, exposed field, grant, tool or provider action. Explicitly saved recipes use
-the unchanged endurance/strength read and create-workout contracts. The same-PR demo Firestore suite checks the private
+the unchanged endurance/strength read and create-workout contracts. Tab-return stability changes only first-party
+request scheduling and visibility analytics; MCP projections, reads and mutation confirmation contracts are unchanged.
+The same-PR demo Firestore suite checks the private
 cache/allowance/deletion fences and existing strict full-workout/strength readback, including private-field exclusion.
 No registered contract digest, client refresh, plugin rebuild, data migration or provider rollout is required.
 

@@ -68,12 +68,16 @@ export class MorningWorkoutComponent {
       // Track only the owner, day, settled Today data, preferences and foreground state.
       const eligible = this.eligible(), preferences = this.preferences(), saving = this.morning.saving();
       const ready = this.dataReady(), visible = this.visible();
-      const scope = JSON.stringify([this.ownerUid(), this.localDate(), eligible, preferences, visible]);
+      const scope = JSON.stringify([this.ownerUid(), this.localDate(), eligible, preferences]);
       // Hydration is a start barrier, not authority to discard work already running for this same scope.
       if (scope !== this.readScope) {
         this.readScope = scope; this.sequence++; this.status.set(null); this.error.set(false); this.loading.set(false);
       }
-      if (!eligible || !preferences.enabled || saving || !ready || !visible || untracked(() => this.loading())) return;
+      if (!eligible || !preferences.enabled || saving || !ready || !visible || untracked(() => this.loading() || this.error())) return;
+      const status = untracked(() => this.status());
+      // Foreground return may start a previously early visit, but never reload an already checked suggestion.
+      // Sleep changes have their own revision-bound retry below; other retries remain explicit.
+      if (status && (status.state !== 'waiting' || !isMorningWorkoutWindow(new Date(), preferences.controls.timeZone))) return;
       const timer = setTimeout(() => { untracked(() => { void this.load(); }); }, 1500);
       onCleanup(() => clearTimeout(timer));
     });
@@ -94,6 +98,16 @@ export class MorningWorkoutComponent {
       const timer = setTimeout(() => untracked(() => { void this.load(); }), 1500);
       onCleanup(() => clearTimeout(timer));
     });
+    effect(() => {
+      const status = this.status(), uid = this.ownerUid();
+      if (!this.eligible() || !this.preferences().enabled || !this.visible() || !status
+        || !['ready', 'planned', 'completed', 'rest-day'].includes(status.state)) return;
+      untracked(() => {
+        const key = `${uid}:${status.localDate}:${status.state}`;
+        if (this.shown.has(key)) return;
+        this.shown.add(key); this.morning.event(uid, 'shown', status.state);
+      });
+    });
   }
   private actionScope = '';
   private current(sequence: number, uid: string): boolean {
@@ -111,16 +125,17 @@ export class MorningWorkoutComponent {
         ? await this.morning.request(uid, 'use-available-data', () => this.current(sequence, uid), this.status()!.localDate)
         : await this.morning.request(uid, 'status', () => this.current(sequence, uid));
       if (!this.current(sequence, uid)) return;
-      if (!useAvailableData && ['waiting', 'waiting-sleep'].includes(status.state) && this.dataReady()
+      if (!useAvailableData && ['waiting', 'waiting-sleep'].includes(status.state)
         && isMorningWorkoutWindow(new Date(), this.preferences().controls.timeZone)) {
-        status = await this.morning.request(uid, 'prepare', () => this.current(sequence, uid));
+        if (this.dataReady() && this.visible()) {
+          status = await this.morning.request(uid, 'prepare', () => this.current(sequence, uid));
+        } else if (status.state === 'waiting-sleep') {
+          // A status-only read did not check current Sleep context; resume once the start barriers settle.
+          this.checkedSleepRevision = -1;
+        }
       }
       if (!this.current(sequence, uid)) return;
       this.status.set(status);
-      const shownKey = `${uid}:${status.localDate}:${status.state}`;
-      if (!this.shown.has(shownKey) && ['ready', 'planned', 'completed', 'rest-day'].includes(status.state)) {
-        this.shown.add(shownKey); this.morning.event(uid, 'shown', status.state);
-      }
     } catch { if (this.current(sequence, uid)) { this.error.set(true); this.morning.event(uid, 'failed'); } }
     finally { if (this.current(sequence, uid)) this.loading.set(false); }
   }
