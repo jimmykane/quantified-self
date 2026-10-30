@@ -187,6 +187,31 @@ describe('morning workout preparation', () => {
     await runMorningWorkout(fallback, identity, deps);
     expect(deps.generate).toHaveBeenCalledOnce(); expect(deps.store.charge).toHaveBeenCalledOnce();
   });
+  it('accepts sleep completed during the context read and records its actual observation time', async () => {
+    const deps = dependencies(), context = evidence(); let now = morningNow;
+    const endedAt = morningNow.getTime() + 30_000;
+    (context.evidence.daily as Record<string, unknown>).dailyReport = {
+      sleep: { status: 'available', latestSession: { endTimeMs: endedAt } },
+      readiness: { drivers: { sleep: { status: 'available', latestSleepAtMs: endedAt } } },
+    };
+    deps.now = () => now;
+    deps.context.mockImplementation(async () => { now = new Date(morningNow.getTime() + 60_000); return context; });
+    const result = await runMorningWorkout({ mode: 'morning', action: 'prepare' }, identity, deps);
+    expect(result.state).toBe('ready'); expect(result.result?.observedAt).toBe(now.toISOString());
+    expect(deps.generate).toHaveBeenCalledOnce(); expect(deps.store.charge).toHaveBeenCalledOnce();
+  });
+  it.each(['planned', 'completed', 'rest-day'] as const)('keeps %s coverage ahead of a deferred fallback, then resumes the unused suggestion', async state => {
+    const deps = dependencies(), context = evidence(); context.evidence.daily = { ...(context.evidence.daily as object), dailyReport: {} };
+    deps.context.mockResolvedValue(context);
+    await runMorningWorkout({ mode: 'morning', action: 'prepare' }, identity, deps);
+    deps.now = () => new Date('2026-10-30T13:00Z'); deps.coverage.mockResolvedValue(state);
+    const fallback = { mode: 'morning', action: 'use-available-data', localDate: '2026-10-30' };
+    expect((await runMorningWorkout(fallback, identity, deps)).state).toBe(state);
+    expect(deps.generate).not.toHaveBeenCalled(); expect(deps.store.charge).not.toHaveBeenCalled();
+    deps.coverage.mockResolvedValue(null);
+    expect((await runMorningWorkout(fallback, identity, deps)).state).toBe('ready');
+    expect(deps.generate).toHaveBeenCalledOnce(); expect(deps.store.charge).toHaveBeenCalledOnce();
+  });
 });
 describe('current-night sleep admission', () => {
   function context(end?: string, processed = true): DayWorkoutContext {

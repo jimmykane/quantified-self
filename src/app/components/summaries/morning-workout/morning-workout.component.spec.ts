@@ -192,6 +192,39 @@ describe('compact morning workout in Today', () => {
     expect(request.mock.calls.length).toBeGreaterThan(attempts);
     expect(fixture.componentInstance.status()?.state).toBe('ready');
   });
+  it('retains an in-flight result while Today readiness reloads without issuing another request', async () => {
+    const { fixture, request } = setup();
+    const ready = await request('owner', 'prepare'); request.mockClear();
+    let finish!: (value: any) => void;
+    request.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = fixture.componentInstance.load();
+    fixture.componentRef.setInput('dataReady', false); fixture.detectChanges();
+    fixture.componentRef.setInput('sleepRevision', 1);
+    fixture.componentRef.setInput('dataReady', true); fixture.detectChanges();
+    finish(ready); await pending; fixture.detectChanges();
+    expect(fixture.componentInstance.status()?.state).toBe('ready');
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(request).toHaveBeenCalledOnce();
+  });
+  it('still retires in-flight reads when personalization changes', async () => {
+    const { fixture, request, preferences } = setup();
+    const ready = await request('owner', 'prepare'); request.mockClear();
+    let finish!: (value: any) => void;
+    request.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = fixture.componentInstance.load();
+    preferences.update(value => ({ ...value, controls: { ...value.controls, timelineContext: false } }));
+    fixture.detectChanges(); finish(ready); await pending;
+    expect(fixture.componentInstance.status()).toBeNull();
+  });
+  it('retains the waiting row but disables generation while readiness is loading again', () => {
+    const { fixture, request } = setup();
+    fixture.componentInstance.status.set({ localDate: '2026-10-30', state: 'waiting-sleep' });
+    fixture.componentRef.setInput('dataReady', false); fixture.detectChanges();
+    const button = [...fixture.nativeElement.querySelectorAll('button')].find((item: HTMLButtonElement) => item.textContent?.includes('Use available data')) as HTMLButtonElement;
+    expect(button.disabled).toBe(true); button.click(); expect(request).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('dataReady', true); fixture.detectChanges();
+    expect(button.disabled).toBe(false);
+  });
   it('uses the dated included fallback only after an explicit click, including after noon', async () => {
     const { fixture, request } = setup();
     fixture.componentInstance.status.set({ localDate: '2026-10-30', state: 'waiting-sleep' });

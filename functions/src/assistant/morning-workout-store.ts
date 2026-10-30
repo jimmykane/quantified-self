@@ -61,6 +61,10 @@ export function createMorningWorkoutStore(db = () => admin.firestore(), clock = 
       const date = preferences.controls.localDate;
       const entry = state.messages[date];
       const status: MorningWorkoutStatus = entry ? publicEntry(entry) : { localDate: date, state: 'waiting' };
+      // Coverage is rechecked by the caller. Preserve earlier deferral if that temporary coverage is removed.
+      if (entry?.awaitingSleep === true && entry.charged === false && ['planned', 'completed', 'rest-day'].includes(entry.state)) {
+        status.state = 'waiting-sleep';
+      }
       if (entry?.state === 'preparing' && (!Number.isFinite(entry.startedAtMs) || now.getTime() - entry.startedAtMs >= LEASE_MS)) {
         status.state = Number.isFinite(entry.startedAtMs) && entry.charged === false
           ? entry.awaitingSleep === true ? 'waiting-sleep' : 'waiting' : 'failed';

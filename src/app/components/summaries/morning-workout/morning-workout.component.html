@@ -12,11 +12,11 @@
       } @else {
         @if (status()?.state === 'ready') { <button mat-button appHapticTap [disabled]="busy()" (click)="review()">Review</button> }
         @if (status()?.state === 'failed') { <button mat-button appHapticTap [disabled]="busy()" (click)="manual()">Generate manually</button> }
-        @if (status()?.state === 'waiting-sleep') { <button mat-button appHapticTap [disabled]="busy()" (click)="load(true)">Use available data</button> }
-        @if (status()?.state !== 'waiting-sleep' && (status()?.state === 'preparing' || error())) { <button mat-button appHapticTap [disabled]="busy()" (click)="load()">Check again</button> }
+        @if (status()?.state === 'waiting-sleep') { <button mat-button appHapticTap [disabled]="busy() || !dataReady()" (click)="load(true)">Use available data</button> }
+        @if (status()?.state !== 'waiting-sleep' && (status()?.state === 'preparing' || error())) { <button mat-button appHapticTap [disabled]="busy() || !dataReady()" (click)="load()">Check again</button> }
         <button mat-icon-button appHapticTap [matMenuTriggerFor]="options" [disabled]="busy()" aria-label="Morning workout options"><mat-icon>more_vert</mat-icon></button>
         <mat-menu #options="matMenu" class="qs-menu-panel">
-          @if (status()?.state === 'waiting-sleep') { <button mat-menu-item appHapticTap (click)="load()">Check again</button> }
+          @if (status()?.state === 'waiting-sleep') { <button mat-menu-item appHapticTap [disabled]="busy() || !dataReady()" (click)="load()">Check again</button> }
           <button mat-menu-item appHapticTap (click)="configure()">Preferences</button>
           <button mat-menu-item (click)="dismiss()">Dismiss for today</button>
           <button mat-menu-item (click)="disable()">Turn off morning suggestions</button>

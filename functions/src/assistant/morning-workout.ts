@@ -141,6 +141,7 @@ export async function runMorningWorkout(value: unknown, context: { auth?: { uid:
     const controls = await dependencies.selectSport(uid, preferences, now);
     const request: GenerateDayWorkoutRequest = { requestId: `morning:${date}`, controls };
     const evidence = await dependencies.context(uid, request, now);
+    const observedAt = dependencies.now();
     await assertActive();
     const skip = morningWorkoutSkip(evidence);
     if (skip) {
@@ -148,7 +149,7 @@ export async function runMorningWorkout(value: unknown, context: { auth?: { uid:
       await dependencies.store.finish(uid, date, token, skip);
       return { localDate: date, state: skip };
     }
-    const awaitingSleep = morningWorkoutAwaitsSleep(controls, evidence, now);
+    const awaitingSleep = morningWorkoutAwaitsSleep(controls, evidence, observedAt);
     if (awaitingSleep && !useAvailable) {
       outcome = 'waiting-sleep';
       await dependencies.store.finish(uid, date, token, outcome);
@@ -166,7 +167,7 @@ export async function runMorningWorkout(value: unknown, context: { auth?: { uid:
       });
     }, assertActive);
     await assertActive();
-    const result = { requestId: request.requestId, observedAt: now.toISOString(), ...suggestion,
+    const result = { requestId: request.requestId, observedAt: observedAt.toISOString(), ...suggestion,
       usedContext: evidence.usedContext, missingContext: evidence.missingContext };
     await dependencies.store.finish(uid, date, token, 'ready', controls, result);
     outcome = 'ready';

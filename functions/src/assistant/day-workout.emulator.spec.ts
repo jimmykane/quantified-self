@@ -192,6 +192,12 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     const deferred = await store.begin(uid, preferences); expect(deferred).toBeTruthy(); expect(deferred).not.toBe(first);
     await store.finish(uid, '2026-10-30', deferred!, 'waiting-sleep');
     expect((await store.read(uid)).status).toEqual({ localDate: '2026-10-30', state: 'waiting-sleep' });
+    // Temporary day coverage must not erase an earlier unspent morning deferral.
+    for (const covered of ['planned', 'completed', 'rest-day'] as const) {
+      const paused = await store.begin(uid, preferences);
+      await store.finish(uid, '2026-10-30', paused!, covered);
+      expect((await store.read(uid)).status).toEqual({ localDate: '2026-10-30', state: 'waiting-sleep' });
+    }
     const retry = await store.begin(uid, preferences);
     await store.finish(uid, '2026-10-30', retry!, 'failed');
     expect((await store.read(uid)).status.state).toBe('waiting-sleep');

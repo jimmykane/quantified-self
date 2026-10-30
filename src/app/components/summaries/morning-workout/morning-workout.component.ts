@@ -59,16 +59,21 @@ export class MorningWorkoutComponent {
   private actionSequence = 0;
   private shown = new Set<string>();
   private checkedSleepRevision = -1;
+  private readScope = '';
   constructor() {
     const visibility = () => this.visible.set(this.document.visibilityState !== 'hidden');
     this.document.addEventListener('visibilitychange', visibility);
     this.destroy.onDestroy(() => { this.sequence++; this.actionSequence++; this.document.removeEventListener('visibilitychange', visibility); });
     effect(onCleanup => {
       // Track only the owner, day, settled Today data, preferences and foreground state.
-      const eligible = this.eligible(), enabled = this.preferences().enabled, saving = this.morning.saving();
-      this.ownerUid(); this.localDate(); this.preferences(); this.dataReady(); this.visible();
-      this.sequence++; this.status.set(null); this.error.set(false); this.loading.set(false);
-      if (!eligible || !enabled || saving || !this.dataReady() || !this.visible()) return;
+      const eligible = this.eligible(), preferences = this.preferences(), saving = this.morning.saving();
+      const ready = this.dataReady(), visible = this.visible();
+      const scope = JSON.stringify([this.ownerUid(), this.localDate(), eligible, preferences, visible]);
+      // Hydration is a start barrier, not authority to discard work already running for this same scope.
+      if (scope !== this.readScope) {
+        this.readScope = scope; this.sequence++; this.status.set(null); this.error.set(false); this.loading.set(false);
+      }
+      if (!eligible || !preferences.enabled || saving || !ready || !visible || untracked(() => this.loading())) return;
       const timer = setTimeout(() => { untracked(() => { void this.load(); }); }, 1500);
       onCleanup(() => clearTimeout(timer));
     });

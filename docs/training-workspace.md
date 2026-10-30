@@ -5707,7 +5707,9 @@ between 05:00 inclusive and 12:00 exclusive in the saved IANA zone. With sleep p
 sleep ending in the previous seven local dates establishes an expectation for today's sleep. The existing validated
 daily report must include a completed main sleep ending on the current date in that zone, with the same end time in
 its on-read recovery sleep driver. Otherwise the server returns `waiting-sleep` before model admission, preserving
-the unused daily allowance. A failed/malformed report stays unknown and waits; no completed history or history older
+the unused daily allowance. Sleep completion and the displayed observation time use the clock after context reads,
+so a night completed during those reads is not mistaken for a future session. A failed/malformed report stays unknown
+and waits; no completed history or history older
 than seven local dates permits available-context generation. Sleep opt-outs bypass this gate. HRV/overnight-HR
 baseline availability and combined readiness confidence do not block it. Naps cannot satisfy the canonical main-sleep
 report, and provider display dates are not substituted for the local end date.
@@ -5720,6 +5722,9 @@ morning deferral after noon, rechecks current coverage and all admission fences,
 qualification in the model/review context. It uses the same one daily allowance; no Assistant quota is reserved.
 The private uncharged deferral receipt survives context failures and expired preparation leases; charged or
 unproven allowance metadata cannot be reclaimed. This keeps a retry from losing the fallback after noon.
+Temporary workout/rest-day coverage also retains that unspent deferral: current coverage still takes priority, but
+removing it restores the same dated fallback. Today hydration reloads do not retire an in-flight read for the same
+owner, day, preferences and foreground scope; those scope changes still invalidate stale replies.
 An ordinary afternoon visit cannot start a new included suggestion. **Check again** remains in the options menu while
 waiting. This is not a sleep-ingestion trigger or a promise that every provider has finished syncing. No queue, scheduler, notification
 or background model request is added. Later evidence/preferences do not silently regenerate a cached draft. Status
