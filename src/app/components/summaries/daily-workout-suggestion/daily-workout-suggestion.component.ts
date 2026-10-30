@@ -19,6 +19,7 @@ import { AppUserService } from '../../../services/app.user.service';
   changeDetection: ChangeDetectionStrategy.OnPush })
 export class DailyWorkoutSuggestionComponent {
   readonly ownerUid = input.required<string>();
+  // The parent's browser date refreshes preferences; the saved-zone date owns the daily scope.
   readonly localDate = input.required<string>();
   readonly dataReady = input(false);
   readonly sleepRevision = input(0);
@@ -71,7 +72,7 @@ export class DailyWorkoutSuggestionComponent {
       const eligible = this.eligible(), preferences = this.preferences(), saving = this.daily.saving();
       const ready = this.dataReady(), visible = this.visible(), sleepKey = this.evidenceKey();
       if (eligible && preferences.enabled && ready) untracked(() => this.daily.observeSleep(this.ownerUid(), sleepKey));
-      const scope = JSON.stringify([this.ownerUid(), this.localDate(), eligible, preferences, this.daily.cacheRevision()]);
+      const scope = JSON.stringify([this.ownerUid(), eligible, preferences, this.daily.cacheRevision()]);
       // Hydration is a start barrier, not authority to discard work already running for this same scope.
       if (scope !== this.readScope) {
         this.readScope = scope; this.sequence++;
@@ -90,7 +91,7 @@ export class DailyWorkoutSuggestionComponent {
     effect(() => {
       const controls = this.preferences().controls;
       // Only account/day changes retire user actions; a settings acknowledgement must not swallow their outcome.
-      const scope = JSON.stringify([this.ownerUid(), this.localDate(), this.eligible(), controls.localDate, controls.timeZone]);
+      const scope = JSON.stringify([this.ownerUid(), this.eligible(), controls.localDate, controls.timeZone]);
       if (scope !== this.actionScope) {
         this.actionScope = scope; this.actionSequence++; this.actionBusy.set(false); this.actionError.set(null);
       }
@@ -154,7 +155,7 @@ export class DailyWorkoutSuggestionComponent {
     });
   }
   async review(): Promise<void> {
-    const uid = this.ownerUid(), screenDate = this.localDate();
+    const uid = this.ownerUid();
     if (this.busy() || this.status()?.state !== 'ready' || !this.preferences().enabled || !this.daily.eligible(uid)) return;
     const sequence = ++this.sequence;
     this.loading.set(true); this.actionError.set(null);
@@ -178,7 +179,7 @@ export class DailyWorkoutSuggestionComponent {
         this.daily.event(uid, 'added', 'ready');
         const status: DailyWorkoutSuggestionStatus = { localDate: value.localDate, state: 'planned' };
         this.daily.remember(uid, status);
-        if (!this.destroy.destroyed && this.ownerUid() === uid && this.localDate() === screenDate) {
+        if (!this.destroy.destroyed && this.ownerUid() === uid) {
           this.status.set(status);
         }
       },

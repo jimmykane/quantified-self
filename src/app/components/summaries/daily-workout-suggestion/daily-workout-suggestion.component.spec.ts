@@ -276,16 +276,46 @@ describe('compact daily workout in Today', () => {
     expect(open).toHaveBeenCalledOnce(); expect(fixture.componentInstance.actionError()).toBeNull();
   });
   it.each(['day', 'account', 'destroy'] as const)('does not open a late coverage result after %s changes', async change => {
-    const { fixture, request, open, owner } = setup();
+    const { fixture, request, open, owner, preferences } = setup();
     await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
     const ready = fixture.componentInstance.status()!;
     let finish!: (value: DailyWorkoutSuggestionStatus) => void;
     request.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     const pending = fixture.componentInstance.review();
     if (change === 'account') { owner.set('other'); fixture.detectChanges(); }
-    if (change === 'day') { fixture.componentRef.setInput('localDate', '2026-10-31'); fixture.detectChanges(); }
+    if (change === 'day') {
+      preferences.update(value => ({ ...value, controls: { ...value.controls, localDate: '2026-10-31' } }));
+      fixture.componentRef.setInput('localDate', '2026-10-31'); fixture.detectChanges();
+    }
     if (change === 'destroy') fixture.destroy();
     finish(ready); await pending; expect(open).not.toHaveBeenCalled();
+  });
+  it('keeps Review and its Add callback valid across a browser-date change within the same saved-zone day', async () => {
+    const { fixture, request, open, remember } = setup();
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    const ready = fixture.componentInstance.status()!;
+    let finish!: (value: DailyWorkoutSuggestionStatus) => void;
+    request.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = fixture.componentInstance.review();
+    fixture.componentRef.setInput('localDate', '2026-10-31'); fixture.detectChanges();
+    finish(ready); await pending;
+    expect(open).toHaveBeenCalledExactlyOnceWith('owner', '2026-10-30', expect.any(String),
+      expect.objectContaining({ initialResult: ready.result }));
+    // Add still belongs to the same reviewed day despite the changed browser date.
+    open.mock.calls[0][3].onAdded();
+    expect(remember).toHaveBeenCalledExactlyOnceWith('owner', { localDate: '2026-10-30', state: 'planned' });
+    expect(fixture.componentInstance.status()?.state).toBe('planned');
+  });
+  it('keeps a pending dismissal valid when only the browser date changes', async () => {
+    const { fixture, request, haptics, event } = setup();
+    let finish!: (value: DailyWorkoutSuggestionStatus) => void;
+    request.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = fixture.componentInstance.dismiss();
+    fixture.componentRef.setInput('localDate', '2026-10-31'); fixture.detectChanges();
+    finish({ localDate: '2026-10-30', state: 'dismissed' }); await pending; fixture.detectChanges();
+    expect(fixture.componentInstance.status()?.state).toBe('dismissed');
+    expect(haptics.success).toHaveBeenCalledOnce(); expect(event).toHaveBeenCalledWith('owner', 'dismissed');
+    expect(fixture.componentInstance.actionBusy()).toBe(false);
   });
   it('remembers a successful Add even when Today was destroyed while the review stayed open', async () => {
     const { fixture, request, open, remember } = setup();
