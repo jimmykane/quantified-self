@@ -343,6 +343,8 @@ Choose **Use available data** to generate with missing sleep explicitly listed i
 
 The compact row stays visible when you collapse Today’s state details. **Review** rechecks whether today is already covered, then opens the existing workout review. This check generates nothing. **Add workout** explicitly saves it as Standalone. You can change the destination before a new manual generation. An already planned workout, recorded workout or authored rest day takes priority when the morning check runs. A rest suggestion is valid and adds nothing automatically.
 
+Deleting today’s last planned workout lets QS check again. An unused suggestion can be prepared during the morning window; an existing suggestion becomes available again without generating another. Other planned workouts, recorded workouts or a planned rest day still take priority. Adding and deleting workouts never resets the daily allowance.
+
 One morning suggestion per local date is included with Pro and **does not use your Assistant allowance**. Your signed-in browser tab reuses the daily status across navigation and reloads. Sleep changes while waiting, schedule changes and explicit retries can recheck availability without regenerating an existing suggestion. Signing out clears the browser copy; another device retrieves the same server result. Additional manual generation uses the displayed Assistant allowance. A failed model attempt is not automatically repeated under a fresh daily request. Use the row’s options to check preferences, dismiss today or turn future suggestions off. Changed preferences apply to the next suggestion; an existing result retains its original choices. Saved workouts use the normal provider sync rules only after explicit Add.
 
 ## Generate a workout for a day

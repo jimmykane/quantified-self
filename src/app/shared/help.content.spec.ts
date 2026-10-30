@@ -855,6 +855,8 @@ describe('help.content', () => {
     expect(content).toContain('Signing out clears the browser copy');
     expect(content).toContain('**Review** rechecks whether today is already covered');
     expect(content).toContain('This check generates nothing');
+    expect(content).toContain('Deleting today’s last planned workout lets QS check again');
+    expect(content).toContain('Adding and deleting workouts never resets the daily allowance');
   });
 
   it('explains separately consented Timeline-note context for workout suggestions', () => {

@@ -5747,6 +5747,15 @@ current owner/day/Pro fences. Old in-flight replies cannot
 replace another owner, date, preferences or newer coverage. No raw Sleep samples/provider payloads enter cache keys;
 the browser copy holds only the existing first-party public response, capped at 400,000 JSON characters.
 
+A planned workout blocks generation without spending the daily model allowance. Deleting today's last blocking planned
+workout changes the verified schedule revision and debounces one new availability check, including Standalone workouts
+when no plan is active. During the morning window, an unused allowance can then prepare its first suggestion. If a
+suggestion already exists, removal restores that same server result, including after noon; adding/deleting a workout
+never resets the daily allowance. Remaining planned workouts, recorded activity or authored rest intent still block it.
+Regression coverage exercises the real browser service/component across cached navigation, an unchanged revision,
+remaining coverage and repeated add/delete cycles; backend tests cover both an early coverage check and an uncharged
+covered receipt. These are deterministic tests with synthetic evidence, not account mutations or live model calls.
+
 An ordinary afternoon visit cannot start a new included suggestion. **Check again** remains in the options menu while
 waiting. This is not a sleep-ingestion trigger or a promise that every provider has finished syncing. No queue, scheduler, notification
 or background model request is added. Later evidence/preferences do not silently regenerate a cached draft. Status
@@ -5804,7 +5813,8 @@ MCP impact review: no public contract or authority impact. Morning generation/pr
 state, not a new recipe, planning mutation, exposed field, grant, tool or provider action. Explicitly saved recipes use
 the unchanged endurance/strength read and create-workout contracts. Tab-return stability and the browser cache change only first-party
 request scheduling, existing read invalidation and visibility analytics. Review coverage checks, restored-recipe validation
-and sign-out cleanup also remain private first-party behavior; MCP projections, reads and mutation confirmation contracts are unchanged.
+and sign-out cleanup also remain private first-party behavior. The deletion/resumption regression tests exercise those
+same existing paths; MCP projections, reads and mutation confirmation contracts are unchanged.
 The same-PR demo Firestore suite checks the private
 cache/allowance/deletion fences and existing strict full-workout/strength readback, including private-field exclusion.
 No registered contract digest, client refresh, plugin rebuild, data migration or provider rollout is required.

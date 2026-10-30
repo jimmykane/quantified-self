@@ -92,7 +92,7 @@ describe('morning workout preparation', () => {
       inputTokens: 100, outputTokens: 20, thoughtsTokens: 40 }));
     expect(JSON.stringify(deps.log.mock.calls)).not.toMatch(/owner|2026-|Keep today/);
   });
-  it.each(['planned', 'completed', 'rest-day'] as const)('skips the model and allowance when today is %s', async state => {
+  it.each(['planned', 'completed', 'rest-day'] as const)('keeps the allowance unused while today is %s and resumes when coverage is removed', async state => {
     const deps = dependencies(), context = evidence();
     const daily = context.evidence.daily as any;
     if (state === 'planned') daily.plannedWorkouts.workouts.push({ lifecycle: 'planned' });
@@ -101,6 +101,14 @@ describe('morning workout preparation', () => {
     deps.context.mockResolvedValue(context);
     expect((await runMorningWorkout({ mode: 'morning', action: 'prepare' }, identity, deps)).state).toBe(state);
     expect(deps.generate).not.toHaveBeenCalled(); expect(deps.store.charge).not.toHaveBeenCalled();
+    // This path persisted an uncharged covered receipt after the full context read.
+    deps.context.mockResolvedValue(evidence());
+    expect((await runMorningWorkout({ mode: 'morning', action: 'status' }, identity, deps)).state).toBe('waiting');
+    expect(deps.generate).not.toHaveBeenCalled(); expect(deps.store.charge).not.toHaveBeenCalled();
+    const ready = await runMorningWorkout({ mode: 'morning', action: 'prepare' }, identity, deps);
+    expect(ready.state).toBe('ready');
+    expect(await runMorningWorkout({ mode: 'morning', action: 'prepare' }, identity, deps)).toEqual(ready);
+    expect(deps.generate).toHaveBeenCalledOnce(); expect(deps.store.charge).toHaveBeenCalledOnce();
   });
   it('fails closed on partial schedule, activities or unknown rest-day evidence', () => {
     for (const key of ['activitiesToday', 'plannedWorkouts']) {
@@ -132,6 +140,31 @@ describe('morning workout preparation', () => {
     const deps = dependencies(); deps.coverage.mockResolvedValue('planned');
     expect((await runMorningWorkout({ mode: 'morning', action: 'prepare' }, identity, deps)).state).toBe('planned');
     expect(deps.selectSport).not.toHaveBeenCalled(); expect(deps.context).not.toHaveBeenCalled(); expect(deps.store.begin).not.toHaveBeenCalled();
+  });
+  it('prepares once after deleting a workout that blocked the initial coverage check', async () => {
+    const deps = dependencies(), prepare = { mode: 'morning', action: 'prepare' };
+    deps.coverage.mockResolvedValue('planned');
+    expect((await runMorningWorkout(prepare, identity, deps)).state).toBe('planned');
+    expect(deps.store.begin).not.toHaveBeenCalled(); expect(deps.generate).not.toHaveBeenCalled();
+    expect(deps.store.charge).not.toHaveBeenCalled();
+    deps.coverage.mockResolvedValue(null);
+    expect((await runMorningWorkout({ mode: 'morning', action: 'status' }, identity, deps)).state).toBe('waiting');
+    const ready = await runMorningWorkout(prepare, identity, deps);
+    expect(ready.state).toBe('ready');
+    // Adding and deleting the suggested workout exposes the existing result without another admission.
+    deps.coverage.mockResolvedValue('planned');
+    expect((await runMorningWorkout(prepare, identity, deps)).state).toBe('planned');
+    deps.coverage.mockResolvedValue(null);
+    expect(await runMorningWorkout(prepare, identity, deps)).toEqual(ready);
+    expect(deps.generate).toHaveBeenCalledOnce(); expect(deps.store.charge).toHaveBeenCalledOnce();
+  });
+  it('does not start a first generation after noon when an initially blocking workout is removed', async () => {
+    const deps = dependencies(), prepare = { mode: 'morning', action: 'prepare' };
+    deps.coverage.mockResolvedValue('planned');
+    expect((await runMorningWorkout(prepare, identity, deps)).state).toBe('planned');
+    deps.now = () => new Date('2026-10-30T13:00Z'); deps.coverage.mockResolvedValue(null);
+    expect((await runMorningWorkout(prepare, identity, deps)).state).toBe('waiting');
+    expect(deps.generate).not.toHaveBeenCalled(); expect(deps.store.charge).not.toHaveBeenCalled();
   });
   it('honors a dismissal or disablement that arrives while cached coverage is being checked', async () => {
     const deps = dependencies(); await runMorningWorkout({ mode: 'morning', action: 'prepare' }, identity, deps);

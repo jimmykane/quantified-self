@@ -122,6 +122,76 @@ describe('compact morning workout in Today', () => {
     expect(fixture.componentInstance.busy()).toBe(false);
     await vi.advanceTimersByTimeAsync(1600); expect(request).not.toHaveBeenCalled();
   });
+  it.each([false, true])('resumes after deleting today’s last planned workout and reuses the daily result (already generated: %s)', async alreadyGenerated => {
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    vi.setSystemTime(new Date('2026-10-30T07:00Z'));
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    restoreVisibility = () => visibility.mockRestore();
+    const controls = defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki');
+    const user = signal({ uid: 'owner', settings: { unitSettings: {}, appSettings: { morningWorkout: {
+      enabled: true, followRoutine: true, controls } } } });
+    const ready: MorningWorkoutStatus = { localDate: controls.localDate, state: 'ready', controls, result: {
+      requestId: 'morning:2026-10-30', observedAt: new Date().toISOString(), kind: 'workout', rationale: 'Keep it easy.',
+      draft: { title: 'Easy run', structure: { version: 1, sport: controls.sport, nodes: [
+        { kind: 'step', id: 'easy', purpose: 'work', ending: { kind: 'time', seconds: 1800 }, targets: [] },
+      ] } }, usedContext: [], missingContext: [], previousLoads: [] } };
+    let covered = true, generated = alreadyGenerated, revision = 1;
+    const generate = vi.fn(), revisions = new Subject<{ uid: string; revision: number }>();
+    const call = vi.fn(async (_name: string, request: { action: string }) => {
+      if (covered) return { data: { localDate: controls.localDate, state: 'planned' } as MorningWorkoutStatus };
+      if (request.action === 'prepare' && !generated) { generated = true; generate(); }
+      return { data: generated ? ready : { localDate: controls.localDate, state: 'waiting' } as MorningWorkoutStatus };
+    });
+    const values = new Map<string, string>(), haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
+    TestBed.configureTestingModule({ imports: [MorningWorkoutComponent], providers: [MorningWorkoutService,
+      { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
+      { provide: Auth, useValue: { currentUser: { uid: 'owner' } } },
+      { provide: AppUserService, useValue: { user, isProSignal: () => true } },
+      { provide: AppFunctionsService, useValue: { call } },
+      { provide: AppAnalyticsService, useValue: { logEvent: vi.fn() } },
+      { provide: AppWindowService, useValue: { windowRef: { sessionStorage: {
+        getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => values.set(key, value),
+        removeItem: (key: string) => values.delete(key),
+      } } } },
+      { provide: TrainingPlansService, useValue: { stateRevisionChanges$: revisions, lastVerifiedStateRevision: () => revision } },
+      { provide: DayWorkoutService, useValue: { open: vi.fn() } }, { provide: AppHapticsService, useValue: haptics },
+    ] });
+    const mount = () => {
+      const fixture = TestBed.createComponent(MorningWorkoutComponent);
+      fixture.componentRef.setInput('ownerUid', 'owner'); fixture.componentRef.setInput('localDate', controls.localDate);
+      fixture.componentRef.setInput('sleepKey', 'night-a'); fixture.componentRef.setInput('dataReady', true);
+      fixture.detectChanges(); return fixture;
+    };
+    let fixture = mount(); await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Today already has a planned workout');
+    expect(call.mock.calls.map(args => args[1].action)).toEqual(['status']); expect(generate).not.toHaveBeenCalled();
+    fixture.destroy(); fixture = mount(); await vi.advanceTimersByTimeAsync(1600);
+    expect(call).toHaveBeenCalledOnce();
+    // Removing one workout while another still covers the day must keep generation blocked.
+    revisions.next({ uid: 'owner', revision: ++revision }); fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    expect(fixture.componentInstance.status()?.state).toBe('planned'); expect(generate).not.toHaveBeenCalled();
+    covered = false; revisions.next({ uid: 'owner', revision: ++revision }); fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    expect(fixture.componentInstance.status()).toEqual(ready);
+    expect(fixture.nativeElement.textContent).toContain('Easy run');
+    expect(generate).toHaveBeenCalledTimes(alreadyGenerated ? 0 : 1);
+    expect(call.mock.calls.map(args => args[1].action)).toEqual(alreadyGenerated ? ['status', 'status', 'status'] : ['status', 'status', 'status', 'prepare']);
+    // Adding and deleting a replacement must expose the same daily draft, never generate a second one.
+    covered = true; revisions.next({ uid: 'owner', revision: ++revision }); fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    expect(fixture.componentInstance.status()?.state).toBe('planned');
+    covered = false; revisions.next({ uid: 'owner', revision: ++revision }); fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    expect(fixture.componentInstance.status()).toEqual(ready);
+    const requests = call.mock.calls.length;
+    fixture.componentInstance.visible.set(false); fixture.detectChanges();
+    fixture.componentInstance.visible.set(true); fixture.detectChanges();
+    revisions.next({ uid: 'owner', revision });
+    await vi.advanceTimersByTimeAsync(1600); expect(call).toHaveBeenCalledTimes(requests);
+    expect(generate).toHaveBeenCalledTimes(alreadyGenerated ? 0 : 1);
+    expect(haptics.success).not.toHaveBeenCalled(); expect(haptics.error).not.toHaveBeenCalled();
+  });
   it('does not recheck cached waiting Sleep when the same night is hydrated again', async () => {
     const { fixture, request } = setup(true, { localDate: '2026-10-30', state: 'waiting-sleep' });
     fixture.componentRef.setInput('sleepKey', 'night-a'); fixture.detectChanges();
