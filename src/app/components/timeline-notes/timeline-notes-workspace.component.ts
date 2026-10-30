@@ -72,6 +72,7 @@ export class TimelineNotesWorkspaceComponent {
   private readonly currentRanges = new Map<object, () => TimelineNoteRange>();
   private version = 0;
   private queued = false;
+  private pending = false;
   private readonly destroyed = signal(false);
   private rangeKey = '';
   private forceRefresh = false;
@@ -129,7 +130,7 @@ export class TimelineNotesWorkspaceComponent {
       document.addEventListener('visibilitychange', returned);
       this.destroy.onDestroy(() => { window.removeEventListener('focus', returned); document.removeEventListener('visibilitychange', returned); });
     }
-    this.destroy.onDestroy(() => { this.destroyed.set(true); this.version++; this.ranges.clear(); this.currentRanges.clear();
+    this.destroy.onDestroy(() => { this.destroyed.set(true); this.version++; this.pending = false; this.ranges.clear(); this.currentRanges.clear();
       this.notes.set([]); this.currentNotes.set([]); this.loadedOwner.set(null); this.loading.set(false); this.error.set(false); this.incomplete.set(null); });
   }
   open(notes?: readonly TimelineNote[]): void {
@@ -140,7 +141,7 @@ export class TimelineNotesWorkspaceComponent {
   refresh(force = true): void {
     this.updateOngoingDates();
     // Focus and visibilitychange commonly arrive separately; neither should restart a pending load.
-    if (this.loading() || this.destroyed()) return;
+    if (this.pending || this.destroyed()) return;
     this.forceRefresh ||= force;
     this.rangeKey = ''; this.schedule();
   }
@@ -170,7 +171,7 @@ export class TimelineNotesWorkspaceComponent {
       this.notes.set([]); this.currentNotes.set([]); this.incomplete.set(null);
     }
     this.loadedOwner.set(uid);
-    this.error.set(false); this.loading.set(false);
+    this.error.set(false); this.loading.set(false); this.pending = false;
     if (!currentRange) this.currentNotes.set([]);
     if (!canLoad) return;
     const isCurrent = () => version === this.version && uid === this.activeOwner() && this.service.isOwner(uid);
@@ -181,9 +182,12 @@ export class TimelineNotesWorkspaceComponent {
       const notes = result.incomplete ? [...new Map([...this.currentNotes(), ...result.notes].map(note => [note.id, note])).values()] : result.notes;
       this.currentNotes.set(notes.filter(note => timelineNoteOverlaps(note, currentRange)).slice(0, TIMELINE_NOTE_LIMITS.records));
     };
-    this.loading.set(true);
+    this.pending = true;
     try {
       const cached = this.service.cachedRange(uid, range);
+      // Cached empty results are usable too. Passive revalidation should not announce another
+      // load or mark downstream calendar context pending; explicit retries keep visible progress.
+      this.loading.set(forceRefresh || !cached);
       if (cached) { this.notes.set(cached.notes); this.incomplete.set(cached.incomplete); acceptCurrent(cached); }
       this.updateOngoingDates();
       const result = await this.service.loadRange(uid, range, forceRefresh);
@@ -197,6 +201,6 @@ export class TimelineNotesWorkspaceComponent {
       }
     } catch {
       if (version === this.version && uid === this.activeOwner() && this.service.isOwner(uid)) this.error.set(true);
-    } finally { if (version === this.version) this.loading.set(false); }
+    } finally { if (version === this.version) { this.pending = false; this.loading.set(false); } }
   }
 }

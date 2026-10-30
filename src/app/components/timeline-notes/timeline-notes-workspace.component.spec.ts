@@ -40,11 +40,13 @@ describe('Timeline notes workspace ownership', () => {
     component.context().reportRange({}, { startDate: '2026-01-01', endDate: '2026-01-10' });
     await flush();
     const rendered = component.context();
+    service.cachedRange.mockReturnValue({ notes: [note], incomplete: null });
     let finish!: (value: unknown) => void;
     service.loadRange.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     document.dispatchEvent(new Event('visibilitychange'));
     await flush();
     expect(component.context()).toBe(rendered);
+    expect(component.loading()).toBe(false);
     window.dispatchEvent(new Event('focus'));
     await flush();
     expect(service.loadRange).toHaveBeenCalledTimes(2);
@@ -55,30 +57,36 @@ describe('Timeline notes workspace ownership', () => {
     expect(service.invalidate).not.toHaveBeenCalled();
     expect(haptics.selection).not.toHaveBeenCalled();
   });
-  it('hydrates a returning workspace from its completed cache while revalidation is pending', async () => {
-    const cached = { notes: [note], incomplete: null };
-    service.cachedRange.mockReturnValue(cached);
-    let finish!: (value: unknown) => void;
-    service.loadRange.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
-    component.context().reportRange({}, { startDate: '2026-01-01', endDate: '2026-01-10' });
-    await flush();
-    expect(component.loading()).toBe(true);
-    expect(component.context().notes).toEqual([note]);
-    expect(service.invalidate).not.toHaveBeenCalled();
-    finish({ notes: [], incomplete: null }); await flush();
-    expect(component.context().notes).toEqual([]);
-  });
+  it.each([{ state: 'empty', notes: [] }, { state: 'populated', notes: [note] }])(
+    'quietly revalidates a returning workspace with a $state cache', async ({ notes }) => {
+      const cached = { notes, incomplete: null };
+      service.cachedRange.mockReturnValue(cached);
+      let finish!: (value: unknown) => void;
+      service.loadRange.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+      component.context().reportRange({}, { startDate: '2026-01-01', endDate: '2026-01-10' });
+      await flush();
+      expect(component.loading()).toBe(false);
+      expect(component.context().notes).toEqual(notes);
+      expect(service.invalidate).not.toHaveBeenCalled();
+      finish({ notes: [], incomplete: null }); await flush();
+      expect(component.context().notes).toEqual([]);
+    });
   it('retains notes after a failed foreground refresh and allows an explicit retry', async () => {
     visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
     component.context().reportRange({}, { startDate: '2026-01-01', endDate: '2026-01-10' }); await flush();
     const rendered = component.context();
+    service.cachedRange.mockReturnValue({ notes: [note], incomplete: null });
     service.loadRange.mockRejectedValueOnce(new Error('offline'));
     window.dispatchEvent(new Event('focus')); await flush();
     expect(component.error()).toBe(true);
     expect(component.context()).toBe(rendered);
-    service.loadRange.mockResolvedValueOnce({ notes: [{ ...note, title: 'Updated', revision: 2 }], incomplete: null });
+    let finish!: (value: unknown) => void;
+    service.loadRange.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     component.refresh(); await flush();
     expect(service.loadRange).toHaveBeenLastCalledWith('owner', { startDate: '2026-01-01', endDate: '2026-01-10' }, true);
+    expect(component.loading()).toBe(true);
+    expect(component.context()).toBe(rendered);
+    finish({ notes: [{ ...note, title: 'Updated', revision: 2 }], incomplete: null }); await flush();
     expect(component.context().notes[0].revision).toBe(2);
     expect(component.error()).toBe(false);
   });
@@ -348,6 +356,12 @@ describe('Timeline notes workspace ownership', () => {
     expect(button.querySelector('mat-icon')).toBe(icon);
     expect(host.querySelector('mat-progress-bar')).toBe(progress);
     expect(progress.classList.contains('timeline-notes-progress-visible')).toBe(false);
+    service.cachedRange.mockReturnValue({ notes: [note], incomplete: null });
+    fixture.componentInstance.refresh(false); await flush(); fixture.detectChanges();
+    expect(host.querySelector('.timeline-notes-action')?.getAttribute('aria-busy')).toBe('false');
+    expect(progress.classList.contains('timeline-notes-progress-visible')).toBe(false);
+    expect(host.querySelector('[role="status"]')?.textContent?.trim()).toBe('');
+    resolveLoad({ notes: [note], incomplete: null }); await flush();
     expect(haptics.selection).not.toHaveBeenCalled();
     const styles = readFileSync(resolve(process.cwd(), 'src/app/components/timeline-notes/timeline-notes-workspace.component.scss'), 'utf8');
     expect(styles.match(/\.timeline-notes-progress\s*\{([^}]+)\}/)?.[1]).toContain('position: absolute;');
