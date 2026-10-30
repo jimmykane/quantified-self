@@ -5730,6 +5730,18 @@ before 05:00 can still start preparation on a foreground return within the morni
 while hidden coalesces into one revision-bound check on return, and explicit **Check again** remains available. A read
 that finishes while hidden retains its result, but its shown event waits until the row is visible. A status read that
 returns after hiding cannot start a new automatic model preparation until foreground return.
+`MorningWorkoutService` keeps one account/day/time-zone/preferences cache and shares in-flight status/preparation
+requests independently of the component lifetime. A bounded, validated session-storage copy restores completed status
+and recipes on same-tab reload; unavailable storage falls back to memory. Logout/account/Pro changes clear the private
+copy, and a different date or preferences cannot reuse it. Pending preparations are not persisted. Explicit retries
+bypass cached status. A waiting-sleep entry compares stable session identity/end/update metadata from the existing Sleep
+listener, so rehydrating the same night does not retry it. Existing verified Training-state reads publish revision
+invalidation without adding a listener or query; repeated revisions and other owners do nothing. Changed revisions
+invalidate day coverage while the backend's charged date receipt still prevents a second generated suggestion.
+Dismissed days remain dismissed. Successful Add updates the shared cache to planned. Old in-flight replies cannot
+replace another owner, date, preferences or newer coverage. No raw Sleep samples/provider payloads enter cache keys;
+the browser copy holds only the existing first-party public response, capped at 400,000 JSON characters.
+
 An ordinary afternoon visit cannot start a new included suggestion. **Check again** remains in the options menu while
 waiting. This is not a sleep-ingestion trigger or a promise that every provider has finished syncing. No queue, scheduler, notification
 or background model request is added. Later evidence/preferences do not silently regenerate a cached draft. Status
@@ -5782,8 +5794,8 @@ platform, cloud dashboard or metric resource is provisioned here. Queue monitori
 
 MCP impact review: no public contract or authority impact. Morning generation/preferences/cache are private first-party
 state, not a new recipe, planning mutation, exposed field, grant, tool or provider action. Explicitly saved recipes use
-the unchanged endurance/strength read and create-workout contracts. Tab-return stability changes only first-party
-request scheduling and visibility analytics; MCP projections, reads and mutation confirmation contracts are unchanged.
+the unchanged endurance/strength read and create-workout contracts. Tab-return stability and the browser cache change only first-party
+request scheduling, existing read invalidation and visibility analytics; MCP projections, reads and mutation confirmation contracts are unchanged.
 The same-PR demo Firestore suite checks the private
 cache/allowance/deletion fences and existing strict full-workout/strength readback, including private-field exclusion.
 No registered contract digest, client refresh, plugin rebuild, data migration or provider rollout is required.

@@ -1,23 +1,50 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { Subject } from 'rxjs';
 import { Auth } from 'app/firebase/auth';
+import { defaultDayWorkoutControls } from '@shared/day-workout';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { projectStrengthWorkoutToV1, type StrengthWorkoutDraftV1 } from '@shared/strength-workout';
+import type { MorningWorkoutStatus } from '@shared/morning-workout';
 import { MorningWorkoutService } from './morning-workout.service';
 import { AppUserService } from './app.user.service';
 import { AppFunctionsService } from './app.functions.service';
 import { AppAnalyticsService } from './app.analytics.service';
+import { AppWindowService } from './app.window.service';
+import { TrainingPlansService } from './training-plans.service';
 
-describe('MorningWorkoutService owner preferences and existing callable', () => {
-  it('defaults off with all data selected, persists only preferences and fences account changes', async () => {
-    const auth = { currentUser: { uid: 'owner' } };
-    const user = signal<any>({ uid: 'owner', settings: {} });
-    const updateUserProperties = vi.fn().mockResolvedValue(undefined), call = vi.fn().mockResolvedValue({ data: { state: 'ready' } });
-    const logEvent = vi.fn();
-    TestBed.configureTestingModule({ providers: [MorningWorkoutService,
-      { provide: Auth, useValue: auth },
-      { provide: AppUserService, useValue: { user, updateUserProperties, isProSignal: () => true } },
-      { provide: AppFunctionsService, useValue: { call } }, { provide: AppAnalyticsService, useValue: { logEvent } },
-    ] });
-    const service = TestBed.inject(MorningWorkoutService), preferences = service.preferences();
+function storage() {
+  const values = new Map<string, string>();
+  return { values, getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
+}
+function setup(saved = storage(), enabled = true, sport = ActivityTypes.Running) {
+  TestBed.resetTestingModule();
+  vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-30T07:00Z'));
+  const auth = { currentUser: { uid: 'owner' } };
+  const controls = defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki', sport);
+  const user = signal<any>({ uid: 'owner', settings: { appSettings: { morningWorkout: { enabled, followRoutine: true, controls } } } });
+  const pro = signal(true), revisions = new Subject<{ uid: string; revision: number | null }>();
+  const updateUserProperties = vi.fn().mockResolvedValue(undefined), logEvent = vi.fn();
+  const result = (): MorningWorkoutStatus => ({ localDate: service.preferences().controls.localDate, state: 'ready', controls,
+    result: { requestId: `morning:${service.preferences().controls.localDate}`, observedAt: new Date().toISOString(), kind: 'rest',
+      rationale: 'An easy day.', draft: null, usedContext: [], missingContext: [], previousLoads: [] } });
+  const call = vi.fn(async () => ({ data: result() }));
+  TestBed.configureTestingModule({ providers: [MorningWorkoutService,
+    { provide: Auth, useValue: auth }, { provide: AppUserService, useValue: { user, updateUserProperties, isProSignal: pro } },
+    { provide: AppFunctionsService, useValue: { call } }, { provide: AppAnalyticsService, useValue: { logEvent } },
+    { provide: AppWindowService, useValue: { windowRef: { sessionStorage: saved } } },
+    { provide: TrainingPlansService, useValue: { stateRevisionChanges$: revisions } },
+  ] });
+  const service = TestBed.inject(MorningWorkoutService);
+  return { service, auth, user, pro, revisions, call, updateUserProperties, logEvent, saved, result };
+}
+afterEach(() => vi.useRealTimers());
+
+describe('MorningWorkoutService daily browser cache', () => {
+  it('defaults off with all data selected, persists preferences and fences account changes', async () => {
+    const { service, auth, user, updateUserProperties, call, logEvent } = setup(storage(), false);
+    const preferences = service.preferences();
     expect(preferences.enabled).toBe(false); expect(preferences.controls.timelineContext).toBe(true);
     expect(preferences.controls.hrvContext).toBe(true);
     let acknowledge!: () => void;
@@ -36,5 +63,148 @@ describe('MorningWorkoutService owner preferences and existing callable', () => 
     expect(call.mock.calls[0][2].canExecute()).toBe(false);
     await expect(service.save('owner', preferences)).rejects.toThrow('account changed');
     service.event('owner', 'added'); expect(logEvent).toHaveBeenCalledTimes(1);
+  });
+  it('reuses settled status across callers and a full app recreation', async () => {
+    const first = setup();
+    const ready = await first.service.request('owner', 'status', () => true);
+    expect(await first.service.request('owner', 'status', () => true)).toBe(ready);
+    expect(first.call).toHaveBeenCalledOnce();
+    const second = setup(first.saved);
+    expect(second.service.cached('owner')?.status).toEqual(ready);
+    expect(await second.service.request('owner', 'status', () => true)).toEqual(ready);
+    expect(second.call).not.toHaveBeenCalled();
+  });
+  it.each(['status', 'prepare'] as const)('shares a pending %s request after its first component leaves', async action => {
+    const { service, call, result } = setup(); let finish!: (value: { data: MorningWorkoutStatus }) => void;
+    call.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    let mounted = true;
+    const first = service.request('owner', action, () => mounted); mounted = false;
+    const second = service.request('owner', action, () => true);
+    expect(call).toHaveBeenCalledOnce(); expect(call.mock.calls[0][2].canExecute()).toBe(true);
+    finish({ data: result() });
+    expect(await first).toBe(await second); expect(service.cached('owner')?.status?.state).toBe('ready');
+  });
+  it.each(['planned', 'completed', 'rest-day', 'dismissed', 'failed', 'waiting-sleep'] as const)('caches %s without repeated status reads', async state => {
+    const first = setup(); first.call.mockResolvedValue({ data: { localDate: '2026-10-30', state } });
+    await first.service.request('owner', 'status', () => true);
+    const next = setup(first.saved);
+    expect((await next.service.request('owner', 'status', () => true)).state).toBe(state);
+    expect(next.call).not.toHaveBeenCalled();
+  });
+  it.each([ActivityTypes.Running, ActivityTypes.StrengthTraining])('round-trips the full %s recipe through a reload', async sport => {
+    const first = setup(storage(), true, sport);
+    const ready = first.result();
+    const strength: StrengthWorkoutDraftV1 = { version: 1, exercises: [{ id: 'squat', name: 'Goblet squat',
+      sets: [{ id: 'set-a', ending: { kind: 'repetitions', repetitions: 8 }, restAfterSeconds: 90, externalLoadKg: 12.5 }] }] };
+    ready.result = { ...ready.result!, kind: 'workout', draft: { title: 'Canonical recipe', structure: sport === ActivityTypes.StrengthTraining
+      ? projectStrengthWorkoutToV1({ ...strength, workoutId: 'draft', revision: 1 }, sport)
+      : { version: 1, sport, nodes: [{ kind: 'repeat', id: 'intervals', count: 3, steps: [
+        { kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 120 }, targets: [] },
+        { kind: 'step', id: 'recovery', purpose: 'recovery', ending: { kind: 'time', seconds: 60 }, targets: [] },
+      ] }] }, ...(sport === ActivityTypes.StrengthTraining ? { strength, estimatedMinutes: { minimum: 20, maximum: 30 } } : {}) } };
+    first.call.mockResolvedValueOnce({ data: ready }); await first.service.request('owner', 'prepare', () => true);
+    const next = setup(first.saved, true, sport);
+    expect(next.service.cached('owner')?.status).toEqual(ready); expect(next.call).not.toHaveBeenCalled();
+  });
+  it('does not invalidate the daily cache when unchanged preferences are saved', async () => {
+    const { service, call } = setup(); await service.request('owner', 'status', () => true);
+    await service.save('owner', service.preferences());
+    expect(service.cached('owner')?.status?.state).toBe('ready');
+    await service.request('owner', 'status', () => true); expect(call).toHaveBeenCalledOnce();
+  });
+  it('lets an explicit refresh bypass cached status and shares that refresh', async () => {
+    const { service, call, result } = setup(); await service.request('owner', 'status', () => true);
+    let finish!: (value: { data: MorningWorkoutStatus }) => void;
+    call.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const first = service.request('owner', 'status', () => true, undefined, true);
+    const second = service.request('owner', 'status', () => true, undefined, true);
+    expect(call).toHaveBeenCalledTimes(2); finish({ data: result() }); await Promise.all([first, second]);
+  });
+  it.each(['dismiss', 'use-available-data'] as const)('keeps the view cancellation fence on explicit %s actions', async action => {
+    const { service, call, result } = setup(); let finish!: (value: { data: MorningWorkoutStatus }) => void;
+    call.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    let current = true;
+    const pending = service.request('owner', action, () => current, '2026-10-30');
+    expect(call.mock.calls[0][2].canExecute()).toBe(true);
+    current = false; expect(call.mock.calls[0][2].canExecute()).toBe(false);
+    finish({ data: result() }); await pending;
+  });
+  it('rechecks only changed Sleep evidence while waiting, retaining an existing ready result', async () => {
+    const { service, call, result } = setup(); service.observeSleep('owner', 'night-a');
+    call.mockResolvedValueOnce({ data: { localDate: '2026-10-30', state: 'waiting-sleep' } });
+    await service.request('owner', 'prepare', () => true);
+    service.observeSleep('owner', 'night-a'); expect(service.cached('owner')?.status?.state).toBe('waiting-sleep');
+    service.observeSleep('owner', 'night-b'); expect(service.cached('owner')).toBeNull();
+    await service.request('owner', 'status', () => true);
+    service.observeSleep('owner', 'night-c'); expect(service.cached('owner')?.status).toEqual(result());
+    expect(call).toHaveBeenCalledTimes(2);
+  });
+  it('does not mistake a restored waiting receipt for a completed Sleep context check', async () => {
+    const first = setup(); first.service.observeSleep('owner', 'night-a');
+    first.call.mockResolvedValueOnce({ data: { localDate: '2026-10-30', state: 'waiting-sleep' } });
+    await first.service.request('owner', 'status', () => true);
+    const next = setup(first.saved);
+    expect(next.service.cached('owner')?.sleepKey).toBeNull();
+    next.service.observeSleep('owner', 'night-a');
+    expect(next.service.cached('owner')).toBeNull();
+    await next.service.request('owner', 'prepare', () => true);
+    expect(next.call).toHaveBeenCalledOnce();
+    expect(next.service.cached('owner')?.status?.state).toBe('ready');
+  });
+  it('invalidates changed verified schedule revisions, not repeated or other-owner emissions', async () => {
+    const { service, revisions, call } = setup(); service.cached('owner');
+    revisions.next({ uid: 'owner', revision: 4 }); await service.request('owner', 'status', () => true);
+    revisions.next({ uid: 'other', revision: 99 }); revisions.next({ uid: 'owner', revision: 4 });
+    expect(service.cached('owner')?.status?.state).toBe('ready');
+    revisions.next({ uid: 'owner', revision: 5 }); expect(service.cached('owner')).toBeNull();
+    await service.request('owner', 'status', () => true); expect(call).toHaveBeenCalledTimes(2);
+  });
+  it('does not let invalidated in-flight replies replace newer coverage', async () => {
+    const { service, call, revisions, result } = setup(); service.cached('owner'); revisions.next({ uid: 'owner', revision: 1 });
+    let finish!: (value: { data: MorningWorkoutStatus }) => void;
+    call.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = service.request('owner', 'status', () => true);
+    revisions.next({ uid: 'owner', revision: 2 }); service.remember('owner', { localDate: '2026-10-30', state: 'planned' });
+    finish({ data: result() }); await expect(pending).rejects.toThrow('access changed');
+    expect(service.cached('owner')?.status?.state).toBe('planned');
+  });
+  it('clears private session state on logout and rejects late replies', async () => {
+    const { service, user, auth, call, result, saved } = setup(); await service.request('owner', 'status', () => true);
+    expect(saved.values.size).toBe(1);
+    let finish!: (value: { data: MorningWorkoutStatus }) => void;
+    call.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = service.request('owner', 'status', () => true, undefined, true);
+    user.set(null); auth.currentUser = null; TestBed.tick();
+    expect(saved.values.size).toBe(0);
+    finish({ data: result() }); await expect(pending).rejects.toThrow('access changed');
+    expect(saved.values.size).toBe(0);
+  });
+  it.each(['day', 'preferences', 'account'] as const)('does not reuse another %s scope', async change => {
+    const { service, user, auth, call } = setup(); await service.request('owner', 'status', () => true);
+    if (change === 'day') vi.setSystemTime(new Date('2026-10-31T07:00Z'));
+    if (change === 'preferences') user.update(value => ({ ...value, settings: { appSettings: { morningWorkout: {
+      ...value.settings.appSettings.morningWorkout, followRoutine: false } } } }));
+    if (change === 'account') { auth.currentUser = { uid: 'other' }; user.update(value => ({ ...value, uid: 'other' })); }
+    const uid = change === 'account' ? 'other' : 'owner';
+    expect(service.cached(uid)).toBeNull(); await service.request(uid, 'status', () => true); expect(call).toHaveBeenCalledTimes(2);
+  });
+  it('treats malformed and obsolete session data as cache misses', async () => {
+    const first = setup(); await first.service.request('owner', 'status', () => true);
+    const key = [...first.saved.values.keys()][0];
+    first.saved.setItem(key, '{broken'); const second = setup(first.saved); expect(second.service.cached('owner')).toBeNull();
+    await second.service.request('owner', 'status', () => true);
+    const saved = JSON.parse(second.saved.getItem(key)!); saved.status.result.draft = {};
+    second.saved.setItem(key, JSON.stringify(saved)); const third = setup(second.saved);
+    expect(third.service.cached('owner')).toBeNull();
+  });
+  it('continues caching in memory when browser storage is blocked', async () => {
+    const saved = storage(); saved.setItem = () => { throw Error('Blocked'); };
+    const { service, call } = setup(saved); await service.request('owner', 'status', () => true);
+    await service.request('owner', 'status', () => true); expect(call).toHaveBeenCalledOnce();
+  });
+  it('does not restore an unfinished preparation after a reload', async () => {
+    const first = setup(); first.call.mockResolvedValue({ data: { localDate: '2026-10-30', state: 'preparing' } });
+    await first.service.request('owner', 'status', () => true);
+    expect(setup(first.saved).service.cached('owner')).toBeNull();
   });
 });

@@ -2,6 +2,7 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
 import { defaultDayWorkoutControls } from '@shared/day-workout';
+import type { MorningWorkoutStatus } from '@shared/morning-workout';
 import { MorningWorkoutComponent } from './morning-workout.component';
 import { MorningWorkoutService } from '../../../services/morning-workout.service';
 import { DayWorkoutService } from '../../../services/day-workout.service';
@@ -10,6 +11,12 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
 import { AppUserService } from '../../../services/app.user.service';
+import { Auth } from 'app/firebase/auth';
+import { AppFunctionsService } from '../../../services/app.functions.service';
+import { AppAnalyticsService } from '../../../services/app.analytics.service';
+import { AppWindowService } from '../../../services/app.window.service';
+import { TrainingPlansService } from '../../../services/training-plans.service';
+import { Subject } from 'rxjs';
 
 
 function exportQa(element: HTMLElement, name: string) {
@@ -30,7 +37,7 @@ function exportQa(element: HTMLElement, name: string) {
 }
 
 let restoreVisibility = () => {};
-function setup(enabled = true) {
+function setup(enabled = true, cachedStatus: MorningWorkoutStatus | null = null) {
   vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] }); vi.setSystemTime(new Date('2026-10-30T07:00Z'));
   const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
   restoreVisibility = () => visibility.mockRestore();
@@ -40,12 +47,14 @@ function setup(enabled = true) {
     usedContext: [], missingContext: [], previousLoads: [] };
   const request = vi.fn(async (_uid, action) => action === 'status' ? { localDate: '2026-10-30', state: 'waiting' }
     : { localDate: '2026-10-30', state: action === 'dismiss' ? 'dismissed' : 'ready', controls: preferences().controls, result });
+  const cacheRevision = signal(0), cached = vi.fn(() => cachedStatus ? { status: cachedStatus, sleepKey: 'night-a' } : null);
+  const observeSleep = vi.fn(), remember = vi.fn();
   const event = vi.fn(), save = vi.fn(async (_uid, value) => { preferences.set(value); });
   const open = vi.fn().mockResolvedValue(undefined);
   const haptics = { success: vi.fn(), error: vi.fn(), selection: vi.fn() };
   TestBed.configureTestingModule({ imports: [MorningWorkoutComponent], providers: [
     { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
-    { provide: MorningWorkoutService, useValue: { preferences, saving, eligible: (uid: string) => uid === owner() && pro(), isOwner: (uid: string) => uid === owner(), request, event, save } },
+    { provide: MorningWorkoutService, useValue: { preferences, saving, eligible: (uid: string) => uid === owner() && pro(), isOwner: (uid: string) => uid === owner(), request, event, save, cacheRevision, cached, observeSleep, remember } },
     { provide: DayWorkoutService, useValue: { open } }, { provide: AppHapticsService, useValue: haptics },
     { provide: AppUserService, useValue: { user: signal({ settings: { unitSettings: {} } }) } },
   ] });
@@ -60,6 +69,69 @@ function setup(enabled = true) {
 }
 afterEach(() => { vi.useRealTimers(); restoreVisibility(); });
 describe('compact morning workout in Today', () => {
+  it('shares the real service cache across hidden, destroyed and recreated Today rows', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    vi.setSystemTime(new Date('2026-10-30T07:00Z'));
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    restoreVisibility = () => visibility.mockRestore();
+    const controls = defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki');
+    const user = signal({ uid: 'owner', settings: { unitSettings: {}, appSettings: { morningWorkout: {
+      enabled: true, followRoutine: true, controls } } } });
+    const ready: MorningWorkoutStatus = { localDate: '2026-10-30', state: 'ready', controls, result: {
+      requestId: 'morning:2026-10-30', observedAt: new Date().toISOString(), kind: 'rest', rationale: 'Easy day.',
+      draft: null, usedContext: [], missingContext: [], previousLoads: [] } };
+    let finish!: (value: { data: MorningWorkoutStatus }) => void;
+    const call = vi.fn(async (_name: string, request: { action: string }) => request.action === 'prepare'
+      ? new Promise<{ data: MorningWorkoutStatus }>(resolve => { finish = resolve; })
+      : { data: { localDate: '2026-10-30', state: 'waiting-sleep' } as MorningWorkoutStatus });
+    const values = new Map<string, string>();
+    TestBed.configureTestingModule({ imports: [MorningWorkoutComponent], providers: [MorningWorkoutService,
+      { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
+      { provide: Auth, useValue: { currentUser: { uid: 'owner' } } },
+      { provide: AppUserService, useValue: { user, isProSignal: () => true } },
+      { provide: AppFunctionsService, useValue: { call } },
+      { provide: AppAnalyticsService, useValue: { logEvent: vi.fn() } },
+      { provide: AppWindowService, useValue: { windowRef: { sessionStorage: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => values.set(key, value), removeItem: (key: string) => values.delete(key),
+      } } } },
+      { provide: TrainingPlansService, useValue: { stateRevisionChanges$: new Subject() } },
+      { provide: DayWorkoutService, useValue: { open: vi.fn() } },
+      { provide: AppHapticsService, useValue: { selection: vi.fn(), success: vi.fn(), error: vi.fn() } },
+    ] });
+    const mount = () => {
+      const fixture = TestBed.createComponent(MorningWorkoutComponent);
+      fixture.componentRef.setInput('ownerUid', 'owner'); fixture.componentRef.setInput('localDate', '2026-10-30');
+      fixture.componentRef.setInput('sleepKey', 'night-a'); fixture.componentRef.setInput('dataReady', true);
+      fixture.detectChanges(); return fixture;
+    };
+    const first = mount(); await vi.advanceTimersByTimeAsync(1600); first.detectChanges();
+    expect(call.mock.calls.map(args => args[1].action)).toEqual(['status', 'prepare']);
+    first.componentInstance.visible.set(false); first.detectChanges(); first.destroy();
+    const second = mount(); await vi.advanceTimersByTimeAsync(1600); second.detectChanges();
+    expect(call).toHaveBeenCalledTimes(2);
+    finish({ data: ready }); await vi.advanceTimersByTimeAsync(0); second.detectChanges();
+    expect(second.componentInstance.status()).toEqual(ready); second.destroy();
+    const third = mount(); expect(third.nativeElement.textContent).toContain('A recovery day');
+    expect(third.componentInstance.busy()).toBe(false);
+    await vi.advanceTimersByTimeAsync(1600); expect(call).toHaveBeenCalledTimes(2);
+  });
+  it('restores a cached covered day immediately without a loading flash or API read', async () => {
+    const { fixture, request } = setup(true, { localDate: '2026-10-30', state: 'planned' });
+    expect(fixture.nativeElement.textContent).toContain('Today already has a planned workout');
+    expect(fixture.componentInstance.busy()).toBe(false);
+    await vi.advanceTimersByTimeAsync(1600); expect(request).not.toHaveBeenCalled();
+  });
+  it('does not recheck cached waiting Sleep when the same night is hydrated again', async () => {
+    const { fixture, request } = setup(true, { localDate: '2026-10-30', state: 'waiting-sleep' });
+    fixture.componentRef.setInput('sleepKey', 'night-a'); fixture.detectChanges();
+    fixture.componentRef.setInput('sleepRevision', 44); fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(1600); expect(request).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('sleepKey', 'night-b'); fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    expect(request.mock.calls.map(call => call[1])).toEqual(['status', 'prepare']);
+  });
+
   it('stays off by default and does no private reads for free or shared dashboards', async () => {
     const { fixture, request, pro } = setup(false);
     expect(fixture.nativeElement.textContent).toContain('Set up'); exportQa(fixture.nativeElement, 'morning-setup');
@@ -259,7 +331,7 @@ describe('compact morning workout in Today', () => {
     await vi.advanceTimersByTimeAsync(1600); expect(request).not.toHaveBeenCalled();
     request.mockResolvedValue(ready); setVisible(true);
     await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
-    expect(request).toHaveBeenCalledExactlyOnceWith('owner', 'status', expect.any(Function));
+    expect(request).toHaveBeenCalledExactlyOnceWith('owner', 'status', expect.any(Function), undefined, true);
     expect(fixture.componentInstance.status()).toBe(ready);
   });
   it.each(['waiting', 'waiting-sleep'] as const)('defers %s preparation when its status read finishes hidden', async state => {

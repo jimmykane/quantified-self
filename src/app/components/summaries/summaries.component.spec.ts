@@ -2057,7 +2057,12 @@ describe('SummariesComponent', () => {
       sleep$.next(nights);
       vi.advanceTimersToNextFrame();
       expect(component.morningWorkoutSleepRevision).toBe(revision + 1);
+      const sleepKey = component.morningWorkoutSleepKey;
+      expect(sleepKey).toBe(JSON.stringify(nights.map(night => [night.id ?? null, night.source.provider,
+        night.startTimeMs, night.endTimeMs, night.updatedAtMs, night.isNap]).sort()));
+      expect(sleepKey).not.toContain('providerUserId');
       sleep$.next(nights);
+      expect(component.morningWorkoutSleepKey).toBe(sleepKey);
       expect(component.morningWorkoutSleepRevision).toBe(revision + 1);
       expect(component.dashboardTodayReadiness.score).toBe(67);
       expect(component.dashboardTodayReadiness.changeSignals.find(signal => signal.id === 'sleep')?.state).toBe('recorded');

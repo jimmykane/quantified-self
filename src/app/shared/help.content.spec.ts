@@ -848,6 +848,13 @@ describe('help.content', () => {
     expect(content).toContain('In **Select** mode, one-finger drags select a range and pinching does not change the chart range');
   });
 
+  it('explains the daily browser cache and targeted morning status checks', () => {
+    const content = HELP_SECTIONS.map(section => section.content).join('\n');
+    expect(content).toContain('reuses the daily status across navigation and reloads');
+    expect(content).toContain('without regenerating an existing suggestion');
+    expect(content).toContain('Signing out clears the browser copy');
+  });
+
   it('explains separately consented Timeline-note context for workout suggestions', () => {
     const assistant = HELP_SECTIONS.find(section => section.id === 'ai-insights')?.content;
     expect(assistant).toContain('notes about sickness, injury, travel, or vacation');

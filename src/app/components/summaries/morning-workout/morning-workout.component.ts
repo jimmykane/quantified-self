@@ -23,6 +23,8 @@ export class MorningWorkoutComponent {
   readonly localDate = input.required<string>();
   readonly dataReady = input(false);
   readonly sleepRevision = input(0);
+  readonly sleepKey = input<string | null>(null);
+  private readonly evidenceKey = computed(() => this.sleepKey() ?? String(this.sleepRevision()));
   readonly morning = inject(MorningWorkoutService);
   private readonly generation = inject(DayWorkoutService);
   private readonly users = inject(AppUserService);
@@ -58,7 +60,7 @@ export class MorningWorkoutComponent {
   private sequence = 0;
   private actionSequence = 0;
   private shown = new Set<string>();
-  private checkedSleepRevision = -1;
+  private checkedSleepKey: string | null = null;
   private readScope = '';
   constructor() {
     const visibility = () => this.visible.set(this.document.visibilityState !== 'hidden');
@@ -67,18 +69,22 @@ export class MorningWorkoutComponent {
     effect(onCleanup => {
       // Track only the owner, day, settled Today data, preferences and foreground state.
       const eligible = this.eligible(), preferences = this.preferences(), saving = this.morning.saving();
-      const ready = this.dataReady(), visible = this.visible();
-      const scope = JSON.stringify([this.ownerUid(), this.localDate(), eligible, preferences]);
+      const ready = this.dataReady(), visible = this.visible(), sleepKey = this.evidenceKey();
+      if (eligible && preferences.enabled && ready) untracked(() => this.morning.observeSleep(this.ownerUid(), sleepKey));
+      const scope = JSON.stringify([this.ownerUid(), this.localDate(), eligible, preferences, this.morning.cacheRevision()]);
       // Hydration is a start barrier, not authority to discard work already running for this same scope.
       if (scope !== this.readScope) {
-        this.readScope = scope; this.sequence++; this.status.set(null); this.error.set(false); this.loading.set(false);
+        this.readScope = scope; this.sequence++;
+        const cached = eligible && preferences.enabled ? untracked(() => this.morning.cached(this.ownerUid())) : null;
+        this.status.set(cached?.status ?? null); this.checkedSleepKey = cached?.sleepKey ?? null;
+        this.error.set(false); this.loading.set(false);
       }
       if (!eligible || !preferences.enabled || saving || !ready || !visible || untracked(() => this.loading() || this.error())) return;
       const status = untracked(() => this.status());
       // Foreground return may start a previously early visit, but never reload an already checked suggestion.
       // Sleep changes have their own revision-bound retry below; other retries remain explicit.
       if (status && (status.state !== 'waiting' || !isMorningWorkoutWindow(new Date(), preferences.controls.timeZone))) return;
-      const timer = setTimeout(() => { untracked(() => { void this.load(); }); }, 1500);
+      const timer = setTimeout(() => { untracked(() => { void this.load(false, false); }); }, 1500);
       onCleanup(() => clearTimeout(timer));
     });
     effect(() => {
@@ -90,9 +96,9 @@ export class MorningWorkoutComponent {
       }
     });
     effect(onCleanup => {
-      const revision = this.sleepRevision(), waiting = this.status()?.state === 'waiting-sleep';
+      const revision = this.evidenceKey(), waiting = this.status()?.state === 'waiting-sleep';
       // React to existing Sleep listener updates, including ones arriving during a context read; never poll.
-      if (!waiting || this.busy() || revision === this.checkedSleepRevision || !this.eligible()
+      if (!waiting || this.busy() || revision === this.checkedSleepKey || !this.eligible()
         || !this.preferences().enabled || !this.dataReady() || !this.visible()
         || !isMorningWorkoutWindow(new Date(), this.preferences().controls.timeZone)) return;
       const timer = setTimeout(() => untracked(() => { void this.load(); }), 1500);
@@ -113,17 +119,17 @@ export class MorningWorkoutComponent {
   private current(sequence: number, uid: string): boolean {
     return !this.destroy.destroyed && sequence === this.sequence && uid === this.ownerUid() && this.morning.eligible(uid);
   }
-  async load(useAvailableData = false): Promise<void> {
+  async load(useAvailableData = false, refresh = true): Promise<void> {
     const uid = this.ownerUid();
     if (this.busy() || !this.morning.eligible(uid) || !this.preferences().enabled || !this.visible() || !this.dataReady()) return;
     if (useAvailableData && this.status()?.state !== 'waiting-sleep') return;
     const sequence = ++this.sequence;
-    this.checkedSleepRevision = this.sleepRevision();
+    this.checkedSleepKey = this.evidenceKey();
     this.loading.set(true); this.error.set(false);
     try {
       let status = useAvailableData
         ? await this.morning.request(uid, 'use-available-data', () => this.current(sequence, uid), this.status()!.localDate)
-        : await this.morning.request(uid, 'status', () => this.current(sequence, uid));
+        : await this.morning.request(uid, 'status', () => this.current(sequence, uid), undefined, refresh);
       if (!this.current(sequence, uid)) return;
       if (!useAvailableData && ['waiting', 'waiting-sleep'].includes(status.state)
         && isMorningWorkoutWindow(new Date(), this.preferences().controls.timeZone)) {
@@ -131,7 +137,7 @@ export class MorningWorkoutComponent {
           status = await this.morning.request(uid, 'prepare', () => this.current(sequence, uid));
         } else if (status.state === 'waiting-sleep') {
           // A status-only read did not check current Sleep context; resume once the start barriers settle.
-          this.checkedSleepRevision = -1;
+          this.checkedSleepKey = null;
         }
       }
       if (!this.current(sequence, uid)) return;
@@ -158,7 +164,8 @@ export class MorningWorkoutComponent {
         this.morning.event(uid, 'added', 'ready');
         if (!this.destroy.destroyed && this.morning.isOwner(uid) && this.ownerUid() === uid
           && this.localDate() === screenDate && this.preferences().controls.localDate === value.localDate) {
-          this.status.set({ localDate: value.localDate, state: 'planned' });
+          const status: MorningWorkoutStatus = { localDate: value.localDate, state: 'planned' };
+          this.morning.remember(uid, status); this.status.set(status);
         }
       },
     });

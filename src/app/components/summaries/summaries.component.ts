@@ -434,6 +434,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public todayDateSubtitle = '';
   public todayRestDate = '';
   public morningWorkoutSleepRevision = 0;
+  public morningWorkoutSleepKey: string | null = null;
   public todayGreeting = '';
   readonly todayDetailsExpanded = signal(true);
   private todayDetailsOwnerUID: string | null = null;
@@ -1241,6 +1242,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
           return;
         }
         this.readinessSleepSessions = sessions;
+        // Stable across listener reattachment; no metric hydration or raw provider/sample data in the key.
+        this.morningWorkoutSleepKey = JSON.stringify(sessions.map(session =>
+          [session.id ?? null, session.source?.provider ?? null, session.startTimeMs, session.endTimeMs, session.updatedAtMs, session.isNap]).sort());
         this.morningWorkoutSleepRevision++;
         this.updateReadinessSleepRefreshTimer();
         this.tileRebuild.request();
@@ -1249,6 +1253,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         // A failed current read invalidates the in-memory Today evidence. Never
         // carry a previously loaded night forward as if it were still current.
         this.readinessSleepSessions = [];
+        this.morningWorkoutSleepKey = 'unavailable';
         this.morningWorkoutSleepRevision++;
         this.readinessSleepStatus = 'error';
         this.updateReadinessSleepRefreshTimer();
@@ -1265,6 +1270,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.readinessSleepListenerKey = null;
     this.readinessSleepSessions = [];
     this.readinessSleepStatus = 'loading';
+    this.morningWorkoutSleepKey = null;
     this.clearReadinessSleepRefreshTimer();
   }
 
