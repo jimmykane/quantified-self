@@ -70,8 +70,7 @@ export class MorningWorkoutComponent {
       onCleanup(() => clearTimeout(timer));
     });
     effect(() => {
-      this.ownerUid(); this.localDate(); this.eligible();
-      const controls = this.preferences().controls; controls.localDate; controls.timeZone;
+      const controls = this.preferences().controls;
       // Only account/day changes retire user actions; a settings acknowledgement must not swallow their outcome.
       const scope = JSON.stringify([this.ownerUid(), this.localDate(), this.eligible(), controls.localDate, controls.timeZone]);
       if (scope !== this.actionScope) {
