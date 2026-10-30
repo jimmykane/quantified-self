@@ -299,6 +299,17 @@ describe('DayWorkoutDialogComponent', () => {
     expect(generate.mock.calls[1][1].controls.purpose).toBe('general-strength');
     expect(mutate).not.toHaveBeenCalled();
   });
+  it('keeps an authored rest day instead of offering a redundant easy-session generation', async () => {
+    schedule.next({ ...schedule.value, plans: schedule.value.plans.map(plan => ({ ...plan, restDays: ['2026-10-28'] })) });
+    const fixture = await render(); const component = fixture.componentInstance;
+    generate.mockImplementationOnce(async (_uid, request) => ({ ...response(request.requestId), kind: 'rest', draft: null, previousLoads: [] }));
+    await component.generate(); fixture.detectChanges(); haptics.selection.mockClear();
+    expect(fixture.nativeElement.textContent).toContain('Planned rest day');
+    expect(component.primaryLabel()).toBe('Keep rest day');
+    expect(fixture.nativeElement.textContent).not.toContain('Try easy session');
+    await component.primaryAction(); expect(close).toHaveBeenCalledOnce(); expect(generate).toHaveBeenCalledOnce();
+    expect(mutate).not.toHaveBeenCalled(); expect(haptics.selection).toHaveBeenCalledOnce();
+  });
   it('shows a disabled pending primary action and wires the error primary action to the same request', async () => {
     const fixture = await render(); const component = fixture.componentInstance;
     let reject!: (error: unknown) => void;

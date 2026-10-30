@@ -954,6 +954,55 @@ discoverable but adds no tool, schema, field, scope, consent, projection, Assist
 bundled-skill behavior. It reads canonical frontend types only to validate and render synthetic data; the existing
 Training plan read/write contract, release lifecycle, and independent consent remain unchanged.
 
+### Explicit plan rest days
+
+A rest day is an authored local calendar date on one plan, not an empty workout or an inference from missing
+activity. In Plans, select an in-range day and choose **Mark as rest day** / **Remove rest day**. Planned workouts
+in that same plan/date must first be moved, skipped or removed. Standalone workouts, skipped sessions and completed
+activities are not deleted or reclassified. A date without a workout and without this marker remains unscheduled.
+The selected plan calendar shows these dates even for inactive plans. Calendar, its day details, Dashboard's calendar
+and Today picker use the existing active-plan overlay; dotted marks distinguish rest days from planned/skipped
+workouts. Day details link to their plan for management. Today and Training show a quiet rest-day link and use **Low training
+load**, rather than **Ready to train**, for a Fresh state on an authored rest day. No score or calculation changes.
+
+`TrainingPlanV1.restDays?: string[]` contains at most 366 unique, sorted, valid local date labels inside the plan's
+inclusive range. Missing stays missing on legacy plans; removing the final marker removes the optional field.
+The strict `set-plan-rest-days` operation uses the existing schedule mutation endpoint, owner/deletion fences,
+state/plan revision checks, receipt and history paths. The final invariant also rejects create, copy, bulk placement,
+move or unskip into a same-plan rest date; it never silently drops a marker. Range edits must retain all rest dates.
+Shift dates moves markers with the plan; history reconstructs/restores them, including legacy absence. Plan deletion
+removes them with plan metadata, never converts them into standalone workouts. Rest dates do not affect workout
+capacity/counts, completion, recorded totals, TSS, load, readiness, recipes or provider consent/delivery.
+
+Today reuses a ref-counted per-owner active-plan stream: restore fence, fresh verified schedule state and one exact
+plan document. It does not query workout history, recipes, activity documents or provider status. Account changes
+immediately withhold earlier-owner context. Calendar reuses its existing bounded schedule read and shared overlay;
+there is no extra per-day query, timer or polling loop.
+
+AI workout generation checks the selected destination plan (otherwise the active plan) under its existing optional
+Training context and schedule revision fence. A declared rest day returns a deterministic rest response, without a
+model call or generation charge. Training context off does not read plan rest dates. The chat Assistant reads active
+plan rest dates before offering a daily-workout create preview; unavailable evidence is not a free training day.
+It can explain a hypothetical without authoring a workout. Removing rest intent requires an explicit separate edit.
+
+**MCP impact:** additive `get_training_plan_rest_days` requires `training-plans:read`, an owner/connection-bound
+plan reference and a dedicated measured field mask. It returns schedule/plan revisions, range and complete dates;
+legacy registered plan outputs remain frozen. Additive `preview_training_rest_days` additionally requires
+`training-plans:write`, exact expected revisions and the full replacement list. Its strict `restDayReview` contains
+plan name/range and complete before/after lists. Existing native-approved idempotent Apply and app-owned Assistant
+Apply recheck authority/revisions; the model is prepare-only. No provider action, new scope, callable, Rules, index,
+migration or metrics schema change is introduced. Training, Activity and cross-domain bundled guidance explains the
+distinction. The registered baseline/history is unchanged; the pending compatible contract digest requires the
+normal separately authorized backend release, client catalog refresh and plugin refresh. No deployment is implied.
+Release the affected Training backend readers/writers before exposing authoring in the frontend: older strict plan
+parsers do not recognize the optional field. Keep rest-day support when rolling back a backend that has already
+authored markers; do not remove stored dates or deploy an older strict parser as an implicit rollback migration.
+
+Verification covers strict dates/range/legacy absence, conflicts and shifts, real emulator preview/apply/replay,
+history restore, grant/revision/reference rejection, no provider delivery, separate Assistant approval, full review
+rendering, shared calendars, Today owner isolation, bounded reads and AI rest behavior. Browser fixtures contain
+synthetic app components, not writes to a real user's plan or live provider tests.
+
 ### Training plan phases (Training 12)
 
 Phases are optional authored context on one current plan. **Plan actions → Phases** edits their names, inclusive

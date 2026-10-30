@@ -107,6 +107,37 @@ export class TrainingPlansService {
   private readonly browserCompatibility = inject(BrowserCompatibilityService);
   private readonly scheduleStreams = new Map<string, Observable<CurrentTrainingScheduleV1>>();
   private readonly completionStreams = new Map<string, Observable<TrainingWorkoutCompletionV1[]>>();
+  private readonly activePlanStreams = new Map<string, Observable<TrainingPlanV1 | null>>();
+
+  /** Small shared Today context: no workout collection, history or provider reads. */
+  watchActivePlan(userId: string): Observable<TrainingPlanV1 | null> {
+    if (!userId) return of(null);
+    const existing = this.activePlanStreams.get(userId);
+    if (existing) return existing;
+    const availability = doc(this.firestore, 'users', userId, TRAINING_PLAN_STATE_COLLECTION_ID,
+      TRAINING_PLAN_STATE_DOCUMENT_ID, 'availability', 'restore');
+    const stream = docData(availability, { waitForServer: true }).pipe(
+      timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
+      switchMap(lock => lock !== undefined ? of(null) : this.watchVerifiedCurrentState(userId).pipe(
+        switchMap(value => {
+          const state = value === undefined ? emptyTrainingSchedule().state : parseTrainingPlanStateV1(value);
+          if (!state.activePlanId) return of(null);
+          const id = state.activePlanId;
+          return docData(doc(this.firestore, 'users', userId, TRAINING_PLANS_COLLECTION_ID, id), { waitForServer: true }).pipe(
+            timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
+            map(data => {
+              const plan = parseTrainingPlanV1(data);
+              if (plan.id !== id || plan.lifecycle !== 'active') throw new Error('The active plan identity is inconsistent.');
+              return plan;
+            }),
+          );
+        }),
+      )),
+      shareReplay({ bufferSize: 1, refCount: true }),
+    );
+    this.activePlanStreams.set(userId, stream);
+    return stream;
+  }
 
   watchCalendarSchedule(userId: string, startLocalDate: string, endLocalDate: string): Observable<CurrentTrainingScheduleV1> {
     if (!userId || !/^\d{4}-\d{2}-\d{2}$/.test(startLocalDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endLocalDate)

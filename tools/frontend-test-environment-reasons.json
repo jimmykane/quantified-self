@@ -35,6 +35,10 @@
     "environment": "angular",
     "reason": "Compiles a directive host with TestBed to verify host class bindings, afterNextRender viewport handling, SSR behavior and DestroyRef teardown."
   },
+  "src/app/components/plans/current-plan-rest-day.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Compiles the Today rest-day indicator with TestBed to verify owner-fenced signal inputs, shared plan reads, date changes, Material navigation, haptic ownership and destruction cleanup."
+  },
   "src/app/components/plans/day-workout-dialog.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the Calendar generation dialog and real Material controls in TestBed to verify consent defaults, prescription review, retained retry IDs, plan extension confirmation and owner changes during pending requests."

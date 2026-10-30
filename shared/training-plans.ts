@@ -93,6 +93,8 @@ export interface TrainingPlanV1 {
   /** QS presentation only; omitted/default uses the theme color. Never part of the workout recipe. */
   color?: TrainingPlanColor;
   phases?: TrainingPlanPhasesV1;
+  /** Explicit authored local calendar dates; absence means no declared rest days. */
+  restDays?: string[];
   lifecycle: TrainingPlanLifecycle;
   startLocalDate: string;
   endLocalDate: string;
@@ -176,6 +178,32 @@ export interface SetTrainingPlanPhasesMutationV1 {
   startLocalDate: string;
   endLocalDate: string;
   confirmPlanRangeExtension: boolean;
+}
+
+export interface SetTrainingPlanRestDaysMutationV1 {
+  kind: 'set-plan-rest-days';
+  planId: string;
+  restDays: string[];
+}
+
+export interface TrainingPlanRestDayReviewV1 {
+  planName: string;
+  startDate: string;
+  endDate: string;
+  before: string[];
+  after: string[];
+}
+
+export function parseTrainingPlanRestDayReview(value: unknown): TrainingPlanRestDayReviewV1 {
+  const record = asRecord(value, '$.restDayReview');
+  rejectUnknownFields(record, ['planName', 'startDate', 'endDate', 'before', 'after'], '$.restDayReview');
+  const startDate = normalizeTrainingLocalDate(record.startDate), endDate = normalizeTrainingLocalDate(record.endDate);
+  validateTrainingPlanDateRange(startDate, endDate);
+  const before = parseTrainingPlanRestDays(record.before), after = parseTrainingPlanRestDays(record.after);
+  if ([...before, ...after].some(date => date < startDate || date > endDate)) {
+    throw new TrainingPlanContractError('$.restDayReview', 'Rest days must be inside the plan dates.');
+  }
+  return { planName: readString(record.planName, '$.restDayReview.planName', 120), startDate, endDate, before, after };
 }
 
 export interface SetTrainingPlanLifecycleMutationV1 {
@@ -268,6 +296,7 @@ export type TrainingScheduleMutationOperationV1 =
   | SetTrainingPlanPhasesMutationV1
   | SetTrainingPlanLifecycleMutationV1
   | ShiftTrainingPlanMutationV1
+  | SetTrainingPlanRestDaysMutationV1
   | CreateScheduledWorkoutMutationV1
   | BulkCreateScheduledWorkoutsMutationV1
   | UpdateScheduledWorkoutMutationV1
@@ -571,7 +600,7 @@ export function parseTrainingPlanV1(value: unknown): TrainingPlanV1 {
   const record = asRecord(value, '$');
   rejectUnknownFields(record, [
     'schemaVersion', 'id', 'name', 'lifecycle', 'startLocalDate', 'endLocalDate',
-    'revision', 'lastCheckpointRevision', 'workoutCount', 'createdAtMs', 'updatedAtMs', 'color', 'phases',
+    'revision', 'lastCheckpointRevision', 'workoutCount', 'createdAtMs', 'updatedAtMs', 'color', 'phases', 'restDays',
   ], '$');
   if (record.schemaVersion !== TRAINING_PLAN_SCHEMA_VERSION) {
     throw new TrainingPlanContractError('$.schemaVersion', 'Unsupported training-plan version.');
@@ -581,6 +610,10 @@ export function parseTrainingPlanV1(value: unknown): TrainingPlanV1 {
   validateTrainingPlanDateRange(startLocalDate, endLocalDate);
   const phases = record.phases === undefined ? undefined : parseTrainingPlanPhasesV1(record.phases);
   if (phases) validateTrainingPlanPhaseRange(phases, startLocalDate, endLocalDate);
+  const restDays = record.restDays === undefined ? undefined : parseTrainingPlanRestDays(record.restDays);
+  if (restDays?.some(date => date < startLocalDate || date > endLocalDate)) {
+    throw new TrainingPlanContractError('$.restDays', 'Rest days must be inside the plan dates.');
+  }
   const revision = readInteger(record.revision, '$.revision', 1);
   const lastCheckpointRevision = readInteger(record.lastCheckpointRevision, '$.lastCheckpointRevision', 1);
   if (lastCheckpointRevision > revision) {
@@ -592,6 +625,7 @@ export function parseTrainingPlanV1(value: unknown): TrainingPlanV1 {
     name: readString(record.name, '$.name', 120),
     ...(record.color === undefined ? {} : { color: readLifecycle(record.color, TRAINING_PLAN_COLORS, '$.color') }),
     ...(phases === undefined ? {} : { phases }),
+    ...(restDays === undefined ? {} : { restDays }),
     lifecycle: readLifecycle(record.lifecycle, TRAINING_PLAN_LIFECYCLES, '$.lifecycle'),
     startLocalDate,
     endLocalDate,
@@ -601,6 +635,19 @@ export function parseTrainingPlanV1(value: unknown): TrainingPlanV1 {
     createdAtMs: readTimestampMs(record.createdAtMs, '$.createdAtMs'),
     updatedAtMs: readTimestampMs(record.updatedAtMs, '$.updatedAtMs'),
   };
+}
+
+export function parseTrainingPlanRestDays(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length > TRAINING_PLAN_MAX_DAYS) {
+    throw new TrainingPlanContractError('$.restDays', `Expected at most ${TRAINING_PLAN_MAX_DAYS} rest dates.`);
+  }
+  const dates = value.map((date, index) => normalizeTrainingLocalDate(date, `$.restDays[${index}]`));
+  if (new Set(dates).size !== dates.length) throw new TrainingPlanContractError('$.restDays', 'Rest dates must be unique.');
+  return dates.sort();
+}
+
+export function isTrainingPlanRestDay(plan: Pick<TrainingPlanV1, 'restDays'> | null | undefined, localDate: string): boolean {
+  return plan?.restDays?.includes(localDate) === true;
 }
 
 export function parseScheduledWorkoutV1(value: unknown): ScheduledWorkoutV1 {
@@ -692,7 +739,7 @@ export function parseMutateTrainingScheduleRequestV1(value: unknown): MutateTrai
   rejectUnknownFields(record, ['mutationId', 'expectedRevisions', 'operation'], '$');
   const operationRecord = asRecord(record.operation, '$.operation');
   const kind = readLifecycle(operationRecord.kind, [
-    'create-plan', 'rename-plan', 'set-plan-color', 'set-plan-phases', 'set-plan-lifecycle', 'shift-plan', 'create-workout',
+    'create-plan', 'rename-plan', 'set-plan-color', 'set-plan-phases', 'set-plan-rest-days', 'set-plan-lifecycle', 'shift-plan', 'create-workout',
     'bulk-create-workouts', 'update-workout', 'move-workout', 'copy-workout', 'set-workout-lifecycle',
     'delete-workout', 'permanently-delete-workout',
   ] as const, '$.operation.kind');
@@ -741,6 +788,11 @@ export function parseMutateTrainingScheduleRequestV1(value: unknown): MutateTrai
         startLocalDate, endLocalDate, confirmPlanRangeExtension: operationRecord.confirmPlanRangeExtension };
       break;
     }
+    case 'set-plan-rest-days':
+      rejectUnknownFields(operationRecord, ['kind', 'planId', 'restDays'], '$.operation');
+      operation = { kind, planId: readEntityId(operationRecord.planId, '$.operation.planId'),
+        restDays: parseTrainingPlanRestDays(operationRecord.restDays) };
+      break;
     case 'set-plan-lifecycle':
       rejectUnknownFields(operationRecord, ['kind', 'planId', 'lifecycle'], '$.operation');
       operation = {

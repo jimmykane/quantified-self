@@ -202,6 +202,16 @@ describe('Calendar generation context boundaries', () => {
       expect(called.includes('query_timeline_notes')).toBe(choices.timelineContext);
     }
   });
+  it('propagates verified selected-plan rest intent only with Training context enabled', async () => {
+    const plannedRestDay = { localDate: controls.localDate, planName: 'Autumn' };
+    const readTraining = vi.fn().mockResolvedValue({ ...training, plannedRestDay });
+    const enabled = await collectDayWorkoutContext({ ...controls, trainingContext: true }, now, session(), readTraining);
+    expect(enabled.plannedRestDay).toEqual(plannedRestDay);
+    expect(enabled.usedContext).toContain('Authored rest day in the selected plan');
+    readTraining.mockClear();
+    const disabled = await collectDayWorkoutContext(controls, now, session(), readTraining);
+    expect(disabled).not.toHaveProperty('plannedRestDay'); expect(readTraining).not.toHaveBeenCalled();
+  });
   it('never reads plans or notes without their independent opt-ins', async () => {
     const source = session(); const readTraining = vi.fn().mockResolvedValue(training);
     const result = await collectDayWorkoutContext(controls, now, source, readTraining);

@@ -5,6 +5,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { provideRouter, Router, RouterModule } from '@angular/router';
 import { TimelineNotesWorkspaceComponent } from '../timeline-notes/timeline-notes-workspace.component';
 import { ActiveSicknessNoteComponent } from '../timeline-notes/active-sickness-note.component';
+import { CurrentPlanRestDayComponent } from '../plans/current-plan-rest-day.component';
 import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
 import { By } from '@angular/platform-browser';
 import { dashboardHrvWindows, type DashboardHrvContext } from '../../helpers/dashboard-hrv-context.helper';
@@ -198,11 +199,12 @@ describe('SummariesComponent', () => {
 
     await TestBed.configureTestingModule({
       declarations: [SummariesComponent, DashboardTileBoardComponent, DashboardTileCellComponent],
-      imports: [AppChartSharedModule, TimelineNotesWorkspaceComponent, ActiveSicknessNoteComponent, PageHeaderComponent, MetricIndicatorComponent, DashboardDailyBriefingComponent, MatMenuModule, MatProgressSpinnerModule, NoopAnimationsModule, RouterModule],
+      imports: [AppChartSharedModule, TimelineNotesWorkspaceComponent, ActiveSicknessNoteComponent, CurrentPlanRestDayComponent, PageHeaderComponent, MetricIndicatorComponent, DashboardDailyBriefingComponent, MatMenuModule, MatProgressSpinnerModule, NoopAnimationsModule, RouterModule],
       schemas: [NO_ERRORS_SCHEMA],
       providers: [provideRouter([]),
         { provide: ActivityCalendarService, useValue: { watchSummaryEvents: vi.fn(() => of({ events: [], complete: true })) } },
         { provide: TrainingPlansService, useValue: {
+          watchActivePlan: vi.fn(() => of(null)),
           watchCalendarSchedule: vi.fn(() => of({ state: { activePlanId: null }, workouts: [], plans: [], workoutsComplete: true })),
           watchWorkoutCompletionsForWorkouts: vi.fn(() => of([])),
         } },

@@ -2368,6 +2368,39 @@ describe('PlansWorkspaceComponent', () => {
     expect(haptics.success).not.toHaveBeenCalled(); expect(haptics.error).not.toHaveBeenCalled();
   });
 
+  it('marks and removes an explicit rest day with revision checks, no fake workout, and no hydration haptics', async () => {
+    schedule.workouts = [];
+    const live = new BehaviorSubject(schedule); watchSchedule.mockReturnValue(live);
+    const fixture = await renderPlans(); const component = fixture.componentInstance;
+    const plan = component.selectedPlan()!;
+    expect(component.selectedDayIsRest()).toBe(false); expect(haptics.selection).not.toHaveBeenCalled();
+    const button = Array.from(fixture.nativeElement.querySelectorAll('button')).find((element: HTMLButtonElement) => element.textContent?.includes('Mark as rest day')) as HTMLButtonElement;
+    expect(button.disabled).toBe(false); button.click(); await fixture.whenStable(); fixture.detectChanges();
+    const date = component.planScheduleDate()!;
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: { kind: 'set-plan-rest-days', planId: plan.id, restDays: [date] },
+      expectedRevisions: expect.arrayContaining([{ scope: 'plan', id: plan.id, revision: plan.revision }]),
+    }));
+    expect(haptics.selection).toHaveBeenCalledOnce(); expect(haptics.success).toHaveBeenCalledOnce();
+    live.next({ ...schedule, plans: [{ ...plan, revision: plan.revision + 1, restDays: [date] }] }); fixture.detectChanges();
+    expect(component.selectedDayIsRest()).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Planned rest day');
+    const add = Array.from(fixture.nativeElement.querySelectorAll('button')).find((element: HTMLButtonElement) => element.textContent?.includes('Add workout')) as HTMLButtonElement;
+    expect(add.disabled).toBe(true);
+    exportLibraryQa(fixture, 'plan-rest-day', '.workout-list');
+    await component.toggleSelectedRestDay();
+    expect(mutate).toHaveBeenLastCalledWith(expect.objectContaining({ operation: { kind: 'set-plan-rest-days', planId: plan.id, restDays: [] } }));
+    expect(mutate.mock.calls.every(([request]) => request.operation.kind === 'set-plan-rest-days')).toBe(true);
+  });
+
+  it('blocks rest-day creation when the same plan date has a planned workout', async () => {
+    const fixture = await renderPlans(); const component = fixture.componentInstance;
+    const workout = schedule.workouts.find(item => item.planId === component.selectedPlanId())!;
+    component.selectScheduleDate(workout.localDate); fixture.detectChanges();
+    expect(component.selectedDayHasPlannedWorkout()).toBe(true);
+    await component.toggleSelectedRestDay(); expect(mutate).not.toHaveBeenCalled();
+  });
+
   it('revision-checks color changes, disables pending controls, and recolors from the live plan', async () => {
     const live = new BehaviorSubject(schedule);
     watchSchedule.mockReturnValue(live);
@@ -3920,6 +3953,7 @@ describe('PlansWorkspaceComponent', () => {
     const sass = createRequire(createRequire(resolve('package.json')).resolve('@angular/build/package.json'))('sass');
     const css = [
       ['app-plans-workspace', 'src/app/components/plans/plans-workspace.component.scss'],
+      ['app-plan-schedule-calendar', 'src/app/components/plans/plan-schedule-calendar.component.scss'],
       ['app-compact-row', 'src/app/components/shared/compact-row/compact-row.component.scss'],
       ['app-training-delivery-button', 'src/app/components/plans/training-delivery-button.component.scss'],
       ['app-workout-time-input', 'src/app/components/plans/workout-time-input.component.scss'],

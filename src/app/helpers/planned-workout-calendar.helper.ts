@@ -16,6 +16,7 @@ export interface PlannedWorkoutCalendarDayOverlay {
   overflowCount: number;
   hasSkipped: boolean;
   ariaLabel: string;
+  restDay?: { planId: string; planName: string; color: string };
 }
 
 export type PlannedWorkoutCalendarOverlay = Readonly<Record<string, PlannedWorkoutCalendarDayOverlay>>;
@@ -33,6 +34,14 @@ export function buildPlannedWorkoutCalendarOverlay(
     ? new Set(plans.filter(plan => plan.lifecycle === 'active').map(plan => plan.id))
     : new Set(activePlanId ? [activePlanId] : []);
   const grouped = new Map<string, PlannedWorkoutCalendarEntry[]>();
+  const restDays = new Map<string, { planId: string; planName: string; color: string }>();
+  for (const plan of plans) {
+    if (!activePlanIds.has(plan.id)) continue;
+    for (const date of plan.restDays ?? []) {
+      restDays.set(date, { planId: plan.id, planName: plan.name, color: trainingPlanAppearance(plan).color });
+      grouped.set(date, []);
+    }
+  }
   workouts
     .filter(workout => (
       workout.lifecycle !== 'deleted'
@@ -67,6 +76,7 @@ export function buildPlannedWorkoutCalendarOverlay(
       visibleEntries[1] = otherScope;
     }
     const parts = [
+      restDays.has(date) ? `Planned rest day, ${restDays.get(date)!.planName}` : '',
       plannedCount ? `${plannedCount} planned workout${plannedCount === 1 ? '' : 's'}` : '',
       skippedCount ? `${skippedCount} skipped workout${skippedCount === 1 ? '' : 's'}` : '',
       completedCount ? `${completedCount} completed workout${completedCount === 1 ? '' : 's'}, activity linked` : '',
@@ -78,6 +88,7 @@ export function buildPlannedWorkoutCalendarOverlay(
       overflowCount: Math.max(0, sorted.length - 2),
       hasSkipped: skippedCount > 0,
       ariaLabel: parts.join(', '),
+      ...(restDays.has(date) ? { restDay: restDays.get(date)! } : {}),
     } satisfies PlannedWorkoutCalendarDayOverlay];
   }));
 }

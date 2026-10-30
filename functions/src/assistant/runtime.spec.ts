@@ -154,6 +154,14 @@ describe('Training phase preview routing', () => {
     'Extend the Base phase by two days'])('routes an explicit phase-only edit: %s', prompt => {
     expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_plan_phases');
   });
+  it.each(['Mark tomorrow as a rest day in my plan', 'Add a rest day on Sunday', 'Remove the rest day from my plan',
+    'Change my rest days', 'Make Sunday a rest day'])('routes an explicit rest-day edit: %s', prompt => {
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_rest_days');
+  });
+  it.each(['Add a workout during my rest day', 'Change my workout on a rest day', 'Which dates are rest days?',
+    'Delete my plan and its rest days', "Don't mark Sunday as a rest day", 'Do not change my rest days'])('does not mistake contextual rest days for a rest-day edit: %s', prompt => {
+    expect(selectAssistantTrainingPreviewTool(prompt)).not.toBe('preview_training_rest_days');
+  });
   it.each([
     ['Add a workout during my Base phase', 'preview_create_planned_workout'],
     ['Delete my workout during the Taper phase', 'preview_training_deletion'],
@@ -384,7 +392,7 @@ function createSession() {
 function createDailyWorkoutSession() {
   const { session, callTool, close } = createSession();
   session.tools.push(...(['query_metric', 'query_activities', 'query_timeline_notes',
-    'query_planned_workouts_by_date', 'get_planned_workout_completions',
+    'query_planned_workouts_by_date', 'get_planned_workout_completions', 'list_training_plans',
     'prepare_training_metrics', 'get_training_metric'] as const).map(name => ({
     name, title: name, description: name, inputSchema: { type: 'object' as const, properties: {} },
   })));
@@ -399,6 +407,7 @@ function createDailyWorkoutSession() {
             aggregateValue: 2_400 }, { bucketKey: Date.parse('2026-09-25T00:00:00Z'),
             aggregateValue: 3_000 }] } } };
       case 'query_activities': return { structuredContent: { activities: [], scanComplete: true } };
+      case 'list_training_plans': return { structuredContent: { scheduleRevision: 7, plans: [], scanComplete: true } };
       case 'query_timeline_notes': return { structuredContent: { notes: [], scanComplete: true,
         nextCursor: null } };
       case 'query_planned_workouts_by_date': return { structuredContent: { scheduleRevision: 7,
@@ -1225,10 +1234,10 @@ describe('Training preview model-tool selection', () => {
       'get_training_metric',
       'get_daily_report', 'query_metric', 'query_activities', 'query_timeline_notes',
       'query_planned_workouts_by_date', 'get_planned_workout_completions',
-      'preview_create_planned_workout',
+      'list_training_plans', 'preview_create_planned_workout',
     ]);
     expect(checkNotes).toHaveBeenCalledTimes(2);
-    expect(checkPlans).toHaveBeenCalledTimes(4);
+    expect(checkPlans).toHaveBeenCalledTimes(6);
     expect(checkWrite).toHaveBeenCalledTimes(2);
     expect(result.pendingTrainingProposal).toMatchObject({ proposalRef: 'opaque-proposal',
       requiresConfirmation: true });

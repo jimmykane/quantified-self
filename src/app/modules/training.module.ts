@@ -2,6 +2,7 @@ import { TrainingBuildMetricsComponent } from '../components/shared/training-sum
 import { TrainingMixDetailsComponent } from '../components/shared/training-summary/training-mix-details.component';
 import { TimelineNotesWorkspaceComponent } from '../components/timeline-notes/timeline-notes-workspace.component';
 import { ActiveSicknessNoteComponent } from '../components/timeline-notes/active-sickness-note.component';
+import { CurrentPlanRestDayComponent } from '../components/plans/current-plan-rest-day.component';
 import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 import {
@@ -37,6 +38,7 @@ import { AppUserSettingsQueryService } from '../services/app.user-settings-query
     TrainingMetricTextComponent,
     TimelineNotesWorkspaceComponent,
     ActiveSicknessNoteComponent,
+    CurrentPlanRestDayComponent,
     SharedModule,
     MaterialModule,
     AppChartsModule,

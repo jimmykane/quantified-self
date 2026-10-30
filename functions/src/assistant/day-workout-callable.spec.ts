@@ -26,6 +26,20 @@ function dependencies(): DayWorkoutDependencies {
 const request = { requestId: 'day-workout:71f1e982-b718-4c5b-a3c7-c45eebdefc84', controls: defaultDayWorkoutControls('2026-10-28', 'UTC') };
 const auth = { auth: { uid: 'owner' }, app: {} };
 describe('generateDayWorkout callable', () => {
+  it('honors an authored rest day without a model request or quota charge and replays it', async () => {
+    const deps = dependencies();
+    vi.mocked(deps.context).mockResolvedValue({ evidence: {}, usedContext: ['Authored rest day'], missingContext: [],
+      previousStrength: [], references: [], plannedRestDay: { localDate: request.controls.localDate, planName: 'Autumn' } });
+    const response = await runGenerateDayWorkout({ ...request, controls: { ...request.controls, trainingContext: true } }, auth, deps);
+    expect(response.kind).toBe('rest');
+    expect(response.rationale).toContain('planned rest day in Autumn');
+    expect(deps.generate).not.toHaveBeenCalled();
+    expect(deps.finalize).not.toHaveBeenCalled();
+    expect(deps.release).toHaveBeenCalledTimes(1);
+    vi.mocked(deps.store.begin).mockResolvedValue({ response });
+    await expect(runGenerateDayWorkout(request, auth, deps)).resolves.toEqual(response);
+    expect(deps.context).toHaveBeenCalledTimes(1);
+  });
   it.each([ActivityTypes.Running, ActivityTypes.StrengthTraining])('constrains model output to the %s prescription schema', async sport => {
     vi.mocked(assistantGenkit.generate).mockResolvedValueOnce({ output: { kind: 'rest', rationale: 'Rest.' } } as never);
     const evidence = await dependencies().context('owner', request, new Date());

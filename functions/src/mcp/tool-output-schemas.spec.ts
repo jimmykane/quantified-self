@@ -469,6 +469,8 @@ const trainingReadFixtures = {
      nodes: [{ kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'time', seconds: 1800 }, targets: [] }] } } },
  list_training_plans: { scheduleRevision: 1, scanComplete: true, recordsScanned: 1, limitsReached: [], nextCursor: null, plans: [{ planRef: 'opaque-plan-reference', name: 'Autumn', lifecycle: 'active', startDate: '2026-07-01', endDate: '2026-07-02', revision: 1, currentWorkoutCount: 1, color: null, createdAtMs: 1, updatedAtMs: 1 }] },
  get_training_plan: { scheduleRevision: 1, plan: { planRef: 'opaque-plan-reference', name: 'Autumn', lifecycle: 'active', startDate: '2026-07-01', endDate: '2026-07-02', revision: 1, currentWorkoutCount: 1, color: null, createdAtMs: 1, updatedAtMs: 1 } },
+ get_training_plan_rest_days: { scheduleRevision: 1, planRef: 'opaque-plan-reference', planRevision: 1,
+   startDate: '2026-07-01', endDate: '2026-07-02', restDays: ['2026-07-02'] },
  get_training_plan_phases: { scheduleRevision: 1, planRef: 'opaque-plan-reference', planRevision: 1,
    startDate: '2026-07-01', endDate: '2026-07-02', phases: { version: 1, items: [
      { id: 'base', name: 'Base', startLocalDate: '2026-07-01', endLocalDate: '2026-07-02', description: 'User context', color: 'green' },
@@ -599,6 +601,9 @@ const service = {
     readTrainingPlans: vi.fn(async (input: { tool: TrainingReadTool }) => trainingReadFixtures[input.tool]),
     previewCreatePlannedWorkout: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewTrainingChanges: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewTrainingRestDays: vi.fn().mockResolvedValue({ ...trainingPreviewFixture,
+      restDayReview: { planName: 'Autumn', startDate: '2026-07-01', endDate: '2026-07-02', before: [], after: ['2026-07-02'] },
+      changes: [{ index: 0, kind: 'set-plan-rest-days', summary: 'Replace rest days in the selected plan.' }] }),
     previewTrainingPlanPhases: vi.fn().mockResolvedValue({ ...trainingPreviewFixture,
       phaseReview: { planName: 'Autumn', previousStartDate: '2026-07-01', previousEndDate: '2026-07-02',
         startDate: '2026-07-01', endDate: '2026-07-02', before: { version: 1, items: [] }, after: { version: 1, items: [] } },
@@ -1411,6 +1416,9 @@ const successfulToolArguments: Record<
   list_training_plans: {},
   get_training_plan: { planRef: 'opaque-plan-reference' },
   get_training_plan_phases: { planRef: 'opaque-plan-reference' },
+  get_training_plan_rest_days: { planRef: 'opaque-plan-reference' },
+  preview_training_rest_days: { expectedScheduleRevision: 1, change: { kind: 'set-plan-rest-days',
+    plan: { ref: 'opaque-plan-reference' }, expectedPlanRevision: 1, restDays: ['2026-07-02'] } },
   preview_training_plan_phases: { expectedScheduleRevision: 1, change: { kind: 'set-plan-phases',
     plan: { ref: 'opaque-plan-reference' }, expectedPlanRevision: 1, phases: { version: 1, items: [] },
     startDate: '2026-07-01', endDate: '2026-07-02', confirmPlanRangeExtension: false } },
@@ -2092,7 +2100,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     // Keep the frozen surface's budget; each additive family has its own explicit bound.
     const planTools = tools.filter(tool => (TRAINING_READ_TOOLS as readonly string[]).includes(tool.name));
     const planReadExtensions = planTools.filter(tool => (TRAINING_READ_EXTENSION_TOOLS as readonly string[]).includes(tool.name)
-      && !['get_workout_prescription_analysis', 'get_planned_workout_v2', 'get_planned_workout_v3', 'get_saved_workout_v2'].includes(tool.name) && !['get_training_plan_phases', 'list_saved_workouts', 'get_saved_workout'].includes(tool.name));
+      && !['get_workout_prescription_analysis', 'get_planned_workout_v2', 'get_planned_workout_v3', 'get_saved_workout_v2'].includes(tool.name) && !['get_training_plan_rest_days', 'get_training_plan_phases', 'list_saved_workouts', 'get_saved_workout'].includes(tool.name));
     const analysisTools = planTools.filter(tool => tool.name === 'get_workout_prescription_analysis');
     expect(Buffer.byteLength(JSON.stringify(analysisTools), 'utf8')).toBeLessThan(24 * 1024);
     const planReadV2 = planTools.filter(tool => tool.name === 'get_planned_workout_v2');
@@ -2105,7 +2113,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     const planWriteTools = tools.filter(tool => (TRAINING_WRITE_TOOLS as readonly string[]).includes(tool.name));
     const planWriteExtensions = planWriteTools.filter(tool => (TRAINING_WRITE_EXTENSION_TOOLS as readonly string[]).includes(tool.name)
       && tool.name !== 'preview_planned_workout_v2_change' && tool.name !== 'preview_saved_workout_change'
-      && !['preview_training_plan_phases', 'preview_training_deletion', 'preview_garmin_workout_replacement', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes', 'preview_saved_workout_v2_change'].includes(tool.name));
+      && !['preview_training_rest_days', 'preview_training_plan_phases', 'preview_training_deletion', 'preview_garmin_workout_replacement', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes', 'preview_saved_workout_v2_change'].includes(tool.name));
     const planDeletionPreview = planWriteTools.filter(tool => tool.name === 'preview_training_deletion');
     const planWriteV2 = planWriteTools.filter(tool => tool.name === 'preview_planned_workout_v2_change');
     const planWriteLibrary = planWriteTools.filter(tool => tool.name === 'preview_saved_workout_change');
@@ -2116,7 +2124,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => tool.name === 'preview_garmin_workout_replacement')), 'utf8')).toBeLessThan(6 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planWriteV2), 'utf8')).toBeLessThan(20 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planWriteLibrary), 'utf8')).toBeLessThan(24 * 1024);
-    for (const name of ['get_training_plan_phases', 'preview_training_plan_phases', 'get_planned_workout_v3', 'get_saved_workout_v2', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes', 'preview_saved_workout_v2_change']) {
+    for (const name of ['get_training_plan_rest_days', 'preview_training_rest_days', 'get_training_plan_phases', 'preview_training_plan_phases', 'get_planned_workout_v3', 'get_saved_workout_v2', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes', 'preview_saved_workout_v2_change']) {
       expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => tool.name === name)), 'utf8')).toBeLessThan(24 * 1024);
     }
     const applyTrainingChangesTool = tools.find(tool => tool.name === 'apply_training_changes');
@@ -3042,6 +3050,41 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       expect(JSON.stringify(result)).not.toContain('private-phase-canary');
     }
   });
+  it('keeps rest-day reads separately granted, strict and owner-bound on every transport', async () => {
+    const service = createFixtureDataService();
+    const denied = await connectFixtureServer(service, []); connections.push(denied);
+    expect((await denied.client.listTools()).tools.map(tool => tool.name)).not.toContain('get_training_plan_rest_days');
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.TrainingPlansRead]); connections.push(connection);
+    const args = successfulToolArguments.get_training_plan_rest_days;
+    const injected = await connection.client.callTool({ name: 'get_training_plan_rest_days', arguments: { ...args, uid: 'other', scopes: [] } });
+    expect(injected.isError).toBe(true); expect(service.readTrainingPlans).not.toHaveBeenCalled();
+    for (const extra of [{ providerId: 'private-rest-canary' }, { restDays: [{ date: '2026-07-02', source: 'private-rest-canary' }] }]) {
+      service.readTrainingPlans = vi.fn().mockResolvedValue({ ...trainingReadFixtures.get_training_plan_rest_days, ...extra });
+      const result = await connection.client.callTool({ name: 'get_training_plan_rest_days', arguments: args });
+      expect(result.isError).toBe(true); expect(result).not.toHaveProperty('structuredContent');
+      expect(JSON.stringify(result)).not.toContain('private-rest-canary');
+    }
+  });
+
+  it('requires both rest-day preview grants and the complete non-provider review on every transport', async () => {
+    const service = createFixtureDataService();
+    for (const scopes of [[], [MCP_OAUTH_SCOPES.TrainingPlansRead], [MCP_OAUTH_SCOPES.TrainingPlansWrite]]) {
+      const denied = await connectFixtureServer(service, scopes); connections.push(denied);
+      expect((await denied.client.listTools()).tools.map(tool => tool.name)).not.toContain('preview_training_rest_days');
+    }
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite]); connections.push(connection);
+    const safe = await service.previewTrainingRestDays({ uid: 'fixture', connectionId: 'fixture', scopes: [], arguments: {} });
+    const args = successfulToolArguments.preview_training_rest_days;
+    const injected = await connection.client.callTool({ name: 'preview_training_rest_days', arguments: { ...args, uid: 'other' } });
+    expect(injected.isError).toBe(true); expect(service.previewTrainingRestDays).toHaveBeenCalledTimes(1);
+    for (const invalid of [{ ...safe, restDayReview: undefined }, { ...safe, restDayReview: { ...safe.restDayReview, providerId: 'private-rest-canary' } }]) {
+      service.previewTrainingRestDays = vi.fn().mockResolvedValue(invalid);
+      const result = await connection.client.callTool({ name: 'preview_training_rest_days', arguments: args });
+      expect(result.isError).toBe(true); expect(result).not.toHaveProperty('structuredContent');
+      expect(JSON.stringify(result)).not.toContain('private-rest-canary');
+    }
+  });
+
   it('requires both activity grants and strictly projects description text on every transport', async () => {
     const service = createFixtureDataService();
     for (const scopes of [[], [MCP_OAUTH_SCOPES.ActivityDetailsRead], [MCP_OAUTH_SCOPES.ActivityDescriptionsRead]]) {

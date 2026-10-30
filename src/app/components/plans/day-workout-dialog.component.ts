@@ -15,7 +15,7 @@ import { DAY_WORKOUT_EQUIPMENT, DAY_WORKOUT_SPORTS, defaultDayWorkoutControls, d
   dayWorkoutPurposes, dayWorkoutTargets, DAY_WORKOUT_SIGNAL_OPTIONS, dayWorkoutReadinessSourcesEnabled,
   type DayWorkoutControls, type GenerateDayWorkoutRequest, type GenerateDayWorkoutResponse } from '@shared/day-workout';
 import { isStrengthWorkoutSportV1 } from '@shared/strength-workout';
-import { isTrainingLocalDateWithinPlan, normalizeTrainingLocalDate, type MutateTrainingScheduleRequestV1 } from '@shared/training-plans';
+import { isTrainingLocalDateWithinPlan, isTrainingPlanRestDay, normalizeTrainingLocalDate, type MutateTrainingScheduleRequestV1 } from '@shared/training-plans';
 import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppUserService } from '../../services/app.user.service';
@@ -84,6 +84,12 @@ export class DayWorkoutDialogComponent {
   readonly strength = computed(() => isStrengthWorkoutSportV1(this.controls().sport));
   readonly planOptions = computed(() => this.schedule()?.plans.filter(plan => plan.lifecycle !== 'archived') ?? []);
   readonly selectedPlan = computed(() => this.planOptions().find(plan => plan.id === this.controls().destinationPlanId) ?? null);
+  readonly restDayPlan = computed(() => {
+    if (!this.controls().trainingContext || this.scheduleFailed() || this.schedule()?.restoreUnavailable) return null;
+    const planId = this.controls().destinationPlanId ?? this.schedule()?.state.activePlanId;
+    const plan = this.planOptions().find(item => item.id === planId);
+    return plan && isTrainingPlanRestDay(plan, this.controls().localDate) ? plan : null;
+  });
   readonly existing = computed(() => this.schedule()?.workouts.filter(workout => workout.lifecycle !== 'deleted'
     && workout.localDate === this.controls().localDate
     && [null, this.schedule()?.state.activePlanId, this.controls().destinationPlanId].includes(workout.planId)) ?? []);
@@ -138,10 +144,14 @@ export class DayWorkoutDialogComponent {
   readonly primaryLabel = computed(() => {
     if (this.busy()) return this.busy() === 'save' ? 'Adding…' : 'Generating…';
     if (this.result()?.draft) return this.saveUncertain() ? 'Retry Add' : 'Add workout';
-    if (this.result()) return 'Try easy session';
+    if (this.result()) return this.restDayPlan() ? 'Keep rest day' : 'Try easy session';
     return this.error() ? 'Retry generation' : 'Generate workout';
   });
   async primaryAction(): Promise<void> {
+    if (this.result()?.kind === 'rest' && this.restDayPlan()) {
+      if (this.busy() || !this.generation.isOwner(this.data.ownerUid)) return;
+      this.haptics.selection(); this.ref.close(); return;
+    }
     if (this.result()?.draft) return this.add();
     if (this.result()) return this.easy();
     return this.generate(!!this.error());

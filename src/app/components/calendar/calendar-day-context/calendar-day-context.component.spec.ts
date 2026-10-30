@@ -32,6 +32,30 @@ function data(dateKey: string): CalendarDayDetailsData {
 const emptyEvidence = { sessions: [], hrvSeries: [], derived: null, sleepError: false, hrvError: false, readinessError: false, recoveryError: false };
 
 describe('CalendarDayContextComponent', () => {
+  it('shows a rest-only day and navigates to its exact plan/date without changing the plan', async () => {
+    const viewer = signal<{ uid: string } | null>({ uid: 'owner' }); const haptics = { selection: vi.fn() };
+    await TestBed.configureTestingModule({ imports: [CalendarDayContextComponent], providers: [provideRouter([]),
+      { provide: DayWorkoutService, useValue: { canGenerate: () => false } },
+      { provide: ViewportScroller, useValue: {} }, { provide: AppUserService, useValue: { user: viewer } },
+      { provide: CalendarDayHealthService, useValue: { watch: () => of(emptyEvidence) } },
+      { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
+      { provide: LoggerService, useValue: { error: vi.fn() } },
+      { provide: TrainingWorkoutDuplicateService, useValue: {} },
+      { provide: AppEventColorService, useValue: {} }, { provide: AppHapticsService, useValue: haptics },
+    ] }).compileComponents();
+    const fixture = TestBed.createComponent(CalendarDayContextComponent);
+    fixture.componentRef.setInput('data', { ...data('2026-10-25'), scheduleSource: () => ({ state: { activePlanId: 'plan' },
+      plans: [{ id: 'plan', name: 'Autumn', lifecycle: 'active', restDays: ['2026-10-25'] }] }) as never });
+    fixture.componentRef.setInput('calmMonth', true); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.dashboardDayIsEmpty()).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('Rest day'); expect(haptics.selection).not.toHaveBeenCalled();
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    const button = fixture.nativeElement.querySelector('[aria-label="Manage this rest day in Plans"]') as HTMLButtonElement;
+    button.click(); expect(navigate).toHaveBeenCalledWith(['/training/plans/plan', 'plan'], { queryParams: { date: '2026-10-25' } });
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    viewer.set({ uid: 'other' }); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[aria-label="Planned rest day"]')).toBeNull();
+  });
   it.each(['preview', 'dashboard', 'calendar', 'day'].flatMap(surface =>
     [false, true].map(hasPhase => ({ surface, hasPhase }))))(
     'opens AI generation and the library from the $surface day menu (phase: $hasPhase)', async ({ surface, hasPhase }) => {

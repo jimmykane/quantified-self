@@ -104,6 +104,19 @@ export async function runGenerateDayWorkout(value: unknown, context: { auth?: { 
     reservation = await dependencies.reserve(uid);
     const evidence = await dependencies.context(uid, request, now);
     await dependencies.store.assertActive(uid, request.requestId, started.token);
+    if (request.controls.trainingContext && evidence.plannedRestDay?.localDate === request.controls.localDate) {
+      // Authored intent is deterministic, not an AI assessment. No model request or quota charge.
+      const suggestion = validateDayWorkoutSuggestion({ kind: 'rest',
+        rationale: `This date is a planned rest day in ${evidence.plannedRestDay.planName}. Remove the rest day in Plans before adding a workout to that plan.`,
+      }, request.controls, evidence.previousStrength, evidence.references);
+      await dependencies.release(reservation);
+      reservation = undefined;
+      const response: GenerateDayWorkoutResponse = { requestId: request.requestId, observedAt: now.toISOString(),
+        ...suggestion, usedContext: evidence.usedContext, missingContext: evidence.missingContext };
+      await dependencies.store.assertActive(uid, request.requestId, started.token);
+      await dependencies.store.finish(uid, request.requestId, started.token, response);
+      return response;
+    }
     // Charge once before the first model attempt, including failed model attempts, as in Assistant chat.
     await dependencies.finalize(reservation);
     billable = true;

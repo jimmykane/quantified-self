@@ -34,6 +34,23 @@ describe('bounded Calendar Training reads', () => {
     service = TestBed.inject(TrainingPlansService);
     vi.mocked(docData).mockReturnValue(of(undefined));
   });
+  it('shares an active-plan-only rest context without scanning workouts or plan collections', async () => {
+    serverState = { ...currentState, activePlanId: 'active-plan' };
+    const plan = { schemaVersion: 1, id: 'active-plan', name: 'Autumn', lifecycle: 'active', startLocalDate: '2026-10-05',
+      endLocalDate: '2026-10-11', restDays: ['2026-10-06'], revision: 1, lastCheckpointRevision: 1, workoutCount: 0, createdAtMs: 1, updatedAtMs: 1 };
+    vi.mocked(docData).mockImplementation(ref => of(ref.path.endsWith('/trainingPlans/active-plan') ? plan : undefined));
+    const shared = service.watchActivePlan('owner');
+    expect(service.watchActivePlan('owner')).toBe(shared);
+    expect(await firstValueFrom(shared)).toEqual(plan);
+    expect(collectionData).not.toHaveBeenCalled();
+    expect(docData).toHaveBeenCalledTimes(3);
+    expect(await firstValueFrom(service.watchActivePlan(''))).toBeNull();
+  });
+  it('withholds rest context behind the restore fence without querying a plan', async () => {
+    vi.mocked(docData).mockReturnValue(of({ operation: 'restore' }));
+    expect(await firstValueFrom(service.watchActivePlan('owner'))).toBeNull();
+    expect(docData).toHaveBeenCalledOnce(); expect(collectionData).not.toHaveBeenCalled(); expect(getDoc).not.toHaveBeenCalled();
+  });
   it('uses inclusive local dates with lookahead and never reports truncated workouts as a complete schedule', async () => {
     vi.mocked(collectionData).mockReturnValue(of(Array.from({ length: 401 }, (_, i) => row(`w${i}`))));
     const schedule = await firstValueFrom(service.watchCalendarSchedule('owner', '2026-10-05', '2026-10-11'));

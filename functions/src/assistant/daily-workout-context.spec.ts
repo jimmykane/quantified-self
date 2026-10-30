@@ -4,6 +4,7 @@ import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
 import { ASSISTANT_CREATE_TODAYS_WORKOUT_PROMPT } from '../../../shared/assistant.prompts';
 import {
   collectDailyWorkoutContext,
+  canPreviewDailyWorkout,
   dailyWorkoutFacts,
   requestsDailyWorkoutChange,
   requestsDailyWorkoutContext,
@@ -53,6 +54,25 @@ function fixtureRead() {
 }
 
 describe('daily workout context', () => {
+  it.each(['rest', 'none', 'unavailable'] as const)('preserves explicit rest intent and fails closed when it cannot be checked: %s', async status => {
+    const base = fixtureRead();
+    const read = vi.fn(async (name: string, args: Record<string, unknown>) => {
+      if (name === 'get_training_metric') return { metricKind: args.metricKind, payload: {} };
+      if (name === 'list_training_plans') return { scheduleRevision: 7, scanComplete: true, plans: [{ planRef: 'plan-ref', name: 'Autumn', revision: 3 }] };
+      if (name === 'get_training_plan_phases') throw new Error('Unavailable phase');
+      if (name === 'get_training_plan_rest_days') {
+        if (status === 'unavailable') throw new Error('Unavailable rest dates');
+        return { scheduleRevision: 7, planRevision: 3, planRef: args.planRef, restDays: status === 'rest' ? ['2026-09-25'] : [] };
+      }
+      return base(name);
+    });
+    const result = await collectDailyWorkoutContext({ now: NOW, timeZone: 'UTC', timelineNotesEnabled: false,
+      trainingPlansEnabled: true, read });
+    expect(result.plannedWorkouts.restDayContext?.status).toBe(status);
+    expect(canPreviewDailyWorkout('Create a workout for today', result)).toBe(status === 'none');
+    if (status === 'rest') expect(dailyWorkoutFacts(result)).toContain('Planned rest day on 2026-09-25');
+    if (status === 'unavailable') expect(dailyWorkoutFacts(result)).toContain('rest days could not be checked');
+  });
   const history = [
     { role: 'user' as const, text: 'Suggest a workout for today using readiness and my plan.',
       createdAt: '2026-10-03T09:00:00Z' },

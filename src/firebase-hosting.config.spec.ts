@@ -336,7 +336,8 @@ describe('Firebase Hosting configuration', () => {
     // Calendar generation help covers default-on Training/Timeline context with independent opt-outs, Calendar/Dashboard entry points, searchable sport selection, expanded default-on Personalization choices for freshness/HRV/recovery, selected-sport weekday routines from complete prior local days, the shared Assistant allowance footer, eligible dates and safe retries (2026-10-29).
     // It applies swim units to weekly distances and the SWOLF pool-length label.
     // Table-filter help covers compact text buttons, the calendar dialog, selected dates and per-filter clearing (2026-10-29).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-29');
+    // Explicit plan rest days cover Plans, Calendar, Today, suggestions and approved Assistant/MCP edits.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-30');
   });
 
   it('rewrites only known CSR app routes so unknown URLs can fall through to 404.html', () => {
@@ -461,7 +462,7 @@ describe('Firebase Hosting configuration', () => {
     // Startup recovery help covers the 15-second deadline and reload without clearing browser storage.
     // Checkout help covers the 20-second access check, confirmed Pro setup and recovery before another payment.
     // Event chart help covers compact option submenus and scrolling to reach every menu setting.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-29');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-30');
     // Homepage keeps the provider introduction near the hero and moves integration details after the product features.
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-28');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
@@ -526,7 +527,7 @@ describe('Firebase Hosting configuration', () => {
     // Swimming Guide help explains inline omissions, visible layout-limit warnings and the HR-target field budget.
     // Form/TSS axes fit the displayed period without changing training values or hiding the neutral baseline.
     // Swimming Automatic prioritizes CSS before HR/MET and excludes calculated power TSS.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-29');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-30');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');

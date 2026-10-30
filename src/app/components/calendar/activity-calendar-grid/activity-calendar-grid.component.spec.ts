@@ -74,6 +74,24 @@ describe('ActivityCalendarGridComponent', () => {
     expect(fixture.componentInstance.model.summary.totalDurationSeconds).toBe(0);
   });
 
+  it('labels rest days independently without overlapping standalone workout previews or adding activity totals', async () => {
+    const rest = { planId: 'plan', planName: 'Autumn', color: 'purple' };
+    const day = { entries: [], visibleEntries: [], overflowCount: 0, hasSkipped: false, ariaLabel: 'Planned rest day, Autumn', restDay: rest };
+    const fixture = await renderGrid('month', false, [], DaysOfTheWeek.Monday, { '2026-08-03': day });
+    fixture.componentRef.setInput('calmMonth', true); fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('[aria-label*="Planned rest day"]') as HTMLElement;
+    expect(button.querySelector('.planned-rest-day-marker')).toBeTruthy();
+    expect(button.querySelectorAll('.activity-calendar-workout-preview')).toHaveLength(1);
+    expect(button.textContent).toContain('Rest day');
+    expect(fixture.nativeElement.querySelector('.activity-calendar-calm-legend-rest')).toBeTruthy();
+    const entry = { workout: { ...createWorkout('Independent run', 'planned'), planId: null }, planName: null, color: 'gray' };
+    fixture.componentRef.setInput('plannedWorkoutsByDate', { '2026-08-03': { ...day, entries: [entry], visibleEntries: [entry] } }); fixture.detectChanges();
+    expect(button.querySelectorAll('.activity-calendar-workout-preview')).toHaveLength(1);
+    expect(button.querySelector('.activity-calendar-workout-preview')?.textContent).toContain('Independent run');
+    expect(button.querySelector('.planned-rest-day-marker')).toBeTruthy();
+    expect(fixture.componentInstance.model.summary.totalDurationSeconds).toBe(0);
+  });
+
   it('marks only the selected date without changing the today marker or day layout', async () => {
     const fixture = await renderGrid('month', false, []);
     fixture.componentRef.setInput('selectedDateKey', '2026-08-03'); fixture.detectChanges();

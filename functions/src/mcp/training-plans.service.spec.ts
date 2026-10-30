@@ -35,8 +35,9 @@ function fixture(weightUnits?: WeightUnits) {
     state: async () => { calls++; if (deleted) throw Error('deleted'); return { revision, activePlanId: 'p1' }; },
     snapshot: async (_uid, read) => read({
       getPlanPhases: async id => collections.trainingPlans[id] ? { id, data: { ...collections.trainingPlans[id] } } : null,
+      getPlanRestDays: async id => collections.trainingPlans[id] ? { id, data: { ...collections.trainingPlans[id] } } : null,
       get: async (collection, id, detail) => collections[collection][id]
-        ? { id, data: { ...Object.fromEntries(Object.entries(collections[collection][id]).filter(([key]) => key !== 'phases')),
+        ? { id, data: { ...Object.fromEntries(Object.entries(collections[collection][id]).filter(([key]) => !['phases', 'restDays'].includes(key))),
           ...(detail ? { structure: structures[id] ?? collections[collection][id].structure ?? structure } : {}) } } : null,
       getStrengthDetails: async id => strengthDocs[id] ? { id: 'current', data: strengthDocs[id] } : null,
       page: async (collection, after, limit, filter) => Object.entries(collections[collection]).sort(([a], [b]) => a.localeCompare(b))
@@ -58,6 +59,24 @@ function fixture(weightUnits?: WeightUnits) {
 }
 
 describe('Training plan MCP reads', () => {
+  it('reads explicit rest dates separately, preserves legacy plans and rejects invalid or leaked data', async () => {
+    const f = fixture();
+    const planRef = f.codec.encode({ kind: 'plan', id: 'p1', createdAtMs: 1 }, 'owner', 'connection');
+    const read = () => f.run('get_training_plan_rest_days', { planRef });
+    expect(await read()).toMatchObject({ restDays: [], planRevision: 1, scheduleRevision: 1 });
+    f.collections.trainingPlans.p1.restDays = ['2026-09-16', '2026-09-15'];
+    expect(await read()).toMatchObject({ restDays: ['2026-09-15', '2026-09-16'] });
+    await expect(f.run('get_training_plan_rest_days', { planRef }, [])).rejects.toThrow();
+    await expect(f.run('get_training_plan_rest_days', { planRef }, [TRAINING_PLANS_SCOPE], 'other')).rejects.toThrow();
+    await expect(f.run('get_training_plan_rest_days', { planRef }, [TRAINING_PLANS_SCOPE], 'connection', 'other')).rejects.toThrow();
+    for (const invalid of [['2026-08-31'], ['2026-09-15', '2026-09-15'], ['not-a-date']]) {
+      f.collections.trainingPlans.p1.restDays = invalid;
+      await expect(read()).rejects.toThrow();
+    }
+    f.collections.trainingPlans.p1.restDays = [];
+    f.collections.trainingPlans.p1.providerId = 'private-rest-canary';
+    await expect(read()).rejects.toThrow();
+  });
   it('keeps seconds and minutes distinct in timed Rest recipes without exposing editor defaults or warnings', async () => {
     const f = fixture();
     const recipe: WorkoutStructureV1 = { version: 1, sport: ActivityTypes.Swimming, nodes: [15, 900, 15.123456789].map((seconds, index) => ({

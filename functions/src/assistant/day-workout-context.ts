@@ -4,7 +4,7 @@ import { DataFeeling, DataRPE } from '@sports-alliance/sports-lib';
 import { dayWorkoutDateOffset, dayWorkoutLocalDate, dayWorkoutReadinessSourcesEnabled, type DayWorkoutControls } from '../../../shared/day-workout';
 import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
 import { parseWorkoutStructureV1, type WorkoutTargetV1 } from '../../../shared/planned-workout';
-import { parseTrainingPlanPhasesV1 } from '../../../shared/training-plans';
+import { parseTrainingPlanPhasesV1, parseTrainingPlanRestDays, normalizeTrainingLocalDate, validateTrainingPlanDateRange } from '../../../shared/training-plans';
 import { isStrengthWorkoutSportV1, parseStrengthWorkoutDetailsV1, strengthProjectionMatchesDetails } from '../../../shared/strength-workout';
 import { createFirestoreTrainingReads } from '../mcp/training-plans.service';
 import { collectDailyWorkoutContext } from './daily-workout-context';
@@ -24,6 +24,7 @@ function datedMetric(value: RecordValue, timeZone: string): RecordValue {
   }) } };
 }
 export interface DayWorkoutContext {
+  plannedRestDay?: { localDate: string; planName: string };
   evidence: RecordValue;
   usedContext: string[];
   missingContext: string[];
@@ -31,6 +32,7 @@ export interface DayWorkoutContext {
   references: WorkoutTargetV1[];
 }
 export interface DayWorkoutTrainingContext {
+  plannedRestDay?: { localDate: string; planName: string };
   scheduleRevision: number;
   nearby: RecordValue[];
   phase: unknown;
@@ -105,7 +107,21 @@ export async function readDayWorkoutTrainingContext(uid: string, controls: DayWo
       phase = { planName: plan.data.name, lifecycle: plan.data.lifecycle,
         phase: phases.items.find(item => controls.localDate >= item.startLocalDate && controls.localDate <= item.endLocalDate) ?? null };
     }
-    return { nearby, phase, previousStrength, references };
+    let plannedRestDay: DayWorkoutTrainingContext['plannedRestDay'];
+    const restPlanId = controls.destinationPlanId ?? before.activePlanId;
+    if (restPlanId) {
+      const plan = await view.getPlanRestDays!(restPlanId);
+      if (!plan || !['active', 'paused'].includes(String(plan.data.lifecycle))) throw new Error('The selected plan is unavailable.');
+      const start = normalizeTrainingLocalDate(plan.data.startLocalDate), end = normalizeTrainingLocalDate(plan.data.endLocalDate);
+      validateTrainingPlanDateRange(start, end);
+      const restDays = parseTrainingPlanRestDays(plan.data.restDays ?? []);
+      if (restDays.some(date => date < start || date > end) || typeof plan.data.name !== 'string'
+        || !plan.data.name.trim() || plan.data.name.length > 120) throw new Error('The selected plan is invalid.');
+      if (restDays.includes(controls.localDate)) {
+        plannedRestDay = { localDate: controls.localDate, planName: plan.data.name };
+      }
+    }
+    return { nearby, phase, previousStrength, references, ...(plannedRestDay ? { plannedRestDay } : {}) };
   });
   const after = await reads.state(uid, identity);
   if (before.revision !== after.revision || before.activePlanId !== after.activePlanId) throw new Error('The schedule changed. Generate again.');
@@ -221,6 +237,7 @@ export async function collectDayWorkoutContext(controls: DayWorkoutControls, now
     training = await readTraining();
     if (training.scheduleRevision !== daily.plannedWorkouts.scheduleRevision) throw new Error('The schedule changed. Generate again.');
     usedContext.push('Selected-day schedule and completion links; nearby sessions within seven days');
+    if (training.plannedRestDay) usedContext.push('Authored rest day in the selected plan');
     if (training.phase) usedContext.push('Selected plan and phase');
     if (training.previousStrength.length) usedContext.push('Up to five previous planned strength prescriptions');
     missingContext.push(...training.missing);
@@ -258,5 +275,6 @@ export async function collectDayWorkoutContext(controls: DayWorkoutControls, now
     previousStrength: training?.previousStrength ?? [], references: training?.references ?? [] };
   if (JSON.stringify(evidence).length > 160_000) throw new Error('The context exceeds the safe generation limit. Try a simpler selection.');
   return { evidence, usedContext, missingContext: [...new Set(missingContext)],
+    ...(training?.plannedRestDay ? { plannedRestDay: training.plannedRestDay } : {}),
     previousStrength: training?.previousStrength ?? [], references: training?.references ?? [] };
 }

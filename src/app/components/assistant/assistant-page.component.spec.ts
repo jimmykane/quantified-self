@@ -325,6 +325,18 @@ describe('AssistantPageComponent', () => {
   });
 
 
+  it('shows complete human-readable rest-day before/after dates without applying during hydration', () => {
+    component.conversation.set(chatResponse.conversation);
+    component.pendingTrainingProposal.set({ ...trainingProposal, permissionMode: 'schedule', providerPreviews: [],
+      changes: [{ index: 0, kind: 'set-plan-rest-days', summary: 'Replace rest dates' }], restDayReview: {
+        planName: '<script>Autumn</script>', startDate: '2026-10-01', endDate: '2026-10-31', before: ['2026-10-02'], after: ['2026-10-03', '2026-10-04'] } });
+    assistantService.applyTrainingProposal.mockClear(); fixture.detectChanges();
+    const review = fixture.nativeElement.querySelector('[aria-label="Review plan rest days"]') as HTMLElement;
+    expect(review.textContent).toContain('Current rest days'); expect(review.textContent).toContain('Proposed rest days');
+    expect(review.textContent).toContain('Oct 2, 2026'); expect(review.textContent).toContain('Oct 3, 2026'); expect(review.textContent).toContain('Oct 4, 2026');
+    expect(review.querySelector('script')).toBeNull(); expect(assistantService.applyTrainingProposal).not.toHaveBeenCalled();
+  });
+
   it('shows full phase before/after metadata and range changes without applying during hydration', async () => {
     const phases = { version: 1 as const, items: [{ id: 'base', name: 'Base', startLocalDate: '2026-10-01', endLocalDate: '2026-10-10',
       description: 'Existing description', color: 'blue' as const }] };

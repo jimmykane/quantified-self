@@ -432,6 +432,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public sleepTrendCanNavigateOlder = true;
   public sleepTrendCanNavigateNewer = false;
   public todayDateSubtitle = '';
+  public todayRestDate = '';
   public todayGreeting = '';
   readonly todayDetailsExpanded = signal(true);
   private todayDetailsOwnerUID: string | null = null;
@@ -703,6 +704,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
     this.isOwnerDashboard = ownerUID !== null;
     this.todayDateSubtitle = this.formatTodayDateSubtitle(date);
+    this.todayRestDate = localCalendarDate(date.getTime());
     this.todayGreeting = formatDashboardGreeting(
       date,
       (this.user as AppUserInterface | null | undefined)?.displayName,

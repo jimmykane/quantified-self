@@ -92,6 +92,15 @@ proof or permission to change a Training plan. Keep note context separate from m
 
 ## Planned versus completed workouts
 
+Discover the focused explicit-rest-date read for the selected plan before answering rest-day questions or filling
+apparently empty dates. Unscheduled is not declared rest; unavailable data is not proof of either. Active-plan rest
+dates are authored intent, not workouts, completion evidence, a medical assessment or a load/readiness change. Do not
+automatically add a session on one. An explicit rest-date edit needs the focused preview, separate Training write
+permission, exact current revisions and the complete replacement list preserving untouched dates. Show the entire
+before/after date list and plan range before separate native/app Apply approval. Same-plan planned sessions must first
+be moved, skipped or removed through their own explicit approved changes; never delete them implicitly. Markers move
+with plan shifts and restore with plan history; they never create a provider workout or grant sending consent.
+
 Use this workflow for current plans, standalone planned workouts and upcoming sessions as well as Training metrics.
 Planning needs independent `training-plans:read`; metrics, activity, Timeline notes or provider access never substitutes.
 Missing tools can mean missing consent or a supporting release/catalog refresh; do not infer no plans. For an external

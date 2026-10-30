@@ -574,6 +574,8 @@ export class PlansWorkspaceComponent {
     : this.currentWorkoutRows().filter(row => row.workout.localDate === this.planScheduleDate()));
   // Standalone defaults resolve at the actual click, even just after midnight before the clock ticks.
   readonly addWorkoutDate = computed(() => this.view() === 'plans' ? this.planScheduleDate() ?? undefined : undefined);
+  readonly selectedDayIsRest = computed(() => this.selectedPlan()?.restDays?.includes(this.planScheduleDate() ?? '') === true);
+  readonly selectedDayHasPlannedWorkout = computed(() => this.displayedWorkoutRows().some(row => row.workout.lifecycle === 'planned'));
   readonly deletedWorkoutRows = computed<WorkoutRow[]>(() => (this.deletedWorkoutPanel()?.workouts ?? []).map(workout => ({
     workout,
     mayHaveStrengthDetails: isStrengthWorkoutSportV1(workout.structure.sport),
@@ -988,6 +990,18 @@ export class PlansWorkspaceComponent {
       operation: { kind: 'set-plan-color', planId: plan.id, color },
     }, `color-${plan.id}`);
     if (response) this.snackBar.open('Plan color updated.', 'Dismiss', { duration: 3000 });
+  }
+
+  async toggleSelectedRestDay(): Promise<void> {
+    const plan = this.selectedPlan(), date = this.planScheduleDate();
+    if (!plan || !date || !this.currentUser()?.uid || this.busyAction() || !this.browsing()
+      || (!this.selectedDayIsRest() && this.selectedDayHasPlannedWorkout())) return;
+    const restDays = this.selectedDayIsRest() ? (plan.restDays ?? []).filter(value => value !== date)
+      : [...(plan.restDays ?? []), date].sort();
+    const response = await this.runMutation({ mutationId: this.plansService.createMutationId('set-plan-rest-days'),
+      expectedRevisions: this.expectedRevisions({ planIds: [plan.id], planRevisionOverrides: new Map([[plan.id, plan.revision]]) }),
+      operation: { kind: 'set-plan-rest-days', planId: plan.id, restDays } }, `rest-${plan.id}`);
+    if (response) this.snackBar.open(restDays.includes(date) ? 'Rest day added.' : 'Rest day removed.', 'Dismiss', { duration: 3000 });
   }
 
   async renamePlan(plan: TrainingPlanV1): Promise<void> {

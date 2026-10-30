@@ -947,6 +947,7 @@ describe('MCP HTTP scope enforcement', () => {
       'get_training_change_status',
       'get_training_plan',
       'get_training_plan_phases',
+      'get_training_plan_rest_days',
       'get_training_sync_status',
       'get_workout_prescription_analysis',
       'list_activity_types',
@@ -963,6 +964,7 @@ describe('MCP HTTP scope enforcement', () => {
       'preview_training_changes',
       'preview_training_deletion',
       'preview_training_plan_phases',
+      'preview_training_rest_days',
       'query_planned_workouts',
       'query_planned_workouts_by_date',
     ]);

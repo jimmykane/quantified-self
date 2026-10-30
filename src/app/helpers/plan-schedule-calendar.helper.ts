@@ -3,7 +3,7 @@ import { formatActivityCalendarDateParam, parseActivityCalendarDate } from './ac
 import { getDateTimeFormatter } from './date-time-format.helper';
 import { trainingPlanPhaseOnDate } from './training-plan-phases.helper';
 
-type PlanRange = Pick<TrainingPlanV1, 'id' | 'startLocalDate' | 'endLocalDate' | 'phases'>;
+type PlanRange = Pick<TrainingPlanV1, 'id' | 'startLocalDate' | 'endLocalDate' | 'phases' | 'restDays'>;
 
 export function resolvePlanScheduleDate(plan: PlanRange, requested: string | null, today: string): string {
   if (requested && requested >= plan.startLocalDate && requested <= plan.endLocalDate) return requested;
@@ -57,6 +57,7 @@ export function buildPlanScheduleMonth(
       selected: localDate === selected,
       boundary,
       phase,
+      isRestDay: inRange && plan.restDays?.includes(localDate) === true,
       phaseBoundary: phase && (localDate === phase.startLocalDate || localDate === phase.endLocalDate),
       boundaryLabel: boundary === 'Plan starts and ends' ? 'Start/end' : boundary === 'Plan starts' ? 'Start' : boundary ? 'End' : null,
       entries,
@@ -64,7 +65,7 @@ export function buildPlanScheduleMonth(
       overflowCount: Math.max(0, entries.length - 2),
       ariaLabel: `${formatter.format(date)}. ${inRange
         ? `${entries.length} workout${entries.length === 1 ? '' : 's'}.${skippedCount ? ` ${skippedCount} skipped.` : ''}${boundary ? ` ${boundary}.` : ''}`
-        : 'Outside this plan.'}${phase ? ` Phase: ${phase.name}, ${phase.startLocalDate} through ${phase.endLocalDate}.` : ''}${localDate === options.today ? ' Today.' : ''}`,
+        : 'Outside this plan.'}${inRange && plan.restDays?.includes(localDate) ? ' Planned rest day.' : ''}${phase ? ` Phase: ${phase.name}, ${phase.startLocalDate} through ${phase.endLocalDate}.` : ''}${localDate === options.today ? ' Today.' : ''}`,
     };
   });
   const monthKey = selected.slice(0, 7);
