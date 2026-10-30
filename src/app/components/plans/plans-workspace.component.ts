@@ -507,6 +507,8 @@ export class PlansWorkspaceComponent {
     uid: string;
     plan: TrainingPlanV1;
     state: CurrentTrainingScheduleV1['state'];
+    /** An edit acknowledgement must never reinsert a plan removed from the live schedule. */
+    existingPlanOnly?: true;
   } | null>(null);
 
   readonly planOptions = computed(() => {
@@ -514,6 +516,7 @@ export class PlansWorkspaceComponent {
     const acknowledged = this.acknowledgedPlan();
     if (!acknowledged || acknowledged.uid !== this.currentUser()?.uid) return plans;
     const current = plans.find(plan => plan.id === acknowledged.plan.id);
+    if (!current && acknowledged.existingPlanOnly) return plans;
     if (current && current.revision >= acknowledged.plan.revision) return plans;
     return current ? plans.map(plan => plan.id === acknowledged.plan.id ? acknowledged.plan : plan)
       : [...plans, acknowledged.plan];
@@ -669,11 +672,11 @@ export class PlansWorkspaceComponent {
   private readonly acknowledgedPlanEffect = effect(() => {
     const acknowledged = this.acknowledgedPlan();
     if (!acknowledged) return;
-    if (acknowledged.uid !== this.currentUser()?.uid || (
-      this.schedule().state.revision >= acknowledged.state.revision
-      && this.schedule().plans.some(plan => plan.id === acknowledged.plan.id
-        && plan.revision >= acknowledged.plan.revision)
-    )) {
+    const current = this.schedule().plans.find(plan => plan.id === acknowledged.plan.id);
+    if (acknowledged.uid !== this.currentUser()?.uid
+      || (acknowledged.existingPlanOnly && !current)
+      || (current && this.schedule().state.revision >= acknowledged.state.revision
+        && current.revision >= acknowledged.plan.revision)) {
       this.acknowledgedPlan.set(null);
     }
   });
@@ -1005,7 +1008,10 @@ export class PlansWorkspaceComponent {
     const response = await this.runMutation({ mutationId: this.plansService.createMutationId('set-plan-rest-days'),
       expectedRevisions: this.expectedRevisions({ planIds: [plan.id], planRevisionOverrides: new Map([[plan.id, plan.revision]]) }),
       operation: { kind: 'set-plan-rest-days', planId: plan.id, restDays } }, `rest-${plan.id}`, isCurrent, isCurrent);
-    if (response && isCurrent()) this.snackBar.open(restDays.includes(date) ? 'Rest day added.' : 'Rest day removed.', 'Dismiss', { duration: 3000 });
+    if (!response || !isCurrent()) return;
+    const updatedPlan = response.plans.find(item => item.id === plan.id);
+    if (updatedPlan) this.acknowledgedPlan.set({ uid, plan: updatedPlan, state: response.state, existingPlanOnly: true });
+    this.snackBar.open(restDays.includes(date) ? 'Rest day added.' : 'Rest day removed.', 'Dismiss', { duration: 3000 });
   }
 
   async renamePlan(plan: TrainingPlanV1): Promise<void> {

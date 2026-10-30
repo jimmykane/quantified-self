@@ -5,11 +5,11 @@
     <div class="table-toolbar-main" [class.table-toolbar-main--compact]="isLibraryPresentation">
       <mat-form-field appearance="outline" class="qs-search-field" subscriptSizing="dynamic">
         <mat-icon matPrefix aria-hidden="true">search</mat-icon>
-        <input #activitySearchInput matInput [value]="searchTerm" (input)="onSearchInput($event)" placeholder="Search activities"
+        <input #activitySearchInput matInput [disabled]="tableIsLoading" [value]="searchTerm" (input)="onSearchInput($event)" placeholder="Search activities"
           aria-label="Search activities"
           autocomplete="off">
         <button mat-icon-button matSuffix type="button" class="table-search-clear" *ngIf="searchTerm"
-          (click)="clearSearch(); activitySearchInput.focus()" aria-label="Clear">
+          [disabled]="tableIsLoading" (click)="clearSearch(); activitySearchInput.focus()" aria-label="Clear">
           <mat-icon>close</mat-icon>
         </button>
       </mat-form-field>
@@ -18,18 +18,18 @@
         <ng-content select="[event-table-filters]"></ng-content>
         @if (showTagFilter) {
         <app-activity-filter-picker class="tag-filter-field" label="Tags" allLabel="All tags" searchLabel="Search tags"
-          [textButton]="true" triggerIcon="sell"
+          [textButton]="true" triggerIcon="sell" [disabled]="tableIsLoading"
           [options]="tagPickerOptions" [selectedValues]="tagPickerValues" [loading]="tagCatalogIsLoading"
           (opened)="onTagFilterOpened(true)" (selectionChange)="updateTagFilters($event)"></app-activity-filter-picker>
         }
         <ng-content select="[event-table-trailing-filters]"></ng-content>
         @if (isLibraryPresentation) {
-          <app-event-table-actions [selectedDataTypes]="selectedColumns" [dataTypes]="libraryAvailableColumns" icon="tune"
+          <app-event-table-actions [attr.inert]="tableIsLoading ? '' : null" [selectedDataTypes]="selectedColumns" [dataTypes]="libraryAvailableColumns" icon="tune"
             (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
         }
       </div>
       @if (canManageEvents && !isLibraryPresentation) {
-        <div class="table-toolbar-actions">
+        <div class="table-toolbar-actions" [attr.inert]="tableIsLoading ? '' : null">
           <app-event-table-actions [selectedDataTypes]="selectedColumns" icon="tune"
             (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
         </div>
@@ -39,7 +39,7 @@
     <ng-content select="[event-table-active-filters]"></ng-content>
 
     @if (canManageEvents && selection.selected.length > 0) {
-      <div class="table-selection-toolbar" aria-live="polite">
+      <div class="table-selection-toolbar" [attr.inert]="tableIsLoading ? '' : null" aria-live="polite">
         <div class="selection-summary">
           <mat-icon>check_circle</mat-icon>
           <span>{{ selection.selected.length }} {{ selection.selected.length === 1 ? 'activity' : 'activities' }} selected</span>
@@ -125,16 +125,16 @@
   </div>
   }
 
-  <app-loading-overlay class="activity-table-overlay" [isLoading]="isLoading"
-    [showSkeleton]="false" height="auto" [minHeight]="showEmptyNotice ? '0px' : '224px'" borderRadius="12px">
+  <div class="activity-table-region" [attr.aria-busy]="tableIsLoading">
+    @if (tableIsLoading) { <mat-progress-bar class="activity-table-progress" mode="indeterminate" [attr.aria-label]="showInitialLoading ? 'Loading activities' : 'Updating activities'"></mat-progress-bar> }
     <div class="table-wrapper qs-scrollbar" tabindex="0" role="region" aria-label="Activity table">
-      <table mat-table [dataSource]="data" [trackBy]="trackByEventId" matSort [matSortActive]="tableSortActive"
+      <table mat-table [attr.inert]="tableIsLoading ? '' : null" [dataSource]="showInitialLoading ? loadingRows : data" [trackBy]="trackByEventId" matSort [matSortActive]="tableSortActive"
         [matSortDirection]="tableSortDirection" matSortDisableClear>
         @for (column of displayedColumns; track column; let isFirst = $first; let isLast = $last) {
         <ng-container [matColumnDef]="column" [sticky]="isSticky(column)" [stickyEnd]="isStickyEnd(column)">
           @if (isFirst && canManageEvents) {
           <th mat-header-cell *matHeaderCellDef>
-            <mat-checkbox (change)="$event ? masterToggle() : null" [checked]="selection.hasValue() && isAllSelected()"
+            <mat-checkbox [disabled]="tableIsLoading" (change)="$event ? masterToggle() : null" [checked]="selection.hasValue() && isAllSelected()"
               [indeterminate]="isLibraryPresentation ? isSelectionIndeterminate : selection.hasValue() && !isAllSelected()"
               [aria-label]="isLibraryPresentation ? 'Select activities on this page' : 'Select all matching activities'">
             </mat-checkbox>
@@ -151,6 +151,9 @@
           }
           <td mat-cell *matCellDef="let row" (click)="onCellClick($event, row, column)"
             [class.event-activity-cell]="isLibraryPresentation && column === 'Name'">
+            @if (showInitialLoading) {
+              <span class="activity-table-skeleton" [class.activity-table-skeleton--icon]="column === 'Checkbox' || column === 'Actions' || column === 'Shared'" aria-hidden="true"></span>
+            } @else {
             @if (isLibraryPresentation && column === 'Name') {
               <a class="event-activity-name" [class.activity-type-cell]="!row['Library Activity Name']"
                 [class.description-text]="!!row['Library Activity Name']"
@@ -171,7 +174,7 @@
               }
             }
             @if (column === 'Checkbox') {
-            <mat-checkbox (click)="$event.stopPropagation()" (change)="$event ? checkBoxClick(row) : null"
+            <mat-checkbox [disabled]="tableIsLoading" (click)="$event.stopPropagation()" (change)="$event ? checkBoxClick(row) : null"
               [checked]="selection.isSelected(row)" [aria-label]="'Select activity ' + (row['Library Activity Label'] || row.Name || row.Description || 'Untitled activity')">
             </mat-checkbox>
             }
@@ -179,7 +182,7 @@
             <span>
               @if (user) {
               <app-event-actions [user]="user" [event]="row.Event"
-                [showDownloadOriginal]="true" [navigateAfterDelete]="false"
+                [showDownloadOriginal]="true" [navigateAfterDelete]="false" [disabled]="tableIsLoading"
                 (eventDeleted)="removeDeletedEvent($event)" (ascentChanged)="refreshSavedAscent($event)"></app-event-actions>
               }
             </span>
@@ -215,7 +218,7 @@
             }
             @if (column === 'Tags') {
             @if (canManageEvents) {
-            <button mat-button type="button" class="event-tags-cell-button"
+            <button mat-button type="button" class="event-tags-cell-button" [disabled]="tableIsLoading"
               [matTooltip]="row['Tags Title']" [matTooltipDisabled]="!row['Tags Title']"
               [attr.aria-label]="row['Tag Action Label']"
               (click)="openEventTagsDialog($event, row.Event)">
@@ -274,6 +277,7 @@
               }
             </span>
             }
+            }
           </td>
         </ng-container>
         }
@@ -281,15 +285,17 @@
 
         <tr mat-header-row class="event-table-header" *matHeaderRowDef="displayedColumns; sticky: true"></tr>
         <tr mat-row *matRowDef="let row; columns: displayedColumns;"
-          [routerLink]="['/user', (targetUser && targetUser.uid) || user.uid, 'event', row.Event.getID()]"
-          [class.merged]="row['Merged Event']" [style.--row-gradient]="row['Gradient']" class="normal-row activity-row">
+          [routerLink]="tableIsLoading ? null : ['/user', (targetUser && targetUser.uid) || user.uid, 'event', row.Event.getID()]"
+          [class.merged]="!showInitialLoading && row['Merged Event']" [style.--row-gradient]="showInitialLoading ? null : row['Gradient']"
+          [class.activity-row]="!showInitialLoading" [class.activity-table-skeleton-row]="showInitialLoading"
+          [attr.aria-hidden]="showInitialLoading ? true : null" class="normal-row">
         </tr>
 
         <!-- Row shown when there is no matching data. -->
         <tr class="mat-row activity-table-no-data-row" *matNoDataRow
-          [class.activity-table-no-data-row--hidden]="!isLoading">
+          [class.activity-table-no-data-row--hidden]="!tableIsLoading">
           <td class="mat-cell" [attr.colspan]="displayedColumns.length">
-            @if (isLoading) { <span>Loading activities…</span> }
+            @if (tableIsLoading) { <span>Loading activities…</span> }
           </td>
         </tr>
       </table>
@@ -308,10 +314,19 @@
         </div>
       </div>
     }
-  </app-loading-overlay>
+  </div>
 
-  <mat-paginator (page)="pageChanges($event)" [length]="data.data.length"
+  <div class="activity-table-footer" [hidden]="showEmptyNotice">
+    <div class="activity-table-loading-status" role="status" aria-live="polite">
+      @if (tableIsLoading) {
+        <span>{{ showInitialLoading ? 'Loading activities…' : 'Updating activities…' }}</span>
+        @if (!showInitialLoading) { <span>Showing previous results</span> }
+      }
+    </div>
+  <mat-paginator (page)="pageChanges($event)" [length]="data.data.length" [disabled]="tableIsLoading"
+    [style.visibility]="showInitialLoading ? 'hidden' : null"
     [hidden]="showEmptyNotice"
     [pageSize]="tablePageSize" [hidePageSize]="isBrowsePresentation" [showFirstLastButtons]="true"
     [pageSizeOptions]="isLibraryPresentation ? [5, 10, 25, 50, 100, 250] : [10, 25, 50, 100, 250]"></mat-paginator>
+  </div>
 </div>

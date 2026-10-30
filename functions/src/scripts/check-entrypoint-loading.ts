@@ -128,10 +128,10 @@ const GEN1_DISPATCHER_METADATA: Readonly<Record<string, {
   dispatchSleepSyncQueue: { memoryMb: 256, timeoutSeconds: 300 },
   dispatchActivitySyncQueue: { memoryMb: 256, timeoutSeconds: 300 },
   dispatchRouteDeliverySyncQueue: { memoryMb: 256, timeoutSeconds: 300 },
-  parseGarminAPIActivityQueue: { memoryMb: 1024, timeoutSeconds: 540 },
+  parseGarminAPIActivityQueue: { memoryMb: 512, timeoutSeconds: 540 },
   parseSuuntoAppActivityQueue: { memoryMb: 1024, timeoutSeconds: 540 },
   parseCOROSAPIWorkoutQueue: { memoryMb: 256, timeoutSeconds: 300 },
-  parseWahooAPIWorkoutQueue: { memoryMb: 1024, timeoutSeconds: 540 },
+  parseWahooAPIWorkoutQueue: { memoryMb: 512, timeoutSeconds: 540 },
 };
 // Every runtime target is compared against a separate fresh discovery process,
 // including all trigger, resource, retry, scaling, IAM and secret metadata.
@@ -207,7 +207,7 @@ const INGESTION_TARGET_METADATA: Readonly<Record<string, {
       'WAHOOAPI_CLIENT_ID', 'WAHOOAPI_CLIENT_SECRET',
     ],
   },
-  processRouteSyncTask: { maxAttempts: 20, memoryMb: 1024, timeoutSeconds: 540, trigger: 'task', secrets: [
+  processRouteSyncTask: { maxAttempts: 20, memoryMb: 512, timeoutSeconds: 540, trigger: 'task', secrets: [
     'SUUNTOAPP_CLIENT_ID', 'SUUNTOAPP_CLIENT_SECRET', 'SUUNTOAPP_SUBSCRIPTION_KEY',
   ] },
   processRouteDeliverySyncTask: { maxAttempts: 20, memoryMb: 1024, timeoutSeconds: 540, trigger: 'task', secrets: [
@@ -219,7 +219,7 @@ const INGESTION_TARGET_METADATA: Readonly<Record<string, {
     eventDocument: 'routeOriginalFileCleanup/{cleanupID}', eventType: 'google.cloud.firestore.document.v1.updated', eventRetry: true,
   },
   cleanupEventFile: {
-    memoryMb: 1024, timeoutSeconds: 300, trigger: 'event', concurrency: 5, maxInstances: 10,
+    memoryMb: 512, timeoutSeconds: 300, trigger: 'event', concurrency: 5, maxInstances: 10,
     eventDocument: 'users/{userId}/events/{eventId}',
     eventType: 'google.cloud.firestore.document.v1.deleted', eventRetry: false,
   },
@@ -229,6 +229,7 @@ const INGESTION_TARGET_METADATA: Readonly<Record<string, {
   projectActivitySendDelivery: { memoryMb: 256, timeoutSeconds: 60, trigger: 'event', eventDocument: 'activitySyncQueue/{queueId}', eventType: 'google.cloud.firestore.document.v1.written' },
   cleanupActivitySendOnDelete: { memoryMb: 256, timeoutSeconds: 300, trigger: 'event', eventDocument: 'users/{uid}', eventType: 'google.cloud.firestore.document.v1.deleted' },
   uploadActivity: { memoryMb: 4096, timeoutSeconds: 3600, trigger: 'http', cpu: 2, concurrency: 1, maxInstances: 20 },
+  mergeEvents: { memoryMb: 2048, timeoutSeconds: 3600, trigger: 'callable', cpu: 2, concurrency: 1, maxInstances: 20 },
   fanOutSuuntoHealthWebhookIngress: {
     memoryMb: 512, timeoutSeconds: 120, trigger: 'event', concurrency: 1, maxInstances: 50,
     eventDocument: 'suuntoHealthWebhookIngress/{ingressID}',
@@ -790,7 +791,7 @@ async function check(): Promise<void> {
         && endpoint.scheduleTrigger === undefined,
       `${target} HTTP trigger changed.`);
     } else if (target === 'receiveGarminAPIHealthData') {
-      assert(endpoint.availableMemoryMb === 1024, `${target} memory configuration changed.`);
+      assert(endpoint.availableMemoryMb === 512, `${target} memory configuration changed.`);
       assert(endpoint.timeoutSeconds === 60, `${target} timeout configuration changed.`);
       assert(endpoint.cpu === undefined
         && JSON.stringify(endpoint.minInstances) === 'null'

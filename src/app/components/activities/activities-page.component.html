@@ -2,19 +2,15 @@
   <app-page-header title="Activities" leadingIcon="list_alt" subtitle="Find activities by date, sport or tag.">
     <button pageHeaderTitleActions mat-icon-button aria-label="Refresh activities" (click)="refresh()"
       [disabled]="loading() || catalogLoading() || !user()">
-      @if (loading() || catalogLoading()) { <mat-spinner diameter="20" aria-label="Refreshing activities"></mat-spinner> }
-      @else { <mat-icon>refresh</mat-icon> }
+      <mat-icon>refresh</mat-icon>
     </button>
   </app-page-header>
 
   @if (user()) {
-    @if (loading() || historyError()) {
-      <div class="activity-history-status" role="status" aria-live="polite">
-        @if (loading()) { <mat-spinner diameter="18" aria-label="Loading activities"></mat-spinner><span>Loading activities…</span> }
-        @else {
-          <span role="alert">Activities couldn’t be loaded. Try again.</span>
-          <button mat-button (click)="retryActivities()">Try again</button>
-        }
+    @if (historyError()) {
+      <div class="activity-history-status">
+        <span role="alert">Activities couldn’t be loaded. Try again.</span>
+        <button mat-button (click)="retryActivities()">Try again</button>
       </div>
     }
     @if (catalogError()) {
@@ -36,13 +32,15 @@
             (selectionChange)="selectPeriod($event)" (applied)="applyCustomRange()" (cancelled)="cancelCustomRange()"
             (cleared)="clearCustomRange()" (calendarOpened)="onCustomPickerOpened()"></app-table-date-filter>
           <app-activity-filter-picker label="Sports" allLabel="All sports" searchLabel="Search sports" [textButton]="true" triggerIcon="directions_run"
+            [disabled]="loading()"
             [options]="sportOptions()" [selectedValues]="selectedSports()" [shortcuts]="sportShortcuts()"
             (selectionChange)="selectSports($event)"></app-activity-filter-picker>
           <app-activity-filter-picker label="Tags" allLabel="All tags" searchLabel="Search tags" [textButton]="true" triggerIcon="sell"
+            [disabled]="loading()"
             [options]="tagOptions()" [selectedValues]="tagFilterValues()" [loading]="catalogLoading()"
             (selectionChange)="selectTagFilters($event)"></app-activity-filter-picker>
           @if (hasMergedEvents()) {
-            <app-merged-activities-toggle [checked]="includeMergedEvents()"
+            <app-merged-activities-toggle [checked]="includeMergedEvents()" [disabled]="loading()" hint=""
               (checkedChange)="selectMergedEvents($event)"></app-merged-activities-toggle>
           }
         </div>

@@ -396,6 +396,20 @@ before loading history. The control owns menu-opening feedback; the owner owns c
 filter changes. Closing or clearing returns focus to the visible date button. Dashboard projects its merged toggle
 after Tags so visual and native keyboard order both remain Date, Sports, Tags, Merged activities.
 
+The shared events table uses skeleton cells beneath its existing column headings on the first load. Refreshes retain
+the same rows, selection and paginator until the owner completes its existing request, with one thin Material progress
+bar and a status outside the busy table region. Row actions and paging are disabled while those results are stale.
+The table defers input-driven row rebuilds and filter-context resets during that request; it does not retain a second
+event collection or start a query. Changing the viewer or target owner clears the retained rows immediately and waits
+for the new owner's event input before displaying data. Activities keeps the merged-control position during loading
+and leaves the shared table responsible for the activity-loading indicator.
+Bulk-action loading is separate from the parent-owned history input: either can finish first without unlocking the
+other or leaving a pending input stuck. Search clearing is disabled while busy; queued text/catalog filters apply
+after loading instead of changing the retained results, and deferred filter-context resets settle when the action ends.
+Initial skeleton mounting defers the table's automatic tag-catalog lookup until ready input, so Calendar's empty/error
+branches do not add a catalog read. Owner changes clear old catalog choices immediately. Retained row action components
+close their open Material menus and disable their controls while the table is busy, without cancelling in-flight work.
+
 Use `ActivityTypesMultiSelectComponent` for canonical sport catalogs with family shortcuts, selected aliases and
 locked choices; use `ActivityTypesFilterMenuComponent` for the equivalent compact toolbar trigger. Both delegate
 to the same picker. Direct callers provide `{ value, label, activityType? }` options, `selectedValues`, visible and

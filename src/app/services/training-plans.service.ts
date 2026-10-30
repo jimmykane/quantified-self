@@ -14,7 +14,7 @@ import {
   startAfter,
   where,
 } from 'app/firebase/firestore';
-import { catchError, combineLatest, from, map, Observable, of, retry, shareReplay, startWith, switchMap, throwError, timeout } from 'rxjs';
+import { catchError, combineLatest, from, map, Observable, of, pairwise, retry, shareReplay, startWith, switchMap, throwError, timeout } from 'rxjs';
 import {
   SCHEDULED_WORKOUTS_COLLECTION_ID,
   DELETED_WORKOUT_RECOVERY_MS,
@@ -118,12 +118,17 @@ export class TrainingPlansService {
       TRAINING_PLAN_STATE_DOCUMENT_ID, 'availability', 'restore');
     const stream = docData(availability, { waitForServer: true }).pipe(
       timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
-      switchMap(lock => lock !== undefined ? of(null) : this.watchVerifiedCurrentState(userId).pipe(
-        switchMap(value => {
-          const state = value === undefined ? emptyTrainingSchedule().state : parseTrainingPlanStateV1(value);
-          if (!state.activePlanId) return of(null);
-          const id = state.activePlanId;
-          return docData(doc(this.firestore, 'users', userId, TRAINING_PLANS_COLLECTION_ID, id), { waitForServer: true }).pipe(
+      switchMap(lock => lock !== undefined ? of(null) : this.watchVerifiedCurrentState(userId, { withholdReadFailures: true }).pipe(
+        map(value => {
+          if (value === undefined || value === null) return null;
+          try { return parseTrainingPlanStateV1(value).activePlanId; }
+          catch { return null; } // Invalid state cannot establish rest intent, but a later revision can recover.
+        }),
+        startWith(null),
+        pairwise(),
+        switchMap(([previousId, id]) => {
+          if (!id) return of(null);
+          const plan$ = docData(doc(this.firestore, 'users', userId, TRAINING_PLANS_COLLECTION_ID, id), { waitForServer: true }).pipe(
             timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
             map(data => {
               if (data === undefined) return null;
@@ -132,11 +137,11 @@ export class TrainingPlansService {
               // Plan and state snapshots can arrive in either order during pause/activation.
               return plan.lifecycle === 'active' ? plan : null;
             }),
-            // Never retain the previous plan while a replacement document is loading.
-            startWith(null),
             // A failed plan read withholds context, but must not end the state listener.
             catchError(() => of(null)),
           );
+          // Clear a replaced plan, not unchanged rest intent on routine schedule revisions.
+          return previousId === id ? plan$ : plan$.pipe(startWith(null));
         }),
       )),
       shareReplay({ bufferSize: 1, refCount: true }),
@@ -255,7 +260,7 @@ export class TrainingPlansService {
   }
 
   /** Share state freshness and readiness bounds across full and bounded Calendar schedules. */
-  private watchVerifiedCurrentState(uid: string): Observable<unknown> {
+  private watchVerifiedCurrentState(uid: string, options: { withholdReadFailures?: boolean } = {}): Observable<unknown> {
     const stateRef = doc(this.firestore, 'users', uid, TRAINING_PLAN_STATE_COLLECTION_ID, TRAINING_PLAN_STATE_DOCUMENT_ID);
     // A server-acknowledged watch can still repeat stale state. Its emissions
     // invalidate the independently verified exact state, including absence.
@@ -263,6 +268,9 @@ export class TrainingPlansService {
       timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
       switchMap(() => from(this.readCurrentState(uid)).pipe(
         timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
+        // Nullable rest context can await the next SDK invalidation. Full schedules still fail/retry;
+        // an unavailable verification must never be published there as a confirmed empty schedule.
+        catchError(error => options.withholdReadFailures ? of(null) : throwError(() => error)),
       )),
     );
   }

@@ -979,18 +979,27 @@ plan document. It does not query workout history, recipes, activity documents or
 immediately withhold earlier-owner context. Calendar reuses its existing bounded schedule read and shared overlay;
 there is no extra per-day query, timer or polling loop.
 
-The active-plan-only context clears when a replacement plan starts loading. Paused, archived or temporarily missing
-plan snapshots withhold the badge without ending the state subscription: plan/state snapshots can arrive in either
-order during activation. A failed or inconsistent exact-plan read also withholds context, with a later verified state
+The active-plan-only context clears when a replacement plan starts loading, but preserves the same plan's context
+during routine schedule-revision refreshes so its rest indicator and Training caption do not flicker. Paused, archived
+or temporarily missing plan snapshots withhold the badge without ending the state subscription: plan/state snapshots
+can arrive in either order during activation. A failed or inconsistent exact-plan read also withholds context, with a later verified state
 emission able to start a fresh read. The stream remains shared and releases listeners after its last subscriber leaves.
+Failed or malformed state verifications likewise withhold only this nullable context and recover on a later SDK
+invalidation; full and Calendar schedule reads still reject/retry failures rather than claiming an empty schedule.
 Rest-day authoring binds dispatch and feedback to the captured owner and workspace generation, including callable
 readiness/retry waits. Leaving that account or view releases its busy state; an old result cannot clear a newer save,
 revive after returning to the same account/view, or display late success/error feedback.
+Successful rest-day edits reuse the confirmed plan/state response until the independent live schedule catches up,
+including the correct revisions for an immediate subsequent edit. This is confirmation, not an optimistic update:
+failed saves leave intent unchanged. Rest-edit acknowledgements apply only to plans still present in the live
+schedule, so they cannot reinsert a deleted plan. No additional query or polling is needed.
 
-This lifecycle follow-up has no MCP impact: it changes only frontend subscription/cancellation behavior. Stored plan
+This lifecycle follow-up has no MCP impact: it changes only frontend context, confirmation and cancellation behavior. Stored plan
 fields, revision checks, read projections, preview/confirmation schemas, consent, provider behavior and contract digest
 remain unchanged. Existing Help instructions still apply. Focused tests cover ordered plan transitions, delayed reads,
-shared listener cleanup, replacement badge rendering and account/view/destroy cancellation with overlapping saves.
+shared listener cleanup, replacement badge rendering, stable same-plan refreshes, delayed live confirmation,
+failed saves/deleted-plan exclusion, state-verification recovery and account/view/destroy cancellation with
+overlapping saves.
 
 AI workout generation checks the selected destination plan (otherwise the active plan) under its existing optional
 Training context and schedule revision fence. A declared rest day returns a deterministic rest response, without a
