@@ -120,6 +120,49 @@ describe('bounded Calendar Training reads', () => {
     stateSignals.next(undefined); await vi.waitFor(() => expect(observed.at(-1)).toBeNull());
     expect(collectionData).not.toHaveBeenCalled(); subscription.unsubscribe();
   });
+  it('keeps verified rest context visible while the same active plan reloads after a routine schedule revision', async () => {
+    const stateSignals = new Subject<unknown>(), planSignals = new Subject<unknown>();
+    const plan: TrainingPlanV1 = { schemaVersion: 1, id: 'active', name: 'Autumn', lifecycle: 'active',
+      startLocalDate: '2026-10-05', endLocalDate: '2026-10-11', restDays: ['2026-10-06'],
+      revision: 1, lastCheckpointRevision: 1, workoutCount: 0, createdAtMs: 1, updatedAtMs: 1 };
+    vi.mocked(docData).mockImplementation(ref => ref.path.endsWith('/availability/restore') ? of(undefined)
+      : ref.path.endsWith('/trainingPlanState/current') ? stateSignals : planSignals);
+    serverState = { ...currentState, activePlanId: plan.id };
+    const observed: (TrainingPlanV1 | null)[] = [];
+    const subscription = service.watchActivePlan('owner').subscribe(value => observed.push(value));
+    stateSignals.next(undefined); await vi.waitFor(() => expect(planSignals.observed).toBe(true));
+    planSignals.next(plan); const beforeRefresh = observed.length;
+    serverState = { ...serverState, revision: 254 };
+    stateSignals.next(undefined); await vi.waitFor(() => expect(docData).toHaveBeenCalledTimes(4));
+    // A standalone-workout edit does not change active-plan identity or rest intent.
+    expect(observed).toHaveLength(beforeRefresh); expect(observed.at(-1)).toEqual(plan);
+    planSignals.next(plan); expect(observed.at(-1)).toEqual(plan);
+    expect(collectionData).not.toHaveBeenCalled(); subscription.unsubscribe();
+  });
+  it.each(['read', 'schema'] as const)('recovers rest context on a later state update after a state %s failure', async failure => {
+    const stateSignals = new Subject<unknown>(), planSignals = new Subject<unknown>();
+    const plan: TrainingPlanV1 = { schemaVersion: 1, id: 'active', name: 'Autumn', lifecycle: 'active',
+      startLocalDate: '2026-10-05', endLocalDate: '2026-10-11', restDays: ['2026-10-06'],
+      revision: 1, lastCheckpointRevision: 1, workoutCount: 0, createdAtMs: 1, updatedAtMs: 1 };
+    vi.mocked(docData).mockImplementation(ref => ref.path.endsWith('/availability/restore') ? of(undefined)
+      : ref.path.endsWith('/trainingPlanState/current') ? stateSignals : planSignals);
+    serverState = { ...currentState, activePlanId: plan.id };
+    const observed: (TrainingPlanV1 | null)[] = [], error = vi.fn();
+    const subscription = service.watchActivePlan('owner').subscribe({ next: value => observed.push(value), error });
+    stateSignals.next(undefined); await vi.waitFor(() => expect(planSignals.observed).toBe(true));
+    planSignals.next(plan); expect(observed.at(-1)).toEqual(plan);
+    if (failure === 'read') vi.mocked(getDoc).mockRejectedValueOnce(new Error('Temporarily unavailable'));
+    else serverState = { revision: 254 };
+    const beforeFailure = observed.length;
+    stateSignals.next(undefined);
+    await vi.waitFor(() => expect(observed.length + error.mock.calls.length).toBeGreaterThan(beforeFailure));
+    expect(error).not.toHaveBeenCalled(); expect(observed.at(-1)).toBeNull();
+    expect(stateSignals.observed).toBe(true); expect(planSignals.observed).toBe(false);
+    serverState = { ...currentState, activePlanId: plan.id, revision: 255 };
+    stateSignals.next(undefined); await vi.waitFor(() => expect(planSignals.observed).toBe(true));
+    planSignals.next(plan); expect(observed.at(-1)).toEqual(plan);
+    expect(getDoc).toHaveBeenCalledTimes(3); expect(collectionData).not.toHaveBeenCalled(); subscription.unsubscribe();
+  });
   it('uses inclusive local dates with lookahead and never reports truncated workouts as a complete schedule', async () => {
     vi.mocked(collectionData).mockReturnValue(of(Array.from({ length: 401 }, (_, i) => row(`w${i}`))));
     const schedule = await firstValueFrom(service.watchCalendarSchedule('owner', '2026-10-05', '2026-10-11'));

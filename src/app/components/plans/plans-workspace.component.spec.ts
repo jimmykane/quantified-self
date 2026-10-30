@@ -2401,6 +2401,68 @@ describe('PlansWorkspaceComponent', () => {
     await component.toggleSelectedRestDay(); expect(mutate).not.toHaveBeenCalled();
   });
 
+  it('reflects confirmed rest-day edits immediately without waiting for the live schedule', async () => {
+    schedule.workouts = [];
+    const live = new BehaviorSubject(schedule); watchSchedule.mockReturnValue(live);
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    const plan = component.selectedPlan()!, date = component.planScheduleDate()!;
+    const addedPlan = { ...plan, restDays: [date], revision: plan.revision + 1 };
+    const addedState = { ...schedule.state, revision: schedule.state.revision + 1 };
+    mutate.mockResolvedValueOnce({ state: addedState, plans: [addedPlan], workouts: [] });
+    await component.toggleSelectedRestDay(); fixture.detectChanges();
+    expect(component.selectedDayIsRest()).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Remove rest day');
+    expect(component.schedule().plans[0]).toEqual(plan); // The live stream is deliberately still old.
+    live.next({ ...schedule }); fixture.detectChanges();
+    expect(component.selectedDayIsRest()).toBe(true); // Repeated older snapshots cannot undo the confirmed edit.
+    const removedPlan = { ...plan, revision: addedPlan.revision + 1 };
+    const removedState = { ...addedState, revision: addedState.revision + 1 };
+    mutate.mockResolvedValueOnce({ state: removedState, plans: [removedPlan], workouts: [] });
+    await component.toggleSelectedRestDay(); fixture.detectChanges();
+    expect(mutate).toHaveBeenLastCalledWith(expect.objectContaining({
+      operation: { kind: 'set-plan-rest-days', planId: plan.id, restDays: [] },
+      expectedRevisions: expect.arrayContaining([
+        { scope: 'state', id: 'current', revision: addedState.revision },
+        { scope: 'plan', id: plan.id, revision: addedPlan.revision },
+      ]),
+    }), expect.any(Function));
+    expect(component.selectedDayIsRest()).toBe(false); expect(component.busyAction()).toBeNull();
+    live.next({ ...schedule, state: addedState, plans: [addedPlan] }); fixture.detectChanges();
+    expect(component.selectedDayIsRest()).toBe(false);
+    live.next({ ...schedule, state: removedState, plans: [removedPlan] }); fixture.detectChanges();
+    expect(component.selectedDayIsRest()).toBe(false); expect(component.selectedPlan()).toEqual(removedPlan);
+    expect(component.schedule().workouts).toEqual([]); expect(haptics.success).toHaveBeenCalledTimes(2);
+  });
+
+  it('never reinserts a removed plan from a rest-day save acknowledgement', async () => {
+    schedule.workouts = [];
+    const live = new BehaviorSubject(schedule); watchSchedule.mockReturnValue(live);
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    const plan = component.selectedPlan()!, date = component.planScheduleDate()!;
+    const updatedState = { ...schedule.state, revision: schedule.state.revision + 1 };
+    mutate.mockResolvedValueOnce({ state: updatedState,
+      plans: [{ ...plan, restDays: [date], revision: plan.revision + 1 }], workouts: [] });
+    await component.toggleSelectedRestDay(); fixture.detectChanges();
+    expect(component.selectedDayIsRest()).toBe(true);
+    live.next({ ...schedule, state: { ...updatedState, revision: updatedState.revision + 1, activePlanId: null }, plans: [] });
+    fixture.detectChanges();
+    expect(component.planOptions()).toEqual([]); expect(component.selectedPlan()).toBeNull();
+    expect(component.selectedDayIsRest()).toBe(false);
+  });
+
+  it.each([false, true])('does not change rest intent when a save fails (already rest=%s)', async alreadyRest => {
+    schedule.workouts = [];
+    if (alreadyRest) schedule.plans[0].restDays = ['2026-09-09'];
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    const before = component.selectedPlan();
+    mutate.mockRejectedValueOnce(new Error('Offline'));
+    await component.toggleSelectedRestDay(); fixture.detectChanges();
+    expect(component.selectedDayIsRest()).toBe(alreadyRest); expect(component.selectedPlan()).toEqual(before);
+    expect(component.busyAction()).toBeNull(); expect(haptics.success).not.toHaveBeenCalled();
+    expect(haptics.error).toHaveBeenCalledOnce(); expect(snackBarOpen).toHaveBeenCalledOnce();
+    expect(snackBarOpen.mock.calls[0][0]).toBe('Offline');
+  });
+
   it('cancels a rest-day save awaiting callable readiness even after returning to the same account', async () => {
     schedule.workouts = [];
     let ready!: () => void;
