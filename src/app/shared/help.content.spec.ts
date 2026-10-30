@@ -853,6 +853,8 @@ describe('help.content', () => {
     expect(content).toContain('reuses the daily status across navigation and reloads');
     expect(content).toContain('without regenerating an existing suggestion');
     expect(content).toContain('Signing out clears the browser copy');
+    expect(content).toContain('**Review** rechecks whether today is already covered');
+    expect(content).toContain('This check generates nothing');
   });
 
   it('explains separately consented Timeline-note context for workout suggestions', () => {

@@ -1,7 +1,7 @@
 import { DestroyRef, Injectable, effect, inject, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Auth, type FirebaseUserType } from 'app/firebase/auth';
-import { defaultDayWorkoutControls, dayWorkoutLocalDate } from '@shared/day-workout';
+import { defaultDayWorkoutControls, dayWorkoutLocalDate, parseGenerateDayWorkoutRequest } from '@shared/day-workout';
 import { parseMorningWorkoutPreferences, type MorningWorkoutPreferences, type MorningWorkoutRequest, type MorningWorkoutStatus } from '@shared/morning-workout';
 import { AppFunctionsService } from './app.functions.service';
 import { AppUserService } from './app.user.service';
@@ -9,9 +9,9 @@ import { AppAnalyticsService } from './app.analytics.service';
 import { AppWindowService } from './app.window.service';
 import { TrainingPlansService } from './training-plans.service';
 import { parseWorkoutStructureV1 } from '@shared/planned-workout';
-import { parseStrengthWorkoutDraftV1 } from '@shared/strength-workout';
+import { isStrengthWorkoutSportV1, parseStrengthWorkoutDraftV1, strengthProjectionMatchesDetails } from '@shared/strength-workout';
+import { MORNING_WORKOUT_SESSION_CACHE_KEY as CACHE_KEY } from '../shared/morning-workout-cache';
 
-const CACHE_KEY = 'qs.morning-workout.v1';
 const MAX_CACHE_CHARACTERS = 400_000;
 const states: MorningWorkoutStatus['state'][] = ['off', 'waiting', 'waiting-sleep', 'ready', 'dismissed', 'failed', 'planned', 'completed', 'rest-day'];
 interface CachedMorningWorkout {
@@ -50,13 +50,16 @@ export class MorningWorkoutService {
       if (this.cache && (this.cache.uid !== uid || !pro)) untracked(() => this.clear());
     });
     this.plans.stateRevisionChanges$.pipe(takeUntilDestroyed(inject(DestroyRef))).subscribe(({ uid, revision }) => {
-      if (!this.cache || this.cache.uid !== uid || !this.eligible(uid)) return;
-      const previous = this.cache.scheduleRevision;
-      if (previous === revision) return;
-      this.cache.scheduleRevision = revision;
-      if (previous !== undefined && previous !== revision && this.cache.status?.state !== 'dismissed') this.invalidate();
-      this.persist();
+      this.acceptScheduleRevision(uid, revision);
     });
+  }
+  private acceptScheduleRevision(uid: string, revision: number | null): void {
+    if (!this.cache || this.cache.uid !== uid || !this.eligible(uid)) return;
+    const previous = this.cache.scheduleRevision;
+    if (previous === revision) return;
+    this.cache.scheduleRevision = revision;
+    if ((previous !== undefined || this.cache.status) && this.cache.status?.state !== 'dismissed') this.invalidate();
+    this.persist();
   }
   private key(uid: string): string { return JSON.stringify([uid, this.preferences()]); }
   private clear(): void {
@@ -81,11 +84,13 @@ export class MorningWorkoutService {
           && (saved.sleepKey === null || typeof saved.sleepKey === 'string')
           && (saved.scheduleRevision === undefined || saved.scheduleRevision === null || Number.isSafeInteger(saved.scheduleRevision))) {
           Object.assign(this.cache, { status: saved.status, sleepKey: saved.sleepKey, scheduleRevision: saved.scheduleRevision });
-          return this.cache;
-        }
+        } else this.window.windowRef.sessionStorage.removeItem(CACHE_KEY);
+      } else {
+        this.window.windowRef.sessionStorage.removeItem(CACHE_KEY);
       }
-      this.window.windowRef.sessionStorage.removeItem(CACHE_KEY);
     } catch { /* A corrupt/unavailable session cache is a miss, never a dashboard failure. */ }
+    const revision = this.plans.lastVerifiedStateRevision(uid);
+    if (revision !== undefined) this.acceptScheduleRevision(uid, revision);
     return this.cache;
   }
   private validStatus(status: MorningWorkoutStatus | null): status is MorningWorkoutStatus {
@@ -98,15 +103,20 @@ export class MorningWorkoutService {
         || ![result.usedContext, result.missingContext].every(items => Array.isArray(items) && items.every(item => typeof item === 'string'))
         || !Array.isArray(result.previousLoads) || !result.previousLoads.every(source => source
           && typeof source.exerciseId === 'string' && typeof source.localDate === 'string')) return false;
-      parseMorningWorkoutPreferences({ enabled: true, followRoutine: true, controls: status.controls });
+      const controls = parseGenerateDayWorkoutRequest({ requestId: result.requestId, controls: status.controls }).controls;
+      if (controls.localDate !== status.localDate || controls.timeZone !== this.preferences().controls.timeZone
+        || controls.destinationPlanId !== null || !controls.trainingContext || controls.activityContext === false) return false;
       if (result.kind === 'rest') return result.draft === null;
       if (result.kind !== 'workout' || !result.draft || typeof result.draft.title !== 'string') return false;
-      if (parseWorkoutStructureV1(result.draft.structure).sport !== status.controls.sport) return false;
+      const structure = parseWorkoutStructureV1(result.draft.structure);
+      if (structure.sport !== controls.sport) return false;
       const estimate = result.draft.estimatedMinutes;
       if (estimate && (!Number.isFinite(estimate.minimum) || !Number.isFinite(estimate.maximum)
         || estimate.minimum < 1 || estimate.maximum < estimate.minimum || estimate.maximum > 480)) return false;
-      if (result.draft.strength) parseStrengthWorkoutDraftV1(result.draft.strength);
-      return true;
+      if (!isStrengthWorkoutSportV1(controls.sport)) return result.draft.strength === undefined && estimate === undefined;
+      if (!result.draft.strength) return false;
+      const strength = parseStrengthWorkoutDraftV1(result.draft.strength);
+      return strengthProjectionMatchesDetails(structure, { ...strength, workoutId: 'draft', revision: 1 });
     } catch { return false; }
   }
   private persist(): void {
@@ -133,7 +143,7 @@ export class MorningWorkoutService {
     }
   }
   remember(uid: string, status: MorningWorkoutStatus): void {
-    if (!this.eligible(uid)) return;
+    if (!this.eligible(uid) || status.localDate !== this.preferences().controls.localDate) return;
     const entry = this.entry(uid);
     this.invalidate(); entry.status = status; this.persist();
   }

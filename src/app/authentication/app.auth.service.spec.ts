@@ -97,6 +97,8 @@ import { Privacy } from '@sports-alliance/sports-lib';
 import { APP_STORAGE } from '../services/storage/app.storage.token';
 import { environment } from '../../environments/environment';
 import { EMAIL_LINK_RETURN_URL_STORAGE_KEY } from './auth-redirect-url';
+import { AppWindowService } from '../services/app.window.service';
+import { MORNING_WORKOUT_SESSION_CACHE_KEY } from '../shared/morning-workout-cache';
 
 import { signal } from '@angular/core';
 
@@ -128,6 +130,7 @@ const mockLocalStorageService = {
     removeItem: vi.fn(),
     clearAllStorage: vi.fn()
 };
+const mockSessionStorage = { removeItem: vi.fn() };
 
 
 describe('AppAuthService', () => {
@@ -157,6 +160,7 @@ describe('AppAuthService', () => {
                 { provide: MatSnackBar, useValue: mockSnackBar },
                 { provide: LocalStorageService, useValue: mockLocalStorageService },
                 { provide: APP_STORAGE, useValue: localStorage },
+                { provide: AppWindowService, useValue: { windowRef: { sessionStorage: mockSessionStorage } } },
             ]
         });
         service = TestBed.inject(AppAuthService);
@@ -219,7 +223,18 @@ describe('AppAuthService', () => {
         await service.signOut();
 
         expect(signOut).toHaveBeenCalledWith(mockAuth);
+        expect(mockSessionStorage.removeItem).toHaveBeenCalledWith(MORNING_WORKOUT_SESSION_CACHE_KEY);
         expect(terminate).toHaveBeenCalledWith(mockFirestore);
+        expect(mockLocalStorageService.clearAllStorage).toHaveBeenCalled();
+        expect(clearIndexedDbPersistence).toHaveBeenCalledWith(mockFirestore);
+        expect(redirectSpy).toHaveBeenCalled();
+    });
+
+    it('finishes sign-out even if private session cache cleanup is blocked', async () => {
+        const redirectSpy = vi.spyOn(service as any, 'redirectToLogin').mockImplementation(() => { });
+        const { clearIndexedDbPersistence } = await import('app/firebase/firestore');
+        mockSessionStorage.removeItem.mockImplementationOnce(() => { throw Error('Storage blocked'); });
+        await service.signOut();
         expect(mockLocalStorageService.clearAllStorage).toHaveBeenCalled();
         expect(clearIndexedDbPersistence).toHaveBeenCalledWith(mockFirestore);
         expect(redirectSpy).toHaveBeenCalled();

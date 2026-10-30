@@ -18,13 +18,16 @@ function storage() {
   return { values, getItem: (key: string) => values.get(key) ?? null,
     setItem: (key: string, value: string) => { values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
 }
-function setup(saved = storage(), enabled = true, sport = ActivityTypes.Running) {
+function setup(saved = storage(), enabled = true, sport = ActivityTypes.Running, knownRevision?: number | null) {
   TestBed.resetTestingModule();
   vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-30T07:00Z'));
   const auth = { currentUser: { uid: 'owner' } };
   const controls = defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki', sport);
   const user = signal<any>({ uid: 'owner', settings: { appSettings: { morningWorkout: { enabled, followRoutine: true, controls } } } });
   const pro = signal(true), revisions = new Subject<{ uid: string; revision: number | null }>();
+  const verifiedRevisions = new Map<string, number | null>();
+  if (knownRevision !== undefined) verifiedRevisions.set('owner', knownRevision);
+  revisions.subscribe(({ uid, revision }) => verifiedRevisions.set(uid, revision));
   const updateUserProperties = vi.fn().mockResolvedValue(undefined), logEvent = vi.fn();
   const result = (): MorningWorkoutStatus => ({ localDate: service.preferences().controls.localDate, state: 'ready', controls,
     result: { requestId: `morning:${service.preferences().controls.localDate}`, observedAt: new Date().toISOString(), kind: 'rest',
@@ -34,7 +37,8 @@ function setup(saved = storage(), enabled = true, sport = ActivityTypes.Running)
     { provide: Auth, useValue: auth }, { provide: AppUserService, useValue: { user, updateUserProperties, isProSignal: pro } },
     { provide: AppFunctionsService, useValue: { call } }, { provide: AppAnalyticsService, useValue: { logEvent } },
     { provide: AppWindowService, useValue: { windowRef: { sessionStorage: saved } } },
-    { provide: TrainingPlansService, useValue: { stateRevisionChanges$: revisions } },
+    { provide: TrainingPlansService, useValue: { stateRevisionChanges$: revisions,
+      lastVerifiedStateRevision: (uid: string) => verifiedRevisions.get(uid) } },
   ] });
   const service = TestBed.inject(MorningWorkoutService);
   return { service, auth, user, pro, revisions, call, updateUserProperties, logEvent, saved, result };
@@ -168,6 +172,29 @@ describe('MorningWorkoutService daily browser cache', () => {
     finish({ data: result() }); await expect(pending).rejects.toThrow('access changed');
     expect(service.cached('owner')?.status?.state).toBe('planned');
   });
+  it.each([undefined, 4])('rejects a restored revision %s when a newer schedule was verified before cache hydration', async revision => {
+    const first = setup(storage(), true, ActivityTypes.Running, revision);
+    await first.service.request('owner', 'status', () => true);
+    const next = setup(first.saved, true, ActivityTypes.Running, 5);
+    expect(next.service.cached('owner')).toBeNull();
+    await next.service.request('owner', 'status', () => true); expect(next.call).toHaveBeenCalledOnce();
+    const unchanged = setup(next.saved, true, ActivityTypes.Running, 5);
+    expect(unchanged.service.cached('owner')?.status?.state).toBe('ready'); expect(unchanged.call).not.toHaveBeenCalled();
+  });
+  it('retains a verified revision emitted before the first cache request', async () => {
+    const first = setup(); first.revisions.next({ uid: 'owner', revision: 4 });
+    await first.service.request('owner', 'status', () => true);
+    expect(setup(first.saved, true, ActivityTypes.Running, 5).service.cached('owner')).toBeNull();
+  });
+  it('invalidates an unversioned restored result on the first verified schedule while retaining dismissal', async () => {
+    const first = setup(); await first.service.request('owner', 'status', () => true);
+    const next = setup(first.saved); expect(next.service.cached('owner')?.status?.state).toBe('ready');
+    next.revisions.next({ uid: 'owner', revision: 1 }); expect(next.service.cached('owner')).toBeNull();
+    next.service.remember('owner', { localDate: '2026-10-30', state: 'dismissed' });
+    next.revisions.next({ uid: 'owner', revision: 2 }); expect(next.service.cached('owner')?.status?.state).toBe('dismissed');
+    const restored = setup(next.saved, true, ActivityTypes.Running, 3);
+    expect(restored.service.cached('owner')?.status?.state).toBe('dismissed');
+  });
   it('clears private session state on logout and rejects late replies', async () => {
     const { service, user, auth, call, result, saved } = setup(); await service.request('owner', 'status', () => true);
     expect(saved.values.size).toBe(1);
@@ -201,6 +228,34 @@ describe('MorningWorkoutService daily browser cache', () => {
     const saved = storage(); saved.setItem = () => { throw Error('Blocked'); };
     const { service, call } = setup(saved); await service.request('owner', 'status', () => true);
     await service.request('owner', 'status', () => true); expect(call).toHaveBeenCalledOnce();
+  });
+  it.each(['date', 'zone', 'missing-strength', 'different-strength', 'endurance-strength', 'endurance-estimate'] as const)(
+    'rejects a restored recipe with inconsistent %s', async change => {
+      const sport = change.includes('strength') && !change.startsWith('endurance') ? ActivityTypes.StrengthTraining : ActivityTypes.Running;
+      const first = setup(storage(), true, sport), ready = first.result();
+      const strength: StrengthWorkoutDraftV1 = { version: 1, exercises: [{ id: 'squat', name: 'Squat',
+        sets: [{ id: 'set-a', ending: { kind: 'repetitions', repetitions: 8 } }] }] };
+      ready.result = { ...ready.result!, kind: 'workout', draft: { title: 'Workout', structure: sport === ActivityTypes.StrengthTraining
+        ? projectStrengthWorkoutToV1({ ...strength, workoutId: 'draft', revision: 1 }, sport)
+        : { version: 1, sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 1800 }, targets: [] }] },
+        ...(sport === ActivityTypes.StrengthTraining ? { strength } : {}) } };
+      first.call.mockResolvedValueOnce({ data: ready }); await first.service.request('owner', 'prepare', () => true);
+      const key = [...first.saved.values.keys()][0], saved = JSON.parse(first.saved.getItem(key)!);
+      if (change === 'date') saved.status.controls.localDate = '2026-10-31';
+      if (change === 'zone') saved.status.controls.timeZone = 'UTC';
+      if (change === 'missing-strength') delete saved.status.result.draft.strength;
+      if (change === 'different-strength') saved.status.result.draft.strength.exercises[0].sets[0].ending.repetitions = 12;
+      if (change === 'endurance-strength') saved.status.result.draft.strength = strength;
+      if (change === 'endurance-estimate') saved.status.result.draft.estimatedMinutes = { minimum: 20, maximum: 30 };
+      first.saved.setItem(key, JSON.stringify(saved));
+      expect(setup(first.saved, true, sport).service.cached('owner')).toBeNull();
+    });
+  it('does not let a late Add callback replace the next local day cache', async () => {
+    const { service, call } = setup(); await service.request('owner', 'status', () => true);
+    vi.setSystemTime(new Date('2026-10-31T07:00Z'));
+    service.remember('owner', { localDate: '2026-10-30', state: 'planned' });
+    expect(service.cached('owner')).toBeNull();
+    await service.request('owner', 'status', () => true); expect(call).toHaveBeenCalledTimes(2);
   });
   it('does not restore an unfinished preparation after a reload', async () => {
     const first = setup(); first.call.mockResolvedValue({ data: { localDate: '2026-10-30', state: 'preparing' } });

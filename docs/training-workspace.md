@@ -5732,21 +5732,29 @@ that finishes while hidden retains its result, but its shown event waits until t
 returns after hiding cannot start a new automatic model preparation until foreground return.
 `MorningWorkoutService` keeps one account/day/time-zone/preferences cache and shares in-flight status/preparation
 requests independently of the component lifetime. A bounded, validated session-storage copy restores completed status
-and recipes on same-tab reload; unavailable storage falls back to memory. Logout/account/Pro changes clear the private
-copy, and a different date or preferences cannot reuse it. Pending preparations are not persisted. Explicit retries
+and recipes on same-tab reload; unavailable storage falls back to memory. Restored controls must match the saved local
+date and time zone, and strength details must match their canonical projection. Logout/account/Pro changes clear the private
+copy; explicit sign-out also removes it when Today has not been loaded since a reload. A different date or preferences
+cannot reuse it. Pending preparations are not persisted. Explicit retries
 bypass cached status. A waiting-sleep entry compares stable session identity/end/update metadata from the existing Sleep
 listener, so rehydrating the same night does not retry it. Existing verified Training-state reads publish revision
-invalidation without adding a listener or query; repeated revisions and other owners do nothing. Changed revisions
+invalidation without adding a listener or query. A bounded eight-owner in-memory revision index preserves updates
+received before the lazy morning cache exists; it never supplies mutation authority. Restored unversioned status is
+invalidated on its first verified revision. Repeated revisions and other owners do nothing. Changed revisions
 invalidate day coverage while the backend's charged date receipt still prevents a second generated suggestion.
-Dismissed days remain dismissed. Successful Add updates the shared cache to planned. Old in-flight replies cannot
+Dismissed days remain dismissed. Successful Add updates the shared cache to planned even after Today has closed, with
+current owner/day/Pro fences. Old in-flight replies cannot
 replace another owner, date, preferences or newer coverage. No raw Sleep samples/provider payloads enter cache keys;
 the browser copy holds only the existing first-party public response, capped at 400,000 JSON characters.
 
 An ordinary afternoon visit cannot start a new included suggestion. **Check again** remains in the options menu while
 waiting. This is not a sleep-ingestion trigger or a promise that every provider has finished syncing. No queue, scheduler, notification
 or background model request is added. Later evidence/preferences do not silently regenerate a cached draft. Status
-retrieval rechecks only current-day activity summaries and the existing revision-bound schedule/rest projection before
-presenting a cached suggestion; an added or completed workout therefore takes priority after reload. No recovery,
+retrieval rechecks only current-day activity summaries and the existing revision-bound schedule/rest projection.
+Browser navigation/reload can restore the daily status without that request. Explicit **Review** always performs one
+status-only coverage check before opening; a subsequently added or completed workout suppresses the stale review.
+That check never prepares or generates a suggestion. A failed check leaves Review available with an inline error.
+No recovery,
 metric, feedback or routine-history reads are added to cache retrieval. A weekday
 sport requires a complete bounded two-page/200-summary scan of the previous 28 complete local days, at least two matching
 dates and a unique leader; otherwise the saved sport wins. Explicit purpose/target compatibility remains authoritative.
@@ -5795,7 +5803,8 @@ platform, cloud dashboard or metric resource is provisioned here. Queue monitori
 MCP impact review: no public contract or authority impact. Morning generation/preferences/cache are private first-party
 state, not a new recipe, planning mutation, exposed field, grant, tool or provider action. Explicitly saved recipes use
 the unchanged endurance/strength read and create-workout contracts. Tab-return stability and the browser cache change only first-party
-request scheduling, existing read invalidation and visibility analytics; MCP projections, reads and mutation confirmation contracts are unchanged.
+request scheduling, existing read invalidation and visibility analytics. Review coverage checks, restored-recipe validation
+and sign-out cleanup also remain private first-party behavior; MCP projections, reads and mutation confirmation contracts are unchanged.
 The same-PR demo Firestore suite checks the private
 cache/allowance/deletion fences and existing strict full-workout/strength readback, including private-field exclusion.
 No registered contract digest, client refresh, plugin rebuild, data migration or provider rollout is required.

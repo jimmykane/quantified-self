@@ -104,6 +104,9 @@ export function selectCalendarVisibleScheduledWorkouts(
 export class TrainingPlansService {
   private readonly stateRevisionChanges = new Subject<{ uid: string; revision: number | null }>();
   readonly stateRevisionChanges$ = this.stateRevisionChanges.asObservable();
+  private readonly verifiedStateRevisions = new Map<string, number | null>();
+  /** Last independently verified revision only; this never starts a read or supplies mutation authority. */
+  lastVerifiedStateRevision(uid: string): number | null | undefined { return this.verifiedStateRevisions.get(uid); }
   private readonly firestore = inject(Firestore);
   private readonly functions = inject(AppFunctionsService);
   private readonly browserCompatibility = inject(BrowserCompatibilityService);
@@ -283,6 +286,9 @@ export class TrainingPlansService {
     const value = (await getDoc(doc(firestore, 'users', uid, TRAINING_PLAN_STATE_COLLECTION_ID, TRAINING_PLAN_STATE_DOCUMENT_ID))).data();
     let revision: number | null = null;
     try { revision = value === undefined ? 0 : parseTrainingPlanStateV1(value).revision; } catch { /* Invalid state stays unknown. */ }
+    this.verifiedStateRevisions.delete(uid);
+    this.verifiedStateRevisions.set(uid, revision);
+    if (this.verifiedStateRevisions.size > 8) this.verifiedStateRevisions.delete(this.verifiedStateRevisions.keys().next().value!);
     this.stateRevisionChanges.next({ uid, revision });
     return value;
   }

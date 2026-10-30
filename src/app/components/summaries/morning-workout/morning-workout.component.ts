@@ -156,16 +156,32 @@ export class MorningWorkoutComponent {
     });
   }
   async review(): Promise<void> {
-    const value = this.status(), uid = this.ownerUid(), screenDate = this.localDate();
-    if (value?.state !== 'ready' || !value.controls || !value.result || !this.morning.eligible(uid)) return;
+    const uid = this.ownerUid(), screenDate = this.localDate();
+    if (this.busy() || this.status()?.state !== 'ready' || !this.preferences().enabled || !this.morning.eligible(uid)) return;
+    const sequence = ++this.sequence;
+    this.loading.set(true); this.actionError.set(null);
+    let value: MorningWorkoutStatus;
+    try {
+      // An imported activity may cover today since this browser last fetched its daily result.
+      value = await this.morning.request(uid, 'status', () => this.current(sequence, uid), undefined, true);
+      if (!this.current(sequence, uid)) return;
+      this.status.set(value);
+    } catch {
+      if (this.current(sequence, uid)) {
+        this.actionError.set('Today could not be checked. Try Review again.'); this.haptics.error();
+      }
+      return;
+    } finally { if (this.current(sequence, uid)) this.loading.set(false); }
+    if (value.state !== 'ready' || !value.controls || !value.result) return;
     this.morning.event(uid, 'reviewed', 'ready');
     await this.generation.open(uid, value.localDate, value.controls.sport, { initialControls: value.controls, initialResult: value.result,
       onAdded: () => {
+        if (!this.morning.eligible(uid) || this.morning.preferences().controls.localDate !== value.localDate) return;
         this.morning.event(uid, 'added', 'ready');
-        if (!this.destroy.destroyed && this.morning.isOwner(uid) && this.ownerUid() === uid
-          && this.localDate() === screenDate && this.preferences().controls.localDate === value.localDate) {
-          const status: MorningWorkoutStatus = { localDate: value.localDate, state: 'planned' };
-          this.morning.remember(uid, status); this.status.set(status);
+        const status: MorningWorkoutStatus = { localDate: value.localDate, state: 'planned' };
+        this.morning.remember(uid, status);
+        if (!this.destroy.destroyed && this.ownerUid() === uid && this.localDate() === screenDate) {
+          this.status.set(status);
         }
       },
     });

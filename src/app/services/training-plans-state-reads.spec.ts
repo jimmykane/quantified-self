@@ -43,6 +43,7 @@ describe('current Training schedule-state reads', () => {
   it('verifies an incorrect missing watch through the same app before publishing any revision', async () => {
     const revisions: unknown[] = [];
     const revisionSubscription = service.stateRevisionChanges$.subscribe(value => revisions.push(value));
+    expect(service.lastVerifiedStateRevision('owner')).toBeUndefined();
     expect(getDoc).not.toHaveBeenCalled();
     const observed: CurrentTrainingScheduleV1[] = [];
     const subscription = service.watchSchedule('owner').subscribe(value => observed.push(value));
@@ -59,6 +60,10 @@ describe('current Training schedule-state reads', () => {
     expect(getCachedDoc).not.toHaveBeenCalled();
     expect(revisions).toEqual([{ uid: 'owner', revision: 253 }, { uid: 'owner', revision: 254 }]);
     subscription.unsubscribe(); revisionSubscription.unsubscribe();
+    const reads = vi.mocked(getDoc).mock.calls.length;
+    expect(service.lastVerifiedStateRevision('owner')).toBe(254);
+    expect(service.lastVerifiedStateRevision('other')).toBeUndefined();
+    expect(getDoc).toHaveBeenCalledTimes(reads);
   });
 
   it('shares the live owner stream instead of adding one server verification per consumer', async () => {

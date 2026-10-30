@@ -65,7 +65,7 @@ function setup(enabled = true, cachedStatus: MorningWorkoutStatus | null = null)
     visibility.mockReturnValue(visible ? 'visible' : 'hidden');
     document.dispatchEvent(new Event('visibilitychange')); fixture.detectChanges();
   };
-  return { fixture, preferences, owner, pro, saving, request, event, save, open, haptics, setVisible };
+  return { fixture, preferences, owner, pro, saving, request, event, save, open, haptics, setVisible, remember };
 }
 afterEach(() => { vi.useRealTimers(); restoreVisibility(); });
 describe('compact morning workout in Today', () => {
@@ -95,7 +95,7 @@ describe('compact morning workout in Today', () => {
         getItem: (key: string) => values.get(key) ?? null,
         setItem: (key: string, value: string) => values.set(key, value), removeItem: (key: string) => values.delete(key),
       } } } },
-      { provide: TrainingPlansService, useValue: { stateRevisionChanges$: new Subject() } },
+      { provide: TrainingPlansService, useValue: { stateRevisionChanges$: new Subject(), lastVerifiedStateRevision: () => undefined } },
       { provide: DayWorkoutService, useValue: { open: vi.fn() } },
       { provide: AppHapticsService, useValue: { selection: vi.fn(), success: vi.fn(), error: vi.fn() } },
     ] });
@@ -158,10 +158,55 @@ describe('compact morning workout in Today', () => {
         ending: { kind: 'time', seconds: 1800 }, targets: [], note: 'Comfortable effort' }] },
     } } });
     fixture.detectChanges(); exportQa(fixture.nativeElement, 'morning-ready');
+    request.mockResolvedValueOnce(fixture.componentInstance.status()!);
     await fixture.componentInstance.review();
     expect(open).toHaveBeenCalledWith('owner', '2026-10-30', expect.any(String), expect.objectContaining({ initialResult: expect.any(Object), onAdded: expect.any(Function) }));
     expect(event).toHaveBeenCalledWith('owner', 'reviewed', 'ready');
     expect(event).not.toHaveBeenCalledWith('owner', 'added', 'ready');
+  });
+  it.each(['planned', 'completed', 'rest-day', 'dismissed', 'off'] as const)(
+    'rechecks coverage on Review and withholds a cached draft when today is %s', async state => {
+      const { fixture, request, open, event } = setup();
+      await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges(); request.mockClear();
+      request.mockResolvedValueOnce({ localDate: '2026-10-30', state });
+      await fixture.componentInstance.review(); fixture.detectChanges();
+      expect(request).toHaveBeenCalledExactlyOnceWith('owner', 'status', expect.any(Function), undefined, true);
+      expect(fixture.componentInstance.status()?.state).toBe(state);
+      expect(open).not.toHaveBeenCalled(); expect(event).not.toHaveBeenCalledWith('owner', 'reviewed', 'ready');
+      expect(fixture.componentInstance.busy()).toBe(false);
+    });
+  it('keeps a cached draft reviewable after a failed coverage check and gives error feedback', async () => {
+    const { fixture, request, open, haptics } = setup();
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    const ready = fixture.componentInstance.status()!;
+    request.mockRejectedValueOnce(Error('Offline'));
+    await fixture.componentInstance.review(); fixture.detectChanges();
+    expect(open).not.toHaveBeenCalled(); expect(haptics.error).toHaveBeenCalledOnce();
+    expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain('Try Review again');
+    expect(fixture.componentInstance.busy()).toBe(false);
+    request.mockResolvedValueOnce(ready); await fixture.componentInstance.review();
+    expect(open).toHaveBeenCalledOnce(); expect(fixture.componentInstance.actionError()).toBeNull();
+  });
+  it.each(['day', 'account', 'destroy'] as const)('does not open a late coverage result after %s changes', async change => {
+    const { fixture, request, open, owner } = setup();
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    const ready = fixture.componentInstance.status()!;
+    let finish!: (value: MorningWorkoutStatus) => void;
+    request.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = fixture.componentInstance.review();
+    if (change === 'account') { owner.set('other'); fixture.detectChanges(); }
+    if (change === 'day') { fixture.componentRef.setInput('localDate', '2026-10-31'); fixture.detectChanges(); }
+    if (change === 'destroy') fixture.destroy();
+    finish(ready); await pending; expect(open).not.toHaveBeenCalled();
+  });
+  it('remembers a successful Add even when Today was destroyed while the review stayed open', async () => {
+    const { fixture, request, open, remember } = setup();
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    request.mockResolvedValueOnce(fixture.componentInstance.status()!);
+    await fixture.componentInstance.review();
+    const onAdded = open.mock.calls[0][3].onAdded;
+    fixture.destroy(); onAdded();
+    expect(remember).toHaveBeenCalledExactlyOnceWith('owner', { localDate: '2026-10-30', state: 'planned' });
   });
   it('drops late replies after account changes and destroy', async () => {
     const { fixture, request, owner } = setup(); let resolve!: (value: any) => void;
@@ -172,13 +217,14 @@ describe('compact morning workout in Today', () => {
     fixture.destroy(); await vi.advanceTimersByTimeAsync(1600); expect(request).toHaveBeenCalledOnce();
   });
   it.each(['day', 'account'] as const)('shows an added workout and fences its callback after a %s change', async change => {
-    const { fixture, open, preferences, owner, event } = setup();
+    const { fixture, open, preferences, owner, event, request, remember } = setup();
     await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
     const ready = fixture.componentInstance.status()!;
     fixture.componentInstance.status.set({ ...ready, result: { ...ready.result!, kind: 'workout', draft: {
       title: 'Easy run', structure: { version: 1, sport: ready.controls!.sport, nodes: [{ kind: 'step', id: 'easy', purpose: 'work',
         ending: { kind: 'time', seconds: 1800 }, targets: [] }] },
     } } });
+    request.mockResolvedValueOnce(fixture.componentInstance.status()!);
     await fixture.componentInstance.review();
     const onAdded = open.mock.calls[0][3].onAdded;
     onAdded();
@@ -192,6 +238,7 @@ describe('compact morning workout in Today', () => {
     fixture.componentInstance.status.set({ localDate: nextDate, state: 'completed' });
     onAdded();
     expect(fixture.componentInstance.status()).toEqual({ localDate: nextDate, state: 'completed' });
+    expect(remember).toHaveBeenCalledOnce();
     expect(event).toHaveBeenCalledWith('owner', 'added', 'ready');
   });
   it('uses saved source opt-outs in preferences and keeps disable available after dismissal', async () => {
