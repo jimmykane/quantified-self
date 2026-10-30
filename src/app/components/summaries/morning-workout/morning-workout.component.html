@@ -1,0 +1,24 @@
+@if (eligible()) {
+  <section aria-label="Morning workout" class="morning-row">
+    <app-compact-row [title]="preferences().enabled ? 'Today’s suggestion' : 'Morning workout · Pro'" density="compact" layout="columns" [showDivider]="false">
+      <p role="status" aria-live="polite">{{ preferences().enabled ? summary() : 'Have a workout ready when you open Today.' }}</p>
+      @if (status()?.state === 'ready') { <small>Included with Pro · review before adding</small> }
+      @if (busy()) { <mat-progress-bar mode="indeterminate" aria-label="Preparing morning suggestion"></mat-progress-bar> }
+    <div compactRowAction class="actions">
+      @if (!preferences().enabled) {
+        <button mat-button appHapticTap (click)="configure()">Set up</button>
+      } @else {
+        @if (status()?.state === 'ready') { <button mat-button appHapticTap [disabled]="busy()" (click)="review()">Review</button> }
+        @if (status()?.state === 'failed') { <button mat-button appHapticTap [disabled]="busy()" (click)="manual()">Generate manually</button> }
+        @if (status()?.state === 'preparing' || error()) { <button mat-button appHapticTap [disabled]="busy()" (click)="load()">Check again</button> }
+        <button mat-icon-button appHapticTap [matMenuTriggerFor]="options" [disabled]="busy()" aria-label="Morning workout options"><mat-icon>more_vert</mat-icon></button>
+        <mat-menu #options="matMenu" class="qs-menu-panel">
+          <button mat-menu-item appHapticTap (click)="configure()">Preferences</button>
+          <button mat-menu-item (click)="dismiss()">Dismiss for today</button>
+          <button mat-menu-item (click)="disable()">Turn off morning suggestions</button>
+        </mat-menu>
+      }
+    </div>
+    </app-compact-row>
+  </section>
+}

@@ -1465,8 +1465,8 @@ describe('Firestore Security Rules', () => {
             });
         });
 
-        describe('Assistant conversations (users/{uid}/assistantConversations/active)', () => {
-            const assistantPath = `users/${userId}/assistantConversations/active`;
+        describe.each(['active', 'day-workout', 'morning-workout'])('Private Assistant leaf %s', leaf => {
+            const assistantPath = `users/${userId}/assistantConversations/${leaf}`;
 
             beforeEach(async () => {
                 await testEnv.withSecurityRulesDisabled(async (context) => {

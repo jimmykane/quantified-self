@@ -5673,6 +5673,66 @@ reads. No metric kind, backend payload, model, tool, strict projection/schema, s
 provider action changes. No reparse, migration, registered-client refresh or backend deployment is required.
 
 
+#### Pro morning workout suggestion
+
+The owner-only Today section includes one compact shared `CompactRowComponent` after its existing Training state and
+Readiness details, outside the collapsible region. The greeting, colored assessment sentence, existing detailed state,
+and user-controlled collapse remain intact. There is no additional card, tinted surface or ripple on the assessment.
+
+`appSettings.morningWorkout` on `users/{uid}/config/settings` holds explicit opt-in (default off), a recorded-weekday
+sport choice and the existing day-workout controls. Owner-authorized settings writes remain direct SDK merges; the
+backend strictly parses them, overwrites the saved date with server-local today, and requires Training and activity
+context so an automatic extra session cannot bypass schedule/completed-workout checks. Other signals retain independent
+opt-outs; all applicable choices, including Timeline, default on. The preferences form and cached-draft review reuse
+`DayWorkoutDialogComponent`, the shared sport picker and prescription display. Morning drafts start Standalone.
+
+V1 prepares only on a foreground Today visit after the current data listeners settle (a 1.5-second UI debounce),
+between 05:00 inclusive and 12:00 exclusive in the saved IANA zone. It uses the latest available recovery context; it
+is not a sleep-ingestion trigger or a promise that every provider has finished syncing. No queue, scheduler, notification
+or background model request is added. Later evidence/preferences do not silently regenerate a cached draft. A weekday
+sport requires a complete bounded two-page/200-summary scan of the previous 28 complete local days, at least two matching
+dates and a unique leader; otherwise the saved sport wins. Explicit purpose/target compatibility remains authoritative.
+Strength/Weight Training alone share their existing family. The normal selected-sport routine and context read remain
+bounded independently; no frontend history query, attendance, location, usual start time or adherence model is introduced.
+
+The existing Auth/App-Check callable `generateDayWorkout` dispatches a strict private `mode: morning` with only
+`status`, `prepare` and `dismiss` actions. Pro and legal access are checked server-side; the mode never accepts client
+controls, dates, user IDs or model configuration. It uses the same context, model, strict canonical validation and
+single correction budget as manual generation. Complete current-day activity, schedule/completion and rest-day evidence
+is required before a model call. Existing planned sessions, recorded sessions and authored rest days take priority.
+Missing or failed context remains unknown rather than an empty day. A model rest result is allowed without any mutation.
+
+A separate server-only `users/{uid}/assistantConversations/morning-workout` leaf supplies the included daily allowance;
+no Assistant quota reservation/finalization is called. Its transactional local-date claim has a four-minute lease,
+current owner/deletion and source-preference fences. Model admission consumes that date once, including failed attempts;
+uncharged context failures can retry. Concurrent devices retrieve preparing/cached state rather than starting another
+model. Date receipts survive response eviction; at most eight receipts, four full responses and 400 KB UTF-8 are retained.
+The existing seven-day conversation TTL/index exemptions and recursive account erasure cover the leaf. Settings remain
+owner-readable; private leases, hashes and raw model context are never browser-readable. Dismissal fences in-flight work.
+
+Reviewing generates nothing. Explicit Add uses the existing revision-bound create-workout command and normal inherited
+sync rules; editor handoff remains unsaved. A cached initial review captures the current schedule and becomes stale on
+subsequent revisions. Changing its options requires ordinary quota-backed manual generation. Existing results retain
+their original context choices, and disabled preferences suppress private status retrieval. This PR enables no account,
+starts no pilot and performs no deployment; an opt-in is still required after a separately approved release.
+
+Measurement: consent-aware `morning_workout` product events use only fixed action/state labels for shown, reviewed,
+direct successful Add, dismissal, enable/disable and failure. A shown event is once per state/component visit, not a
+unique-person count; edited workouts saved later in the full editor are not attributed as direct morning acceptance.
+`[MorningWorkout]` logs contain aggregate attempts, input/output/thinking tokens, metered versus unknown attempts,
+model and elapsed time, including correction and post-provider JSON failures. No dates, UIDs, titles, health values,
+notes or model text enter these logs/events. Unknown provider usage is explicit, never a measured zero-dollar claim.
+Use current model pricing on these counters for model-only cost per request/addition; Firestore/compute/network remain
+separate. Event counts and aggregate model usage are not an exactly-once experiment ledger or a completed impact study.
+The proposed opt-in pilot and any control assignment/budget activation remain operational decisions; no experiment
+platform, cloud dashboard or metric resource is provisioned here. Queue monitoring coverage is unchanged (no new queue).
+
+MCP impact review: no public contract or authority impact. Morning generation/preferences/cache are private first-party
+state, not a new recipe, planning mutation, exposed field, grant, tool or provider action. Explicitly saved recipes use
+the unchanged endurance/strength read and create-workout contracts. The same-PR demo Firestore suite checks the private
+cache/allowance/deletion fences and existing strict full-workout/strength readback, including private-field exclusion.
+No registered contract digest, client refresh, plugin rebuild, data migration or provider rollout is required.
+
 #### Dashboard daily briefing
 
 The owner-only **At a glance** continues the **Today** greeting in one sentence and one Material text button. The

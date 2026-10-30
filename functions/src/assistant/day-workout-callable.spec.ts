@@ -30,7 +30,7 @@ function mockSdkOutputs(...outputs: (string | Error)[]) {
   const provider = vi.fn(async (): Promise<GenerateResponseData> => {
     const output = outputs[attempt++];
     if (output instanceof Error) throw output;
-    return { finishReason: 'stop' as const, message: { role: 'model' as const, content: [{ text: output }] } };
+    return { usage: { inputTokens: 123, outputTokens: 17, thoughtsTokens: 9 }, finishReason: 'stop' as const, message: { role: 'model' as const, content: [{ text: output }] } };
   });
   const model = ai.defineModel({ name: 'test/day-workout-output-correction' }, provider);
   const generate = vi.mocked(assistantGenkit.generate).mockReset();
@@ -40,6 +40,12 @@ function mockSdkOutputs(...outputs: (string | Error)[]) {
 const request = { requestId: 'day-workout:71f1e982-b718-4c5b-a3c7-c45eebdefc84', controls: defaultDayWorkoutControls('2026-10-28', 'UTC') };
 const auth = { auth: { uid: 'owner' }, app: {} };
 describe('generateDayWorkout callable', () => {
+  it('meters the real provider response before Genkit rejects malformed JSON', async () => {
+    const evidence = await dependencies().context('owner', request, new Date());
+    mockSdkOutputs('{"kind":'); const usage = vi.fn();
+    await expect(generateDayWorkoutSuggestion(request, evidence, undefined, usage)).rejects.toBeInstanceOf(DayWorkoutSuggestionValidationError);
+    expect(usage).toHaveBeenCalledWith({ available: true, inputTokens: 123, outputTokens: 17, thoughtsTokens: 9 });
+  });
   it('honors an authored rest day without a model request or quota charge and replays it', async () => {
     const deps = dependencies();
     vi.mocked(deps.context).mockResolvedValue({ evidence: {}, usedContext: ['Authored rest day'], missingContext: [],

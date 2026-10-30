@@ -87,6 +87,10 @@
     "environment": "angular",
     "reason": "Compiles the real sentence-only Dashboard rail to verify authenticated-owner fencing, accessible headline-only rendering, assessment input resets and silent display updates without independent data readers."
   },
+  "src/app/components/summaries/morning-workout/morning-workout.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Renders the standalone Material Today row to verify foreground/debounce effects, settled-data and owner guards, review/preference callbacks and DestroyRef cancellation."
+  },
   "src/app/components/timeline-notes/active-sickness-note.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the shared owner-only sickness context with Material buttons, signal inputs, date rollover, range registration and component teardown in TestBed."
@@ -130,6 +134,10 @@
   "src/app/services/history-import-progress.service.spec.ts": {
     "environment": "angular",
     "reason": "Uses TestBed injection, toSignal teardown and Angular effects to verify one shared owner subscription, raw sign-out, A/B/A isolation, read-error recovery and expiry timer cleanup."
+  },
+  "src/app/services/morning-workout.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection for owner, Pro and Functions execution fences, queued preference writes and consent-aware analytics dependencies."
   },
   "src/app/services/recorded-history-start.service.spec.ts": {
     "environment": "angular",
