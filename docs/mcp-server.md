@@ -777,6 +777,33 @@ mutation kind, provider action, digest or bundled guidance changes. MCP clients 
 prescription-analysis and compatibility reads and their native approval UI. See
 [Training proposal review](training-workspace.md#assistant-workout-proposal-review-training-11).
 
+### Explicit plan rest dates
+
+Additive `get_training_plan_rest_days` accepts one exact opaque plan reference with `training-plans:read`.
+The dedicated measured field mask returns schedule/plan revisions, plan range and a complete bounded date list;
+legacy absence returns `[]`. Internal IDs, neighboring provider fields and workout documents remain excluded.
+References remain owner/connection-bound and the normal state/grant/deletion/restore fences apply.
+
+Additive `preview_training_rest_days` also needs independent `training-plans:write`. It accepts exactly one
+`set-plan-rest-days` change with the opaque plan reference, expected plan/schedule revisions and complete replacement
+list (maximum 366 unique valid local dates inside the plan). The required strict `restDayReview` exposes the plan
+name/range and all before/after dates. It is schedule-only, with no provider previews or implicit workout deletion.
+Planned workouts in the same plan/date conflict; skipped/standalone/recorded activities remain independent.
+Normal native-approved idempotent `apply_training_changes` rechecks authority and revisions. The Assistant advertises
+only the focused preview and requires its app-owned complete review/Apply; no apply tool is available to the model.
+
+Rest-day reading guidance is available with `training-plans:read`; editing guidance names the preview only when
+`training-plans:write` is granted. Read-only and provider-delivery-only connections must not recommend the unavailable
+rest-day editing tool. This applies to both external clients and the built-in Assistant; it does not widen consent,
+tool registration, schemas or Apply authority.
+
+Unscheduled dates are not declared rest days. Daily suggestions read explicit intent separately and do not fill
+it automatically; missing reads remain unknown. Markers shift/restore with their plan but never count as workouts,
+change modeled metrics, grant sync consent or produce provider artifacts. No new scope or deployed Function is
+added. Registered plan and batch schemas, registered baseline and transition history remain frozen. The pending
+compatible digest, separately approved backend release, registered-app rescan/catalog refresh and bundled-plugin
+refresh follow the existing lifecycle; local implementation does not establish deployed-client availability.
+
 ### Authored plan phases (Training 12)
 
 The additive `get_training_plan_phases` reads one opaque owner/connection-bound plan reference under existing
@@ -1587,6 +1614,13 @@ plugin sync remain explicit lifecycle actions.
    document whenever the public contract moves.
 
 ## Sports Lib metric discovery
+
+Sports Lib 23.9.0 updates Suunto JSON/SML R–R-derived heart-rate filtering. Normal persisted HR values and bounded
+original-file chart/sample projections can reflect the new parser, without exposing filter state, raw intervals or
+new fields. FIT recorded HR and existing HRV/quality definitions remain unchanged. Numeric catalog membership, units,
+persisted-only availability, scopes, consent, strict outputs, planning/delivery contracts and registered schemas are
+unchanged; no registered-client refresh, contract promotion or plugin rebuild is required. Historical stored values
+change only through the separately authorized source-backed reparse lifecycle described in the runbook.
 
 Sports Lib 23.7.1 accepts 13-digit Unix-millisecond GPX point times and rejects invalid times before stream allocation.
 Existing bounded original-file chart/sample hydration uses this parser without changing metrics, units, output schemas,

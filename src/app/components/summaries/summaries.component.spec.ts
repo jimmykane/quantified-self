@@ -5,6 +5,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { provideRouter, Router, RouterModule } from '@angular/router';
 import { TimelineNotesWorkspaceComponent } from '../timeline-notes/timeline-notes-workspace.component';
 import { ActiveSicknessNoteComponent } from '../timeline-notes/active-sickness-note.component';
+import { CurrentPlanRestDayComponent } from '../plans/current-plan-rest-day.component';
 import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
 import { By } from '@angular/platform-browser';
 import { dashboardHrvWindows, type DashboardHrvContext } from '../../helpers/dashboard-hrv-context.helper';
@@ -198,11 +199,12 @@ describe('SummariesComponent', () => {
 
     await TestBed.configureTestingModule({
       declarations: [SummariesComponent, DashboardTileBoardComponent, DashboardTileCellComponent],
-      imports: [AppChartSharedModule, TimelineNotesWorkspaceComponent, ActiveSicknessNoteComponent, PageHeaderComponent, MetricIndicatorComponent, DashboardDailyBriefingComponent, MatMenuModule, MatProgressSpinnerModule, NoopAnimationsModule, RouterModule],
+      imports: [AppChartSharedModule, TimelineNotesWorkspaceComponent, ActiveSicknessNoteComponent, CurrentPlanRestDayComponent, PageHeaderComponent, MetricIndicatorComponent, DashboardDailyBriefingComponent, MatMenuModule, MatProgressSpinnerModule, NoopAnimationsModule, RouterModule],
       schemas: [NO_ERRORS_SCHEMA],
       providers: [provideRouter([]),
         { provide: ActivityCalendarService, useValue: { watchSummaryEvents: vi.fn(() => of({ events: [], complete: true })) } },
         { provide: TrainingPlansService, useValue: {
+          watchActivePlan: vi.fn(() => of(null)),
           watchCalendarSchedule: vi.fn(() => of({ state: { activePlanId: null }, workouts: [], plans: [], workoutsComplete: true })),
           watchWorkoutCompletionsForWorkouts: vi.fn(() => of([])),
         } },
@@ -2051,8 +2053,12 @@ describe('SummariesComponent', () => {
       expect(render().querySelector('.dashboard-readiness-primary-value')?.textContent).toContain('Awaiting today’s sleep');
       expect(render().querySelector('[label="Available readiness signals"]')).toBeNull();
       // Newly imported sleep continues updating the open dashboard.
+      const revision = component.morningWorkoutSleepRevision;
       sleep$.next(nights);
       vi.advanceTimersToNextFrame();
+      expect(component.morningWorkoutSleepRevision).toBe(revision + 1);
+      sleep$.next(nights);
+      expect(component.morningWorkoutSleepRevision).toBe(revision + 1);
       expect(component.dashboardTodayReadiness.score).toBe(67);
       expect(component.dashboardTodayReadiness.changeSignals.find(signal => signal.id === 'sleep')?.state).toBe('recorded');
     });

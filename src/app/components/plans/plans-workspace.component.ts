@@ -507,6 +507,8 @@ export class PlansWorkspaceComponent {
     uid: string;
     plan: TrainingPlanV1;
     state: CurrentTrainingScheduleV1['state'];
+    /** An edit acknowledgement must never reinsert a plan removed from the live schedule. */
+    existingPlanOnly?: true;
   } | null>(null);
 
   readonly planOptions = computed(() => {
@@ -514,6 +516,7 @@ export class PlansWorkspaceComponent {
     const acknowledged = this.acknowledgedPlan();
     if (!acknowledged || acknowledged.uid !== this.currentUser()?.uid) return plans;
     const current = plans.find(plan => plan.id === acknowledged.plan.id);
+    if (!current && acknowledged.existingPlanOnly) return plans;
     if (current && current.revision >= acknowledged.plan.revision) return plans;
     return current ? plans.map(plan => plan.id === acknowledged.plan.id ? acknowledged.plan : plan)
       : [...plans, acknowledged.plan];
@@ -574,6 +577,8 @@ export class PlansWorkspaceComponent {
     : this.currentWorkoutRows().filter(row => row.workout.localDate === this.planScheduleDate()));
   // Standalone defaults resolve at the actual click, even just after midnight before the clock ticks.
   readonly addWorkoutDate = computed(() => this.view() === 'plans' ? this.planScheduleDate() ?? undefined : undefined);
+  readonly selectedDayIsRest = computed(() => this.selectedPlan()?.restDays?.includes(this.planScheduleDate() ?? '') === true);
+  readonly selectedDayHasPlannedWorkout = computed(() => this.displayedWorkoutRows().some(row => row.workout.lifecycle === 'planned'));
   readonly deletedWorkoutRows = computed<WorkoutRow[]>(() => (this.deletedWorkoutPanel()?.workouts ?? []).map(workout => ({
     workout,
     mayHaveStrengthDetails: isStrengthWorkoutSportV1(workout.structure.sport),
@@ -667,11 +672,11 @@ export class PlansWorkspaceComponent {
   private readonly acknowledgedPlanEffect = effect(() => {
     const acknowledged = this.acknowledgedPlan();
     if (!acknowledged) return;
-    if (acknowledged.uid !== this.currentUser()?.uid || (
-      this.schedule().state.revision >= acknowledged.state.revision
-      && this.schedule().plans.some(plan => plan.id === acknowledged.plan.id
-        && plan.revision >= acknowledged.plan.revision)
-    )) {
+    const current = this.schedule().plans.find(plan => plan.id === acknowledged.plan.id);
+    if (acknowledged.uid !== this.currentUser()?.uid
+      || (acknowledged.existingPlanOnly && !current)
+      || (current && this.schedule().state.revision >= acknowledged.state.revision
+        && current.revision >= acknowledged.plan.revision)) {
       this.acknowledgedPlan.set(null);
     }
   });
@@ -988,6 +993,25 @@ export class PlansWorkspaceComponent {
       operation: { kind: 'set-plan-color', planId: plan.id, color },
     }, `color-${plan.id}`);
     if (response) this.snackBar.open('Plan color updated.', 'Dismiss', { duration: 3000 });
+  }
+
+  async toggleSelectedRestDay(): Promise<void> {
+    const plan = this.selectedPlan(), date = this.planScheduleDate();
+    const uid = this.currentUser()?.uid;
+    if (!plan || !date || !uid || this.busyAction() || !this.browsing()
+      || (!this.selectedDayIsRest() && this.selectedDayHasPlannedWorkout())) return;
+    const generation = this.editorGeneration, routeKey = trainingPlansRouteKey(uid, this.routeState());
+    const isCurrent = () => !this.destroyRef.destroyed && uid === this.currentUser()?.uid
+      && generation === this.editorGeneration && routeKey === trainingPlansRouteKey(uid, this.routeState());
+    const restDays = this.selectedDayIsRest() ? (plan.restDays ?? []).filter(value => value !== date)
+      : [...(plan.restDays ?? []), date].sort();
+    const response = await this.runMutation({ mutationId: this.plansService.createMutationId('set-plan-rest-days'),
+      expectedRevisions: this.expectedRevisions({ planIds: [plan.id], planRevisionOverrides: new Map([[plan.id, plan.revision]]) }),
+      operation: { kind: 'set-plan-rest-days', planId: plan.id, restDays } }, `rest-${plan.id}`, isCurrent, isCurrent);
+    if (!response || !isCurrent()) return;
+    const updatedPlan = response.plans.find(item => item.id === plan.id);
+    if (updatedPlan) this.acknowledgedPlan.set({ uid, plan: updatedPlan, state: response.state, existingPlanOnly: true });
+    this.snackBar.open(restDays.includes(date) ? 'Rest day added.' : 'Rest day removed.', 'Dismiss', { duration: 3000 });
   }
 
   async renamePlan(plan: TrainingPlanV1): Promise<void> {
@@ -1434,6 +1458,8 @@ export class PlansWorkspaceComponent {
 
   private advanceEditorGeneration(): void {
     this.editorGeneration += 1;
+    // The old rest save no longer owns this view; its completion must not clear a new action.
+    if (this.busyAction()?.startsWith('rest-')) this.busyAction.set(null);
     this.generatedSaveRequest = null;
     this.editorProfileSelection.set(null);
     this.editorDrag = null;
@@ -2202,11 +2228,13 @@ export class PlansWorkspaceComponent {
     request: MutateTrainingScheduleRequestV1,
     action: string,
     feedbackAllowed: () => boolean = () => true,
+    canExecute?: () => boolean,
   ): Promise<MutateTrainingScheduleResponseV1 | null> {
+    const executionGuard = canExecute ?? (this.generatedSaveRequest?.mutationId === request.mutationId ? feedbackAllowed : undefined);
     this.busyAction.set(action);
     try {
       const response = await this.plansService.mutate(request,
-        ...(this.generatedSaveRequest?.mutationId === request.mutationId ? [feedbackAllowed] : []));
+        ...(executionGuard ? [executionGuard] : []));
       if (feedbackAllowed()) this.haptics.success();
       return response;
     } catch (error) {
@@ -2227,7 +2255,7 @@ export class PlansWorkspaceComponent {
             } as MutateTrainingScheduleRequestV1;
             if (this.generatedSaveRequest?.mutationId === request.mutationId) this.generatedSaveRequest = extendedRequest;
             const response = await this.plansService.mutate(extendedRequest,
-              ...(this.generatedSaveRequest?.mutationId === request.mutationId ? [feedbackAllowed] : []));
+              ...(executionGuard ? [executionGuard] : []));
             if (feedbackAllowed()) this.haptics.success();
             return response;
           } catch (retryError) {
@@ -2240,7 +2268,7 @@ export class PlansWorkspaceComponent {
       this.showError(error);
       return null;
     } finally {
-      this.busyAction.set(null);
+      if (!canExecute || canExecute()) this.busyAction.set(null);
     }
   }
 

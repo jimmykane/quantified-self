@@ -4,10 +4,11 @@ import { DataFeeling, DataRPE } from '@sports-alliance/sports-lib';
 import { dayWorkoutDateOffset, dayWorkoutLocalDate, dayWorkoutReadinessSourcesEnabled, type DayWorkoutControls } from '../../../shared/day-workout';
 import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
 import { parseWorkoutStructureV1, type WorkoutTargetV1 } from '../../../shared/planned-workout';
-import { parseTrainingPlanPhasesV1 } from '../../../shared/training-plans';
+import { parseTrainingPlanPhasesV1, parseTrainingPlanRestDays, normalizeTrainingLocalDate, validateTrainingPlanDateRange } from '../../../shared/training-plans';
 import { isStrengthWorkoutSportV1, parseStrengthWorkoutDetailsV1, strengthProjectionMatchesDetails } from '../../../shared/strength-workout';
 import { createFirestoreTrainingReads } from '../mcp/training-plans.service';
 import { collectDailyWorkoutContext } from './daily-workout-context';
+import { readDayWorkoutRoutine } from './day-workout-routine';
 import type { AssistantMcpSession, AssistantMcpToolName } from './mcp-session';
 import type { PreviousStrengthPrescription } from './day-workout-validation';
 
@@ -23,6 +24,7 @@ function datedMetric(value: RecordValue, timeZone: string): RecordValue {
   }) } };
 }
 export interface DayWorkoutContext {
+  plannedRestDay?: { localDate: string; planName: string };
   evidence: RecordValue;
   usedContext: string[];
   missingContext: string[];
@@ -30,6 +32,7 @@ export interface DayWorkoutContext {
   references: WorkoutTargetV1[];
 }
 export interface DayWorkoutTrainingContext {
+  plannedRestDay?: { localDate: string; planName: string };
   scheduleRevision: number;
   nearby: RecordValue[];
   phase: unknown;
@@ -104,7 +107,21 @@ export async function readDayWorkoutTrainingContext(uid: string, controls: DayWo
       phase = { planName: plan.data.name, lifecycle: plan.data.lifecycle,
         phase: phases.items.find(item => controls.localDate >= item.startLocalDate && controls.localDate <= item.endLocalDate) ?? null };
     }
-    return { nearby, phase, previousStrength, references };
+    let plannedRestDay: DayWorkoutTrainingContext['plannedRestDay'];
+    const restPlanId = controls.destinationPlanId ?? before.activePlanId;
+    if (restPlanId) {
+      const plan = await view.getPlanRestDays!(restPlanId);
+      if (!plan || !['active', 'paused'].includes(String(plan.data.lifecycle))) throw new Error('The selected plan is unavailable.');
+      const start = normalizeTrainingLocalDate(plan.data.startLocalDate), end = normalizeTrainingLocalDate(plan.data.endLocalDate);
+      validateTrainingPlanDateRange(start, end);
+      const restDays = parseTrainingPlanRestDays(plan.data.restDays ?? []);
+      if (restDays.some(date => date < start || date > end) || typeof plan.data.name !== 'string'
+        || !plan.data.name.trim() || plan.data.name.length > 120) throw new Error('The selected plan is invalid.');
+      if (restDays.includes(controls.localDate)) {
+        plannedRestDay = { localDate: controls.localDate, planName: plan.data.name };
+      }
+    }
+    return { nearby, phase, previousStrength, references, ...(plannedRestDay ? { plannedRestDay } : {}) };
   });
   const after = await reads.state(uid, identity);
   if (before.revision !== after.revision || before.activePlanId !== after.activePlanId) throw new Error('The schedule changed. Generate again.');
@@ -144,7 +161,8 @@ export async function collectDayWorkoutContext(controls: DayWorkoutControls, now
   };
   const read = async (name: AssistantMcpToolName, input: RecordValue): Promise<RecordValue> => {
     if (name === 'query_timeline_notes' && !controls.timelineContext) throw new Error('Timeline context is disabled.');
-    if ((name === 'query_activities' || name === 'query_metric') && controls.activityContext === false) return {};
+    // The generator's sport-specific routine replaces the old all-sport recording-day buckets.
+    if (name === 'query_metric' || name === 'query_activities' && controls.activityContext === false) return {};
     if (name === 'prepare_training_metrics') {
       const metricKinds = [
         ...(controls.freshnessContext !== false ? [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.FormNow, DERIVED_METRIC_KINDS.RampRate] : []),
@@ -160,7 +178,7 @@ export async function collectDayWorkoutContext(controls: DayWorkoutControls, now
       if (name === 'get_daily_report') return selectReport(value);
       if (name === 'prepare_training_metrics') return { ...value,
         readyMetricKinds: Array.isArray(value.readyMetricKinds) ? value.readyMetricKinds.filter(kind => (input.metricKinds as unknown[]).includes(kind)) : [] };
-      return name === 'query_metric' ? datedMetric(value, controls.timeZone) : value;
+      return value;
     }
     catch (error) {
       if (['query_planned_workouts_by_date', 'get_planned_workout_completions'].includes(name)) throw error;
@@ -219,6 +237,7 @@ export async function collectDayWorkoutContext(controls: DayWorkoutControls, now
     training = await readTraining();
     if (training.scheduleRevision !== daily.plannedWorkouts.scheduleRevision) throw new Error('The schedule changed. Generate again.');
     usedContext.push('Selected-day schedule and completion links; nearby sessions within seven days');
+    if (training.plannedRestDay) usedContext.push('Authored rest day in the selected plan');
     if (training.phase) usedContext.push('Selected plan and phase');
     if (training.previousStrength.length) usedContext.push('Up to five previous planned strength prescriptions');
     missingContext.push(...training.missing);
@@ -239,10 +258,23 @@ export async function collectDayWorkoutContext(controls: DayWorkoutControls, now
     usedContext.push('Existing recording-level Feeling/RPE ranges; imported and QS-edited values are not distinguished');
   } else missingContext.push('No usable existing Feeling/RPE feedback was found.');
   const selectedDaily: RecordValue = { ...daily };
-  if (controls.activityContext === false) { delete selectedDaily.weekdayConsistency; delete selectedDaily.activitiesToday; }
+  delete selectedDaily.weekdayConsistency;
+  if (controls.activityContext === false) delete selectedDaily.activitiesToday;
+  if (controls.activityContext !== false && controls.routineContext !== false) {
+    const routine = await readDayWorkoutRoutine(controls, now,
+      async input => (await session.callTool('query_activities', input)).structuredContent);
+    if (routine) {
+      selectedDaily.trainingRoutine = routine;
+      if (routine.recordedDayCount > 0) usedContext.push('Recorded ' + routine.sport + ' on ' + routine.recordedDayCount + ' of the previous '
+        + routine.weekdayOpportunities + ' ' + routine.weekday + 's');
+      if (routine.status === 'insufficient') missingContext.push('Training routine: too few matching recorded days to establish a usual pattern.');
+      if (routine.typicalDurationSeconds === null) missingContext.push('Training routine: usual session duration is unknown.');
+    } else missingContext.push('Training routine could not be checked completely; no weekday habit was inferred.');
+  } else missingContext.push('Training routine: turned off (requires Recent activities).');
   const evidence: RecordValue = { daily: selectedDaily, ...(controls.feedbackContext !== false ? { feedback } : {}), nearby: training?.nearby ?? null, phase: training?.phase ?? null,
     previousStrength: training?.previousStrength ?? [], references: training?.references ?? [] };
   if (JSON.stringify(evidence).length > 160_000) throw new Error('The context exceeds the safe generation limit. Try a simpler selection.');
   return { evidence, usedContext, missingContext: [...new Set(missingContext)],
+    ...(training?.plannedRestDay ? { plannedRestDay: training.plannedRestDay } : {}),
     previousStrength: training?.previousStrength ?? [], references: training?.references ?? [] };
 }

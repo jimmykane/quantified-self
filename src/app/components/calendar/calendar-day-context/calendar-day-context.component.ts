@@ -36,6 +36,7 @@ import { buildTrainingDayImpactView, buildTrainingSessionImpactView } from '../.
 import type { TrainingImpactSnapshotState } from '../../../services/training-impact.service';
 import { buildCalendarPlanPhases } from '../../../helpers/training-plan-phases.helper';
 import { CalendarActivityTagsComponent } from '../calendar-activity-tags/calendar-activity-tags.component';
+import { buildPlannedWorkoutCalendarOverlay } from '../../../helpers/planned-workout-calendar.helper';
 
 interface HealthState {
   status: 'loading' | 'ready' | 'private' | 'hidden';
@@ -133,6 +134,7 @@ export class CalendarDayContextComponent {
     && this.notesStatus() === 'ready'
     && this.noteRows().length === 0
     && !this.planPhase()
+    && !this.plannedRestDay()
     && (!this.canPlan() || (this.plannedWorkoutsComplete() && this.plannedRows().length === 0)));
   readonly previewActivities = computed(() => this.calmMonth() ? this.activities() : this.activities().slice(0, 2));
   readonly previewNotes = computed(() => this.calmMonth() ? this.noteRows() : this.noteRows().slice(0, 2));
@@ -142,6 +144,11 @@ export class CalendarDayContextComponent {
     if (!this.canPlan() || this.plannedStatus() !== 'ready') return null;
     const schedule = this.data().scheduleSource?.();
     return schedule ? buildCalendarPlanPhases(schedule.plans, schedule.state.activePlanId)[this.data().day.dateKey] ?? null : null;
+  });
+  readonly plannedRestDay = computed(() => {
+    if (!this.canPlan() || this.plannedStatus() !== 'ready') return null;
+    const schedule = this.data().scheduleSource?.();
+    return schedule ? buildPlannedWorkoutCalendarOverlay([], schedule.plans, schedule.state.activePlanId)[this.data().day.dateKey]?.restDay ?? null : null;
   });
   readonly healthState = signal<HealthState>({ status: 'loading', dateKey: null, ownerUid: null, summary: null, sleepPoint: null });
   readonly sleepFacts = computed(() => {
@@ -265,6 +272,13 @@ export class CalendarDayContextComponent {
     if (!this.canPlan()) return;
     this.prepareNavigation();
     void this.dayWorkouts.open(this.data().userId, this.data().day.dateKey, this.plannedWorkouts()[0]?.workout.structure.sport);
+  }
+
+  openRestDayPlan(): void {
+    const rest = this.plannedRestDay();
+    if (!this.canPlan() || !rest) return;
+    this.prepareNavigation();
+    void this.router.navigate(['/training/plans/plan', rest.planId], { queryParams: { date: this.data().day.dateKey } });
   }
 
   prepareNavigation(): void {

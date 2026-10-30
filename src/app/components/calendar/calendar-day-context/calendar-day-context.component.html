@@ -15,8 +15,12 @@
 
   <mat-menu #addDayWorkoutMenu="matMenu" class="qs-menu-panel">
     @if (canPlan()) {
-      <a mat-menu-item appHapticTap [routerLink]="['/training/plans/new']"
-        [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Plan workout</a>
+      @if (plannedRestDay()) {
+        <button mat-menu-item appHapticTap type="button" (click)="openRestDayPlan()">Manage rest day</button>
+      } @else {
+        <a mat-menu-item appHapticTap [routerLink]="['/training/plans/new']"
+          [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Plan workout</a>
+      }
       <a mat-menu-item appHapticTap [routerLink]="['/training/plans/standalone/new']"
         [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Standalone workout</a>
       <a mat-menu-item appHapticTap [routerLink]="['/training/plans/library']"
@@ -43,6 +47,12 @@
       <div class="calendar-day-context-loading-timeline" aria-hidden="true"></div>
     </div>
   } @else {
+  @if (plannedRestDay(); as rest) {
+    <section class="calendar-day-phase" aria-label="Planned rest day">
+      <p class="calendar-day-entry-title">Rest day</p>
+      <button mat-button appHapticTap type="button" (click)="openRestDayPlan()" aria-label="Manage this rest day in Plans">{{ rest.planName }} · Manage in Plans</button>
+    </section>
+  }
   @if (planPhase(); as context) {
     <section class="calendar-day-phase" aria-label="Plan phase">
       <p class="calendar-day-entry-title">Phase: {{ context.phase.name }}</p>

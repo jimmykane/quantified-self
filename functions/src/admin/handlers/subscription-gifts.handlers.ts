@@ -1058,7 +1058,7 @@ async function runGiftNotificationTransaction(
             transaction.create(nextMailRef, {
                 ...newEmailDeliveryFields(),
                 to: resolution.recipient,
-                toUids: [uid],
+                uid,
                 from: TRANSACTIONAL_EMAIL_FROM,
                 replyTo: TRANSACTIONAL_EMAIL_REPLY_TO,
                 template: {

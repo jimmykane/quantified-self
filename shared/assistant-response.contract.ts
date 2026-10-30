@@ -1,6 +1,6 @@
 import { validateReflectionFields } from './workout-reflection';
 import { isAssistantWorkoutReviews } from './assistant-workout-review';
-import { parseTrainingPlanPhaseReviewV1 } from './training-plans';
+import { parseTrainingPlanPhaseReviewV1, parseTrainingPlanRestDayReview } from './training-plans';
 import {
   ASSISTANT_CONVERSATION_VERSION,
   ASSISTANT_MAX_EVIDENCE_ITEMS,
@@ -124,7 +124,7 @@ function isFiniteNumber(value: unknown): value is number {
 export function isAssistantTrainingProposal(value: unknown): value is AssistantTrainingProposalPreview {
   if (!isRecord(value)
     || !hasOnlyKeys(value, ['proposalRef', 'permissionMode', 'expiresAtMs', 'scheduleRevision', 'summary',
-      'requiresConfirmation', 'changes', 'providerPreviews', 'workoutReviews', 'phaseReview'])
+      'requiresConfirmation', 'changes', 'providerPreviews', 'workoutReviews', 'phaseReview', 'restDayReview'])
     || !isBoundedString(value.proposalRef, 1, 2048)
     || !['schedule', 'delivery', 'combined'].includes(`${value.permissionMode}`)
     || !Number.isSafeInteger(value.expiresAtMs) || Number(value.expiresAtMs) < 0
@@ -159,6 +159,11 @@ export function isAssistantTrainingProposal(value: unknown): value is AssistantT
   if (value.workoutReviews !== undefined && (!isAssistantWorkoutReviews(value.workoutReviews)
     || value.workoutReviews.some(review => !changeIndices.has(review.index)))) return false;
   const phases = value.changes.some(change => isRecord(change) && change.kind === 'set-plan-phases');
+  const restDays = value.changes.some(change => isRecord(change) && change.kind === 'set-plan-rest-days');
+  if (restDays || value.restDayReview !== undefined) {
+    if (!restDays || value.permissionMode !== 'schedule' || value.changes.length !== 1 || value.changes[0].index !== 0 || value.providerPreviews.length !== 0) return false;
+    try { parseTrainingPlanRestDayReview(value.restDayReview); } catch { return false; }
+  }
   if (phases || value.phaseReview !== undefined) {
     if (!phases || value.permissionMode !== 'schedule' || value.changes.length !== 1 || value.changes[0].index !== 0 || value.providerPreviews.length !== 0) return false;
     try { parseTrainingPlanPhaseReviewV1(value.phaseReview); } catch { return false; }

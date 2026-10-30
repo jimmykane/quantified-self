@@ -1,8 +1,11 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import { z } from 'zod';
+import { GenkitError } from 'genkit';
+import type { ModelMiddleware } from 'genkit/model';
+import { ValidationError as GenkitValidationError } from 'genkit/schema';
 import { WorkoutStructureValidationError } from '../../../shared/planned-workout';
-import { isStrengthWorkoutSportV1 } from '../../../shared/strength-workout';
+import { isStrengthWorkoutSportV1, StrengthWorkoutValidationError } from '../../../shared/strength-workout';
 import { TRAINING_RECIPE_WITH_POOL_SCHEMA, TRAINING_STRENGTH_DRAFT_SCHEMA } from '../mcp/training-plans.schemas';
 import { parseGenerateDayWorkoutRequest, type GenerateDayWorkoutRequest, type GenerateDayWorkoutResponse } from '../../../shared/day-workout';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
@@ -33,7 +36,7 @@ Use only enabled context controls. A false signal choice excludes that source; n
 Personalize intensity, volume and the choice of workout or rest using evidence.daily: current freshness (Form) and ramp rate in dailyReport.readiness.drivers.load, sleep duration/quality and comparison in dailyReport.sleep, HRV personalRange and overnightHeartRate in readiness.drivers, readiness score/confidence, trainingSnapshots and dailyReport.trainingSummary, weekday pattern and activities already completed today. These core signals apply even when optional Training-plan or Timeline context is off.
 Use the current daily-report load values for freshness and ramp rate; historical snapshots are dated history, not a substitute for an unavailable current value. Readiness summarizes its drivers: do not count the score as independent evidence on top of those same drivers. Interpret HRV against the supplied personal range and reason, never assume higher is always better. A building baseline or insufficient current observations cannot establish normal or abnormal HRV. Respect missing baselines and readiness confidence.
 Use the selected sport's recorded per-session duration/load where available to judge the proposed session. Available minutes are a time budget, not a requirement to fill it; explain a shorter/easier session or rest using the available recovery and training evidence. Briefly name the signals that materially affected the choice and any important missing evidence; do not claim an unavailable signal was considered or invent a usual-session baseline.
-Readiness is observed now, not a forecast for a future date. For a future workout, make intensity conditional on rechecking recovery closer to that day. Missing evidence is unknown, not zero, missed training or poor adherence. Weekday recording counts are descriptive only.
+Readiness is observed now, not a forecast for a future date. For a future workout, make intensity conditional on rechecking recovery closer to that day. Missing evidence is unknown, not zero, missed training or poor adherence. Weekday recording counts are descriptive only. When evidence.daily.trainingRoutine is present, use its selected-sport weekday frequency and typicalDurationSeconds as descriptive preference context. The window covers the previous 28 complete local days, excluding today. A matching recorded habit can guide the session's character and duration within the explicit time budget; it cannot change the selected sport/equipment/purpose or outweigh current recovery and existing scheduled sessions. status insufficient is too little evidence to call a routine, and null duration is unknown. Missing dates do not prove missed sessions, punctuality, gym attendance or adherence. Do not infer a usual start time or location.
 Use existing recording-level Feeling/RPE as context, never invent feedback or claim it was entered in QS. Ended notes are historical; upcoming notes are not current illness.
 Respect existing scheduled sessions and linked completions; a suggestion is an additional workout, never a replacement. Rest may be appropriate. Purpose recovery requests a gentle alternative when reasonable.
 Return only JSON: {kind:'rest',rationale:string}, or {kind:'workout',title:string,rationale:string,structure:WorkoutStructureV1} for endurance. Endurance must omit strength and estimatedMinutes entirely, including null placeholders. Its duration is derived from the structure.
@@ -45,7 +48,7 @@ Use only selected equipment, name equipment explicitly where it distinguishes an
 Keep rationale under 1200 characters and title under 120. Use a short explanation of the choice and its limits, no diagnosis or invented data.`;
 
 export async function generateDayWorkoutSuggestion(request: GenerateDayWorkoutRequest, context: DayWorkoutContext,
-  correction?: string): Promise<unknown> {
+  correction?: string, onUsage?: (usage: { inputTokens: number; outputTokens: number; thoughtsTokens: number; available: boolean }) => void): Promise<unknown> {
   const { destinationPlanId: _destination, ...controls } = request.controls;
   const rationale = z.string().min(1).max(1200);
   const workout = { kind: z.literal('workout'), title: z.string().min(1).max(120), rationale };
@@ -58,20 +61,74 @@ export async function generateDayWorkoutSuggestion(request: GenerateDayWorkoutRe
         ...TRAINING_RECIPE_WITH_POOL_SCHEMA.shape, sport: z.literal(controls.sport),
       }) }),
   ]);
-  const response = await assistantGenkit.generate({ system: DAY_WORKOUT_SYSTEM,
-    prompt: JSON.stringify({ controls, evidence: context.evidence, missingContext: context.missingContext,
-      ...(correction ? { correction } : {}) }),
-    output: { format: 'json', jsonSchema: z.toJSONSchema(schema, { target: 'draft-7', override: ({ jsonSchema }) => {
-      // Nested repetition/target bounds exceed Gemini's decoder complexity limit. Constrain the shape here;
-      // validateDayWorkoutSuggestion and the canonical parsers still enforce every value and size limit.
-      for (const key of ['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum',
-        'minItems', 'maxItems', 'minLength', 'maxLength', 'pattern'] as const) delete jsonSchema[key];
-    } }) },
-    config: { maxOutputTokens: 8192 } });
-  return response.output;
+  let modelResponded = false;
+  const observeResponse: ModelMiddleware = async (input, next) => {
+    const result = await next(input);
+    modelResponded = true;
+    const usage = result.usage;
+    const valid = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+    const tokens = (value: unknown) => valid(value) ? value : 0;
+    try { onUsage?.({ available: valid(usage?.inputTokens) && valid(usage?.outputTokens)
+      && (usage?.thoughtsTokens === undefined || valid(usage.thoughtsTokens)),
+      inputTokens: tokens(usage?.inputTokens), outputTokens: tokens(usage?.outputTokens), thoughtsTokens: tokens(usage?.thoughtsTokens) }); }
+    catch { /* Telemetry cannot turn a valid provider response into another model attempt. */ }
+    return result;
+  };
+  try {
+    const response = await assistantGenkit.generate({ system: DAY_WORKOUT_SYSTEM,
+      prompt: JSON.stringify({ controls, evidence: context.evidence, missingContext: context.missingContext,
+        ...(correction ? { correction } : {}) }),
+      output: { format: 'json', jsonSchema: z.toJSONSchema(schema, { target: 'draft-7', override: ({ jsonSchema }) => {
+        // Nested repetition/target bounds exceed Gemini's decoder complexity limit. Constrain the shape here;
+        // validateDayWorkoutSuggestion and the canonical parsers still enforce every value and size limit.
+        for (const key of ['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum',
+          'minItems', 'maxItems', 'minLength', 'maxLength', 'pattern'] as const) delete jsonSchema[key];
+      } }) },
+      use: [observeResponse],
+      config: { maxOutputTokens: 8192 } });
+    return response.output;
+  } catch (error) {
+    // Genkit's mixed ESM/CJS exports can hold distinct ValidationError constructors with the same base.
+    const schemaFailure = error instanceof GenkitValidationError || error instanceof GenkitError
+      && error.status === 'INVALID_ARGUMENT' && error.constructor.name === GenkitValidationError.name;
+    // Only parsing/validation after a provider response is a correctable prescription failure.
+    if (modelResponded && (schemaFailure || error instanceof SyntaxError)) {
+      throw new DayWorkoutSuggestionValidationError('Invalid prescription schema.');
+    }
+    throw error;
+  }
 }
 
-const defaults: DayWorkoutDependencies = {
+/** Shared bounded correction/validation path for manual and included morning suggestions. */
+export async function generateValidatedDayWorkout(request: GenerateDayWorkoutRequest, evidence: DayWorkoutContext,
+  generate: DayWorkoutDependencies['generate'], assertActive: () => Promise<void>) {
+  let suggestion;
+  let correction: string | undefined;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const generated = await generate(request, evidence, correction);
+      await assertActive();
+      suggestion = validateDayWorkoutSuggestion(generated, request.controls, evidence.previousStrength, evidence.references);
+      break;
+    } catch (error) {
+      // The generator normalizes SDK output failures. Provider/auth errors and stale requests leave immediately.
+      if (!(error instanceof DayWorkoutSuggestionValidationError
+        || error instanceof WorkoutStructureValidationError || error instanceof StrengthWorkoutValidationError)) throw error;
+      await assertActive();
+      logger.warn('[DayWorkout] Invalid model prescription.', {
+        attempt: attempt + 1,
+        errorName: error instanceof Error ? error.name : 'unknown',
+        validationReason: error instanceof DayWorkoutSuggestionValidationError ? error.message : 'Invalid prescription schema.',
+        issueCodes: error instanceof WorkoutStructureValidationError ? [...new Set(error.issues.map(issue => issue.code))] : [],
+      });
+      correction = `${error instanceof DayWorkoutSuggestionValidationError ? error.message : 'Invalid prescription schema.'} The previous response failed strict prescription validation. Return a complete valid JSON prescription matching the schema and every selected constraint; omit targets without available references and omit all external loads.`;
+    }
+  }
+  if (!suggestion) throw new HttpsError('failed-precondition', 'AI could not produce a valid prescription. Generate again or use the manual editor.');
+  return suggestion;
+}
+
+export const dayWorkoutDependencies: DayWorkoutDependencies = {
   store: createDayWorkoutStore(), now: () => new Date(), legal: assertAssistantLegalAccess,
   reserve: reserveAssistantQuotaForRequest, finalize: finalizeAssistantQuotaReservation, release: releaseAssistantQuotaReservation,
   context: async (uid, request, now) => {
@@ -84,7 +141,7 @@ const defaults: DayWorkoutDependencies = {
   generate: generateDayWorkoutSuggestion,
 };
 export async function runGenerateDayWorkout(value: unknown, context: { auth?: { uid: string } | null; app?: unknown },
-  dependencies: DayWorkoutDependencies = defaults): Promise<GenerateDayWorkoutResponse> {
+  dependencies: DayWorkoutDependencies = dayWorkoutDependencies): Promise<GenerateDayWorkoutResponse> {
   if (!context.auth?.uid) throw new HttpsError('unauthenticated', 'Sign in to generate a workout.');
   enforceAppCheck(context);
   let request: GenerateDayWorkoutRequest;
@@ -102,27 +159,25 @@ export async function runGenerateDayWorkout(value: unknown, context: { auth?: { 
     reservation = await dependencies.reserve(uid);
     const evidence = await dependencies.context(uid, request, now);
     await dependencies.store.assertActive(uid, request.requestId, started.token);
+    if (request.controls.trainingContext && evidence.plannedRestDay?.localDate === request.controls.localDate) {
+      // Authored intent is deterministic, not an AI assessment. No model request or quota charge.
+      const suggestion = validateDayWorkoutSuggestion({ kind: 'rest',
+        rationale: `This date is a planned rest day in ${evidence.plannedRestDay.planName}. Remove the rest day in Plans before adding a workout to that plan.`,
+      }, request.controls, evidence.previousStrength, evidence.references);
+      await dependencies.release(reservation);
+      reservation = undefined;
+      const response: GenerateDayWorkoutResponse = { requestId: request.requestId, observedAt: now.toISOString(),
+        ...suggestion, usedContext: evidence.usedContext, missingContext: evidence.missingContext };
+      await dependencies.store.assertActive(uid, request.requestId, started.token);
+      await dependencies.store.finish(uid, request.requestId, started.token, response);
+      return response;
+    }
     // Charge once before the first model attempt, including failed model attempts, as in Assistant chat.
     await dependencies.finalize(reservation);
     billable = true;
     stage = 'model';
-    let suggestion;
-    let correction: string | undefined;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      const generated = await dependencies.generate(request, evidence, correction);
-      await dependencies.store.assertActive(uid, request.requestId, started.token);
-      try { suggestion = validateDayWorkoutSuggestion(generated, request.controls, evidence.previousStrength, evidence.references); break; }
-      catch (error) {
-        logger.warn('[DayWorkout] Invalid model prescription.', {
-          attempt: attempt + 1,
-          errorName: error instanceof Error ? error.name : 'unknown',
-          validationReason: error instanceof DayWorkoutSuggestionValidationError ? error.message : 'Invalid prescription schema.',
-          issueCodes: error instanceof WorkoutStructureValidationError ? [...new Set(error.issues.map(issue => issue.code))] : [],
-        });
-        correction = `${error instanceof DayWorkoutSuggestionValidationError ? error.message : 'Invalid prescription schema.'} The previous response failed strict prescription validation. Return a complete valid JSON prescription matching the schema and every selected constraint; omit targets without available references and omit all external loads.`;
-      }
-    }
-    if (!suggestion) throw new HttpsError('failed-precondition', 'AI could not produce a valid prescription. Generate again or use the manual editor.');
+    const suggestion = await generateValidatedDayWorkout(request, evidence, dependencies.generate,
+      () => dependencies.store.assertActive(uid, request.requestId, started.token));
     const response: GenerateDayWorkoutResponse = { requestId: request.requestId, observedAt: now.toISOString(), ...suggestion,
       usedContext: evidence.usedContext, missingContext: evidence.missingContext };
     stage = 'save-result';
@@ -147,4 +202,10 @@ export const GENERATE_DAY_WORKOUT_OPTIONS = {
   region: FUNCTIONS_MANIFEST.generateDayWorkout.region, secrets: FUNCTION_SECRET_BINDINGS.generateDayWorkout,
   cors: ALLOWED_CORS_ORIGINS, enforceAppCheck: true, memory: '2GiB' as const, timeoutSeconds: 180, concurrency: 10, maxInstances: 10,
 };
-export const generateDayWorkout = onCall(GENERATE_DAY_WORKOUT_OPTIONS, request => runGenerateDayWorkout(request.data, request));
+export const generateDayWorkout = onCall(GENERATE_DAY_WORKOUT_OPTIONS, async request => {
+  if (request.data?.mode === 'morning') {
+    const { runMorningWorkout } = await import('./morning-workout');
+    return runMorningWorkout(request.data, request);
+  }
+  return runGenerateDayWorkout(request.data, request);
+});

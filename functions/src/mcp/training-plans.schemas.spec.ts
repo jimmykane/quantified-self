@@ -33,6 +33,28 @@ vi.unmock('@sports-alliance/sports-lib');
 const recipe = (ending: WorkoutEndingV1, targets: WorkoutTargetV1[] = []): WorkoutStructureV1 => ({ version: 1, sport: ActivityTypes.Running,
   nodes: [{ kind: 'step', id: 'step-1', purpose: 'work', ending, targets, note: '夜の練習 🏃\nPrivate context' }] });
 
+describe('additive plan rest-day contract', () => {
+  const change = { kind: 'set-plan-rest-days', plan: { ref: 'owner-bound-ref' }, expectedPlanRevision: 2, restDays: ['2026-10-30'] };
+  const preview = { proposalRef: 'opaque-proposal', expiresAtMs: 1000, permissionMode: 'schedule', scheduleRevision: 2,
+    requiresConfirmation: true, summary: 'Review explicit rest days.', changes: [{ index: 0, kind: 'set-plan-rest-days', summary: 'Replace rest dates.' }],
+    providerPreviews: [], restDayReview: { planName: 'Autumn', startDate: '2026-10-01', endDate: '2026-10-31', before: [], after: ['2026-10-30'] } };
+  it('requires exact bounded dates and the full review without widening legacy tools', () => {
+    expect(TRAINING_WRITE_INPUTS.preview_training_rest_days.parse({ expectedScheduleRevision: 2, change }).change).toEqual(change);
+    expect(TRAINING_WRITE_OUTPUTS.preview_training_rest_days.parse(preview)).toEqual(preview);
+    expect(TRAINING_ASSISTANT_PREVIEW_OUTPUT.parse(preview)).toEqual(preview);
+    expect(TRAINING_CHANGE_SCHEMA.safeParse(change).success).toBe(false);
+    expect(TRAINING_WRITE_OUTPUTS.preview_training_changes.safeParse(preview).success).toBe(false);
+    for (const restDays of [['2026-02-30'], ['2026-10-30', '2026-10-30'], Array(367).fill('2026-10-30')]) {
+      expect(TRAINING_WRITE_INPUTS.preview_training_rest_days.safeParse({ expectedScheduleRevision: 2, change: { ...change, restDays } }).success).toBe(false);
+    }
+    for (const invalid of [{ ...preview, restDayReview: undefined }, { ...preview, permissionMode: 'delivery' },
+      { ...preview, restDayReview: { ...preview.restDayReview, after: ['2026-11-01'] } },
+      { ...preview, restDayReview: { ...preview.restDayReview, providerId: 'private-rest-canary' } }]) {
+      expect(TRAINING_ASSISTANT_PREVIEW_OUTPUT.safeParse(invalid).success).toBe(false);
+    }
+  });
+});
+
 const endingFixtures = {
   time: { kind: 'time', seconds: 60 },
   distance: { kind: 'distance', meters: 1000 },

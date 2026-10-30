@@ -1,4 +1,4 @@
-<h2 mat-dialog-title>{{ result() ? 'Review workout' : 'Generate a workout' }}</h2>
+<h2 mat-dialog-title>{{ data.mode === 'preferences' ? 'Morning workout' : result() ? 'Review workout' : 'Generate a workout' }}</h2>
 <mat-dialog-content>
   <div class="review-destination">
     <p>{{ controls().localDate | date:'EEE, MMM d, y' }}@if (result()) { · {{ selectedPlan()?.name ?? 'Standalone' }} · {{ controls().sport }} }</p>
@@ -9,7 +9,12 @@
       </button>
     }
   </div>
-  @if (!result()) { <p class="hint">Review before adding. Uses your Assistant allowance.</p> }
+  @if (data.mode === 'preferences') {
+    <p class="hint">One included suggestion on your first morning visit to Today, 5 am–noon in {{ timeZone }}. Review before adding; nothing is saved automatically.</p>
+    <mat-checkbox [checked]="followRoutine()" [disabled]="!!busy()" (change)="followRoutine.set($event.checked); haptics.selection()">Choose sport from my recorded weekday routine</mat-checkbox>
+    <p class="hint">The selected sport is used when there is no clear routine. Training plans and Recent activities stay on to check whether today is already covered.</p>
+  } @else if (!result()) { <p class="hint">Review before adding. Uses your Assistant allowance.</p> }
+  @if (result()?.requestId === data.initialResult?.requestId && result()) { <p class="hint">Included morning suggestion · Assistant allowance unchanged. Additional generation uses your Assistant allowance.</p> }
   <fieldset id="day-workout-settings" [hidden]="!!result() && !showSettings()" [disabled]="!!busy() || saveUncertain()">
     <div class="controls-grid">
       <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Time available</mat-label>
@@ -36,6 +41,7 @@
             [disabled]="!!busy() || saveUncertain() || choice.disabled">{{ choice.label }}</mat-checkbox>
         }
       </div>
+      @if (controls().activityContext === false) { <p class="hint">Training routine requires Recent activities.</p> }
       @if (!readinessSourcesEnabled()) { <p class="hint">Readiness combines freshness, HRV, sleep and overnight heart rate. Enable all four to include it.</p> }
     </div>
     <button mat-button appHapticTap type="button" [attr.aria-expanded]="more()" aria-controls="day-workout-more" (click)="more.set(!more())">
@@ -50,6 +56,7 @@
       @if (!strength()) { <p class="hint">Targets need saved athlete references. Strict timing includes all steps.</p> }
     </div>
   </fieldset>
+  @if (data.mode !== 'preferences') {
   @if (scheduleFailed()) {
     <p role="alert">Your schedule could not be loaded.</p><button mat-button appHapticTap (click)="loadSchedule()">Reload schedule</button>
   } @else if (!schedule()) { <p role="status">Loading your schedule…</p> }
@@ -59,12 +66,14 @@
     <p class="hint">Adding creates another workout on this day.</p>
   }
   <p class="hint">{{ syncLabel() }}</p>
+  @if (restDayPlan(); as plan) { <p class="hint">Planned rest day · {{ plan.name }}. Remove this marker in Plans before adding a workout to that plan.</p> }
   @if (selectedPlan()?.lifecycle === 'paused') { <p>Paused plan: this workout appears in Calendar after activation.</p> }
-  @if (busy()) { <p role="status">{{ busy() === 'generate' ? 'Checking your context and generating…' : 'Adding your workout…' }}</p> }
+  }
+  @if (busy()) { <p role="status">{{ data.mode === 'preferences' ? 'Saving morning preferences…' : busy() === 'generate' ? 'Checking your context and generating…' : 'Adding your workout…' }}</p> }
   @if (error()) { <p #generationError role="alert" tabindex="-1">{{ error() }}</p> }
   @if (result(); as result) {
     <section class="review" aria-label="Workout review" aria-live="polite">
-      <h3 #reviewHeading class="section-title" tabindex="-1">{{ result.draft?.title ?? 'Rest suggestion' }}</h3><p>{{ result.rationale }}</p>
+      <h3 #reviewHeading class="section-title" tabindex="-1">{{ result.draft?.title ?? (restDayPlan() ? 'Planned rest day' : 'Rest suggestion') }}</h3><p>{{ result.rationale }}</p>
       @if (review(); as review) {
         <p>{{ review.summary }}</p>@if (review.estimate) { <p class="hint">{{ review.estimate }}</p> }
         @for (exercise of review.exercises; track exercise.id) {
@@ -87,10 +96,10 @@
       </app-summary-disclosure>
     </section>
   }
-  @if (result() || error()) {
+  @if (data.mode !== 'preferences' && (result() || error())) {
     <div class="review-actions">
       @if (result()?.draft) { <button mat-button appHapticTap [disabled]="!!busy() || staleReview() || saveUncertain()" (click)="edit()">Edit workout</button> }
-      <button mat-button [disabled]="!!busy() || !valid() || saveUncertain()" (click)="generate()">Generate again</button>
+      @if (!restDayPlan() || result()?.draft) { <button mat-button [disabled]="!!busy() || !valid() || saveUncertain()" (click)="generate()">Generate again</button> }
     </div>
   }
   @if (staleReview() && !saveUncertain()) {

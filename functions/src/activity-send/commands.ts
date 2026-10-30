@@ -251,8 +251,71 @@ async function prepareSaved(uid: string, draft: SendOperation, request: Extract<
   try { logger.info('[ActivitySend] Saved preview page checked.', { provider: draft.provider, sourceCount: sources.length, checkedCount: checked, hasNextPage: !!nextCursor, elapsedMs: Math.max(0, Date.now() - startedAt) }); } catch { /* Diagnostics cannot change preparation. */ }
 }
 
+const COMMAND_ACTIONS = new Set(['create', 'prepare', 'confirm', 'remove', 'stop', 'check', 'retry']);
+const COMMAND_ERROR_CODES = new Set([
+  'cancelled', 'unknown', 'invalid-argument', 'deadline-exceeded', 'not-found', 'already-exists',
+  'permission-denied', 'resource-exhausted', 'failed-precondition', 'aborted', 'out-of-range',
+  'unimplemented', 'internal', 'unavailable', 'data-loss', 'unauthenticated',
+]);
+// Match only authored messages, never copy arbitrary exception text or details into diagnostics.
+const COMMAND_REJECTION_REASONS = new Map([
+  ['Unsupported send version.', 'unsupported_version'],
+  ['Invalid send reference.', 'invalid_reference'],
+  [PRO_REQUIRED_MESSAGE, 'pro_required'],
+  ['Choose a supported destination and source.', 'unsupported_destination_or_source'],
+  ['This reference belongs to another send.', 'reference_already_used'],
+  ['Destination account changed. Create a new draft.', 'destination_account_changed'],
+  ['Destination account changed. Review a new draft.', 'destination_account_changed'],
+  ['Draft changed.', 'draft_changed'],
+  ['Finish selecting and validating activities first.', 'selection_not_ready'],
+  ['Send was not found.', 'send_not_found'],
+  ['Review the current selection before sending.', 'selection_not_reviewed_or_stale'],
+  ['No provider operation is available.', 'provider_operation_missing'],
+  ['Delivery was not found.', 'delivery_not_found'],
+  ['The retry window expired or this batch was stopped. Create a new draft after reviewing the provider.', 'retry_window_closed'],
+  ['An uncertain or accepted upload cannot be resent.', 'resend_not_safe'],
+  ['This delivery has a final result; there is no pending status to check.', 'delivery_already_final'],
+  ['Check the provider directly; no safe operation identifier is available.', 'provider_operation_id_missing'],
+  ['Delivery source was not found.', 'delivery_source_not_found'],
+  ['Unsupported send action.', 'unsupported_action'],
+  ['Preview a saved selection before continuing.', 'saved_selection_missing'],
+  ['Choose valid activity sources.', 'invalid_selection_shape'],
+  ['Choose only the supported activity sources.', 'unsupported_activity_sources'],
+  ['Choose activity sources.', 'activity_sources_empty'],
+  ['Select up to 50 activities at a time.', 'selection_size_invalid'],
+  ['Choose a valid date range.', 'invalid_date_range'],
+  ['Selection changed. Create a new draft.', 'selection_changed'],
+  ['Preview cursor is no longer current.', 'preview_cursor_stale'],
+  ['The selection changed. Review a new draft.', 'selection_changed'],
+  ['Saved activity checking is temporarily unavailable. Reopen this draft and choose Continue saved-activity preview.', 'saved_preview_unavailable'],
+  ['Account is unavailable.', 'account_unavailable'],
+  ['Connect or reconnect the destination in Connections.', 'destination_reconnect_required'],
+  ['Connect exactly one Suunto account before sending.', 'suunto_account_ambiguous'],
+  ['Create a new send draft.', 'draft_closed'],
+]);
+
 export const activitySendCommand = onCall({ region: 'europe-west2', cors: ALLOWED_CORS_ORIGINS, memory: '512MiB', timeoutSeconds: 120, maxInstances: 10 }, async request => {
-  enforceAppCheck(request);
-  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in to send activities.');
-  return runSendCommand(request.auth.uid, request.data as ActivitySendCommand);
+  let stage: 'app_check' | 'authentication' | 'command' = 'app_check';
+  try {
+    enforceAppCheck(request);
+    stage = 'authentication';
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in to send activities.');
+    stage = 'command';
+    return await runSendCommand(request.auth.uid, request.data as ActivitySendCommand);
+  } catch (error) {
+    try {
+      const known = error instanceof HttpsError;
+      const httpStatus = known ? error.httpErrorCode.status : 500;
+      const log = httpStatus >= 500 ? logger.error : logger.warn;
+      log('[ActivitySendCommand] Request rejected.', {
+        stage,
+        action: COMMAND_ACTIONS.has(request.data?.action) ? request.data.action : 'unknown',
+        errorCode: known && COMMAND_ERROR_CODES.has(error.code) ? error.code : 'unknown',
+        httpStatus,
+        reason: stage === 'app_check' ? 'app_check_rejected' : stage === 'authentication' ? 'sign_in_required'
+          : known ? COMMAND_REJECTION_REASONS.get(error.message) || 'unclassified' : 'unexpected_error',
+      });
+    } catch { /* Diagnostics must not change the original rejection or retry behavior. */ }
+    throw error;
+  }
 });

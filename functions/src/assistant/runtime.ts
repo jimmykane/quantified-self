@@ -549,6 +549,10 @@ export function selectAssistantTrainingPreviewTool(prompt: string,
     .some(([, target]) => !/\b(?:workouts?|sessions?|steps?|intervals?|targets?|repeats?|exercises?|plans?)\b/u
       .test(target.replace(/\bplans?(?:['’]s?)?\s*$/u, '')));
   if (phaseEdit) return 'preview_training_plan_phases';
+  const restDayEdit = [...question.matchAll(/\b(?:add|mark|make|set|declare|remove|clear|edit|change|update)\s+([^.!?;\n]{0,80}?)\brest\s+days?\b/gu)]
+    .some(match => !/\b(?:don't|do not|never)\s*$/u.test(question.slice(0, match.index))
+      && !/\b(?:workouts?|sessions?|rides?|runs?|steps?|intervals?|targets?|repeats?|exercises?)\b/u.test(match[1]));
+  if (restDayEdit) return 'preview_training_rest_days';
   if (/\b(?:library|saved\s+workouts?|workout\s+templates?|saved\s+recipes?)\b/u.test(question)
     && /\b(?:create|save|copy|duplicate|edit|update|archive|restore|delete|remove|place|schedule|add)\b/u.test(question)) {
     return 'preview_saved_workout_v2_change';

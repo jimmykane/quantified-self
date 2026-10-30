@@ -565,7 +565,7 @@ async function handleGarminAPIHealthData(
 
 export const receiveGarminAPIHealthData = functions.region('europe-west2').runWith({
     timeoutSeconds: 60,
-    memory: '1GB',
+    memory: '512MB',
     secrets: FUNCTION_SECRET_BINDINGS.receiveGarminAPIHealthData,
 }).https.onRequest(handleGarminAPIHealthData);
 

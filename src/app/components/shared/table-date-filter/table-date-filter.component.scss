@@ -1,0 +1,31 @@
+@use '../../../../styles/table-filters' as filters;
+@use '@angular/material' as mat;
+
+:host { display: inline-flex; flex-direction: column; min-width: 0; max-width: 100%; }
+.table-date-filter-control { display: flex; align-items: center; min-width: 0; max-width: 100%; }
+.table-date-filter-button { @include filters.text-button; }
+.table-date-filter-button.is-open { background: color-mix(in srgb, var(--mat-sys-primary) 9%, transparent); }
+.table-date-clear {
+  @include mat.icon-button-overrides((icon-size: 16px, state-layer-size: 28px));
+  width: 28px; height: 28px; padding: 6px; flex: 0 0 auto;
+  color: color-mix(in srgb, var(--mat-sys-on-surface) 70%, var(--mat-sys-primary));
+  mat-icon { width: 16px; height: 16px; font-size: 16px; }
+  @media (pointer: coarse) {
+    @include mat.icon-button-overrides((state-layer-size: 44px));
+    width: 44px; height: 44px; padding: 14px;
+  }
+}
+.table-date-menu-label { display: flex; align-items: center; gap: 24px; width: 100%; }
+.table-date-menu-text { display: inline-flex; flex-direction: column; gap: 4px; }
+.table-date-menu-detail { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
+.table-date-menu-check { margin-inline-start: auto; margin-inline-end: 0; }
+.table-date-menu-item {
+  --mat-menu-item-label-text-size: 0.8125rem;
+  min-width: 253px;
+  min-height: 40px;
+  font-size: 0.8125rem;
+}
+.table-date-menu-item.has-detail { min-height: 61px; }
+.table-date-warning { color: var(--qs-status-caution); }
+.table-date-error { color: var(--mat-sys-error); font: var(--mat-sys-body-small); }
+button.is-selected { background: color-mix(in srgb, var(--mat-sys-primary) 12%, transparent); }

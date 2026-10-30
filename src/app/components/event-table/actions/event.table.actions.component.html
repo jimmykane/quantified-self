@@ -1,9 +1,9 @@
-<button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Configure table columns" appHapticTap
+<button mat-icon-button [matMenuTriggerFor]="menu" [disabled]="disabled" aria-label="Configure table columns" appHapticTap
   (click)="$event.preventDefault(); $event.stopPropagation();">
   <mat-icon>{{ icon }}</mat-icon>
 </button>
 <mat-menu #menu="matMenu" class="qs-menu-panel" (closed)="menuClosed()">
-  <mat-selection-list [multiple]="true" (selectionChange)="selectionChange($event)" (click)="$event.preventDefault(); $event.stopPropagation();">
+  <mat-selection-list [multiple]="true" [disabled]="disabled" (selectionChange)="selectionChange($event)" (click)="$event.preventDefault(); $event.stopPropagation();">
     @for (dataType of dataTypes; track dataType) {
       <mat-list-option [selected]="selectedDataTypes.indexOf(dataType) !== -1" [value]="dataType">
         {{dataType}}

@@ -366,6 +366,7 @@ function getOperationWorkoutIds(request: MutateTrainingScheduleRequestV1): strin
         case 'rename-plan':
         case 'set-plan-color':
         case 'set-plan-phases':
+        case 'set-plan-rest-days':
         case 'set-plan-lifecycle':
         case 'shift-plan':
             return [];

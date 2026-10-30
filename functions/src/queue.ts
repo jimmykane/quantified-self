@@ -473,11 +473,12 @@ async function readHistoryWorkoutBatch(serviceName: ServiceNames, batch: History
 const TIMEOUT_DEFAULT = 300;
 const MEMORY_DEFAULT = '256MB';
 const TIMEOUT_HIGH = 540;
+const MEMORY_MEDIUM = '512MB';
 const MEMORY_HIGH = '1GB';
 
 export const parseGarminAPIActivityQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: TIMEOUT_HIGH,
-  memory: MEMORY_HIGH,
+  memory: MEMORY_MEDIUM,
   maxInstances: 1,
 }).pubsub.schedule(QUEUE_SCHEDULE).onRun(async () => {
   await dispatchQueueItemTasks(ServiceNames.GarminAPI);
@@ -501,7 +502,7 @@ export const parseSuuntoAppActivityQueue = functions.region('europe-west2').runW
 
 export const parseWahooAPIWorkoutQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: TIMEOUT_HIGH,
-  memory: MEMORY_HIGH,
+  memory: MEMORY_MEDIUM,
   maxInstances: 1,
 }).pubsub.schedule(QUEUE_SCHEDULE).onRun(async () => {
   await dispatchQueueItemTasks(ServiceNames.WahooAPI);

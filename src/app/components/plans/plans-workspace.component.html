@@ -942,21 +942,36 @@
               <p>Phase: {{ phase.name }} · {{ phase.startLocalDate }} – {{ phase.endLocalDate }}</p>
               @if (phase.description) { <p>{{ phase.description }}</p> }
             }
-            <p>{{ displayedWorkoutRows().length }} {{ displayedWorkoutRows().length === 1 ? 'workout' : 'workouts' }}</p>
+            <p>{{ selectedDayIsRest() ? 'Planned rest day' : displayedWorkoutRows().length + (displayedWorkoutRows().length === 1 ? ' workout' : ' workouts') }}</p>
           }
         </div>
         <button appHapticTap #addWorkoutButton mat-flat-button type="button"
           (click)="openNewWorkout(view() === 'plans' ? selectedPlanId() : null, addWorkoutDate())"
-          [disabled]="busyAction() !== null || (view() === 'plans' && !selectedPlanId())">
+          [disabled]="busyAction() !== null || (view() === 'plans' && (!selectedPlanId() || selectedDayIsRest()))">
           <mat-icon aria-hidden="true">add</mat-icon><span>Add workout</span>
         </button>
       </div>
 
+      @if (view() === 'plans') {
+        <button appHapticTap mat-button type="button" (click)="toggleSelectedRestDay()"
+          [disabled]="busyAction() !== null || (!selectedDayIsRest() && selectedDayHasPlannedWorkout())">
+          <span class="button-content">
+            @if (busyAction() === 'rest-' + selectedPlanId()) { <mat-spinner diameter="18" aria-label="Saving rest day"></mat-spinner> }
+            <span>{{ selectedDayIsRest() ? 'Remove rest day' : 'Mark as rest day' }}</span>
+          </span>
+        </button>
+        @if (!selectedDayIsRest() && selectedDayHasPlannedWorkout()) {
+          <p>Move, skip or remove this day's planned workouts before marking it as rest.</p>
+        }
+      }
+
       @if (displayedWorkoutRows().length === 0) {
+        @if (!selectedDayIsRest()) {
         <div class="workout-empty-state" role="status">
           <mat-icon aria-hidden="true">event_available</mat-icon>
-          <span>{{ view() === 'standalone' ? 'No standalone workouts yet.' : 'Nothing scheduled. Leave this day open, or add a workout.' }}</span>
+          <span>{{ view() === 'standalone' ? 'No standalone workouts yet.' : 'Nothing scheduled. Leave this day open, mark it as rest, or add a workout.' }}</span>
         </div>
+        }
       } @else {
         <div class="workout-rows">
           @for (row of displayedWorkoutRows(); track row.workout.id; let lastWorkout = $last) {

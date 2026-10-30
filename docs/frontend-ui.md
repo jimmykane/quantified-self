@@ -289,6 +289,10 @@ caution or unavailable phrases; punctuation stays neutral. Keep both inline, wit
 dot, chevron, extra row, card or visible heading. Let the sentence wrap naturally on narrow screens. Selecting it
 collapses or reopens the existing Today metrics; details start open and reset to open on owner changes.
 The sentence owns `aria-expanded`, `aria-controls` and one selection haptic, with a 44px minimum touch target.
+The owner’s greeting/status slot reserves the same height while the update banner, loading copy and completed
+assessment replace each other. Its wrapping allowance follows the header container width, so mobile layouts and
+sidebars keep the Today card anchored. Text can still grow naturally for exceptional copy or accessibility settings;
+never truncate the assessment or add loading-driven animations, observers or haptics to stabilize it.
 Disable its ripple and filled interaction state through Material’s public APIs; preserve a neutral keyboard focus outline.
 One short sentence combines the existing training state and Readiness assessments with the most relevant supporting
 Sleep, seven-day HRV or overnight-HR signal; unavailable, attention, missing and loading evidence precede an ordinary
@@ -378,6 +382,34 @@ including form fields such as the AI workout sport. It is the same component use
 table tag filters. Import the standalone component directly; it owns its narrow Material imports, shared dialog
 surface, search field, sport icons, wrapping option labels, thin scrollbars and keyboard/focus behavior.
 Do not create another searchable sport dialog or embed a search input inside a `mat-select` option.
+
+Table headers opt into `[textButton]="true"` with a `triggerIcon` on the same picker. The compact text button shows
+one selected name or a sport/tag count, keeps sport icons and opens the unchanged searchable dialog. Other form
+fields and icon-only tile triggers keep their existing presentation. The shared `styles/_table-filters.scss` mixin
+owns button density and icon/text alignment; touch targets expand on coarse pointers.
+
+`TableDateFilterComponent` provides the matching preset menu and native Material range-calendar dialog. Each owner
+passes its existing range form and handles preset, Apply, Cancel and Clear outputs; the control never queries or
+persists activities. Draft dates stay in Material's pending selection until Apply. Applied custom dates remain in
+the trigger with a separate clear action. All dates stays last with its warning, and the owner still confirms it
+before loading history. The control owns menu-opening feedback; the owner owns calendar opening and accepted
+filter changes. Closing or clearing returns focus to the visible date button. Dashboard projects its merged toggle
+after Tags so visual and native keyboard order both remain Date, Sports, Tags, Merged activities.
+
+The shared events table uses skeleton cells beneath its existing column headings on the first load. Refreshes retain
+the same rows, selection and paginator until the owner completes its existing request, with one thin Material progress
+bar and a status outside the busy table region. Row actions and paging are disabled while those results are stale.
+The table defers input-driven row rebuilds and filter-context resets during that request; it does not retain a second
+event collection or start a query. Changing the viewer or target owner clears the retained rows immediately and waits
+for the new owner's event input before displaying data. Activities keeps the merged-control position during loading
+and leaves the shared table responsible for the activity-loading indicator.
+Bulk-action loading is separate from the parent-owned history input: either can finish first without unlocking the
+other or leaving a pending input stuck. Search clearing and column choices are disabled while busy, including in an
+already-open column menu; queued text/catalog filters apply
+after loading instead of changing the retained results, and deferred filter-context resets settle when the action ends.
+Initial skeleton mounting defers the table's automatic tag-catalog lookup until ready input, so Calendar's empty/error
+branches do not add a catalog read. Owner changes clear old catalog choices immediately. Retained row action components
+close their open Material menus and disable their controls while the table is busy, without cancelling in-flight work.
 
 Use `ActivityTypesMultiSelectComponent` for canonical sport catalogs with family shortcuts, selected aliases and
 locked choices; use `ActivityTypesFilterMenuComponent` for the equivalent compact toolbar trigger. Both delegate

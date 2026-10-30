@@ -3,7 +3,6 @@ import {
   ChangeDetectorRef,
   Component,
   EventEmitter,
-  ElementRef,
   ViewChild,
   Input,
   OnChanges,
@@ -22,9 +21,10 @@ import { MatButtonToggleChange } from '@angular/material/button-toggle';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 import { DateRanges } from '@sports-alliance/sports-lib';
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
-import { MatDatepickerInputEvent, MatDateRangePicker } from '@angular/material/datepicker';
+import { MatDatepickerInputEvent } from '@angular/material/datepicker';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
+import { TableDateFilterComponent } from '../shared/table-date-filter/table-date-filter.component';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { firstValueFrom } from 'rxjs';
@@ -83,18 +83,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   public toolbarSportShortcuts: ActivityFilterPickerShortcut[] = [];
   public toolbarSelectedSports: string[] = [];
   public customRangeOpen = false;
-  private focusDateControl = false;
-  private datePresetsControl?: MatSelect;
-  private customStartDateControl?: ElementRef<HTMLInputElement>;
-  @ViewChild('toolbarPicker') private toolbarPicker?: MatDateRangePicker<Dayjs>;
-  @ViewChild('datePresets') set datePresets(control: MatSelect | undefined) {
-    this.datePresetsControl = control;
-    if (control && this.focusDateControl) { this.focusDateControl = false; control.focus(); }
-  }
-  @ViewChild('customStartDate') set customStartDate(control: ElementRef<HTMLInputElement> | undefined) {
-    this.customStartDateControl = control;
-    if (control && this.focusDateControl) { this.focusDateControl = false; control.nativeElement.focus(); }
-  }
+  @ViewChild(TableDateFilterComponent) private tableDateFilter?: TableDateFilterComponent<DateRanges>;
   constructor(
     changeDetector: ChangeDetectorRef,
     private dialog?: MatDialog,
@@ -109,18 +98,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
 
   openToolbarDateFilter(): void {
     if (this.isLoading || !this.showDatePicker || !this.toolbarRangeLayout) return;
-    if (this.customRangeOpen || this.selectedDateRange === DateRanges.custom) {
-      const picker = this.toolbarPicker;
-      if (!picker || picker.disabled || picker.opened) return;
-      this.customStartDateControl?.nativeElement.focus();
-      picker.open(); // The existing opened handler owns feedback.
-      return;
-    }
-    const presets = this.datePresetsControl;
-    if (!presets || presets.disabled || presets.panelOpen) return;
-    presets.focus();
-    presets.open();
-    if (presets.panelOpen) this.hapticsService?.selection();
+    this.tableDateFilter?.open();
   }
 
   get endDateControl(): UntypedFormControl {
@@ -290,15 +268,13 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
 
   async onToolbarDateRangeChange(value: DateRanges, source?: MatSelect): Promise<void> {
     if (value === DateRanges.custom) {
-      if (this.customRangeOpen || this.selectedDateRange === DateRanges.custom) return;
+      if (this.customRangeOpen) return;
       const { startDate, endDate } = this.resolveCurrentRangeDates();
       // Presets use an exclusive midnight bound; the editor shows inclusive calendar dates.
       const inclusiveEnd = endDate && endDate.getHours() === 0 && endDate.getMinutes() === 0
         && endDate.getSeconds() === 0 && endDate.getMilliseconds() === 0 ? new Date(endDate.getTime() - 1) : endDate;
       this.searchFormGroup.patchValue({ startDate, endDate: inclusiveEnd }, { emitEvent: false });
       this.customRangeOpen = true;
-      this.focusDateControl = true;
-      this.hapticsService?.selection();
     } else if (value !== this.selectedDateRange) {
       await this.selectDateRange(value);
     }
@@ -328,7 +304,6 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
 
   cancelToolbarCustomRange(): void {
     this.customRangeOpen = false;
-    this.focusDateControl = this.selectedDateRange !== DateRanges.custom;
     const { startDate, endDate } = this.resolveCurrentRangeDates();
     this.searchFormGroup.patchValue({ startDate, endDate }, { emitEvent: false });
     this.hapticsService?.selection();
@@ -340,7 +315,6 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
       return;
     }
     this.customRangeOpen = false;
-    this.focusDateControl = true;
     const fallback = this.dateRangesToShow.includes(DateRanges.lastThirtyDays) ? DateRanges.lastThirtyDays
       : this.dateRangesToShow.find(value => value !== DateRanges.custom && value !== DateRanges.all) ?? DateRanges.lastThirtyDays;
     await this.selectDateRange(fallback);

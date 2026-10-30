@@ -3,7 +3,7 @@ import { Firestore, FieldValue } from 'firebase-admin/firestore';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { encodeOpaqueValue, decodeOpaqueValue } from './data.service';
-import { applyTrainingChanges, previewTrainingChanges, previewTrainingPlanPhases, type TrainingWriteDependencies } from './training-plans-write.service';
+import { applyTrainingChanges, previewTrainingChanges, previewTrainingPlanPhases, previewTrainingRestDays, type TrainingWriteDependencies } from './training-plans-write.service';
 import { createFirestoreTrainingReads, readTrainingPlans, } from './training-plans.service';
 import type { TrainingReadTool } from './training-plans.schemas';
 import { mutateTrainingScheduleForUser } from '../training-plans/persistence';
@@ -15,6 +15,8 @@ import { reconcileTrainingDeliveryPage } from '../training-plans/delivery/store'
 import { processTrainingDelivery } from '../training-plans/delivery/worker';
 import { createAssistantConversationStore } from '../assistant/conversation-store';
 import { runApplyAssistantTrainingProposal } from '../assistant/callable';
+import { readDayWorkoutTrainingContext } from '../assistant/day-workout-context';
+import { defaultDayWorkoutControls } from '../../../shared/day-workout';
 
 // All writes and cleanup are confined to a generated synthetic owner in a loopback demo emulator.
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training plan phases in isolated Firestore', { timeout: 30_000 }, () => {
@@ -62,6 +64,74 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training plan phases in i
   });
   afterEach(async () => { await db.recursiveDelete(user()); });
   afterAll(async () => { await db.terminate(); });
+
+  const restInput = (restDays = ['2026-10-26'], connectionId = 'connection') => ({ uid, connectionId, scopes, arguments: {
+    expectedScheduleRevision: 2, change: { kind: 'set-plan-rest-days' as const, plan: { ref: reference(connectionId) },
+      expectedPlanRevision: 2, restDays } } });
+
+  it('previews and applies rest dates idempotently without workouts, load, legacy-wire or delivery changes; restores absence', async () => {
+    const beforeWorkout = (await workout().get()).data();
+    expect(await read('get_training_plan_rest_days')).toMatchObject({ restDays: [] });
+    const preview = await previewTrainingRestDays(restInput(), deps);
+    expect(preview.restDayReview).toEqual({ planName: 'Autumn', startDate: '2026-10-24', endDate: '2026-10-31', before: [], after: ['2026-10-26'] });
+    expect((await plan().get()).data()).not.toHaveProperty('restDays');
+    expect(preview.providerPreviews).toEqual([]);
+    const applied = await apply(preview.proposalRef);
+    expect(await apply(preview.proposalRef)).toEqual(applied);
+    expect((await plan().get()).data()).toMatchObject({ revision: 3, workoutCount: 1, restDays: ['2026-10-26'] });
+    expect((await workout().get()).data()).toEqual(beforeWorkout);
+    expect((await readPlanSnapshotAtRevision(db, uid, 'plan', 3)).plan.restDays).toEqual(['2026-10-26']);
+    const controls = defaultDayWorkoutControls('2026-10-26', 'Europe/Helsinki');
+    const activeContext = await readDayWorkoutTrainingContext(uid, controls, new Date(deps.now()), db);
+    expect(activeContext.plannedRestDay).toEqual({ localDate: '2026-10-26', planName: 'Autumn' });
+    const selectedContext = await readDayWorkoutTrainingContext(uid, { ...controls, destinationPlanId: 'plan' }, new Date(deps.now()), db);
+    expect(selectedContext.plannedRestDay).toEqual(activeContext.plannedRestDay);
+    await plan().update({ privateProviderId: 'private-rest-canary' });
+    const result = await read('get_training_plan_rest_days');
+    expect(result).toMatchObject({ restDays: ['2026-10-26'] });
+    expect(JSON.stringify(result)).not.toContain('private-rest-canary');
+    expect(await read('get_training_plan')).not.toHaveProperty('restDays');
+    await plan().update({ privateProviderId: FieldValue.delete() });
+    await drain();
+    expect(transport.calls).toEqual([]);
+    expect((await user().collection('trainingDeliveryLedger').get()).empty).toBe(true);
+    const restored = await restoreTrainingScheduleRevisionForUser(uid, { mutationId: randomUUID(), scope: { kind: 'plan', id: 'plan' },
+      targetRevision: 2, expectedRevisions: revisions(3, 3) }, { db, nowMs: deps.now() + 1 });
+    expect(restored.mutation.plans[0]).not.toHaveProperty('restDays');
+    expect((await workout().get()).data()).toMatchObject({ localDate: beforeWorkout!.localDate, lifecycle: beforeWorkout!.lifecycle });
+  });
+
+  it('rejects rest-day conflicts, out-of-range dates, foreign references, stale revisions and revoked grants without authoring', async () => {
+    await expect(previewTrainingRestDays(restInput(['2026-10-25']), deps)).rejects.toThrow();
+    await expect(previewTrainingRestDays(restInput(['2026-11-01']), deps)).rejects.toThrow();
+    await expect(previewTrainingRestDays({ ...restInput(), connectionId: 'other' }, deps)).rejects.toThrow();
+    await expect(previewTrainingRestDays({ ...restInput(), scopes: ['training-plans:read'] }, deps)).rejects.toThrow();
+    const stale = restInput(); stale.arguments.change.expectedPlanRevision = 1;
+    await expect(previewTrainingRestDays(stale, deps)).rejects.toThrow();
+    const preview = await previewTrainingRestDays(restInput(), deps);
+    await user().collection('mcpConnections').doc('connection').update({ grantId: 'grant-2' });
+    await expect(apply(preview.proposalRef)).rejects.toThrow();
+    expect((await plan().get()).data()).not.toHaveProperty('restDays');
+    expect((await workout().get()).get('revision')).toBe(1);
+  });
+
+  it.each([false, true])('keeps Assistant rest-day changes behind complete app review and Apply (confirm=%s)', async confirm => {
+    const store = createAssistantConversationStore({ db: () => db, now: () => new Date(deps.now()), createId: () => `chat-${++sequence}` });
+    const chat = await store.resetConversation(uid, 'coordinate_free', false, null, true, true, false);
+    const begun = await store.beginTurn(uid, chat.conversationId, undefined, undefined, 'coordinate_free', false, true, true, false);
+    if (begun.kind !== 'started') throw new Error('Expected turn.');
+    const connectionId = `first-party-assistant-v1:${chat.conversationId}`;
+    const preview = await previewTrainingRestDays(restInput(['2026-10-26'], connectionId), deps);
+    const createdAt = new Date(deps.now()).toISOString();
+    await store.completeTurn(uid, begun, { id: 'request', role: 'user', createdAt, text: 'Mark Monday as a rest day.' },
+      { id: 'preview', role: 'assistant', createdAt, text: 'Review the rest date.' }, preview);
+    expect((await plan().get()).data()).not.toHaveProperty('restDays');
+    const result = await runApplyAssistantTrainingProposal({ proposalRef: preview.proposalRef, permissionMode: 'schedule',
+      conversationId: chat.conversationId, confirm }, { auth: { uid }, app: { appId: 'synthetic-app' } }, store,
+      input => applyTrainingChanges(input, deps));
+    expect(result.status).toBe(confirm ? 'applied' : 'dismissed');
+    expect((await plan().get()).get('restDays') ?? null).toEqual(confirm ? ['2026-10-26'] : null);
+  });
 
   it('previews without authoring, preserves masked legacy reads, replays Apply and reconstructs/restores full phase history', async () => {
     const beforeWorkout = (await workout().get()).data();
@@ -116,7 +186,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training plan phases in i
     expect((await plan().get()).data()).not.toHaveProperty('phases');
   });
 
-  it('changes no enabled provider delivery or workout recipe when phases change', async () => {
+  it('changes no enabled provider delivery or workout recipe when phases or rest days change', async () => {
     const delivery = await previewTrainingChanges({ uid, connectionId: 'connection', scopes, arguments: {
       expectedScheduleRevision: 2, changes: [{ kind: 'provider-delivery', targetType: 'plan', target: { ref: reference() },
         providers: ['garmin'], action: 'enable', timeZone: 'Europe/Helsinki' }] } }, deps);
@@ -128,6 +198,11 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training plan phases in i
     const setting = (await user().collection('trainingDeliverySettings').get()).docs[0];
     const consent = setting.data(); const before = (await workout().get()).data();
     await apply((await previewTrainingPlanPhases(phaseInput(), deps)).proposalRef);
+    await drain(); await processTrainingDelivery(deps.runtime, uid, ledger.id); await drain();
+    expect(transport.calls).toHaveLength(1); expect((await setting.ref.get()).data()).toEqual(consent);
+    expect((await workout().get()).data()).toEqual(before);
+    const rest = restInput(); rest.arguments.expectedScheduleRevision = 3; rest.arguments.change.expectedPlanRevision = 3;
+    await apply((await previewTrainingRestDays(rest, deps)).proposalRef);
     await drain(); await processTrainingDelivery(deps.runtime, uid, ledger.id); await drain();
     expect(transport.calls).toHaveLength(1); expect((await setting.ref.get()).data()).toEqual(consent);
     expect((await workout().get()).data()).toEqual(before);

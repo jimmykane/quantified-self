@@ -27,6 +27,9 @@ describe('help.content', () => {
     expect(help).toContain('**Personalization** starts expanded with every data option selected');
     expect(help).toContain('Uncheck any source to exclude its evidence');
     expect(help).toContain('turning off any of those also turns off the combined score');
+    expect(help).toContain('**Training routine** starts selected and requires **Recent activities**');
+    expect(help).toContain('previous 28 complete local days, excluding today');
+    expect(help).toContain('missing recordings do not mean missed training');
     expect(help).toContain('The modal footer shows your shared **Assistant allowance**');
     expect(help).toContain('after each generation attempt');
   });
@@ -110,6 +113,14 @@ describe('help.content', () => {
     expect(copy).toContain('Flags are not confirmed strap errors');
     expect(copy).toContain('a lower percentage alone does not prove that a device is more accurate');
     expect(copy).toContain('Suspected ectopic pairs, invalid intervals and recording gaps are tracked separately');
+  });
+  it('distinguishes filtered Suunto HR from raw beat statistics and historical stored values', () => {
+    const copy = HELP_SECTIONS.find(section => section.content.includes('### Activity beat-interval statistics'))!.content;
+    expect(copy).toContain('Suunto JSON/SML recordings can derive a filtered heart-rate trace');
+    expect(copy).toContain('retaining source HR when there are too few usable estimates');
+    expect(copy).toContain('Original intervals and HRV/artifact calculations stay separate');
+    expect(copy).toContain('FIT imports keep recorded heart rate');
+    expect(copy).toContain('older saved HR summaries and calculated Training load need an original-file reparse');
   });
   it('explains source updates, saved leg preferences and the retained-original boundary', () => {
     const copy = HELP_SECTIONS.find(section => section.content.includes('### Updated recordings and saved preferences'))!.content.replace(/\s+/g, ' ');
@@ -236,6 +247,7 @@ describe('help.content', () => {
     for (const phrase of ['[Activities](/activities)', '**Overview** section of the sidenav', 'same full events table as Calendar', '**Search activities**',
       'compact notice below their existing column headings', '**Change dates**',
       'Activity tables default to **Start Date**, newest first', 'your choice is saved',
+      'placeholder rows on their first load', '**Updating activities…**', '**Showing previous results**', 'Row actions and paging pause',
       'no filter matches suggest changing dates or clearing a filter', '**All dates** without filters uses a neutral message',
       'offers connection setup only when no service is connected',
       'column picker beside the filters', 'scroll inside the table', 'no separate history-loading step',
@@ -246,8 +258,8 @@ describe('help.content', () => {
       'saved tag remains available', '**Refresh activities**', 'Generated timestamp names are hidden',
       '**All dates** is the last option and shows a warning', '**Keep current range** to cancel without reloading',
       'Saved All dates links also require confirmation', '**Custom dates**', 'Both dates are included',
-      'replaces the date preset selector in place', 'The field shows your selected dates', '**×** clear button',
-      'Clearing an unapplied custom range keeps the previous preset',
+      'compact date button opens the presets', 'The button shows your selected dates', '**×** clear button',
+      '**Cancel** keeps the previous range',
       'only applying a valid changed range starts a new date-range query', 'Custom dates stay fixed as days pass',
       'custom names remain visible', 'older /tags links open Activities']) expect(copy).toContain(phrase);
   });

@@ -82,6 +82,9 @@
             @if (plannedDay) {
               <span class="planned-workout-markers" aria-hidden="true"
                 [class.planned-workout-markers--skipped]="plannedDay.hasSkipped">
+                @if (plannedDay.restDay; as rest) {
+                  <mat-icon class="planned-rest-day-marker" [style.color]="rest.color">hotel</mat-icon>
+                }
                 @for (entry of plannedDay.visibleEntries; track entry.workout.id) {
                   <mat-icon [style.color]="entry.color"
                     [class.planned-workout-marker--skipped]="!entry.completed && entry.workout.lifecycle === 'skipped'"
@@ -91,6 +94,9 @@
                   <span>+{{ plannedDay.overflowCount }}</span>
                 }
               </span>
+              @if (isCalmGrid && plannedDay.restDay && !plannedDay.visibleEntries.length) {
+                <span class="activity-calendar-workout-preview" aria-hidden="true">Rest day</span>
+              }
               @if (isCalmGrid && plannedDay.visibleEntries[0]; as firstWorkout) {
                 <span class="activity-calendar-workout-preview" aria-hidden="true"
                   [style.color]="firstWorkout.color"
@@ -114,7 +120,7 @@
     </section>
     }
   </div>
-  @if (isCalmGrid && (legendFamilies.length || hasVisibleNotes || hasVisiblePlans)) {
+  @if (isCalmGrid && (legendFamilies.length || hasVisibleNotes || hasVisiblePlans || hasVisibleRestDays)) {
     <div class="activity-calendar-calm-legend" aria-label="Calendar markers">
       @for (family of legendFamilies; track family.id) {
         <span><i [style.background-color]="family.color" aria-hidden="true"></i>{{ family.label }}</span>
@@ -124,6 +130,7 @@
       }
       @if (hasVisibleNotes) { <span><i class="activity-calendar-calm-legend-note" aria-hidden="true"></i>Timeline note</span> }
       @if (hasVisiblePlans) { <span><i class="activity-calendar-calm-legend-plan" aria-hidden="true"></i>Planned workout</span> }
+      @if (hasVisibleRestDays) { <span><i class="activity-calendar-calm-legend-rest" aria-hidden="true"></i>Rest day</span> }
     </div>
   }
 </section>

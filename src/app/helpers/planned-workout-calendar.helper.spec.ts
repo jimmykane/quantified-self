@@ -47,6 +47,14 @@ const PLAN: TrainingPlanV1 = {
 };
 
 describe('planned workout calendar overlay', () => {
+  it('shows active-plan rest days independently of workouts and preserves standalone entries', () => {
+    const active = { ...PLAN, restDays: ['2026-09-01', '2026-09-02'] };
+    const overlay = buildPlannedWorkoutCalendarOverlay([workout('standalone')], [active], active.id);
+    expect(overlay['2026-09-01']).toMatchObject({ entries: [], visibleEntries: [], restDay: { planId: PLAN.id, planName: PLAN.name } });
+    expect(overlay['2026-09-01'].ariaLabel).toContain('Planned rest day');
+    expect(overlay['2026-09-02'].entries.map(entry => entry.workout.id)).toEqual(['standalone']);
+    expect(buildPlannedWorkoutCalendarOverlay([], [active], null)).toEqual({});
+  });
   it('keeps observed links but labels unlinked entries unknown when completion coverage is unavailable', () => {
     const day = buildPlannedWorkoutCalendarOverlay([workout('tempo'), workout('standalone')], [PLAN], PLAN.id, ['tempo'], false)['2026-09-02'];
     expect(day.entries.find(entry => entry.workout.id === 'tempo')).toMatchObject({ completed: true });

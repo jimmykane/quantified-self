@@ -1,0 +1,43 @@
+<div class="table-date-filter-control">
+  <button mat-button type="button" class="table-date-filter-button" #rangeTrigger="matMenuTrigger"
+    [matMenuTriggerFor]="rangeMenu" [disabled]="disabled()" [class.is-active]="customSelected()"
+    [class.is-open]="menuOpen()" [attr.aria-label]="'Date range: ' + label()"
+    (menuOpened)="onMenuOpened()" (menuClosed)="onMenuClosed()">
+    <span class="table-filter-button-content"><mat-icon aria-hidden="true">calendar_today</mat-icon><span>{{ label() }}</span>
+      <mat-icon class="table-filter-chevron" aria-hidden="true">{{ menuOpen() ? 'keyboard_arrow_up' : 'keyboard_arrow_down' }}</mat-icon></span>
+  </button>
+  @if (customSelected()) {
+    <button mat-icon-button type="button" class="table-date-clear" [disabled]="disabled()"
+      aria-label="Clear custom dates and show date presets" matTooltip="Show date presets" (click)="clear()"><mat-icon>close</mat-icon></button>
+  }
+</div>
+<mat-menu #rangeMenu="matMenu" class="qs-menu-panel table-date-filter-menu">
+  @for (option of options(); track option.value) {
+    @if (option.value === customValue() || option.value === allValue()) { <mat-divider></mat-divider> }
+    <button mat-menu-item type="button" class="table-date-menu-item" role="menuitemradio" [attr.aria-checked]="option.value === value()"
+      [class.has-detail]="option.value === allValue() || (option.value === customValue() && customSelected())"
+      [class.is-selected]="option.value === value()" [disabled]="disabled()" (click)="choose(option.value)">
+      @if (option.value === customValue()) { <mat-icon aria-hidden="true">date_range</mat-icon> }
+      @if (option.value === allValue()) { <mat-icon class="table-date-warning" aria-hidden="true">warning_amber</mat-icon> }
+      <span class="table-date-menu-label"><span class="table-date-menu-text">{{ option.label }}
+          @if (option.value === customValue() && customSelected()) { <span class="table-date-menu-detail">{{ rangeLabel() }}</span> }
+          @if (option.value === allValue()) { <span class="table-date-menu-detail">May load a large history</span> }
+        </span>
+        @if (option.value === value()) { <mat-icon class="table-date-menu-check" aria-hidden="true">check</mat-icon> }
+      </span>
+    </button>
+  }
+</mat-menu>
+<!-- The native range picker owns keyboard/touch calendar selection; the button owns its visible trigger. -->
+<mat-date-range-input class="cdk-visually-hidden" aria-hidden="true" [formGroup]="rangeForm()" [rangePicker]="picker">
+  <input matStartDate [formControlName]="startControlName()" tabindex="-1" aria-label="Start date">
+  <input matEndDate [formControlName]="endControlName()" tabindex="-1" aria-label="End date">
+</mat-date-range-input>
+<mat-date-range-picker #picker [touchUi]="true" [restoreFocus]="false" [disabled]="disabled()"
+  (opened)="calendarOpened.emit()" (closed)="onCalendarClosed()">
+  <mat-date-range-picker-actions>
+    <button mat-button matDateRangePickerCancel>Cancel</button>
+    <button mat-flat-button matDateRangePickerApply (click)="apply()">Apply</button>
+  </mat-date-range-picker-actions>
+</mat-date-range-picker>
+@if (invalidRange()) { <span class="table-date-error" role="alert">{{ invalidRangeMessage() }}</span> }

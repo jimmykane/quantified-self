@@ -1,55 +1,27 @@
 @if (searchFormGroup) {
-<form [formGroup]="searchFormGroup" autocomplete="off">
-  <app-loading-overlay class="search-overlay" [isLoading]="isLoading" [showSkeleton]="false" height="auto">
-    @if (toolbarRangeLayout) {
+  @if (toolbarRangeLayout) {
     <div class="toolbar-controls">
       @if (showDatePicker) {
-        @if (customRangeOpen || selectedDateRange === dateRanges.custom) {
-          <mat-form-field class="toolbar-custom-date-field" appearance="outline" subscriptSizing="dynamic">
-            <mat-label>Custom dates</mat-label>
-            <mat-date-range-input [formGroup]="searchFormGroup" [rangePicker]="toolbarPicker"
-              (click)="toolbarPicker.open()" (keydown.enter)="applyToolbarCustomRange()">
-              <input #customStartDate matStartDate [formControl]="startDateControl" placeholder="Start date" aria-label="Start date">
-              <input matEndDate [formControl]="endDateControl" placeholder="End date" aria-label="End date">
-            </mat-date-range-input>
-            <mat-datepicker-toggle class="toolbar-calendar-toggle" matIconSuffix [for]="toolbarPicker"></mat-datepicker-toggle>
-            <button mat-icon-button matIconSuffix type="button" aria-label="Clear custom dates and show date presets"
-              matTooltip="Show date presets" (click)="clearToolbarCustomRange()"><mat-icon>close</mat-icon></button>
-            <mat-date-range-picker #toolbarPicker (opened)="onToolbarPickerOpened()">
-              <mat-date-range-picker-actions>
-                <button mat-button matDateRangePickerCancel (click)="cancelToolbarCustomRange()">Cancel</button>
-                <button mat-flat-button matDateRangePickerApply (click)="applyToolbarCustomRange()">Apply</button>
-              </mat-date-range-picker-actions>
-            </mat-date-range-picker>
-            <mat-error>Enter valid dates, up to 5 years, with the end on or after the start.</mat-error>
-          </mat-form-field>
-        } @else {
-          <mat-form-field class="toolbar-date-filter" appearance="outline" subscriptSizing="dynamic">
-            <mat-label>Date range</mat-label>
-            <mat-select #datePresets [value]="selectedDateRange" aria-label="Date range"
-              (selectionChange)="onToolbarDateRangeChange($event.value, $event.source)">
-              @for (option of toolbarDateRangeOptions; track option.value) {
-                <mat-option [value]="option.value">
-                  @if (option.value === dateRanges.all) { <mat-icon aria-hidden="true">warning_amber</mat-icon> }
-                  {{ option.label }}
-                </mat-option>
-              }
-            </mat-select>
-          </mat-form-field>
-        }
+        <app-table-date-filter [options]="toolbarDateRangeOptions" [value]="selectedDateRange"
+          [customValue]="dateRanges.custom" [allValue]="dateRanges.all" [rangeForm]="searchFormGroup"
+          startControlName="startDate" endControlName="endDate" [startDate]="selectedStartDate" [endDate]="selectedEndDate" [disabled]="isLoading"
+          invalidRangeMessage="Choose valid dates, up to 5 years, with the end on or after the start."
+          (selectionChange)="onToolbarDateRangeChange($event)" (applied)="applyToolbarCustomRange()"
+          (cancelled)="cancelToolbarCustomRange()" (cleared)="clearToolbarCustomRange()" (calendarOpened)="onToolbarPickerOpened()"></app-table-date-filter>
       }
       @if (showActivityTypePicker) {
-        <app-activity-filter-picker label="Sports" allLabel="All sports" searchLabel="Search sports"
-          [options]="toolbarSportOptions" [selectedValues]="toolbarSelectedSports" [shortcuts]="toolbarSportShortcuts"
+        <app-activity-filter-picker label="Sports" allLabel="All sports" searchLabel="Search sports" [textButton]="true" triggerIcon="directions_run"
+          [options]="toolbarSportOptions" [selectedValues]="toolbarSelectedSports" [shortcuts]="toolbarSportShortcuts" [disabled]="isLoading"
           (selectionChange)="onToolbarSportsChange($event)"></app-activity-filter-picker>
       }
       @if (showMergedEventsToggle) {
-        <app-merged-activities-toggle [checked]="includeMergedEvents" [disabled]="mergedEventsToggleDisabled"
-          [label]="mergedEventsToggleLabel" [hint]="mergedEventsToggleHint"
-          (checkedChange)="onMergedEventsChange($event)"></app-merged-activities-toggle>
+        <app-merged-activities-toggle [checked]="includeMergedEvents" [disabled]="isLoading || mergedEventsToggleDisabled"
+          [label]="mergedEventsToggleLabel" [hint]="mergedEventsToggleDisabled ? mergedEventsToggleHint : ''" (checkedChange)="onMergedEventsChange($event)"></app-merged-activities-toggle>
       }
     </div>
-    } @else {
+  } @else {
+    <form [formGroup]="searchFormGroup" autocomplete="off">
+      <app-loading-overlay class="search-overlay" [isLoading]="isLoading" [showSkeleton]="false" height="auto">
     <section class="filters-row"
       [ngStyle]="{display: showDatePicker || showActivityTypePicker || showMergedEventsToggle ? 'flex' : 'none' }">
       @if (searchFormGroup) {
@@ -164,7 +136,7 @@
       </div>
       }
     </section>
-    }
-  </app-loading-overlay>
-</form>
+      </app-loading-overlay>
+    </form>
+  }
 }

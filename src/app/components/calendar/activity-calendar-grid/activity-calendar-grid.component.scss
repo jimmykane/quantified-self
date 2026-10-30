@@ -659,6 +659,7 @@
     line-height: 0;
   }
   .planned-workout-markers .planned-workout-marker--skipped { border-inline-start-style: dashed; }
+  .planned-workout-markers .planned-rest-day-marker { border-inline-start-style: dotted; }
   .planned-workout-markers > span { display: none; }
   .activity-calendar-workout-preview {
     position: absolute;
@@ -702,6 +703,12 @@
     height: 10px;
     border-radius: 0;
     background: var(--mat-sys-outline);
+  }
+  .activity-calendar-calm-legend .activity-calendar-calm-legend-rest {
+    width: 3px;
+    height: 10px;
+    border-radius: 0;
+    border-inline-start: 3px dotted var(--mat-sys-outline);
   }
 }
 

@@ -50,6 +50,23 @@ describe('dedicated Garmin replacement review boundary', () => {
   });
 });
 
+describe('plan rest-day review boundary', () => {
+  const preview = { proposalRef: 'opaque', expiresAtMs: 1000, permissionMode: 'schedule', scheduleRevision: 2,
+    requiresConfirmation: true, summary: 'Replace rest days.', changes: [{ index: 0, kind: 'set-plan-rest-days', summary: 'Rest-day edit.' }],
+    providerPreviews: [], restDayReview: { planName: 'Autumn', startDate: '2026-10-01', endDate: '2026-10-31', before: [], after: ['2026-10-30'] } };
+  it('requires a complete date-only before/after review and rejects conflicting or private fields', () => {
+    expect(isAssistantTrainingProposal(preview)).toBe(true);
+    for (const patch of [{ restDayReview: undefined }, { permissionMode: 'delivery' },
+      { changes: [{ ...preview.changes[0], index: 1 }] }, { changes: [...preview.changes, preview.changes[0]] },
+      { restDayReview: { ...preview.restDayReview, providerId: 'PRIVATE' } },
+      { restDayReview: { ...preview.restDayReview, after: ['2026-02-30'] } },
+      { restDayReview: { ...preview.restDayReview, before: ['2026-11-01'] } },
+      { restDayReview: { ...preview.restDayReview, after: ['2026-10-30', '2026-10-30'] } }]) {
+      expect(isAssistantTrainingProposal({ ...preview, ...patch })).toBe(false);
+    }
+  });
+});
+
 describe('plan phase review boundary', () => {
   const phase = { id: 'base', name: 'Base', startLocalDate: '2026-10-01', endLocalDate: '2026-10-10' };
   const preview = { proposalRef: 'opaque', expiresAtMs: 1000, permissionMode: 'schedule', scheduleRevision: 2,

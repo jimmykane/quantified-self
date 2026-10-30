@@ -353,10 +353,11 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('derived workout reuse / r
         expect((await db.doc(`connectionHistoryImports/${historyId}`).get()).data()).not.toHaveProperty('derivedMetricsFlush');
     });
 
-    it('coalesces simultaneous ingress and automatic/MCP freshness requests without moving the deadline', async () => {
+    it('coalesces five simultaneous ingress and automatic/MCP freshness requests without moving the deadline', async () => {
         const { claim } = await warm();
         await completeDerivedMetricsProcessing(uid, claim.generation, claim);
-        const extraKinds = [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.TrainingReadiness, DERIVED_METRIC_KINDS.Acwr];
+        const extraKinds = [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.TrainingReadiness, DERIVED_METRIC_KINDS.Acwr,
+            DERIVED_METRIC_KINDS.BodyWeightTrend, DERIVED_METRIC_KINDS.RampRate];
         const results = await Promise.all(extraKinds.map(kind => markDerivedMetricsDirtyAndMaybeQueue(uid, [kind],
             { background: true, incrementEventMutationVersion: true })));
         expect(new Set(results.map(result => result.generation)).size).toBe(1);
@@ -369,9 +370,27 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('derived workout reuse / r
             readyMetricKinds: [], retryAfterSeconds: 5 });
         const after = (await coordinator().get()).data()!;
         expect(after).toMatchObject({ generation: before.generation, buildNotBeforeMs: before.buildNotBeforeMs,
-            requestedAtMs: before.requestedAtMs, eventMutationVersion: 4 });
+            requestedAtMs: before.requestedAtMs, eventMutationVersion: 6 });
         expect(new Set(after.dirtyMetricKinds)).toEqual(new Set([...extraKinds, DERIVED_METRIC_KINDS.TrainingDurability]));
         expect(mocks.enqueue).toHaveBeenCalledTimes(queuedCalls);
+    });
+
+    it('keeps five concurrent owners in independent coordinators and task generations', async () => {
+        const ownerKinds = [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.TrainingReadiness, DERIVED_METRIC_KINDS.Acwr,
+            DERIVED_METRIC_KINDS.BodyWeightTrend, DERIVED_METRIC_KINDS.RampRate];
+        const requests = ownerKinds.map(kind => ({ owner: `reuse-fixture-${randomUUID()}`, kind }));
+        owners.push(...requests.map(request => request.owner));
+        await Promise.all(requests.map(({ owner }) => db.doc(`users/${owner}`).set({ fixture: true })));
+        const results = await Promise.all(requests.map(({ owner, kind }) =>
+            markDerivedMetricsDirtyAndMaybeQueue(owner, [kind], { background: true, incrementEventMutationVersion: true })));
+        for (const [index, { owner, kind }] of requests.entries()) {
+            expect(results[index].queued).toBe(true);
+            const state = (await db.doc(`users/${owner}/derivedMetrics/coordinator`).get()).data()!;
+            expect(state).toMatchObject({ status: 'queued', generation: results[index].generation,
+                dirtyMetricKinds: [kind], eventMutationVersion: 1 });
+            expect(mocks.enqueue).toHaveBeenCalledWith(owner, results[index].generation);
+        }
+        expect(mocks.enqueue).toHaveBeenCalledTimes(5);
     });
 
     it('promotes waiting work and fences a late failed enqueue and delivery of its old generation', async () => {

@@ -1,4 +1,14 @@
-@if (compact()) {
+@if (textButton()) {
+  <button mat-button type="button" class="activity-picker-text-trigger" [class.is-active]="selectedValues().length > 0"
+    [disabled]="disabled()" aria-haspopup="dialog" [attr.aria-label]="accessibleTriggerLabel()" [attr.aria-expanded]="pickerOpen()"
+    [attr.aria-controls]="pickerOpen() ? dialogId : null" [matTooltip]="selectedLabels()" [matTooltipDisabled]="selectedValues().length < 2" (click)="openPicker()">
+    <span class="table-filter-button-content">
+      @if (selectedSport()) { <app-activity-type-icon [activityType]="selectedSport()" size="18px"></app-activity-type-icon> }
+      @else { <mat-icon aria-hidden="true">{{ triggerIcon() }}</mat-icon> }
+      <span>{{ textSummary() }}</span><mat-icon class="table-filter-chevron" aria-hidden="true">keyboard_arrow_down</mat-icon>
+    </span>
+  </button>
+} @else if (compact()) {
   <button mat-icon-button type="button" class="activity-picker-compact-trigger" [class.is-active]="selectedValues().length > 0"
     [disabled]="disabled()" aria-haspopup="dialog" [attr.aria-label]="accessibleTriggerLabel()" [attr.aria-expanded]="pickerOpen()"
     [attr.aria-controls]="pickerOpen() ? dialogId : null" (click)="openPicker()"><mat-icon>filter_list</mat-icon></button>

@@ -1,4 +1,5 @@
 @use '../../../styles/breakpoints' as bp;
+@use '@angular/material' as mat;
 
 /* Consolidated and cleaned up styles for event table */
 
@@ -12,9 +13,9 @@
 }
 
 .table-toolbar {
-  --qs-table-filter-height: 46px;
-  --qs-table-filter-text-size: 0.95rem;
-  --qs-table-filter-padding: 10px;
+  --qs-table-filter-height: 36px;
+  --qs-table-filter-text-size: 0.8125rem;
+  --qs-table-filter-padding: 6px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -24,9 +25,9 @@
 }
 
 .table-toolbar-main {
-  display: grid;
-  align-items: start;
-  grid-template-columns: minmax(180px, 1fr) auto auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   min-width: 0;
 }
@@ -35,28 +36,10 @@
   --mat-form-field-container-height: var(--qs-table-filter-height);
   --mat-form-field-container-text-size: var(--qs-table-filter-text-size);
   --mat-form-field-container-vertical-padding: var(--qs-table-filter-padding);
-  width: 100%;
-  min-width: 0;
-}
-
-.table-toolbar-main .qs-search-field ::ng-deep .mat-mdc-form-field-infix {
-  min-height: 46px;
-  padding-top: 10px !important;
-  padding-bottom: 10px !important;
-}
-
-.table-toolbar-main .qs-search-field ::ng-deep .mat-mdc-icon-button {
-  width: 38px;
-  height: 38px;
-  padding: 7px;
-}
-
-.table-toolbar-main .qs-search-field ::ng-deep .mat-mdc-form-field-flex {
-  min-height: 46px;
-}
-
-.table-toolbar-main .qs-search-field ::ng-deep input.mat-mdc-input-element {
-  font-size: 0.95rem;
+  flex: 1 1 240px;
+  width: auto;
+  max-width: none;
+  min-width: 180px;
 }
 
 .table-toolbar-main .qs-search-field mat-icon {
@@ -65,26 +48,32 @@
   width: 20px;
 }
 
+.table-search-clear {
+  @include mat.icon-button-overrides((state-layer-size: 32px, icon-size: 20px));
+}
+
 .table-toolbar-filters {
-  align-items: flex-start;
+  align-items: center;
   display: flex;
+  flex: 0 1 auto;
   justify-content: flex-start;
   min-width: 0;
   min-height: 0;
   overflow: visible;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
 .table-toolbar-actions {
   min-height: var(--qs-table-filter-height);
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
 }
 
 .tag-filter-field {
-  flex: 0 0 170px;
-  width: 170px;
+  flex: 0 0 auto;
+  width: auto;
   min-width: 0;
 }
 
@@ -248,23 +237,10 @@
     padding: 10px 12px;
   }
 
-  .table-toolbar-main {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px;
-  }
-
-  .table-toolbar-main .qs-search-field {
-    grid-column: 1 / -1;
-  }
-
-  .table-toolbar-filters {
-    grid-column: 1;
-  }
-
-  .table-toolbar-actions {
-    grid-column: 2;
-    align-self: start;
-  }
+  .table-toolbar-main { gap: 8px; }
+  .table-toolbar-main .qs-search-field { flex-basis: 100%; }
+  .table-toolbar-filters { flex: 1 1 0%; }
+  .table-toolbar-actions { align-self: flex-start; }
 
   .table-selection-toolbar {
     align-items: stretch;
@@ -426,21 +402,6 @@
 
 @include bp.xsmall {
 
-  .table-toolbar-main .qs-search-field { grid-column: 1; }
-  .table-toolbar-actions { grid-column: 2; grid-row: 1; }
-
-  .table-toolbar-filters {
-    grid-column: 1 / -1;
-    align-items: stretch;
-    flex-direction: column;
-    width: 100%;
-  }
-
-  .tag-filter-field {
-    flex: 0 0 auto;
-    width: 100%;
-  }
-
   .mat-column-Checkbox,
   .mat-column-Privacy,
   .mat-column-Actions {
@@ -518,13 +479,6 @@ mat-icon {
   width: 100%;
 }
 
-// Layout-only adaptations; all presentations share the table's visual rules.
-.table-toolbar-main--compact {
-  grid-template-columns: minmax(0, 1fr) auto;
-  .table-toolbar-filters { grid-column: auto; width: auto; flex-direction: row; }
-  .qs-search-field { grid-column: auto; max-width: none; }
-}
-
 .event-activity-cell {
   min-width: 140px;
   width: 180px;
@@ -545,8 +499,35 @@ mat-icon {
   color: var(--mat-sys-on-surface-variant);
 }
 
-.activity-table-overlay {
-  --loading-overlay-top-offset: 56px;
+.activity-table-region { position: relative; }
+.table-toolbar-actions[inert], app-event-table-actions[inert], .table-selection-toolbar[inert] { opacity: 0.55; }
+.activity-table-progress {
+  @include mat.progress-bar-overrides((track-height: 3px, active-indicator-height: 3px));
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 101;
+}
+.activity-table-skeleton-row { height: var(--mat-table-row-item-container-height, 52px); }
+.activity-table-skeleton {
+  display: block;
+  height: 10px;
+  width: 72%;
+  min-width: 38px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--mat-sys-surface-container-highest) 20%, var(--mat-sys-surface-container-low) 50%, var(--mat-sys-surface-container-highest) 80%);
+  background-size: 220% 100%;
+  animation: activity-table-shimmer 1.8s ease-in-out infinite;
+}
+.activity-table-skeleton--icon { width: 16px; min-width: 16px; }
+@keyframes activity-table-shimmer { from { background-position: 220% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .activity-table-skeleton { animation: none; } }
+.activity-table-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.activity-table-footer[hidden] { display: none; }
+.activity-table-loading-status { min-height: 20px; margin: 8px 12px; font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); display: flex; flex-wrap: wrap; gap: 4px 8px; }
+.activity-table-footer mat-paginator { flex: 1 1 auto; }
+@include bp.max-768 {
+  .activity-table-footer { flex-direction: column; align-items: stretch; }
+  .activity-table-loading-status { min-height: 36px; margin-block: 8px 0; flex-direction: column; gap: 0; }
 }
 
 .activity-table-no-data-row--hidden {

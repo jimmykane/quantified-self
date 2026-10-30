@@ -244,6 +244,16 @@
                 }
               </section>
             }
+            @if (proposal.restDayReview; as review) {
+              <section aria-label="Review plan rest days" class="training-phase-review">
+                <h3>{{ review.planName }}</h3>
+                <p>Plan dates: {{ review.startDate | date:'mediumDate' }} – {{ review.endDate | date:'mediumDate' }}</p>
+                <h4>Current rest days</h4>
+                <p>@for (day of review.before; track day) { {{ day | date:'mediumDate' }}@if (!$last) { · } } @empty { No rest days. }</p>
+                <h4>Proposed rest days</h4>
+                <p>@for (day of review.after; track day) { {{ day | date:'mediumDate' }}@if (!$last) { · } } @empty { No rest days. }</p>
+              </section>
+            }
             @for (change of proposal.changes; track change.index) {
               <div class="training-proposal-row">
                 <mat-icon aria-hidden="true">arrow_forward</mat-icon>

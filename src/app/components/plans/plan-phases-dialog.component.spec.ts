@@ -41,6 +41,12 @@ describe('PlanPhasesDialogComponent', () => {
     expect(close).toHaveBeenCalledWith(expect.objectContaining({ confirmPlanRangeExtension: true, startLocalDate: '2026-09-30' }));
     close.mockClear(); component.update('phase-new', 'name', ''); component.save(); expect(close).not.toHaveBeenCalled();
   });
+  it('does not shrink the plan past an explicit rest day', () => {
+    TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { plan: { ...plan, restDays: ['2026-10-31'] }, currentWorkoutDates: [] } });
+    const component = TestBed.createComponent(PlanPhasesDialogComponent).componentInstance;
+    component.end.set('2026-10-30');
+    expect(component.validation().error).toContain('every rest day'); component.save(); expect(close).not.toHaveBeenCalled();
+  });
   it('removes phases locally and emits one haptic per accepted semantic action', () => {
     const component = TestBed.createComponent(PlanPhasesDialogComponent).componentInstance;
     component.add('Recovery'); component.selectColor('phase-new', 'green'); component.selectColor('phase-new', 'green');

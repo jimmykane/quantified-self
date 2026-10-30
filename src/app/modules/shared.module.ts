@@ -1,5 +1,6 @@
 import { ActivityFilterPickerComponent } from '../components/shared/activity-filter-picker/activity-filter-picker.component';
 import { MergedActivitiesToggleComponent } from '../components/shared/merged-activities-toggle/merged-activities-toggle.component';
+import { TableDateFilterComponent } from '../components/shared/table-date-filter/table-date-filter.component';
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MaterialModule } from './material.module';
@@ -46,6 +47,7 @@ import { MyTracksTripsPanelComponent } from '../components/shared/my-tracks-trip
         CommonModule,
         ActivityFilterPickerComponent,
         MergedActivitiesToggleComponent,
+        TableDateFilterComponent,
         MaterialModule,
         RouterModule,
         ReactiveFormsModule,
@@ -87,6 +89,8 @@ import { MyTracksTripsPanelComponent } from '../components/shared/my-tracks-trip
     ],
     providers: [],
     exports: [
+        TableDateFilterComponent,
+        MergedActivitiesToggleComponent,
         CommonModule,
         MaterialModule,
         RouterModule,

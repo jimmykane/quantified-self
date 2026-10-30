@@ -13,6 +13,30 @@ const sdk = vi.hoisted(() => ({ authState: vi.fn() }));
 vi.mock('app/firebase/auth', async original => ({ ...await original<typeof import('app/firebase/auth')>(), authState: sdk.authState }));
 
 describe('DayWorkoutService owner-bound handoff', () => {
+  it.each(['day', 'account'] as const)('rechecks the saved-zone %s after lazy loading and releases the dialog lock', async change => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-30T09:59:59Z'));
+    try {
+      const changes = new BehaviorSubject<{ uid: string } | null>({ uid: 'owner' }); sdk.authState.mockReturnValue(changes);
+      const auth = { currentUser: { uid: 'owner' } }, user = signal({ uid: 'owner' });
+      const controls = defaultDayWorkoutControls('2026-10-30', 'Pacific/Kiritimati');
+      const open = vi.fn().mockReturnValue({ afterClosed: () => of(undefined) });
+      TestBed.configureTestingModule({ providers: [DayWorkoutService,
+        { provide: Auth, useValue: auth }, { provide: AppUserService, useValue: { user } },
+        { provide: Router, useValue: { navigate: vi.fn() } }, { provide: MatDialog, useValue: { open } },
+        { provide: AppFunctionsService, useValue: { call: vi.fn() } },
+      ] });
+      const service = TestBed.inject(DayWorkoutService);
+      const pending = service.open('owner', controls.localDate, controls.sport, { initialControls: controls });
+      if (change === 'day') vi.setSystemTime(new Date('2026-10-30T10:00:01Z'));
+      else { auth.currentUser = { uid: 'other' }; user.set({ uid: 'other' }); changes.next(auth.currentUser); }
+      await pending;
+      expect(open).not.toHaveBeenCalled();
+      const nextDate = change === 'day' ? '2026-10-31' : controls.localDate;
+      await service.open(auth.currentUser.uid, nextDate, controls.sport, { initialControls: { ...controls, localDate: nextDate } });
+      expect(open).toHaveBeenCalledOnce();
+      expect(open.mock.calls[0][1].data).toMatchObject({ ownerUid: auth.currentUser.uid, localDate: nextDate });
+    } finally { vi.useRealTimers(); }
+  });
   it('hands off an unsaved draft once, clears it on sign-out and rechecks the owner after App Check', async () => {
     vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-28T12:00Z'));
     try {

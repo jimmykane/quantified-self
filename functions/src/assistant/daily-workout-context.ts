@@ -1,7 +1,7 @@
 import { DataDuration } from '@sports-alliance/sports-lib';
 import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
 import type { AssistantMessage } from '../../../shared/assistant.types';
-import { parseTrainingPlanPhasesV1 } from '../../../shared/training-plans';
+import { parseTrainingPlanPhasesV1, parseTrainingPlanRestDays } from '../../../shared/training-plans';
 import type { AssistantMcpToolName } from './mcp-session';
 
 type RecordValue = Record<string, unknown>;
@@ -175,7 +175,8 @@ export interface DailyWorkoutContext {
     notes: RecordValue[] };
   plannedWorkouts: { access: 'enabled' | 'disabled'; scanComplete: boolean | null;
     scheduleRevision: number | null; workouts: RecordValue[]; completionChecked: boolean;
-    phaseContext?: { status: 'known' | 'none' | 'unavailable'; planName?: string; name?: string; startDate?: string; endDate?: string } };
+    phaseContext?: { status: 'known' | 'none' | 'unavailable'; planName?: string; name?: string; startDate?: string; endDate?: string };
+    restDayContext?: { status: 'rest' | 'none' | 'unavailable'; planName?: string; localDate?: string } };
   trainingSnapshots: { preparationStatus: string; form: RecordValue | null;
     rampRate: RecordValue | null; trainingSummary: RecordValue | null };
 }
@@ -184,7 +185,91 @@ export function canPreviewDailyWorkout(prompt: string, context: DailyWorkoutCont
   const request = context.recommendation;
   return requestsDailyWorkoutChange(prompt) && (!request || (request.targetDate !== null
     && !request.hypotheticalWithoutPlan
-    && !(request.noAdditionalWorkoutToday && request.targetDate === context.localDate)));
+    && !(request.noAdditionalWorkoutToday && request.targetDate === context.localDate)))
+    && (!context.plannedWorkouts.restDayContext || context.plannedWorkouts.restDayContext.status === 'none');
+}
+
+/** The shared revision-bound day schedule/rest read, without metrics, recovery or history reads. */
+export async function readDailyWorkoutPlanContext(targetDate: string | null, enabled: boolean,
+  read: ReadTool): Promise<DailyWorkoutContext['plannedWorkouts']> {
+  const plannedWorkouts: DailyWorkoutContext['plannedWorkouts'] = {
+    access: enabled ? 'enabled' : 'disabled',
+    scanComplete: enabled ? false : null,
+    scheduleRevision: null,
+    workouts: [],
+    completionChecked: false,
+  };
+  if (enabled && targetDate) {
+    const schedule = await read('query_planned_workouts_by_date', {
+      startDate: targetDate, endDate: targetDate, limit: WORKOUT_LIMIT,
+    });
+    if (!Number.isSafeInteger(schedule.scheduleRevision)
+      || Number(schedule.scheduleRevision) < 0) {
+      throw new Error('The Assistant received an invalid Training schedule revision.');
+    }
+    plannedWorkouts.scheduleRevision = Number(schedule.scheduleRevision);
+    plannedWorkouts.scanComplete = schedule.scanComplete === true;
+    const workouts = records(schedule.workouts);
+    const workoutRefs = workouts.map(workout => workout.workoutRef);
+    if (workoutRefs.some(ref => typeof ref !== 'string')) {
+      throw new Error('The Assistant received a planned workout without a reference.');
+    }
+    let completions: RecordValue[] = [];
+    if (workoutRefs.length > 0) {
+      const completionResult = await read('get_planned_workout_completions', {
+        workoutRefs,
+      });
+      completions = records(completionResult.completions);
+      if (completionResult.scheduleRevision !== schedule.scheduleRevision
+        || completions.length !== workouts.length
+        || completions.some((completion, index) => completion.workoutRef !== workoutRefs[index]
+          || !['linked', 'unlinked'].includes(`${completion.state}`))) {
+        throw new Error('The Assistant received incomplete planned workout completion evidence.');
+      }
+    }
+    plannedWorkouts.workouts = workouts.map((workout, index) => ({
+      title: workout.title,
+      localDate: workout.localDate,
+      lifecycle: workout.lifecycle,
+      planRef: workout.planRef,
+      workoutRef: workout.workoutRef,
+      completion: completions[index] ?? null,
+    }));
+    plannedWorkouts.completionChecked = true;
+    plannedWorkouts.phaseContext = { status: 'unavailable' };
+    plannedWorkouts.restDayContext = { status: 'unavailable' };
+    try {
+      const result = await read('list_training_plans', { lifecycle: 'active', limit: 2 });
+      const plans = records(result.plans);
+      if (result.scheduleRevision === schedule.scheduleRevision && result.scanComplete === true && plans.length === 0) {
+        plannedWorkouts.phaseContext = { status: 'none' };
+        plannedWorkouts.restDayContext = { status: 'none' };
+      } else if (result.scheduleRevision === schedule.scheduleRevision && result.scanComplete === true && plans.length === 1) {
+        // Independent reads: an unavailable phase must not erase verified rest-day intent.
+        const [phaseResult, restResult] = await Promise.allSettled([
+          read('get_training_plan_phases', { planRef: plans[0].planRef }),
+          read('get_training_plan_rest_days', { planRef: plans[0].planRef }),
+        ]);
+        if (restResult.status === 'fulfilled') {
+          const rest = restResult.value;
+          if (rest.planRef === plans[0].planRef && rest.scheduleRevision === schedule.scheduleRevision
+            && rest.planRevision === plans[0].revision) {
+            const dates = parseTrainingPlanRestDays(rest.restDays);
+            plannedWorkouts.restDayContext = dates.includes(targetDate!)
+              ? { status: 'rest', planName: String(plans[0].name), localDate: targetDate! } : { status: 'none' };
+          }
+        }
+        const phases = phaseResult.status === 'fulfilled' ? phaseResult.value : {};
+        if (phases.scheduleRevision === schedule.scheduleRevision && phases.planRevision === plans[0].revision) {
+          const phase = parseTrainingPlanPhasesV1(phases.phases).items.find(item => targetDate!
+            >= item.startLocalDate && targetDate! <= item.endLocalDate);
+          plannedWorkouts.phaseContext = phase ? { status: 'known', planName: String(plans[0].name), name: phase.name,
+            startDate: phase.startLocalDate, endDate: phase.endLocalDate } : { status: 'none' };
+        }
+      }
+    } catch { /* Unavailable phase evidence cannot be substituted with an invented phase. */ }
+  }
+  return plannedWorkouts;
 }
 
 export async function collectDailyWorkoutContext(input: {
@@ -270,67 +355,7 @@ export async function collectDailyWorkoutContext(input: {
     }
   }
 
-  const plannedWorkouts: DailyWorkoutContext['plannedWorkouts'] = {
-    access: input.trainingPlansEnabled ? 'enabled' : 'disabled',
-    scanComplete: input.trainingPlansEnabled ? false : null,
-    scheduleRevision: null,
-    workouts: [],
-    completionChecked: false,
-  };
-  if (input.trainingPlansEnabled && request.targetDate) {
-    const schedule = await input.read('query_planned_workouts_by_date', {
-      startDate: request.targetDate, endDate: request.targetDate, limit: WORKOUT_LIMIT,
-    });
-    if (!Number.isSafeInteger(schedule.scheduleRevision)
-      || Number(schedule.scheduleRevision) < 0) {
-      throw new Error('The Assistant received an invalid Training schedule revision.');
-    }
-    plannedWorkouts.scheduleRevision = Number(schedule.scheduleRevision);
-    plannedWorkouts.scanComplete = schedule.scanComplete === true;
-    const workouts = records(schedule.workouts);
-    const workoutRefs = workouts.map(workout => workout.workoutRef);
-    if (workoutRefs.some(ref => typeof ref !== 'string')) {
-      throw new Error('The Assistant received a planned workout without a reference.');
-    }
-    let completions: RecordValue[] = [];
-    if (workoutRefs.length > 0) {
-      const completionResult = await input.read('get_planned_workout_completions', {
-        workoutRefs,
-      });
-      completions = records(completionResult.completions);
-      if (completionResult.scheduleRevision !== schedule.scheduleRevision
-        || completions.length !== workouts.length
-        || completions.some((completion, index) => completion.workoutRef !== workoutRefs[index]
-          || !['linked', 'unlinked'].includes(`${completion.state}`))) {
-        throw new Error('The Assistant received incomplete planned workout completion evidence.');
-      }
-    }
-    plannedWorkouts.workouts = workouts.map((workout, index) => ({
-      title: workout.title,
-      localDate: workout.localDate,
-      lifecycle: workout.lifecycle,
-      planRef: workout.planRef,
-      workoutRef: workout.workoutRef,
-      completion: completions[index] ?? null,
-    }));
-    plannedWorkouts.completionChecked = true;
-    plannedWorkouts.phaseContext = { status: 'unavailable' };
-    try {
-      const result = await input.read('list_training_plans', { lifecycle: 'active', limit: 2 });
-      const plans = records(result.plans);
-      if (result.scheduleRevision === schedule.scheduleRevision && result.scanComplete === true && plans.length === 0) {
-        plannedWorkouts.phaseContext = { status: 'none' };
-      } else if (result.scheduleRevision === schedule.scheduleRevision && result.scanComplete === true && plans.length === 1) {
-        const phases = await input.read('get_training_plan_phases', { planRef: plans[0].planRef });
-        if (phases.scheduleRevision === schedule.scheduleRevision && phases.planRevision === plans[0].revision) {
-          const phase = parseTrainingPlanPhasesV1(phases.phases).items.find(item => request.targetDate!
-            >= item.startLocalDate && request.targetDate! <= item.endLocalDate);
-          plannedWorkouts.phaseContext = phase ? { status: 'known', planName: String(plans[0].name), name: phase.name,
-            startDate: phase.startLocalDate, endDate: phase.endLocalDate } : { status: 'none' };
-        }
-      }
-    } catch { /* Unavailable phase evidence cannot be substituted with an invented phase. */ }
-  }
+  const plannedWorkouts = await readDailyWorkoutPlanContext(request.targetDate, input.trainingPlansEnabled, input.read);
 
   return {
     recommendation: request,
@@ -392,6 +417,9 @@ export function dailyWorkoutFacts(context: DailyWorkoutContext): string {
   if (context.plannedWorkouts.access === 'disabled') {
     facts.push('Planned workouts and linked activities were not checked because Training plans access is off.');
   } else if (targetDate) {
+    const rest = context.plannedWorkouts.restDayContext;
+    if (rest?.status === 'rest') facts.push(`**Planned rest day on ${targetDate}:** ${escapeMarkdownText(rest.planName)}. Keep this authored rest day; remove it in Plans before adding a workout to that plan.`);
+    else if (rest?.status === 'unavailable') facts.push('Planned rest days could not be checked; an empty workout list does not establish a free training day.');
     const phase = context.plannedWorkouts.phaseContext;
     if (phase?.status === 'known') facts.push(`**Plan phase on ${targetDate}:** ${escapeMarkdownText(phase.name)} (${phase.startDate} – ${phase.endDate}). Authored context only; it does not change load or readiness.`);
     else if (phase) facts.push(phase.status === 'none' ? `No active-plan phase on ${targetDate}.` : 'Active-plan phase context could not be checked.');

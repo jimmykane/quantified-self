@@ -40,6 +40,7 @@ import {
 import {
     TrainingScheduleMutationError,
     cloneTrainingScheduleSnapshot,
+    assertTrainingPlanRestDaysAvailable,
     type AppliedTrainingScheduleMutationV1,
     type TrainingScheduleSnapshotV1,
 } from './mutation';
@@ -169,6 +170,7 @@ function responseForApplied(
     changedWorkoutIds: string[],
     includeWorkoutSnapshots: boolean,
 ): MutateTrainingScheduleResponseV1 {
+    for (const plan of after.plans.values()) assertTrainingPlanRestDaysAvailable(plan, after.workouts.values());
     return {
         mutationId: request.mutationId,
         state: after.state,

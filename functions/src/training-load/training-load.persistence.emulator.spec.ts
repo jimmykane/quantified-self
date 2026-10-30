@@ -1190,7 +1190,8 @@ describe.skipIf(!enabled)('Training load persistence in Firestore', { timeout: 3
     expect((await readTrainingLoadSummaries(uid, countedDb as any))?.size).toBe(1001);
     expect(reads).toBe(17);
     const ids: string[] = [];
-    for (let i = 0; ids.length < 102; i++) if (trainingLoadCacheKey(`split-${i}`)[0] === 'a') ids.push(`split-${i}`);
+    // Five overlapping source deliveries must retain every entry when the shared bucket splits.
+    for (let i = 0; ids.length < 105; i++) if (trainingLoadCacheKey(`split-${i}`)[0] === 'a') ids.push(`split-${i}`);
     await db.doc(`users/${uid}/trainingLoadCache/b_a`).set({ version: 1, leaf: true,
       entries: Object.fromEntries(ids.slice(0, 100).map(id => [trainingLoadCacheKey(id), summarizeTrainingLoad(id, parent, metadata)])) });
     await Promise.all(ids.slice(100).map(id => db.runTransaction(async transaction => {

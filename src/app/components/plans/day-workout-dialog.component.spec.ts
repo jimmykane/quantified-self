@@ -1,7 +1,7 @@
 import { signal } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { ActivityFilterPickerComponent } from '../shared/activity-filter-picker/activity-filter-picker.component';
-import { DAY_WORKOUT_SPORTS, parseGenerateDayWorkoutRequest } from '@shared/day-workout';
+import { DAY_WORKOUT_SPORTS, defaultDayWorkoutControls, parseGenerateDayWorkoutRequest } from '@shared/day-workout';
 import { SummaryDisclosureComponent } from '../shared/summary-disclosure/summary-disclosure.component';
 import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogContainer, MatDialogRef } from '@angular/material/dialog';
@@ -38,6 +38,26 @@ function response(requestId: string): GenerateDayWorkoutResponse {
     missingContext: ['No usable existing Feeling/RPE feedback was found.', 'HRV personal baseline is still building.'],
     previousLoads: [{ exerciseId: 'squat', localDate: '2026-10-25' }] };
 }
+
+function exportMorningDialogQa(element: HTMLElement, name: string) {
+  const dir = process.env.DAY_WORKOUT_QA_DIR; if (!dir) return;
+  const sass = createRequire(createRequire(resolve('package.json')).resolve('@angular/build/package.json'))('sass');
+  const css = (MatDialogContainer as unknown as { ɵcmp: { styles: string[] } }).ɵcmp.styles.join('\n')
+    + [[`#${element.id}`, 'plans/day-workout-dialog'], ['app-compact-row', 'shared/compact-row/compact-row']]
+      .map(([selector, path]) => sass.compileString(`${selector} {` + readFileSync(`src/app/components/${path}.component.scss`, 'utf8')
+        .replace(/:host\(([^)]+)\)/g, '&$1').replace(/:host/g, '&') + '}').css).join('');
+  const markup = element.cloneNode(true) as HTMLElement;
+  const inputs: HTMLInputElement[] = [...element.querySelectorAll('input')];
+  markup.querySelectorAll('input').forEach((input, i) => { input.setAttribute('value', inputs[i].value); input.toggleAttribute('checked', inputs[i].checked); });
+  for (const dark of [false, true]) writeFileSync(join(dir, `${name}${dark ? '-dark' : ''}.html`),
+    '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+    + '<link rel="stylesheet" href="styles.css">' + [...document.head.querySelectorAll('style')].map(style => style.outerHTML).join('')
+    + '<style>' + css + '.qa-pane{width:720px;max-width:100vw;max-height:100dvh;margin:auto}@media(max-width:600px){.qa-pane{width:100vw;height:100dvh}}</style></head>'
+    + '<body class="app-hydrated' + (dark ? ' dark-theme' : '') + '"><div class="qa-pane"><mat-dialog-container class="mat-mdc-dialog-container mdc-dialog mdc-dialog--open">'
+    + '<div class="mat-mdc-dialog-inner-container mdc-dialog__container"><div class="mat-mdc-dialog-surface mdc-dialog__surface">'
+    + markup.outerHTML + '</div></div></mat-dialog-container></div></body></html>');
+}
+
 describe('DayWorkoutDialogComponent', () => {
   let schedule: BehaviorSubject<CurrentTrainingScheduleV1>;
   let auth: BehaviorSubject<{ uid: string } | null>;
@@ -78,6 +98,31 @@ describe('DayWorkoutDialogComponent', () => {
   async function render() { const fixture = TestBed.createComponent(DayWorkoutDialogComponent);
     vi.spyOn((fixture.componentInstance as unknown as { dialogs: MatDialog }).dialogs, 'open').mockImplementation(dialogOpen);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); return fixture; }
+  it('reviews an included morning draft without generation, preserves Standalone and reports only its explicit successful Add', async () => {
+    const data = TestBed.inject(MAT_DIALOG_DATA); const onAdded = vi.fn();
+    data.initialControls = defaultDayWorkoutControls('2026-10-28', 'Europe/Helsinki', ActivityTypes.StrengthTraining);
+    data.initialResult = response('morning:2026-10-28'); data.onAdded = onAdded;
+    const fixture = await render();
+    expect(generate).not.toHaveBeenCalled(); expect(mutate).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.controls().destinationPlanId).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Included morning suggestion');
+    exportMorningDialogQa(fixture.nativeElement, 'morning-review');
+    await fixture.componentInstance.add();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ operation: expect.objectContaining({ kind: 'create-workout', planId: null }) }), expect.any(Function));
+    expect(onAdded).toHaveBeenCalledOnce();
+  });
+  it('saves morning preferences with all data enabled without generating or saving a workout', async () => {
+    const data = TestBed.inject(MAT_DIALOG_DATA); data.mode = 'preferences'; data.savePreferences = vi.fn().mockResolvedValue(undefined);
+    const fixture = await render(); const component = fixture.componentInstance;
+    expect(fixture.nativeElement.textContent).toContain('5 am–noon');
+    expect(component.primaryLabel()).toBe('Save preferences');
+    exportMorningDialogQa(fixture.nativeElement, 'morning-preferences');
+    expect(component.mainChoices().some(choice => choice.key === 'destinationPlanId')).toBe(false);
+    expect(component.contextChoices().filter(choice => ['activityContext', 'trainingContext'].includes(choice.key)).every(choice => choice.disabled && choice.checked)).toBe(true);
+    await component.primaryAction();
+    expect(data.savePreferences).toHaveBeenCalledWith(expect.objectContaining({ destinationPlanId: null, timelineContext: true, hrvContext: true }), true);
+    expect(generate).not.toHaveBeenCalled(); expect(mutate).not.toHaveBeenCalled();
+  });
   it('shows the shared Assistant allowance before generation and refreshes authoritative counts after attempts', async () => {
     const fixture = await render(); const component = fixture.componentInstance;
     const text = () => fixture.nativeElement.querySelector('.allowance').textContent;
@@ -189,21 +234,23 @@ describe('DayWorkoutDialogComponent', () => {
     const fixture = await render(); const component = fixture.componentInstance;
     component.more.set(true); fixture.detectChanges();
     const inputs = [...fixture.nativeElement.querySelectorAll('#day-workout-personalization mat-checkbox input')] as HTMLInputElement[];
-    expect(inputs).toHaveLength(10);
+    expect(inputs).toHaveLength(11);
     expect(inputs.every(input => input.checked && !input.disabled)).toBe(true);
     expect(haptics.selection).not.toHaveBeenCalled();
     await component.generate(); fixture.detectChanges();
     expect(generate.mock.calls[0][1].controls).toMatchObject({ trainingContext: true, timelineContext: true, usePreviousWeights: true });
     component.showSettings.set(true); fixture.detectChanges(); haptics.selection.mockClear();
-    inputs[8].click(); fixture.detectChanges();
+    const choice = (label: string) => [...fixture.nativeElement.querySelectorAll('#day-workout-personalization mat-checkbox')]
+      .find((element: HTMLElement) => element.textContent?.trim() === label)!.querySelector('input') as HTMLInputElement;
+    choice('Timeline notes').click(); fixture.detectChanges();
     expect(component.controls()).toMatchObject({ trainingContext: true, timelineContext: false });
     expect(component.result()).toBeNull(); expect(haptics.selection).toHaveBeenCalledOnce();
     await component.generate(); fixture.detectChanges();
     expect(generate.mock.calls[1][1].controls).toMatchObject({ trainingContext: true, timelineContext: false });
     expect(generate.mock.calls[1][1].requestId).not.toBe(generate.mock.calls[0][1].requestId);
-    component.showSettings.set(true); fixture.detectChanges(); inputs[7].click(); fixture.detectChanges();
+    component.showSettings.set(true); fixture.detectChanges(); choice('Training plans & workouts').click(); fixture.detectChanges();
     expect(component.controls()).toMatchObject({ trainingContext: false, timelineContext: false });
-    expect(inputs[9].disabled).toBe(true); expect(mutate).not.toHaveBeenCalled();
+    expect(choice('Reuse planned weights').disabled).toBe(true); expect(mutate).not.toHaveBeenCalled();
   });
   it('shows every data choice selected initially and disables derived readiness when a source is turned off', async () => {
     const fixture = await render(); const component = fixture.componentInstance;
@@ -221,6 +268,20 @@ describe('DayWorkoutDialogComponent', () => {
     expect(generate.mock.calls[0][1].controls).toMatchObject({ hrvContext: false, readinessContext: false, sleepContext: true, timelineContext: true });
     component.set('hrvContext', true); fixture.detectChanges();
     expect(inputs[4].disabled).toBe(false); expect(inputs[4].checked).toBe(false);
+  });
+  it('starts Training routine selected, preserves its opt-out and requires activity evidence', async () => {
+    const fixture = await render(); const component = fixture.componentInstance;
+    const routine = () => [...fixture.nativeElement.querySelectorAll('mat-checkbox')]
+      .find((element: HTMLElement) => element.textContent?.trim() === 'Training routine')!.querySelector('input') as HTMLInputElement;
+    expect(routine().checked).toBe(true); expect(routine().disabled).toBe(false);
+    haptics.selection.mockClear(); routine().click(); fixture.detectChanges();
+    expect(component.controls().routineContext).toBe(false); expect(haptics.selection).toHaveBeenCalledOnce();
+    await component.generate(); expect(generate.mock.calls[0][1].controls.routineContext).toBe(false);
+    component.set('routineContext', true); component.set('activityContext', false); fixture.detectChanges();
+    expect(routine().disabled).toBe(true); expect(routine().checked).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('Training routine requires Recent activities.');
+    component.set('activityContext', true); fixture.detectChanges();
+    expect(routine().checked).toBe(true); expect(routine().disabled).toBe(false);
   });
   it('focuses new reviews and errors without stealing focus during unrelated option changes', async () => {
     const fixture = await render(); const component = fixture.componentInstance;
@@ -282,6 +343,17 @@ describe('DayWorkoutDialogComponent', () => {
     expect(haptics.selection).toHaveBeenCalledOnce();
     expect(generate.mock.calls[1][1].controls.purpose).toBe('general-strength');
     expect(mutate).not.toHaveBeenCalled();
+  });
+  it('keeps an authored rest day instead of offering a redundant easy-session generation', async () => {
+    schedule.next({ ...schedule.value, plans: schedule.value.plans.map(plan => ({ ...plan, restDays: ['2026-10-28'] })) });
+    const fixture = await render(); const component = fixture.componentInstance;
+    generate.mockImplementationOnce(async (_uid, request) => ({ ...response(request.requestId), kind: 'rest', draft: null, previousLoads: [] }));
+    await component.generate(); fixture.detectChanges(); haptics.selection.mockClear();
+    expect(fixture.nativeElement.textContent).toContain('Planned rest day');
+    expect(component.primaryLabel()).toBe('Keep rest day');
+    expect(fixture.nativeElement.textContent).not.toContain('Try easy session');
+    await component.primaryAction(); expect(close).toHaveBeenCalledOnce(); expect(generate).toHaveBeenCalledOnce();
+    expect(mutate).not.toHaveBeenCalled(); expect(haptics.selection).toHaveBeenCalledOnce();
   });
   it('shows a disabled pending primary action and wires the error primary action to the same request', async () => {
     const fixture = await render(); const component = fixture.componentInstance;

@@ -7,6 +7,7 @@ import {
     parseScheduledWorkoutV1,
     parseTrainingPlanStateV1,
     parseTrainingPlanV1,
+    parseTrainingPlanRestDays,
     shouldCheckpointTrainingPlanRevision,
     type ExpectedTrainingScheduleRevision,
     type MutateTrainingScheduleRequestV1,
@@ -294,6 +295,17 @@ export function applyTrainingScheduleMutation(
             if (after.state.activePlanId === plan.id) after.state.activePlanId = null;
             break;
         }
+        case 'set-plan-rest-days': {
+            const plan = expectPlan(operation.planId);
+            const restDays = parseTrainingPlanRestDays(operation.restDays);
+            if (restDays.some(date => date < plan.startLocalDate || date > plan.endLocalDate)) {
+                throw new TrainingScheduleMutationError('failed-precondition', 'Rest days must be inside the plan dates.');
+            }
+            if (restDays.length) plan.restDays = restDays;
+            else delete plan.restDays;
+            affectedPlanIds.add(plan.id);
+            break;
+        }
         case 'set-plan-phases': {
             const plan = expectPlan(operation.planId);
             if ((operation.startLocalDate < plan.startLocalDate || operation.endLocalDate > plan.endLocalDate)
@@ -318,6 +330,7 @@ export function applyTrainingScheduleMutation(
             if (plan.phases) plan.phases.items = plan.phases.items.map(phase => ({ ...phase,
                 startLocalDate: addDaysToTrainingLocalDate(phase.startLocalDate, operation.days),
                 endLocalDate: addDaysToTrainingLocalDate(phase.endLocalDate, operation.days) }));
+            if (plan.restDays) plan.restDays = plan.restDays.map(date => addDaysToTrainingLocalDate(date, operation.days));
             affectedPlanIds.add(plan.id);
             for (const workout of after.workouts.values()) {
                 if (workout.planId !== plan.id || workout.lifecycle === 'deleted') continue;
@@ -539,6 +552,7 @@ export function applyTrainingScheduleMutation(
 
     for (const planId of affectedPlanIds) {
         const plan = getPlan(after.plans, planId);
+        assertTrainingPlanRestDaysAvailable(plan, after.workouts.values());
         const previous = before.plans.get(planId);
         if (previous) {
             plan.revision = previous.revision + 1;
@@ -590,4 +604,15 @@ export function applyTrainingScheduleMutation(
         permanentlyDeletedWorkoutIds: permanentlyDeleted,
         bulkOperation,
     };
+}
+
+/** Shared by ordinary mutations and history restores; a skipped session is not scheduled training. */
+export function assertTrainingPlanRestDaysAvailable(plan: TrainingPlanV1, workouts: Iterable<ScheduledWorkoutV1>): void {
+    const dates = new Set(plan.restDays ?? []);
+    if (!dates.size) return;
+    for (const workout of workouts) {
+        if (workout.planId === plan.id && workout.lifecycle === 'planned' && dates.has(workout.localDate)) {
+            throw new TrainingScheduleMutationError('failed-precondition', 'This plan date is a rest day. Remove the rest day or move, skip or remove the planned workout first.');
+        }
+    }
 }

@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { firstValueFrom, of, Subject, throwError } from 'rxjs';
+import { filter, firstValueFrom, of, Subject, throwError } from 'rxjs';
+import type { TrainingPlanV1 } from '@shared/training-plans';
 import { Firestore, collectionData, docData, where, limit, getDoc as getCachedDoc } from 'app/firebase/firestore';
 import { getDoc, getFirestore } from 'firebase/firestore/lite';
 import { TrainingPlansService, TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS, type CurrentTrainingScheduleV1 } from './training-plans.service';
@@ -33,6 +34,134 @@ describe('bounded Calendar Training reads', () => {
       { provide: AppFunctionsService, useValue: {} }, { provide: BrowserCompatibilityService, useValue: {} }] });
     service = TestBed.inject(TrainingPlansService);
     vi.mocked(docData).mockReturnValue(of(undefined));
+  });
+  it('shares an active-plan-only rest context without scanning workouts or plan collections', async () => {
+    serverState = { ...currentState, activePlanId: 'active-plan' };
+    const plan = { schemaVersion: 1, id: 'active-plan', name: 'Autumn', lifecycle: 'active', startLocalDate: '2026-10-05',
+      endLocalDate: '2026-10-11', restDays: ['2026-10-06'], revision: 1, lastCheckpointRevision: 1, workoutCount: 0, createdAtMs: 1, updatedAtMs: 1 };
+    vi.mocked(docData).mockImplementation(ref => of(ref.path.endsWith('/trainingPlans/active-plan') ? plan : undefined));
+    const shared = service.watchActivePlan('owner');
+    expect(service.watchActivePlan('owner')).toBe(shared);
+    expect(await firstValueFrom(shared.pipe(filter(value => value !== null)))).toEqual(plan);
+    expect(collectionData).not.toHaveBeenCalled();
+    expect(docData).toHaveBeenCalledTimes(3);
+    expect(await firstValueFrom(service.watchActivePlan(''))).toBeNull();
+  });
+  it('withholds rest context behind the restore fence without querying a plan', async () => {
+    vi.mocked(docData).mockReturnValue(of({ operation: 'restore' }));
+    expect(await firstValueFrom(service.watchActivePlan('owner'))).toBeNull();
+    expect(docData).toHaveBeenCalledOnce(); expect(collectionData).not.toHaveBeenCalled(); expect(getDoc).not.toHaveBeenCalled();
+  });
+  it.each(['paused', 'archived', 'missing'] as const)('keeps rest context live when the old plan becomes %s before the state changes', async lifecycle => {
+    const stateSignals = new Subject<unknown>(), oldPlan = new Subject<unknown>(), nextPlan = new Subject<unknown>();
+    const plan: TrainingPlanV1 = { schemaVersion: 1, id: 'old', name: 'Autumn', lifecycle: 'active',
+      startLocalDate: '2026-10-05', endLocalDate: '2026-10-11', restDays: ['2026-10-06'],
+      revision: 1, lastCheckpointRevision: 1, workoutCount: 0, createdAtMs: 1, updatedAtMs: 1 };
+    vi.mocked(docData).mockImplementation(ref => ref.path.endsWith('/availability/restore') ? of(undefined)
+      : ref.path.endsWith('/trainingPlanState/current') ? stateSignals
+        : ref.path.endsWith('/trainingPlans/old') ? oldPlan : nextPlan);
+    serverState = { ...currentState, activePlanId: 'old' };
+    const observed: (TrainingPlanV1 | null)[] = [], error = vi.fn(), complete = vi.fn();
+    const subscription = service.watchActivePlan('owner').subscribe({ next: value => observed.push(value), error, complete });
+    stateSignals.next(undefined); await vi.waitFor(() => expect(oldPlan.observed).toBe(true));
+    oldPlan.next(plan); expect(observed.at(-1)).toEqual(plan);
+    oldPlan.next(lifecycle === 'missing' ? undefined : { ...plan, lifecycle });
+    expect(observed.at(-1)).toBeNull(); expect(error).not.toHaveBeenCalled(); expect(complete).not.toHaveBeenCalled();
+    // A missing document can reappear before the state pointer catches up, too.
+    if (lifecycle === 'missing') { oldPlan.next(plan); expect(observed.at(-1)).toEqual(plan); }
+    serverState = { ...currentState, activePlanId: 'next', revision: 254 };
+    stateSignals.next(undefined); await vi.waitFor(() => expect(nextPlan.observed).toBe(true));
+    expect(oldPlan.observed).toBe(false); expect(observed.at(-1)).toBeNull();
+    const replacement = { ...plan, id: 'next', name: 'Winter', restDays: ['2026-10-07'] };
+    nextPlan.next(replacement); expect(observed.at(-1)).toEqual(replacement);
+    expect(collectionData).not.toHaveBeenCalled(); subscription.unsubscribe();
+    expect(stateSignals.observed).toBe(false); expect(nextPlan.observed).toBe(false);
+  });
+  it('clears the previous plan while its replacement loads and shares the live listener until the last subscriber leaves', async () => {
+    const stateSignals = new Subject<unknown>(), oldPlan = new Subject<unknown>(), nextPlan = new Subject<unknown>();
+    const plan: TrainingPlanV1 = { schemaVersion: 1, id: 'old', name: 'Autumn', lifecycle: 'active',
+      startLocalDate: '2026-10-05', endLocalDate: '2026-10-11', restDays: ['2026-10-06'],
+      revision: 1, lastCheckpointRevision: 1, workoutCount: 0, createdAtMs: 1, updatedAtMs: 1 };
+    vi.mocked(docData).mockImplementation(ref => ref.path.endsWith('/availability/restore') ? of(undefined)
+      : ref.path.endsWith('/trainingPlanState/current') ? stateSignals
+        : ref.path.endsWith('/trainingPlans/old') ? oldPlan : nextPlan);
+    serverState = { ...currentState, activePlanId: 'old' };
+    const first: (TrainingPlanV1 | null)[] = [], second: (TrainingPlanV1 | null)[] = [];
+    const shared = service.watchActivePlan('owner');
+    const one = shared.subscribe(value => first.push(value)), two = shared.subscribe(value => second.push(value));
+    stateSignals.next(undefined); await vi.waitFor(() => expect(oldPlan.observed).toBe(true));
+    oldPlan.next(plan); expect(first.at(-1)).toEqual(plan); expect(second.at(-1)).toEqual(plan);
+    serverState = { ...currentState, activePlanId: 'next', revision: 254 };
+    stateSignals.next(undefined); await vi.waitFor(() => expect(nextPlan.observed).toBe(true));
+    expect(first.at(-1)).toBeNull(); expect(second.at(-1)).toBeNull();
+    oldPlan.next(plan); expect(first.at(-1)).toBeNull();
+    nextPlan.next({ ...plan, id: 'next' }); expect(first.at(-1)?.id).toBe('next');
+    expect(docData).toHaveBeenCalledTimes(4); expect(collectionData).not.toHaveBeenCalled();
+    one.unsubscribe(); expect(nextPlan.observed).toBe(true);
+    two.unsubscribe(); expect(nextPlan.observed).toBe(false); expect(stateSignals.observed).toBe(false);
+  });
+  it.each(['identity', 'listener'] as const)('withholds invalid rest context after a plan %s failure and recovers on fresh state', async failure => {
+    const stateSignals = new Subject<unknown>(), planSignals = new Subject<unknown>();
+    const plan: TrainingPlanV1 = { schemaVersion: 1, id: 'active', name: 'Autumn', lifecycle: 'active',
+      startLocalDate: '2026-10-05', endLocalDate: '2026-10-11', revision: 1,
+      lastCheckpointRevision: 1, workoutCount: 0, createdAtMs: 1, updatedAtMs: 1 };
+    let recovering = false;
+    vi.mocked(docData).mockImplementation(ref => ref.path.endsWith('/availability/restore') ? of(undefined)
+      : ref.path.endsWith('/trainingPlanState/current') ? stateSignals : recovering ? of(plan) : planSignals);
+    serverState = { ...currentState, activePlanId: plan.id };
+    const observed: (TrainingPlanV1 | null)[] = [], error = vi.fn();
+    const subscription = service.watchActivePlan('owner').subscribe({ next: value => observed.push(value), error });
+    stateSignals.next(undefined); await vi.waitFor(() => expect(planSignals.observed).toBe(true));
+    planSignals.next(plan); expect(observed.at(-1)).toEqual(plan);
+    if (failure === 'identity') planSignals.next({ ...plan, id: 'wrong' }); else planSignals.error(new Error('Unavailable'));
+    expect(observed.at(-1)).toBeNull(); expect(error).not.toHaveBeenCalled();
+    recovering = true; stateSignals.next(undefined); await vi.waitFor(() => expect(observed.at(-1)).toEqual(plan));
+    serverState = { ...currentState, activePlanId: null, revision: 254 };
+    stateSignals.next(undefined); await vi.waitFor(() => expect(observed.at(-1)).toBeNull());
+    expect(collectionData).not.toHaveBeenCalled(); subscription.unsubscribe();
+  });
+  it('keeps verified rest context visible while the same active plan reloads after a routine schedule revision', async () => {
+    const stateSignals = new Subject<unknown>(), planSignals = new Subject<unknown>();
+    const plan: TrainingPlanV1 = { schemaVersion: 1, id: 'active', name: 'Autumn', lifecycle: 'active',
+      startLocalDate: '2026-10-05', endLocalDate: '2026-10-11', restDays: ['2026-10-06'],
+      revision: 1, lastCheckpointRevision: 1, workoutCount: 0, createdAtMs: 1, updatedAtMs: 1 };
+    vi.mocked(docData).mockImplementation(ref => ref.path.endsWith('/availability/restore') ? of(undefined)
+      : ref.path.endsWith('/trainingPlanState/current') ? stateSignals : planSignals);
+    serverState = { ...currentState, activePlanId: plan.id };
+    const observed: (TrainingPlanV1 | null)[] = [];
+    const subscription = service.watchActivePlan('owner').subscribe(value => observed.push(value));
+    stateSignals.next(undefined); await vi.waitFor(() => expect(planSignals.observed).toBe(true));
+    planSignals.next(plan); const beforeRefresh = observed.length;
+    serverState = { ...serverState, revision: 254 };
+    stateSignals.next(undefined); await vi.waitFor(() => expect(docData).toHaveBeenCalledTimes(4));
+    // A standalone-workout edit does not change active-plan identity or rest intent.
+    expect(observed).toHaveLength(beforeRefresh); expect(observed.at(-1)).toEqual(plan);
+    planSignals.next(plan); expect(observed.at(-1)).toEqual(plan);
+    expect(collectionData).not.toHaveBeenCalled(); subscription.unsubscribe();
+  });
+  it.each(['read', 'schema'] as const)('recovers rest context on a later state update after a state %s failure', async failure => {
+    const stateSignals = new Subject<unknown>(), planSignals = new Subject<unknown>();
+    const plan: TrainingPlanV1 = { schemaVersion: 1, id: 'active', name: 'Autumn', lifecycle: 'active',
+      startLocalDate: '2026-10-05', endLocalDate: '2026-10-11', restDays: ['2026-10-06'],
+      revision: 1, lastCheckpointRevision: 1, workoutCount: 0, createdAtMs: 1, updatedAtMs: 1 };
+    vi.mocked(docData).mockImplementation(ref => ref.path.endsWith('/availability/restore') ? of(undefined)
+      : ref.path.endsWith('/trainingPlanState/current') ? stateSignals : planSignals);
+    serverState = { ...currentState, activePlanId: plan.id };
+    const observed: (TrainingPlanV1 | null)[] = [], error = vi.fn();
+    const subscription = service.watchActivePlan('owner').subscribe({ next: value => observed.push(value), error });
+    stateSignals.next(undefined); await vi.waitFor(() => expect(planSignals.observed).toBe(true));
+    planSignals.next(plan); expect(observed.at(-1)).toEqual(plan);
+    if (failure === 'read') vi.mocked(getDoc).mockRejectedValueOnce(new Error('Temporarily unavailable'));
+    else serverState = { revision: 254 };
+    const beforeFailure = observed.length;
+    stateSignals.next(undefined);
+    await vi.waitFor(() => expect(observed.length + error.mock.calls.length).toBeGreaterThan(beforeFailure));
+    expect(error).not.toHaveBeenCalled(); expect(observed.at(-1)).toBeNull();
+    expect(stateSignals.observed).toBe(true); expect(planSignals.observed).toBe(false);
+    serverState = { ...currentState, activePlanId: plan.id, revision: 255 };
+    stateSignals.next(undefined); await vi.waitFor(() => expect(planSignals.observed).toBe(true));
+    planSignals.next(plan); expect(observed.at(-1)).toEqual(plan);
+    expect(getDoc).toHaveBeenCalledTimes(3); expect(collectionData).not.toHaveBeenCalled(); subscription.unsubscribe();
   });
   it('uses inclusive local dates with lookahead and never reports truncated workouts as a complete schedule', async () => {
     vi.mocked(collectionData).mockReturnValue(of(Array.from({ length: 401 }, (_, i) => row(`w${i}`))));

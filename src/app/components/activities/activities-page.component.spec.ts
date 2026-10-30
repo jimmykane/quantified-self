@@ -3,7 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { MatDialog } from '@angular/material/dialog';
-import { MatSelect, MatSelectChange } from '@angular/material/select';
+import { MatMenuTrigger } from '@angular/material/menu';
+import { TableDateFilterComponent } from '../shared/table-date-filter/table-date-filter.component';
 import { DateAdapter } from '@angular/material/core';
 import { MatDateRangeInput, MatDateRangePicker } from '@angular/material/datepicker';
 import { OverlayContainer } from '@angular/cdk/overlay';
@@ -38,6 +39,7 @@ import { AppUserUtilities } from '../../utils/app.user.utilities';
 import { EventTableModule } from '../../modules/event-table.module';
 import { EventTableComponent, type EventTableEventsChange } from '../event-table/event.table.component';
 import { EventTableActionsComponent } from '../event-table/actions/event.table.actions.component';
+import { EventActionsComponent } from '../event-actions/event.actions.component';
 import { ActivitiesPageComponent } from './activities-page.component';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { ActivityFilterPickerComponent } from '../shared/activity-filter-picker/activity-filter-picker.component';
@@ -124,6 +126,13 @@ async function render(context: Awaited<ReturnType<typeof setup>>) {
   context.fixture.detectChanges();
 }
 
+async function openCustomDates(c: Awaited<ReturnType<typeof setup>>) {
+  c.fixture.debugElement.query(By.directive(TableDateFilterComponent)).componentInstance.open(); await render(c);
+  const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+  [...overlay.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(option => option.textContent?.includes('Custom dates'))!.click();
+  await render(c);
+}
+
 describe('ActivitiesPageComponent', () => {
   it('uses Dashboard’s full-range query with bounded numeric dates by default', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
@@ -139,7 +148,7 @@ describe('ActivitiesPageComponent', () => {
       const table = c.fixture.debugElement.query(By.directive(EventTableStub)).componentInstance as EventTableStub;
       expect(table.events).toEqual(data); expect(table.presentation).toBe('dashboard');
       expect(table.hideGeneratedNames).toBe(true);
-      expect(c.fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]').textContent).toContain('Last 30 days');
+      expect(c.fixture.nativeElement.querySelector('.table-date-filter-button').textContent).toContain('Last 30 days');
       expect(c.haptics.selection).not.toHaveBeenCalled();
       expect(c.events.getEventsPageOnceByWithMeta).not.toHaveBeenCalled();
       expect(c.events.getEventCountBy).not.toHaveBeenCalled(); expect(c.events.getEventCount).not.toHaveBeenCalled();
@@ -176,7 +185,9 @@ describe('ActivitiesPageComponent', () => {
     expect(c.router.navigate.mock.lastCall[1].queryParams).toMatchObject({
       tag: ['Endurance'], untagged: '1', sport: ['Cycling', 'Running'],
     });
-    expect(c.fixture.nativeElement.querySelectorAll('mat-chip')).toHaveLength(4);
+    expect(c.fixture.nativeElement.querySelectorAll('[event-table-active-filters]')).toHaveLength(0);
+    expect(c.fixture.nativeElement.querySelector('.activity-explorer-filters').textContent).toContain('2 sports');
+    expect(c.fixture.nativeElement.querySelector('.activity-explorer-filters').textContent).toContain('2 tags');
     c.component.removeTag('Endurance'); await render(c);
     expect(c.component.filteredEvents().map(record => record.getID())).toEqual(['no-tag']);
     c.component.removeSport('Running'); await render(c);
@@ -210,13 +221,14 @@ describe('ActivitiesPageComponent', () => {
     c.component.selectPeriod('custom'); await render(c);
     expect(c.component.period()).toBe('month'); expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
     expect(c.fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]')).toBeNull();
-    const labels = Array.from(c.fixture.nativeElement.querySelectorAll('.activity-explorer-filters mat-label')) as HTMLElement[];
-    expect(labels.map(label => label.textContent)).toEqual(['Tags', 'Custom dates', 'Sports']);
+    const controls = [...c.fixture.nativeElement.querySelectorAll('.activity-explorer-filters > *')] as HTMLElement[];
+    expect(controls.map(control => control.tagName)).toEqual(['APP-TABLE-DATE-FILTER', 'APP-ACTIVITY-FILTER-PICKER', 'APP-ACTIVITY-FILTER-PICKER']);
+    expect(c.fixture.nativeElement.querySelector('.activity-explorer-filters mat-form-field')).toBeNull();
     expect(c.fixture.nativeElement.querySelector('form')).toBeNull();
     c.component.customDateForm.setValue({ start: dayjs('2026-09-03'), end: null }); await render(c);
     c.component.applyCustomRange(); expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
     c.component.customDateForm.setValue({ start: dayjs('2026-09-03'), end: dayjs('2026-09-04') }); await render(c);
-    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce(); expect(c.haptics.selection).toHaveBeenCalledOnce();
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce(); expect(c.haptics.selection).not.toHaveBeenCalled();
     const data = [
       { ...event('before', []), startDate: new Date(2026, 8, 2, 23, 59, 59, 999) },
       { ...event('first', []), startDate: new Date(2026, 8, 3) },
@@ -224,7 +236,7 @@ describe('ActivitiesPageComponent', () => {
       { ...event('after', []), startDate: new Date(2026, 8, 5) },
     ];
     c.events.getEventSummariesBy.mockReturnValue(of(data));
-    c.fixture.nativeElement.querySelector('input[aria-label="End date"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    c.component.applyCustomRange();
     await render(c);
     expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
     expect(c.events.getEventSummariesBy).toHaveBeenLastCalledWith(c.user$.value, [
@@ -235,44 +247,33 @@ describe('ActivitiesPageComponent', () => {
     expect(c.router.navigate).toHaveBeenLastCalledWith([], expect.objectContaining({
       queryParams: expect.objectContaining({ period: 'custom', start: '2026-09-03', end: '2026-09-04' }),
     }));
-    expect(c.haptics.selection).toHaveBeenCalledTimes(2);
+    expect(c.haptics.selection).toHaveBeenCalledOnce();
     c.component.applyCustomRange(); c.component.selectPeriod('custom'); await render(c);
-    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2); expect(c.haptics.selection).toHaveBeenCalledTimes(2);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2); expect(c.haptics.selection).toHaveBeenCalledOnce();
     expect(c.events.getEventCountBy).not.toHaveBeenCalled(); expect(c.events.getEventCount).not.toHaveBeenCalled();
     expect(c.events.getEventsPageOnceByWithMeta).not.toHaveBeenCalled();
   });
 
-  it('validates typed custom dates without queries or typing feedback and cancels without changing the range', async () => {
+  it('validates incomplete and reversed custom dates without queries and cancels without changing the range', async () => {
     const c = await setup(); await render(c); c.component.selectPeriod('custom'); await render(c);
-    const range = c.fixture.debugElement.query(By.directive(MatDateRangeInput));
-    const adapter = range.injector.get(DateAdapter) as DateAdapter<Dayjs>;
-    const type = (label: string, value: string) => {
-      const input = c.fixture.nativeElement.querySelector(`input[aria-label="${label}"]`) as HTMLInputElement;
-      input.value = value;
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.dispatchEvent(new Event('change', { bubbles: true }));
-      input.dispatchEvent(new Event('blur'));
-    };
-    type('Start date', adapter.format(dayjs('2026-09-03'), 'L'));
-    type('End date', 'invalid'); await render(c);
+    c.component.customDateForm.setValue({ start: dayjs('2026-09-03'), end: null }); c.component.applyCustomRange();
     expect(c.component.customDateForm.invalid).toBe(true);
-    expect(c.fixture.nativeElement.querySelector('mat-error').textContent).toContain('Enter valid dates');
-    type('End date', adapter.format(dayjs('2026-09-02'), 'L')); await render(c);
-    c.component.applyCustomRange(); expect(c.component.customDateForm.hasError('dateOrder')).toBe(true);
-    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce(); expect(c.haptics.selection).toHaveBeenCalledOnce();
+    c.component.customDateForm.controls.end.setValue(dayjs('2026-09-02')); c.component.applyCustomRange();
+    expect(c.component.customDateForm.hasError('dateOrder')).toBe(true);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce(); expect(c.haptics.selection).not.toHaveBeenCalled();
     c.component.cancelCustomRange(); await render(c);
     expect(c.component.period()).toBe('month'); expect(c.component.showCustomRange()).toBe(false);
-    expect(c.fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]').textContent.trim()).toBe('Last 30 days');
-    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce(); expect(c.haptics.selection).toHaveBeenCalledTimes(2);
+    expect(c.fixture.nativeElement.querySelector('.table-date-filter-button').textContent).toContain('Last 30 days');
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce(); expect(c.haptics.selection).toHaveBeenCalledOnce();
   });
 
   it('supports selecting both dates in the calendar without a query until Apply', async () => {
-    const c = await setup(); await render(c); c.component.selectPeriod('custom'); await render(c);
-    c.component.customDateForm.reset({ start: null, end: null });
+    const c = await setup(); await render(c);
     const picker = c.fixture.debugElement.query(By.directive(MatDateRangePicker)).componentInstance as MatDateRangePicker<Dayjs>;
     picker.startAt = dayjs('2026-09-01');
     const adapter = c.fixture.debugElement.query(By.directive(MatDateRangeInput)).injector.get(DateAdapter) as DateAdapter<Dayjs>;
-    c.fixture.nativeElement.querySelector('input[aria-label="Start date"]').click(); await render(c);
+    await openCustomDates(c);
+    const previousStart = c.component.customDateForm.controls.start.value?.format('YYYY-MM-DD');
     expect(c.haptics.selection).toHaveBeenCalledTimes(2);
     const overlay = TestBed.inject(OverlayContainer).getContainerElement();
     expect(overlay.querySelector('mat-calendar')).not.toBeNull();
@@ -282,10 +283,10 @@ describe('ActivitiesPageComponent', () => {
       expect(cell, `Calendar date ${label}`).toBeDefined(); cell!.click();
     };
     clickDate('2026-09-03'); await render(c);
-    expect(c.component.customDateForm.controls.start.value).toBeNull();
+    expect(c.component.customDateForm.controls.start.value?.format('YYYY-MM-DD')).toBe(previousStart);
     expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
     clickDate('2026-09-04'); await render(c);
-    expect(c.component.customDateForm.controls.end.value).toBeNull();
+    expect(c.component.customDateForm.controls.end.value?.format('YYYY-MM-DD')).not.toBe('2026-09-04');
     expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
     const apply = overlay.querySelector('button[matDateRangePickerApply]') as HTMLButtonElement;
     expect(apply.disabled).toBe(false); apply.click(); await render(c);
@@ -296,7 +297,7 @@ describe('ActivitiesPageComponent', () => {
     expect(c.haptics.selection).toHaveBeenCalledTimes(3);
 
     // Calendar actions keep their pending model separate from the applied field.
-    c.fixture.nativeElement.querySelector('mat-datepicker-toggle button').click(); await render(c);
+    await openCustomDates(c);
     clickDate('2026-09-10'); await render(c);
     clickDate('2026-09-11'); await render(c);
     expect(c.component.customDateForm.controls.start.value?.format('YYYY-MM-DD')).toBe('2026-09-03');
@@ -304,55 +305,34 @@ describe('ActivitiesPageComponent', () => {
     expect(c.component.customDateForm.controls.end.value?.format('YYYY-MM-DD')).toBe('2026-09-04');
     expect(c.component.showCustomRange()).toBe(true);
     expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
-    expect(c.haptics.selection).toHaveBeenCalledTimes(5);
+    expect(c.haptics.selection).toHaveBeenCalledTimes(6);
   });
 
-  it('clears custom dates back to presets without loading pending edits and preserves other filters', async () => {
+  it('clears applied custom dates back to Last 30 days and preserves other filters', async () => {
     const c = await setup('Endurance'); await render(c);
-    c.component.selectPeriod('week'); await render(c);
-    c.component.selectPeriod('custom'); await render(c);
-    const clear = () => c.fixture.nativeElement.querySelector('button[aria-label="Clear custom dates and show date presets"]').click();
-    clear(); await render(c);
+    c.component.selectPeriod('week'); await render(c); c.component.selectPeriod('custom'); await render(c);
+    c.component.cancelCustomRange(); await render(c);
     expect(c.component.period()).toBe('week'); expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
-    expect(c.fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]').textContent.trim()).toBe('Last 7 days');
     c.component.selectPeriod('custom'); await render(c);
-    c.component.customDateForm.setValue({ start: dayjs('2026-09-03'), end: dayjs('2026-09-04') });
-    c.component.applyCustomRange(); await render(c);
-    expect(c.fixture.nativeElement.querySelector('input[aria-label="Start date"]').value).not.toBe('');
-    expect(c.fixture.nativeElement.querySelector('input[aria-label="End date"]').value).not.toBe('');
-    clear(); await render(c);
+    c.component.customDateForm.setValue({ start: dayjs('2026-09-03'), end: dayjs('2026-09-04') }); c.component.applyCustomRange(); await render(c);
+    expect(c.fixture.nativeElement.querySelector('.table-date-filter-button').textContent).toContain('3–4 Sep 2026');
+    const clear = c.fixture.nativeElement.querySelector('button[aria-label="Clear custom dates and show date presets"]') as HTMLButtonElement;
+    clear.focus(); clear.click(); await render(c);
     expect(c.component.period()).toBe('month'); expect(c.component.selectedTags()).toEqual(['Endurance']);
-    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(4);
-    expect(c.events.getEventSummariesBy.mock.lastCall[1]).toHaveLength(2);
-    expect(c.fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]').textContent.trim()).toBe('Last 30 days');
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(4); expect(c.events.getEventSummariesBy.mock.lastCall[1]).toHaveLength(2);
+    expect(c.fixture.nativeElement.querySelector('.table-date-filter-button').textContent).toContain('Last 30 days');
+    expect(document.activeElement).toBe(c.fixture.nativeElement.querySelector('.table-date-filter-button'));
     expect(c.router.navigate.mock.lastCall[1].queryParams).toMatchObject({ period: 'month', start: null, end: null });
   });
 
-  it('keeps keyboard focus on the date control when entering, clearing or canceling a custom range', async () => {
-    const c = await setup(); await render(c);
-    const presets = c.fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]') as HTMLElement;
-    presets.focus(); presets.click(); await render(c);
+  it('restores keyboard focus after cancelling a custom calendar without changing the range', async () => {
+    const c = await setup(); await render(c); await openCustomDates(c);
     const overlay = TestBed.inject(OverlayContainer).getContainerElement();
-    const customOption = Array.from(overlay.querySelectorAll<HTMLElement>('[role="option"]'))
-      .find(option => option.textContent?.trim() === 'Custom dates')!;
-    customOption.click(); await render(c);
-    const start = c.fixture.nativeElement.querySelector('input[aria-label="Start date"]') as HTMLInputElement;
-    expect(document.activeElement).toBe(start);
-    start.focus(); start.click(); await render(c);
     const cancel = overlay.querySelector<HTMLButtonElement>('button[matDateRangePickerCancel]')!;
     cancel.focus(); cancel.click(); await render(c);
-    expect(document.activeElement).toBe(c.fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]'));
-    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
-
-    c.component.selectPeriod('custom'); await render(c);
-    c.component.customDateForm.setValue({ start: dayjs('2026-09-03'), end: dayjs('2026-09-04') });
-    c.component.applyCustomRange(); await render(c);
-    const clear = c.fixture.nativeElement.querySelector('button[aria-label="Clear custom dates and show date presets"]') as HTMLButtonElement;
-    clear.focus(); clear.click(); await render(c);
-    expect(document.activeElement).toBe(c.fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]'));
-    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(3);
-    expect(c.events.getEventCountBy).not.toHaveBeenCalled();
-    expect(c.events.getEventsPageOnceByWithMeta).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(c.fixture.nativeElement.querySelector('.table-date-filter-button'));
+    expect(c.component.period()).toBe('month'); expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
+    expect(c.events.getEventCountBy).not.toHaveBeenCalled(); expect(c.events.getEventsPageOnceByWithMeta).not.toHaveBeenCalled();
   });
 
   it('hydrates saved custom dates silently and queries once when only their bounds change', async () => {
@@ -412,12 +392,10 @@ describe('ActivitiesPageComponent', () => {
 
   it('places All dates last and keeps the displayed range and query until confirmation', async () => {
     const c = await setup(); await render(c);
-    const select = c.fixture.debugElement.queryAll(By.directive(MatSelect))
-      .map(element => element.componentInstance as MatSelect).find(select => select.ariaLabel === 'Date range')!;
-    expect(select.options.last.value).toBe('all');
-    select.value = 'all';
-    select.selectionChange.emit(new MatSelectChange(select, 'all')); await render(c);
-    expect(select.value).toBe('month'); expect(c.component.period()).toBe('month');
+    const select = c.fixture.debugElement.query(By.directive(TableDateFilterComponent)).componentInstance as TableDateFilterComponent;
+    expect(select.options().at(-1)?.value).toBe('all');
+    select.selectionChange.emit('all'); await render(c);
+    expect(select.value()).toBe('month'); expect(c.component.period()).toBe('month');
     expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
     expect(c.dialog.open).toHaveBeenCalledExactlyOnceWith(ConfirmationDialogComponent, {
       data: {
@@ -429,9 +407,9 @@ describe('ActivitiesPageComponent', () => {
     expect(c.dialog.open.mock.lastCall[1].data.message).toContain('uses more data');
     c.component.selectPeriod('all'); expect(c.dialog.open).toHaveBeenCalledOnce();
     c.dialogs[0].close(true); await render(c);
-    expect(select.value).toBe('all'); expect(c.component.period()).toBe('all');
-    const dateField = c.fixture.nativeElement.querySelector('mat-select[aria-label="Date range"]');
-    expect(dateField.textContent.trim()).toBe('All dates');
+    expect(select.value()).toBe('all'); expect(c.component.period()).toBe('all');
+    const dateField = c.fixture.nativeElement.querySelector('.table-date-filter-button');
+    expect(dateField.textContent).toContain('All dates');
     // The shared dialog owns its confirmation button's feedback; do not repeat it here.
     expect(c.haptics.selection).toHaveBeenCalledOnce();
     expect(c.events.getEventSummariesBy).toHaveBeenLastCalledWith(c.user$.value, [], 'startDate', false, 0);
@@ -688,6 +666,84 @@ describe('ActivitiesPageComponent', () => {
     } finally { c.fixture.destroy(); vi.useRealTimers(); }
   });
 
+  it('keeps the merged control in place through consecutive range changes and clears it on account changes', async () => {
+    const c = await setup();
+    c.events.getEventSummariesBy.mockReturnValue(of([{ ...records[0], isMerge: true }]));
+    await render(c);
+    expect(c.component.hasMergedEvents()).toBe(true);
+    c.events.getEventSummariesBy.mockReturnValue(new Subject());
+    c.component.selectPeriod('week'); c.fixture.detectChanges();
+    expect(c.component.loading()).toBe(true); expect(c.component.hasMergedEvents()).toBe(true);
+    c.component.selectPeriod('year'); c.fixture.detectChanges();
+    expect(c.component.hasMergedEvents()).toBe(true);
+    c.auth.currentUser = null; c.authState$.next(null); c.fixture.detectChanges();
+    expect(c.component.hasMergedEvents()).toBe(false);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(3);
+    c.fixture.destroy();
+  });
+
+  it('uses aligned skeleton cells initially and retains real rows and the merged control while refreshing without extra reads', async () => {
+    const c = await setup('', true);
+    const stream = new Subject<AppEventInterface[]>();
+    c.events.getEventSummariesBy.mockReturnValue(stream);
+    const settle = async () => { c.fixture.detectChanges(); await c.fixture.whenStable(); c.fixture.detectChanges(); };
+    await settle();
+    const root = c.fixture.nativeElement as HTMLElement;
+    const table = c.fixture.debugElement.query(By.directive(EventTableComponent)).componentInstance as EventTableComponent;
+    const header = root.querySelector('.event-table-header');
+    const paginator = table.paginator;
+    const placeholders = root.querySelectorAll('.activity-table-skeleton-row');
+    expect(placeholders).toHaveLength(4);
+    for (const row of placeholders) expect(row.querySelectorAll('.activity-table-skeleton')).toHaveLength(table.displayedColumns.length);
+    expect(root.querySelectorAll('mat-progress-bar')).toHaveLength(1);
+    expect(root.querySelector('mat-spinner, app-loading-overlay, app-shade')).toBeNull();
+    expect(root.querySelector('table[mat-table]')?.hasAttribute('inert')).toBe(true);
+    expect(root.querySelector('.table-wrapper')?.hasAttribute('inert')).toBe(false);
+    expect(root.querySelector('.activity-table-loading-status')?.textContent).toContain('Loading activities');
+    const makeRecord = (id: string, merged = false) => {
+      const record = EventImporterJSON.getEventFromJSON({ name: 'Sample ride', startDate: Date.now(), endDate: Date.now(), srcFileType: FileType.FIT, privacy: Privacy.Private, stats: {}, activities: [] }) as AppEventInterface;
+      record.setID(id); record.isMerge = merged;
+      record.addStat(new DataActivityTypes([ActivityTypes.Cycling])); record.addStat(new DataDeviceNames([])); record.addStat(new DataDistance(1000));
+      return record;
+    };
+    stream.next([makeRecord('initial'), makeRecord('merged', true)]); await render(c);
+    const row = root.querySelector('tr.activity-row');
+    const rowActions = c.fixture.debugElement.query(By.directive(EventActionsComponent)).componentInstance as EventActionsComponent;
+    expect(rowActions.disabled).toBe(false);
+    const columnPicker = c.fixture.debugElement.query(By.directive(EventTableActionsComponent)).componentInstance as EventTableActionsComponent;
+    expect(columnPicker.disabled).toBe(false);
+    expect(row).toBeTruthy(); expect(root.querySelector('.merged-events-button')).toBeTruthy();
+    expect(root.querySelectorAll('.activity-table-skeleton')).toHaveLength(0);
+    expect(paginator.length).toBe(1);
+    table.search('ride'); await render(c);
+    c.component.refresh(); await settle();
+    expect(root.querySelector('tr.activity-row')).toBe(row);
+    expect(c.fixture.debugElement.query(By.directive(EventActionsComponent)).componentInstance).toBe(rowActions);
+    expect(rowActions.disabled).toBe(true);
+    expect(columnPicker.disabled).toBe(true);
+    expect(root.querySelector('.event-table-header')).toBe(header);
+    expect(table.paginator).toBe(paginator); expect(paginator.length).toBe(1); expect(paginator.disabled).toBe(true);
+    expect(root.querySelector('.activity-table-loading-status')?.textContent).toContain('Updating activities');
+    expect(root.querySelector('.activity-table-loading-status')?.textContent).toContain('Showing previous results');
+    expect(root.querySelectorAll('mat-progress-bar')).toHaveLength(1);
+    const clearSearch = root.querySelector<HTMLButtonElement>('.table-search-clear');
+    expect(clearSearch.disabled).toBe(true);
+    clearSearch.click();
+    expect(table.searchTerm).toBe('ride');
+    expect(root.querySelector('.merged-events-button')).toBeTruthy(); expect(root.querySelector('.merge-toggle-hint')).toBeNull();
+    stream.next([makeRecord('refreshed')]); await render(c);
+    expect(table.data.data.map(row => row.Event.getID())).toEqual(['refreshed']);
+    expect(c.fixture.debugElement.query(By.directive(EventActionsComponent)).componentInstance.disabled).toBe(false);
+    expect(columnPicker.disabled).toBe(false);
+    expect(paginator.disabled).toBe(false); expect(root.querySelector('mat-progress-bar')).toBeNull();
+    expect(clearSearch.disabled).toBe(false);
+    expect(root.querySelector('table[mat-table]')?.hasAttribute('inert')).toBe(false);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
+    expect(c.events.getEventCount).not.toHaveBeenCalled(); expect(c.events.getEventCountBy).not.toHaveBeenCalled();
+    expect(c.events.getEventsPageOnceByWithMeta).not.toHaveBeenCalled();
+    c.fixture.destroy();
+  });
+
   it('shows the compact notice only for ready empty results and opens existing date controls without queries or duplicate feedback', async () => {
     const c = await setup('', true);
     const stream = new Subject<AppEventInterface[]>();
@@ -706,20 +762,17 @@ describe('ActivitiesPageComponent', () => {
     expect(root.querySelector<HTMLElement>('mat-paginator')?.hidden).toBe(true);
     expect(c.haptics.selection).not.toHaveBeenCalled();
     root.querySelector<HTMLButtonElement>('[event-table-empty-action]')!.click(); await settle();
-    const presets = c.fixture.debugElement.query(By.directive(MatSelect)).componentInstance as MatSelect;
-    expect(presets.panelOpen).toBe(true); expect(c.haptics.selection).toHaveBeenCalledOnce();
+    const presets = c.fixture.debugElement.query(By.directive(TableDateFilterComponent)).query(By.directive(MatMenuTrigger)).injector.get(MatMenuTrigger);
+    expect(presets.menuOpen).toBe(true); expect(c.haptics.selection).toHaveBeenCalledOnce();
     c.component.openDateFilter(); expect(c.haptics.selection).toHaveBeenCalledOnce();
-    presets.close(); await settle();
-    expect(document.activeElement?.getAttribute('aria-label')).toBe('Date range');
+    presets.closeMenu(); await settle();
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Date range: Last 30 days');
     expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
-    c.component.selectPeriod('custom'); await settle(); c.haptics.selection.mockClear();
-    root.querySelector<HTMLButtonElement>('[event-table-empty-action]')!.click(); await settle();
+    await openCustomDates(c); c.haptics.selection.mockClear();
     const picker = c.fixture.debugElement.query(By.directive(MatDateRangePicker)).componentInstance as MatDateRangePicker<Dayjs>;
-    expect(picker.opened).toBe(true); expect(c.haptics.selection).toHaveBeenCalledOnce();
-    c.component.openDateFilter(); await settle(); expect(c.haptics.selection).toHaveBeenCalledOnce();
-    expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce(); picker.close(); await settle();
-    expect(document.activeElement?.getAttribute('aria-label')).toBe('Start date');
-    c.component.cancelCustomRange(); await settle();
+    expect(picker.opened).toBe(true); c.component.openDateFilter(); await settle();
+    expect(c.haptics.selection).not.toHaveBeenCalled(); expect(c.events.getEventSummariesBy).toHaveBeenCalledOnce();
+    picker.close(); await settle(); expect(document.activeElement?.getAttribute('aria-label')).toBe('Date range: Last 30 days');
     const record = EventImporterJSON.getEventFromJSON({ name: 'Sample ride', startDate: Date.now(), endDate: Date.now(),
       srcFileType: FileType.FIT, privacy: Privacy.Private, stats: {}, activities: [] }) as AppEventInterface;
     record.setID('empty-notice-example'); record.addStat(new DataActivityTypes([ActivityTypes.Cycling]));
@@ -848,6 +901,34 @@ describe('ActivitiesPageComponent', () => {
 });
 
 describe('Activity filter picker Material integration', () => {
+  it('uses an opt-in text button with sport icons and counts while keeping the existing searchable picker', async () => {
+    const haptics = { selection: vi.fn() };
+    TestBed.configureTestingModule({ imports: [ActivityFilterPickerComponent, NoopAnimationsModule], providers: [
+      { provide: AppHapticsService, useValue: haptics },
+      { provide: AppEventColorService, useValue: { getColorForActivityTypeByActivityTypeGroup: () => '#123456' } },
+    ] });
+    const fixture = TestBed.createComponent(ActivityFilterPickerComponent);
+    fixture.componentRef.setInput('label', 'Sports'); fixture.componentRef.setInput('allLabel', 'All sports');
+    fixture.componentRef.setInput('searchLabel', 'Search sports'); fixture.componentRef.setInput('textButton', true); fixture.componentRef.setInput('triggerIcon', 'directions_run');
+    fixture.componentRef.setInput('options', ['Running', 'Cycling'].map(value => ({ value, label:value, activityType:value })));
+    fixture.componentRef.setInput('selectedValues', ['Running', 'Cycling']);
+    const selected = vi.fn((values: string[]) => fixture.componentRef.setInput('selectedValues', values));
+    fixture.componentInstance.selectionChange.subscribe(selected);
+    const settle = async () => { fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); };
+    await settle();
+    const trigger = fixture.nativeElement.querySelector('.activity-picker-text-trigger') as HTMLButtonElement;
+    expect(trigger.textContent).toContain('2 sports'); expect(trigger.querySelector('app-activity-type-icon')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('mat-form-field')).toBeNull(); expect(haptics.selection).not.toHaveBeenCalled();
+    trigger.focus(); trigger.click(); await settle();
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    expect(overlay.querySelector('input[aria-label="Search sports"]')).toBeTruthy();
+    [...overlay.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Clear selection')!.click(); await settle();
+    expect(selected).toHaveBeenCalledExactlyOnceWith([]); expect(trigger.textContent).toContain('All sports');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    [...overlay.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Done')!.click(); await settle();
+    expect(document.activeElement).toBe(trigger); expect(haptics.selection).toHaveBeenCalledTimes(2);
+  });
+
   it('searches single choices, replaces the selection, closes and restores keyboard focus without bulk actions', async () => {
     const haptics = { selection: vi.fn() };
     TestBed.configureTestingModule({ imports: [ActivityFilterPickerComponent, NoopAnimationsModule], providers: [

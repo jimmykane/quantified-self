@@ -1806,6 +1806,15 @@ Send activities file-validation rejections are not captured in debug storage. Th
 inspection reason. These diagnostics do not include filenames, identities, headers, file contents, or raw exceptions;
 the existing request trace provides correlation. Validation behavior and client error messages stay unchanged.
 
+Send command failures emit `[ActivitySendCommand] Request rejected.` with only the allowlisted action, stage,
+callable error code, HTTP status and a fixed rejection reason (for example `invalid_date_range`,
+`preview_cursor_stale`, or `destination_account_changed`). Unrecognized messages become `unclassified`;
+unexpected exceptions become `unexpected_error`. Client rejections are WARNING and server failures ERROR.
+Correlate using the existing request trace; request values, identities, filenames, exception text and error details
+are never copied into these diagnostics. Original errors, replies, authorization and retry behavior are unchanged.
+Monitoring coverage is unchanged: the activity-delivery bundle selects `[ActivityDelivery]` events, so these
+request diagnostics do not add queue failure counts, metric labels or alerts.
+
 #### Fourteen-day debug-file expiry
 
 `storage.debug-lifecycle.json` defines native Cloud Storage deletion eligibility at object age 14 days for the entire

@@ -43,6 +43,9 @@ describe('day workout contract and prescription validation', () => {
       expect(() => parseGenerateDayWorkoutRequest({ requestId, controls }, now)).toThrow('Invalid request identifier');
     }
   });
+  it.each([{ timing: ['strict'] }, { structure: ['simple'] }, { strengthFocus: ['core'] }])('rejects coerced enum controls %j', patch => {
+    expect(() => parseGenerateDayWorkoutRequest({ requestId: 'request-123', controls: { ...controls, ...patch } }, new Date('2026-10-28T12:00Z'))).toThrow('Choose supported workout options');
+  });
   it('counts every repeated recovery and warmup against strict time', () => {
     const value = endurance();
     value.structure.nodes = [{ kind: 'repeat', id: 'repeats', count: 4, steps: [step()] }] as never;

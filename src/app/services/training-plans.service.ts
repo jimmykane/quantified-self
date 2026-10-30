@@ -14,7 +14,7 @@ import {
   startAfter,
   where,
 } from 'app/firebase/firestore';
-import { catchError, combineLatest, from, map, Observable, of, retry, shareReplay, switchMap, throwError, timeout } from 'rxjs';
+import { catchError, combineLatest, from, map, Observable, of, pairwise, retry, shareReplay, startWith, switchMap, throwError, timeout } from 'rxjs';
 import {
   SCHEDULED_WORKOUTS_COLLECTION_ID,
   DELETED_WORKOUT_RECOVERY_MS,
@@ -107,6 +107,48 @@ export class TrainingPlansService {
   private readonly browserCompatibility = inject(BrowserCompatibilityService);
   private readonly scheduleStreams = new Map<string, Observable<CurrentTrainingScheduleV1>>();
   private readonly completionStreams = new Map<string, Observable<TrainingWorkoutCompletionV1[]>>();
+  private readonly activePlanStreams = new Map<string, Observable<TrainingPlanV1 | null>>();
+
+  /** Small shared Today context: no workout collection, history or provider reads. */
+  watchActivePlan(userId: string): Observable<TrainingPlanV1 | null> {
+    if (!userId) return of(null);
+    const existing = this.activePlanStreams.get(userId);
+    if (existing) return existing;
+    const availability = doc(this.firestore, 'users', userId, TRAINING_PLAN_STATE_COLLECTION_ID,
+      TRAINING_PLAN_STATE_DOCUMENT_ID, 'availability', 'restore');
+    const stream = docData(availability, { waitForServer: true }).pipe(
+      timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
+      switchMap(lock => lock !== undefined ? of(null) : this.watchVerifiedCurrentState(userId, { withholdReadFailures: true }).pipe(
+        map(value => {
+          if (value === undefined || value === null) return null;
+          try { return parseTrainingPlanStateV1(value).activePlanId; }
+          catch { return null; } // Invalid state cannot establish rest intent, but a later revision can recover.
+        }),
+        startWith(null),
+        pairwise(),
+        switchMap(([previousId, id]) => {
+          if (!id) return of(null);
+          const plan$ = docData(doc(this.firestore, 'users', userId, TRAINING_PLANS_COLLECTION_ID, id), { waitForServer: true }).pipe(
+            timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
+            map(data => {
+              if (data === undefined) return null;
+              const plan = parseTrainingPlanV1(data);
+              if (plan.id !== id) throw new Error('The active plan identity is inconsistent.');
+              // Plan and state snapshots can arrive in either order during pause/activation.
+              return plan.lifecycle === 'active' ? plan : null;
+            }),
+            // A failed plan read withholds context, but must not end the state listener.
+            catchError(() => of(null)),
+          );
+          // Clear a replaced plan, not unchanged rest intent on routine schedule revisions.
+          return previousId === id ? plan$ : plan$.pipe(startWith(null));
+        }),
+      )),
+      shareReplay({ bufferSize: 1, refCount: true }),
+    );
+    this.activePlanStreams.set(userId, stream);
+    return stream;
+  }
 
   watchCalendarSchedule(userId: string, startLocalDate: string, endLocalDate: string): Observable<CurrentTrainingScheduleV1> {
     if (!userId || !/^\d{4}-\d{2}-\d{2}$/.test(startLocalDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endLocalDate)
@@ -218,7 +260,7 @@ export class TrainingPlansService {
   }
 
   /** Share state freshness and readiness bounds across full and bounded Calendar schedules. */
-  private watchVerifiedCurrentState(uid: string): Observable<unknown> {
+  private watchVerifiedCurrentState(uid: string, options: { withholdReadFailures?: boolean } = {}): Observable<unknown> {
     const stateRef = doc(this.firestore, 'users', uid, TRAINING_PLAN_STATE_COLLECTION_ID, TRAINING_PLAN_STATE_DOCUMENT_ID);
     // A server-acknowledged watch can still repeat stale state. Its emissions
     // invalidate the independently verified exact state, including absence.
@@ -226,6 +268,9 @@ export class TrainingPlansService {
       timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
       switchMap(() => from(this.readCurrentState(uid)).pipe(
         timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
+        // Nullable rest context can await the next SDK invalidation. Full schedules still fail/retry;
+        // an unavailable verification must never be published there as a confirmed empty schedule.
+        catchError(error => options.withholdReadFailures ? of(null) : throwError(() => error)),
       )),
     );
   }

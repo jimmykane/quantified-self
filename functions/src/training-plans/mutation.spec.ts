@@ -93,6 +93,37 @@ function request(
 }
 
 describe('applyTrainingScheduleMutation', () => {
+    it('adds and removes rest days without creating workouts or changing their counts', () => {
+        const selected = plan();
+        const added = applyTrainingScheduleMutation(snapshot([selected]), request({ kind: 'set-plan-rest-days',
+            planId: selected.id, restDays: ['2026-09-03', '2026-09-02'] },
+        [{ scope: 'plan', id: selected.id, revision: selected.revision }]), NOW_MS);
+        expect(added.response.plans[0]).toMatchObject({ restDays: ['2026-09-02', '2026-09-03'], workoutCount: 0 });
+        expect(added.changedWorkoutIds).toEqual([]);
+        expect(added.after.state.currentWorkoutCount).toBe(0);
+        const removed = applyTrainingScheduleMutation(added.after, { mutationId: 'clear-rest',
+            expectedRevisions: [{ scope: 'state', id: 'current', revision: 8 }, { scope: 'plan', id: selected.id, revision: 4 }],
+            operation: { kind: 'set-plan-rest-days', planId: selected.id, restDays: [] } }, NOW_MS + 1);
+        expect(removed.response.plans[0]).not.toHaveProperty('restDays');
+    });
+    it('rejects planned-workout conflicts and out-of-range rest dates but permits skipped sessions', () => {
+        const selected = plan();
+        const operation = { kind: 'set-plan-rest-days' as const, planId: selected.id, restDays: ['2026-09-02'] };
+        const expected = [{ scope: 'plan' as const, id: selected.id, revision: selected.revision }];
+        expect(() => applyTrainingScheduleMutation(snapshot([selected], [workout({ planId: selected.id })]),
+            request(operation, expected), NOW_MS)).toThrow('rest day');
+        expect(() => applyTrainingScheduleMutation(snapshot([selected]), request({ ...operation, restDays: ['2026-10-01'] }, expected), NOW_MS)).toThrow('inside');
+        expect(applyTrainingScheduleMutation(snapshot([selected], [workout({ planId: selected.id, lifecycle: 'skipped' })]),
+            request(operation, expected), NOW_MS).response.plans[0].restDays).toEqual(['2026-09-02']);
+    });
+    it('shifts rest dates across month boundaries and does not allow adding a workout to them', () => {
+        const selected = plan({ restDays: ['2026-09-30'] });
+        const expected = [{ scope: 'plan' as const, id: selected.id, revision: selected.revision }];
+        expect(applyTrainingScheduleMutation(snapshot([selected]), request({ kind: 'shift-plan', planId: selected.id, days: 7 }, expected), NOW_MS)
+            .response.plans[0].restDays).toEqual(['2026-10-07']);
+        expect(() => applyTrainingScheduleMutation(snapshot([selected]), request({ kind: 'create-workout', workoutId: 'new',
+            planId: selected.id, localDate: '2026-09-30', title: 'Run', structure: STRUCTURE, confirmPlanRangeExtension: false }, expected), NOW_MS)).toThrow('rest day');
+    });
     it('replaces and removes phases through plan revisions without altering workouts', () => {
         const selected = plan({ workoutCount: 1 });
         const scheduled = workout({ planId: selected.id });

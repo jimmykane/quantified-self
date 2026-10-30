@@ -554,7 +554,7 @@ async function deleteSourceFilesForDeletedEventSnapshot(
 export const cleanupEventFile = onDocumentDeleted({
     document: 'users/{userId}/events/{eventId}',
     region: 'europe-west2',
-    memory: '1GiB',
+    memory: '512MiB',
     maxInstances: 10,
     concurrency: 5,
     timeoutSeconds: 300,
