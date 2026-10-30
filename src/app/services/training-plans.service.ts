@@ -14,7 +14,7 @@ import {
   startAfter,
   where,
 } from 'app/firebase/firestore';
-import { catchError, combineLatest, from, map, Observable, of, pairwise, retry, shareReplay, startWith, switchMap, throwError, timeout } from 'rxjs';
+import { catchError, combineLatest, from, map, Observable, of, pairwise, retry, Subject, shareReplay, startWith, switchMap, throwError, timeout } from 'rxjs';
 import {
   SCHEDULED_WORKOUTS_COLLECTION_ID,
   DELETED_WORKOUT_RECOVERY_MS,
@@ -102,6 +102,11 @@ export function selectCalendarVisibleScheduledWorkouts(
 
 @Injectable({ providedIn: 'root' })
 export class TrainingPlansService {
+  private readonly stateRevisionChanges = new Subject<{ uid: string; revision: number | null }>();
+  readonly stateRevisionChanges$ = this.stateRevisionChanges.asObservable();
+  private readonly verifiedStateRevisions = new Map<string, number | null>();
+  /** Last independently verified revision only; this never starts a read or supplies mutation authority. */
+  lastVerifiedStateRevision(uid: string): number | null | undefined { return this.verifiedStateRevisions.get(uid); }
   private readonly firestore = inject(Firestore);
   private readonly functions = inject(AppFunctionsService);
   private readonly browserCompatibility = inject(BrowserCompatibilityService);
@@ -278,7 +283,14 @@ export class TrainingPlansService {
   private async readCurrentState(uid: string): Promise<unknown> {
     const { getFirestore, doc, getDoc } = await import('firebase/firestore/lite');
     const firestore = getFirestore(this.firestore.app);
-    return (await getDoc(doc(firestore, 'users', uid, TRAINING_PLAN_STATE_COLLECTION_ID, TRAINING_PLAN_STATE_DOCUMENT_ID))).data();
+    const value = (await getDoc(doc(firestore, 'users', uid, TRAINING_PLAN_STATE_COLLECTION_ID, TRAINING_PLAN_STATE_DOCUMENT_ID))).data();
+    let revision: number | null = null;
+    try { revision = value === undefined ? 0 : parseTrainingPlanStateV1(value).revision; } catch { /* Invalid state stays unknown. */ }
+    this.verifiedStateRevisions.delete(uid);
+    this.verifiedStateRevisions.set(uid, revision);
+    if (this.verifiedStateRevisions.size > 8) this.verifiedStateRevisions.delete(this.verifiedStateRevisions.keys().next().value!);
+    this.stateRevisionChanges.next({ uid, revision });
+    return value;
   }
 
   async getDeletedWorkoutsPage(

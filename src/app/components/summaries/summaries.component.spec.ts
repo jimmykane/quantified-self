@@ -2053,12 +2053,17 @@ describe('SummariesComponent', () => {
       expect(render().querySelector('.dashboard-readiness-primary-value')?.textContent).toContain('Awaiting today’s sleep');
       expect(render().querySelector('[label="Available readiness signals"]')).toBeNull();
       // Newly imported sleep continues updating the open dashboard.
-      const revision = component.morningWorkoutSleepRevision;
+      const revision = component.dailyWorkoutSuggestionSleepRevision;
       sleep$.next(nights);
       vi.advanceTimersToNextFrame();
-      expect(component.morningWorkoutSleepRevision).toBe(revision + 1);
+      expect(component.dailyWorkoutSuggestionSleepRevision).toBe(revision + 1);
+      const sleepKey = component.dailyWorkoutSuggestionSleepKey;
+      expect(sleepKey).toBe(JSON.stringify(nights.map(night => [night.id ?? null, night.source.provider,
+        night.startTimeMs, night.endTimeMs, night.updatedAtMs, night.isNap]).sort()));
+      expect(sleepKey).not.toContain('providerUserId');
       sleep$.next(nights);
-      expect(component.morningWorkoutSleepRevision).toBe(revision + 1);
+      expect(component.dailyWorkoutSuggestionSleepKey).toBe(sleepKey);
+      expect(component.dailyWorkoutSuggestionSleepRevision).toBe(revision + 1);
       expect(component.dashboardTodayReadiness.score).toBe(67);
       expect(component.dashboardTodayReadiness.changeSignals.find(signal => signal.id === 'sleep')?.state).toBe('recorded');
     });

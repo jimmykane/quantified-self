@@ -3,34 +3,34 @@ import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { dayWorkoutDateOffset, type DayWorkoutControls, type GenerateDayWorkoutResponse } from '../../../shared/day-workout';
-import { parseMorningWorkoutPreferences, type MorningWorkoutPreferences, type MorningWorkoutStatus } from '../../../shared/morning-workout';
+import { parseDailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionStatus } from '../../../shared/daily-workout-suggestion';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import { TTL_CONFIG } from '../shared/ttl-config';
 
-interface Entry extends MorningWorkoutStatus { token: string; startedAtMs: number; charged: boolean; preferenceHash: string; awaitingSleep?: true }
+interface Entry extends DailyWorkoutSuggestionStatus { token: string; startedAtMs: number; charged: boolean; preferenceHash: string; awaitingSleep?: true }
 // A date-keyed map under the existing index-exempt messages field; this leaf is not a chat transcript.
-interface State { version: 'morning-workout-v1'; messages: Record<string, Entry>; expireAt: Timestamp }
-const fingerprint = (value: MorningWorkoutPreferences) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+interface State { version: 'daily-workout-suggestion-v1'; messages: Record<string, Entry>; expireAt: Timestamp }
+const fingerprint = (value: DailyWorkoutSuggestionPreferences) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const LEASE_MS = 4 * 60_000;
-const publicEntry = ({ localDate, state, controls, result }: Entry): MorningWorkoutStatus => ({ localDate, state,
+const publicEntry = ({ localDate, state, controls, result }: Entry): DailyWorkoutSuggestionStatus => ({ localDate, state,
   ...(controls ? { controls } : {}), ...(result ? { result } : {}) });
 
 /** Server-only leaf under the existing conversation Rules, seven-day TTL and recursive account erasure. */
-export function createMorningWorkoutStore(db = () => admin.firestore(), clock = () => new Date()) {
-  async function transact<T>(uid: string, action: (preferences: MorningWorkoutPreferences | null, state: State, now: Date) =>
+export function createDailyWorkoutSuggestionStore(db = () => admin.firestore(), clock = () => new Date()) {
+  async function transact<T>(uid: string, action: (preferences: DailyWorkoutSuggestionPreferences | null, state: State, now: Date) =>
     { value: T; write?: boolean }): Promise<T> {
     const database = db();
     return database.runTransaction(async tx => {
       const now = clock();
       const guard = await getUserDeletionGuardStateInTransaction(database, tx, uid, now.getTime());
-      if (guard.shouldSkip) throw new HttpsError('permission-denied', 'Morning suggestions are unavailable.');
-      const ref = database.doc(`users/${uid}/assistantConversations/morning-workout`);
+      if (guard.shouldSkip) throw new HttpsError('permission-denied', 'Daily suggestions are unavailable.');
+      const ref = database.doc(`users/${uid}/assistantConversations/daily-workout-suggestion`);
       const [settings, snapshot] = await Promise.all([tx.get(database.doc(`users/${uid}/config/settings`)), tx.get(ref)]);
-      let preferences: MorningWorkoutPreferences | null = null;
-      try { preferences = parseMorningWorkoutPreferences(settings.get('appSettings.morningWorkout'), now); } catch { /* Missing/malformed is off. */ }
+      let preferences: DailyWorkoutSuggestionPreferences | null = null;
+      try { preferences = parseDailyWorkoutSuggestionPreferences(settings.get('appSettings.dailyWorkoutSuggestion'), now); } catch { /* Missing/malformed is off. */ }
       const state = snapshot.data() as State | undefined;
-      if (state && state.version !== 'morning-workout-v1') throw new HttpsError('failed-precondition', 'Morning suggestion state is unavailable.');
-      const next: State = state ?? { version: 'morning-workout-v1', messages: {}, expireAt: Timestamp.fromMillis(0) };
+      if (state && state.version !== 'daily-workout-suggestion-v1') throw new HttpsError('failed-precondition', 'Daily suggestion state is unavailable.');
+      const next: State = state ?? { version: 'daily-workout-suggestion-v1', messages: {}, expireAt: Timestamp.fromMillis(0) };
       const outcome = action(preferences, next, now);
       if (outcome.write) {
         next.expireAt = Timestamp.fromMillis(now.getTime() + TTL_CONFIG.ASSISTANT_CONVERSATIONS_IN_DAYS * 86_400_000);
@@ -40,7 +40,7 @@ export function createMorningWorkoutStore(db = () => admin.firestore(), clock = 
         for (const day of days.slice(8)) delete next.messages[day];
         while (Buffer.byteLength(JSON.stringify(next), 'utf8') > 400_000) {
           const old = days.slice().reverse().find(day => next.messages[day]?.result && day !== preferences?.controls.localDate);
-          if (!old) throw new HttpsError('resource-exhausted', 'Morning suggestion is too large.');
+          if (!old) throw new HttpsError('resource-exhausted', 'Daily suggestion is too large.');
           delete next.messages[old].result; delete next.messages[old].controls;
         }
         tx.set(ref, next);
@@ -48,19 +48,19 @@ export function createMorningWorkoutStore(db = () => admin.firestore(), clock = 
       return outcome.value;
     });
   }
-  function active(preferences: MorningWorkoutPreferences | null, state: State, date: string, token: string, now: Date): Entry {
+  function active(preferences: DailyWorkoutSuggestionPreferences | null, state: State, date: string, token: string, now: Date): Entry {
     const entry = state.messages[date];
     if (!preferences?.enabled || preferences.controls.localDate !== date || !entry || entry.token !== token
       || entry.state !== 'preparing' || !Number.isFinite(entry.startedAtMs) || now.getTime() - entry.startedAtMs >= LEASE_MS
-      || entry.preferenceHash !== fingerprint(preferences)) throw new HttpsError('aborted', 'The morning suggestion changed or expired.');
+      || entry.preferenceHash !== fingerprint(preferences)) throw new HttpsError('aborted', 'The daily suggestion changed or expired.');
     return entry;
   }
   return {
-    read: (uid: string) => transact<{ preferences: MorningWorkoutPreferences | null; status: MorningWorkoutStatus }>(uid, (preferences, state, now) => {
-      if (!preferences?.enabled) return { value: { preferences: null, status: { localDate: '', state: 'off' } as MorningWorkoutStatus } };
+    read: (uid: string) => transact<{ preferences: DailyWorkoutSuggestionPreferences | null; status: DailyWorkoutSuggestionStatus }>(uid, (preferences, state, now) => {
+      if (!preferences?.enabled) return { value: { preferences: null, status: { localDate: '', state: 'off' } as DailyWorkoutSuggestionStatus } };
       const date = preferences.controls.localDate;
       const entry = state.messages[date];
-      const status: MorningWorkoutStatus = entry ? publicEntry(entry) : { localDate: date, state: 'waiting' };
+      const status: DailyWorkoutSuggestionStatus = entry ? publicEntry(entry) : { localDate: date, state: 'waiting' };
       // Coverage is rechecked by the caller. Preserve earlier deferral if that temporary coverage is removed.
       if (entry?.awaitingSleep === true && entry.charged === false && ['planned', 'completed', 'rest-day'].includes(entry.state)) {
         status.state = 'waiting-sleep';
@@ -72,8 +72,8 @@ export function createMorningWorkoutStore(db = () => admin.firestore(), clock = 
       if (status.state === 'ready' && !status.result) status.state = 'failed';
       return { value: { preferences, status } };
     }),
-    begin: (uid: string, expected: MorningWorkoutPreferences) => transact<string | null>(uid, (preferences, state, now) => {
-      if (!preferences?.enabled || fingerprint(preferences) !== fingerprint(expected)) throw new HttpsError('aborted', 'Morning preferences changed.');
+    begin: (uid: string, expected: DailyWorkoutSuggestionPreferences) => transact<string | null>(uid, (preferences, state, now) => {
+      if (!preferences?.enabled || fingerprint(preferences) !== fingerprint(expected)) throw new HttpsError('aborted', 'Daily preferences changed.');
       const date = preferences.controls.localDate;
       const existing = state.messages[date];
       const reclaimable = existing && existing.charged === false && (['planned', 'completed', 'rest-day', 'waiting-sleep'].includes(existing.state)
@@ -91,7 +91,7 @@ export function createMorningWorkoutStore(db = () => admin.firestore(), clock = 
     charge: (uid: string, date: string, token: string) => transact(uid, (preferences, state, now) => {
       active(preferences, state, date, token, now).charged = true; return { value: undefined, write: true };
     }),
-    finish: (uid: string, date: string, token: string, outcome: MorningWorkoutStatus['state'],
+    finish: (uid: string, date: string, token: string, outcome: DailyWorkoutSuggestionStatus['state'],
       controls?: DayWorkoutControls, result?: GenerateDayWorkoutResponse) => transact(uid, (preferences, state, now) => {
       const current = state.messages[date];
       // A source-choice change can cancel uncharged work without spending the daily allowance.
@@ -106,13 +106,13 @@ export function createMorningWorkoutStore(db = () => admin.firestore(), clock = 
       return { value: undefined, write: true };
     }),
     dismiss: (uid: string, expectedDate: string) => transact(uid, (preferences, state, now) => {
-      if (!preferences?.enabled) throw new HttpsError('failed-precondition', 'Morning suggestions are off.');
+      if (!preferences?.enabled) throw new HttpsError('failed-precondition', 'Daily suggestions are off.');
       const date = preferences.controls.localDate;
       if (date !== expectedDate) throw new HttpsError('aborted', 'The day changed. Review today before dismissing.');
       state.messages[date] = { localDate: date, state: 'dismissed', token: randomUUID(), startedAtMs: now.getTime(), charged: true,
         preferenceHash: fingerprint(preferences) };
-      return { value: { localDate: date, state: 'dismissed' } as MorningWorkoutStatus, write: true };
+      return { value: { localDate: date, state: 'dismissed' } as DailyWorkoutSuggestionStatus, write: true };
     }),
   };
 }
-export type MorningWorkoutStore = ReturnType<typeof createMorningWorkoutStore>;
+export type DailyWorkoutSuggestionStore = ReturnType<typeof createDailyWorkoutSuggestionStore>;

@@ -52,6 +52,21 @@ describe('bounded Calendar Training reads', () => {
     expect(await firstValueFrom(service.watchActivePlan('owner'))).toBeNull();
     expect(docData).toHaveBeenCalledOnce(); expect(collectionData).not.toHaveBeenCalled(); expect(getDoc).not.toHaveBeenCalled();
   });
+  it('publishes standalone-workout deletion revisions even when there is no active plan', async () => {
+    const stateSignals = new Subject<unknown>(), revisions: unknown[] = [];
+    vi.mocked(docData).mockImplementation(ref => ref.path.endsWith('/availability/restore') ? of(undefined) : stateSignals);
+    serverState = currentState;
+    const revisionSubscription = service.stateRevisionChanges$.subscribe(value => revisions.push(value));
+    const subscription = service.watchActivePlan('owner').subscribe();
+    stateSignals.next(currentState);
+    await vi.waitFor(() => expect(revisions).toEqual([{ uid: 'owner', revision: 253 }]));
+    serverState = { ...currentState, currentWorkoutCount: 0, revision: 254 };
+    stateSignals.next(serverState);
+    await vi.waitFor(() => expect(revisions).toEqual([{ uid: 'owner', revision: 253 }, { uid: 'owner', revision: 254 }]));
+    expect(service.lastVerifiedStateRevision('owner')).toBe(254);
+    expect(collectionData).not.toHaveBeenCalled(); expect(docData).toHaveBeenCalledTimes(2);
+    subscription.unsubscribe(); revisionSubscription.unsubscribe();
+  });
   it.each(['paused', 'archived', 'missing'] as const)('keeps rest context live when the old plan becomes %s before the state changes', async lifecycle => {
     const stateSignals = new Subject<unknown>(), oldPlan = new Subject<unknown>(), nextPlan = new Subject<unknown>();
     const plan: TrainingPlanV1 = { schemaVersion: 1, id: 'old', name: 'Autumn', lifecycle: 'active',

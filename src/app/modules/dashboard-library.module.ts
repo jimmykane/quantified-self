@@ -1,6 +1,6 @@
 import { DashboardPerformanceTrendComponent } from '../components/charts/performance-trend/dashboard-performance-trend.component';
 import { DashboardHealthChartComponent } from '../components/charts/health/dashboard-health-chart.component';
-import { MorningWorkoutComponent } from '../components/summaries/morning-workout/morning-workout.component';
+import { DailyWorkoutSuggestionComponent } from '../components/summaries/daily-workout-suggestion/daily-workout-suggestion.component';
 import { DashboardDailyBriefingComponent } from '../components/summaries/dashboard-daily-briefing/dashboard-daily-briefing.component';
 import { TimelineNotesWorkspaceComponent } from '../components/timeline-notes/timeline-notes-workspace.component';
 import { ActiveSicknessNoteComponent } from '../components/timeline-notes/active-sickness-note.component';
@@ -38,7 +38,7 @@ import { EventTableModule } from './event-table.module';
         DashboardHealthChartComponent,
         DashboardPerformanceTrendComponent,
         DashboardDailyBriefingComponent,
-        MorningWorkoutComponent,
+        DailyWorkoutSuggestionComponent,
         DashboardChartThumbnailComponent,
         SharedModule,
         MaterialModule,

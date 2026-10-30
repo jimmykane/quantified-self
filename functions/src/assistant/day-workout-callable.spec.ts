@@ -6,7 +6,8 @@ import { ValidationError } from 'genkit/schema';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { assistantGenkit } from './model';
 import { defaultDayWorkoutControls } from '../../../shared/day-workout';
-import { DAY_WORKOUT_SYSTEM, generateDayWorkoutSuggestion, runGenerateDayWorkout, type DayWorkoutDependencies } from './day-workout-callable';
+import { DAY_WORKOUT_SYSTEM, generateDayWorkout, generateDayWorkoutSuggestion, runGenerateDayWorkout, type DayWorkoutDependencies } from './day-workout-callable';
+import { runDailyWorkoutSuggestion } from './daily-workout-suggestion';
 import { DayWorkoutSuggestionValidationError } from './day-workout-validation';
 import type { AssistantQuotaReservation } from './quota';
 vi.mock('../utils', () => ({ ALLOWED_CORS_ORIGINS: [], enforceAppCheck: (context: { app?: unknown }) => {
@@ -14,6 +15,7 @@ vi.mock('../utils', () => ({ ALLOWED_CORS_ORIGINS: [], enforceAppCheck: (context
 } }));
 vi.mock('./model', () => ({ assistantGenkit: { generate: vi.fn() } }));
 vi.mock('./mcp-session', () => ({ createAssistantMcpSession: vi.fn() }));
+vi.mock('./daily-workout-suggestion', () => ({ runDailyWorkoutSuggestion: vi.fn() }));
 vi.mock('./quota', () => ({ reserveAssistantQuotaForRequest: vi.fn(), finalizeAssistantQuotaReservation: vi.fn(), releaseAssistantQuotaReservation: vi.fn() }));
 function dependencies(): DayWorkoutDependencies {
   return { now: () => new Date('2026-10-28T12:00:00Z'), legal: vi.fn().mockResolvedValue(undefined),
@@ -40,6 +42,14 @@ function mockSdkOutputs(...outputs: (string | Error)[]) {
 const request = { requestId: 'day-workout:71f1e982-b718-4c5b-a3c7-c45eebdefc84', controls: defaultDayWorkoutControls('2026-10-28', 'UTC') };
 const auth = { auth: { uid: 'owner' }, app: {} };
 describe('generateDayWorkout callable', () => {
+  it('dispatches the first-party daily-suggestion mode through the existing callable', async () => {
+    const input = { mode: 'daily-suggestion', action: 'status' };
+    const status = { localDate: '2026-10-28', state: 'waiting' as const };
+    vi.mocked(runDailyWorkoutSuggestion).mockResolvedValueOnce(status);
+    const callableRequest = { data: input, ...auth };
+    expect(await generateDayWorkout.run(callableRequest as Parameters<typeof generateDayWorkout.run>[0])).toEqual(status);
+    expect(runDailyWorkoutSuggestion).toHaveBeenCalledExactlyOnceWith(input, callableRequest);
+  });
   it('meters the real provider response before Genkit rejects malformed JSON', async () => {
     const evidence = await dependencies().context('owner', request, new Date());
     mockSdkOutputs('{"kind":'); const usage = vi.fn();

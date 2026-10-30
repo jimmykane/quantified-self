@@ -1,11 +1,11 @@
 import { DAY_WORKOUT_SPORTS, dayWorkoutDateOffset, dayWorkoutLocalDate, dayWorkoutPurposes, dayWorkoutTargets } from '../../../shared/day-workout';
 import { isStrengthWorkoutSportV1 } from '../../../shared/strength-workout';
-import type { MorningWorkoutPreferences } from '../../../shared/morning-workout';
+import type { DailyWorkoutSuggestionPreferences } from '../../../shared/daily-workout-suggestion';
 import { buildDayWorkoutRoutine } from './day-workout-routine';
 import { createAssistantMcpSession } from './mcp-session';
 
 /** Exact recorded weekday sport, only with two distinct days and an unambiguous winner. Saved sport is the fallback. */
-export function morningRoutineSport(preferences: MorningWorkoutPreferences, now: Date, activities: unknown[]) {
+export function dailyWorkoutSuggestionRoutineSport(preferences: DailyWorkoutSuggestionPreferences, now: Date, activities: unknown[]) {
   const candidates = DAY_WORKOUT_SPORTS.map(sport => buildDayWorkoutRoutine({ ...preferences.controls, sport }, now, activities))
     .filter(item => {
       const sport = DAY_WORKOUT_SPORTS.find(sport => sport === item.sport)!;
@@ -19,7 +19,7 @@ export function morningRoutineSport(preferences: MorningWorkoutPreferences, now:
   return unique.length && (!unique[1] || unique[0].recordedDayCount > unique[1].recordedDayCount)
     ? DAY_WORKOUT_SPORTS.find(sport => sport === unique[0].sport)! : preferences.controls.sport;
 }
-export async function selectMorningWorkoutSport(uid: string, preferences: MorningWorkoutPreferences, now: Date) {
+export async function selectDailyWorkoutSuggestionSport(uid: string, preferences: DailyWorkoutSuggestionPreferences, now: Date) {
   const saved = preferences.controls;
   if (!preferences.followRoutine || saved.routineContext === false || saved.activityContext === false) return saved;
   const session = await createAssistantMcpSession(uid, 'https://quantified-self.io', undefined, 'coordinate_free', false, false);
@@ -32,7 +32,7 @@ export async function selectMorningWorkoutSport(uid: string, preferences: Mornin
       if (!Array.isArray(result.activities) || result.activities.length > 100) return saved;
       activities.push(...result.activities);
       if (result.scanComplete === true && !result.nextCursor) {
-        const selected = morningRoutineSport(preferences, now, activities);
+        const selected = dailyWorkoutSuggestionRoutineSport(preferences, now, activities);
         const sport = dayWorkoutTargets(selected).includes(saved.target) || saved.target === 'auto' ? selected : saved.sport;
         return { ...saved, sport, purpose: dayWorkoutPurposes(sport).includes(saved.purpose) ? saved.purpose : 'suggest' as const,
           target: dayWorkoutTargets(sport).includes(saved.target) ? saved.target : dayWorkoutTargets(sport)[0],
