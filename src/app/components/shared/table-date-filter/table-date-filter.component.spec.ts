@@ -49,6 +49,19 @@ describe('TableDateFilterComponent', () => {
     expect(c.applied).not.toHaveBeenCalled(); expect(c.haptics.selection).toHaveBeenCalledOnce();
   });
 
+  it.each(['disable', 'destroy'])('discards a queued preset when the owner chooses to %s before the menu handoff', async action => {
+    const c = await setup();
+    c.trigger.click(); await c.settle();
+    const week = [...c.overlay.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')].find(button => button.textContent?.includes('Last 7 days'))!;
+    week.click();
+    expect(c.selected).not.toHaveBeenCalled();
+    if (action === 'destroy') c.fixture.destroy();
+    else c.fixture.componentRef.setInput('disabled', true);
+    await c.settle();
+    expect(c.selected).not.toHaveBeenCalled();
+    expect(c.opened).not.toHaveBeenCalled();
+  });
+
   it('uses the native range calendar, stages both dates until Apply and restores the date button focus', async () => {
     const c = await setup();
     const picker = c.fixture.debugElement.query(By.directive(MatDateRangePicker)).componentInstance as MatDateRangePicker<Dayjs>;

@@ -59,11 +59,11 @@ export class TableDateFilterComponent<T extends string | number = string | numbe
   private readonly destroyRef = inject(DestroyRef);
   private readonly trigger = viewChild.required<MatMenuTrigger>('rangeTrigger');
   private readonly picker = viewChild.required<MatDateRangePicker<Dayjs>>('picker');
-  private pendingCalendar = false;
+  private pendingChoice?: T;
   private applyClicked = false;
 
   open(): void {
-    if (this.disabled() || this.pendingCalendar || this.trigger().menuOpen || this.picker().opened) return;
+    if (this.disabled() || this.pendingChoice !== undefined || this.trigger().menuOpen || this.picker().opened) return;
     this.focus();
     this.trigger().openMenu();
   }
@@ -75,17 +75,20 @@ export class TableDateFilterComponent<T extends string | number = string | numbe
   choose(value: T): void {
     if (this.disabled()) return;
     this.invalidRange.set(false);
-    this.pendingCalendar = value === this.customValue();
-    this.selectionChange.emit(value);
+    this.pendingChoice = value;
   }
 
   onMenuClosed(): void {
     this.menuOpen.set(false);
-    if (!this.pendingCalendar) return;
-    // Wait for the menu to restore focus and the owner to initialize its existing form.
+    if (this.pendingChoice === undefined) return;
+    // Let the menu restore focus before a selection can open a dialog. Dialogs must
+    // remember this persistent button, rather than a menu item that is being removed.
     afterNextRender(() => {
-      this.pendingCalendar = false;
-      if (this.destroyRef.destroyed || this.disabled()) return;
+      const value = this.pendingChoice;
+      this.pendingChoice = undefined;
+      if (value === undefined || this.destroyRef.destroyed || this.disabled()) return;
+      this.selectionChange.emit(value);
+      if (value !== this.customValue()) return;
       this.applyClicked = false;
       this.picker().open();
     }, { injector: this.injector });

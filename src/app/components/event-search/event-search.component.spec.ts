@@ -8,6 +8,7 @@ import { MatSelect } from '@angular/material/select';
 import dayjs from 'dayjs';
 import { ActivityFilterPickerComponent } from '../shared/activity-filter-picker/activity-filter-picker.component';
 import { TableDateFilterComponent } from '../shared/table-date-filter/table-date-filter.component';
+import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { MergedActivitiesToggleComponent } from '../shared/merged-activities-toggle/merged-activities-toggle.component';
 import { ChangeDetectorRef, Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
@@ -56,12 +57,13 @@ class MergedFilterTestHost {
 }
 
 describe('Merged toolbar filter rendering', () => {
-  const haptics = { selection: vi.fn() };
+  const haptics = { selection: vi.fn(), warning: vi.fn() };
 
   beforeEach(async () => {
     haptics.selection.mockClear();
+    haptics.warning.mockClear();
     await TestBed.configureTestingModule({
-      declarations: [MergedFilterTestHost, EventSearchComponent, ActivityTypesMultiSelectComponent],
+      declarations: [MergedFilterTestHost, EventSearchComponent, ActivityTypesMultiSelectComponent, ConfirmationDialogComponent],
       imports: [TableDateFilterComponent, ActivityFilterPickerComponent, MergedActivitiesToggleComponent, CommonModule, ReactiveFormsModule, NoopAnimationsModule, MaterialModule, AppChartSharedModule],
       providers: [{ provide: AppHapticsService, useValue: haptics },
         { provide: AppEventColorService, useValue: { getColorForActivityTypeByActivityTypeGroup: () => '#123456' } }],
@@ -135,6 +137,25 @@ describe('Merged toolbar filter rendering', () => {
     fixture.nativeElement.querySelector('button[aria-label="Clear custom dates and show date presets"]').click(); await render();
     expect(fixture.componentInstance.requests).toHaveLength(2); expect(fixture.componentInstance.requests[1].dateRange).toBe(DateRanges.lastThirtyDays);
     expect(document.activeElement?.getAttribute('aria-label')).toBe('Date range: Last 30 days');
+  });
+
+  it.each(['Cancel', 'OK'])('restores date-button focus after closing the real All dates warning with %s', async action => {
+    const fixture = TestBed.createComponent(MergedFilterTestHost);
+    const settle = async () => { fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); };
+    await settle();
+    const trigger = fixture.nativeElement.querySelector('.table-date-filter-button') as HTMLButtonElement;
+    trigger.focus(); trigger.click(); await settle();
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    const allDates = [...overlay.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')].find(button => button.textContent?.includes('All dates'))!;
+    allDates.focus(); allDates.click(); await settle();
+    const dialog = overlay.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(dialog).toBeTruthy();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    [...dialog.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.trim() === action)!.click(); await settle();
+    expect(fixture.componentInstance.requests).toEqual(action === 'Cancel' ? [] : [expect.objectContaining({ dateRange: DateRanges.all })]);
+    expect(haptics.selection).toHaveBeenCalledTimes(action === 'Cancel' ? 3 : 2);
+    expect(haptics.warning).toHaveBeenCalledTimes(action === 'Cancel' ? 0 : 1);
+    expect(document.activeElement).toBe(trigger);
   });
 
   it('explains the existing five-year date limit without submitting an invalid range', async () => {
