@@ -22,6 +22,7 @@ export class MorningWorkoutComponent {
   readonly ownerUid = input.required<string>();
   readonly localDate = input.required<string>();
   readonly dataReady = input(false);
+  readonly sleepRevision = input(0);
   readonly morning = inject(MorningWorkoutService);
   private readonly generation = inject(DayWorkoutService);
   private readonly users = inject(AppUserService);
@@ -51,11 +52,13 @@ export class MorningWorkoutComponent {
     if (value?.state === 'rest-day') return 'Today is a planned rest day.';
     if (value?.state === 'dismissed') return 'Dismissed for today.';
     if (value?.state === 'preparing') return 'Your suggestion is being prepared.';
+    if (value?.state === 'waiting-sleep') return 'Waiting for your latest sleep…';
     return 'Prepared on your first visit between 5 am and noon.';
   });
   private sequence = 0;
   private actionSequence = 0;
   private shown = new Set<string>();
+  private checkedSleepRevision = -1;
   constructor() {
     const visibility = () => this.visible.set(this.document.visibilityState !== 'hidden');
     this.document.addEventListener('visibilitychange', visibility);
@@ -77,20 +80,34 @@ export class MorningWorkoutComponent {
         this.actionScope = scope; this.actionSequence++; this.actionBusy.set(false); this.actionError.set(null);
       }
     });
+    effect(onCleanup => {
+      const revision = this.sleepRevision(), waiting = this.status()?.state === 'waiting-sleep';
+      // React to existing Sleep listener updates, including ones arriving during a context read; never poll.
+      if (!waiting || this.busy() || revision === this.checkedSleepRevision || !this.eligible()
+        || !this.preferences().enabled || !this.dataReady() || !this.visible()
+        || !isMorningWorkoutWindow(new Date(), this.preferences().controls.timeZone)) return;
+      const timer = setTimeout(() => untracked(() => { void this.load(); }), 1500);
+      onCleanup(() => clearTimeout(timer));
+    });
   }
   private actionScope = '';
   private current(sequence: number, uid: string): boolean {
     return !this.destroy.destroyed && sequence === this.sequence && uid === this.ownerUid() && this.morning.eligible(uid);
   }
-  async load(): Promise<void> {
+  async load(useAvailableData = false): Promise<void> {
     const uid = this.ownerUid();
     if (this.busy() || !this.morning.eligible(uid) || !this.preferences().enabled || !this.visible() || !this.dataReady()) return;
+    if (useAvailableData && this.status()?.state !== 'waiting-sleep') return;
     const sequence = ++this.sequence;
+    this.checkedSleepRevision = this.sleepRevision();
     this.loading.set(true); this.error.set(false);
     try {
-      let status = await this.morning.request(uid, 'status', () => this.current(sequence, uid));
+      let status = useAvailableData
+        ? await this.morning.request(uid, 'use-available-data', () => this.current(sequence, uid), this.status()!.localDate)
+        : await this.morning.request(uid, 'status', () => this.current(sequence, uid));
       if (!this.current(sequence, uid)) return;
-      if (status.state === 'waiting' && this.dataReady() && isMorningWorkoutWindow(new Date(), this.preferences().controls.timeZone)) {
+      if (!useAvailableData && ['waiting', 'waiting-sleep'].includes(status.state) && this.dataReady()
+        && isMorningWorkoutWindow(new Date(), this.preferences().controls.timeZone)) {
         status = await this.morning.request(uid, 'prepare', () => this.current(sequence, uid));
       }
       if (!this.current(sequence, uid)) return;

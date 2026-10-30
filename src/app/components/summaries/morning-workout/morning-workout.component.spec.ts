@@ -164,5 +164,46 @@ describe('compact morning workout in Today', () => {
     finish({ localDate: '2026-10-30', state: 'dismissed' }); await pending;
     expect(haptics.success).not.toHaveBeenCalled(); expect(fixture.componentInstance.status()).toBeNull();
   });
+  it('waits without polling, retries on Sleep changes, and leaves a ready suggestion unchanged', async () => {
+    const { fixture, request, haptics } = setup(); let synced = false;
+    const ready = await request('owner', 'prepare'); request.mockClear();
+    request.mockImplementation(async (_uid, action) => synced && action === 'prepare' ? ready : { localDate: '2026-10-30', state: 'waiting-sleep' } as any);
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Waiting for your latest sleep'); exportQa(fixture.nativeElement, 'morning-waiting');
+    const attempts = request.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(60_000); expect(request).toHaveBeenCalledTimes(attempts);
+    synced = true; fixture.componentRef.setInput('sleepRevision', 1); fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    expect(fixture.componentInstance.status()?.state).toBe('ready'); expect(haptics.success).not.toHaveBeenCalled();
+    const completed = request.mock.calls.length;
+    fixture.componentRef.setInput('sleepRevision', 2); fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(1600); expect(request).toHaveBeenCalledTimes(completed);
+  });
+  it('notices Sleep arriving during an in-flight context read and coalesces the follow-up', async () => {
+    const { fixture, request } = setup(); let finish!: (value: any) => void;
+    request.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = fixture.componentInstance.load();
+    fixture.componentRef.setInput('sleepRevision', 1); fixture.detectChanges();
+    finish({ localDate: '2026-10-30', state: 'waiting-sleep' });
+    request.mockResolvedValueOnce({ localDate: '2026-10-30', state: 'waiting-sleep' } as any);
+    await pending; fixture.detectChanges();
+    const attempts = request.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    expect(request.mock.calls.length).toBeGreaterThan(attempts);
+    expect(fixture.componentInstance.status()?.state).toBe('ready');
+  });
+  it('uses the dated included fallback only after an explicit click, including after noon', async () => {
+    const { fixture, request } = setup();
+    fixture.componentInstance.status.set({ localDate: '2026-10-30', state: 'waiting-sleep' });
+    fixture.detectChanges(); vi.setSystemTime(new Date('2026-10-30T13:00Z'));
+    fixture.componentRef.setInput('sleepRevision', 1); fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(request.mock.calls.every(call => call[1] === 'status')).toBe(true);
+    fixture.componentInstance.status.set({ localDate: '2026-10-30', state: 'waiting-sleep' }); fixture.detectChanges();
+    const button = [...fixture.nativeElement.querySelectorAll('button')].find((item: HTMLButtonElement) => item.textContent?.includes('Use available data')) as HTMLButtonElement;
+    button.click(); await vi.advanceTimersByTimeAsync(0);
+    expect(request).toHaveBeenLastCalledWith('owner', 'use-available-data', expect.any(Function), '2026-10-30');
+    expect(fixture.componentInstance.status()?.state).toBe('ready');
+  });
 
 });

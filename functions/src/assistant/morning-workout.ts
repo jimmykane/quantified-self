@@ -2,7 +2,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import { isMorningWorkoutWindow, type MorningWorkoutPreferences, type MorningWorkoutStatus } from '../../../shared/morning-workout';
 import { normalizeTrainingLocalDate } from '../../../shared/training-plans';
-import { type DayWorkoutControls, type GenerateDayWorkoutRequest } from '../../../shared/day-workout';
+import { dayWorkoutDateOffset, dayWorkoutLocalDate, type DayWorkoutControls, type GenerateDayWorkoutRequest } from '../../../shared/day-workout';
 import { enforceAppCheck, getUserRoleAndGracePeriod } from '../utils';
 import { assertAssistantLegalAccess } from './access';
 import { createMorningWorkoutStore, type MorningWorkoutStore } from './morning-workout-store';
@@ -15,6 +15,20 @@ import { ASSISTANT_MODEL_NAME } from './model';
 
 type RecordValue = Record<string, unknown>;
 const record = (v: unknown): RecordValue => v && typeof v === 'object' && !Array.isArray(v) ? v as RecordValue : {};
+/** Recent completed sleep establishes an expectation, not a provider-sync promise. Missing reads remain unknown. */
+export function morningWorkoutAwaitsSleep(controls: DayWorkoutControls, context: DayWorkoutContext, now: Date): boolean {
+  if (controls.sleepContext === false) return false;
+  const report = record(record(context.evidence.daily).dailyReport), sleep = record(report.sleep);
+  if (sleep.status === 'no_completed_session' && sleep.latestSession === null) return false;
+  const end = record(sleep.latestSession).endTimeMs;
+  if (sleep.status !== 'available' || typeof end !== 'number' || !Number.isFinite(end) || end > now.getTime()
+    || !Number.isFinite(new Date(end).getTime())) return true;
+  const endedOn = dayWorkoutLocalDate(new Date(end), controls.timeZone);
+  if (endedOn < dayWorkoutDateOffset(controls.localDate, -7)) return false;
+  if (endedOn !== controls.localDate) return true;
+  const driver = record(record(record(report.readiness).drivers).sleep);
+  return driver.status !== 'available' || driver.latestSleepAtMs !== end;
+}
 export function morningWorkoutSkip(context: DayWorkoutContext): MorningWorkoutStatus['state'] | null {
   const daily = record(context.evidence.daily), activities = record(daily.activitiesToday), planned = record(daily.plannedWorkouts);
   if (activities.scanComplete !== true || planned.scanComplete !== true || planned.completionChecked !== true
@@ -72,7 +86,7 @@ const defaults: MorningWorkoutDependencies = {
 const coveredStates = ['planned', 'completed', 'rest-day'];
 async function currentMorningStatus(uid: string, dependencies: MorningWorkoutDependencies) {
   const initial = await dependencies.store.read(uid);
-  if (!initial.preferences || !['waiting', 'ready', 'failed', ...coveredStates].includes(initial.status.state)) return initial;
+  if (!initial.preferences || !['waiting', 'waiting-sleep', 'ready', 'failed', ...coveredStates].includes(initial.status.state)) return initial;
   const coverage = await dependencies.coverage(uid, initial.preferences.controls);
   // Dismissal, disablement, deletion or a day/zone change during the read must supersede its result.
   const latest = await dependencies.store.read(uid);
@@ -92,22 +106,28 @@ export async function runMorningWorkout(value: unknown, context: { auth?: { uid:
   if (!context.auth?.uid) throw new HttpsError('unauthenticated', 'Sign in to use morning suggestions.');
   enforceAppCheck(context);
   const input = record(value);
-  const keys = input.action === 'dismiss' ? ['mode', 'action', 'localDate'] : ['mode', 'action'];
+  const datedAction = input.action === 'dismiss' || input.action === 'use-available-data';
+  const keys = datedAction ? ['mode', 'action', 'localDate'] : ['mode', 'action'];
   if (Object.keys(input).some(key => !keys.includes(key)) || input.mode !== 'morning'
-    || typeof input.action !== 'string' || !['status', 'prepare', 'dismiss'].includes(input.action)) throw new HttpsError('invalid-argument', 'Choose a morning action.');
+    || typeof input.action !== 'string' || !['status', 'prepare', 'dismiss', 'use-available-data'].includes(input.action)) throw new HttpsError('invalid-argument', 'Choose a morning action.');
   const uid = context.auth.uid;
   await dependencies.legal(uid);
   if (!await dependencies.pro(uid)) throw new HttpsError('permission-denied', 'Morning suggestions require Pro.');
-  if (input.action === 'dismiss') {
-    let date: string;
-    try { date = normalizeTrainingLocalDate(input.localDate); }
-    catch { throw new HttpsError('invalid-argument', 'Choose the day to dismiss.'); }
-    return dependencies.store.dismiss(uid, date);
+  let expectedDate: string | undefined;
+  if (datedAction) {
+    try { expectedDate = normalizeTrainingLocalDate(input.localDate); }
+    catch { throw new HttpsError('invalid-argument', 'Choose the displayed day.'); }
   }
+  if (input.action === 'dismiss') return dependencies.store.dismiss(uid, expectedDate!);
   const { preferences, status } = await currentMorningStatus(uid, dependencies);
-  if (input.action === 'status' || !preferences || status.state !== 'waiting') return status;
+  if (expectedDate && preferences && expectedDate !== preferences.controls.localDate) {
+    throw new HttpsError('aborted', 'The day changed. Review today before generating.');
+  }
+  if (input.action === 'status' || !preferences || !['waiting', 'waiting-sleep'].includes(status.state)) return status;
   const now = dependencies.now();
-  if (!isMorningWorkoutWindow(now, preferences.controls.timeZone)) return status;
+  const useAvailable = input.action === 'use-available-data';
+  // An explicit fallback can finish a suggestion deferred this morning, including after noon.
+  if (useAvailable ? status.state !== 'waiting-sleep' : !isMorningWorkoutWindow(now, preferences.controls.timeZone)) return status;
   const token = await dependencies.store.begin(uid, preferences);
   if (!token) return (await currentMorningStatus(uid, dependencies)).status;
   const date = preferences.controls.localDate;
@@ -127,21 +147,29 @@ export async function runMorningWorkout(value: unknown, context: { auth?: { uid:
       outcome = skip;
       await dependencies.store.finish(uid, date, token, skip);
       return { localDate: date, state: skip };
-    } else {
-      // Separate daily allowance. Never reserve/finalize Assistant billing-period quota.
-      await dependencies.store.charge(uid, date, token);
-      const suggestion = await generateValidatedDayWorkout(request, evidence, async (request, evidence, correction) => {
-        attempts++;
-        return dependencies.generate(request, evidence, correction, usage => {
-          if (usage.available) meteredAttempts++; inputTokens += usage.inputTokens; outputTokens += usage.outputTokens; thoughtsTokens += usage.thoughtsTokens;
-        });
-      }, assertActive);
-      await assertActive();
-      const result = { requestId: request.requestId, observedAt: now.toISOString(), ...suggestion,
-        usedContext: evidence.usedContext, missingContext: evidence.missingContext };
-      await dependencies.store.finish(uid, date, token, 'ready', controls, result);
-      outcome = 'ready';
     }
+    const awaitingSleep = morningWorkoutAwaitsSleep(controls, evidence, now);
+    if (awaitingSleep && !useAvailable) {
+      outcome = 'waiting-sleep';
+      await dependencies.store.finish(uid, date, token, outcome);
+      return { localDate: date, state: outcome };
+    }
+    if (awaitingSleep) {
+      evidence.missingContext.push('Today’s completed sleep is not included. Treat older sleep and sleep-dependent readiness as dated history, not today’s recovery. You explicitly chose to use available data.');
+    }
+    // Separate daily allowance. Never reserve/finalize Assistant billing-period quota.
+    await dependencies.store.charge(uid, date, token);
+    const suggestion = await generateValidatedDayWorkout(request, evidence, async (request, evidence, correction) => {
+      attempts++;
+      return dependencies.generate(request, evidence, correction, usage => {
+        if (usage.available) meteredAttempts++; inputTokens += usage.inputTokens; outputTokens += usage.outputTokens; thoughtsTokens += usage.thoughtsTokens;
+      });
+    }, assertActive);
+    await assertActive();
+    const result = { requestId: request.requestId, observedAt: now.toISOString(), ...suggestion,
+      usedContext: evidence.usedContext, missingContext: evidence.missingContext };
+    await dependencies.store.finish(uid, date, token, 'ready', controls, result);
+    outcome = 'ready';
     return (await currentMorningStatus(uid, dependencies)).status;
   } catch {
     await dependencies.store.finish(uid, date, token, 'failed').catch(() => undefined);

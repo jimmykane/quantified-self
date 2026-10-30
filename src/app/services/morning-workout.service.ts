@@ -25,8 +25,8 @@ export class MorningWorkoutService {
   }
   async request(uid: string, action: MorningWorkoutRequest['action'], current: () => boolean, expectedDate?: string): Promise<MorningWorkoutStatus> {
     if (!this.eligible(uid) || !current()) throw Error('Morning suggestion access changed.');
-    if (action === 'dismiss' && !expectedDate) throw Error('Choose the day to dismiss.');
-    const request: MorningWorkoutRequest = action === 'dismiss'
+    if ((action === 'dismiss' || action === 'use-available-data') && !expectedDate) throw Error('Choose the displayed day.');
+    const request: MorningWorkoutRequest = action === 'dismiss' || action === 'use-available-data'
       ? { mode: 'morning', action, localDate: expectedDate! } : { mode: 'morning', action };
     return (await this.functions.call<MorningWorkoutRequest, MorningWorkoutStatus>('generateDayWorkout', request,
       { canExecute: () => this.eligible(uid) && current() })).data;

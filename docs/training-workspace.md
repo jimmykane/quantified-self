@@ -5694,8 +5694,25 @@ opt-outs; all applicable choices, including Timeline, default on. The preference
 `DayWorkoutDialogComponent`, the shared sport picker and prescription display. Morning drafts start Standalone.
 
 V1 prepares only on a foreground Today visit after the current data listeners settle (a 1.5-second UI debounce),
-between 05:00 inclusive and 12:00 exclusive in the saved IANA zone. It uses the latest available recovery context; it
-is not a sleep-ingestion trigger or a promise that every provider has finished syncing. No queue, scheduler, notification
+between 05:00 inclusive and 12:00 exclusive in the saved IANA zone. With sleep personalization enabled, a completed main
+sleep ending in the previous seven local dates establishes an expectation for today's sleep. The existing validated
+daily report must include a completed main sleep ending on the current date in that zone, with the same end time in
+its on-read recovery sleep driver. Otherwise the server returns `waiting-sleep` before model admission, preserving
+the unused daily allowance. A failed/malformed report stays unknown and waits; no completed history or history older
+than seven local dates permits available-context generation. Sleep opt-outs bypass this gate. HRV/overnight-HR
+baseline availability and combined readiness confidence do not block it. Naps cannot satisfy the canonical main-sleep
+report, and provider display dates are not substituted for the local end date.
+
+The existing Today Sleep listener increments a private UI revision only when evidence changes. A waiting row debounces
+one new check on that revision, including an update arriving during an in-flight read. It never polls, silently
+regenerates an existing result, or treats identical listener emissions as new evidence. **Use available data** sends a
+date-bound `use-available-data` action for a previously deferred suggestion. This explicit fallback can finish that day's
+morning deferral after noon, rechecks current coverage and all admission fences, and includes a fixed missing-sleep
+qualification in the model/review context. It uses the same one daily allowance; no Assistant quota is reserved.
+The private uncharged deferral receipt survives context failures and expired preparation leases; charged or
+unproven allowance metadata cannot be reclaimed. This keeps a retry from losing the fallback after noon.
+An ordinary afternoon visit cannot start a new included suggestion. **Check again** remains in the options menu while
+waiting. This is not a sleep-ingestion trigger or a promise that every provider has finished syncing. No queue, scheduler, notification
 or background model request is added. Later evidence/preferences do not silently regenerate a cached draft. Status
 retrieval rechecks only current-day activity summaries and the existing revision-bound schedule/rest projection before
 presenting a cached suggestion; an added or completed workout therefore takes priority after reload. No recovery,
@@ -5706,8 +5723,8 @@ Strength/Weight Training alone share their existing family. The normal selected-
 bounded independently; no frontend history query, attendance, location, usual start time or adherence model is introduced.
 
 The existing Auth/App-Check callable `generateDayWorkout` dispatches a strict private `mode: morning` with only
-`status`, `prepare` and `dismiss` actions. Pro and legal access are checked server-side; the mode never accepts client
-controls, user IDs or model configuration. Only dismissal accepts the displayed local date as a rollover fence;
+`status`, `prepare`, `dismiss` and `use-available-data` actions. Pro and legal access are checked server-side; the mode never accepts client
+controls, user IDs or model configuration. Only dismissal and explicit fallback accept the displayed local date as a rollover fence;
 status/preparation dates come from the saved time zone and server clock. It uses the same context, model, strict
 canonical validation and single correction budget as manual generation. Complete current-day activity, schedule/completion and rest-day evidence
 is required before a model call. Existing planned sessions, recorded sessions and authored rest days take priority.

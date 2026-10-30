@@ -28,6 +28,9 @@ describe('MorningWorkoutService owner preferences and existing callable', () => 
     await service.request('owner', 'prepare', () => true);
     expect(call).toHaveBeenCalledWith('generateDayWorkout', { mode: 'morning', action: 'prepare' }, expect.any(Object));
     expect(call.mock.calls[0][2].canExecute()).toBe(true);
+    await expect(service.request('owner', 'use-available-data', () => true)).rejects.toThrow('displayed day');
+    await service.request('owner', 'use-available-data', () => true, preferences.controls.localDate);
+    expect(call).toHaveBeenLastCalledWith('generateDayWorkout', { mode: 'morning', action: 'use-available-data', localDate: preferences.controls.localDate }, expect.any(Object));
     service.event('owner', 'reviewed', 'ready'); expect(logEvent).toHaveBeenCalledWith('morning_workout', { action: 'reviewed', state: 'ready' });
     auth.currentUser = { uid: 'other' }; user.set({ uid: 'other' });
     expect(call.mock.calls[0][2].canExecute()).toBe(false);

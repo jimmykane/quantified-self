@@ -7,7 +7,7 @@ import { parseMorningWorkoutPreferences, type MorningWorkoutPreferences, type Mo
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import { TTL_CONFIG } from '../shared/ttl-config';
 
-interface Entry extends MorningWorkoutStatus { token: string; startedAtMs: number; charged: boolean; preferenceHash: string }
+interface Entry extends MorningWorkoutStatus { token: string; startedAtMs: number; charged: boolean; preferenceHash: string; awaitingSleep?: true }
 // A date-keyed map under the existing index-exempt messages field; this leaf is not a chat transcript.
 interface State { version: 'morning-workout-v1'; messages: Record<string, Entry>; expireAt: Timestamp }
 const fingerprint = (value: MorningWorkoutPreferences) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -62,7 +62,8 @@ export function createMorningWorkoutStore(db = () => admin.firestore(), clock = 
       const entry = state.messages[date];
       const status: MorningWorkoutStatus = entry ? publicEntry(entry) : { localDate: date, state: 'waiting' };
       if (entry?.state === 'preparing' && (!Number.isFinite(entry.startedAtMs) || now.getTime() - entry.startedAtMs >= LEASE_MS)) {
-        status.state = Number.isFinite(entry.startedAtMs) && entry.charged === false ? 'waiting' : 'failed';
+        status.state = Number.isFinite(entry.startedAtMs) && entry.charged === false
+          ? entry.awaitingSleep === true ? 'waiting-sleep' : 'waiting' : 'failed';
       }
       if (status.state === 'ready' && !status.result) status.state = 'failed';
       return { value: { preferences, status } };
@@ -71,13 +72,13 @@ export function createMorningWorkoutStore(db = () => admin.firestore(), clock = 
       if (!preferences?.enabled || fingerprint(preferences) !== fingerprint(expected)) throw new HttpsError('aborted', 'Morning preferences changed.');
       const date = preferences.controls.localDate;
       const existing = state.messages[date];
-      const reclaimable = existing && existing.charged === false && (['planned', 'completed', 'rest-day'].includes(existing.state)
+      const reclaimable = existing && existing.charged === false && (['planned', 'completed', 'rest-day', 'waiting-sleep'].includes(existing.state)
         || existing.state === 'preparing' && Number.isFinite(existing.startedAtMs) && now.getTime() - existing.startedAtMs >= LEASE_MS);
       if (existing && !reclaimable) return { value: null };
       for (const day of Object.keys(state.messages)) if (day < dayWorkoutDateOffset(date, -7)) delete state.messages[day];
       const token = randomUUID();
       state.messages[date] = { localDate: date, state: 'preparing', token, startedAtMs: now.getTime(), charged: false,
-        preferenceHash: fingerprint(preferences) };
+        preferenceHash: fingerprint(preferences), ...(existing?.awaitingSleep === true ? { awaitingSleep: true } : {}) };
       return { value: token, write: true };
     }),
     assertActive: (uid: string, date: string, token: string) => transact(uid, (preferences, state, now) => {
@@ -91,9 +92,12 @@ export function createMorningWorkoutStore(db = () => admin.firestore(), clock = 
       const current = state.messages[date];
       // A source-choice change can cancel uncharged work without spending the daily allowance.
       if (outcome === 'failed' && current?.token === token && current.charged === false) {
-        delete state.messages[date]; return { value: undefined, write: true };
+        if (current.awaitingSleep === true) current.state = 'waiting-sleep';
+        else delete state.messages[date];
+        return { value: undefined, write: true };
       }
       const entry = active(preferences, state, date, token, now);
+      if (outcome === 'waiting-sleep') entry.awaitingSleep = true;
       entry.state = outcome; if (controls) entry.controls = controls; if (result) entry.result = result;
       return { value: undefined, write: true };
     }),

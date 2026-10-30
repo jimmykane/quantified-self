@@ -29,7 +29,7 @@ describe('morning workout preferences', () => {
   });
 });
 
-import { collectMorningWorkoutCoverage, morningWorkoutSkip, runMorningWorkout, type MorningWorkoutDependencies } from './morning-workout';
+import { collectMorningWorkoutCoverage, morningWorkoutAwaitsSleep, morningWorkoutSkip, runMorningWorkout, type MorningWorkoutDependencies } from './morning-workout';
 import { morningRoutineSport } from './morning-workout-routine';
 import type { DayWorkoutContext } from './day-workout-context';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
@@ -40,7 +40,7 @@ vi.mock('../utils', async original => ({ ...await original<typeof import('../uti
 const morningNow = new Date('2026-10-30T07:00:00Z');
 const morningControls = defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki');
 function evidence(): DayWorkoutContext {
-  return { evidence: { daily: { activitiesToday: { scanComplete: true, activities: [] },
+  return { evidence: { daily: { dailyReport: { sleep: { status: 'no_completed_session', latestSession: null } }, activitiesToday: { scanComplete: true, activities: [] },
     plannedWorkouts: { scanComplete: true, completionChecked: true, workouts: [], restDayContext: { status: 'none' } } } },
   usedContext: [], missingContext: [], previousStrength: [], references: [] };
 }
@@ -157,6 +157,57 @@ describe('morning workout preparation', () => {
     await expect(runMorningWorkout({ mode: 'morning', action: 'prepare' }, identity, deps)).rejects.toMatchObject({ code: 'unavailable' });
     expect((await runMorningWorkout({ mode: 'morning', action: 'prepare' }, identity, deps)).state).toBe('failed');
     expect(deps.generate).toHaveBeenCalledOnce(); expect(JSON.stringify(deps.log.mock.calls)).not.toContain('PRIVATE');
+  });
+  it('waits without spending allowance, then uses the synced night once without requiring an HRV baseline', async () => {
+    const deps = dependencies(), context = evidence(), input = { mode: 'morning', action: 'prepare' };
+    const daily = context.evidence.daily as Record<string, unknown>;
+    daily.dailyReport = { sleep: { status: 'available', latestSession: { endTimeMs: Date.parse('2026-10-29T05:00Z') } } };
+    deps.context.mockResolvedValue(context);
+    expect(await runMorningWorkout(input, identity, deps)).toEqual({ localDate: '2026-10-30', state: 'waiting-sleep' });
+    expect(deps.store.charge).not.toHaveBeenCalled(); expect(deps.generate).not.toHaveBeenCalled();
+    daily.dailyReport = { sleep: { status: 'available', latestSession: { endTimeMs: Date.parse('2026-10-30T05:00Z') } },
+      readiness: { drivers: { sleep: { status: 'available', latestSleepAtMs: Date.parse('2026-10-30T05:00Z') }, hrv: { personalRange: { reason: 'building_baseline' } } } } };
+    expect((await runMorningWorkout(input, identity, deps)).state).toBe('ready');
+    expect((await runMorningWorkout(input, identity, deps)).state).toBe('ready');
+    expect(deps.store.charge).toHaveBeenCalledOnce(); expect(deps.generate).toHaveBeenCalledOnce();
+  });
+  it('requires a dated, previously deferred suggestion for the included explicit fallback and allows it after noon', async () => {
+    const deps = dependencies(), context = evidence(); context.evidence.daily = { ...(context.evidence.daily as object), dailyReport: {} };
+    deps.context.mockResolvedValue(context);
+    const fallback = { mode: 'morning', action: 'use-available-data', localDate: '2026-10-30' };
+    await expect(runMorningWorkout({ mode: 'morning', action: 'use-available-data' }, identity, deps)).rejects.toMatchObject({ code: 'invalid-argument' });
+    expect((await runMorningWorkout(fallback, identity, deps)).state).toBe('waiting');
+    expect(deps.store.begin).not.toHaveBeenCalled();
+    await runMorningWorkout({ mode: 'morning', action: 'prepare' }, identity, deps);
+    deps.now = () => new Date('2026-10-30T13:00Z');
+    expect((await runMorningWorkout({ mode: 'morning', action: 'prepare' }, identity, deps)).state).toBe('waiting-sleep');
+    await expect(runMorningWorkout({ ...fallback, localDate: '2026-10-29' }, identity, deps)).rejects.toMatchObject({ code: 'aborted' });
+    const result = await runMorningWorkout(fallback, identity, deps);
+    expect(result.state).toBe('ready'); expect(result.result?.missingContext.join(' ')).toContain('explicitly chose');
+    await runMorningWorkout(fallback, identity, deps);
+    expect(deps.generate).toHaveBeenCalledOnce(); expect(deps.store.charge).toHaveBeenCalledOnce();
+  });
+});
+describe('current-night sleep admission', () => {
+  function context(end?: string, processed = true): DayWorkoutContext {
+    const value = evidence(); (value.evidence.daily as Record<string, unknown>).dailyReport = end ? {
+      sleep: { status: 'available', latestSession: { endTimeMs: Date.parse(end) } },
+      readiness: { drivers: { sleep: { status: 'available', latestSleepAtMs: processed ? Date.parse(end) : null } } },
+    } : { sleep: { status: 'no_completed_session', latestSession: null } }; return value;
+  }
+  it('does not block no-history, inactive tracking or opted-out sleep, but does not mistake a failed read for no history', () => {
+    expect(morningWorkoutAwaitsSleep(morningControls, context(), morningNow)).toBe(false);
+    expect(morningWorkoutAwaitsSleep(morningControls, context('2026-10-01T05:00Z'), morningNow)).toBe(false);
+    const missing = evidence(); missing.evidence.daily = {};
+    expect(morningWorkoutAwaitsSleep(morningControls, missing, morningNow)).toBe(true);
+    expect(morningWorkoutAwaitsSleep({ ...morningControls, sleepContext: false }, missing, morningNow)).toBe(false);
+  });
+  it('waits for a completed current local night and its matching recovery projection, including the seven-day boundary', () => {
+    expect(morningWorkoutAwaitsSleep(morningControls, context('2026-10-23T05:00Z'), morningNow)).toBe(true);
+    expect(morningWorkoutAwaitsSleep(morningControls, context('2026-10-30T08:00Z'), morningNow)).toBe(true);
+    expect(morningWorkoutAwaitsSleep(morningControls, context('2026-10-30T05:00Z', false), morningNow)).toBe(true);
+    expect(morningWorkoutAwaitsSleep(morningControls, context('2026-10-29T22:30Z'), morningNow)).toBe(false);
+    expect(morningWorkoutAwaitsSleep(morningControls, context('2026-10-29T05:00Z'), morningNow)).toBe(true);
   });
 });
 describe('morning sport preference from recorded weekday history', () => {

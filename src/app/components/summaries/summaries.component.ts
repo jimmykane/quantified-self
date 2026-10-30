@@ -433,6 +433,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public sleepTrendCanNavigateNewer = false;
   public todayDateSubtitle = '';
   public todayRestDate = '';
+  public morningWorkoutSleepRevision = 0;
   public todayGreeting = '';
   readonly todayDetailsExpanded = signal(true);
   private todayDetailsOwnerUID: string | null = null;
@@ -1240,6 +1241,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
           return;
         }
         this.readinessSleepSessions = sessions;
+        this.morningWorkoutSleepRevision++;
         this.updateReadinessSleepRefreshTimer();
         this.tileRebuild.request();
       },
@@ -1247,6 +1249,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         // A failed current read invalidates the in-memory Today evidence. Never
         // carry a previously loaded night forward as if it were still current.
         this.readinessSleepSessions = [];
+        this.morningWorkoutSleepRevision++;
         this.readinessSleepStatus = 'error';
         this.updateReadinessSleepRefreshTimer();
         this.tileRebuild.request();

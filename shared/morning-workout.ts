@@ -7,10 +7,10 @@ export interface MorningWorkoutPreferences {
   controls: DayWorkoutControls;
 }
 export type MorningWorkoutRequest = { mode: 'morning'; action: 'status' | 'prepare' }
-  | { mode: 'morning'; action: 'dismiss'; localDate: string };
+  | { mode: 'morning'; action: 'dismiss' | 'use-available-data'; localDate: string };
 export interface MorningWorkoutStatus {
   localDate: string;
-  state: 'off' | 'waiting' | 'preparing' | 'ready' | 'dismissed' | 'failed' | 'planned' | 'completed' | 'rest-day';
+  state: 'off' | 'waiting' | 'waiting-sleep' | 'preparing' | 'ready' | 'dismissed' | 'failed' | 'planned' | 'completed' | 'rest-day';
   controls?: DayWorkoutControls;
   result?: GenerateDayWorkoutResponse;
 }
