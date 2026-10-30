@@ -31,7 +31,13 @@ import { SummaryDisclosureComponent } from '../shared/summary-disclosure/summary
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
 import type { AssistantQuotaStatus } from '@shared/assistant.types';
 
-export interface DayWorkoutDialogData { ownerUid: string; localDate: string; sport: ActivityTypes }
+export interface DayWorkoutDialogData {
+  ownerUid: string; localDate: string; sport: ActivityTypes;
+  mode?: 'preferences'; initialControls?: DayWorkoutControls; initialResult?: GenerateDayWorkoutResponse;
+  followRoutine?: boolean;
+  savePreferences?: (controls: DayWorkoutControls, followRoutine: boolean) => Promise<void>;
+  onAdded?: () => void;
+}
 type ChoiceKey = 'purpose' | 'destinationPlanId' | 'equipment' | 'timing' | 'target' | 'structure' | 'strengthFocus';
 interface Choice { key: ChoiceKey; label: string; options: { value: string | null; label: string }[] }
 @Component({ selector: 'app-day-workout-dialog', standalone: true, imports: [DatePipe, NgTemplateOutlet, FormsModule, MatDialogModule, MatButtonModule, MatCheckboxModule,
@@ -50,16 +56,17 @@ export class DayWorkoutDialogComponent {
   private readonly destroyRef = inject(DestroyRef);
   private readonly dialogs = inject(MatDialog);
   private readonly ref = inject(MatDialogRef<DayWorkoutDialogComponent, DayWorkoutEditorDraft | undefined>);
-  readonly timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  readonly timeZone = this.data.initialControls?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   readonly today = dayWorkoutLocalDate(new Date(), this.timeZone);
   readonly latestDate = dayWorkoutDateOffset(this.today, 365);
-  readonly controls = signal(defaultDayWorkoutControls(this.data.localDate, this.timeZone, this.data.sport));
+  readonly controls = signal(this.data.initialControls ? structuredClone(this.data.initialControls) : defaultDayWorkoutControls(this.data.localDate, this.timeZone, this.data.sport));
+  readonly followRoutine = signal(this.data.followRoutine ?? true);
   readonly more = signal(false);
   readonly showPersonalization = signal(true);
   readonly showSettings = signal(false);
   readonly busy = signal<'generate' | 'save' | null>(null);
   readonly error = signal<string | null>(null);
-  readonly result = signal<GenerateDayWorkoutResponse | null>(null);
+  readonly result = signal<GenerateDayWorkoutResponse | null>(this.data.initialResult ? structuredClone(this.data.initialResult) : null);
   readonly schedule = signal<CurrentTrainingScheduleV1 | null>(null);
   readonly scheduleFailed = signal(false);
   readonly staleReview = signal(false);
@@ -101,7 +108,7 @@ export class DayWorkoutDialogComponent {
     const controls = this.controls(); const date = normalizeTrainingLocalDate(controls.localDate);
     return date >= this.today && date <= this.latestDate && Number.isSafeInteger(controls.minutes)
       && controls.minutes >= 5 && controls.minutes <= 240 && controls.equipment.length > 0
-      && !!this.schedule() && !this.scheduleFailed() && !this.schedule()?.restoreUnavailable
+      && (this.data.mode === 'preferences' || !!this.schedule() && !this.scheduleFailed() && !this.schedule()?.restoreUnavailable)
       && (!this.controls().destinationPlanId || !!this.selectedPlan());
   } catch { return false; } });
   readonly labels: Record<string, string> = {
@@ -117,8 +124,8 @@ export class DayWorkoutDialogComponent {
   readonly selectedSports = computed(() => [this.controls().sport]);
   readonly mainChoices = computed<Choice[]>(() => [
     this.choice('purpose', 'Purpose', dayWorkoutPurposes(this.controls().sport)),
-    { key: 'destinationPlanId', label: 'Add to', options: [{ value: null, label: 'Standalone' },
-      ...this.planOptions().map(plan => ({ value: plan.id, label: `${plan.name}${plan.lifecycle === 'paused' ? ' (paused)' : ''}` }))] },
+    ...(this.data.mode === 'preferences' ? [] : [{ key: 'destinationPlanId' as const, label: 'Add to', options: [{ value: null, label: 'Standalone' },
+      ...this.planOptions().map(plan => ({ value: plan.id, label: `${plan.name}${plan.lifecycle === 'paused' ? ' (paused)' : ''}` }))] }]),
     ...(this.strength() ? [this.choice('equipment', 'Available equipment', DAY_WORKOUT_EQUIPMENT)] : [])]);
   readonly moreChoices = computed<Choice[]>(() => this.strength()
     ? [this.choice('strengthFocus', 'Strength focus', ['full-body', 'upper-body', 'lower-body', 'core'])]
@@ -131,10 +138,11 @@ export class DayWorkoutDialogComponent {
     { key: 'timelineContext' as const, label: 'Timeline notes' },
     ...(this.strength() ? [{ key: 'usePreviousWeights' as const, label: 'Reuse planned weights' }] : []),
   ].map(choice => {
-    const disabled = choice.key === 'routineContext' && this.controls().activityContext === false
+    const requiredForMorning = this.data.mode === 'preferences' && ['trainingContext', 'activityContext'].includes(choice.key);
+    const disabled = requiredForMorning || choice.key === 'routineContext' && this.controls().activityContext === false
       || choice.key === 'readinessContext' && !this.readinessSourcesEnabled()
       || choice.key === 'usePreviousWeights' && !this.controls().trainingContext;
-    return { ...choice, disabled, checked: !disabled && this.controls()[choice.key] !== false };
+    return { ...choice, disabled, checked: (!disabled || requiredForMorning) && this.controls()[choice.key] !== false };
   }));
   readonly contextSelection = computed(() => {
     const choices = this.contextChoices();
@@ -142,12 +150,24 @@ export class DayWorkoutDialogComponent {
     return count === choices.length ? 'All selected' : `${count} of ${choices.length} selected`;
   });
   readonly primaryLabel = computed(() => {
+    if (this.data.mode === 'preferences') return this.busy() ? 'Saving…' : 'Save preferences';
     if (this.busy()) return this.busy() === 'save' ? 'Adding…' : 'Generating…';
     if (this.result()?.draft) return this.saveUncertain() ? 'Retry Add' : 'Add workout';
     if (this.result()) return this.restDayPlan() ? 'Keep rest day' : 'Try easy session';
     return this.error() ? 'Retry generation' : 'Generate workout';
   });
   async primaryAction(): Promise<void> {
+    if (this.data.mode === 'preferences') {
+      if (!this.valid() || this.busy() || !this.generation.isOwner(this.data.ownerUid)) return;
+      const sequence = ++this.sequence;
+      this.busy.set('save'); this.ref.disableClose = true; this.error.set(null);
+      try {
+        await this.data.savePreferences?.({ ...this.controls(), destinationPlanId: null }, this.followRoutine());
+        if (this.current(sequence)) { this.haptics.success(); this.ref.close(); }
+      } catch { if (this.current(sequence)) { this.error.set('Morning preferences could not be saved. Your choices are kept.'); this.haptics.error(); } }
+      finally { if (this.current(sequence)) { this.busy.set(null); this.ref.disableClose = false; } }
+      return;
+    }
     if (this.result()?.kind === 'rest' && this.restDayPlan()) {
       if (this.busy() || !this.generation.isOwner(this.data.ownerUid)) return;
       this.haptics.selection(); this.ref.close(); return;
@@ -170,7 +190,7 @@ export class DayWorkoutDialogComponent {
     authState(inject(Auth)).pipe(takeUntilDestroyed()).subscribe(user => {
       if (user?.uid !== this.data.ownerUid) { this.sequence++; this.ref.close(); }
     });
-    this.loadSchedule();
+    if (this.data.mode !== 'preferences') this.loadSchedule();
     void this.refreshQuota();
     this.destroyRef.onDestroy(() => { this.sequence++; this.scheduleSubscription?.unsubscribe(); this.syncSubscription?.unsubscribe(); });
   }
@@ -188,12 +208,13 @@ export class DayWorkoutDialogComponent {
     this.scheduleSubscription = this.plansService.watchSchedule(this.data.ownerUid).subscribe({ next: schedule => {
       if (!this.generation.isOwner(this.data.ownerUid)) return;
       this.schedule.set(schedule);
-      if (!this.initializedDestination) {
+      if (!this.initializedDestination && !this.data.initialControls) {
         const active = schedule.plans.find(plan => plan.id === schedule.state.activePlanId && plan.lifecycle === 'active'
           && isTrainingLocalDateWithinPlan(this.controls().localDate, plan));
         this.controls.update(value => ({ ...value, destinationPlanId: active?.id ?? null }));
         this.initializedDestination = true;
       }
+      if (!this.reviewedSchedule && this.data.initialResult && this.result()) this.reviewedSchedule = schedule;
       if (this.reviewedSchedule && this.result() && this.reviewedSchedule.state.revision !== schedule.state.revision) this.staleReview.set(true);
       this.watchSync();
     }, error: () => { this.scheduleFailed.set(true); this.schedule.set(null); } });
@@ -294,7 +315,7 @@ export class DayWorkoutDialogComponent {
         command = this.command = { ...command, operation: { ...command.operation, confirmPlanRangeExtension: true } };
       }
       await this.plansService.mutate(command, () => this.current(sequence));
-      if (this.current(sequence)) { this.haptics.success(); this.ref.close(); }
+      if (this.current(sequence)) { this.haptics.success(); if (this.result()?.requestId === this.data.initialResult?.requestId) this.data.onAdded?.(); this.ref.close(); }
     } catch (error) {
       if (!this.current(sequence)) return;
       const code = (error as { code?: string }).code;

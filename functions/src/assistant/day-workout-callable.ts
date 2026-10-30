@@ -48,7 +48,7 @@ Use only selected equipment, name equipment explicitly where it distinguishes an
 Keep rationale under 1200 characters and title under 120. Use a short explanation of the choice and its limits, no diagnosis or invented data.`;
 
 export async function generateDayWorkoutSuggestion(request: GenerateDayWorkoutRequest, context: DayWorkoutContext,
-  correction?: string): Promise<unknown> {
+  correction?: string, onUsage?: (usage: { inputTokens: number; outputTokens: number; thoughtsTokens: number; available: boolean }) => void): Promise<unknown> {
   const { destinationPlanId: _destination, ...controls } = request.controls;
   const rationale = z.string().min(1).max(1200);
   const workout = { kind: z.literal('workout'), title: z.string().min(1).max(120), rationale };
@@ -65,6 +65,13 @@ export async function generateDayWorkoutSuggestion(request: GenerateDayWorkoutRe
   const observeResponse: ModelMiddleware = async (input, next) => {
     const result = await next(input);
     modelResponded = true;
+    const usage = result.usage;
+    const valid = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+    const tokens = (value: unknown) => valid(value) ? value : 0;
+    try { onUsage?.({ available: valid(usage?.inputTokens) && valid(usage?.outputTokens)
+      && (usage?.thoughtsTokens === undefined || valid(usage.thoughtsTokens)),
+      inputTokens: tokens(usage?.inputTokens), outputTokens: tokens(usage?.outputTokens), thoughtsTokens: tokens(usage?.thoughtsTokens) }); }
+    catch { /* Telemetry cannot turn a valid provider response into another model attempt. */ }
     return result;
   };
   try {
@@ -92,7 +99,36 @@ export async function generateDayWorkoutSuggestion(request: GenerateDayWorkoutRe
   }
 }
 
-const defaults: DayWorkoutDependencies = {
+/** Shared bounded correction/validation path for manual and included morning suggestions. */
+export async function generateValidatedDayWorkout(request: GenerateDayWorkoutRequest, evidence: DayWorkoutContext,
+  generate: DayWorkoutDependencies['generate'], assertActive: () => Promise<void>) {
+  let suggestion;
+  let correction: string | undefined;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const generated = await generate(request, evidence, correction);
+      await assertActive();
+      suggestion = validateDayWorkoutSuggestion(generated, request.controls, evidence.previousStrength, evidence.references);
+      break;
+    } catch (error) {
+      // The generator normalizes SDK output failures. Provider/auth errors and stale requests leave immediately.
+      if (!(error instanceof DayWorkoutSuggestionValidationError
+        || error instanceof WorkoutStructureValidationError || error instanceof StrengthWorkoutValidationError)) throw error;
+      await assertActive();
+      logger.warn('[DayWorkout] Invalid model prescription.', {
+        attempt: attempt + 1,
+        errorName: error instanceof Error ? error.name : 'unknown',
+        validationReason: error instanceof DayWorkoutSuggestionValidationError ? error.message : 'Invalid prescription schema.',
+        issueCodes: error instanceof WorkoutStructureValidationError ? [...new Set(error.issues.map(issue => issue.code))] : [],
+      });
+      correction = `${error instanceof DayWorkoutSuggestionValidationError ? error.message : 'Invalid prescription schema.'} The previous response failed strict prescription validation. Return a complete valid JSON prescription matching the schema and every selected constraint; omit targets without available references and omit all external loads.`;
+    }
+  }
+  if (!suggestion) throw new HttpsError('failed-precondition', 'AI could not produce a valid prescription. Generate again or use the manual editor.');
+  return suggestion;
+}
+
+export const dayWorkoutDependencies: DayWorkoutDependencies = {
   store: createDayWorkoutStore(), now: () => new Date(), legal: assertAssistantLegalAccess,
   reserve: reserveAssistantQuotaForRequest, finalize: finalizeAssistantQuotaReservation, release: releaseAssistantQuotaReservation,
   context: async (uid, request, now) => {
@@ -105,7 +141,7 @@ const defaults: DayWorkoutDependencies = {
   generate: generateDayWorkoutSuggestion,
 };
 export async function runGenerateDayWorkout(value: unknown, context: { auth?: { uid: string } | null; app?: unknown },
-  dependencies: DayWorkoutDependencies = defaults): Promise<GenerateDayWorkoutResponse> {
+  dependencies: DayWorkoutDependencies = dayWorkoutDependencies): Promise<GenerateDayWorkoutResponse> {
   if (!context.auth?.uid) throw new HttpsError('unauthenticated', 'Sign in to generate a workout.');
   enforceAppCheck(context);
   let request: GenerateDayWorkoutRequest;
@@ -140,29 +176,8 @@ export async function runGenerateDayWorkout(value: unknown, context: { auth?: { 
     await dependencies.finalize(reservation);
     billable = true;
     stage = 'model';
-    let suggestion;
-    let correction: string | undefined;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        const generated = await dependencies.generate(request, evidence, correction);
-        await dependencies.store.assertActive(uid, request.requestId, started.token);
-        suggestion = validateDayWorkoutSuggestion(generated, request.controls, evidence.previousStrength, evidence.references);
-        break;
-      } catch (error) {
-        // The generator normalizes SDK output failures. Provider/auth errors and stale requests leave immediately.
-        if (!(error instanceof DayWorkoutSuggestionValidationError
-          || error instanceof WorkoutStructureValidationError || error instanceof StrengthWorkoutValidationError)) throw error;
-        await dependencies.store.assertActive(uid, request.requestId, started.token);
-        logger.warn('[DayWorkout] Invalid model prescription.', {
-          attempt: attempt + 1,
-          errorName: error instanceof Error ? error.name : 'unknown',
-          validationReason: error instanceof DayWorkoutSuggestionValidationError ? error.message : 'Invalid prescription schema.',
-          issueCodes: error instanceof WorkoutStructureValidationError ? [...new Set(error.issues.map(issue => issue.code))] : [],
-        });
-        correction = `${error instanceof DayWorkoutSuggestionValidationError ? error.message : 'Invalid prescription schema.'} The previous response failed strict prescription validation. Return a complete valid JSON prescription matching the schema and every selected constraint; omit targets without available references and omit all external loads.`;
-      }
-    }
-    if (!suggestion) throw new HttpsError('failed-precondition', 'AI could not produce a valid prescription. Generate again or use the manual editor.');
+    const suggestion = await generateValidatedDayWorkout(request, evidence, dependencies.generate,
+      () => dependencies.store.assertActive(uid, request.requestId, started.token));
     const response: GenerateDayWorkoutResponse = { requestId: request.requestId, observedAt: now.toISOString(), ...suggestion,
       usedContext: evidence.usedContext, missingContext: evidence.missingContext };
     stage = 'save-result';
@@ -187,4 +202,10 @@ export const GENERATE_DAY_WORKOUT_OPTIONS = {
   region: FUNCTIONS_MANIFEST.generateDayWorkout.region, secrets: FUNCTION_SECRET_BINDINGS.generateDayWorkout,
   cors: ALLOWED_CORS_ORIGINS, enforceAppCheck: true, memory: '2GiB' as const, timeoutSeconds: 180, concurrency: 10, maxInstances: 10,
 };
-export const generateDayWorkout = onCall(GENERATE_DAY_WORKOUT_OPTIONS, request => runGenerateDayWorkout(request.data, request));
+export const generateDayWorkout = onCall(GENERATE_DAY_WORKOUT_OPTIONS, async request => {
+  if (request.data?.mode === 'morning') {
+    const { runMorningWorkout } = await import('./morning-workout');
+    return runMorningWorkout(request.data, request);
+  }
+  return runGenerateDayWorkout(request.data, request);
+});

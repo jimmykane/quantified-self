@@ -333,6 +333,18 @@ When a numeric step allows **early Lap**, the summary labels its totals as **pre
 
 **Subtotal** means part of the workout is known. Manual/Lap, repetition, and energy endings do not supply a duration. For example, a 10-minute warmup plus four 1 km efforts at 4–5 min/km and four manual recoveries has **26–30 minutes covered, plus four steps with unknown duration** and a **4 km distance subtotal**. The recoveries make the complete duration unknown. Missing information never counts as zero. HR, power, and cadence targets do not establish speed. Summaries follow your unit preferences and do not change your saved workout, completed activity totals, or Wahoo's exact timed-duration requirement.
 
+## Morning workout suggestions
+
+Pro members can choose **Morning workout → Set up** inside Dashboard **Today**. Suggestions start off. Choose your fallback sport, available time, equipment and data choices using the same options as the manual generator. All applicable personalization, including Timeline notes, starts selected. Training plans and Recent activities remain selected so QS can check whether today is already covered.
+
+On your first foreground visit between **5 am and noon** in the saved time zone, QS checks whether a suggestion can be prepared. If you have completed sleep in the past seven local days but today’s sleep has not arrived, it shows **Waiting for your latest sleep** without using your included suggestion. It also waits until recovery includes that completed sleep; a building HRV baseline does not block it. No recent sleep history, or switching sleep personalization off, lets it continue with the available context. Sleep changes on the open Today page trigger another morning check; there is no background generation.
+
+Choose **Use available data** to generate with missing sleep explicitly listed in Context. This uses your one included suggestion, not your Assistant allowance. The option remains available after noon if a check deferred the suggestion earlier that day. **Check again** is in the row’s options. Once a suggestion has been generated, later syncs do not silently regenerate it. Review its observation time and available/missing context before adding it. A clear recorded weekday routine can choose the sport; otherwise your selected sport is used. Turn that option off to keep a fixed sport. Missing recordings never prove missed training or gym attendance.
+
+The compact row stays visible when you collapse Today’s state details. **Review** opens the existing workout review; **Add workout** explicitly saves it as Standalone. You can change the destination before a new manual generation. An already planned workout, recorded workout or authored rest day takes priority when the morning check runs. A rest suggestion is valid and adds nothing automatically.
+
+One morning suggestion per local date is included with Pro and **does not use your Assistant allowance**. Reloading or opening another device retrieves the same result. Additional manual generation uses the displayed Assistant allowance. A failed model attempt is not automatically repeated under a fresh daily request. Use the row’s options to check preferences, dismiss today or turn future suggestions off. Changed preferences apply to the next suggestion; an existing result retains its original choices. Saved workouts use the normal provider sync rules only after explicit Add.
+
 ## Generate a workout for a day
 
 - In Calendar or the Dashboard calendar, select today or a future day (up to 365 days ahead), then **Add workout → Generate with AI**. It is also available in the day sheet and full day page. Search and choose one sport, then set time, purpose and destination (defaults: **30 minutes**, fitting active plan or Standalone).

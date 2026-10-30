@@ -186,6 +186,10 @@
       </div>
     </dl>
   </section>
+  @if (isOwnerDashboard && user?.uid) {
+    <app-morning-workout [ownerUid]="user!.uid" [localDate]="todayRestDate" [dataReady]="!dashboardTodayReadiness.loading"
+      [sleepRevision]="morningWorkoutSleepRevision"></app-morning-workout>
+  }
   }
   @if (showActions && library.busy()) { <mat-progress-bar mode="indeterminate" aria-label="Saving dashboard"></mat-progress-bar> }
   @if (showActions && library.error() && !library.activeLane()) { <p role="alert">{{ library.error() }}</p> }

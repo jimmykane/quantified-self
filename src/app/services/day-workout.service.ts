@@ -7,6 +7,7 @@ import { Auth, authState } from 'app/firebase/auth';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { DAY_WORKOUT_SPORTS, dayWorkoutLocalDate, dayWorkoutDateOffset, type DayWorkoutControls, type DayWorkoutDraft,
   type GenerateDayWorkoutRequest, type GenerateDayWorkoutResponse } from '@shared/day-workout';
+import type { DayWorkoutDialogData } from '../components/plans/day-workout-dialog.component';
 import type { MutateTrainingScheduleRequestV1 } from '@shared/training-plans';
 import { AppFunctionsService } from './app.functions.service';
 import { trainingPlansCreateRoute } from '../helpers/training-plans-navigation.helper';
@@ -34,22 +35,23 @@ export class DayWorkoutService {
     });
   }
   isOwner(uid: string): boolean { return this.auth.currentUser?.uid === uid && this.users.user()?.uid === uid; }
-  canGenerate(date: string): boolean {
+  canGenerate(date: string, timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone): boolean {
     try {
-      const today = dayWorkoutLocalDate(new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone);
+      const today = dayWorkoutLocalDate(new Date(), timeZone);
       return date >= today && date <= dayWorkoutDateOffset(today, 365);
     }
     catch { return false; }
   }
-  async open(ownerUid: string, localDate: string, sport?: string): Promise<void> {
-    if (!this.isOwner(ownerUid) || !this.canGenerate(localDate) || this.opening) return;
+  async open(ownerUid: string, localDate: string, sport?: string,
+    options: Partial<Pick<DayWorkoutDialogData, 'initialControls' | 'initialResult' | 'mode' | 'followRoutine' | 'savePreferences' | 'onAdded'>> = {}): Promise<void> {
+    if (!this.isOwner(ownerUid) || !this.canGenerate(localDate, options.initialControls?.timeZone) || this.opening) return;
     this.opening = true;
     try {
       const { DayWorkoutDialogComponent } = await import('../components/plans/day-workout-dialog.component');
-      if (!this.isOwner(ownerUid)) return;
+      if (!this.isOwner(ownerUid) || !this.canGenerate(localDate, options.initialControls?.timeZone)) return;
       const narrow = typeof window !== 'undefined' && window.matchMedia('(max-width: 600px)').matches;
       const result = await firstValueFrom(this.dialog.open(DayWorkoutDialogComponent, {
-        data: { ownerUid, localDate, sport: DAY_WORKOUT_SPORTS.find(value => value === sport) ?? ActivityTypes.Running },
+        data: { ...options, ownerUid, localDate, sport: DAY_WORKOUT_SPORTS.find(value => value === sport) ?? ActivityTypes.Running },
         width: narrow ? '100vw' : '720px', maxWidth: '100vw', maxHeight: '100dvh', ...(narrow ? { height: '100dvh' } : {}),
       }).afterClosed());
       if (result && this.isOwner(ownerUid)) {
