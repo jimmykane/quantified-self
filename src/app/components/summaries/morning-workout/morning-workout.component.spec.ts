@@ -29,8 +29,11 @@ function exportQa(element: HTMLElement, name: string) {
     + element.outerHTML + '</main></body></html>');
 }
 
+let restoreVisibility = () => {};
 function setup(enabled = true) {
   vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] }); vi.setSystemTime(new Date('2026-10-30T07:00Z'));
+  const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  restoreVisibility = () => visibility.mockRestore();
   const preferences = signal({ enabled, followRoutine: true, controls: defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki') });
   const owner = signal('owner'), pro = signal(true), saving = signal(false);
   const result = { requestId: 'morning:2026-10-30', observedAt: '2026-10-30T07:00Z', kind: 'rest', rationale: 'An easy day.', draft: null,
@@ -49,9 +52,13 @@ function setup(enabled = true) {
   const fixture = TestBed.createComponent(MorningWorkoutComponent);
   fixture.componentRef.setInput('ownerUid', 'owner'); fixture.componentRef.setInput('localDate', '2026-10-30');
   fixture.componentRef.setInput('dataReady', true); fixture.detectChanges();
-  return { fixture, preferences, owner, pro, saving, request, event, save, open, haptics };
+  const setVisible = (visible: boolean) => {
+    visibility.mockReturnValue(visible ? 'visible' : 'hidden');
+    document.dispatchEvent(new Event('visibilitychange')); fixture.detectChanges();
+  };
+  return { fixture, preferences, owner, pro, saving, request, event, save, open, haptics, setVisible };
 }
-afterEach(() => vi.useRealTimers());
+afterEach(() => { vi.useRealTimers(); restoreVisibility(); });
 describe('compact morning workout in Today', () => {
   it('stays off by default and does no private reads for free or shared dashboards', async () => {
     const { fixture, request, pro } = setup(false);
@@ -205,6 +212,91 @@ describe('compact morning workout in Today', () => {
     expect(fixture.componentInstance.status()?.state).toBe('ready');
     await vi.advanceTimersByTimeAsync(1600);
     expect(request).toHaveBeenCalledOnce();
+  });
+  it.each(['ready', 'planned', 'completed', 'rest-day', 'dismissed', 'failed', 'preparing', 'waiting-sleep'] as const)(
+    'keeps the %s row through tab switches without another API read', async state => {
+      const { fixture, request, setVisible } = setup();
+      const ready = await request('owner', 'prepare'); request.mockClear();
+      request.mockResolvedValue({ ...ready, state } as any);
+      await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+      const status = fixture.componentInstance.status(), summary = fixture.componentInstance.summary();
+      const attempts = request.mock.calls.length;
+      for (let visit = 0; visit < 3; visit++) {
+        setVisible(false);
+        expect(fixture.componentInstance.status()).toBe(status);
+        setVisible(true); await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+        expect(fixture.componentInstance.status()).toBe(status);
+        expect(fixture.componentInstance.summary()).toBe(summary);
+        expect(fixture.componentInstance.busy()).toBe(false);
+      }
+      fixture.componentRef.setInput('dataReady', false); fixture.detectChanges();
+      fixture.componentRef.setInput('dataReady', true); fixture.detectChanges();
+      await vi.advanceTimersByTimeAsync(1600);
+      expect(request).toHaveBeenCalledTimes(attempts);
+    });
+  it('retains a read that finishes in a hidden tab and counts it shown on return', async () => {
+    const { fixture, request, event, setVisible } = setup();
+    const ready = await request('owner', 'prepare'); request.mockClear();
+    let finish!: (value: typeof ready) => void;
+    request.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = fixture.componentInstance.load(); setVisible(false);
+    expect(fixture.componentInstance.busy()).toBe(true);
+    finish(ready); await pending; fixture.detectChanges();
+    expect(fixture.componentInstance.status()).toBe(ready);
+    expect(event).not.toHaveBeenCalledWith('owner', 'shown', 'ready');
+    setVisible(true); await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    expect(request).toHaveBeenCalledOnce();
+    expect(event).toHaveBeenCalledExactlyOnceWith('owner', 'shown', 'ready');
+  });
+  it('coalesces Sleep changes while hidden into one check on return', async () => {
+    const { fixture, request, setVisible } = setup();
+    const ready = await request('owner', 'prepare'); request.mockClear();
+    request.mockResolvedValue({ localDate: '2026-10-30', state: 'waiting-sleep' } as any);
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    request.mockClear(); setVisible(false);
+    fixture.componentRef.setInput('sleepRevision', 1); fixture.detectChanges();
+    fixture.componentRef.setInput('sleepRevision', 2); fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(1600); expect(request).not.toHaveBeenCalled();
+    request.mockResolvedValue(ready); setVisible(true);
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    expect(request).toHaveBeenCalledExactlyOnceWith('owner', 'status', expect.any(Function));
+    expect(fixture.componentInstance.status()).toBe(ready);
+  });
+  it.each(['waiting', 'waiting-sleep'] as const)('defers %s preparation when its status read finishes hidden', async state => {
+    const { fixture, request, setVisible } = setup();
+    let finish!: (value: any) => void;
+    request.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = fixture.componentInstance.load(); setVisible(false);
+    finish({ localDate: '2026-10-30', state }); await pending; fixture.detectChanges();
+    expect(request.mock.calls.map(call => call[1])).toEqual(['status']);
+    expect(fixture.componentInstance.status()?.state).toBe(state);
+    setVisible(true); await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    expect(request.mock.calls.map(call => call[1])).toEqual(['status', 'status', 'prepare']);
+    expect(fixture.componentInstance.status()?.state).toBe('ready');
+    setVisible(false); setVisible(true); await vi.advanceTimersByTimeAsync(1600);
+    expect(request).toHaveBeenCalledTimes(3);
+  });
+  it('keeps a failed read stable on tab return and allows an explicit retry', async () => {
+    const { fixture, request, setVisible } = setup();
+    request.mockRejectedValueOnce(Error('Offline'));
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    expect(fixture.componentInstance.error()).toBe(true);
+    setVisible(false); setVisible(true); await vi.advanceTimersByTimeAsync(1600);
+    expect(request).toHaveBeenCalledOnce();
+    await fixture.componentInstance.load(); fixture.detectChanges();
+    expect(fixture.componentInstance.status()?.state).toBe('ready');
+    expect(fixture.componentInstance.error()).toBe(false);
+  });
+  it('can start the morning window after an earlier same-day visit', async () => {
+    const { fixture, request, setVisible } = setup();
+    vi.setSystemTime(new Date('2026-10-30T02:00Z'));
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    expect(request.mock.calls.map(call => call[1])).toEqual(['status']);
+    expect(fixture.componentInstance.status()?.state).toBe('waiting');
+    setVisible(false); vi.setSystemTime(new Date('2026-10-30T04:00Z')); setVisible(true);
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    expect(request.mock.calls.map(call => call[1])).toEqual(['status', 'status', 'prepare']);
+    expect(fixture.componentInstance.status()?.state).toBe('ready');
   });
   it('still retires in-flight reads when personalization changes', async () => {
     const { fixture, request, preferences } = setup();
