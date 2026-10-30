@@ -18,7 +18,7 @@
     gap: 7px;
     min-width: 0;
     max-width: 100%;
-    > span { min-width: 0; white-space: normal; text-align: start; }
+    > span { min-width: 0; white-space: normal; overflow-wrap: anywhere; text-align: start; }
     > mat-icon, > app-activity-type-icon { flex: 0 0 auto; }
   }
 
@@ -30,5 +30,5 @@
     .table-filter-chevron { color: inherit; }
   }
 
-  @media (pointer: coarse) { height: 44px; min-height: 44px; }
+  @media (pointer: coarse) { min-height: 44px; }
 }

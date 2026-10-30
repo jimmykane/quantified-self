@@ -34,6 +34,7 @@ export class TableDateFilterComponent<T extends string | number = string | numbe
   readonly startDate = input<Date | string | null>(null);
   readonly endDate = input<Date | string | null>(null);
   readonly disabled = input(false);
+  readonly invalidRangeMessage = input('Choose valid start and end dates.');
   readonly selectionChange = output<T>();
   readonly applied = output<void>();
   readonly cancelled = output<void>();

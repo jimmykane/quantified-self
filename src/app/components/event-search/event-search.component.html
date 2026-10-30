@@ -5,6 +5,7 @@
         <app-table-date-filter [options]="toolbarDateRangeOptions" [value]="selectedDateRange"
           [customValue]="dateRanges.custom" [allValue]="dateRanges.all" [rangeForm]="searchFormGroup"
           startControlName="startDate" endControlName="endDate" [startDate]="selectedStartDate" [endDate]="selectedEndDate" [disabled]="isLoading"
+          invalidRangeMessage="Choose valid dates, up to 5 years, with the end on or after the start."
           (selectionChange)="onToolbarDateRangeChange($event)" (applied)="applyToolbarCustomRange()"
           (cancelled)="cancelToolbarCustomRange()" (cleared)="clearToolbarCustomRange()" (calendarOpened)="onToolbarPickerOpened()"></app-table-date-filter>
       }

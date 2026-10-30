@@ -5,10 +5,11 @@
     <div class="table-toolbar-main" [class.table-toolbar-main--compact]="isLibraryPresentation">
       <mat-form-field appearance="outline" class="qs-search-field" subscriptSizing="dynamic">
         <mat-icon matPrefix aria-hidden="true">search</mat-icon>
-        <input matInput [value]="searchTerm" (input)="onSearchInput($event)" placeholder="Search activities"
+        <input #activitySearchInput matInput [value]="searchTerm" (input)="onSearchInput($event)" placeholder="Search activities"
           aria-label="Search activities"
           autocomplete="off">
-        <button mat-icon-button matSuffix *ngIf="searchTerm" (click)="clearSearch()" aria-label="Clear">
+        <button mat-icon-button matSuffix type="button" class="table-search-clear" *ngIf="searchTerm"
+          (click)="clearSearch(); activitySearchInput.focus()" aria-label="Clear">
           <mat-icon>close</mat-icon>
         </button>
       </mat-form-field>

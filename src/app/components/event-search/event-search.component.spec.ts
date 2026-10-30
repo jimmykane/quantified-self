@@ -137,6 +137,20 @@ describe('Merged toolbar filter rendering', () => {
     expect(document.activeElement?.getAttribute('aria-label')).toBe('Date range: Last 30 days');
   });
 
+  it('explains the existing five-year date limit without submitting an invalid range', async () => {
+    const fixture = TestBed.createComponent(MergedFilterTestHost);
+    fixture.detectChanges();
+    const search = fixture.debugElement.query(By.directive(EventSearchComponent)).componentInstance as EventSearchComponent;
+    search.searchFormGroup.patchValue({ startDate: dayjs('2019-01-01'), endDate: dayjs('2026-01-01') });
+    expect(search.searchFormGroup.hasError('dateRange')).toBe(true);
+    const dateFilter = fixture.debugElement.query(By.directive(TableDateFilterComponent)).componentInstance as TableDateFilterComponent;
+    dateFilter.apply();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain('up to 5 years');
+    expect(fixture.componentInstance.requests).toEqual([]);
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
   it('uses the same sport picker in the My Tracks layout and preserves available and selected no-match sports', async () => {
     const fixture = TestBed.createComponent(MergedFilterTestHost);
     const host = fixture.componentInstance; host.toolbar = false;

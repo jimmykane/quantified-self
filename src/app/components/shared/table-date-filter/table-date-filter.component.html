@@ -40,4 +40,4 @@
     <button mat-flat-button matDateRangePickerApply (click)="apply()">Apply</button>
   </mat-date-range-picker-actions>
 </mat-date-range-picker>
-@if (invalidRange()) { <span class="table-date-error" role="alert">Choose valid start and end dates.</span> }
+@if (invalidRange()) { <span class="table-date-error" role="alert">{{ invalidRangeMessage() }}</span> }

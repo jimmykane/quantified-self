@@ -664,6 +664,21 @@ describe('EventTableComponent', () => {
         expect(mockHapticsService.selection).toHaveBeenCalledOnce();
     });
 
+    it('keeps search focused after its clear button disappears and gives one feedback', () => {
+        component.searchTerm = 'run';
+        fixture.detectChanges();
+        const search = fixture.nativeElement.querySelector('input[aria-label="Search activities"]') as HTMLInputElement;
+        const clear = fixture.nativeElement.querySelector('.table-search-clear') as HTMLButtonElement;
+        clear.focus();
+        clear.click();
+        fixture.detectChanges();
+        expect(component.searchTerm).toBe('');
+        expect(search.value).toBe('');
+        expect(document.activeElement).toBe(search);
+        expect(fixture.nativeElement.querySelector('.table-search-clear')).toBeNull();
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+    });
+
     it('does not restore pending activity search after the user clears it and gives one feedback', async () => {
         component.onSearchInput({ target: { value: 'old search' } } as unknown as Event);
         component.clearSearch();

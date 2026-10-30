@@ -1,4 +1,5 @@
 @use '../../../styles/breakpoints' as bp;
+@use '@angular/material' as mat;
 
 /* Consolidated and cleaned up styles for event table */
 
@@ -45,6 +46,10 @@
   font-size: 20px;
   height: 20px;
   width: 20px;
+}
+
+.table-search-clear {
+  @include mat.icon-button-overrides((state-layer-size: 32px, icon-size: 20px));
 }
 
 .table-toolbar-filters {
