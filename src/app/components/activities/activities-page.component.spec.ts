@@ -710,6 +710,8 @@ describe('ActivitiesPageComponent', () => {
     const row = root.querySelector('tr.activity-row');
     const rowActions = c.fixture.debugElement.query(By.directive(EventActionsComponent)).componentInstance as EventActionsComponent;
     expect(rowActions.disabled).toBe(false);
+    const columnPicker = c.fixture.debugElement.query(By.directive(EventTableActionsComponent)).componentInstance as EventTableActionsComponent;
+    expect(columnPicker.disabled).toBe(false);
     expect(row).toBeTruthy(); expect(root.querySelector('.merged-events-button')).toBeTruthy();
     expect(root.querySelectorAll('.activity-table-skeleton')).toHaveLength(0);
     expect(paginator.length).toBe(1);
@@ -718,6 +720,7 @@ describe('ActivitiesPageComponent', () => {
     expect(root.querySelector('tr.activity-row')).toBe(row);
     expect(c.fixture.debugElement.query(By.directive(EventActionsComponent)).componentInstance).toBe(rowActions);
     expect(rowActions.disabled).toBe(true);
+    expect(columnPicker.disabled).toBe(true);
     expect(root.querySelector('.event-table-header')).toBe(header);
     expect(table.paginator).toBe(paginator); expect(paginator.length).toBe(1); expect(paginator.disabled).toBe(true);
     expect(root.querySelector('.activity-table-loading-status')?.textContent).toContain('Updating activities');
@@ -731,6 +734,7 @@ describe('ActivitiesPageComponent', () => {
     stream.next([makeRecord('refreshed')]); await render(c);
     expect(table.data.data.map(row => row.Event.getID())).toEqual(['refreshed']);
     expect(c.fixture.debugElement.query(By.directive(EventActionsComponent)).componentInstance.disabled).toBe(false);
+    expect(columnPicker.disabled).toBe(false);
     expect(paginator.disabled).toBe(false); expect(root.querySelector('mat-progress-bar')).toBeNull();
     expect(clearSearch.disabled).toBe(false);
     expect(root.querySelector('table[mat-table]')?.hasAttribute('inert')).toBe(false);

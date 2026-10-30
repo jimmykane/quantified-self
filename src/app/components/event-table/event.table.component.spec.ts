@@ -2669,6 +2669,17 @@ describe('EventTableActionsComponent Material menu', () => {
             ['Duration', 'true'], ['Distance', 'true'], ['Ascent', 'false'],
         ]);
         expect(haptics.selection).not.toHaveBeenCalled();
+        menuFixture.componentRef.setInput('disabled', true);
+        menuFixture.detectChanges();
+        expect(menuFixture.nativeElement.querySelector('button').disabled).toBe(true);
+        expect(overlay.querySelector('[role="listbox"]').getAttribute('aria-disabled')).toBe('true');
+        options[2].click();
+        menuFixture.detectChanges();
+        expect(menuFixture.componentInstance.selectedDataTypes).toEqual(['Distance', 'Duration']);
+        expect(haptics.selection).not.toHaveBeenCalled();
+        expect(changes).not.toHaveBeenCalled();
+        menuFixture.componentRef.setInput('disabled', false);
+        menuFixture.detectChanges();
         options[2].click();
         menuFixture.detectChanges();
         expect(haptics.selection).toHaveBeenCalledOnce();

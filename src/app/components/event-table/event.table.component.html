@@ -24,13 +24,13 @@
         }
         <ng-content select="[event-table-trailing-filters]"></ng-content>
         @if (isLibraryPresentation) {
-          <app-event-table-actions [attr.inert]="tableIsLoading ? '' : null" [selectedDataTypes]="selectedColumns" [dataTypes]="libraryAvailableColumns" icon="tune"
+          <app-event-table-actions [attr.inert]="tableIsLoading ? '' : null" [disabled]="tableIsLoading" [selectedDataTypes]="selectedColumns" [dataTypes]="libraryAvailableColumns" icon="tune"
             (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
         }
       </div>
       @if (canManageEvents && !isLibraryPresentation) {
         <div class="table-toolbar-actions" [attr.inert]="tableIsLoading ? '' : null">
-          <app-event-table-actions [selectedDataTypes]="selectedColumns" icon="tune"
+          <app-event-table-actions [disabled]="tableIsLoading" [selectedDataTypes]="selectedColumns" icon="tune"
             (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
         </div>
       }

@@ -404,7 +404,8 @@ event collection or start a query. Changing the viewer or target owner clears th
 for the new owner's event input before displaying data. Activities keeps the merged-control position during loading
 and leaves the shared table responsible for the activity-loading indicator.
 Bulk-action loading is separate from the parent-owned history input: either can finish first without unlocking the
-other or leaving a pending input stuck. Search clearing is disabled while busy; queued text/catalog filters apply
+other or leaving a pending input stuck. Search clearing and column choices are disabled while busy, including in an
+already-open column menu; queued text/catalog filters apply
 after loading instead of changing the retained results, and deferred filter-context resets settle when the action ends.
 Initial skeleton mounting defers the table's automatic tag-catalog lookup until ready input, so Calendar's empty/error
 branches do not add a catalog read. Owner changes clear old catalog choices immediately. Retained row action components
