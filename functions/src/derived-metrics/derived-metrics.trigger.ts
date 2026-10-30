@@ -5,6 +5,9 @@ import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 import { hasDerivedMetricSourceChange, hasDerivedMetricsHealthSource, type DerivedMetricSource } from './derived-metrics-source-change';
 
 const DERIVED_METRICS_SOURCE_TRIGGER_MEMORY = '512MiB';
+// Share warm instances across I/O waits without lowering the existing burst instance ceiling.
+// Calculation workers retain their own concurrency and memory limits.
+const DERIVED_METRICS_SOURCE_TRIGGER_CONCURRENCY = 5;
 
 async function dispatchSourceWrite(
     event: Parameters<Parameters<typeof onDocumentWritten>[1]>[0],
@@ -59,7 +62,7 @@ export const onDashboardDerivedMetricsEventWrite = onDocumentWritten({
     document: 'users/{uid}/events/{eventId}',
     memory: DERIVED_METRICS_SOURCE_TRIGGER_MEMORY,
     maxInstances: 50,
-    concurrency: 1,
+    concurrency: DERIVED_METRICS_SOURCE_TRIGGER_CONCURRENCY,
     retry: true,
 }, event => dispatchSourceWrite(event, 'event'));
 
@@ -68,7 +71,7 @@ export const onDashboardDerivedMetricsActivityWrite = onDocumentWritten({
     document: 'users/{uid}/activities/{activityId}',
     memory: DERIVED_METRICS_SOURCE_TRIGGER_MEMORY,
     maxInstances: 50,
-    concurrency: 1,
+    concurrency: DERIVED_METRICS_SOURCE_TRIGGER_CONCURRENCY,
     retry: true,
 }, event => dispatchSourceWrite(event, 'activity'));
 
@@ -77,7 +80,7 @@ export const onDashboardDerivedMetricsSleepWrite = onDocumentWritten({
     document: 'users/{uid}/sleepSessions/{sleepSessionId}',
     memory: DERIVED_METRICS_SOURCE_TRIGGER_MEMORY,
     maxInstances: 50,
-    concurrency: 1,
+    concurrency: DERIVED_METRICS_SOURCE_TRIGGER_CONCURRENCY,
     retry: true,
 }, event => dispatchSourceWrite(event, 'sleep'));
 
@@ -86,7 +89,7 @@ export const onDashboardDerivedMetricsHealthWrite = onDocumentWritten({
     document: 'users/{uid}/healthSourceRecords/{sourceRecordId}',
     memory: DERIVED_METRICS_SOURCE_TRIGGER_MEMORY,
     maxInstances: 50,
-    concurrency: 1,
+    concurrency: DERIVED_METRICS_SOURCE_TRIGGER_CONCURRENCY,
     retry: true,
 }, event => dispatchSourceWrite(event, 'health'));
 
@@ -95,6 +98,6 @@ export const onTrainingLoadMetadataWrite = onDocumentWritten({
     document: 'users/{uid}/events/{eventId}/metaData/trainingLoad',
     memory: DERIVED_METRICS_SOURCE_TRIGGER_MEMORY,
     maxInstances: 50,
-    concurrency: 1,
+    concurrency: DERIVED_METRICS_SOURCE_TRIGGER_CONCURRENCY,
     retry: true,
 }, event => dispatchSourceWrite(event, 'training-load'));

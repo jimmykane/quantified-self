@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as cloudTasks from '../shared/cloud-tasks';
+import * as trainingLoadCache from '../training-load/training-load-cache';
 
 const hoisted = vi.hoisted(() => ({
     onDocumentWritten: vi.fn((_opts: unknown, handler: any) => handler),
@@ -14,15 +16,10 @@ const hoisted = vi.hoisted(() => ({
     refresh: vi.fn(),
 }));
 
-vi.mock('../training-load/training-load-cache', async importOriginal => ({ ...await importOriginal<any>(), refreshTrainingLoadSummary: hoisted.refresh }));
-
 vi.mock('firebase-functions/v2/firestore', () => ({
     onDocumentWritten: hoisted.onDocumentWritten,
 }));
 
-vi.mock('../shared/cloud-tasks', () => ({
-    enqueueDerivedMetricsIngressTask: hoisted.enqueueDerivedMetricsIngressTask,
-}));
 vi.mock('firebase-admin', () => ({
     firestore: hoisted.firestore,
 }));
@@ -55,10 +52,14 @@ import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
 
 describe('onDashboardDerivedMetricsEventWrite', () => {
     beforeEach(() => {
+        // Spy on the loaded export: overlapping dynamic imports can bypass Vitest's
+        // async mock factory. Cold import isolation has its own loading spec.
+        vi.spyOn(cloudTasks, 'enqueueDerivedMetricsIngressTask').mockImplementation(hoisted.enqueueDerivedMetricsIngressTask);
+        vi.spyOn(trainingLoadCache, 'refreshTrainingLoadSummary').mockImplementation(hoisted.refresh);
         hoisted.usersDoc.mockReset();
-        hoisted.usersDoc.mockReturnValue({ path: 'users/user-1' });
+        hoisted.usersDoc.mockImplementation((uid: string) => ({ path: `users/${uid}` }));
         hoisted.tombstonesDoc.mockReset();
-        hoisted.tombstonesDoc.mockReturnValue({ path: 'userDeletionTombstones/user-1' });
+        hoisted.tombstonesDoc.mockImplementation((uid: string) => ({ path: `userDeletionTombstones/${uid}` }));
         hoisted.usersCollection.mockReset();
         hoisted.usersCollection.mockReturnValue({ doc: hoisted.usersDoc });
         hoisted.tombstonesCollection.mockReset();
@@ -100,6 +101,76 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
         params: { uid: 'user-1', eventId: 'event-1', activityId: 'leg', sleepSessionId: 'sleep-1', sourceRecordId: 'health-1' },
         data: { before: { exists: true, data: () => ({ eventID: 'event-1', metricIds: ['body_weight'] }) },
             after: { exists: false, data: () => undefined } },
+    });
+
+    describe.each(deletionTriggers)('%s concurrent deliveries', (source, handler) => {
+        it.each(['same owner', 'different owners'])('keeps owners and invalidation scopes isolated across five overlapping writes (%s)', async scope => {
+            let release!: () => void;
+            const blocked = new Promise<void>(resolve => { release = resolve; });
+            hoisted.enqueueDerivedMetricsIngressTask.mockImplementation(async () => { await blocked; return true; });
+            const events = Array.from({ length: 5 }, (_, index) => {
+                const uid = scope === 'same owner' ? 'owner-shared' : `owner-${index}`;
+                const data = source === 'health' ? { metricIds: ['body_weight'] }
+                    : source === 'activity' ? { eventID: 'workout' }
+                        : source === 'training-load' ? { controls: {}, excluded: true } : {};
+                return { source, uid, handler, event: {
+                    params: { uid, eventId: 'workout', activityId: 'leg', sleepSessionId: 'night', sourceRecordId: 'weight' },
+                    data: { before: { exists: false, data: () => undefined }, after: { exists: true, data: () => data } },
+                } };
+            });
+            const pending = Promise.allSettled(events.map(({ handler, event }) =>
+                (handler as unknown as (event: unknown) => Promise<void>)(event)));
+            try {
+                await vi.waitFor(() => expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledTimes(5));
+                for (const { source, uid } of events) {
+                    const calls = hoisted.enqueueDerivedMetricsIngressTask.mock.calls.filter(call => call[0] === uid);
+                    const taskScope = source === 'training-load' ? 'training-load' : source === 'sleep' ? 'sleep'
+                        : source === 'health' ? 'health-body_weight_trend' : undefined;
+                    expect(calls.some(call => call[3]?.taskScope === taskScope)).toBe(true);
+                    if (source === 'health') {
+                        expect(calls.find(call => call[3]?.taskScope === taskScope)?.[3]).toEqual({
+                            taskScope, metricKinds: [DERIVED_METRIC_KINDS.BodyWeightTrend], incrementEventMutationVersion: false,
+                        });
+                    }
+                }
+                expect(hoisted.refresh).toHaveBeenCalledTimes(source === 'training-load' ? 5 : 0);
+                if (source === 'training-load') {
+                    for (const { uid } of events) expect(hoisted.refresh).toHaveBeenCalledWith(uid, 'workout');
+                }
+            } finally { release(); await pending; }
+            expect(await pending).toEqual(events.map(() => ({ status: 'fulfilled', value: undefined })));
+        });
+    });
+
+    it('propagates an enqueue failure independently while other concurrent owners complete and the failed owner retries', async () => {
+        const failedUid = 'owner-retry';
+        const completed = new Set<string>();
+        let unavailable = true;
+        const failure = new Error('synthetic enqueue unavailable');
+        hoisted.enqueueDerivedMetricsIngressTask.mockImplementation(async (uid: string) => {
+            if (uid === failedUid && unavailable) throw failure;
+            completed.add(uid);
+            return true;
+        });
+        const owners = [failedUid, 'owner-1', 'owner-2', 'owner-3', 'owner-4'];
+        const run = (uid: string) => (onDashboardDerivedMetricsSleepWrite as unknown as (event: unknown) => Promise<void>)({
+            params: { uid, sleepSessionId: 'night' },
+            data: { before: { exists: false }, after: { exists: true, data: () => ({}) } },
+        });
+        const results = await Promise.allSettled(owners.map(run));
+        expect(results[0]).toEqual({ status: 'rejected', reason: failure });
+        expect(results.slice(1)).toEqual(owners.slice(1).map(() => ({ status: 'fulfilled', value: undefined })));
+        expect(completed).toEqual(new Set(owners.slice(1)));
+        unavailable = false;
+        await run(failedUid);
+        expect(completed).toEqual(new Set(owners));
+    });
+
+    it.each(deletionTriggers)('keeps the %s trigger at 512 MiB with retries and the existing instance ceiling', (_source, handler) => {
+        const registered = hoisted.onDocumentWritten.mock.calls.find(call => call[1] === handler);
+        expect(registered?.[0]).toMatchObject({
+            region: 'europe-west2', memory: '512MiB', concurrency: 5, maxInstances: 50, retry: true,
+        });
     });
 
     describe.each(['tombstone', 'missing root'])('account deletion (%s)', state => {

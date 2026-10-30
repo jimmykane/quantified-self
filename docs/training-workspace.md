@@ -7290,7 +7290,11 @@ avoid full-source invalidation. No original-file
 reparse is required to warm this cache, and it does not recalculate historical TSS.
 
 The five event/activity/sleep/Health/load trigger entrypoints keep their existing Firestore paths, retry policy,
-512 MiB memory and concurrency of one. Their semantic no-op and preparation-only checks run before dynamically
+512 MiB memory and maximum of 50 instances per Function. Each instance admits up to five concurrent deliveries so
+independent Firestore/Cloud Tasks waits can share a warm instance. The instance ceiling is retained for the first
+trial rather than limiting burst capacity; it is not a global limit of 50 in-flight deliveries. This changes only
+source-handler scheduling; `processDerivedMetricsTask` retains concurrency one and 2 GiB memory. Their semantic no-op
+and preparation-only checks run before dynamically
 loading the cache/calculation/Cloud Tasks handler. Both pending and final metadata writes remain; this avoids heavy
 startup work for ignored deliveries rather than removing a trigger invocation. Coordinated event/activity writes
 check current metadata before loading the calculation registry; irrelevant Health records exit before that load too.
@@ -7303,7 +7307,7 @@ deliveries acknowledge without cache refresh, metadata reads or enqueueing. Non-
 decoding until after this guard; unrelated Health records still exit with no Firestore reads. An ordinary source
 deletion adds this two-document preflight and retains cache maintenance and
 the later deletion/transaction guards, including a deletion that starts during handling. Guard lookup failures retry.
-Trigger delivery still occurs; concurrency, deletion pacing, resources and retry settings are unchanged. Help, MCP
+Trigger delivery still occurs; deletion pacing, memory and retry settings are unchanged. Help, MCP
 contracts/planning reads and monitoring coverage are unchanged: this only short-circuits an existing lifecycle skip.
 
 Preparation, finalization and trigger cache refresh batch the account root, deletion tombstone and already-known
@@ -7325,6 +7329,18 @@ Help/MCP/monitoring review: these execution changes leave user behavior, recorde
 contracts and planning/provider actions unchanged. Existing Help guidance remains accurate. Trigger identities,
 queue scopes, debounce, leases, retries, failure logs and monitoring filters remain unchanged; no new operational
 resource, schema, index or migration is required.
+
+Source-trigger concurrency verification uses overlapping same-owner and different-owner deliveries plus independent
+enqueue failure/retry checks. Real Firestore transaction tests cover coordinator contention, cache splitting,
+out-of-order corrections/deletions and deletion fences. Local tests do not predict autoscaling or billed savings.
+After separately approved deployment of only these five source triggers, compare matched 24–48-hour periods using
+native Cloud Run billable instance time per request, request latency/count, instance count, CPU/memory utilization,
+errors/OOMs and retries for each service. Check existing derived ingress/worker outcomes, pending-generation age
+and publication freshness as downstream guardrails; the existing derived monitoring filters continue to cover those
+workers, not source-trigger invocation costs. No monitoring apply or new logs are required. Reject the trial if
+contention, memory pressure or refresh latency regresses. Roll back all five concurrency values to one and the
+compiled entrypoint expectations together, then redeploy only those Functions after approval. Help and MCP contract
+coverage remain unchanged because formulas, source selection, authorization and public payloads do not change.
 
 For imports, source triggers check the pending marker and committed update times, leaving invalidation to the final
 metadata write. Completed changed sources use normal full-source ingress; owner-only load edits retain targeted
