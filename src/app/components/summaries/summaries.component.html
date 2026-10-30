@@ -187,8 +187,8 @@
     </dl>
   </section>
   @if (isOwnerDashboard && user?.uid) {
-    <app-morning-workout [ownerUid]="user!.uid" [localDate]="todayRestDate" [dataReady]="!dashboardTodayReadiness.loading"
-      [sleepRevision]="morningWorkoutSleepRevision" [sleepKey]="morningWorkoutSleepKey"></app-morning-workout>
+    <app-daily-workout-suggestion [ownerUid]="user!.uid" [localDate]="todayRestDate" [dataReady]="!dashboardTodayReadiness.loading"
+      [sleepRevision]="dailyWorkoutSuggestionSleepRevision" [sleepKey]="dailyWorkoutSuggestionSleepKey"></app-daily-workout-suggestion>
   }
   }
   @if (showActions && library.busy()) { <mat-progress-bar mode="indeterminate" aria-label="Saving dashboard"></mat-progress-bar> }

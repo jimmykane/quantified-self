@@ -39,7 +39,7 @@ function response(requestId: string): GenerateDayWorkoutResponse {
     previousLoads: [{ exerciseId: 'squat', localDate: '2026-10-25' }] };
 }
 
-function exportMorningDialogQa(element: HTMLElement, name: string) {
+function exportDailySuggestionDialogQa(element: HTMLElement, name: string) {
   const dir = process.env.DAY_WORKOUT_QA_DIR; if (!dir) return;
   const sass = createRequire(createRequire(resolve('package.json')).resolve('@angular/build/package.json'))('sass');
   const css = (MatDialogContainer as unknown as { ɵcmp: { styles: string[] } }).ɵcmp.styles.join('\n')
@@ -98,25 +98,25 @@ describe('DayWorkoutDialogComponent', () => {
   async function render() { const fixture = TestBed.createComponent(DayWorkoutDialogComponent);
     vi.spyOn((fixture.componentInstance as unknown as { dialogs: MatDialog }).dialogs, 'open').mockImplementation(dialogOpen);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); return fixture; }
-  it('reviews an included morning draft without generation, preserves Standalone and reports only its explicit successful Add', async () => {
+  it('reviews an included daily suggestion draft without generation, preserves Standalone and reports only its explicit successful Add', async () => {
     const data = TestBed.inject(MAT_DIALOG_DATA); const onAdded = vi.fn();
     data.initialControls = defaultDayWorkoutControls('2026-10-28', 'Europe/Helsinki', ActivityTypes.StrengthTraining);
-    data.initialResult = response('morning:2026-10-28'); data.onAdded = onAdded;
+    data.initialResult = response('daily-suggestion:2026-10-28'); data.onAdded = onAdded;
     const fixture = await render();
     expect(generate).not.toHaveBeenCalled(); expect(mutate).not.toHaveBeenCalled();
     expect(fixture.componentInstance.controls().destinationPlanId).toBeNull();
-    expect(fixture.nativeElement.textContent).toContain('Included morning suggestion');
-    exportMorningDialogQa(fixture.nativeElement, 'morning-review');
+    expect(fixture.nativeElement.textContent).toContain('Included daily suggestion');
+    exportDailySuggestionDialogQa(fixture.nativeElement, 'daily-suggestion-review');
     await fixture.componentInstance.add();
     expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ operation: expect.objectContaining({ kind: 'create-workout', planId: null }) }), expect.any(Function));
     expect(onAdded).toHaveBeenCalledOnce();
   });
-  it('saves morning preferences with all data enabled without generating or saving a workout', async () => {
+  it('saves daily suggestion preferences with all data enabled without generating or saving a workout', async () => {
     const data = TestBed.inject(MAT_DIALOG_DATA); data.mode = 'preferences'; data.savePreferences = vi.fn().mockResolvedValue(undefined);
     const fixture = await render(); const component = fixture.componentInstance;
-    expect(fixture.nativeElement.textContent).toContain('5 am–noon');
+    expect(fixture.nativeElement.textContent).toContain('One included suggestion per local day');
     expect(component.primaryLabel()).toBe('Save preferences');
-    exportMorningDialogQa(fixture.nativeElement, 'morning-preferences');
+    exportDailySuggestionDialogQa(fixture.nativeElement, 'daily-suggestion-preferences');
     expect(component.mainChoices().some(choice => choice.key === 'destinationPlanId')).toBe(false);
     expect(component.contextChoices().filter(choice => ['activityContext', 'trainingContext'].includes(choice.key)).every(choice => choice.disabled && choice.checked)).toBe(true);
     await component.primaryAction();

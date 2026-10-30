@@ -5,8 +5,8 @@ import { Auth } from 'app/firebase/auth';
 import { defaultDayWorkoutControls } from '@shared/day-workout';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { projectStrengthWorkoutToV1, type StrengthWorkoutDraftV1 } from '@shared/strength-workout';
-import type { MorningWorkoutStatus } from '@shared/morning-workout';
-import { MorningWorkoutService } from './morning-workout.service';
+import type { DailyWorkoutSuggestionStatus } from '@shared/daily-workout-suggestion';
+import { DailyWorkoutSuggestionService } from './daily-workout-suggestion.service';
 import { AppUserService } from './app.user.service';
 import { AppFunctionsService } from './app.functions.service';
 import { AppAnalyticsService } from './app.analytics.service';
@@ -23,29 +23,29 @@ function setup(saved = storage(), enabled = true, sport = ActivityTypes.Running,
   vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-30T07:00Z'));
   const auth = { currentUser: { uid: 'owner' } };
   const controls = defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki', sport);
-  const user = signal<any>({ uid: 'owner', settings: { appSettings: { morningWorkout: { enabled, followRoutine: true, controls } } } });
+  const user = signal<any>({ uid: 'owner', settings: { appSettings: { dailyWorkoutSuggestion: { enabled, followRoutine: true, controls } } } });
   const pro = signal(true), revisions = new Subject<{ uid: string; revision: number | null }>();
   const verifiedRevisions = new Map<string, number | null>();
   if (knownRevision !== undefined) verifiedRevisions.set('owner', knownRevision);
   revisions.subscribe(({ uid, revision }) => verifiedRevisions.set(uid, revision));
   const updateUserProperties = vi.fn().mockResolvedValue(undefined), logEvent = vi.fn();
-  const result = (): MorningWorkoutStatus => ({ localDate: service.preferences().controls.localDate, state: 'ready', controls,
-    result: { requestId: `morning:${service.preferences().controls.localDate}`, observedAt: new Date().toISOString(), kind: 'rest',
+  const result = (): DailyWorkoutSuggestionStatus => ({ localDate: service.preferences().controls.localDate, state: 'ready', controls,
+    result: { requestId: `daily-suggestion:${service.preferences().controls.localDate}`, observedAt: new Date().toISOString(), kind: 'rest',
       rationale: 'An easy day.', draft: null, usedContext: [], missingContext: [], previousLoads: [] } });
   const call = vi.fn(async () => ({ data: result() }));
-  TestBed.configureTestingModule({ providers: [MorningWorkoutService,
+  TestBed.configureTestingModule({ providers: [DailyWorkoutSuggestionService,
     { provide: Auth, useValue: auth }, { provide: AppUserService, useValue: { user, updateUserProperties, isProSignal: pro } },
     { provide: AppFunctionsService, useValue: { call } }, { provide: AppAnalyticsService, useValue: { logEvent } },
     { provide: AppWindowService, useValue: { windowRef: { sessionStorage: saved } } },
     { provide: TrainingPlansService, useValue: { stateRevisionChanges$: revisions,
       lastVerifiedStateRevision: (uid: string) => verifiedRevisions.get(uid) } },
   ] });
-  const service = TestBed.inject(MorningWorkoutService);
+  const service = TestBed.inject(DailyWorkoutSuggestionService);
   return { service, auth, user, pro, revisions, call, updateUserProperties, logEvent, saved, result };
 }
 afterEach(() => vi.useRealTimers());
 
-describe('MorningWorkoutService daily browser cache', () => {
+describe('DailyWorkoutSuggestionService daily browser cache', () => {
   it('defaults off with all data selected, persists preferences and fences account changes', async () => {
     const { service, auth, user, updateUserProperties, call, logEvent } = setup(storage(), false);
     const preferences = service.preferences();
@@ -55,14 +55,14 @@ describe('MorningWorkoutService daily browser cache', () => {
     updateUserProperties.mockReturnValueOnce(new Promise<void>(resolve => { acknowledge = resolve; }));
     const write = service.save('owner', { ...preferences, enabled: true }); await Promise.resolve();
     expect(service.saving()).toBe(true); acknowledge(); await write; expect(service.saving()).toBe(false);
-    expect(updateUserProperties).toHaveBeenCalledWith(user(), { settings: { appSettings: { morningWorkout: { ...preferences, enabled: true } } } });
+    expect(updateUserProperties).toHaveBeenCalledWith(user(), { settings: { appSettings: { dailyWorkoutSuggestion: { ...preferences, enabled: true } } } });
     await service.request('owner', 'prepare', () => true);
-    expect(call).toHaveBeenCalledWith('generateDayWorkout', { mode: 'morning', action: 'prepare' }, expect.any(Object));
+    expect(call).toHaveBeenCalledWith('generateDayWorkout', { mode: 'daily-suggestion', action: 'prepare' }, expect.any(Object));
     expect(call.mock.calls[0][2].canExecute()).toBe(true);
     await expect(service.request('owner', 'use-available-data', () => true)).rejects.toThrow('displayed day');
     await service.request('owner', 'use-available-data', () => true, preferences.controls.localDate);
-    expect(call).toHaveBeenLastCalledWith('generateDayWorkout', { mode: 'morning', action: 'use-available-data', localDate: preferences.controls.localDate }, expect.any(Object));
-    service.event('owner', 'reviewed', 'ready'); expect(logEvent).toHaveBeenCalledWith('morning_workout', { action: 'reviewed', state: 'ready' });
+    expect(call).toHaveBeenLastCalledWith('generateDayWorkout', { mode: 'daily-suggestion', action: 'use-available-data', localDate: preferences.controls.localDate }, expect.any(Object));
+    service.event('owner', 'reviewed', 'ready'); expect(logEvent).toHaveBeenCalledWith('daily_workout_suggestion', { action: 'reviewed', state: 'ready' });
     auth.currentUser = { uid: 'other' }; user.set({ uid: 'other' });
     expect(call.mock.calls[0][2].canExecute()).toBe(false);
     await expect(service.save('owner', preferences)).rejects.toThrow('account changed');
@@ -79,7 +79,7 @@ describe('MorningWorkoutService daily browser cache', () => {
     expect(second.call).not.toHaveBeenCalled();
   });
   it.each(['status', 'prepare'] as const)('shares a pending %s request after its first component leaves', async action => {
-    const { service, call, result } = setup(); let finish!: (value: { data: MorningWorkoutStatus }) => void;
+    const { service, call, result } = setup(); let finish!: (value: { data: DailyWorkoutSuggestionStatus }) => void;
     call.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     let mounted = true;
     const first = service.request('owner', action, () => mounted); mounted = false;
@@ -118,14 +118,14 @@ describe('MorningWorkoutService daily browser cache', () => {
   });
   it('lets an explicit refresh bypass cached status and shares that refresh', async () => {
     const { service, call, result } = setup(); await service.request('owner', 'status', () => true);
-    let finish!: (value: { data: MorningWorkoutStatus }) => void;
+    let finish!: (value: { data: DailyWorkoutSuggestionStatus }) => void;
     call.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     const first = service.request('owner', 'status', () => true, undefined, true);
     const second = service.request('owner', 'status', () => true, undefined, true);
     expect(call).toHaveBeenCalledTimes(2); finish({ data: result() }); await Promise.all([first, second]);
   });
   it.each(['dismiss', 'use-available-data'] as const)('keeps the view cancellation fence on explicit %s actions', async action => {
-    const { service, call, result } = setup(); let finish!: (value: { data: MorningWorkoutStatus }) => void;
+    const { service, call, result } = setup(); let finish!: (value: { data: DailyWorkoutSuggestionStatus }) => void;
     call.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     let current = true;
     const pending = service.request('owner', action, () => current, '2026-10-30');
@@ -165,7 +165,7 @@ describe('MorningWorkoutService daily browser cache', () => {
   });
   it('does not let invalidated in-flight replies replace newer coverage', async () => {
     const { service, call, revisions, result } = setup(); service.cached('owner'); revisions.next({ uid: 'owner', revision: 1 });
-    let finish!: (value: { data: MorningWorkoutStatus }) => void;
+    let finish!: (value: { data: DailyWorkoutSuggestionStatus }) => void;
     call.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     const pending = service.request('owner', 'status', () => true);
     revisions.next({ uid: 'owner', revision: 2 }); service.remember('owner', { localDate: '2026-10-30', state: 'planned' });
@@ -198,7 +198,7 @@ describe('MorningWorkoutService daily browser cache', () => {
   it('clears private session state on logout and rejects late replies', async () => {
     const { service, user, auth, call, result, saved } = setup(); await service.request('owner', 'status', () => true);
     expect(saved.values.size).toBe(1);
-    let finish!: (value: { data: MorningWorkoutStatus }) => void;
+    let finish!: (value: { data: DailyWorkoutSuggestionStatus }) => void;
     call.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     const pending = service.request('owner', 'status', () => true, undefined, true);
     user.set(null); auth.currentUser = null; TestBed.tick();
@@ -209,8 +209,8 @@ describe('MorningWorkoutService daily browser cache', () => {
   it.each(['day', 'preferences', 'account'] as const)('does not reuse another %s scope', async change => {
     const { service, user, auth, call } = setup(); await service.request('owner', 'status', () => true);
     if (change === 'day') vi.setSystemTime(new Date('2026-10-31T07:00Z'));
-    if (change === 'preferences') user.update(value => ({ ...value, settings: { appSettings: { morningWorkout: {
-      ...value.settings.appSettings.morningWorkout, followRoutine: false } } } }));
+    if (change === 'preferences') user.update(value => ({ ...value, settings: { appSettings: { dailyWorkoutSuggestion: {
+      ...value.settings.appSettings.dailyWorkoutSuggestion, followRoutine: false } } } }));
     if (change === 'account') { auth.currentUser = { uid: 'other' }; user.update(value => ({ ...value, uid: 'other' })); }
     const uid = change === 'account' ? 'other' : 'owner';
     expect(service.cached(uid)).toBeNull(); await service.request(uid, 'status', () => true); expect(call).toHaveBeenCalledTimes(2);

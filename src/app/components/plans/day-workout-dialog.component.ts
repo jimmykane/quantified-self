@@ -138,11 +138,11 @@ export class DayWorkoutDialogComponent {
     { key: 'timelineContext' as const, label: 'Timeline notes' },
     ...(this.strength() ? [{ key: 'usePreviousWeights' as const, label: 'Reuse planned weights' }] : []),
   ].map(choice => {
-    const requiredForMorning = this.data.mode === 'preferences' && ['trainingContext', 'activityContext'].includes(choice.key);
-    const disabled = requiredForMorning || choice.key === 'routineContext' && this.controls().activityContext === false
+    const requiredForDailySuggestion = this.data.mode === 'preferences' && ['trainingContext', 'activityContext'].includes(choice.key);
+    const disabled = requiredForDailySuggestion || choice.key === 'routineContext' && this.controls().activityContext === false
       || choice.key === 'readinessContext' && !this.readinessSourcesEnabled()
       || choice.key === 'usePreviousWeights' && !this.controls().trainingContext;
-    return { ...choice, disabled, checked: (!disabled || requiredForMorning) && this.controls()[choice.key] !== false };
+    return { ...choice, disabled, checked: (!disabled || requiredForDailySuggestion) && this.controls()[choice.key] !== false };
   }));
   readonly contextSelection = computed(() => {
     const choices = this.contextChoices();
@@ -164,7 +164,7 @@ export class DayWorkoutDialogComponent {
       try {
         await this.data.savePreferences?.({ ...this.controls(), destinationPlanId: null }, this.followRoutine());
         if (this.current(sequence)) { this.haptics.success(); this.ref.close(); }
-      } catch { if (this.current(sequence)) { this.error.set('Morning preferences could not be saved. Your choices are kept.'); this.haptics.error(); } }
+      } catch { if (this.current(sequence)) { this.error.set('Daily suggestion preferences could not be saved. Your choices are kept.'); this.haptics.error(); } }
       finally { if (this.current(sequence)) { this.busy.set(null); this.ref.disableClose = false; } }
       return;
     }

@@ -848,7 +848,7 @@ describe('help.content', () => {
     expect(content).toContain('In **Select** mode, one-finger drags select a range and pinching does not change the chart range');
   });
 
-  it('explains the daily browser cache and targeted morning status checks', () => {
+  it('explains the daily browser cache and targeted daily suggestion status checks', () => {
     const content = HELP_SECTIONS.map(section => section.content).join('\n');
     expect(content).toContain('reuses the daily status across navigation and reloads');
     expect(content).toContain('without regenerating an existing suggestion');
@@ -857,6 +857,9 @@ describe('help.content', () => {
     expect(content).toContain('This check generates nothing');
     expect(content).toContain('Deleting today’s last planned workout lets QS check again');
     expect(content).toContain('Adding and deleting workouts never resets the daily allowance');
+    expect(content).toContain('at any time that day');
+    expect(content).toContain('each local day, at any time');
+    expect(content).not.toContain('5 am and noon');
   });
 
   it('explains separately consented Timeline-note context for workout suggestions', () => {

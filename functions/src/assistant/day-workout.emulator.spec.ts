@@ -4,7 +4,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { defaultDayWorkoutControls, type GenerateDayWorkoutResponse } from '../../../shared/day-workout';
 import { projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
-import { createMorningWorkoutStore } from './morning-workout-store';
+import { createDailyWorkoutSuggestionStore } from './daily-workout-suggestion-store';
 import { createDayWorkoutStore } from './day-workout-store';
 import { readDayWorkoutTrainingContext } from './day-workout-context';
 import { validateDayWorkoutSuggestion } from './day-workout-validation';
@@ -116,27 +116,27 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     expect(await store.begin(uid, { requestId: latest.requestId, controls })).toEqual({ response: latest });
     await expect(store.begin(uid, { requestId: 'large-request-0', controls })).rejects.toMatchObject({ code: 'failed-precondition' });
   }, 30_000);
-  it('claims one included morning result across devices, preserves preferences and never touches Assistant quota', async () => {
-    const uid = `morning-${randomUUID()}`;
-    let now = new Date('2026-10-30T07:00Z');
+  it('claims one included daily result after noon across devices, preserves preferences and never touches Assistant quota', async () => {
+    const uid = `daily-suggestion-${randomUUID()}`;
+    let now = new Date('2026-10-30T13:00Z');
     const saved = { enabled: true, followRoutine: true, controls: defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki') };
     const user = db.doc(`users/${uid}`); await user.set({});
-    await user.collection('config').doc('settings').set({ appSettings: { morningWorkout: saved } });
-    const store = createMorningWorkoutStore(() => db, () => now);
+    await user.collection('config').doc('settings').set({ appSettings: { dailyWorkoutSuggestion: saved } });
+    const store = createDailyWorkoutSuggestionStore(() => db, () => now);
     const first = await store.read(uid); expect(first.status.state).toBe('waiting');
     const concurrent = await Promise.all([store.begin(uid, first.preferences!), store.begin(uid, first.preferences!)]);
     const token = concurrent.find(value => value !== null)!;
     expect(concurrent.filter(value => value !== null)).toHaveLength(1);
     await store.charge(uid, '2026-10-30', token);
-    const result = response('morning:2026-10-30');
+    const result = response('daily-suggestion:2026-10-30');
     await store.finish(uid, '2026-10-30', token, 'ready', saved.controls, result);
     expect((await store.read(uid)).status).toMatchObject({ state: 'ready', result, controls: saved.controls });
-    await user.collection('config').doc('settings').set({ appSettings: { morningWorkout: { ...saved,
+    await user.collection('config').doc('settings').set({ appSettings: { dailyWorkoutSuggestion: { ...saved,
       controls: { ...saved.controls, minutes: 60 } } } });
     expect((await store.read(uid)).status.controls?.minutes).toBe(30);
     expect(await store.begin(uid, (await store.read(uid)).preferences!)).toBeNull();
     expect((await user.collection('assistantUsage').get()).empty).toBe(true);
-    const state = (await user.collection('assistantConversations').doc('morning-workout').get()).data()!;
+    const state = (await user.collection('assistantConversations').doc('daily-workout-suggestion').get()).data()!;
     expect(state.expireAt.toMillis()).toBe(now.getTime() + 7 * 86_400_000);
     expect(Object.keys(state).sort()).toEqual(['expireAt', 'messages', 'version']);
     expect(state.messages['2026-10-30'].result).toEqual(result);
@@ -154,16 +154,16 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     await expect(store.dismiss(uid, '2026-10-30')).rejects.toMatchObject({ code: 'permission-denied' });
   }, 30_000);
   it('releases uncharged context failures, fences opt-outs and never reclaims an expired model lease', async () => {
-    const uid = `morning-fences-${randomUUID()}`;
+    const uid = `daily-suggestion-fences-${randomUUID()}`;
     let now = new Date('2026-10-30T07:00Z');
     const user = db.doc(`users/${uid}`); await user.set({});
     const preferences = { enabled: true, followRoutine: true, controls: defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki') };
-    const settings = user.collection('config').doc('settings'); await settings.set({ appSettings: { morningWorkout: preferences } });
-    const store = createMorningWorkoutStore(() => db, () => now);
+    const settings = user.collection('config').doc('settings'); await settings.set({ appSettings: { dailyWorkoutSuggestion: preferences } });
+    const store = createDailyWorkoutSuggestionStore(() => db, () => now);
     const first = await store.begin(uid, preferences);
     await store.finish(uid, '2026-10-30', first!, 'failed');
     const second = await store.begin(uid, preferences); expect(second).not.toBe(first);
-    await settings.update({ 'appSettings.morningWorkout.controls.timelineContext': false });
+    await settings.update({ 'appSettings.dailyWorkoutSuggestion.controls.timelineContext': false });
     await expect(store.charge(uid, '2026-10-30', second!)).rejects.toMatchObject({ code: 'aborted' });
     await store.finish(uid, '2026-10-30', second!, 'failed');
     const next = (await store.read(uid)).preferences!;
@@ -176,23 +176,23 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     now = new Date(now.getTime() + 4 * 60_000);
     expect((await store.read(uid)).status.state).toBe('failed');
     expect(await store.begin(uid, next)).toBeNull();
-    await expect(store.finish(uid, '2026-10-30', third!, 'ready', next.controls, response('morning:2026-10-30'))).rejects.toMatchObject({ code: 'aborted' });
-    await settings.update({ 'appSettings.morningWorkout.enabled': false });
+    await expect(store.finish(uid, '2026-10-30', third!, 'ready', next.controls, response('daily-suggestion:2026-10-30'))).rejects.toMatchObject({ code: 'aborted' });
+    await settings.update({ 'appSettings.dailyWorkoutSuggestion.enabled': false });
     expect((await store.read(uid)).status).toEqual({ localDate: '', state: 'off' });
   }, 30_000);
 
   it('reclaims unused skip receipts but never guesses that missing allowance metadata means uncharged', async () => {
-    const uid = `morning-proof-${randomUUID()}`; let now = new Date('2026-10-30T07:00Z');
+    const uid = `daily-suggestion-proof-${randomUUID()}`; let now = new Date('2026-10-30T07:00Z');
     const user = db.doc(`users/${uid}`); await user.set({});
     const preferences = { enabled: true, followRoutine: true, controls: defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki') };
-    await user.collection('config').doc('settings').set({ appSettings: { morningWorkout: preferences } });
-    const store = createMorningWorkoutStore(() => db, () => now);
+    await user.collection('config').doc('settings').set({ appSettings: { dailyWorkoutSuggestion: preferences } });
+    const store = createDailyWorkoutSuggestionStore(() => db, () => now);
     const first = await store.begin(uid, preferences);
     await store.finish(uid, '2026-10-30', first!, 'planned');
     const deferred = await store.begin(uid, preferences); expect(deferred).toBeTruthy(); expect(deferred).not.toBe(first);
     await store.finish(uid, '2026-10-30', deferred!, 'waiting-sleep');
     expect((await store.read(uid)).status).toEqual({ localDate: '2026-10-30', state: 'waiting-sleep' });
-    // Temporary day coverage must not erase an earlier unspent morning deferral.
+    // Temporary day coverage must not erase an earlier unspent sleep deferral.
     for (const covered of ['planned', 'completed', 'rest-day'] as const) {
       const paused = await store.begin(uid, preferences);
       await store.finish(uid, '2026-10-30', paused!, covered);
@@ -207,7 +207,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     const contenders = await Promise.all([store.begin(uid, preferences), store.begin(uid, preferences)]);
     const winners = contenders.filter((value): value is string => value !== null);
     expect(winners).toHaveLength(1); const second = winners[0]; expect(second).not.toBe(deferred);
-    const ref = user.collection('assistantConversations').doc('morning-workout');
+    const ref = user.collection('assistantConversations').doc('daily-workout-suggestion');
     const state = (await ref.get()).data()!; delete state.messages['2026-10-30'].charged; await ref.set(state);
     now = new Date(now.getTime() + 4 * 60_000);
     expect((await store.read(uid)).status.state).toBe('failed');

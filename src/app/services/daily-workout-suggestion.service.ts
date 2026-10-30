@@ -2,7 +2,7 @@ import { DestroyRef, Injectable, effect, inject, signal, untracked } from '@angu
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Auth, type FirebaseUserType } from 'app/firebase/auth';
 import { defaultDayWorkoutControls, dayWorkoutLocalDate, parseGenerateDayWorkoutRequest } from '@shared/day-workout';
-import { parseMorningWorkoutPreferences, type MorningWorkoutPreferences, type MorningWorkoutRequest, type MorningWorkoutStatus } from '@shared/morning-workout';
+import { parseDailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionRequest, type DailyWorkoutSuggestionStatus } from '@shared/daily-workout-suggestion';
 import { AppFunctionsService } from './app.functions.service';
 import { AppUserService } from './app.user.service';
 import { AppAnalyticsService } from './app.analytics.service';
@@ -10,35 +10,35 @@ import { AppWindowService } from './app.window.service';
 import { TrainingPlansService } from './training-plans.service';
 import { parseWorkoutStructureV1 } from '@shared/planned-workout';
 import { isStrengthWorkoutSportV1, parseStrengthWorkoutDraftV1, strengthProjectionMatchesDetails } from '@shared/strength-workout';
-import { MORNING_WORKOUT_SESSION_CACHE_KEY as CACHE_KEY } from '../shared/morning-workout-cache';
+import { DAILY_WORKOUT_SUGGESTION_SESSION_CACHE_KEY as CACHE_KEY } from '../shared/daily-workout-suggestion-cache';
 
 const MAX_CACHE_CHARACTERS = 400_000;
-const states: MorningWorkoutStatus['state'][] = ['off', 'waiting', 'waiting-sleep', 'ready', 'dismissed', 'failed', 'planned', 'completed', 'rest-day'];
-interface CachedMorningWorkout {
-  key: string; uid: string; status: MorningWorkoutStatus | null; sleepKey: string | null;
+const states: DailyWorkoutSuggestionStatus['state'][] = ['off', 'waiting', 'waiting-sleep', 'ready', 'dismissed', 'failed', 'planned', 'completed', 'rest-day'];
+interface CachedDailyWorkoutSuggestion {
+  key: string; uid: string; status: DailyWorkoutSuggestionStatus | null; sleepKey: string | null;
   scheduleRevision?: number | null;
 }
-interface MorningWorkoutCache extends CachedMorningWorkout {
+interface DailyWorkoutSuggestionCache extends CachedDailyWorkoutSuggestion {
   authUser: FirebaseUserType | null; epoch: number; observedSleepKey: string | null;
-  pending: Map<string, Promise<MorningWorkoutStatus>>;
+  pending: Map<string, Promise<DailyWorkoutSuggestionStatus>>;
 }
 
 @Injectable({ providedIn: 'root' })
-export class MorningWorkoutService {
+export class DailyWorkoutSuggestionService {
   private readonly auth = inject(Auth);
   private readonly users = inject(AppUserService);
   private readonly functions = inject(AppFunctionsService);
   private readonly analytics = inject(AppAnalyticsService);
   private readonly window = inject(AppWindowService);
   private readonly plans = inject(TrainingPlansService);
-  private cache: MorningWorkoutCache | null = null;
+  private cache: DailyWorkoutSuggestionCache | null = null;
   readonly cacheRevision = signal(0);
   private writes: Promise<void> = Promise.resolve();
   readonly saving = signal(false);
   isOwner(uid: string): boolean { return !!uid && this.auth.currentUser?.uid === uid && this.users.user()?.uid === uid; }
   eligible(uid: string): boolean { return this.isOwner(uid) && this.users.isProSignal(); }
-  preferences(): MorningWorkoutPreferences {
-    try { return parseMorningWorkoutPreferences(this.users.user()?.settings?.appSettings?.morningWorkout); }
+  preferences(): DailyWorkoutSuggestionPreferences {
+    try { return parseDailyWorkoutSuggestionPreferences(this.users.user()?.settings?.appSettings?.dailyWorkoutSuggestion); }
     catch {
       const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       return { enabled: false, followRoutine: true, controls: defaultDayWorkoutControls(dayWorkoutLocalDate(new Date(), zone), zone) };
@@ -71,7 +71,7 @@ export class MorningWorkoutService {
     this.cache.epoch++; this.cache.pending.clear(); this.cache.status = null;
     this.cacheRevision.update(value => value + 1);
   }
-  private entry(uid: string): MorningWorkoutCache {
+  private entry(uid: string): DailyWorkoutSuggestionCache {
     const key = this.key(uid);
     if (this.cache?.key === key && this.cache.authUser === this.auth.currentUser) return this.cache;
     this.cache = { key, uid, authUser: this.auth.currentUser, epoch: 0, status: null, sleepKey: null,
@@ -79,7 +79,7 @@ export class MorningWorkoutService {
     try {
       const text = this.window.windowRef.sessionStorage.getItem(CACHE_KEY);
       if (text && text.length <= MAX_CACHE_CHARACTERS) {
-        const saved = JSON.parse(text) as CachedMorningWorkout;
+        const saved = JSON.parse(text) as CachedDailyWorkoutSuggestion;
         if (saved.key === key && saved.uid === uid && this.validStatus(saved.status)
           && (saved.sleepKey === null || typeof saved.sleepKey === 'string')
           && (saved.scheduleRevision === undefined || saved.scheduleRevision === null || Number.isSafeInteger(saved.scheduleRevision))) {
@@ -93,12 +93,12 @@ export class MorningWorkoutService {
     if (revision !== undefined) this.acceptScheduleRevision(uid, revision);
     return this.cache;
   }
-  private validStatus(status: MorningWorkoutStatus | null): status is MorningWorkoutStatus {
+  private validStatus(status: DailyWorkoutSuggestionStatus | null): status is DailyWorkoutSuggestionStatus {
     try {
       if (!status || !states.includes(status.state) || status.localDate !== this.preferences().controls.localDate) return false;
       if (status.state !== 'ready') return true;
       const result = status.result;
-      if (!status.controls || !result || result.requestId !== `morning:${status.localDate}`
+      if (!status.controls || !result || result.requestId !== `daily-suggestion:${status.localDate}`
         || !Number.isFinite(Date.parse(result.observedAt)) || typeof result.rationale !== 'string'
         || ![result.usedContext, result.missingContext].every(items => Array.isArray(items) && items.every(item => typeof item === 'string'))
         || !Array.isArray(result.previousLoads) || !result.previousLoads.every(source => source
@@ -129,7 +129,7 @@ export class MorningWorkoutService {
       else this.window.windowRef.sessionStorage.removeItem(CACHE_KEY);
     } catch { /* In-memory caching still works when session storage is unavailable. */ }
   }
-  cached(uid: string): Pick<CachedMorningWorkout, 'status' | 'sleepKey'> | null {
+  cached(uid: string): Pick<CachedDailyWorkoutSuggestion, 'status' | 'sleepKey'> | null {
     if (!this.eligible(uid)) return null;
     const entry = this.entry(uid);
     return entry.status && entry.pending.size === 0 ? { status: entry.status, sleepKey: entry.sleepKey } : null;
@@ -142,14 +142,14 @@ export class MorningWorkoutService {
       this.invalidate(); this.persist();
     }
   }
-  remember(uid: string, status: MorningWorkoutStatus): void {
+  remember(uid: string, status: DailyWorkoutSuggestionStatus): void {
     if (!this.eligible(uid) || status.localDate !== this.preferences().controls.localDate) return;
     const entry = this.entry(uid);
     this.invalidate(); entry.status = status; this.persist();
   }
-  async request(uid: string, action: MorningWorkoutRequest['action'], current: () => boolean, expectedDate?: string,
-    refresh = false): Promise<MorningWorkoutStatus> {
-    if (!this.eligible(uid) || !current()) throw Error('Morning suggestion access changed.');
+  async request(uid: string, action: DailyWorkoutSuggestionRequest['action'], current: () => boolean, expectedDate?: string,
+    refresh = false): Promise<DailyWorkoutSuggestionStatus> {
+    if (!this.eligible(uid) || !current()) throw Error('Daily suggestion access changed.');
     if ((action === 'dismiss' || action === 'use-available-data') && !expectedDate) throw Error('Choose the displayed day.');
     const entry = this.entry(uid);
     if (expectedDate && expectedDate !== this.preferences().controls.localDate) throw Error('The displayed day changed.');
@@ -161,12 +161,12 @@ export class MorningWorkoutService {
     const epoch = entry.epoch, sleepKey = entry.observedSleepKey;
     const active = () => this.cache === entry && entry.epoch === epoch && entry.authUser === this.auth.currentUser
       && this.eligible(uid) && this.key(uid) === entry.key;
-    const request: MorningWorkoutRequest = action === 'dismiss' || action === 'use-available-data'
-      ? { mode: 'morning', action, localDate: expectedDate! } : { mode: 'morning', action };
+    const request: DailyWorkoutSuggestionRequest = action === 'dismiss' || action === 'use-available-data'
+      ? { mode: 'daily-suggestion', action, localDate: expectedDate! } : { mode: 'daily-suggestion', action };
     // The shared operation belongs to this authenticated day, not the component that first requested it.
-    const pending = this.functions.call<MorningWorkoutRequest, MorningWorkoutStatus>('generateDayWorkout', request,
+    const pending = this.functions.call<DailyWorkoutSuggestionRequest, DailyWorkoutSuggestionStatus>('generateDayWorkout', request,
       { canExecute: () => active() && (!expectedDate || current()) }).then(({ data }) => {
-        if (!active()) throw Error('Morning suggestion access changed.');
+        if (!active()) throw Error('Daily suggestion access changed.');
         if (data.localDate !== this.preferences().controls.localDate) throw Error('The day changed.');
         entry.status = data;
         // A receipt read does not check current Sleep evidence. Preserve the last actual context check.
@@ -176,15 +176,15 @@ export class MorningWorkoutService {
     entry.pending.set(action, pending);
     return pending;
   }
-  save(uid: string, value: MorningWorkoutPreferences): Promise<void> {
-    const preferences = parseMorningWorkoutPreferences(value);
+  save(uid: string, value: DailyWorkoutSuggestionPreferences): Promise<void> {
+    const preferences = parseDailyWorkoutSuggestionPreferences(value);
     const write = this.writes.then(async () => {
       if (!this.eligible(uid)) throw Error('The signed-in account changed.');
       const user = this.users.user()!;
       const changed = this.key(uid) !== JSON.stringify([uid, preferences]);
       this.saving.set(true);
       try {
-        await this.users.updateUserProperties(user, { settings: { appSettings: { morningWorkout: preferences } } });
+        await this.users.updateUserProperties(user, { settings: { appSettings: { dailyWorkoutSuggestion: preferences } } });
         if (changed && this.isOwner(uid)) this.clear();
       }
       finally { this.saving.set(false); }
@@ -193,7 +193,7 @@ export class MorningWorkoutService {
     return write;
   }
   event(uid: string, action: 'shown' | 'reviewed' | 'added' | 'dismissed' | 'enabled' | 'preferences_saved' | 'disabled' | 'failed',
-    state?: MorningWorkoutStatus['state']): void {
-    if (this.eligible(uid)) this.analytics.logEvent('morning_workout', { action, ...(state ? { state } : {}) });
+    state?: DailyWorkoutSuggestionStatus['state']): void {
+    if (this.eligible(uid)) this.analytics.logEvent('daily_workout_suggestion', { action, ...(state ? { state } : {}) });
   }
 }

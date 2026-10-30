@@ -1465,7 +1465,7 @@ describe('Firestore Security Rules', () => {
             });
         });
 
-        describe.each(['active', 'day-workout', 'morning-workout'])('Private Assistant leaf %s', leaf => {
+        describe.each(['active', 'day-workout', 'daily-workout-suggestion'])('Private Assistant leaf %s', leaf => {
             const assistantPath = `users/${userId}/assistantConversations/${leaf}`;
 
             beforeEach(async () => {

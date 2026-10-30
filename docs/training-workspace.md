@@ -5689,21 +5689,22 @@ reads. No metric kind, backend payload, model, tool, strict projection/schema, s
 provider action changes. No reparse, migration, registered-client refresh or backend deployment is required.
 
 
-#### Pro morning workout suggestion
+#### Pro daily workout suggestion
 
 The owner-only Today section includes one compact shared `CompactRowComponent` after its existing Training state and
 Readiness details, outside the collapsible region. The greeting, colored assessment sentence, existing detailed state,
 and user-controlled collapse remain intact. There is no additional card, tinted surface or ripple on the assessment.
 
-`appSettings.morningWorkout` on `users/{uid}/config/settings` holds explicit opt-in (default off), a recorded-weekday
+`appSettings.dailyWorkoutSuggestion` on `users/{uid}/config/settings` holds explicit opt-in (default off), a recorded-weekday
 sport choice and the existing day-workout controls. Owner-authorized settings writes remain direct SDK merges; the
 backend strictly parses them, overwrites the saved date with server-local today, and requires Training and activity
 context so an automatic extra session cannot bypass schedule/completed-workout checks. Other signals retain independent
 opt-outs; all applicable choices, including Timeline, default on. The preferences form and cached-draft review reuse
-`DayWorkoutDialogComponent`, the shared sport picker and prescription display. Morning drafts start Standalone.
+`DayWorkoutDialogComponent`, the shared sport picker and prescription display. Daily drafts start Standalone.
 
-V1 prepares only on a foreground Today visit after the current data listeners settle (a 1.5-second UI debounce),
-between 05:00 inclusive and 12:00 exclusive in the saved IANA zone. With sleep personalization enabled, a completed main
+V1 prepares on the first eligible foreground Today visit after the current data listeners settle (a 1.5-second UI
+debounce), at any hour. The saved IANA zone defines the local date and its one included model allowance; there is no
+start-hour or noon cutoff. With sleep personalization enabled, a completed main
 sleep ending in the previous seven local dates establishes an expectation for today's sleep. The existing validated
 daily report must include a completed main sleep ending on the current date in that zone, with the same end time in
 its on-read recovery sleep driver. Otherwise the server returns `waiting-sleep` before model admission, preserving
@@ -5718,19 +5719,19 @@ The existing Today Sleep listener increments a private UI revision only when evi
 one new check on that revision, including an update arriving during an in-flight read. It never polls, silently
 regenerates an existing result, or treats identical listener emissions as new evidence. **Use available data** sends a
 date-bound `use-available-data` action for a previously deferred suggestion. This explicit fallback can finish that day's
-morning deferral after noon, rechecks current coverage and all admission fences, and includes a fixed missing-sleep
+sleep deferral at any hour, rechecks current coverage and all admission fences, and includes a fixed missing-sleep
 qualification in the model/review context. It uses the same one daily allowance; no Assistant quota is reserved.
 The private uncharged deferral receipt survives context failures and expired preparation leases; charged or
-unproven allowance metadata cannot be reclaimed. This keeps a retry from losing the fallback after noon.
+unproven allowance metadata cannot be reclaimed. This keeps a retry from losing the same-day fallback.
 Temporary workout/rest-day coverage also retains that unspent deferral: current coverage still takes priority, but
 removing it restores the same dated fallback. Today hydration reloads and tab visibility changes do not retire an
 in-flight read for the same owner, day and preferences; changes to that scope still invalidate stale replies. A checked
-row stays visible without another status request or loading flash on foreground return or repeated hydration. A visit
-before 05:00 can still start preparation on a foreground return within the morning window. Sleep evidence received
+row stays visible without another status request or loading flash on foreground return or repeated hydration. An unstarted
+visit can prepare on a later foreground return at any hour. Sleep evidence received
 while hidden coalesces into one revision-bound check on return, and explicit **Check again** remains available. A read
 that finishes while hidden retains its result, but its shown event waits until the row is visible. A status read that
 returns after hiding cannot start a new automatic model preparation until foreground return.
-`MorningWorkoutService` keeps one account/day/time-zone/preferences cache and shares in-flight status/preparation
+`DailyWorkoutSuggestionService` keeps one account/day/time-zone/preferences cache and shares in-flight status/preparation
 requests independently of the component lifetime. A bounded, validated session-storage copy restores completed status
 and recipes on same-tab reload; unavailable storage falls back to memory. Restored controls must match the saved local
 date and time zone, and strength details must match their canonical projection. Logout/account/Pro changes clear the private
@@ -5739,7 +5740,7 @@ cannot reuse it. Pending preparations are not persisted. Explicit retries
 bypass cached status. A waiting-sleep entry compares stable session identity/end/update metadata from the existing Sleep
 listener, so rehydrating the same night does not retry it. Existing verified Training-state reads publish revision
 invalidation without adding a listener or query. A bounded eight-owner in-memory revision index preserves updates
-received before the lazy morning cache exists; it never supplies mutation authority. Restored unversioned status is
+received before the lazy daily cache exists; it never supplies mutation authority. Restored unversioned status is
 invalidated on its first verified revision. Repeated revisions and other owners do nothing. Changed revisions
 invalidate day coverage while the backend's charged date receipt still prevents a second generated suggestion.
 Dismissed days remain dismissed. Successful Add updates the shared cache to planned even after Today has closed, with
@@ -5749,14 +5750,14 @@ the browser copy holds only the existing first-party public response, capped at 
 
 A planned workout blocks generation without spending the daily model allowance. Deleting today's last blocking planned
 workout changes the verified schedule revision and debounces one new availability check, including Standalone workouts
-when no plan is active. During the morning window, an unused allowance can then prepare its first suggestion. If a
-suggestion already exists, removal restores that same server result, including after noon; adding/deleting a workout
+when no plan is active. An unused allowance can then prepare its first suggestion at any hour. If a
+suggestion already exists, removal restores that same server result; adding/deleting a workout
 never resets the daily allowance. Remaining planned workouts, recorded activity or authored rest intent still block it.
 Regression coverage exercises the real browser service/component across cached navigation, an unchanged revision,
 remaining coverage and repeated add/delete cycles; backend tests cover both an early coverage check and an uncharged
 covered receipt. These are deterministic tests with synthetic evidence, not account mutations or live model calls.
 
-An ordinary afternoon visit cannot start a new included suggestion. **Check again** remains in the options menu while
+Afternoon, evening and before-dawn visits use the same admission and sleep gates. **Check again** remains in the options menu while
 waiting. This is not a sleep-ingestion trigger or a promise that every provider has finished syncing. No queue, scheduler, notification
 or background model request is added. Later evidence/preferences do not silently regenerate a cached draft. Status
 retrieval rechecks only current-day activity summaries and the existing revision-bound schedule/rest projection.
@@ -5770,7 +5771,7 @@ dates and a unique leader; otherwise the saved sport wins. Explicit purpose/targ
 Strength/Weight Training alone share their existing family. The normal selected-sport routine and context read remain
 bounded independently; no frontend history query, attendance, location, usual start time or adherence model is introduced.
 
-The existing Auth/App-Check callable `generateDayWorkout` dispatches a strict private `mode: morning` with only
+The existing Auth/App-Check callable `generateDayWorkout` dispatches a strict private `mode: daily-suggestion` with only
 `status`, `prepare`, `dismiss` and `use-available-data` actions. Pro and legal access are checked server-side; the mode never accepts client
 controls, user IDs or model configuration. Only dismissal and explicit fallback accept the displayed local date as a rollover fence;
 status/preparation dates come from the saved time zone and server clock. It uses the same context, model, strict
@@ -5778,7 +5779,7 @@ canonical validation and single correction budget as manual generation. Complete
 is required before a model call. Existing planned sessions, recorded sessions and authored rest days take priority.
 Missing or failed context remains unknown rather than an empty day. A model rest result is allowed without any mutation.
 
-A separate server-only `users/{uid}/assistantConversations/morning-workout` leaf supplies the included daily allowance;
+A separate server-only `users/{uid}/assistantConversations/daily-workout-suggestion` leaf supplies the included daily allowance;
 no Assistant quota reservation/finalization is called. Its transactional local-date claim has a four-minute lease,
 current owner/deletion and source-preference fences. Model admission consumes that date once, including failed attempts;
 uncharged context failures can retry. Concurrent devices retrieve preparing/cached state rather than starting another
@@ -5797,11 +5798,11 @@ subsequent revisions. Changing its options requires ordinary quota-backed manual
 their original context choices, and disabled preferences suppress private status retrieval. This PR enables no account,
 starts no pilot and performs no deployment; an opt-in is still required after a separately approved release.
 
-Measurement: consent-aware `morning_workout` product events use only fixed action/state labels for shown, reviewed,
+Measurement: consent-aware `daily_workout_suggestion` product events use only fixed action/state labels for shown, reviewed,
 direct successful Add, dismissal, enable/disable and failure. A shown event is once per state/component visit, not a
 unique-person count; preference edits use their own event rather than counting as new opt-ins. Edited workouts saved
-later in the full editor are not attributed as direct morning acceptance.
-`[MorningWorkout]` logs contain aggregate attempts, input/output/thinking tokens, metered versus unknown attempts,
+later in the full editor are not attributed as direct daily acceptance.
+`[DailyWorkoutSuggestion]` logs contain aggregate attempts, input/output/thinking tokens, metered versus unknown attempts,
 model and elapsed time, including correction and post-provider JSON failures. No dates, UIDs, titles, health values,
 notes or model text enter these logs/events. Unknown provider usage is explicit, never a measured zero-dollar claim.
 Use current model pricing on these counters for model-only cost per request/addition; Firestore/compute/network remain
@@ -5809,7 +5810,7 @@ separate. Event counts and aggregate model usage are not an exactly-once experim
 The proposed opt-in pilot and any control assignment/budget activation remain operational decisions; no experiment
 platform, cloud dashboard or metric resource is provisioned here. Queue monitoring coverage is unchanged (no new queue).
 
-MCP impact review: no public contract or authority impact. Morning generation/preferences/cache are private first-party
+MCP impact review: no public contract or authority impact. Daily generation/preferences/cache are private first-party
 state, not a new recipe, planning mutation, exposed field, grant, tool or provider action. Explicitly saved recipes use
 the unchanged endurance/strength read and create-workout contracts. Tab-return stability and the browser cache change only first-party
 request scheduling, existing read invalidation and visibility analytics. Review coverage checks, restored-recipe validation
@@ -5817,7 +5818,11 @@ and sign-out cleanup also remain private first-party behavior. The deletion/resu
 same existing paths; MCP projections, reads and mutation confirmation contracts are unchanged.
 The same-PR demo Firestore suite checks the private
 cache/allowance/deletion fences and existing strict full-workout/strength readback, including private-field exclusion.
-No registered contract digest, client refresh, plugin rebuild, data migration or provider rollout is required.
+The all-day refactor also renames the shared types, component/service/files, private callable mode, settings key, cache
+key, request IDs, server leaf/version and telemetry consistently. This feature was unreleased, so no legacy aliases or
+data migration are introduced; development opt-ins under the old key must be set up again. No cloud data is deleted.
+The deployed callable remains `generateDayWorkout`, with unchanged options and manual-generation behavior.
+No registered MCP contract digest, client refresh, plugin rebuild or provider rollout is required.
 
 #### Dashboard daily briefing
 

@@ -99,7 +99,7 @@ export async function generateDayWorkoutSuggestion(request: GenerateDayWorkoutRe
   }
 }
 
-/** Shared bounded correction/validation path for manual and included morning suggestions. */
+/** Shared bounded correction/validation path for manual and included daily suggestions. */
 export async function generateValidatedDayWorkout(request: GenerateDayWorkoutRequest, evidence: DayWorkoutContext,
   generate: DayWorkoutDependencies['generate'], assertActive: () => Promise<void>) {
   let suggestion;
@@ -203,9 +203,9 @@ export const GENERATE_DAY_WORKOUT_OPTIONS = {
   cors: ALLOWED_CORS_ORIGINS, enforceAppCheck: true, memory: '2GiB' as const, timeoutSeconds: 180, concurrency: 10, maxInstances: 10,
 };
 export const generateDayWorkout = onCall(GENERATE_DAY_WORKOUT_OPTIONS, async request => {
-  if (request.data?.mode === 'morning') {
-    const { runMorningWorkout } = await import('./morning-workout');
-    return runMorningWorkout(request.data, request);
+  if (request.data?.mode === 'daily-suggestion') {
+    const { runDailyWorkoutSuggestion } = await import('./daily-workout-suggestion');
+    return runDailyWorkoutSuggestion(request.data, request);
   }
   return runGenerateDayWorkout(request.data, request);
 });

@@ -98,7 +98,7 @@ import { APP_STORAGE } from '../services/storage/app.storage.token';
 import { environment } from '../../environments/environment';
 import { EMAIL_LINK_RETURN_URL_STORAGE_KEY } from './auth-redirect-url';
 import { AppWindowService } from '../services/app.window.service';
-import { MORNING_WORKOUT_SESSION_CACHE_KEY } from '../shared/morning-workout-cache';
+import { DAILY_WORKOUT_SUGGESTION_SESSION_CACHE_KEY } from '../shared/daily-workout-suggestion-cache';
 
 import { signal } from '@angular/core';
 
@@ -223,7 +223,7 @@ describe('AppAuthService', () => {
         await service.signOut();
 
         expect(signOut).toHaveBeenCalledWith(mockAuth);
-        expect(mockSessionStorage.removeItem).toHaveBeenCalledWith(MORNING_WORKOUT_SESSION_CACHE_KEY);
+        expect(mockSessionStorage.removeItem).toHaveBeenCalledWith(DAILY_WORKOUT_SUGGESTION_SESSION_CACHE_KEY);
         expect(terminate).toHaveBeenCalledWith(mockFirestore);
         expect(mockLocalStorageService.clearAllStorage).toHaveBeenCalled();
         expect(clearIndexedDbPersistence).toHaveBeenCalledWith(mockFirestore);

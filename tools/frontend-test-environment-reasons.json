@@ -83,13 +83,13 @@
     "environment": "angular",
     "reason": "Compiles the shared table date control with real Material menus and range-picker portals to verify calendar selection, deferred Apply versus Cancel, focus restoration, disabled controls and haptic ownership."
   },
+  "src/app/components/summaries/daily-workout-suggestion/daily-workout-suggestion.component.spec.ts": {
+    "environment": "angular",
+    "reason": "Renders the standalone Material Today row to verify foreground/debounce effects, settled-data and owner guards, review/preference callbacks and DestroyRef cancellation."
+  },
   "src/app/components/summaries/dashboard-daily-briefing/dashboard-daily-briefing.component.spec.ts": {
     "environment": "angular",
     "reason": "Compiles the real sentence-only Dashboard rail to verify authenticated-owner fencing, accessible headline-only rendering, assessment input resets and silent display updates without independent data readers."
-  },
-  "src/app/components/summaries/morning-workout/morning-workout.component.spec.ts": {
-    "environment": "angular",
-    "reason": "Renders the standalone Material Today row to verify foreground/debounce effects, settled-data and owner guards, review/preference callbacks and DestroyRef cancellation."
   },
   "src/app/components/timeline-notes/active-sickness-note.component.spec.ts": {
     "environment": "angular",
@@ -127,6 +127,10 @@
     "environment": "angular",
     "reason": "Exercises worker completion, cancellation, timeout and provider teardown through the browser compatibility service, whose runtime dependency graph imports Angular Material dialog components. Component-scoped injection and destruction are covered in the R\u2013R panel fixture suite."
   },
+  "src/app/services/daily-workout-suggestion.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses TestBed injection for owner, Pro and Functions execution fences, queued preference writes and consent-aware analytics dependencies."
+  },
   "src/app/services/day-workout.service.spec.ts": {
     "environment": "angular",
     "reason": "Uses Angular dependency injection and DestroyRef with the dialog and router to verify single-use unsaved draft handoff, Firebase owner changes and the delayed callable execution fence."
@@ -134,10 +138,6 @@
   "src/app/services/history-import-progress.service.spec.ts": {
     "environment": "angular",
     "reason": "Uses TestBed injection, toSignal teardown and Angular effects to verify one shared owner subscription, raw sign-out, A/B/A isolation, read-error recovery and expiry timer cleanup."
-  },
-  "src/app/services/morning-workout.service.spec.ts": {
-    "environment": "angular",
-    "reason": "Uses TestBed injection for owner, Pro and Functions execution fences, queued preference writes and consent-aware analytics dependencies."
   },
   "src/app/services/recorded-history-start.service.spec.ts": {
     "environment": "angular",

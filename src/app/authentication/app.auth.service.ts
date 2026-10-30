@@ -18,7 +18,7 @@ import {
 } from '../shared/adapters/firebase-auth-link.constants';
 import { EMAIL_LINK_RETURN_URL_STORAGE_KEY, sanitizeLocalAuthRedirectUrl } from './auth-redirect-url';
 import { AppWindowService } from '../services/app.window.service';
-import { MORNING_WORKOUT_SESSION_CACHE_KEY } from '../shared/morning-workout-cache';
+import { DAILY_WORKOUT_SUGGESTION_SESSION_CACHE_KEY } from '../shared/daily-workout-suggestion-cache';
 
 import { AppUserInterface } from '../models/app-user.interface';
 
@@ -241,7 +241,7 @@ export class AppAuthService {
 
   async signOut(): Promise<void> {
     await signOut(this.auth);
-    try { this.window.windowRef.sessionStorage.removeItem(MORNING_WORKOUT_SESSION_CACHE_KEY); }
+    try { this.window.windowRef.sessionStorage.removeItem(DAILY_WORKOUT_SUGGESTION_SESSION_CACHE_KEY); }
     catch { /* Blocked browser storage must not prevent sign-out cleanup. */ }
     await terminate(this.firestore);
     this.localStorageService.clearAllStorage();
