@@ -337,6 +337,7 @@ describe('Firebase Hosting configuration', () => {
     // It applies swim units to weekly distances and the SWOLF pool-length label.
     // Table-filter help covers compact text buttons, the calendar dialog, selected dates and per-filter clearing (2026-10-29).
     // Explicit plan rest days cover Plans, Calendar, Today, suggestions and approved Assistant/MCP edits.
+    // Activity table help covers initial placeholders, retained rows and paused row actions while refreshing (2026-10-30).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-30');
   });
 

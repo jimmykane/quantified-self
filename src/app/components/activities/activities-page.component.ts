@@ -64,7 +64,8 @@ export class ActivitiesPageComponent implements OnInit {
   readonly selectedTags = signal<string[]>([]);
   readonly selectedSports = signal<string[]>([]);
   readonly includeMergedEvents = signal(false);
-  readonly hasMergedEvents = computed(() => this.events().some(event => event.isMerge));
+  private readonly loadingHadMergedEvents = signal(false);
+  readonly hasMergedEvents = computed(() => this.loading() ? this.loadingHadMergedEvents() : this.events().some(event => event.isMerge));
   readonly periods = ACTIVITY_EXPLORER_PERIODS;
   readonly defaultPeriod: ActivityExplorerPeriod = 'month';
   readonly period = signal<ActivityExplorerPeriod>(this.defaultPeriod);
@@ -456,6 +457,7 @@ export class ActivitiesPageComponent implements OnInit {
     this.localDayStartMs.set(new Date().setHours(0, 0, 0, 0));
     this.generation += 1;
     this.eventsSubscription?.unsubscribe();
+    if (!this.loading()) this.loadingHadMergedEvents.set(this.events().some(event => event.isMerge));
     this.events.set([]);
     this.historyError.set(false);
     const user = this.user();

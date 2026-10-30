@@ -141,9 +141,31 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       .filter(column => !['Start Date', 'Activity Types', 'Name', 'Description', 'Distance', 'Duration'].includes(column)),
   ];
   displayedColumns: string[] = [];
+  readonly loadingRows = [null, null, null, null];
+  private pendingLoadingInputs = false;
+  private pendingFilterContextReset = false;
+  private renderedOwnerKey: string | null = null;
+  private readonly eventInputOwners = new WeakMap<EventRead[], string>();
+
+  private get currentOwnerKey(): string {
+    return JSON.stringify([this.user?.uid, (this.targetUser || this.user)?.uid]);
+  }
+
+  private get awaitingOwnerEvents(): boolean {
+    const owner = this.events && this.eventInputOwners.get(this.events);
+    return !!owner && owner !== this.currentOwnerKey;
+  }
+
+  get tableIsLoading(): boolean {
+    return !!this.isLoading || !this.events || this.pendingLoadingInputs || this.awaitingOwnerEvents;
+  }
+
+  get showInitialLoading(): boolean {
+    return this.tableIsLoading && (this.data.filteredData ?? this.data.data).length === 0;
+  }
 
   get showEmptyNotice(): boolean {
-    if (this.isLoading || this.hasLoadError || !this.events) return false;
+    if (this.tableIsLoading || this.hasLoadError || !this.events) return false;
     const rows = this.data.filteredData ?? this.data.data;
     return rows.length === 0 && (this.events.length === 0 || this.data.data.length > 0);
   }
@@ -259,19 +281,20 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   ngOnChanges(simpleChanges: SimpleChanges): void {
     const preferencesChanged = this.user && (simpleChanges.user || simpleChanges.presentation);
     if (preferencesChanged) {
-      // The loading base renders synchronously. Initialize the picker first so
-      // Material does not retain options created with Dashboard defaults.
       this.selectedColumns = this.isLibraryPresentation ? this.libraryColumns
         : this.user.settings?.dashboardSettings?.tableSettings?.selectedColumns || AppUserUtilities.getDefaultSelectedTableColumns();
     }
-    this.isLoading ? this.loading() : this.loaded();
-    if (!this.events) {
+    if (this.renderedOwnerKey !== null && this.renderedOwnerKey !== this.currentOwnerKey) {
+      // Retained rows belong only to the viewer/owner pair that produced them.
+      this.data.data = [];
       this.rowCache.clear();
-      this.loading();
-      return;
+      this.selection.clear();
     }
-    if (this.events && (simpleChanges.events || preferencesChanged || simpleChanges.hideGeneratedNames) && this.paginator && this.sort) {
-      this.processChanges(simpleChanges.presentation ? 'on_changes_presentation' : 'on_changes_events', true);
+    if (simpleChanges.events || preferencesChanged || simpleChanges.hideGeneratedNames || simpleChanges.targetUser || this.pendingLoadingInputs) {
+      this.pendingLoadingInputs = !!this.isLoading || !this.events || this.awaitingOwnerEvents;
+      if (!this.pendingLoadingInputs && this.paginator && this.sort) {
+        this.processChanges(simpleChanges.presentation ? 'on_changes_presentation' : 'on_changes_events', true);
+      }
     }
     if (preferencesChanged) {
       const nextPageSize = this.tablePageSize;
@@ -296,6 +319,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.applyTableFilter();
     }
     if (simpleChanges.filterContext) {
+      this.pendingFilterContextReset = true;
+    }
+    if (this.pendingFilterContextReset && !this.tableIsLoading) {
+      this.pendingFilterContextReset = false;
       if (!this.preserveSearchOnFilterChange) {
         this.searchTerm = '';
         this.searchSubject.next('');
@@ -397,8 +424,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         });
       }
     });
-    if (this.events) {
+    if (this.events && !this.tableIsLoading) {
       this.processChanges('after_view_init');
+    } else {
+      this.pendingLoadingInputs = true;
     }
   }
 
@@ -1417,7 +1446,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   private processChanges(trigger: string = 'unknown', preserveSelection: boolean = false) {
-    if (!this.events || !this.user) {
+    if (!this.events || !this.user || this.pendingLoadingInputs || this.awaitingOwnerEvents) {
       return;
     }
     const processStart = performance.now();
@@ -1497,6 +1526,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       rebuiltRows += 1;
     }
     this.rowCache = nextRowCache;
+    this.renderedOwnerKey = this.currentOwnerKey;
+    this.eventInputOwners.set(this.events, this.currentOwnerKey);
     this.data.data = rows;
     this.selection.clear();
     if (selectedEventIDs.size > 0) {

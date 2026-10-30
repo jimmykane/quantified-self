@@ -88,6 +88,20 @@ describe('Merged toolbar filter rendering', () => {
     expect(haptics.selection).toHaveBeenCalledTimes(1);
   });
 
+  it('disables the merged control during loading without adding a hint unless merged activities are explicitly unavailable', () => {
+    const fixture = TestBed.createComponent(MergedFilterTestHost);
+    fixture.componentInstance.includeMerged = false;
+    fixture.componentInstance.loading = true;
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.merged-events-button').disabled).toBe(true);
+    expect(fixture.nativeElement.querySelector('.merge-toggle-hint')).toBeNull();
+    fixture.componentInstance.disabled = true;
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.merge-toggle-hint').textContent).toContain('Merged activities are excluded');
+    expect(fixture.componentInstance.requests).toEqual([]);
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
   it('opens the date menu without a search or repeated feedback, then opens the native calendar from Custom dates', async () => {
     const fixture = TestBed.createComponent(MergedFilterTestHost);
     const settle = async () => { fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); };

@@ -16,7 +16,7 @@
       }
       @if (showMergedEventsToggle) {
         <app-merged-activities-toggle [checked]="includeMergedEvents" [disabled]="isLoading || mergedEventsToggleDisabled"
-          [label]="mergedEventsToggleLabel" [hint]="mergedEventsToggleHint" (checkedChange)="onMergedEventsChange($event)"></app-merged-activities-toggle>
+          [label]="mergedEventsToggleLabel" [hint]="mergedEventsToggleDisabled ? mergedEventsToggleHint : ''" (checkedChange)="onMergedEventsChange($event)"></app-merged-activities-toggle>
       }
     </div>
   } @else {

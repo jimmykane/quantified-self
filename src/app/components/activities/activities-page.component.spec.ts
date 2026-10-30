@@ -665,6 +665,69 @@ describe('ActivitiesPageComponent', () => {
     } finally { c.fixture.destroy(); vi.useRealTimers(); }
   });
 
+  it('keeps the merged control in place through consecutive range changes and clears it on account changes', async () => {
+    const c = await setup();
+    c.events.getEventSummariesBy.mockReturnValue(of([{ ...records[0], isMerge: true }]));
+    await render(c);
+    expect(c.component.hasMergedEvents()).toBe(true);
+    c.events.getEventSummariesBy.mockReturnValue(new Subject());
+    c.component.selectPeriod('week'); c.fixture.detectChanges();
+    expect(c.component.loading()).toBe(true); expect(c.component.hasMergedEvents()).toBe(true);
+    c.component.selectPeriod('year'); c.fixture.detectChanges();
+    expect(c.component.hasMergedEvents()).toBe(true);
+    c.auth.currentUser = null; c.authState$.next(null); c.fixture.detectChanges();
+    expect(c.component.hasMergedEvents()).toBe(false);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(3);
+    c.fixture.destroy();
+  });
+
+  it('uses aligned skeleton cells initially and retains real rows and the merged control while refreshing without extra reads', async () => {
+    const c = await setup('', true);
+    const stream = new Subject<AppEventInterface[]>();
+    c.events.getEventSummariesBy.mockReturnValue(stream);
+    const settle = async () => { c.fixture.detectChanges(); await c.fixture.whenStable(); c.fixture.detectChanges(); };
+    await settle();
+    const root = c.fixture.nativeElement as HTMLElement;
+    const table = c.fixture.debugElement.query(By.directive(EventTableComponent)).componentInstance as EventTableComponent;
+    const header = root.querySelector('.event-table-header');
+    const paginator = table.paginator;
+    const placeholders = root.querySelectorAll('.activity-table-skeleton-row');
+    expect(placeholders).toHaveLength(4);
+    for (const row of placeholders) expect(row.querySelectorAll('.activity-table-skeleton')).toHaveLength(table.displayedColumns.length);
+    expect(root.querySelectorAll('mat-progress-bar')).toHaveLength(1);
+    expect(root.querySelector('mat-spinner, app-loading-overlay, app-shade')).toBeNull();
+    expect(root.querySelector('table[mat-table]')?.hasAttribute('inert')).toBe(true);
+    expect(root.querySelector('.table-wrapper')?.hasAttribute('inert')).toBe(false);
+    expect(root.querySelector('.activity-table-loading-status')?.textContent).toContain('Loading activities');
+    const makeRecord = (id: string, merged = false) => {
+      const record = EventImporterJSON.getEventFromJSON({ name: 'Sample ride', startDate: Date.now(), endDate: Date.now(), srcFileType: FileType.FIT, privacy: Privacy.Private, stats: {}, activities: [] }) as AppEventInterface;
+      record.setID(id); record.isMerge = merged;
+      record.addStat(new DataActivityTypes([ActivityTypes.Cycling])); record.addStat(new DataDeviceNames([])); record.addStat(new DataDistance(1000));
+      return record;
+    };
+    stream.next([makeRecord('initial'), makeRecord('merged', true)]); await render(c);
+    const row = root.querySelector('tr.activity-row');
+    expect(row).toBeTruthy(); expect(root.querySelector('.merged-events-button')).toBeTruthy();
+    expect(root.querySelectorAll('.activity-table-skeleton')).toHaveLength(0);
+    expect(paginator.length).toBe(1);
+    c.component.refresh(); await settle();
+    expect(root.querySelector('tr.activity-row')).toBe(row);
+    expect(root.querySelector('.event-table-header')).toBe(header);
+    expect(table.paginator).toBe(paginator); expect(paginator.length).toBe(1); expect(paginator.disabled).toBe(true);
+    expect(root.querySelector('.activity-table-loading-status')?.textContent).toContain('Updating activities');
+    expect(root.querySelector('.activity-table-loading-status')?.textContent).toContain('Showing previous results');
+    expect(root.querySelectorAll('mat-progress-bar')).toHaveLength(1);
+    expect(root.querySelector('.merged-events-button')).toBeTruthy(); expect(root.querySelector('.merge-toggle-hint')).toBeNull();
+    stream.next([makeRecord('refreshed')]); await render(c);
+    expect(table.data.data.map(row => row.Event.getID())).toEqual(['refreshed']);
+    expect(paginator.disabled).toBe(false); expect(root.querySelector('mat-progress-bar')).toBeNull();
+    expect(root.querySelector('table[mat-table]')?.hasAttribute('inert')).toBe(false);
+    expect(c.events.getEventSummariesBy).toHaveBeenCalledTimes(2);
+    expect(c.events.getEventCount).not.toHaveBeenCalled(); expect(c.events.getEventCountBy).not.toHaveBeenCalled();
+    expect(c.events.getEventsPageOnceByWithMeta).not.toHaveBeenCalled();
+    c.fixture.destroy();
+  });
+
   it('shows the compact notice only for ready empty results and opens existing date controls without queries or duplicate feedback', async () => {
     const c = await setup('', true);
     const stream = new Subject<AppEventInterface[]>();

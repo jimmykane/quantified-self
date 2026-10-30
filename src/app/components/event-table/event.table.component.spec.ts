@@ -554,14 +554,13 @@ describe('EventTableComponent', () => {
         expect(row['sort.Name']).toBe(event.name);
     });
 
-    it('initializes library column choices before a synchronous loading render can create the Material menu', () => {
+    it('initializes library column choices before rendering the Material picker', () => {
         component.presentation = 'tag-library';
         component.selectedColumns = ['Distance', 'Duration', 'Ascent'];
-        const renderedChoices: string[][] = [];
-        vi.spyOn(component, 'loaded').mockImplementation(() => { renderedChoices.push([...component.selectedColumns]); });
         component.ngOnChanges({ presentation: new SimpleChange('dashboard', 'tag-library', true) });
-        expect(renderedChoices.length).toBeGreaterThan(0);
-        expect(renderedChoices.every(choices => choices.join(',') === 'Distance,Duration')).toBe(true);
+        fixture.detectChanges();
+        expect(component.selectedColumns).toEqual(['Distance', 'Duration']);
+        expect(fixture.nativeElement.querySelector('app-event-table-actions').selectedDataTypes).toEqual(['Distance', 'Duration']);
     });
 
     it('keeps the Tag library metric order stable when the picker adds and restores columns', async () => {
@@ -808,7 +807,7 @@ describe('EventTableComponent', () => {
         expect(fixture.nativeElement.querySelector('.activity-table-empty-copy').textContent).toContain('No activities to show');
         expect(fixture.nativeElement.querySelector('.activity-table-empty-copy p')).toBeNull();
         expect(fixture.nativeElement.querySelector('mat-paginator').hidden).toBe(true);
-        expect(fixture.nativeElement.querySelector('app-loading-overlay').hasError).toBeFalsy();
+        expect(fixture.nativeElement.querySelector('app-loading-overlay')).toBeNull();
         expect(mockHapticsService.selection).not.toHaveBeenCalled();
         fixture.componentRef.setInput('isLoading', true); await settle();
         expect(fixture.nativeElement.querySelector('.activity-table-empty')).toBeNull();
@@ -845,15 +844,63 @@ describe('EventTableComponent', () => {
         expect(component.selection.selected).toHaveLength(0);
     });
 
-    it('should call loading and return early in ngOnChanges when events are missing', () => {
-        const loadingSpy = vi.spyOn(component as any, 'loading');
+    it('retains existing rows and reports loading when the parent temporarily removes its events input', () => {
+        const rows = component.data.data;
         component.events = null as any;
 
         component.ngOnChanges({
             events: new SimpleChange([], null, false),
         } as any);
 
-        expect(loadingSpy).toHaveBeenCalled();
+        expect(component.tableIsLoading).toBe(true);
+        expect(component.showEmptyNotice).toBe(false);
+        expect(component.data.data).toBe(rows);
+        component.events = [];
+        component.ngOnChanges({ events: new SimpleChange(null, [], false) });
+        expect(component.tableIsLoading).toBe(false);
+        expect(component.showEmptyNotice).toBe(true);
+    });
+
+    it('retains rows, page and selection until a changed date range finishes loading', () => {
+        const rows = component.data.data;
+        component.selection.select(rows[0]);
+        component.paginator.pageIndex = 2;
+        component.paginator.firstPage = vi.fn();
+        component.isLoading = true;
+        component.events = [];
+        component.ngOnChanges({ events: new SimpleChange(null, [], false), filterContext: new SimpleChange('month', 'year', false) });
+        expect(component.data.data).toBe(rows);
+        expect(component.paginator.pageIndex).toBe(2);
+        expect(component.paginator.firstPage).not.toHaveBeenCalled();
+        expect(component.selection.selected).toEqual([rows[0]]);
+        component.isLoading = false;
+        component.events = [new MockEvent('fresh-range') as any];
+        component.ngOnChanges({ isLoading: new SimpleChange(true, false, false), events: new SimpleChange([], component.events, false) });
+        expect(component.tableIsLoading).toBe(false);
+        expect(component.data.data.map(row => row.Event.getID())).toEqual(['fresh-range']);
+        expect(component.paginator.firstPage).toHaveBeenCalledOnce();
+        expect(component.selection.selected).toEqual([]);
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+    });
+
+    it.each(['viewer', 'target'])('clears retained rows immediately when the %s changes and waits for that owner’s events', changed => {
+        const oldEvents = component.events;
+        component.selection.select(component.data.data[0]);
+        component.isLoading = true;
+        if (changed === 'viewer') component.user = { ...component.user, uid: 'other-owner' } as User;
+        else component.targetUser = { ...component.user, uid: 'other-owner' } as User;
+        component.ngOnChanges({ [changed === 'viewer' ? 'user' : 'targetUser']: new SimpleChange(null, changed === 'viewer' ? component.user : component.targetUser, false) });
+        expect(component.data.data).toEqual([]);
+        expect(component.selection.selected).toEqual([]);
+        expect(component.showInitialLoading).toBe(true);
+        component.isLoading = false;
+        component.ngOnChanges({ isLoading: new SimpleChange(true, false, false) });
+        expect(component.data.data).toEqual([]);
+        expect(component.tableIsLoading).toBe(true);
+        component.events = [new MockEvent('other-owner-event') as any];
+        component.ngOnChanges({ events: new SimpleChange(oldEvents, component.events, false) });
+        expect(component.data.data.map(row => row.Event.getID())).toEqual(['other-owner-event']);
+        expect(component.tableIsLoading).toBe(false);
     });
 
     it('should update selected columns and page size on user/showActions changes', () => {

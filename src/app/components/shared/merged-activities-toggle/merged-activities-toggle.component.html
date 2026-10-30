@@ -3,4 +3,4 @@
   <span class="table-filter-button-content"><mat-icon aria-hidden="true">{{ checked() ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
     <span>{{ label() }}</span></span>
 </button>
-@if (disabled() && !checked()) { <span class="merge-toggle-hint">{{ hint() }}</span> }
+@if (disabled() && !checked() && hint()) { <span class="merge-toggle-hint">{{ hint() }}</span> }
