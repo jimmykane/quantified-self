@@ -21,7 +21,7 @@ interface RouteSyncTaskPayload {
 export const processRouteSyncTask = onTaskDispatched({
     retryConfig: PROVIDER_CLOUD_TASK_RETRY_CONFIG,
     secrets: FUNCTION_SECRET_BINDINGS.processRouteSyncTask,
-    memory: '1GiB',
+    memory: '512MiB',
     timeoutSeconds: 540,
     region: 'europe-west2',
 }, async (request) => {
