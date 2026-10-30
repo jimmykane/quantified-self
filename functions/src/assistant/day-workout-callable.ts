@@ -1,8 +1,10 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import { z } from 'zod';
+import { GenkitError } from 'genkit';
+import { ValidationError as GenkitValidationError } from 'genkit/schema';
 import { WorkoutStructureValidationError } from '../../../shared/planned-workout';
-import { isStrengthWorkoutSportV1 } from '../../../shared/strength-workout';
+import { isStrengthWorkoutSportV1, StrengthWorkoutValidationError } from '../../../shared/strength-workout';
 import { TRAINING_RECIPE_WITH_POOL_SCHEMA, TRAINING_STRENGTH_DRAFT_SCHEMA } from '../mcp/training-plans.schemas';
 import { parseGenerateDayWorkoutRequest, type GenerateDayWorkoutRequest, type GenerateDayWorkoutResponse } from '../../../shared/day-workout';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
@@ -109,10 +111,20 @@ export async function runGenerateDayWorkout(value: unknown, context: { auth?: { 
     let suggestion;
     let correction: string | undefined;
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      const generated = await dependencies.generate(request, evidence, correction);
-      await dependencies.store.assertActive(uid, request.requestId, started.token);
-      try { suggestion = validateDayWorkoutSuggestion(generated, request.controls, evidence.previousStrength, evidence.references); break; }
-      catch (error) {
+      try {
+        const generated = await dependencies.generate(request, evidence, correction);
+        await dependencies.store.assertActive(uid, request.requestId, started.token);
+        suggestion = validateDayWorkoutSuggestion(generated, request.controls, evidence.previousStrength, evidence.references);
+        break;
+      } catch (error) {
+        // Genkit can reject output before generate returns. Only prescription failures are correctable;
+        // provider/auth failures and stale requests must leave this loop immediately.
+        // Genkit's mixed ESM/CJS exports can hold distinct ValidationError constructors with the same base.
+        const schemaFailure = error instanceof GenkitValidationError || error instanceof GenkitError
+          && error.status === 'INVALID_ARGUMENT' && error.constructor.name === GenkitValidationError.name;
+        if (!(schemaFailure || error instanceof DayWorkoutSuggestionValidationError
+          || error instanceof WorkoutStructureValidationError || error instanceof StrengthWorkoutValidationError)) throw error;
+        await dependencies.store.assertActive(uid, request.requestId, started.token);
         logger.warn('[DayWorkout] Invalid model prescription.', {
           attempt: attempt + 1,
           errorName: error instanceof Error ? error.name : 'unknown',
