@@ -406,6 +406,9 @@ and leaves the shared table responsible for the activity-loading indicator.
 Bulk-action loading is separate from the parent-owned history input: either can finish first without unlocking the
 other or leaving a pending input stuck. Search clearing is disabled while busy; queued text/catalog filters apply
 after loading instead of changing the retained results, and deferred filter-context resets settle when the action ends.
+Initial skeleton mounting defers the table's automatic tag-catalog lookup until ready input, so Calendar's empty/error
+branches do not add a catalog read. Owner changes clear old catalog choices immediately. Retained row action components
+close their open Material menus and disable their controls while the table is busy, without cancelling in-flight work.
 
 Use `ActivityTypesMultiSelectComponent` for canonical sport catalogs with family shortcuts, selected aliases and
 locked choices; use `ActivityTypesFilterMenuComponent` for the equivalent compact toolbar trigger. Both delegate

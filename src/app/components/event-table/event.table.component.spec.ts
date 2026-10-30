@@ -861,6 +861,31 @@ describe('EventTableComponent', () => {
         expect(component.showEmptyNotice).toBe(true);
     });
 
+    it.each([false, true])('does not read the tag catalog for initial skeletons and only loads it after ready input (%s)', async completes => {
+        fixture.destroy();
+        mockEventTagCatalogService.listAllTags.mockClear();
+        const initialFixture = TestBed.createComponent(EventTableComponent);
+        const initialTable = initialFixture.componentInstance;
+        initialTable.sort = { sortChange: new Subject(), active: '', direction: '' } as any;
+        initialTable.paginator = { _changePageSize: vi.fn(), firstPage: vi.fn(), page: new Subject() } as any;
+        initialFixture.componentRef.setInput('user', mockUser);
+        initialFixture.componentRef.setInput('events', []);
+        initialFixture.componentRef.setInput('isLoading', true);
+        initialFixture.detectChanges();
+        await initialFixture.whenStable();
+        expect(initialTable.showInitialLoading).toBe(true);
+        expect(mockEventTagCatalogService.listAllTags).not.toHaveBeenCalled();
+        if (completes) {
+            initialFixture.componentRef.setInput('events', [new MockEvent('ready')]);
+            initialFixture.componentRef.setInput('isLoading', false);
+            initialFixture.detectChanges();
+            await initialFixture.whenStable();
+            expect(mockEventTagCatalogService.listAllTags).toHaveBeenCalledExactlyOnceWith(mockUser.uid, false);
+        }
+        initialFixture.destroy();
+        expect(mockEventTagCatalogService.listAllTags).toHaveBeenCalledTimes(Number(completes));
+    });
+
     it('retains rows, page and selection until a changed date range finishes loading', () => {
         const rows = component.data.data;
         component.selection.select(rows[0]);
@@ -1343,6 +1368,23 @@ describe('EventTableComponent', () => {
         await refresh;
 
         expect(component.tagFilterOptions).not.toContain('Private owner tag');
+    });
+
+    it('clears the previous owner’s catalog immediately while deferring the new owner’s read', async () => {
+        mockEventTagCatalogService.listAllTags.mockResolvedValueOnce(['Private old tag']);
+        await (component as any).loadAllHistoryTags(true);
+        mockEventTagCatalogService.listAllTags.mockClear();
+        component.user = { ...mockUser, uid: 'new-owner' } as User;
+        component.events = [];
+        component.isLoading = true;
+        component.ngOnChanges({ user: new SimpleChange(mockUser, component.user, false), events: new SimpleChange(null, [], false) });
+        expect(component.tagFilterOptions).not.toContain('Private old tag');
+        expect(mockEventTagCatalogService.listAllTags).not.toHaveBeenCalled();
+        component.events = [new MockEvent('new-owner-event') as any];
+        component.isLoading = false;
+        component.ngOnChanges({ events: new SimpleChange([], component.events, false), isLoading: new SimpleChange(true, false, false) });
+        await fixture.whenStable();
+        expect(mockEventTagCatalogService.listAllTags).toHaveBeenCalledExactlyOnceWith('new-owner', false);
     });
 
     it('retries a failed full-history tag load when the filter is opened', async () => {

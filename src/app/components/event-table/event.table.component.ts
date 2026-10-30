@@ -147,6 +147,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   private pendingLoadingInputs = false;
   private pendingFilterContextReset = false;
   private pendingTableFilter = false;
+  private pendingTagCatalog = false;
   private renderedOwnerKey: string | null = null;
   private readonly eventInputOwners = new WeakMap<EventRead[], string>();
 
@@ -337,7 +338,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.pendingFilterContextReset = true;
     }
     this.settleDeferredFilters();
-    if (simpleChanges.user || simpleChanges.targetUser || simpleChanges.presentation) {
+    if (simpleChanges.user || simpleChanges.targetUser || simpleChanges.presentation
+      || (this.pendingTagCatalog && !this.tableIsLoading)) {
       void this.loadAllHistoryTags();
     }
   }
@@ -1414,6 +1416,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     // Event collection listing is owner-only. Public/other-user views retain their loaded-row tags.
     const userID = this.user?.uid;
     if (!this.showToolbar || !userID || (this.targetUser && this.targetUser.uid !== userID)) {
+      this.pendingTagCatalog = false;
       this.canLoadTagCatalog = false;
       this.tagCatalogRequestVersion += 1;
       this.tagCatalogUserID = null;
@@ -1427,12 +1430,25 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     const sameUser = this.tagCatalogUserID === userID;
     if (!force && sameUser && (this.tagCatalogIsLoading
       || (!checkCache && this.allHistoryTags !== null && !this.tagCatalogLoadFailed))) {
+      this.pendingTagCatalog = false;
       return;
     }
 
     if (!sameUser) {
+      this.tagCatalogRequestVersion += 1;
+      this.tagCatalogUserID = null;
       this.allHistoryTags = null;
+      this.tagCatalogIsLoading = false;
+      this.tagCatalogLoadFailed = false;
+      this.updateTagFilterOptions();
     }
+    // Calendar can mount this table for skeletons and remove it on an empty or
+    // failed result. Mounting placeholders must not start a new catalog read.
+    if (!force && !checkCache && this.tableIsLoading) {
+      this.pendingTagCatalog = true;
+      return;
+    }
+    this.pendingTagCatalog = false;
     this.tagCatalogUserID = userID;
     this.tagCatalogIsLoading = true;
     this.tagCatalogLoadFailed = false;

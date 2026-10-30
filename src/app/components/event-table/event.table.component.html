@@ -182,7 +182,7 @@
             <span>
               @if (user) {
               <app-event-actions [user]="user" [event]="row.Event"
-                [showDownloadOriginal]="true" [navigateAfterDelete]="false"
+                [showDownloadOriginal]="true" [navigateAfterDelete]="false" [disabled]="tableIsLoading"
                 (eventDeleted)="removeDeletedEvent($event)" (ascentChanged)="refreshSavedAscent($event)"></app-event-actions>
               }
             </span>
