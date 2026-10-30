@@ -48,7 +48,7 @@ export class DayWorkoutService {
     this.opening = true;
     try {
       const { DayWorkoutDialogComponent } = await import('../components/plans/day-workout-dialog.component');
-      if (!this.isOwner(ownerUid)) return;
+      if (!this.isOwner(ownerUid) || !this.canGenerate(localDate, options.initialControls?.timeZone)) return;
       const narrow = typeof window !== 'undefined' && window.matchMedia('(max-width: 600px)').matches;
       const result = await firstValueFrom(this.dialog.open(DayWorkoutDialogComponent, {
         data: { ...options, ownerUid, localDate, sport: DAY_WORKOUT_SPORTS.find(value => value === sport) ?? ActivityTypes.Running },

@@ -5757,7 +5757,8 @@ haptics or analytics. Late Add callbacks cannot replace another day or account's
 creates neither a workout nor an authored rest marker; only an explicitly saved workout invokes the Add callback.
 
 Reviewing generates nothing. Explicit Add uses the existing revision-bound create-workout command and normal inherited
-sync rules; editor handoff remains unsaved. A cached initial review captures the current schedule and becomes stale on
+sync rules; editor handoff remains unsaved. The shared dialog rechecks the owner and eligible date in the saved time
+zone after its lazy import, preventing an expired review from opening across midnight. A cached initial review captures the current schedule and becomes stale on
 subsequent revisions. Changing its options requires ordinary quota-backed manual generation. Existing results retain
 their original context choices, and disabled preferences suppress private status retrieval. This PR enables no account,
 starts no pilot and performs no deployment; an opt-in is still required after a separately approved release.
