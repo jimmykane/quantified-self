@@ -1,6 +1,7 @@
 import type Stripe from 'stripe';
 import type { CallableRequest } from 'firebase-functions/v2/https';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { TTL_CONFIG } from '../shared/ttl-config';
 import type {
     GrantAdminSubscriptionGiftRequest,
     GrantAdminSubscriptionGiftResponse,
@@ -553,7 +554,31 @@ describe('admin subscription gift callables', () => {
         expect(mailDocuments).toHaveLength(1);
         expect(JSON.stringify(mailDocuments[0][1])).toContain('subscription_time_gift');
         expect(JSON.stringify(mailDocuments[0][1])).not.toContain('Thank-you gift');
-        expect(mailDocuments[0][1]).toMatchObject({ toUids: ['target-user'] });
+        expect(mailDocuments[0][1]).toMatchObject({ uid: 'target-user' });
+    });
+
+    it('addresses gift mail once using Auth while retaining inert UID ownership and expiry', async () => {
+        db.store.set('users/target-user', { email: 'stale-profile@example.invalid' });
+        const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
+
+        await grantGift(callableRequest({
+            uid: 'target-user',
+            months: 1,
+            reason: 'Thank-you gift',
+            notifyUser: true,
+            operationId,
+            previewVersion: preview.previewVersion,
+        }));
+
+        const mailDocuments = [...db.store.entries()].filter(([path]) => path.startsWith('mail/'));
+        expect(mailDocuments).toHaveLength(1);
+        const mail = mailDocuments[0][1];
+        expect(mail).toMatchObject({ to: 'target-user@example.com', uid: 'target-user' });
+        // Trigger Email expands toUids into recipients; ownership must not add another address.
+        expect(mail).not.toHaveProperty('toUids');
+        expect((mail.expireAt as { toMillis(): number }).toMillis()).toBe(
+            Date.now() + TTL_CONFIG.MAIL_IN_DAYS * 24 * 60 * 60 * 1000,
+        );
     });
 
     it('keeps notification optional and does not queue mail when disabled', async () => {
@@ -719,7 +744,13 @@ describe('admin subscription gift callables', () => {
         expect((await grantGift(request)).notificationStatus).toBe('queued');
         const [firstMailPath, firstMail] = [...db.store.entries()]
             .find(([path]) => path.startsWith('mail/'))!;
-        db.store.set(firstMailPath, { ...firstMail, delivery: { state: 'ERROR' } });
+        const legacyMail: Record<string, unknown> = {
+            ...firstMail,
+            toUids: ['target-user'],
+            delivery: { state: 'ERROR' },
+        };
+        delete legacyMail.uid;
+        db.store.set(firstMailPath, legacyMail);
 
         const reopened = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
         expect(reopened.resumableOperation).toMatchObject({
@@ -742,6 +773,12 @@ describe('admin subscription gift callables', () => {
         expect([...db.store.keys()].filter(path => path.startsWith('mail/'))).toHaveLength(2);
 
         const [secondMailPath, secondMail] = mailEntriesAfterRetry.find(([path]) => path !== firstMailPath)!;
+        expect(secondMail).toMatchObject({ to: 'target-user@example.com', uid: 'target-user' });
+        expect(secondMail).not.toHaveProperty('toUids');
+        expect((secondMail.expireAt as { toMillis(): number }).toMillis()).toBe(
+            Date.now() + TTL_CONFIG.MAIL_IN_DAYS * 24 * 60 * 60 * 1000,
+        );
+        expect(db.store.get(firstMailPath)).toEqual(legacyMail);
         db.store.set(secondMailPath, { ...secondMail, delivery: { state: 'SUCCESS' } });
 
         expect((await grantGift(request)).notificationStatus).toBe('delivered');
@@ -755,7 +792,7 @@ describe('admin subscription gift callables', () => {
         expect(mockStripeUpdate).toHaveBeenCalledTimes(1);
     });
 
-    it('does not resolve the recipient again while deterministic mail is queued', async () => {
+    it.each(['PENDING', 'PROCESSING', 'RETRY', 'SUCCESS'])('preserves legacy %s gift mail without resending', async state => {
         const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
         const request = callableRequest({
             uid: 'target-user',
@@ -767,17 +804,29 @@ describe('admin subscription gift callables', () => {
         });
         expect((await grantGift(request)).notificationStatus).toBe('queued');
 
+        const [mailPath, mail] = [...db.store.entries()].find(([path]) => path.startsWith('mail/'))!;
+        const legacyMail: Record<string, unknown> = {
+            ...mail,
+            toUids: ['target-user'],
+            delivery: { ...(mail.delivery as Record<string, unknown>), state },
+        };
+        delete legacyMail.uid;
+        db.store.set(mailPath, legacyMail);
+
         const operationPath = `users/target-user/adminSubscriptionGifts/${operationId}`;
         const authReadsBeforeRetry = mockAuthGetUser.mock.calls.length;
+        const notificationStatus = state === 'SUCCESS' ? 'delivered' : 'queued';
 
         const retried = await grantGift(request);
 
-        expect(retried.notificationStatus).toBe('queued');
+        expect(retried.notificationStatus).toBe(notificationStatus);
         expect(mockAuthGetUser).toHaveBeenCalledTimes(authReadsBeforeRetry + 1);
         expect(db.store.get(operationPath)).toMatchObject({
-            notificationStatus: 'queued',
-            notificationResultCode: 'already_queued',
+            notificationStatus,
+            notificationResultCode: state === 'SUCCESS' ? 'delivered' : 'already_queued',
         });
+        expect(db.store.get(mailPath)).toEqual(legacyMail);
+        expect([...db.store.keys()].filter(path => path.startsWith('mail/'))).toHaveLength(1);
         expect(mockStripeUpdate).toHaveBeenCalledTimes(1);
     });
 
