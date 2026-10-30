@@ -1368,6 +1368,46 @@ describe('MCP HTTP scope enforcement', () => {
     }
   });
 
+  it.each([
+    { mode: 'no Training', readable: false, writable: false, delivery: false },
+    { mode: 'Training read', readable: true, writable: false, delivery: false },
+    { mode: 'Training delivery', readable: true, writable: false, delivery: true },
+    { mode: 'Training edits', readable: true, writable: true, delivery: false },
+    { mode: 'all Training', readable: true, writable: true, delivery: true },
+  ])('advertises rest-day guidance only for available tools in $mode', async ({ readable, writable, delivery }) => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({ uid: 'user-1', clientId: 'https://client.example/mcp.json', connectionId: 'connection-1',
+      scopes: [
+        ...(readable ? [MCP_OAUTH_SCOPES.TrainingPlansRead] : []),
+        ...(writable ? [MCP_OAUTH_SCOPES.TrainingPlansWrite] : []),
+        ...(delivery ? [MCP_OAUTH_SCOPES.TrainingDeliveryWrite] : []),
+      ],
+    }, 'https://quantified-self.io');
+    const client = new Client({ name: 'training-rest-day-instructions-client', version: '1.0.0' });
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const instructions = client.getInstructions() || '';
+      const names = (await client.listTools()).tools.map(tool => tool.name);
+      expect(names.includes('get_training_plan_rest_days')).toBe(readable);
+      expect(instructions.includes('get_training_plan_rest_days')).toBe(readable);
+      expect(names.includes('preview_training_rest_days')).toBe(writable);
+      expect(instructions.includes('preview_training_rest_days')).toBe(writable);
+      if (readable) {
+        expect(instructions).toContain('unscheduled, not a declared rest day');
+        expect(instructions).toContain('never suggest filling them automatically');
+      }
+      if (writable) {
+        expect(instructions).toContain('complete replacement list');
+        expect(instructions).toContain('full before/after dates and require separate Apply approval');
+        expect(instructions).toContain('do not delete workouts or override a rest day implicitly');
+      }
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it.each([false, true])('provides prescription-fidelity guidance only with planning write access %s', async writable => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const server = createMcpServer({ uid: 'user-1', clientId: 'https://client.example/mcp.json', connectionId: 'connection-1',

@@ -51,7 +51,7 @@ export function createMorningWorkoutStore(db = () => admin.firestore(), clock = 
   function active(preferences: MorningWorkoutPreferences | null, state: State, date: string, token: string, now: Date): Entry {
     const entry = state.messages[date];
     if (!preferences?.enabled || preferences.controls.localDate !== date || !entry || entry.token !== token
-      || entry.state !== 'preparing' || now.getTime() - entry.startedAtMs >= LEASE_MS
+      || entry.state !== 'preparing' || !Number.isFinite(entry.startedAtMs) || now.getTime() - entry.startedAtMs >= LEASE_MS
       || entry.preferenceHash !== fingerprint(preferences)) throw new HttpsError('aborted', 'The morning suggestion changed or expired.');
     return entry;
   }
@@ -61,7 +61,9 @@ export function createMorningWorkoutStore(db = () => admin.firestore(), clock = 
       const date = preferences.controls.localDate;
       const entry = state.messages[date];
       const status: MorningWorkoutStatus = entry ? publicEntry(entry) : { localDate: date, state: 'waiting' };
-      if (entry?.state === 'preparing' && now.getTime() - entry.startedAtMs >= LEASE_MS) status.state = entry.charged ? 'failed' : 'waiting';
+      if (entry?.state === 'preparing' && (!Number.isFinite(entry.startedAtMs) || now.getTime() - entry.startedAtMs >= LEASE_MS)) {
+        status.state = Number.isFinite(entry.startedAtMs) && entry.charged === false ? 'waiting' : 'failed';
+      }
       if (status.state === 'ready' && !status.result) status.state = 'failed';
       return { value: { preferences, status } };
     }),
@@ -69,8 +71,9 @@ export function createMorningWorkoutStore(db = () => admin.firestore(), clock = 
       if (!preferences?.enabled || fingerprint(preferences) !== fingerprint(expected)) throw new HttpsError('aborted', 'Morning preferences changed.');
       const date = preferences.controls.localDate;
       const existing = state.messages[date];
-      if (existing && !(existing.state === 'preparing' && !existing.charged
-        && now.getTime() - existing.startedAtMs >= LEASE_MS)) return { value: null };
+      const reclaimable = existing && existing.charged === false && (['planned', 'completed', 'rest-day'].includes(existing.state)
+        || existing.state === 'preparing' && Number.isFinite(existing.startedAtMs) && now.getTime() - existing.startedAtMs >= LEASE_MS);
+      if (existing && !reclaimable) return { value: null };
       for (const day of Object.keys(state.messages)) if (day < dayWorkoutDateOffset(date, -7)) delete state.messages[day];
       const token = randomUUID();
       state.messages[date] = { localDate: date, state: 'preparing', token, startedAtMs: now.getTime(), charged: false,
@@ -87,16 +90,17 @@ export function createMorningWorkoutStore(db = () => admin.firestore(), clock = 
       controls?: DayWorkoutControls, result?: GenerateDayWorkoutResponse) => transact(uid, (preferences, state, now) => {
       const current = state.messages[date];
       // A source-choice change can cancel uncharged work without spending the daily allowance.
-      if (outcome === 'failed' && current?.token === token && !current.charged) {
+      if (outcome === 'failed' && current?.token === token && current.charged === false) {
         delete state.messages[date]; return { value: undefined, write: true };
       }
       const entry = active(preferences, state, date, token, now);
       entry.state = outcome; if (controls) entry.controls = controls; if (result) entry.result = result;
       return { value: undefined, write: true };
     }),
-    dismiss: (uid: string) => transact(uid, (preferences, state, now) => {
+    dismiss: (uid: string, expectedDate: string) => transact(uid, (preferences, state, now) => {
       if (!preferences?.enabled) throw new HttpsError('failed-precondition', 'Morning suggestions are off.');
       const date = preferences.controls.localDate;
+      if (date !== expectedDate) throw new HttpsError('aborted', 'The day changed. Review today before dismissing.');
       state.messages[date] = { localDate: date, state: 'dismissed', token: randomUUID(), startedAtMs: now.getTime(), charged: true,
         preferenceHash: fingerprint(preferences) };
       return { value: { localDate: date, state: 'dismissed' } as MorningWorkoutStatus, write: true };

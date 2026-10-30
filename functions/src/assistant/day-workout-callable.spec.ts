@@ -46,6 +46,21 @@ describe('generateDayWorkout callable', () => {
     await expect(generateDayWorkoutSuggestion(request, evidence, undefined, usage)).rejects.toBeInstanceOf(DayWorkoutSuggestionValidationError);
     expect(usage).toHaveBeenCalledWith({ available: true, inputTokens: 123, outputTokens: 17, thoughtsTokens: 9 });
   });
+  it('keeps telemetry failures separate from successful model output', async () => {
+    const evidence = await dependencies().context('owner', request, new Date());
+    const { provider } = mockSdkOutputs(JSON.stringify({ kind: 'rest', rationale: 'Take it easy.' }));
+    await expect(generateDayWorkoutSuggestion(request, evidence, undefined, () => { throw new SyntaxError('Telemetry failed'); }))
+      .resolves.toEqual({ kind: 'rest', rationale: 'Take it easy.' });
+    expect(provider).toHaveBeenCalledOnce();
+  });
+  it('flags invalid token metadata as unknown instead of measuring a zero-cost attempt', async () => {
+    const evidence = await dependencies().context('owner', request, new Date());
+    const { provider } = mockSdkOutputs('unused'); const usage = vi.fn();
+    provider.mockResolvedValueOnce({ finishReason: 'stop', usage: { inputTokens: 100, outputTokens: -1, thoughtsTokens: 9 },
+      message: { role: 'model', content: [{ text: JSON.stringify({ kind: 'rest', rationale: 'Take it easy.' }) }] } });
+    await generateDayWorkoutSuggestion(request, evidence, undefined, usage);
+    expect(usage).toHaveBeenCalledWith({ available: false, inputTokens: 100, outputTokens: 0, thoughtsTokens: 9 });
+  });
   it('honors an authored rest day without a model request or quota charge and replays it', async () => {
     const deps = dependencies();
     vi.mocked(deps.context).mockResolvedValue({ evidence: {}, usedContext: ['Authored rest day'], missingContext: [],

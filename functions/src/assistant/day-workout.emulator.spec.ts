@@ -141,8 +141,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     expect(Object.keys(state).sort()).toEqual(['expireAt', 'messages', 'version']);
     expect(state.messages['2026-10-30'].result).toEqual(result);
     expect((await user.collection('scheduledWorkouts').get()).empty).toBe(true);
-    await store.dismiss(uid); expect((await store.read(uid)).status.state).toBe('dismissed');
+    await store.dismiss(uid, '2026-10-30'); expect((await store.read(uid)).status.state).toBe('dismissed');
     now = new Date('2026-10-31T07:00Z');
+    await expect(store.dismiss(uid, '2026-10-30')).rejects.toMatchObject({ code: 'aborted' });
     const tomorrow = (await store.read(uid)).preferences!;
     const nextToken = await store.begin(uid, tomorrow); expect(nextToken).toBeTruthy();
     await store.charge(uid, '2026-10-31', nextToken!);
@@ -150,7 +151,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     expect(await store.begin(uid, tomorrow)).toBeNull();
     await db.doc(`userDeletionTombstones/${uid}`).set({ createdAtMs: now.getTime() });
     await expect(store.read(uid)).rejects.toMatchObject({ code: 'permission-denied' });
-    await expect(store.dismiss(uid)).rejects.toMatchObject({ code: 'permission-denied' });
+    await expect(store.dismiss(uid, '2026-10-30')).rejects.toMatchObject({ code: 'permission-denied' });
   }, 30_000);
   it('releases uncharged context failures, fences opt-outs and never reclaims an expired model lease', async () => {
     const uid = `morning-fences-${randomUUID()}`;
@@ -178,6 +179,23 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     await expect(store.finish(uid, '2026-10-30', third!, 'ready', next.controls, response('morning:2026-10-30'))).rejects.toMatchObject({ code: 'aborted' });
     await settings.update({ 'appSettings.morningWorkout.enabled': false });
     expect((await store.read(uid)).status).toEqual({ localDate: '', state: 'off' });
+  }, 30_000);
+
+  it('reclaims unused skip receipts but never guesses that missing allowance metadata means uncharged', async () => {
+    const uid = `morning-proof-${randomUUID()}`; let now = new Date('2026-10-30T07:00Z');
+    const user = db.doc(`users/${uid}`); await user.set({});
+    const preferences = { enabled: true, followRoutine: true, controls: defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki') };
+    await user.collection('config').doc('settings').set({ appSettings: { morningWorkout: preferences } });
+    const store = createMorningWorkoutStore(() => db, () => now);
+    const first = await store.begin(uid, preferences);
+    await store.finish(uid, '2026-10-30', first!, 'planned');
+    const second = await store.begin(uid, preferences); expect(second).toBeTruthy(); expect(second).not.toBe(first);
+    const ref = user.collection('assistantConversations').doc('morning-workout');
+    const state = (await ref.get()).data()!; delete state.messages['2026-10-30'].charged; await ref.set(state);
+    now = new Date(now.getTime() + 4 * 60_000);
+    expect((await store.read(uid)).status.state).toBe('failed');
+    expect(await store.begin(uid, preferences)).toBeNull();
+    await expect(store.finish(uid, '2026-10-30', second!, 'failed')).rejects.toMatchObject({ code: 'aborted' });
   }, 30_000);
 
 });

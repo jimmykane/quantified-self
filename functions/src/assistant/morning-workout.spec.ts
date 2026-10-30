@@ -29,7 +29,7 @@ describe('morning workout preferences', () => {
   });
 });
 
-import { morningWorkoutSkip, runMorningWorkout, type MorningWorkoutDependencies } from './morning-workout';
+import { collectMorningWorkoutCoverage, morningWorkoutSkip, runMorningWorkout, type MorningWorkoutDependencies } from './morning-workout';
 import { morningRoutineSport } from './morning-workout-routine';
 import type { DayWorkoutContext } from './day-workout-context';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
@@ -51,7 +51,7 @@ function dependencies() {
     assertActive: vi.fn(), charge: vi.fn(), finish: vi.fn(async (_uid, _date, _token, state, controls, result) => { status = { localDate: '2026-10-30', state, ...(controls ? { controls } : {}), ...(result ? { result } : {}) }; }),
     dismiss: vi.fn(async () => ({ localDate: '2026-10-30', state: 'dismissed' as const })) };
   return { store, now: () => morningNow, legal: vi.fn(), pro: vi.fn(async () => true), selectSport: vi.fn(async () => morningControls),
-    context: vi.fn(async () => evidence()), generate: vi.fn(async (_request, _evidence, _correction, usage) => {
+    coverage: vi.fn(async () => null as 'planned' | 'completed' | 'rest-day' | null), context: vi.fn(async () => evidence()), generate: vi.fn(async (_request, _evidence, _correction, usage) => {
       usage?.({ available: true, inputTokens: 100, outputTokens: 20, thoughtsTokens: 40 }); return { kind: 'rest', rationale: 'Keep today easy.' };
     }), log: vi.fn() } satisfies MorningWorkoutDependencies;
 }
@@ -69,6 +69,18 @@ describe('morning workout preparation', () => {
     const deps = dependencies();
     await expect(runMorningWorkout({ mode: 'morning', action: 'prepare', date: 'tomorrow' }, identity, deps)).rejects.toMatchObject({ code: 'invalid-argument' });
     expect(deps.store.read).not.toHaveBeenCalled();
+  });
+  it.each([{ action: ['status'] }, { action: ['prepare'] }, { action: {} }, { action: null }])('rejects non-string actions before data access %j', async value => {
+    const deps = dependencies();
+    await expect(runMorningWorkout({ mode: 'morning', ...value }, identity, deps)).rejects.toMatchObject({ code: 'invalid-argument' });
+    expect(deps.legal).not.toHaveBeenCalled(); expect(deps.store.read).not.toHaveBeenCalled();
+  });
+  it('requires an explicit dismiss date and rejects date injection on read/generate actions', async () => {
+    const deps = dependencies();
+    await expect(runMorningWorkout({ mode: 'morning', action: 'dismiss' }, identity, deps)).rejects.toMatchObject({ code: 'invalid-argument' });
+    await expect(runMorningWorkout({ mode: 'morning', action: 'status', localDate: '2026-10-30' }, identity, deps)).rejects.toMatchObject({ code: 'invalid-argument' });
+    await runMorningWorkout({ mode: 'morning', action: 'dismiss', localDate: '2026-10-30' }, identity, deps);
+    expect(deps.store.dismiss).toHaveBeenCalledWith('owner', '2026-10-30');
   });
   it('prepares one included result and replays without Assistant quota dependencies or another model call', async () => {
     const deps = dependencies(); const input = { mode: 'morning', action: 'prepare' };
@@ -105,6 +117,31 @@ describe('morning workout preparation', () => {
     deps.store.read.mockResolvedValueOnce({ preferences: null as any, status: { localDate: '', state: 'off' } });
     expect((await runMorningWorkout({ mode: 'morning', action: 'prepare' }, identity, deps)).state).toBe('off');
   });
+  it('rechecks cached suggestions after Add, completed activity sync or an authored rest day', async () => {
+    const deps = dependencies(), input = { mode: 'morning', action: 'prepare' };
+    await runMorningWorkout(input, identity, deps);
+    for (const state of ['planned', 'completed', 'rest-day'] as const) {
+      deps.coverage.mockResolvedValue(state);
+      expect(await runMorningWorkout({ mode: 'morning', action: 'status' }, identity, deps)).toEqual({ localDate: '2026-10-30', state });
+    }
+    deps.coverage.mockResolvedValue(null);
+    expect((await runMorningWorkout(input, identity, deps)).state).toBe('ready');
+    expect(deps.generate).toHaveBeenCalledOnce(); expect(deps.store.charge).toHaveBeenCalledOnce();
+  });
+  it('checks coverage before loading routine or recovery context for an already covered day', async () => {
+    const deps = dependencies(); deps.coverage.mockResolvedValue('planned');
+    expect((await runMorningWorkout({ mode: 'morning', action: 'prepare' }, identity, deps)).state).toBe('planned');
+    expect(deps.selectSport).not.toHaveBeenCalled(); expect(deps.context).not.toHaveBeenCalled(); expect(deps.store.begin).not.toHaveBeenCalled();
+  });
+  it('honors a dismissal or disablement that arrives while cached coverage is being checked', async () => {
+    const deps = dependencies(); await runMorningWorkout({ mode: 'morning', action: 'prepare' }, identity, deps);
+    const ready = await deps.store.read('owner');
+    deps.store.read.mockResolvedValueOnce(ready).mockResolvedValueOnce({ ...ready, status: { localDate: '2026-10-30', state: 'dismissed' } });
+    deps.coverage.mockResolvedValue('planned');
+    expect((await runMorningWorkout({ mode: 'morning', action: 'status' }, identity, deps)).state).toBe('dismissed');
+    deps.store.read.mockResolvedValueOnce(ready).mockResolvedValueOnce({ preferences: null as any, status: { localDate: '', state: 'off' } });
+    expect((await runMorningWorkout({ mode: 'morning', action: 'status' }, identity, deps)).state).toBe('off');
+  });
   it('records both model attempts when the first prescription fails validation', async () => {
     const deps = dependencies();
     deps.generate.mockImplementationOnce(async (_request, _context, _correction, usage) => {
@@ -133,5 +170,23 @@ describe('morning sport preference from recorded weekday history', () => {
     expect(morningRoutineSport(preferences, morningNow, strength.slice(0, 1))).toBe(ActivityTypes.Running);
     expect(morningRoutineSport(preferences, morningNow, [...strength,
       ...activities(ActivityTypes.Cycling, ['2026-10-09', '2026-10-16'])])).toBe(ActivityTypes.Running);
+  });
+});
+
+describe('bounded current-day coverage for cached suggestions', () => {
+  it('uses only current-day activity summaries and existing schedule/rest reads', async () => {
+    const callTool = vi.fn(async (name: string) => ({ structuredContent: name === 'query_activities'
+      ? { activities: [], scanComplete: true } : name === 'query_planned_workouts_by_date'
+      ? { workouts: [], scanComplete: true, scheduleRevision: 1 }
+      : { plans: [], scanComplete: true, scheduleRevision: 1 } }));
+    expect(await collectMorningWorkoutCoverage(morningControls, { callTool })).toBeNull();
+    expect(callTool.mock.calls.map(call => call[0])).toEqual(['query_activities', 'query_planned_workouts_by_date', 'list_training_plans']);
+    expect(callTool).toHaveBeenCalledWith('query_activities', { relativePeriod: 'today', timeZone: 'Europe/Helsinki', limit: 1 });
+  });
+  it('uses positive existence without scanning more activities, and rejects partial empty reads', async () => {
+    const callTool = vi.fn().mockResolvedValueOnce({ structuredContent: { activities: [{}], scanComplete: false } });
+    expect(await collectMorningWorkoutCoverage(morningControls, { callTool })).toBe('completed'); expect(callTool).toHaveBeenCalledOnce();
+    callTool.mockResolvedValueOnce({ structuredContent: { activities: [], scanComplete: false } });
+    await expect(collectMorningWorkoutCoverage(morningControls, { callTool })).rejects.toThrow('incomplete');
   });
 });

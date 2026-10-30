@@ -66,10 +66,12 @@ export async function generateDayWorkoutSuggestion(request: GenerateDayWorkoutRe
     const result = await next(input);
     modelResponded = true;
     const usage = result.usage;
-    const tokens = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
-    onUsage?.({ available: typeof usage?.inputTokens === 'number' && Number.isFinite(usage.inputTokens)
-      && typeof usage?.outputTokens === 'number' && Number.isFinite(usage.outputTokens), inputTokens: tokens(usage?.inputTokens), outputTokens: tokens(usage?.outputTokens),
-      thoughtsTokens: tokens(usage?.thoughtsTokens) });
+    const valid = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+    const tokens = (value: unknown) => valid(value) ? value : 0;
+    try { onUsage?.({ available: valid(usage?.inputTokens) && valid(usage?.outputTokens)
+      && (usage?.thoughtsTokens === undefined || valid(usage.thoughtsTokens)),
+      inputTokens: tokens(usage?.inputTokens), outputTokens: tokens(usage?.outputTokens), thoughtsTokens: tokens(usage?.thoughtsTokens) }); }
+    catch { /* Telemetry cannot turn a valid provider response into another model attempt. */ }
     return result;
   };
   try {

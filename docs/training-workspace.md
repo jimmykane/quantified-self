@@ -1007,6 +1007,13 @@ Apply recheck authority/revisions; the model is prepare-only. No provider action
 migration or metrics schema change is introduced. Training, Activity and cross-domain bundled guidance explains the
 distinction. The registered baseline/history is unchanged; the pending compatible contract digest requires the
 normal separately authorized backend release, client catalog refresh and plugin refresh. No deployment is implied.
+
+Rest-day server guidance follows the same independent grants: reading intent remains available with Training reads,
+while naming the editing preview requires plan/workout changes permission. Provider-delivery permission alone cannot
+enable that guidance or tool. Regression coverage checks external no-access, read-only, delivery-only, editing and
+combined connections plus the Assistant permission matrix. This instruction correction preserves all read/write
+schemas, projections and approval contracts; its pending digest follows the existing server-instruction refresh lifecycle.
+
 Release the affected Training backend readers/writers before exposing authoring in the frontend: older strict plan
 parsers do not recognize the optional field. Keep rest-day support when rolling back a backend that has already
 authored markers; do not remove stored dates or deploy an older strict parser as an implicit rollback migration.
@@ -5689,7 +5696,10 @@ opt-outs; all applicable choices, including Timeline, default on. The preference
 V1 prepares only on a foreground Today visit after the current data listeners settle (a 1.5-second UI debounce),
 between 05:00 inclusive and 12:00 exclusive in the saved IANA zone. It uses the latest available recovery context; it
 is not a sleep-ingestion trigger or a promise that every provider has finished syncing. No queue, scheduler, notification
-or background model request is added. Later evidence/preferences do not silently regenerate a cached draft. A weekday
+or background model request is added. Later evidence/preferences do not silently regenerate a cached draft. Status
+retrieval rechecks only current-day activity summaries and the existing revision-bound schedule/rest projection before
+presenting a cached suggestion; an added or completed workout therefore takes priority after reload. No recovery,
+metric, feedback or routine-history reads are added to cache retrieval. A weekday
 sport requires a complete bounded two-page/200-summary scan of the previous 28 complete local days, at least two matching
 dates and a unique leader; otherwise the saved sport wins. Explicit purpose/target compatibility remains authoritative.
 Strength/Weight Training alone share their existing family. The normal selected-sport routine and context read remain
@@ -5708,7 +5718,11 @@ current owner/deletion and source-preference fences. Model admission consumes th
 uncharged context failures can retry. Concurrent devices retrieve preparing/cached state rather than starting another
 model. Date receipts survive response eviction; at most eight receipts, four full responses and 400 KB UTF-8 are retained.
 The existing seven-day conversation TTL/index exemptions and recursive account erasure cover the leaf. Settings remain
-owner-readable; private leases, hashes and raw model context are never browser-readable. Dismissal fences in-flight work.
+owner-readable; private leases, hashes and raw model context are never browser-readable. Dismissal fences in-flight
+work and binds the displayed local date, rejecting a rollover instead of dismissing another day. Read refresh
+cancellation stays separate from user-action completion so settings acknowledgements cannot swallow disable errors,
+haptics or analytics. Late Add callbacks cannot replace another day's card state; a saved rest suggestion displays
+the rest-day state.
 
 Reviewing generates nothing. Explicit Add uses the existing revision-bound create-workout command and normal inherited
 sync rules; editor handoff remains unsaved. A cached initial review captures the current schedule and becomes stale on
@@ -5718,7 +5732,8 @@ starts no pilot and performs no deployment; an opt-in is still required after a 
 
 Measurement: consent-aware `morning_workout` product events use only fixed action/state labels for shown, reviewed,
 direct successful Add, dismissal, enable/disable and failure. A shown event is once per state/component visit, not a
-unique-person count; edited workouts saved later in the full editor are not attributed as direct morning acceptance.
+unique-person count; preference edits use their own event rather than counting as new opt-ins. Edited workouts saved
+later in the full editor are not attributed as direct morning acceptance.
 `[MorningWorkout]` logs contain aggregate attempts, input/output/thinking tokens, metered versus unknown attempts,
 model and elapsed time, including correction and post-provider JSON failures. No dates, UIDs, titles, health values,
 notes or model text enter these logs/events. Unknown provider usage is explicit, never a measured zero-dollar claim.

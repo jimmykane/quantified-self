@@ -6,7 +6,8 @@ export interface MorningWorkoutPreferences {
   followRoutine: boolean;
   controls: DayWorkoutControls;
 }
-export type MorningWorkoutRequest = { mode: 'morning'; action: 'status' | 'prepare' | 'dismiss' };
+export type MorningWorkoutRequest = { mode: 'morning'; action: 'status' | 'prepare' }
+  | { mode: 'morning'; action: 'dismiss'; localDate: string };
 export interface MorningWorkoutStatus {
   localDate: string;
   state: 'off' | 'waiting' | 'preparing' | 'ready' | 'dismissed' | 'failed' | 'planned' | 'completed' | 'rest-day';

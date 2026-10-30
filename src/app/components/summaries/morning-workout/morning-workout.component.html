@@ -3,10 +3,11 @@
     <app-compact-row [title]="preferences().enabled ? 'Today’s suggestion' : 'Morning workout · Pro'" density="compact" layout="columns" [showDivider]="false">
       <p role="status" aria-live="polite">{{ preferences().enabled ? summary() : 'Have a workout ready when you open Today.' }}</p>
       @if (status()?.state === 'ready') { <small>Included with Pro · review before adding</small> }
-      @if (busy()) { <mat-progress-bar mode="indeterminate" aria-label="Preparing morning suggestion"></mat-progress-bar> }
+      @if (actionError()) { <p role="alert">{{ actionError() }}</p> }
+      @if (busy()) { <mat-progress-bar mode="indeterminate" [attr.aria-label]="actionBusy() ? 'Updating morning preferences' : 'Preparing morning suggestion'"></mat-progress-bar> }
     <div compactRowAction class="actions">
       @if (!preferences().enabled) {
-        <button mat-button appHapticTap (click)="configure()">Set up</button>
+        <button mat-button appHapticTap [disabled]="busy()" (click)="configure()">Set up</button>
       } @else {
         @if (status()?.state === 'ready') { <button mat-button appHapticTap [disabled]="busy()" (click)="review()">Review</button> }
         @if (status()?.state === 'failed') { <button mat-button appHapticTap [disabled]="busy()" (click)="manual()">Generate manually</button> }

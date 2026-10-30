@@ -92,16 +92,68 @@ describe('compact morning workout in Today', () => {
     expect(fixture.componentInstance.status()).toBeNull();
     fixture.destroy(); await vi.advanceTimersByTimeAsync(1600); expect(request).toHaveBeenCalledOnce();
   });
+  it('shows a saved rest day and prevents an older review from replacing a new day', async () => {
+    const { fixture, open, preferences, event } = setup();
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    await fixture.componentInstance.review();
+    const onAdded = open.mock.calls[0][3].onAdded;
+    onAdded();
+    expect(fixture.componentInstance.status()).toEqual({ localDate: '2026-10-30', state: 'rest-day' });
+    preferences.update(value => ({ ...value, controls: { ...value.controls, localDate: '2026-10-31' } }));
+    fixture.componentRef.setInput('localDate', '2026-10-31'); fixture.detectChanges();
+    fixture.componentInstance.status.set({ localDate: '2026-10-31', state: 'completed' });
+    onAdded();
+    expect(fixture.componentInstance.status()).toEqual({ localDate: '2026-10-31', state: 'completed' });
+    expect(event).toHaveBeenCalledWith('owner', 'added', 'ready');
+  });
   it('uses saved source opt-outs in preferences and keeps disable available after dismissal', async () => {
-    const { fixture, open, request, save } = setup();
+    const { fixture, open, request, save, event } = setup();
     await fixture.componentInstance.configure();
     const config = open.mock.calls[0][3]; expect(config.mode).toBe('preferences');
     await config.savePreferences({ ...config.initialControls, timelineContext: false }, false);
     expect(save).toHaveBeenCalledWith('owner', expect.objectContaining({ enabled: true, followRoutine: false, controls: expect.objectContaining({ timelineContext: false }) }));
+    expect(event).toHaveBeenCalledWith('owner', 'preferences_saved');
+    expect(event).not.toHaveBeenCalledWith('owner', 'enabled');
     fixture.detectChanges();
     await fixture.componentInstance.dismiss(); fixture.detectChanges();
-    expect(request).toHaveBeenCalledWith('owner', 'dismiss', expect.any(Function));
+    expect(request).toHaveBeenCalledWith('owner', 'dismiss', expect.any(Function), '2026-10-30');
     expect(fixture.nativeElement.textContent).toContain('Dismissed for today');
     expect(fixture.nativeElement.querySelector('[aria-label="Morning workout options"]')).toBeTruthy();
   });
+  it.each([false, true])('keeps disable feedback through settings effects (failure: %s)', async fail => {
+    const { fixture, save, saving, preferences, haptics, event, request } = setup();
+    let finish!: () => void;
+    save.mockImplementationOnce(async (_uid, value) => {
+      saving.set(true); await new Promise<void>(resolve => { finish = resolve; });
+      saving.set(false); if (fail) throw Error('Write rejected'); preferences.set(value);
+    });
+    const pending = fixture.componentInstance.disable(); fixture.detectChanges();
+    expect(fixture.componentInstance.busy()).toBe(true);
+    await vi.advanceTimersByTimeAsync(1600); expect(request).not.toHaveBeenCalled();
+    finish(); await pending; fixture.detectChanges();
+    expect(fixture.componentInstance.busy()).toBe(false);
+    if (fail) {
+      expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain('could not be saved');
+      expect(haptics.error).toHaveBeenCalledOnce(); expect(event).not.toHaveBeenCalledWith('owner', 'disabled');
+    } else { expect(haptics.success).toHaveBeenCalledOnce(); expect(event).toHaveBeenCalledWith('owner', 'disabled'); }
+  });
+  it('does not let an automatic refresh supersede a dismiss action', async () => {
+    const { fixture, request, haptics } = setup(); let finish!: (value: any) => void;
+    request.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = fixture.componentInstance.dismiss();
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(request).toHaveBeenCalledOnce();
+    finish({ localDate: '2026-10-30', state: 'dismissed' }); await pending; fixture.detectChanges();
+    expect(fixture.componentInstance.status()?.state).toBe('dismissed'); expect(haptics.success).toHaveBeenCalledOnce();
+  });
+  it('drops action feedback after a day or account changes', async () => {
+    const { fixture, request, preferences, haptics } = setup(); let finish!: (value: any) => void;
+    request.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = fixture.componentInstance.dismiss();
+    preferences.update(value => ({ ...value, controls: { ...value.controls, localDate: '2026-10-31' } }));
+    fixture.componentRef.setInput('localDate', '2026-10-31'); fixture.detectChanges();
+    finish({ localDate: '2026-10-30', state: 'dismissed' }); await pending;
+    expect(haptics.success).not.toHaveBeenCalled(); expect(fixture.componentInstance.status()).toBeNull();
+  });
+
 });

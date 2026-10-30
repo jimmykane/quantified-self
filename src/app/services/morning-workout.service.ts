@@ -23,9 +23,12 @@ export class MorningWorkoutService {
       return { enabled: false, followRoutine: true, controls: defaultDayWorkoutControls(dayWorkoutLocalDate(new Date(), zone), zone) };
     }
   }
-  async request(uid: string, action: MorningWorkoutRequest['action'], current: () => boolean): Promise<MorningWorkoutStatus> {
+  async request(uid: string, action: MorningWorkoutRequest['action'], current: () => boolean, expectedDate?: string): Promise<MorningWorkoutStatus> {
     if (!this.eligible(uid) || !current()) throw Error('Morning suggestion access changed.');
-    return (await this.functions.call<MorningWorkoutRequest, MorningWorkoutStatus>('generateDayWorkout', { mode: 'morning', action },
+    if (action === 'dismiss' && !expectedDate) throw Error('Choose the day to dismiss.');
+    const request: MorningWorkoutRequest = action === 'dismiss'
+      ? { mode: 'morning', action, localDate: expectedDate! } : { mode: 'morning', action };
+    return (await this.functions.call<MorningWorkoutRequest, MorningWorkoutStatus>('generateDayWorkout', request,
       { canExecute: () => this.eligible(uid) && current() })).data;
   }
   save(uid: string, value: MorningWorkoutPreferences): Promise<void> {
@@ -40,7 +43,7 @@ export class MorningWorkoutService {
     this.writes = write.catch(() => undefined);
     return write;
   }
-  event(uid: string, action: 'shown' | 'reviewed' | 'added' | 'dismissed' | 'enabled' | 'disabled' | 'failed',
+  event(uid: string, action: 'shown' | 'reviewed' | 'added' | 'dismissed' | 'enabled' | 'preferences_saved' | 'disabled' | 'failed',
     state?: MorningWorkoutStatus['state']): void {
     if (this.eligible(uid)) this.analytics.logEvent('morning_workout', { action, ...(state ? { state } : {}) });
   }

@@ -104,9 +104,9 @@ export function parseGenerateDayWorkoutRequest(value: unknown, now = new Date())
   if (!sport || !dayWorkoutPurposes(sport).includes(c.purpose as DayWorkoutPurpose)
     || !dayWorkoutTargets(sport).includes(c.target as DayWorkoutTarget)) throw new Error('Choose supported sport options.');
   if (!Number.isSafeInteger(c.minutes) || Number(c.minutes) < 5 || Number(c.minutes) > 240) throw new Error('Choose 5 to 240 minutes.');
-  if (!['approximate', 'strict'].includes(String(c.timing)) || (isStrengthWorkoutSportV1(sport) && c.timing !== 'approximate')
-    || !['auto', 'simple'].includes(String(c.structure))
-    || !['full-body', 'upper-body', 'lower-body', 'core'].includes(String(c.strengthFocus))) throw new Error('Choose supported workout options.');
+  if (typeof c.timing !== 'string' || !['approximate', 'strict'].includes(c.timing) || (isStrengthWorkoutSportV1(sport) && c.timing !== 'approximate')
+    || typeof c.structure !== 'string' || !['auto', 'simple'].includes(c.structure)
+    || typeof c.strengthFocus !== 'string' || !['full-body', 'upper-body', 'lower-body', 'core'].includes(c.strengthFocus)) throw new Error('Choose supported workout options.');
   if (c.destinationPlanId !== null && (typeof c.destinationPlanId !== 'string'
     || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(c.destinationPlanId))) throw new Error('Choose a valid destination.');
   if (!Array.isArray(c.equipment) || c.equipment.length < 1 || c.equipment.length > DAY_WORKOUT_EQUIPMENT.length
