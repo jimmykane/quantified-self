@@ -2,6 +2,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import { z } from 'zod';
 import { GenkitError } from 'genkit';
+import type { ModelMiddleware } from 'genkit/model';
 import { ValidationError as GenkitValidationError } from 'genkit/schema';
 import { WorkoutStructureValidationError } from '../../../shared/planned-workout';
 import { isStrengthWorkoutSportV1, StrengthWorkoutValidationError } from '../../../shared/strength-workout';
@@ -60,17 +61,35 @@ export async function generateDayWorkoutSuggestion(request: GenerateDayWorkoutRe
         ...TRAINING_RECIPE_WITH_POOL_SCHEMA.shape, sport: z.literal(controls.sport),
       }) }),
   ]);
-  const response = await assistantGenkit.generate({ system: DAY_WORKOUT_SYSTEM,
-    prompt: JSON.stringify({ controls, evidence: context.evidence, missingContext: context.missingContext,
-      ...(correction ? { correction } : {}) }),
-    output: { format: 'json', jsonSchema: z.toJSONSchema(schema, { target: 'draft-7', override: ({ jsonSchema }) => {
-      // Nested repetition/target bounds exceed Gemini's decoder complexity limit. Constrain the shape here;
-      // validateDayWorkoutSuggestion and the canonical parsers still enforce every value and size limit.
-      for (const key of ['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum',
-        'minItems', 'maxItems', 'minLength', 'maxLength', 'pattern'] as const) delete jsonSchema[key];
-    } }) },
-    config: { maxOutputTokens: 8192 } });
-  return response.output;
+  let modelResponded = false;
+  const observeResponse: ModelMiddleware = async (input, next) => {
+    const result = await next(input);
+    modelResponded = true;
+    return result;
+  };
+  try {
+    const response = await assistantGenkit.generate({ system: DAY_WORKOUT_SYSTEM,
+      prompt: JSON.stringify({ controls, evidence: context.evidence, missingContext: context.missingContext,
+        ...(correction ? { correction } : {}) }),
+      output: { format: 'json', jsonSchema: z.toJSONSchema(schema, { target: 'draft-7', override: ({ jsonSchema }) => {
+        // Nested repetition/target bounds exceed Gemini's decoder complexity limit. Constrain the shape here;
+        // validateDayWorkoutSuggestion and the canonical parsers still enforce every value and size limit.
+        for (const key of ['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum',
+          'minItems', 'maxItems', 'minLength', 'maxLength', 'pattern'] as const) delete jsonSchema[key];
+      } }) },
+      use: [observeResponse],
+      config: { maxOutputTokens: 8192 } });
+    return response.output;
+  } catch (error) {
+    // Genkit's mixed ESM/CJS exports can hold distinct ValidationError constructors with the same base.
+    const schemaFailure = error instanceof GenkitValidationError || error instanceof GenkitError
+      && error.status === 'INVALID_ARGUMENT' && error.constructor.name === GenkitValidationError.name;
+    // Only parsing/validation after a provider response is a correctable prescription failure.
+    if (modelResponded && (schemaFailure || error instanceof SyntaxError)) {
+      throw new DayWorkoutSuggestionValidationError('Invalid prescription schema.');
+    }
+    throw error;
+  }
 }
 
 const defaults: DayWorkoutDependencies = {
@@ -130,12 +149,8 @@ export async function runGenerateDayWorkout(value: unknown, context: { auth?: { 
         suggestion = validateDayWorkoutSuggestion(generated, request.controls, evidence.previousStrength, evidence.references);
         break;
       } catch (error) {
-        // Genkit can reject output before generate returns. Only prescription failures are correctable;
-        // provider/auth failures and stale requests must leave this loop immediately.
-        // Genkit's mixed ESM/CJS exports can hold distinct ValidationError constructors with the same base.
-        const schemaFailure = error instanceof GenkitValidationError || error instanceof GenkitError
-          && error.status === 'INVALID_ARGUMENT' && error.constructor.name === GenkitValidationError.name;
-        if (!(schemaFailure || error instanceof DayWorkoutSuggestionValidationError
+        // The generator normalizes SDK output failures. Provider/auth errors and stale requests leave immediately.
+        if (!(error instanceof DayWorkoutSuggestionValidationError
           || error instanceof WorkoutStructureValidationError || error instanceof StrengthWorkoutValidationError)) throw error;
         await dependencies.store.assertActive(uid, request.requestId, started.token);
         logger.warn('[DayWorkout] Invalid model prescription.', {

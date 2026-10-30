@@ -7,6 +7,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { assistantGenkit } from './model';
 import { defaultDayWorkoutControls } from '../../../shared/day-workout';
 import { DAY_WORKOUT_SYSTEM, generateDayWorkoutSuggestion, runGenerateDayWorkout, type DayWorkoutDependencies } from './day-workout-callable';
+import { DayWorkoutSuggestionValidationError } from './day-workout-validation';
 import type { AssistantQuotaReservation } from './quota';
 vi.mock('../utils', () => ({ ALLOWED_CORS_ORIGINS: [], enforceAppCheck: (context: { app?: unknown }) => {
   if (!context.app) throw new Error('App Check required');
@@ -22,6 +23,19 @@ function dependencies(): DayWorkoutDependencies {
     context: vi.fn().mockResolvedValue({ evidence: {}, usedContext: [], missingContext: [], previousStrength: [], references: [] }),
     generate: vi.fn().mockResolvedValue({ kind: 'rest', rationale: 'Take a recovery day.' }),
   };
+}
+function mockSdkOutputs(...outputs: (string | Error)[]) {
+  const ai = genkit({});
+  let attempt = 0;
+  const provider = vi.fn(async () => {
+    const output = outputs[attempt++];
+    if (output instanceof Error) throw output;
+    return { finishReason: 'stop' as const, message: { role: 'model' as const, content: [{ text: output }] } };
+  });
+  const model = ai.defineModel({ name: 'test/day-workout-output-correction' }, provider);
+  const generate = vi.mocked(assistantGenkit.generate).mockReset();
+  generate.mockImplementation(options => ai.generate({ ...options as object, model }) as never);
+  return { provider, generate };
 }
 const request = { requestId: 'day-workout:71f1e982-b718-4c5b-a3c7-c45eebdefc84', controls: defaultDayWorkoutControls('2026-10-28', 'UTC') };
 const auth = { auth: { uid: 'owner' }, app: {} };
@@ -97,21 +111,16 @@ describe('generateDayWorkout callable', () => {
     expect(deps.finalize).toHaveBeenCalledTimes(1);
     expect(deps.release).not.toHaveBeenCalled();
   });
-  it('corrects a strength reply rejected by the real Genkit output-schema validator', async () => {
+  it.each(['schema', 'JSON syntax'])('corrects a strength reply rejected by real Genkit %s validation', async kind => {
     const deps = dependencies();
     const reply = { kind: 'workout', title: 'Bodyweight session', rationale: 'A gentle session.',
       strength: { version: 1, exercises: [{ id: 'squat', name: 'Bodyweight squat',
         sets: [{ id: 'set1', ending: { kind: 'repetitions', repetitions: 10 } }] }] } };
-    const ai = genkit({});
-    const provider = vi.fn()
-      .mockResolvedValueOnce({ finishReason: 'stop', message: { role: 'model', content: [{ text: JSON.stringify({
-        ...reply, strength: { version: 1, exercises: [{ id: 'squat', name: 'Bodyweight squat',
-          sets: [{ id: 'set1', ending: { kind: 'repetitions', reps: 10 } }] }] },
-      }) }] } })
-      .mockResolvedValueOnce({ finishReason: 'stop', message: { role: 'model', content: [{ text: JSON.stringify(reply) }] } });
-    const model = ai.defineModel({ name: 'test/day-workout-schema-correction' }, provider);
-    const generate = vi.mocked(assistantGenkit.generate).mockReset();
-    generate.mockImplementation(options => ai.generate({ ...options as object, model }) as never);
+    const malformed = kind === 'schema' ? JSON.stringify({ ...reply,
+      strength: { version: 1, exercises: [{ id: 'squat', name: 'Bodyweight squat',
+        sets: [{ id: 'set1', ending: { kind: 'repetitions', reps: 10 } }] }] },
+    }) : '{"kind":"workout","rationale":PRIVATE_MODEL_REPLY}';
+    const { provider, generate } = mockSdkOutputs(malformed, JSON.stringify(reply));
     deps.generate = generateDayWorkoutSuggestion;
     try {
       const response = await runGenerateDayWorkout({ ...request,
@@ -128,23 +137,38 @@ describe('generateDayWorkout callable', () => {
       expect(deps.finalize).toHaveBeenCalledTimes(1);
     } finally { generate.mockReset(); }
   });
-  it('stops after two schema failures without exposing raw output or charging twice', async () => {
+  it.each(['schema', 'JSON syntax'])('stops after two %s failures without exposing raw output or charging twice', async kind => {
     const deps = dependencies();
-    const error = new ValidationError({ data: { rationale: 'PRIVATE_MODEL_REPLY' }, schema: {},
-      errors: [{ path: 'strength.exercises.0.sets.0.ending', message: 'PRIVATE_VALIDATION_DETAIL' }] });
-    vi.mocked(deps.generate).mockRejectedValue(error);
+    const malformed = kind === 'schema' ? JSON.stringify({ kind: 'rest', rationale: 'PRIVATE_MODEL_REPLY', PRIVATE_VALIDATION_DETAIL: true })
+      : '{"kind":"rest","rationale":PRIVATE_MODEL_REPLY}';
+    const { provider, generate } = mockSdkOutputs(malformed, malformed);
+    deps.generate = generateDayWorkoutSuggestion;
     const warning = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     const failure = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
     try {
       await expect(runGenerateDayWorkout(request, auth, deps)).rejects.toMatchObject({ code: 'failed-precondition' });
-      expect(deps.generate).toHaveBeenCalledTimes(2);
+      expect(provider).toHaveBeenCalledTimes(2);
       expect(deps.finalize).toHaveBeenCalledTimes(1);
       expect(deps.release).not.toHaveBeenCalled();
       expect(deps.store.finish).toHaveBeenCalledWith('owner', request.requestId, 'lease', null);
-      const diagnostics = JSON.stringify([warning.mock.calls, failure.mock.calls, vi.mocked(deps.generate).mock.calls]);
+      const diagnostics = JSON.stringify([warning.mock.calls, failure.mock.calls, generate.mock.calls]);
       expect(diagnostics).not.toContain('PRIVATE_MODEL_REPLY');
       expect(diagnostics).not.toContain('PRIVATE_VALIDATION_DETAIL');
-    } finally { warning.mockRestore(); failure.mockRestore(); }
+    } finally { warning.mockRestore(); failure.mockRestore(); generate.mockReset(); }
+  });
+  it.each([
+    { kind: 'request schema', error: new ValidationError({ data: null, schema: {}, errors: [] }) },
+    { kind: 'provider parsing', error: new SyntaxError('PRIVATE_PROVIDER_RESPONSE') },
+  ])('does not correct $kind failures before the provider returns a response', async ({ error }) => {
+    const deps = dependencies();
+    const { provider, generate } = mockSdkOutputs(error, JSON.stringify({ kind: 'rest', rationale: 'Rest.' }));
+    deps.generate = generateDayWorkoutSuggestion;
+    try {
+      await expect(runGenerateDayWorkout(request, auth, deps)).rejects.toMatchObject({ code: 'unavailable' });
+      expect(provider).toHaveBeenCalledTimes(1);
+      expect(deps.finalize).toHaveBeenCalledTimes(1);
+      expect(deps.release).not.toHaveBeenCalled();
+    } finally { generate.mockReset(); }
   });
   it.each(['UNAVAILABLE', 'UNAUTHENTICATED', 'PERMISSION_DENIED', 'INVALID_ARGUMENT'] as const)(
     'does not treat a provider %s failure as correctable model output', async status => {
@@ -157,7 +181,7 @@ describe('generateDayWorkout callable', () => {
     });
   it('rechecks the request lease before correcting a rejected schema', async () => {
     const deps = dependencies();
-    vi.mocked(deps.generate).mockRejectedValueOnce(new ValidationError({ data: null, schema: {}, errors: [] }));
+    vi.mocked(deps.generate).mockRejectedValueOnce(new DayWorkoutSuggestionValidationError('Invalid prescription schema.'));
     vi.mocked(deps.store.assertActive).mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(new HttpsError('aborted', 'Draft replaced.'));
     await expect(runGenerateDayWorkout(request, auth, deps)).rejects.toMatchObject({ code: 'aborted' });
