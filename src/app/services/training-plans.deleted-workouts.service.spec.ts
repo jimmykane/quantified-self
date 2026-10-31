@@ -1,3 +1,5 @@
+import { TrainingRestDaysService } from './training-rest-days.service';
+import { of } from 'rxjs';
 import { TestBed } from '@angular/core/testing';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -38,7 +40,7 @@ describe('owner deleted-workout pages', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(Date, 'now').mockReturnValue(NOW_MS);
-    TestBed.configureTestingModule({ providers: [TrainingPlansService,
+    TestBed.configureTestingModule({ providers: [TrainingPlansService, { provide: TrainingRestDaysService, useValue: { watchRange: () => of([]), changes$: of() } },
       { provide: Firestore, useValue: {} }, { provide: AppFunctionsService, useValue: {} },
       { provide: BrowserCompatibilityService, useValue: {} }] });
     service = TestBed.inject(TrainingPlansService);

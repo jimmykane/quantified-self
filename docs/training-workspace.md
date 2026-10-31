@@ -991,21 +991,89 @@ activity. In Plans, select an in-range day and choose **Mark as rest day** / **R
 in that same plan/date must first be moved, skipped or removed. Standalone workouts, skipped sessions and completed
 activities are not deleted or reclassified. A date without a workout and without this marker remains unscheduled.
 The selected plan calendar shows these dates even for inactive plans. Calendar, its day details, Dashboard's calendar
-and Today picker use the existing active-plan overlay; dotted marks distinguish rest days from planned/skipped
-workouts. Calendar day menus also offer **Mark as rest day** for an in-range date of the active plan, using the existing
-`set-plan-rest-days` mutation and exact state/plan revisions. Incomplete/restoring schedules and same-plan planned
-workouts withhold or disable this action; no plan is created implicitly. The shared day-context component covers
-Calendar previews, the day sheet, the full day page and Dashboard previews. A pending save disables the day menu
-and displays its status.
-The day sheet binds to the same child menu rather than keeping separate actions. Navigation dismisses that sheet
-once and preserves its Today/Calendar return context; saving rest stays in the sheet and shares its pending state.
-The confirmed plan response bridges the live read without optimistic markers or extra
-queries, and cannot reinsert a missing/newer plan. Owner/day/active-plan changes and destruction fence dispatch and
-late feedback; an earlier response cannot clear a later save. Day details link to their plan for removal/management.
-The action adds about 2.94 kB of lazy JavaScript over the preceding release; startup remains 1.40 MB / 333.25 kB
-transfer. The existing total-script cap had 220 bytes of space, so production and beta caps move from 13,800 to
-13,805 kB for this feature. The initial limit and all warning budgets are unchanged; no runtime dependency is added. Today and Training show a quiet rest-day link and use **Low training
-load**, rather than **Ready to train**, for a Fresh state on an authored rest day. No score or calculation changes.
+and Today picker combine the active-plan overlay with independent calendar markers; dotted marks distinguish rest
+from workouts. Today and Training use **Low training load** instead of **Ready to train** for a Fresh state on an
+authored rest day. Scores and calculations are unchanged.
+
+#### Standalone calendar rest days
+
+Every private Calendar day menu offers **Mark as rest day**, including dates outside a plan and accounts with no
+plan. **Remove rest day** removes only the calendar marker. Plan-authored rest retains its **Manage in Plans** link;
+removing an overlapping calendar marker cannot erase the plan's intent. Existing workouts and completed activities
+remain intact, and explicit manual workout creation is still possible. No empty workout or implicit plan is created.
+The shared day-context menu covers Dashboard previews, the day sheet and full day page. Navigation dismisses the
+sheet once and preserves return context; rest saves stay in the sheet with shared pending state.
+
+`users/{uid}/trainingRestDays/{YYYY-MM-DD}` stores exactly `schemaVersion: 1`, `localDate`, `isRestDay` and a positive
+integer `revision`. Removal writes `isRestDay: false` and increments revision; it does not delete the record. This
+retains an optimistic concurrency fence across retries and cached responses. These fixed local dates survive plan
+shifts, deletion and history restores. They do not count as workouts, change metrics, or create provider jobs.
+Owner-scoped Firebase SDK transactions read before writing. Desired-state retries are idempotent; contradictory
+stale revisions reject. Auth identity and owner/day/view generations fence waits, acknowledgements and feedback.
+Successful writes bridge live reads without optimistic markers; older acknowledgements cannot resurrect newer removals.
+Rules validate the four-field schema, real calendar dates, exact document identity, revision increments, root account
+presence and deletion tombstones. Deletes are denied. Account deletion reuses recursive cleanup below the user root.
+
+All Calendar views use the existing visible-range schedule reader plus one bounded rest-date query (maximum 366
+calendar labels, limit 367 to detect overflow). The existing single-field index suffices. Today, manual generation
+with Training context, and daily suggestions share one ref-counted exact-date read per owner/date; no workout history
+or recipe query is needed for this marker. Unknown/error evidence cannot authorize automatic generation. Verified
+rest immediately masks a cached ready suggestion; removal invalidates coverage and can recover the same daily result,
+without resetting the charged daily receipt or permitting another model call. Dismissal stays authoritative.
+Session-cache entries track the verified rest revision, and restored recipes wait for current evidence. Cache authority
+exists only while a current authenticated day listener remains live; teardown/error removes that authority. The bounded
+revision index separately retains a monotonic floor to reject delayed acknowledgements and older reconnect snapshots.
+The shared daily listener follows the existing Today date/foreground checks across saved-zone midnight and same-UID
+session replacement, even if the user profile object has not changed. A failed root listener is reattached on an explicit
+request; passive cache reads never restart failed subscriptions. Context changes during the initial read reject before
+any generation request. This adds no clock, polling, model call or change to the daily charge receipt.
+A recreated Today view joins an in-flight generation or dismissal instead of issuing a competing status read.
+Preparation waits for an older status check; an explicit available-data choice waits for a preceding sleep check,
+while automatic preparation can share an already authorized available-data generation. The existing pending map
+serializes these action combinations without a separate queue or polling. Epoch changes, including rest and dismissal,
+reject queued work before dispatch. This prevents a late `preparing`/`waiting` receipt from replacing a finished result
+and preserves the existing daily allowance. Public MCP inputs/outputs, scopes, Rules and stored records are unchanged.
+
+Manual generation also checks independent calendar intent when Training context is enabled, even with no selected
+or active plan. An authored rest response is deterministic and releases the unused quota reservation. Training context
+off preserves the existing explicit opt-out. The optional Today feature always respects authored rest.
+
+**MCP impact:** additive `get_training_calendar_rest_days` uses existing `training-plans:read`, takes inclusive
+`startDate`/`endDate` (maximum 366 valid dates), and returns only those bounds, `scanComplete: true` and sorted active
+`restDays`. A dedicated measured four-field query rechecks connection/grant/deletion fences in the transaction.
+False markers, revisions, storage identifiers and neighboring fields are excluded. Assistant guidance checks these
+dates even without a plan. Additive `preview_training_calendar_rest_day` takes one exact `localDate` and `isRestDay`
+under independent `training-plans:write` plus reads. It captures the marker revision in a bounded proposal and returns
+strict `calendarRestDayReview: { localDate, before, after }`. Native-approved `apply_training_changes` commits only this
+marker and its durable result in one transaction. Stale revisions (including change-away-and-back), grant changes,
+revocation, account deletion, expiry and Assistant conversation/pending-proposal changes reject. Concurrent/replayed
+Apply returns the original result, never resurrects later-removed intent. No-op removal creates no marker. No full
+schedule/history query, global revision write, new endpoint, new scope or provider action is added. Existing plan-only
+preview/Apply remains separate; no registered schema or baseline/history changes.
+
+The built-in Assistant exposes only this prepare tool for an unqualified calendar-rest request, with complete app-owned
+before/after review and explicit Apply/dismissal. A specific plan-rest request keeps its existing full-list workflow.
+A short date reply to the immediately preceding rest-date clarification retains the original calendar-versus-plan
+preview choice. New actions, cancellation, negative replies and questions never inherit it. Routing supplies neither
+values nor Apply authority; complete review and separate confirmation still apply.
+Its shared response validator requires the dedicated calendar review; missing/foreign/private fields fail closed.
+This lifecycle review changes no MCP tool, input/output schema, scope, stored marker or public preview/Apply contract;
+read and mutation coverage remains unchanged. Existing Help instructions remain accurate.
+The native Calendar writer and shared live exact-date listeners use the same four-field records/revisions, so MCP
+edits immediately invalidate daily coverage through existing cache signals. Marking rest and removing it never clears
+the one-day AI generation receipt. Tests use synthetic emulator owners, without live account/provider writes.
+
+Standalone rest, its MCP preview/Apply and listener lifecycle fixes add 13.31 kB of lazy JavaScript over the preceding release
+(13,816.03 kB total scripts); startup remains
+1.40 MB / 333.26 kB transfer. Matching production/beta all-script caps move from 13,805 to 13,817 kB; the lifecycle fixes account for about 1.32 kB. Initial and warning
+budgets are unchanged, and no runtime dependency is added.
+
+Rollout requires separately approved Firestore Rules and updated Functions before the frontend, plus the normal
+registered-app catalog refresh and bundled-plugin refresh for the additive read/guidance. No new Function endpoint,
+composite index, data backfill or migration is required. Old clients continue to use plan rest dates. Keep the new
+Rules/read support when rolling back a frontend that has already authored calendar markers. Local emulator tests use
+synthetic users and a stub model with the real Firestore reader/store: rest prevents generation, removal admits one
+result, and repeated mark/remove returns the same result without another generation charge.
 
 `TrainingPlanV1.restDays?: string[]` contains at most 366 unique, sorted, valid local date labels inside the plan's
 inclusive range. Missing stays missing on legacy plans; removing the final marker removes the optional field.
@@ -1018,8 +1086,8 @@ capacity/counts, completion, recorded totals, TSS, load, readiness, recipes or p
 
 Today reuses a ref-counted per-owner active-plan stream: restore fence, fresh verified schedule state and one exact
 plan document. It does not query workout history, recipes, activity documents or provider status. Account changes
-immediately withhold earlier-owner context. Calendar reuses its existing bounded schedule read and shared overlay;
-there is no extra per-day query, timer or polling loop.
+immediately withhold earlier-owner context. Calendar combines this plan context with the bounded independent rest-date read described above.
+The shared exact-date reader provides standalone intent to Today; no timer or polling loop is added.
 
 The active-plan-only context clears when a replacement plan starts loading, but preserves the same plan's context
 during routine schedule-revision refreshes so its rest indicator and Training caption do not flicker. Paused, archived
@@ -5806,10 +5874,9 @@ invalidate day coverage while the backend's charged date receipt still prevents 
 Dismissed days remain dismissed. This same revision invalidation covers rest-day edits from Calendar and Plans:
 the next status read checks current rest intent before exposing a cached suggestion or admitting a model call.
 Removing rest intent can recover the existing daily result; it never resets the one-day model allowance. Focused
-cache and server tests cover this transition without a new listener, polling, callable or backend change.
-MCP impact: the Calendar shortcut reuses existing rest-date fields, revision checks and native mutation; plan/rest
-read projections, approved rest-day preview/apply, scopes, consent and schemas are unchanged. No wire impact or
-provider/queue behavior changes. Successful Add updates the shared cache to planned even after Today has closed, with
+cache and server tests cover both plan and standalone rest transitions. The standalone marker adds one shared
+exact-date listener and the additive bounded MCP read documented under Explicit plan rest days. Existing plan
+preview/Apply, consent and provider/queue behavior stay unchanged. Successful Add updates the shared cache to planned even after Today has closed, with
 current owner/day/Pro fences. Old in-flight replies cannot
 replace another owner, date, preferences or newer coverage. No raw Sleep samples/provider payloads enter cache keys;
 the browser copy holds only the existing first-party public response, capped at 400,000 JSON characters.

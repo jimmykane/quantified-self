@@ -1,3 +1,4 @@
+import { TrainingRestDaysService } from './training-rest-days.service';
 import { TestBed } from '@angular/core/testing';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { filter, firstValueFrom, of, Subject, throwError } from 'rxjs';
@@ -30,7 +31,7 @@ describe('bounded Calendar Training reads', () => {
     vi.resetAllMocks(); serverState = undefined;
     vi.mocked(getDoc).mockImplementation(async () => ({ data: () => serverState }) as Awaited<ReturnType<typeof getDoc>>);
     vi.mocked(getCachedDoc).mockResolvedValue({ exists: () => false } as never);
-    TestBed.configureTestingModule({ providers: [TrainingPlansService, { provide: Firestore, useValue: { app } },
+    TestBed.configureTestingModule({ providers: [TrainingPlansService, { provide: TrainingRestDaysService, useValue: { watchRange: () => of([]), changes$: of() } }, { provide: Firestore, useValue: { app } },
       { provide: AppFunctionsService, useValue: {} }, { provide: BrowserCompatibilityService, useValue: {} }] });
     service = TestBed.inject(TrainingPlansService);
     vi.mocked(docData).mockReturnValue(of(undefined));

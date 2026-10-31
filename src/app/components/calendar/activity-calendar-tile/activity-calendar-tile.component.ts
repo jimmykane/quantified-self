@@ -168,12 +168,14 @@ export class ActivityCalendarTileComponent {
   private readonly plansSource = computed(() => {
     const user = this.user();
     if (!user?.uid) return of({ status: 'ready', schedule: null } as ActivityCalendarTilePlansState);
+    const window = resolveActivityCalendarQueryWindow(this.mode(), this.anchorDate(), user.settings?.unitSettings?.startOfTheWeek);
     // A popup's user input is a snapshot. Keep the live viewer fence inside the shared
     // stream so it also cancels a day-sheet listener after Material destroys this tile.
     return this.users.user$.pipe(
       map(viewer => viewer?.uid ?? null),
       distinctUntilChanged(),
-      switchMap(viewerUid => viewerUid === user.uid ? this.plansService.watchSchedule(user.uid).pipe(
+      switchMap(viewerUid => viewerUid === user.uid ? this.plansService.watchCalendarSchedule(user.uid, formatActivityCalendarDateParam(new Date(window.startMs)),
+        formatActivityCalendarDateParam(new Date(window.endExclusiveMs - 1))).pipe(
         map(schedule => schedule.restoreUnavailable
           ? ({ status: 'error', schedule: null, restoreInProgress: true } as ActivityCalendarTilePlansState)
           : ({ status: 'ready', schedule } as ActivityCalendarTilePlansState)),
@@ -209,7 +211,7 @@ export class ActivityCalendarTileComponent {
       selectCalendarVisibleScheduledWorkouts(schedule),
       schedule.plans,
       schedule.state.activePlanId,
-      this.workoutCompletions().map(completion => completion.workoutId),
+      this.workoutCompletions().map(completion => completion.workoutId), true, schedule.restDays,
     );
   });
   readonly calendarModel = computed(() => buildActivityCalendarViewModel(this.eventState().events, {
@@ -254,6 +256,7 @@ export class ActivityCalendarTileComponent {
       activities: this.selectedDayActivities,
       plannedWorkoutsSource: this.selectedDayPlanned,
       plannedWorkoutsStatusSource: () => this.plansState().status,
+      plannedWorkoutsCompleteSource: () => this.plansState().schedule?.workoutsComplete !== false,
       scheduleSource: () => this.users.user()?.uid === user.uid ? this.plansState().schedule : null,
       trainingImpact: this.trainingImpactState,
     };
@@ -431,7 +434,7 @@ export class ActivityCalendarTileComponent {
       const schedule = plansState().schedule;
       return schedule ? buildPlannedWorkoutCalendarOverlay(
         selectCalendarVisibleScheduledWorkouts(schedule), schedule.plans, schedule.state.activePlanId,
-        workoutCompletions().map(completion => completion.workoutId),
+        workoutCompletions().map(completion => completion.workoutId), true, schedule.restDays,
       )[day.dateKey]?.entries ?? [] : [];
     });
     const release = () => {
@@ -458,6 +461,7 @@ export class ActivityCalendarTileComponent {
           plannedWorkouts: plannedWorkouts(),
           plannedWorkoutsSource: plannedWorkouts,
           plannedWorkoutsStatusSource: () => plansState().status,
+          plannedWorkoutsCompleteSource: () => plansState().schedule?.workoutsComplete !== false,
           scheduleSource: () => this.users.user()?.uid === userId ? plansState().schedule : null,
           trainingImpact: this.trainingImpactState,
         },

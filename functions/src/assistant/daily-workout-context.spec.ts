@@ -14,9 +14,10 @@ import {
 const NOW = new Date('2026-09-25T12:00:00.000Z');
 
 function fixtureRead() {
-  return vi.fn(async (name: string) => {
+  return vi.fn(async (name: string, args: Record<string, unknown> = {}) => {
     switch (name) {
       case 'list_training_plans': return { scheduleRevision: 7, scanComplete: true, plans: [] };
+      case 'get_training_calendar_rest_days': return { startDate: args.startDate ?? '2026-09-25', endDate: args.endDate ?? '2026-09-25', scanComplete: true, restDays: [] };
       case 'get_daily_report': return { sleep: { durationSeconds: 29_520 }, readiness: { score: 61 } };
       case 'query_metric': return { metric: { type: DataDuration.type }, aggregation: {
         buckets: [
@@ -54,6 +55,20 @@ function fixtureRead() {
 }
 
 describe('daily workout context', () => {
+  it.each(['rest', 'none', 'unavailable'] as const)('checks standalone calendar rest days even without a plan: %s', async state => {
+    const base = fixtureRead();
+    const read = vi.fn(async (name: string, args: Record<string, unknown>) => {
+      if (name === 'get_training_metric') return { metricKind: args.metricKind, payload: {} };
+      if (name === 'get_training_calendar_rest_days') {
+        if (state === 'unavailable') throw Error('Calendar unavailable');
+        return { ...args, scanComplete: true, restDays: state === 'rest' ? ['2026-09-25'] : [] };
+      }
+      return base(name, args);
+    });
+    const result = await collectDailyWorkoutContext({ now: NOW, timeZone: 'UTC', timelineNotesEnabled: false, trainingPlansEnabled: true, read });
+    expect(result.plannedWorkouts.restDayContext?.status).toBe(state);
+    if (state === 'rest') expect(result.plannedWorkouts.restDayContext?.planName).toBe('Calendar');
+  });
   it.each(['rest', 'none', 'unavailable'] as const)('preserves explicit rest intent and fails closed when it cannot be checked: %s', async status => {
     const base = fixtureRead();
     const read = vi.fn(async (name: string, args: Record<string, unknown>) => {
@@ -64,7 +79,7 @@ describe('daily workout context', () => {
         if (status === 'unavailable') throw new Error('Unavailable rest dates');
         return { scheduleRevision: 7, planRevision: 3, planRef: args.planRef, restDays: status === 'rest' ? ['2026-09-25'] : [] };
       }
-      return base(name);
+      return base(name, args);
     });
     const result = await collectDailyWorkoutContext({ now: NOW, timeZone: 'UTC', timelineNotesEnabled: false,
       trainingPlansEnabled: true, read });
@@ -151,7 +166,7 @@ describe('daily workout context', () => {
         category: 'travel', title: 'Trip', startDate: '2026-09-26', endDate: '2026-09-27',
         effectiveEndDate: '2026-09-27', timeZone: 'Europe/Helsinki',
       }] };
-      return base(name);
+      return base(name, args);
     });
     const result = await collectDailyWorkoutContext({ now: NOW, timeZone: 'Europe/Helsinki',
       timelineNotesEnabled: true, trainingPlansEnabled: true, read: read as never,
@@ -187,7 +202,7 @@ describe('daily workout context', () => {
           description: 'private-description-canary',
         }] } };
       }
-      return base(name);
+      return base(name, args);
     });
     const result = await collectDailyWorkoutContext({ now: new Date('2026-10-24T12:00:00Z'), timeZone: 'Europe/Helsinki',
       timelineNotesEnabled: false, trainingPlansEnabled: state !== 'disabled', read: read as never,
@@ -217,7 +232,7 @@ describe('daily workout context', () => {
   it('keeps distant-date notes inside the existing query contract without claiming a complete scan', async () => {
     const base = fixtureRead();
     const read = vi.fn(async (name: string, args: Record<string, unknown>) => name === 'get_training_metric'
-      ? { metricKind: args.metricKind, payload: {} } : base(name));
+      ? { metricKind: args.metricKind, payload: {} } : base(name, args));
     const result = await collectDailyWorkoutContext({ now: NOW, timeZone: 'UTC',
       timelineNotesEnabled: true, trainingPlansEnabled: false, read: read as never,
       request: { targetDate: '2027-12-31', hypotheticalWithoutPlan: false, noAdditionalWorkoutToday: false } });
@@ -244,7 +259,7 @@ describe('daily workout context', () => {
     const read = vi.fn(async (name: Parameters<typeof base>[0], args: Record<string, unknown>) =>
       name === 'get_training_metric'
         ? { metricKind: args.metricKind, payload: { measured: true } }
-        : base(name));
+        : base(name, args));
     const result = await collectDailyWorkoutContext({ now: NOW, timeZone: 'Europe/Helsinki',
       timelineNotesEnabled: true, trainingPlansEnabled: true, read });
     expect(result.localDate).toBe('2026-09-25');
@@ -263,7 +278,7 @@ describe('daily workout context', () => {
       'prepare_training_metrics', 'get_training_metric', 'get_training_metric',
       'get_training_metric',
       'get_daily_report', 'query_metric', 'query_activities', 'query_timeline_notes',
-      'query_planned_workouts_by_date', 'get_planned_workout_completions', 'list_training_plans',
+      'query_planned_workouts_by_date', 'get_planned_workout_completions', 'list_training_plans', 'get_training_calendar_rest_days',
     ]);
     expect(read.mock.calls.find(([name]) => name === 'query_metric')?.[1])
       .toMatchObject({ metric: DataDuration.type, aggregation: 'total', interval: 'daily',
@@ -286,7 +301,7 @@ describe('daily workout context', () => {
     const read = vi.fn(async (name: string, args: Record<string, unknown>) =>
       name === 'get_training_metric'
         ? { metricKind: args.metricKind, payload: {} }
-        : base(name));
+        : base(name, args));
     const result = await collectDailyWorkoutContext({ now: NOW, timeZone: 'Europe/Helsinki',
       timelineNotesEnabled: false, trainingPlansEnabled: false, read: read as never });
     expect(read.mock.calls.map(([name]) => name)).not.toContain('query_timeline_notes');
@@ -298,7 +313,7 @@ describe('daily workout context', () => {
   it('keeps missing records distinct from incomplete reads in the readable summary', async () => {
     const base = fixtureRead();
     const read = vi.fn(async (name: string, args: Record<string, unknown>) =>
-      name === 'get_training_metric' ? { metricKind: args.metricKind, payload: {} } : base(name));
+      name === 'get_training_metric' ? { metricKind: args.metricKind, payload: {} } : base(name, args));
     const result = await collectDailyWorkoutContext({ now: NOW, timeZone: 'Europe/Helsinki',
       timelineNotesEnabled: true, trainingPlansEnabled: true, read: read as never });
     result.activitiesToday.scanComplete = false;
@@ -322,7 +337,7 @@ describe('daily workout context', () => {
         ? { scheduleRevision: 7, completions: [{ workoutRef: 'wrong-ref', state: 'unlinked' }] }
         : name === 'get_training_metric'
           ? { metricKind: args.metricKind, payload: {} }
-          : base(name));
+          : base(name, args));
     await expect(collectDailyWorkoutContext({ now: NOW, timeZone: 'Europe/Helsinki',
       timelineNotesEnabled: false, trainingPlansEnabled: true, read: read as never }))
       .rejects.toThrow('incomplete planned workout completion evidence');
@@ -339,7 +354,7 @@ describe('daily workout context', () => {
           title: 'Past illness', details: null, startDate: '2026-09-04', endDate: '2026-09-10',
           effectiveEndDate: '2026-09-10', timeZone: 'Europe/Helsinki' }] };
       if (name === 'get_training_metric') return { metricKind: args.metricKind, payload: {} };
-      return base(name);
+      return base(name, args);
     });
     const result = await collectDailyWorkoutContext({ now: NOW, timeZone: 'Europe/Helsinki',
       timelineNotesEnabled: true, trainingPlansEnabled: false, read: read as never });
@@ -351,9 +366,9 @@ describe('daily workout context', () => {
 
   it('does not label a prepared but unavailable Training snapshot as read', async () => {
     const base = fixtureRead();
-    const read = vi.fn(async (name: string) => name === 'prepare_training_metrics'
+    const read = vi.fn(async (name: string, args: Record<string, unknown> = {}) => name === 'prepare_training_metrics'
       ? { status: 'unavailable', readyMetricKinds: [] }
-      : base(name));
+      : base(name, args));
     const result = await collectDailyWorkoutContext({ now: NOW, timeZone: 'Europe/Helsinki',
       timelineNotesEnabled: false, trainingPlansEnabled: false, read: read as never });
     expect(result.trainingSnapshots).toMatchObject({ form: null, rampRate: null,

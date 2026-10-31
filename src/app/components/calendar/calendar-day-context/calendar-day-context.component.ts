@@ -3,7 +3,6 @@ import type { EventRead } from '@shared/event-read';
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import type { MatMenu } from '@angular/material/menu';
-import { isTrainingLocalDateWithinPlan, type TrainingPlanV1 } from '@shared/training-plans';
 import { Router } from '@angular/router';
 import { ViewportScroller } from '@angular/common';
 import { isTimelineNoteVisible, timelineNoteOverlaps, TIMELINE_NOTE_LABELS } from '@shared/timeline-notes';
@@ -153,33 +152,19 @@ export class CalendarDayContextComponent {
   readonly canPlan = computed(() => this.data().planningEnabled !== false && this.users.user()?.uid === this.data().userId);
   readonly restDaySaving = signal(false);
   private restDayGeneration = 0;
-  private readonly restDayAcknowledgement = signal<{ uid: string; date: string; plan: TrainingPlanV1 } | null>(null);
-  private readonly restDayScope = computed(() => JSON.stringify([this.canPlan() ? this.data().userId : null,
-    this.data().day.dateKey, this.data().scheduleSource?.()?.state.activePlanId]));
-  private readonly resetRestDayAction = effect(() => {
-    this.restDayScope(); this.restDayGeneration++;
-    this.restDaySaving.set(false); this.restDayAcknowledgement.set(null);
-  });
-  private readonly restDaySchedule = computed(() => {
-    const schedule = this.data().scheduleSource?.(), ack = this.restDayAcknowledgement();
-    if (!schedule || !ack || !this.canPlan() || ack.uid !== this.data().userId || ack.date !== this.data().day.dateKey
-      || schedule.state.activePlanId !== ack.plan.id) return schedule;
-    const live = schedule.plans.find(plan => plan.id === ack.plan.id);
-    return live && live.revision < ack.plan.revision
-      ? { ...schedule, plans: schedule.plans.map(plan => plan.id === ack.plan.id ? ack.plan : plan) } : schedule;
-  });
-  readonly restDayPlan = computed(() => {
-    if (!this.canPlan() || this.plannedStatus() !== 'ready') return null;
-    const schedule = this.restDaySchedule();
-    if (!schedule || schedule.restoreUnavailable) return null;
-    return schedule.plans.find(plan => plan.id === schedule.state.activePlanId && plan.lifecycle === 'active'
-      && isTrainingLocalDateWithinPlan(this.data().day.dateKey, plan)) ?? null;
-  });
+  private readonly restDayScope = computed(() => JSON.stringify([this.canPlan() ? this.data().userId : null, this.data().day.dateKey]));
+  private readonly resetRestDayAction = effect(() => { this.restDayScope(); this.restDayGeneration++; this.restDaySaving.set(false); });
+  readonly calendarRestDay = computed(() => this.canPlan()
+    ? this.data().scheduleSource?.()?.restDays?.find(record => record.localDate === this.data().day.dateKey) ?? null : null);
   readonly restDayBlockedReason = computed(() => {
-    if (!this.plannedWorkoutsComplete() || this.restDaySchedule()?.workoutsComplete === false) return 'Wait for the day’s schedule to finish loading.';
-    return this.restDaySchedule()?.workouts.some(workout => workout.planId === this.restDayPlan()?.id
-      && workout.localDate === this.data().day.dateKey && workout.lifecycle === 'planned')
-      ? 'Move, skip or remove this plan’s workouts on the date first.' : '';
+    const schedule = this.data().scheduleSource?.();
+    return this.plannedStatus() !== 'ready' || !schedule || schedule.restoreUnavailable || schedule.restDays === undefined
+      ? 'Wait for the day’s rest information to finish loading.' : '';
+  });
+  readonly planRestDay = computed(() => {
+    if (!this.canPlan() || this.plannedStatus() !== 'ready') return null;
+    const schedule = this.data().scheduleSource?.();
+    return schedule ? buildPlannedWorkoutCalendarOverlay([], schedule.plans, schedule.state.activePlanId)[this.data().day.dateKey]?.restDay ?? null : null;
   });
   readonly planPhase = computed(() => {
     if (!this.canPlan() || this.plannedStatus() !== 'ready') return null;
@@ -188,8 +173,8 @@ export class CalendarDayContextComponent {
   });
   readonly plannedRestDay = computed(() => {
     if (!this.canPlan() || this.plannedStatus() !== 'ready') return null;
-    const schedule = this.restDaySchedule();
-    return schedule ? buildPlannedWorkoutCalendarOverlay([], schedule.plans, schedule.state.activePlanId)[this.data().day.dateKey]?.restDay ?? null : null;
+    const schedule = this.data().scheduleSource?.();
+    return schedule ? buildPlannedWorkoutCalendarOverlay([], schedule.plans, schedule.state.activePlanId, [], true, schedule.restDays)[this.data().day.dateKey]?.restDay ?? null : null;
   });
   readonly healthState = signal<HealthState>({ status: 'loading', dateKey: null, ownerUid: null, summary: null, sleepPoint: null });
   readonly sleepFacts = computed(() => {
@@ -316,37 +301,32 @@ export class CalendarDayContextComponent {
   }
 
   openRestDayPlan(): void {
-    const rest = this.plannedRestDay();
-    if (!this.canPlan() || !rest) return;
+    const rest = this.planRestDay();
+    if (!this.canPlan() || !rest?.planId) return;
     this.prepareNavigation();
     void this.router.navigate(['/training/plans/plan', rest.planId], { queryParams: { date: this.data().day.dateKey } });
   }
 
-  async markRestDay(): Promise<void> {
-    const plan = this.restDayPlan(), schedule = this.restDaySchedule(), data = this.data();
-    if (!plan || !schedule || this.plannedRestDay() || this.restDayBlockedReason() || this.restDaySaving()
-      || !this.dayWorkouts.isOwner(data.userId)) return;
+  async markRestDay(isRestDay = true): Promise<void> {
+    const data = this.data(), record = this.calendarRestDay();
+    if (!this.canPlan() || this.restDayBlockedReason() || this.restDaySaving()
+      || (record?.isRestDay ?? false) === isRestDay || !this.dayWorkouts.isOwner(data.userId)) return;
     const generation = this.restDayGeneration;
     const current = () => !this.destroy.destroyed && generation === this.restDayGeneration && this.canPlan()
       && this.data().userId === data.userId && this.data().day.dateKey === data.day.dateKey
-      && this.restDayPlan()?.id === plan.id && this.dayWorkouts.isOwner(data.userId);
+      && !this.restDayBlockedReason() && this.dayWorkouts.isOwner(data.userId);
     this.restDaySaving.set(true);
     try {
-      const response = await this.plans.mutate({ mutationId: this.plans.createMutationId('set-plan-rest-days'),
-        expectedRevisions: [{ scope: 'state', id: 'current', revision: schedule.state.revision },
-          { scope: 'plan', id: plan.id, revision: plan.revision }],
-        operation: { kind: 'set-plan-rest-days', planId: plan.id,
-          restDays: [...(plan.restDays ?? []), data.day.dateKey].sort() },
-      }, current);
+      await this.plans.setCalendarRestDay(data.userId, data.day.dateKey, isRestDay, record?.revision ?? 0, current);
       if (!current()) return;
-      const updatedPlan = response.plans.find(item => item.id === plan.id);
-      if (updatedPlan) this.restDayAcknowledgement.set({ uid: data.userId, date: data.day.dateKey, plan: updatedPlan });
       this.haptics.success();
-      this.snackBar.open('Rest day added.', 'Dismiss', { duration: 3000 });
+      const message = isRestDay ? 'Rest day added.' : this.planRestDay()
+        ? 'Calendar rest day removed. Your plan still marks this date as rest.' : 'Rest day removed.';
+      this.snackBar.open(message, 'Dismiss', { duration: 4000 });
     } catch {
       if (!current()) return;
       this.haptics.error();
-      this.snackBar.open('Could not mark this day as rest. Reload the day and try again.', 'Dismiss', { duration: 6000 });
+      this.snackBar.open('Could not update this rest day. Reload the day and try again.', 'Dismiss', { duration: 6000 });
     } finally {
       if (generation === this.restDayGeneration && !this.destroy.destroyed) this.restDaySaving.set(false);
     }

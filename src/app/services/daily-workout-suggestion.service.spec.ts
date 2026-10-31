@@ -1,6 +1,7 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { Subject } from 'rxjs';
+import { BehaviorSubject, Subject, map, tap } from 'rxjs';
+import type { TrainingRestDayV1 } from '@shared/training-rest-days';
 import { Auth } from 'app/firebase/auth';
 import { defaultDayWorkoutControls } from '@shared/day-workout';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
@@ -24,6 +25,9 @@ function setup(saved = storage(), enabled = true, sport = ActivityTypes.Running,
   const auth = { currentUser: { uid: 'owner' } };
   const controls = defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki', sport);
   const user = signal<any>({ uid: 'owner', settings: { appSettings: { dailyWorkoutSuggestion: { enabled, followRoutine: true, controls } } } });
+  const restDay$ = new BehaviorSubject<TrainingRestDayV1 | null>(null);
+  const restChanges = new Subject<{ uid: string; localDate: string; revision: number }>();
+  const restRevisions = new Map<string, number>([['owner|2026-10-30', 0]]);
   const pro = signal(true), revisions = new Subject<{ uid: string; revision: number | null }>();
   const verifiedRevisions = new Map<string, number | null>();
   if (knownRevision !== undefined) verifiedRevisions.set('owner', knownRevision);
@@ -38,14 +42,91 @@ function setup(saved = storage(), enabled = true, sport = ActivityTypes.Running,
     { provide: AppFunctionsService, useValue: { call } }, { provide: AppAnalyticsService, useValue: { logEvent } },
     { provide: AppWindowService, useValue: { windowRef: { sessionStorage: saved } } },
     { provide: TrainingPlansService, useValue: { stateRevisionChanges$: revisions,
-      lastVerifiedStateRevision: (uid: string) => verifiedRevisions.get(uid) } },
+      lastVerifiedStateRevision: (uid: string) => verifiedRevisions.get(uid), calendarRestDayChanges$: restChanges,
+      lastCalendarRestDayRevision: (uid: string, date: string) => restRevisions.get(uid + '|' + date),
+      watchCalendarRestDay: (uid: string, date: string) => restDay$.pipe(map(record => record?.localDate === date ? record : null),
+        tap(record => restRevisions.set(uid + '|' + date, record?.revision ?? 0))) } },
   ] });
   const service = TestBed.inject(DailyWorkoutSuggestionService);
-  return { service, auth, user, pro, revisions, call, updateUserProperties, logEvent, saved, result };
+  return { service, auth, user, pro, revisions, call, updateUserProperties, logEvent, saved, result, restDay$, restChanges, restRevisions,
+    setRest: (record: TrainingRestDayV1) => { restRevisions.set('owner|' + record.localDate, record.revision);
+      restChanges.next({ uid: 'owner', localDate: record.localDate, revision: record.revision }); restDay$.next(record); } };
 }
 afterEach(() => vi.useRealTimers());
 
 describe('DailyWorkoutSuggestionService daily browser cache', () => {
+  it('immediately hides a cached suggestion on calendar rest and reuses the daily result after removal', async () => {
+    const { service, setRest, call, result } = setup(); TestBed.flushEffects();
+    await service.request('owner', 'prepare', () => true);
+    setRest({ schemaVersion: 1, localDate: '2026-10-30', isRestDay: true, revision: 1 });
+    expect(service.cached('owner')?.status?.state).toBe('rest-day');
+    expect((await service.request('owner', 'prepare', () => true)).state).toBe('rest-day');
+    expect(call).toHaveBeenCalledOnce();
+    setRest({ schemaVersion: 1, localDate: '2026-10-30', isRestDay: false, revision: 2 });
+    expect(service.cached('owner')).toBeNull(); call.mockResolvedValueOnce({ data: result() });
+    expect((await service.request('owner', 'status', () => true)).state).toBe('ready');
+    expect(call).toHaveBeenCalledTimes(2);
+    expect(call).toHaveBeenLastCalledWith('generateDayWorkout', { mode: 'daily-suggestion', action: 'status' }, expect.anything());
+  });
+  it('moves the shared rest listener to the new saved-zone date without changing the user object', async () => {
+    const { service, setRest } = setup(); TestBed.flushEffects();
+    await service.request('owner', 'prepare', () => true);
+    vi.setSystemTime(new Date('2026-10-31T07:00Z'));
+    service.cached('owner'); TestBed.flushEffects();
+    setRest({ schemaVersion: 1, localDate: '2026-10-31', isRestDay: true, revision: 1 });
+    expect(service.cached('owner')?.status).toEqual({ localDate: '2026-10-31', state: 'rest-day' });
+  });
+  it('replaces a same-date listener after the authenticated session changes, even if the user object is unchanged', async () => {
+    const { service, auth, setRest } = setup();
+    const watch = vi.spyOn(TestBed.inject(TrainingPlansService), 'watchCalendarRestDay'); TestBed.flushEffects();
+    await service.request('owner', 'prepare', () => true); expect(watch).toHaveBeenCalledTimes(1);
+    auth.currentUser = { uid: 'owner' }; service.cached('owner'); TestBed.flushEffects();
+    expect(watch).toHaveBeenCalledTimes(2);
+    setRest({ schemaVersion: 1, localDate: '2026-10-30', isRestDay: true, revision: 1 });
+    expect(service.cached('owner')?.status?.state).toBe('rest-day');
+  });
+  it.each(['session', 'controls'] as const)('rejects a changed %s while waiting for current calendar evidence', async change => {
+    const { service, auth, user, restRevisions, call } = setup(); restRevisions.clear();
+    const pendingRead = new Subject<TrainingRestDayV1 | null>();
+    vi.spyOn(TestBed.inject(TrainingPlansService), 'watchCalendarRestDay').mockReturnValue(pendingRead);
+    const pending = service.request('owner', 'prepare', () => true);
+    if (change === 'session') auth.currentUser = { uid: 'owner' };
+    else user.update(value => ({ ...value, settings: { appSettings: { dailyWorkoutSuggestion: {
+      ...value.settings.appSettings.dailyWorkoutSuggestion, followRoutine: false } } } }));
+    pendingRead.next(null); await expect(pending).rejects.toThrow('changed'); expect(call).not.toHaveBeenCalled();
+  });
+  it('keeps a recovered day listener after an explicit retry, without retrying from cache reads', async () => {
+    const { service, restDay$, restRevisions, call } = setup(); TestBed.flushEffects();
+    await service.request('owner', 'prepare', () => true);
+    restRevisions.clear(); restDay$.error(new Error('Read failed'));
+    const watch = vi.spyOn(TestBed.inject(TrainingPlansService), 'watchCalendarRestDay');
+    service.cached('owner'); TestBed.flushEffects(); expect(watch).not.toHaveBeenCalled();
+    const recovered$ = new BehaviorSubject<TrainingRestDayV1 | null>(null);
+    watch.mockImplementation((uid, date) => recovered$.pipe(tap(record => restRevisions.set(uid + '|' + date, record?.revision ?? 0))));
+    await service.request('owner', 'status', () => true); expect(watch).toHaveBeenCalledOnce();
+    expect(recovered$.observed).toBe(true);
+    recovered$.next({ schemaVersion: 1, localDate: '2026-10-30', isRestDay: true, revision: 1 });
+    expect(service.cached('owner')?.status?.state).toBe('rest-day'); expect(call).toHaveBeenCalledTimes(2);
+  });
+  it('withholds a restored recipe until current calendar rest intent has been verified', async () => {
+    const first = setup(); await first.service.request('owner', 'prepare', () => true);
+    const next = setup(first.saved); next.restRevisions.clear();
+    const evidence = new Subject<TrainingRestDayV1 | null>();
+    TestBed.inject(TrainingPlansService).watchCalendarRestDay = () => evidence.pipe(tap(record => next.restRevisions.set('owner|2026-10-30', record?.revision ?? 0)));
+    expect(next.service.cached('owner')).toBeNull();
+    const pending = next.service.request('owner', 'prepare', () => true); expect(next.call).not.toHaveBeenCalled();
+    evidence.next(null); expect((await pending).state).toBe('ready'); expect(next.call).not.toHaveBeenCalled();
+  });
+  it('preserves dismissal and ignores calendar revisions for other owners or dates', async () => {
+    const { service, restChanges, setRest, call } = setup(); TestBed.flushEffects();
+    await service.request('owner', 'prepare', () => true);
+    restChanges.next({ uid: 'other', localDate: '2026-10-30', revision: 5 });
+    restChanges.next({ uid: 'owner', localDate: '2026-10-31', revision: 5 });
+    expect(service.cached('owner')?.status?.state).toBe('ready');
+    service.remember('owner', { localDate: '2026-10-30', state: 'dismissed' });
+    setRest({ schemaVersion: 1, localDate: '2026-10-30', isRestDay: true, revision: 1 });
+    expect(service.cached('owner')?.status?.state).toBe('dismissed'); expect(call).toHaveBeenCalledOnce();
+  });
   it('defaults off with all data selected, persists preferences and fences account changes', async () => {
     const { service, auth, user, updateUserProperties, call, logEvent } = setup(storage(), false);
     const preferences = service.preferences();
@@ -87,6 +168,72 @@ describe('DailyWorkoutSuggestionService daily browser cache', () => {
     expect(call).toHaveBeenCalledOnce(); expect(call.mock.calls[0][2].canExecute()).toBe(true);
     finish({ data: result() });
     expect(await first).toBe(await second); expect(service.cached('owner')?.status?.state).toBe('ready');
+  });
+  it.each(['prepare', 'use-available-data'] as const)('joins in-flight %s when a recreated view refreshes status', async action => {
+    const { service, call, result } = setup();
+    let finish!: (value: { data: DailyWorkoutSuggestionStatus }) => void;
+    call.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const generation = service.request('owner', action, () => true, action === 'use-available-data' ? '2026-10-30' : undefined);
+    const status = service.request('owner', 'status', () => true, undefined, true);
+    expect(call).toHaveBeenCalledOnce(); finish({ data: result() });
+    expect(await status).toBe(await generation); expect(service.cached('owner')?.status?.state).toBe('ready');
+  });
+  it.each(['prepare', 'use-available-data'] as const)('waits for an older status request before dispatching %s', async action => {
+    const { service, call, result } = setup();
+    let finishStatus!: (value: { data: DailyWorkoutSuggestionStatus }) => void;
+    let finishGeneration!: (value: { data: DailyWorkoutSuggestionStatus }) => void;
+    call.mockImplementationOnce(() => new Promise(resolve => { finishStatus = resolve; }));
+    call.mockImplementationOnce(() => new Promise(resolve => { finishGeneration = resolve; }));
+    const status = service.request('owner', 'status', () => true);
+    const generation = service.request('owner', action, () => true, action === 'use-available-data' ? '2026-10-30' : undefined);
+    expect(call).toHaveBeenCalledOnce();
+    finishStatus({ data: { localDate: '2026-10-30', state: 'waiting-sleep' } }); await status;
+    await vi.waitFor(() => expect(call).toHaveBeenCalledTimes(2)); finishGeneration({ data: result() });
+    expect((await generation).state).toBe('ready'); expect(service.cached('owner')?.status?.state).toBe('ready');
+  });
+  it('queues the explicit available-data choice after a pending sleep check', async () => {
+    const { service, call, result } = setup();
+    let finish!: (value: { data: DailyWorkoutSuggestionStatus }) => void;
+    call.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const check = service.request('owner', 'prepare', () => true);
+    const fallback = service.request('owner', 'use-available-data', () => true, '2026-10-30');
+    expect(call).toHaveBeenCalledOnce(); finish({ data: { localDate: '2026-10-30', state: 'waiting-sleep' } }); await check;
+    expect((await fallback).state).toBe('ready'); expect(call).toHaveBeenCalledTimes(2);
+    expect(call).toHaveBeenLastCalledWith('generateDayWorkout', { mode: 'daily-suggestion', action: 'use-available-data', localDate: '2026-10-30' }, expect.anything());
+    expect(service.cached('owner')?.status).toEqual(result());
+  });
+  it('shares an explicit available-data generation with a later automatic preparation', async () => {
+    const { service, call, result } = setup();
+    let finish!: (value: { data: DailyWorkoutSuggestionStatus }) => void;
+    call.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const explicit = service.request('owner', 'use-available-data', () => true, '2026-10-30');
+    const automatic = service.request('owner', 'prepare', () => true);
+    expect(call).toHaveBeenCalledOnce(); finish({ data: result() }); expect(await automatic).toBe(await explicit);
+  });
+  it.each(['rest', 'dismiss'] as const)('does not dispatch queued generation after %s supersedes the pending read', async change => {
+    const { service, call, setRest } = setup(); TestBed.flushEffects();
+    let finish!: (value: { data: DailyWorkoutSuggestionStatus }) => void;
+    call.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const status = service.request('owner', 'status', () => true);
+    const generation = service.request('owner', 'prepare', () => true);
+    if (change === 'rest') setRest({ schemaVersion: 1, localDate: '2026-10-30', isRestDay: true, revision: 1 });
+    else {
+      call.mockResolvedValueOnce({ data: { localDate: '2026-10-30', state: 'dismissed' } });
+      await service.request('owner', 'dismiss', () => true, '2026-10-30');
+    }
+    finish({ data: { localDate: '2026-10-30', state: 'waiting' } });
+    const results = await Promise.allSettled([status, generation]); expect(results.every(result => result.status === 'rejected')).toBe(true);
+    expect(call).toHaveBeenCalledTimes(change === 'rest' ? 1 : 2);
+    expect(service.cached('owner')?.status?.state).toBe(change === 'rest' ? 'rest-day' : 'dismissed');
+  });
+  it('joins a pending dismissal instead of reading and caching an older status', async () => {
+    const { service, call } = setup();
+    let finish!: (value: { data: DailyWorkoutSuggestionStatus }) => void;
+    call.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const dismissal = service.request('owner', 'dismiss', () => true, '2026-10-30');
+    const status = service.request('owner', 'status', () => true, undefined, true);
+    expect(call).toHaveBeenCalledOnce(); finish({ data: { localDate: '2026-10-30', state: 'dismissed' } });
+    expect(await status).toBe(await dismissal); expect(service.cached('owner')?.status?.state).toBe('dismissed');
   });
   it.each(['planned', 'completed', 'rest-day', 'dismissed', 'failed', 'waiting-sleep'] as const)('caches %s without repeated status reads', async state => {
     const first = setup(); first.call.mockResolvedValue({ data: { localDate: '2026-10-30', state } });

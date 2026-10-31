@@ -469,6 +469,7 @@ const trainingReadFixtures = {
      nodes: [{ kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'time', seconds: 1800 }, targets: [] }] } } },
  list_training_plans: { scheduleRevision: 1, scanComplete: true, recordsScanned: 1, limitsReached: [], nextCursor: null, plans: [{ planRef: 'opaque-plan-reference', name: 'Autumn', lifecycle: 'active', startDate: '2026-07-01', endDate: '2026-07-02', revision: 1, currentWorkoutCount: 1, color: null, createdAtMs: 1, updatedAtMs: 1 }] },
  get_training_plan: { scheduleRevision: 1, plan: { planRef: 'opaque-plan-reference', name: 'Autumn', lifecycle: 'active', startDate: '2026-07-01', endDate: '2026-07-02', revision: 1, currentWorkoutCount: 1, color: null, createdAtMs: 1, updatedAtMs: 1 } },
+ get_training_calendar_rest_days: { startDate: '2026-07-01', endDate: '2026-07-02', scanComplete: true, restDays: ['2026-07-02'] },
  get_training_plan_rest_days: { scheduleRevision: 1, planRef: 'opaque-plan-reference', planRevision: 1,
    startDate: '2026-07-01', endDate: '2026-07-02', restDays: ['2026-07-02'] },
  get_training_plan_phases: { scheduleRevision: 1, planRef: 'opaque-plan-reference', planRevision: 1,
@@ -601,6 +602,9 @@ const service = {
     readTrainingPlans: vi.fn(async (input: { tool: TrainingReadTool }) => trainingReadFixtures[input.tool]),
     previewCreatePlannedWorkout: vi.fn().mockResolvedValue(trainingPreviewFixture),
     previewTrainingChanges: vi.fn().mockResolvedValue(trainingPreviewFixture),
+    previewTrainingCalendarRestDay: vi.fn().mockResolvedValue({ ...trainingPreviewFixture,
+      calendarRestDayReview: { localDate: '2026-07-02', before: false, after: true },
+      changes: [{ index: 0, kind: 'set-calendar-rest-day', summary: 'Mark calendar rest date.' }] }),
     previewTrainingRestDays: vi.fn().mockResolvedValue({ ...trainingPreviewFixture,
       restDayReview: { planName: 'Autumn', startDate: '2026-07-01', endDate: '2026-07-02', before: [], after: ['2026-07-02'] },
       changes: [{ index: 0, kind: 'set-plan-rest-days', summary: 'Replace rest days in the selected plan.' }] }),
@@ -1416,7 +1420,9 @@ const successfulToolArguments: Record<
   list_training_plans: {},
   get_training_plan: { planRef: 'opaque-plan-reference' },
   get_training_plan_phases: { planRef: 'opaque-plan-reference' },
+  get_training_calendar_rest_days: { startDate: '2026-07-01', endDate: '2026-07-02' },
   get_training_plan_rest_days: { planRef: 'opaque-plan-reference' },
+  preview_training_calendar_rest_day: { localDate: '2026-07-02', isRestDay: true },
   preview_training_rest_days: { expectedScheduleRevision: 1, change: { kind: 'set-plan-rest-days',
     plan: { ref: 'opaque-plan-reference' }, expectedPlanRevision: 1, restDays: ['2026-07-02'] } },
   preview_training_plan_phases: { expectedScheduleRevision: 1, change: { kind: 'set-plan-phases',
@@ -2113,7 +2119,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     const planWriteTools = tools.filter(tool => (TRAINING_WRITE_TOOLS as readonly string[]).includes(tool.name));
     const planWriteExtensions = planWriteTools.filter(tool => (TRAINING_WRITE_EXTENSION_TOOLS as readonly string[]).includes(tool.name)
       && tool.name !== 'preview_planned_workout_v2_change' && tool.name !== 'preview_saved_workout_change'
-      && !['preview_training_rest_days', 'preview_training_plan_phases', 'preview_training_deletion', 'preview_garmin_workout_replacement', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes', 'preview_saved_workout_v2_change'].includes(tool.name));
+      && !['preview_training_calendar_rest_day', 'preview_training_rest_days', 'preview_training_plan_phases', 'preview_training_deletion', 'preview_garmin_workout_replacement', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes', 'preview_saved_workout_v2_change'].includes(tool.name));
     const planDeletionPreview = planWriteTools.filter(tool => tool.name === 'preview_training_deletion');
     const planWriteV2 = planWriteTools.filter(tool => tool.name === 'preview_planned_workout_v2_change');
     const planWriteLibrary = planWriteTools.filter(tool => tool.name === 'preview_saved_workout_change');
@@ -2124,7 +2130,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => tool.name === 'preview_garmin_workout_replacement')), 'utf8')).toBeLessThan(6 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planWriteV2), 'utf8')).toBeLessThan(20 * 1024);
     expect(Buffer.byteLength(JSON.stringify(planWriteLibrary), 'utf8')).toBeLessThan(24 * 1024);
-    for (const name of ['get_training_plan_rest_days', 'preview_training_rest_days', 'get_training_plan_phases', 'preview_training_plan_phases', 'get_planned_workout_v3', 'get_saved_workout_v2', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes', 'preview_saved_workout_v2_change']) {
+    for (const name of ['preview_training_calendar_rest_day', 'get_training_plan_rest_days', 'preview_training_rest_days', 'get_training_plan_phases', 'preview_training_plan_phases', 'get_planned_workout_v3', 'get_saved_workout_v2', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes', 'preview_saved_workout_v2_change']) {
       expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => tool.name === name)), 'utf8')).toBeLessThan(24 * 1024);
     }
     const applyTrainingChangesTool = tools.find(tool => tool.name === 'apply_training_changes');
@@ -3063,6 +3069,30 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       const result = await connection.client.callTool({ name: 'get_training_plan_rest_days', arguments: args });
       expect(result.isError).toBe(true); expect(result).not.toHaveProperty('structuredContent');
       expect(JSON.stringify(result)).not.toContain('private-rest-canary');
+    }
+  });
+
+  it('requires calendar rest grants, strict date/boolean inputs and a private-field-free review on every transport', async () => {
+    const service = createFixtureDataService();
+    for (const scopes of [[], [MCP_OAUTH_SCOPES.TrainingPlansRead], [MCP_OAUTH_SCOPES.TrainingPlansWrite],
+      [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingDeliveryWrite]]) {
+      const denied = await connectFixtureServer(service, scopes); connections.push(denied);
+      expect((await denied.client.listTools()).tools.map(tool => tool.name)).not.toContain('preview_training_calendar_rest_day');
+    }
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite]); connections.push(connection);
+    const args = successfulToolArguments.preview_training_calendar_rest_day;
+    for (const patch of [{ uid: 'other' }, { isRestDay: 'true' }, { localDate: '2026-02-29' }, { planRef: 'private' }]) {
+      expect((await connection.client.callTool({ name: 'preview_training_calendar_rest_day', arguments: { ...args, ...patch } })).isError).toBe(true);
+    }
+    expect(service.previewTrainingCalendarRestDay).not.toHaveBeenCalled();
+    const safe = await service.previewTrainingCalendarRestDay({ uid: 'fixture', connectionId: 'fixture', scopes: [], arguments: {} });
+    for (const invalid of [{ ...safe, calendarRestDayReview: undefined },
+      { ...safe, calendarRestDayReview: { ...safe.calendarRestDayReview, revision: 3, providerId: 'private-calendar-canary' } },
+      { ...safe, calendarRestDayReview: { ...safe.calendarRestDayReview, after: 'true' } }]) {
+      service.previewTrainingCalendarRestDay = vi.fn().mockResolvedValue(invalid);
+      const result = await connection.client.callTool({ name: 'preview_training_calendar_rest_day', arguments: args });
+      expect(result.isError).toBe(true); expect(result).not.toHaveProperty('structuredContent');
+      expect(JSON.stringify(result)).not.toContain('private-calendar-canary');
     }
   });
 

@@ -47,6 +47,17 @@ const PLAN: TrainingPlanV1 = {
 };
 
 describe('planned workout calendar overlay', () => {
+  it('shows standalone rest intent without a plan, preserves workouts and ignores removed markers', () => {
+    const source = workout('standalone');
+    const result = buildPlannedWorkoutCalendarOverlay([source], [], null, [], true, [
+      { schemaVersion: 1, localDate: source.localDate, isRestDay: true, revision: 1 },
+      { schemaVersion: 1, localDate: '2026-09-03', isRestDay: false, revision: 2 },
+    ]);
+    expect(result[source.localDate].restDay).toEqual({ planId: null, planName: 'Calendar', color: STANDALONE_WORKOUT_COLOR });
+    expect(result[source.localDate].entries.map(entry => entry.workout)).toEqual([source]);
+    expect(result[source.localDate].ariaLabel).toContain('Rest day, Calendar');
+    expect(result['2026-09-03']).toBeUndefined();
+  });
   it('shows active-plan rest days independently of workouts and preserves standalone entries', () => {
     const active = { ...PLAN, restDays: ['2026-09-01', '2026-09-02'] };
     const overlay = buildPlannedWorkoutCalendarOverlay([workout('standalone')], [active], active.id);

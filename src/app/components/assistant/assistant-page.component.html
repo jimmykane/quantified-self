@@ -244,6 +244,14 @@
                 }
               </section>
             }
+            @if (proposal.calendarRestDayReview; as review) {
+              <section aria-label="Review calendar rest day" class="training-phase-review">
+                <h3>Calendar · {{ review.localDate | date:'mediumDate' }}</h3>
+                <p>Current: {{ review.before ? 'Rest day' : 'No calendar rest marker' }}</p>
+                <p>Proposed: {{ review.after ? 'Rest day' : 'No calendar rest marker' }}</p>
+                <p>Plan rest days and existing workouts stay unchanged.</p>
+              </section>
+            }
             @if (proposal.restDayReview; as review) {
               <section aria-label="Review plan rest days" class="training-phase-review">
                 <h3>{{ review.planName }}</h3>

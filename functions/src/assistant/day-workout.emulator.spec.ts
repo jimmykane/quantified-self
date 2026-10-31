@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Firestore } from 'firebase-admin/firestore';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { defaultDayWorkoutControls, type GenerateDayWorkoutResponse } from '../../../shared/day-workout';
 import { projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
@@ -10,6 +10,8 @@ import { readDayWorkoutTrainingContext } from './day-workout-context';
 import { validateDayWorkoutSuggestion } from './day-workout-validation';
 import { createFirestoreTrainingReads, readTrainingPlans } from '../mcp/training-plans.service';
 import { TRAINING_READ_OUTPUTS, type TrainingReadTool } from '../mcp/training-plans.schemas';
+import { collectDailyWorkoutSuggestionCoverage, runDailyWorkoutSuggestion, type DailyWorkoutSuggestionDependencies } from './daily-workout-suggestion';
+import type { AssistantMcpSession } from './mcp-session';
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation private state and existing MCP read-back', () => {
   if (process.env.FIRESTORE_EMULATOR_HOST && !/^(127\.0\.0\.1|localhost):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST)) throw Error('Loopback emulator required');
@@ -18,6 +20,43 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
   const controls = defaultDayWorkoutControls('2026-10-28', 'Europe/Helsinki');
   const response = (requestId: string): GenerateDayWorkoutResponse => ({ requestId, observedAt: '2026-10-28T12:00:00Z',
     kind: 'rest', rationale: 'Rest suggestion.', draft: null, usedContext: [], missingContext: [], previousLoads: [] });
+  it('honors standalone calendar rest without a plan and restores the same charged daily result after removal', async () => {
+    const uid = `calendar-rest-${randomUUID()}`, user = db.collection('users').doc(uid);
+    const now = new Date('2026-10-28T08:00Z');
+    const selected = { ...defaultDayWorkoutControls('2026-10-28', 'UTC'), sleepContext: false };
+    await user.set({});
+    await user.collection('config').doc('settings').set({ appSettings: { dailyWorkoutSuggestion: { enabled: true, followRoutine: false, controls: selected } } });
+    await user.collection('mcpConnections').doc('calendar-reader').set({ scopes: ['training-plans:read'], status: 'active', grantId: 'grant', createdAtMs: 1 });
+    const marker = user.collection('trainingRestDays').doc(selected.localDate);
+    const reads = createFirestoreTrainingReads(() => db);
+    const read = (tool: TrainingReadTool, args: Record<string, unknown>) => readTrainingPlans({ uid, connectionId: 'calendar-reader',
+      scopes: ['training-plans:read'], tool, arguments: args }, reads, { encode: () => 'unused-ref', decode: () => ({}) }, now.getTime());
+    const callTool: Pick<AssistantMcpSession, 'callTool'>['callTool'] = async (name, args = {}) => ({ structuredContent: name === 'query_activities'
+      ? { scanComplete: true, activities: [] } : await read(name as TrainingReadTool, args) });
+    const generate = vi.fn(async () => ({ kind: 'rest' as const, rationale: 'A recovery day.' }));
+    const deps: DailyWorkoutSuggestionDependencies = { store: createDailyWorkoutSuggestionStore(() => db, () => now), now: () => now,
+      legal: async () => undefined, pro: async () => true, selectSport: async () => selected,
+      coverage: async () => collectDailyWorkoutSuggestionCoverage(selected, { callTool }),
+      context: async () => ({ evidence: { daily: { activitiesToday: { scanComplete: true, activities: [] },
+        plannedWorkouts: { scanComplete: true, completionChecked: true, workouts: [], restDayContext: { status: 'none' } } } },
+      usedContext: [], missingContext: [], previousStrength: [], references: [] }), generate, log: () => undefined };
+    const input = { mode: 'daily-suggestion', action: 'prepare' }, identity = { auth: { uid }, app: {} };
+    try {
+      await marker.set({ schemaVersion: 1, localDate: selected.localDate, isRestDay: true, revision: 1, privateCanary: 'DO-NOT-EXPOSE' });
+      expect(await read('get_training_calendar_rest_days', { startDate: selected.localDate, endDate: selected.localDate }))
+        .toEqual({ startDate: selected.localDate, endDate: selected.localDate, scanComplete: true, restDays: [selected.localDate] });
+      expect((await runDailyWorkoutSuggestion(input, identity, deps)).state).toBe('rest-day'); expect(generate).not.toHaveBeenCalled();
+      await marker.update({ isRestDay: false, revision: 2 });
+      const ready = await runDailyWorkoutSuggestion(input, identity, deps); expect(ready.state).toBe('ready'); expect(generate).toHaveBeenCalledOnce();
+      await marker.update({ isRestDay: true, revision: 3 });
+      expect((await runDailyWorkoutSuggestion(input, identity, deps)).state).toBe('rest-day');
+      await marker.update({ isRestDay: false, revision: 4 });
+      expect(await runDailyWorkoutSuggestion(input, identity, deps)).toEqual(ready); expect(generate).toHaveBeenCalledOnce();
+      expect((await deps.store.read(uid)).status).toEqual(ready);
+      await user.collection('mcpConnections').doc('calendar-reader').update({ status: 'revoked' });
+      await expect(read('get_training_calendar_rest_days', { startDate: selected.localDate, endDate: selected.localDate })).rejects.toThrow();
+    } finally { await db.recursiveDelete(user); }
+  });
   it('serializes concurrent generation, replays once, retains tombstones after response eviction, and fences deletion', async () => {
     const uid = `day-generation-${randomUUID()}`; await db.doc(`users/${uid}`).set({});
     let now = Date.parse('2026-10-28T12:00Z'); const store = createDayWorkoutStore(() => db, () => now);

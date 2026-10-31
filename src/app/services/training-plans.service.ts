@@ -47,6 +47,8 @@ import {
   type StrengthWorkoutDetailsV1,
 } from '@shared/strength-workout';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
+import { TrainingRestDaysService } from './training-rest-days.service';
+import type { TrainingRestDayV1 } from '@shared/training-rest-days';
 import {
   TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID,
   parseTrainingWorkoutCompletionV1,
@@ -61,6 +63,8 @@ export interface CurrentTrainingScheduleV1 {
   restoreUnavailable?: true;
   /** Calendar-only bounded-read coverage; never persisted or exposed through MCP. */
   workoutsComplete?: boolean;
+  /** Complete bounded Calendar intent, including retained false revisions. Never part of plan history. */
+  restDays?: TrainingRestDayV1[];
 }
 
 export interface DeletedTrainingWorkoutsPageV1 {
@@ -108,6 +112,13 @@ export class TrainingPlansService {
   /** Last independently verified revision only; this never starts a read or supplies mutation authority. */
   lastVerifiedStateRevision(uid: string): number | null | undefined { return this.verifiedStateRevisions.get(uid); }
   private readonly firestore = inject(Firestore);
+  private readonly restDays = inject(TrainingRestDaysService);
+  readonly calendarRestDayChanges$ = this.restDays.changes$;
+  watchCalendarRestDay(uid: string, localDate: string): Observable<TrainingRestDayV1 | null> { return this.restDays.watchDay(uid, localDate); }
+  lastCalendarRestDayRevision(uid: string, localDate: string): number | undefined { return this.restDays.lastRevision(uid, localDate); }
+  setCalendarRestDay(uid: string, localDate: string, isRestDay: boolean, expectedRevision: number, current: () => boolean): Promise<TrainingRestDayV1 | null> {
+    return this.restDays.setDay(uid, localDate, isRestDay, expectedRevision, current);
+  }
   private readonly functions = inject(AppFunctionsService);
   private readonly browserCompatibility = inject(BrowserCompatibilityService);
   private readonly scheduleStreams = new Map<string, Observable<CurrentTrainingScheduleV1>>();
@@ -161,7 +172,7 @@ export class TrainingPlansService {
     const availabilityRef = doc(this.firestore, 'users', userId, TRAINING_PLAN_STATE_COLLECTION_ID,
       TRAINING_PLAN_STATE_DOCUMENT_ID, 'availability', 'restore');
     const workoutsRef = collection(this.firestore, 'users', userId, SCHEDULED_WORKOUTS_COLLECTION_ID);
-    return docData(availabilityRef, { waitForServer: true }).pipe(
+    const schedule$ = docData(availabilityRef, { waitForServer: true }).pipe(
       timeout({ first: TRAINING_SCHEDULE_STATE_READ_TIMEOUT_MS }),
       switchMap(availability => {
         if (availability !== undefined) return of({ ...emptyTrainingSchedule(), restoreUnavailable: true as const });
@@ -195,6 +206,9 @@ export class TrainingPlansService {
           )),
         );
       }),
+    );
+    return combineLatest([schedule$, this.restDays.watchRange(userId, startLocalDate, endLocalDate)]).pipe(
+      map(([schedule, restDays]) => ({ ...schedule, restDays })),
     );
   }
 

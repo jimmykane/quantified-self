@@ -456,6 +456,33 @@ service cloud.firestore {
           allow write: if false;
         }
 
+        // Standalone calendar intent. It changes no workout, plan, provider consent or AI allowance.
+        match /trainingRestDays/{localDate} {
+          function validRestDay() {
+            let value = request.resource.data;
+            let parts = localDate.split('-');
+            let year = int(parts[0]);
+            let month = int(parts[1]);
+            let day = int(parts[2]);
+            let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+            let days = month == 2 ? (leap ? 29 : 28) : (month in [4, 6, 9, 11] ? 30 : 31);
+            return localDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+              && year >= 100 && month >= 1 && month <= 12 && day >= 1 && day <= days
+              && value.keys().hasAll(['schemaVersion', 'localDate', 'isRestDay', 'revision'])
+              && value.keys().hasOnly(['schemaVersion', 'localDate', 'isRestDay', 'revision'])
+              && value.schemaVersion == 1 && value.localDate == localDate && value.isRestDay is bool
+              && value.revision is int && value.revision > 0 && value.revision <= 9007199254740991;
+          }
+          allow get: if isOwner();
+          allow list: if isOwner() && request.query.limit != null && request.query.limit <= 367;
+          allow create: if isOwner() && exists(/databases/$(database)/documents/users/$(userID)) && mayWriteAccount(userID) && validRestDay()
+            && request.resource.data.revision == 1;
+          allow update: if isOwner() && exists(/databases/$(database)/documents/users/$(userID)) && mayWriteAccount(userID) && validRestDay()
+            && request.resource.data.revision == resource.data.revision + 1;
+          // A retained false marker preserves concurrency/retry fences. Account cleanup remains recursive.
+          allow delete: if false;
+        }
+
         // Current training-plan state is owner-readable for live UI listeners,
         // but every mutation is fenced and validated by App Check callables.
         // Nested revisions, receipts, and deletion locks remain server-only.

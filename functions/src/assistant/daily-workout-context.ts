@@ -176,7 +176,8 @@ export interface DailyWorkoutContext {
   plannedWorkouts: { access: 'enabled' | 'disabled'; scanComplete: boolean | null;
     scheduleRevision: number | null; workouts: RecordValue[]; completionChecked: boolean;
     phaseContext?: { status: 'known' | 'none' | 'unavailable'; planName?: string; name?: string; startDate?: string; endDate?: string };
-    restDayContext?: { status: 'rest' | 'none' | 'unavailable'; planName?: string; localDate?: string } };
+    restDayContext?: { status: 'rest' | 'none' | 'unavailable'; planName?: string; localDate?: string; source?: 'calendar' | 'plan' };
+    calendarRestDayContext?: { status: 'rest' | 'none' | 'unavailable'; localDate?: string } };
   trainingSnapshots: { preparationStatus: string; form: RecordValue | null;
     rampRate: RecordValue | null; trainingSummary: RecordValue | null };
 }
@@ -268,6 +269,18 @@ export async function readDailyWorkoutPlanContext(targetDate: string | null, ena
         }
       }
     } catch { /* Unavailable phase evidence cannot be substituted with an invented phase. */ }
+    try {
+      const calendar = await read('get_training_calendar_rest_days', { startDate: targetDate, endDate: targetDate });
+      if (calendar.startDate !== targetDate || calendar.endDate !== targetDate || calendar.scanComplete !== true) throw Error('Calendar rest-day coverage is unavailable.');
+      const dates = parseTrainingPlanRestDays(calendar.restDays);
+      if (dates.some(date => date !== targetDate)) throw Error('Calendar rest-day dates changed.');
+      plannedWorkouts.calendarRestDayContext = { status: dates.includes(targetDate) ? 'rest' : 'none', localDate: targetDate };
+      if (dates.includes(targetDate)) plannedWorkouts.restDayContext = { status: 'rest', source: 'calendar', planName: 'Calendar', localDate: targetDate };
+    } catch {
+      plannedWorkouts.calendarRestDayContext = { status: 'unavailable' };
+      // Positive plan intent still blocks generation; absence requires both independent reads to succeed.
+      if (plannedWorkouts.restDayContext?.status !== 'rest') plannedWorkouts.restDayContext = { status: 'unavailable' };
+    }
   }
   return plannedWorkouts;
 }
@@ -418,7 +431,8 @@ export function dailyWorkoutFacts(context: DailyWorkoutContext): string {
     facts.push('Planned workouts and linked activities were not checked because Training plans access is off.');
   } else if (targetDate) {
     const rest = context.plannedWorkouts.restDayContext;
-    if (rest?.status === 'rest') facts.push(`**Planned rest day on ${targetDate}:** ${escapeMarkdownText(rest.planName)}. Keep this authored rest day; remove it in Plans before adding a workout to that plan.`);
+    if (rest?.status === 'rest' && rest.source === 'calendar') facts.push(`**Calendar rest day on ${targetDate}:** Keep this authored rest day. Remove the marker in Calendar before recommending a workout for this date.`);
+    else if (rest?.status === 'rest') facts.push(`**Planned rest day on ${targetDate}:** ${escapeMarkdownText(rest.planName)}. Keep this authored rest day; remove it in Plans before adding a workout to that plan.`);
     else if (rest?.status === 'unavailable') facts.push('Planned rest days could not be checked; an empty workout list does not establish a free training day.');
     const phase = context.plannedWorkouts.phaseContext;
     if (phase?.status === 'known') facts.push(`**Plan phase on ${targetDate}:** ${escapeMarkdownText(phase.name)} (${phase.startDate} – ${phase.endDate}). Authored context only; it does not change load or readiness.`);

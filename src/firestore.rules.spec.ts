@@ -33,6 +33,54 @@ describe('Firestore Security Rules', () => {
         await testEnv.clearFirestore();
     });
 
+    describe('Standalone calendar rest days', () => {
+        const path = 'users/rest-owner/trainingRestDays/2026-10-31';
+        const value = { schemaVersion: 1, localDate: '2026-10-31', isRestDay: true, revision: 1 };
+        beforeEach(async () => {
+            await testEnv.withSecurityRulesDisabled(async context => { await context.firestore().doc('users/rest-owner').set({}); });
+        });
+        it('allows an owner to mark/remove intent with retained revisions and bounded reads only', async () => {
+            const db = testEnv.authenticatedContext('rest-owner').firestore();
+            await assertSucceeds(db.doc(path).set(value));
+            await assertSucceeds(db.doc(path).set({ ...value, isRestDay: false, revision: 2 }));
+            await assertSucceeds(db.doc(path).get());
+            await assertSucceeds(db.collection('users/rest-owner/trainingRestDays').limit(367).get());
+            await assertFails(db.collection('users/rest-owner/trainingRestDays').get());
+            await assertFails(db.collection('users/rest-owner/trainingRestDays').limit(368).get());
+            await assertFails(db.doc(path).delete());
+        });
+        it.each([{ ...value, revision: 2 }, { ...value, revision: 1.5 }, { ...value, isRestDay: 'true' },
+            { ...value, planId: 'plan' }, { ...value, localDate: '2026-11-01' }])('rejects malformed or unrelated writes %j', async input => {
+            await assertFails(testEnv.authenticatedContext('rest-owner').firestore().doc(path).set(input));
+        });
+        it.each(['0000-01-01', '0099-12-31', '2026-02-29', '1900-02-29', '2026-04-31', '2026-13-01'])('rejects invalid calendar label %s', async localDate => {
+            await assertFails(testEnv.authenticatedContext('rest-owner').firestore()
+                .doc(`users/rest-owner/trainingRestDays/${localDate}`).set({ ...value, localDate }));
+        });
+        it('accepts a leap day and rejects stale revisions and other readers/writers', async () => {
+            const owner = testEnv.authenticatedContext('rest-owner').firestore();
+            await assertSucceeds(owner.doc(path).set(value)); await assertFails(owner.doc(path).set({ ...value, isRestDay: false }));
+            await assertSucceeds(owner.doc('users/rest-owner/trainingRestDays/2000-02-29').set({ ...value, localDate: '2000-02-29' }));
+            for (const db of [testEnv.authenticatedContext('other').firestore(), testEnv.unauthenticatedContext().firestore()]) {
+                await assertFails(db.doc(path).get()); await assertFails(db.doc(path).set(value));
+            }
+        });
+        it('rejects revisions outside the shared safe-integer contract', async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc(path).set({ ...value, revision: Number.MAX_SAFE_INTEGER });
+            });
+            await assertFails(testEnv.authenticatedContext('rest-owner').firestore().doc(path)
+                .set({ ...value, isRestDay: false, revision: Number.MAX_SAFE_INTEGER + 1 }));
+        });
+        it('fences missing/deleted accounts, including a retained session after deletion starts', async () => {
+            const owner = testEnv.authenticatedContext('rest-owner').firestore();
+            await testEnv.withSecurityRulesDisabled(async context => { await context.firestore().doc('userDeletionTombstones/rest-owner').set({}); });
+            await assertFails(owner.doc(path).set(value));
+            await assertFails(testEnv.authenticatedContext('missing').firestore()
+                .doc('users/missing/trainingRestDays/2026-10-31').set(value));
+        });
+    });
+
     describe('Activity send projections', () => {
         beforeEach(async () => {
             await testEnv.withSecurityRulesDisabled(async context => {

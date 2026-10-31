@@ -16,6 +16,7 @@ import { isStrengthWorkoutSportV1, parseStrengthWorkoutDetailsV1, strengthProjec
 import { parseWorkoutLibraryItemV1 } from '../../../shared/workout-library';
 import { parseTrainingPlanPhasesV1, parseTrainingPlanRestDays, validateTrainingPlanDateRange, validateTrainingPlanPhaseRange } from '../../../shared/training-plans';
 import { isUserDeletionTombstoneActive } from '../shared/user-deletion-guard';
+import { TRAINING_REST_DAYS_COLLECTION, parseTrainingRestDayV1 } from '../../../shared/training-rest-days';
 import { TRAINING_PLANS_SCOPE, TRAINING_READ_INPUTS, TRAINING_READ_OUTPUTS, TRAINING_RECIPE_SCHEMA,
   TRAINING_RECIPE_WITH_POOL_SCHEMA, TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA,
   trainingDate, type TrainingReadResult, type TrainingReadTool } from './training-plans.schemas';
@@ -59,6 +60,7 @@ type Filter = { field: 'planId' | 'workoutId' | 'scopeId' | 'associationPlanId';
 interface WorkoutDateCursor { localDate: string; id: string }
 interface State { revision: number; activePlanId: string | null; libraryRevision?: number; accessGeneration?: string }
 export interface TrainingReadView {
+  calendarRestDays?(startDate: string, endDate: string): Promise<Document[]>;
   getPlanRestDays?(id: string): Promise<Document | null>;
   getPlanPhases?(id: string): Promise<Document | null>;
   get(collection: Collection, id: string, structure?: boolean): Promise<Document | null>;
@@ -112,6 +114,12 @@ export function createFirestoreTrainingReads(database: () => FirebaseFirestore.F
     const db = database();
     const user = db.collection('users').doc(uid);
     return db.runTransaction(async transaction => read({
+      async calendarRestDays(startDate, endDate) {
+        const result = await transaction.get(user.collection(TRAINING_REST_DAYS_COLLECTION)
+          .where('localDate', '>=', startDate).where('localDate', '<=', endDate).orderBy('localDate')
+          .select('schemaVersion', 'localDate', 'isRestDay', 'revision').limit(367));
+        return result.docs.map(doc => ({ id: doc.id, data: doc.data() }));
+      },
       async getPlanRestDays(documentId) {
         const [doc] = await transaction.getAll(user.collection('trainingPlans').doc(documentId),
           { fieldMask: [...MASKS.trainingPlans, 'restDays'] });
@@ -216,6 +224,12 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
     // Account for every selected document once, including the unused tail of a fetched page.
     // Measuring only projected results misses lookahead records and double-counts cached plans.
     const view: TrainingReadView = {
+      async calendarRestDays(startDate, endDate) {
+        const documents = await source.calendarRestDays?.(startDate, endDate);
+        if (!documents) throw unavailable();
+        documents.forEach(measure);
+        return documents;
+      },
       async getPlanRestDays(id) {
         const doc = await source.getPlanRestDays?.(id);
         if (doc) measure(doc);
@@ -398,6 +412,15 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
     if (input.tool === 'get_training_plan') {
       const a = TRAINING_READ_INPUTS.get_training_plan.parse(args.data);
       return { scheduleRevision: state.revision, plan: projectPlan(await resolve(a.planRef, 'plan')) };
+    }
+    if (input.tool === 'get_training_calendar_rest_days') {
+      const a = TRAINING_READ_INPUTS.get_training_calendar_rest_days.parse(args.data);
+      const documents = await view.calendarRestDays?.(a.startDate, a.endDate);
+      if (!documents || documents.length > 366) throw unavailable();
+      const records = documents.map(document => parseTrainingRestDayV1(document.data, document.id));
+      if (records.some(record => record.localDate < a.startDate || record.localDate > a.endDate)) throw unavailable();
+      return { ...a, scanComplete: true as const,
+        restDays: records.filter(record => record.isRestDay).map(record => record.localDate).sort() };
     }
     if (input.tool === 'get_training_plan_rest_days') {
       const a = TRAINING_READ_INPUTS.get_training_plan_rest_days.parse(args.data);

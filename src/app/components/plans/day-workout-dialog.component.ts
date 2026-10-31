@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, afterRenderEffect, computed, inject, signal, viewChild } from '@angular/core';
-import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -10,7 +10,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
-import { firstValueFrom, Subscription } from 'rxjs';
+import { catchError, firstValueFrom, map, of, startWith, Subscription, switchMap } from 'rxjs';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { DAY_WORKOUT_EQUIPMENT, DAY_WORKOUT_SPORTS, defaultDayWorkoutControls, dayWorkoutLocalDate, dayWorkoutDateOffset,
   dayWorkoutPurposes, dayWorkoutTargets, DAY_WORKOUT_SIGNAL_OPTIONS, dayWorkoutReadinessSourcesEnabled,
@@ -122,6 +122,14 @@ export class DayWorkoutDialogComponent {
     const plan = this.planOptions().find(item => item.id === planId);
     return plan && isTrainingPlanRestDay(plan, this.controls().localDate) ? plan : null;
   });
+  private readonly calendarRestScope = computed(() => this.controls().trainingContext && this.data.mode !== 'preferences'
+    && !this.savedWorkoutId() ? this.controls().localDate : '');
+  private readonly calendarRest = toSignal(toObservable(this.calendarRestScope).pipe(switchMap(localDate => localDate
+    ? this.plansService.watchCalendarRestDay(this.data.ownerUid, localDate).pipe(
+      map(record => ({ localDate, isRestDay: record?.isRestDay === true })), startWith(null), catchError(() => of(null))) : of(null))), { initialValue: null });
+  readonly calendarRestDay = computed(() => this.controls().trainingContext && this.calendarRest()?.localDate === this.controls().localDate
+    && this.calendarRest()?.isRestDay === true);
+  readonly declaredRestDay = computed(() => this.calendarRestDay() || !!this.restDayPlan());
   readonly existing = computed(() => this.schedule()?.workouts.filter(workout => workout.lifecycle !== 'deleted'
     && workout.localDate === this.controls().localDate
     && [null, this.schedule()?.state.activePlanId, this.controls().destinationPlanId].includes(workout.planId)) ?? []);
@@ -178,7 +186,7 @@ export class DayWorkoutDialogComponent {
     if (this.data.mode === 'preferences') return this.busy() ? 'Saving…' : 'Save preferences';
     if (this.busy()) return this.busy() === 'save' ? 'Adding…' : 'Generating…';
     if (this.result()?.draft) return this.saveUncertain() ? 'Retry Add' : 'Add workout';
-    if (this.result()) return this.restDayPlan() ? 'Keep rest day' : 'Try easy session';
+    if (this.result()) return this.declaredRestDay() ? 'Keep rest day' : 'Try easy session';
     return this.error() ? 'Retry generation' : 'Generate workout';
   });
   async primaryAction(): Promise<void> {
@@ -194,7 +202,7 @@ export class DayWorkoutDialogComponent {
       finally { if (this.current(sequence)) { this.busy.set(null); this.ref.disableClose = false; } }
       return;
     }
-    if (this.result()?.kind === 'rest' && this.restDayPlan()) {
+    if (this.result()?.kind === 'rest' && this.declaredRestDay()) {
       if (this.busy() || !this.generation.isOwner(this.data.ownerUid)) return;
       this.haptics.selection(); this.ref.close(); return;
     }

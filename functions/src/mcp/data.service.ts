@@ -6592,6 +6592,10 @@ export function createMcpDataService(
       const { previewTrainingPlanPhases } = await import('./training-plans-write.service');
       return previewTrainingPlanPhases(input);
     },
+    async previewTrainingCalendarRestDay(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewTrainingCalendarRestDay } = await import('./training-plans-write.service');
+      return previewTrainingCalendarRestDay(input);
+    },
     async previewTrainingRestDays(input: import('./training-plans-write.service').TrainingWriteInput) {
       const { previewTrainingRestDays } = await import('./training-plans-write.service');
       return previewTrainingRestDays(input);

@@ -38,7 +38,7 @@ function restSchedule(): CurrentTrainingScheduleV1 {
   return {
     state: { schemaVersion: 1, revision: 2, activePlanId: 'plan', currentWorkoutCount: 0, updatedAtMs: 1 },
     plans: [{ schemaVersion: 1, id: 'plan', name: 'Autumn', lifecycle: 'active', startLocalDate: '2026-08-01',
-      endLocalDate: '2026-08-31', revision: 3, lastCheckpointRevision: 3, workoutCount: 0, createdAtMs: 1, updatedAtMs: 1 }], workouts: [],
+      endLocalDate: '2026-08-31', revision: 3, lastCheckpointRevision: 3, workoutCount: 0, createdAtMs: 1, updatedAtMs: 1 }], workouts: [], restDays: [],
   };
 }
 
@@ -47,12 +47,9 @@ describe('CalendarDayDetailsComponent', () => {
     const schedule = signal(restSchedule());
     const fixture = await renderDayDetails([], { scheduleSource: schedule });
     const plans = TestBed.inject(TrainingPlansService);
-    plans.createMutationId = vi.fn(() => 'rest-edit');
-    const response: Awaited<ReturnType<TrainingPlansService['mutate']>> = { mutationId: 'rest-edit', removedPlanIds: [], permanentlyDeletedWorkoutIds: [],
-      state: { ...schedule().state, revision: 3 },
-      plans: [{ ...schedule().plans[0], revision: 4, restDays: ['2026-08-03'] }], workouts: [] };
+    const response = { schemaVersion: 1 as const, localDate: '2026-08-03', isRestDay: true, revision: 1 };
     let finish!: (value: typeof response) => void;
-    plans.mutate = vi.fn(() => new Promise<typeof response>(resolve => { finish = resolve; }));
+    plans.setCalendarRestDay = vi.fn(() => new Promise<typeof response>(resolve => { finish = resolve; }));
     const child = fixture.debugElement.query(By.directive(CalendarDayContextComponent));
     vi.spyOn(child.injector.get(MatSnackBar), 'open').mockImplementation(vi.fn());
     await fixture.whenStable(); fixture.detectChanges();
@@ -62,10 +59,8 @@ describe('CalendarDayDetailsComponent', () => {
     expect(mark).toBeDefined(); mark!.click(); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('[aria-label="Add workout for selected day"]').disabled).toBe(true);
     expect(fixture.nativeElement.textContent).toContain('Saving rest day');
-    finish(response); await fixture.whenStable(); fixture.detectChanges();
-    expect(plans.mutate).toHaveBeenCalledWith(expect.objectContaining({ operation: {
-      kind: 'set-plan-rest-days', planId: 'plan', restDays: ['2026-08-03'],
-    } }), expect.any(Function));
+    schedule.update(value => ({ ...value, restDays: [response] })); finish(response); await fixture.whenStable(); fixture.detectChanges();
+    expect(plans.setCalendarRestDay).toHaveBeenCalledWith(planningUserUid, '2026-08-03', true, 0, expect.any(Function));
     expect(TestBed.inject(MatBottomSheetRef).dismiss).not.toHaveBeenCalled();
     expect(TestBed.inject(AppHapticsService).success).toHaveBeenCalledOnce();
     expect(fixture.nativeElement.querySelector('[aria-label="Planned rest day"]')).toBeTruthy();

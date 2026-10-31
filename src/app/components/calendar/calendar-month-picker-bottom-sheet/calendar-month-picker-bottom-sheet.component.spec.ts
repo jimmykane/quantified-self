@@ -36,10 +36,11 @@ describe('CalendarMonthPickerBottomSheetComponent', () => {
         {
           provide: TrainingPlansService,
           useValue: {
-            watchSchedule: vi.fn().mockReturnValue(of({
+            watchCalendarSchedule: vi.fn().mockReturnValue(of({
               state: { schemaVersion: 1, activePlanId: null, revision: 0, currentWorkoutCount: 0, updatedAtMs: 0 },
               plans: [],
               workouts: [],
+              restDays: [],
             })),
             watchWorkoutCompletions: vi.fn().mockReturnValue(of([])),
           },

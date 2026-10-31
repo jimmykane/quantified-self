@@ -502,6 +502,15 @@ function trainingWorkoutRoutingContext(prompt: string): string {
 
 export function selectAssistantTrainingPreviewTool(prompt: string,
   history: readonly Pick<AssistantMessage, 'role' | 'text'>[] = []): typeof TRAINING_PREVIEW_TOOLS[number] {
+  // A short date answer keeps only the immediately requested rest edit, never Apply authority.
+  const clarification = history[history.length - 1], restRequest = history[history.length - 2];
+  if (prompt.length <= 100 && !/[?]|\b(?:cancel|stop|never|no|not|don't|don’t|do not|create|add|mark|make|set|declare|clear|update|rename|schedule|start|resume|enable|disable|edit|change|apply|delete|remove|move|copy|send|sync)\b/iu.test(prompt)
+    && /\b(?:today|tomorrow|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|may|june|july|august|september|october|november|december)\b|\b\d{4}-\d{2}-\d{2}\b/iu.test(prompt)
+    && clarification?.role === 'assistant' && restRequest?.role === 'user'
+    && /\b(?:which|what|provide|choose|specify)\b[^.!?\n]{0,100}\b(?:date|day)\b/iu.test(clarification.text)) {
+    const previous = selectAssistantTrainingPreviewTool(restRequest.text);
+    if (previous === 'preview_training_calendar_rest_day' || previous === 'preview_training_rest_days') return previous;
+  }
   if (assistantRecoveryDurationSeconds(prompt) !== null) return 'preview_planned_workout_v3_change';
   // Only an exact sport choice answering our immediate separate-actions question
   // retains the strength schema. It inherits neither recipe values nor delivery.
@@ -549,10 +558,15 @@ export function selectAssistantTrainingPreviewTool(prompt: string,
     .some(([, target]) => !/\b(?:workouts?|sessions?|steps?|intervals?|targets?|repeats?|exercises?|plans?)\b/u
       .test(target.replace(/\bplans?(?:['’]s?)?\s*$/u, '')));
   if (phaseEdit) return 'preview_training_plan_phases';
-  const restDayEdit = [...question.matchAll(/\b(?:add|mark|make|set|declare|remove|clear|edit|change|update)\s+([^.!?;\n]{0,80}?)\brest\s+days?\b/gu)]
+  const restDayEdit = [...question.matchAll(/\b(?:add|mark|make|set|declare|remove|delete|clear|edit|change|update)\s+([^.!?;\n]{0,80}?)\brest\s+days?\b/gu)]
     .some(match => !/\b(?:don't|do not|never)\s*$/u.test(question.slice(0, match.index))
-      && !/\b(?:workouts?|sessions?|rides?|runs?|steps?|intervals?|targets?|repeats?|exercises?)\b/u.test(match[1]));
-  if (restDayEdit) return 'preview_training_rest_days';
+      && !/\b(?:workouts?|sessions?|rides?|runs?|steps?|intervals?|targets?|repeats?|exercises?|plans?)\b/u
+        .test(match[1].replace(/\bplans?(?:['’]s?)?\s*$/u, '')));
+  if (restDayEdit) {
+    const planTarget = /\bplans?(?:['’]s)?\b/u.test(question)
+      && !/\b(?:calendar|without|outside|no plan|not in (?:a|the|my) plan)\b/u.test(question);
+    return planTarget ? 'preview_training_rest_days' : 'preview_training_calendar_rest_day';
+  }
   if (/\b(?:library|saved\s+workouts?|workout\s+templates?|saved\s+recipes?)\b/u.test(question)
     && /\b(?:create|save|copy|duplicate|edit|update|archive|restore|delete|remove|place|schedule|add)\b/u.test(question)) {
     return 'preview_saved_workout_v2_change';
@@ -1626,7 +1640,8 @@ export function createAssistantRuntime(
         const selectedTrainingPreview = separateStrengthActions ? undefined
           : modelToolDefinitions.some(tool => tool.name === preferredTrainingPreview)
           ? preferredTrainingPreview
-          : preferredTrainingPreview === 'preview_garmin_workout_replacement'
+          : preferredTrainingPreview === 'preview_training_calendar_rest_day'
+            || preferredTrainingPreview === 'preview_garmin_workout_replacement'
             || preferredTrainingPreview === 'preview_planned_workout_v3_changes'
             || preferredTrainingPreview === 'preview_strength_workout_change'
             ? undefined // Never substitute an unsafe legacy writer or Send/Retry for missing capability.

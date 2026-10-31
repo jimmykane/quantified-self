@@ -71,7 +71,7 @@ describe('ActivityCalendarTileComponent', () => {
           getActivityColor: vi.fn(), getColorForActivityTypeByActivityTypeGroup: vi.fn(),
         } },
         { provide: ActivityCalendarService, useValue: { watchEvents } },
-        { provide: TrainingPlansService, useValue: { watchSchedule, watchWorkoutCompletions } },
+        { provide: TrainingPlansService, useValue: { watchSchedule, watchCalendarSchedule: vi.fn(uid => watchSchedule(uid)), watchWorkoutCompletions } },
         { provide: CalendarDayHealthService, useValue: { watch: watchHealth } },
         { provide: TrainingImpactService, useValue: { watch: vi.fn(() => of({ status: 'private', formPoints: null })) } },
         { provide: TrainingWorkoutDuplicateService, useValue: { duplicate: vi.fn() } },

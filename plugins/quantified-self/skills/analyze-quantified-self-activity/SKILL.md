@@ -145,9 +145,10 @@ modes. Revocation cannot erase copies already received or quoted.
 
 ## Planned versus completed workouts
 
-An explicit plan rest date is authored intent, not a completed activity or zero-load evidence. Empty workout dates
+An explicit plan or standalone calendar rest date is authored intent, not a completed activity or zero-load evidence. Empty workout dates
 are merely unscheduled. Route rest-date questions and explicitly approved edits through the Training workflow's
-focused reads and complete preview/Apply review; never infer or clear a rest day from a recorded activity.
+focused reads and complete separate preview/Apply review. Standalone calendar markers use their focused date/boolean
+preview with independent Training write permission; native Calendar also manages them. Read calendar rest dates even without a plan; never infer or clear a rest day from a recorded activity.
 
 For planned or upcoming sessions, use the Training skill and discover the separately authorized planning read capabilities. Completed workouts still use activity tools.
 Planning needs independent `training-plans:read`; metrics, activity, Timeline notes or provider access never substitutes.

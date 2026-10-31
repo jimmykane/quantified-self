@@ -187,22 +187,22 @@ export class CalendarPageComponent {
     }),
   ), { initialValue: { status: 'loading', events: [] } as CalendarEventsState });
   readonly plansState = toSignal(combineLatest([this.userService.user$, this.routeState$, toObservable(this.reloadSequence)]).pipe(
-    map(([user, state, reload]) => ({ uid: user?.uid, reload, bounded: !this.isDayRoute && ['week', 'month'].includes(state.view),
+    map(([user, state, reload]) => ({ uid: user?.uid, reload,
       window: resolveActivityCalendarQueryWindow(state.view, state.anchorDate, user?.settings?.unitSettings?.startOfTheWeek) })),
-    distinctUntilChanged((a, b) => a.uid === b.uid && a.reload === b.reload && a.bounded === b.bounded
-      && (!a.bounded || (a.window.startMs === b.window.startMs && a.window.endExclusiveMs === b.window.endExclusiveMs))),
-    switchMap(({ uid, bounded, window }) => {
+    distinctUntilChanged((a, b) => a.uid === b.uid && a.reload === b.reload
+      && a.window.startMs === b.window.startMs && a.window.endExclusiveMs === b.window.endExclusiveMs),
+    switchMap(({ uid, window }) => {
       if (!uid) return of({ status: 'ready', schedule: null } as CalendarPlansState);
       const startedAt = Date.now();
-      const schedule$ = bounded ? this.plansService.watchCalendarSchedule(uid, formatActivityCalendarDateParam(new Date(window.startMs)),
-        formatActivityCalendarDateParam(new Date(window.endExclusiveMs - 1))) : this.plansService.watchSchedule(uid);
+      const schedule$ = this.plansService.watchCalendarSchedule(uid, formatActivityCalendarDateParam(new Date(window.startMs)),
+        formatActivityCalendarDateParam(new Date(window.endExclusiveMs - 1)));
       return schedule$.pipe(
         map(schedule => schedule.restoreUnavailable
           ? ({ status: 'error', schedule: null, restoreInProgress: true } as CalendarPlansState)
           : ({ status: 'ready', schedule } as CalendarPlansState)),
         startWith({ status: 'loading', schedule: null } as CalendarPlansState),
         catchError((error: unknown) => {
-          this.logReadFailure('planned-workouts', error, startedAt, bounded);
+          this.logReadFailure('planned-workouts', error, startedAt, true);
           return of({ status: 'error', schedule: null } as CalendarPlansState);
         }),
       );
@@ -271,6 +271,7 @@ export class CalendarPageComponent {
       schedule.state.activePlanId,
       coverage.linkedWorkoutIds,
       coverage.complete,
+      schedule.restDays,
     );
   });
   readonly calendarModel = computed(() => {

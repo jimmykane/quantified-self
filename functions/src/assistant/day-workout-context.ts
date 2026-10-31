@@ -24,7 +24,7 @@ function datedMetric(value: RecordValue, timeZone: string): RecordValue {
   }) } };
 }
 export interface DayWorkoutContext {
-  plannedRestDay?: { localDate: string; planName: string };
+  plannedRestDay?: { localDate: string; planName: string; source?: 'calendar' | 'plan' };
   evidence: RecordValue;
   usedContext: string[];
   missingContext: string[];
@@ -32,7 +32,7 @@ export interface DayWorkoutContext {
   references: WorkoutTargetV1[];
 }
 export interface DayWorkoutTrainingContext {
-  plannedRestDay?: { localDate: string; planName: string };
+  plannedRestDay?: { localDate: string; planName: string; source?: 'calendar' | 'plan' };
   scheduleRevision: number;
   nearby: RecordValue[];
   phase: unknown;
@@ -236,8 +236,12 @@ export async function collectDayWorkoutContext(controls: DayWorkoutControls, now
     if (!daily.plannedWorkouts.scanComplete || !daily.plannedWorkouts.completionChecked) throw new Error('The selected day’s schedule could not be checked completely.');
     training = await readTraining();
     if (training.scheduleRevision !== daily.plannedWorkouts.scheduleRevision) throw new Error('The schedule changed. Generate again.');
+    const calendarRest = daily.plannedWorkouts.calendarRestDayContext;
+    if (calendarRest?.status === 'rest') training = { ...training,
+      plannedRestDay: { localDate: controls.localDate, planName: 'Calendar', source: 'calendar' } };
+    else if (calendarRest?.status !== 'none' && !training.plannedRestDay) throw new Error('Calendar rest days could not be checked.');
     usedContext.push('Selected-day schedule and completion links; nearby sessions within seven days');
-    if (training.plannedRestDay) usedContext.push('Authored rest day in the selected plan');
+    if (training.plannedRestDay) usedContext.push(training.plannedRestDay.source === 'calendar' ? 'Authored calendar rest day' : 'Authored rest day in the selected plan');
     if (training.phase) usedContext.push('Selected plan and phase');
     if (training.previousStrength.length) usedContext.push('Up to five previous planned strength prescriptions');
     missingContext.push(...training.missing);

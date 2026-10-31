@@ -944,6 +944,7 @@ describe('MCP HTTP scope enforcement', () => {
       'get_saved_workout',
       'get_saved_workout_v2',
       'get_strength_workout_details',
+      'get_training_calendar_rest_days',
       'get_training_change_status',
       'get_training_plan',
       'get_training_plan_phases',
@@ -961,6 +962,7 @@ describe('MCP HTTP scope enforcement', () => {
       'preview_saved_workout_change',
       'preview_saved_workout_v2_change',
       'preview_strength_workout_change',
+      'preview_training_calendar_rest_day',
       'preview_training_changes',
       'preview_training_deletion',
       'preview_training_plan_phases',
@@ -1392,6 +1394,8 @@ describe('MCP HTTP scope enforcement', () => {
       expect(names.includes('get_training_plan_rest_days')).toBe(readable);
       expect(instructions.includes('get_training_plan_rest_days')).toBe(readable);
       expect(names.includes('preview_training_rest_days')).toBe(writable);
+      expect(names.includes('preview_training_calendar_rest_day')).toBe(writable);
+      expect(instructions.includes('preview_training_calendar_rest_day')).toBe(writable);
       expect(instructions.includes('preview_training_rest_days')).toBe(writable);
       if (readable) {
         expect(instructions).toContain('unscheduled, not a declared rest day');

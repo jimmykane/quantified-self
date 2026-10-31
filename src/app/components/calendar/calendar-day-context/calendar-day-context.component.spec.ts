@@ -25,7 +25,7 @@ import type { CalendarDayDetailsData } from '../calendar-day-details/calendar-da
 import { CalendarDayContextComponent } from './calendar-day-context.component';
 import { TrainingPlansService, type CurrentTrainingScheduleV1 } from '../../../services/training-plans.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import type { MutateTrainingScheduleRequestV1 } from '@shared/training-plans';
+import type { TrainingRestDayV1 } from '@shared/training-rest-days';
 
 function data(dateKey: string): CalendarDayDetailsData {
   const model = buildActivityCalendarViewModel([], { view: 'month', anchorDate: new Date(`${dateKey}T12:00:00`), locale: 'en-US' });
@@ -33,7 +33,7 @@ function data(dateKey: string): CalendarDayDetailsData {
 }
 
 const restDayProviders = () => [
-  { provide: TrainingPlansService, useValue: { mutate: vi.fn(), createMutationId: () => 'rest-edit' } },
+  { provide: TrainingPlansService, useValue: { setCalendarRestDay: vi.fn() } },
   { provide: MatSnackBar, useValue: { open: vi.fn() } },
 ];
 
@@ -43,33 +43,35 @@ describe('CalendarDayContextComponent', () => {
   async function restDaySetup() {
     const viewer = signal<{ uid: string } | null>({ uid: 'owner' });
     const schedule = signal<CurrentTrainingScheduleV1>({
-      state: { schemaVersion: 1, revision: 7, activePlanId: 'plan', currentWorkoutCount: 0, updatedAtMs: 1 },
-      plans: [{ schemaVersion: 1, id: 'plan', name: 'Autumn', lifecycle: 'active', startLocalDate: '2026-10-01', endLocalDate: '2026-10-31',
-        revision: 3, lastCheckpointRevision: 3, workoutCount: 0, createdAtMs: 1, updatedAtMs: 1 }], workouts: [],
+      state: { schemaVersion: 1, revision: 7, activePlanId: null, currentWorkoutCount: 0, updatedAtMs: 1 },
+      plans: [], workouts: [], restDays: [],
     });
     const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
-    const mutate = vi.fn(async (_request: MutateTrainingScheduleRequestV1, _current?: () => boolean) => ({ state: { ...schedule().state, revision: 8 },
-      plans: [{ ...schedule().plans[0], revision: 4, restDays: [...(schedule().plans[0].restDays ?? []), '2026-10-25'].sort() }], workouts: [] }));
+    const write = vi.fn(async (_uid: string, localDate: string, isRestDay: boolean, revision: number, _current: () => boolean) => {
+      const record: TrainingRestDayV1 = { schemaVersion: 1, localDate, isRestDay, revision: revision + 1 };
+      schedule.update(value => ({ ...value, restDays: [...value.restDays!.filter(item => item.localDate !== localDate), record] }));
+      return record;
+    });
     const open = vi.fn();
     await TestBed.configureTestingModule({ imports: [CalendarDayContextComponent], providers: [provideRouter([]),
       { provide: DayWorkoutService, useValue: { canGenerate: () => false, isOwner: (uid: string) => viewer()?.uid === uid } },
-      { provide: TrainingPlansService, useValue: { mutate, createMutationId: () => 'rest-edit' } },
+      { provide: TrainingPlansService, useValue: { setCalendarRestDay: write } },
       { provide: MatSnackBar, useValue: { open } },
       { provide: ViewportScroller, useValue: {} }, { provide: AppUserService, useValue: { user: viewer } },
       { provide: CalendarDayHealthService, useValue: { watch: () => of(emptyEvidence) } },
       { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
       { provide: LoggerService, useValue: { error: vi.fn() } }, { provide: TrainingWorkoutDuplicateService, useValue: {} },
       { provide: AppEventColorService, useValue: {} }, { provide: AppHapticsService, useValue: haptics },
-    ] }).overrideProvider(MatSnackBar, { useValue: { open } }).compileComponents();
+    ] }).compileComponents();
     const fixture = TestBed.createComponent(CalendarDayContextComponent);
     const notice = vi.spyOn(fixture.debugElement.injector.get(MatSnackBar), 'open').mockImplementation(open);
     fixture.componentRef.setInput('data', { ...data('2026-10-25'), scheduleSource: schedule });
     fixture.componentRef.setInput('calmMonth', true); fixture.detectChanges(); await fixture.whenStable();
-    return { fixture, component: fixture.componentInstance, viewer, schedule, haptics, mutate, open: notice };
+    return { fixture, component: fixture.componentInstance, viewer, schedule, haptics, write, open: notice };
   }
 
-  it('marks the selected day through the existing revision-bound mutation and immediately shows the confirmed rest day', async () => {
-    const { fixture, component, mutate, haptics, open } = await restDaySetup();
+  it('marks and removes calendar rest without a plan, without changing schedule revisions or workouts', async () => {
+    const { fixture, component, write, haptics, schedule } = await restDaySetup();
     const add = [...fixture.nativeElement.querySelectorAll('button')].find((button: HTMLButtonElement) => button.textContent?.includes('Add workout')) as HTMLButtonElement;
     expect(haptics.success).not.toHaveBeenCalled(); add.click(); fixture.detectChanges(); await fixture.whenStable();
     const mark = [...document.querySelectorAll('button')].find(button => button.textContent?.includes('Mark as rest day'))!;
@@ -88,69 +90,55 @@ describe('CalendarDayContextComponent', () => {
         dark ? html.replace('class="app-hydrated"', 'class="app-hydrated dark-theme"') : html);
     }
     expect(mark).toBeDefined(); mark.click(); await fixture.whenStable(); fixture.detectChanges();
-    expect(mutate).toHaveBeenCalledExactlyOnceWith({ mutationId: 'rest-edit',
-      expectedRevisions: [{ scope: 'state', id: 'current', revision: 7 }, { scope: 'plan', id: 'plan', revision: 3 }],
-      operation: { kind: 'set-plan-rest-days', planId: 'plan', restDays: ['2026-10-25'] },
-    }, expect.any(Function));
-    expect(component.plannedRestDay()?.planId).toBe('plan');
+    expect(write).toHaveBeenCalledExactlyOnceWith('owner', '2026-10-25', true, 0, expect.any(Function));
+    expect(component.plannedRestDay()?.planId).toBeNull();
     expect(fixture.nativeElement.querySelector('[aria-label="Planned rest day"]')).toBeTruthy();
-    expect(haptics.success).toHaveBeenCalledOnce(); expect(haptics.error).not.toHaveBeenCalled();
-    expect(open).toHaveBeenCalledWith('Rest day added.', 'Dismiss', { duration: 3000 });
-    await component.markRestDay(); expect(mutate).toHaveBeenCalledOnce();
+    expect(haptics.success).toHaveBeenCalledOnce(); await component.markRestDay(); expect(write).toHaveBeenCalledOnce();
+    await component.markRestDay(false); fixture.detectChanges();
+    expect(write).toHaveBeenLastCalledWith('owner', '2026-10-25', false, 1, expect.any(Function));
+    expect(component.plannedRestDay()).toBeNull(); expect(schedule().state.revision).toBe(7); expect(schedule().plans).toEqual([]);
   });
 
-  it('withholds the action without a current in-range active plan or complete schedule, and blocks same-plan workouts', async () => {
-    const { fixture, component, schedule, mutate, viewer } = await restDaySetup();
+  it('keeps unavailable reads and other accounts from writing, while allowing dates outside any plan', async () => {
+    const { fixture, component, schedule, write, viewer } = await restDaySetup();
     const original = schedule();
-    schedule.set({ ...original, workoutsComplete: false }); fixture.detectChanges();
-    await component.markRestDay(); expect(mutate).not.toHaveBeenCalled();
-    expect(component.restDayBlockedReason()).toContain('loading');
-    schedule.set({ ...original, workouts: [{ id: 'workout', planId: 'plan', localDate: '2026-10-25', lifecycle: 'planned' } as never] });
-    fixture.detectChanges(); await component.markRestDay(); expect(mutate).not.toHaveBeenCalled();
-    expect(component.restDayBlockedReason()).toContain('Move, skip or remove');
-    for (const next of [{ ...original, restoreUnavailable: true as const }, { ...original, plans: [] },
-      { ...original, plans: [{ ...original.plans[0], lifecycle: 'paused' as const }] },
-      { ...original, plans: [{ ...original.plans[0], endLocalDate: '2026-10-24' }] }]) {
-      schedule.set(next); fixture.detectChanges(); expect(component.restDayPlan()).toBeNull();
-      await component.markRestDay();
+    for (const value of [{ ...original, restDays: undefined }, { ...original, restoreUnavailable: true as const }]) {
+      schedule.set(value); fixture.detectChanges(); await component.markRestDay(); expect(write).not.toHaveBeenCalled();
     }
     schedule.set(original); viewer.set({ uid: 'other' }); fixture.detectChanges();
-    expect(component.restDayPlan()).toBeNull(); await component.markRestDay(); expect(mutate).not.toHaveBeenCalled();
+    await component.markRestDay(); expect(write).not.toHaveBeenCalled();
+    viewer.set({ uid: 'owner' }); fixture.detectChanges(); await component.markRestDay(); expect(write).toHaveBeenCalledOnce();
   });
 
-  it('keeps failed saves unchanged and drops the confirmation after a newer live plan or deletion', async () => {
-    const { fixture, component, schedule, mutate, haptics, open } = await restDaySetup();
-    mutate.mockRejectedValueOnce(new Error('conflict'));
-    await component.markRestDay(); fixture.detectChanges();
-    expect(component.plannedRestDay()).toBeNull(); expect(component.restDaySaving()).toBe(false);
-    expect(haptics.error).toHaveBeenCalledOnce(); expect(haptics.success).not.toHaveBeenCalled();
-    expect(open).toHaveBeenCalledWith(expect.stringContaining('Reload'), 'Dismiss', { duration: 6000 });
-    await component.markRestDay(); fixture.detectChanges(); expect(component.plannedRestDay()).toBeTruthy();
-    schedule.update(value => ({ ...value, plans: [{ ...value.plans[0], revision: 5 }] })); fixture.detectChanges();
-    expect(component.plannedRestDay()).toBeNull();
-    schedule.update(value => ({ ...value, plans: [] })); fixture.detectChanges();
-    expect(component.plannedRestDay()).toBeNull();
+  it('does not remove plan rest intent when removing an overlapping calendar marker', async () => {
+    const { fixture, component, schedule, open } = await restDaySetup();
+    schedule.update(value => ({ ...value, state: { ...value.state, activePlanId: 'plan' },
+      plans: [{ schemaVersion: 1, id: 'plan', name: 'Autumn', lifecycle: 'active', startLocalDate: '2026-10-01', endLocalDate: '2026-10-31',
+        revision: 3, lastCheckpointRevision: 3, workoutCount: 0, createdAtMs: 1, updatedAtMs: 1, restDays: ['2026-10-25'] }],
+      restDays: [{ schemaVersion: 1, localDate: '2026-10-25', isRestDay: true, revision: 1 }] }));
+    fixture.detectChanges(); await component.markRestDay(false); fixture.detectChanges();
+    expect(component.plannedRestDay()?.planId).toBe('plan'); expect(schedule().plans[0].restDays).toEqual(['2026-10-25']);
+    expect(open).toHaveBeenCalledWith(expect.stringContaining('Your plan still marks'), 'Dismiss', { duration: 4000 });
   });
 
-  it('preserves other rest dates and allows standalone or skipped workouts without altering them', async () => {
-    const { fixture, component, schedule, mutate } = await restDaySetup();
-    const workout = { schemaVersion: 1 as const, id: 'workout', planId: null, localDate: '2026-10-25',
-      lifecycle: 'planned' as const, title: 'Standalone', structure: { version: 1 as const, sport: ActivityTypes.Running, nodes: [] },
-      revision: 1, createdAtMs: 1, updatedAtMs: 1 };
-    schedule.update(value => ({ ...value, plans: [{ ...value.plans[0], restDays: ['2026-10-20'] }],
-      workouts: [workout, { ...workout, id: 'skipped', planId: 'plan', lifecycle: 'skipped' }] }));
-    fixture.detectChanges(); expect(component.restDayBlockedReason()).toBe(''); await component.markRestDay();
-    expect(mutate.mock.calls[0][0].operation).toEqual({ kind: 'set-plan-rest-days', planId: 'plan', restDays: ['2026-10-20', '2026-10-25'] });
-    expect(schedule().workouts.map(item => [item.id, item.lifecycle])).toEqual([['workout', 'planned'], ['skipped', 'skipped']]);
+  it('retains existing workouts and reports failed writes without an optimistic marker', async () => {
+    const { fixture, component, schedule, write, haptics } = await restDaySetup();
+    const workout = { schemaVersion: 1 as const, id: 'standalone', planId: null, localDate: '2026-10-25', lifecycle: 'planned' as const,
+      title: 'Workout', structure: { version: 1 as const, sport: ActivityTypes.Running, nodes: [] }, revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+    schedule.update(value => ({ ...value, workouts: [workout] })); fixture.detectChanges();
+    write.mockRejectedValueOnce(new Error('offline')); await component.markRestDay(); fixture.detectChanges();
+    expect(component.plannedRestDay()).toBeNull(); expect(haptics.error).toHaveBeenCalledOnce();
+    await component.markRestDay(); fixture.detectChanges(); expect(schedule().workouts).toEqual([workout]);
+    expect(component.plannedRestDay()).toBeTruthy();
   });
 
-  it.each(['account', 'day', 'restore', 'destroy'] as const)('fences pending rest-day dispatch and feedback after changing %s', async change => {
-    const { fixture, component, viewer, mutate, haptics, open, schedule } = await restDaySetup();
-    let finish!: (value: Awaited<ReturnType<typeof mutate>>) => void;
-    mutate.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  it.each(['account', 'day', 'restore', 'destroy'] as const)('fences pending calendar-rest dispatch and feedback after %s changes', async change => {
+    const { fixture, component, viewer, write, haptics, open, schedule } = await restDaySetup();
+    let finish!: (value: TrainingRestDayV1) => void;
+    write.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     const pending = component.markRestDay(); fixture.detectChanges();
-    expect(component.restDaySaving()).toBe(true); await component.markRestDay(); expect(mutate).toHaveBeenCalledOnce();
-    const guard = mutate.mock.calls[0][1] as unknown as () => boolean;
+    expect(component.restDaySaving()).toBe(true); await component.markRestDay(); expect(write).toHaveBeenCalledOnce();
+    const guard = write.mock.calls[0][4];
     if (change === 'account') {
       viewer.set({ uid: 'other' }); fixture.detectChanges(); viewer.set({ uid: 'owner' }); fixture.detectChanges();
     } else if (change === 'day') {
@@ -159,8 +147,7 @@ describe('CalendarDayContextComponent', () => {
       schedule.update(value => ({ ...value, restoreUnavailable: true })); fixture.detectChanges();
     } else fixture.destroy();
     expect(guard()).toBe(false);
-    finish({ state: schedule().state, plans: [{ ...schedule().plans[0], revision: 4, restDays: ['2026-10-25'] }], workouts: [] });
-    await pending;
+    finish({ schemaVersion: 1, localDate: '2026-10-25', isRestDay: true, revision: 1 }); await pending;
     if (change !== 'destroy') expect(component.restDaySaving()).toBe(false);
     expect(haptics.success).not.toHaveBeenCalled(); expect(haptics.error).not.toHaveBeenCalled(); expect(open).not.toHaveBeenCalled();
   });
