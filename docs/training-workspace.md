@@ -736,6 +736,29 @@ new signal choices preserve the original automatic behavior and stable fingerpri
 Training/Timeline/weight choices still require explicit booleans. These draft-only options never modify chat grants,
 provider consent, stored metrics or feedback.
 
+After an acknowledged Add, the modal stays open in a saved confirmation with the same canonical workout summary,
+unchanged Assistant allowance and `TrainingDeliveryButtonComponent`; Done closes it. Save completion records the exact
+created workout ID before exposing delivery. The server acknowledgement supplies the initial delivery summary until
+the existing schedule stream catches up. Add, generation, edit handoff and option changes are disabled after success,
+so cancelling or failing a later provider review cannot create another workout or charge another AI request. Account
+changes remove the saved action. The pre-save plan-sync hint listener is released once the workout is saved.
+Today's planned-workout row uses the same delivery component for its first displayed saved workout, alongside an
+owner/date-fenced Open link. Its existing bounded day read supplies the workout and parent-plan summary; delivery
+status uses the shared exact-workout settings/status/verification readers. Stable computed inputs keep foreground
+focus and unrelated change detection from recreating those readers. No new polling or status/generation requests are
+introduced, and removing coverage releases the delivery consumer.
+Manual creation and single library placements offer a short-lived **Send / sync** snackbar action through the root
+`TrainingWorkoutAddedService`, surviving source-route destruction. It opens the existing delivery review without
+writing provider consent. Account changes dismiss and invalidate it, including a later switch back. Bulk placements
+retain their count confirmation rather than implying one-workout Send covers an entire batch. Plan-bound workout
+delivery review includes **Plan sync settings**, which opens its parent's existing review instead of enabling the
+whole plan implicitly. Existing Pro, connection, compatibility, date-window and explicit confirmation gates apply.
+MCP impact review: no wire impact. These are native entry points for existing saved-workout reads and provider review;
+strict proposal/apply contracts, consent, tool schemas, lifecycle, provider transports and AI/daily quotas are unchanged.
+Monitoring coverage: unchanged. Existing Training Delivery dashboards/alerts and queue-monitoring routes cover the
+same workers, queues, outcomes, retry/lease policy and schedules; this adds no job or telemetry contract. No backend,
+Rules/index deployment, MCP refresh or plugin rebuild is required for these frontend changes.
+
 `generateDayWorkout` is a private first-party callable using the existing Assistant model, legal/access checks,
 App Check and quota. It receives a strict allowlisted `shared/day-workout.ts` request and cannot mutate a schedule.
 The model has no tools. The server parses a canonical prescription, allows one bounded correction, rejects

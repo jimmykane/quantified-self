@@ -504,6 +504,12 @@ export class TrainingDeliveryDialogComponent {
       ...(this.data.scope !== 'workout' ? { returnTo: { scope: this.data.scope, id: this.data.id,
         title: this.scopeTitle(), selectedProvider: status.provider } } : {}) });
   }
+  openPlanSync(): void {
+    const plan = this.parentPlan();
+    if (!this.planBound() || !plan || !this.canReview()) return;
+    this.openContext({ scope: 'plan', id: plan.id, title: plan.name });
+  }
+
   backToOverview(): void {
     if (this.data.returnTo) this.openContext({ ...this.data.returnTo,
       ...(this.data.planSummaries ? { planSummaries: this.data.planSummaries } : {}) });

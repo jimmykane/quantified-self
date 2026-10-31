@@ -39,11 +39,17 @@
       </div>
     }
   } @else {
+  @if (prominent()) {
+    <button mat-flat-button appHapticTap type="button" (click)="open()" [disabled]="disabled()">
+      <mat-icon aria-hidden="true">send</mat-icon>{{ buttonLabel() }}
+    </button>
+  } @else {
   <button mat-button appHapticTap type="button" (click)="open()" [disabled]="disabled()"
       [attr.aria-label]="scope() === 'history' ? 'Workout sync history' : null"
       [matTooltip]="scope() === 'history' && historyLabel() !== 'Workout sync history' ? 'Workout sync history' : ''">
     <mat-icon aria-hidden="true">sync</mat-icon>{{ buttonLabel() }}
   </button>
+  }
     @if (showSetupHint()) {
       <p class="delivery-setup-hint delivery-summary-detail">Optional Pro sync. Sends eligible upcoming workouts while this plan is active.</p>
     }

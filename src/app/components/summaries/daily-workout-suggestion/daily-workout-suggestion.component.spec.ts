@@ -18,13 +18,29 @@ import { AppWindowService } from '../../../services/app.window.service';
 import { TrainingPlansService, type CurrentTrainingScheduleV1 } from '../../../services/training-plans.service';
 import { BehaviorSubject, map, of, Subject } from 'rxjs';
 import { DistanceUnits } from '@sports-alliance/sports-lib';
+import { provideRouter } from '@angular/router';
+import { TrainingDeliveryService, type TrainingDeliveryView } from '../../../services/training-delivery.service';
+import { TrainingDeliveryButtonComponent } from '../../plans/training-delivery-button.component';
+import { By, DomSanitizer } from '@angular/platform-browser';
+import { MatDialog } from '@angular/material/dialog';
+import { MatIconRegistry } from '@angular/material/icon';
+import { AppEventService } from '../../../services/app.event.service';
+import { createHash, webcrypto } from 'node:crypto';
 import type { ScheduledWorkoutV1 } from '@shared/training-plans';
+
+function deliveryProvider() {
+  const empty: TrainingDeliveryView = { settings: [], statuses: [], verifications: [] };
+  return { provide: TrainingDeliveryService, useValue: {
+    watchPresence: vi.fn(() => of(false)), watchSummaryScope: vi.fn(() => of(empty)),
+    anyReady: () => true, isVisible: (provider: string) => provider !== 'coros', isReady: () => true, isSetupAvailable: () => true,
+  } };
+}
 
 
 function exportQa(element: HTMLElement, name: string) {
   const dir = process.env.DAILY_WORKOUT_SUGGESTION_QA_DIR; if (!dir) return;
   const sass = createRequire(createRequire(resolve('package.json')).resolve('@angular/build/package.json'))('sass');
-  const css = ['summaries/daily-workout-suggestion/daily-workout-suggestion', 'shared/compact-row/compact-row'].map(path => {
+  const css = ['summaries/daily-workout-suggestion/daily-workout-suggestion', 'shared/compact-row/compact-row', 'plans/training-delivery-button'].map(path => {
     const tag = path.split('/').at(-1);
     return sass.compileString(`app-${tag} {` + readFileSync(`src/app/components/${path}.component.scss`, 'utf8')
       .replace(/:host\(([^)]+)\)/g, '&$1').replace(/:host/g, '&') + '}').css;
@@ -35,7 +51,7 @@ function exportQa(element: HTMLElement, name: string) {
     + '<style>' + css + '</style></head><body class="app-hydrated' + (dark ? ' dark-theme' : '')
     + '"><main class="qs-workspace-page"><h2>Today</h2><p>Friday, 30 October 2026</p>'
     + '<p>Good morning — training state is Fresh, readiness is Mixed.</p><p>Training state · Fresh &nbsp; Readiness · Mixed</p>'
-    + element.outerHTML + '</main></body></html>');
+    + '<app-daily-workout-suggestion>' + element.outerHTML + '</app-daily-workout-suggestion></main></body></html>');
 }
 
 let restoreVisibility = () => {};
@@ -66,12 +82,15 @@ function setup(enabled = true, cachedStatus: DailyWorkoutSuggestionStatus | null
   const haptics = { success: vi.fn(), error: vi.fn(), selection: vi.fn() };
   const workouts = new BehaviorSubject<ScheduledWorkoutV1[]>([]);
   const watchCalendarSchedule = vi.fn(() => workouts.pipe(map(items => savedSchedule(items))));
-  const user = signal({ settings: { unitSettings: { distanceUnits: DistanceUnits.Kilometers } } });
+  const user = signal({ uid: 'owner', settings: { unitSettings: { distanceUnits: DistanceUnits.Kilometers } } });
+  const delivery = deliveryProvider(), deliveryOpen = vi.fn();
+  TestBed.overrideComponent(TrainingDeliveryButtonComponent, { add: { providers: [{ provide: MatDialog, useValue: { open: deliveryOpen } }] } });
   TestBed.configureTestingModule({ imports: [DailyWorkoutSuggestionComponent], providers: [
+    provideRouter([]), delivery, { provide: AppEventService, useValue: {} },
     { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
     { provide: DailyWorkoutSuggestionService, useValue: { preferences, saving, eligible: (uid: string) => uid === owner() && pro(), isOwner: (uid: string) => uid === owner(), request, event, save, cacheRevision, cached, observeSleep, remember } },
     { provide: DayWorkoutService, useValue: { open } }, { provide: AppHapticsService, useValue: haptics },
-    { provide: AppUserService, useValue: { user } },
+    { provide: AppUserService, useValue: { user, user$: of(user()) } },
     { provide: TrainingPlansService, useValue: { watchCalendarSchedule } },
   ] });
   const fixture = TestBed.createComponent(DailyWorkoutSuggestionComponent);
@@ -81,10 +100,47 @@ function setup(enabled = true, cachedStatus: DailyWorkoutSuggestionStatus | null
     visibility.mockReturnValue(visible ? 'visible' : 'hidden');
     document.dispatchEvent(new Event('visibilitychange')); fixture.detectChanges();
   };
-  return { fixture, preferences, owner, pro, saving, request, event, save, open, haptics, setVisible, remember, workouts, watchCalendarSchedule, user };
+  return { fixture, preferences, owner, pro, saving, request, event, save, open, haptics, setVisible, remember, workouts, watchCalendarSchedule, user,
+    delivery: delivery.useValue, deliveryOpen };
 }
-afterEach(() => { vi.useRealTimers(); restoreVisibility(); });
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); restoreVisibility(); });
 describe('compact daily workout in Today', () => {
+  it('opens the saved workout and shows live shared delivery status without new AI calls or focus reads', async () => {
+    vi.stubGlobal('crypto', webcrypto);
+    const { fixture, workouts, request, delivery, deliveryOpen } = setup(true, { localDate: '2026-10-30', state: 'planned' });
+    const registry = TestBed.inject(MatIconRegistry), sanitizer = TestBed.inject(DomSanitizer);
+    registry.addSvgIconLiteral('suunto', sanitizer.bypassSecurityTrustHtml(readFileSync('src/assets/logos/suunto.svg', 'utf8')));
+    const workout = savedWorkout();
+    const setting = { schemaVersion: 1 as const, scope: 'workout' as const, scopeId: workout.id, provider: 'suunto' as const,
+      revision: 1, enabled: true, suppressed: false, timeZone: 'Europe/Helsinki', destinationKey: 'safe', connectionEpoch: 0,
+      scopeGeneration: 0, associationPlanId: null, approvedDigest: null, updatedAtMs: 1 };
+    const pending = { schemaVersion: 1 as const, id: createHash('sha256').update(JSON.stringify(['owner', 'suunto', 'safe', workout.id])).digest('hex'),
+      workoutId: workout.id, planId: null, provider: 'suunto' as const, status: 'pending' as const, hasRemoteCopy: false,
+      differsFromQS: false, timeZone: 'Europe/Helsinki', approvalDigest: null, issues: [], lastAcceptedAtMs: null,
+      lastAttemptAtMs: null, retryCount: 0, nextRetryAtMs: null, updatedAtMs: 1 };
+    const view = new BehaviorSubject<TrainingDeliveryView>({ settings: [setting], statuses: [pending] });
+    delivery.watchSummaryScope.mockReturnValue(view);
+    workouts.next([workout]); fixture.detectChanges();
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.nativeElement.textContent).toContain('Waiting to send'); });
+    expect(fixture.nativeElement.querySelector('a[aria-label="Open Saved easy run"]').getAttribute('href')).toBe('/training/plans/workout/saved-workout');
+    const button = fixture.debugElement.query(By.directive(TrainingDeliveryButtonComponent)).componentInstance as TrainingDeliveryButtonComponent;
+    button.open();
+    expect(deliveryOpen).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: { scope: 'workout', id: workout.id, title: workout.title } }));
+    exportQa(fixture.nativeElement, 'planned-waiting-send');
+    view.next({ settings: [setting], statuses: [{ ...pending, status: 'delivered', hasRemoteCopy: true, lastAcceptedAtMs: Date.now() }] });
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.nativeElement.textContent).toContain('Sent to Suunto'); });
+    exportQa(fixture.nativeElement, 'planned-sent');
+    view.next({ settings: [setting], statuses: [{ ...pending, status: 'failed', issues: ['Delivery failed'] }] });
+    await vi.waitFor(() => { fixture.detectChanges(); expect(fixture.nativeElement.textContent).toMatch(/failed|attention/i); });
+    exportQa(fixture.nativeElement, 'planned-send-failed');
+    fixture.componentInstance.visible.set(false); fixture.detectChanges();
+    fixture.componentInstance.visible.set(true); fixture.detectChanges();
+    expect(delivery.watchSummaryScope).toHaveBeenCalledOnce();
+    expect(request).not.toHaveBeenCalled();
+    workouts.next([]); fixture.detectChanges(); expect(view.observed).toBe(false);
+    expect(fixture.debugElement.query(By.directive(TrainingDeliveryButtonComponent))).toBeNull();
+  });
+
   it('shares the real service cache across Today rows and refreshes the saved-zone day on foreground return', async () => {
     vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
     vi.setSystemTime(new Date('2026-10-30T07:00Z'));
@@ -102,9 +158,10 @@ describe('compact daily workout in Today', () => {
       : { data: { localDate: dayWorkoutLocalDate(new Date(), controls.timeZone), state: 'waiting-sleep' } as DailyWorkoutSuggestionStatus });
     const values = new Map<string, string>();
     TestBed.configureTestingModule({ imports: [DailyWorkoutSuggestionComponent], providers: [DailyWorkoutSuggestionService,
+      provideRouter([]), deliveryProvider(),
       { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
       { provide: Auth, useValue: { currentUser: { uid: 'owner' } } },
-      { provide: AppUserService, useValue: { user, isProSignal: () => true } },
+      { provide: AppUserService, useValue: { user, user$: of(user()), isProSignal: () => true } },
       { provide: AppFunctionsService, useValue: { call } },
       { provide: AppAnalyticsService, useValue: { logEvent: vi.fn() } },
       { provide: AppWindowService, useValue: { windowRef: { sessionStorage: {
@@ -193,7 +250,7 @@ describe('compact daily workout in Today', () => {
     expect(fixture.nativeElement.textContent).toContain('+1 more');
     expect(fixture.nativeElement.querySelector('.compact-row__title')?.textContent).toContain('Today’s workouts');
     expect(fixture.componentInstance.plannedWorkouts()).toHaveLength(2);
-    user.set({ settings: { unitSettings: { distanceUnits: DistanceUnits.Miles } } }); fixture.detectChanges();
+    user.set({ uid: 'owner', settings: { unitSettings: { distanceUnits: DistanceUnits.Miles } } }); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('3.11 mi');
     expect(watchCalendarSchedule).toHaveBeenCalledOnce();
   });
@@ -266,9 +323,10 @@ describe('compact daily workout in Today', () => {
     });
     const values = new Map<string, string>(), haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
     TestBed.configureTestingModule({ imports: [DailyWorkoutSuggestionComponent], providers: [DailyWorkoutSuggestionService,
+      provideRouter([]), deliveryProvider(),
       { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
       { provide: Auth, useValue: { currentUser: { uid: 'owner' } } },
-      { provide: AppUserService, useValue: { user, isProSignal: () => true } },
+      { provide: AppUserService, useValue: { user, user$: of(user()), isProSignal: () => true } },
       { provide: AppFunctionsService, useValue: { call } },
       { provide: AppAnalyticsService, useValue: { logEvent: vi.fn() } },
       { provide: AppWindowService, useValue: { windowRef: { sessionStorage: {

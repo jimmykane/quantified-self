@@ -1968,6 +1968,16 @@ structured/native failure coverage; no monitoring resources or activation change
 
 The frontend should reuse the Services and provider-presentation patterns rather than create a one-off integration page.
 
+Planned-workout post-save and Today actions reuse `TrainingDeliveryButtonComponent` and the existing delivery review.
+An acknowledged AI Add keeps its saved confirmation open; manual creation and single library placements offer a
+short-lived, owner-bound Send/sync shortcut that survives editor navigation. Plan-bound workouts can open their
+parent's Plan sync settings explicitly. Opening these surfaces never grants consent or sends a workout. Failed or
+cancelled delivery leaves the authored workout saved, and provider acceptance remains separate from app/watch receipt.
+See [Training planning](training-workspace.md#generate-a-workout-from-a-calendar-day) for the detailed frontend contract.
+Monitoring review: **unchanged**. These entry points use the existing Training Delivery command, queue and status
+projections. Worker/dispatcher behavior, schedules, leases, retries, terminal states, dashboards and alert labels are
+unchanged; no operational resource activation or new provider/MCP permission is part of this UI change.
+
 ### Required product surfaces
 
 Garmin's connection overview displays supported permissions per browser-safe account snapshot, including optional

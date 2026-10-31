@@ -1695,6 +1695,10 @@ describe('help.content', () => {
     const planningSection = HELP_SECTIONS.find(section => section.id === 'training-plans');
 
     expect(planningSection?.content).toContain('You do not need to create a plan first');
+    expect(planningSection?.content).toContain('confirmation stays open with the saved workout');
+    expect(planningSection?.content).toContain('confirmation offers **Send / sync**');
+    expect(planningSection?.content).toContain('**Plan sync settings** opens that plan');
+    expect(planningSection?.content).toContain('Opening sync does not generate another workout');
     expect(planningSection?.content).toContain('five three-minute efforts, not a five-mile run');
     expect(planningSection?.content).toContain('titles and notes alone do not create repeats or HR/pace targets');
     expect(planningSection?.content).toContain('a sample does not verify every workout');

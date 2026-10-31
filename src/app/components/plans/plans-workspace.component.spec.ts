@@ -38,6 +38,7 @@ import {
   type CurrentTrainingScheduleV1,
 } from '../../services/training-plans.service';
 import { PlansWorkspaceComponent } from './plans-workspace.component';
+import { TrainingDeliveryDialogComponent } from './training-delivery-dialog.component';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { TRAINING_PLAN_COLOR_OPTIONS, trainingPlanAppearance } from '../../helpers/training-plan-appearance.helper';
 import { createManualWorkoutEditorStep, manualWorkoutEditorToStructure, workoutStructureToManualEditor,
@@ -120,7 +121,7 @@ describe('PlansWorkspaceComponent', () => {
     restoreSchedule = vi.fn();
     deleteTrainingPlan = vi.fn();
     dialogOpen = vi.fn();
-    snackBarOpen = vi.fn();
+    snackBarOpen = vi.fn().mockReturnValue({ onAction: () => of(), dismiss: vi.fn() });
     savePreferences = vi.fn().mockResolvedValue(undefined);
     haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
     await TestBed.configureTestingModule({
@@ -3704,6 +3705,39 @@ describe('PlansWorkspaceComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Some providers cannot remove past workouts');
     await fixture.componentInstance.deletePlan(schedule.plans[0]);
     expect(deleteTrainingPlan).toHaveBeenCalledWith(expect.objectContaining({ removePastProviderCopies: true }));
+  });
+
+  it.each(['manual', 'library'] as const)('offers the existing delivery review after adding a %s workout', async source => {
+    setRouteState({ mode: source === 'manual' ? 'create' : 'library-browse', scope: 'standalone' });
+    const action = new Subject<void>();
+    snackBarOpen.mockReturnValue({ onAction: () => action, dismiss: vi.fn() });
+    const fixture = await renderPlans(true); const component = fixture.componentInstance;
+    const open = dialogOpen;
+    if (source === 'manual') {
+      component.updateEditorField('title', 'Quick run'); await component.saveWorkout();
+    } else {
+      libraryPlace.mockResolvedValue({ workoutIds: ['placed-workout'] });
+      component.beginLibraryPlacement(savedItem()); await component.placeLibraryItem();
+    }
+    expect(snackBarOpen).toHaveBeenLastCalledWith(expect.any(String), 'Send / sync', { duration: 8000 });
+    expect(open).not.toHaveBeenCalled();
+    action.next(); action.next();
+    expect(open).toHaveBeenCalledOnce();
+    expect(open).toHaveBeenCalledWith(TrainingDeliveryDialogComponent, expect.objectContaining({
+      data: { scope: 'workout', id: source === 'manual' ? 'workout-new' : 'placed-workout', title: source === 'manual' ? 'Quick run' : savedItem().title },
+    }));
+    expect(mutate).toHaveBeenCalledTimes(source === 'manual' ? 1 : 0);
+    expect(libraryPlace).toHaveBeenCalledTimes(source === 'library' ? 1 : 0);
+  });
+
+  it('discards a saved-workout Send shortcut after sign-out', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone' });
+    const action = new Subject<void>(); snackBarOpen.mockReturnValue({ onAction: () => action, dismiss: vi.fn() });
+    const fixture = await renderPlans(true); const component = fixture.componentInstance;
+    const open = dialogOpen;
+    component.updateEditorField('title', 'Quick run'); await component.saveWorkout();
+    userSignal.set(null); userSubject.next(null);
+    action.next(); expect(open).not.toHaveBeenCalled();
   });
 
   it('passes the explicit single-workout cleanup choice and leaves cancellation inert', async () => {

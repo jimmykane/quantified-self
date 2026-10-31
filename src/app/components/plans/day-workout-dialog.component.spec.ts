@@ -19,6 +19,7 @@ import type { AssistantQuotaStatus } from '@shared/assistant.types';
 import { TrainingPlansService, type CurrentTrainingScheduleV1 } from '../../services/training-plans.service';
 import { TrainingDeliveryService } from '../../services/training-delivery.service';
 import { DayWorkoutDialogComponent } from './day-workout-dialog.component';
+import { TrainingDeliveryButtonComponent } from './training-delivery-button.component';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
@@ -41,9 +42,11 @@ function response(requestId: string): GenerateDayWorkoutResponse {
 
 function exportDailySuggestionDialogQa(element: HTMLElement, name: string) {
   const dir = process.env.DAY_WORKOUT_QA_DIR; if (!dir) return;
+  const saved = !!element.querySelector('.saved-workout');
   const sass = createRequire(createRequire(resolve('package.json')).resolve('@angular/build/package.json'))('sass');
   const css = (MatDialogContainer as unknown as { ɵcmp: { styles: string[] } }).ɵcmp.styles.join('\n')
-    + [[`#${element.id}`, 'plans/day-workout-dialog'], ['app-compact-row', 'shared/compact-row/compact-row']]
+    + [[`#${element.id}`, 'plans/day-workout-dialog'], ['app-compact-row', 'shared/compact-row/compact-row'],
+      ['app-training-delivery-button', 'plans/training-delivery-button']]
       .map(([selector, path]) => sass.compileString(`${selector} {` + readFileSync(`src/app/components/${path}.component.scss`, 'utf8')
         .replace(/:host\(([^)]+)\)/g, '&$1').replace(/:host/g, '&') + '}').css).join('');
   const markup = element.cloneNode(true) as HTMLElement;
@@ -52,7 +55,7 @@ function exportDailySuggestionDialogQa(element: HTMLElement, name: string) {
   for (const dark of [false, true]) writeFileSync(join(dir, `${name}${dark ? '-dark' : ''}.html`),
     '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
     + '<link rel="stylesheet" href="styles.css">' + [...document.head.querySelectorAll('style')].map(style => style.outerHTML).join('')
-    + '<style>' + css + '.qa-pane{width:720px;max-width:100vw;max-height:100dvh;margin:auto}@media(max-width:600px){.qa-pane{width:100vw;height:100dvh}}</style></head>'
+    + '<style>' + css + 'body{display:flex;min-height:100dvh;align-items:center;justify-content:center}.qa-pane{width:720px;max-width:100vw;max-height:100dvh;margin:auto}@media(max-width:600px){.qa-pane{width:100vw;height:' + (saved ? 'auto' : '100dvh') + '}}</style></head>'
     + '<body class="app-hydrated' + (dark ? ' dark-theme' : '') + '"><div class="qa-pane"><mat-dialog-container class="mat-mdc-dialog-container mdc-dialog mdc-dialog--open">'
     + '<div class="mat-mdc-dialog-inner-container mdc-dialog__container"><div class="mat-mdc-dialog-surface mdc-dialog__surface">'
     + markup.outerHTML + '</div></div></mat-dialog-container></div></body></html>');
@@ -79,6 +82,7 @@ describe('DayWorkoutDialogComponent', () => {
     loadQuotaStatus = vi.fn().mockResolvedValue(quotaStatus);
     mutate = vi.fn().mockResolvedValue({}); close = vi.fn(); dialogOpen = vi.fn().mockReturnValue({ afterClosed: () => of(true) });
     haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() }; let counter = 0;
+    TestBed.overrideComponent(TrainingDeliveryButtonComponent, { add: { providers: [{ provide: MatDialog, useValue: { open: dialogOpen } }] } });
     const user = { uid: 'owner', settings: { unitSettings: {} } };
     await TestBed.configureTestingModule({ imports: [DayWorkoutDialogComponent], providers: [
       { provide: MAT_DIALOG_DATA, useValue: { ownerUid: 'owner', localDate: '2026-10-28', sport: ActivityTypes.StrengthTraining } },
@@ -86,12 +90,14 @@ describe('DayWorkoutDialogComponent', () => {
       { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
       { provide: AppUserService, useValue: { user: signal(user), user$: of(user) } },
       { provide: AppHapticsService, useValue: haptics },
-      { provide: MatDialogRef, useValue: { close, disableClose: false } }, { provide: MatDialog, useValue: { open: dialogOpen } },
+      { provide: MatDialogRef, useValue: { close, disableClose: false, updateSize: vi.fn() } }, { provide: MatDialog, useValue: { open: dialogOpen } },
       { provide: DayWorkoutService, useValue: { generate, isOwner: () => auth.value?.uid === 'owner' } },
       { provide: AssistantQuotaService, useValue: { loadQuotaStatus } },
       { provide: TrainingPlansService, useValue: { watchSchedule: () => schedule, mutate,
         createMutationId: (prefix: string) => `${prefix}:00000000-0000-4000-8000-${String(++counter).padStart(12, '0')}`, createEntityId: () => `workout-${++counter}` } },
-      { provide: TrainingDeliveryService, useValue: { watchScope: () => of({ settings: [{ provider: 'garmin', enabled: true }] }) } },
+      { provide: TrainingDeliveryService, useValue: { watchScope: () => of({ settings: [{ provider: 'garmin', enabled: true }] }),
+        watchPresence: () => of(false), watchSummaryScope: () => of({ settings: [], statuses: [], verifications: [] }),
+        anyReady: () => true, isVisible: (provider: string) => provider !== 'coros', isReady: () => true, isSetupAvailable: () => true } },
     ] }).compileComponents();
   });
   afterEach(() => vi.useRealTimers());
@@ -122,6 +128,50 @@ describe('DayWorkoutDialogComponent', () => {
     await component.primaryAction();
     expect(data.savePreferences).toHaveBeenCalledWith(expect.objectContaining({ destinationPlanId: null, timelineContext: true, hrvContext: true }), true);
     expect(generate).not.toHaveBeenCalled(); expect(mutate).not.toHaveBeenCalled();
+  });
+  it('keeps a successful Add open with the shared Send control and prevents duplicate saves or generation', async () => {
+    const data = TestBed.inject(MAT_DIALOG_DATA);
+    data.initialControls = defaultDayWorkoutControls('2026-10-28', 'Europe/Helsinki', ActivityTypes.StrengthTraining);
+    data.initialResult = response('daily-suggestion:2026-10-28'); data.onAdded = vi.fn();
+    const fixture = await render(); const component = fixture.componentInstance;
+    await component.add(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const id = mutate.mock.calls[0][0].operation.workoutId;
+    expect(fixture.nativeElement.querySelector('[aria-label="Saved workout"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('mat-dialog-actions [mat-flat-button]')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Your workout is saved.');
+    expect(fixture.nativeElement.textContent).toContain('88 of 100 remaining');
+    expect(close).not.toHaveBeenCalled(); expect(data.onAdded).toHaveBeenCalledOnce();
+    expect(TestBed.inject(MatDialogRef).updateSize).toHaveBeenCalledWith(undefined, 'auto');
+    const deliveryButton = fixture.debugElement.query(By.directive(TrainingDeliveryButtonComponent)).componentInstance as TrainingDeliveryButtonComponent;
+    expect(deliveryButton.entityId()).toBe(id); expect(deliveryButton.standalone()).toBe(true);
+    deliveryButton.open();
+    expect(dialogOpen).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: expect.objectContaining({ scope: 'workout', id }) }));
+    expect(close).not.toHaveBeenCalled(); // Cancelling provider review leaves the saved confirmation available.
+    exportDailySuggestionDialogQa(fixture.nativeElement, 'workout-added-send');
+    await component.add(); await component.primaryAction(); await component.generate(); component.edit(); component.set('minutes', 90);
+    expect(component.controls().minutes).toBe(30);
+    expect(mutate).toHaveBeenCalledOnce(); expect(generate).not.toHaveBeenCalled(); expect(loadQuotaStatus).toHaveBeenCalledOnce();
+  });
+
+  it('uses the acknowledged saved workout for delivery summaries and removes the action on account change', async () => {
+    const fixture = await render(); const component = fixture.componentInstance;
+    await component.generate();
+    mutate.mockImplementationOnce(async request => ({ workouts: [{ schemaVersion: 1, id: request.operation.workoutId,
+      planId: request.operation.planId, localDate: request.operation.localDate, title: 'Acknowledged workout',
+      structure: request.operation.structure, revision: 1, lifecycle: 'planned', createdAtMs: 1, updatedAtMs: 1 }] }));
+    await component.add(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const button = fixture.debugElement.query(By.directive(TrainingDeliveryButtonComponent)).componentInstance as TrainingDeliveryButtonComponent;
+    expect(button.summaryWorkouts()?.[0].title).toBe('Acknowledged workout'); expect(button.standalone()).toBe(false);
+    const saved = button.summaryWorkouts()![0];
+    schedule.next({ ...schedule.value, workouts: [{ ...saved, planId: null, localDate: '2026-10-30', title: 'Moved saved workout',
+      structure: { version: 1, sport: ActivityTypes.Running, nodes: [{ kind: 'step', id: 'steady', purpose: 'work', ending: { kind: 'time', seconds: 1800 }, targets: [] }] } }] });
+    fixture.detectChanges();
+    expect(button.standalone()).toBe(true); expect(button.summaryPlan()).toBeNull();
+    expect(component.savedDetails()).toMatchObject({ title: 'Moved saved workout', localDate: '2026-10-30', sport: ActivityTypes.Running, summary: '30m 00s' });
+    auth.next({ uid: 'other-owner' }); fixture.detectChanges();
+    expect(component.savedWorkoutId()).toBeNull();
+    expect(fixture.debugElement.query(By.directive(TrainingDeliveryButtonComponent))).toBeNull();
+    expect(close).toHaveBeenCalledOnce();
   });
   it('shows the shared Assistant allowance before generation and refreshes authoritative counts after attempts', async () => {
     const fixture = await render(); const component = fixture.componentInstance;
@@ -414,7 +464,8 @@ describe('DayWorkoutDialogComponent', () => {
     component.set('minutes', 50); expect(component.controls().minutes).toBe(30);
     await component.add();
     expect(mutate.mock.calls[1][0]).toEqual(command); expect(dialogOpen).toHaveBeenCalledOnce();
-    expect(close).toHaveBeenCalledOnce();
+    expect(close).not.toHaveBeenCalled();
+    expect(component.savedWorkoutId()).toBe(command.operation.workoutId);
   });
   it('requires a current-day review after a definitive conflict and retains the draft', async () => {
     const fixture = await render(); const component = fixture.componentInstance;
