@@ -1482,6 +1482,11 @@ shadow for in-flow cards or add route-local card shadows.
 
 ## Dashboard calendar popup
 
+Calendar route and Dashboard grids share the same dotted rest-day marker, including compact cells. A rest-only day
+keeps its visible label in dense and phone grids (shortened to **Rest** on phones), with the full rest-day context in
+the accessible date name and selected-day preview. Rest markers remain alongside authored workouts without a second
+overlapping preview label. This presentation fix changes no Training/MCP reads, writes, scopes, contracts or AI allowance.
+
 Selected-day presentation is shared by the full day page, Dashboard day preview, Calendar day preview, and day
 bottom sheet through `components/calendar/_calendar-day-presentation.scss`. Reuse its navigation, supporting-text,
 section-heading, entry-row, entry-title, and entry-icon mixins instead of copying presentation rules. The full day retains

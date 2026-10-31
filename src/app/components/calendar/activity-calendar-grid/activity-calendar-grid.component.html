@@ -95,7 +95,7 @@
                 }
               </span>
               @if (isCalmGrid && plannedDay.restDay && !plannedDay.visibleEntries.length) {
-                <span class="activity-calendar-workout-preview" aria-hidden="true">Rest day</span>
+                <span class="activity-calendar-workout-preview activity-calendar-workout-preview--rest" aria-hidden="true"><span>Rest<span class="activity-calendar-rest-day-suffix"> day</span></span></span>
               }
               @if (isCalmGrid && plannedDay.visibleEntries[0]; as firstWorkout) {
                 <span class="activity-calendar-workout-preview" aria-hidden="true"

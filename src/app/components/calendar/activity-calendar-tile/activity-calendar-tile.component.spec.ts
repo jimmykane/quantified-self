@@ -657,6 +657,36 @@ describe('ActivityCalendarTileComponent', () => {
     expect(reportRange).toHaveBeenLastCalledWith(fixture.componentInstance, null);
   });
 
+  it.each(['month', '30d'] as const)('updates calendar-only rest days live in the dashboard %s grid and day preview', async view => {
+    const localDate = currentLocalDate(new Date().getDate());
+    const schedule = new BehaviorSubject<CurrentTrainingScheduleV1>({ ...emptySchedule(), restDays: [] });
+    watchSchedule.mockReturnValue(schedule);
+    watchEvents.mockReturnValue(of([]));
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('view', view);
+    fixture.componentRef.setInput('dayContextEnabled', true);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.planned-rest-day-marker')).toBeNull();
+
+    schedule.next({ ...emptySchedule(), restDays: [{ schemaVersion: 1, localDate, isRestDay: true, revision: 1 }] });
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const cell = fixture.nativeElement.querySelector('[aria-label*="Rest day, Calendar"]') as HTMLElement;
+    expect(cell.querySelector('.planned-rest-day-marker')).toBeTruthy();
+    expect(cell.querySelector('.activity-calendar-workout-preview--rest')?.textContent).toBe('Rest day');
+    expect(fixture.nativeElement.querySelector('.activity-calendar-calm-legend-rest')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[aria-label="Planned rest day"]')?.textContent).toContain('Rest day');
+
+    schedule.next({ ...emptySchedule(), restDays: [{ schemaVersion: 1, localDate, isRestDay: false, revision: 2 }] });
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.planned-rest-day-marker')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[aria-label="Planned rest day"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-calm-legend-rest')).toBeNull();
+    expect(watchSchedule).toHaveBeenCalledOnce();
+    expect(watchEvents).toHaveBeenCalledOnce();
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
   it('shows active-plan and standalone workouts and passes them to empty-day details', async () => {
     const plannedDate = currentLocalDate(2);
     watchSchedule.mockReturnValue(of(scheduleForDate(plannedDate)));
