@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { By } from '@angular/platform-browser';
 import { buildActivityCalendarViewModel } from '../../../helpers/activity-calendar.helper';
@@ -74,20 +74,26 @@ describe('ActivityCalendarGridComponent', () => {
     expect(fixture.componentInstance.model.summary.totalDurationSeconds).toBe(0);
   });
 
-  it('labels rest days independently without overlapping standalone workout previews or adding activity totals', async () => {
+  it.each([false, true])('labels rest days independently in route/dashboard grids (compact: %s) without overlapping workouts or adding activity totals', async compact => {
     const rest = { planId: 'plan', planName: 'Autumn', color: 'purple' };
     const day = { entries: [], visibleEntries: [], overflowCount: 0, hasSkipped: false, ariaLabel: 'Planned rest day, Autumn', restDay: rest };
-    const fixture = await renderGrid('month', false, [], DaysOfTheWeek.Monday, { '2026-08-03': day });
-    fixture.componentRef.setInput('calmMonth', true); fixture.detectChanges();
+    const fixture = await renderGrid('month', compact, [], DaysOfTheWeek.Monday, { '2026-08-03': day });
+    fixture.componentRef.setInput('calmMonth', true);
+    fixture.componentRef.setInput('dashboardDayContext', compact);
+    fixture.detectChanges();
     const button = fixture.nativeElement.querySelector('[aria-label*="Planned rest day"]') as HTMLElement;
     expect(button.querySelector('.planned-rest-day-marker')).toBeTruthy();
     expect(button.querySelectorAll('.activity-calendar-workout-preview')).toHaveLength(1);
     expect(button.textContent).toContain('Rest day');
+    expect(button.querySelector('.activity-calendar-workout-preview--rest')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.activity-calendar-calm-legend-rest')).toBeTruthy();
+    if (process.env.CALENDAR_REST_QA_DIR) writeFileSync(resolve(process.env.CALENDAR_REST_QA_DIR,
+      `rest-day-grid-${compact ? 'dashboard' : 'route'}.html`), fixture.nativeElement.outerHTML);
     const entry = { workout: { ...createWorkout('Independent run', 'planned'), planId: null }, planName: null, color: 'gray' };
     fixture.componentRef.setInput('plannedWorkoutsByDate', { '2026-08-03': { ...day, entries: [entry], visibleEntries: [entry] } }); fixture.detectChanges();
     expect(button.querySelectorAll('.activity-calendar-workout-preview')).toHaveLength(1);
     expect(button.querySelector('.activity-calendar-workout-preview')?.textContent).toContain('Independent run');
+    expect(button.querySelector('.activity-calendar-workout-preview--rest')).toBeNull();
     expect(button.querySelector('.planned-rest-day-marker')).toBeTruthy();
     expect(fixture.componentInstance.model.summary.totalDurationSeconds).toBe(0);
   });

@@ -650,6 +650,7 @@
   }
   .planned-workout-markers mat-icon,
   &.activity-calendar--compact .planned-workout-markers mat-icon {
+    box-sizing: border-box;
     width: 3px;
     height: auto;
     flex: 1 1 0;
@@ -658,8 +659,9 @@
     font-size: 0;
     line-height: 0;
   }
-  .planned-workout-markers .planned-workout-marker--skipped { border-inline-start-style: dashed; }
-  .planned-workout-markers .planned-rest-day-marker { border-inline-start-style: dotted; }
+  // Match the compact base rule's specificity so status styles survive on dashboard cells too.
+  .planned-workout-markers mat-icon.planned-workout-marker--skipped { border-inline-start-style: dashed; }
+  .planned-workout-markers mat-icon.planned-rest-day-marker { border-inline-start-style: dotted; }
   .planned-workout-markers > span { display: none; }
   .activity-calendar-workout-preview {
     position: absolute;
@@ -736,7 +738,7 @@
 
 // A six-week dashboard month uses shorter fixed-height rows. Keep its colored
 // plan rail and accessible name, and leave the full title to the day preview.
-.activity-calendar--dense-dashboard-month .activity-calendar-workout-preview { display: none; }
+.activity-calendar--dense-dashboard-month .activity-calendar-workout-preview:not(.activity-calendar-workout-preview--rest) { display: none; }
 
 // The shared narrow-grid rules use concentric markers. Calm month keeps its
 // separate dots and readable date cells until the phone layout takes over.
@@ -766,7 +768,14 @@
     .activity-calendar-marker { width: 8px; height: 8px; margin-right: -3px; border-width: 1px; }
     .activity-calendar-marker-overflow { display: none; }
     .activity-calendar-calm-note { position: absolute; right: 2px; bottom: 7px; width: 2px; height: 12px; }
-    .activity-calendar-workout-preview { display: none; }
+    .activity-calendar-workout-preview:not(.activity-calendar-workout-preview--rest) { display: none; }
+    .activity-calendar-workout-preview--rest {
+      right: 2px;
+      bottom: 2px;
+      left: 2px;
+      justify-content: center;
+    }
+    .activity-calendar-rest-day-suffix { display: none; }
     .planned-workout-markers,
     &.activity-calendar--compact .planned-workout-markers { top: 18px; width: 2px; }
     .planned-workout-markers mat-icon,
