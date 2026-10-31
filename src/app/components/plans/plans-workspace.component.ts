@@ -2009,6 +2009,12 @@ export class PlansWorkspaceComponent {
   }
 
   async deleteWorkout(workout: ScheduledWorkoutV1): Promise<void> {
+    const uid = this.currentUser()?.uid;
+    if (!uid || this.busyAction()) return;
+    const generation = this.editorGeneration;
+    const editingWorkout = this.editor()?.original?.id === workout.id;
+    const current = () => !this.destroyRef.destroyed && uid === this.currentUser()?.uid
+      && generation === this.editorGeneration;
     const expectedRevisions = this.expectedRevisions({
       workoutIds: [workout.id],
       workoutRevisionOverrides: new Map([[workout.id, workout.revision]]),
@@ -2020,14 +2026,19 @@ export class PlansWorkspaceComponent {
       'Delete workout',
       'warn',
     );
-    if (!confirmation) return;
+    if (!confirmation || !current() || this.busyAction()) return;
+    const action = `delete-${workout.id}`;
     const response = await this.runMutation({
       mutationId: this.plansService.createMutationId('delete-workout'),
       expectedRevisions,
       operation: { kind: 'delete-workout', workoutId: workout.id,
         ...(confirmation.removePastProviderCopies ? { removePastProviderCopies: true } : {}) },
-    }, `delete-${workout.id}`);
-    if (response) this.snackBar.open(confirmation.removePastProviderCopies
+    }, action, current, current);
+    // A changed account/view suppresses feedback but must still release this pending action.
+    if (this.busyAction() === action) this.busyAction.set(null);
+    if (!response || !current()) return;
+    if (editingWorkout) this.cancelEditor();
+    this.snackBar.open(confirmation.removePastProviderCopies
       ? 'Workout deleted. Past provider cleanup is pending where supported; check Workout sync history.'
       : 'Workout deleted. Open history to restore it.', 'Dismiss', { duration: 6000 });
   }

@@ -526,6 +526,7 @@
 }
 
 .editor-save-actions {
+  flex-wrap: wrap;
   position: sticky;
   bottom: 0;
   z-index: 2;
@@ -533,6 +534,10 @@
   padding: 12px 0 max(12px, env(safe-area-inset-bottom));
   background: var(--mat-sys-surface);
   border-top: 1px solid var(--mat-sys-outline-variant);
+}
+
+.editor-delete-action {
+  margin-inline-end: auto;
 }
 
 .workout-summary {
@@ -664,9 +669,9 @@ mat-card-actions button,
 }
 
 @media (max-width: 600px) {
-  .workout-row-actions,
-  .editor-save-actions { flex-wrap: wrap; }
-  .editor-library-copy-action { flex: 1 1 100%; }
+  .workout-row-actions { flex-wrap: wrap; }
+  .editor-library-copy-action,
+  .editor-delete-action { flex: 1 1 100%; }
   .strength-set-type,
   .strength-set-rest { grid-column: 1 / -1; }
   .plans-view-navigation {

@@ -3715,9 +3715,127 @@ describe('PlansWorkspaceComponent', () => {
     await fixture.componentInstance.deleteWorkout(schedule.workouts[0]);
     expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
       operation: { kind: 'delete-workout', workoutId: 'plan-workout', removePastProviderCopies: true },
-    }));
+    }), expect.any(Function));
     await fixture.componentInstance.permanentlyDeleteWorkout(schedule.workouts[0]);
     expect(mutate).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['plan-workout', 'standalone-workout'])('deletes %s from the editor and returns to its saved day', async workoutId => {
+    const workout = schedule.workouts.find(item => item.id === workoutId)!;
+    workout.localDate = '2026-09-20';
+    setRouteState({ mode: 'edit', workoutId });
+    const fixture = await renderPlans(true);
+    const component = fixture.componentInstance;
+    component.updateEditorField('title', ''); // Invalid unsaved edits must not prevent deleting the saved workout.
+    fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('.editor-delete-action') as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    expect(button.classList.contains('qs-mat-warn')).toBe(true);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    exportLibraryQa(fixture, `delete-${workoutId}`, '.workout-editor');
+    const confirmation = mockWorkoutDeleteConfirmation(component, of({ confirmed: true, removePastProviderCopies: false }));
+
+    button.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(confirmation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: expect.objectContaining({
+      title: 'Delete workout?', message: 'The workout will remain in history and can be restored.',
+      pastProviderCleanupOption: true,
+    }) }));
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: { kind: 'delete-workout', workoutId },
+      expectedRevisions: expect.arrayContaining([{ scope: 'workout', id: workoutId, revision: workout.revision }]),
+    }), expect.any(Function));
+    expect(component.editor()).toBeNull();
+    expect(component.view()).toBe(workout.planId ? 'plans' : 'standalone');
+    if (workout.planId) expect(component.planScheduleDate()).toBe('2026-09-20');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(haptics.success).toHaveBeenCalledOnce();
+    expect(haptics.error).not.toHaveBeenCalled();
+  });
+
+  it.each(['create', 'library-create', 'library-edit'] as const)('hides scheduled-workout deletion in %s', async mode => {
+    if (mode === 'library-edit') libraryGet.mockResolvedValue(savedItem());
+    setRouteState({ mode, ...(mode === 'library-edit' ? { libraryItemId: 'library-1' } : {}) });
+    const fixture = await renderPlans();
+    expect(fixture.nativeElement.querySelector('.editor-delete-action')).toBeNull();
+  });
+
+  it.each(['cancel', 'failure'] as const)('keeps the editor draft after deletion %s', async outcome => {
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans(true);
+    const component = fixture.componentInstance;
+    component.updateEditorField('title', 'Unsaved workout title');
+    mockWorkoutDeleteConfirmation(component, of(outcome === 'cancel' ? false : { confirmed: true }));
+    if (outcome === 'failure') mutate.mockRejectedValue(new Error('Delete failed'));
+    await component.deleteWorkout(component.editor()!.original!);
+    fixture.detectChanges();
+    expect(component.editor()?.value.title).toBe('Unsaved workout title');
+    expect(TestBed.inject(Router).navigate).not.toHaveBeenCalled();
+    expect(haptics.success).not.toHaveBeenCalled();
+    expect(mutate).toHaveBeenCalledTimes(outcome === 'cancel' ? 0 : 1);
+    expect(haptics.error).toHaveBeenCalledTimes(outcome === 'failure' ? 1 : 0);
+  });
+
+  it('locks editor deletion while pending and keeps its original revision precondition', async () => {
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans(true);
+    const component = fixture.componentInstance;
+    mockWorkoutDeleteConfirmation(component, of({ confirmed: true }));
+    let finish!: (value: unknown) => void;
+    mutate.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    schedule.workouts[0] = { ...schedule.workouts[0], revision: 2 };
+    fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('.editor-delete-action') as HTMLButtonElement;
+    button.click();
+    await Promise.resolve();
+    fixture.detectChanges();
+    expect(button.disabled).toBe(true);
+    expect(button.querySelector('mat-spinner')).toBeTruthy();
+    exportLibraryQa(fixture, 'delete-pending', '.workout-editor');
+    expect(mutate.mock.calls[0][0].expectedRevisions).toContainEqual({ scope: 'workout', id: 'plan-workout', revision: 1 });
+    expect(mutate.mock.calls[0][1]()).toBe(true);
+    finish({});
+    await fixture.whenStable();
+    expect(component.editor()).toBeNull();
+  });
+
+  it.each(['sign-out', 'navigate', 'destroy'] as const)('ignores an editor delete confirmation after %s', async change => {
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans(true);
+    const component = fixture.componentInstance;
+    const confirmation = new Subject<{ confirmed: boolean }>();
+    mockWorkoutDeleteConfirmation(component, confirmation);
+    const deletion = component.deleteWorkout(component.editor()!.original!);
+    if (change === 'sign-out') { userSignal.set(null); userSubject.next(null); }
+    else if (change === 'destroy') fixture.destroy();
+    else { setRouteState({ mode: 'create' }, true); fixture.detectChanges(); }
+    confirmation.next({ confirmed: true });
+    confirmation.complete();
+    await deletion;
+    expect(mutate).not.toHaveBeenCalled();
+    expect(haptics.success).not.toHaveBeenCalled();
+    expect(snackBarOpen).not.toHaveBeenCalled();
+  });
+
+  it('ignores a completed editor deletion after navigation and releases its busy state', async () => {
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans(true);
+    const component = fixture.componentInstance;
+    mockWorkoutDeleteConfirmation(component, of({ confirmed: true }));
+    let finish!: (value: unknown) => void;
+    mutate.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    const deletion = component.deleteWorkout(component.editor()!.original!);
+    await Promise.resolve();
+    setRouteState({ mode: 'create' }, true); fixture.detectChanges();
+    expect(mutate.mock.calls[0][1]()).toBe(false);
+    finish({});
+    await deletion;
+    expect(component.editor()?.mode).toBe('create');
+    expect(component.busyAction()).toBeNull();
+    expect(haptics.success).not.toHaveBeenCalled();
+    expect(snackBarOpen).not.toHaveBeenCalled();
   });
 
   it('keeps plan mutations visibly pending beside the triggering controls', async () => {
@@ -4075,6 +4193,11 @@ describe('PlansWorkspaceComponent', () => {
     expect(fixture.componentInstance.editor()).toBeNull();
     expect(mutate).not.toHaveBeenCalled();
   });
+
+  function mockWorkoutDeleteConfirmation(component: PlansWorkspaceComponent, result: Observable<unknown>) {
+    const dialog = (component as unknown as { dialog: MatDialog }).dialog;
+    return vi.spyOn(dialog, 'open').mockReturnValue({ afterClosed: () => result } as never);
+  }
 
   function exportLibraryQa(fixture: ComponentFixture<PlansWorkspaceComponent>, name: string, selector = '.workout-library'): void {
     if (!process.env.TRAINING_DELIVERY_QA_DIR) return;

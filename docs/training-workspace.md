@@ -2272,6 +2272,20 @@ without horizontal page overflow. Selection haptics belong to explicit UI action
 the actual result, and hydration, typing, and unchanged choices stay silent. Phone emulation verifies layout and wiring,
 not physical vibration or a real mobile keyboard.
 
+Existing scheduled-workout editors expose **Delete workout** in the sticky footer, separated from Save on desktop
+and placed on its own row on phones. New-workout and library-recipe editors omit this scheduled-workout action. It
+reuses the list's recoverable deletion, older-provider-copy choice, revision preconditions and server mutation; no
+permanent deletion is introduced. The precondition uses the editor-open workout revision rather than a newer live
+record. Cancelled or failed deletion retains the draft, including invalid unsaved fields. Success exits through the
+same context-preserving path as Cancel; an account/view change or destruction invalidates pending confirmation,
+transport retry and result feedback. Pending deletion disables editor actions and shows the existing icon/spinner row.
+The existing verified schedule-revision stream invalidates Today's availability cache after deletion; removing a
+workout does not reset or spend an additional daily generation allowance.
+MCP impact review: no wire impact. This adds a native entry point for the existing recoverable `delete-workout`
+operation; plan/workout read projections, lifecycle semantics, strict MCP/Assistant proposal and confirmation schemas,
+consent, provider cleanup choices and registered tools remain unchanged. No backend deployment or plugin refresh is
+required. Help documents the new footer entry point and existing 90-day recovery.
+
 The shared scheduled/library workout editor uses content-sized Material hint/error regions: wrapped pool-length help
 and validation messages reserve their real height instead of colliding with the next field or **Save to** legend.
 Controls align at the top of each grid row, with 16px row gaps and 24px between editor sections. Pool length and its

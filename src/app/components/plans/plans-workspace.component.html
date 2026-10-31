@@ -827,6 +827,19 @@
               [standalone]="workout.planId === null" [disabled]="busyAction() !== null"></app-training-delivery-button>
           }
         <div class="form-actions editor-save-actions">
+          @if (!libraryView() && session.mode === 'edit' && session.original && savedEditorWorkout()) {
+            <button appHapticTap mat-button class="editor-delete-action qs-mat-warn" type="button"
+              (click)="deleteWorkout(session.original)" [disabled]="busyAction() !== null">
+              <span class="button-content">
+                @if (busyAction() === 'delete-' + session.original.id) {
+                  <mat-spinner diameter="18"></mat-spinner>
+                } @else {
+                  <mat-icon aria-hidden="true">delete</mat-icon>
+                }
+                <span>Delete workout</span>
+              </span>
+            </button>
+          }
           @if (!libraryView() && session.mode === 'edit' && savedEditorWorkout()) {
             <button appHapticTap mat-stroked-button class="editor-library-copy-action" type="button"
               (click)="saveEditorCopyToLibrary()"
