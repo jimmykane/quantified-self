@@ -65,6 +65,28 @@ async function setup(mobile = false) {
   return {owner, sources, progress, dialog, sheet, haptics, closed$, dismiss};
 }
 describe('shared history import surfaces', () => {
+  it('uses a compact icon control while retaining the full status and provider count for accessibility', async () => {
+    const state = await setup();
+    const fixture = TestBed.createComponent(HistoryImportIndicatorComponent); fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+    expect(button.hasAttribute('mat-icon-button')).toBe(true);
+    expect(button.hasAttribute('mat-button')).toBe(false);
+    expect(button.getAttribute('aria-label')).toContain('Importing history. View history import status for 1 provider');
+    expect(button.querySelector('.cdk-visually-hidden')?.textContent).toContain('Importing history · 1');
+    expect(button.querySelector('mat-progress-spinner')).not.toBeNull();
+    expect(state.haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('uses flat provider rows inside the panel and retains outlined cards on the dashboard', async () => {
+    await setup();
+    const fixture = TestBed.createComponent(SharedSurfaces); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-history-import-cards mat-card')?.classList.contains('qs-overlay-flat')).toBe(false);
+    const panel = TestBed.createComponent(HistoryImportPanelComponent); panel.detectChanges();
+    expect(panel.nativeElement.querySelector('mat-card')?.classList.contains('qs-overlay-flat')).toBe(true);
+    expect(panel.nativeElement.querySelector('button[role="switch"]')?.getAttribute('aria-labelledby')).toBe('history-import-dashboard-label');
+    expect(panel.nativeElement.querySelector('#history-import-dashboard-label')?.textContent).toBe('Show on dashboard');
+  });
+
   it('updates the header and dashboard card from the same live state and clears both on sign-out', async () => {
     const state = await setup(); const fixture = TestBed.createComponent(SharedSurfaces); fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
@@ -215,6 +237,7 @@ describe('shared history import surfaces', () => {
     expect(opener).toHaveBeenCalledTimes(1);
     expect(opener.mock.calls[0][0]).toBe(HistoryImportPanelComponent);
     expect(opener.mock.calls[0][1].data.owner).toBe(state.owner());
+    if (mobile) expect(opener.mock.calls[0][1].panelClass).toBe('qs-bottom-sheet-container');
     expect(state.haptics.selection).toHaveBeenCalledTimes(1);
     expect(button.getAttribute('aria-expanded')).toBe('true');
     state.closed$.next(); fixture.detectChanges(); expect(button.getAttribute('aria-expanded')).toBe('false');

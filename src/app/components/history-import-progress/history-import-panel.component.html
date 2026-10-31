@@ -1,5 +1,6 @@
 <header class="panel-heading">
-  <div><h2>History imports</h2><p>{{ count() }} {{ count() === 1 ? 'provider' : 'providers' }} · {{ view().active ? 'Continues in the background' : 'Latest history status' }}</p></div>
+  <mat-icon class="panel-icon" aria-hidden="true">history</mat-icon>
+  <div class="panel-title"><h2>History imports</h2><p>{{ count() }} {{ count() === 1 ? 'provider' : 'providers' }} · {{ view().active ? 'Continues in the background' : 'Latest history status' }}</p></div>
   <button mat-icon-button type="button" aria-label="Close history imports" (click)="close()"><mat-icon aria-hidden="true">close</mat-icon></button>
 </header>
 <div class="panel-content" tabindex="0" aria-label="Provider history import cards">
@@ -7,5 +8,6 @@
   @if (!count()) { <p class="empty-status">No active or recent history imports.</p> }
 </div>
 <div class="panel-preference">
-  <mat-slide-toggle [checked]="showOnDashboard()" [disabled]="!ownerMatches()" (change)="setShowOnDashboard($event.checked)">Show on dashboard</mat-slide-toggle>
+  <span id="history-import-dashboard-label">Show on dashboard</span>
+  <mat-slide-toggle aria-labelledby="history-import-dashboard-label" [checked]="showOnDashboard()" [disabled]="!ownerMatches()" (change)="setShowOnDashboard($event.checked)" />
 </div>

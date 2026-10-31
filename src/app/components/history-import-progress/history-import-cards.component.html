@@ -1,5 +1,5 @@
 @if (showCards()) {
-<section class="history-import-region" aria-label="History import progress">
+<section class="history-import-region" [class.history-import-region-panel]="placement() === 'panel'" aria-label="History import progress">
   @if (placement() === 'dashboard') {
   <div class="dashboard-heading">
     <h2>History imports</h2>
@@ -10,7 +10,7 @@
   }
   <div class="history-import-cards">
   @for (item of items(); track item.serviceName) {
-  <mat-card appearance="outlined" class="history-import-card">
+  <mat-card appearance="outlined" class="history-import-card" [class.qs-overlay-flat]="placement() === 'panel'">
     <mat-card-content>
       <div class="provider-heading">
         <app-service-source-icon [sourceServiceName]="item.serviceName" [showTooltip]="false" />

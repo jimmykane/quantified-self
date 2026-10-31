@@ -1,9 +1,9 @@
 @if (view().items.length) {
-<button class="history-import-header-action" mat-button type="button" [attr.aria-label]="ariaLabel()" [attr.aria-expanded]="panelOpen()" [matTooltip]="view().label + ' · ' + view().items.length" aria-haspopup="dialog" (click)="open()">
+<button class="history-import-header-action" mat-icon-button type="button" [attr.aria-label]="ariaLabel()" [attr.aria-expanded]="panelOpen()" [matTooltip]="view().label + ' · ' + view().items.length" matTooltipTouchGestures="off" aria-haspopup="dialog" (click)="open()">
   <span class="history-import-header-content">
-    @if (view().active) { <mat-progress-spinner mode="indeterminate" [diameter]="12" [strokeWidth]="2" aria-hidden="true" /> }
-    @else { <mat-icon aria-hidden="true">{{ icon() }}</mat-icon> }
-    <span class="history-import-header-label">{{ view().label + ' ' }}</span><span class="history-import-header-count">· {{ view().items.length }}</span>
+    <mat-icon class="qs-app-badge qs-app-badge--small" [matBadge]="view().items.length" [matBadgeHidden]="view().items.length < 2" aria-hidden="true">{{ view().active ? 'history' : icon() }}</mat-icon>
+    @if (view().active) { <mat-progress-spinner mode="indeterminate" [diameter]="32" [strokeWidth]="2" aria-hidden="true" /> }
+    <span class="cdk-visually-hidden">{{ view().label + ' ' }}· {{ view().items.length }}</span>
   </span>
 </button>
 }
