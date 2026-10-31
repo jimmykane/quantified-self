@@ -1,3 +1,4 @@
+import { TrainingPlansService } from '../../../services/training-plans.service';
 import { DayWorkoutService } from '../../../services/day-workout.service';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -535,6 +536,7 @@ async function renderDayDetails(eventOrEvents: EventInterface | EventInterface[]
     imports: [CalendarDayDetailsComponent],
     providers: [
       provideRouter([]),
+      { provide: TrainingPlansService, useValue: {} },
       { provide: DayWorkoutService, useValue: { canGenerate: () => false, open: vi.fn() } },
       { provide: MAT_BOTTOM_SHEET_DATA, useValue: data },
       { provide: AppUserService, useValue: { user: signal({ uid: data.userId }) } },

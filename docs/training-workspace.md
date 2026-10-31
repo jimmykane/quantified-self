@@ -992,7 +992,16 @@ in that same plan/date must first be moved, skipped or removed. Standalone worko
 activities are not deleted or reclassified. A date without a workout and without this marker remains unscheduled.
 The selected plan calendar shows these dates even for inactive plans. Calendar, its day details, Dashboard's calendar
 and Today picker use the existing active-plan overlay; dotted marks distinguish rest days from planned/skipped
-workouts. Day details link to their plan for management. Today and Training show a quiet rest-day link and use **Low training
+workouts. Calendar day menus also offer **Mark as rest day** for an in-range date of the active plan, using the existing
+`set-plan-rest-days` mutation and exact state/plan revisions. Incomplete/restoring schedules and same-plan planned
+workouts withhold or disable this action; no plan is created implicitly. The shared day-context component covers
+Calendar previews, the day sheet, the full day page and Dashboard previews. A pending save disables the day menu
+and displays its status. The confirmed plan response bridges the live read without optimistic markers or extra
+queries, and cannot reinsert a missing/newer plan. Owner/day/active-plan changes and destruction fence dispatch and
+late feedback; an earlier response cannot clear a later save. Day details link to their plan for removal/management.
+The action adds about 3.93 kB of lazy JavaScript over the preceding release; startup remains 1.40 MB / 333.26 kB
+transfer. The existing total-script cap had 220 bytes of space, so production and beta caps move from 13,800 to
+13,805 kB for this feature. The initial limit and all warning budgets are unchanged; no runtime dependency is added. Today and Training show a quiet rest-day link and use **Low training
 load**, rather than **Ready to train**, for a Fresh state on an authored rest day. No score or calculation changes.
 
 `TrainingPlanV1.restDays?: string[]` contains at most 366 unique, sorted, valid local date labels inside the plan's
@@ -5791,7 +5800,13 @@ invalidation without adding a listener or query. A bounded eight-owner in-memory
 received before the lazy daily cache exists; it never supplies mutation authority. Restored unversioned status is
 invalidated on its first verified revision. Repeated revisions and other owners do nothing. Changed revisions
 invalidate day coverage while the backend's charged date receipt still prevents a second generated suggestion.
-Dismissed days remain dismissed. Successful Add updates the shared cache to planned even after Today has closed, with
+Dismissed days remain dismissed. This same revision invalidation covers rest-day edits from Calendar and Plans:
+the next status read checks current rest intent before exposing a cached suggestion or admitting a model call.
+Removing rest intent can recover the existing daily result; it never resets the one-day model allowance. Focused
+cache and server tests cover this transition without a new listener, polling, callable or backend change.
+MCP impact: the Calendar shortcut reuses existing rest-date fields, revision checks and native mutation; plan/rest
+read projections, approved rest-day preview/apply, scopes, consent and schemas are unchanged. No wire impact or
+provider/queue behavior changes. Successful Add updates the shared cache to planned even after Today has closed, with
 current owner/day/Pro fences. Old in-flight replies cannot
 replace another owner, date, preferences or newer coverage. No raw Sleep samples/provider payloads enter cache keys;
 the browser copy holds only the existing first-party public response, capped at 400,000 JSON characters.

@@ -20,6 +20,12 @@
       } @else {
         <a mat-menu-item appHapticTap [routerLink]="['/training/plans/new']"
           [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Plan workout</a>
+        @if (restDayPlan()) {
+          <button mat-menu-item appHapticTap type="button" (click)="markRestDay()"
+            [disabled]="restDaySaving() || !!restDayBlockedReason()" [matTooltip]="restDayBlockedReason()">
+            <mat-icon aria-hidden="true">hotel</mat-icon>Mark as rest day
+          </button>
+        }
       }
       <a mat-menu-item appHapticTap [routerLink]="['/training/plans/standalone/new']"
         [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Standalone workout</a>
@@ -47,6 +53,7 @@
       <div class="calendar-day-context-loading-timeline" aria-hidden="true"></div>
     </div>
   } @else {
+  @if (restDaySaving()) { <p role="status">Saving rest day…</p> }
   @if (plannedRestDay(); as rest) {
     <section class="calendar-day-phase" aria-label="Planned rest day">
       <p class="calendar-day-entry-title">Rest day</p>
@@ -130,7 +137,7 @@
           <h3 id="calendar-day-timeline-title">Your day</h3>
         </div>
         @if (canPlan()) {
-          <button mat-button appHapticTap type="button" [matMenuTriggerFor]="addDayWorkoutMenu">
+          <button mat-button appHapticTap type="button" [matMenuTriggerFor]="addDayWorkoutMenu" [disabled]="restDaySaving()">
             <mat-icon aria-hidden="true">add</mat-icon>Add workout<mat-icon iconPositionEnd aria-hidden="true">arrow_drop_down</mat-icon>
           </button>
         }
@@ -204,7 +211,7 @@
       <strong role="status">Nothing recorded yet</strong>
       <p>Activities, notes, and planned workouts will appear here.</p>
       @if (canPlan()) {
-        <button mat-button appHapticTap type="button" [matMenuTriggerFor]="addDayWorkoutMenu">
+        <button mat-button appHapticTap type="button" [matMenuTriggerFor]="addDayWorkoutMenu" [disabled]="restDaySaving()">
           <mat-icon aria-hidden="true">add</mat-icon>Add workout<mat-icon iconPositionEnd aria-hidden="true">arrow_drop_down</mat-icon>
         </button>
       }
@@ -283,7 +290,7 @@
       }
       @if (canPlan() && plannedStatus() === 'ready') {
           <button mat-button appHapticTap type="button" class="calendar-day-context-preview-add"
-            [matMenuTriggerFor]="addDayWorkoutMenu">
+            [matMenuTriggerFor]="addDayWorkoutMenu" [disabled]="restDaySaving()">
             <mat-icon aria-hidden="true">add</mat-icon>Add workout<mat-icon iconPositionEnd aria-hidden="true">arrow_drop_down</mat-icon>
           </button>
       }
@@ -324,7 +331,7 @@
     <section class="calendar-day-context-section" aria-label="Planned workouts on selected day">
       <div class="calendar-day-context-section-header"><h3>Planned workouts</h3>
         <div class="calendar-day-context-plan-actions">
-          <button mat-button appHapticTap type="button" [matMenuTriggerFor]="addDayWorkoutMenu">
+          <button mat-button appHapticTap type="button" [matMenuTriggerFor]="addDayWorkoutMenu" [disabled]="restDaySaving()">
             <mat-icon aria-hidden="true">add</mat-icon>Add workout<mat-icon iconPositionEnd aria-hidden="true">arrow_drop_down</mat-icon>
           </button>
         </div>

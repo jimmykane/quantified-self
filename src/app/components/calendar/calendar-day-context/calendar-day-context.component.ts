@@ -1,6 +1,8 @@
 import { DayWorkoutService } from '../../../services/day-workout.service';
 import type { EventRead } from '@shared/event-read';
-import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { isTrainingLocalDateWithinPlan, type TrainingPlanV1 } from '@shared/training-plans';
 import { Router } from '@angular/router';
 import { ViewportScroller } from '@angular/common';
 import { isTimelineNoteVisible, timelineNoteOverlaps, TIMELINE_NOTE_LABELS } from '@shared/timeline-notes';
@@ -14,6 +16,8 @@ import { CalendarDayHealthService } from '../../../services/calendar-day-health.
 import { AppThemeService } from '../../../services/app.theme.service';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
 import { TrainingWorkoutDuplicateService } from '../../../services/training-workout-duplicate.service';
+import { TrainingPlansService } from '../../../services/training-plans.service';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 import { buildCalendarDayHealthSummary, buildCalendarDaySleepFacts, resolveCalendarDaySleepPoint, type CalendarDayHealthSummary } from '../../../helpers/calendar-day-health.helper';
 import type { DashboardSleepTrendPoint } from '../../../helpers/dashboard-sleep-chart.helper';
 import { HealthSleepStageSummaryComponent } from '../../health/health-sleep-stage-summary.component';
@@ -68,6 +72,10 @@ export class CalendarDayContextComponent {
   private readonly viewportScroller = inject(ViewportScroller);
   private readonly navigation = inject(CalendarDayDetailsNavigationService);
   private readonly duplicateService = inject(TrainingWorkoutDuplicateService);
+  private readonly plans = inject(TrainingPlansService);
+  private readonly snackBar = inject(MatSnackBar);
+  private readonly haptics = inject(AppHapticsService);
+  private readonly destroy = inject(DestroyRef);
   private readonly elementRef = inject<ElementRef<HTMLElement>>(ElementRef);
 
   readonly data = input.required<CalendarDayDetailsData>();
@@ -140,6 +148,36 @@ export class CalendarDayContextComponent {
   readonly previewNotes = computed(() => this.calmMonth() ? this.noteRows() : this.noteRows().slice(0, 2));
   readonly previewPlans = computed(() => this.calmMonth() ? this.plannedRows() : this.plannedRows().slice(0, 2));
   readonly canPlan = computed(() => this.data().planningEnabled !== false && this.users.user()?.uid === this.data().userId);
+  readonly restDaySaving = signal(false);
+  private restDayGeneration = 0;
+  private readonly restDayAcknowledgement = signal<{ uid: string; date: string; plan: TrainingPlanV1 } | null>(null);
+  private readonly restDayScope = computed(() => JSON.stringify([this.canPlan() ? this.data().userId : null,
+    this.data().day.dateKey, this.data().scheduleSource?.()?.state.activePlanId]));
+  private readonly resetRestDayAction = effect(() => {
+    this.restDayScope(); this.restDayGeneration++;
+    this.restDaySaving.set(false); this.restDayAcknowledgement.set(null);
+  });
+  private readonly restDaySchedule = computed(() => {
+    const schedule = this.data().scheduleSource?.(), ack = this.restDayAcknowledgement();
+    if (!schedule || !ack || !this.canPlan() || ack.uid !== this.data().userId || ack.date !== this.data().day.dateKey
+      || schedule.state.activePlanId !== ack.plan.id) return schedule;
+    const live = schedule.plans.find(plan => plan.id === ack.plan.id);
+    return live && live.revision < ack.plan.revision
+      ? { ...schedule, plans: schedule.plans.map(plan => plan.id === ack.plan.id ? ack.plan : plan) } : schedule;
+  });
+  readonly restDayPlan = computed(() => {
+    if (!this.canPlan() || this.plannedStatus() !== 'ready') return null;
+    const schedule = this.restDaySchedule();
+    if (!schedule || schedule.restoreUnavailable) return null;
+    return schedule.plans.find(plan => plan.id === schedule.state.activePlanId && plan.lifecycle === 'active'
+      && isTrainingLocalDateWithinPlan(this.data().day.dateKey, plan)) ?? null;
+  });
+  readonly restDayBlockedReason = computed(() => {
+    if (!this.plannedWorkoutsComplete() || this.restDaySchedule()?.workoutsComplete === false) return 'Wait for the day’s schedule to finish loading.';
+    return this.restDaySchedule()?.workouts.some(workout => workout.planId === this.restDayPlan()?.id
+      && workout.localDate === this.data().day.dateKey && workout.lifecycle === 'planned')
+      ? 'Move, skip or remove this plan’s workouts on the date first.' : '';
+  });
   readonly planPhase = computed(() => {
     if (!this.canPlan() || this.plannedStatus() !== 'ready') return null;
     const schedule = this.data().scheduleSource?.();
@@ -147,7 +185,7 @@ export class CalendarDayContextComponent {
   });
   readonly plannedRestDay = computed(() => {
     if (!this.canPlan() || this.plannedStatus() !== 'ready') return null;
-    const schedule = this.data().scheduleSource?.();
+    const schedule = this.restDaySchedule();
     return schedule ? buildPlannedWorkoutCalendarOverlay([], schedule.plans, schedule.state.activePlanId)[this.data().day.dateKey]?.restDay ?? null : null;
   });
   readonly healthState = signal<HealthState>({ status: 'loading', dateKey: null, ownerUid: null, summary: null, sleepPoint: null });
@@ -279,6 +317,36 @@ export class CalendarDayContextComponent {
     if (!this.canPlan() || !rest) return;
     this.prepareNavigation();
     void this.router.navigate(['/training/plans/plan', rest.planId], { queryParams: { date: this.data().day.dateKey } });
+  }
+
+  async markRestDay(): Promise<void> {
+    const plan = this.restDayPlan(), schedule = this.restDaySchedule(), data = this.data();
+    if (!plan || !schedule || this.plannedRestDay() || this.restDayBlockedReason() || this.restDaySaving()
+      || !this.dayWorkouts.isOwner(data.userId)) return;
+    const generation = this.restDayGeneration;
+    const current = () => !this.destroy.destroyed && generation === this.restDayGeneration && this.canPlan()
+      && this.data().userId === data.userId && this.data().day.dateKey === data.day.dateKey
+      && this.restDayPlan()?.id === plan.id && this.dayWorkouts.isOwner(data.userId);
+    this.restDaySaving.set(true);
+    try {
+      const response = await this.plans.mutate({ mutationId: this.plans.createMutationId('set-plan-rest-days'),
+        expectedRevisions: [{ scope: 'state', id: 'current', revision: schedule.state.revision },
+          { scope: 'plan', id: plan.id, revision: plan.revision }],
+        operation: { kind: 'set-plan-rest-days', planId: plan.id,
+          restDays: [...(plan.restDays ?? []), data.day.dateKey].sort() },
+      }, current);
+      if (!current()) return;
+      const updatedPlan = response.plans.find(item => item.id === plan.id);
+      if (updatedPlan) this.restDayAcknowledgement.set({ uid: data.userId, date: data.day.dateKey, plan: updatedPlan });
+      this.haptics.success();
+      this.snackBar.open('Rest day added.', 'Dismiss', { duration: 3000 });
+    } catch {
+      if (!current()) return;
+      this.haptics.error();
+      this.snackBar.open('Could not mark this day as rest. Reload the day and try again.', 'Dismiss', { duration: 6000 });
+    } finally {
+      if (generation === this.restDayGeneration && !this.destroy.destroyed) this.restDaySaving.set(false);
+    }
   }
 
   prepareNavigation(): void {

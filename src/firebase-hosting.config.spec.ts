@@ -336,7 +336,7 @@ describe('Firebase Hosting configuration', () => {
     // Calendar generation help covers default-on Training/Timeline context with independent opt-outs, Calendar/Dashboard entry points, searchable sport selection, expanded default-on Personalization choices for freshness/HRV/recovery, selected-sport weekday routines from complete prior local days, the shared Assistant allowance footer, eligible dates and safe retries (2026-10-29).
     // It applies swim units to weekly distances and the SWOLF pool-length label.
     // Table-filter help covers compact text buttons, the calendar dialog, selected dates and per-filter clearing (2026-10-29).
-    // Explicit plan rest days cover Plans, Calendar, Today, suggestions and approved Assistant/MCP edits.
+    // Explicit plan rest days cover the Calendar day-menu action, Plans, Today, cached daily suggestions and approved Assistant/MCP edits (2026-10-31).
     // Daily workout suggestion help covers opt-in Pro suggestions, current-sleep waiting/rechecks, explicit available-data fallback, all-day foreground preparation and saved-zone dates, separate daily allowance, the daily browser cache, status-only coverage before Review, sign-out cleanup, explicit Add and resuming after deleting today's planned workout without resetting the allowance (2026-10-30).
     // Activity table help covers initial placeholders, retained rows and paused row actions while refreshing (2026-10-30).
     // R–R help also separates filtered Suunto HR, raw statistics, recorded FIT HR and historical reparse (2026-10-30).
@@ -663,7 +663,7 @@ describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('bounds total scripts with matching release budgets for %s', configuration => {
     const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
     expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
-      type: 'allScript', maximumWarning: '13000kb', maximumError: '13800kb',
+      type: 'allScript', maximumWarning: '13000kb', maximumError: '13805kb',
     });
   });
 

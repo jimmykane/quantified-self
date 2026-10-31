@@ -850,6 +850,7 @@ describe('help.content', () => {
 
   it('explains the daily browser cache and targeted daily suggestion status checks', () => {
     const content = HELP_SECTIONS.map(section => section.content).join('\n');
+    expect(content).toContain('blocks automatic generation');
     expect(content).toContain('reuses the daily status across navigation and reloads');
     expect(content).toContain('without regenerating an existing suggestion');
     expect(content).toContain('Signing out clears the browser copy');
@@ -1695,6 +1696,9 @@ describe('help.content', () => {
     const planningSection = HELP_SECTIONS.find(section => section.id === 'training-plans');
 
     expect(planningSection?.content).toContain('You do not need to create a plan first');
+    expect(planningSection?.content).toContain('**Calendar → select day → Add workout → Mark as rest day**');
+    const calendar = HELP_SECTIONS.find(section => section.id === 'activity-calendar');
+    expect(calendar?.content).toContain('**Add workout → Mark as rest day**');
     expect(planningSection?.content).toContain('confirmation stays open with the saved workout');
     expect(planningSection?.content).toContain('**Reload schedule** checks it again without saving or generating another workout');
     expect(planningSection?.content).toContain('confirmation offers **Send / sync**');
