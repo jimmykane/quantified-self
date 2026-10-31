@@ -82,14 +82,15 @@
     <p class="hint">Adding creates another workout on this day.</p>
   }
   <p class="hint">{{ syncLabel() }}</p>
-  @if (restDayPlan(); as plan) { <p class="hint">Planned rest day · {{ plan.name }}. Remove this marker in Plans before adding a workout to that plan.</p> }
+  @if (calendarRestDay()) { <p class="hint">Calendar rest day. Remove this marker in Calendar before requesting a workout suggestion for this date.</p> }
+  @else if (restDayPlan(); as plan) { <p class="hint">Planned rest day · {{ plan.name }}. Remove this marker in Plans before adding a workout to that plan.</p> }
   @if (selectedPlan()?.lifecycle === 'paused') { <p>Paused plan: this workout appears in Calendar after activation.</p> }
   }
   @if (busy()) { <p role="status">{{ data.mode === 'preferences' ? 'Saving daily suggestion preferences…' : busy() === 'generate' ? 'Checking your context and generating…' : 'Adding your workout…' }}</p> }
   @if (error()) { <p #generationError role="alert" tabindex="-1">{{ error() }}</p> }
   @if (result(); as result) {
     <section class="review" aria-label="Workout review" aria-live="polite">
-      <h3 #reviewHeading class="section-title" tabindex="-1">{{ result.draft?.title ?? (restDayPlan() ? 'Planned rest day' : 'Rest suggestion') }}</h3><p>{{ result.rationale }}</p>
+      <h3 #reviewHeading class="section-title" tabindex="-1">{{ result.draft?.title ?? (declaredRestDay() ? 'Rest day' : 'Rest suggestion') }}</h3><p>{{ result.rationale }}</p>
       @if (review(); as review) {
         <p>{{ review.summary }}</p>@if (review.estimate) { <p class="hint">{{ review.estimate }}</p> }
         @for (exercise of review.exercises; track exercise.id) {
@@ -115,7 +116,7 @@
   @if (data.mode !== 'preferences' && (result() || error())) {
     <div class="review-actions">
       @if (result()?.draft) { <button mat-button appHapticTap [disabled]="!!busy() || staleReview() || saveUncertain()" (click)="edit()">Edit workout</button> }
-      @if (!restDayPlan() || result()?.draft) { <button mat-button [disabled]="!!busy() || !valid() || saveUncertain()" (click)="generate()">Generate again</button> }
+      @if (!declaredRestDay() || result()?.draft) { <button mat-button [disabled]="!!busy() || !valid() || saveUncertain()" (click)="generate()">Generate again</button> }
     </div>
   }
   @if (staleReview() && !saveUncertain()) {

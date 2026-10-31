@@ -15,17 +15,20 @@
 
   <mat-menu #addDayWorkoutMenu="matMenu" class="qs-menu-panel">
     @if (canPlan()) {
-      @if (plannedRestDay()) {
+      @if (planRestDay()) {
         <button mat-menu-item appHapticTap type="button" (click)="openRestDayPlan()">Manage rest day</button>
       } @else {
         <a mat-menu-item appHapticTap [routerLink]="['/training/plans/new']"
           [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Plan workout</a>
-        @if (restDayPlan()) {
-          <button mat-menu-item appHapticTap type="button" (click)="markRestDay()"
-            [disabled]="restDaySaving() || !!restDayBlockedReason()" [matTooltip]="restDayBlockedReason()">
-            <mat-icon aria-hidden="true">hotel</mat-icon>Mark as rest day
-          </button>
-        }
+      }
+      @if (calendarRestDay()?.isRestDay) {
+        <button mat-menu-item appHapticTap type="button" (click)="markRestDay(false)"
+          [disabled]="restDaySaving() || !!restDayBlockedReason()">Remove rest day</button>
+      } @else if (!planRestDay()) {
+        <button mat-menu-item appHapticTap type="button" (click)="markRestDay()"
+          [disabled]="restDaySaving() || !!restDayBlockedReason()" [matTooltip]="restDayBlockedReason()">
+          <mat-icon aria-hidden="true">hotel</mat-icon>Mark as rest day
+        </button>
       }
       <a mat-menu-item appHapticTap [routerLink]="['/training/plans/standalone/new']"
         [queryParams]="{ date: data().day.dateKey }" (click)="prepareNavigation()">Standalone workout</a>
@@ -57,7 +60,12 @@
   @if (plannedRestDay(); as rest) {
     <section class="calendar-day-phase" aria-label="Planned rest day">
       <p class="calendar-day-entry-title">Rest day</p>
-      <button mat-button appHapticTap type="button" (click)="openRestDayPlan()" aria-label="Manage this rest day in Plans">{{ rest.planName }} · Manage in Plans</button>
+      @if (rest.planId) {
+        <button mat-button appHapticTap type="button" (click)="openRestDayPlan()" aria-label="Manage this rest day in Plans">{{ rest.planName }} · Manage in Plans</button>
+      } @else {
+        <button mat-button appHapticTap type="button" (click)="markRestDay(false)"
+          [disabled]="restDaySaving() || !!restDayBlockedReason()">Remove rest day</button>
+      }
     </section>
   }
   @if (planPhase(); as context) {

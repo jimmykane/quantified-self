@@ -336,7 +336,8 @@ describe('Firebase Hosting configuration', () => {
     // Calendar generation help covers default-on Training/Timeline context with independent opt-outs, Calendar/Dashboard entry points, searchable sport selection, expanded default-on Personalization choices for freshness/HRV/recovery, selected-sport weekday routines from complete prior local days, the shared Assistant allowance footer, eligible dates and safe retries (2026-10-29).
     // It applies swim units to weekly distances and the SWOLF pool-length label.
     // Table-filter help covers compact text buttons, the calendar dialog, selected dates and per-filter clearing (2026-10-29).
-    // Explicit plan rest days cover the Calendar day-menu action, Plans, Today, cached daily suggestions and approved Assistant/MCP edits (2026-10-31).
+    // Calendar help covers standalone rest on any date, independent plan markers, immediate cache masking/removal and unchanged daily allowance (2026-10-31).
+    // MCP and Policies clarify separately consented reads of standalone calendar rest dates (2026-10-31).
     // Daily workout suggestion help covers opt-in Pro suggestions, current-sleep waiting/rechecks, explicit available-data fallback, all-day foreground preparation and saved-zone dates, separate daily allowance, the daily browser cache, status-only coverage before Review, sign-out cleanup, explicit Add and resuming after deleting today's planned workout without resetting the allowance (2026-10-30).
     // Activity table help covers initial placeholders, retained rows and paused row actions while refreshing (2026-10-30).
     // R–R help also separates filtered Suunto HR, raw statistics, recorded FIT HR and historical reparse (2026-10-30).
@@ -475,7 +476,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-10-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-10-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-09-02');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-10-07');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-10-31');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/suunto`)).toBe('2026-10-13');
@@ -534,8 +535,8 @@ describe('Firebase Hosting configuration', () => {
     // Form/TSS axes fit the displayed period without changing training values or hiding the neutral baseline.
     // Swimming Automatic prioritizes CSS before HR/MET and excludes calculated power TSS.
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-31');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-14');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-14');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-31');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-31');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');
   });
 
@@ -663,7 +664,7 @@ describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('bounds total scripts with matching release budgets for %s', configuration => {
     const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
     expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
-      type: 'allScript', maximumWarning: '13000kb', maximumError: '13805kb',
+      type: 'allScript', maximumWarning: '13000kb', maximumError: '13815kb',
     });
   });
 

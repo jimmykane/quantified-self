@@ -205,6 +205,7 @@ describe('SummariesComponent', () => {
         { provide: ActivityCalendarService, useValue: { watchSummaryEvents: vi.fn(() => of({ events: [], complete: true })) } },
         { provide: TrainingPlansService, useValue: {
           watchActivePlan: vi.fn(() => of(null)),
+          watchCalendarRestDay: vi.fn(() => of(null)),
           watchCalendarSchedule: vi.fn(() => of({ state: { activePlanId: null }, workouts: [], plans: [], workoutsComplete: true })),
           watchWorkoutCompletionsForWorkouts: vi.fn(() => of([])),
         } },

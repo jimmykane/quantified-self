@@ -168,7 +168,7 @@ describe('compact daily workout in Today', () => {
         getItem: (key: string) => values.get(key) ?? null,
         setItem: (key: string, value: string) => values.set(key, value), removeItem: (key: string) => values.delete(key),
       } } } },
-      { provide: TrainingPlansService, useValue: { stateRevisionChanges$: new Subject(), lastVerifiedStateRevision: () => undefined, watchCalendarSchedule: () => of(savedSchedule()) } },
+      { provide: TrainingPlansService, useValue: { calendarRestDayChanges$: new Subject(), watchCalendarRestDay: () => of(null), lastCalendarRestDayRevision: () => 0, stateRevisionChanges$: new Subject(), lastVerifiedStateRevision: () => undefined, watchCalendarSchedule: () => of(savedSchedule()) } },
       { provide: DayWorkoutService, useValue: { open: vi.fn() } },
       { provide: AppHapticsService, useValue: { selection: vi.fn(), success: vi.fn(), error: vi.fn() } },
     ] });
@@ -333,7 +333,7 @@ describe('compact daily workout in Today', () => {
         getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => values.set(key, value),
         removeItem: (key: string) => values.delete(key),
       } } } },
-      { provide: TrainingPlansService, useValue: { stateRevisionChanges$: revisions, lastVerifiedStateRevision: () => revision, watchCalendarSchedule: () => of(savedSchedule()) } },
+      { provide: TrainingPlansService, useValue: { calendarRestDayChanges$: new Subject(), watchCalendarRestDay: () => of(null), lastCalendarRestDayRevision: () => 0, stateRevisionChanges$: revisions, lastVerifiedStateRevision: () => revision, watchCalendarSchedule: () => of(savedSchedule()) } },
       { provide: DayWorkoutService, useValue: { open: vi.fn() } }, { provide: AppHapticsService, useValue: haptics },
     ] });
     const mount = () => {

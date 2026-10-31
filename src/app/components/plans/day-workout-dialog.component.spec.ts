@@ -103,7 +103,7 @@ describe('DayWorkoutDialogComponent', () => {
       { provide: MatDialogRef, useValue: { close, disableClose: false, updateSize: vi.fn() } }, { provide: MatDialog, useValue: { open: dialogOpen } },
       { provide: DayWorkoutService, useValue: { generate, isOwner: () => auth.value?.uid === 'owner' } },
       { provide: AssistantQuotaService, useValue: { loadQuotaStatus } },
-      { provide: TrainingPlansService, useValue: { watchSchedule: () => schedule, mutate,
+      { provide: TrainingPlansService, useValue: { watchCalendarRestDay: () => of(null), watchSchedule: () => schedule, mutate,
         createMutationId: (prefix: string) => `${prefix}:00000000-0000-4000-8000-${String(++counter).padStart(12, '0')}`, createEntityId: () => `workout-${++counter}` } },
       { provide: TrainingDeliveryService, useValue: { watchScope: () => of({ settings: [{ provider: 'garmin', enabled: true }] }),
         watchPresence: () => of(false), watchSummaryScope: () => of({ settings: [], statuses: [], verifications: [] }),
@@ -114,6 +114,15 @@ describe('DayWorkoutDialogComponent', () => {
   async function render() { const fixture = TestBed.createComponent(DayWorkoutDialogComponent);
     vi.spyOn((fixture.componentInstance as unknown as { dialogs: MatDialog }).dialogs, 'open').mockImplementation(dialogOpen);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges(); return fixture; }
+  it('explains a standalone calendar rest day and keeps the rest result without another generation', async () => {
+    TestBed.inject(TrainingPlansService).watchCalendarRestDay = () => of({ schemaVersion: 1, localDate: '2026-10-28', isRestDay: true, revision: 1 });
+    const fixture = await render(); const component = fixture.componentInstance;
+    generate.mockImplementationOnce(async (_uid, request) => ({ ...response(request.requestId), kind: 'rest', draft: null, previousLoads: [] }));
+    await component.generate(); fixture.detectChanges();
+    expect(component.calendarRestDay()).toBe(true); expect(component.primaryLabel()).toBe('Keep rest day');
+    expect(fixture.nativeElement.textContent).toContain('Remove this marker in Calendar');
+    await component.primaryAction(); expect(close).toHaveBeenCalledOnce(); expect(generate).toHaveBeenCalledOnce(); expect(mutate).not.toHaveBeenCalled();
+  });
   it('reviews an included daily suggestion draft without generation, preserves Standalone and reports only its explicit successful Add', async () => {
     const data = TestBed.inject(MAT_DIALOG_DATA); const onAdded = vi.fn();
     data.initialControls = defaultDayWorkoutControls('2026-10-28', 'Europe/Helsinki', ActivityTypes.StrengthTraining);

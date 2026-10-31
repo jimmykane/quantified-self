@@ -804,6 +804,25 @@ added. Registered plan and batch schemas, registered baseline and transition his
 compatible digest, separately approved backend release, registered-app rescan/catalog refresh and bundled-plugin
 refresh follow the existing lifecycle; local implementation does not establish deployed-client availability.
 
+### Standalone calendar rest dates
+
+`get_training_calendar_rest_days` adds an independent read under `training-plans:read`, even when there is no active
+plan. Its strict input is inclusive `startDate`/`endDate`, at most 366 valid local date labels. Its strict output is
+`{ startDate, endDate, scanComplete: true, restDays: string[] }`, with sorted active dates only. The measured bounded
+query projects exactly the four schema fields from `users/{uid}/trainingRestDays`; false markers, revisions, document
+identifiers and neighboring private data stay internal. Current connection, grant and account-deletion fences are
+rechecked transactionally. Incomplete or malformed evidence is an error, never an empty free training day.
+
+Native Calendar marks/removes these fixed dates independently of plans, without altering existing workouts. Plan
+shifts, deletion and restores do not move them. AI day context checks both calendar and plan intent and returns rest
+before calling the model. Standalone removal invalidates daily coverage while retaining the existing once-per-day
+receipt. Existing plan rest preview/Apply remains plan-only; standalone writes are not exposed through MCP or the
+Assistant. Guidance points to Calendar for that edit and does not infer a broader write grant.
+
+This additive tool and server instructions require the existing digest-bound pending lifecycle, separately approved
+backend/Rules release and registered-app refresh. Updated bundled Training, Activity and cross-domain guidance needs
+a plugin refresh. No new scope, endpoint, composite index or migration is introduced; baseline/history are unchanged.
+
 ### Authored plan phases (Training 12)
 
 The additive `get_training_plan_phases` reads one opaque owner/connection-bound plan reference under existing

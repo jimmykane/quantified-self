@@ -1,6 +1,7 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { Subject } from 'rxjs';
+import { BehaviorSubject, Subject, map, tap } from 'rxjs';
+import type { TrainingRestDayV1 } from '@shared/training-rest-days';
 import { Auth } from 'app/firebase/auth';
 import { defaultDayWorkoutControls } from '@shared/day-workout';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
@@ -24,6 +25,9 @@ function setup(saved = storage(), enabled = true, sport = ActivityTypes.Running,
   const auth = { currentUser: { uid: 'owner' } };
   const controls = defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki', sport);
   const user = signal<any>({ uid: 'owner', settings: { appSettings: { dailyWorkoutSuggestion: { enabled, followRoutine: true, controls } } } });
+  const restDay$ = new BehaviorSubject<TrainingRestDayV1 | null>(null);
+  const restChanges = new Subject<{ uid: string; localDate: string; revision: number }>();
+  const restRevisions = new Map<string, number>([['owner|2026-10-30', 0]]);
   const pro = signal(true), revisions = new Subject<{ uid: string; revision: number | null }>();
   const verifiedRevisions = new Map<string, number | null>();
   if (knownRevision !== undefined) verifiedRevisions.set('owner', knownRevision);
@@ -38,14 +42,51 @@ function setup(saved = storage(), enabled = true, sport = ActivityTypes.Running,
     { provide: AppFunctionsService, useValue: { call } }, { provide: AppAnalyticsService, useValue: { logEvent } },
     { provide: AppWindowService, useValue: { windowRef: { sessionStorage: saved } } },
     { provide: TrainingPlansService, useValue: { stateRevisionChanges$: revisions,
-      lastVerifiedStateRevision: (uid: string) => verifiedRevisions.get(uid) } },
+      lastVerifiedStateRevision: (uid: string) => verifiedRevisions.get(uid), calendarRestDayChanges$: restChanges,
+      lastCalendarRestDayRevision: (uid: string, date: string) => restRevisions.get(uid + '|' + date),
+      watchCalendarRestDay: (uid: string, date: string) => restDay$.pipe(map(record => record?.localDate === date ? record : null),
+        tap(record => restRevisions.set(uid + '|' + date, record?.revision ?? 0))) } },
   ] });
   const service = TestBed.inject(DailyWorkoutSuggestionService);
-  return { service, auth, user, pro, revisions, call, updateUserProperties, logEvent, saved, result };
+  return { service, auth, user, pro, revisions, call, updateUserProperties, logEvent, saved, result, restDay$, restChanges, restRevisions,
+    setRest: (record: TrainingRestDayV1) => { restRevisions.set('owner|' + record.localDate, record.revision);
+      restChanges.next({ uid: 'owner', localDate: record.localDate, revision: record.revision }); restDay$.next(record); } };
 }
 afterEach(() => vi.useRealTimers());
 
 describe('DailyWorkoutSuggestionService daily browser cache', () => {
+  it('immediately hides a cached suggestion on calendar rest and reuses the daily result after removal', async () => {
+    const { service, setRest, call, result } = setup(); TestBed.flushEffects();
+    await service.request('owner', 'prepare', () => true);
+    setRest({ schemaVersion: 1, localDate: '2026-10-30', isRestDay: true, revision: 1 });
+    expect(service.cached('owner')?.status?.state).toBe('rest-day');
+    expect((await service.request('owner', 'prepare', () => true)).state).toBe('rest-day');
+    expect(call).toHaveBeenCalledOnce();
+    setRest({ schemaVersion: 1, localDate: '2026-10-30', isRestDay: false, revision: 2 });
+    expect(service.cached('owner')).toBeNull(); call.mockResolvedValueOnce({ data: result() });
+    expect((await service.request('owner', 'status', () => true)).state).toBe('ready');
+    expect(call).toHaveBeenCalledTimes(2);
+    expect(call).toHaveBeenLastCalledWith('generateDayWorkout', { mode: 'daily-suggestion', action: 'status' }, expect.anything());
+  });
+  it('withholds a restored recipe until current calendar rest intent has been verified', async () => {
+    const first = setup(); await first.service.request('owner', 'prepare', () => true);
+    const next = setup(first.saved); next.restRevisions.clear();
+    const evidence = new Subject<TrainingRestDayV1 | null>();
+    TestBed.inject(TrainingPlansService).watchCalendarRestDay = () => evidence.pipe(tap(record => next.restRevisions.set('owner|2026-10-30', record?.revision ?? 0)));
+    expect(next.service.cached('owner')).toBeNull();
+    const pending = next.service.request('owner', 'prepare', () => true); expect(next.call).not.toHaveBeenCalled();
+    evidence.next(null); expect((await pending).state).toBe('ready'); expect(next.call).not.toHaveBeenCalled();
+  });
+  it('preserves dismissal and ignores calendar revisions for other owners or dates', async () => {
+    const { service, restChanges, setRest, call } = setup(); TestBed.flushEffects();
+    await service.request('owner', 'prepare', () => true);
+    restChanges.next({ uid: 'other', localDate: '2026-10-30', revision: 5 });
+    restChanges.next({ uid: 'owner', localDate: '2026-10-31', revision: 5 });
+    expect(service.cached('owner')?.status?.state).toBe('ready');
+    service.remember('owner', { localDate: '2026-10-30', state: 'dismissed' });
+    setRest({ schemaVersion: 1, localDate: '2026-10-30', isRestDay: true, revision: 1 });
+    expect(service.cached('owner')?.status?.state).toBe('dismissed'); expect(call).toHaveBeenCalledOnce();
+  });
   it('defaults off with all data selected, persists preferences and fences account changes', async () => {
     const { service, auth, user, updateUserProperties, call, logEvent } = setup(storage(), false);
     const preferences = service.preferences();

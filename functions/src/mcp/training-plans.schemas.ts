@@ -25,11 +25,12 @@ import { normalizeTrainingLocalDate, TRAINING_PLAN_COLORS, TRAINING_PLAN_MAX_PHA
 import { TRAINING_SYNC_OUTCOMES } from '../../../shared/training-delivery-summary';
 import { PLANNED_WORKOUT_PROVIDER_IDS } from '../../../shared/planned-workout-providers';
 import { STRENGTH_WORKOUT_VERSION, parseStrengthWorkoutDraftV1 } from '../../../shared/strength-workout';
+import { validateTrainingRestDayRange } from '../../../shared/training-rest-days';
 
 export const TRAINING_PLANS_SCOPE = 'training-plans:read';
 export const TRAINING_PLANS_WRITE_SCOPE = 'training-plans:write';
 export const TRAINING_DELIVERY_WRITE_SCOPE = 'training-delivery:write';
-export const TRAINING_READ_EXTENSION_TOOLS = ['get_training_plan_rest_days', 'get_training_plan_phases', 'query_planned_workouts_by_date',
+export const TRAINING_READ_EXTENSION_TOOLS = ['get_training_calendar_rest_days', 'get_training_plan_rest_days', 'get_training_plan_phases', 'query_planned_workouts_by_date',
   'get_planned_workout_completions', 'assess_planned_workout_compatibility', 'get_strength_workout_details',
   'get_planned_workout_v2', 'get_planned_workout_v3', 'list_saved_workouts', 'get_saved_workout', 'get_saved_workout_v2', 'get_workout_prescription_analysis'] as const;
 export const TRAINING_READ_TOOLS = ['list_training_plans', 'get_training_plan', 'query_planned_workouts',
@@ -85,6 +86,10 @@ export const TRAINING_READ_INPUTS = {
   list_training_plans: z.strictObject({ search: z.string().max(120).optional(), lifecycle: lifecycle.optional(), ...pagination }),
   get_training_plan: z.strictObject({ planRef: ref }),
   get_training_plan_rest_days: z.strictObject({ planRef: ref }),
+  get_training_calendar_rest_days: z.strictObject({ startDate: trainingDate, endDate: trainingDate }).superRefine((value, context) => {
+    try { validateTrainingRestDayRange(value.startDate, value.endDate); }
+    catch { context.addIssue({ code: 'custom', message: 'Choose at most 366 calendar dates.' }); }
+  }),
   get_training_plan_phases: z.strictObject({ planRef: ref }),
   query_planned_workouts: z.strictObject(workoutQuery),
   query_planned_workouts_by_date: z.strictObject(workoutQuery),
@@ -277,6 +282,8 @@ export const TRAINING_STRENGTH_DRAFT_SCHEMA = TRAINING_STRENGTH_DETAILS_SCHEMA.o
 export const TRAINING_READ_OUTPUTS = {
   get_training_plan_rest_days: z.strictObject({ scheduleRevision: count, planRef: ref, planRevision: count.positive(),
     startDate: trainingDate, endDate: trainingDate, restDays: TRAINING_REST_DAYS_SCHEMA }),
+  get_training_calendar_rest_days: z.strictObject({ startDate: trainingDate, endDate: trainingDate,
+    scanComplete: z.literal(true), restDays: TRAINING_REST_DAYS_SCHEMA }),
   get_training_plan_phases: z.strictObject({ scheduleRevision: count, planRef: ref, planRevision: count.positive(),
     startDate: trainingDate, endDate: trainingDate, phases: TRAINING_PLAN_PHASES_SCHEMA }),
   get_workout_prescription_analysis: z.strictObject({ source: z.enum(['scheduled', 'saved']), reference: ref,

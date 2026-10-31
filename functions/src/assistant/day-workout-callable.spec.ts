@@ -71,13 +71,13 @@ describe('generateDayWorkout callable', () => {
     await generateDayWorkoutSuggestion(request, evidence, undefined, usage);
     expect(usage).toHaveBeenCalledWith({ available: false, inputTokens: 100, outputTokens: 0, thoughtsTokens: 9 });
   });
-  it('honors an authored rest day without a model request or quota charge and replays it', async () => {
+  it.each(['plan', 'calendar'] as const)('honors an authored %s rest day without a model request or quota charge and replays it', async source => {
     const deps = dependencies();
     vi.mocked(deps.context).mockResolvedValue({ evidence: {}, usedContext: ['Authored rest day'], missingContext: [],
-      previousStrength: [], references: [], plannedRestDay: { localDate: request.controls.localDate, planName: 'Autumn' } });
+      previousStrength: [], references: [], plannedRestDay: { localDate: request.controls.localDate, planName: 'Autumn', source } });
     const response = await runGenerateDayWorkout({ ...request, controls: { ...request.controls, trainingContext: true } }, auth, deps);
     expect(response.kind).toBe('rest');
-    expect(response.rationale).toContain('planned rest day in Autumn');
+    expect(response.rationale).toContain(source === 'calendar' ? 'calendar rest day' : 'planned rest day in Autumn');
     expect(deps.generate).not.toHaveBeenCalled();
     expect(deps.finalize).not.toHaveBeenCalled();
     expect(deps.release).toHaveBeenCalledTimes(1);

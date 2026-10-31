@@ -1,3 +1,4 @@
+import { TrainingRestDaysService } from './training-rest-days.service';
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom, of, Subject } from 'rxjs';
 import { Firestore, collectionData, docData, getDoc as getCachedDoc } from 'app/firebase/firestore';
@@ -34,7 +35,7 @@ describe('current Training schedule-state reads', () => {
     vi.mocked(docData).mockImplementation(ref => ref.path.endsWith('/availability/restore') ? availability : stateSignals);
     vi.mocked(collectionData).mockReturnValue(of([]));
     vi.mocked(getDoc).mockImplementation(async () => ({ data: () => serverState }) as Awaited<ReturnType<typeof getDoc>>);
-    TestBed.configureTestingModule({ providers: [TrainingPlansService,
+    TestBed.configureTestingModule({ providers: [TrainingPlansService, { provide: TrainingRestDaysService, useValue: { watchRange: () => of([]), changes$: of() } },
       { provide: Firestore, useValue: { app } }, { provide: AppFunctionsService, useValue: {} },
       { provide: BrowserCompatibilityService, useValue: {} }] });
     service = TestBed.inject(TrainingPlansService);

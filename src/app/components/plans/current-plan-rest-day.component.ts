@@ -25,10 +25,22 @@ export class CurrentPlanRestDayComponent {
   private readonly current = toSignal(toObservable(this.owner).pipe(switchMap(uid => uid
     ? this.plans.watchActivePlan(uid).pipe(map(plan => ({ uid, plan })), startWith({ uid, plan: null }), catchError(() => of({ uid, plan: null })))
     : of({ uid: null, plan: null }))), { initialValue: { uid: null, plan: null } });
+  private readonly calendarScope = computed(() => this.owner() && this.localDate() ? JSON.stringify([this.owner(), this.localDate()]) : '');
+  private readonly calendar = toSignal(toObservable(this.calendarScope).pipe(switchMap(key => {
+    if (!key) return of(null);
+    const [uid, localDate] = JSON.parse(key) as [string, string];
+    return this.plans.watchCalendarRestDay(uid, localDate).pipe(map(record => ({ uid, localDate, isRestDay: record?.isRestDay === true })),
+      startWith(null), catchError(() => of(null)));
+  })), { initialValue: null });
+  readonly calendarRest = computed(() => this.calendar()?.uid === this.owner() && this.calendar()?.localDate === this.localDate() && this.calendar()?.isRestDay);
+  readonly restName = computed(() => this.calendarRest() ? 'Calendar' : this.plan()?.name);
   readonly plan = computed(() => this.owner() && this.current().uid === this.owner() ? this.current().plan : null);
-  readonly isRestDay = computed(() => isTrainingPlanRestDay(this.plan(), this.localDate()));
+  readonly isRestDay = computed(() => !!this.calendarRest() || isTrainingPlanRestDay(this.plan(), this.localDate()));
 
   open(): void {
+    if (this.calendarRest() && this.owner()) {
+      this.haptics.selection(); void this.router.navigate(['/calendar/day', this.localDate()]); return;
+    }
     const plan = this.plan();
     if (!plan || !this.isRestDay()) return;
     this.haptics.selection();

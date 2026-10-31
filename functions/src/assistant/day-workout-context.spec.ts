@@ -8,8 +8,9 @@ const now = new Date('2026-10-28T12:00:00Z');
 const controls = { ...defaultDayWorkoutControls('2026-11-02', 'Europe/Helsinki'), trainingContext: false, timelineContext: false };
 const training: DayWorkoutTrainingContext = { scheduleRevision: 7, nearby: [], phase: null, previousStrength: [], references: [], missing: [] };
 function session(fail?: string) {
-  return { callTool: vi.fn<(name: AssistantMcpToolName, input?: Record<string, unknown>) => Promise<{ structuredContent: Record<string, unknown> }>>(async name => {
+  return { callTool: vi.fn<(name: AssistantMcpToolName, input?: Record<string, unknown>) => Promise<{ structuredContent: Record<string, unknown> }>>(async (name, input) => {
     if (name === fail) throw new Error('Synthetic read failure');
+    if (name === 'get_training_calendar_rest_days') return { structuredContent: { ...input, scanComplete: true, restDays: [] } };
     const values: Record<string, Record<string, unknown>> = {
       prepare_training_metrics: { status: 'preparing', readyMetricKinds: [] },
       get_daily_report: { readiness: { score: null } },
@@ -23,6 +24,16 @@ function session(fail?: string) {
   }) };
 }
 describe('Calendar generation context boundaries', () => {
+  it('respects calendar rest without a plan and treats unavailable rest evidence as unknown', async () => {
+    const source = session(), original = source.callTool.getMockImplementation()!;
+    source.callTool.mockImplementation(async (name, input) => name === 'get_training_calendar_rest_days'
+      ? { structuredContent: { ...input, scanComplete: true, restDays: [controls.localDate] } } : original(name, input));
+    const result = await collectDayWorkoutContext({ ...controls, trainingContext: true }, now, source, async () => training);
+    expect(result.plannedRestDay).toEqual({ source: 'calendar', localDate: controls.localDate, planName: 'Calendar' });
+    expect(result.usedContext).toContain('Authored calendar rest day');
+    await expect(collectDayWorkoutContext({ ...controls, trainingContext: true }, now, session('get_training_calendar_rest_days'), async () => training))
+      .rejects.toThrow('Calendar rest days could not be checked');
+  });
   const recoveryReport = {
     sleep: { status: 'available', latestSession: { durationSeconds: 28800 } },
     readiness: { status: 'available', score: 61, confidence: 'medium', drivers: {
@@ -35,8 +46,8 @@ describe('Calendar generation context boundaries', () => {
   };
   function withReport(report: Record<string, unknown>) {
     const source = session(); const original = source.callTool.getMockImplementation()!;
-    source.callTool.mockImplementation(async name => name === 'get_daily_report'
-      ? { structuredContent: report } : original(name));
+    source.callTool.mockImplementation(async (name, input) => name === 'get_daily_report'
+      ? { structuredContent: report } : original(name, input));
     return source;
   }
   const reportWithVitals = () => ({ ...recoveryReport, sleep: { ...recoveryReport.sleep, latestSession: {
@@ -46,10 +57,10 @@ describe('Calendar generation context boundaries', () => {
   it.each(['hrvContext', 'sleepContext', 'overnightHeartRateContext', 'freshnessContext'] as const)('omits unchecked %s evidence and the combined readiness score', async key => {
       const source = withReport(reportWithVitals());
       const original = source.callTool.getMockImplementation()!;
-      source.callTool.mockImplementation(async name => name === 'prepare_training_metrics'
+      source.callTool.mockImplementation(async (name, input) => name === 'prepare_training_metrics'
         ? { structuredContent: { status: 'ready', readyMetricKinds: ['form', 'ramp_rate', 'training_summary'] } }
         : name === 'get_training_metric' ? { structuredContent: { payload: { dailyLoads: [{ load: 5757.01 }] } } }
-          : original(name));
+          : original(name, input));
       const result = await collectDayWorkoutContext({ ...controls, [key]: false }, now, source, vi.fn());
       const daily = result.evidence.daily as { dailyReport: {
         sleep?: { latestSession: { vitals: Record<string, unknown> } };
@@ -104,7 +115,7 @@ describe('Calendar generation context boundaries', () => {
       ? { structuredContent: { scanComplete: true, activities: ['2026-10-12', '2026-10-19', '2026-10-26'].map(date => ({
         activityRef: 'PRIVATE-REF-' + date, activityType: ActivityTypes.StrengthTraining,
         startTimeMs: Date.parse(date + 'T10:00Z'), stats: { durationSeconds: 3600 }, title: 'PRIVATE-TITLE',
-      })) } } : original(name));
+      })) } } : original(name, input));
     const result = await collectDayWorkoutContext({ ...controls, sport: ActivityTypes.StrengthTraining }, now, source, vi.fn());
     expect(result.evidence.daily).toMatchObject({ trainingRoutine: { sport: ActivityTypes.StrengthTraining, weekday: 'Monday',
       recordedDayCount: 3, weekdayOpportunities: 4, typicalDurationSeconds: 3600 } });
@@ -126,7 +137,7 @@ describe('Calendar generation context boundaries', () => {
   it('discloses incomplete routine history without claiming an empty weekday pattern', async () => {
     const source = session(); const original = source.callTool.getMockImplementation()!;
     source.callTool.mockImplementation(async (name, input) => name === 'query_activities' && input?.start
-      ? { structuredContent: { scanComplete: false, nextCursor: 'more', activities: [] } } : original(name));
+      ? { structuredContent: { scanComplete: false, nextCursor: 'more', activities: [] } } : original(name, input));
     const result = await collectDayWorkoutContext(controls, now, source, vi.fn());
     expect(result.evidence.daily).not.toHaveProperty('trainingRoutine');
     expect(result.missingContext).toContain('Training routine could not be checked completely; no weekday habit was inferred.');
@@ -148,12 +159,12 @@ describe('Calendar generation context boundaries', () => {
   });
   it('retains available historical loads without calling them current freshness when the daily report fails', async () => {
     const source = session('get_daily_report'); const original = source.callTool.getMockImplementation()!;
-    source.callTool.mockImplementation(async name => {
+    source.callTool.mockImplementation(async (name, input) => {
       if (name === 'prepare_training_metrics') return { structuredContent: { status: 'ready', readyMetricKinds: ['form'] } };
       if (name === 'get_training_metric') return { structuredContent: { metricKind: 'form', payload: {
         dailyLoads: [{ dayMs: Date.parse('2026-10-27T00:00Z'), load: 75 }],
       } } };
-      return original(name);
+      return original(name, input);
     });
     const result = await collectDayWorkoutContext(controls, now, source, async () => training);
     expect(result.usedContext).toContain('Training load history');
@@ -242,7 +253,7 @@ describe('Calendar generation context boundaries', () => {
   });
   it('counts actual feedback values, including zero/fractions, and normalizes local-day metric buckets', async () => {
     const source = session(); const original = source.callTool.getMockImplementation()!;
-    source.callTool.mockImplementation(async name => {
+    source.callTool.mockImplementation(async (name, input) => {
       if (name === 'query_metric') return { structuredContent: { aggregation: { buckets: [
         { time: Date.parse('2026-10-27T22:00Z'), totalCount: 1, aggregateValue: 1800 },
       ] } } };
@@ -254,7 +265,7 @@ describe('Calendar generation context boundaries', () => {
         ] } },
         { metric: { type: 'Rated Perceived Exertion' }, matchedEventCount: 12, aggregation: { buckets: [] } },
       ] } };
-      return original(name);
+      return original(name, input);
     });
     const result = await collectDayWorkoutContext(controls, now, source, async () => training);
     expect(result.evidence.feedback).toMatchObject({ results: [
@@ -262,8 +273,8 @@ describe('Calendar generation context boundaries', () => {
       { aggregation: { buckets: [] } },
     ] });
     expect(JSON.stringify(result.evidence.daily)).toContain('2026-10-28');
-    source.callTool.mockImplementation(async name => name === 'query_metrics'
-      ? { structuredContent: { results: [{ matchedEventCount: 12, aggregation: { buckets: [] } }] } } : original(name));
+    source.callTool.mockImplementation(async (name, input) => name === 'query_metrics'
+      ? { structuredContent: { results: [{ matchedEventCount: 12, aggregation: { buckets: [] } }] } } : original(name, input));
     expect((await collectDayWorkoutContext(controls, now, source, async () => training)).missingContext)
       .toContain('No usable existing Feeling/RPE feedback was found.');
   });

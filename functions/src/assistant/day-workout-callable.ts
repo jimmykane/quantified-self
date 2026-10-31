@@ -162,7 +162,9 @@ export async function runGenerateDayWorkout(value: unknown, context: { auth?: { 
     if (request.controls.trainingContext && evidence.plannedRestDay?.localDate === request.controls.localDate) {
       // Authored intent is deterministic, not an AI assessment. No model request or quota charge.
       const suggestion = validateDayWorkoutSuggestion({ kind: 'rest',
-        rationale: `This date is a planned rest day in ${evidence.plannedRestDay.planName}. Remove the rest day in Plans before adding a workout to that plan.`,
+        rationale: evidence.plannedRestDay.source === 'calendar'
+          ? 'This date is a calendar rest day. Remove the marker in Calendar before requesting a workout suggestion.'
+          : `This date is a planned rest day in ${evidence.plannedRestDay.planName}. Remove the rest day in Plans before adding a workout to that plan.`,
       }, request.controls, evidence.previousStrength, evidence.references);
       await dependencies.release(reservation);
       reservation = undefined;

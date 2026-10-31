@@ -297,12 +297,13 @@ describe('daily sport preference from recorded weekday history', () => {
 
 describe('bounded current-day coverage for cached suggestions', () => {
   it('uses only current-day activity summaries and existing schedule/rest reads', async () => {
-    const callTool = vi.fn(async (name: string) => ({ structuredContent: name === 'query_activities'
+    const callTool = vi.fn(async (name: string, args: Record<string, unknown> = {}) => ({ structuredContent: name === 'get_training_calendar_rest_days'
+      ? { ...args, scanComplete: true, restDays: [] } : name === 'query_activities'
       ? { activities: [], scanComplete: true } : name === 'query_planned_workouts_by_date'
       ? { workouts: [], scanComplete: true, scheduleRevision: 1 }
       : { plans: [], scanComplete: true, scheduleRevision: 1 } }));
     expect(await collectDailyWorkoutSuggestionCoverage(dailyControls, { callTool })).toBeNull();
-    expect(callTool.mock.calls.map(call => call[0])).toEqual(['query_activities', 'query_planned_workouts_by_date', 'list_training_plans']);
+    expect(callTool.mock.calls.map(call => call[0])).toEqual(['query_activities', 'query_planned_workouts_by_date', 'list_training_plans', 'get_training_calendar_rest_days']);
     expect(callTool).toHaveBeenCalledWith('query_activities', { relativePeriod: 'today', timeZone: 'Europe/Helsinki', limit: 1 });
   });
   it('uses positive existence without scanning more activities, and rejects partial empty reads', async () => {

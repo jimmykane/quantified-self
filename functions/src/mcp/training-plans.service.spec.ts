@@ -20,7 +20,7 @@ function fixture(weightUnits?: WeightUnits) {
   const collections: Record<string, Record<string, Record<string, unknown>>> = {
     trainingPlans: { p1: plan('Active'), p2: plan('Paused', 'paused'), p3: plan('Archived', 'archived') },
     scheduledWorkouts: { w1: workout('p1'), w2: workout(null), w3: workout('p2'), w4: workout('p3'), w5: workout('p1', undefined, 'skipped'), w6: workout('p1', undefined, 'deleted') },
-    workoutLibrary: {}, trainingDeliverySettings: {}, trainingDeliveryStatuses: {}, trainingWorkoutCompletions: {},
+    workoutLibrary: {}, trainingDeliverySettings: {}, trainingDeliveryStatuses: {}, trainingWorkoutCompletions: {}, trainingRestDays: {},
   };
   const strengthDocs: Record<string, Record<string, unknown>> = {};
   const structures: Record<string, unknown> = {};
@@ -34,6 +34,9 @@ function fixture(weightUnits?: WeightUnits) {
   const reads: TrainingReads = {
     state: async () => { calls++; if (deleted) throw Error('deleted'); return { revision, activePlanId: 'p1' }; },
     snapshot: async (_uid, read) => read({
+      calendarRestDays: async (startDate, endDate) => Object.entries(collections.trainingRestDays)
+        .filter(([, data]) => String(data.localDate) >= startDate && String(data.localDate) <= endDate)
+        .map(([id, data]) => ({ id, data })),
       getPlanPhases: async id => collections.trainingPlans[id] ? { id, data: { ...collections.trainingPlans[id] } } : null,
       getPlanRestDays: async id => collections.trainingPlans[id] ? { id, data: { ...collections.trainingPlans[id] } } : null,
       get: async (collection, id, detail) => collections[collection][id]
@@ -59,6 +62,18 @@ function fixture(weightUnits?: WeightUnits) {
 }
 
 describe('Training plan MCP reads', () => {
+  it('reads bounded standalone rest intent without a plan and excludes removal/storage metadata', async () => {
+    const f = fixture(); delete f.collections.trainingPlans.p1;
+    f.collections.trainingRestDays['2026-09-15'] = { schemaVersion: 1, localDate: '2026-09-15', isRestDay: true, revision: 1 };
+    f.collections.trainingRestDays['2026-09-16'] = { schemaVersion: 1, localDate: '2026-09-16', isRestDay: false, revision: 2 };
+    const args = { startDate: '2026-09-15', endDate: '2026-09-16' };
+    expect(await f.run('get_training_calendar_rest_days', args)).toEqual({ ...args, scanComplete: true, restDays: ['2026-09-15'] });
+    await expect(f.run('get_training_calendar_rest_days', args, [])).rejects.toThrow();
+    await expect(f.run('get_training_calendar_rest_days', { ...args, uid: 'other' })).rejects.toThrow();
+    await expect(f.run('get_training_calendar_rest_days', { startDate: '2026-01-01', endDate: '2027-01-02' })).rejects.toThrow();
+    f.collections.trainingRestDays['2026-09-15'].revision = 0;
+    await expect(f.run('get_training_calendar_rest_days', args)).rejects.toThrow();
+  });
   it('reads explicit rest dates separately, preserves legacy plans and rejects invalid or leaked data', async () => {
     const f = fixture();
     const planRef = f.codec.encode({ kind: 'plan', id: 'p1', createdAtMs: 1 }, 'owner', 'connection');
