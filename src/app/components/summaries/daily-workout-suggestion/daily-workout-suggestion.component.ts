@@ -42,6 +42,8 @@ export class DailyWorkoutSuggestionComponent {
   readonly actionError = signal<string | null>(null);
   readonly busy = computed(() => this.loading() || this.actionBusy() || this.daily.saving());
   readonly error = signal(false);
+  readonly title = computed(() => !this.preferences().enabled ? 'Daily workout suggestion · Pro'
+    : this.status()?.state === 'planned' ? 'Today’s workout' : 'Today’s suggestion');
   readonly summary = computed(() => {
     const value = this.status();
     if (value?.state === 'ready' && value.result) {
@@ -50,7 +52,7 @@ export class DailyWorkoutSuggestionComponent {
     }
     if (this.busy()) return 'Preparing with your latest available context…';
     if (this.error() || value?.state === 'failed') return 'Today’s suggestion could not finish.';
-    if (value?.state === 'planned') return 'Today already has a planned workout.';
+    if (value?.state === 'planned') return 'Your workout is planned for today.';
     if (value?.state === 'completed') return 'You already recorded a workout today.';
     if (value?.state === 'rest-day') return 'Today is a planned rest day.';
     if (value?.state === 'dismissed') return 'Dismissed for today.';

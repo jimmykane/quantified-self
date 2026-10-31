@@ -1,6 +1,6 @@
 @if (eligible()) {
   <section aria-label="Daily workout suggestion" class="daily-row">
-    <app-compact-row [title]="preferences().enabled ? 'Today’s suggestion' : 'Daily workout suggestion · Pro'" density="compact" layout="columns" [showDivider]="false">
+    <app-compact-row [title]="title()" density="compact" layout="columns" [showDivider]="false">
       <p role="status" aria-live="polite">{{ preferences().enabled ? summary() : 'Have a workout ready when you open Today.' }}</p>
       @if (status()?.state === 'ready') { <small>Included with Pro · review before adding</small> }
       @if (status()?.state === 'waiting-sleep') { <small>Using available data uses today’s included suggestion</small> }

@@ -135,7 +135,10 @@ describe('compact daily workout in Today', () => {
   });
   it('restores a cached covered day immediately without a loading flash or API read', async () => {
     const { fixture, request } = setup(true, { localDate: '2026-10-30', state: 'planned' });
-    expect(fixture.nativeElement.textContent).toContain('Today already has a planned workout');
+    expect(fixture.nativeElement.querySelector('.compact-row__title')?.textContent).toContain('Today’s workout');
+    expect(fixture.nativeElement.textContent).toContain('Your workout is planned for today.');
+    expect(fixture.nativeElement.textContent).not.toContain('Today’s suggestion');
+    expect([...fixture.nativeElement.querySelectorAll('button')].some((button: HTMLButtonElement) => button.textContent?.trim() === 'Review')).toBe(false);
     expect(fixture.componentInstance.busy()).toBe(false);
     await vi.advanceTimersByTimeAsync(1600); expect(request).not.toHaveBeenCalled();
   });
@@ -180,7 +183,7 @@ describe('compact daily workout in Today', () => {
       fixture.detectChanges(); return fixture;
     };
     let fixture = mount(); await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('Today already has a planned workout');
+    expect(fixture.nativeElement.textContent).toContain('Your workout is planned for today.');
     expect(call.mock.calls.map(args => args[1].action)).toEqual(['status']); expect(generate).not.toHaveBeenCalled();
     fixture.destroy(); fixture = mount(); await vi.advanceTimersByTimeAsync(1600);
     expect(call).toHaveBeenCalledOnce();
@@ -192,6 +195,8 @@ describe('compact daily workout in Today', () => {
     covered = false; revisions.next({ uid: 'owner', revision: ++revision }); fixture.detectChanges();
     await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
     expect(fixture.componentInstance.status()).toEqual(ready);
+    expect(fixture.nativeElement.querySelector('.compact-row__title')?.textContent).toContain('Today’s suggestion');
+    expect(fixture.nativeElement.textContent).not.toContain('Your workout is planned for today.');
     expect(fixture.nativeElement.textContent).toContain('Easy run');
     expect(generate).toHaveBeenCalledTimes(alreadyGenerated ? 0 : 1);
     expect(call.mock.calls.map(args => args[1].action)).toEqual(alreadyGenerated ? ['status', 'status', 'status'] : ['status', 'status', 'status', 'prepare']);
@@ -346,7 +351,10 @@ describe('compact daily workout in Today', () => {
     await fixture.componentInstance.review();
     const onAdded = open.mock.calls[0][3].onAdded;
     onAdded();
+    fixture.detectChanges();
     expect(fixture.componentInstance.status()).toEqual({ localDate: '2026-10-30', state: 'planned' });
+    expect(fixture.nativeElement.querySelector('.compact-row__title')?.textContent).toContain('Today’s workout');
+    expect(fixture.nativeElement.textContent).toContain('Your workout is planned for today.');
     const nextDate = change === 'day' ? '2026-10-31' : '2026-10-30';
     if (change === 'day') {
       preferences.update(value => ({ ...value, controls: { ...value.controls, localDate: nextDate } }));
