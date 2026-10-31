@@ -102,7 +102,10 @@ before/after date list and plan range before separate native/app Apply approval.
 be moved, skipped or removed through their own explicit approved changes; never delete them implicitly. Markers move
 with plan shifts and restore with plan history; they never create a provider workout or grant sending consent.
 Standalone calendar markers are separate intent and stay on their dates. They do not remove existing workouts.
-Use native Calendar to mark/remove them; the plan-only rest-date preview cannot change calendar markers. Never
+For an explicitly requested standalone edit, discover its focused calendar-rest preview under independent Training
+write permission. Use one exact local date and desired boolean; show its complete before/after review before separate
+native/app Apply. Without an explicit plan target, prefer this independent marker. Native Calendar also manages them.
+The plan-only rest-date preview cannot change calendar markers. Replayed approval cannot restore a later removal. Never
 infer permission for another mutation or treat an unavailable calendar read as no rest intent.
 
 Use this workflow for current plans, standalone planned workouts and upcoming sessions as well as Training metrics.

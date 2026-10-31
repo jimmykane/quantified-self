@@ -1,3 +1,4 @@
+import { parseTrainingCalendarRestDayReview } from './training-rest-days';
 import { validateReflectionFields } from './workout-reflection';
 import { isAssistantWorkoutReviews } from './assistant-workout-review';
 import { parseTrainingPlanPhaseReviewV1, parseTrainingPlanRestDayReview } from './training-plans';
@@ -124,7 +125,7 @@ function isFiniteNumber(value: unknown): value is number {
 export function isAssistantTrainingProposal(value: unknown): value is AssistantTrainingProposalPreview {
   if (!isRecord(value)
     || !hasOnlyKeys(value, ['proposalRef', 'permissionMode', 'expiresAtMs', 'scheduleRevision', 'summary',
-      'requiresConfirmation', 'changes', 'providerPreviews', 'workoutReviews', 'phaseReview', 'restDayReview'])
+      'requiresConfirmation', 'changes', 'providerPreviews', 'workoutReviews', 'phaseReview', 'restDayReview', 'calendarRestDayReview'])
     || !isBoundedString(value.proposalRef, 1, 2048)
     || !['schedule', 'delivery', 'combined'].includes(`${value.permissionMode}`)
     || !Number.isSafeInteger(value.expiresAtMs) || Number(value.expiresAtMs) < 0
@@ -159,6 +160,11 @@ export function isAssistantTrainingProposal(value: unknown): value is AssistantT
   if (value.workoutReviews !== undefined && (!isAssistantWorkoutReviews(value.workoutReviews)
     || value.workoutReviews.some(review => !changeIndices.has(review.index)))) return false;
   const phases = value.changes.some(change => isRecord(change) && change.kind === 'set-plan-phases');
+  const calendarRest = value.changes.some(change => isRecord(change) && change.kind === 'set-calendar-rest-day');
+  if (calendarRest || value.calendarRestDayReview !== undefined) {
+    if (!calendarRest || value.permissionMode !== 'schedule' || value.changes.length !== 1 || value.changes[0].index !== 0 || value.providerPreviews.length !== 0) return false;
+    try { parseTrainingCalendarRestDayReview(value.calendarRestDayReview); } catch { return false; }
+  }
   const restDays = value.changes.some(change => isRecord(change) && change.kind === 'set-plan-rest-days');
   if (restDays || value.restDayReview !== undefined) {
     if (!restDays || value.permissionMode !== 'schedule' || value.changes.length !== 1 || value.changes[0].index !== 0 || value.providerPreviews.length !== 0) return false;

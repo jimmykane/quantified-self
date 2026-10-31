@@ -816,8 +816,19 @@ rechecked transactionally. Incomplete or malformed evidence is an error, never a
 Native Calendar marks/removes these fixed dates independently of plans, without altering existing workouts. Plan
 shifts, deletion and restores do not move them. AI day context checks both calendar and plan intent and returns rest
 before calling the model. Standalone removal invalidates daily coverage while retaining the existing once-per-day
-receipt. Existing plan rest preview/Apply remains plan-only; standalone writes are not exposed through MCP or the
-Assistant. Guidance points to Calendar for that edit and does not infer a broader write grant.
+receipt. Existing plan rest preview/Apply remains plan-only. Additive `preview_training_calendar_rest_day` accepts
+exactly `{ localDate, isRestDay }` under independent `training-plans:write` plus reads. It captures the private current
+marker revision and returns the strict date/boolean `calendarRestDayReview: { localDate, before, after }` with one
+`set-calendar-rest-day` change and no provider previews. No plan or caller-supplied revision is needed. Show the
+complete review, then use separate native-approved `apply_training_changes` with `permissionMode: schedule`.
+
+The marker and durable approved result commit in one authority-checked transaction. Revoked/replaced grants, deleted
+accounts, stale marker revisions, expiry and replaced Assistant conversations/proposals reject. Replay returns the
+original result without touching current intent; removal retains the false marker revision. No-op removal creates
+nothing. Plan rest days, workouts, provider consent, schedule revisions and AI daily receipts remain unchanged. Reads
+use a four-field mask, never a full plan/workout scan. The Assistant exposes prepare only, validates this dedicated
+review and uses existing app-owned confirmation. Unqualified rest edits target Calendar; explicit plan-rest edits keep
+the plan-only full-list preview. Missing write consent never advertises the preview or apply authority.
 
 This additive tool and server instructions require the existing digest-bound pending lifecycle, separately approved
 backend/Rules release and registered-app refresh. Updated bundled Training, Activity and cross-domain guidance needs

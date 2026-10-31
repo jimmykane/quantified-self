@@ -1702,6 +1702,7 @@ describe('help.content', () => {
     expect(calendar?.content).toContain('**Add workout → Mark as rest day**');
     expect(calendar?.content).toContain('outside a plan or without a plan');
     expect(calendar?.content).toContain('**Remove rest day**');
+    expect(HELP_SECTIONS.some(section => section.content.includes('**Calendar rest days through MCP or Assistant:**'))).toBe(true);
     expect(planningSection?.content).toContain('confirmation stays open with the saved workout');
     expect(planningSection?.content).toContain('**Reload schedule** checks it again without saving or generating another workout');
     expect(planningSection?.content).toContain('confirmation offers **Send / sync**');

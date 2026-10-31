@@ -154,13 +154,17 @@ describe('Training phase preview routing', () => {
     'Extend the Base phase by two days'])('routes an explicit phase-only edit: %s', prompt => {
     expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_plan_phases');
   });
-  it.each(['Mark tomorrow as a rest day in my plan', 'Add a rest day on Sunday', 'Remove the rest day from my plan',
-    'Change my rest days', 'Make Sunday a rest day'])('routes an explicit rest-day edit: %s', prompt => {
+  it.each(['Mark tomorrow as a rest day in my plan', 'Remove the rest day from my plan'])('routes an explicit rest-day edit: %s', prompt => {
     expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_rest_days');
+  });
+  it.each(['Add a rest day on Sunday', 'Change my rest days', 'Make Sunday a rest day',
+    'Delete the rest day tomorrow', 'Mark Sunday as a rest day without a plan', 'Add a rest day outside my plan'])('routes standalone rest intent: %s', prompt => {
+    expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_calendar_rest_day');
   });
   it.each(['Add a workout during my rest day', 'Change my workout on a rest day', 'Which dates are rest days?',
     'Delete my plan and its rest days', "Don't mark Sunday as a rest day", 'Do not change my rest days'])('does not mistake contextual rest days for a rest-day edit: %s', prompt => {
     expect(selectAssistantTrainingPreviewTool(prompt)).not.toBe('preview_training_rest_days');
+    expect(selectAssistantTrainingPreviewTool(prompt)).not.toBe('preview_training_calendar_rest_day');
   });
   it.each([
     ['Add a workout during my Base phase', 'preview_create_planned_workout'],
@@ -392,7 +396,7 @@ function createSession() {
 function createDailyWorkoutSession() {
   const { session, callTool, close } = createSession();
   session.tools.push(...(['query_metric', 'query_activities', 'query_timeline_notes',
-    'query_planned_workouts_by_date', 'get_planned_workout_completions', 'list_training_plans',
+    'query_planned_workouts_by_date', 'get_planned_workout_completions', 'list_training_plans', 'get_training_calendar_rest_days',
     'prepare_training_metrics', 'get_training_metric'] as const).map(name => ({
     name, title: name, description: name, inputSchema: { type: 'object' as const, properties: {} },
   })));
@@ -407,6 +411,7 @@ function createDailyWorkoutSession() {
             aggregateValue: 2_400 }, { bucketKey: Date.parse('2026-09-25T00:00:00Z'),
             aggregateValue: 3_000 }] } } };
       case 'query_activities': return { structuredContent: { activities: [], scanComplete: true } };
+      case 'get_training_calendar_rest_days': return { structuredContent: { ...args, scanComplete: true, restDays: [] } };
       case 'list_training_plans': return { structuredContent: { scheduleRevision: 7, plans: [], scanComplete: true } };
       case 'query_timeline_notes': return { structuredContent: { notes: [], scanComplete: true,
         nextCursor: null } };
@@ -647,6 +652,29 @@ describe('Training preview model-tool selection', () => {
     expect(result.evidence[0].summary).toContain('unknown duration');
     expect(JSON.stringify(result.evidence)).not.toContain('opaque-workout');
     expect(ASSISTANT_SYSTEM_INSTRUCTIONS).toContain('never describe a partial subtotal as the complete duration');
+  });
+
+  it('prepares an independent calendar rest review with no model Apply tool', async () => {
+    const { session, callTool } = createSession();
+    session.tools.push(...(['preview_training_calendar_rest_day', 'preview_training_rest_days'] as const)
+      .map(name => ({ name, title: name, description: name, inputSchema: { type: 'object' as const } })));
+    const preview = { proposalRef: 'opaque-calendar', expiresAtMs: Date.parse('2026-10-31T12:15Z'), permissionMode: 'schedule',
+      scheduleRevision: 0, requiresConfirmation: true, summary: 'Mark October 31 as rest.',
+      changes: [{ index: 0, kind: 'set-calendar-rest-day', summary: 'Mark calendar rest.' }], providerPreviews: [],
+      calendarRestDayReview: { localDate: '2026-10-31', before: false, after: true } };
+    callTool.mockResolvedValue({ structuredContent: preview });
+    const runtime = createAssistantRuntime({ createMcpSession: vi.fn().mockResolvedValue(session),
+      now: () => new Date('2026-10-31T12:00Z'), generateAnswer: async input => {
+        expect(input.tools.some(tool => tool.name === 'apply_training_changes')).toBe(false);
+        expect(input.tools.filter(tool => tool.name.startsWith('preview_')).map(tool => tool.name)).toEqual(['preview_training_calendar_rest_day']);
+        await input.tools.find(tool => tool.name === 'preview_training_calendar_rest_day')!.execute({ localDate: '2026-10-31', isRestDay: true });
+        return { answer: 'Review this calendar rest day and confirm in QS.', visualRequest: { chart: null, map: null } };
+      } });
+    const result = await runtime.answer({ uid: 'owner', appBaseUrl: 'https://quantified-self.io', prompt: 'Mark October 31 as a rest day.',
+      timeZone: 'UTC', history: [], trainingPlansEnabled: true, trainingPlanChangesEnabled: true,
+      assertTrainingPlansAccess: vi.fn().mockResolvedValue(undefined), assertTrainingWriteAccess: vi.fn().mockResolvedValue(undefined) });
+    expect(result.pendingTrainingProposal?.calendarRestDayReview).toEqual(preview.calendarRestDayReview);
+    expect(callTool).toHaveBeenCalledExactlyOnceWith('preview_training_calendar_rest_day', { localDate: '2026-10-31', isRestDay: true });
   });
 
   it('advertises only the selected preview to Gemini while retaining authorized MCP tools', async () => {
@@ -1234,10 +1262,10 @@ describe('Training preview model-tool selection', () => {
       'get_training_metric',
       'get_daily_report', 'query_metric', 'query_activities', 'query_timeline_notes',
       'query_planned_workouts_by_date', 'get_planned_workout_completions',
-      'list_training_plans', 'preview_create_planned_workout',
+      'list_training_plans', 'get_training_calendar_rest_days', 'preview_create_planned_workout',
     ]);
     expect(checkNotes).toHaveBeenCalledTimes(2);
-    expect(checkPlans).toHaveBeenCalledTimes(6);
+    expect(checkPlans).toHaveBeenCalledTimes(8);
     expect(checkWrite).toHaveBeenCalledTimes(2);
     expect(result.pendingTrainingProposal).toMatchObject({ proposalRef: 'opaque-proposal',
       requiresConfirmation: true });

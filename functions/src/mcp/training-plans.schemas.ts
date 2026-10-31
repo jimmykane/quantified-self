@@ -37,11 +37,11 @@ export const TRAINING_READ_TOOLS = ['list_training_plans', 'get_training_plan', 
   'get_planned_workout', 'get_training_sync_status', 'get_planned_workout_completion',
   ...TRAINING_READ_EXTENSION_TOOLS] as const;
 export type TrainingReadTool = typeof TRAINING_READ_TOOLS[number];
-export const TRAINING_PREVIEW_TOOLS = ['preview_training_rest_days', 'preview_training_plan_phases', 'preview_create_planned_workout', 'preview_training_changes',
+export const TRAINING_PREVIEW_TOOLS = ['preview_training_calendar_rest_day', 'preview_training_rest_days', 'preview_training_plan_phases', 'preview_create_planned_workout', 'preview_training_changes',
   'preview_strength_workout_change', 'preview_planned_workout_v2_change', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes', 'preview_saved_workout_change', 'preview_saved_workout_v2_change',
   'preview_training_deletion', 'preview_garmin_workout_replacement'] as const;
 export const TRAINING_WRITE_TOOLS = [...TRAINING_PREVIEW_TOOLS, 'apply_training_changes', 'apply_saved_workout_change'] as const;
-export const TRAINING_WRITE_EXTENSION_TOOLS = ['preview_training_rest_days', 'preview_training_plan_phases', 'preview_strength_workout_change', 'preview_planned_workout_v2_change', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes',
+export const TRAINING_WRITE_EXTENSION_TOOLS = ['preview_training_calendar_rest_day', 'preview_training_rest_days', 'preview_training_plan_phases', 'preview_strength_workout_change', 'preview_planned_workout_v2_change', 'preview_planned_workout_v3_change', 'preview_planned_workout_v3_changes',
   'preview_saved_workout_change', 'preview_saved_workout_v2_change', 'apply_saved_workout_change', 'preview_training_deletion', 'preview_garmin_workout_replacement'] as const;
 export type TrainingWriteTool = typeof TRAINING_WRITE_TOOLS[number];
 export const trainingDate = z.string().length(10).refine(value => {
@@ -456,6 +456,7 @@ const savedWorkoutChange = savedWorkoutChangeWithRecipe(TRAINING_RECIPE_WITH_POO
 const savedWorkoutV2Change = savedWorkoutChangeWithRecipe(TRAINING_RECIPE_WITH_EARLY_LAP_SCHEMA);
 
 export const TRAINING_WRITE_INPUTS = {
+  preview_training_calendar_rest_day: z.strictObject({ localDate: trainingDate, isRestDay: z.boolean() }),
   preview_training_plan_phases: z.strictObject({ expectedScheduleRevision: count, change: TRAINING_PLAN_PHASE_CHANGE_SCHEMA }),
   preview_training_rest_days: z.strictObject({ expectedScheduleRevision: count, change: TRAINING_REST_DAYS_CHANGE_SCHEMA }),
   preview_garmin_workout_replacement: z.strictObject({ workoutRef: ref,
@@ -512,6 +513,10 @@ const trainingPreviewOutput = z.strictObject({ proposalRef: ref, expiresAtMs: co
     changes: z.array(proposedChange).min(1).max(25), providerPreviews: z.array(providerPreview).max(100) });
 
 export const TRAINING_WRITE_OUTPUTS = {
+  preview_training_calendar_rest_day: trainingPreviewOutput.extend({ permissionMode: z.literal('schedule'),
+    calendarRestDayReview: z.strictObject({ localDate: trainingDate, before: z.boolean(), after: z.boolean() }),
+    changes: z.array(proposedChange.extend({ index: z.literal(0), kind: z.literal('set-calendar-rest-day') })).length(1),
+    providerPreviews: z.array(providerPreview).length(0) }),
   preview_training_rest_days: trainingPreviewOutput.extend({ permissionMode: z.literal('schedule'), restDayReview,
     changes: z.array(proposedChange.extend({ index: z.literal(0), kind: z.literal('set-plan-rest-days') })).length(1),
     providerPreviews: z.array(providerPreview).length(0) }),
@@ -549,7 +554,12 @@ export const TRAINING_ASSISTANT_PREVIEW_OUTPUT = z.union([
   TRAINING_WRITE_OUTPUTS.preview_garmin_workout_replacement,
   TRAINING_WRITE_OUTPUTS.preview_training_plan_phases,
   TRAINING_WRITE_OUTPUTS.preview_training_rest_days,
+  TRAINING_WRITE_OUTPUTS.preview_training_calendar_rest_day,
 ]).superRefine((value, context) => {
+  if (value.changes.some(change => change.kind === 'set-calendar-rest-day')
+    && !TRAINING_WRITE_OUTPUTS.preview_training_calendar_rest_day.safeParse(value).success) {
+    context.addIssue({ code: 'custom', message: 'Calendar rest requires its dedicated before/after review.' });
+  }
   if (value.changes.some(change => change.kind === 'set-plan-rest-days')
     && !TRAINING_WRITE_OUTPUTS.preview_training_rest_days.safeParse(value).success) {
     context.addIssue({ code: 'custom', message: 'Rest days require their complete dedicated before/after review.' });

@@ -191,8 +191,8 @@ for every analysis. Distinguish absent text from an oversized-text error and dir
 Explicit plan and standalone calendar rest dates are authored context, never inferred from missing workouts, activity records or recovery
 metrics. Discover their focused Training read before suggesting filling a day. Preserve this intent separately from
 measured load/readiness and completed activities. Rest-date changes require the Training workflow's independent
-write permission, full before/after review and native/app Apply for plan edits; standalone markers are managed in
-native Calendar. Read calendar rest dates for the requested range even without a plan. Analysis never authorizes
+write permission, full before/after review and separate native/app Apply. Standalone markers use their focused
+date/boolean preview; plan rest dates keep their full-list review. Native Calendar also manages independent markers. Read calendar rest dates for the requested range even without a plan. Analysis never authorizes
 changing the schedule or clearing a marker.
 
 For planned or upcoming sessions, use the Training skill and discover the separately authorized planning read capabilities. Completed workouts still use activity tools.

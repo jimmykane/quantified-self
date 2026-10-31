@@ -325,6 +325,20 @@ describe('AssistantPageComponent', () => {
   });
 
 
+  it('shows calendar rest before/after without a plan and does not apply on hydration', () => {
+    component.conversation.set(chatResponse.conversation);
+    component.pendingTrainingProposal.set({ ...trainingProposal, permissionMode: 'schedule', providerPreviews: [],
+      changes: [{ index: 0, kind: 'set-calendar-rest-day', summary: 'Mark rest date' }],
+      calendarRestDayReview: { localDate: '2026-10-31', before: false, after: true } });
+    assistantService.applyTrainingProposal.mockClear(); fixture.detectChanges();
+    const review = fixture.nativeElement.querySelector('[aria-label="Review calendar rest day"]') as HTMLElement;
+    expect(review.textContent).toContain('Oct 31, 2026');
+    expect(review.textContent).toContain('Current: No calendar rest marker');
+    expect(review.textContent).toContain('Proposed: Rest day');
+    expect(review.textContent).toContain('Plan rest days and existing workouts stay unchanged');
+    expect(assistantService.applyTrainingProposal).not.toHaveBeenCalled();
+  });
+
   it('shows complete human-readable rest-day before/after dates without applying during hydration', () => {
     component.conversation.set(chatResponse.conversation);
     component.pendingTrainingProposal.set({ ...trainingProposal, permissionMode: 'schedule', providerPreviews: [],

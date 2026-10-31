@@ -1030,10 +1030,24 @@ off preserves the existing explicit opt-out. The optional Today feature always r
 `startDate`/`endDate` (maximum 366 valid dates), and returns only those bounds, `scanComplete: true` and sorted active
 `restDays`. A dedicated measured four-field query rechecks connection/grant/deletion fences in the transaction.
 False markers, revisions, storage identifiers and neighboring fields are excluded. Assistant guidance checks these
-dates even without a plan. Standalone authoring stays in native Calendar: no mutation kind, consent scope or provider
-action is added; plan-only preview/Apply cannot edit standalone markers. The registered baseline/history is unchanged.
+dates even without a plan. Additive `preview_training_calendar_rest_day` takes one exact `localDate` and `isRestDay`
+under independent `training-plans:write` plus reads. It captures the marker revision in a bounded proposal and returns
+strict `calendarRestDayReview: { localDate, before, after }`. Native-approved `apply_training_changes` commits only this
+marker and its durable result in one transaction. Stale revisions (including change-away-and-back), grant changes,
+revocation, account deletion, expiry and Assistant conversation/pending-proposal changes reject. Concurrent/replayed
+Apply returns the original result, never resurrects later-removed intent. No-op removal creates no marker. No full
+schedule/history query, global revision write, new endpoint, new scope or provider action is added. Existing plan-only
+preview/Apply remains separate; no registered schema or baseline/history changes.
 
-Release builds add 9.66 kB of lazy JavaScript over the preceding release (13,812.38 kB total scripts); startup remains
+The built-in Assistant exposes only this prepare tool for an unqualified calendar-rest request, with complete app-owned
+before/after review and explicit Apply/dismissal. A specific plan-rest request keeps its existing full-list workflow.
+Its shared response validator requires the dedicated calendar review; missing/foreign/private fields fail closed.
+The native Calendar writer and shared live exact-date listeners use the same four-field records/revisions, so MCP
+edits immediately invalidate daily coverage through existing cache signals. Marking rest and removing it never clears
+the one-day AI generation receipt. Tests use synthetic emulator owners, without live account/provider writes.
+
+Standalone rest and its MCP preview/Apply add 11.99 kB of lazy JavaScript over the preceding release
+(13,814.71 kB total scripts); startup remains
 1.40 MB / 333.25 kB transfer. Matching production/beta all-script caps move from 13,805 to 13,815 kB. Initial and warning
 budgets are unchanged, and no runtime dependency is added.
 

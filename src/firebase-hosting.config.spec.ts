@@ -337,7 +337,7 @@ describe('Firebase Hosting configuration', () => {
     // It applies swim units to weekly distances and the SWOLF pool-length label.
     // Table-filter help covers compact text buttons, the calendar dialog, selected dates and per-filter clearing (2026-10-29).
     // Calendar help covers standalone rest on any date, independent plan markers, immediate cache masking/removal and unchanged daily allowance (2026-10-31).
-    // MCP and Policies clarify separately consented reads of standalone calendar rest dates (2026-10-31).
+    // MCP, Help and Policies cover standalone rest reads and revision-bound preview/Apply under independent Training changes consent (2026-10-31).
     // Daily workout suggestion help covers opt-in Pro suggestions, current-sleep waiting/rechecks, explicit available-data fallback, all-day foreground preparation and saved-zone dates, separate daily allowance, the daily browser cache, status-only coverage before Review, sign-out cleanup, explicit Add and resuming after deleting today's planned workout without resetting the allowance (2026-10-30).
     // Activity table help covers initial placeholders, retained rows and paused row actions while refreshing (2026-10-30).
     // R–R help also separates filtered Suunto HR, raw statistics, recorded FIT HR and historical reparse (2026-10-30).

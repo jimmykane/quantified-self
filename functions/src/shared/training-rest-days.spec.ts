@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseTrainingRestDayV1, validateTrainingRestDayRange } from '../../../shared/training-rest-days';
+import { parseTrainingRestDayV1, parseTrainingCalendarRestDayReview, validateTrainingRestDayRange } from '../../../shared/training-rest-days';
 
 const value = { schemaVersion: 1, localDate: '2026-10-31', isRestDay: true, revision: 1 };
 describe('standalone calendar rest dates', () => {
@@ -18,4 +18,11 @@ describe('standalone calendar rest dates', () => {
     expect(() => validateTrainingRestDayRange('2024-01-01', '2025-01-01')).toThrow();
     expect(() => validateTrainingRestDayRange('2026-11-01', '2026-10-31')).toThrow();
   });
+});
+
+it('requires exact calendar review dates and booleans without identity or plan fields', () => {
+  const review = { localDate: value.localDate, before: false, after: true };
+  expect(parseTrainingCalendarRestDayReview(review)).toEqual(review);
+  for (const bad of [{ ...review, before: undefined }, { ...review, after: 'true' }, { ...review, localDate: '2026-02-29' },
+    { ...review, planId: 'private' }, { ...review, revision: 1 }]) expect(() => parseTrainingCalendarRestDayReview(bad)).toThrow();
 });

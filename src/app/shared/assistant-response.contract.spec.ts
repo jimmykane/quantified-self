@@ -501,3 +501,19 @@ describe('Assistant response contract', () => {
     });
   });
 });
+
+describe('standalone calendar rest review boundary', () => {
+  const preview = { proposalRef: 'opaque', expiresAtMs: 1000, permissionMode: 'schedule', scheduleRevision: 0,
+    requiresConfirmation: true, summary: 'Mark date.', changes: [{ index: 0, kind: 'set-calendar-rest-day', summary: 'Calendar edit.' }],
+    providerPreviews: [], calendarRestDayReview: { localDate: '2026-10-31', before: false, after: true } };
+  it('requires the exact complete calendar-only review and rejects unrelated fields or changes', () => {
+    expect(isAssistantTrainingProposal(preview)).toBe(true);
+    for (const patch of [{ calendarRestDayReview: undefined }, { permissionMode: 'delivery' },
+      { changes: [{ ...preview.changes[0], kind: 'set-plan-rest-days' }] },
+      { calendarRestDayReview: { ...preview.calendarRestDayReview, after: 'true' } },
+      { calendarRestDayReview: { ...preview.calendarRestDayReview, localDate: '2026-02-29' } },
+      { calendarRestDayReview: { ...preview.calendarRestDayReview, revision: 7 } }]) {
+      expect(isAssistantTrainingProposal({ ...preview, ...patch })).toBe(false);
+    }
+  });
+});

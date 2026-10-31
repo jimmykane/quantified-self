@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "ded05fe8682a9c95ddac5c39ef1f0687c99efb9cf95f28ee29339088bd780b52",
+  "candidateSha256": "7919d1503ad7298d1757c19c9464f19a7eab0d801ffc6ed7e919e6a6b8c450b2",
   "lifecycleAction": "developer-refresh",
-  "summary": "Sports Lib 23: 284 sports, strict enums, 16 KiB previews. Preserve replacement, analysis, reflections, phases, recipe/title/HR checks, sync, v2 endurance, EnergySense, Garmin sleep HR, strength aliases/creates and edit RPE. Add plan rest reads/full before-after preview and bounded standalone calendar rest reads; standalone writes stay native-only. Reads/writes need separate grants and Apply. Baseline/history unchanged. Backend release, app rescan and plugin refresh remain separate.",
+  "summary": "Sports Lib 23: 284 sports, strict enums, 16 KiB previews. Preserve replacement, analysis, reflections, phases, recipe/title/HR checks, sync, v2 endurance, EnergySense, Garmin sleep HR, strength aliases/creates and edit RPE. Add plan rest reads/full before-after preview and bounded standalone calendar rest reads; add date preview/atomic approved calendar Apply. Reads/writes need separate grants and Apply. Baseline/history unchanged. Backend release, app rescan and plugin refresh remain separate.",
   "rescanRequired": true
 }
