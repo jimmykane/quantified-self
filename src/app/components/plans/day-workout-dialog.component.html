@@ -1,5 +1,21 @@
-<h2 mat-dialog-title>{{ data.mode === 'preferences' ? 'Daily workout suggestion' : result() ? 'Review workout' : 'Generate a workout' }}</h2>
+<h2 mat-dialog-title>{{ savedWorkoutId() ? 'Workout added' : data.mode === 'preferences' ? 'Daily workout suggestion' : result() ? 'Review workout' : 'Generate a workout' }}</h2>
 <mat-dialog-content>
+  @if (savedWorkoutId(); as workoutId) {
+    @let saved = savedDetails();
+    <section class="review saved-workout" aria-label="Saved workout" aria-live="polite">
+      <h3 #savedHeading class="section-title" tabindex="-1"><mat-icon aria-hidden="true">check_circle</mat-icon>{{ saved.title }}</h3>
+      @if (savedSyncAvailable()) {
+        <p>{{ saved.summary }}</p>
+        <p class="hint">{{ saved.localDate | date:'EEE, MMM d' }} · {{ saved.plan?.name ?? 'Standalone' }} · {{ saved.sport }}</p>
+        <app-training-delivery-button scope="workout" [entityId]="workoutId" [title]="saved.title"
+          [standalone]="saved.standalone" [summaryWorkouts]="saved.workouts" [summaryPlan]="saved.plan" [prominent]="true"></app-training-delivery-button>
+        <p class="hint">Your workout is saved. Review sync before sending to a connected service.</p>
+      } @else {
+        <p role="status">Your workout was added, but its current schedule is unavailable. Reload before sending.</p>
+        <button mat-button appHapticTap type="button" (click)="loadSchedule()">Reload schedule</button>
+      }
+    </section>
+  } @else {
   <div class="review-destination">
     <p>{{ controls().localDate | date:'EEE, MMM d, y' }}@if (result()) { · {{ selectedPlan()?.name ?? 'Standalone' }} · {{ controls().sport }} }</p>
     @if (result()) {
@@ -106,12 +122,17 @@
     <p role="alert">Schedule changed. Review the day and destination before adding.</p>
     <button mat-button [disabled]="!!busy() || !valid()" (click)="refreshReview()">Use updated schedule</button>
   }
+  }
 </mat-dialog-content>
 <mat-dialog-actions align="end">
   <p class="hint allowance" role="status" aria-live="polite">{{ quotaText() }}</p>
+  @if (savedWorkoutId()) {
+    <button mat-button appHapticTap mat-dialog-close>Done</button>
+  } @else {
   <button mat-button appHapticTap mat-dialog-close [disabled]="!!busy() || saveUncertain()">Cancel</button>
   <button mat-flat-button [disabled]="!!busy() || (!saveUncertain() && (!valid() || (!!result()?.draft && staleReview())))"
     (click)="primaryAction()">{{ primaryLabel() }}</button>
+  }
 </mat-dialog-actions>
 
 <ng-template #choiceField let-choice="choice">

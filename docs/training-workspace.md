@@ -736,6 +736,36 @@ new signal choices preserve the original automatic behavior and stable fingerpri
 Training/Timeline/weight choices still require explicit booleans. These draft-only options never modify chat grants,
 provider consent, stored metrics or feedback.
 
+After an acknowledged Add, the modal stays open in a saved confirmation with the same canonical workout summary,
+unchanged Assistant allowance and `TrainingDeliveryButtonComponent`; Done closes it. Save completion records the exact
+created workout ID before exposing delivery. The server acknowledgement supplies the initial delivery summary until
+the existing schedule stream catches up. Add, generation, edit handoff and option changes are disabled after success,
+so cancelling or failing a later provider review cannot create another workout or charge another AI request. Account
+changes remove the saved action. The pre-save plan-sync hint listener is released once the workout is saved.
+The acknowledgement is only a bridge until live workout coverage arrives. It is retired after observing that ID or
+a coherent schedule at/after the acknowledged revision whose current-workout count matches the full workout read.
+New state alone cannot retire it while the independent workout listener is still catching up. Missing/deleted
+workouts, read failures, incomplete coverage and restore locks withhold Send; explicit Reload schedule recovers the
+existing read without another save, generation or quota request. Saved confirmation closes on Router navigation so
+Edit workout or Connections links inside provider review cannot leave it covering the destination page. Pre-save
+draft navigation behavior is unchanged. These guards change no MCP data, consent, provider command or monitoring path.
+Today's planned-workout row uses the same delivery component for its first displayed saved workout, alongside an
+owner/date-fenced Open link. Its existing bounded day read supplies the workout and parent-plan summary; delivery
+status uses the shared exact-workout settings/status/verification readers. Stable computed inputs keep foreground
+focus and unrelated change detection from recreating those readers. No new polling or status/generation requests are
+introduced, and removing coverage releases the delivery consumer.
+Manual creation and single library placements offer a short-lived **Send / sync** snackbar action through the root
+`TrainingWorkoutAddedService`, surviving source-route destruction. It opens the existing delivery review without
+writing provider consent. Account changes dismiss and invalidate it, including a later switch back. Bulk placements
+retain their count confirmation rather than implying one-workout Send covers an entire batch. Plan-bound workout
+delivery review includes **Plan sync settings**, which opens its parent's existing review instead of enabling the
+whole plan implicitly. Existing Pro, connection, compatibility, date-window and explicit confirmation gates apply.
+MCP impact review: no wire impact. These are native entry points for existing saved-workout reads and provider review;
+strict proposal/apply contracts, consent, tool schemas, lifecycle, provider transports and AI/daily quotas are unchanged.
+Monitoring coverage: unchanged. Existing Training Delivery dashboards/alerts and queue-monitoring routes cover the
+same workers, queues, outcomes, retry/lease policy and schedules; this adds no job or telemetry contract. No backend,
+Rules/index deployment, MCP refresh or plugin rebuild is required for these frontend changes.
+
 `generateDayWorkout` is a private first-party callable using the existing Assistant model, legal/access checks,
 App Check and quota. It receives a strict allowlisted `shared/day-workout.ts` request and cannot mutate a schedule.
 The model has no tools. The server parses a canonical prescription, allows one bounded correction, rejects
@@ -962,7 +992,19 @@ in that same plan/date must first be moved, skipped or removed. Standalone worko
 activities are not deleted or reclassified. A date without a workout and without this marker remains unscheduled.
 The selected plan calendar shows these dates even for inactive plans. Calendar, its day details, Dashboard's calendar
 and Today picker use the existing active-plan overlay; dotted marks distinguish rest days from planned/skipped
-workouts. Day details link to their plan for management. Today and Training show a quiet rest-day link and use **Low training
+workouts. Calendar day menus also offer **Mark as rest day** for an in-range date of the active plan, using the existing
+`set-plan-rest-days` mutation and exact state/plan revisions. Incomplete/restoring schedules and same-plan planned
+workouts withhold or disable this action; no plan is created implicitly. The shared day-context component covers
+Calendar previews, the day sheet, the full day page and Dashboard previews. A pending save disables the day menu
+and displays its status.
+The day sheet binds to the same child menu rather than keeping separate actions. Navigation dismisses that sheet
+once and preserves its Today/Calendar return context; saving rest stays in the sheet and shares its pending state.
+The confirmed plan response bridges the live read without optimistic markers or extra
+queries, and cannot reinsert a missing/newer plan. Owner/day/active-plan changes and destruction fence dispatch and
+late feedback; an earlier response cannot clear a later save. Day details link to their plan for removal/management.
+The action adds about 2.94 kB of lazy JavaScript over the preceding release; startup remains 1.40 MB / 333.25 kB
+transfer. The existing total-script cap had 220 bytes of space, so production and beta caps move from 13,800 to
+13,805 kB for this feature. The initial limit and all warning budgets are unchanged; no runtime dependency is added. Today and Training show a quiet rest-day link and use **Low training
 load**, rather than **Ready to train**, for a Fresh state on an authored rest day. No score or calculation changes.
 
 `TrainingPlanV1.restDays?: string[]` contains at most 366 unique, sorted, valid local date labels inside the plan's
@@ -2271,6 +2313,20 @@ Fieldsets, grid children, and repeat rows allow shrinking
 without horizontal page overflow. Selection haptics belong to explicit UI actions; mutation success/error feedback follows
 the actual result, and hydration, typing, and unchanged choices stay silent. Phone emulation verifies layout and wiring,
 not physical vibration or a real mobile keyboard.
+
+Existing scheduled-workout editors expose **Delete workout** in the sticky footer, separated from Save on desktop
+and placed on its own row on phones. New-workout and library-recipe editors omit this scheduled-workout action. It
+reuses the list's recoverable deletion, older-provider-copy choice, revision preconditions and server mutation; no
+permanent deletion is introduced. The precondition uses the editor-open workout revision rather than a newer live
+record. Cancelled or failed deletion retains the draft, including invalid unsaved fields. Success exits through the
+same context-preserving path as Cancel; an account/view change or destruction invalidates pending confirmation,
+transport retry and result feedback. Pending deletion disables editor actions and shows the existing icon/spinner row.
+The existing verified schedule-revision stream invalidates Today's availability cache after deletion; removing a
+workout does not reset or spend an additional daily generation allowance.
+MCP impact review: no wire impact. This adds a native entry point for the existing recoverable `delete-workout`
+operation; plan/workout read projections, lifecycle semantics, strict MCP/Assistant proposal and confirmation schemas,
+consent, provider cleanup choices and registered tools remain unchanged. No backend deployment or plugin refresh is
+required. Help documents the new footer entry point and existing 90-day recovery.
 
 The shared scheduled/library workout editor uses content-sized Material hint/error regions: wrapped pool-length help
 and validation messages reserve their real height instead of colliding with the next field or **Save to** legend.
@@ -5747,7 +5803,13 @@ invalidation without adding a listener or query. A bounded eight-owner in-memory
 received before the lazy daily cache exists; it never supplies mutation authority. Restored unversioned status is
 invalidated on its first verified revision. Repeated revisions and other owners do nothing. Changed revisions
 invalidate day coverage while the backend's charged date receipt still prevents a second generated suggestion.
-Dismissed days remain dismissed. Successful Add updates the shared cache to planned even after Today has closed, with
+Dismissed days remain dismissed. This same revision invalidation covers rest-day edits from Calendar and Plans:
+the next status read checks current rest intent before exposing a cached suggestion or admitting a model call.
+Removing rest intent can recover the existing daily result; it never resets the one-day model allowance. Focused
+cache and server tests cover this transition without a new listener, polling, callable or backend change.
+MCP impact: the Calendar shortcut reuses existing rest-date fields, revision checks and native mutation; plan/rest
+read projections, approved rest-day preview/apply, scopes, consent and schemas are unchanged. No wire impact or
+provider/queue behavior changes. Successful Add updates the shared cache to planned even after Today has closed, with
 current owner/day/Pro fences. Old in-flight replies cannot
 replace another owner, date, preferences or newer coverage. No raw Sleep samples/provider payloads enter cache keys;
 the browser copy holds only the existing first-party public response, capped at 400,000 JSON characters.

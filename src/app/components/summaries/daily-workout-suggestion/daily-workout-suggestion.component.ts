@@ -6,6 +6,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { RouterLink } from '@angular/router';
 import type { DailyWorkoutSuggestionStatus } from '@shared/daily-workout-suggestion';
 import { formatWorkoutPrescriptionSummaryV1 } from '@shared/planned-workout-analysis-display';
 import { DailyWorkoutSuggestionService } from '../../../services/daily-workout-suggestion.service';
@@ -15,9 +16,12 @@ import { AppChartSharedModule } from '../../../modules/app-chart-shared.module';
 import { CompactRowComponent } from '../../shared/compact-row/compact-row.component';
 import { AppUserService } from '../../../services/app.user.service';
 import { selectCalendarVisibleScheduledWorkouts, TrainingPlansService } from '../../../services/training-plans.service';
+import { TrainingDeliveryButtonComponent } from '../../plans/training-delivery-button.component';
+import { trainingPlansWorkoutRoute } from '../../../helpers/training-plans-navigation.helper';
 
 @Component({ selector: 'app-daily-workout-suggestion', standalone: true,
-  imports: [CompactRowComponent, MatButtonModule, MatIconModule, MatMenuModule, MatProgressBarModule, AppChartSharedModule],
+  imports: [CompactRowComponent, MatButtonModule, MatIconModule, MatMenuModule, MatProgressBarModule, AppChartSharedModule,
+    RouterLink, TrainingDeliveryButtonComponent],
   templateUrl: './daily-workout-suggestion.component.html', styleUrl: './daily-workout-suggestion.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush })
 export class DailyWorkoutSuggestionComponent {
@@ -62,6 +66,13 @@ export class DailyWorkoutSuggestionComponent {
       || saved.schedule.workoutsComplete === false) return [];
     return selectCalendarVisibleScheduledWorkouts(saved.schedule, scope.date, scope.date)
       .filter(workout => workout.lifecycle === 'planned');
+  });
+  readonly plannedWorkout = computed(() => this.plannedWorkouts()[0] ?? null);
+  readonly plannedWorkoutRoute = computed(() => this.plannedWorkout() ? trainingPlansWorkoutRoute(this.plannedWorkout()!.id) : null);
+  readonly plannedDeliveryWorkouts = computed(() => this.plannedWorkout() ? [this.plannedWorkout()!] : null);
+  readonly plannedWorkoutPlan = computed(() => {
+    const workout = this.plannedWorkout();
+    return workout ? this.savedWorkouts()?.schedule.plans.find(plan => plan.id === workout.planId) ?? null : null;
   });
   readonly title = computed(() => {
     if (!this.preferences().enabled) return 'Daily workout suggestion · Pro';

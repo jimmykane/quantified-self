@@ -2,5 +2,6 @@
 .daily-row { padding-block: 8px; border-top: 1px solid var(--mat-sys-outline-variant); }
 p { margin: 0; font: var(--mat-sys-body-small); overflow-wrap: anywhere; }
 small { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
-.actions { display: flex; align-items: center; }
+.actions { display: flex; align-items: center; flex-wrap: wrap; }
+.actions app-training-delivery-button { flex: 1 1 160px; min-width: 0; max-width: 100%; }
 mat-progress-bar { margin-top: 8px; }

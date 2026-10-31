@@ -21,6 +21,10 @@
       </a>
     }
   </div>
+  @if (planBound() && parentPlan() && !draft()) {
+    <p class="delivery-caption">This workout follows its plan’s sync settings.</p>
+    <button mat-button appHapticTap type="button" [disabled]="busy() || !canReview()" (click)="openPlanSync()">Plan sync settings</button>
+  }
   @if (canRepeatWorkout() && !draft()) {
     <p class="delivery-caption">This workout has been completed. Changing its date does not resend its protected provider copy. Duplicate it as a new scheduled workout; the original recording and completion stay unchanged.</p>
     <button mat-button appHapticTap type="button" [disabled]="busy() || !canReview()" (click)="repeatWorkout()">{{ phase() === 'copying' ? 'Duplicating workout…' : 'Duplicate to…' }}</button>

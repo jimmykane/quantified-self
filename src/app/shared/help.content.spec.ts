@@ -850,6 +850,7 @@ describe('help.content', () => {
 
   it('explains the daily browser cache and targeted daily suggestion status checks', () => {
     const content = HELP_SECTIONS.map(section => section.content).join('\n');
+    expect(content).toContain('blocks automatic generation');
     expect(content).toContain('reuses the daily status across navigation and reloads');
     expect(content).toContain('without regenerating an existing suggestion');
     expect(content).toContain('Signing out clears the browser copy');
@@ -1695,6 +1696,14 @@ describe('help.content', () => {
     const planningSection = HELP_SECTIONS.find(section => section.id === 'training-plans');
 
     expect(planningSection?.content).toContain('You do not need to create a plan first');
+    expect(planningSection?.content).toContain('**Calendar → select day → Add workout → Mark as rest day**');
+    const calendar = HELP_SECTIONS.find(section => section.id === 'activity-calendar');
+    expect(calendar?.content).toContain('**Add workout → Mark as rest day**');
+    expect(planningSection?.content).toContain('confirmation stays open with the saved workout');
+    expect(planningSection?.content).toContain('**Reload schedule** checks it again without saving or generating another workout');
+    expect(planningSection?.content).toContain('confirmation offers **Send / sync**');
+    expect(planningSection?.content).toContain('**Plan sync settings** opens that plan');
+    expect(planningSection?.content).toContain('Opening sync does not generate another workout');
     expect(planningSection?.content).toContain('five three-minute efforts, not a five-mile run');
     expect(planningSection?.content).toContain('titles and notes alone do not create repeats or HR/pace targets');
     expect(planningSection?.content).toContain('a sample does not verify every workout');
@@ -1760,6 +1769,8 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('only one can be active');
     expect(planningSection?.content).toContain('Move a workout between plans or between a plan and **Standalone**');
     expect(planningSection?.content).toContain('Ordinary deletion is recoverable for');
+    expect(planningSection?.content).toContain('choose **Delete workout** in the footer');
+    expect(planningSection?.content).toContain('Cancelling keeps your unsaved edits');
     expect(planningSection?.content).toContain('Show more deleted workouts');
     expect(planningSection?.content).toContain('90 days from the time you delete the workout');
     expect(planningSection?.content).toContain('Deleted workouts (90 days)');

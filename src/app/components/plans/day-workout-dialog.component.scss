@@ -16,6 +16,9 @@ mat-checkbox { display: block; margin-block: 8px; }
 .review-actions { margin-top: 8px; }
 [hidden] { display: none !important; }
 p, li, h3, h4 { overflow-wrap: anywhere; }
+.saved-workout h3 { display: flex; align-items: center; gap: 8px; }
+.saved-workout h3 mat-icon { flex: 0 0 auto; color: var(--qs-status-positive); }
+.saved-workout app-training-delivery-button { display: block; margin-top: 16px; }
 ol, ul { padding-inline-start: 24px; }
 ul.sets { padding: 0; }
 li { margin-block: 4px; }

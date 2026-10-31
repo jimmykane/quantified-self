@@ -13,7 +13,8 @@
         Full day <mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon>
       </a>
     }
-    <app-calendar-day-context [data]="data" [compact]="true" [privateHealthEnabled]="data.privateHealthEnabled !== false"></app-calendar-day-context>
+    <app-calendar-day-context #dayContext [data]="data" [compact]="true" [privateHealthEnabled]="data.privateHealthEnabled !== false"
+      (navigationRequested)="dismiss()"></app-calendar-day-context>
     @if (noteRows().length) {
     <section class="calendar-day-details-group" aria-labelledby="calendar-day-notes-title">
       <h3 id="calendar-day-notes-title">Timeline notes</h3>
@@ -39,20 +40,9 @@
       <div class="calendar-day-section-heading">
         <h3 id="calendar-day-planned-title">Planned workouts</h3>
         <button mat-button appHapticTap type="button" class="calendar-day-plan-add"
-          [matMenuTriggerFor]="addDayWorkoutMenu" aria-label="Add workout for selected day">
+          [matMenuTriggerFor]="dayContext.dayWorkoutMenu() ?? null" [disabled]="dayContext.restDaySaving()" aria-label="Add workout for selected day">
           <mat-icon aria-hidden="true">add</mat-icon>Add workout<mat-icon iconPositionEnd aria-hidden="true">arrow_drop_down</mat-icon>
         </button>
-        <mat-menu #addDayWorkoutMenu="matMenu" class="qs-menu-panel">
-          <a mat-menu-item appHapticTap [routerLink]="['/training/plans/new']"
-            [queryParams]="{ date: data.day.dateKey }" (click)="prepareWorkoutNavigation()">Plan workout</a>
-          <a mat-menu-item appHapticTap [routerLink]="['/training/plans/standalone/new']"
-            [queryParams]="{ date: data.day.dateKey }" (click)="prepareWorkoutNavigation()">Standalone workout</a>
-          <a mat-menu-item appHapticTap [routerLink]="['/training/plans/library']"
-            [queryParams]="{ date: data.day.dateKey }" (click)="prepareWorkoutNavigation()">Add from library</a>
-          @if (dayWorkouts.canGenerate(data.day.dateKey)) {
-            <button mat-menu-item appHapticTap type="button" (click)="generateWorkout()"><mat-icon>auto_awesome</mat-icon>Generate with AI</button>
-          }
-        </mat-menu>
       </div>
       @if (plannedWorkoutsStatus() === 'loading') {
       <p class="calendar-day-empty" role="status">Loading planned workouts…</p>

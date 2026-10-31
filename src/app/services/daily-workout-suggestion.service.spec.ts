@@ -163,6 +163,19 @@ describe('DailyWorkoutSuggestionService daily browser cache', () => {
     revisions.next({ uid: 'owner', revision: 5 }); expect(service.cached('owner')).toBeNull();
     await service.request('owner', 'status', () => true); expect(call).toHaveBeenCalledTimes(2);
   });
+  it('rechecks a cached suggestion when a rest day is marked or removed, without preparing another suggestion', async () => {
+    const { service, revisions, call, result } = setup();
+    service.cached('owner'); revisions.next({ uid: 'owner', revision: 4 });
+    await service.request('owner', 'prepare', () => true);
+    call.mockResolvedValueOnce({ data: { localDate: '2026-10-30', state: 'rest-day' } });
+    revisions.next({ uid: 'owner', revision: 5 }); expect(service.cached('owner')).toBeNull();
+    expect((await service.request('owner', 'status', () => true)).state).toBe('rest-day');
+    expect((await service.request('owner', 'prepare', () => true)).state).toBe('rest-day');
+    expect(call).toHaveBeenCalledTimes(2);
+    revisions.next({ uid: 'owner', revision: 6 }); call.mockResolvedValueOnce({ data: result() });
+    expect((await service.request('owner', 'status', () => true)).state).toBe('ready');
+    expect(call.mock.calls.map(([, request]) => request.action)).toEqual(['prepare', 'status', 'status']);
+  });
   it('does not let invalidated in-flight replies replace newer coverage', async () => {
     const { service, call, revisions, result } = setup(); service.cached('owner'); revisions.next({ uid: 'owner', revision: 1 });
     let finish!: (value: { data: DailyWorkoutSuggestionStatus }) => void;

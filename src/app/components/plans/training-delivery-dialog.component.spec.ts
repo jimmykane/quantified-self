@@ -70,6 +70,23 @@ describe('Training provider delivery controls', () => {
       }] }), watchWorkoutCompletions: () => of([]) } },
     ] }).compileComponents();
   });
+  it('opens the parent plan sync settings without enabling or sending anything', async () => {
+    const plans = TestBed.inject(TrainingPlansService);
+    const schedule = { state: { revision: 3 }, plans: [{ id: 'parent', name: 'Build plan', lifecycle: 'active' }], workouts: [{
+      schemaVersion: 1, id: 'w', planId: 'parent', title: 'Morning run', revision: 2, localDate: '2026-09-10', lifecycle: 'planned',
+      createdAtMs: 1, updatedAtMs: 1, structure: { version: 1, sport: ActivityTypes.Running, nodes: [] },
+    }] };
+    vi.spyOn(plans, 'watchSchedule').mockReturnValue(of(schedule) as never);
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent);
+    const open = vi.spyOn((fixture.componentInstance as unknown as { dialog: MatDialog }).dialog, 'open').mockReturnValue({} as never);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const button = [...fixture.nativeElement.querySelectorAll('button')].find((item: HTMLButtonElement) => item.textContent.includes('Plan sync settings')) as HTMLButtonElement;
+    expect(button).toBeTruthy(); button.click();
+    expect(open).toHaveBeenCalledWith(TrainingDeliveryDialogComponent, expect.objectContaining({ data: { scope: 'plan', id: 'parent', title: 'Build plan' } }));
+    expect(close).toHaveBeenCalledOnce(); expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
+  });
+
   it.each(['plan', 'workout', 'history'])('renders a provider overview with destination logos in %s sync without extra reads or actions', scope => {
     TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { scope, id: 'w', title: 'Example' } });
     const providers = ['garmin', 'coros', 'wahoo', 'suunto'];

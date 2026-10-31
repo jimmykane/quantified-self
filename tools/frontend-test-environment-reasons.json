@@ -154,5 +154,9 @@
   "src/app/services/training-load.service.spec.ts": {
     "environment": "angular",
     "reason": "Uses TestBed to verify injected Firestore, user and Calendar services together, including owner-scoped subscriptions, transactions and shared browser compatibility handling."
+  },
+  "src/app/services/training-workout-added.service.spec.ts": {
+    "environment": "angular",
+    "reason": "Uses injected Material snackbar/dialog services, DestroyRef and child EnvironmentInjector teardown to verify the owner-bound action survives source-view navigation and cancels on account changes."
   }
 }

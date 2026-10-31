@@ -39,6 +39,7 @@ import {
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import dayjs, { type Dayjs } from 'dayjs';
 import { catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
+import { TrainingWorkoutAddedService } from '../../services/training-workout-added.service';
 import type { AppUserInterface } from '../../models/app-user.interface';
 import { SharedModule } from '../../modules/shared.module';
 import { AppUserService } from '../../services/app.user.service';
@@ -210,6 +211,7 @@ export class PlansWorkspaceComponent {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
   private readonly dialog = inject(MatDialog);
+  private readonly addedFeedback = inject(TrainingWorkoutAddedService);
   private phaseDialog: MatDialogRef<PlanPhasesDialogComponent> | null = null;
   private readonly snackBar = inject(MatSnackBar);
   private readonly liveAnnouncer = inject(LiveAnnouncer);
@@ -1707,7 +1709,7 @@ export class PlansWorkspaceComponent {
       this.advanceEditorGeneration();
       const route = this.browseRouteState();
       this.navigateWorkspace(trainingPlansBrowseRoute(route.planId, route.standalone), route, { replaceUrl: true });
-      this.snackBar.open('Workout added.', 'Dismiss', { duration: 3000 });
+      this.addedFeedback.show('Workout added.', { id: operation.workoutId, title });
       return;
     }
 
@@ -1951,8 +1953,8 @@ export class PlansWorkspaceComponent {
       this.placementAttempt.set(null);
       this.placementItem.set(null);
       this.restoreLibraryPlacementFocus(item.id);
-      this.snackBar.open(`${response.workoutIds.length} ${response.workoutIds.length === 1 ? 'workout' : 'workouts'} added to your calendar.`,
-        'Dismiss', { duration: 5000 });
+      this.addedFeedback.show(`${response.workoutIds.length} ${response.workoutIds.length === 1 ? 'workout' : 'workouts'} added to your calendar.`,
+        response.workoutIds.length === 1 ? { id: response.workoutIds[0], title: item.title } : null);
     } catch (error) {
       if (!current()) return;
       const code = (error as { code?: string })?.code?.replace(/^functions\//, '');
@@ -2009,6 +2011,12 @@ export class PlansWorkspaceComponent {
   }
 
   async deleteWorkout(workout: ScheduledWorkoutV1): Promise<void> {
+    const uid = this.currentUser()?.uid;
+    if (!uid || this.busyAction()) return;
+    const generation = this.editorGeneration;
+    const editingWorkout = this.editor()?.original?.id === workout.id;
+    const current = () => !this.destroyRef.destroyed && uid === this.currentUser()?.uid
+      && generation === this.editorGeneration;
     const expectedRevisions = this.expectedRevisions({
       workoutIds: [workout.id],
       workoutRevisionOverrides: new Map([[workout.id, workout.revision]]),
@@ -2020,14 +2028,19 @@ export class PlansWorkspaceComponent {
       'Delete workout',
       'warn',
     );
-    if (!confirmation) return;
+    if (!confirmation || !current() || this.busyAction()) return;
+    const action = `delete-${workout.id}`;
     const response = await this.runMutation({
       mutationId: this.plansService.createMutationId('delete-workout'),
       expectedRevisions,
       operation: { kind: 'delete-workout', workoutId: workout.id,
         ...(confirmation.removePastProviderCopies ? { removePastProviderCopies: true } : {}) },
-    }, `delete-${workout.id}`);
-    if (response) this.snackBar.open(confirmation.removePastProviderCopies
+    }, action, current, current);
+    // A changed account/view suppresses feedback but must still release this pending action.
+    if (this.busyAction() === action) this.busyAction.set(null);
+    if (!response || !current()) return;
+    if (editingWorkout) this.cancelEditor();
+    this.snackBar.open(confirmation.removePastProviderCopies
       ? 'Workout deleted. Past provider cleanup is pending where supported; check Workout sync history.'
       : 'Workout deleted. Open history to restore it.', 'Dismiss', { duration: 6000 });
   }
