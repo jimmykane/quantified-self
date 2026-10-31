@@ -1027,6 +1027,12 @@ The shared daily listener follows the existing Today date/foreground checks acro
 session replacement, even if the user profile object has not changed. A failed root listener is reattached on an explicit
 request; passive cache reads never restart failed subscriptions. Context changes during the initial read reject before
 any generation request. This adds no clock, polling, model call or change to the daily charge receipt.
+A recreated Today view joins an in-flight generation or dismissal instead of issuing a competing status read.
+Preparation waits for an older status check; an explicit available-data choice waits for a preceding sleep check,
+while automatic preparation can share an already authorized available-data generation. The existing pending map
+serializes these action combinations without a separate queue or polling. Epoch changes, including rest and dismissal,
+reject queued work before dispatch. This prevents a late `preparing`/`waiting` receipt from replacing a finished result
+and preserves the existing daily allowance. Public MCP inputs/outputs, scopes, Rules and stored records are unchanged.
 
 Manual generation also checks independent calendar intent when Training context is enabled, even with no selected
 or active plan. An authored rest response is deterministic and releases the unused quota reservation. Training context
@@ -1057,9 +1063,9 @@ The native Calendar writer and shared live exact-date listeners use the same fou
 edits immediately invalidate daily coverage through existing cache signals. Marking rest and removing it never clears
 the one-day AI generation receipt. Tests use synthetic emulator owners, without live account/provider writes.
 
-Standalone rest, its MCP preview/Apply and listener lifecycle fixes add 12.96 kB of lazy JavaScript over the preceding release
-(13,815.68 kB total scripts); startup remains
-1.40 MB / 333.25 kB transfer. Matching production/beta all-script caps move from 13,805 to 13,817 kB; the lifecycle fixes account for under 1 kB. Initial and warning
+Standalone rest, its MCP preview/Apply and listener lifecycle fixes add 13.31 kB of lazy JavaScript over the preceding release
+(13,816.03 kB total scripts); startup remains
+1.40 MB / 333.26 kB transfer. Matching production/beta all-script caps move from 13,805 to 13,817 kB; the lifecycle fixes account for about 1.32 kB. Initial and warning
 budgets are unchanged, and no runtime dependency is added.
 
 Rollout requires separately approved Firestore Rules and updated Functions before the frontend, plus the normal

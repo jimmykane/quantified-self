@@ -208,6 +208,15 @@ export class DailyWorkoutSuggestionService {
     if (expectedDate && expectedDate !== this.preferences().controls.localDate) throw Error('The displayed day changed.');
     const existing = entry.pending.get(action);
     if (existing) return existing;
+    const processing = entry.pending.get('dismiss') ?? entry.pending.get('use-available-data') ?? entry.pending.get('prepare') ?? entry.pending.get('status');
+    if (action !== 'dismiss' && processing) {
+      // A recreated view joins generation; an explicit stronger request waits for the preceding read/check.
+      if (action === 'status' || (action === 'prepare' && entry.pending.has('use-available-data'))) return processing;
+      const waitingEpoch = entry.epoch;
+      await processing;
+      if (this.cache !== entry || entry.epoch !== waitingEpoch) throw Error('Daily suggestion access changed.');
+      return this.request(uid, action, current, expectedDate, refresh);
+    }
     if (action === 'status' && !refresh && entry.status) return entry.status;
     if (action === 'prepare' && entry.status && !['waiting', 'waiting-sleep'].includes(entry.status.state)) return entry.status;
     if (action === 'dismiss') this.invalidate();
