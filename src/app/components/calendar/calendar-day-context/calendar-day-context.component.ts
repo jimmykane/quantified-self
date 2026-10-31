@@ -1,7 +1,8 @@
 import { DayWorkoutService } from '../../../services/day-workout.service';
 import type { EventRead } from '@shared/event-read';
-import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import type { MatMenu } from '@angular/material/menu';
 import { isTrainingLocalDateWithinPlan, type TrainingPlanV1 } from '@shared/training-plans';
 import { Router } from '@angular/router';
 import { ViewportScroller } from '@angular/common';
@@ -88,6 +89,8 @@ export class CalendarDayContextComponent {
   readonly privateHealthEnabled = input(true);
   readonly hideHealth = input(false);
   readonly noteSelected = output<TimelineNote>();
+  readonly navigationRequested = output<void>();
+  readonly dayWorkoutMenu = viewChild<MatMenu>('addDayWorkoutMenu');
   readonly title = computed(() => getDateTimeFormatter(this.data().locale, {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   }).format(this.data().day.date));
@@ -350,7 +353,9 @@ export class CalendarDayContextComponent {
   }
 
   prepareNavigation(): void {
-    this.navigation.prepareReturn(this.router.url, this.data().day.dateKey, undefined, this.data().calendarReturn);
+    this.navigation.prepareReturn(this.router.url, this.data().day.dateKey,
+      this.compact() && this.data().returnToDashboard ? 'today-sheet' : undefined, this.data().calendarReturn);
+    this.navigationRequested.emit();
   }
 
   async duplicateWorkout(workoutId: string): Promise<void> {

@@ -996,10 +996,13 @@ workouts. Calendar day menus also offer **Mark as rest day** for an in-range dat
 `set-plan-rest-days` mutation and exact state/plan revisions. Incomplete/restoring schedules and same-plan planned
 workouts withhold or disable this action; no plan is created implicitly. The shared day-context component covers
 Calendar previews, the day sheet, the full day page and Dashboard previews. A pending save disables the day menu
-and displays its status. The confirmed plan response bridges the live read without optimistic markers or extra
+and displays its status.
+The day sheet binds to the same child menu rather than keeping separate actions. Navigation dismisses that sheet
+once and preserves its Today/Calendar return context; saving rest stays in the sheet and shares its pending state.
+The confirmed plan response bridges the live read without optimistic markers or extra
 queries, and cannot reinsert a missing/newer plan. Owner/day/active-plan changes and destruction fence dispatch and
 late feedback; an earlier response cannot clear a later save. Day details link to their plan for removal/management.
-The action adds about 3.93 kB of lazy JavaScript over the preceding release; startup remains 1.40 MB / 333.26 kB
+The action adds about 2.94 kB of lazy JavaScript over the preceding release; startup remains 1.40 MB / 333.25 kB
 transfer. The existing total-script cap had 220 bytes of space, so production and beta caps move from 13,800 to
 13,805 kB for this feature. The initial limit and all warning budgets are unchanged; no runtime dependency is added. Today and Training show a quiet rest-day link and use **Low training
 load**, rather than **Ready to train**, for a Fresh state on an authored rest day. No score or calculation changes.

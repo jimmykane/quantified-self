@@ -1,4 +1,7 @@
-import { TrainingPlansService } from '../../../services/training-plans.service';
+import { TrainingPlansService, type CurrentTrainingScheduleV1 } from '../../../services/training-plans.service';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { By } from '@angular/platform-browser';
+import { CalendarDayContextComponent } from '../calendar-day-context/calendar-day-context.component';
 import { DayWorkoutService } from '../../../services/day-workout.service';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -31,7 +34,67 @@ import { buildTrainingLoadPoints } from '@shared/training-load';
 
 const planningUserUid = 'planning-user';
 
+function restSchedule(): CurrentTrainingScheduleV1 {
+  return {
+    state: { schemaVersion: 1, revision: 2, activePlanId: 'plan', currentWorkoutCount: 0, updatedAtMs: 1 },
+    plans: [{ schemaVersion: 1, id: 'plan', name: 'Autumn', lifecycle: 'active', startLocalDate: '2026-08-01',
+      endLocalDate: '2026-08-31', revision: 3, lastCheckpointRevision: 3, workoutCount: 0, createdAtMs: 1, updatedAtMs: 1 }], workouts: [],
+  };
+}
+
 describe('CalendarDayDetailsComponent', () => {
+  it('marks a rest day from the mobile sheet menu without navigating or closing the sheet', async () => {
+    const schedule = signal(restSchedule());
+    const fixture = await renderDayDetails([], { scheduleSource: schedule });
+    const plans = TestBed.inject(TrainingPlansService);
+    plans.createMutationId = vi.fn(() => 'rest-edit');
+    const response: Awaited<ReturnType<TrainingPlansService['mutate']>> = { mutationId: 'rest-edit', removedPlanIds: [], permanentlyDeletedWorkoutIds: [],
+      state: { ...schedule().state, revision: 3 },
+      plans: [{ ...schedule().plans[0], revision: 4, restDays: ['2026-08-03'] }], workouts: [] };
+    let finish!: (value: typeof response) => void;
+    plans.mutate = vi.fn(() => new Promise<typeof response>(resolve => { finish = resolve; }));
+    const child = fixture.debugElement.query(By.directive(CalendarDayContextComponent));
+    vi.spyOn(child.injector.get(MatSnackBar), 'open').mockImplementation(vi.fn());
+    await fixture.whenStable(); fixture.detectChanges();
+    fixture.nativeElement.querySelector('[aria-label="Add workout for selected day"]').click();
+    fixture.detectChanges(); await fixture.whenStable();
+    const mark = [...document.querySelectorAll('button')].find(button => button.textContent?.includes('Mark as rest day'));
+    expect(mark).toBeDefined(); mark!.click(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[aria-label="Add workout for selected day"]').disabled).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Saving rest day');
+    finish(response); await fixture.whenStable(); fixture.detectChanges();
+    expect(plans.mutate).toHaveBeenCalledWith(expect.objectContaining({ operation: {
+      kind: 'set-plan-rest-days', planId: 'plan', restDays: ['2026-08-03'],
+    } }), expect.any(Function));
+    expect(TestBed.inject(MatBottomSheetRef).dismiss).not.toHaveBeenCalled();
+    expect(TestBed.inject(AppHapticsService).success).toHaveBeenCalledOnce();
+    expect(fixture.nativeElement.querySelector('[aria-label="Planned rest day"]')).toBeTruthy();
+  });
+
+  it('shares Manage rest day and preserves the Today return date when leaving the sheet', async () => {
+    const schedule = restSchedule(); schedule.plans[0].restDays = ['2026-08-03'];
+    const fixture = await renderDayDetails([], { returnToDashboard: true, scheduleSource: () => schedule });
+    const prepareReturn = vi.spyOn(TestBed.inject(CalendarDayDetailsNavigationService), 'prepareReturn');
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    await fixture.whenStable(); fixture.detectChanges();
+    fixture.nativeElement.querySelector('[aria-label="Add workout for selected day"]').click();
+    fixture.detectChanges(); await fixture.whenStable();
+    const actions = [...document.querySelectorAll('[role="menuitem"]')];
+    expect(actions.some(item => item.textContent?.trim() === 'Plan workout')).toBe(false);
+    const manage = actions.find(item => item.textContent?.trim() === 'Manage rest day') as HTMLButtonElement;
+    expect(manage).toBeDefined(); vi.mocked(TestBed.inject(AppHapticsService).selection).mockClear(); manage.click();
+    expect(navigate).toHaveBeenCalledWith(['/training/plans/plan', 'plan'], { queryParams: { date: '2026-08-03' } });
+    expect(prepareReturn).toHaveBeenCalledWith('/', '2026-08-03', 'today-sheet', undefined);
+    expect(TestBed.inject(MatBottomSheetRef).dismiss).toHaveBeenCalledOnce();
+    expect(TestBed.inject(AppHapticsService).selection).toHaveBeenCalledOnce();
+  });
+
+  it('withholds the shared planning menu when planning is disabled for the day sheet', async () => {
+    const fixture = await renderDayDetails([], { planningEnabled: false, scheduleSource: restSchedule });
+    expect(fixture.nativeElement.querySelector('[aria-label="Add workout for selected day"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[aria-label="Planned rest day"]')).toBeNull();
+  });
+
   it('opens AI generation from the owned day menu and dismisses the sheet with one action haptic', async () => {
     const fixture = await renderDayDetails([], { returnToDashboard: true });
     vi.spyOn(TestBed.inject(DayWorkoutService), 'canGenerate').mockReturnValue(true);
@@ -537,11 +600,11 @@ async function renderDayDetails(eventOrEvents: EventInterface | EventInterface[]
     providers: [
       provideRouter([]),
       { provide: TrainingPlansService, useValue: {} },
-      { provide: DayWorkoutService, useValue: { canGenerate: () => false, open: vi.fn() } },
+      { provide: DayWorkoutService, useValue: { canGenerate: () => false, open: vi.fn(), isOwner: (uid: string) => uid === data.userId } },
       { provide: MAT_BOTTOM_SHEET_DATA, useValue: data },
       { provide: AppUserService, useValue: { user: signal({ uid: data.userId }) } },
       { provide: MatBottomSheetRef, useValue: { dismiss: vi.fn() } },
-      { provide: AppHapticsService, useValue: { selection: vi.fn() } },
+      { provide: AppHapticsService, useValue: { selection: vi.fn(), success: vi.fn(), error: vi.fn() } },
       { provide: AppThemeService, useValue: { appTheme: signal('normal') } },
       // The embedded context also serves previews, where duplication is retained.
       { provide: TrainingWorkoutDuplicateService, useValue: { duplicate: vi.fn() } },
