@@ -502,6 +502,15 @@ function trainingWorkoutRoutingContext(prompt: string): string {
 
 export function selectAssistantTrainingPreviewTool(prompt: string,
   history: readonly Pick<AssistantMessage, 'role' | 'text'>[] = []): typeof TRAINING_PREVIEW_TOOLS[number] {
+  // A short date answer keeps only the immediately requested rest edit, never Apply authority.
+  const clarification = history[history.length - 1], restRequest = history[history.length - 2];
+  if (prompt.length <= 100 && !/[?]|\b(?:cancel|stop|never|no|not|don't|don’t|do not|create|add|mark|make|set|declare|clear|update|rename|schedule|start|resume|enable|disable|edit|change|apply|delete|remove|move|copy|send|sync)\b/iu.test(prompt)
+    && /\b(?:today|tomorrow|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|may|june|july|august|september|october|november|december)\b|\b\d{4}-\d{2}-\d{2}\b/iu.test(prompt)
+    && clarification?.role === 'assistant' && restRequest?.role === 'user'
+    && /\b(?:which|what|provide|choose|specify)\b[^.!?\n]{0,100}\b(?:date|day)\b/iu.test(clarification.text)) {
+    const previous = selectAssistantTrainingPreviewTool(restRequest.text);
+    if (previous === 'preview_training_calendar_rest_day' || previous === 'preview_training_rest_days') return previous;
+  }
   if (assistantRecoveryDurationSeconds(prompt) !== null) return 'preview_planned_workout_v3_change';
   // Only an exact sport choice answering our immediate separate-actions question
   // retains the strength schema. It inherits neither recipe values nor delivery.

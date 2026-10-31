@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Auth, type FirebaseUserType } from 'app/firebase/auth';
 import { Firestore, collection, collectionData, doc, docData, limit, orderBy, query, runTransaction, where } from 'app/firebase/firestore';
-import { Observable, Subject, catchError, distinctUntilChanged, filter, map, merge, scan, shareReplay, tap, throwError, timeout } from 'rxjs';
+import { Observable, Subject, defer, finalize, distinctUntilChanged, filter, map, merge, scan, shareReplay, tap, timeout } from 'rxjs';
 import { TRAINING_REST_DAYS_COLLECTION, parseTrainingRestDayV1, validateTrainingRestDayRange, type TrainingRestDayV1 } from '@shared/training-rest-days';
 import { normalizeTrainingLocalDate } from '@shared/training-plans';
 
@@ -10,12 +10,17 @@ export class TrainingRestDaysService {
   private readonly firestore = inject(Firestore);
   private readonly auth = inject(Auth);
   private readonly dayStreams = new Map<string, { authUser: FirebaseUserType | null; stream$: Observable<TrainingRestDayV1 | null> }>();
-  private readonly revisions = new Map<string, { authUser: FirebaseUserType | null; revision: number }>();
+  private readonly revisions = new Map<string, { authUser: FirebaseUserType | null; revision: number; liveSource?: object }>();
   private readonly acknowledgements = new Subject<{ uid: string; record: TrainingRestDayV1 }>();
   private readonly changes = new Subject<{ uid: string; localDate: string; revision: number }>();
   readonly changes$ = this.changes.asObservable();
 
   lastRevision(uid: string, localDate: string): number | undefined {
+    const value = this.revisions.get(JSON.stringify([uid, localDate]));
+    return value?.liveSource && this.auth.currentUser?.uid === uid && value.authUser === this.auth.currentUser ? value.revision : undefined;
+  }
+
+  private observedRevision(uid: string, localDate: string): number | undefined {
     const value = this.revisions.get(JSON.stringify([uid, localDate]));
     return this.auth.currentUser?.uid === uid && value?.authUser === this.auth.currentUser ? value?.revision : undefined;
   }
@@ -25,20 +30,24 @@ export class TrainingRestDaysService {
     if (!uid) throw Error('Choose the signed-in account.');
     const key = JSON.stringify([uid, localDate]), existing = this.dayStreams.get(key), authUser = this.auth.currentUser;
     if (existing?.authUser === authUser) return existing.stream$;
-    const stream$ = merge(
-      docData(doc(this.firestore, 'users', uid, TRAINING_REST_DAYS_COLLECTION, localDate), { waitForServer: true })
-        .pipe(map(value => value === undefined ? null : parseTrainingRestDayV1(value, localDate))),
-      this.acknowledgements.pipe(filter(update => update.uid === uid && update.record.localDate === localDate), map(update => update.record)),
-    ).pipe(filter(() => this.auth.currentUser === authUser), timeout({ first: 15_000 }),
-      // An older SDK echo cannot undo an acknowledged write. Records are removed by setting false, never deleting.
-      scan((previous, value) => (value?.revision ?? 0) >= (previous?.revision ?? 0) ? value : previous, null as TrainingRestDayV1 | null),
-      distinctUntilChanged((left, right) => left?.revision === right?.revision && left?.isRestDay === right?.isRestDay),
-      tap(record => this.publish(uid, localDate, record?.revision ?? 0)),
-      catchError(error => {
-        if (this.revisions.get(key)?.authUser === authUser) this.revisions.delete(key);
-        return throwError(() => error);
-      }),
-      shareReplay({ bufferSize: 1, refCount: true }));
+    const stream$ = defer(() => {
+      const source = {};
+      return merge(
+        docData(doc(this.firestore, 'users', uid, TRAINING_REST_DAYS_COLLECTION, localDate), { waitForServer: true })
+          .pipe(map(value => value === undefined ? null : parseTrainingRestDayV1(value, localDate))),
+        this.acknowledgements.pipe(filter(update => update.uid === uid && update.record.localDate === localDate), map(update => update.record)),
+      ).pipe(filter(record => this.auth.currentUser === authUser
+        && (record?.revision ?? 0) >= (this.observedRevision(uid, localDate) ?? 0)), timeout({ first: 15_000 }),
+        // An older SDK echo cannot undo an acknowledged write. False markers retain revisions.
+        scan((previous, value) => (value?.revision ?? 0) >= (previous?.revision ?? 0) ? value : previous, null as TrainingRestDayV1 | null),
+        distinctUntilChanged((left, right) => left?.revision === right?.revision && left?.isRestDay === right?.isRestDay),
+        tap(record => this.publish(uid, localDate, record?.revision ?? 0, source)),
+        // Keep the monotonic floor for write races, but stop treating disconnected evidence as current.
+        finalize(() => {
+          const value = this.revisions.get(key);
+          if (value?.liveSource === source) delete value.liveSource;
+        }));
+    }).pipe(shareReplay({ bufferSize: 1, refCount: true }));
     if (this.dayStreams.size >= 64) this.dayStreams.delete(this.dayStreams.keys().next().value!);
     this.dayStreams.set(key, { authUser, stream$ });
     return stream$;
@@ -89,17 +98,20 @@ export class TrainingRestDaysService {
       return record;
     });
     if (!active()) throw Error('The calendar context changed.');
-    if (result && (this.lastRevision(uid, localDate) ?? 0) > result.revision) throw Error('This rest day changed again. Reload the day and try again.');
+    if (result && (this.observedRevision(uid, localDate) ?? 0) > result.revision) throw Error('This rest day changed again. Reload the day and try again.');
     if (result) this.acknowledgements.next({ uid, record: result });
     this.publish(uid, localDate, result?.revision ?? 0);
     return result;
   }
 
-  private publish(uid: string, localDate: string, revision: number): void {
+  private publish(uid: string, localDate: string, revision: number, source?: object): void {
     if (this.auth.currentUser?.uid !== uid) return;
     const key = JSON.stringify([uid, localDate]);
-    if ((this.lastRevision(uid, localDate) ?? -1) >= revision) return;
-    this.revisions.delete(key); this.revisions.set(key, { authUser: this.auth.currentUser, revision });
+    if ((this.observedRevision(uid, localDate) ?? -1) >= revision) {
+      if (source && this.observedRevision(uid, localDate) === revision) this.revisions.get(key)!.liveSource = source;
+      return;
+    }
+    this.revisions.delete(key); this.revisions.set(key, { authUser: this.auth.currentUser, revision, liveSource: source });
     if (this.revisions.size > 128) this.revisions.delete(this.revisions.keys().next().value!);
     this.changes.next({ uid, localDate, revision });
   }

@@ -1020,7 +1020,13 @@ with Training context, and daily suggestions share one ref-counted exact-date re
 or recipe query is needed for this marker. Unknown/error evidence cannot authorize automatic generation. Verified
 rest immediately masks a cached ready suggestion; removal invalidates coverage and can recover the same daily result,
 without resetting the charged daily receipt or permitting another model call. Dismissal stays authoritative.
-Session-cache entries track the verified rest revision, and restored recipes wait for current evidence. No polling is added.
+Session-cache entries track the verified rest revision, and restored recipes wait for current evidence. Cache authority
+exists only while a current authenticated day listener remains live; teardown/error removes that authority. The bounded
+revision index separately retains a monotonic floor to reject delayed acknowledgements and older reconnect snapshots.
+The shared daily listener follows the existing Today date/foreground checks across saved-zone midnight and same-UID
+session replacement, even if the user profile object has not changed. A failed root listener is reattached on an explicit
+request; passive cache reads never restart failed subscriptions. Context changes during the initial read reject before
+any generation request. This adds no clock, polling, model call or change to the daily charge receipt.
 
 Manual generation also checks independent calendar intent when Training context is enabled, even with no selected
 or active plan. An authored rest response is deterministic and releases the unused quota reservation. Training context
@@ -1041,14 +1047,19 @@ preview/Apply remains separate; no registered schema or baseline/history changes
 
 The built-in Assistant exposes only this prepare tool for an unqualified calendar-rest request, with complete app-owned
 before/after review and explicit Apply/dismissal. A specific plan-rest request keeps its existing full-list workflow.
+A short date reply to the immediately preceding rest-date clarification retains the original calendar-versus-plan
+preview choice. New actions, cancellation, negative replies and questions never inherit it. Routing supplies neither
+values nor Apply authority; complete review and separate confirmation still apply.
 Its shared response validator requires the dedicated calendar review; missing/foreign/private fields fail closed.
+This lifecycle review changes no MCP tool, input/output schema, scope, stored marker or public preview/Apply contract;
+read and mutation coverage remains unchanged. Existing Help instructions remain accurate.
 The native Calendar writer and shared live exact-date listeners use the same four-field records/revisions, so MCP
 edits immediately invalidate daily coverage through existing cache signals. Marking rest and removing it never clears
 the one-day AI generation receipt. Tests use synthetic emulator owners, without live account/provider writes.
 
-Standalone rest and its MCP preview/Apply add 11.99 kB of lazy JavaScript over the preceding release
-(13,814.71 kB total scripts); startup remains
-1.40 MB / 333.25 kB transfer. Matching production/beta all-script caps move from 13,805 to 13,815 kB. Initial and warning
+Standalone rest, its MCP preview/Apply and listener lifecycle fixes add 12.96 kB of lazy JavaScript over the preceding release
+(13,815.68 kB total scripts); startup remains
+1.40 MB / 333.25 kB transfer. Matching production/beta all-script caps move from 13,805 to 13,817 kB; the lifecycle fixes account for under 1 kB. Initial and warning
 budgets are unchanged, and no runtime dependency is added.
 
 Rollout requires separately approved Firestore Rules and updated Functions before the frontend, plus the normal

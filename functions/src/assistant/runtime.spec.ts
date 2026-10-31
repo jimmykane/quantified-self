@@ -161,6 +161,17 @@ describe('Training phase preview routing', () => {
     'Delete the rest day tomorrow', 'Mark Sunday as a rest day without a plan', 'Add a rest day outside my plan'])('routes standalone rest intent: %s', prompt => {
     expect(selectAssistantTrainingPreviewTool(prompt)).toBe('preview_training_calendar_rest_day');
   });
+  it.each([
+    ['Tomorrow', 'Mark a rest day.', 'Which date should be a rest day?', 'preview_training_calendar_rest_day'],
+    ['2026-11-15', 'Add a rest day outside my plan.', 'Which date?', 'preview_training_calendar_rest_day'],
+    ['Next Sunday', 'Mark a rest day in my plan.', 'Which day should I mark as rest?', 'preview_training_rest_days'],
+  ])('retains the rest edit through a date clarification: %s', (reply, request, question, expected) => {
+    expect(selectAssistantTrainingPreviewTool(reply, [{ role: 'user', text: request }, { role: 'assistant', text: question }])).toBe(expected);
+  });
+  it.each(['Add a workout tomorrow', 'Cancel it tomorrow', "Don't mark tomorrow", 'Which Sunday?', 'Tomorrow, send to Garmin', 'No, not tomorrow', 'Make Sunday a workout day'])('does not retain rest intent after a new or negative request: %s', reply => {
+    const tool = selectAssistantTrainingPreviewTool(reply, [{ role: 'user', text: 'Mark a rest day.' }, { role: 'assistant', text: 'Which date?' }]);
+    expect(tool).not.toBe('preview_training_calendar_rest_day'); expect(tool).not.toBe('preview_training_rest_days');
+  });
   it.each(['Add a workout during my rest day', 'Change my workout on a rest day', 'Which dates are rest days?',
     'Delete my plan and its rest days', "Don't mark Sunday as a rest day", 'Do not change my rest days'])('does not mistake contextual rest days for a rest-day edit: %s', prompt => {
     expect(selectAssistantTrainingPreviewTool(prompt)).not.toBe('preview_training_rest_days');

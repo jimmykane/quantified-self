@@ -68,6 +68,46 @@ describe('DailyWorkoutSuggestionService daily browser cache', () => {
     expect(call).toHaveBeenCalledTimes(2);
     expect(call).toHaveBeenLastCalledWith('generateDayWorkout', { mode: 'daily-suggestion', action: 'status' }, expect.anything());
   });
+  it('moves the shared rest listener to the new saved-zone date without changing the user object', async () => {
+    const { service, setRest } = setup(); TestBed.flushEffects();
+    await service.request('owner', 'prepare', () => true);
+    vi.setSystemTime(new Date('2026-10-31T07:00Z'));
+    service.cached('owner'); TestBed.flushEffects();
+    setRest({ schemaVersion: 1, localDate: '2026-10-31', isRestDay: true, revision: 1 });
+    expect(service.cached('owner')?.status).toEqual({ localDate: '2026-10-31', state: 'rest-day' });
+  });
+  it('replaces a same-date listener after the authenticated session changes, even if the user object is unchanged', async () => {
+    const { service, auth, setRest } = setup();
+    const watch = vi.spyOn(TestBed.inject(TrainingPlansService), 'watchCalendarRestDay'); TestBed.flushEffects();
+    await service.request('owner', 'prepare', () => true); expect(watch).toHaveBeenCalledTimes(1);
+    auth.currentUser = { uid: 'owner' }; service.cached('owner'); TestBed.flushEffects();
+    expect(watch).toHaveBeenCalledTimes(2);
+    setRest({ schemaVersion: 1, localDate: '2026-10-30', isRestDay: true, revision: 1 });
+    expect(service.cached('owner')?.status?.state).toBe('rest-day');
+  });
+  it.each(['session', 'controls'] as const)('rejects a changed %s while waiting for current calendar evidence', async change => {
+    const { service, auth, user, restRevisions, call } = setup(); restRevisions.clear();
+    const pendingRead = new Subject<TrainingRestDayV1 | null>();
+    vi.spyOn(TestBed.inject(TrainingPlansService), 'watchCalendarRestDay').mockReturnValue(pendingRead);
+    const pending = service.request('owner', 'prepare', () => true);
+    if (change === 'session') auth.currentUser = { uid: 'owner' };
+    else user.update(value => ({ ...value, settings: { appSettings: { dailyWorkoutSuggestion: {
+      ...value.settings.appSettings.dailyWorkoutSuggestion, followRoutine: false } } } }));
+    pendingRead.next(null); await expect(pending).rejects.toThrow('changed'); expect(call).not.toHaveBeenCalled();
+  });
+  it('keeps a recovered day listener after an explicit retry, without retrying from cache reads', async () => {
+    const { service, restDay$, restRevisions, call } = setup(); TestBed.flushEffects();
+    await service.request('owner', 'prepare', () => true);
+    restRevisions.clear(); restDay$.error(new Error('Read failed'));
+    const watch = vi.spyOn(TestBed.inject(TrainingPlansService), 'watchCalendarRestDay');
+    service.cached('owner'); TestBed.flushEffects(); expect(watch).not.toHaveBeenCalled();
+    const recovered$ = new BehaviorSubject<TrainingRestDayV1 | null>(null);
+    watch.mockImplementation((uid, date) => recovered$.pipe(tap(record => restRevisions.set(uid + '|' + date, record?.revision ?? 0))));
+    await service.request('owner', 'status', () => true); expect(watch).toHaveBeenCalledOnce();
+    expect(recovered$.observed).toBe(true);
+    recovered$.next({ schemaVersion: 1, localDate: '2026-10-30', isRestDay: true, revision: 1 });
+    expect(service.cached('owner')?.status?.state).toBe('rest-day'); expect(call).toHaveBeenCalledTimes(2);
+  });
   it('withholds a restored recipe until current calendar rest intent has been verified', async () => {
     const first = setup(); await first.service.request('owner', 'prepare', () => true);
     const next = setup(first.saved); next.restRevisions.clear();

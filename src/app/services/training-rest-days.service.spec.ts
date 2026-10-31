@@ -34,6 +34,21 @@ describe('calendar rest-day persistence', () => {
     expect(sdk.docData).toHaveBeenCalledWith('users/owner/trainingRestDays/2026-10-31', { waitForServer: true });
     first.unsubscribe(); expect(day$.observed).toBe(true); second.unsubscribe(); expect(day$.observed).toBe(false);
   });
+  it('requires fresh evidence after the last day listener disconnects and reconnects', () => {
+    const { service, day$ } = setup();
+    const first = service.watchDay('owner', date).subscribe(); day$.next(undefined);
+    expect(service.lastRevision('owner', date)).toBe(0);
+    first.unsubscribe(); expect(service.lastRevision('owner', date)).toBeUndefined();
+    const next = vi.fn(), second = service.watchDay('owner', date).subscribe(next);
+    expect(next).not.toHaveBeenCalled(); expect(service.lastRevision('owner', date)).toBeUndefined();
+    day$.next(rest); expect(service.lastRevision('owner', date)).toBe(1);
+    second.unsubscribe(); expect(service.lastRevision('owner', date)).toBeUndefined();
+  });
+  it('does not treat a write acknowledgement without a live day read as current cache evidence', async () => {
+    const { service } = setup();
+    await service.setDay('owner', date, true, 0, () => true);
+    expect(service.lastRevision('owner', date)).toBeUndefined();
+  });
   it('writes calendar intent directly and keeps an acknowledged revision ahead of older SDK echoes', async () => {
     const { service, day$, set } = setup(); const values: (TrainingRestDayV1 | null)[] = [];
     const sub = service.watchDay('owner', date).subscribe(value => values.push(value)); day$.next(undefined);
@@ -42,6 +57,14 @@ describe('calendar rest-day persistence', () => {
     day$.next(undefined); expect(values.at(-1)).toEqual(rest);
     expect(await service.setDay('owner', date, false, 1, () => true)).toEqual({ ...rest, isRestDay: false, revision: 2 });
     day$.next(rest); expect(values.at(-1)?.isRestDay).toBe(false); sub.unsubscribe();
+  });
+  it('does not verify an older server echo when reconnecting after a newer acknowledged removal', async () => {
+    const { service, day$ } = setup();
+    await service.setDay('owner', date, true, 0, () => true); await service.setDay('owner', date, false, 1, () => true);
+    const next = vi.fn(), subscription = service.watchDay('owner', date).subscribe(next);
+    day$.next(rest); expect(next).not.toHaveBeenCalled(); expect(service.lastRevision('owner', date)).toBeUndefined();
+    day$.next({ ...rest, isRestDay: false, revision: 2 });
+    expect(next).toHaveBeenCalledExactlyOnceWith({ ...rest, isRestDay: false, revision: 2 }); subscription.unsubscribe();
   });
   it('makes desired-state retries idempotent and rejects a conflicting revision', async () => {
     const { service, seed, set } = setup(); seed({ ...rest, revision: 3 });
@@ -92,7 +115,8 @@ describe('calendar rest-day persistence', () => {
     const next = vi.fn(), subscription = service.watchDay('owner', date).subscribe(next);
     expect(next).not.toHaveBeenCalled(); day$.next(undefined);
     expect(next).toHaveBeenCalledExactlyOnceWith(null); expect(service.lastRevision('owner', date)).toBe(0);
-    old.unsubscribe(); subscription.unsubscribe();
+    old.unsubscribe(); expect(service.lastRevision('owner', date)).toBe(0);
+    subscription.unsubscribe(); expect(service.lastRevision('owner', date)).toBeUndefined();
   });
   it('does not let a delayed earlier acknowledgement resurrect rest after a newer removal', async () => {
     const { service, range$, get, set } = setup(); const next = vi.fn();
@@ -106,6 +130,6 @@ describe('calendar rest-day persistence', () => {
     await service.setDay('owner', date, false, 1, () => true); acknowledge();
     await expect(earlier).rejects.toThrow('changed again');
     expect(next).toHaveBeenLastCalledWith([{ ...rest, isRestDay: false, revision: 2 }]);
-    expect(service.lastRevision('owner', date)).toBe(2); subscription.unsubscribe();
+    expect(service.lastRevision('owner', date)).toBeUndefined(); subscription.unsubscribe();
   });
 });

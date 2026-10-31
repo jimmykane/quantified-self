@@ -829,6 +829,9 @@ nothing. Plan rest days, workouts, provider consent, schedule revisions and AI d
 use a four-field mask, never a full plan/workout scan. The Assistant exposes prepare only, validates this dedicated
 review and uses existing app-owned confirmation. Unqualified rest edits target Calendar; explicit plan-rest edits keep
 the plan-only full-list preview. Missing write consent never advertises the preview or apply authority.
+The Assistant retains that choice for a short date answer to its immediately preceding rest-date clarification; a new
+request or cancellation cannot inherit it. Client cache verification retires with its day listener and refreshes on
+existing date/session checks and explicit recovery. These lifecycle fixes leave the public contract/digest unchanged.
 
 This additive tool and server instructions require the existing digest-bound pending lifecycle, separately approved
 backend/Rules release and registered-app refresh. Updated bundled Training, Activity and cross-domain guidance needs

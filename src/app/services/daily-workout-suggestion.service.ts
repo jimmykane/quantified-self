@@ -1,4 +1,4 @@
-import { DestroyRef, Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
+import { DestroyRef, Injectable, effect, inject, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Auth, type FirebaseUserType } from 'app/firebase/auth';
 import { defaultDayWorkoutControls, dayWorkoutLocalDate, parseGenerateDayWorkoutRequest } from '@shared/day-workout';
@@ -11,7 +11,7 @@ import { TrainingPlansService } from './training-plans.service';
 import { parseWorkoutStructureV1 } from '@shared/planned-workout';
 import { isStrengthWorkoutSportV1, parseStrengthWorkoutDraftV1, strengthProjectionMatchesDetails } from '@shared/strength-workout';
 import { DAILY_WORKOUT_SUGGESTION_SESSION_CACHE_KEY as CACHE_KEY } from '../shared/daily-workout-suggestion-cache';
-import { firstValueFrom, take } from 'rxjs';
+import { Subscription, firstValueFrom, take } from 'rxjs';
 
 const MAX_CACHE_CHARACTERS = 400_000;
 const states: DailyWorkoutSuggestionStatus['state'][] = ['off', 'waiting', 'waiting-sleep', 'ready', 'dismissed', 'failed', 'planned', 'completed', 'rest-day'];
@@ -33,10 +33,7 @@ export class DailyWorkoutSuggestionService {
   private readonly analytics = inject(AppAnalyticsService);
   private readonly window = inject(AppWindowService);
   private readonly plans = inject(TrainingPlansService);
-  private readonly restReadScope = computed(() => {
-    const uid = this.users.user()?.uid, preferences = this.preferences();
-    return uid && this.eligible(uid) && preferences.enabled ? JSON.stringify([uid, preferences.controls.localDate]) : '';
-  });
+  private restRead: { uid: string; localDate: string; authUser: FirebaseUserType | null; subscription: Subscription } | null = null;
   private cache: DailyWorkoutSuggestionCache | null = null;
   readonly cacheRevision = signal(0);
   private writes: Promise<void> = Promise.resolve();
@@ -51,18 +48,11 @@ export class DailyWorkoutSuggestionService {
     }
   }
   constructor() {
-    effect(onCleanup => {
-      const key = this.restReadScope();
-      if (!key) return;
-      const [uid, localDate] = JSON.parse(key) as [string, string];
-      const subscription = this.plans.watchCalendarRestDay(uid, localDate).subscribe({ next: record => untracked(() => {
-        if (!this.eligible(uid) || this.preferences().controls.localDate !== localDate) return;
-        this.acceptRestDayRevision(uid, localDate, record?.revision ?? 0);
-        if (record?.isRestDay && this.cache?.status?.state !== 'dismissed') this.remember(uid, { localDate, state: 'rest-day' });
-      }), error: () => untracked(() => {
-        if (this.cache?.uid === uid && this.cache.status?.state !== 'dismissed') { this.invalidate(); this.persist(); }
-      }) });
-      onCleanup(() => subscription.unsubscribe());
+    inject(DestroyRef).onDestroy(() => this.stopRestRead());
+    effect(() => {
+      const uid = this.users.user()?.uid, preferences = this.preferences();
+      const enabled = uid && this.eligible(uid) && preferences.enabled;
+      untracked(() => enabled ? this.ensureRestRead(uid, preferences.controls.localDate) : this.stopRestRead());
     });
     effect(() => {
       const uid = this.users.user()?.uid, pro = this.users.isProSignal();
@@ -74,6 +64,27 @@ export class DailyWorkoutSuggestionService {
     this.plans.calendarRestDayChanges$.pipe(takeUntilDestroyed(inject(DestroyRef))).subscribe(({ uid, localDate, revision }) => {
       this.acceptRestDayRevision(uid, localDate, revision);
     });
+  }
+  private stopRestRead(): void {
+    this.restRead?.subscription.unsubscribe(); this.restRead = null;
+  }
+  private ensureRestRead(uid: string, localDate: string, retry = false): void {
+    const previous = this.restRead, authUser = this.auth.currentUser;
+    if (previous?.uid === uid && previous.localDate === localDate && previous.authUser === authUser
+      && (!previous.subscription.closed || !retry)) return;
+    this.stopRestRead();
+    // Bind before subscribing: a shared replay can synchronously remember rest and re-enter entry().
+    const context = { uid, localDate, authUser, subscription: new Subscription() };
+    this.restRead = context;
+    context.subscription.add(this.plans.watchCalendarRestDay(uid, localDate).subscribe({ next: record => untracked(() => {
+      if (this.restRead !== context || !this.eligible(uid) || this.preferences().controls.localDate !== localDate) return;
+      this.acceptRestDayRevision(uid, localDate, record?.revision ?? 0);
+      if (record?.isRestDay && this.cache?.status?.state !== 'dismissed') this.remember(uid, { localDate, state: 'rest-day' });
+    }), error: () => untracked(() => {
+      context.subscription.unsubscribe();
+      if (this.restRead === context && this.cache?.uid === uid && this.cache.status?.state !== 'dismissed'
+        && (this.cache.status || this.cache.pending.size)) { this.invalidate(); this.persist(); }
+    }) }));
   }
   private acceptRestDayRevision(uid: string, localDate: string, revision: number): void {
     if (!this.cache || this.cache.uid !== uid || !this.eligible(uid) || localDate !== this.preferences().controls.localDate
@@ -101,7 +112,9 @@ export class DailyWorkoutSuggestionService {
     this.cache.epoch++; this.cache.pending.clear(); this.cache.status = null;
     this.cacheRevision.update(value => value + 1);
   }
-  private entry(uid: string): DailyWorkoutSuggestionCache {
+  private entry(uid: string, retryRest = false): DailyWorkoutSuggestionCache {
+    const preferences = this.preferences();
+    if (preferences.enabled) this.ensureRestRead(uid, preferences.controls.localDate, retryRest);
     const key = this.key(uid);
     if (this.cache?.key === key && this.cache.authUser === this.auth.currentUser) return this.cache;
     this.cache = { key, uid, authUser: this.auth.currentUser, epoch: 0, status: null, sleepKey: null,
@@ -185,13 +198,13 @@ export class DailyWorkoutSuggestionService {
     refresh = false): Promise<DailyWorkoutSuggestionStatus> {
     if (!this.eligible(uid) || !current()) throw Error('Daily suggestion access changed.');
     if ((action === 'dismiss' || action === 'use-available-data') && !expectedDate) throw Error('Choose the displayed day.');
-    const localDate = this.preferences().controls.localDate;
+    const entry = this.entry(uid, true), localDate = this.preferences().controls.localDate;
     // A cached recipe cannot establish that no new standalone rest marker exists.
     if (action !== 'dismiss' && this.plans.lastCalendarRestDayRevision(uid, localDate) === undefined) {
       await firstValueFrom(this.plans.watchCalendarRestDay(uid, localDate).pipe(take(1)));
-      if (!this.eligible(uid) || !current() || this.preferences().controls.localDate !== localDate) throw Error('Daily suggestion access changed.');
+      if (this.cache !== entry || entry.authUser !== this.auth.currentUser || !this.eligible(uid) || !current()
+        || this.key(uid) !== entry.key || this.preferences().controls.localDate !== localDate) throw Error('Daily suggestion access changed.');
     }
-    const entry = this.entry(uid);
     if (expectedDate && expectedDate !== this.preferences().controls.localDate) throw Error('The displayed day changed.');
     const existing = entry.pending.get(action);
     if (existing) return existing;
