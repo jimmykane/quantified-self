@@ -1,17 +1,20 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { DOCUMENT } from '@angular/common';
+import { toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { catchError, map, of, switchMap } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import type { DailyWorkoutSuggestionStatus } from '@shared/daily-workout-suggestion';
+import { formatWorkoutPrescriptionSummaryV1 } from '@shared/planned-workout-analysis-display';
 import { DailyWorkoutSuggestionService } from '../../../services/daily-workout-suggestion.service';
 import { DayWorkoutService } from '../../../services/day-workout.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppChartSharedModule } from '../../../modules/app-chart-shared.module';
-import { dayWorkoutReview } from '../../../helpers/day-workout-review.helper';
 import { CompactRowComponent } from '../../shared/compact-row/compact-row.component';
 import { AppUserService } from '../../../services/app.user.service';
+import { selectCalendarVisibleScheduledWorkouts, TrainingPlansService } from '../../../services/training-plans.service';
 
 @Component({ selector: 'app-daily-workout-suggestion', standalone: true,
   imports: [CompactRowComponent, MatButtonModule, MatIconModule, MatMenuModule, MatProgressBarModule, AppChartSharedModule],
@@ -28,6 +31,7 @@ export class DailyWorkoutSuggestionComponent {
   readonly daily = inject(DailyWorkoutSuggestionService);
   private readonly generation = inject(DayWorkoutService);
   private readonly users = inject(AppUserService);
+  private readonly plans = inject(TrainingPlansService);
   private readonly haptics = inject(AppHapticsService);
   private readonly destroy = inject(DestroyRef);
   private readonly document = inject(DOCUMENT);
@@ -42,13 +46,39 @@ export class DailyWorkoutSuggestionComponent {
   readonly actionError = signal<string | null>(null);
   readonly busy = computed(() => this.loading() || this.actionBusy() || this.daily.saving());
   readonly error = signal(false);
-  readonly title = computed(() => !this.preferences().enabled ? 'Daily workout suggestion · Pro'
-    : this.status()?.state === 'planned' ? 'Today’s workout' : 'Today’s suggestion');
+  // Reuse Calendar's bounded reader only for the current owner's planned date.
+  private readonly plannedScope = computed(() => {
+    const preferences = this.preferences(), status = this.status();
+    return this.eligible() && preferences.enabled && status?.state === 'planned'
+      && status.localDate === preferences.controls.localDate ? { uid: this.ownerUid(), date: status.localDate } : null;
+  }, { equal: (left, right) => left?.uid === right?.uid && left?.date === right?.date });
+  private readonly savedWorkouts = toSignal(toObservable(this.plannedScope).pipe(switchMap(scope => scope
+    ? this.plans.watchCalendarSchedule(scope.uid, scope.date, scope.date).pipe(
+      map(schedule => ({ ...scope, schedule })), catchError(() => of(null)))
+    : of(null))), { initialValue: null });
+  readonly plannedWorkouts = computed(() => {
+    const scope = this.plannedScope(), saved = this.savedWorkouts();
+    if (!scope || saved?.uid !== scope.uid || saved.date !== scope.date || saved.schedule.restoreUnavailable
+      || saved.schedule.workoutsComplete === false) return [];
+    return selectCalendarVisibleScheduledWorkouts(saved.schedule, scope.date, scope.date)
+      .filter(workout => workout.lifecycle === 'planned');
+  });
+  readonly title = computed(() => {
+    if (!this.preferences().enabled) return 'Daily workout suggestion · Pro';
+    if (this.status()?.state !== 'planned') return 'Today’s suggestion';
+    return this.plannedWorkouts().length > 1 ? 'Today’s workouts' : 'Today’s workout';
+  });
   readonly summary = computed(() => {
     const value = this.status();
     if (value?.state === 'ready' && value.result) {
       const draft = value.result.draft;
-      return draft ? `${draft.title} · ${dayWorkoutReview(draft, this.users.user()?.settings?.unitSettings).summary}` : 'A recovery day';
+      return draft ? `${draft.title} · ${formatWorkoutPrescriptionSummaryV1(draft.structure, this.users.user()?.settings?.unitSettings, draft.structure.sport)}` : 'A recovery day';
+    }
+    const planned = this.plannedWorkouts();
+    if (planned.length) {
+      const workout = planned[0];
+      return `${workout.title} · ${formatWorkoutPrescriptionSummaryV1(workout.structure, this.users.user()?.settings?.unitSettings, workout.structure.sport)}`
+        + (planned.length > 1 ? ` · +${planned.length - 1} more` : '');
     }
     if (this.busy()) return 'Preparing with your latest available context…';
     if (this.error() || value?.state === 'failed') return 'Today’s suggestion could not finish.';

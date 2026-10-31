@@ -5752,6 +5752,14 @@ current owner/day/Pro fences. Old in-flight replies cannot
 replace another owner, date, preferences or newer coverage. No raw Sleep samples/provider payloads enter cache keys;
 the browser copy holds only the existing first-party public response, capped at 400,000 JSON characters.
 
+While Today is enabled and its owner-scoped daily status is planned, the compact row reuses
+`TrainingPlansService.watchCalendarSchedule` for that single date, with Calendar's bounded reads and visibility selection.
+It shows the current saved title and the same canonical
+prescription summary as suggestion review, labels it **Planned for today**, and counts additional planned workouts.
+Only matching-date, planned, Calendar-visible workouts appear; account/date/access changes fence stale details and
+leaving the planned state releases the consumer. Missing, failed, incomplete or restoring optional details retain the planned confirmation.
+This adds no AI request, polling, new cache, query shape, stored field, or MCP projection/permission change.
+
 A planned workout blocks generation without spending the daily model allowance. Deleting today's last blocking planned
 workout changes the verified schedule revision and debounces one new availability check, including Standalone workouts
 when no plan is active. An unused allowance can then prepare its first suggestion at any hour. If a

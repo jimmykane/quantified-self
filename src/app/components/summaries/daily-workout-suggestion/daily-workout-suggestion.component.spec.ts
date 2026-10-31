@@ -15,8 +15,10 @@ import { Auth } from 'app/firebase/auth';
 import { AppFunctionsService } from '../../../services/app.functions.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { AppWindowService } from '../../../services/app.window.service';
-import { TrainingPlansService } from '../../../services/training-plans.service';
-import { Subject } from 'rxjs';
+import { TrainingPlansService, type CurrentTrainingScheduleV1 } from '../../../services/training-plans.service';
+import { BehaviorSubject, map, of, Subject } from 'rxjs';
+import { DistanceUnits } from '@sports-alliance/sports-lib';
+import type { ScheduledWorkoutV1 } from '@shared/training-plans';
 
 
 function exportQa(element: HTMLElement, name: string) {
@@ -37,6 +39,16 @@ function exportQa(element: HTMLElement, name: string) {
 }
 
 let restoreVisibility = () => {};
+function savedWorkout(patch: Partial<ScheduledWorkoutV1> = {}): ScheduledWorkoutV1 {
+  return { schemaVersion: 1, id: 'saved-workout', planId: null, localDate: '2026-10-30', lifecycle: 'planned',
+    title: 'Saved easy run', revision: 1, createdAtMs: 1, updatedAtMs: 1,
+    structure: { version: 1, sport: defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki').sport,
+      nodes: [{ kind: 'step', id: 'easy', purpose: 'work', ending: { kind: 'time', seconds: 1800 }, targets: [] }] }, ...patch };
+}
+function savedSchedule(workouts: ScheduledWorkoutV1[] = []): CurrentTrainingScheduleV1 {
+  return { state: { schemaVersion: 1, activePlanId: null, revision: 1, currentWorkoutCount: workouts.length, updatedAtMs: 1 },
+    plans: [], workouts, workoutsComplete: true };
+}
 function setup(enabled = true, cachedStatus: DailyWorkoutSuggestionStatus | null = null) {
   vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] }); vi.setSystemTime(new Date('2026-10-30T07:00Z'));
   const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
@@ -52,11 +64,15 @@ function setup(enabled = true, cachedStatus: DailyWorkoutSuggestionStatus | null
   const event = vi.fn(), save = vi.fn(async (_uid, value) => { preferences.set(value); });
   const open = vi.fn().mockResolvedValue(undefined);
   const haptics = { success: vi.fn(), error: vi.fn(), selection: vi.fn() };
+  const workouts = new BehaviorSubject<ScheduledWorkoutV1[]>([]);
+  const watchCalendarSchedule = vi.fn(() => workouts.pipe(map(items => savedSchedule(items))));
+  const user = signal({ settings: { unitSettings: { distanceUnits: DistanceUnits.Kilometers } } });
   TestBed.configureTestingModule({ imports: [DailyWorkoutSuggestionComponent], providers: [
     { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
     { provide: DailyWorkoutSuggestionService, useValue: { preferences, saving, eligible: (uid: string) => uid === owner() && pro(), isOwner: (uid: string) => uid === owner(), request, event, save, cacheRevision, cached, observeSleep, remember } },
     { provide: DayWorkoutService, useValue: { open } }, { provide: AppHapticsService, useValue: haptics },
-    { provide: AppUserService, useValue: { user: signal({ settings: { unitSettings: {} } }) } },
+    { provide: AppUserService, useValue: { user } },
+    { provide: TrainingPlansService, useValue: { watchCalendarSchedule } },
   ] });
   const fixture = TestBed.createComponent(DailyWorkoutSuggestionComponent);
   fixture.componentRef.setInput('ownerUid', 'owner'); fixture.componentRef.setInput('localDate', '2026-10-30');
@@ -65,7 +81,7 @@ function setup(enabled = true, cachedStatus: DailyWorkoutSuggestionStatus | null
     visibility.mockReturnValue(visible ? 'visible' : 'hidden');
     document.dispatchEvent(new Event('visibilitychange')); fixture.detectChanges();
   };
-  return { fixture, preferences, owner, pro, saving, request, event, save, open, haptics, setVisible, remember };
+  return { fixture, preferences, owner, pro, saving, request, event, save, open, haptics, setVisible, remember, workouts, watchCalendarSchedule, user };
 }
 afterEach(() => { vi.useRealTimers(); restoreVisibility(); });
 describe('compact daily workout in Today', () => {
@@ -95,7 +111,7 @@ describe('compact daily workout in Today', () => {
         getItem: (key: string) => values.get(key) ?? null,
         setItem: (key: string, value: string) => values.set(key, value), removeItem: (key: string) => values.delete(key),
       } } } },
-      { provide: TrainingPlansService, useValue: { stateRevisionChanges$: new Subject(), lastVerifiedStateRevision: () => undefined } },
+      { provide: TrainingPlansService, useValue: { stateRevisionChanges$: new Subject(), lastVerifiedStateRevision: () => undefined, watchCalendarSchedule: () => of(savedSchedule()) } },
       { provide: DayWorkoutService, useValue: { open: vi.fn() } },
       { provide: AppHapticsService, useValue: { selection: vi.fn(), success: vi.fn(), error: vi.fn() } },
     ] });
@@ -142,6 +158,92 @@ describe('compact daily workout in Today', () => {
     expect(fixture.componentInstance.busy()).toBe(false);
     await vi.advanceTimersByTimeAsync(1600); expect(request).not.toHaveBeenCalled();
   });
+  it('shows live saved details after acceptance, using the existing prescription summary', async () => {
+    const { fixture, workouts, watchCalendarSchedule, request, open, haptics } = setup();
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    expect(watchCalendarSchedule).not.toHaveBeenCalled();
+    fixture.componentInstance.status.update(value => ({ ...value!, result: { ...value!.result!, kind: 'workout',
+      draft: { title: 'Original suggestion', structure: savedWorkout().structure } } }));
+    request.mockResolvedValueOnce(fixture.componentInstance.status()!);
+    await fixture.componentInstance.review();
+    workouts.next([savedWorkout()]);
+    open.mock.calls[0][3].onAdded(); fixture.detectChanges();
+    expect(watchCalendarSchedule).toHaveBeenCalledExactlyOnceWith('owner', '2026-10-30', '2026-10-30');
+    expect(fixture.nativeElement.textContent).toContain('Saved easy run · 30m 00s');
+    expect(fixture.nativeElement.textContent).toContain('Planned for today');
+    const calls = request.mock.calls.length;
+    workouts.next([savedWorkout({ title: 'Edited saved run', structure: { ...savedWorkout().structure,
+      nodes: [{ kind: 'step', id: 'easy', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] }] } })]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Edited saved run · 10m 00s');
+    expect(fixture.nativeElement.textContent).not.toContain('Saved easy run');
+    expect(request).toHaveBeenCalledTimes(calls);
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('shows only today’s planned workouts, counts additional ones, and respects display units', () => {
+    const { fixture, workouts, user, watchCalendarSchedule } = setup(true, { localDate: '2026-10-30', state: 'planned' });
+    const distance = savedWorkout({ title: 'Distance run', structure: { ...savedWorkout().structure,
+      nodes: [{ kind: 'step', id: 'distance', purpose: 'work', ending: { kind: 'distance', meters: 5000 }, targets: [] }] } });
+    workouts.next([savedWorkout({ localDate: '2026-10-29', title: 'Yesterday' }), savedWorkout({ lifecycle: 'skipped', title: 'Skipped' }),
+      savedWorkout({ planId: 'inactive-plan', title: 'Inactive plan' }),
+      distance, savedWorkout({ id: 'second', title: 'Second workout' }), savedWorkout({ localDate: '2026-10-31', title: 'Tomorrow' })]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Distance run · Duration unknown');
+    expect(fixture.nativeElement.textContent).toContain('5.00 Km');
+    expect(fixture.nativeElement.textContent).toContain('+1 more');
+    expect(fixture.nativeElement.querySelector('.compact-row__title')?.textContent).toContain('Today’s workouts');
+    expect(fixture.componentInstance.plannedWorkouts()).toHaveLength(2);
+    user.set({ settings: { unitSettings: { distanceUnits: DistanceUnits.Miles } } }); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('3.11 mi');
+    expect(watchCalendarSchedule).toHaveBeenCalledOnce();
+  });
+  it.each(['owner', 'day'] as const)('clears private details across a %s change and releases the listener when no longer planned', change => {
+    const { fixture, workouts, owner, preferences, watchCalendarSchedule } = setup(true, { localDate: '2026-10-30', state: 'planned' });
+    workouts.next([savedWorkout()]); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Saved easy run');
+    const other = new BehaviorSubject<ScheduledWorkoutV1[]>([]);
+    if (change === 'day') preferences.update(value => ({ ...value, controls: { ...value.controls, localDate: '2026-10-31' } }));
+    else {
+      watchCalendarSchedule.mockReturnValue(other.pipe(map(items => savedSchedule(items))));
+      owner.set('other'); fixture.componentRef.setInput('ownerUid', 'other');
+    }
+    expect(fixture.componentInstance.plannedWorkouts()).toEqual([]);
+    fixture.detectChanges();
+    expect(workouts.observed).toBe(false);
+    expect(fixture.nativeElement.textContent).not.toContain('Saved easy run');
+    fixture.componentInstance.status.set({ localDate: preferences().controls.localDate, state: 'completed' }); fixture.detectChanges();
+    expect(fixture.componentInstance.plannedWorkouts()).toEqual([]);
+    expect(other.observed).toBe(false);
+  });
+  it.each(['disabled', 'not-pro', 'destroyed'] as const)('releases the shared planned-workout consumer when %s', change => {
+    const { fixture, workouts, pro, preferences } = setup(true, { localDate: '2026-10-30', state: 'planned' });
+    workouts.next([savedWorkout()]); fixture.detectChanges();
+    expect(workouts.observed).toBe(true);
+    if (change === 'disabled') preferences.update(value => ({ ...value, enabled: false }));
+    if (change === 'not-pro') pro.set(false);
+    if (change === 'destroyed') fixture.destroy(); else fixture.detectChanges();
+    expect(workouts.observed).toBe(false);
+  });
+  it('keeps the planned confirmation if optional saved details fail, without a status or generation request', () => {
+    const { fixture, workouts, request } = setup(true, { localDate: '2026-10-30', state: 'planned' });
+    workouts.next([savedWorkout()]); fixture.detectChanges();
+    workouts.error(new Error('Schedule unavailable')); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Your workout is planned for today.');
+    expect(fixture.nativeElement.textContent).not.toContain('Saved easy run');
+    expect(fixture.componentInstance.status()?.state).toBe('planned');
+    expect(request).not.toHaveBeenCalled();
+  });
+  it.each(['restore', 'incomplete'] as const)('withholds optional saved details during an %s schedule read', state => {
+    const { fixture, watchCalendarSchedule } = setup();
+    const schedule = new BehaviorSubject(savedSchedule([savedWorkout()]));
+    watchCalendarSchedule.mockReturnValue(schedule);
+    fixture.componentInstance.status.set({ localDate: '2026-10-30', state: 'planned' }); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Saved easy run');
+    schedule.next({ ...savedSchedule([savedWorkout()]), ...(state === 'restore' ? { restoreUnavailable: true as const } : { workoutsComplete: false }) });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Your workout is planned for today.');
+    expect(fixture.nativeElement.textContent).not.toContain('Saved easy run');
+  });
   it.each([false, true])('resumes after deleting today’s last planned workout and reuses the daily result (already generated: %s)', async alreadyGenerated => {
     vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
     vi.setSystemTime(new Date('2026-10-30T07:00Z'));
@@ -173,7 +275,7 @@ describe('compact daily workout in Today', () => {
         getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => values.set(key, value),
         removeItem: (key: string) => values.delete(key),
       } } } },
-      { provide: TrainingPlansService, useValue: { stateRevisionChanges$: revisions, lastVerifiedStateRevision: () => revision } },
+      { provide: TrainingPlansService, useValue: { stateRevisionChanges$: revisions, lastVerifiedStateRevision: () => revision, watchCalendarSchedule: () => of(savedSchedule()) } },
       { provide: DayWorkoutService, useValue: { open: vi.fn() } }, { provide: AppHapticsService, useValue: haptics },
     ] });
     const mount = () => {

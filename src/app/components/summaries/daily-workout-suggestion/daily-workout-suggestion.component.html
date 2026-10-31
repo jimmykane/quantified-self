@@ -3,6 +3,7 @@
     <app-compact-row [title]="title()" density="compact" layout="columns" [showDivider]="false">
       <p role="status" aria-live="polite">{{ preferences().enabled ? summary() : 'Have a workout ready when you open Today.' }}</p>
       @if (status()?.state === 'ready') { <small>Included with Pro · review before adding</small> }
+      @if (plannedWorkouts().length) { <small>Planned for today</small> }
       @if (status()?.state === 'waiting-sleep') { <small>Using available data uses today’s included suggestion</small> }
       @if (actionError()) { <p role="alert">{{ actionError() }}</p> }
       @if (busy()) { <mat-progress-bar mode="indeterminate" [attr.aria-label]="actionBusy() ? 'Updating daily preferences' : 'Preparing daily suggestion'"></mat-progress-bar> }
