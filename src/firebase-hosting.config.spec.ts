@@ -342,6 +342,7 @@ describe('Firebase Hosting configuration', () => {
     // R–R help also separates filtered Suunto HR, raw statistics, recorded FIT HR and historical reparse (2026-10-30).
     // Planned-workout editor help includes its recoverable Delete workout footer action (2026-10-31).
     // Saved-workout help includes post-Add Send/sync review, Today delivery actions and the explicit plan-settings link (2026-10-31).
+    // It also covers saved-schedule recovery and dismissing the saved confirmation during sync navigation (2026-10-31).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-31');
   });
 

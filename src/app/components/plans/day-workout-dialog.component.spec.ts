@@ -4,10 +4,12 @@ import { ActivityFilterPickerComponent } from '../shared/activity-filter-picker/
 import { DAY_WORKOUT_SPORTS, defaultDayWorkoutControls, parseGenerateDayWorkoutRequest } from '@shared/day-workout';
 import { SummaryDisclosureComponent } from '../shared/summary-disclosure/summary-disclosure.component';
 import { TestBed } from '@angular/core/testing';
+import { NavigationStart, Router, provideRouter } from '@angular/router';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogContainer, MatDialogRef } from '@angular/material/dialog';
 import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { BehaviorSubject, of } from 'rxjs';
+import { BehaviorSubject, of, Subject } from 'rxjs';
+import type { MutateTrainingScheduleRequestV1, MutateTrainingScheduleResponseV1 } from '@shared/training-plans';
 import { Auth } from 'app/firebase/auth';
 import type { GenerateDayWorkoutResponse } from '@shared/day-workout';
 import { projectStrengthWorkoutToV1 } from '@shared/strength-workout';
@@ -80,11 +82,19 @@ describe('DayWorkoutDialogComponent', () => {
     });
     generate = vi.fn(async (_uid, request) => response(parseGenerateDayWorkoutRequest(request).requestId));
     loadQuotaStatus = vi.fn().mockResolvedValue(quotaStatus);
-    mutate = vi.fn().mockResolvedValue({}); close = vi.fn(); dialogOpen = vi.fn().mockReturnValue({ afterClosed: () => of(true) });
+    mutate = vi.fn().mockImplementation(async (request: MutateTrainingScheduleRequestV1): Promise<MutateTrainingScheduleResponseV1> => {
+      if (request.operation.kind !== 'create-workout') throw new Error('Expected workout creation.');
+      const operation = request.operation;
+      return { mutationId: request.mutationId, state: { ...schedule.value.state, revision: schedule.value.state.revision + 1,
+        currentWorkoutCount: schedule.value.state.currentWorkoutCount + 1 }, plans: [], removedPlanIds: [], permanentlyDeletedWorkoutIds: [],
+        workouts: [{ schemaVersion: 1, id: operation.workoutId, planId: operation.planId, localDate: operation.localDate,
+          title: operation.title, structure: operation.structure, lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1 }] };
+    }); close = vi.fn(); dialogOpen = vi.fn().mockReturnValue({ afterClosed: () => of(true) });
     haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() }; let counter = 0;
     TestBed.overrideComponent(TrainingDeliveryButtonComponent, { add: { providers: [{ provide: MatDialog, useValue: { open: dialogOpen } }] } });
     const user = { uid: 'owner', settings: { unitSettings: {} } };
     await TestBed.configureTestingModule({ imports: [DayWorkoutDialogComponent], providers: [
+      provideRouter([]),
       { provide: MAT_DIALOG_DATA, useValue: { ownerUid: 'owner', localDate: '2026-10-28', sport: ActivityTypes.StrengthTraining } },
       { provide: Auth, useValue: {} },
       { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
@@ -173,6 +183,74 @@ describe('DayWorkoutDialogComponent', () => {
     expect(fixture.debugElement.query(By.directive(TrainingDeliveryButtonComponent))).toBeNull();
     expect(close).toHaveBeenCalledOnce();
   });
+  it('closes the saved confirmation when provider review navigates to another page', async () => {
+    const events = new Subject<NavigationStart>();
+    vi.spyOn(TestBed.inject(Router), 'events', 'get').mockReturnValue(events);
+    const fixture = await render(); const component = fixture.componentInstance;
+    events.next(new NavigationStart(1, '/services')); expect(close).not.toHaveBeenCalled();
+    await component.generate(); await component.add();
+    events.next(new NavigationStart(2, '/training/plans/workout/saved'));
+    expect(close).toHaveBeenCalledOnce(); expect(mutate).toHaveBeenCalledOnce();
+    fixture.destroy(); expect(events.observed).toBe(false);
+  });
+
+  it.each(['removed', 'restore', 'read-error'] as const)('withholds stale Send after the saved workout is %s', async change => {
+    const fixture = await render(); const component = fixture.componentInstance;
+    await component.generate(); await component.add();
+    const workout = component.savedWorkout()!;
+    schedule.next({ ...schedule.value, state: { ...schedule.value.state, revision: 8, currentWorkoutCount: 1 }, workouts: [workout] });
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.debugElement.query(By.directive(TrainingDeliveryButtonComponent))).toBeTruthy();
+    if (change === 'read-error') schedule.error(new Error('Offline'));
+    else schedule.next({ ...schedule.value, state: { ...schedule.value.state, revision: 9, currentWorkoutCount: 0 }, workouts: [],
+      ...(change === 'restore' ? { restoreUnavailable: true as const } : {}) });
+    fixture.detectChanges();
+    expect(fixture.debugElement.query(By.directive(TrainingDeliveryButtonComponent))).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Reload schedule');
+    await component.add(); expect(mutate).toHaveBeenCalledOnce();
+  });
+
+  it('does not resurrect an acknowledgement when the workout was removed before its first live echo', async () => {
+    const fixture = await render(); const component = fixture.componentInstance;
+    await component.generate(); await component.add();
+    schedule.next({ ...schedule.value, state: { ...schedule.value.state, revision: 9, currentWorkoutCount: 0 }, workouts: [] });
+    fixture.detectChanges();
+    expect(fixture.debugElement.query(By.directive(TrainingDeliveryButtonComponent))).toBeNull();
+  });
+
+  it('retains an acknowledged save while state arrives before workouts and withholds incomplete reads', async () => {
+    const fixture = await render(); const component = fixture.componentInstance;
+    await component.generate(); await component.add();
+    const workout = component.savedWorkout()!;
+    schedule.next({ ...schedule.value, state: { ...schedule.value.state, revision: 8, currentWorkoutCount: 1 }, workouts: [] });
+    expect(component.savedSyncAvailable()).toBe(true);
+    expect(component.savedWorkout()).toEqual(workout);
+    schedule.next({ ...schedule.value, workoutsComplete: false });
+    fixture.detectChanges(); expect(component.savedSyncAvailable()).toBe(false);
+    schedule.next({ ...schedule.value, workoutsComplete: true, workouts: [workout] });
+    fixture.detectChanges(); expect(component.savedSyncAvailable()).toBe(true);
+    expect(fixture.debugElement.query(By.directive(TrainingDeliveryButtonComponent))).toBeTruthy();
+    expect(mutate).toHaveBeenCalledOnce(); expect(generate).toHaveBeenCalledOnce();
+  });
+
+  it('reloads saved availability after a read error without saving or generating again', async () => {
+    const fixture = await render(); const component = fixture.componentInstance;
+    await component.generate(); await component.add(); const workout = component.savedWorkout()!;
+    schedule.error(new Error('Offline')); fixture.detectChanges();
+    expect(component.savedSyncAvailable()).toBe(false);
+    const quotaReads = loadQuotaStatus.mock.calls.length;
+    schedule = new BehaviorSubject<CurrentTrainingScheduleV1>({ state: { schemaVersion: 1, revision: 8, currentWorkoutCount: 1,
+      activePlanId: null, updatedAtMs: 8 }, plans: [], workouts: [workout] });
+    haptics.selection.mockClear(); haptics.success.mockClear();
+    const reload = [...fixture.nativeElement.querySelectorAll('button')].find((button: HTMLButtonElement) => button.textContent.includes('Reload schedule')) as HTMLButtonElement;
+    reload.click(); fixture.detectChanges();
+    expect(component.savedSyncAvailable()).toBe(true);
+    expect(fixture.debugElement.query(By.directive(TrainingDeliveryButtonComponent))).toBeTruthy();
+    expect(mutate).toHaveBeenCalledOnce(); expect(generate).toHaveBeenCalledOnce();
+    expect(loadQuotaStatus).toHaveBeenCalledTimes(quotaReads);
+    expect(haptics.selection).toHaveBeenCalledOnce(); expect(haptics.success).not.toHaveBeenCalled();
+  });
+
   it('shows the shared Assistant allowance before generation and refreshes authoritative counts after attempts', async () => {
     const fixture = await render(); const component = fixture.componentInstance;
     const text = () => fixture.nativeElement.querySelector('.allowance').textContent;

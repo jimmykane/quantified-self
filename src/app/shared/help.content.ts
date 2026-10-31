@@ -358,6 +358,7 @@ One daily suggestion per local date is included with Pro and **does not use your
 - Strength offers equipment, focus and matching **previously planned** loads (enabled by default), not verified performed weights. Duration is an estimate.
 - Review all steps/sets. **Change options** reopens settings; changes require regeneration. **Context → Show details** explains evidence. Choose **Edit workout**, **Generate again**, or **Add workout**. Rest saves nothing.
 - After **Add workout** succeeds, the confirmation stays open with the saved workout and its **Send workout** or **Workout sync** control. Review the destination and any limitations before confirming a send. **Done** closes the confirmation. Cancelling or a failed send keeps your saved workout; sync review and sending do not use your AI allowance.
+- If the saved workout cannot be checked, sync is withheld. **Reload schedule** checks it again without saving or generating another workout. Navigating to Edit workout or Connections from sync review closes the saved confirmation so it does not cover the destination page.
 - The modal footer shows your shared **Assistant allowance**, with requests remaining out of your limit. It refreshes when you open the modal and after each generation attempt; a failed quota read shows unavailable. Generation uses the Assistant allowance; exact retries are free. After a lost save reply, keep the dialog open and **Retry Add**. Conflicts retain the draft. Enabled plan sync may send automatically.
 
 ## Organize plans and standalone workouts

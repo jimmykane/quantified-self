@@ -742,6 +742,13 @@ created workout ID before exposing delivery. The server acknowledgement supplies
 the existing schedule stream catches up. Add, generation, edit handoff and option changes are disabled after success,
 so cancelling or failing a later provider review cannot create another workout or charge another AI request. Account
 changes remove the saved action. The pre-save plan-sync hint listener is released once the workout is saved.
+The acknowledgement is only a bridge until live workout coverage arrives. It is retired after observing that ID or
+a coherent schedule at/after the acknowledged revision whose current-workout count matches the full workout read.
+New state alone cannot retire it while the independent workout listener is still catching up. Missing/deleted
+workouts, read failures, incomplete coverage and restore locks withhold Send; explicit Reload schedule recovers the
+existing read without another save, generation or quota request. Saved confirmation closes on Router navigation so
+Edit workout or Connections links inside provider review cannot leave it covering the destination page. Pre-save
+draft navigation behavior is unchanged. These guards change no MCP data, consent, provider command or monitoring path.
 Today's planned-workout row uses the same delivery component for its first displayed saved workout, alongside an
 owner/date-fenced Open link. Its existing bounded day read supplies the workout and parent-plan summary; delivery
 status uses the shared exact-workout settings/status/verification readers. Stable computed inputs keep foreground

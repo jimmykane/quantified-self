@@ -3,6 +3,7 @@ import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { NavigationStart, Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -75,8 +76,14 @@ export class DayWorkoutDialogComponent {
   readonly saveUncertain = signal(false);
   readonly savedWorkoutId = signal<string | null>(null);
   private readonly savedAcknowledgement = signal<ScheduledWorkoutV1 | null>(null);
-  readonly savedWorkout = computed(() => this.schedule()?.workouts.find(workout => workout.id === this.savedWorkoutId())
+  private savedAcknowledgementRevision: number | null = null;
+  readonly savedWorkout = computed(() => this.schedule()?.workouts.find(workout => workout.id === this.savedWorkoutId() && workout.lifecycle !== 'deleted')
     ?? this.savedAcknowledgement());
+  readonly savedSyncAvailable = computed(() => {
+    const schedule = this.schedule(), workout = this.savedWorkout();
+    return !!this.savedWorkoutId() && !!workout && workout.lifecycle !== 'deleted' && !!schedule
+      && !this.scheduleFailed() && !schedule.restoreUnavailable && schedule.workoutsComplete !== false;
+  });
   readonly savedDetails = computed(() => {
     const workout = this.savedWorkout(), controls = this.controls();
     const planId = workout ? workout.planId : controls.destinationPlanId;
@@ -208,8 +215,11 @@ export class DayWorkoutDialogComponent {
   constructor() {
     authState(inject(Auth)).pipe(takeUntilDestroyed()).subscribe(user => {
       if (user?.uid !== this.data.ownerUid) {
-        this.sequence++; this.savedWorkoutId.set(null); this.savedAcknowledgement.set(null); this.ref.close();
+        this.sequence++; this.savedWorkoutId.set(null); this.savedAcknowledgement.set(null); this.savedAcknowledgementRevision = null; this.ref.close();
       }
+    });
+    inject(Router).events.pipe(takeUntilDestroyed()).subscribe(event => {
+      if (event instanceof NavigationStart && this.savedWorkoutId()) this.ref.close();
     });
     if (this.data.mode !== 'preferences') this.loadSchedule();
     void this.refreshQuota();
@@ -229,6 +239,7 @@ export class DayWorkoutDialogComponent {
     this.scheduleSubscription = this.plansService.watchSchedule(this.data.ownerUid).subscribe({ next: schedule => {
       if (!this.generation.isOwner(this.data.ownerUid)) return;
       this.schedule.set(schedule);
+      this.reconcileSavedAcknowledgement(schedule);
       if (!this.initializedDestination && !this.data.initialControls) {
         const active = schedule.plans.find(plan => plan.id === schedule.state.activePlanId && plan.lifecycle === 'active'
           && isTrainingLocalDateWithinPlan(this.controls().localDate, plan));
@@ -239,6 +250,14 @@ export class DayWorkoutDialogComponent {
       if (!this.savedWorkoutId() && this.reviewedSchedule && this.result() && this.reviewedSchedule.state.revision !== schedule.state.revision) this.staleReview.set(true);
       this.watchSync();
     }, error: () => { this.scheduleFailed.set(true); this.schedule.set(null); } });
+  }
+  private reconcileSavedAcknowledgement(schedule: CurrentTrainingScheduleV1 | null): void {
+    const id = this.savedWorkoutId(), revision = this.savedAcknowledgementRevision;
+    if (!id || !schedule || schedule.restoreUnavailable || schedule.workoutsComplete === false) return;
+    // State and workouts are independent listeners: a newer state alone cannot prove a missing workout.
+    if (schedule.workouts.some(workout => workout.id === id)
+      || (revision !== null && schedule.state.revision >= revision
+        && schedule.state.currentWorkoutCount === schedule.workouts.length)) this.savedAcknowledgement.set(null);
   }
   selectSport(values: readonly string[]): void {
     const sport = values.length === 1 ? DAY_WORKOUT_SPORTS.find(sport => sport === values[0]) : undefined;
@@ -339,8 +358,10 @@ export class DayWorkoutDialogComponent {
       const response = await this.plansService.mutate(command, () => this.current(sequence));
       if (this.current(sequence) && command.operation.kind === 'create-workout') {
         const id = command.operation.workoutId;
+        this.savedAcknowledgementRevision = response.state?.revision ?? null;
         this.savedAcknowledgement.set(response.workouts?.find(workout => workout.id === id) ?? null);
         this.savedWorkoutId.set(id); this.saveUncertain.set(false); this.staleReview.set(false);
+        this.reconcileSavedAcknowledgement(this.schedule());
         this.ref.updateSize(undefined, 'auto');
         this.syncSubscription?.unsubscribe();
         this.haptics.success();

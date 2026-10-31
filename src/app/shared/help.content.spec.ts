@@ -1696,6 +1696,7 @@ describe('help.content', () => {
 
     expect(planningSection?.content).toContain('You do not need to create a plan first');
     expect(planningSection?.content).toContain('confirmation stays open with the saved workout');
+    expect(planningSection?.content).toContain('**Reload schedule** checks it again without saving or generating another workout');
     expect(planningSection?.content).toContain('confirmation offers **Send / sync**');
     expect(planningSection?.content).toContain('**Plan sync settings** opens that plan');
     expect(planningSection?.content).toContain('Opening sync does not generate another workout');
