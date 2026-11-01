@@ -13,7 +13,7 @@ const sdk = vi.hoisted(() => ({ authState: vi.fn() }));
 vi.mock('app/firebase/auth', async original => ({ ...await original<typeof import('app/firebase/auth')>(), authState: sdk.authState }));
 
 describe('DayWorkoutService owner-bound handoff', () => {
-  it.each(['day', 'account'] as const)('rechecks the saved-zone %s after lazy loading and releases the dialog lock', async change => {
+  it.each(['day', 'account', 'view'] as const)('rechecks the %s after lazy loading and releases the dialog lock', async change => {
     vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-30T09:59:59Z'));
     try {
       const changes = new BehaviorSubject<{ uid: string } | null>({ uid: 'owner' }); sdk.authState.mockReturnValue(changes);
@@ -26,15 +26,23 @@ describe('DayWorkoutService owner-bound handoff', () => {
         { provide: AppFunctionsService, useValue: { call: vi.fn() } },
       ] });
       const service = TestBed.inject(DayWorkoutService);
-      const pending = service.open('owner', controls.localDate, controls.sport, { initialControls: controls });
+      let viewCurrent = false;
+      const canExecute = () => viewCurrent;
+      await service.open('owner', controls.localDate, controls.sport, { initialControls: controls, canExecute });
+      expect(open).not.toHaveBeenCalled();
+      viewCurrent = true;
+      const pending = service.open('owner', controls.localDate, controls.sport, { initialControls: controls, canExecute });
       if (change === 'day') vi.setSystemTime(new Date('2026-10-30T10:00:01Z'));
-      else { auth.currentUser = { uid: 'other' }; user.set({ uid: 'other' }); changes.next(auth.currentUser); }
+      else if (change === 'account') { auth.currentUser = { uid: 'other' }; user.set({ uid: 'other' }); changes.next(auth.currentUser); }
+      else viewCurrent = false;
       await pending;
       expect(open).not.toHaveBeenCalled();
       const nextDate = change === 'day' ? '2026-10-31' : controls.localDate;
-      await service.open(auth.currentUser.uid, nextDate, controls.sport, { initialControls: { ...controls, localDate: nextDate } });
+      viewCurrent = true;
+      await service.open(auth.currentUser.uid, nextDate, controls.sport, { initialControls: { ...controls, localDate: nextDate }, canExecute });
       expect(open).toHaveBeenCalledOnce();
       expect(open.mock.calls[0][1].data).toMatchObject({ ownerUid: auth.currentUser.uid, localDate: nextDate });
+      expect(open.mock.calls[0][1].data).not.toHaveProperty('canExecute');
     } finally { vi.useRealTimers(); }
   });
   it('hands off an unsaved draft once, clears it on sign-out and rechecks the owner after App Check', async () => {
@@ -67,13 +75,20 @@ describe('DayWorkoutService owner-bound handoff', () => {
       expect(navigate).not.toHaveBeenCalled();
       expect(open.mock.lastCall?.[1].data).not.toHaveProperty('onEditorDraft');
       expect(service.takeEditorDraft('owner', null, controls.localDate)).toBeNull();
+      let viewCurrent = true;
+      const retiredDraft = vi.fn();
+      open.mockReturnValueOnce({ afterClosed: () => { viewCurrent = false; return of(result); } });
+      await service.open('owner', controls.localDate, controls.sport, { canExecute: () => viewCurrent, onEditorDraft: retiredDraft });
+      expect(retiredDraft).not.toHaveBeenCalled();
+      expect(navigate).not.toHaveBeenCalled();
+      expect(service.takeEditorDraft('owner', null, controls.localDate)).toBeNull();
       await service.open('owner', controls.localDate); auth.currentUser = null; user.set(null); changes.next(null);
       auth.currentUser = { uid: 'owner' }; user.set({ uid: 'owner' }); changes.next(auth.currentUser);
       expect(service.takeEditorDraft('owner', null, controls.localDate)).toBeNull();
       await service.generate('owner', { requestId: 'generation-request', controls }, () => true);
       expect(call.mock.calls[0][2].canExecute()).toBe(true);
       auth.currentUser = { uid: 'other' }; expect(call.mock.calls[0][2].canExecute()).toBe(false);
-      await service.open('other', controls.localDate); expect(open).toHaveBeenCalledTimes(3);
+      await service.open('other', controls.localDate); expect(open).toHaveBeenCalledTimes(4);
     } finally { vi.useRealTimers(); }
   });
 });

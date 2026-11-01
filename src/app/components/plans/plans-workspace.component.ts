@@ -582,10 +582,14 @@ export class PlansWorkspaceComponent {
   readonly addWorkoutDate = computed(() => this.view() === 'plans' ? this.planScheduleDate() ?? undefined : undefined);
   readonly generationOpen = signal(false);
   readonly generationDate = computed(() => this.editor()?.value.localDate ?? this.addWorkoutDate() ?? this.today());
-  readonly canGenerateWorkout = computed(() => !this.libraryView() && this.hasTrainingPlanningUIAccess()
-    && this.scheduleState().status === 'ready' && (this.editor()?.mode === 'create' || this.browsing())
-    && !this.workoutDateInputInvalid() && this.dayWorkouts.canGenerate(this.generationDate())
-    && (this.view() !== 'plans' || !!this.selectedPlanId() || !!this.editor()));
+  readonly canGenerateWorkout = computed(() => {
+    // Explicit dates also need to recheck eligibility when the existing day clock advances.
+    this.today();
+    return !this.libraryView() && this.hasTrainingPlanningUIAccess()
+      && this.scheduleState().status === 'ready' && (this.editor()?.mode === 'create' || this.browsing())
+      && !this.workoutDateInputInvalid() && this.dayWorkouts.canGenerate(this.generationDate())
+      && (this.view() !== 'plans' || !!this.selectedPlanId() || !!this.editor());
+  });
   readonly selectedDayIsRest = computed(() => this.selectedPlan()?.restDays?.includes(this.planScheduleDate() ?? '') === true);
   readonly selectedDayHasPlannedWorkout = computed(() => this.displayedWorkoutRows().some(row => row.workout.lifecycle === 'planned'));
   readonly deletedWorkoutRows = computed<WorkoutRow[]>(() => (this.deletedWorkoutPanel()?.workouts ?? []).map(workout => ({
@@ -1164,7 +1168,7 @@ export class PlansWorkspaceComponent {
       && routeKey === trainingPlansRouteKey(uid, this.routeState());
     this.generationOpen.set(true);
     try {
-      await this.dayWorkouts.open(uid, date, controls.sport, { initialControls: controls,
+      await this.dayWorkouts.open(uid, date, controls.sport, { initialControls: controls, canExecute: current,
         onEditorDraft: draft => {
           if (!current() || draft.ownerUid !== uid) return;
           const destination = draft.controls.destinationPlanId, localDate = draft.controls.localDate;

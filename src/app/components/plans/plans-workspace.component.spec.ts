@@ -205,9 +205,11 @@ describe('PlansWorkspaceComponent', () => {
       options = value; await new Promise<void>(resolve => { finish = resolve; });
     });
     const pending = component.generateWorkout();
+    expect(options?.canExecute?.()).toBe(true);
     if (change === 'account') { userSignal.set(null); userSubject.next(null); }
     else setRouteState({ scope: 'standalone' }, true);
     fixture.detectChanges();
+    expect(options?.canExecute?.()).toBe(false);
     options?.onEditorDraft?.({ ownerUid: user.uid, controls: defaultDayWorkoutControls('2026-09-09', 'Europe/Helsinki'),
       draft: { title: 'Late draft', structure: schedule.workouts[0].structure }, saveRequest: {} as DayWorkoutEditorDraft['saveRequest'] });
     finish(); await pending; fixture.detectChanges();
@@ -251,6 +253,21 @@ describe('PlansWorkspaceComponent', () => {
     vi.setSystemTime(new Date(2026, 8, 10, 0, 1));
     await component.generateWorkout();
     expect(TestBed.inject(DayWorkoutService).open).toHaveBeenCalledWith(user.uid, '2026-09-10', expect.anything(), expect.anything());
+  });
+  it.each([
+    { date: '2026-09-09', before: true, after: false },
+    { date: '2027-09-10', before: false, after: true },
+  ])('refreshes explicit-date generation eligibility across midnight ($date)', async ({ date, before, after }) => {
+    vi.mocked(TestBed.inject(DayWorkoutService).canGenerate).mockImplementation(DayWorkoutService.prototype.canGenerate);
+    setRouteState({ mode: 'create', scope: 'standalone', date });
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    expect(component.canGenerateWorkout()).toBe(before);
+    vi.setSystemTime(new Date(2026, 8, 10, 0, 1)); component.refreshToday(); fixture.detectChanges();
+    expect(component.canGenerateWorkout()).toBe(after);
+    const labels = [...fixture.nativeElement.querySelectorAll('button')].map((button: HTMLButtonElement) => button.textContent);
+    expect(labels.some(label => label?.includes('Generate with AI'))).toBe(after);
+    expect(TestBed.inject(DayWorkoutService).open).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
   });
 
   it.each(['plans', 'standalone', 'library'] as const)('shows live unsaved timed totals and repeat changes in the %s editor', async scope => {

@@ -718,7 +718,10 @@ It reuses `DayWorkoutService` and `DayWorkoutDialogComponent` with the selected 
 recipes and existing-workout editors retain their existing workflows. Past/invalid dates and pending authored writes
 cannot launch generation. An explicit Edit workout result can populate the existing new-workout form through a
 private owner/route/editor-bound callback, preserving the generated save identity and the existing strength/endurance
-conversion. It bypasses same-URL navigation, which could otherwise reinitialize the form. Cancellation leaves the
+conversion. The caller context is rechecked before and after lazy loading and before applying a returned draft;
+leaving the originating form cannot open an obsolete dialog. Explicit-date eligibility refreshes from the existing
+day clock, including dates becoming past or entering the 365-day window. It bypasses same-URL navigation, which could
+otherwise reinitialize the form. Cancellation leaves the
 current form untouched; an acknowledged Add returns that form to its normal browse destination. No save or provider
 action is inferred from opening the generator or accepting the editor handoff.
 
