@@ -260,10 +260,17 @@ sending the file. The fixed mappings are:
 | Sailing (`32`) | Generic / Generic (`0` / `0`) | GPS Cardio |
 | Fishing (`29`) | Generic / Generic (`0` / `0`) | GPS Cardio |
 | Diving (`53`) | Generic / Generic (`0` / `0`) | Generic workout; app label unverified |
+| Indoor Rowing (`4` / sub_sport `14`) | Generic / Generic (`0` / `0`) | Generic workout; app label unverified |
+| Single-session Multisport (`18`, sub_sport absent or `0`) | Generic / Generic (`0` / `0`) | Generic workout; app label unverified |
 
 The adapter only converts structurally valid, single-session activity FITs with
-consistent category fields. Snorkeling and Diving convert with or without recorded GPS;
+consistent category fields. Snorkeling, Diving, Indoor Rowing and single-session
+Multisport convert with or without recorded GPS;
 Sailing and Fishing require at least one valid recorded latitude/longitude pair.
+Indoor Rowing must explicitly declare fitness-equipment / indoor-rowing (`4` / `14`);
+other fitness sub-types do not inherit its fallback. Multisport requires exactly one
+Session with absent or Generic sub_sport, and explicit conflicting Lap/Sport sub-types
+prevent conversion. Genuine multi-session recordings are not flattened.
 Apart from the empty-field repair above, GPS-less Sailing or Fishing, mixed/multi-session,
 malformed and unrelated files pass through unchanged for the existing provider
 inference/rejection behavior; no support for those cases is claimed.
@@ -310,6 +317,17 @@ universal acceptance. Depth, sensor and developer fields remain in the outgoing
 file; COROS app category and dive-profile/depth display are not established by
 terminal success. The fixed INFO label is `diving_to_generic`.
 
+On 1 November 2026, separately authorized owner-account tests of Indoor Rowing
+and single-session Multisport copies reached terminal status `2` as FIT
+generic/generic (`0` / `0`), including summary-only Multisport with no Record samples.
+The attempted fitness-equipment/generic (`4` / `0`) encoding failed on tested files;
+it is not the implemented fallback and does not establish Gym Cardio support.
+Only classification fields and CRCs changed; every other native/developer field
+was compared with its retained original. No GPS, samples or metrics were added.
+This validates the tested copies, not universal acceptance or the app's visible
+category. New fixed INFO labels are `indoor_rowing_to_generic` and
+`single_session_multisport_to_generic`.
+
 Fingerprint receipts are computed from the actual sent copy. A converted fresh
 send/restart replaces a legacy original-file queue fingerprint marker through the
 existing guarded update; previously accepted operations keep their receipt and
@@ -319,12 +337,14 @@ are unchanged. INFO `[COROS] Applied activity FIT category fallback.` logs only 
 fixed mapping label, never files, coordinates or account identifiers. App Help
 discloses the category change and unsupported cases.
 
-Send previews expose the Fishing and Diving category changes through the existing
+Send previews expose the Fishing, Diving, Indoor Rowing and single-session Multisport category changes through the existing
 row `warnings` field for both saved activities and local files. Fishing names the
 GPS eligibility requirement; Diving names the Generic fallback, optional GPS and
-unverified COROS depth/profile display. Notices use the single FIT Session's sport
-code, leaving the original preview sport and file unchanged. No frontend release
-or new response field is needed; monitoring coverage remains **unchanged** because
+unverified COROS depth/profile display. Indoor Rowing and Multisport name Generic
+and optional GPS. Their notices use the single FIT Session's sport/sub_sport,
+leaving the original preview sport and file unchanged. The existing renderer needs
+no new response field; Help and the public integration page also describe the mappings.
+Monitoring coverage remains **unchanged** because
 these are preview descriptions, not queue transitions or provider outcomes.
 
 Monitoring coverage is **unchanged**: the #832 bundle/runbook already includes

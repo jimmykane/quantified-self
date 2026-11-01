@@ -211,9 +211,10 @@ describe('COROS asynchronous activity uploads', () => {
   });
 
   it.each([[82, true, false], [82, false, false], [32, true, false], [29, true, false],
-    [53, false, false], [1, true, true]] as const)(
+    [53, false, false], [4, false, false], [18, false, false], [1, true, true]] as const)(
     'direct sport %i fingerprints and posts the same prepared FIT (GPS=%s, empty fields=%s)', async (sport, withGPS, emptyFields) => {
-      const input = createCOROSActivityFITFixture({ sport, withGPS, emptyNativeFields: emptyFields ? 'zero' : undefined });
+      const input = createCOROSActivityFITFixture({ sport, withGPS, subSport: sport === 4 ? 14 : undefined,
+        withSubSport: sport === 4, emptyNativeFields: emptyFields ? 'zero' : undefined });
       const original = Buffer.from(input);
       const converted = prepareCOROSActivityFITUpload(input);
       await importActivityToCOROSAPI(activityRequest(input));

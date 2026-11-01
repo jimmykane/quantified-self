@@ -171,6 +171,75 @@ describe('COROS sailing FIT copy', () => {
 });
 
 describe('COROS production FIT preparation', () => {
+  it.each([undefined, 0])('preserves summary-only Multisport with sub-sport %s without inventing records', subSport => {
+    const input = fixture({ sport: 18, subSport, withSubSport: subSport !== undefined, summaryOnly: true });
+    const original = Buffer.from(input), output = prepareCOROSActivityFITUpload(input);
+    expect(input).toEqual(original);
+    const before = readFitMessages(input), after = readFitMessages(output);
+    expect(after.issues).toEqual([]);
+    expect(after.messages.map(message => message.globalMessageNumber)).toEqual([0, 18, 34]);
+    const withoutCategory = (messages: typeof before.messages) => messages.map(message => ({ ...message,
+      fields: message.fields.filter(field => message.globalMessageNumber !== 18 || ![5, 6].includes(field.fieldNumber)) }));
+    expect(withoutCategory(after.messages)).toEqual(withoutCategory(before.messages));
+    const session = after.messages[1];
+    expect(session.fields.find(field => field.fieldNumber === 5)!.bytes).toEqual(Buffer.from([0]));
+    expect(session.fields.find(field => field.fieldNumber === 6)!.bytes).toEqual(Buffer.from([0]));
+  });
+
+  it.each([[4, 14], [18, 0], [18, undefined]] as const)(
+    'maps single-session %i/%s to Generic while preserving every other field', (sport, subSport) => {
+      for (const withGPS of [false, true]) for (const bigEndian of [false, true]) {
+        const input = fixture({ sport, subSport, withSubSport: subSport !== undefined,
+          withGPS, bigEndian, developer: true, compressed: true, compressedLap: true });
+        const original = Buffer.from(input), output = prepareCOROSActivityFITUpload(input);
+        expect(input).toEqual(original);
+        expect(output).not.toEqual(input);
+        const before = readFitMessages(input), after = readFitMessages(output);
+        const categoryFields = new Map([[12, [0, 1]], [18, [5, 6]], [19, [25, 39]]]);
+        const withoutCategory = (message: typeof before.messages[number]) => ({ ...message,
+          fields: message.fields.filter(field => !(categoryFields.get(message.globalMessageNumber) ?? []).includes(field.fieldNumber)) });
+        expect(after.issues).toEqual([]);
+        expect(after.messages.map(withoutCategory)).toEqual(before.messages.map(withoutCategory));
+        for (const message of after.messages) for (const field of categoryFields.get(message.globalMessageNumber) ?? []) {
+          expect(message.fields.find(value => value.fieldNumber === field)!.bytes).toEqual(Buffer.from([0]));
+        }
+        expect(prepareCOROSActivityFITUpload(output)).toBe(output);
+      }
+    },
+  );
+
+  it.each([[4, 14, 'indoor_rowing_to_generic'], [18, 0, 'single_session_multisport_to_generic']] as const)(
+    'logs only the fixed new category label for %i/%i', (sport, subSport, mapping) => {
+      vi.mocked(logger.info).mockClear();
+      prepareCOROSActivityFITUpload(fixture({ sport, subSport, withSubSport: true, withGPS: false }));
+      expect(logger.info).toHaveBeenCalledExactlyOnceWith('[COROS] Applied activity FIT category fallback.', { mapping });
+    },
+  );
+
+  it.each([[4, undefined], [4, 0], [4, 20], [4, 26], [15, 14], [18, 80], [18, 126], [18, 255]] as const)(
+    'preserves unverified fitness and multisport subtype %i/%s', (sport, subSport) => {
+      const input = fixture({ sport, subSport, withSubSport: subSport !== undefined });
+      expect(prepareCOROSActivityFITUpload(input)).toBe(input);
+    },
+  );
+
+  it.each([[4, 14], [18, 0]] as const)('preserves multi-session, mixed and malformed %i/%i files', (sport, subSport) => {
+    const base = { sport, subSport, withSubSport: true };
+    const corrupt = fixture(base); corrupt[corrupt.length - 1] ^= 1;
+    const conflicting = fixture(base);
+    const lap = readFitMessages(conflicting).messages.find(message => message.globalMessageNumber === 19)!;
+    // The synthetic lap pattern identifies its classification bytes without private file data.
+    const bytes = Buffer.concat(lap.fields.map(field => Buffer.from(field.bytes)));
+    const offset = conflicting.indexOf(bytes);
+    expect(offset).toBeGreaterThan(0);
+    conflicting[offset + bytes.length - 1] = 20; repairCRC(conflicting);
+    for (const input of [fixture({ ...base, sessionCount: 2 }), fixture({ ...base, malformedSport: true }), conflicting, corrupt]) {
+      const before = Buffer.from(input);
+      expect(prepareCOROSActivityFITUpload(input)).toBe(input);
+      expect(input).toEqual(before);
+    }
+  });
+
   it('restores a missing summary without changing the semantic echo identity', async () => {
     const input = sessionlessFixture({ bigEndian: true, developer: true });
     const original = Buffer.from(input), output = prepareCOROSActivityFITUpload(input);

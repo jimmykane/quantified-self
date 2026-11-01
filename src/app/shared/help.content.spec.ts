@@ -2615,6 +2615,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('**Sailing as GPS Cardio** only with recorded GPS');
     expect(serviceConnectionsSection?.content).toContain('**Fishing as GPS Cardio** only with recorded GPS');
     expect(serviceConnectionsSection?.content).toContain('**Diving as Generic** with or without recorded GPS');
+    expect(serviceConnectionsSection?.content).toContain('**Indoor Rowing as Generic** and **single-session Multisport as Generic** also work with or without recorded GPS');
+    expect(serviceConnectionsSection?.content).toContain('other fitness sub-types and true multi-session recordings are not converted');
     expect(serviceConnectionsSection?.content).toContain('COROS may not display every field or a dive profile');
     expect(serviceConnectionsSection?.content).toContain('missing GPS is not added');
     expect(serviceConnectionsSection?.content).toContain('GPS-less Sailing or Fishing, mixed/multi-session, malformed and other activity types');

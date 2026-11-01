@@ -485,7 +485,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/suunto`)).toBe('2026-10-13');
     // COROS and Help describe Diving-to-Generic copies without requiring GPS.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/coros`)).toBe('2026-10-28');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/coros`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/wahoo`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-10-23');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/supported-activities`)).toBe('2026-10-17');

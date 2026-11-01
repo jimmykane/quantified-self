@@ -1876,9 +1876,12 @@ describe('activity-sync/process-queue-item', () => {
   it.each([[82, true, false, true], [82, false, false, true], [32, true, false, true],
     [29, true, false, true], [29, true, false, false],
     [53, false, false, true], [53, false, false, false],
+    [4, false, false, true], [4, false, false, false],
+    [18, false, false, true], [18, false, false, false],
     [1, true, true, true], [1, true, true, false]] as const)(
     'queued sport %i refreshes the prepared receipt and then only polls (GPS=%s, empty fields=%s, restart=%s)', async (sport, withGPS, emptyFields, restart) => {
-      const input = createCOROSActivityFITFixture({ sport, withGPS, emptyNativeFields: emptyFields ? 'zero' : undefined });
+      const input = createCOROSActivityFITFixture({ sport, withGPS, subSport: sport === 4 ? 14 : undefined,
+        withSubSport: sport === 4, emptyNativeFields: emptyFields ? 'zero' : undefined });
       const original = Buffer.from(input);
       mockDownload.mockResolvedValue([input]);
       const queueItem: ActivitySyncQueueItemInterface = {
