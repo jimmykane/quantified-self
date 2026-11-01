@@ -1449,6 +1449,16 @@ For Garmin, Suunto, COROS, and Wahoo, **Import already running** means an existi
 
 COROS activity history prevents overlapping requests from separate tabs or devices, even when they select different dates. If a later part of a scan fails, activities already queued keep processing and the cooldown reflects the queued count. An empty scan allows another request. A finished request or an expired running status does not mean all queued activities have finished importing.
 
+## Move activities from Strava
+
+Quantified Self has no Strava connection. Follow the [Strava to Suunto](/guides/strava-to-suunto), [Strava to Wahoo](/guides/strava-to-wahoo), [Strava to COROS](/guides/strava-to-coros), or [Strava to Garmin](/guides/strava-to-garmin) guide for exported recordings.
+
+On Strava’s website, open **Settings → My Account → Download your account → Get Started → Request download**, then follow the download link emailed by Strava. See [Strava’s official export instructions](https://support.strava.com/en-us/articles/15401919-how-do-i-export-my-strava-data). Extract the account ZIP and choose the activity recordings, not activities.csv, photos or the whole account archive.
+
+With **Pro**, connect Suunto, Wahoo or COROS in **Connections**, open [Send activities](/send-activities), select the destination and **Local files**, then choose FIT or FIT.gz recordings. Review and explicitly confirm **Send**. Alternatively, use **Upload** on Dashboard to save supported activity files to QS first. Then choose **Saved activities → Uploaded to QS** and your dates in Send activities. Only eligible retained FIT originals can be sent; GPX and TCX uploads can be analyzed in QS but are not converted to FIT for delivery. Extract gzip files before using the Dashboard file picker if it does not show them. Local-file sends do not add recordings to the QS archive and neither path enables ongoing Strava sync.
+
+For **Garmin Connect**, use Garmin’s own **Import Data** page with extracted FIT, TCX or timestamped GPX files. QS does not send completed activities to Garmin, and connecting Garmin or sending a course is not a substitute for activity import. Check the destination before sending another copy if delivery is uncertain.
+
 ## Send activities once
 
 [Send activities](/send-activities) supports **Suunto, COROS, and Wahoo**. It is a separate workspace from automatic sync and route/course uploads. Anyone signed in can view the page and their retained results; preparing and starting a send requires **Pro**, rather than Basic. Connect the destination in **Connections**, choose local files or saved activities, review the selected recordings and warnings, then explicitly confirm **Send**.

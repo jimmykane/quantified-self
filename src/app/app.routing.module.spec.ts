@@ -649,6 +649,10 @@ describe('AppRoutingModule routes', () => {
 
   it('should define public guide SEO routes with lazily resolved HowTo JSON-LD', async () => {
     const expectedRoutes = [
+      { path: PUBLIC_GUIDE_PATHS.importStravaToSuunto, h1: 'How to transfer Strava activities to Suunto' },
+      { path: PUBLIC_GUIDE_PATHS.importStravaToGarmin, h1: 'How to transfer Strava activities to Garmin Connect' },
+      { path: PUBLIC_GUIDE_PATHS.importStravaToWahoo, h1: 'How to transfer Strava activities to Wahoo' },
+      { path: PUBLIC_GUIDE_PATHS.importStravaToCoros, h1: 'How to transfer Strava activities to COROS' },
       {
         path: PUBLIC_GUIDE_PATHS.syncGarminToSuunto,
         h1: 'How to sync Garmin data to Suunto automatically',

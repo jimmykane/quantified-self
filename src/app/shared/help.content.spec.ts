@@ -17,6 +17,16 @@ import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 
 describe('help.content', () => {
+  it('documents Strava file transfers and the separate Garmin import path', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'service-connections')?.content;
+    for (const provider of ['suunto', 'wahoo', 'coros', 'garmin']) {
+      expect(content).toContain(`/guides/strava-to-${provider}`);
+    }
+    expect(content).toContain('Quantified Self has no Strava connection');
+    expect(content).toContain('Extract the account ZIP');
+    expect(content).toContain('GPX and TCX uploads can be analyzed in QS but are not converted to FIT');
+    expect(content).toContain('QS does not send completed activities to Garmin');
+  });
   it('explains default-on workout generation context and independent draft opt-outs', () => {
     const help = HELP_SECTIONS.map(section => section.content).join('\n');
     expect(help).toContain('**Training plans and workouts** and **Timeline notes** start enabled for every new draft');
