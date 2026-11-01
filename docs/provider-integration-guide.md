@@ -61,6 +61,15 @@ finished scan awaiting child outcomes. Garmin submission semantics and Sleep/Hea
 See [independent activity retries](connection-history-import.md#continuing-activity-history-while-workouts-retry)
 for checkpoint recovery, monitoring coverage and the two-function release boundary. No migration or replay is needed.
 
+History child observation also accepts a workout worker's committed `cross_provider_duplicate` or
+`outbound_provider_echo` skip as already handled, restricted to the four recorded-workout queues. A returning QS
+upload must not stop the remaining history scan. Pending jobs, genuine failures and authorization/lifecycle skips
+retain their existing handling; canonical queue rows and saved activity edits are not rewritten. This correction
+requires only `processConnectionHistoryTask` after separate deployment approval. Already stopped runs require a
+separately approved resume. Monitoring is **covered/unchanged** by the existing committed checkpoint, queue-health
+and unknown-observation signals; no resource, label or provider API change is needed. See
+[handled history copies](connection-history-import.md#continuing-activity-history-while-workouts-retry).
+
 ## 1. Define the product contract before writing code
 
 Start with a concise support matrix agreed with product and the provider. Do not infer capability from an OAuth scope alone.

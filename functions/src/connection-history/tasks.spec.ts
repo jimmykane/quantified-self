@@ -222,7 +222,9 @@ describe('durable history coordinator', () => {
     { service: ServiceNames.WahooAPI, collection: 'wahooAPIWorkoutQueue', tokenRoot: 'wahooAPIAccessTokens' },
     { service: ServiceNames.GarminAPI, collection: 'garminAPIActivityQueue', tokenRoot: 'garminAPITokens' },
   ];
-  it.each(duplicateWorkoutQueues)('continues $service history past a completed batch containing a verified cross-provider copy', async ({ service, collection, tokenRoot }) => {
+  const handledWorkoutCases = duplicateWorkoutQueues.flatMap(queue =>
+    ['cross_provider_duplicate', 'outbound_provider_echo'].map(skippedReason => ({ ...queue, skippedReason })));
+  it.each(handledWorkoutCases)('continues and finishes $service history after $skippedReason', async ({ service, collection, tokenRoot, skippedReason }) => {
     run = createHistoryRun('owner', service, { requested: true, rangePreset: '30_days', runId,
       tokenPath: `${tokenRoot}/owner/tokens/account`, rootPath: `${tokenRoot}/owner`,
       providerUserId: 'account', credentialGeneration: 'credential' }, 'connection', now);
@@ -231,7 +233,8 @@ describe('durable history coordinator', () => {
     mocks.rows.set(path(), run); mocks.rows.set(run.rootPath, { activeOAuthCredentialGeneration: 'credential' });
     mocks.rows.set(run.tokenPath, { tokenCredentialGeneration: 'credential' });
     mocks.rows.set(`users/owner/meta/${run.serviceName}`, { connectionState: 'connected', connectionStateGeneration: 'connection' });
-    mocks.rows.set(`${collection}/copy`, { processed: true, resultStatus: 'skipped', skippedReason: 'cross_provider_duplicate' });
+    const handledCopy = { processed: true, resultStatus: 'skipped', skippedReason };
+    mocks.rows.set(`${collection}/copy`, handledCopy);
     mocks.rows.set(`${collection}/import`, { processed: true });
     mocks.execute.mockResolvedValueOnce({ count: 1, nextStartMs: run.startMs + 30000, nextPage: 2 });
 
@@ -240,19 +243,39 @@ describe('durable history coordinator', () => {
     expect(mocks.execute).toHaveBeenCalledTimes(1);
     expect(saved()).toMatchObject({ processed: false, steps: [{ status: 'queued', done: false,
       count: 1, nextStartMs: run.startMs + 30000, page: 2, childPaths: [] }] });
+    const finalBatch = saved();
+    finalBatch.steps[0].nextStartMs = finalBatch.endMs + 1;
+    finalBatch.steps[0].childPaths = [`${collection}/copy`, `${collection}/import`];
+    vi.mocked(Date.now).mockReturnValue(finalBatch.nextAttemptAt);
+    await processConnectionHistoryRun(run.id, `${finalBatch.revision}`);
+    const status = service === ServiceNames.GarminAPI ? 'requested' : 'processed';
+    expect(saved()).toMatchObject({ processed: true, steps: [{ status, done: true, count: 1, childPaths: [] }] });
+    expect(mocks.execute).toHaveBeenCalledTimes(1);
+    expect(mocks.rows.get(`${collection}/copy`)).toEqual(handledCopy);
+    expect(mocks.rows.get(`${collection}/import`)).toEqual({ processed: true });
+    expect(mocks.rows.get(`users/owner/meta/${run.serviceName}`).connectionHistoryImport)
+      .toMatchObject({ active: false, canRetry: false, steps: [{ status }] });
+    expect(signals()).toContainEqual(expect.objectContaining({ event: 'checkpoint', outcome: status }));
   });
-  it.each(['sleepSyncQueue', 'activitySyncQueue', 'routeSyncQueue', 'queue'])('does not broaden duplicate completion to %s', async collection => {
+  it.each(['sleepSyncQueue', 'activitySyncQueue', 'routeSyncQueue', 'queue'].flatMap(collection =>
+    ['cross_provider_duplicate', 'outbound_provider_echo'].map(skippedReason => ({ collection, skippedReason }))))('does not broaden $skippedReason completion to $collection', async ({ collection, skippedReason }) => {
     const child = `${collection}/copy`;
-    mocks.rows.set(child, { processed: true, resultStatus: 'skipped', skippedReason: 'cross_provider_duplicate' });
+    mocks.rows.set(child, { processed: true, resultStatus: 'skipped', skippedReason });
     expect(await observeHistoryChildren([child])).toBe('skipped');
   });
-  it.each(duplicateWorkoutQueues)('still waits for pending $service children and stops on lifecycle skips beside a verified copy', async ({ collection }) => {
+  it.each(handledWorkoutCases)('preserves pending, lifecycle and failure outcomes for $service beside $skippedReason', async ({ collection, skippedReason }) => {
     const paths = [`${collection}/copy`, `${collection}/pending`];
-    mocks.rows.set(paths[0], { processed: true, resultStatus: 'skipped', skippedReason: 'cross_provider_duplicate' });
+    mocks.rows.set(paths[0], { processed: true, resultStatus: 'skipped', skippedReason });
     mocks.rows.set(paths[1], { processed: false });
     expect(await observeHistoryChildren(paths)).toBe('pending');
+    expect(await observeHistoryChildren(paths, undefined, undefined, true))
+      .toEqual({ failedPaths: [], pendingPaths: [paths[1]], retryingCount: 0 });
     mocks.rows.set(paths[1], { processed: true, resultStatus: 'skipped', skippedReason: 'connection_history_superseded' });
     expect(await observeHistoryChildren(paths)).toBe('skipped');
+    mocks.rows.set(paths[1], { processed: true, resultStatus: 'failed', context: 'AUTH_RECONNECT_REQUIRED' });
+    expect(await observeHistoryChildren(paths)).toBe('authorization');
+    mocks.rows.set(paths[1], { processed: true, resultStatus: 'failed', context: 'ACTIVITY_IDENTITY_CONFLICT' });
+    expect(await observeHistoryChildren(paths)).toBe('failed');
   });
   it('continues later history pages after a run-owned child fails and retries only that record after the scan', async () => {
     const step = run.steps[0]; step.page = 2; step.count = 2;

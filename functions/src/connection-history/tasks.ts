@@ -103,11 +103,12 @@ export async function observeHistoryChildren(paths: string[], runId?: string, ex
   if (liveFailure && !verifiedFailures) return 'failed';
   if (settled.some(row => {
     const data = row.data();
-    // A verified cross-provider copy already satisfies this workout import. Other skips
-    // still stop the scope when authorization or its connection changed.
+    // A verified provider copy or returning QS upload already satisfies this workout import.
+    // Other skips still stop the scope when authorization or its connection changed.
     if ([SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME, COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME,
       GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME, WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME].includes(row.ref.parent.id)
-      && data?.resultStatus === 'skipped' && data.skippedReason === 'cross_provider_duplicate') return false;
+      && data?.resultStatus === 'skipped'
+      && ['cross_provider_duplicate', 'outbound_provider_echo'].includes(data.skippedReason)) return false;
     if (row.ref.parent.id === ROUTE_SYNC_QUEUE_COLLECTION_NAME
       && data?.resultStatus === 'skipped'
       && ['provider_route_up_to_date', 'provider_route_content_unchanged', 'provider_route_not_found'].includes(data.skippedReason)) return false;
