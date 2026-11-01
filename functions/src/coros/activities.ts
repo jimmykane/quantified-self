@@ -31,7 +31,7 @@ import {
 } from '../activity-sync/outbound-fingerprint';
 import { parseCOROSJSON } from './json';
 import { normalizeCOROSInt64Identifier } from './identifier';
-import { prepareCOROSActivityFITUpload } from './activity-fit';
+import { prepareCOROSActivityFITUpload, logCOROSActivityProcessingFailure, type COROSActivityFITCategory } from './activity-fit';
 
 const COROS_SUCCESS_CODE = '0000';
 const COROS_DUPLICATE_CODE = '5082';
@@ -58,6 +58,7 @@ interface COROSUploadResponse {
 
 export interface COROSActivityUploadCountOptions {
   queueItemRef?: admin.firestore.DocumentReference;
+  sourceFIT?: COROSActivityFITCategory;
 }
 
 export interface COROSActivityUploadOptions {
@@ -438,6 +439,7 @@ export async function getCOROSActivityUploadStatus(
         return { status: 'success', message: 'Activity uploaded to COROS.', uploadId, providerUserId };
       }
       if (status === -1) {
+        logCOROSActivityProcessingFailure(countOptions.sourceFIT);
         throw new ProviderOperationError({
           serviceName: ServiceNames.COROSAPI,
           operation: 'activity_upload_status',

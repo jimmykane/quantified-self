@@ -54,14 +54,14 @@ read the owner. A missing or invalid value leaves Suunto unavailable without blo
 For local Functions emulation, add `SUUNTOAPP_GUIDE_OWNER=<exact application name>` to the ignored
 `functions/.secret.local` and restart the Functions emulator. The value-free `.secret.local.example` lists the key.
 For deployment, an authorized operator sets it interactively with
-`firebase functions:secrets:set SUUNTOAPP_GUIDE_OWNER --project <firebase-project-id>` and then redeploys those three
+`npm run firebase -- functions:secrets:set SUUNTOAPP_GUIDE_OWNER --project <firebase-project-id>` and then redeploys those three
 Training endpoints together under separate deployment approval. No frontend release, OAuth reconnect or source-code
 change is needed to configure the name. This implementation does not set a local/cloud value, provision a secret,
 deploy, or change existing rollout/consent gates.
 
-Do not put these values in `functions/.env`, workflow YAML, repository documentation, or service-account files. Secret existence can be checked with `firebase functions:secrets:get NAME`; do not print or retrieve values during routine validation.
+Do not put these values in `functions/.env`, workflow YAML, repository documentation, or service-account files. Secret existence can be checked with `npm run firebase -- functions:secrets:get NAME`; do not print or retrieve values during routine validation.
 
-For admin marketing campaigns, generate a random high-entropy signing key and set it through the approved Secret Manager workflow before deployment: `firebase functions:secrets:set MARKETING_UNSUBSCRIBE_SIGNING_KEY --project <firebase-project-id>`. Bindings are limited to the test-send callable, campaign start/resume dispatcher, scheduled dispatcher, and public unsubscribe endpoint. The value-free local example includes the key; do not check in a real value. The signed endpoint handles no-login opt-outs, so losing the key invalidates unsubscribe links in previously sent emails. Rotate only with a migration plan. Provisioning and deployment need separate approval.
+For admin marketing campaigns, generate a random high-entropy signing key and set it through the approved Secret Manager workflow before deployment: `npm run firebase -- functions:secrets:set MARKETING_UNSUBSCRIBE_SIGNING_KEY --project <firebase-project-id>`. Bindings are limited to the test-send callable, campaign start/resume dispatcher, scheduled dispatcher, and public unsubscribe endpoint. The value-free local example includes the key; do not check in a real value. The signed endpoint handles no-login opt-outs, so losing the key invalidates unsubscribe links in previously sent emails. Rotate only with a migration plan. Provisioning and deployment need separate approval.
 
 ## Garmin callback credential and migration
 
@@ -81,7 +81,7 @@ It has no timed cutoff; #800 removes its compatibility fallback. Each cleanup re
 or compatibility switch. Preparing or merging the PR does not change the currently deployed receivers.
 
 An authorized operator provisions the value interactively with
-`firebase functions:secrets:set GARMINAPI_WEBHOOK_SECRET --project <firebase-project-id>` and deploys the four
+`npm run firebase -- functions:secrets:set GARMINAPI_WEBHOOK_SECRET --project <firebase-project-id>` and deploys the four
 receivers together. Changing an injected secret version requires redeployment; editing Secret Manager alone does
 not immediately change running functions. Follow the [Garmin deployment cutover](garmin-integration.md#production-configuration).
 Do not put credential values or complete protected URLs in commits, tickets, commands, or application logs.
@@ -101,7 +101,7 @@ Copy `functions/.secret.local.example` to `functions/.secret.local` and add deve
 ```bash
 cp functions/.secret.local.example functions/.secret.local
 npm --prefix functions run build
-firebase emulators:start --only auth,functions,firestore,storage
+npm run firebase -- emulators:start --only auth,functions,firestore,storage
 ```
 
 Firebase's Functions emulator uses `.secret.local` for bound secret parameters. Never copy production credentials into an emulator checkout: provider calls and background workers can still reach real external services.
@@ -131,14 +131,14 @@ From the repository root, an existing root-level key needs only:
 
 ```bash
 npm --prefix functions run build
-firebase emulators:start --only functions
+npm run firebase -- emulators:start --only functions
 ```
 
 For a key stored outside the checkout:
 
 ```bash
 GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/development-service-account.json \
-  firebase emulators:start --only functions
+  npm run firebase -- emulators:start --only functions
 ```
 
 Keep keys outside `functions/`, outside source control, and out of `.secret.local`. This mode accesses the hosted project, so select the intended development project and credentials. The optional key lookup happens only during custom-token creation and is skipped in deployed runtimes and whenever the Auth emulator is configured. Entering impersonation, restoring the original admin, and the existing provider custom-token helper reuse this signer; admin authorization and impersonation claims are unchanged. A wrong or malformed signing key cannot prevent unrelated Functions from starting.
@@ -157,7 +157,7 @@ The legacy file remains a local-script compatibility fallback only. Deployed run
 
 ## Adding or changing a secret
 
-1. Create the Secret Manager entry in the target project through the Cloud console or `firebase functions:secrets:set NAME`.
+1. Create the Secret Manager entry in the target project through the Cloud console or `npm run firebase -- functions:secrets:set NAME`.
 2. Add its `defineSecret()` registration to `SECRET_PARAMS` in `functions/src/secrets.ts`.
 3. Add it only to the endpoints that directly or transitively require it in `FUNCTION_SECRET_BINDINGS`.
 4. Add an empty entry to `functions/.secret.local.example` and update this inventory.
@@ -186,6 +186,8 @@ The command accepts only project and region selectors. It has no apply mode, no 
 
 ## Complete production deployment
 
+Use the [pinned Firebase CLI](firebase-tooling.md) for local commands and CI. Run `npm run firebase:tools` after selecting the intended Node version.
+
 Confirm all managed names have an enabled version, run the complete local verification suite, and deploy every repository-defined Function in one command:
 
 ```bash
@@ -193,8 +195,8 @@ npm --prefix functions test
 npm --prefix functions run build
 npm --prefix functions run secrets:check:compiled
 npm --prefix functions run mcp:contract:check:compiled
-firebase deploy --only functions --dry-run --project quantified-self-io
-firebase deploy --only functions --project quantified-self-io
+npm run firebase -- deploy --only functions --dry-run --project quantified-self-io
+npm run firebase -- deploy --only functions --project quantified-self-io
 npm --prefix functions run secrets:audit-deployed -- \
   --project=quantified-self-io \
   --regions=europe-west2,europe-west3

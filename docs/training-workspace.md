@@ -713,6 +713,27 @@ and must never be inferred from merely connecting a service.
 
 ### Generate a workout from a Calendar day
 
+The same native generator is available beside Add workout in Plans/Standalone and in a new dated workout editor.
+It reuses `DayWorkoutService` and `DayWorkoutDialogComponent` with the selected date, sport and destination. Library
+recipes and existing-workout editors retain their existing workflows. Past/invalid dates and pending authored writes
+cannot launch generation. An explicit Edit workout result can populate the existing new-workout form through a
+private owner/route/editor-bound callback, preserving the generated save identity and the existing strength/endurance
+conversion. The caller context is rechecked before and after lazy loading and before applying a returned draft;
+leaving the originating form cannot open an obsolete dialog. Explicit-date eligibility refreshes from the existing
+day clock, including dates becoming past or entering the 365-day window. It bypasses same-URL navigation, which could
+otherwise reinitialize the form. Cancellation leaves the
+current form untouched; an acknowledged Add returns that form to its normal browse destination. No save or provider
+action is inferred from opening the generator or accepting the editor handoff.
+
+Home, Features, Training Plans, Dashboard and Assistant feature pages share the synthetic `daily-workout` public
+preview and generation copy. It is deferred behind the existing viewport/SSR placeholder and native snippet exclusion,
+uses CompactRow and the real workout profile/formatters, and only toggles sample workout/rest review. It performs no
+account reads, generation, saves or provider calls. Pro membership copy distinguishes the opt-in daily suggestion
+from the shared Assistant allowance used for manual generation; daily preparation starts on a Today visit.
+MCP impact review: no public wire, authority, recipe, storage or provider change. These are first-party discovery and
+editor entry points for existing generation, strict workout reads and explicit Add/rest-confirmation paths; existing
+MCP projections and approval contracts are unchanged. No Functions, Rules, indexes or registered-client refresh is needed.
+
 Owned Calendar and Dashboard selected-day previews, the day sheet and the full day page expose
 **Generate with AI** last in **Add workout**, after **Add from library**, for today through 365 days ahead. All day-context presentations share one
 menu, including empty days; manual plan, standalone and library options remain available for past dates. This opens an unsaved review workflow. The date stays on the selected Calendar day. Main controls are supported manual sport (including
@@ -5832,6 +5853,38 @@ provider action changes. No reparse, migration, registered-client refresh or bac
 
 
 #### Pro daily workout suggestion
+
+Daily delivery is an independent, default-off `appSettings.dailyWorkoutDelivery` preference with an explicit bounded
+provider selection. It is not part of `dailyWorkoutSuggestion`, model context, the daily cache key or the server's
+generation fingerprint: changing destinations neither invalidates a recipe nor spends another AI request. The existing
+preferences dialog exposes Send after approval before its generation options. Only the open preferences/daily-workout
+review observes the existing activity-service connection projection; Today adds no connection listener or polling.
+The dialog reuses that live connection subscription for the same owner across unrelated profile/settings updates.
+Delivery validation gates preference saving and Add & send, independently of ordinary generation validation: an
+unavailable destination cannot block an explicit manual regeneration. An acknowledged delivery result stays visible
+even when the schedule listener fails; Reload retrieves the schedule without repeating Add, generation or sending.
+
+For the original daily Standalone workout, the review can opt out for this approval or choose connected, admitted
+services. **Add & send** first acknowledges the existing idempotent create, then calls
+`TrainingDeliveryService.sendApprovedWorkout` with that saved workout and schedule revision. Each selected service
+uses the existing uncached revision check, delivery preview and Send command, with expected settings revision zero.
+Only an exact, warning-free, connected, Pro-eligible, single-workout preview is admitted automatically. Mapping losses,
+unavailable/reconnected services, stale revisions and pre-existing sync settings require the existing Review sync path;
+this shortcut never supplies a mapping approval digest, changes plan consent, replaces a remote copy or resumes stopped
+sync. Selected services have independent outcomes. An uncertain send is not automatically replayed. The dialog keeps
+its successful workout acknowledgement on any delivery failure and exposes the shared live sync control afterwards.
+An uncertain Add sends nothing until the same create receipt is acknowledged. Rest results, manual replacement
+generations and drafts handed to the full editor keep their existing explicit workflows. Changing a preference alone
+does not save or send a workout. Disabling it affects future approvals; already enabled workout sync is managed through
+each workout's existing Sync controls. Provider acceptance remains distinct from device receipt; preparation still starts
+on a Today visit, with no new background generation or scheduler.
+
+MCP impact: no wire/authority change. Authored recipes, strict planned-workout reads, and existing delivery-status
+projections remain unchanged; private UI preferences are never added to an exposed recipe or proposal. Existing MCP
+create-and-send preview/native-approval contracts retain their own explicit provider selection. Monitoring coverage is
+**unchanged/covered** by the existing Training delivery/verification/queue-health filters in
+`tools/training-monitoring/definitions.mjs`: this UI uses the same commands, workers, provider labels, retry limits and
+terminal outcomes. No Functions, Rules, indexes, monitoring apply, plugin rebuild or registered-client refresh is needed.
 
 The owner-only Today section includes one compact shared `CompactRowComponent` after its existing Training state and
 Readiness details, outside the collapsible region. The greeting, colored assessment sentence, existing detailed state,

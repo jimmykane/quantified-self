@@ -185,7 +185,7 @@ describe('HomeComponent', () => {
     const previews = fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent));
     expect(previews.map(preview => preview.componentInstance.previewKey()))
       .toEqual(['training-snapshot', 'training-readiness', 'training-signals',
-        'training-explorer', 'dashboard', 'workout-analysis', 'training-plans',
+        'training-explorer', 'dashboard', 'workout-analysis', 'daily-workout', 'training-plans',
         'health-overview', 'health-sleep', 'health-hrv', 'health-note-comparison', 'health-weight', 'assistant-example', 'mcp-flow',
         'activity-map', 'reviewer-benchmark', 'provider-flow']);
     expect(previews.every(preview => !!preview.nativeElement.querySelector(':scope > div[data-nosnippet]'))).toBe(true);
@@ -210,7 +210,9 @@ describe('HomeComponent', () => {
     expect(comparisonCopy.textContent).toContain('R–R intervals and heart rate variability (HRV)');
     expect(comparisonCopy.closest('[data-nosnippet]')).toBeNull();
     expect(copy).toContain('location access remains separate');
-    expect(fixture.nativeElement.querySelectorAll('.training-plans-section app-compact-row')).toHaveLength(6);
+    expect(fixture.nativeElement.querySelectorAll('.training-plans-section app-compact-row')).toHaveLength(7);
+    expect(copy).toContain('A workout that fits today');
+    expect(copy).toContain('One included daily workout suggestion');
     expect(fixture.nativeElement.querySelector('#home-plans-example-title')?.textContent)
       .toContain("Create Today's Workout");
   });

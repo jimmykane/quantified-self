@@ -10,7 +10,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
-import { catchError, firstValueFrom, map, of, startWith, Subscription, switchMap } from 'rxjs';
+import { catchError, distinctUntilChanged, firstValueFrom, map, of, startWith, Subscription, switchMap } from 'rxjs';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { DAY_WORKOUT_EQUIPMENT, DAY_WORKOUT_SPORTS, defaultDayWorkoutControls, dayWorkoutLocalDate, dayWorkoutDateOffset,
   dayWorkoutPurposes, dayWorkoutTargets, DAY_WORKOUT_SIGNAL_OPTIONS, dayWorkoutReadinessSourcesEnabled,
@@ -33,19 +33,25 @@ import { ActivityFilterPickerComponent } from '../shared/activity-filter-picker/
 import { SummaryDisclosureComponent } from '../shared/summary-disclosure/summary-disclosure.component';
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
 import type { AssistantQuotaStatus } from '@shared/assistant.types';
+import { dailyWorkoutDeliveryPreferences, DAILY_WORKOUT_DELIVERY_SERVICES, type DailyWorkoutDeliveryPreferences } from '../../helpers/daily-workout-delivery.helper';
+import { PLANNED_WORKOUT_PROVIDER_IDS, PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1, type PlannedWorkoutProviderId } from '@shared/planned-workout-providers';
+import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
+import { buildDestinationProviderPresentation } from '../../helpers/provider-presentation.helper';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 
 export interface DayWorkoutDialogData {
   ownerUid: string; localDate: string; sport: ActivityTypes;
   mode?: 'preferences'; initialControls?: DayWorkoutControls; initialResult?: GenerateDayWorkoutResponse;
   followRoutine?: boolean;
-  savePreferences?: (controls: DayWorkoutControls, followRoutine: boolean) => Promise<void>;
+  dailyDelivery?: DailyWorkoutDeliveryPreferences;
+  savePreferences?: (controls: DayWorkoutControls, followRoutine: boolean, delivery?: DailyWorkoutDeliveryPreferences) => Promise<void>;
   onAdded?: (kind: GenerateDayWorkoutResponse['kind']) => void;
 }
 type ChoiceKey = 'purpose' | 'destinationPlanId' | 'equipment' | 'timing' | 'target' | 'structure' | 'strengthFocus';
 interface Choice { key: ChoiceKey; label: string; options: { value: string | null; label: string }[] }
 @Component({ selector: 'app-day-workout-dialog', standalone: true, imports: [DatePipe, NgTemplateOutlet, FormsModule, MatDialogModule, MatButtonModule, MatCheckboxModule,
   MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule, AppChartSharedModule,
-  CompactRowComponent, SummaryDisclosureComponent, ActivityFilterPickerComponent, TrainingDeliveryButtonComponent],
+  CompactRowComponent, SummaryDisclosureComponent, ActivityFilterPickerComponent, TrainingDeliveryButtonComponent, ServiceSourceIconComponent, MatSlideToggleModule],
   templateUrl: './day-workout-dialog.component.html', styleUrls: ['./day-workout-dialog.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush })
 export class DayWorkoutDialogComponent {
@@ -75,6 +81,9 @@ export class DayWorkoutDialogComponent {
   readonly staleReview = signal(false);
   readonly saveUncertain = signal(false);
   readonly savedWorkoutId = signal<string | null>(null);
+  readonly dailyDelivery = signal(dailyWorkoutDeliveryPreferences(this.data.dailyDelivery));
+  readonly showDeliveryOptions = signal(this.data.mode === 'preferences');
+  readonly deliveryOutcomeText = signal<string | null>(null);
   private readonly savedAcknowledgement = signal<ScheduledWorkoutV1 | null>(null);
   private savedAcknowledgementRevision: number | null = null;
   readonly savedWorkout = computed(() => this.schedule()?.workouts.find(workout => workout.id === this.savedWorkoutId() && workout.lifecycle !== 'deleted')
@@ -134,6 +143,25 @@ export class DayWorkoutDialogComponent {
     && workout.localDate === this.controls().localDate
     && [null, this.schedule()?.state.activePlanId, this.controls().destinationPlanId].includes(workout.planId)) ?? []);
   readonly user = toSignal(this.users.user$, { initialValue: this.users.user() });
+  // Only an open daily-preferences/review dialog observes connections; Today keeps its existing read footprint.
+  private readonly deliveryConnections = toSignal(this.users.user$.pipe(
+    distinctUntilChanged((previous, current) => previous?.uid === current?.uid),
+    switchMap(user => user?.uid === this.data.ownerUid
+    && (this.data.mode === 'preferences' || this.data.dailyDelivery !== undefined && this.data.initialResult?.kind === 'workout')
+    ? this.users.watchActivityServiceConnectionState(user).pipe(catchError(() => of(null))) : of(null))), { initialValue: null });
+  readonly showDailyDelivery = computed(() => this.data.mode === 'preferences' || this.data.dailyDelivery !== undefined
+    && this.result()?.kind === 'workout' && this.result()?.requestId === this.data.initialResult?.requestId
+    && this.controls().destinationPlanId === null);
+  readonly deliveryRows = computed(() => PLANNED_WORKOUT_PROVIDER_IDS
+    .filter(provider => this.delivery.isVisible(provider) || this.dailyDelivery().providers.includes(provider))
+    .map(provider => ({ provider, label: PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label,
+      presentation: buildDestinationProviderPresentation(DAILY_WORKOUT_DELIVERY_SERVICES[provider]),
+      connected: this.delivery.isReady(provider) && this.deliveryConnections()?.[DAILY_WORKOUT_DELIVERY_SERVICES[provider]] === true,
+      selected: this.dailyDelivery().providers.includes(provider) })));
+  readonly deliveryLabel = computed(() => this.dailyDelivery().providers.map(provider => PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label).join(', '));
+  readonly sendAfterApproval = computed(() => this.showDailyDelivery() && this.dailyDelivery().enabled);
+  readonly deliveryValid = computed(() => !this.sendAfterApproval() || this.dailyDelivery().providers.length > 0
+    && this.dailyDelivery().providers.every(provider => this.deliveryRows().some(row => row.provider === provider && row.connected)));
   readonly review = computed(() => { const draft = this.result()?.draft;
     return draft ? dayWorkoutReview(draft, this.user()?.settings?.unitSettings, this.result()?.previousLoads) : null; });
   readonly contextDetails = computed(() => [...(this.result()?.usedContext ?? []), ...(this.result()?.missingContext ?? [])]);
@@ -144,6 +172,7 @@ export class DayWorkoutDialogComponent {
       && (this.data.mode === 'preferences' || !!this.schedule() && !this.scheduleFailed() && !this.schedule()?.restoreUnavailable)
       && (!this.controls().destinationPlanId || !!this.selectedPlan());
   } catch { return false; } });
+  readonly approvalValid = computed(() => this.valid() && this.deliveryValid());
   readonly labels: Record<string, string> = {
     suggest: 'Suggest for me', recovery: 'Recovery / easy',
     none: 'No targets', speed: 'Pace / speed',
@@ -185,18 +214,18 @@ export class DayWorkoutDialogComponent {
   readonly primaryLabel = computed(() => {
     if (this.data.mode === 'preferences') return this.busy() ? 'Saving…' : 'Save preferences';
     if (this.busy()) return this.busy() === 'save' ? this.result()?.kind === 'rest' ? 'Marking…' : 'Adding…' : 'Generating…';
-    if (this.result()?.draft) return this.saveUncertain() ? 'Retry Add' : 'Add workout';
+    if (this.result()?.draft) return this.saveUncertain() ? 'Retry Add' : this.sendAfterApproval() ? 'Add & send' : 'Add workout';
     if (this.result()) return this.declaredRestDay() ? 'Keep rest day' : 'Mark as rest day';
     return this.error() ? 'Retry generation' : 'Generate workout';
   });
   async primaryAction(): Promise<void> {
     if (this.savedWorkoutId()) return;
     if (this.data.mode === 'preferences') {
-      if (!this.valid() || this.busy() || !this.generation.isOwner(this.data.ownerUid)) return;
+      if (!this.approvalValid() || this.busy() || !this.generation.isOwner(this.data.ownerUid)) return;
       const sequence = ++this.sequence;
       this.busy.set('save'); this.ref.disableClose = true; this.error.set(null);
       try {
-        await this.data.savePreferences?.({ ...this.controls(), destinationPlanId: null }, this.followRoutine());
+        await this.data.savePreferences?.({ ...this.controls(), destinationPlanId: null }, this.followRoutine(), this.dailyDelivery());
         if (this.current(sequence)) { this.haptics.success(); this.ref.close(); }
       } catch { if (this.current(sequence)) { this.error.set('Daily suggestion preferences could not be saved. Your choices are kept.'); this.haptics.error(); } }
       finally { if (this.current(sequence)) { this.busy.set(null); this.ref.disableClose = false; } }
@@ -270,6 +299,19 @@ export class DayWorkoutDialogComponent {
   selectSport(values: readonly string[]): void {
     const sport = values.length === 1 ? DAY_WORKOUT_SPORTS.find(sport => sport === values[0]) : undefined;
     if (sport) this.set('sport', sport);
+  }
+  setDeliveryEnabled(enabled: boolean): void {
+    if (this.busy() || this.saveUncertain() || this.dailyDelivery().enabled === enabled) return;
+    this.dailyDelivery.update(value => ({ ...value, enabled }));
+    if (enabled && !this.dailyDelivery().providers.length) this.showDeliveryOptions.set(true);
+    this.haptics.selection();
+  }
+  selectDeliveryProvider(provider: PlannedWorkoutProviderId, selected: boolean): void {
+    const row = this.deliveryRows().find(row => row.provider === provider);
+    if (!row || this.busy() || this.saveUncertain() || row.selected === selected || selected && !row.connected) return;
+    this.dailyDelivery.update(value => ({ ...value, providers: PLANNED_WORKOUT_PROVIDER_IDS.filter(id =>
+      id === provider ? selected : value.providers.includes(id)) }));
+    this.haptics.selection();
   }
   set<K extends keyof DayWorkoutControls>(key: K, value: DayWorkoutControls[K], feedback = true): void {
     if (this.savedWorkoutId() || this.busy() || this.saveUncertain() || JSON.stringify(this.controls()[key]) === JSON.stringify(value)) return;
@@ -367,8 +409,9 @@ export class DayWorkoutDialogComponent {
       draft: structuredClone(this.result()!.draft!), saveRequest: this.saveCommand() });
   }
   async add(): Promise<void> {
-    if (this.savedWorkoutId() || !this.result()?.draft || this.busy() || (!this.saveUncertain() && (this.staleReview() || !this.valid()))) return;
+    if (this.savedWorkoutId() || !this.result()?.draft || this.busy() || (!this.saveUncertain() && (this.staleReview() || !this.approvalValid()))) return;
     const sequence = ++this.sequence;
+    const approvedProviders = this.sendAfterApproval() ? [...this.dailyDelivery().providers] : [];
     this.busy.set('save'); this.ref.disableClose = true; this.error.set(null);
     try {
       let command = this.saveCommand();
@@ -390,8 +433,11 @@ export class DayWorkoutDialogComponent {
         this.reconcileSavedAcknowledgement(this.schedule());
         this.ref.updateSize(undefined, 'auto');
         this.syncSubscription?.unsubscribe();
-        this.haptics.success();
         if (this.result()?.requestId === this.data.initialResult?.requestId) this.data.onAdded?.('workout');
+        if (approvedProviders.length) {
+          await this.sendSavedWorkout(sequence, response.workouts?.find(workout => workout.id === id), response.state?.revision, approvedProviders);
+        }
+        if (this.current(sequence)) this.haptics.success();
       }
     } catch (error) {
       if (!this.current(sequence)) return;
@@ -404,5 +450,25 @@ export class DayWorkoutDialogComponent {
         : 'Save confirmation lost. Keep this dialog open and Retry Add to check the same workout.');
       this.haptics.error();
     } finally { if (this.current(sequence)) { this.busy.set(null); this.ref.disableClose = this.saveUncertain(); } }
+  }
+  private async sendSavedWorkout(sequence: number, workout: ScheduledWorkoutV1 | undefined,
+    scheduleRevision: number | undefined, providers: PlannedWorkoutProviderId[]): Promise<void> {
+    if (!workout || scheduleRevision === undefined) {
+      this.deliveryOutcomeText.set('Your workout is saved. Reload its schedule before sending to the selected services.'); return;
+    }
+    this.deliveryOutcomeText.set('Checking compatibility and sending to your selected services…');
+    try {
+      const outcomes = await this.delivery.sendApprovedWorkout(this.data.ownerUid, workout, scheduleRevision,
+        providers, this.controls().timeZone, () => this.current(sequence));
+      if (!this.current(sequence)) return;
+      const queued = outcomes.filter(outcome => outcome.state === 'queued')
+        .map(outcome => PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[outcome.provider].label);
+      const review = providers.filter(provider => !outcomes.some(outcome => outcome.provider === provider && outcome.state === 'queued'))
+        .map(provider => PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label);
+      this.deliveryOutcomeText.set([queued.length ? `Delivery queued for ${queued.join(', ')}. Sync your device after the service accepts it.` : '',
+        review.length ? `Your workout is saved. Review sync for ${review.join(', ')} to check compatibility or an unfinished send.` : ''].filter(Boolean).join(' '));
+    } catch {
+      if (this.current(sequence)) this.deliveryOutcomeText.set('Your workout is saved. Review sync to check an unfinished send before trying again.');
+    }
   }
 }

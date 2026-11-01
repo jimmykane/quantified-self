@@ -6,14 +6,13 @@
         <a mat-icon-button routerLink="/help" fragment="ai-insights" aria-label="Assistant help" matTooltip="Assistant help">
           <mat-icon>help_outline</mat-icon>
         </a>
-        <button mat-icon-button type="button" aria-label="Start a new chat with all optional data access off" matTooltip="Start a new chat"
-          [disabled]="loadingConversation() || !!conversationLoadError() || sending() || resetting() || proposalActionInProgress()" (click)="resetConversation()">
-          @if (resetting()) {
-            <mat-spinner diameter="20"></mat-spinner>
-          } @else {
-            <mat-icon>add_comment</mat-icon>
-          }
-        </button>
+        <span class="assistant-icon-action">
+          <button mat-icon-button type="button" aria-label="Start a new chat with all optional data access off" matTooltip="Start a new chat"
+            [disabled]="loadingConversation() || !!conversationLoadError() || sending() || resetting() || proposalActionInProgress()" (click)="resetConversation()">
+            @if (!resetting()) { <mat-icon>add_comment</mat-icon> }
+          </button>
+          @if (resetting()) { <mat-spinner diameter="20" aria-hidden="true"></mat-spinner> }
+        </span>
       </div>
     </div>
     <button class="assistant-explore-trigger" mat-button type="button"
@@ -319,17 +318,16 @@
               cdkTextareaAutosize cdkAutosizeMinRows="1" cdkAutosizeMaxRows="5"
               [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending() || resetting() || proposalActionInProgress()"
               [placeholder]="composerPlaceholder" (keydown)="handleComposerKeydown($event)"></textarea>
-            <button mat-icon-button class="composer-submit" type="submit"
-              [disabled]="sending() || resetting() || proposalActionInProgress() || quotaPreventsSend() || promptControl.invalid"
-              [attr.aria-label]="sending() ? 'Sending message' : 'Send message'">
-              <span class="composer-submit-content">
-                @if (sending()) {
-                  <mat-spinner class="composer-submit-spinner" diameter="20" aria-hidden="true"></mat-spinner>
-                } @else {
-                  <mat-icon>arrow_upward</mat-icon>
-                }
-              </span>
-            </button>
+            <span class="assistant-icon-action">
+              <button mat-icon-button class="composer-submit" type="submit"
+                [disabled]="sending() || resetting() || proposalActionInProgress() || quotaPreventsSend() || promptControl.invalid"
+                [attr.aria-label]="sending() ? 'Sending message' : 'Send message'">
+                <span class="composer-submit-content">
+                  @if (!sending()) { <mat-icon>arrow_upward</mat-icon> }
+                </span>
+              </button>
+              @if (sending()) { <mat-spinner diameter="20" aria-hidden="true"></mat-spinner> }
+            </span>
           </form>
           <div class="composer-footer">
             <span>{{ quotaText() }}</span>

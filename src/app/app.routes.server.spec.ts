@@ -79,6 +79,10 @@ describe('serverRoutes', () => {
     ]);
     expect(PRERENDERED_GUIDE_ROUTES).toEqual([
       'guides',
+      'guides/strava-to-suunto',
+      'guides/strava-to-garmin',
+      'guides/strava-to-wahoo',
+      'guides/strava-to-coros',
       'guides/sync-garmin-to-suunto',
       'guides/sync-garmin-to-wahoo',
       'guides/sync-coros-to-suunto',

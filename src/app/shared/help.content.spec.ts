@@ -17,6 +17,27 @@ import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 
 describe('help.content', () => {
+  it('explains explicit daily approval, delivery recovery and the unchanged generation allowance', () => {
+    const help = HELP_SECTIONS.map(section => section.content).join('\n');
+    for (const text of ['**Send after approval**', '**Add & send** saves the reviewed Standalone workout',
+      'Destinations can change without using another AI suggestion', 'Rest days are only marked in Calendar and send nothing',
+      'A sending problem keeps the saved workout', 'Provider acceptance does not confirm arrival on your watch']) {
+      expect(help).toContain(text);
+    }
+  });
+  it('documents Strava file transfers and the separate Garmin import path', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'service-connections')?.content;
+    for (const provider of ['suunto', 'wahoo', 'coros', 'garmin']) {
+      expect(content).toContain(`/guides/strava-to-${provider}`);
+    }
+    expect(content).toContain('Quantified Self has no Strava connection');
+    expect(content).toContain('Extract the account ZIP');
+    expect(content).toContain('keep the destination tab selected through sign-in and required onboarding');
+    expect(content).toContain('**Connections → your destination → Send past activities**');
+    expect(content).toContain('Garmin advises exporting Strava activities individually');
+    expect(content).toContain('GPX and TCX uploads can be analyzed in QS but are not converted to FIT');
+    expect(content).toContain('QS does not send completed activities to Garmin');
+  });
   it('explains default-on workout generation context and independent draft opt-outs', () => {
     const help = HELP_SECTIONS.map(section => section.content).join('\n');
     expect(help).toContain('**Training plans and workouts** and **Timeline notes** start enabled for every new draft');
@@ -53,6 +74,8 @@ describe('help.content', () => {
       '**Finished with issues**', '**Dismiss this result**', 'not failure totals',
       '**Requesting Garmin history**', '**requests scheduled**', 'not records received',
       '**Waiting for history retries**', 'quiet clock icon instead of a spinner',
+      "**History import** dialog in Connections directly", 'same counts, stages and explanations',
+      '**View import progress**', 'it does not start authorization',
       'Later queued sections wait for the current section', 'pending retries do not count as a finished import',
       'delivery completion is not tracked here',
       'a new import or a retried result appears again', 'recovery controls remain in Connections']) expect(copy).toContain(phrase);
@@ -2613,6 +2636,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('**Sailing as GPS Cardio** only with recorded GPS');
     expect(serviceConnectionsSection?.content).toContain('**Fishing as GPS Cardio** only with recorded GPS');
     expect(serviceConnectionsSection?.content).toContain('**Diving as Generic** with or without recorded GPS');
+    expect(serviceConnectionsSection?.content).toContain('**Indoor Rowing as Generic** and **single-session Multisport as Generic** also work with or without recorded GPS');
+    expect(serviceConnectionsSection?.content).toContain('other fitness sub-types and true multi-session recordings are not converted');
     expect(serviceConnectionsSection?.content).toContain('COROS may not display every field or a dive profile');
     expect(serviceConnectionsSection?.content).toContain('missing GPS is not added');
     expect(serviceConnectionsSection?.content).toContain('GPS-less Sailing or Fishing, mixed/multi-session, malformed and other activity types');

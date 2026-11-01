@@ -105,6 +105,7 @@ describe('PublicFeaturePreviewComponent', () => {
     ['training-readiness', 'readiness'],
     ['training-explorer', 'explorer'],
     ['training-plans', 'training-plans'],
+    ['daily-workout', 'daily-workout'],
     ['dashboard', 'dashboard'],
     ['workout-analysis', 'workout'],
     ['activity-map', 'map'],

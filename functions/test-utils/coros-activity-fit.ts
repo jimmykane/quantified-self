@@ -5,10 +5,11 @@ type Field = [number, number, Buffer];
 // Entirely synthetic FIT structures: no production files, identifiers or samples.
 export function createCOROSActivityFITFixture(options: {
   headerSize?: 12 | 14; bigEndian?: boolean; sport?: number; sessionCount?: number;
-  withSubSport?: boolean; developer?: boolean; compressed?: boolean; withGPS?: boolean; withDepth?: boolean;
+  withSubSport?: boolean; subSport?: number; developer?: boolean; compressed?: boolean; withGPS?: boolean; withDepth?: boolean;
   coordinates?: [number, number]; compressedLap?: boolean; fullSessionDefinition?: boolean; malformedSport?: boolean;
   emptyNativeFields?: 'zero' | 'omitted' | 'populated'; eventCount?: number;
   localMessageNumber?: 0 | 1 | 2 | 3 | 7 | 15;
+  summaryOnly?: boolean;
 } = {}): Buffer {
   const parts: Buffer[] = [];
   const u16 = (value: number) => {
@@ -32,15 +33,17 @@ export function createCOROSActivityFITFixture(options: {
       ...fields.filter(field => field[0] !== 253).map(field => field[2]),
       ...(developer ? [Buffer.from([0xa1, 0xb2, 0xc3])] : [])]));
   };
-  const category: Field[] = options.withSubSport ? [[6, 0, Buffer.from([0])]] : [];
+  const category: Field[] = options.withSubSport ? [[6, 0, Buffer.from([options.subSport ?? 0])]] : [];
   message(0, [[0, 0, Buffer.from([4])], [1, 0x84, u16(23)]]);
-  message(20, [[253, 0x86, u32(1000)], [3, 2, Buffer.from([120])],
-    ...(options.withDepth ? [[92, 0x86, u32(12000)]] as Field[] : []),
-    ...(options.withGPS === false ? [] : [[0, 0x85, u32(options.coordinates?.[0] ?? 1234)], [1, 0x85, u32(options.coordinates?.[1] ?? 5678)]] as Field[])], false, options.compressed);
-  // Same local slot is redefined repeatedly, including an opaque vendor message.
-  message(65280, [[9, 13, Buffer.from([11, 22, 33, 44])]], options.developer);
-  message(12, [[0, 0, Buffer.from([options.sport ?? 82])], [3, 7, Buffer.from('Snorkel\0')],
-    ...(options.withSubSport ? [[1, 0, Buffer.from([0])]] as Field[] : [])]);
+  if (!options.summaryOnly) {
+    message(20, [[253, 0x86, u32(1000)], [3, 2, Buffer.from([120])],
+      ...(options.withDepth ? [[92, 0x86, u32(12000)]] as Field[] : []),
+      ...(options.withGPS === false ? [] : [[0, 0x85, u32(options.coordinates?.[0] ?? 1234)], [1, 0x85, u32(options.coordinates?.[1] ?? 5678)]] as Field[])], false, options.compressed);
+    // Same local slot is redefined repeatedly, including an opaque vendor message.
+    message(65280, [[9, 13, Buffer.from([11, 22, 33, 44])]], options.developer);
+    message(12, [[0, 0, Buffer.from([options.sport ?? 82])], [3, 7, Buffer.from('Snorkel\0')],
+      ...(options.withSubSport ? [[1, 0, Buffer.from([options.subSport ?? 0])]] as Field[] : [])]);
+  }
   if (options.emptyNativeFields) {
     for (let i = 0; i < (options.eventCount ?? 1); i++) {
       message(21, [[253, 0x86, u32(1000)], [0, 0, Buffer.from([0])], [1, 0, Buffer.from([0])],
@@ -48,11 +51,11 @@ export function createCOROSActivityFITFixture(options: {
           options.emptyNativeFields === 'zero' ? Buffer.alloc(0) : u32(17)]] as Field[])], options.developer);
     }
   }
-  message(19, [[253, 0x86, u32(1000)], [25, 0, Buffer.from([options.sport ?? 82])],
+  if (!options.summaryOnly) message(19, [[253, 0x86, u32(1000)], [25, 0, Buffer.from([options.sport ?? 82])],
     [26, 2, Buffer.from([7])], [7, 0x86, u32(90000)],
     ...(!options.emptyNativeFields || options.emptyNativeFields === 'omitted' ? [] : [[10, 0x86,
       options.emptyNativeFields === 'zero' ? Buffer.alloc(0) : u32(17)]] as Field[]),
-    ...(options.withSubSport ? [[39, 0, Buffer.from([0])]] as Field[] : [])], options.developer, options.compressedLap);
+    ...(options.withSubSport ? [[39, 0, Buffer.from([options.subSport ?? 0])]] as Field[] : [])], options.developer, options.compressedLap);
   for (let i = 0; i < (options.sessionCount ?? 1); i++) {
     const extraFields: Field[] = options.fullSessionDefinition
       ? Array.from({ length: 256 }, (_, n) => n).filter(n => ![253, 2, 5, 6, 7, 9, 200].includes(n))

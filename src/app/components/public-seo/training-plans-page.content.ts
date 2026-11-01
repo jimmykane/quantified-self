@@ -1,16 +1,19 @@
 import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
 import { TRAINING_PLANS_ACCESS_NOTE } from './training-plans-access.content';
+import { WORKOUT_GENERATION_SECTION } from './workout-generation.content';
 
 /** Concise metadata shared by the public Training Plans route and its structured data. */
 export const TRAINING_PLANS_SEO_CONTENT = {
   title: 'Training Plans for Running, Cycling & More',
-  description: 'Create free training plans and standalone workouts for running, cycling, swimming and more. Organize phases by date, with completed activities kept separate.',
+  description: 'Build or generate structured workouts, create free training plans, and explore opt-in daily AI suggestions with Pro. Review workouts or rest before adding.',
   h1: 'Plan workouts for running, cycling, swimming and more',
   intro: 'Build a dated plan with named phases or start with one standalone workout. Work directly in Quantified Self, keep scheduled work separate from completed activities, and connect other tools only when you choose.',
   accessNote: TRAINING_PLANS_ACCESS_NOTE,
   featureList: [
     'Running, cycling, swimming, walking, hiking, rowing and strength plans included on the free tier',
     'Standalone structured workouts without a plan',
+    'AI workout generation using selected recovery, training and Timeline context',
+    'Opt-in daily workout or rest suggestions included with Pro',
     'Dated plan calendars with colors, history, and shifting',
     'Custom plan phases with inclusive dates, descriptions, and colors',
     'Planned-workout overlays kept separate from completed activity totals',
@@ -21,6 +24,7 @@ export const TRAINING_PLANS_SEO_CONTENT = {
 
 /** Long-form Training Plans sections loaded with the public feature-page content. */
 export const TRAINING_PLANS_PAGE_SECTIONS = [
+  WORKOUT_GENERATION_SECTION,
   {
     eyebrow: 'Plan or Standalone',
     title: 'Plan with or without a training plan',

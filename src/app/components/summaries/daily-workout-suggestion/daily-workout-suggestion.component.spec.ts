@@ -535,7 +535,7 @@ describe('compact daily workout in Today', () => {
     await fixture.componentInstance.configure();
     const config = open.mock.calls[0][3]; expect(config.mode).toBe('preferences');
     await config.savePreferences({ ...config.initialControls, timelineContext: false }, false);
-    expect(save).toHaveBeenCalledWith('owner', expect.objectContaining({ enabled: true, followRoutine: false, controls: expect.objectContaining({ timelineContext: false }) }));
+    expect(save).toHaveBeenCalledWith('owner', expect.objectContaining({ enabled: true, followRoutine: false, controls: expect.objectContaining({ timelineContext: false }) }), { enabled: false, providers: [] });
     expect(event).toHaveBeenCalledWith('owner', 'preferences_saved');
     expect(event).not.toHaveBeenCalledWith('owner', 'enabled');
     fixture.detectChanges();
@@ -543,6 +543,25 @@ describe('compact daily workout in Today', () => {
     expect(request).toHaveBeenCalledWith('owner', 'dismiss', expect.any(Function), '2026-10-30');
     expect(fixture.nativeElement.textContent).toContain('Dismissed for today');
     expect(fixture.nativeElement.querySelector('[aria-label="Daily workout options"]')).toBeTruthy();
+  });
+  it('passes explicit delivery choices to review and saves them separately without restarting daily generation', async () => {
+    const { fixture, open, request, save, user, watchCalendarSchedule } = setup();
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    const component = fixture.componentInstance, status = component.status()!;
+    const ready: DailyWorkoutSuggestionStatus = { ...status, result: { ...status.result!, kind: 'workout',
+      draft: { title: 'Easy run', structure: savedWorkout().structure } } };
+    component.status.set(ready);
+    const before = request.mock.calls.length, delivery = { enabled: true, providers: ['garmin' as const] };
+    user.update(value => ({ ...value, settings: { ...value.settings, appSettings: { dailyWorkoutDelivery: delivery } } }));
+    fixture.detectChanges(); await vi.advanceTimersByTimeAsync(1600);
+    expect(request).toHaveBeenCalledTimes(before); expect(watchCalendarSchedule).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.textContent).toContain('After approval · Garmin');
+    request.mockResolvedValueOnce(ready); await component.review();
+    expect(open.mock.calls[0][3].dailyDelivery).toEqual(delivery);
+    open.mockClear(); await component.configure();
+    const options = open.mock.calls[0][3]; expect(options.dailyDelivery).toEqual(delivery);
+    await options.savePreferences(options.initialControls, true, { enabled: false, providers: ['garmin'] });
+    expect(save).toHaveBeenCalledWith('owner', expect.any(Object), { enabled: false, providers: ['garmin'] });
   });
   it.each([false, true])('keeps disable feedback through settings effects (failure: %s)', async fail => {
     const { fixture, save, saving, preferences, haptics, event, request } = setup();

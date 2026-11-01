@@ -37,6 +37,7 @@
     "src/app/helpers/chart-source.helper.spec.ts",
     "src/app/helpers/coalesced-frame-task.spec.ts",
     "src/app/helpers/current-training-state.helper.spec.ts",
+    "src/app/helpers/daily-workout-delivery.helper.spec.ts",
     "src/app/helpers/dashboard-action-prompt.helper.spec.ts",
     "src/app/helpers/dashboard-activity-calendar.helper.spec.ts",
     "src/app/helpers/dashboard-auto-tile.helper.spec.ts",

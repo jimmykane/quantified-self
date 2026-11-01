@@ -73,7 +73,13 @@ describe('shared history import surfaces', () => {
     expect(button.hasAttribute('mat-button')).toBe(false);
     expect(button.getAttribute('aria-label')).toContain('Importing history. View history import status for 1 provider');
     expect(button.querySelector('.cdk-visually-hidden')?.textContent).toContain('Importing history · 1');
-    expect(button.querySelector('mat-progress-spinner')).not.toBeNull();
+    const spinner = fixture.nativeElement.querySelector('mat-progress-spinner') as HTMLElement;
+    expect(spinner).not.toBeNull();
+    expect(spinner.closest('button')).toBeNull();
+    expect(spinner.parentElement).toBe(fixture.nativeElement);
+    expect(spinner.style.width).toBe('32px');
+    expect(spinner.style.height).toBe('32px');
+    expect(spinner.getAttribute('aria-hidden')).toBe('true');
     expect(state.haptics.selection).not.toHaveBeenCalled();
   });
 
@@ -138,6 +144,7 @@ describe('shared history import surfaces', () => {
     expect(host.querySelector('mat-progress-spinner')).toBeNull();
     expect(host.querySelector('mat-progress-bar')).toBeNull();
     expect(host.querySelector('a')?.getAttribute('href')).toContain('serviceName=Garmin%20API');
+    expect(host.querySelector('a')?.getAttribute('href')).toContain('tool=history');
     expect(host.textContent).toContain('7 requests scheduled');
     expect(host.textContent).not.toContain('items or requests');
     expect(host.textContent).toContain('Counts describe scheduled requests, not records received');

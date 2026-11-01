@@ -1853,6 +1853,29 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockUploadActivityFileToCOROS).toHaveBeenCalledTimes(1);
   });
 
+  it('retains an unmapped original sport for later status checks without changing the file or adding writes', async () => {
+    const input = createCOROSActivityFITFixture({ sport: 51, withSubSport: true, subSport: 0 });
+    mockDownload.mockResolvedValue([input]);
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_COROSAPI,
+      destinationServiceName: ServiceNames.COROSAPI, outboundFingerprintID: null,
+    };
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.ProviderStatusPending);
+    expect(mockUploadActivityFileToCOROS.mock.calls[0][1]).toBe(input);
+    expect(mockUpdateQueueItemIfUserActive.mock.calls.filter(([p]) => p.phase === 'before_activity_sync_outbound_fingerprint_marker'))
+      .toHaveLength(1);
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'before_activity_sync_outbound_fingerprint_marker',
+      updateData: { outboundFingerprintID: 'exact-v1-new', corosSourceFIT: { sport: 51, subSport: 0 } },
+    }));
+    expect(await processActivitySyncQueueItem({ ...queueItem, corosSourceFIT: { ...queueItem.corosSourceFIT! } })).toBe(QueueResult.Processed);
+    expect(mockGetCOROSActivityUploadStatus).toHaveBeenLastCalledWith('user-1', '9223372036854775806', 'coros-user-1', {
+      queueItemRef: queueItem.ref, sourceFIT: { sport: 51, subSport: 0 },
+    });
+    expect(mockDownload).toHaveBeenCalledTimes(1);
+    expect(mockUploadActivityFileToCOROS).toHaveBeenCalledTimes(1);
+  });
+
   it('sends the shared Session-repaired copy once and keeps accepted work status-only', async () => {
     const input = sessionlessFixture({ bigEndian: true }), original = Buffer.from(input);
     mockDownload.mockResolvedValue([input]);
@@ -1876,9 +1899,12 @@ describe('activity-sync/process-queue-item', () => {
   it.each([[82, true, false, true], [82, false, false, true], [32, true, false, true],
     [29, true, false, true], [29, true, false, false],
     [53, false, false, true], [53, false, false, false],
+    [4, false, false, true], [4, false, false, false],
+    [18, false, false, true], [18, false, false, false],
     [1, true, true, true], [1, true, true, false]] as const)(
     'queued sport %i refreshes the prepared receipt and then only polls (GPS=%s, empty fields=%s, restart=%s)', async (sport, withGPS, emptyFields, restart) => {
-      const input = createCOROSActivityFITFixture({ sport, withGPS, emptyNativeFields: emptyFields ? 'zero' : undefined });
+      const input = createCOROSActivityFITFixture({ sport, withGPS, subSport: sport === 4 ? 14 : undefined,
+        withSubSport: sport === 4, emptyNativeFields: emptyFields ? 'zero' : undefined });
       const original = Buffer.from(input);
       mockDownload.mockResolvedValue([input]);
       const queueItem: ActivitySyncQueueItemInterface = {
@@ -1895,12 +1921,15 @@ describe('activity-sync/process-queue-item', () => {
       expect(queueItem.outboundFingerprintID).toBe('exact-v1-new');
       expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
         phase: 'before_activity_sync_outbound_fingerprint_marker',
-        updateData: { outboundFingerprintID: 'exact-v1-new' },
+        updateData: { outboundFingerprintID: 'exact-v1-new', corosSourceFIT: { sport: emptyFields ? null : sport, subSport: sport === 4 ? 14 : null } },
       }));
       expect(mockRecordActivitySyncOutboundFingerprint.mock.invocationCallOrder[0])
         .toBeLessThan(mockUploadActivityFileToCOROS.mock.invocationCallOrder[0]);
       expect(input).toEqual(original);
       expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+      expect(mockGetCOROSActivityUploadStatus).toHaveBeenLastCalledWith('user-1', '9223372036854775806', 'coros-user-1', {
+        queueItemRef: queueItem.ref, sourceFIT: { sport: emptyFields ? null : sport, subSport: sport === 4 ? 14 : null },
+      });
       expect(mockDownload).toHaveBeenCalledTimes(1);
       expect(mockUploadActivityFileToCOROS).toHaveBeenCalledTimes(1);
       expect(mockRecordActivitySyncOutboundFingerprint).toHaveBeenCalledTimes(1);

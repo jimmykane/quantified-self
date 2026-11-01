@@ -31,6 +31,7 @@ import { CommonModule, formatDate } from '@angular/common'; // Added CommonModul
 import { HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT } from '@shared/history-import.constants';
 import dayjs from 'dayjs';
 import { SleepSyncState } from '@shared/sleep';
+import type { ConnectionHistoryStatusProjection } from '@shared/connection-history';
 
 vi.mock('../../services/app.event.service');
 vi.mock('../../services/app.user.service');
@@ -288,6 +289,20 @@ describe('HistoryImportFormComponent', () => {
                 : component.onSleepBackfill(new Event('click'));
         }
 
+        it('omits duplicate tracked progress in the details dialog but keeps a newer optimistic acceptance visible', async () => {
+            await reopen(ServiceNames.WahooAPI);
+            const history: ConnectionHistoryStatusProjection = {runId: 'tracked', rangePreset: 'custom', startMs: 1, endMs: 2, updatedAtMs: Date.now(),
+                active: true, canRetry: false, steps: [{id: 'activities', resources: ['activities'], status: 'retrying', count: 128}]};
+            fixture.componentRef.setInput('showTrackedHistoryStatus', false);
+            fixture.componentRef.setInput('userMetaForService', {connectionHistoryImport: history}); fixture.detectChanges();
+            expect(component.backgroundActivityImport()?.runId).toBe('tracked');
+            expect(fixture.nativeElement.textContent).not.toContain('Your selected history is importing in the background');
+            component.backgroundActivityImport.set({...history, runId: 'newly-accepted'});
+            fixture.detectChanges();
+            expect(fixture.nativeElement.textContent).toContain('Your selected history is importing in the background');
+            expect(mockUserService.importServiceHistoryForCurrentUser).not.toHaveBeenCalled();
+        });
+
         it.each([ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])('retains %s background acceptance across reopen and unlocks only after live completion', async provider => {
             await reopen(provider);
             const history = { runId: 'manual-run', rangePreset: 'custom', startMs: 1, endMs: 2, updatedAtMs: Date.now(),
@@ -321,12 +336,19 @@ describe('HistoryImportFormComponent', () => {
             fixture.componentRef.setInput('userMetaForService', { didLastHistoryImport: Date.now(),
                 processedActivitiesFromLastHistoryImportCount: 100,
                 connectionHistoryImport: { runId: 'finished-manual', rangePreset: 'custom', active: false,
-                    updatedAtMs: Date.now(), steps: [{ id: 'activities', status: provider === ServiceNames.GarminAPI ? 'requested' : 'processed', count: 100 }] } });
+                    startMs: 1, endMs: 2, canRetry: false, updatedAtMs: Date.now(),
+                    steps: [{ id: 'activities', resources: ['activities'], status: provider === ServiceNames.GarminAPI ? 'requested' : 'processed', count: 100 }] } });
             fixture.detectChanges();
             expect(fixture.nativeElement.querySelector('app-status-info').title).toBe(provider === ServiceNames.GarminAPI ? 'History requested' : 'History import finished');
             expect(fixture.nativeElement.textContent).toContain('New import available on');
             expect(component.nextImportAvailableDate.getTime()).toBeGreaterThan(Date.now());
             expect(component.formGroup.disabled).toBe(true);
+            fixture.componentRef.setInput('showTrackedHistoryStatus', false); fixture.detectChanges();
+            expect(fixture.nativeElement.textContent).toContain('New import available on');
+            expect(fixture.nativeElement.textContent).toContain(formatDate(component.nextImportAvailableDate, 'medium', 'en-US'));
+            expect(fixture.nativeElement.textContent).not.toContain('Your selected history has been processed');
+            expect(component.formGroup.disabled).toBe(true);
+            expect(mockUserService.importServiceHistoryForCurrentUser).not.toHaveBeenCalled();
         });
 
         it.each([ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])('keeps live %s counts when background acceptance arrives after the metadata update', async provider => {

@@ -33,7 +33,7 @@ import { AppWindowService } from '../../../services/app.window.service';
 import { AppDeepLinkService } from '../../../services/app.deeplink.service';
 import { LoggerService } from '../../../services/logger.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, convertToParamMap } from '@angular/router';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { of, Subject } from 'rxjs';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
@@ -52,6 +52,49 @@ describe('ServicesGarminComponent', () => {
     let queryParams: Record<string, string | null>;
     let mockActivatedRoute: any;
     let haptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
+
+
+
+    it.each(['denied', 'incomplete'])('settles a %s callback in the main view without claiming a connection', async kind => {
+        const values: Record<string, string> = {serviceName: component.serviceName, state: 'synthetic-state',
+            ...(kind === 'denied' ? {error: 'access_denied'} : {})};
+        vi.spyOn(TestBed.inject(ActivatedRoute).snapshot.queryParamMap, 'get').mockImplementation(key => values[key] ?? null);
+        const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+        const notice = vi.spyOn(TestBed.inject(MatSnackBar), 'open').mockReturnValue(undefined);
+        Object.assign(TestBed.inject(AppUserService), {getServiceToken: vi.fn(() => of([])),
+            getUserMetaForService: vi.fn(() => of(undefined))});
+        fixture.componentRef.setInput('user', {uid: 'auth-owner', settings: {}});
+        component.showConnectionSummary = true;
+        await component.ngOnChanges();
+        await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith(['services'], {
+            queryParams: {serviceName: component.serviceName}, queryParamsHandling: ''}));
+        expect(notice).toHaveBeenCalledWith(expect.stringContaining(kind === 'denied'
+            ? 'authorization was not completed' : 'callback is missing state or code'), undefined, {duration: 10000});
+        expect(TestBed.inject(AppUserService).requestAndSetCurrentUserGarminAPIAccessToken).not.toHaveBeenCalled();
+        expect(component.forceConnected).toBe(false); expect(component.isConnecting).toBe(false);
+    });
+
+    it.each(['callback', 'connect link'])('keeps a tools-only history dialog from consuming an OAuth %s', async kind => {
+        const values: Record<string, string> = {serviceName: component.serviceName, tool: 'history',
+            ...(kind === 'callback' ? {code: 'synthetic-code', state: 'synthetic-state'} : {connect: '1'})};
+        vi.spyOn(TestBed.inject(ActivatedRoute).snapshot.queryParamMap, 'get').mockImplementation(key => values[key] ?? null);
+        vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+        Object.assign(TestBed.inject(AppUserService), {getServiceToken: vi.fn(() => of([])),
+            getUserMetaForService: vi.fn(() => of({connectionState: 'connected'}))});
+        fixture.componentRef.setInput('user', {uid: 'auth-owner', settings: {}});
+        component.showConnectionSummary = false;
+        const exchange = vi.spyOn(component, 'requestAndSetToken').mockResolvedValue({connected: true, outcome: 'connected'});
+        await component.ngOnChanges();
+        expect(exchange).not.toHaveBeenCalled(); expect(component.isConnecting).toBe(false);
+        expect(component.serviceMeta?.connectionState).toBe('connected');
+    });
+
+    it('returns reconnect review from the tools dialog to provider controls without starting OAuth', () => {
+        component.showConnectionSummary = false;
+        component.reviewHistoryReconnect();
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/services'], {queryParams: {serviceName: component.serviceName, reconnect: '1'}});
+        expect(mockUserService.requestAndSetCurrentUserGarminAPIAccessToken).not.toHaveBeenCalled();
+    });
 
     beforeEach(async () => {
         haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
@@ -340,6 +383,63 @@ describe('ServicesGarminComponent', () => {
             reject(new Error('old account failure')); await pending;
             expect(component.isConnecting).toBe(true);
             expect(haptics.error).not.toHaveBeenCalled();
+        });
+
+        it('keeps the callback locked until its URL cleanup finishes despite live metadata updates', async () => {
+            const metadata$ = new Subject<{ connectionState: 'connected'; connectedAtMs: number }>();
+            mockUserService.getUserMetaForService.mockReturnValue(metadata$);
+            mockUserService.requestAndSetCurrentUserGarminAPIAccessToken.mockResolvedValue({ connected: true, outcome: 'connected' });
+            let finishNavigation!: (result: boolean) => void;
+            mockRouter.navigate.mockReturnValue(new Promise<boolean>(resolve => { finishNavigation = resolve; }));
+            queryParams = { serviceName: component.serviceName, state: 'test-state', code: 'test-code' };
+            await component.ngOnChanges();
+            try {
+                metadata$.next({ connectionState: 'connected', connectedAtMs: 1 });
+                await vi.waitFor(() => expect(mockRouter.navigate).toHaveBeenCalledOnce());
+                metadata$.next({ connectionState: 'connected', connectedAtMs: 2 });
+                await Promise.resolve(); await Promise.resolve();
+                expect(mockUserService.requestAndSetCurrentUserGarminAPIAccessToken).toHaveBeenCalledOnce();
+                expect(component.isConnecting).toBe(true);
+            } finally {
+                queryParams = { serviceName: component.serviceName };
+                finishNavigation(true);
+            }
+            await vi.waitFor(() => expect(component.isConnecting).toBe(false));
+            expect(mockRouter.navigate).toHaveBeenCalledOnce();
+        });
+
+        it('does not let an earlier account callback cleanup unlock a newer connection action', async () => {
+            mockUserService.requestAndSetCurrentUserGarminAPIAccessToken.mockResolvedValue({ connected: true, outcome: 'connected' });
+            let finishNavigation!: (result: boolean) => void;
+            mockRouter.navigate.mockReturnValue(new Promise<boolean>(resolve => { finishNavigation = resolve; }));
+            queryParams = { serviceName: component.serviceName, state: 'test-state', code: 'test-code' };
+            await component.ngOnChanges();
+            await vi.waitFor(() => expect(mockRouter.navigate).toHaveBeenCalledOnce());
+            queryParams = { serviceName: component.serviceName };
+            fixture.componentRef.setInput('user', { uid: 'next-owner', settings: {} }); fixture.detectChanges();
+            component.isConnecting = true;
+            finishNavigation(true);
+            await Promise.resolve(); await Promise.resolve();
+            expect(component.isConnecting).toBe(true);
+            expect(component.forceConnected).toBe(false);
+        });
+
+        it.each([
+            {serviceName: 'Suunto app'},
+            {serviceName: 'Garmin API', tool: 'history'},
+            {serviceName: 'Garmin API', state: 'new-state', code: 'new-code'},
+        ])('does not overwrite newer navigation %j when an earlier callback completes', async nextParams => {
+            let finishExchange!: (value: {connected: true; outcome: 'connected'}) => void;
+            mockUserService.requestAndSetCurrentUserGarminAPIAccessToken.mockReturnValue(new Promise(resolve => { finishExchange = resolve; }));
+            queryParams = { serviceName: component.serviceName, state: 'test-state', code: 'test-code' };
+            mockActivatedRoute.snapshot.queryParamMap = convertToParamMap(queryParams);
+            await component.ngOnChanges();
+            expect(mockUserService.requestAndSetCurrentUserGarminAPIAccessToken).toHaveBeenCalledOnce();
+            mockActivatedRoute.snapshot.queryParamMap = convertToParamMap(nextParams);
+            finishExchange({connected: true, outcome: 'connected'});
+            await vi.waitFor(() => expect(component.isConnecting).toBe(false));
+            expect(component.forceConnected).toBe(true);
+            expect(mockRouter.navigate).not.toHaveBeenCalled();
         });
 
         it('drops OAuth callback feedback and navigation after the view is destroyed', async () => {

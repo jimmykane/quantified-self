@@ -6,15 +6,15 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ServicesComponent } from './services.component';
 import { AppUserService } from '../../services/app.user.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, convertToParamMap } from '@angular/router';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { AppFileService } from '../../services/app.file.service';
 import { AppEventService } from '../../services/app.event.service';
 import { AppWindowService } from '../../services/app.window.service';
-import { of, Subject, throwError } from 'rxjs';
-import { CUSTOM_ELEMENTS_SCHEMA, signal } from '@angular/core';
+import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
+import { CUSTOM_ELEMENTS_SCHEMA, getDebugNode, signal, type DebugElement } from '@angular/core';
 import { ServiceNames, User } from '@sports-alliance/sports-lib';
 import { MaterialModule } from '../../modules/material.module';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
@@ -133,6 +133,102 @@ describe('ServicesComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it.each([
+        ['garmin', ServiceNames.GarminAPI], ['suunto', ServiceNames.SuuntoApp],
+        ['coros', ServiceNames.COROSAPI], ['wahoo', ServiceNames.WahooAPI],
+    ])('opens %s history details directly from its notification link without an import action', async (section, service) => {
+        const params = convertToParamMap({serviceName: service, tool: 'history'});
+        mockActivatedRoute.snapshot.queryParamMap = params; mockActivatedRoute.queryParamMap = of(params);
+        mockActivatedRoute.snapshot.data = {userData: {user: {uid: 'owner', stripeRole: 'pro'}, isPro: true}};
+        fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+        expect(mockDialog.open).toHaveBeenCalledTimes(1);
+        expect(component.managedService).toBe(section); expect(component.managedTool).toBe('history');
+        expect(mockRouter.navigate).toHaveBeenCalledWith([], expect.objectContaining({queryParams: {tool: null}, replaceUrl: true}));
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+        fixture.detectChanges(); expect(mockDialog.open).toHaveBeenCalledTimes(1);
+    });
+
+    it('waits for the verified profile and allows closing and following the same history link again', async () => {
+        const params = convertToParamMap({serviceName: ServiceNames.SuuntoApp, tool: 'history'});
+        const routes = new BehaviorSubject(params);
+        mockActivatedRoute.snapshot.queryParamMap = params; mockActivatedRoute.queryParamMap = routes;
+        fixture.detectChanges(); expect(mockDialog.open).not.toHaveBeenCalled();
+        mockAuthService.user$.next({uid: 'owner', stripeRole: 'pro'});
+        fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+        expect(mockDialog.open).toHaveBeenCalledTimes(1);
+        dialogClosed$.next(); fixture.detectChanges(); expect(component.managedService).toBeNull();
+        routes.next(params); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+        expect(mockDialog.open).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([null, 'mcp', 'unknown'])('does not open history tools for invalid provider %s', async serviceName => {
+        const params = convertToParamMap({serviceName, tool: 'history'});
+        mockActivatedRoute.snapshot.queryParamMap = params; mockActivatedRoute.queryParamMap = of(params);
+        mockActivatedRoute.snapshot.data = {userData: {user: {uid: 'owner', stripeRole: 'pro'}, isPro: true}};
+        fixture.detectChanges(); await fixture.whenStable();
+        expect(mockDialog.open).not.toHaveBeenCalled();
+    });
+
+    it.each([{connect: '1'}, {code: 'synthetic-code'}, {state: 'synthetic-state'}, {error: 'access_denied'},
+        {reconnect: '1'}, {code: ''}])('leaves auth and reconnect navigation %j untouched by a history link', async auth => {
+        const params = convertToParamMap({serviceName: ServiceNames.GarminAPI, tool: 'history', ...auth});
+        mockActivatedRoute.snapshot.queryParamMap = params; mockActivatedRoute.queryParamMap = of(params);
+        mockActivatedRoute.snapshot.data = {userData: {user: {uid: 'owner', stripeRole: 'pro'}, isPro: true}};
+        fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+        expect(mockDialog.open).not.toHaveBeenCalled(); expect(mockRouter.navigate).not.toHaveBeenCalled();
+    });
+
+    it('cancels a pending history open when an OAuth callback arrives before the next render', async () => {
+        const routes = new BehaviorSubject(convertToParamMap({serviceName: ServiceNames.GarminAPI, tool: 'history'}));
+        mockActivatedRoute.queryParamMap = routes;
+        mockActivatedRoute.snapshot.data = {userData: {user: {uid: 'owner', stripeRole: 'pro'}, isPro: true}};
+        fixture.detectChanges();
+        routes.next(convertToParamMap({serviceName: ServiceNames.GarminAPI, tool: 'history', code: 'synthetic-code', state: 'synthetic-state'}));
+        await fixture.whenStable(); fixture.detectChanges();
+        expect(mockDialog.open).not.toHaveBeenCalled(); expect(mockRouter.navigate).not.toHaveBeenCalled();
+    });
+
+    it('keeps the details link passive without Pro and closes an open dialog on account change', async () => {
+        const params = convertToParamMap({serviceName: ServiceNames.WahooAPI, tool: 'history'});
+        mockActivatedRoute.snapshot.queryParamMap = params; mockActivatedRoute.queryParamMap = of(params);
+        mockActivatedRoute.snapshot.data = {userData: {user: {uid: 'owner', stripeRole: 'free'}, isPro: false}};
+        fixture.detectChanges(); await fixture.whenStable(); expect(mockDialog.open).not.toHaveBeenCalled();
+        mockAuthService.user$.next({uid: 'owner', stripeRole: 'pro'});
+        fixture.detectChanges(); await fixture.whenStable();
+        // Access-only updates must still allow the user's pending navigation to finish.
+        expect(mockDialog.open).toHaveBeenCalledTimes(1);
+        component.setServiceConnectionState('wahoo', true);
+        component.processUser({uid: 'different-owner'} as User, true);
+        expect(mockDialog.open.mock.results[0].value.close).toHaveBeenCalledTimes(1);
+        expect(Object.values(component.serviceConnectionState)).toEqual([false, false, false, false]);
+    });
+
+    it.each(['garmin', 'suunto', 'coros', 'wahoo'] as const)('keeps the main %s connection badge authoritative while its dialog initializes', section => {
+        component.processUser({uid: 'owner'} as User, true); fixture.detectChanges();
+        component.managedService = section; component.setServiceConnectionState(section, true);
+        const template = (component as unknown as {serviceToolsDialog: import('@angular/core').TemplateRef<unknown>}).serviceToolsDialog;
+        const view = template.createEmbeddedView({}); view.detectChanges();
+        const child = view.rootNodes.flatMap((node: Node) => node instanceof Element
+            ? [...node.querySelectorAll(`app-services-${section}`)] : [])[0];
+        expect(child).toBeTruthy();
+        (getDebugNode(child) as DebugElement).triggerEventHandler('connectionStateChanged', false);
+        expect(component.serviceConnectionState[section]).toBe(true);
+        view.destroy();
+    });
+
+    it.each([{reconnect: '1'}, {connect: '1'}, {code: 'synthetic-code', state: 'synthetic-state'},
+        {error: 'access_denied', state: 'synthetic-state'}, {state: 'synthetic-state'}])('closes history details for auth navigation %j without reopening or rewriting it', async auth => {
+        const routes = new BehaviorSubject(convertToParamMap({serviceName: ServiceNames.GarminAPI, tool: 'history'}));
+        mockActivatedRoute.queryParamMap = routes;
+        mockActivatedRoute.snapshot.data = {userData: {user: {uid: 'owner', stripeRole: 'pro'}, isPro: true}};
+        fixture.detectChanges(); await fixture.whenStable();
+        mockRouter.navigate.mockClear();
+        routes.next(convertToParamMap({serviceName: ServiceNames.GarminAPI, tool: 'history', ...auth}));
+        expect(mockDialog.open.mock.results[0].value.close).toHaveBeenCalledTimes(1);
+        dialogClosed$.next(); fixture.detectChanges(); await fixture.whenStable();
+        expect(mockDialog.open).toHaveBeenCalledTimes(1); expect(mockRouter.navigate).not.toHaveBeenCalled();
+    });
+
     function setStarterCatalog() {
         const product: StripeProduct = { id: 'pro', name: 'Pro', active: true, role: 'pro', metadata: { role: 'pro' }, description: null, images: [], prices: [{
             id: 'price_pro_month', active: true, type: 'recurring', recurring: { interval: 'month' }, interval: 'month', interval_count: 1,
@@ -222,6 +318,18 @@ describe('ServicesComponent', () => {
         expect(mockHapticsService.selection).toHaveBeenCalledTimes(1);
     });
 
+    it.each(['garmin', 'suunto', 'coros', 'wahoo', 'mcp'] as const)('does not carry another provider\'s callback or history request into %s', section => {
+        component.activeSection = section === 'garmin' ? 'suunto' : 'garmin';
+        mockActivatedRoute.snapshot.queryParamMap = convertToParamMap({serviceName: ServiceNames.GarminAPI,
+            code: 'synthetic-code', state: 'synthetic-state', connect: '1', reconnect: '1', tool: 'history'});
+        component.onProviderTabClick(new MouseEvent('click', {cancelable: true}), section);
+        const target = component.serviceSectionOptions.find(option => option.id === section)!;
+        expect(mockRouter.navigate).toHaveBeenCalledWith([], {
+            relativeTo: mockActivatedRoute,
+            queryParams: {serviceName: target.serviceName ?? 'mcp'}, queryParamsHandling: '',
+        });
+    });
+
     it.each([true, false])('uses the verified admin claim from resolver data: %s', async admin => {
         mockAuthService.user$ = new Subject();
         mockActivatedRoute.snapshot.data['userData'] = { user: { uid: '123', admin }, isPro: admin };
@@ -287,7 +395,7 @@ describe('ServicesComponent', () => {
         expect(mockRouter.navigate).toHaveBeenCalledWith([], {
             relativeTo: mockActivatedRoute,
             queryParams: { serviceName: ServiceNames.GarminAPI },
-            queryParamsHandling: 'merge',
+            queryParamsHandling: '',
         });
         expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('service_section_selected', {
             section: 'garmin',
@@ -358,7 +466,7 @@ describe('ServicesComponent', () => {
         expect(mockRouter.navigate).toHaveBeenCalledWith([], {
             relativeTo: mockActivatedRoute,
             queryParams: { serviceName: ServiceNames.WahooAPI },
-            queryParamsHandling: 'merge',
+            queryParamsHandling: '',
         });
     });
 
@@ -373,7 +481,7 @@ describe('ServicesComponent', () => {
         expect(mockRouter.navigate).toHaveBeenCalledWith([], {
             relativeTo: mockActivatedRoute,
             queryParams: { serviceName: 'mcp' },
-            queryParamsHandling: 'merge',
+            queryParamsHandling: '',
         });
         expect((component as any).getSectionFromServiceName('mcp')).toBe('mcp');
     });

@@ -8,11 +8,13 @@
         <p>{{ saved.summary }}</p>
         <p class="hint">{{ saved.localDate | date:'EEE, MMM d' }} · {{ saved.plan?.name ?? 'Standalone' }} · {{ saved.sport }}</p>
         <app-training-delivery-button scope="workout" [entityId]="workoutId" [title]="saved.title"
-          [standalone]="saved.standalone" [summaryWorkouts]="saved.workouts" [summaryPlan]="saved.plan" [prominent]="true"></app-training-delivery-button>
-        <p class="hint">Your workout is saved. Review sync before sending to a connected service.</p>
+          [standalone]="saved.standalone" [summaryWorkouts]="saved.workouts" [summaryPlan]="saved.plan" [prominent]="true" [disabled]="!!busy()"></app-training-delivery-button>
       } @else {
-        <p role="status">Your workout was added, but its current schedule is unavailable. Reload before sending.</p>
+        <p role="status">Your workout was added, but its current schedule is unavailable. Reload to review sync.</p>
         <button mat-button appHapticTap type="button" (click)="loadSchedule()">Reload schedule</button>
+      }
+      @if (deliveryOutcomeText() || savedSyncAvailable()) {
+        <p class="hint" role="status">{{ deliveryOutcomeText() ?? 'Your workout is saved. Review sync before sending to a connected service.' }}</p>
       }
     </section>
   } @else {
@@ -31,6 +33,7 @@
     <p class="hint">The selected sport is used when there is no clear routine. Training plans and Recent activities stay on to check whether today is already covered.</p>
   } @else if (!result()) { <p class="hint">Review before adding. Uses your Assistant allowance.</p> }
   @if (result()?.requestId === data.initialResult?.requestId && result()) { <p class="hint">Included daily suggestion · Assistant allowance unchanged. Additional generation uses your Assistant allowance.</p> }
+  @if (showDailyDelivery()) { <ng-container [ngTemplateOutlet]="dailyDeliveryOptions" /> }
   <fieldset id="day-workout-settings" [hidden]="!!result() && !showSettings()" [disabled]="!!busy() || saveUncertain()">
     <div class="controls-grid">
       <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Time available</mat-label>
@@ -81,7 +84,7 @@
     <h3 class="section-title">Already on this day</h3><ul>@for (workout of existing(); track workout.id) { <li>{{ workout.title }} · {{ workout.lifecycle }}</li> }</ul>
     <p class="hint">{{ result()?.kind === 'rest' ? 'Marking rest keeps these workouts.' : 'Adding creates another workout on this day.' }}</p>
   }
-  @if (result()?.kind !== 'rest') { <p class="hint">{{ syncLabel() }}</p> }
+  @if (result()?.kind !== 'rest' && !sendAfterApproval()) { <p class="hint">{{ syncLabel() }}</p> }
   @if (calendarRestDay()) { <p class="hint">Calendar rest day. Remove this marker in Calendar before requesting a workout suggestion for this date.</p> }
   @else if (restDayPlan(); as plan) { <p class="hint">Planned rest day · {{ plan.name }}. Remove this marker in Plans before adding a workout to that plan.</p> }
   @if (selectedPlan()?.lifecycle === 'paused' && result()?.kind !== 'rest') { <p>Paused plan: this workout appears in Calendar after activation.</p> }
@@ -130,10 +133,10 @@
 <mat-dialog-actions align="end">
   <p class="hint allowance" role="status" aria-live="polite">{{ quotaText() }}</p>
   @if (savedWorkoutId()) {
-    <button mat-button appHapticTap mat-dialog-close>Done</button>
+    <button mat-button appHapticTap mat-dialog-close [disabled]="!!busy()">Done</button>
   } @else {
   <button mat-button appHapticTap mat-dialog-close [disabled]="!!busy() || saveUncertain()">Cancel</button>
-  <button mat-flat-button [disabled]="!!busy() || (!saveUncertain() && (!valid() || (!!result()?.draft && staleReview())))"
+  <button mat-flat-button [disabled]="!!busy() || (!saveUncertain() && (!approvalValid() || (!!result()?.draft && staleReview())))"
     (click)="primaryAction()">{{ primaryLabel() }}</button>
   }
 </mat-dialog-actions>
@@ -144,4 +147,35 @@
       @for (option of choice.options; track option.value) { <mat-option [value]="option.value">{{ option.label }}</mat-option> }
     </mat-select>
   </mat-form-field>
+</ng-template>
+
+<ng-template #dailyDeliveryOptions>
+  @if (showDailyDelivery()) {
+    <section class="daily-delivery" aria-label="Send after approval">
+      <div class="review-destination">
+        @if (data.mode === 'preferences') {
+          <mat-slide-toggle [checked]="dailyDelivery().enabled" [disabled]="!!busy()" (change)="setDeliveryEnabled($event.checked)">Send after approval</mat-slide-toggle>
+        } @else {
+          <mat-checkbox [checked]="dailyDelivery().enabled" [disabled]="!!busy() || saveUncertain()" (change)="setDeliveryEnabled($event.checked)">Send {{ deliveryLabel() ? 'to ' + deliveryLabel() : 'after adding' }}</mat-checkbox>
+        }
+        @if (dailyDelivery().enabled) {
+          <button mat-button appHapticTap [disabled]="!!busy() || saveUncertain()" [attr.aria-expanded]="showDeliveryOptions()" aria-controls="daily-delivery-services"
+            (click)="showDeliveryOptions.set(!showDeliveryOptions())">{{ showDeliveryOptions() ? 'Hide services' : 'Change' }}</button>
+        }
+      </div>
+      @if (dailyDelivery().enabled) {
+        <p class="hint">{{ data.mode === 'preferences' ? 'Remember these services. You review and add each day’s workout.' : 'Send this workout and keep future edits synced after you add it.' }}</p>
+        <div id="daily-delivery-services" [hidden]="!showDeliveryOptions()" role="group" aria-label="Daily workout delivery services">
+          @for (row of deliveryRows(); track row.provider) {
+            <mat-checkbox [checked]="row.selected" [disabled]="!!busy() || saveUncertain() || (!row.connected && !row.selected)" (change)="selectDeliveryProvider(row.provider, $event.checked)">
+              <span class="daily-delivery-provider"><app-service-source-icon [presentation]="row.presentation" [showTooltip]="false" [iconWidth]="36" />{{ row.label }}<small>{{ row.connected ? 'Connected' : 'Unavailable or not connected' }}</small></span>
+            </mat-checkbox>
+          }
+        </div>
+        @if (!deliveryValid()) { <p class="hint" role="status">Choose a connected service, or turn sending off to add workouts without sending.</p> }
+        <p class="hint">Compatibility is checked before sending. Changes may need Review sync; your watch still needs to sync.</p>
+      }
+    </section>
+  }
+
 </ng-template>

@@ -86,6 +86,9 @@
       <p>{{ trainingPlansFeature.accessNote }}</p>
       <a mat-button [routerLink]="trainingPlansFeature.cta.routerLink">{{ trainingPlansFeature.cta.label }} <mat-icon iconPositionEnd>{{ trainingPlansFeature.cta.icon }}</mat-icon></a>
     </div>
+    <app-compact-row appHomeReveal layout="stacked" icon="auto_awesome"
+      [title]="workoutGeneration.title" [summary]="workoutGeneration.copy" [showDivider]="false"></app-compact-row>
+    <app-public-feature-preview [prepareAhead]="true" appHomeReveal [previewKey]="workoutGeneration.preview"></app-public-feature-preview>
     <div class="compact-row-stack">
       @for (row of trainingPlansFeature.rows; track row.title; let last = $last) {
         <app-compact-row appHomeReveal layout="stacked" density="compact" [icon]="row.icon" [iconTone]="row.iconTone"

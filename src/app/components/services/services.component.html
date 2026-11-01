@@ -245,6 +245,7 @@
                       <p class="service-overview-card__status" aria-label="Latest history import status">
                         {{ item.label }}@if (item.updatedAtMs) { · Updated {{ item.updatedAtMs | date:'short' }} }
                       </p>
+                      <button mat-button type="button" (click)="openHistoryProgress(section)">View import progress</button>
                       }
                     }
                   }
@@ -299,7 +300,7 @@
         [activeProviderTool]="managedTool"
         [initialActivitySyncDestination]="managedActivitySyncDestination"
         [showOnlyActiveProviderTool]="true"
-        (connectionStateChanged)="setServiceConnectionState('garmin', $event)">
+>
       </app-services-garmin>
       }
       @case ('suunto') {
@@ -311,7 +312,7 @@
         [activeProviderTool]="managedTool"
         [initialActivitySyncDestination]="managedActivitySyncDestination"
         [showOnlyActiveProviderTool]="true"
-        (connectionStateChanged)="setServiceConnectionState('suunto', $event)">
+>
       </app-services-suunto>
       }
       @case ('coros') {
@@ -323,7 +324,7 @@
         [activeProviderTool]="managedTool"
         [initialActivitySyncDestination]="managedActivitySyncDestination"
         [showOnlyActiveProviderTool]="true"
-        (connectionStateChanged)="setServiceConnectionState('coros', $event)">
+>
       </app-services-coros>
       }
       @case ('wahoo') {
@@ -335,7 +336,7 @@
         [activeProviderTool]="managedTool"
         [initialActivitySyncDestination]="managedActivitySyncDestination"
         [showOnlyActiveProviderTool]="true"
-        (connectionStateChanged)="setServiceConnectionState('wahoo', $event)">
+>
       </app-services-wahoo>
       }
     }

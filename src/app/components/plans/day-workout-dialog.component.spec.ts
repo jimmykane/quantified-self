@@ -1,20 +1,21 @@
 import { signal } from '@angular/core';
-import { By } from '@angular/platform-browser';
+import { By, DomSanitizer } from '@angular/platform-browser';
 import { ActivityFilterPickerComponent } from '../shared/activity-filter-picker/activity-filter-picker.component';
 import { DAY_WORKOUT_SPORTS, defaultDayWorkoutControls, parseGenerateDayWorkoutRequest } from '@shared/day-workout';
 import { SummaryDisclosureComponent } from '../shared/summary-disclosure/summary-disclosure.component';
 import { TestBed } from '@angular/core/testing';
 import { NavigationStart, Router, provideRouter } from '@angular/router';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogContainer, MatDialogRef } from '@angular/material/dialog';
-import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
-import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { MAT_ICON_DEFAULT_OPTIONS, MatIconRegistry } from '@angular/material/icon';
+import { ActivityTypes, ServiceNames } from '@sports-alliance/sports-lib';
 import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
 import type { TrainingRestDayV1 } from '@shared/training-rest-days';
 import type { MutateTrainingScheduleRequestV1, MutateTrainingScheduleResponseV1 } from '@shared/training-plans';
 import { Auth } from 'app/firebase/auth';
 import type { GenerateDayWorkoutResponse } from '@shared/day-workout';
 import { projectStrengthWorkoutToV1 } from '@shared/strength-workout';
-import { AppUserService } from '../../services/app.user.service';
+import { AppUserService, type ActivityServiceConnectionState } from '../../services/app.user.service';
+import { AppEventService } from '../../services/app.event.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { DayWorkoutService } from '../../services/day-workout.service';
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
@@ -28,6 +29,7 @@ import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 
 const sdk = vi.hoisted(() => ({ authState: vi.fn() }));
+type DialogProfile = { uid: string; displayName?: string; settings: { unitSettings: object } };
 vi.mock('app/firebase/auth', async original => ({ ...await original<typeof import('app/firebase/auth')>(), authState: sdk.authState }));
 const strength = { version: 1 as const, exercises: [{ id: 'squat', name: 'Dumbbell squat', sets: [
   { id: 'one', ending: { kind: 'repetitions' as const, repetitions: 8 }, externalLoadKg: 12.5, restAfterSeconds: 90 },
@@ -73,6 +75,9 @@ describe('DayWorkoutDialogComponent', () => {
   let close: ReturnType<typeof vi.fn>;
   let dialogOpen: ReturnType<typeof vi.fn>;
   let loadQuotaStatus: ReturnType<typeof vi.fn>;
+  let connections: BehaviorSubject<ActivityServiceConnectionState>;
+  let profile: BehaviorSubject<DialogProfile | null>;
+  let sendApprovedWorkout: ReturnType<typeof vi.fn>;
   let haptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
   beforeEach(async () => {
     vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-28T12:00:00Z'));
@@ -83,6 +88,9 @@ describe('DayWorkoutDialogComponent', () => {
         endLocalDate: '2026-10-31', revision: 2, lastCheckpointRevision: 1, workoutCount: 0, createdAtMs: 1, updatedAtMs: 2 }], workouts: [],
     });
     generate = vi.fn(async (_uid, request) => response(parseGenerateDayWorkoutRequest(request).requestId));
+    connections = new BehaviorSubject({ [ServiceNames.GarminAPI]: true, [ServiceNames.SuuntoApp]: true,
+      [ServiceNames.COROSAPI]: false, [ServiceNames.WahooAPI]: false });
+    sendApprovedWorkout = vi.fn(async (_uid, _workout, _revision, providers) => providers.map(provider => ({ provider, state: 'queued' })));
     loadQuotaStatus = vi.fn().mockResolvedValue(quotaStatus);
     setCalendarRestDay = vi.fn(async (_uid, localDate, _isRestDay, revision) => ({ schemaVersion: 1, localDate, isRestDay: true, revision: revision + 1 }));
     mutate = vi.fn().mockImplementation(async (request: MutateTrainingScheduleRequestV1): Promise<MutateTrainingScheduleResponseV1> => {
@@ -96,22 +104,28 @@ describe('DayWorkoutDialogComponent', () => {
     haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() }; let counter = 0;
     TestBed.overrideComponent(TrainingDeliveryButtonComponent, { add: { providers: [{ provide: MatDialog, useValue: { open: dialogOpen } }] } });
     const user = { uid: 'owner', settings: { unitSettings: {} } };
+    profile = new BehaviorSubject<DialogProfile | null>(user);
     await TestBed.configureTestingModule({ imports: [DayWorkoutDialogComponent], providers: [
       provideRouter([]),
       { provide: MAT_DIALOG_DATA, useValue: { ownerUid: 'owner', localDate: '2026-10-28', sport: ActivityTypes.StrengthTraining } },
       { provide: Auth, useValue: {} },
       { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
-      { provide: AppUserService, useValue: { user: signal(user), user$: of(user) } },
+      { provide: AppUserService, useValue: { user: signal(user), user$: profile, watchActivityServiceConnectionState: () => connections } },
+      { provide: AppEventService, useValue: {} },
       { provide: AppHapticsService, useValue: haptics },
       { provide: MatDialogRef, useValue: { close, disableClose: false, updateSize: vi.fn() } }, { provide: MatDialog, useValue: { open: dialogOpen } },
       { provide: DayWorkoutService, useValue: { generate, isOwner: () => auth.value?.uid === 'owner' } },
       { provide: AssistantQuotaService, useValue: { loadQuotaStatus } },
       { provide: TrainingPlansService, useValue: { watchCalendarRestDay: () => of(null), setCalendarRestDay, watchSchedule: () => schedule, mutate,
         createMutationId: (prefix: string) => `${prefix}:00000000-0000-4000-8000-${String(++counter).padStart(12, '0')}`, createEntityId: () => `workout-${++counter}` } },
-      { provide: TrainingDeliveryService, useValue: { watchScope: () => of({ settings: [{ provider: 'garmin', enabled: true }] }),
+      { provide: TrainingDeliveryService, useValue: { sendApprovedWorkout, watchScope: () => of({ settings: [{ provider: 'garmin', enabled: true }] }),
         watchPresence: () => of(false), watchSummaryScope: () => of({ settings: [], statuses: [], verifications: [] }),
         anyReady: () => true, isVisible: (provider: string) => provider !== 'coros', isReady: () => true, isSetupAvailable: () => true } },
     ] }).compileComponents();
+    const registry = TestBed.inject(MatIconRegistry), sanitizer = TestBed.inject(DomSanitizer);
+    for (const provider of ['garmin', 'suunto', 'coros', 'wahoo']) {
+      registry.addSvgIconLiteral(provider, sanitizer.bypassSecurityTrustHtml(readFileSync(`src/assets/logos/${provider}.svg`, 'utf8')));
+    }
   });
   afterEach(() => vi.useRealTimers());
   async function render() { const fixture = TestBed.createComponent(DayWorkoutDialogComponent);
@@ -148,8 +162,156 @@ describe('DayWorkoutDialogComponent', () => {
     expect(component.mainChoices().some(choice => choice.key === 'destinationPlanId')).toBe(false);
     expect(component.contextChoices().filter(choice => ['activityContext', 'trainingContext'].includes(choice.key)).every(choice => choice.disabled && choice.checked)).toBe(true);
     await component.primaryAction();
-    expect(data.savePreferences).toHaveBeenCalledWith(expect.objectContaining({ destinationPlanId: null, timelineContext: true, hrvContext: true }), true);
+    expect(data.savePreferences).toHaveBeenCalledWith(expect.objectContaining({ destinationPlanId: null, timelineContext: true, hrvContext: true }), true, { enabled: false, providers: [] });
     expect(generate).not.toHaveBeenCalled(); expect(mutate).not.toHaveBeenCalled();
+  });
+  function configureDailyDelivery() {
+    const data = TestBed.inject(MAT_DIALOG_DATA);
+    data.initialControls = defaultDayWorkoutControls('2026-10-28', 'Europe/Helsinki', ActivityTypes.StrengthTraining);
+    data.initialResult = response('daily-suggestion:2026-10-28');
+    data.dailyDelivery = { enabled: true, providers: ['garmin'] };
+    data.onAdded = vi.fn();
+    return data;
+  }
+  it('requires an explicit connected service in the default-off daily delivery preference', async () => {
+    const data = TestBed.inject(MAT_DIALOG_DATA); data.mode = 'preferences'; data.savePreferences = vi.fn().mockResolvedValue(undefined);
+    const fixture = await render(), component = fixture.componentInstance;
+    expect(component.dailyDelivery()).toEqual({ enabled: false, providers: [] });
+    component.setDeliveryEnabled(true); fixture.detectChanges(); expect(component.approvalValid()).toBe(false);
+    expect(component.valid()).toBe(true); await component.primaryAction(); expect(data.savePreferences).not.toHaveBeenCalled();
+    component.selectDeliveryProvider('coros', true); expect(component.dailyDelivery().providers).toEqual([]);
+    component.selectDeliveryProvider('garmin', true); fixture.detectChanges(); expect(component.approvalValid()).toBe(true);
+    exportDailySuggestionDialogQa(fixture.nativeElement, 'daily-suggestion-delivery-preferences');
+    await component.primaryAction();
+    expect(data.savePreferences).toHaveBeenCalledWith(expect.any(Object), true, { enabled: true, providers: ['garmin'] });
+    expect(generate).not.toHaveBeenCalled(); expect(mutate).not.toHaveBeenCalled(); expect(sendApprovedWorkout).not.toHaveBeenCalled();
+  });
+  it('adds the reviewed daily workout once and sends only after the acknowledged creation', async () => {
+    const data = configureDailyDelivery();
+    const fixture = await render(), component = fixture.componentInstance;
+    expect(component.primaryLabel()).toBe('Add & send');
+    const deliveryChoice = fixture.nativeElement.querySelector('.daily-delivery') as HTMLElement;
+    expect(deliveryChoice.compareDocumentPosition(fixture.nativeElement.querySelector('.review')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(sendApprovedWorkout).not.toHaveBeenCalled(); expect(mutate).not.toHaveBeenCalled();
+    exportDailySuggestionDialogQa(fixture.nativeElement, 'daily-suggestion-add-and-send');
+    await component.primaryAction(); fixture.detectChanges();
+    expect(sendApprovedWorkout).toHaveBeenCalledExactlyOnceWith('owner', expect.objectContaining({ id: component.savedWorkoutId(), revision: 1, planId: null }),
+      8, ['garmin'], 'Europe/Helsinki', expect.any(Function));
+    expect(data.onAdded).toHaveBeenCalledExactlyOnceWith('workout');
+    expect(component.deliveryOutcomeText()).toContain('Delivery queued for Garmin');
+    expect(component.saveUncertain()).toBe(false); expect(generate).not.toHaveBeenCalled();
+    await component.primaryAction(); await component.add(); expect(mutate).toHaveBeenCalledOnce(); expect(sendApprovedWorkout).toHaveBeenCalledOnce();
+    exportDailySuggestionDialogQa(fixture.nativeElement, 'daily-suggestion-delivery-queued');
+  });
+  it.each(['review-required', 'failed', 'unexpected-error'] as const)('keeps the acknowledged workout when delivery needs recovery: %s', async state => {
+    configureDailyDelivery();
+    if (state === 'unexpected-error') sendApprovedWorkout.mockRejectedValueOnce(Error('offline'));
+    else sendApprovedWorkout.mockResolvedValueOnce([{ provider: 'garmin', state }]);
+    const fixture = await render(), component = fixture.componentInstance;
+    await component.add(); fixture.detectChanges();
+    expect(component.savedWorkoutId()).toBeTruthy(); expect(component.saveUncertain()).toBe(false); expect(component.error()).toBeNull();
+    expect(component.deliveryOutcomeText()).toContain('Review sync');
+    expect(fixture.nativeElement.textContent).toContain('Workout added');
+    await component.add(); expect(mutate).toHaveBeenCalledOnce(); expect(sendApprovedWorkout).toHaveBeenCalledOnce();
+    exportDailySuggestionDialogQa(fixture.nativeElement, 'daily-suggestion-delivery-'+state);
+  });
+  it('keeps Done and manual sync disabled until delivery admission finishes', async () => {
+    configureDailyDelivery(); let finish!: (value: { provider: string; state: string }[]) => void;
+    sendApprovedWorkout.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const fixture = await render(), component = fixture.componentInstance;
+    const pending = component.add(); await vi.waitFor(() => expect(sendApprovedWorkout).toHaveBeenCalledOnce()); fixture.detectChanges();
+    expect(component.savedWorkoutId()).toBeTruthy(); expect(component.busy()).toBe('save');
+    const done = [...fixture.nativeElement.querySelectorAll('button')].find((button: HTMLButtonElement) => button.textContent.trim() === 'Done') as HTMLButtonElement;
+    expect(done.disabled).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Checking compatibility and sending');
+    finish([{ provider: 'garmin', state: 'queued' }]); await pending; fixture.detectChanges();
+    expect(component.busy()).toBeNull(); expect(done.disabled).toBe(false);
+  });
+  it('lets a user opt out for this approval without changing the saved preference', async () => {
+    const data = configureDailyDelivery(); const fixture = await render(), component = fixture.componentInstance;
+    component.setDeliveryEnabled(false); fixture.detectChanges(); expect(component.primaryLabel()).toBe('Add workout');
+    await component.add(); expect(sendApprovedWorkout).not.toHaveBeenCalled(); expect(mutate).toHaveBeenCalledOnce();
+    expect(data.dailyDelivery).toEqual({ enabled: true, providers: ['garmin'] });
+  });
+  it('blocks a newly disconnected destination and still allows Add without sending', async () => {
+    configureDailyDelivery(); const fixture = await render(), component = fixture.componentInstance;
+    connections.next({ ...connections.value, [ServiceNames.GarminAPI]: false }); fixture.detectChanges();
+    expect(component.deliveryValid()).toBe(false); await component.add(); expect(mutate).not.toHaveBeenCalled();
+    component.setDeliveryEnabled(false); await component.add(); expect(mutate).toHaveBeenCalledOnce(); expect(sendApprovedWorkout).not.toHaveBeenCalled();
+  });
+  it('allows manual regeneration when a selected delivery service becomes unavailable', async () => {
+    configureDailyDelivery(); const fixture = await render(), component = fixture.componentInstance;
+    connections.next({ ...connections.value, [ServiceNames.GarminAPI]: false }); fixture.detectChanges();
+    const regenerate = [...fixture.nativeElement.querySelectorAll('button')]
+      .find((button: HTMLButtonElement) => button.textContent.trim() === 'Generate again') as HTMLButtonElement;
+    expect(regenerate.disabled).toBe(false);
+    await component.generate(); fixture.detectChanges();
+    expect(generate).toHaveBeenCalledOnce(); expect(component.showDailyDelivery()).toBe(false);
+    await component.add(); expect(mutate).toHaveBeenCalledOnce(); expect(sendApprovedWorkout).not.toHaveBeenCalled();
+  });
+  it('reuses connection subscriptions across same-owner profile updates and still observes disconnects', async () => {
+    configureDailyDelivery();
+    const watch = vi.spyOn(TestBed.inject(AppUserService), 'watchActivityServiceConnectionState');
+    const fixture = await render(), component = fixture.componentInstance;
+    expect(watch).toHaveBeenCalledOnce();
+    profile.next({ ...profile.value!, displayName: 'Updated name' }); fixture.detectChanges();
+    profile.next({ ...profile.value!, settings: { unitSettings: {} } }); fixture.detectChanges();
+    expect(watch).toHaveBeenCalledOnce();
+    connections.next({ ...connections.value, [ServiceNames.GarminAPI]: false }); fixture.detectChanges();
+    expect(component.deliveryValid()).toBe(false);
+    profile.next(null); fixture.detectChanges();
+    profile.next({ uid: 'owner', settings: { unitSettings: {} } }); fixture.detectChanges();
+    expect(watch).toHaveBeenCalledTimes(2);
+  });
+  it.each(['queued', 'failed'] as const)('keeps the %s delivery result visible when the saved schedule read fails', async state => {
+    configureDailyDelivery(); let finish!: () => void;
+    sendApprovedWorkout.mockImplementationOnce(() => new Promise(resolve => { finish = () => resolve([{ provider: 'garmin', state }]); }));
+    const fixture = await render(), component = fixture.componentInstance;
+    const pending = component.add(); await vi.waitFor(() => expect(sendApprovedWorkout).toHaveBeenCalledOnce());
+    schedule.error(Error('Offline')); fixture.detectChanges();
+    finish(); await pending; fixture.detectChanges();
+    expect(component.savedSyncAvailable()).toBe(false); expect(component.savedWorkoutId()).toBeTruthy();
+    expect(fixture.nativeElement.textContent).toContain(state === 'queued' ? 'Delivery queued for Garmin' : 'Review sync for Garmin');
+    expect(fixture.nativeElement.textContent).toContain('Reload schedule');
+    expect(mutate).toHaveBeenCalledOnce(); expect(sendApprovedWorkout).toHaveBeenCalledOnce(); expect(generate).not.toHaveBeenCalled();
+    exportDailySuggestionDialogQa(fixture.nativeElement, 'daily-suggestion-schedule-unavailable-'+state);
+    const workout = component.savedWorkout()!;
+    schedule = new BehaviorSubject<CurrentTrainingScheduleV1>({ state: { schemaVersion: 1, revision: 8,
+      currentWorkoutCount: 1, activePlanId: null, updatedAtMs: 8 }, plans: [], workouts: [workout] });
+    const reload = [...fixture.nativeElement.querySelectorAll('button')]
+      .find((button: HTMLButtonElement) => button.textContent.includes('Reload schedule')) as HTMLButtonElement;
+    reload.click(); fixture.detectChanges();
+    expect(component.savedSyncAvailable()).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain(state === 'queued' ? 'Delivery queued for Garmin' : 'Review sync for Garmin');
+    expect(mutate).toHaveBeenCalledOnce(); expect(sendApprovedWorkout).toHaveBeenCalledOnce(); expect(generate).not.toHaveBeenCalled();
+  });
+  it('never sends for a rest result', async () => {
+    const data = configureDailyDelivery(); data.initialResult = { ...data.initialResult, kind: 'rest', draft: null };
+    const fixture = await render(), component = fixture.componentInstance;
+    expect(component.showDailyDelivery()).toBe(false); await component.primaryAction();
+    expect(setCalendarRestDay).toHaveBeenCalledOnce(); expect(sendApprovedWorkout).not.toHaveBeenCalled();
+  });
+  it('keeps sending off for a new manual generation replacing the daily draft', async () => {
+    configureDailyDelivery(); const fixture = await render(), component = fixture.componentInstance;
+    component.set('minutes', 40); await component.generate(); fixture.detectChanges();
+    expect(component.showDailyDelivery()).toBe(false); expect(component.primaryLabel()).toBe('Add workout');
+    await component.add(); expect(sendApprovedWorkout).not.toHaveBeenCalled(); expect(mutate).toHaveBeenCalledOnce();
+  });
+  it('does not send before an uncertain Add is acknowledged and reuses that Add on retry', async () => {
+    configureDailyDelivery(); const fixture = await render(), component = fixture.componentInstance;
+    mutate.mockRejectedValueOnce({ code: 'functions/deadline-exceeded' });
+    await component.add(); expect(sendApprovedWorkout).not.toHaveBeenCalled(); expect(component.saveUncertain()).toBe(true);
+    const original = mutate.mock.calls[0][0];
+    await component.add(); expect(mutate.mock.calls[1][0]).toEqual(original); expect(sendApprovedWorkout).toHaveBeenCalledOnce();
+    expect(component.saveUncertain()).toBe(false);
+  });
+  it('drops late delivery results and feedback when the account changes', async () => {
+    configureDailyDelivery(); let finish!: () => void;
+    sendApprovedWorkout.mockImplementationOnce(() => new Promise(resolve => { finish = () => resolve([{ provider: 'garmin', state: 'queued' }]); }));
+    const fixture = await render(), component = fixture.componentInstance;
+    const pending = component.add(); await vi.waitFor(() => expect(sendApprovedWorkout).toHaveBeenCalledOnce());
+    auth.next({ uid: 'other' }); finish(); await pending;
+    expect(haptics.success).not.toHaveBeenCalled(); expect(component.savedWorkoutId()).toBeNull();
   });
   it('keeps a successful Add open with the shared Send control and prevents duplicate saves or generation', async () => {
     const data = TestBed.inject(MAT_DIALOG_DATA);

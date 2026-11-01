@@ -9,7 +9,7 @@ import { deliverySettingsId, parseTrainingDeliverySettingsV1, parseTrainingDeliv
 import { AppFunctionsService } from './app.functions.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
 import { AppUserService } from './app.user.service';
-import { parseScheduledWorkoutV1, parseTrainingPlanStateV1, parseTrainingPlanV1, TRAINING_PLAN_MAX_CURRENT_WORKOUTS } from '@shared/training-plans';
+import { parseScheduledWorkoutV1, parseTrainingPlanStateV1, parseTrainingPlanV1, TRAINING_PLAN_MAX_CURRENT_WORKOUTS, type ScheduledWorkoutV1 } from '@shared/training-plans';
 import { TRAINING_DELIVERY_VERIFICATIONS, parseTrainingVerificationV1,
   type TrainingVerificationReceiptV1, type TrainingVerificationV1 } from '@shared/training-provider-verification';
 
@@ -23,6 +23,10 @@ export interface TrainingDeliveryView {
 /** History is a read-only UI scope, never a delivery command or new consent scope. */
 export type TrainingDeliveryViewScope = TrainingDeliveryScope | 'history';
 export const EMPTY_TRAINING_DELIVERY_VIEW: TrainingDeliveryView = { settings: [], statuses: [] };
+export interface ApprovedWorkoutDeliveryOutcome {
+  provider: PlannedWorkoutProviderId;
+  state: 'queued' | 'review-required' | 'failed';
+}
 export const TRAINING_DELIVERY_PREVIEW_TIMEOUT_MS = 30_000;
 export const TRAINING_DELIVERY_SAVE_TIMEOUT_MS = 70_000;
 // One look-ahead beyond the current 400-workout/four-provider bound. Historical
@@ -123,6 +127,38 @@ export class TrainingDeliveryService {
   }
   async mutate(command: TrainingDeliveryCommandV1, canExecute: () => boolean = () => true): Promise<TrainingDeliverySettingsV1> {
     return this.invoke<TrainingDeliverySettingsV1>('mutateTrainingProviderDelivery', command, canExecute, TRAINING_DELIVERY_SAVE_TIMEOUT_MS);
+  }
+  /** Explicit Add & send approval, after an acknowledged standalone create. Never approves mapping losses. */
+  async sendApprovedWorkout(uid: string, workout: ScheduledWorkoutV1, scheduleRevision: number,
+    providers: readonly PlannedWorkoutProviderId[], timeZone: string, canExecute: () => boolean): Promise<ApprovedWorkoutDeliveryOutcome[]> {
+    const outcomes: ApprovedWorkoutDeliveryOutcome[] = [];
+    const current = () => this.users.user()?.uid === uid && canExecute();
+    for (const provider of [...new Set(providers)]) {
+      if (!current()) break;
+      if (!PLANNED_WORKOUT_PROVIDER_IDS.includes(provider) || !this.isReady(provider)
+        || workout.planId !== null || workout.lifecycle !== 'planned') {
+        outcomes.push({ provider, state: 'review-required' }); continue;
+      }
+      const command: TrainingDeliveryCommandV1 = { schemaVersion: 1, mutationId: this.createMutationId(),
+        scope: 'workout', scopeId: workout.id, provider, action: 'send', timeZone,
+        expectedScheduleRevision: scheduleRevision, expectedScopeRevision: workout.revision, expectedSettingsRevision: 0 };
+      try {
+        // The existing preview performs uncached source/settings revision reads. Existing consent, a stop, an edit,
+        // or another tab's changes require a fresh review instead of being overwritten by a remembered preference.
+        const preview = await this.preview(command, current);
+        if (!current()) break;
+        if (!preview.available || !preview.hasPro || preview.connection !== 'connected' || preview.eligibleCount !== 1
+          || preview.effect !== 'enable' || preview.settingsRevision !== 0 || preview.workoutCompatibility !== 'exact'
+          || preview.warningCount !== 0 || (preview.approvalRequiredCount ?? preview.warningCount) !== 0) {
+          outcomes.push({ provider, state: 'review-required' }); continue;
+        }
+        await this.mutate(command, current);
+        if (current()) outcomes.push({ provider, state: 'queued' });
+      } catch {
+        if (current()) outcomes.push({ provider, state: 'failed' });
+      }
+    }
+    return outcomes;
   }
   async check(command: TrainingDeliveryCommandV1 & { action: 'check' }, canExecute: () => boolean = () => true): Promise<TrainingVerificationReceiptV1> {
     return this.invoke<TrainingVerificationReceiptV1>('mutateTrainingProviderDelivery', command, canExecute, TRAINING_DELIVERY_SAVE_TIMEOUT_MS);

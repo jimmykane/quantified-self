@@ -20,6 +20,31 @@ const resultVariables = {
   DELIVERY_PLAN_RESULT: 'delivery_plan', DELIVERY_RESULT: 'delivery_emulators',
 };
 
+test('Firebase CI consumers install the shared pin instead of an unversioned CLI', () => {
+  for (const file of ['buildAndDeployMain.yml', 'buildAndDeployBeta.yml', 'deployFunctionsManual.yml', '_run-tests.yml']) {
+    for (const [id, job] of Object.entries(workflow(file).jobs)) {
+      const runs = (job.steps || []).map(step => step.run || '').join('\n');
+      assert.doesNotMatch(runs, /npm install[^\n]*firebase-tools/, `${file}/${id} bypasses the shared pin`);
+      if (/npm run (?:firebase --|test:functions-emulators|test:rules)/.test(runs)) {
+        assert.match(runs, /npm run firebase:tools/, `${file}/${id} needs the pinned CLI`);
+      }
+    }
+  }
+  assert.ok(shared.jobs.rules_tests.steps.some(step => step.run === 'npm run test:firebase-cli'));
+  const scripts = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')).scripts;
+  assert.equal(scripts.firebase, 'node tools/firebase-cli.mjs');
+  assert.equal(scripts['firebase:tools'], 'node tools/firebase-cli.mjs --install');
+  assert.equal(scripts['pretest:functions-emulators'], 'npm run firebase -- --version');
+  for (const name of ['firebase-hosting-beta', 'firebase-hosting-production', 'test:rules', 'test:training-delivery', 'test:disconnect']) {
+    assert.match(scripts[name], /^npm run firebase -- /, name);
+  }
+  const functionsScripts = JSON.parse(readFileSync(resolve(root, 'functions/package.json'), 'utf8')).scripts;
+  for (const name of ['serve', 'shell', 'deploy', 'logs']) {
+    assert.match(functionsScripts[name], /node \.\.\/tools\/firebase-cli\.mjs /, name);
+    assert.doesNotMatch(functionsScripts[name], /\bfirebase /, name);
+  }
+});
+
 test('every check job uses the declared Functions Node runtime', () => {
   const functionsPackage = JSON.parse(readFileSync(resolve(root, 'functions/package.json'), 'utf8'));
   for (const id of requiredJobs) {
@@ -211,7 +236,7 @@ test('independent jobs retain every validation and Rules check without weakening
   assert.equal(shared.jobs.unit_tests.steps.find(step => step.uses === 'actions/checkout@v4').with['fetch-depth'], 0);
   const rules = shared.jobs.rules_tests.steps;
   assert.ok(rules.some(step => step.uses === 'actions/setup-java@v4' && step.with['java-version'] === '21'));
-  assert.ok(rules.some(step => step.run === 'npm install -g firebase-tools'));
+  assert.ok(rules.some(step => step.run === 'npm run firebase:tools'));
   assert.ok(rules.some(step => step.run === 'npm run test:rules'));
   for (const command of ['npm run test:rules', 'npm run lint']) {
     const owners = requiredJobs.filter(id => shared.jobs[id].steps.some(step => step.run === command));
@@ -271,7 +296,7 @@ test('fork tests are read-only, use the PR merge ref and do not inherit deployme
     assert.equal(checkout.with.ref, '${{ inputs.ref || github.sha }}');
     assert.equal(job.permissions, undefined);
     assert.equal(job.environment, undefined);
-    assert.ok(job.steps.every(step => !/google-github-actions\/auth|firebase deploy/.test(step.uses || step.run || '')));
+    assert.ok(job.steps.every(step => !/google-github-actions\/auth|firebase(?: --)? deploy/.test(step.uses || step.run || '')));
   }
 });
 

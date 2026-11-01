@@ -25,7 +25,7 @@ import { LoggerService } from '../../../services/logger.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { of, BehaviorSubject } from 'rxjs';
-import { ActivatedRoute, convertToParamMap, ParamMap } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, ParamMap, Router } from '@angular/router';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
@@ -130,6 +130,40 @@ describe('ServicesSuuntoComponent', () => {
         fixture = TestBed.createComponent(ServicesSuuntoComponent);
         component = fixture.componentInstance;
         fixture.detectChanges();
+    });
+
+    it.each(['denied', 'incomplete'])('settles a %s callback in the main view without claiming a connection', async kind => {
+        const values: Record<string, string> = {serviceName: component.serviceName, state: 'synthetic-state',
+            ...(kind === 'denied' ? {error: 'access_denied'} : {})};
+        vi.spyOn(TestBed.inject(ActivatedRoute).snapshot.queryParamMap, 'get').mockImplementation(key => values[key] ?? null);
+        const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+        const notice = vi.spyOn(TestBed.inject(MatSnackBar), 'open').mockReturnValue(undefined);
+        Object.assign(TestBed.inject(AppUserService), {getServiceToken: vi.fn(() => of([])),
+            getUserMetaForService: vi.fn(() => of(undefined))});
+        fixture.componentRef.setInput('user', {uid: 'auth-owner', settings: {}});
+        component.showConnectionSummary = true;
+        await component.ngOnChanges();
+        await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith(['services'], {
+            queryParams: {serviceName: component.serviceName}, queryParamsHandling: ''}));
+        expect(notice).toHaveBeenCalledWith(expect.stringContaining(kind === 'denied'
+            ? 'authorization was not completed' : 'callback is missing state or code'), undefined, {duration: 10000});
+        expect(TestBed.inject(AppUserService).requestAndSetCurrentUserSuuntoAppAccessToken).not.toHaveBeenCalled();
+        expect(component.forceConnected).toBe(false); expect(component.isConnecting).toBe(false);
+    });
+
+    it.each(['callback', 'connect link'])('keeps a tools-only history dialog from consuming an OAuth %s', async kind => {
+        const values: Record<string, string> = {serviceName: component.serviceName, tool: 'history',
+            ...(kind === 'callback' ? {code: 'synthetic-code', state: 'synthetic-state'} : {connect: '1'})};
+        vi.spyOn(TestBed.inject(ActivatedRoute).snapshot.queryParamMap, 'get').mockImplementation(key => values[key] ?? null);
+        vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+        Object.assign(TestBed.inject(AppUserService), {getServiceToken: vi.fn(() => of([])),
+            getUserMetaForService: vi.fn(() => of({connectionState: 'connected'}))});
+        fixture.componentRef.setInput('user', {uid: 'auth-owner', settings: {}});
+        component.showConnectionSummary = false;
+        const exchange = vi.spyOn(component, 'requestAndSetToken').mockResolvedValue({connected: true, outcome: 'connected'});
+        await component.ngOnChanges();
+        expect(exchange).not.toHaveBeenCalled(); expect(component.isConnecting).toBe(false);
+        expect(component.serviceMeta?.connectionState).toBe('connected');
     });
 
     it('should create', () => {

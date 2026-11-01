@@ -1,4 +1,4 @@
-import { Component, inject, OnDestroy, OnInit, TemplateRef, ViewChild, signal } from '@angular/core';
+import { afterNextRender, type AfterRenderRef, Component, inject, Injector, OnDestroy, OnInit, TemplateRef, ViewChild, signal } from '@angular/core';
 import { UntypedFormGroup } from '@angular/forms';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -351,6 +351,9 @@ export class ServicesComponent implements OnInit, OnDestroy {
   private userSubscription!: Subscription;
   private routeSubscription!: Subscription;
   private serviceToolsDialogRef: MatDialogRef<unknown> | null = null;
+  private readonly injector = inject(Injector);
+  private requestedHistoryProvider: ProviderServiceSectionId | null = null;
+  private historyDetailsRender: AfterRenderRef | null = null;
   private readonly dialog = inject(MatDialog);
   private readonly analyticsService = inject(AppAnalyticsService);
   private readonly paymentService = inject(AppPaymentService);
@@ -398,13 +401,43 @@ export class ServicesComponent implements OnInit, OnDestroy {
         this.automaticSyncSummaryBySection = buildAutomaticSyncSummaryBySection(user);
         this.refreshDataFlowSummary();
         this.refreshProOffer();
+        this.scheduleHistoryDetails();
       }
     });
 
     this.routeSubscription = this.route.queryParamMap.subscribe(params => {
       this.activeSection = this.getSectionFromServiceName(params.get('serviceName'));
+      // Callback/connection intent wins over a display-only history link, even
+      // for incomplete or denied callbacks. Do not consume or rewrite that URL.
+      const authNavigation = ['connect', 'code', 'state', 'error', 'reconnect'].some(key => params.get(key) != null);
+      this.requestedHistoryProvider = !authNavigation && params.get('tool') === 'history'
+        ? this.serviceSectionOptions.find(option => option.serviceName === params.get('serviceName'))?.providerId ?? null : null;
+      if (this.serviceToolsDialogRef && (this.managedService !== this.activeSection || authNavigation)) this.serviceToolsDialogRef.close();
       this.refreshProOffer();
+      this.scheduleHistoryDetails();
     });
+  }
+
+  private scheduleHistoryDetails(): void {
+    this.historyDetailsRender?.destroy();
+    this.historyDetailsRender = null;
+    const provider = this.requestedHistoryProvider, uid = this.user?.uid;
+    if (!provider || !uid || !this.hasProAccess) return;
+    this.historyDetailsRender = afterNextRender(() => {
+      this.historyDetailsRender = null;
+      if (this.requestedHistoryProvider !== provider || this.user?.uid !== uid || !this.hasProAccess
+        || !this.serviceToolsDialog || this.serviceToolsDialogRef) return;
+      this.requestedHistoryProvider = null;
+      this.openServiceTools(provider, {tool: 'history', title: 'History import'});
+      // Consume the display-only request so closing and following the same link works again.
+      void this.router.navigate([], {relativeTo: this.route, queryParams: {tool: null}, queryParamsHandling: 'merge', replaceUrl: true});
+    }, {injector: this.injector});
+  }
+
+  public openHistoryProgress(section: ProviderServiceSectionId): void {
+    if (!this.user?.uid || !this.hasProAccess || this.serviceToolsDialogRef) return;
+    this.hapticsService.selection();
+    this.openServiceTools(section, {tool: 'history', title: 'History import'});
   }
 
   async selectService(section: ServiceSectionId) {
@@ -424,7 +457,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
     await this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { serviceName: serviceName },
-      queryParamsHandling: 'merge',
+      queryParamsHandling: '',
     });
   }
 
@@ -470,6 +503,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
       this.managedTool = 'history';
       this.managedToolTitle = null;
       this.managedActivitySyncDestination = null;
+      this.scheduleHistoryDetails();
     });
   }
 
@@ -528,6 +562,12 @@ export class ServicesComponent implements OnInit, OnDestroy {
   }
 
   processUser(user: AppUserInterface | null, isPro: boolean) {
+    if (this.user?.uid && this.user.uid !== user?.uid) {
+      this.requestedHistoryProvider = null;
+      this.historyDetailsRender?.destroy();
+      this.serviceToolsDialogRef?.close();
+      for (const provider of Object.keys(this.serviceConnectionState) as ProviderServiceSectionId[]) this.serviceConnectionState[provider] = false;
+    }
     if (!user) {
       this.user = user;
       this.hasProAccess = false;
@@ -551,9 +591,12 @@ export class ServicesComponent implements OnInit, OnDestroy {
     this.activeSection = this.getSectionFromServiceName(this.route.snapshot.queryParamMap.get('serviceName'));
     this.refreshProOffer();
     this.isLoading = false;
+    this.scheduleHistoryDetails();
   }
 
   ngOnDestroy(): void {
+    this.requestedHistoryProvider = null;
+    this.historyDetailsRender?.destroy();
     this.offerReadSubscription?.unsubscribe();
     this.serviceToolsDialogRef?.close();
     if (this.userSubscription) {

@@ -27,6 +27,31 @@ Auth and the verified profile must match before reads begin. Raw sign-out/accoun
 unsubscribe old metadata, dismiss owned panels silently and reject old results. Profile-only updates do not restart
 listeners. Dashboard progress is omitted when viewing another account. Read failures are unavailable, not zero; an
 explicit **Refresh status** reattaches only these safe reads. Header, panel and Dashboard consume the same live view.
+`HistoryImportSummaryComponent` renders the same progress rows, counts, messages, range labels and request/delivery
+qualification inside provider management for Garmin, Suunto, COROS and Wahoo. **View details** links to the selected
+provider with `tool=history`; Connections opens its existing history dialog after the verified owner and view are ready,
+then consumes that display-only parameter so the same link can be followed again. Invalid providers and non-Pro
+views do not open tools. Account/provider changes and teardown cancel pending opens or close stale dialogs. Connections
+keeps only its compact status line and **View import progress** action; the modal displays history inline without a
+nested accordion. The main provider instance owns connection badges; the dialog copy cannot clear them during hydration.
+Reconnect review uses the existing `reconnect=1` navigation to reveal main connection controls without starting OAuth.
+Only the main provider connection view handles OAuth callbacks; its tools-dialog copy keeps observing metadata but
+cannot exchange the same callback again. Callback, connection and reconnect URL parameters take precedence over
+`tool=history`, including denied, incomplete and empty callback fields. Pending history opens are cancelled and existing
+dialogs close without consuming or rewriting the auth URL. The main view validates callback returns, displays denied
+or incomplete failures without a token exchange, and uses its existing owner-guarded completion/clean-URL path.
+The callback lock remains held through clean-URL navigation so live metadata cannot exchange the same code again
+while that navigation is pending; late cleanup cannot unlock a different account's connection action.
+Provider tab switches use their clean provider URL, without carrying another provider's callback, reconnect or history
+flags. Callback cleanup only rewrites its original callback parameters; later navigation to another provider, history
+details or a different callback remains intact while the authorized connection result can still update its own view.
+Existing Help's explicit connection/reconnect and passive progress wording remains accurate. Monitoring is unchanged:
+no provider endpoint, scope, credential, OAuth backend validation, queue or telemetry contract changes.
+The date, stored-history and retry controls stay in management. Stored calendar dates render as UTC dates. A form
+omits its duplicate banner only when the surrounding summary displays the exact same tracked run; a newer optimistic
+acceptance stays visible until metadata catches up. After completion, the form still shows the next permitted import
+date during cooldown, independently of the shared progress summary. Progress updates do not restart stored-history reads. This is a
+frontend release: no migration, provider call, replay, new backend endpoint, queue or monitoring change is required.
 During that read, the existing cards stay visible and **Checking status** disables repeat refreshes. A provider's fresh
 snapshot updates immediately even if another provider is still loading. Retained results never cross owners or sessions.
 

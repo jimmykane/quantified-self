@@ -2,8 +2,9 @@
 <button class="history-import-header-action" mat-icon-button type="button" [attr.aria-label]="ariaLabel()" [attr.aria-expanded]="panelOpen()" [matTooltip]="view().label + ' · ' + view().items.length" matTooltipTouchGestures="off" aria-haspopup="dialog" (click)="open()">
   <span class="history-import-header-content">
     <mat-icon class="qs-app-badge qs-app-badge--small" [matBadge]="view().items.length" [matBadgeHidden]="view().items.length < 2" aria-hidden="true">{{ view().busy ? 'history' : icon() }}</mat-icon>
-    @if (view().busy) { <mat-progress-spinner mode="indeterminate" [diameter]="32" [strokeWidth]="2" aria-hidden="true" /> }
     <span class="cdk-visually-hidden">{{ view().label + ' ' }}· {{ view().items.length }}</span>
   </span>
 </button>
+<!-- Icon buttons size descendant SVGs as icons, which distorts the spinner's rotating circles. -->
+@if (view().busy) { <mat-progress-spinner mode="indeterminate" [diameter]="32" [strokeWidth]="2" aria-hidden="true" /> }
 }

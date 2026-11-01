@@ -5,8 +5,10 @@ import {
 } from './public-seo-pages.paths';
 import type { PublicSeoPageKey } from './public-seo-pages.paths';
 import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
+import { STRAVA_IMPORT_GUIDE_PAGES } from './strava-import-guides.content';
 import { HEALTH_FEATURE_CONTENT } from './health-feature.content';
 import { TRAINING_PLANS_PAGE_SECTIONS, TRAINING_PLANS_SEO_CONTENT } from './training-plans-page.content';
+import { WORKOUT_GENERATION_SECTION } from './workout-generation.content';
 import { COROS_SETUP_QUERY_PARAMS, WAHOO_SETUP_QUERY_PARAMS } from '../../helpers/service-setup-redirect.helper';
 
 export {
@@ -59,6 +61,7 @@ export interface PublicSeoPage {
   closingTitle: string;
   closingCopy: string;
   closingActions: readonly PublicSeoAction[];
+  sources?: readonly { label: string; url: string }[];
   howToSteps?: readonly string[];
   featureList?: readonly string[];
   socialImage?: string;
@@ -99,6 +102,7 @@ function routeAction(
 }
 
 export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
+  ...STRAVA_IMPORT_GUIDE_PAGES,
   health: {
     key: 'health', path: PUBLIC_FEATURE_PATHS.health, eyebrow: 'Health · Beta',
     title: 'Sleep, HRV and Health Trends Across Your Devices',
@@ -140,10 +144,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.hub,
     eyebrow: 'Features',
     title: 'Activity, Training & Health Features',
-    description: 'Bring Garmin, Suunto, COROS, Wahoo, and files together for activity analysis, workout planning, health tracking, maps, comparisons, and AI answers.',
+    description: 'Garmin, Suunto, COROS, Wahoo and files together for workout analysis, plans, AI workout generation, daily Pro suggestions, health, maps and AI answers.',
     h1: 'Features for your activities, training, and health',
     intro: 'Use Quantified Self to centralize provider activities, uploaded files, and saved routes, review workout history in an activity calendar, analyze training context, compare recordings, benchmark devices, and ask questions through the built-in Assistant or an MCP client you explicitly authorize.',
-    chips: ['Activity calendar', 'Training analysis', 'Training plans', 'Supported activity types', 'Assistant', 'MCP server', 'Workout comparison', 'Route files', 'Benchmarks'],
+    chips: ['Activity calendar', 'Training analysis', 'Training plans', 'AI workouts', 'Supported activity types', 'Assistant', 'MCP server', 'Workout comparison', 'Route files', 'Benchmarks'],
     actions: [
       routeAction('Training Analysis', '/features/training-analysis', 'flat', 'arrow_forward'),
       routeAction('Training Plans', '/features/training-plans'),
@@ -177,7 +181,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'edit_calendar',
             title: 'Training plans',
-            copy: 'Create plans with named date phases or standalone structured workouts for running, cycling, swimming, and more. See planned work alongside completed activity history.',
+            copy: 'Build or generate structured workouts and organize plans with named phases. Pro members can opt in to an included daily workout or rest suggestion in Today.',
           },
           {
             icon: 'auto_awesome',
@@ -200,6 +204,9 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             copy: 'Keep provider activities, uploaded files, saved routes, maps, exports, training insights, and cross-service sync in one account.',
           },
         ],
+      },
+      {
+        ...WORKOUT_GENERATION_SECTION,
       },
       {
         eyebrow: 'Files and Devices',
@@ -482,7 +489,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     h1: TRAINING_PLANS_SEO_CONTENT.h1,
     intro: TRAINING_PLANS_SEO_CONTENT.intro,
     accessNote: TRAINING_PLANS_SEO_CONTENT.accessNote,
-    chips: ['Plans included', 'Standalone workouts', 'Named phases', 'MCP planning', 'Provider delivery for Pro', 'Plan calendar', 'Completed totals stay separate'],
+    chips: ['Plans included', 'Standalone workouts', 'Generate with AI', 'Daily suggestions with Pro', 'Named phases', 'MCP planning', 'Provider delivery for Pro'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Training Plans Help', '/help', 'stroked', undefined, 'training-plans'),
@@ -570,6 +577,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       routeAction('Activity Calendar', '/features/activity-calendar'),
     ],
     sections: [
+      WORKOUT_GENERATION_SECTION,
       {
         eyebrow: 'Your Workspace',
         title: 'Arrange the evidence around your training questions',
@@ -823,6 +831,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       routeAction('Assistant Help', '/help', 'stroked', undefined, 'ai-insights'),
     ],
     sections: [
+      WORKOUT_GENERATION_SECTION,
       {
         eyebrow: 'Conversational analysis',
         title: 'Ask naturally, then follow up',
@@ -1130,9 +1139,9 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_GUIDE_PATHS.hub,
     eyebrow: 'Guides',
     title: 'Training Data Sync Guides',
-    description: 'Step-by-step guides to import activities to Suunto or Wahoo, Garmin to Suunto activity sync, Garmin to Wahoo activity sync, COROS to Suunto activity sync, Wahoo to Suunto activity sync, sending Suunto routes to Garmin, and centralizing workout data in one dashboard.',
+    description: 'Export Strava history to Suunto, Garmin, Wahoo or COROS. Follow activity-import, Garmin to Suunto activity sync, route-transfer and workout-archive guides.',
     h1: 'Training data sync guides',
-    intro: 'Choose the guide that matches the workflow you need: import activities to Suunto or Wahoo, sync Garmin activities to Wahoo, sync Garmin, COROS, or Wahoo activities to Suunto, send Suunto routes to Garmin courses, or build a centralized multi-provider workout archive.',
+    intro: 'Move your Strava history using exported activity files, or choose the guide that matches the workflow you need: import activities to Suunto or Wahoo, sync Garmin activities to Wahoo, sync Garmin, COROS, or Wahoo activities to Suunto, send Suunto routes to Garmin courses, or build a centralized multi-provider workout archive.',
     chips: ['Import to Suunto', 'Import to Wahoo', 'Garmin to Wahoo', 'Garmin to Suunto', 'COROS to Suunto', 'Wahoo to Suunto', 'Past activity sync'],
     actions: [
       routeAction('Import to Suunto', '/guides/import-activities-to-suunto', 'flat', 'arrow_forward'),
@@ -1143,6 +1152,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       routeAction('Wahoo to Suunto', '/guides/sync-wahoo-to-suunto'),
       routeAction('Suunto Routes to Garmin', '/guides/sync-suunto-routes-to-garmin-courses'),
       routeAction('Centralize Data', '/guides/centralize-garmin-suunto-coros-workout-data'),
+      routeAction('Strava to Suunto', '/guides/strava-to-suunto'),
+      routeAction('Strava to Garmin', '/guides/strava-to-garmin'),
+      routeAction('Strava to Wahoo', '/guides/strava-to-wahoo'),
+      routeAction('Strava to COROS', '/guides/strava-to-coros'),
     ],
     sections: [
       {
@@ -1185,6 +1198,15 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             title: 'You control automatic sync',
             copy: 'Automatic sync is always opt-in. You can also send past activities or saved routes without turning on automatic sync.',
           },
+        ],
+      },
+      {
+        eyebrow: 'Strava history',
+        title: 'Move activities from a Strava export',
+        copy: 'Download your Strava account archive, extract the activity files, and choose your destination. There is no Strava connection or automatic Strava sync in Quantified Self.',
+        items: [
+          { icon: 'upload_file', title: 'Strava to Suunto, Wahoo or COROS', copy: 'Connect the destination with Pro, review exported FIT recordings in Send activities, then confirm Send. Or upload the files to your QS archive first and send saved activities later.' },
+          { icon: 'file_upload', title: 'Strava to Garmin Connect', copy: 'Import supported activity files on Garmin Connect’s website. Quantified Self does not send completed activities to Garmin; its Garmin course tools are for routes.' },
         ],
       },
       {
@@ -2117,6 +2139,10 @@ export const PUBLIC_SEO_ROUTE_DATA: Record<PublicSeoPageKey, PublicSeoRouteData>
   fitGpxTcxFileAnalyzer: buildRouteData(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer),
   routeFiles: buildRouteData(PUBLIC_SEO_PAGES.routeFiles),
   guidesHub: buildRouteData(PUBLIC_SEO_PAGES.guidesHub),
+  importStravaToSuunto: buildRouteData(PUBLIC_SEO_PAGES.importStravaToSuunto),
+  importStravaToGarmin: buildRouteData(PUBLIC_SEO_PAGES.importStravaToGarmin),
+  importStravaToWahoo: buildRouteData(PUBLIC_SEO_PAGES.importStravaToWahoo),
+  importStravaToCoros: buildRouteData(PUBLIC_SEO_PAGES.importStravaToCoros),
   syncGarminToSuunto: buildRouteData(PUBLIC_SEO_PAGES.syncGarminToSuunto),
   syncGarminToWahoo: buildRouteData(PUBLIC_SEO_PAGES.syncGarminToWahoo),
   syncCorosToSuunto: buildRouteData(PUBLIC_SEO_PAGES.syncCorosToSuunto),

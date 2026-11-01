@@ -484,6 +484,30 @@ const topLevelRoutes: Routes = [
     pathMatch: 'full'
   },
   {
+    path: PUBLIC_GUIDE_PATHS.importStravaToSuunto,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    resolve: publicSeoRouteData('importStravaToSuunto'),
+    data: { preload: true, animation: 'PublicSeo' },
+  },
+  {
+    path: PUBLIC_GUIDE_PATHS.importStravaToGarmin,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    resolve: publicSeoRouteData('importStravaToGarmin'),
+    data: { preload: true, animation: 'PublicSeo' },
+  },
+  {
+    path: PUBLIC_GUIDE_PATHS.importStravaToWahoo,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    resolve: publicSeoRouteData('importStravaToWahoo'),
+    data: { preload: true, animation: 'PublicSeo' },
+  },
+  {
+    path: PUBLIC_GUIDE_PATHS.importStravaToCoros,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    resolve: publicSeoRouteData('importStravaToCoros'),
+    data: { preload: true, animation: 'PublicSeo' },
+  },
+  {
     path: PUBLIC_GUIDE_PATHS.syncGarminToSuunto,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
     resolve: publicSeoRouteData('syncGarminToSuunto'),

@@ -70,7 +70,7 @@ import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../wahoo/constants';
 import { isWahooReconnectRequiredError } from '../wahoo/refresh-recovery';
 import { WAHOO_RATE_LIMIT_MAX_RESET_SECONDS } from '../wahoo/rate-limit';
 import { getCOROSActivityUploadStatus, uploadActivityFileToCOROS } from '../coros/activities';
-import { prepareCOROSActivityFITUpload } from '../coros/activity-fit';
+import { prepareCOROSActivityFITUpload, readCOROSActivityFITCategory } from '../coros/activity-fit';
 import { getActiveCOROSTokenSnapshot } from '../coros/account';
 import { hasProAccess } from '../utils';
 import { getActivitySyncRouteAllowlistConfigError, isActivitySyncRouteUserAllowlisted } from './allowlist';
@@ -591,7 +591,7 @@ async function uploadToDestination(
                     queueItem.userID,
                     queueItem.destinationUploadID,
                     queueItem.destinationProviderUserID,
-                    { queueItemRef: queueItem.ref },
+                    { queueItemRef: queueItem.ref, ...(queueItem.corosSourceFIT ? { sourceFIT: queueItem.corosSourceFIT } : {}) },
                 );
             }
             if (!fileBuffer) {
@@ -890,6 +890,7 @@ async function ensureOutboundFingerprintBeforeProviderUpload(
     queueItem: ActivitySyncQueueItemInterface,
     fileBuffer: Buffer | undefined,
     fileChanged = false,
+    corosSourceFIT?: ActivitySyncQueueItemInterface['corosSourceFIT'],
 ): Promise<boolean> {
     if (queueItem.outboundFingerprintID && !fileChanged) {
         return true;
@@ -910,6 +911,7 @@ async function ensureOutboundFingerprintBeforeProviderUpload(
         phase: 'before_activity_sync_outbound_fingerprint_marker',
         updateData: {
             outboundFingerprintID: fingerprints.exactFingerprintId,
+            ...(corosSourceFIT ? { corosSourceFIT } : {}),
         },
         actionDescription: 'outbound provider-echo fingerprint marker',
     });
@@ -918,6 +920,7 @@ async function ensureOutboundFingerprintBeforeProviderUpload(
         return false;
     }
     queueItem.outboundFingerprintID = fingerprints.exactFingerprintId;
+    if (corosSourceFIT) queueItem.corosSourceFIT = corosSourceFIT;
     return true;
 }
 
@@ -1867,7 +1870,9 @@ export async function processActivitySyncQueueItem(
             return markActivitySyncQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
         }
 
-        if (!(await ensureOutboundFingerprintBeforeProviderUpload(queueItem, fileBuffer, fileBuffer !== originalFileBuffer))) {
+        const corosSourceFIT = originalFileBuffer && queueItem.destinationServiceName === ServiceNames.COROSAPI
+            && !hasPersistedDestinationUpload(queueItem) ? readCOROSActivityFITCategory(originalFileBuffer) : undefined;
+        if (!(await ensureOutboundFingerprintBeforeProviderUpload(queueItem, fileBuffer, fileBuffer !== originalFileBuffer, corosSourceFIT))) {
             return QueueResult.AcknowledgedStale;
         }
 

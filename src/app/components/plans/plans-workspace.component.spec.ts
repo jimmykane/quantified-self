@@ -1,4 +1,4 @@
-import { DayWorkoutService } from '../../services/day-workout.service';
+import { DayWorkoutService, type DayWorkoutEditorDraft } from '../../services/day-workout.service';
 import { defaultDayWorkoutControls } from '@shared/day-workout';
 import { createManualWorkoutEditorTarget } from '../../helpers/planned-workout-target-editor.helper';
 import { WorkoutTargetsEditorComponent } from './workout-targets-editor.component';
@@ -130,7 +130,8 @@ describe('PlansWorkspaceComponent', () => {
         { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
         { provide: EChartsLoaderService, useValue: { init: vi.fn().mockResolvedValue(null), dispose: vi.fn() } },
         provideRouter([]),
-        { provide: DayWorkoutService, useValue: { takeEditorDraft: vi.fn().mockReturnValue(null), isOwner: () => true } },
+        { provide: DayWorkoutService, useValue: { takeEditorDraft: vi.fn().mockReturnValue(null), isOwner: () => true,
+          canGenerate: vi.fn(() => true), open: vi.fn().mockResolvedValue(undefined) } },
         { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
         { provide: ActivatedRoute, useValue: route },
         { provide: AppUserService, useValue: { user: userSignal, user$: userSubject } },
@@ -171,6 +172,103 @@ describe('PlansWorkspaceComponent', () => {
   });
 
   afterEach(() => vi.useRealTimers());
+
+  it('opens AI generation from New Workout and replaces the reviewed draft without same-route navigation or a save', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    component.updateEditorField('sport', ActivityTypes.Cycling); fixture.detectChanges();
+    const generator = TestBed.inject(DayWorkoutService), router = TestBed.inject(Router);
+    const controls = defaultDayWorkoutControls('2026-09-09', Intl.DateTimeFormat().resolvedOptions().timeZone, ActivityTypes.Cycling);
+    const draft: DayWorkoutEditorDraft = { ownerUid: user.uid, controls,
+      draft: { title: 'Generated cycling', structure: schedule.workouts[0].structure },
+      saveRequest: { mutationId: 'ai-save', expectedRevisions: [{ scope: 'state', id: 'current', revision: 4 }],
+        operation: { kind: 'create-workout', workoutId: 'ai-workout', planId: null, localDate: controls.localDate,
+          title: 'Generated cycling', structure: schedule.workouts[0].structure, confirmPlanRangeExtension: false } } };
+    vi.mocked(generator.open).mockImplementationOnce(async (_uid, _date, _sport, options) => { options?.onEditorDraft?.(draft); });
+    vi.mocked(router.navigate).mockClear(); haptics.selection.mockClear();
+    const button = [...fixture.nativeElement.querySelectorAll('button')].find((button: HTMLButtonElement) => button.textContent?.includes('Generate with AI')) as HTMLButtonElement;
+    expect(button).toBeTruthy(); button.click(); await fixture.whenStable(); fixture.detectChanges();
+    expect(generator.open).toHaveBeenCalledWith(user.uid, controls.localDate, ActivityTypes.Cycling, expect.objectContaining({
+      initialControls: expect.objectContaining({ destinationPlanId: null, sport: ActivityTypes.Cycling, timelineContext: true }),
+    }));
+    expect(component.editor()?.value.title).toBe('Generated cycling');
+    expect(router.navigate).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled(); expect(libraryMutate).not.toHaveBeenCalled();
+    expect(haptics.selection).toHaveBeenCalledOnce(); expect(component.generationOpen()).toBe(false);
+  });
+  it.each(['account', 'route'] as const)('discards a late AI handoff after the %s changes', async change => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    let finish!: () => void, options!: Parameters<DayWorkoutService['open']>[3];
+    const generator = TestBed.inject(DayWorkoutService);
+    vi.mocked(generator.open).mockImplementationOnce(async (_uid, _date, _sport, value) => {
+      options = value; await new Promise<void>(resolve => { finish = resolve; });
+    });
+    const pending = component.generateWorkout();
+    expect(options?.canExecute?.()).toBe(true);
+    if (change === 'account') { userSignal.set(null); userSubject.next(null); }
+    else setRouteState({ scope: 'standalone' }, true);
+    fixture.detectChanges();
+    expect(options?.canExecute?.()).toBe(false);
+    options?.onEditorDraft?.({ ownerUid: user.uid, controls: defaultDayWorkoutControls('2026-09-09', 'Europe/Helsinki'),
+      draft: { title: 'Late draft', structure: schedule.workouts[0].structure }, saveRequest: {} as DayWorkoutEditorDraft['saveRequest'] });
+    finish(); await pending; fixture.detectChanges();
+    expect(component.editor()?.value.title).not.toBe('Late draft');
+    expect(mutate).not.toHaveBeenCalled(); expect(component.generationOpen()).toBe(false);
+  });
+  it('reuses the selected plan and date for generation, and hides it from library and existing-workout editors', async () => {
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    const generator = TestBed.inject(DayWorkoutService);
+    await component.generateWorkout();
+    expect(generator.open).toHaveBeenCalledWith(user.uid, component.generationDate(), ActivityTypes.Running,
+      expect.objectContaining({ initialControls: expect.objectContaining({ destinationPlanId: component.selectedPlanId() }) }));
+    setRouteState({ mode: 'library-create' }, true); fixture.detectChanges();
+    expect(component.canGenerateWorkout()).toBe(false);
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' }, true); fixture.detectChanges();
+    expect(component.canGenerateWorkout()).toBe(false);
+  });
+  it('keeps an unsaved form on cancellation and prevents duplicate opens or generation for an unsupported date', async () => {
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-09' });
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    component.updateEditorField('title', 'My unsaved workout');
+    const original = component.editor(), generator = TestBed.inject(DayWorkoutService);
+    let finish!: () => void;
+    vi.mocked(generator.open).mockImplementationOnce(async () => { await new Promise<void>(resolve => { finish = resolve; }); });
+    const pending = component.generateWorkout(); await component.generateWorkout();
+    fixture.detectChanges();
+    const openingButton = [...fixture.nativeElement.querySelectorAll('button')].find((button: HTMLButtonElement) => button.textContent?.includes('Opening…')) as HTMLButtonElement;
+    expect(openingButton?.disabled).toBe(true);
+    expect(openingButton.querySelector('.button-content mat-spinner')).toBeTruthy();
+    expect(generator.open).toHaveBeenCalledOnce();
+    finish(); await pending;
+    fixture.detectChanges(); expect(fixture.nativeElement.textContent).not.toContain('Opening…');
+    expect(component.editor()).toBe(original); expect(component.editor()?.value.title).toBe('My unsaved workout');
+    vi.mocked(generator.canGenerate).mockReturnValue(false);
+    await component.generateWorkout(); expect(generator.open).toHaveBeenCalledOnce();
+    expect(mutate).not.toHaveBeenCalled(); expect(haptics.success).not.toHaveBeenCalled();
+  });
+  it('uses the click-time local date for standalone generation before the day clock refreshes', async () => {
+    setRouteState({ scope: 'standalone' });
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    vi.setSystemTime(new Date(2026, 8, 10, 0, 1));
+    await component.generateWorkout();
+    expect(TestBed.inject(DayWorkoutService).open).toHaveBeenCalledWith(user.uid, '2026-09-10', expect.anything(), expect.anything());
+  });
+  it.each([
+    { date: '2026-09-09', before: true, after: false },
+    { date: '2027-09-10', before: false, after: true },
+  ])('refreshes explicit-date generation eligibility across midnight ($date)', async ({ date, before, after }) => {
+    vi.mocked(TestBed.inject(DayWorkoutService).canGenerate).mockImplementation(DayWorkoutService.prototype.canGenerate);
+    setRouteState({ mode: 'create', scope: 'standalone', date });
+    const fixture = await renderPlans(true), component = fixture.componentInstance;
+    expect(component.canGenerateWorkout()).toBe(before);
+    vi.setSystemTime(new Date(2026, 8, 10, 0, 1)); component.refreshToday(); fixture.detectChanges();
+    expect(component.canGenerateWorkout()).toBe(after);
+    const labels = [...fixture.nativeElement.querySelectorAll('button')].map((button: HTMLButtonElement) => button.textContent);
+    expect(labels.some(label => label?.includes('Generate with AI'))).toBe(after);
+    expect(TestBed.inject(DayWorkoutService).open).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
+  });
 
   it.each(['plans', 'standalone', 'library'] as const)('shows live unsaved timed totals and repeat changes in the %s editor', async scope => {
     setRouteState({ mode: scope === 'library' ? 'library-create' : 'create', scope: scope === 'standalone' ? 'standalone' : 'plans', date: '2026-09-09' });

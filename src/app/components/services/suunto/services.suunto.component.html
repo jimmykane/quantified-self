@@ -117,9 +117,14 @@
 
     </div>
   </app-service-connection-status>
+
+  }
+
+  @if (showAdvancedTools && activeProviderTool === 'history') {
   <app-connection-history-status [service]="serviceName" [status]="serviceMeta?.connectionHistoryImport || null"
+    [inline]="!showConnectionSummary" [connectionState]="serviceMeta?.connectionState ?? null"
     [disabled]="!hasProAccess || isConnecting || isDisconnecting"
-    (reconnect)="reconnectRequested = true"></app-connection-history-status>
+    (reconnect)="reviewHistoryReconnect()"></app-connection-history-status>
   }
 
   @if (showAdvancedTools) {
@@ -197,7 +202,7 @@
         <span>History import is a Pro feature.</span>
       </div>
       } @else if (!isReconnectRequired && isServiceConnected) {
-      <app-history-import-form [serviceName]="serviceName" [userMetaForService]="serviceMeta"
+      <app-history-import-form [showTrackedHistoryStatus]="showConnectionSummary" [serviceName]="serviceName" [userMetaForService]="serviceMeta"
         [providerConnected]="true"
         [isLoadingParent]="isLoading" (importInitiated)="onHistoryImportInitiated()"></app-history-import-form>
       } @else {
