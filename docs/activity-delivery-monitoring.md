@@ -102,6 +102,46 @@ change does not authorize historical replay, new telemetry or production monitor
 
 ## Bounded read-only observation
 
+### COROS sport discovery warning — 1 November 2026
+
+`[COROSActivityUpload] Processing failed.` is a best-effort WARNING emitted only
+after COROS returns its confirmed processing status `-1` for the requested upload.
+Its entire diagnostic payload is `telemetryVersion: 1`, `fit_sport` and
+`fit_sub_sport`: original FIT enum codes 0–254 or `unknown`. No user/workout/upload
+identities, names, filenames, samples, URLs, credentials or raw errors are added.
+This is an observed failed attempt, not proof that the sport is unsupported or that
+the job exhausted its retry budget. Pending, success, malformed status, wrong-upload
+responses and HTTP/auth/quota failures do not emit this observation.
+
+Fresh queued sends retain the two original codes in `corosSourceFIT` alongside the
+existing guarded outbound fingerprint marker, before conversion/provider work. No
+extra database read/write, original-file download, scheduler or retry is introduced.
+Accepted uploads keep status-only reconciliation. Legacy cached receipts, unreadable
+or multi-session files and the separate legacy direct-status endpoint can report
+`unknown`; diagnostics never reopen those operations or fetch a file to fill the gap.
+Logging failure cannot change the provider result. Existing queue/account cleanup
+and retention cover these optional private fields; event/activity data is unchanged.
+
+The new `coros_sport_failures` counter and **Review COROS FIT category** WARNING
+policy use the existing Alerts email channel. A log-match condition extracts the
+original codes into the email and groups notifications by their pair, with a
+24-hour notification limit per pair and one-day autoclose. It sends only opening
+notifications. The first confirmed failure qualifies without waiting for a metric
+threshold. The dashboard counter groups failed attempts, including retries—not
+distinct workouts. A warning can remain open after the upload recovers.
+Google's log-metric labels are not supported in documentation templates, so the
+email uses documented `log.extracted_label` variables, not `metric.label` guesses.
+The notification includes both codes and investigation/count-dashboard links.
+Review a representative original and verify a mapping before adding one; no blanket
+Generic fallback is enabled. Existing delivery/retry/DLQ policies remain unchanged.
+
+Coverage is **extended** by one metric, one policy and one dashboard chart. Unit and
+offline provisioning tests cover field bounds/privacy, asynchronous original-code
+retention, unchanged upload/retry behavior, exclusions, email grouping and ownership.
+No user-facing Help, frontend, MCP or Training contract change is needed for this
+operator diagnostic. Runtime and Monitoring activation require their own readback;
+offline tests alone do not prove email delivery or a positive metric series.
+
 Historical-send preview performance has **unchanged** delivery coverage. Its existing callable batches bounded exact
 Firestore reads and emits `[HistoricalActivitySend] Preview page checked.` with only fixed destination, source count,
 checked/failure counts, continuation presence and elapsed milliseconds. These diagnostics describe read-only eligibility
@@ -290,7 +330,7 @@ Preview is offline and needs no credentials or network:
 node tools/activity-delivery-monitoring/cli.mjs --project=quantified-self-io
 ```
 
-After separate approval to apply the fourteen metrics, one dashboard and nine
+After separate approval to apply the fifteen metrics, one dashboard and ten
 policies using the existing enabled email channel, supply its exact resource name:
 
 ```sh
@@ -303,7 +343,7 @@ dashboard etags, updates serially, and never deletes resources or creates email
 channels. It preserves the Training, import and Health/Sleep bundles. Reapplying
 does not duplicate this bundle. Private API errors/channel labels are not printed.
 
-After activation, read back exactly one owned dashboard, fourteen log metrics and nine
+After activation, read back exactly one owned dashboard, fifteen log metrics and ten
 enabled policies, their conditions and the unchanged email channel. Check policy
 validity and each dashboard query through the API. After the next normal dispatcher
 run, verify a post-metric-creation heartbeat **time series** for Suunto, Wahoo and COROS;

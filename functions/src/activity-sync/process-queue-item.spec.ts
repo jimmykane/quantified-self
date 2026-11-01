@@ -1898,12 +1898,15 @@ describe('activity-sync/process-queue-item', () => {
       expect(queueItem.outboundFingerprintID).toBe('exact-v1-new');
       expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
         phase: 'before_activity_sync_outbound_fingerprint_marker',
-        updateData: { outboundFingerprintID: 'exact-v1-new' },
+        updateData: { outboundFingerprintID: 'exact-v1-new', corosSourceFIT: { sport: emptyFields ? null : sport, subSport: sport === 4 ? 14 : null } },
       }));
       expect(mockRecordActivitySyncOutboundFingerprint.mock.invocationCallOrder[0])
         .toBeLessThan(mockUploadActivityFileToCOROS.mock.invocationCallOrder[0]);
       expect(input).toEqual(original);
       expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Processed);
+      expect(mockGetCOROSActivityUploadStatus).toHaveBeenLastCalledWith('user-1', '9223372036854775806', 'coros-user-1', {
+        queueItemRef: queueItem.ref, sourceFIT: { sport: emptyFields ? null : sport, subSport: sport === 4 ? 14 : null },
+      });
       expect(mockDownload).toHaveBeenCalledTimes(1);
       expect(mockUploadActivityFileToCOROS).toHaveBeenCalledTimes(1);
       expect(mockRecordActivitySyncOutboundFingerprint).toHaveBeenCalledTimes(1);

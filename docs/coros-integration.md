@@ -355,6 +355,14 @@ replay require separate explicit approval; this implementation does not deploy,
 replay or complete old queue records. Roll back by reverting the adapter wiring,
 preserving all accepted operation IDs and their polling state.
 
+Confirmed COROS processing failures also emit the privacy-safe original-sport
+diagnostic and grouped email warning described in
+[COROS sport discovery](activity-delivery-monitoring.md#coros-sport-discovery-warning--1-november-2026).
+Fresh queued sends preserve only original sport/sub_sport codes with their existing
+guarded fingerprint marker; accepted legacy operations remain status-only and can
+report unknown codes. This adds no mapping, automatic Generic conversion, provider
+request or retry policy. A failure is not proof that a sport is unsupported.
+
 ## Echo suppression
 
 Provider-to-provider activity delivery can otherwise return through a destination's import feed and start a loop. The shared outbound fingerprint mechanism runs for every activity destination, not only COROS:

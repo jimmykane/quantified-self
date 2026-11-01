@@ -2,6 +2,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import * as logger from 'firebase-functions/logger';
 import { PRO_REQUIRED_MESSAGE } from '../utils';
 import { COROS_API_REQUEST_TIMEOUT_MS } from './constants';
 import { createCOROSActivityFITFixture } from '../../test-utils/coros-activity-fit';
@@ -402,6 +403,7 @@ describe('COROS asynchronous activity uploads', () => {
   });
 
   it('classifies confirmed processing failure for a bounded restart with original diagnostics', async () => {
+    vi.mocked(logger.warn).mockClear();
     mocks.get.mockResolvedValueOnce(JSON.stringify({
       result: '0000',
       data: [{ uploadId: '42', status: -1 }],
@@ -411,6 +413,7 @@ describe('COROS asynchronous activity uploads', () => {
       'test-user-id',
       '42',
       'open-id-1',
+      { sourceFIT: { sport: 4, subSport: 14 } },
     )).rejects.toMatchObject({
       code: 'provider-processing-failed',
       disposition: 'retryable',
@@ -420,6 +423,17 @@ describe('COROS asynchronous activity uploads', () => {
       providerUserId: 'open-id-1',
       dlqContext: 'COROS_ACTIVITY_UPLOAD_FAILED',
     });
+    expect(mocks.post).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledExactlyOnceWith('[COROSActivityUpload] Processing failed.', {
+      telemetryVersion: 1, fit_sport: '4', fit_sub_sport: '14',
+    });
+  });
+
+  it.each([1, 2, 99, 'PRIVATE', [-1]])('does not emit a sport-failure alert for non-failed or malformed status %s', async status => {
+    vi.mocked(logger.warn).mockClear();
+    mocks.get.mockResolvedValueOnce(JSON.stringify({ result: '0000', data: [{ uploadId: '42', status }] }));
+    try { await getCOROSActivityUploadStatus('test-user-id', '42', 'open-id-1'); } catch { /* Existing status policy is unchanged. */ }
+    expect(logger.warn).not.toHaveBeenCalledWith('[COROSActivityUpload] Processing failed.', expect.anything());
     expect(mocks.post).not.toHaveBeenCalled();
   });
 

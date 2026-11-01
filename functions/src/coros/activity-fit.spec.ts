@@ -5,7 +5,7 @@ import { ActivityTypes, EventImporterFIT } from '@sports-alliance/sports-lib';
 import * as logger from 'firebase-functions/logger';
 import { createParsingOptions } from '../../../shared/parsing-options';
 import { buildActivitySyncOutboundFingerprintIds } from '../activity-sync/outbound-fingerprint';
-import { createCOROSSailingFIT, createCOROSSnorkelingFIT, prepareCOROSActivityFITUpload } from './activity-fit';
+import { createCOROSSailingFIT, createCOROSSnorkelingFIT, prepareCOROSActivityFITUpload, readCOROSActivityFITCategory, logCOROSActivityProcessingFailure } from './activity-fit';
 import { createCOROSActivityFITFixture as fixture } from '../../test-utils/coros-activity-fit';
 import { sessionlessFixture } from '../../test-utils/fit-activity-session';
 
@@ -14,6 +14,34 @@ function repairCRC(file: Buffer): Buffer {
   file.writeUInt16LE(FitEncoder.calculateCRC(file.subarray(0, -2)), file.length - 2);
   return file;
 }
+
+describe('COROS original sport diagnostics', () => {
+  it('reads original sport codes without converting or exposing any other FIT fields', () => {
+    const input = fixture({ sport: 4, withSubSport: true, subSport: 14 }), original = Buffer.from(input);
+    expect(readCOROSActivityFITCategory(input)).toEqual({ sport: 4, subSport: 14 });
+    expect(readCOROSActivityFITCategory(fixture({ sport: 18 }))).toEqual({ sport: 18, subSport: null });
+    expect(input).toEqual(original);
+  });
+  it('reports unknown for malformed or multi-session classifications', () => {
+    for (const input of [Buffer.from('PRIVATE'), fixture({ sessionCount: 2 }), fixture({ malformedSport: true })]) {
+      expect(readCOROSActivityFITCategory(input)).toEqual({ sport: null, subSport: null });
+    }
+  });
+  it('logs only bounded sport codes, with unknown for missing or untrusted values', () => {
+    vi.mocked(logger.warn).mockClear();
+    logCOROSActivityProcessingFailure({ sport: 4, subSport: 14 });
+    logCOROSActivityProcessingFailure({ sport: 'PRIVATE', subSport: 300, userID: 'PRIVATE' } as never);
+    logCOROSActivityProcessingFailure();
+    expect(vi.mocked(logger.warn).mock.calls).toEqual([
+      ['[COROSActivityUpload] Processing failed.', { telemetryVersion: 1, fit_sport: '4', fit_sub_sport: '14' }],
+      ...Array.from({ length: 2 }, () => ['[COROSActivityUpload] Processing failed.', { telemetryVersion: 1, fit_sport: 'unknown', fit_sub_sport: 'unknown' }]),
+    ]);
+  });
+  it('does not change delivery error handling if logging fails', () => {
+    vi.mocked(logger.warn).mockImplementationOnce(() => { throw new Error('PRIVATE'); });
+    expect(() => logCOROSActivityProcessingFailure({ sport: 18, subSport: null })).not.toThrow();
+  });
+});
 
 describe('COROS snorkeling FIT copy', () => {
   it.each([12, 14] as const)('adds missing sub_sport using a valid %i-byte header', headerSize => {

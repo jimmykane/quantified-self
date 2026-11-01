@@ -21,6 +21,32 @@ const CATEGORY_FIELDS = new Map([
   [19, { sport: 25, subSport: 39 }], // Lap field 26 is event_group.
 ]);
 
+export interface COROSActivityFITCategory { sport: number | null; subSport: number | null }
+
+/** Original classification only; no activity samples, names or identities. */
+export function readCOROSActivityFITCategory(input: Buffer): COROSActivityFITCategory {
+  try {
+    const parsed = readFitMessages(input, { messageNumbers: [18], maxInputBytes: MAX_BYTES });
+    if (!parsed.issues.length && parsed.messages.length === 1) {
+      const session = parsed.messages[0];
+      return {
+        sport: readFitUnsignedField(session.fields.find(field => field.fieldNumber === 5), 0, 1, session.littleEndian) ?? null,
+        subSport: readFitUnsignedField(session.fields.find(field => field.fieldNumber === 6), 0, 1, session.littleEndian) ?? null,
+      };
+    }
+  } catch { /* Diagnostics must not change upload behavior. */ }
+  return { sport: null, subSport: null };
+}
+
+export function logCOROSActivityProcessingFailure(category?: COROSActivityFITCategory): void {
+  const label = (value: unknown) => typeof value === 'number' && Number.isInteger(value) && value >= 0 && value < 255 ? `${value}` : 'unknown';
+  try {
+    logger.warn('[COROSActivityUpload] Processing failed.', {
+      telemetryVersion: 1, fit_sport: label(category?.sport), fit_sub_sport: label(category?.subSport),
+    });
+  } catch { /* A failed diagnostic must not change the provider result. */ }
+}
+
 interface FieldDefinition { number: number; size: number; baseType: number }
 interface Definition {
   global: number;

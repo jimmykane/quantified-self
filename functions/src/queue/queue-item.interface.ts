@@ -128,6 +128,8 @@ export interface ActivitySyncQueueItemInterface extends QueueItemInterface {
   destinationUploadContinuation?: ActivitySyncUploadContinuation | null;
   /** Durable marker proving provider-echo fingerprints were written before upload. */
   outboundFingerprintID?: string | null;
+  /** Original COROS FIT category retained with the echo receipt for asynchronous failure diagnostics. */
+  corosSourceFIT?: { sport: number | null; subSport: number | null };
 }
 
 export interface RouteSyncQueueItemInterface extends QueueItemInterface {
