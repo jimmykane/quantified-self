@@ -174,11 +174,14 @@ describe('SeoService', () => {
         expect(mockDocument.head.appendChild).toHaveBeenCalledWith(mockScript);
         expect(mockScript.textContent).toContain('"@type":"SoftwareApplication"');
         expect(JSON.parse(mockScript.textContent)).toEqual(HOME_SEO_JSON_LD);
-        expect(mockScript.textContent).toContain('build structured workouts');
+        expect(mockScript.textContent).toContain('generate AI workouts and build plans');
+        expect(mockScript.textContent).toContain('Pro includes opt-in daily workout suggestions.');
         expect(mockScript.textContent).not.toMatch(/\bprivate\b/i);
         expect(mockScript.textContent).toContain('Week, Month, and Year activity calendar with duration-scaled activity groups');
         expect(mockScript.textContent).toContain('Curated training analysis for readiness, load, intensity, durability, sleep context, and best builds');
-        expect(mockScript.textContent).toContain('Training plans with named date phases and standalone structured workouts for running and cycling');
+        expect(mockScript.textContent).toContain('Training plans with named date phases and standalone structured workouts for endurance and strength');
+        expect(mockScript.textContent).toContain('AI workout generation using selected recovery, training and Timeline context');
+        expect(mockScript.textContent).toContain('Opt-in daily workout or rest suggestions included with Pro');
         expect(mockScript.textContent).toContain('Garmin to Suunto activity sync');
         expect(mockScript.textContent).toContain('COROS to Suunto activity sync');
         expect(mockScript.textContent).toContain('Wahoo to Suunto activity sync');
