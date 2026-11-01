@@ -15,7 +15,7 @@ import {
 } from 'app/firebase/firestore';
 import type { QueryDocumentSnapshot } from 'firebase/firestore';
 import { Observable, of, from, combineLatest, defer } from 'rxjs';
-import { map, switchMap, catchError } from 'rxjs/operators';
+import { map, switchMap, catchError, mergeMap, toArray } from 'rxjs/operators';
 import { enrichSleepWithNightlyHrv, nightlyHrvDateRange } from '@shared/nightly-hrv';
 import { HrvHistoryService } from './hrv-history.service';
 import {
@@ -81,7 +81,9 @@ export class AppSleepService {
         ) : of(sessions);
         const queries = nightlyHeartRateQueries(uid, sessions);
         const heartRateRanges$ = queries.length && secureMatching
-          ? combineLatest(queries.map(query => this.health.watchRange(uid, query, options))).pipe(catchError(() => of([])))
+          ? (options?.serverRead
+            ? from(queries).pipe(mergeMap(query => this.health.watchRange(uid, query, options), 4), toArray())
+            : combineLatest(queries.map(query => this.health.watchRange(uid, query, options)))).pipe(catchError(() => of([])))
           : of([]);
         // Source updates must reuse these listeners, rather than restarting the other Health read.
         return combineLatest([hrvSessions$, heartRateRanges$]).pipe(

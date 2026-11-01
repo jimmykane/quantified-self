@@ -215,6 +215,7 @@ describe('AppSleepService', () => {
       seriesKey: 'heart_rate_15_second_representative', origin: 'recorded', recordingMethod: 'device', normalizationStatus: 'canonical',
       canonicalUnit: 'bpm', startTimeMs: start + 15_000, endTimeMs: end, offsetMs: Array.from({ length: 1920 }, (_, i) => i * 15_000),
       canonicalValues: Array(1920).fill(60) } as never] });
+    heartRateServer$.complete();
     expect((await result)[0].vitals).toMatchObject({ overnightHrvMs: 44, averageHeartRateBpm: 60, minimumHeartRateBpm: 60 });
     expect(TestBed.inject(AppHealthService).watchRange).toHaveBeenCalledTimes(4);
     expect(collectionData).not.toHaveBeenCalled();
@@ -235,6 +236,46 @@ describe('AppSleepService', () => {
     expect(cached$.observed).toBe(true);
     live.unsubscribe();
     expect(cached$.observed).toBe(false);
+  });
+
+  it.each([false, true])('bounds one-shot overnight HR reads and releases pending work (read fails: %s)', async readFails => {
+    const start = Date.parse('2026-09-01T22:00:00Z');
+    const nights = Array.from({ length: 10 }, (_, index) => ({ id: `night-${index}`, userID: 'user-1',
+      source: { provider: 'GarminAPI', providerUserId: 'account' }, sleepDate: `2026-09-${String(index + 2).padStart(2, '0')}`,
+      startTimeMs: start + index * 86_400_000, endTimeMs: start + index * 86_400_000 + 28_800_000,
+      durationSeconds: 28_800, isNap: false, vitals: { averageHrvMs: 44 } }));
+    vi.mocked(getDocsFromServer).mockResolvedValueOnce({ docs: nights.map(night => ({ id: night.id, data: () => night })) } as never);
+    const empty = projectHealthRange([], [], { startDate: '2026-09-01', endDate: '2026-09-01', includeSamples: true });
+    const replies: Subject<typeof empty>[] = [];
+    const health = TestBed.inject(AppHealthService);
+    vi.mocked(health.watchRange).mockImplementation(() => {
+      const reply = new Subject<typeof empty>(); replies.push(reply); return reply;
+    });
+    const resolved = vi.fn();
+    const result = firstValueFrom(service.watchForDashboard('user-1', start, nights.at(-1)!.endTimeMs, { serverRead: true }))
+      .then(value => { resolved(); return value; });
+    await vi.waitFor(() => expect(health.watchRange).toHaveBeenCalled());
+    expect(health.watchRange).toHaveBeenCalledTimes(4);
+    expect(resolved).not.toHaveBeenCalled();
+    if (readFails) {
+      replies[0].error(new Error('offline'));
+      expect(await result).toHaveLength(10);
+      expect(health.watchRange).toHaveBeenCalledTimes(4);
+      expect(replies.every(reply => !reply.observed)).toBe(true);
+      return;
+    }
+    for (let index = 0; index < replies.length; index++) {
+      expect(replies.filter(reply => reply.observed).length).toBeLessThanOrEqual(4);
+      replies[index].next(empty); replies[index].complete();
+    }
+    expect(await result).toHaveLength(10);
+    expect(health.watchRange).toHaveBeenCalledTimes(13);
+    const dates = vi.mocked(health.watchRange).mock.calls.map(([, query]) => query.startDate);
+    expect(new Set(dates).size).toBe(13);
+    expect(dates[0]).toBe('2026-08-31');
+    expect(dates.at(-1)).toBe('2026-09-12');
+    expect(replies.every(reply => !reply.observed)).toBe(true);
+    expect(collectionData).not.toHaveBeenCalled();
   });
 
   it('matches native Sleep to its Health account for highlights without an extra Health read', async () => {
