@@ -74,14 +74,14 @@ export class AppSleepService {
       switchMap(sessions => {
         const secureMatching = this.browserCompatibility.checkWebCryptoSupport();
         const range = nightlyHrvDateRange(sessions);
-        const hrvSessions$ = range && secureMatching ? this.hrvHistory.watch(uid, range.startDate, range.endDate).pipe(
+        const hrvSessions$ = range && secureMatching ? this.hrvHistory.watch(uid, range.startDate, range.endDate, options).pipe(
           switchMap(records => from(enrichSleepWithNightlyHrv(uid, sessions, records))),
           // A failed or incomplete optional Health read must not erase native Sleep evidence.
           catchError(() => of(sessions)),
         ) : of(sessions);
         const queries = nightlyHeartRateQueries(uid, sessions);
         const heartRateRanges$ = queries.length && secureMatching
-          ? combineLatest(queries.map(query => this.health.watchRange(uid, query))).pipe(catchError(() => of([])))
+          ? combineLatest(queries.map(query => this.health.watchRange(uid, query, options))).pipe(catchError(() => of([])))
           : of([]);
         // Source updates must reuse these listeners, rather than restarting the other Health read.
         return combineLatest([hrvSessions$, heartRateRanges$]).pipe(
