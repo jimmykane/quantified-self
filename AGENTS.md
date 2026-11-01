@@ -17,6 +17,10 @@ Always-on rules:
 - `.agent/rules/queue-monitoring-coverage.md` for provider/service integrations and queue lifecycle changes
 - `.agent/rules/firestore-write-sanitization.md` for any frontend/functions write path that persists event or activity data
 - Never patch or directly modify files under `node_modules/`.
+- Use the shared Firebase CLI pin in `.firebase-tools-version`: install with `npm run firebase:tools` after selecting
+  the intended Node version, and run commands from the repository root through `npm run firebase -- <args>`.
+  Keep CI and package scripts on this entry point; do not install an unversioned CLI or bypass a version mismatch.
+  See `docs/firebase-tooling.md` before changing the pin or diagnosing deployment CLI errors.
 - Never install or add the official Garmin FIT SDK as a project dependency, development dependency, optional dependency,
   or vendored project code. Its license prevents its use as a dependency in Quantified Self, sports-lib, and fit-parser.
   When needed for investigation, run it only as a standalone tool outside those repositories and their dependency trees.

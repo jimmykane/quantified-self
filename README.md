@@ -48,7 +48,7 @@ For frontend tests and the repository's full development workflow, install:
 
 For Firebase emulators and Rules tests, also install:
 
-- [Firebase CLI](https://firebase.google.com/docs/cli).
+- [Firebase CLI](https://firebase.google.com/docs/cli), installed at the repository's pinned version below.
 - Java 21, matching the CI environment.
 
 > [!NOTE]
@@ -65,6 +65,7 @@ nvm install 22
 nvm use 22
 npm ci
 npm --prefix functions ci
+npm run firebase:tools
 ```
 
 The root application and Functions use separate lockfiles, so both installs are required for the full development workflow.
@@ -94,7 +95,7 @@ In the first terminal:
 
 ```bash
 npm --prefix functions run build
-firebase emulators:start --only auth,functions,firestore,storage
+npm run firebase -- emulators:start --only auth,functions,firestore,storage
 ```
 
 The Functions emulator loads compiled output from `functions/lib`, so the build must finish before the emulators start.
@@ -112,7 +113,7 @@ before changing CORS policy. Angular's hot reload does not refresh the Functions
 For the default browser configuration, which keeps hosted Auth, Firestore, and Storage, run just the Functions emulator:
 
 ```bash
-firebase emulators:start --only functions
+npm run firebase -- emulators:start --only functions
 ```
 
 Admin impersonation in this mode signs tokens with an existing, Git-ignored `quantified-self-io-firebase-adminsdk.json` at the repository root, outside `functions/`. The key must match the emulator's project and is used only for custom-token signing; the default Admin app keeps ADC. Alternatively, set `GOOGLE_APPLICATION_CREDENTIALS` to an external service-account JSON file before starting the emulator. See [Functions-only emulation with hosted Auth](docs/function-secret-management.md#functions-only-emulation-with-hosted-auth) for credential precedence and isolation.
@@ -296,6 +297,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 - [Activity Calendar architecture and maintenance](docs/activity-calendar.md)
 - [MCP server](docs/mcp-server.md)
 - [Firebase Function secret management](docs/function-secret-management.md)
+- [Pinned Firebase CLI and deployment commands](docs/firebase-tooling.md)
 - [Queue processing architecture](docs/queue-processing.md)
 - [Sleep sync operations](docs/sleep-sync-operations.md)
 - [Email lifecycle](docs/email-lifecycle.md)
