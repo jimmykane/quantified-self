@@ -17,7 +17,7 @@ Dashboard setup actions read durable service state on every visit. The empty-act
 
 ## Shared header and Dashboard progress
 
-The authenticated header lazily loads a text action such as **Importing history · 2**. Its Material panel (bottom
+The authenticated header lazily loads a compact icon action with an accessible status such as **Importing history**. Its Material panel (bottom
 sheet on phones) and the signed-in owner's Dashboard render the same `HistoryImportCardsComponent`. The root
 `HistoryImportProgressService` subscribes once per authenticated session to the four existing owner-readable
 `users/{uid}/meta/{service}` documents. It consumes only `connectionHistoryImport`; Connections and older prompt
@@ -42,7 +42,14 @@ with `reconnect_required` shows **Reconnect required** and a Connections link in
 an automatic-retry claim. A successful reconnect replaces/clears the old projection through the existing lifecycle;
 this UI performs no recovery action and reads no token or generation fields.
 
-Active work and automatic retries retain their distinct stages. Garmin cards say **Requesting history** or **Waiting
+Active work and automatic retries retain their distinct stages. The first unfinished section determines a provider's
+current state because the coordinator runs sections in order. Later queued sections cannot keep its progress bar
+spinning while that section retries. The header shows **Waiting for history retries** with a static clock when all
+unfinished providers are retrying, and resumes **Importing history** with its spinner when a provider continues work.
+The local view retains `active=true` for unfinished retries but uses `busy` only for the animated indicator. Existing
+per-section messages/counts explain the remaining work; no message parsing, progress estimate, new reads, migration
+or backend change is needed for this presentation. A sole Garmin header keeps its request-specific wording.
+Garmin cards say **Requesting history** or **Waiting
 to retry requests**; a sole Garmin header says **Requesting Garmin history** or **Waiting to retry Garmin requests**.
 Garmin Activities, Sleep and Health counters explicitly describe **requests scheduled**, not records received or
 accepted HTTP calls. Health counts can include planned windows before they are submitted. Garmin sends records

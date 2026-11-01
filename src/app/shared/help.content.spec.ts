@@ -52,6 +52,8 @@ describe('help.content', () => {
       'remembered for your account on this browser', 'Hiding the cards does not stop an import',
       '**Finished with issues**', '**Dismiss this result**', 'not failure totals',
       '**Requesting Garmin history**', '**requests scheduled**', 'not records received',
+      '**Waiting for history retries**', 'quiet clock icon instead of a spinner',
+      'Later queued sections wait for the current section', 'pending retries do not count as a finished import',
       'delivery completion is not tracked here',
       'a new import or a retried result appears again', 'recovery controls remain in Connections']) expect(copy).toContain(phrase);
   });

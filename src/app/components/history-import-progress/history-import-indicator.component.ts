@@ -31,7 +31,7 @@ export class HistoryImportIndicatorComponent {
     const count = this.view().items.length;
     return `${this.view().label}. View history import status for ${count} ${count === 1 ? 'provider' : 'providers'}`;
   });
-  readonly icon = computed(() => this.view().items.some(item => item.kind === 'attention' || item.kind === 'unavailable') ? 'info' : this.view().items.some(item => item.kind === 'requested') ? 'schedule' : 'check_circle');
+  readonly icon = computed(() => this.view().items.some(item => item.kind === 'attention' || item.kind === 'unavailable') ? 'info' : this.view().items.some(item => item.kind === 'retrying' || item.kind === 'requested') ? 'schedule' : 'check_circle');
   constructor() { this.destroyRef.onDestroy(() => this.dismissPanel?.()); }
   open(): void {
     const owner = this.progress.owner();

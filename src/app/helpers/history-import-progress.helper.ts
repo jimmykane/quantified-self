@@ -24,7 +24,7 @@ export interface HistoryImportResultDismissal {
   serviceName: ServiceNames; runId: string; updatedAtMs: number;
 }
 export interface HistoryImportProgressView {
-  items: HistoryImportProgressItem[]; active: boolean; label: string; nextExpiryAtMs: number | null;
+  items: HistoryImportProgressItem[]; active: boolean; busy: boolean; label: string; nextExpiryAtMs: number | null;
 }
 const resourceNames: Record<HistoryResource, string> = {activities: 'Activities', sleep: 'Sleep', health: 'Health', routes: 'Saved routes'};
 const descriptions: Record<ConnectionHistoryStatus, string> = {
@@ -72,8 +72,10 @@ function item(source: HistoryImportSource): HistoryImportProgressItem | null {
       message: typeof step.message === 'string' && step.message.trim() ? step.message.slice(0, 1000) : null});
   }
   if (!value.active && steps.some(step => step.status === 'queued' || step.status === 'requesting' || step.status === 'retrying')) return unavailable(serviceName);
+  // The coordinator runs sections in order; later queued sections wait behind the current retry.
+  const currentStep = steps.find(step => step.status === 'queued' || step.status === 'requesting' || step.status === 'retrying');
   const kind: HistoryImportKind = value.active
-    ? steps.some(step => step.status === 'retrying') && !steps.some(step => step.status === 'queued' || step.status === 'requesting') ? 'retrying' : 'active'
+    ? currentStep?.status === 'retrying' ? 'retrying' : 'active'
     : steps.some(step => step.status === 'failed' || step.status === 'skipped') ? 'attention'
       : steps.some(step => step.status === 'requested') ? 'requested' : 'processed';
   // A submitted provider request is not a live delivery tracker. Keep recent terminal
@@ -103,14 +105,16 @@ export function buildHistoryImportProgress(sources: readonly HistoryImportSource
     .filter(entry => !entry.canDismiss || !dismissed.some(result => result.serviceName === entry.serviceName
       && result.runId === entry.runId && result.updatedAtMs === entry.updatedAtMs));
   const active = items.some(entry => entry.kind === 'active' || entry.kind === 'retrying');
+  const busy = items.some(entry => entry.kind === 'active');
   const requestItem = items.length === 1 && items[0].requestOnly ? items[0] : null;
   const label = requestItem?.kind === 'active' ? 'Requesting Garmin history'
     : requestItem?.kind === 'retrying' ? 'Waiting to retry Garmin requests'
     : requestItem?.kind === 'processed' ? 'History requests finished'
-    : active ? 'Importing history' : items.some(entry => entry.kind === 'attention' && !entry.canDismiss) ? 'History needs attention'
+    : busy ? 'Importing history' : active ? 'Waiting for history retries'
+    : items.some(entry => entry.kind === 'attention' && !entry.canDismiss) ? 'History needs attention'
     : items.some(entry => entry.kind === 'unavailable') ? 'Import status unavailable'
       : items.some(entry => entry.kind === 'attention') ? 'History finished with issues'
       : items.some(entry => entry.kind === 'requested') ? 'History requested' : 'History processed';
   const deadlines = items.flatMap(entry => entry.expiresAtMs === undefined ? [] : [entry.expiresAtMs]);
-  return {items, active, label, nextExpiryAtMs: deadlines.length ? Math.min(...deadlines) : null};
+  return {items, active, busy, label, nextExpiryAtMs: deadlines.length ? Math.min(...deadlines) : null};
 }

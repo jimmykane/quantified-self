@@ -345,6 +345,7 @@ describe('Firebase Hosting configuration', () => {
     // Saved-workout help includes post-Add Send/sync review, Today delivery actions and the explicit plan-settings link (2026-10-31).
     // It also covers saved-schedule recovery and dismissing the saved confirmation during sync navigation (2026-10-31).
     // AI rest review includes explicit Calendar rest marking and unchanged generation allowance (2026-11-01).
+    // History progress help distinguishes quiet automatic retries and later queued sections (2026-11-01).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-01');
   });
 
