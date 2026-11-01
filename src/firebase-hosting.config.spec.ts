@@ -346,6 +346,7 @@ describe('Firebase Hosting configuration', () => {
     // It also covers saved-schedule recovery and dismissing the saved confirmation during sync navigation (2026-10-31).
     // AI rest review includes explicit Calendar rest marking and unchanged generation allowance (2026-11-01).
     // History progress help distinguishes quiet automatic retries and later queued sections (2026-11-01).
+    // Daily suggestions retain saved recipes after check failures and distinguish lost responses (2026-11-01).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-01');
   });
 
@@ -666,7 +667,8 @@ describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('bounds total scripts with matching release budgets for %s', configuration => {
     const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
     expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
-      type: 'allScript', maximumWarning: '13000kb', maximumError: '13823kb',
+      // Measured daily check recovery adds 1.76 kB beyond the prior ceiling; retain the startup limit.
+      type: 'allScript', maximumWarning: '13000kb', maximumError: '13825kb',
     });
   });
 

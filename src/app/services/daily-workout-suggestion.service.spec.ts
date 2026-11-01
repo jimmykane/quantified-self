@@ -13,6 +13,7 @@ import { AppFunctionsService } from './app.functions.service';
 import { AppAnalyticsService } from './app.analytics.service';
 import { AppWindowService } from './app.window.service';
 import { TrainingPlansService } from './training-plans.service';
+import { LoggerService } from './logger.service';
 
 function storage() {
   const values = new Map<string, string>();
@@ -33,6 +34,7 @@ function setup(saved = storage(), enabled = true, sport = ActivityTypes.Running,
   if (knownRevision !== undefined) verifiedRevisions.set('owner', knownRevision);
   revisions.subscribe(({ uid, revision }) => verifiedRevisions.set(uid, revision));
   const updateUserProperties = vi.fn().mockResolvedValue(undefined), logEvent = vi.fn();
+  const logger = { getUser: vi.fn(() => ({ id: 'owner' })), captureMessage: vi.fn() };
   const result = (): DailyWorkoutSuggestionStatus => ({ localDate: service.preferences().controls.localDate, state: 'ready', controls,
     result: { requestId: `daily-suggestion:${service.preferences().controls.localDate}`, observedAt: new Date().toISOString(), kind: 'rest',
       rationale: 'An easy day.', draft: null, usedContext: [], missingContext: [], previousLoads: [] } });
@@ -41,6 +43,7 @@ function setup(saved = storage(), enabled = true, sport = ActivityTypes.Running,
     { provide: Auth, useValue: auth }, { provide: AppUserService, useValue: { user, updateUserProperties, isProSignal: pro } },
     { provide: AppFunctionsService, useValue: { call } }, { provide: AppAnalyticsService, useValue: { logEvent } },
     { provide: AppWindowService, useValue: { windowRef: { sessionStorage: saved } } },
+    { provide: LoggerService, useValue: logger },
     { provide: TrainingPlansService, useValue: { stateRevisionChanges$: revisions,
       lastVerifiedStateRevision: (uid: string) => verifiedRevisions.get(uid), calendarRestDayChanges$: restChanges,
       lastCalendarRestDayRevision: (uid: string, date: string) => restRevisions.get(uid + '|' + date),
@@ -48,13 +51,109 @@ function setup(saved = storage(), enabled = true, sport = ActivityTypes.Running,
         tap(record => restRevisions.set(uid + '|' + date, record?.revision ?? 0))) } },
   ] });
   const service = TestBed.inject(DailyWorkoutSuggestionService);
-  return { service, auth, user, pro, revisions, call, updateUserProperties, logEvent, saved, result, restDay$, restChanges, restRevisions,
+  return { service, auth, user, pro, revisions, call, updateUserProperties, logEvent, saved, result, restDay$, restChanges, restRevisions, logger,
     setRest: (record: TrainingRestDayV1) => { restRevisions.set('owner|' + record.localDate, record.revision);
       restChanges.next({ uid: 'owner', localDate: record.localDate, revision: record.revision }); restDay$.next(record); } };
 }
 afterEach(() => vi.useRealTimers());
 
 describe('DailyWorkoutSuggestionService daily browser cache', () => {
+  it.each(['functions/unavailable', 'functions/internal', 'deadline-exceeded'])('retries a transient status read once (%s) and shares the retry', async code => {
+    const { service, call, logger } = setup();
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    call.mockRejectedValueOnce({ code });
+    const first = service.request('owner', 'status', () => true);
+    const joined = service.request('owner', 'status', () => true);
+    await vi.advanceTimersByTimeAsync(499); expect(call).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(1);
+    expect((await first).state).toBe('ready'); expect(await joined).toEqual(await first);
+    expect(call).toHaveBeenCalledTimes(2);
+    expect(call.mock.calls.every(([, request]) => request.action === 'status')).toBe(true);
+    expect(logger.captureMessage).not.toHaveBeenCalled();
+  });
+  it.each(['prepare', 'use-available-data', 'dismiss'] as const)('does not automatically retry %s after a lost response', async action => {
+    const { service, call, logger } = setup();
+    const error = { code: 'functions/unavailable', message: 'private workout and sleep' };
+    call.mockRejectedValueOnce(error);
+    await expect(service.request('owner', action, () => true, '2026-10-30')).rejects.toBe(error);
+    expect(call).toHaveBeenCalledOnce();
+    expect(logger.captureMessage).toHaveBeenCalledWith('Daily workout suggestion request failed', expect.objectContaining({
+      tags: { operation: 'daily-workout-suggestion', action, errorCode: 'functions/unavailable' },
+    }));
+    expect(JSON.stringify(logger.captureMessage.mock.calls)).not.toContain('private workout');
+  });
+  it('limits a failing status read to one retry and deduplicates safe diagnostics', async () => {
+    const { service, call, logger } = setup();
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    const error = { code: 'functions/unavailable', message: 'sensitive context' };
+    call.mockRejectedValue(error);
+    const first = service.request('owner', 'status', () => true);
+    const rejected = expect(first).rejects.toBe(error);
+    await vi.advanceTimersByTimeAsync(500); await rejected;
+    expect(call).toHaveBeenCalledTimes(2); expect(logger.captureMessage).toHaveBeenCalledOnce();
+    const second = service.request('owner', 'status', () => true);
+    const again = expect(second).rejects.toBe(error);
+    await vi.advanceTimersByTimeAsync(500); await again;
+    expect(call).toHaveBeenCalledTimes(4); expect(logger.captureMessage).toHaveBeenCalledOnce();
+    expect(service.cached('owner')).toBeNull();
+  });
+  it.each(['account', 'day', 'rest'] as const)('cancels a delayed status retry after %s changes', async change => {
+    const { service, call, auth, setRest, logger } = setup();
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    call.mockRejectedValueOnce({ code: 'functions/unavailable' });
+    const pending = service.request('owner', 'status', () => true);
+    const rejected = expect(pending).rejects.toThrow('access changed');
+    await vi.advanceTimersByTimeAsync(0);
+    if (change === 'account') auth.currentUser = { uid: 'other' };
+    else if (change === 'day') vi.setSystemTime(new Date('2026-10-31T07:00Z'));
+    else setRest({ schemaVersion: 1, localDate: '2026-10-30', isRestDay: true, revision: 1 });
+    await vi.advanceTimersByTimeAsync(500); await rejected;
+    expect(call).toHaveBeenCalledOnce(); expect(logger.captureMessage).not.toHaveBeenCalled();
+  });
+  it('does not retry permission failures and excludes arbitrary exception fields from diagnostics', async () => {
+    const { service, call, logger } = setup();
+    const error = { code: 'functions/permission-denied', message: 'sensitive context' };
+    call.mockRejectedValueOnce(error);
+    await expect(service.request('owner', 'status', () => true)).rejects.toBe(error);
+    expect(call).toHaveBeenCalledOnce();
+    expect(logger.captureMessage).toHaveBeenCalledOnce();
+    call.mockRejectedValueOnce({ code: 'private code', message: 'private message' });
+    await expect(service.request('owner', 'status', () => true)).rejects.toEqual(expect.anything());
+    expect(logger.captureMessage.mock.calls[1][1].tags.errorCode).toBe('unknown');
+    expect(JSON.stringify(logger.captureMessage.mock.calls)).not.toMatch(/sensitive context|private code|private message/);
+  });
+  it('preserves request failures when diagnostics throw or the Sentry account differs', async () => {
+    const { service, call, logger } = setup();
+    const error = { code: 'functions/permission-denied' }; call.mockRejectedValue(error);
+    logger.getUser.mockReturnValueOnce({ id: 'other' });
+    await expect(service.request('owner', 'status', () => true)).rejects.toBe(error);
+    expect(logger.captureMessage).not.toHaveBeenCalled();
+    logger.captureMessage.mockImplementationOnce(() => { throw Error('Telemetry unavailable'); });
+    await expect(service.request('owner', 'status', () => true)).rejects.toBe(error);
+    expect(logger.captureMessage).toHaveBeenCalledOnce();
+  });
+  it('retains the same cached recipe after an exhausted explicit status refresh', async () => {
+    const { service, call } = setup();
+    const ready = await service.request('owner', 'prepare', () => true);
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    const error = { code: 'functions/unavailable' }; call.mockRejectedValue(error);
+    const pending = service.request('owner', 'status', () => true, undefined, true);
+    const rejected = expect(pending).rejects.toBe(error);
+    await vi.advanceTimersByTimeAsync(500); await rejected;
+    expect(service.cached('owner')?.status).toBe(ready);
+    expect((await service.request('owner', 'status', () => true))).toBe(ready);
+    expect(call.mock.calls.map(([, request]) => request.action)).toEqual(['prepare', 'status', 'status']);
+  });
+  it('reports failed calendar-rest reads separately while invalidating coverage authority', async () => {
+    const { service, logger, restDay$ } = setup(); TestBed.flushEffects();
+    await service.request('owner', 'prepare', () => true);
+    restDay$.error({ code: 'permission-denied', message: 'private document path' });
+    expect(service.cached('owner')).toBeNull();
+    expect(logger.captureMessage).toHaveBeenCalledWith('Daily workout suggestion request failed', expect.objectContaining({
+      tags: { operation: 'daily-workout-suggestion', action: 'calendar-rest', errorCode: 'permission-denied' },
+    }));
+    expect(JSON.stringify(logger.captureMessage.mock.calls)).not.toContain('private document');
+  });
   it('immediately hides a cached suggestion on calendar rest and reuses the daily result after removal', async () => {
     const { service, setRest, call, result } = setup(); TestBed.flushEffects();
     await service.request('owner', 'prepare', () => true);

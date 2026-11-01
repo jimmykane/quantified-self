@@ -101,7 +101,7 @@ function setup(enabled = true, cachedStatus: DailyWorkoutSuggestionStatus | null
     document.dispatchEvent(new Event('visibilitychange')); fixture.detectChanges();
   };
   return { fixture, preferences, owner, pro, saving, request, event, save, open, haptics, setVisible, remember, workouts, watchCalendarSchedule, user,
-    delivery: delivery.useValue, deliveryOpen };
+    delivery: delivery.useValue, deliveryOpen, cached, cacheRevision };
 }
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); restoreVisibility(); });
 describe('compact daily workout in Today', () => {
@@ -689,12 +689,86 @@ describe('compact daily workout in Today', () => {
     const { fixture, request, setVisible } = setup();
     request.mockRejectedValueOnce(Error('Offline'));
     await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
-    expect(fixture.componentInstance.error()).toBe(true);
+    expect(fixture.componentInstance.error()).toBe('Could not check today’s suggestion. Try again.');
+    expect(fixture.nativeElement.textContent).not.toContain('could not be generated');
     setVisible(false); setVisible(true); await vi.advanceTimersByTimeAsync(1600);
     expect(request).toHaveBeenCalledOnce();
     await fixture.componentInstance.load(); fixture.detectChanges();
     expect(fixture.componentInstance.status()?.state).toBe('ready');
-    expect(fixture.componentInstance.error()).toBe(false);
+    expect(fixture.componentInstance.error()).toBeNull();
+  });
+  it.each(['rest', 'workout'] as const)('keeps an invalidated %s recipe visible after a failed check, but requires fresh coverage before review', async kind => {
+    const { fixture, request, cached, cacheRevision, open, setVisible, haptics } = setup();
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    const previous = fixture.componentInstance.status()!;
+    const ready = kind === 'rest' ? previous : { ...previous, result: { ...previous.result!, kind,
+      draft: { title: 'Saved easy run', structure: savedWorkout().structure } } };
+    fixture.componentInstance.status.set(ready);
+    request.mockClear(); request.mockRejectedValueOnce(Error('Offline'));
+    cached.mockReturnValue(null); cacheRevision.update(value => value + 1); fixture.detectChanges();
+    expect(fixture.componentInstance.status()).toBe(ready);
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    expect(request.mock.calls.map(call => call[1])).toEqual(['status']);
+    expect(fixture.nativeElement.textContent).toContain(kind === 'rest' ? 'Rest day suggested' : 'Saved easy run');
+    expect(fixture.nativeElement.textContent).toContain('Showing your saved suggestion');
+    expect(fixture.nativeElement.textContent).toContain('Review');
+    expect(fixture.nativeElement.textContent).not.toContain('Check again');
+    expect(haptics.error).not.toHaveBeenCalled();
+    expect(open).not.toHaveBeenCalled();
+    exportQa(fixture.nativeElement, `daily-check-failed-cached-${kind}`);
+    setVisible(false); setVisible(true); await vi.advanceTimersByTimeAsync(1600);
+    expect(request).toHaveBeenCalledOnce();
+    request.mockRejectedValueOnce(Error('Still offline'));
+    await fixture.componentInstance.review(); fixture.detectChanges();
+    expect(open).not.toHaveBeenCalled();
+    request.mockResolvedValueOnce({ localDate: '2026-10-30', state: 'rest-day' });
+    await fixture.componentInstance.review(); fixture.detectChanges();
+    expect(fixture.componentInstance.status()?.state).toBe('rest-day');
+    expect(fixture.componentInstance.error()).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('Rest day suggested');
+    expect(open).not.toHaveBeenCalled();
+    expect(request.mock.calls.every(call => call[1] === 'status')).toBe(true);
+  });
+  it.each(['day', 'account', 'preferences'] as const)('clears the display-only recipe after a %s change', async change => {
+    const { fixture, request, preferences, owner } = setup();
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    expect(fixture.componentInstance.status()?.state).toBe('ready');
+    request.mockClear();
+    if (change === 'account') owner.set('other');
+    else preferences.update(value => ({ ...value, controls: { ...value.controls,
+      ...(change === 'day' ? { localDate: '2026-10-31' } : { minutes: 45 }) } }));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.status()).toBeNull();
+  });
+  it('immediately replaces the display-only recipe with a verified rest day', async () => {
+    const { fixture, cached, cacheRevision, request } = setup();
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges(); request.mockClear();
+    cached.mockReturnValue({ status: { localDate: '2026-10-30', state: 'rest-day' }, sleepKey: 'night-a' });
+    cacheRevision.update(value => value + 1); fixture.detectChanges();
+    expect(fixture.componentInstance.summary()).toBe('Today is a rest day.');
+    await vi.advanceTimersByTimeAsync(1600); expect(request).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.textContent).not.toContain('Review');
+  });
+  it('retrieves a lost preparation response without claiming failure or starting another preparation', async () => {
+    const { fixture, request } = setup();
+    const ready = await request('owner', 'prepare'); request.mockClear();
+    request.mockResolvedValueOnce({ localDate: '2026-10-30', state: 'waiting' });
+    request.mockRejectedValueOnce(Error('Response lost'));
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Check again to see whether it finished');
+    expect(fixture.nativeElement.textContent).not.toContain('could not be generated');
+    exportQa(fixture.nativeElement, 'daily-response-lost');
+    request.mockResolvedValueOnce(ready);
+    await fixture.componentInstance.load(); fixture.detectChanges();
+    expect(request.mock.calls.map(call => call[1])).toEqual(['status', 'prepare', 'status']);
+    expect(fixture.componentInstance.status()).toBe(ready);
+    expect(fixture.componentInstance.error()).toBeNull();
+  });
+  it('offers manual generation only after the server confirms a failed generation', async () => {
+    const { fixture } = setup(true, { localDate: '2026-10-30', state: 'failed' });
+    expect(fixture.nativeElement.textContent).toContain('Today’s suggestion could not be generated.');
+    expect(fixture.nativeElement.textContent).toContain('Generate manually');
+    expect(fixture.nativeElement.textContent).not.toContain('Check again');
   });
   it.each(['2026-10-30T00:30Z', '2026-10-30T10:00Z', '2026-10-30T13:00Z', '2026-10-30T20:30Z'])(
     'prepares on a fresh foreground visit at %s and stays cached on focus', async instant => {

@@ -5924,6 +5924,16 @@ retrieval rechecks only current-day activity summaries and the existing revision
 Browser navigation/reload can restore the daily status without that request. Explicit **Review** always performs one
 status-only coverage check before opening; a subsequently added or completed workout suppresses the stale review.
 That check never prepares or generates a suggestion. A failed check leaves Review available with an inline error.
+Transient status failures get one shared retry after 500 ms, fenced by the same authenticated day and cache revision;
+preparation, available-data generation and dismissal are never automatically replayed by this recovery path.
+A schedule/rest invalidation may retain a same-scope recipe for display while rechecking coverage. A failed refresh
+labels it as the saved suggestion; Review still requires a successful fresh coverage read before opening it.
+Verified rest/covered status replaces it, and owner, day, eligibility or preferences changes clear the display fallback.
+Request/retrieval errors do not claim that generation failed: only the server's failed state offers manual generation.
+Warning diagnostics use fixed action and allowlisted SDK-code labels, deduplicated per account/day/preferences scope,
+and retain only the existing Sentry identity. No exception text, controls, recipe, Sleep or Timeline content is attached.
+This is first-party presentation/read recovery only: MCP read projections, mutation confirmations, consent, model
+admission and the daily allowance are unchanged; no backend, rules, index, plugin or MCP refresh deployment is needed.
 No recovery,
 metric, feedback or routine-history reads are added to cache retrieval. A weekday
 sport requires a complete bounded two-page/200-summary scan of the previous 28 complete local days, at least two matching
