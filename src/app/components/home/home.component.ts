@@ -7,6 +7,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MAT_TOOLTIP_DEFAULT_OPTIONS, MatTooltipModule } from '@angular/material/tooltip';
 import { ASSISTANT_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '@shared/limits';
+import { DAILY_WORKOUT_PRO_BENEFIT, WORKOUT_GENERATION_SECTION } from '../public-seo/workout-generation.content';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { getNumberFormatter } from '../../helpers/number-format.helper';
@@ -69,6 +70,7 @@ export class HomeComponent implements OnInit {
   readonly expandedFaq = signal<string | null>(null);
   readonly healthFeature = HEALTH_FEATURE_CONTENT;
   readonly trainingPlansFeature = TRAINING_PLANS_HOME_CONTENT;
+  readonly workoutGeneration = WORKOUT_GENERATION_SECTION;
   readonly memberships = [
     { name: 'Starter', label: 'Free', copy: 'Core tools, free forever.', route: '/login', action: 'Start free',
       features: [`Up to ${getNumberFormatter().format(USAGE_LIMITS.free)} activities`,
@@ -79,8 +81,9 @@ export class HomeComponent implements OnInit {
       features: [`Up to ${getNumberFormatter().format(USAGE_LIMITS.basic)} activities`,
         `Up to ${getNumberFormatter().format(ROUTE_USAGE_LIMITS.basic)} saved routes`,
         `Up to ${getNumberFormatter().format(ASSISTANT_REQUEST_LIMITS.basic)} Assistant requests per billing period`] },
-    { name: 'Pro', label: 'Keep it connected', copy: 'Everything in Basic, plus automatic activity imports and supported cross-provider sync.', route: '/pricing', action: 'See pricing',
+    { name: 'Pro', label: 'Keep it connected', copy: 'Everything in Basic, plus automatic imports, supported sync and daily workout suggestions.', route: '/pricing', action: 'See pricing',
       features: ['Unlimited activities and routes', 'Automatic activity imports', 'Supported cross-provider sync', 'Compatible workout delivery',
+        DAILY_WORKOUT_PRO_BENEFIT,
         `Up to ${getNumberFormatter().format(ASSISTANT_REQUEST_LIMITS.pro)} Assistant requests per billing period`] },
   ];
   readonly faqs = [

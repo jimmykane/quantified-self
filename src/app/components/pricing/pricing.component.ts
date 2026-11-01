@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy, inject, Output, EventEmitter, PLATFORM_ID, Input, signal } from '@angular/core';
+import { DAILY_WORKOUT_PRO_BENEFIT } from '../public-seo/workout-generation.content';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -62,6 +63,7 @@ interface SubscriptionSummary {
     styleUrls: ['./pricing.component.scss']
 })
 export class PricingComponent implements OnInit, OnDestroy {
+    readonly dailyWorkoutBenefit = DAILY_WORKOUT_PRO_BENEFIT;
     @Input() isOnboarding = false;
     @Input() onboardingUser: User | null = null;
     @Output() planSelected = new EventEmitter<void>();

@@ -61,13 +61,19 @@ describe('DayWorkoutService owner-bound handoff', () => {
       expect(navigate).toHaveBeenCalledWith(['/training/plans/standalone/new'], { queryParams: { date: controls.localDate } });
       expect(service.takeEditorDraft('owner', null, controls.localDate)).toEqual(result);
       expect(service.takeEditorDraft('owner', null, controls.localDate)).toBeNull();
+      const onEditorDraft = vi.fn(); navigate.mockClear();
+      await service.open('owner', controls.localDate, controls.sport, { onEditorDraft });
+      expect(onEditorDraft).toHaveBeenCalledExactlyOnceWith(result);
+      expect(navigate).not.toHaveBeenCalled();
+      expect(open.mock.lastCall?.[1].data).not.toHaveProperty('onEditorDraft');
+      expect(service.takeEditorDraft('owner', null, controls.localDate)).toBeNull();
       await service.open('owner', controls.localDate); auth.currentUser = null; user.set(null); changes.next(null);
       auth.currentUser = { uid: 'owner' }; user.set({ uid: 'owner' }); changes.next(auth.currentUser);
       expect(service.takeEditorDraft('owner', null, controls.localDate)).toBeNull();
       await service.generate('owner', { requestId: 'generation-request', controls }, () => true);
       expect(call.mock.calls[0][2].canExecute()).toBe(true);
       auth.currentUser = { uid: 'other' }; expect(call.mock.calls[0][2].canExecute()).toBe(false);
-      await service.open('other', controls.localDate); expect(open).toHaveBeenCalledTimes(2);
+      await service.open('other', controls.localDate); expect(open).toHaveBeenCalledTimes(3);
     } finally { vi.useRealTimers(); }
   });
 });

@@ -1,0 +1,29 @@
+<section class="daily-workout-preview" aria-label="Daily workout suggestion example">
+  <header>
+    <div><h3>Today</h3><p>Sample data · Nothing is saved</p></div>
+    <mat-button-toggle-group aria-label="Suggestion example" [value]="example()" hideSingleSelectionIndicator
+      (change)="selectExample($event.value)">
+      <mat-button-toggle value="workout">Workout</mat-button-toggle>
+      <mat-button-toggle value="rest">Rest day</mat-button-toggle>
+    </mat-button-toggle-group>
+  </header>
+  <p class="context">Example context: sleep, HRV, freshness, recent training and Timeline notes.</p>
+  <app-compact-row title="Today’s suggestion" layout="columns" density="compact" [showDivider]="false">
+    <p role="status" aria-live="polite">{{ summary() }}</p>
+    <small>Included daily suggestion with Pro · review before adding</small>
+    <button compactRowAction mat-button type="button" [attr.aria-expanded]="reviewExpanded()"
+      aria-controls="daily-workout-example-review" (click)="toggleReview()">{{ reviewExpanded() ? 'Hide review' : 'Review example' }}</button>
+  </app-compact-row>
+  <div id="daily-workout-example-review" [hidden]="!reviewExpanded()" class="review">
+    @if (reviewExpanded()) {
+      @if (example() === 'workout') {
+        <p>Review each step, adjust the options, or edit the workout before adding it.</p>
+        <app-workout-profile [structure]="structure" [unitSettings]="unitSettings()" contextKey="public-daily-workout-example"></app-workout-profile>
+        <p>In your account, Add workout saves the reviewed session. Then choose Send workout for a compatible connected service.</p>
+      } @else {
+        <p>Recovery can call for rest. Review the reason, then choose Mark as rest day to mark Calendar, or request an easy alternative.</p>
+        <p>Existing workouts stay unchanged. A rest day creates no workout or provider send.</p>
+      }
+    }
+  </div>
+</section>

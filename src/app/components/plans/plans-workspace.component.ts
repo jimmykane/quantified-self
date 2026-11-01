@@ -1,4 +1,5 @@
-import { DayWorkoutService } from '../../services/day-workout.service';
+import { DayWorkoutService, type DayWorkoutEditorDraft } from '../../services/day-workout.service';
+import { defaultDayWorkoutControls } from '@shared/day-workout';
 import { formatWorkoutPrescriptionSummaryV1 } from '@shared/planned-workout-analysis-display';
 import {
   ChangeDetectionStrategy,
@@ -579,6 +580,12 @@ export class PlansWorkspaceComponent {
     : this.currentWorkoutRows().filter(row => row.workout.localDate === this.planScheduleDate()));
   // Standalone defaults resolve at the actual click, even just after midnight before the clock ticks.
   readonly addWorkoutDate = computed(() => this.view() === 'plans' ? this.planScheduleDate() ?? undefined : undefined);
+  readonly generationOpen = signal(false);
+  readonly generationDate = computed(() => this.editor()?.value.localDate ?? this.addWorkoutDate() ?? this.today());
+  readonly canGenerateWorkout = computed(() => !this.libraryView() && this.hasTrainingPlanningUIAccess()
+    && this.scheduleState().status === 'ready' && (this.editor()?.mode === 'create' || this.browsing())
+    && !this.workoutDateInputInvalid() && this.dayWorkouts.canGenerate(this.generationDate())
+    && (this.view() !== 'plans' || !!this.selectedPlanId() || !!this.editor()));
   readonly selectedDayIsRest = computed(() => this.selectedPlan()?.restDays?.includes(this.planScheduleDate() ?? '') === true);
   readonly selectedDayHasPlannedWorkout = computed(() => this.displayedWorkoutRows().some(row => row.workout.lifecycle === 'planned'));
   readonly deletedWorkoutRows = computed<WorkoutRow[]>(() => (this.deletedWorkoutPanel()?.workouts ?? []).map(workout => ({
@@ -1143,10 +1150,42 @@ export class PlansWorkspaceComponent {
     this.navigateWorkspace(trainingPlansCreateRoute(requested.planId, requested.standalone), requested, { editorReturn: true });
   }
 
-  private startNewWorkoutEditor(destinationPlanId: string | null, localDate: string): void {
+  async generateWorkout(): Promise<void> {
+    const uid = this.currentUser()?.uid, session = this.editor();
+    if (!uid || !this.canGenerateWorkout() || this.busyAction() || this.generationOpen()) return;
+    const date = session?.value.localDate ?? this.addWorkoutDate() ?? todayLocalDate();
+    if (!this.dayWorkouts.canGenerate(date)) return;
+    const planId = session ? session.destinationPlanId : this.view() === 'plans' ? this.selectedPlanId() : null;
+    const controls = { ...defaultDayWorkoutControls(date, Intl.DateTimeFormat().resolvedOptions().timeZone,
+      session?.value.sport ?? ActivityTypes.Running), destinationPlanId: planId };
+    const generation = this.editorGeneration, routeKey = trainingPlansRouteKey(uid, this.routeState());
+    const current = () => !this.destroyRef.destroyed && uid === this.currentUser()?.uid && this.dayWorkouts.isOwner(uid)
+      && generation === this.editorGeneration && session === this.editor()
+      && routeKey === trainingPlansRouteKey(uid, this.routeState());
+    this.generationOpen.set(true);
+    try {
+      await this.dayWorkouts.open(uid, date, controls.sport, { initialControls: controls,
+        onEditorDraft: draft => {
+          if (!current() || draft.ownerUid !== uid) return;
+          const destination = draft.controls.destinationPlanId, localDate = draft.controls.localDate;
+          this.selectWorkoutScope(destination, localDate);
+          this.startNewWorkoutEditor(destination, localDate, draft);
+          // The form is already open. Same-URL navigation would reinitialize and discard this draft.
+          if (session) return;
+          this.navigateWorkspace(trainingPlansCreateRoute(destination, destination === null), {
+            mode: 'create', workoutId: null, planId: destination, standalone: destination === null, localDate,
+          }, { editorReturn: true });
+        },
+        onAdded: () => { if (current() && session) this.cancelEditor(); },
+      });
+    } catch (error) { if (current()) this.showError(error); }
+    finally { if (!this.destroyRef.destroyed) this.generationOpen.set(false); }
+  }
+
+  private startNewWorkoutEditor(destinationPlanId: string | null, localDate: string,
+    generated: DayWorkoutEditorDraft | null = this.dayWorkouts.takeEditorDraft(this.currentUser()?.uid ?? '', destinationPlanId, localDate)): void {
     this.advanceEditorGeneration();
     this.workoutDateInputInvalid.set(false);
-    const generated = this.dayWorkouts.takeEditorDraft(this.currentUser()?.uid ?? '', destinationPlanId, localDate);
     const units = normalizeUserUnitSettings(this.currentUser()?.settings?.unitSettings);
     this.generatedSaveRequest = generated?.saveRequest ?? null;
     this.editor.set({

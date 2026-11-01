@@ -713,6 +713,24 @@ and must never be inferred from merely connecting a service.
 
 ### Generate a workout from a Calendar day
 
+The same native generator is available beside Add workout in Plans/Standalone and in a new dated workout editor.
+It reuses `DayWorkoutService` and `DayWorkoutDialogComponent` with the selected date, sport and destination. Library
+recipes and existing-workout editors retain their existing workflows. Past/invalid dates and pending authored writes
+cannot launch generation. An explicit Edit workout result can populate the existing new-workout form through a
+private owner/route/editor-bound callback, preserving the generated save identity and the existing strength/endurance
+conversion. It bypasses same-URL navigation, which could otherwise reinitialize the form. Cancellation leaves the
+current form untouched; an acknowledged Add returns that form to its normal browse destination. No save or provider
+action is inferred from opening the generator or accepting the editor handoff.
+
+Home, Features, Training Plans, Dashboard and Assistant feature pages share the synthetic `daily-workout` public
+preview and generation copy. It is deferred behind the existing viewport/SSR placeholder and native snippet exclusion,
+uses CompactRow and the real workout profile/formatters, and only toggles sample workout/rest review. It performs no
+account reads, generation, saves or provider calls. Pro membership copy distinguishes the opt-in daily suggestion
+from the shared Assistant allowance used for manual generation; daily preparation starts on a Today visit.
+MCP impact review: no public wire, authority, recipe, storage or provider change. These are first-party discovery and
+editor entry points for existing generation, strict workout reads and explicit Add/rest-confirmation paths; existing
+MCP projections and approval contracts are unchanged. No Functions, Rules, indexes or registered-client refresh is needed.
+
 Owned Calendar and Dashboard selected-day previews, the day sheet and the full day page expose
 **Generate with AI** last in **Add workout**, after **Add from library**, for today through 365 days ahead. All day-context presentations share one
 menu, including empty days; manual plan, standalone and library options remain available for past dates. This opens an unsaved review workflow. The date stays on the selected Calendar day. Main controls are supported manual sport (including

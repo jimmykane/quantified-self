@@ -43,18 +43,21 @@ export class DayWorkoutService {
     catch { return false; }
   }
   async open(ownerUid: string, localDate: string, sport?: string,
-    options: Partial<Pick<DayWorkoutDialogData, 'initialControls' | 'initialResult' | 'mode' | 'followRoutine' | 'savePreferences' | 'onAdded'>> = {}): Promise<void> {
+    options: Partial<Pick<DayWorkoutDialogData, 'initialControls' | 'initialResult' | 'mode' | 'followRoutine' | 'savePreferences' | 'onAdded'>>
+      & { onEditorDraft?: (draft: DayWorkoutEditorDraft) => void } = {}): Promise<void> {
     if (!this.isOwner(ownerUid) || !this.canGenerate(localDate, options.initialControls?.timeZone) || this.opening) return;
     this.opening = true;
     try {
       const { DayWorkoutDialogComponent } = await import('../components/plans/day-workout-dialog.component');
       if (!this.isOwner(ownerUid) || !this.canGenerate(localDate, options.initialControls?.timeZone)) return;
       const narrow = typeof window !== 'undefined' && window.matchMedia('(max-width: 600px)').matches;
+      const { onEditorDraft, ...dialogOptions } = options;
       const result = await firstValueFrom(this.dialog.open(DayWorkoutDialogComponent, {
-        data: { ...options, ownerUid, localDate, sport: DAY_WORKOUT_SPORTS.find(value => value === sport) ?? ActivityTypes.Running },
+        data: { ...dialogOptions, ownerUid, localDate, sport: DAY_WORKOUT_SPORTS.find(value => value === sport) ?? ActivityTypes.Running },
         width: narrow ? '100vw' : '720px', maxWidth: '100vw', maxHeight: '100dvh', ...(narrow ? { height: '100dvh' } : {}),
       }).afterClosed());
-      if (result && this.isOwner(ownerUid)) {
+      if (result && this.isOwner(ownerUid) && result.ownerUid === ownerUid) {
+        if (onEditorDraft) { this.handoff = null; onEditorDraft(result); return; }
         this.handoff = result;
         const destination = result.controls.destinationPlanId;
         try {

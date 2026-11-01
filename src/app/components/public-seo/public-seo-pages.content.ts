@@ -7,6 +7,7 @@ import type { PublicSeoPageKey } from './public-seo-pages.paths';
 import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
 import { HEALTH_FEATURE_CONTENT } from './health-feature.content';
 import { TRAINING_PLANS_PAGE_SECTIONS, TRAINING_PLANS_SEO_CONTENT } from './training-plans-page.content';
+import { WORKOUT_GENERATION_SECTION } from './workout-generation.content';
 import { COROS_SETUP_QUERY_PARAMS, WAHOO_SETUP_QUERY_PARAMS } from '../../helpers/service-setup-redirect.helper';
 
 export {
@@ -140,10 +141,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.hub,
     eyebrow: 'Features',
     title: 'Activity, Training & Health Features',
-    description: 'Bring Garmin, Suunto, COROS, Wahoo, and files together for activity analysis, workout planning, health tracking, maps, comparisons, and AI answers.',
+    description: 'Garmin, Suunto, COROS, Wahoo and files together for workout analysis, plans, AI workout generation, daily Pro suggestions, health, maps and AI answers.',
     h1: 'Features for your activities, training, and health',
     intro: 'Use Quantified Self to centralize provider activities, uploaded files, and saved routes, review workout history in an activity calendar, analyze training context, compare recordings, benchmark devices, and ask questions through the built-in Assistant or an MCP client you explicitly authorize.',
-    chips: ['Activity calendar', 'Training analysis', 'Training plans', 'Supported activity types', 'Assistant', 'MCP server', 'Workout comparison', 'Route files', 'Benchmarks'],
+    chips: ['Activity calendar', 'Training analysis', 'Training plans', 'AI workouts', 'Supported activity types', 'Assistant', 'MCP server', 'Workout comparison', 'Route files', 'Benchmarks'],
     actions: [
       routeAction('Training Analysis', '/features/training-analysis', 'flat', 'arrow_forward'),
       routeAction('Training Plans', '/features/training-plans'),
@@ -177,7 +178,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'edit_calendar',
             title: 'Training plans',
-            copy: 'Create plans with named date phases or standalone structured workouts for running, cycling, swimming, and more. See planned work alongside completed activity history.',
+            copy: 'Build or generate structured workouts and organize plans with named phases. Pro members can opt in to an included daily workout or rest suggestion in Today.',
           },
           {
             icon: 'auto_awesome',
@@ -200,6 +201,9 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             copy: 'Keep provider activities, uploaded files, saved routes, maps, exports, training insights, and cross-service sync in one account.',
           },
         ],
+      },
+      {
+        ...WORKOUT_GENERATION_SECTION,
       },
       {
         eyebrow: 'Files and Devices',
@@ -482,7 +486,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     h1: TRAINING_PLANS_SEO_CONTENT.h1,
     intro: TRAINING_PLANS_SEO_CONTENT.intro,
     accessNote: TRAINING_PLANS_SEO_CONTENT.accessNote,
-    chips: ['Plans included', 'Standalone workouts', 'Named phases', 'MCP planning', 'Provider delivery for Pro', 'Plan calendar', 'Completed totals stay separate'],
+    chips: ['Plans included', 'Standalone workouts', 'Generate with AI', 'Daily suggestions with Pro', 'Named phases', 'MCP planning', 'Provider delivery for Pro'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Training Plans Help', '/help', 'stroked', undefined, 'training-plans'),
@@ -570,6 +574,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       routeAction('Activity Calendar', '/features/activity-calendar'),
     ],
     sections: [
+      WORKOUT_GENERATION_SECTION,
       {
         eyebrow: 'Your Workspace',
         title: 'Arrange the evidence around your training questions',
@@ -823,6 +828,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       routeAction('Assistant Help', '/help', 'stroked', undefined, 'ai-insights'),
     ],
     sections: [
+      WORKOUT_GENERATION_SECTION,
       {
         eyebrow: 'Conversational analysis',
         title: 'Ask naturally, then follow up',

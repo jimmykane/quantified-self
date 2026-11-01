@@ -85,6 +85,17 @@ describe('public-seo-pages.content', () => {
     expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('planned workouts');
     expect(TRAINING_PLANS_HOME_CONTENT.mcpExample.prompt).toContain('without duplicating training');
   });
+  it('explains manual and opt-in daily generation on the feature, plan, dashboard and Assistant pages', () => {
+    for (const key of ['featuresHub', 'trainingPlans', 'trainingDashboard', 'assistant'] as const) {
+      const section = PUBLIC_SEO_PAGES[key].sections.find(section => section.preview === 'daily-workout');
+      expect(section?.title).toBe('A workout that fits today');
+      const copy = JSON.stringify(section);
+      expect(copy).toContain('when they open Today');
+      expect(copy).toContain('separately from your Assistant allowance');
+      expect(copy).toContain('rest days');
+      expect(copy).toContain('Nothing is added without your choice');
+    }
+  });
 
   it('advertises lap-ended steps without promising unsupported provider delivery', () => {
     const copy = TRAINING_PLANS_PAGE_SECTIONS.find(section => section.title === 'Build the workout you mean')!.copy;

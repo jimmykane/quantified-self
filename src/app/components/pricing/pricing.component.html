@@ -7,7 +7,7 @@
   } @else {
   <h1>{{ currentRole === 'pro' || currentRole === 'basic' ? 'Your Subscription' : 'Choose Your Plan' }}</h1>
   @if (currentRole !== 'pro' && currentRole !== 'basic') {
-  <p class="pricing-intro">Analysis, training plans, workouts, and manual uploads are included with Starter. Upgrade for more history, higher Assistant allowances, or connected provider services.</p>
+  <p class="pricing-intro">Analysis, training plans, workouts, and manual uploads are included with Starter. AI workout generation uses your shared Assistant allowance. Pro also includes an opt-in daily workout suggestion, separately from that allowance, alongside connected provider services.</p>
   }
 
   @if (currentRole === 'pro' || currentRole === 'basic') {
@@ -290,6 +290,7 @@
             <li><mat-icon class="qs-color-primary">check_circle</mat-icon> Manual training plans and standalone workouts</li>
             <li><mat-icon class="qs-color-primary">check_circle</mat-icon> Automatic activity imports from your watch</li>
             <li><mat-icon class="qs-color-primary">check_circle</mat-icon> Provider planned-workout delivery</li>
+            <li><mat-icon class="qs-color-primary">check_circle</mat-icon> {{ dailyWorkoutBenefit }}</li>
             <li><mat-icon class="qs-color-primary">check_circle</mat-icon> Cross-device sync</li>
             <li><mat-icon class="qs-color-primary">check_circle</mat-icon> {{ getAssistantLimitLabel(product.metadata['role']) }}</li>
             <li><mat-icon class="qs-color-warn">favorite</mat-icon> Helps fund faster feature releases</li>

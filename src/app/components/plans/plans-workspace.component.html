@@ -522,6 +522,18 @@
 
     @if (editor(); as session) {
       <section class="workout-editor" aria-labelledby="plans-title">
+          @if (canGenerateWorkout()) {
+            <div class="form-actions">
+              <button mat-button type="button" appHapticTap (click)="generateWorkout()"
+                [disabled]="busyAction() !== null || generationOpen()">
+                <span class="button-content">
+                  @if (generationOpen()) { <mat-spinner diameter="18" aria-hidden="true"></mat-spinner> }
+                  @else { <mat-icon aria-hidden="true">auto_awesome</mat-icon> }
+                  <span>{{ generationOpen() ? 'Opening…' : 'Generate with AI' }}</span>
+                </span>
+              </button>
+            </div>
+          }
           <fieldset class="editor-fields" [disabled]="busyAction() !== null" aria-label="Workout details">
           <div class="workout-editor-basics" [class.workout-editor-basics--library]="libraryView()">
             <mat-form-field subscriptSizing="dynamic">
@@ -958,11 +970,23 @@
             <p>{{ selectedDayIsRest() ? 'Planned rest day' : displayedWorkoutRows().length + (displayedWorkoutRows().length === 1 ? ' workout' : ' workouts') }}</p>
           }
         </div>
+        <div class="plans-header-actions">
         <button appHapticTap #addWorkoutButton mat-flat-button type="button"
           (click)="openNewWorkout(view() === 'plans' ? selectedPlanId() : null, addWorkoutDate())"
           [disabled]="busyAction() !== null || (view() === 'plans' && (!selectedPlanId() || selectedDayIsRest()))">
           <mat-icon aria-hidden="true">add</mat-icon><span>Add workout</span>
         </button>
+        @if (canGenerateWorkout()) {
+          <button mat-button type="button" appHapticTap (click)="generateWorkout()"
+            [disabled]="busyAction() !== null || generationOpen()">
+            <span class="button-content">
+              @if (generationOpen()) { <mat-spinner diameter="18" aria-hidden="true"></mat-spinner> }
+              @else { <mat-icon aria-hidden="true">auto_awesome</mat-icon> }
+              <span>{{ generationOpen() ? 'Opening…' : 'Generate with AI' }}</span>
+            </span>
+          </button>
+        }
+        </div>
       </div>
 
       @if (view() === 'plans') {

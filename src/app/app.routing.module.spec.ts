@@ -525,7 +525,7 @@ describe('AppRoutingModule routes', () => {
         path: PUBLIC_FEATURE_PATHS.hub,
         title: 'Activity, Training & Health Features',
         h1: 'Features for your activities, training, and health',
-        descriptionText: 'activity analysis, workout planning, health tracking, maps, comparisons, and AI answers',
+        descriptionText: 'AI workout generation, daily Pro suggestions',
       },
       {
         path: PUBLIC_FEATURE_PATHS.activityCalendar,
@@ -715,7 +715,7 @@ describe('AppRoutingModule routes', () => {
       title: 'Training Analysis & Workout Planning',
       animation: 'Home',
     });
-    expect(homeRoute?.data?.['description']).toBe('Bring your activities, sleep and health data together. Analyze training, build structured workouts and plan your next session with Quantified Self.');
+    expect(homeRoute?.data?.['description']).toBe('Bring activities, sleep and health together. Analyze training, generate AI workouts and build plans. Pro includes opt-in daily workout suggestions.');
     expect(homeRoute?.data?.['jsonLd']?.['description']).toBe(homeRoute?.data?.['description']);
     expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Manual blood pressure, weight, body composition, blood oxygen, and VO₂ max logging');
     expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Timeline notes for travel, sickness, stress, and time away');
