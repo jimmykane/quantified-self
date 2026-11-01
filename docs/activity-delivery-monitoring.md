@@ -142,6 +142,25 @@ No user-facing Help, frontend, MCP or Training contract change is needed for thi
 operator diagnostic. Runtime and Monitoring activation require their own readback;
 offline tests alone do not prove email delivery or a positive metric series.
 
+The owner-approved activation completed on 1 November 2026. Configuration readback
+at 15:57 UTC verified fifteen owned metrics, ten enabled policies, the matching
+log-match extractors/rate limit, the new chart and the same enabled email channel.
+All unrelated metrics, policies, dashboards and notification-channel configuration
+were unchanged. The new counter query returned HTTP 200 at 16:06 UTC with no series;
+no qualifying post-creation failure, notification or synthetic email test is claimed.
+
+The approved five-function deployment completed at approximately 16:06 UTC:
+`processActivitySyncTask`, `importActivityToCOROSAPI`,
+`getCOROSAPIWorkoutFileUploadStatus`, `activitySendCommand` and
+`uploadActivitySendFile`. This also releases the previously verified mapping/preview
+changes. Readback at 16:06–16:08 UTC verified ACTIVE Functions, fresh ready revisions
+and 100% traffic, unchanged runtime memory/CPU/concurrency/timeouts/secret bindings,
+unchanged task retry/rate limits and zero ERROR logs in those new revisions.
+The source build, 385 backend tests, six monitoring checks, lint, all 191 isolated
+entrypoint contracts and 75 secret-bound endpoint checks passed. No Hosting, Rules,
+index, provider replay, queue reset or new provider request was performed for this
+diagnostic rollout. Existing classifications and retry behavior remain authoritative.
+
 Historical-send preview performance has **unchanged** delivery coverage. Its existing callable batches bounded exact
 Firestore reads and emits `[HistoricalActivitySend] Preview page checked.` with only fixed destination, source count,
 checked/failure counts, continuation presence and elapsed milliseconds. These diagnostics describe read-only eligibility
