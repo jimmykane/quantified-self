@@ -53,6 +53,8 @@ describe('help.content', () => {
       '**Finished with issues**', '**Dismiss this result**', 'not failure totals',
       '**Requesting Garmin history**', '**requests scheduled**', 'not records received',
       '**Waiting for history retries**', 'quiet clock icon instead of a spinner',
+      "**History import** dialog in Connections directly", 'same counts, stages and explanations',
+      '**View import progress**', 'it does not start authorization',
       'Later queued sections wait for the current section', 'pending retries do not count as a finished import',
       'delivery completion is not tracked here',
       'a new import or a retried result appears again', 'recovery controls remain in Connections']) expect(copy).toContain(phrase);

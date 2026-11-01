@@ -27,6 +27,18 @@ Auth and the verified profile must match before reads begin. Raw sign-out/accoun
 unsubscribe old metadata, dismiss owned panels silently and reject old results. Profile-only updates do not restart
 listeners. Dashboard progress is omitted when viewing another account. Read failures are unavailable, not zero; an
 explicit **Refresh status** reattaches only these safe reads. Header, panel and Dashboard consume the same live view.
+`HistoryImportSummaryComponent` renders the same progress rows, counts, messages, range labels and request/delivery
+qualification inside provider management for Garmin, Suunto, COROS and Wahoo. **View details** links to the selected
+provider with `tool=history`; Connections opens its existing history dialog after the verified owner and view are ready,
+then consumes that display-only parameter so the same link can be followed again. Invalid providers and non-Pro
+views do not open tools. Account/provider changes and teardown cancel pending opens or close stale dialogs. Connections
+keeps only its compact status line and **View import progress** action; the modal displays history inline without a
+nested accordion. The main provider instance owns connection badges; the dialog copy cannot clear them during hydration.
+Reconnect review uses the existing `reconnect=1` navigation to reveal main connection controls without starting OAuth.
+The date, stored-history and retry controls stay in management. Stored calendar dates render as UTC dates. A form
+omits its duplicate banner only when the surrounding summary displays the exact same tracked run; a newer optimistic
+acceptance stays visible until metadata catches up. Progress updates do not restart stored-history reads. This is a
+frontend release: no migration, provider call, replay, new backend endpoint, queue or monitoring change is required.
 During that read, the existing cards stay visible and **Checking status** disables repeat refreshes. A provider's fresh
 snapshot updates immediately even if another provider is still loading. Retained results never cross owners or sessions.
 

@@ -53,6 +53,13 @@ describe('ServicesGarminComponent', () => {
     let mockActivatedRoute: any;
     let haptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
 
+    it('returns reconnect review from the tools dialog to provider controls without starting OAuth', () => {
+        component.showConnectionSummary = false;
+        component.reviewHistoryReconnect();
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/services'], {queryParams: {serviceName: component.serviceName, reconnect: '1'}});
+        expect(mockUserService.requestAndSetCurrentUserGarminAPIAccessToken).not.toHaveBeenCalled();
+    });
+
     beforeEach(async () => {
         haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
         queryParams = {};

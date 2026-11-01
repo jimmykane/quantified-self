@@ -1,19 +1,18 @@
 import { Component, computed, inject, input, output } from '@angular/core';
-import { DecimalPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
-import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
 import { HistoryImportProgressService } from '../../services/history-import-progress.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import type { HistoryImportProgressItem } from '../../helpers/history-import-progress.helper';
+import { HistoryImportSummaryComponent } from './history-import-summary.component';
 
 @Component({selector: 'app-history-import-cards', standalone: true,
-  imports: [DecimalPipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, MatProgressSpinnerModule, MatTooltipModule, ServiceSourceIconComponent],
+  imports: [RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressSpinnerModule, MatTooltipModule, ServiceSourceIconComponent, HistoryImportSummaryComponent],
   templateUrl: './history-import-cards.component.html', styleUrl: './history-import-cards.component.scss'})
 export class HistoryImportCardsComponent {
   readonly ownerUid = input.required<string>();

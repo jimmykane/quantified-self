@@ -4,6 +4,9 @@
     Your request is in progress. Closing this dialog does not cancel it.
   </app-status-info>
 </div>
+} @else if (!showTrackedHistoryStatus && backgroundActivityImport()?.runId
+  && backgroundActivityImport()?.runId === userMetaForService?.connectionHistoryImport?.runId) {
+<!-- The enclosing history dialog already displays this exact run's shared progress. -->
 } @else if (backgroundActivityImport(); as history) {
 @let garminRequests = serviceName === serviceNames.GarminAPI;
 <div class="status-container" role="status" aria-live="polite">

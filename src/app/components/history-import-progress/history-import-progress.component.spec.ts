@@ -144,6 +144,7 @@ describe('shared history import surfaces', () => {
     expect(host.querySelector('mat-progress-spinner')).toBeNull();
     expect(host.querySelector('mat-progress-bar')).toBeNull();
     expect(host.querySelector('a')?.getAttribute('href')).toContain('serviceName=Garmin%20API');
+    expect(host.querySelector('a')?.getAttribute('href')).toContain('tool=history');
     expect(host.textContent).toContain('7 requests scheduled');
     expect(host.textContent).not.toContain('items or requests');
     expect(host.textContent).toContain('Counts describe scheduled requests, not records received');

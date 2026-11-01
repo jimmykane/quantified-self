@@ -73,6 +73,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   @Input() missingPermissions: string[] = [];
   @Input() isLoadingParent = false;
   @Input() providerConnected = false;
+  @Input() showTrackedHistoryStatus = true;
   @Output() importInitiated = new EventEmitter<void>();
 
 

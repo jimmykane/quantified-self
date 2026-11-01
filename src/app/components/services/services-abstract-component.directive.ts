@@ -252,6 +252,13 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
   protected onServiceDataChanged(): void {
   }
 
+  public reviewHistoryReconnect(): void {
+    this.reconnectRequested = true;
+    if (!this.showConnectionSummary) {
+      void this.router.navigate(['/services'], {queryParams: {serviceName: this.serviceName, reconnect: '1'}});
+    }
+  }
+
   protected get canConnectWithoutProAccess(): boolean {
     return false;
   }
