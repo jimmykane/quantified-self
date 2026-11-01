@@ -5859,6 +5859,10 @@ provider selection. It is not part of `dailyWorkoutSuggestion`, model context, t
 generation fingerprint: changing destinations neither invalidates a recipe nor spends another AI request. The existing
 preferences dialog exposes Send after approval before its generation options. Only the open preferences/daily-workout
 review observes the existing activity-service connection projection; Today adds no connection listener or polling.
+The dialog reuses that live connection subscription for the same owner across unrelated profile/settings updates.
+Delivery validation gates preference saving and Add & send, independently of ordinary generation validation: an
+unavailable destination cannot block an explicit manual regeneration. An acknowledged delivery result stays visible
+even when the schedule listener fails; Reload retrieves the schedule without repeating Add, generation or sending.
 
 For the original daily Standalone workout, the review can opt out for this approval or choose connected, admitted
 services. **Add & send** first acknowledges the existing idempotent create, then calls

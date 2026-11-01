@@ -9,10 +9,12 @@
         <p class="hint">{{ saved.localDate | date:'EEE, MMM d' }} · {{ saved.plan?.name ?? 'Standalone' }} · {{ saved.sport }}</p>
         <app-training-delivery-button scope="workout" [entityId]="workoutId" [title]="saved.title"
           [standalone]="saved.standalone" [summaryWorkouts]="saved.workouts" [summaryPlan]="saved.plan" [prominent]="true" [disabled]="!!busy()"></app-training-delivery-button>
-        <p class="hint" role="status">{{ deliveryOutcomeText() ?? 'Your workout is saved. Review sync before sending to a connected service.' }}</p>
       } @else {
-        <p role="status">Your workout was added, but its current schedule is unavailable. Reload before sending.</p>
+        <p role="status">Your workout was added, but its current schedule is unavailable. Reload to review sync.</p>
         <button mat-button appHapticTap type="button" (click)="loadSchedule()">Reload schedule</button>
+      }
+      @if (deliveryOutcomeText() || savedSyncAvailable()) {
+        <p class="hint" role="status">{{ deliveryOutcomeText() ?? 'Your workout is saved. Review sync before sending to a connected service.' }}</p>
       }
     </section>
   } @else {
@@ -134,7 +136,7 @@
     <button mat-button appHapticTap mat-dialog-close [disabled]="!!busy()">Done</button>
   } @else {
   <button mat-button appHapticTap mat-dialog-close [disabled]="!!busy() || saveUncertain()">Cancel</button>
-  <button mat-flat-button [disabled]="!!busy() || (!saveUncertain() && (!valid() || (!!result()?.draft && staleReview())))"
+  <button mat-flat-button [disabled]="!!busy() || (!saveUncertain() && (!approvalValid() || (!!result()?.draft && staleReview())))"
     (click)="primaryAction()">{{ primaryLabel() }}</button>
   }
 </mat-dialog-actions>

@@ -10,7 +10,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
-import { catchError, firstValueFrom, map, of, startWith, Subscription, switchMap } from 'rxjs';
+import { catchError, distinctUntilChanged, firstValueFrom, map, of, startWith, Subscription, switchMap } from 'rxjs';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { DAY_WORKOUT_EQUIPMENT, DAY_WORKOUT_SPORTS, defaultDayWorkoutControls, dayWorkoutLocalDate, dayWorkoutDateOffset,
   dayWorkoutPurposes, dayWorkoutTargets, DAY_WORKOUT_SIGNAL_OPTIONS, dayWorkoutReadinessSourcesEnabled,
@@ -144,7 +144,9 @@ export class DayWorkoutDialogComponent {
     && [null, this.schedule()?.state.activePlanId, this.controls().destinationPlanId].includes(workout.planId)) ?? []);
   readonly user = toSignal(this.users.user$, { initialValue: this.users.user() });
   // Only an open daily-preferences/review dialog observes connections; Today keeps its existing read footprint.
-  private readonly deliveryConnections = toSignal(this.users.user$.pipe(switchMap(user => user?.uid === this.data.ownerUid
+  private readonly deliveryConnections = toSignal(this.users.user$.pipe(
+    distinctUntilChanged((previous, current) => previous?.uid === current?.uid),
+    switchMap(user => user?.uid === this.data.ownerUid
     && (this.data.mode === 'preferences' || this.data.dailyDelivery !== undefined && this.data.initialResult?.kind === 'workout')
     ? this.users.watchActivityServiceConnectionState(user).pipe(catchError(() => of(null))) : of(null))), { initialValue: null });
   readonly showDailyDelivery = computed(() => this.data.mode === 'preferences' || this.data.dailyDelivery !== undefined
@@ -168,8 +170,9 @@ export class DayWorkoutDialogComponent {
     return date >= this.today && date <= this.latestDate && Number.isSafeInteger(controls.minutes)
       && controls.minutes >= 5 && controls.minutes <= 240 && controls.equipment.length > 0
       && (this.data.mode === 'preferences' || !!this.schedule() && !this.scheduleFailed() && !this.schedule()?.restoreUnavailable)
-      && (!this.controls().destinationPlanId || !!this.selectedPlan()) && this.deliveryValid();
+      && (!this.controls().destinationPlanId || !!this.selectedPlan());
   } catch { return false; } });
+  readonly approvalValid = computed(() => this.valid() && this.deliveryValid());
   readonly labels: Record<string, string> = {
     suggest: 'Suggest for me', recovery: 'Recovery / easy',
     none: 'No targets', speed: 'Pace / speed',
@@ -218,7 +221,7 @@ export class DayWorkoutDialogComponent {
   async primaryAction(): Promise<void> {
     if (this.savedWorkoutId()) return;
     if (this.data.mode === 'preferences') {
-      if (!this.valid() || this.busy() || !this.generation.isOwner(this.data.ownerUid)) return;
+      if (!this.approvalValid() || this.busy() || !this.generation.isOwner(this.data.ownerUid)) return;
       const sequence = ++this.sequence;
       this.busy.set('save'); this.ref.disableClose = true; this.error.set(null);
       try {
@@ -406,7 +409,7 @@ export class DayWorkoutDialogComponent {
       draft: structuredClone(this.result()!.draft!), saveRequest: this.saveCommand() });
   }
   async add(): Promise<void> {
-    if (this.savedWorkoutId() || !this.result()?.draft || this.busy() || (!this.saveUncertain() && (this.staleReview() || !this.valid()))) return;
+    if (this.savedWorkoutId() || !this.result()?.draft || this.busy() || (!this.saveUncertain() && (this.staleReview() || !this.approvalValid()))) return;
     const sequence = ++this.sequence;
     const approvedProviders = this.sendAfterApproval() ? [...this.dailyDelivery().providers] : [];
     this.busy.set('save'); this.ref.disableClose = true; this.error.set(null);

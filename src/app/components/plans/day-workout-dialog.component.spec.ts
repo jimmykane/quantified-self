@@ -29,6 +29,7 @@ import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 
 const sdk = vi.hoisted(() => ({ authState: vi.fn() }));
+type DialogProfile = { uid: string; displayName?: string; settings: { unitSettings: object } };
 vi.mock('app/firebase/auth', async original => ({ ...await original<typeof import('app/firebase/auth')>(), authState: sdk.authState }));
 const strength = { version: 1 as const, exercises: [{ id: 'squat', name: 'Dumbbell squat', sets: [
   { id: 'one', ending: { kind: 'repetitions' as const, repetitions: 8 }, externalLoadKg: 12.5, restAfterSeconds: 90 },
@@ -75,6 +76,7 @@ describe('DayWorkoutDialogComponent', () => {
   let dialogOpen: ReturnType<typeof vi.fn>;
   let loadQuotaStatus: ReturnType<typeof vi.fn>;
   let connections: BehaviorSubject<ActivityServiceConnectionState>;
+  let profile: BehaviorSubject<DialogProfile | null>;
   let sendApprovedWorkout: ReturnType<typeof vi.fn>;
   let haptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
   beforeEach(async () => {
@@ -102,12 +104,13 @@ describe('DayWorkoutDialogComponent', () => {
     haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() }; let counter = 0;
     TestBed.overrideComponent(TrainingDeliveryButtonComponent, { add: { providers: [{ provide: MatDialog, useValue: { open: dialogOpen } }] } });
     const user = { uid: 'owner', settings: { unitSettings: {} } };
+    profile = new BehaviorSubject<DialogProfile | null>(user);
     await TestBed.configureTestingModule({ imports: [DayWorkoutDialogComponent], providers: [
       provideRouter([]),
       { provide: MAT_DIALOG_DATA, useValue: { ownerUid: 'owner', localDate: '2026-10-28', sport: ActivityTypes.StrengthTraining } },
       { provide: Auth, useValue: {} },
       { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
-      { provide: AppUserService, useValue: { user: signal(user), user$: of(user), watchActivityServiceConnectionState: () => connections } },
+      { provide: AppUserService, useValue: { user: signal(user), user$: profile, watchActivityServiceConnectionState: () => connections } },
       { provide: AppEventService, useValue: {} },
       { provide: AppHapticsService, useValue: haptics },
       { provide: MatDialogRef, useValue: { close, disableClose: false, updateSize: vi.fn() } }, { provide: MatDialog, useValue: { open: dialogOpen } },
@@ -174,9 +177,10 @@ describe('DayWorkoutDialogComponent', () => {
     const data = TestBed.inject(MAT_DIALOG_DATA); data.mode = 'preferences'; data.savePreferences = vi.fn().mockResolvedValue(undefined);
     const fixture = await render(), component = fixture.componentInstance;
     expect(component.dailyDelivery()).toEqual({ enabled: false, providers: [] });
-    component.setDeliveryEnabled(true); fixture.detectChanges(); expect(component.valid()).toBe(false);
+    component.setDeliveryEnabled(true); fixture.detectChanges(); expect(component.approvalValid()).toBe(false);
+    expect(component.valid()).toBe(true); await component.primaryAction(); expect(data.savePreferences).not.toHaveBeenCalled();
     component.selectDeliveryProvider('coros', true); expect(component.dailyDelivery().providers).toEqual([]);
-    component.selectDeliveryProvider('garmin', true); fixture.detectChanges(); expect(component.valid()).toBe(true);
+    component.selectDeliveryProvider('garmin', true); fixture.detectChanges(); expect(component.approvalValid()).toBe(true);
     exportDailySuggestionDialogQa(fixture.nativeElement, 'daily-suggestion-delivery-preferences');
     await component.primaryAction();
     expect(data.savePreferences).toHaveBeenCalledWith(expect.any(Object), true, { enabled: true, providers: ['garmin'] });
@@ -234,6 +238,52 @@ describe('DayWorkoutDialogComponent', () => {
     connections.next({ ...connections.value, [ServiceNames.GarminAPI]: false }); fixture.detectChanges();
     expect(component.deliveryValid()).toBe(false); await component.add(); expect(mutate).not.toHaveBeenCalled();
     component.setDeliveryEnabled(false); await component.add(); expect(mutate).toHaveBeenCalledOnce(); expect(sendApprovedWorkout).not.toHaveBeenCalled();
+  });
+  it('allows manual regeneration when a selected delivery service becomes unavailable', async () => {
+    configureDailyDelivery(); const fixture = await render(), component = fixture.componentInstance;
+    connections.next({ ...connections.value, [ServiceNames.GarminAPI]: false }); fixture.detectChanges();
+    const regenerate = [...fixture.nativeElement.querySelectorAll('button')]
+      .find((button: HTMLButtonElement) => button.textContent.trim() === 'Generate again') as HTMLButtonElement;
+    expect(regenerate.disabled).toBe(false);
+    await component.generate(); fixture.detectChanges();
+    expect(generate).toHaveBeenCalledOnce(); expect(component.showDailyDelivery()).toBe(false);
+    await component.add(); expect(mutate).toHaveBeenCalledOnce(); expect(sendApprovedWorkout).not.toHaveBeenCalled();
+  });
+  it('reuses connection subscriptions across same-owner profile updates and still observes disconnects', async () => {
+    configureDailyDelivery();
+    const watch = vi.spyOn(TestBed.inject(AppUserService), 'watchActivityServiceConnectionState');
+    const fixture = await render(), component = fixture.componentInstance;
+    expect(watch).toHaveBeenCalledOnce();
+    profile.next({ ...profile.value!, displayName: 'Updated name' }); fixture.detectChanges();
+    profile.next({ ...profile.value!, settings: { unitSettings: {} } }); fixture.detectChanges();
+    expect(watch).toHaveBeenCalledOnce();
+    connections.next({ ...connections.value, [ServiceNames.GarminAPI]: false }); fixture.detectChanges();
+    expect(component.deliveryValid()).toBe(false);
+    profile.next(null); fixture.detectChanges();
+    profile.next({ uid: 'owner', settings: { unitSettings: {} } }); fixture.detectChanges();
+    expect(watch).toHaveBeenCalledTimes(2);
+  });
+  it.each(['queued', 'failed'] as const)('keeps the %s delivery result visible when the saved schedule read fails', async state => {
+    configureDailyDelivery(); let finish!: () => void;
+    sendApprovedWorkout.mockImplementationOnce(() => new Promise(resolve => { finish = () => resolve([{ provider: 'garmin', state }]); }));
+    const fixture = await render(), component = fixture.componentInstance;
+    const pending = component.add(); await vi.waitFor(() => expect(sendApprovedWorkout).toHaveBeenCalledOnce());
+    schedule.error(Error('Offline')); fixture.detectChanges();
+    finish(); await pending; fixture.detectChanges();
+    expect(component.savedSyncAvailable()).toBe(false); expect(component.savedWorkoutId()).toBeTruthy();
+    expect(fixture.nativeElement.textContent).toContain(state === 'queued' ? 'Delivery queued for Garmin' : 'Review sync for Garmin');
+    expect(fixture.nativeElement.textContent).toContain('Reload schedule');
+    expect(mutate).toHaveBeenCalledOnce(); expect(sendApprovedWorkout).toHaveBeenCalledOnce(); expect(generate).not.toHaveBeenCalled();
+    exportDailySuggestionDialogQa(fixture.nativeElement, 'daily-suggestion-schedule-unavailable-'+state);
+    const workout = component.savedWorkout()!;
+    schedule = new BehaviorSubject<CurrentTrainingScheduleV1>({ state: { schemaVersion: 1, revision: 8,
+      currentWorkoutCount: 1, activePlanId: null, updatedAtMs: 8 }, plans: [], workouts: [workout] });
+    const reload = [...fixture.nativeElement.querySelectorAll('button')]
+      .find((button: HTMLButtonElement) => button.textContent.includes('Reload schedule')) as HTMLButtonElement;
+    reload.click(); fixture.detectChanges();
+    expect(component.savedSyncAvailable()).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain(state === 'queued' ? 'Delivery queued for Garmin' : 'Review sync for Garmin');
+    expect(mutate).toHaveBeenCalledOnce(); expect(sendApprovedWorkout).toHaveBeenCalledOnce(); expect(generate).not.toHaveBeenCalled();
   });
   it('never sends for a rest result', async () => {
     const data = configureDailyDelivery(); data.initialResult = { ...data.initialResult, kind: 'rest', draft: null };
