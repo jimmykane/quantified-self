@@ -44,6 +44,7 @@ describe('AppSleepService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getDocsFromServer).mockReset();
     vi.mocked(collectionData).mockReturnValue(of([]));
     vi.mocked(docData).mockReturnValue(of(undefined));
     TestBed.configureTestingModule({
@@ -301,6 +302,49 @@ describe('AppSleepService', () => {
     expect(where).toHaveBeenCalledWith('startTimeMs', '<=', end);
     expect(orderBy).toHaveBeenCalledWith('startTimeMs', 'desc');
     expect(limit).not.toHaveBeenCalled();
+    expect(collectionData).toHaveBeenCalledOnce();
+    expect(getDocsFromServer).not.toHaveBeenCalled();
+  });
+
+  it('loads a complete long range with one server query instead of accepting a short cached history', async () => {
+    const start = Date.parse('2025-11-02T00:00:00Z'), end = Date.parse('2026-11-02T00:00:00Z');
+    const nights = Array.from({ length: 344 }, (_, index) => ({ id: `night-${index}`,
+      userID: 'user-1', source: { provider: 'SuuntoApp', providerUserId: 'account', sourceSessionKey: `night-${index}` },
+      sleepDate: new Date(start + index * 86_400_000).toISOString().slice(0, 10),
+      startTimeMs: start + index * 86_400_000, endTimeMs: start + index * 86_400_000 + 28_800_000,
+      durationSeconds: 28_800, isNap: false, stages: [], stageDurationsSeconds: {},
+      vitals: { averageHrvMs: 45 }, createdAtMs: 0, updatedAtMs: 0 }));
+    vi.mocked(collectionData).mockReturnValue(of(nights.slice(-66)));
+    let finish!: () => void;
+    vi.mocked(getDocsFromServer).mockImplementationOnce(() => new Promise(resolve => {
+      finish = () => resolve({ docs: nights.map(night => ({ id: night.id, data: () => night })) } as never);
+    }));
+    const resolved = vi.fn();
+    const result = firstValueFrom(service.watchForDashboard('user-1', start, end, { serverRead: true }));
+    void result.then(resolved);
+    await Promise.resolve(); await Promise.resolve();
+    expect(resolved).not.toHaveBeenCalled();
+    expect(collectionData).not.toHaveBeenCalled();
+    expect(getDocsFromServer).toHaveBeenCalledOnce();
+    finish();
+    const loaded = await result;
+    expect(loaded).toHaveLength(344);
+    expect(loaded[0].sleepDate).toBe('2025-11-02');
+    expect(loaded.at(-1)?.id).toBe('night-343');
+    expect(loaded.every(night => night.vitals?.averageHrvMs === 45)).toBe(true);
+    expect(limit).not.toHaveBeenCalled();
+    expect(where).toHaveBeenCalledWith('startTimeMs', '>=', start - 18 * 3_600_000);
+    expect(where).toHaveBeenCalledWith('startTimeMs', '<=', end);
+    expect(TestBed.inject(AppHealthService).watchRange).not.toHaveBeenCalled();
+  });
+
+  it('propagates a failed server Sleep read without replacing it with cached data', async () => {
+    vi.mocked(collectionData).mockReturnValue(of([]));
+    vi.mocked(getDocsFromServer).mockRejectedValueOnce(new Error('offline'));
+    await expect(firstValueFrom(service.watchForDashboard('user-1', 1, 2, { serverRead: true })))
+      .rejects.toThrow('offline');
+    expect(collectionData).not.toHaveBeenCalled();
+    expect(getDocsFromServer).toHaveBeenCalledOnce();
   });
 
   it('queries all sleep sessions without applying the fallback limit when start is zero', async () => {

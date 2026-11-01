@@ -14,7 +14,7 @@ import {
   startAfter,
 } from 'app/firebase/firestore';
 import type { QueryDocumentSnapshot } from 'firebase/firestore';
-import { Observable, of, from, combineLatest } from 'rxjs';
+import { Observable, of, from, combineLatest, defer } from 'rxjs';
 import { map, switchMap, catchError } from 'rxjs/operators';
 import { enrichSleepWithNightlyHrv, nightlyHrvDateRange } from '@shared/nightly-hrv';
 import { HrvHistoryService } from './hrv-history.service';
@@ -67,9 +67,10 @@ export class AppSleepService {
     userID: string | null | undefined,
     startDate: Date | number | null | undefined,
     endDate: Date | number | null | undefined,
+    options?: { serverRead?: boolean },
   ): Observable<HealthWorkspaceSleepSession[]> {
     const uid = `${userID || ''}`.trim();
-    return this.watchSessions(userID, startDate, endDate).pipe(
+    return this.watchSessions(userID, startDate, endDate, options).pipe(
       switchMap(sessions => {
         const secureMatching = this.browserCompatibility.checkWebCryptoSupport();
         const range = nightlyHrvDateRange(sessions);
@@ -132,6 +133,7 @@ export class AppSleepService {
     userID: string | null | undefined,
     startDate: Date | number | null | undefined,
     endDate: Date | number | null | undefined,
+    options?: { serverRead?: boolean },
   ): Observable<SleepSession[]> {
     const uid = `${userID || ''}`.trim();
     if (!uid) {
@@ -152,7 +154,13 @@ export class AppSleepService {
       ...(isFallbackWindow ? [limit(AppSleepService.FALLBACK_LIMIT)] : []),
     );
 
-    return (collectionData(sleepQuery, { idField: 'id' }) as Observable<SleepSession[]>).pipe(
+    // One-shot range consumers must not finish on an incomplete local-cache snapshot.
+    const sessions$ = options?.serverRead
+      ? defer(() => getDocsFromServer(sleepQuery)).pipe(
+        map(snapshot => snapshot.docs.map(document => ({ ...document.data(), id: document.id } as SleepSession))),
+      )
+      : collectionData(sleepQuery, { idField: 'id' }) as Observable<SleepSession[]>;
+    return sessions$.pipe(
       map((sessions) => sessions
         .map(decodeSleepSessionSportsLibData)
         .filter((session) => this.overlapsDashboardRange(session, startTimeMs, endTimeMs))
