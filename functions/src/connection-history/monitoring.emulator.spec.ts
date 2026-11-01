@@ -65,7 +65,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('connection history bounde
     if (reason === 'retry') { run.steps[0].status = 'retrying'; await ref.update({ steps: run.steps, nextAttemptAt: Date.now() + 60000 }); }
     if (reason === 'permission') await db.doc(run.tokenPath).update({ permissions: [] });
     if (reason === 'cooldown') await db.doc(`users/PRIVATE_OWNER/meta/${run.serviceName}`).update({ connectionHistoryReservation: 'OTHER', connectionHistoryReservationExpiresAt: Date.now() + 60000 });
-    if (reason === 'child') { run.steps[0].childPaths = ['workoutQueue/PRIVATE']; await ref.update({ steps: run.steps }); await db.doc('workoutQueue/PRIVATE').set({ processed: false }); }
+    if (reason === 'child') { run.steps[0].childPaths = ['workoutQueue/PRIVATE']; run.steps[0].nextStartMs = run.endMs + 1;
+      await ref.update({ steps: run.steps }); await db.doc('workoutQueue/PRIVATE').set({ processed: false, connectionHistoryRunId: run.id }); }
     await observe(async () => reason !== 'pro', async () => reason === 'capacity' ? 500 : 0);
     expect(logs().some(([, fields]) => fields.dueSample > 0)).toBe(false);
     expect(logger.warn).not.toHaveBeenCalled();
@@ -165,15 +166,30 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('connection history bounde
     const depth = vi.fn(async () => 500); await observe(async () => true, depth);
     expect(sample()).toMatchObject({ dueSample: 0, unknownSample: 0 }); expect(depth).toHaveBeenCalledOnce();
   });
-  it.each(['disconnect', 'pro', 'child'])('committed receipts still respect %s lifecycle and waiting work', async reason => {
+  it.each(['disconnect', 'pro'])('committed receipts still respect %s lifecycle', async reason => {
     const { ref, run } = await seed();
     if (reason === 'disconnect') await db.doc(run.rootPath).update({ disconnectOperationGeneration: 'PRIVATE_NEW' });
-    if (reason === 'child') {
-      run.steps[0].childPaths = ['workoutQueue/PRIVATE_CHILD']; await db.doc('workoutQueue/PRIVATE_CHILD').set({ processed: false });
-    }
     await ref.update({ steps: run.steps, lastOperation: { key: historyOperationKey(run.steps[0]), result: 'PRIVATE_RESULT' } });
     const depth = vi.fn(async () => 500); await observe(async () => reason !== 'pro', depth);
     expect(sample()).toMatchObject({ dueSample: 0, unknownSample: 0 }); expect(depth).not.toHaveBeenCalled();
+  });
+  it.each(['available', 'full', 'scanned', 'receipt', 'webhook', 'shared-capacity'])('observes activity continuation with %s pending work', async state => {
+    const { ref, run } = await seed();
+    const count = state === 'full' ? 101 : 1;
+    run.steps[0].childPaths = Array.from({ length: count }, (_, i) => `workoutQueue/PRIVATE_${i}`);
+    const batch = db.batch();
+    for (const path of run.steps[0].childPaths) batch.set(db.doc(path), { processed: false, retryCount: 7,
+      ...(state === 'webhook' ? {} : { connectionHistoryRunId: run.id }) });
+    await batch.commit();
+    if (state === 'scanned') run.steps[0].nextStartMs = run.endMs + 1;
+    await ref.update({ steps: run.steps, ...(state === 'receipt' ? { lastOperation: {
+      key: historyOperationKey(run.steps[0]), result: 'PRIVATE_RESULT' } } : {}) });
+    const before = await ref.get(); const depth = vi.fn(async () => state === 'shared-capacity' || state === 'receipt' ? 500 : 0);
+    await observe(async () => true, depth);
+    expect(sample()).toMatchObject({ dueSample: ['available', 'receipt', 'webhook'].includes(state) ? 1 : 0, unknownSample: 0 });
+    if (['full', 'scanned', 'receipt'].includes(state)) expect(depth).not.toHaveBeenCalled();
+    expect((await ref.get()).updateTime!.isEqual(before.updateTime!)).toBe(true);
+    expect(JSON.stringify(logs())).not.toContain('PRIVATE');
   });
   it('treats an ambiguous child state as unknown, not eligible or healthy zero', async () => {
     const { ref, run } = await seed(); run.steps[0].childPaths = ['workoutQueue/PRIVATE']; await ref.update({ steps: run.steps });

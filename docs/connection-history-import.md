@@ -171,7 +171,7 @@ requests never add Sleep, Health or routes. The automatic-admission environment 
 requests. No existing jobs are converted, reset or replayed.
 
 For Suunto/COROS, the shared coordinator admits at most 100 workouts per window, uses the existing 60-second history
-dispatch spread, waits for committed child outcomes and resumes with the same capacity, retry, deletion and
+dispatch spread, tracks committed child outcomes and resumes with the same shared capacity, retry, deletion and
 connection guards. Wahoo reuses its existing adapter: one descending 100-workout page per step, a checkpointed
 page cursor and the same exact selected range. Its deferred workout dispatch schedule is unchanged, not replaced
 by the Suunto/COROS spread. Workouts without FIT files or identified as third-party imports remain excluded.
@@ -268,8 +268,8 @@ dispatched, retrying, leased, parked and different-run/account/owner rows remain
 settles before checkpointing; failures retain durable undispatched children for the half-hour safety net, without
 resetting retries or repeating admission. A batch already waiting before deployment can still wait for that scan once.
 Legacy manual bulk activity history and scheduled recovery retain the shared 15-minute task spread. Wahoo, Garmin,
-worker concurrency and retry/backoff settings are unchanged. The coordinator still waits for all children in a window
-before admitting the next one; newly dispatched coordinator-owned activity batches get the shorter spread. Existing tasks
+worker concurrency and retry/backoff settings are unchanged. The coordinator can continue activity windows while individual workouts retry, within the outstanding-work bound below;
+newly dispatched coordinator-owned activity batches get the shorter spread. Existing tasks
 are not rescheduled or replayed, and 60 seconds is a dispatch window, not a processing-completion guarantee.
 Reserved-name recovery still requires the exact explicit queue revision, including Suunto history; a superseded
 attempt cannot advance or dispatch a replacement. Fallback diagnostics are best effort and cannot interrupt the
@@ -295,14 +295,50 @@ Queued children from a superseded connection finish through the existing revisio
 
 Suunto activity history uses the same Firebase-owner-scoped queue identity as webhooks. Existing canonical queue revisions are preserved by automatic admission. A new connection replaces only its owner’s unfinished work from a superseded history run, with a new queue revision; completed records remain intact. Child rows must have explicit terminal outcomes; missing rows never count as success. Failed child items can be restored only from the same run's matching DLQ entry, without overwriting a replacement row. Retry resumes failed steps and preserves completed steps and dates, renewing restored queue rows’ retention. Automatic cooldown timestamps remain anchored to the original connection, including across pages and retries; retry checks reservations again before restoring failed queue work. Lost authorization is explained separately and leads to reconnect options.
 
+### Continuing activity history while workouts retry
+
+Suunto, COROS and Wahoo activity steps retain outstanding jobs in the existing private `childPaths` checkpoint.
+After each observation, completed jobs leave that list and verified failures enter the existing `failedChildPaths` list.
+The coordinator can admit another unchanged batch of at most 100 when outstanding jobs plus retained recovery
+references total at most 100. The combined bound is therefore 200, including failures from earlier steps. At capacity,
+it waits one minute without spending a retry, advancing a cursor or changing any child job. The existing shared
+500-item admission threshold and single coordinator dispatch remain in force. Empty windows with outstanding jobs
+also keep the one-minute observation cadence. This limits congestion; it does not guarantee faster processing under load.
+
+Each workout keeps its canonical queue identity, revision, dispatch marker, retry count and backoff. This also covers
+an existing webhook job reused by admission. Receipt recovery merges newly admitted paths with outstanding paths,
+so a crash cannot drop the older retry, repeat the admitted page or count its receipt twice. No provider parser,
+identity/deduplication policy, retry budget, admission batch size or worker concurrency changes.
+
+The existing safe `message` projection distinguishes **Continuing the remaining history**, **Waiting for processing
+capacity**, and **History scan finished**, with queued/processing, retrying and retained-failure counts. An exhausted
+scan cursor does not complete the step while workouts remain pending. Successful completion clears stale waiting
+messages; if all remaining workouts are retries, the existing `retrying` status explains that final wait without
+spending a coordinator retry. Settled failures retain explicit recovery guidance. Existing Dashboard/header and Connections readers
+already display this message, so no frontend schema or deployment is needed. Counters describe queue work, not unique
+new activities or a coverage percentage. Garmin request completion and Sleep/Health/route batch barriers stay unchanged.
+The existing authorization, disconnect/deletion, failure-bound and provider-request failure stops remain authoritative.
+If the isolated-failure bound is exceeded while activity jobs remain pending, admission pauses and keeps its bounded
+checkpoint until those jobs settle before offering explicit recovery.
+
+Existing runs adopt the behaviour on their next coordinator dispatch; no migration, replay or retry reset is needed.
+Release only `processConnectionHistoryTask` and `recoverConnectionHistoryImports` after separate approval. The latter
+must understand admission past pending children and the 200-reference bound. Rolling back restores the batch barrier
+while retaining every outstanding child in the same compatible checkpoint shape. Monitoring is **covered** by #847
+and #829: the bounded probe now counts available activity admission as due even while a child retries, excludes
+capacity/final-drain waits, and keeps real worker/DLQ outcomes separate. It reads at most 200 child rows in total per
+quarter-hour observation; masks, the five-second deadline, privacy labels and alert resources are unchanged. No
+monitoring apply, new queue, Function, Rule, index, credential or MCP/Assistant contract is introduced. Reviewed Help's
+background progress/retry guidance remains accurate; the more specific explanation is supplied by the backend.
+
 ### Isolated record failures
 
-Once an active batch has settled, failed child records verified against this exact run and original queue are retained
+Failed child records verified against this exact run and original queue are retained
 privately in `failedChildPaths`. The coordinator continues the remaining pages/windows and independent resource steps.
 It does not re-read earlier failures on every page or replay them automatically. The server-only execution context
 snapshots retained failure paths in memory; Suunto/COROS window admission and Wahoo page admission exclude those exact
 paths when provider results overlap, without extra database reads. Explicit recovery clears those exclusions as it
-restores the selected records. Still-pending children continue waiting;
+restores the selected records. Activity children can remain pending while later activity batches continue;
 missing/unverifiable DLQ records, authorization loss, disconnect, deletion and other lifecycle skips do not qualify for isolation.
 No identity-conflict guard, provider-copy recognition, saved activity or user edit is changed.
 
@@ -466,13 +502,13 @@ Logger failures cannot turn a committed checkpoint or ACK into another task retr
 
 The existing recovery scheduler samples every **15 minutes**, using its scheduled timestamp rather than delayed invocation time. Its dispatch loop still runs every minute, with unchanged limits. There is no additional scheduler or persistent monitoring state.
 
-One masked, oldest-due-first query inspects at most **20 runs plus one truncation sentinel**, using the existing `(processed, nextAttemptAt)` index. Reads exclude token values, provider payloads and operation receipt results; only the receipt's `lastOperation.key` is selected. Each candidate's read-only transaction rechecks exact document update time, owner/tombstone, token/root presence and credential/connection generations. Permission/cooldown/unsupported-capability and Sleep/Health rollout checks match the local admission contract. Pro/grace checks are read-only and cached, at most 20 Auth lookups. Child observations share a **100-row total budget** and read only `processed`, `resultStatus` and `skippedReason`; pending children belong to the downstream bundles. Missing/failed children or an exhausted cursor can leave overdue coordinator finalization, not prove successful ingestion. Successful children with another page remaining still require downstream capacity; ambiguous child state is unknown.
+One masked, oldest-due-first query inspects at most **20 runs plus one truncation sentinel**, using the existing `(processed, nextAttemptAt)` index. Reads exclude token values, provider payloads and operation receipt results; only the receipt's `lastOperation.key` is selected. Each candidate's read-only transaction rechecks exact document update time, owner/tombstone, token/root presence and credential/connection generations. Permission/cooldown/unsupported-capability and Sleep/Health rollout checks match the local admission contract. Pro/grace checks are read-only and cached, at most 20 Auth lookups. Child observations share a **200-row total budget** and read only `processed`, `resultStatus` and `skippedReason`; pending children belong to the downstream bundles, while activity admission can remain eligible within its outstanding-work bound. Missing/failed children or an exhausted cursor can leave overdue coordinator finalization, not prove successful ingestion. Successful children with another page remaining still require downstream capacity; ambiguous child state is unknown.
 
-A durable receipt matching the exact current step, capability version, cursor, window and page means the worker only resumes its committed result. That checkpoint recovery stays observable without new provider admission or capacity, permission or cooldown checks. It still requires a current connected account, Pro/grace access and no pending children. Stale receipt keys cannot bypass admission checks. The key never enters telemetry, and observing recovery never claims successful ingestion.
+A durable receipt matching the exact current step, capability version, cursor, window and page means the worker only resumes its committed result. That checkpoint recovery stays observable without new provider admission or capacity, permission or cooldown checks. It still requires a current connected account, Pro/grace access; pending activity children may remain tracked during receipt recovery. Other resources retain their child barrier. Stale receipt keys cannot bypass admission checks. The key never enters telemetry, and observing recovery never claims successful ingestion.
 
 Capacity checks reuse the actual downstream queue/collection mapping, cache each mapping within the observation, and require both native depth and Firestore pending count below the existing half-capacity threshold. No provider API, refresh, queue write, account pinning, dispatch decision or retry change occurs. Capacity reads settle together on ordinary errors. A shared **five-second deadline** stops further reads and suppresses late healthy emissions; already-started requests may finish afterward.
 
-Future retries, active leases, children waiting on live/recent tasks, superseded/disconnected/deleting accounts and non-Pro access are excluded. Unissued or old-issued route children needing coordinator redispatch are eligible; masked ownership/source mismatches are unknown. The probe makes no task or provider API calls. Downstream saturation and expected permission/cooldown skips exclude new admissions, not receipt recovery or finalization. A retry that is already overdue remains eligible; its future backoff window is not mistaken for a stall. Age is the delay since the sampled revision's `nextAttemptAt`, not the lifetime of a years-long import. A same-revision edit racing the sample is unknown, not zero.
+Future retries, active leases, final-drain or capacity waits on activity children, other children waiting on live/recent tasks, superseded/disconnected/deleting accounts and non-Pro access are excluded. Unissued or old-issued route children needing coordinator redispatch are eligible; masked ownership/source mismatches are unknown. The probe makes no task or provider API calls. Downstream saturation and expected permission/cooldown skips exclude new admissions, not receipt recovery or finalization. A retry that is already overdue remains eligible; its future backoff window is not mistaken for a stall. Age is the delay since the sampled revision's `nextAttemptAt`, not the lifetime of a years-long import. A same-revision edit racing the sample is unknown, not zero.
 
 Positive count/age values are lower bounds. A global saturated or unknown prefix without a proven eligible count omits count/age, including for unseen providers; it cannot clear backlog as healthy zero. Query/read/capacity failure or timeout emits unavailable for all four groups. A complete idle observation emits real zero. Histogram chart means preserve zero observations without interpolating a false positive age; the backlog policy uses the exact emitted count/age predicate instead.
 
@@ -512,7 +548,7 @@ The provisioner validates the enabled email channel and paginated inventories be
 
 Before closing #847, record approval and pinned commit, deploy/apply results, exact API readback of the dashboard/14 metric schemas/six valid enabled policies, all **18 chart and nine condition queries**, native metrics for all four services and the queue, and positive **post-creation** metric points from a natural quarter-hour observation for each of the four heartbeat groups. Earlier logs cannot initialize new metric-absence series. Reuse existing same-channel notification evidence where valid; fault injection, manual scheduler invocation, test email, provider actions or deletion need their own approval. Do not claim operational coverage while activation/readback is pending.
 
-Monitoring adds bounded Firestore/Auth/Cloud Tasks reads (at most 21 queried runs, 20 six-record lifecycle reads plus optional Sleep rows, 100 child rows and cached capacity observations per 15-minute tick), small fixed-category logs, log-metric series and alert evaluations. This is **not guaranteed free**. Idle probes read one bounded query and emit four logs; no provider calls or new scheduler are added. Review current [Observability pricing](https://cloud.google.com/products/observability/pricing) and actual volume before changing thresholds or sample limits.
+Monitoring adds bounded Firestore/Auth/Cloud Tasks reads (at most 21 queried runs, 20 six-record lifecycle reads plus optional Sleep rows, 200 child rows and cached capacity observations per 15-minute tick), small fixed-category logs, log-metric series and alert evaluations. This is **not guaranteed free**. Idle probes read one bounded query and emit four logs; no provider calls or new scheduler are added. Review current [Observability pricing](https://cloud.google.com/products/observability/pricing) and actual volume before changing thresholds or sample limits.
 
 Help's **Recent history when connecting** was reviewed and remains accurate; observability changes no user-facing behavior. **No MCP wire impact:** no tools, schemas, scopes, consent, exposed athlete data, Assistant actions or bundled skills change. Local verification includes privacy/lifecycle emulator cases, deterministic telemetry/deadline specs, actual log-filter fixtures, provisioning ownership/pagination/reapplication tests and the existing entrypoint/secret checks. The new emulator suite is registered in CI's `mcp-data` group; offline definitions run in the existing unit job.
 
