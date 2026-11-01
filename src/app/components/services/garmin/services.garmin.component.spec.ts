@@ -33,7 +33,7 @@ import { AppWindowService } from '../../../services/app.window.service';
 import { AppDeepLinkService } from '../../../services/app.deeplink.service';
 import { LoggerService } from '../../../services/logger.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, convertToParamMap } from '@angular/router';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { of, Subject } from 'rxjs';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
@@ -422,6 +422,24 @@ describe('ServicesGarminComponent', () => {
             await Promise.resolve(); await Promise.resolve();
             expect(component.isConnecting).toBe(true);
             expect(component.forceConnected).toBe(false);
+        });
+
+        it.each([
+            {serviceName: 'Suunto app'},
+            {serviceName: 'Garmin API', tool: 'history'},
+            {serviceName: 'Garmin API', state: 'new-state', code: 'new-code'},
+        ])('does not overwrite newer navigation %j when an earlier callback completes', async nextParams => {
+            let finishExchange!: (value: {connected: true; outcome: 'connected'}) => void;
+            mockUserService.requestAndSetCurrentUserGarminAPIAccessToken.mockReturnValue(new Promise(resolve => { finishExchange = resolve; }));
+            queryParams = { serviceName: component.serviceName, state: 'test-state', code: 'test-code' };
+            mockActivatedRoute.snapshot.queryParamMap = convertToParamMap(queryParams);
+            await component.ngOnChanges();
+            expect(mockUserService.requestAndSetCurrentUserGarminAPIAccessToken).toHaveBeenCalledOnce();
+            mockActivatedRoute.snapshot.queryParamMap = convertToParamMap(nextParams);
+            finishExchange({connected: true, outcome: 'connected'});
+            await vi.waitFor(() => expect(component.isConnecting).toBe(false));
+            expect(component.forceConnected).toBe(true);
+            expect(mockRouter.navigate).not.toHaveBeenCalled();
         });
 
         it('drops OAuth callback feedback and navigation after the view is destroyed', async () => {

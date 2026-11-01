@@ -168,9 +168,12 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
       if (this.isConnecting) {
         return;
       }
+      const callbackParams = this.route.snapshot.queryParamMap;
+      const isCurrentCallback = () => ['serviceName', 'connect', 'code', 'state', 'error']
+        .every(key => this.route.snapshot.queryParamMap.get(key) === callbackParams.get(key));
       this.isConnecting = true;
       try {
-        const completion = await this.requestAndSetToken(this.route.snapshot.queryParamMap);
+        const completion = await this.requestAndSetToken(callbackParams);
         if (!isCurrentView()) return;
         if (
           completion?.connected !== true
@@ -240,7 +243,10 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
           this.isLoading = false;
           try {
             // Live metadata must not consume this callback again before its URL is cleared.
-            await this.router.navigate(['services'], { queryParams: { serviceName: serviceName }, queryParamsHandling: '' });
+            // A completed callback must not replace navigation the user made in the meantime.
+            if (isCurrentCallback()) {
+              await this.router.navigate(['services'], { queryParams: { serviceName: serviceName }, queryParamsHandling: '' });
+            }
           } finally {
             if (isCurrentView()) {
               this.isConnecting = false;

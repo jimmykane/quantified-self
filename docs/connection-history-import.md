@@ -42,6 +42,9 @@ dialogs close without consuming or rewriting the auth URL. The main view validat
 or incomplete failures without a token exchange, and uses its existing owner-guarded completion/clean-URL path.
 The callback lock remains held through clean-URL navigation so live metadata cannot exchange the same code again
 while that navigation is pending; late cleanup cannot unlock a different account's connection action.
+Provider tab switches use their clean provider URL, without carrying another provider's callback, reconnect or history
+flags. Callback cleanup only rewrites its original callback parameters; later navigation to another provider, history
+details or a different callback remains intact while the authorized connection result can still update its own view.
 Existing Help's explicit connection/reconnect and passive progress wording remains accurate. Monitoring is unchanged:
 no provider endpoint, scope, credential, OAuth backend validation, queue or telemetry contract changes.
 The date, stored-history and retry controls stay in management. Stored calendar dates render as UTC dates. A form

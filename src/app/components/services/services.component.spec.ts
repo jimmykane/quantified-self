@@ -318,6 +318,18 @@ describe('ServicesComponent', () => {
         expect(mockHapticsService.selection).toHaveBeenCalledTimes(1);
     });
 
+    it.each(['garmin', 'suunto', 'coros', 'wahoo', 'mcp'] as const)('does not carry another provider\'s callback or history request into %s', section => {
+        component.activeSection = section === 'garmin' ? 'suunto' : 'garmin';
+        mockActivatedRoute.snapshot.queryParamMap = convertToParamMap({serviceName: ServiceNames.GarminAPI,
+            code: 'synthetic-code', state: 'synthetic-state', connect: '1', reconnect: '1', tool: 'history'});
+        component.onProviderTabClick(new MouseEvent('click', {cancelable: true}), section);
+        const target = component.serviceSectionOptions.find(option => option.id === section)!;
+        expect(mockRouter.navigate).toHaveBeenCalledWith([], {
+            relativeTo: mockActivatedRoute,
+            queryParams: {serviceName: target.serviceName ?? 'mcp'}, queryParamsHandling: '',
+        });
+    });
+
     it.each([true, false])('uses the verified admin claim from resolver data: %s', async admin => {
         mockAuthService.user$ = new Subject();
         mockActivatedRoute.snapshot.data['userData'] = { user: { uid: '123', admin }, isPro: admin };
@@ -383,7 +395,7 @@ describe('ServicesComponent', () => {
         expect(mockRouter.navigate).toHaveBeenCalledWith([], {
             relativeTo: mockActivatedRoute,
             queryParams: { serviceName: ServiceNames.GarminAPI },
-            queryParamsHandling: 'merge',
+            queryParamsHandling: '',
         });
         expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('service_section_selected', {
             section: 'garmin',
@@ -454,7 +466,7 @@ describe('ServicesComponent', () => {
         expect(mockRouter.navigate).toHaveBeenCalledWith([], {
             relativeTo: mockActivatedRoute,
             queryParams: { serviceName: ServiceNames.WahooAPI },
-            queryParamsHandling: 'merge',
+            queryParamsHandling: '',
         });
     });
 
@@ -469,7 +481,7 @@ describe('ServicesComponent', () => {
         expect(mockRouter.navigate).toHaveBeenCalledWith([], {
             relativeTo: mockActivatedRoute,
             queryParams: { serviceName: 'mcp' },
-            queryParamsHandling: 'merge',
+            queryParamsHandling: '',
         });
         expect((component as any).getSectionFromServiceName('mcp')).toBe('mcp');
     });

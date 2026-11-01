@@ -457,7 +457,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
     await this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { serviceName: serviceName },
-      queryParamsHandling: 'merge',
+      queryParamsHandling: '',
     });
   }
 
