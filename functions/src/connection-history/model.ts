@@ -6,6 +6,13 @@ import { suuntoHistoryBatchDays } from '../suunto/history-windows';
 
 // Bound the private failure checkpoint and explicit retry transaction (one active batch is at most 100).
 export const MAX_ISOLATED_HISTORY_FAILURES = 100;
+export const MAX_HISTORY_ADMISSION_CHILDREN = 100;
+// Includes retained failures: explicit recovery remains below Firestore's write limit.
+export const MAX_OUTSTANDING_HISTORY_CHILDREN = 200;
+export function allowsPendingActivityHistory(step: HistoryStep): boolean {
+  return step.id === 'activities' && step.resources?.length === 1 && step.resources[0] === 'activities'
+    && step.capability.completion === 'queued';
+}
 export const CONNECTION_HISTORY_COLLECTION = 'connectionHistoryImports';
 export const OAUTH_HISTORY_FIELD = 'oauthImportRecentHistory';
 export const OAUTH_HISTORY_RANGE_FIELD = 'oauthImportHistoryRange';

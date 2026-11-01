@@ -865,8 +865,9 @@ The modal's fixed action footer displays the shared Assistant allowance as remai
 generation attempt, including failed attempts and exact retries; it never decrements an optimistic local counter.
 Loading and unavailable states stay distinct from zero remaining. Per-read sequencing, owner checks and destruction
 checks discard stale/account-switched replies. The footer stays visible with a reviewed draft and wraps above the
-buttons on phones. The rest action uses **Try easy session** so Cancel and the primary action stay on the same
-row at 320 px, including short screens. Reading/displaying allowance does not consume it; the existing backend remains authoritative.
+buttons on phones. A model rest recommendation offers **Mark as rest day** as the primary action, with **Try easy session**
+as the secondary generation alternative. Cancel and the primary action stay in the fixed footer at 320 px, including
+short screens. Reading/displaying allowance does not consume it; the existing backend remains authoritative.
 No fitness-provider secrets or delivery actions are available to this callable. It is synchronous and introduces
 no queue or provider lifecycle.
 
@@ -885,6 +886,23 @@ mutation. Extending plan dates requires confirmation. A lost save reply retains 
 identity; the dialog locks changes until **Retry Add** resolves it. Definitive revision conflicts retain the draft
 and require review of the current schedule. This is always an additional workout. It never replaces a session,
 creates new sync consent, or invokes Send; existing plan sync may process an eligible new plan workout normally.
+
+Accepting a rest recommendation reuses `watchCalendarRestDay` and the existing revision-bound `setCalendarRestDay`
+transaction for the explicitly reviewed date. The marker read/save and feedback are fenced by owner, dialog generation,
+date and result identity. Nothing is written while generating or reviewing. Saving works with Training context off too:
+that context choice controls model evidence, not the user's explicit Calendar action. Existing workouts and plan rest
+dates remain intact, and a selected plan is never silently edited. Rest review omits workout-sync/destination copy.
+Failures retain the recommendation; retry reads the current marker revision and uses the existing desired-state
+idempotence. Already authored rest keeps its existing Keep action. Accepting rest generates nothing, charges no new
+AI allowance, changes no daily receipt and creates no provider job. Included daily acceptance updates the shared
+Today cache to `rest-day` after acknowledgement, including when Today has unmounted; owner/day fences still apply.
+MCP impact review: no wire or authority change. Existing bounded `get_training_calendar_rest_days` reads and the strict
+calendar-rest preview/approved Apply already cover these same four-field markers. No MCP capability, read projection,
+mutation kind, consent, contract digest, model prompt, Rules/index or backend deployment changes are required.
+
+Optimized beta verification with this rest-acceptance change measures approximately 13,820 kB of script output and a 1.40 MB /
+333.47 kB transfer startup. Matching production/beta all-script caps are 13,823 kB; startup and warning budgets stay
+unchanged. The flow reuses existing runtime dependencies and adds no queue or background model request.
 
 MCP impact review: existing public read schemas, mutation kinds, proposal/confirmation contracts and scopes are
 unchanged. Generated workouts persist the same canonical root and full strength companion used by manual editing.
@@ -5876,7 +5894,8 @@ the next status read checks current rest intent before exposing a cached suggest
 Removing rest intent can recover the existing daily result; it never resets the one-day model allowance. Focused
 cache and server tests cover both plan and standalone rest transitions. The standalone marker adds one shared
 exact-date listener and the additive bounded MCP read documented under Explicit plan rest days. Existing plan
-preview/Apply, consent and provider/queue behavior stay unchanged. Successful Add updates the shared cache to planned even after Today has closed, with
+preview/Apply, consent and provider/queue behavior stay unchanged. Successful workout Add updates the shared cache to planned,
+and explicitly accepted rest updates it to rest-day, even after Today has closed, with
 current owner/day/Pro fences. Old in-flight replies cannot
 replace another owner, date, preferences or newer coverage. No raw Sleep samples/provider payloads enter cache keys;
 the browser copy holds only the existing first-party public response, capped at 400,000 JSON characters.
@@ -5905,6 +5924,16 @@ retrieval rechecks only current-day activity summaries and the existing revision
 Browser navigation/reload can restore the daily status without that request. Explicit **Review** always performs one
 status-only coverage check before opening; a subsequently added or completed workout suppresses the stale review.
 That check never prepares or generates a suggestion. A failed check leaves Review available with an inline error.
+Transient status failures get one shared retry after 500 ms, fenced by the same authenticated day and cache revision;
+preparation, available-data generation and dismissal are never automatically replayed by this recovery path.
+A schedule/rest invalidation may retain a same-scope recipe for display while rechecking coverage. A failed refresh
+labels it as the saved suggestion; Review still requires a successful fresh coverage read before opening it.
+Verified rest/covered status replaces it, and owner, day, eligibility or preferences changes clear the display fallback.
+Request/retrieval errors do not claim that generation failed: only the server's failed state offers manual generation.
+Warning diagnostics use fixed action and allowlisted SDK-code labels, deduplicated per account/day/preferences scope,
+and retain only the existing Sentry identity. No exception text, controls, recipe, Sleep or Timeline content is attached.
+This is first-party presentation/read recovery only: MCP read projections, mutation confirmations, consent, model
+admission and the daily allowance are unchanged; no backend, rules, index, plugin or MCP refresh deployment is needed.
 No recovery,
 metric, feedback or routine-history reads are added to cache retrieval. A weekday
 sport requires a complete bounded two-page/200-summary scan of the previous 28 complete local days, at least two matching
@@ -5929,8 +5958,9 @@ The existing seven-day conversation TTL/index exemptions and recursive account e
 owner-readable; private leases, hashes and raw model context are never browser-readable. Dismissal fences in-flight
 work and binds the displayed local date, rejecting a rollover instead of dismissing another day. Read refresh
 cancellation stays separate from user-action completion so settings acknowledgements cannot swallow disable errors,
-haptics or analytics. Late Add callbacks cannot replace another day or account's card state. A model rest suggestion
-creates neither a workout nor an authored rest marker; only an explicitly saved workout invokes the Add callback.
+haptics or analytics. Late acceptance callbacks cannot replace another day or account's card state. A model rest suggestion
+alone creates neither a workout nor an authored rest marker. Explicit Mark as rest day saves only the Calendar marker;
+the acknowledged acceptance callback updates Today to rest-day rather than planned, without another AI request.
 
 Reviewing generates nothing. Explicit Add uses the existing revision-bound create-workout command and normal inherited
 sync rules; editor handoff remains unsaved. The shared dialog rechecks the owner and eligible date in the saved time
@@ -5943,6 +5973,8 @@ Measurement: consent-aware `daily_workout_suggestion` product events use only fi
 direct successful Add, dismissal, enable/disable and failure. A shown event is once per state/component visit, not a
 unique-person count; preference edits use their own event rather than counting as new opt-ins. Edited workouts saved
 later in the full editor are not attributed as direct daily acceptance.
+Explicitly accepted rest uses the existing added action with rest-day state; workout Add keeps ready state, so rest
+acceptance can be separated from authored-workout additions without adding telemetry fields or counting it as generation.
 `[DailyWorkoutSuggestion]` logs contain aggregate attempts, input/output/thinking tokens, metered versus unknown attempts,
 model and elapsed time, including correction and post-provider JSON failures. No dates, UIDs, titles, health values,
 notes or model text enter these logs/events. Unknown provider usage is explicit, never a measured zero-dollar claim.

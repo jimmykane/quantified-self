@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 vi.unmock('@sports-alliance/sports-lib');
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { MAX_ISOLATED_HISTORY_FAILURES, createHistoryRun } from './model';
+import { MAX_ISOLATED_HISTORY_FAILURES, MAX_OUTSTANDING_HISTORY_CHILDREN, createHistoryRun } from './model';
 import { advanceHistoryRun, type HistoryAdvanceDependencies } from './advance';
 const now = Date.parse('2026-09-14T12:00:00Z');
 function run() { return createHistoryRun('owner', ServiceNames.WahooAPI, { requested: true, rangePreset: '30_days', providerUserId: 'account', tokenPath: 'tokens/account', rootPath: 'tokens', credentialGeneration: 'credential', runId: '11111111-1111-4111-8111-111111111111' }, 'connection', now); }
@@ -80,13 +80,14 @@ describe('history continuation', () => {
     await advanceHistoryRun(job, deps, now);
     expect(step).toMatchObject({ done: false, status: 'queued', count: 3, page: 3,
       childPaths: ['queue/last'], failedChildPaths: ['queue/bad'] });
-    expect(step.message).toContain('Continuing');
+    expect(step.message).toContain('History scan finished');
+    expect(step.message).toContain('1 queued or processing');
     expect(job.processed).toBe(false);
     await advanceHistoryRun(job, deps, now + 60000);
     expect(job.processed).toBe(true);
     expect(step).toMatchObject({ done: true, status: 'failed', childPaths: [], failedChildPaths: ['queue/bad'], retryCount: 0 });
     expect(step.message).toContain('History scan finished. 1 record failed');
-    expect(deps.observe).toHaveBeenNthCalledWith(2, ['queue/last']);
+    expect(deps.observe).toHaveBeenNthCalledWith(2, ['queue/last'], true);
     await advanceHistoryRun(job, deps, now + 120000);
     expect(deps.execute).toHaveBeenCalledTimes(1);
   });
@@ -178,5 +179,72 @@ describe('history continuation', () => {
   it('subdivides oversized responses without spending retries or dropping data', async () => {
     const job = run(); const deps = dependencies(); deps.execute = vi.fn().mockRejectedValue(new Error()); deps.classify = () => ({ kind: 'split', message: 'Too large' });
     await advanceHistoryRun(job, deps, now); expect(job.steps[0].windowDays).toBe(15); expect(job.steps[0].retryCount).toBe(0); expect(job.steps[0].nextStartMs).toBe(job.startMs);
+  });
+  it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])('continues %s activity history past a retry and waits for actual completion', async service => {
+    const job = run(); job.serviceName = service;
+    const step = job.steps[0]; step.childPaths = ['queue/good', 'queue/retry']; step.count = 2;
+    const deps = dependencies();
+    deps.observe = vi.fn().mockResolvedValueOnce({ failedPaths: [], pendingPaths: ['queue/retry'], retryingCount: 1 })
+      .mockResolvedValueOnce({ failedPaths: [], pendingPaths: ['queue/retry'], retryingCount: 1 }).mockResolvedValue('processed');
+    deps.execute = vi.fn(async () => ({ count: 1, nextStartMs: job.endMs + 1000, nextPage: 2, childPaths: ['queue/last'] }));
+    await advanceHistoryRun(job, deps, now);
+    expect(step).toMatchObject({ childPaths: ['queue/retry', 'queue/last'], count: 3, done: false });
+    expect(step.message).toContain('History scan finished'); expect(step.message).toContain('1 waiting to retry');
+    await advanceHistoryRun(job, deps, now + 60000);
+    expect(step.childPaths).toEqual(['queue/retry']); expect(job.processed).toBe(false);
+    expect(step.status).toBe('retrying'); expect(step.retryCount).toBe(0);
+    expect(deps.execute).toHaveBeenCalledTimes(1);
+    await advanceHistoryRun(job, deps, now + 120000);
+    expect(job.processed).toBe(true); expect(step.status).toBe('processed'); expect(step.childPaths).toEqual([]);
+    expect(step.message).toBeUndefined(); expect(step.count).toBe(3); expect(deps.execute).toHaveBeenCalledTimes(1);
+  });
+  it('bounds pending jobs together with retained failures and resumes when capacity returns', async () => {
+    const job = run(); const step = job.steps[0]; const deps = dependencies();
+    step.failedChildPaths = ['queue/failed'];
+    step.childPaths = Array.from({ length: 100 }, (_, i) => `queue/retry-${i}`);
+    const original = [...step.childPaths];
+    deps.observe = vi.fn().mockResolvedValueOnce({ failedPaths: [], pendingPaths: original, retryingCount: 100 })
+      .mockResolvedValueOnce({ failedPaths: [], pendingPaths: original.slice(1), retryingCount: 99 });
+    const next = Array.from({ length: 100 }, (_, i) => `queue/next-${i}`);
+    deps.execute = vi.fn(async () => ({ count: 100, nextStartMs: job.startMs + 1000, nextPage: 2, childPaths: next }));
+    await advanceHistoryRun(job, deps, now);
+    expect(deps.execute).not.toHaveBeenCalled(); expect(step.childPaths).toEqual(original);
+    expect(step.retryCount).toBe(0); expect(job.nextAttemptAt).toBe(now + 60000);
+    await advanceHistoryRun(job, deps, now + 60000);
+    expect(deps.execute).toHaveBeenCalledTimes(1);
+    expect(step.childPaths.length + step.failedChildPaths.length).toBe(MAX_OUTSTANDING_HISTORY_CHILDREN);
+    expect(step.childPaths).toEqual([...original.slice(1), ...next]);
+  });
+  it('retains both pending children and settled failures until the last job settles', async () => {
+    const job = run(); const step = job.steps[0]; const deps = dependencies();
+    step.childPaths = ['queue/bad', 'queue/retry']; step.nextStartMs = job.endMs + 1000;
+    deps.observe = vi.fn().mockResolvedValue({ failedPaths: ['queue/bad'], pendingPaths: ['queue/retry'], retryingCount: 1 });
+    await advanceHistoryRun(job, deps, now);
+    expect(step).toMatchObject({ failedChildPaths: ['queue/bad'], childPaths: ['queue/retry'], done: false });
+    expect(step.message).toContain('1 failed'); expect(step.message).toContain('1 waiting to retry');
+    expect(job.processed).toBe(false); expect(deps.execute).not.toHaveBeenCalled();
+    deps.observe = vi.fn().mockResolvedValue({ failedPaths: ['queue/retry'], pendingPaths: [] });
+    await advanceHistoryRun(job, deps, now + 60000);
+    expect(step).toMatchObject({ done: true, status: 'failed', childPaths: [], failedChildPaths: ['queue/bad', 'queue/retry'] });
+  });
+  it.each(['sleep', 'health', 'routes'])('keeps the existing %s batch barrier', async resource => {
+    const job = run(); const step = job.steps[0]; step.id = resource; step.childPaths = ['queue/pending'];
+    const deps = dependencies(); deps.observe = vi.fn(async () => 'pending');
+    await advanceHistoryRun(job, deps, now);
+    expect(deps.observe).toHaveBeenCalledWith(['queue/pending']); expect(deps.execute).not.toHaveBeenCalled();
+  });
+  it('drains pending jobs before offering recovery when failed references exceed the isolation bound', async () => {
+    const job = run(); const step = job.steps[0]; const deps = dependencies();
+    step.failedChildPaths = Array.from({ length: 99 }, (_, i) => `queue/old-${i}`);
+    step.childPaths = ['queue/bad-1', 'queue/bad-2', 'queue/pending'];
+    deps.observe = vi.fn().mockResolvedValueOnce({ failedPaths: ['queue/bad-1', 'queue/bad-2'], pendingPaths: ['queue/pending'] })
+      .mockResolvedValueOnce({ failedPaths: ['queue/bad-1', 'queue/bad-2'], pendingPaths: [] });
+    await advanceHistoryRun(job, deps, now);
+    expect(job.processed).toBe(false); expect(step.done).toBe(false); expect(step.childPaths).toHaveLength(3);
+    expect(step.message).toContain('Waiting for 1 outstanding'); expect(deps.execute).not.toHaveBeenCalled();
+    await advanceHistoryRun(job, deps, now + 60000);
+    expect(job.processed).toBe(true); expect(step.status).toBe('failed');
+    expect(step.childPaths).toHaveLength(3); expect(step.failedChildPaths).toHaveLength(99);
+    expect(deps.execute).not.toHaveBeenCalled();
   });
 });

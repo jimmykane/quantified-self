@@ -313,6 +313,12 @@
     min-width: 0;
 }
 
+.service-overview-card__copy .service-overview-card__status {
+    margin-top: 8px;
+    font: var(--mat-sys-body-small);
+    color: var(--mat-sys-on-surface-variant);
+}
+
 .service-overview-card__action {
     display: inline-flex;
     min-width: 104px;
@@ -400,6 +406,16 @@
     .service-overview-card__action {
         grid-column: 1 / -1;
         width: 100%;
+        height: auto;
+        min-height: 40px;
+        padding-block: 8px;
         justify-content: space-between;
+    }
+
+    .service-overview-card__action span {
+        min-width: 0;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        text-align: start;
     }
 }

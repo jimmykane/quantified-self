@@ -4,7 +4,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { Auth, authState, type FirebaseUserType } from 'app/firebase/auth';
 import { Subject, catchError, combineLatest, defer, distinctUntilChanged, map, of, scan, startWith, switchMap } from 'rxjs';
 import { AppUserService } from './app.user.service';
-import { HISTORY_IMPORT_PROVIDERS, buildHistoryImportProgress, type HistoryImportSource,
+import { HISTORY_IMPORT_PROVIDERS, buildHistoryImportItems, buildHistoryImportProgress, type HistoryImportSource,
   type HistoryImportProgressItem, type HistoryImportResultDismissal } from '../helpers/history-import-progress.helper';
 import { APP_STORAGE } from './storage/app.storage.token';
 
@@ -71,6 +71,7 @@ export class HistoryImportProgressService {
     }) : [];
     return buildHistoryImportProgress(owner ? this.snapshot().sources : [], Math.max(this.now(), Date.now()), dismissed);
   });
+  readonly latestImports = computed(() => buildHistoryImportItems(this.owner() ? this.snapshot().sources : []));
   readonly refreshing = computed(() => !!this.owner() && this.snapshot().refreshing);
   readonly dashboardHidden = computed(() => {
     const uid = this.owner()?.uid;

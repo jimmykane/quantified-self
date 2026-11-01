@@ -54,6 +54,13 @@ dispatch/processing failure, new DLQ/reconciliation and unavailable-observation 
 See [activity delivery monitoring](activity-delivery-monitoring.md) and [route monitoring](route-monitoring.md).
 Local tests do not establish provider/device acceptance or activate production configuration.
 
+Activity-history coordination for Suunto, COROS and Wahoo can continue later batches while individual workouts
+retry. It retains the same canonical jobs and backoff, bounds outstanding jobs plus retained failures to 200, and
+keeps the shared queue-capacity and lifecycle guards. Safe progress distinguishes scanning, capacity waits and a
+finished scan awaiting child outcomes. Garmin submission semantics and Sleep/Health/route barriers are unchanged.
+See [independent activity retries](connection-history-import.md#continuing-activity-history-while-workouts-retry)
+for checkpoint recovery, monitoring coverage and the two-function release boundary. No migration or replay is needed.
+
 ## 1. Define the product contract before writing code
 
 Start with a concise support matrix agreed with product and the provider. Do not infer capability from an OAuth scope alone.

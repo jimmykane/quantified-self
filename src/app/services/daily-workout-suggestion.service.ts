@@ -3,7 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Auth, type FirebaseUserType } from 'app/firebase/auth';
 import { defaultDayWorkoutControls, dayWorkoutLocalDate, parseGenerateDayWorkoutRequest } from '@shared/day-workout';
 import { parseDailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionRequest, type DailyWorkoutSuggestionStatus } from '@shared/daily-workout-suggestion';
-import { AppFunctionsService } from './app.functions.service';
+import { AppFunctionsService, callableDiagnosticErrorCode } from './app.functions.service';
 import { AppUserService } from './app.user.service';
 import { AppAnalyticsService } from './app.analytics.service';
 import { AppWindowService } from './app.window.service';
@@ -12,8 +12,10 @@ import { parseWorkoutStructureV1 } from '@shared/planned-workout';
 import { isStrengthWorkoutSportV1, parseStrengthWorkoutDraftV1, strengthProjectionMatchesDetails } from '@shared/strength-workout';
 import { DAILY_WORKOUT_SUGGESTION_SESSION_CACHE_KEY as CACHE_KEY } from '../shared/daily-workout-suggestion-cache';
 import { Subscription, firstValueFrom, take } from 'rxjs';
+import { LoggerService } from './logger.service';
 
 const MAX_CACHE_CHARACTERS = 400_000;
+const TRANSIENT_STATUS_CODES = ['internal', 'unavailable', 'deadline-exceeded'];
 const states: DailyWorkoutSuggestionStatus['state'][] = ['off', 'waiting', 'waiting-sleep', 'ready', 'dismissed', 'failed', 'planned', 'completed', 'rest-day'];
 interface CachedDailyWorkoutSuggestion {
   key: string; uid: string; status: DailyWorkoutSuggestionStatus | null; sleepKey: string | null;
@@ -33,6 +35,9 @@ export class DailyWorkoutSuggestionService {
   private readonly analytics = inject(AppAnalyticsService);
   private readonly window = inject(AppWindowService);
   private readonly plans = inject(TrainingPlansService);
+  private readonly logger = inject(LoggerService);
+  private diagnosticScope = '';
+  private readonly reportedFailures = new Set<string>();
   private restRead: { uid: string; localDate: string; authUser: FirebaseUserType | null; subscription: Subscription } | null = null;
   private cache: DailyWorkoutSuggestionCache | null = null;
   readonly cacheRevision = signal(0);
@@ -80,8 +85,9 @@ export class DailyWorkoutSuggestionService {
       if (this.restRead !== context || !this.eligible(uid) || this.preferences().controls.localDate !== localDate) return;
       this.acceptRestDayRevision(uid, localDate, record?.revision ?? 0);
       if (record?.isRestDay && this.cache?.status?.state !== 'dismissed') this.remember(uid, { localDate, state: 'rest-day' });
-    }), error: () => untracked(() => {
+    }), error: error => untracked(() => {
       context.subscription.unsubscribe();
+      if (this.restRead === context) this.reportFailure(uid, 'calendar-rest', error);
       if (this.restRead === context && this.cache?.uid === uid && this.cache.status?.state !== 'dismissed'
         && (this.cache.status || this.cache.pending.size)) { this.invalidate(); this.persist(); }
     }) }));
@@ -105,6 +111,7 @@ export class DailyWorkoutSuggestionService {
   private key(uid: string): string { return JSON.stringify([uid, this.preferences()]); }
   private clear(): void {
     this.cache = null; this.cacheRevision.update(value => value + 1);
+    this.diagnosticScope = ''; this.reportedFailures.clear();
     try { this.window.windowRef.sessionStorage.removeItem(CACHE_KEY); } catch { /* Storage may be blocked. */ }
   }
   private invalidate(): void {
@@ -226,17 +233,52 @@ export class DailyWorkoutSuggestionService {
     const request: DailyWorkoutSuggestionRequest = action === 'dismiss' || action === 'use-available-data'
       ? { mode: 'daily-suggestion', action, localDate: expectedDate! } : { mode: 'daily-suggestion', action };
     // The shared operation belongs to this authenticated day, not the component that first requested it.
-    const pending = this.functions.call<DailyWorkoutSuggestionRequest, DailyWorkoutSuggestionStatus>('generateDayWorkout', request,
-      { canExecute: () => active() && (!expectedDate || current()) }).then(({ data }) => {
+    const canExecute = () => active() && (!expectedDate || current());
+    const invoke = () => this.functions.call<DailyWorkoutSuggestionRequest, DailyWorkoutSuggestionStatus>('generateDayWorkout', request,
+      { canExecute });
+    const retrieve = async () => {
+      try { return await invoke(); }
+      catch (error) {
+        const code = (error as { code?: unknown } | null)?.code;
+        // Only repeat a read. A lost preparation response must never replay a model request.
+        if (action !== 'status' || !canExecute() || typeof code !== 'string'
+          || !TRANSIENT_STATUS_CODES.includes(code.replace(/^functions\//, ''))) throw error;
+        await new Promise(resolve => setTimeout(resolve, 500));
+        if (!canExecute()) throw Error('Daily suggestion access changed.');
+        return invoke();
+      }
+    };
+    const pending = retrieve().then(({ data }) => {
         if (!active()) throw Error('Daily suggestion access changed.');
         if (data.localDate !== this.preferences().controls.localDate) throw Error('The day changed.');
         entry.status = data;
         // A receipt read does not check current Sleep evidence. Preserve the last actual context check.
         if (action !== 'status' || data.state !== 'waiting-sleep') entry.sleepKey = sleepKey;
         this.persist(); return data;
+      }).catch(error => {
+        if (canExecute()) this.reportFailure(uid, action, error);
+        throw error;
       }).finally(() => { if (entry.pending.get(action) === pending) entry.pending.delete(action); });
     entry.pending.set(action, pending);
     return pending;
+  }
+  private reportFailure(uid: string, operation: DailyWorkoutSuggestionRequest['action'] | 'calendar-rest', error: unknown): void {
+    try {
+      if (!this.eligible(uid)) return;
+      const user = this.logger.getUser();
+      if (user.id !== uid) return;
+      const scope = this.key(uid);
+      if (this.diagnosticScope !== scope) { this.diagnosticScope = scope; this.reportedFailures.clear(); }
+      const errorCode = callableDiagnosticErrorCode(error);
+      const key = `${operation}:${errorCode}`;
+      if (this.reportedFailures.has(key)) return;
+      this.reportedFailures.add(key);
+      // Fixed labels only: no exception text, workout, preferences, sleep or Timeline content.
+      this.logger.captureMessage('Daily workout suggestion request failed', {
+        level: 'warning', user, fingerprint: ['daily-workout-suggestion', operation, errorCode],
+        tags: { operation: 'daily-workout-suggestion', action: operation, errorCode },
+      });
+    } catch { /* Diagnostics must preserve the original failure. */ }
   }
   save(uid: string, value: DailyWorkoutSuggestionPreferences): Promise<void> {
     const preferences = parseDailyWorkoutSuggestionPreferences(value);

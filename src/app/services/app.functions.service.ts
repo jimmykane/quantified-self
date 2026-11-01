@@ -23,6 +23,12 @@ const CALLABLE_DIAGNOSTIC_CODES = new Set([
         'initial-throttle', 'throttled'].map(code => `appCheck/${code}`),
 ]);
 
+/** Share the bounded SDK-code projection; arbitrary exception fields can contain private data. */
+export function callableDiagnosticErrorCode(error: unknown): string {
+    const code = (error as { code?: unknown } | null)?.code;
+    return typeof code === 'string' && CALLABLE_DIAGNOSTIC_CODES.has(code) ? code : 'unknown';
+}
+
 @Injectable({
     providedIn: 'root'
 })
@@ -167,8 +173,7 @@ export class AppFunctionsService {
             // Firebase may acquire auth credentials asynchronously. After an account
             // switch, neither the old nor the new identity is reliable for this failure.
             if (this.logger.getUser().id !== user.id) return;
-            const code = (error as { code?: unknown } | null)?.code;
-            const errorCode = typeof code === 'string' && CALLABLE_DIAGNOSTIC_CODES.has(code) ? code : 'unknown';
+            const errorCode = callableDiagnosticErrorCode(error);
             const now = Date.now();
             for (const [key, reportedAt] of this.reportedEnsureFailures) {
                 if (now - reportedAt >= AppFunctionsService.FAILURE_REPORT_COOLDOWN_MS) {

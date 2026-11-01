@@ -29,6 +29,7 @@
     serviceLabel="Garmin Connect"
     providerIcon="garmin"
     [proOffer]="proOffer"
+    [automaticImports]="hasProAccess && hasGarminActivityExportPermission"
     [description]="connectionDescription"
     [connected]="isConnectedToService()"
     [loading]="isLoading"

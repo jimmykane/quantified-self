@@ -8,7 +8,8 @@ import { NavigationStart, Router, provideRouter } from '@angular/router';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogContainer, MatDialogRef } from '@angular/material/dialog';
 import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { BehaviorSubject, of, Subject } from 'rxjs';
+import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
+import type { TrainingRestDayV1 } from '@shared/training-rest-days';
 import type { MutateTrainingScheduleRequestV1, MutateTrainingScheduleResponseV1 } from '@shared/training-plans';
 import { Auth } from 'app/firebase/auth';
 import type { GenerateDayWorkoutResponse } from '@shared/day-workout';
@@ -68,6 +69,7 @@ describe('DayWorkoutDialogComponent', () => {
   let auth: BehaviorSubject<{ uid: string } | null>;
   let generate: ReturnType<typeof vi.fn>;
   let mutate: ReturnType<typeof vi.fn>;
+  let setCalendarRestDay: ReturnType<typeof vi.fn>;
   let close: ReturnType<typeof vi.fn>;
   let dialogOpen: ReturnType<typeof vi.fn>;
   let loadQuotaStatus: ReturnType<typeof vi.fn>;
@@ -82,6 +84,7 @@ describe('DayWorkoutDialogComponent', () => {
     });
     generate = vi.fn(async (_uid, request) => response(parseGenerateDayWorkoutRequest(request).requestId));
     loadQuotaStatus = vi.fn().mockResolvedValue(quotaStatus);
+    setCalendarRestDay = vi.fn(async (_uid, localDate, _isRestDay, revision) => ({ schemaVersion: 1, localDate, isRestDay: true, revision: revision + 1 }));
     mutate = vi.fn().mockImplementation(async (request: MutateTrainingScheduleRequestV1): Promise<MutateTrainingScheduleResponseV1> => {
       if (request.operation.kind !== 'create-workout') throw new Error('Expected workout creation.');
       const operation = request.operation;
@@ -103,7 +106,7 @@ describe('DayWorkoutDialogComponent', () => {
       { provide: MatDialogRef, useValue: { close, disableClose: false, updateSize: vi.fn() } }, { provide: MatDialog, useValue: { open: dialogOpen } },
       { provide: DayWorkoutService, useValue: { generate, isOwner: () => auth.value?.uid === 'owner' } },
       { provide: AssistantQuotaService, useValue: { loadQuotaStatus } },
-      { provide: TrainingPlansService, useValue: { watchCalendarRestDay: () => of(null), watchSchedule: () => schedule, mutate,
+      { provide: TrainingPlansService, useValue: { watchCalendarRestDay: () => of(null), setCalendarRestDay, watchSchedule: () => schedule, mutate,
         createMutationId: (prefix: string) => `${prefix}:00000000-0000-4000-8000-${String(++counter).padStart(12, '0')}`, createEntityId: () => `workout-${++counter}` } },
       { provide: TrainingDeliveryService, useValue: { watchScope: () => of({ settings: [{ provider: 'garmin', enabled: true }] }),
         watchPresence: () => of(false), watchSummaryScope: () => of({ settings: [], statuses: [], verifications: [] }),
@@ -134,7 +137,7 @@ describe('DayWorkoutDialogComponent', () => {
     exportDailySuggestionDialogQa(fixture.nativeElement, 'daily-suggestion-review');
     await fixture.componentInstance.add();
     expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ operation: expect.objectContaining({ kind: 'create-workout', planId: null }) }), expect.any(Function));
-    expect(onAdded).toHaveBeenCalledOnce();
+    expect(onAdded).toHaveBeenCalledExactlyOnceWith('workout');
   });
   it('saves daily suggestion preferences with all data enabled without generating or saving a workout', async () => {
     const data = TestBed.inject(MAT_DIALOG_DATA); data.mode = 'preferences'; data.savePreferences = vi.fn().mockResolvedValue(undefined);
@@ -470,16 +473,101 @@ describe('DayWorkoutDialogComponent', () => {
     expect(element.querySelector('fieldset')!.hidden).toBe(true);
     expect((element.querySelector('#day-workout-context-details') as HTMLElement).hidden).toBe(true);
   });
-  it('uses one primary action and one selection feedback when requesting an easy session from rest', async () => {
+  it('offers explicit rest marking and keeps the easy-session alternative behind one generation', async () => {
     const fixture = await render(); const component = fixture.componentInstance;
     generate.mockImplementationOnce(async (_uid, request) => ({ ...response(request.requestId), kind: 'rest', draft: null, previousLoads: [] }));
     await component.generate(); fixture.detectChanges(); haptics.selection.mockClear();
-    expect(fixture.nativeElement.querySelector('mat-dialog-actions').textContent).toContain('Try easy session');
+    expect(fixture.nativeElement.querySelector('mat-dialog-actions').textContent).toContain('Mark as rest day');
     expect(fixture.nativeElement.querySelector('mat-dialog-actions').textContent).not.toContain('Add workout');
+    expect(fixture.nativeElement.querySelector('.review-actions').textContent).toContain('Try easy session');
+    expect(setCalendarRestDay).not.toHaveBeenCalled();
     await component.easy();
     expect(haptics.selection).toHaveBeenCalledOnce();
     expect(generate.mock.calls[1][1].controls.purpose).toBe('general-strength');
     expect(mutate).not.toHaveBeenCalled();
+  });
+  it('marks a model rest recommendation only on explicit acceptance, without another generation or workout', async () => {
+    const fixture = await render(); const component = fixture.componentInstance;
+    component.set('trainingContext', false, false);
+    generate.mockImplementationOnce(async (_uid, request) => ({ ...response(request.requestId), kind: 'rest', draft: null, previousLoads: [] }));
+    await component.generate(); fixture.detectChanges(); haptics.success.mockClear();
+    const quotaReads = loadQuotaStatus.mock.calls.length;
+    expect(setCalendarRestDay).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.textContent).toContain('Existing workouts stay unchanged.');
+    expect(fixture.nativeElement.textContent).not.toContain('Inherits plan sync');
+    exportDailySuggestionDialogQa(fixture.nativeElement, 'ai-rest-review');
+    const action = fixture.nativeElement.querySelector('mat-dialog-actions button[mat-flat-button]') as HTMLButtonElement;
+    action.click(); await fixture.whenStable(); fixture.detectChanges();
+    expect(setCalendarRestDay).toHaveBeenCalledExactlyOnceWith('owner', '2026-10-28', true, 0, expect.any(Function));
+    expect(setCalendarRestDay.mock.calls[0][4]()).toBe(true);
+    expect(close).toHaveBeenCalledOnce(); expect(haptics.success).toHaveBeenCalledOnce();
+    expect(mutate).not.toHaveBeenCalled(); expect(generate).toHaveBeenCalledOnce();
+    expect(loadQuotaStatus).toHaveBeenCalledTimes(quotaReads);
+    await component.primaryAction(); expect(setCalendarRestDay).toHaveBeenCalledOnce();
+  });
+  it('reports a daily rest acceptance only after confirmation and prevents duplicate saves', async () => {
+    const data = TestBed.inject(MAT_DIALOG_DATA); data.initialResult = { ...response('daily-rest'), kind: 'rest', draft: null, previousLoads: [] };
+    data.onAdded = vi.fn();
+    let finish!: () => void;
+    setCalendarRestDay.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+    const fixture = await render(); const component = fixture.componentInstance;
+    const pending = component.primaryAction(); await vi.waitFor(() => expect(setCalendarRestDay).toHaveBeenCalledOnce());
+    fixture.detectChanges();
+    expect(component.primaryLabel()).toBe('Marking…');
+    expect((fixture.nativeElement.querySelector('mat-dialog-actions button[mat-flat-button]') as HTMLButtonElement).disabled).toBe(true);
+    await component.primaryAction();
+    expect(data.onAdded).not.toHaveBeenCalled(); expect(close).not.toHaveBeenCalled();
+    finish(); await pending;
+    expect(setCalendarRestDay).toHaveBeenCalledOnce(); expect(data.onAdded).toHaveBeenCalledExactlyOnceWith('rest');
+    expect(close).toHaveBeenCalledOnce(); expect(generate).not.toHaveBeenCalled(); expect(mutate).not.toHaveBeenCalled();
+  });
+  it('keeps the rest review on failure and retries with the current marker revision', async () => {
+    const data = TestBed.inject(MAT_DIALOG_DATA); data.initialResult = { ...response('daily-rest'), kind: 'rest', draft: null, previousLoads: [] };
+    data.onAdded = vi.fn();
+    const fixture = await render(); const component = fixture.componentInstance;
+    setCalendarRestDay.mockRejectedValueOnce(Error('Reply lost'));
+    await component.primaryAction(); fixture.detectChanges();
+    expect(component.error()).toContain('could not be confirmed'); expect(component.result()?.kind).toBe('rest');
+    expect(haptics.error).toHaveBeenCalledOnce(); expect(data.onAdded).not.toHaveBeenCalled(); expect(close).not.toHaveBeenCalled();
+    TestBed.inject(TrainingPlansService).watchCalendarRestDay = () => of({ schemaVersion: 1, localDate: '2026-10-28', isRestDay: false, revision: 4 });
+    await component.primaryAction();
+    expect(setCalendarRestDay.mock.calls[1].slice(0, 4)).toEqual(['owner', '2026-10-28', true, 4]);
+    expect(data.onAdded).toHaveBeenCalledExactlyOnceWith('rest'); expect(haptics.success).toHaveBeenCalledOnce();
+    expect(generate).not.toHaveBeenCalled(); expect(mutate).not.toHaveBeenCalled();
+  });
+  it('does not write rest when the marker read fails', async () => {
+    const data = TestBed.inject(MAT_DIALOG_DATA); data.initialResult = { ...response('daily-rest'), kind: 'rest', draft: null, previousLoads: [] };
+    const fixture = await render();
+    TestBed.inject(TrainingPlansService).watchCalendarRestDay = () => throwError(() => Error('Read unavailable'));
+    await fixture.componentInstance.primaryAction();
+    expect(setCalendarRestDay).not.toHaveBeenCalled(); expect(close).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.error()).toContain('could not be confirmed');
+  });
+  it('releases a pending rest marker read when the review closes, without feedback or writes', async () => {
+    const data = TestBed.inject(MAT_DIALOG_DATA); data.initialResult = { ...response('daily-rest'), kind: 'rest', draft: null, previousLoads: [] };
+    const fixture = await render(); const marker = new Subject<TrainingRestDayV1 | null>();
+    TestBed.inject(TrainingPlansService).watchCalendarRestDay = () => marker;
+    const pending = fixture.componentInstance.primaryAction();
+    expect(marker.observed).toBe(true); fixture.destroy(); await pending;
+    expect(marker.observed).toBe(false); expect(setCalendarRestDay).not.toHaveBeenCalled();
+    expect(haptics.success).not.toHaveBeenCalled(); expect(haptics.error).not.toHaveBeenCalled();
+  });
+  it.each(['read', 'write'] as const)('fences rest acceptance and feedback when the account changes during its %s', async stage => {
+    const data = TestBed.inject(MAT_DIALOG_DATA); data.initialResult = { ...response('daily-rest'), kind: 'rest', draft: null, previousLoads: [] };
+    data.onAdded = vi.fn();
+    const fixture = await render(); const component = fixture.componentInstance;
+    const marker = new Subject<TrainingRestDayV1 | null>(); let finish!: () => void;
+    if (stage === 'read') TestBed.inject(TrainingPlansService).watchCalendarRestDay = () => marker;
+    else setCalendarRestDay.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+    const pending = component.primaryAction();
+    if (stage === 'write') await vi.waitFor(() => expect(setCalendarRestDay).toHaveBeenCalledOnce());
+    auth.next({ uid: 'other' }); auth.next({ uid: 'owner' });
+    if (stage === 'read') marker.next(null); else finish();
+    await pending;
+    if (stage === 'read') expect(setCalendarRestDay).not.toHaveBeenCalled();
+    else expect(setCalendarRestDay.mock.calls[0][4]()).toBe(false);
+    expect(data.onAdded).not.toHaveBeenCalled(); expect(haptics.success).not.toHaveBeenCalled(); expect(haptics.error).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledOnce(); expect(generate).not.toHaveBeenCalled(); expect(mutate).not.toHaveBeenCalled();
   });
   it('keeps an authored rest day instead of offering a redundant easy-session generation', async () => {
     schedule.next({ ...schedule.value, plans: schedule.value.plans.map(plan => ({ ...plan, restDays: ['2026-10-28'] })) });

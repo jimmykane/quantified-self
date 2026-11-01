@@ -64,7 +64,32 @@ describe('history import progress presentation', () => {
   it('shows an automatic retry without requiring another user action', () => {
     const result = view(projection('retrying'));
     expect(result.active).toBe(true);
+    expect(result.busy).toBe(false);
+    expect(result.label).toBe('Waiting for history retries');
     expect(result.items[0].label).toBe('Waiting to retry');
+  });
+  it('shows the current section retry even when later Sleep and Health sections are queued', () => {
+    const value = {...projection('retrying'), steps: [
+      {id: 'activities', resources: ['activities'], status: 'retrying', count: 136,
+        message: 'History scan finished. Workouts: 1 waiting to retry.'},
+      {id: 'sleep', resources: ['sleep'], status: 'queued', count: 0},
+      {id: 'health', resources: ['health'], status: 'queued', count: 0},
+    ]};
+    const result = view(value);
+    expect(result).toMatchObject({active: true, busy: false, label: 'Waiting for history retries'});
+    expect(result.items[0]).toMatchObject({kind: 'retrying', canDismiss: false});
+    expect(result.items[0].steps.map(step => [step.label, step.description])).toEqual([
+      ['Activities', 'Waiting to retry'], ['Sleep', 'Queued'], ['Health', 'Queued'],
+    ]);
+    expect(result.items[0].steps[0].message).toBe(value.steps[0].message);
+  });
+  it('keeps other providers working visibly while one provider retries', () => {
+    const result = buildHistoryImportProgress([
+      {serviceName: ServiceNames.SuuntoApp, projection: projection('retrying')},
+      {serviceName: ServiceNames.WahooAPI, projection: projection('queued')},
+    ], now);
+    expect(result).toMatchObject({active: true, busy: true, label: 'Importing history'});
+    expect(result.items.map(item => item.kind)).toEqual(['active', 'retrying']);
   });
   it.each(['failed', 'skipped'])('keeps %s outcomes visible until superseded', status => {
     const result = view(projection(status, false), ServiceNames.SuuntoApp, now + 10 * HISTORY_IMPORT_RECENT_MS);

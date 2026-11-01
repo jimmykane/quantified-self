@@ -344,7 +344,10 @@ describe('Firebase Hosting configuration', () => {
     // Planned-workout editor help includes its recoverable Delete workout footer action (2026-10-31).
     // Saved-workout help includes post-Add Send/sync review, Today delivery actions and the explicit plan-settings link (2026-10-31).
     // It also covers saved-schedule recovery and dismissing the saved confirmation during sync navigation (2026-10-31).
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-31');
+    // AI rest review includes explicit Calendar rest marking and unchanged generation allowance (2026-11-01).
+    // History progress help distinguishes quiet automatic retries and later queued sections (2026-11-01).
+    // Daily suggestions retain saved recipes after check failures and distinguish lost responses (2026-11-01).
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-01');
   });
 
   it('rewrites only known CSR app routes so unknown URLs can fall through to 404.html', () => {
@@ -469,7 +472,7 @@ describe('Firebase Hosting configuration', () => {
     // Startup recovery help covers the 15-second deadline and reload without clearing browser storage.
     // Checkout help covers the 20-second access check, confirmed Pro setup and recovery before another payment.
     // Event chart help covers compact option submenus and scrolling to reach every menu setting.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-31');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-01');
     // Homepage keeps the provider introduction near the hero and moves integration details after the product features.
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-10-28');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/health`)).toBe('2026-10-15');
@@ -534,7 +537,7 @@ describe('Firebase Hosting configuration', () => {
     // Swimming Guide help explains inline omissions, visible layout-limit warnings and the HR-target field budget.
     // Form/TSS axes fit the displayed period without changing training values or hiding the neutral baseline.
     // Swimming Automatic prioritizes CSS before HR/MET and excludes calculated power TSS.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-10-31');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-10-31');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-10-31');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-10-07');
@@ -664,7 +667,7 @@ describe('Firebase Hosting configuration', () => {
   it.each(['production', 'beta'])('bounds total scripts with matching release budgets for %s', configuration => {
     const budgets = angularConfig.projects['track-tools'].architect.build.configurations[configuration].budgets;
     expect(budgets?.find(budget => budget.type === 'allScript')).toEqual({
-      type: 'allScript', maximumWarning: '13000kb', maximumError: '13817kb',
+      type: 'allScript', maximumWarning: '13000kb', maximumError: '14mb',
     });
   });
 

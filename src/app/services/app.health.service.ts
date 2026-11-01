@@ -5,7 +5,6 @@ import {
     collectionData,
     documentId,
     getCountFromServer,
-    getDocs,
     getDocsFromServer,
     limit,
     orderBy,
@@ -14,7 +13,7 @@ import {
     where,
 } from 'app/firebase/firestore';
 import type { QueryConstraint } from 'firebase/firestore';
-import { Observable, combineLatest, of } from 'rxjs';
+import { Observable, combineLatest, defer, of } from 'rxjs';
 import { map, shareReplay } from 'rxjs/operators';
 import {
     HEALTH_SYNC_STATE_COLLECTION_ID,
@@ -100,10 +99,12 @@ export class AppHealthService {
     /**
      * Default Health read path. Firestore supplies bounded source pages and
      * the shared projector produces the exact same result shape as the callable.
+     * One-shot enrichment can require server pages instead of initial cached emissions.
      */
     watchRange(
         userID: string | null | undefined,
         queryValue: HealthRangeQuery,
+        options?: { serverRead?: boolean },
     ): Observable<HealthRangeResult> {
         const plans = planHealthFirestoreQueries(queryValue);
         const uid = `${userID || ''}`.trim();
@@ -111,9 +112,9 @@ export class AppHealthService {
             return of(projectHealthRange([], [], plans.query));
         }
 
-        const sourceRecords$ = this.watchCollection<HealthSourceRecord>(uid, plans.sourceRecords);
+        const sourceRecords$ = this.watchCollection<HealthSourceRecord>(uid, plans.sourceRecords, options);
         const chunks$ = plans.chunks
-            ? this.watchCollection<HealthSampleChunk>(uid, plans.chunks)
+            ? this.watchCollection<HealthSampleChunk>(uid, plans.chunks, options)
             : of([] as HealthSampleChunk[]);
         return combineLatest([sourceRecords$, chunks$]).pipe(
             map(([sourceRecords, chunks]) => projectHealthRange(sourceRecords, chunks, plans.query)),
@@ -322,7 +323,7 @@ export class AppHealthService {
             samplePointCount: chunkPage.values.reduce((count, chunk) => count + chunk.offsetMs.length, 0) };
     }
 
-    private watchCollection<T>(userID: string, plan: HealthFirestoreQueryPlan): Observable<T[]> {
+    private watchCollection<T>(userID: string, plan: HealthFirestoreQueryPlan, options?: { serverRead?: boolean }): Observable<T[]> {
         const targetCollection = collection(this.firestore, 'users', userID, plan.collectionId);
         const constraints: QueryConstraint[] = [
             where('calendarDate', '>=', plan.startDate),
@@ -340,6 +341,11 @@ export class AppHealthService {
         }
         constraints.push(limit(plan.fetchLimit));
         const targetQuery = query(targetCollection, ...constraints);
+        if (options?.serverRead) {
+            return defer(() => getDocsFromServer(targetQuery)).pipe(
+                map(snapshot => snapshot.docs.map(document => ({ ...document.data(), id: document.id } as T))),
+            );
+        }
         return collectionData(targetQuery, { idField: 'id' }) as Observable<T[]>;
     }
 
@@ -354,7 +360,7 @@ export class AppHealthService {
             const plan = planHealthFirestoreQueries({ ...queryValue, sourceRecordCursor: cursor }, {
                 maximumSampleRangeDays: APP_HEALTH_WORKSPACE_SAMPLE_MAX_DAYS,
             }).sourceRecords;
-            const snapshot = await getDocs(this.buildCollectionQuery(userID, plan));
+            const snapshot = await getDocsFromServer(this.buildCollectionQuery(userID, plan));
             const page = snapshot.docs.slice(0, plan.fetchLimit - 1);
             for (const documentSnapshot of page) {
                 if (values.length >= HEALTH_WORKSPACE_LOAD_LIMITS.sourceRecords) {
@@ -399,7 +405,7 @@ export class AppHealthService {
             if (!plan) {
                 return { values, complete: true, cursor: null, serializedBytes, limitReached: null };
             }
-            const snapshot = await getDocs(this.buildCollectionQuery(userID, plan));
+            const snapshot = await getDocsFromServer(this.buildCollectionQuery(userID, plan));
             const page = snapshot.docs.slice(0, plan.fetchLimit - 1);
             for (const documentSnapshot of page) {
                 if (values.length >= HEALTH_WORKSPACE_LOAD_LIMITS.sampleChunks) {

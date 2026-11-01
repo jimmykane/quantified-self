@@ -28,6 +28,13 @@ describe('bounded history observation selection', () => {
     const row = run(); row.nextAttemptAt = NaN; expect(historyProbeCandidate(row, 2000)).toBe('unknown');
     row.nextAttemptAt = 1000; row.steps = Array(11).fill(row.steps[0]); expect(historyProbeCandidate(row, 2000)).toBe('unknown');
   });
+  it('accepts bounded outstanding activity work without widening other resources', () => {
+    const row = run(); row.steps[0].childPaths = Array.from({ length: 200 }, (_, i) => `queue/${i}`);
+    expect(historyProbeCandidate(row, 2000)).toBe('eligible');
+    row.steps[0].childPaths.push('queue/overflow'); expect(historyProbeCandidate(row, 2000)).toBe('unknown');
+    row.steps[0].childPaths.pop(); row.steps[0].id = 'sleep';
+    expect(historyProbeCandidate(row, 2000)).toBe('unknown');
+  });
   it('times out with four unavailable heartbeats and suppresses late healthy observations', async () => {
     vi.useFakeTimers();
     let resolveQuery!: (value: unknown) => void;

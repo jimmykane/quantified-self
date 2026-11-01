@@ -1,6 +1,6 @@
 import { BrowserCompatibilityService } from './browser.compatibility.service';
 import { TestBed } from '@angular/core/testing';
-import { firstValueFrom, of, BehaviorSubject, throwError } from 'rxjs';
+import { firstValueFrom, of, BehaviorSubject, Subject, throwError } from 'rxjs';
 import { nightlyHealthAccountKey } from '@shared/nightly-hrv';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -44,6 +44,7 @@ describe('AppSleepService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getDocsFromServer).mockReset();
     vi.mocked(collectionData).mockReturnValue(of([]));
     vi.mocked(docData).mockReturnValue(of(undefined));
     TestBed.configureTestingModule({
@@ -179,6 +180,104 @@ describe('AppSleepService', () => {
     expect(result[0].vitals).toEqual({averageHeartRateBpm: 50});
   });
 
+  it('waits for every HRV page and heart-rate enrichment before completing a server Sleep range', async () => {
+    const start = Date.parse('2026-09-10T22:00:00Z'), end = start + 28_800_000;
+    const accountKey = await nightlyHealthAccountKey('user-1', 'GarminAPI', 'provider-account');
+    const session = { id: 'sleep', userID: 'user-1', source: { provider: 'GarminAPI', providerUserId: 'provider-account' },
+      sleepDate: '2026-09-11', startTimeMs: start, endTimeMs: end, durationSeconds: 28_800, isNap: false };
+    const hrv = { id: 'z-matching', userID: 'user-1', schemaVersion: 1, kind: 'interval_summary',
+      source: { provider: 'GarminAPI', accountKey }, calendarDate: '2026-09-11', startTimeMs: start, endTimeMs: end,
+      metrics: [{ kind: 'value', metricId: 'heart_rate_variability', valueType: 'number', aggregation: 'average',
+        semanticVariant: 'overnight_rmssd', origin: 'provider_summary', recordingMethod: 'provider_calculated',
+        normalizationStatus: 'canonical', canonical: { value: 44, unit: 'ms' } }] };
+    const page = [...Array.from({ length: 32 }, (_, index) => ({ ...hrv, id: `a-${index}`, source: { ...hrv.source, accountKey: 'other' } })), hrv];
+    let finishHrv!: () => void;
+    vi.mocked(getDocsFromServer).mockImplementation(rawQuery => {
+      const q = rawQuery as unknown as { collectionRef: { path: string[] }; constraints: Array<{ type: string }> };
+      if (q.collectionRef.path.at(-1) === 'sleepSessions') return Promise.resolve({ docs: [{ id: 'sleep', data: () => session }] } as never);
+      if (!q.constraints.some(c => c.type === 'startAfter')) return Promise.resolve({ docs: page.map(record => ({ id: record.id, data: () => record })) } as never);
+      return new Promise(resolve => { finishHrv = () => resolve({ docs: [{ id: hrv.id, data: () => hrv }] } as never); });
+    });
+    const empty = projectHealthRange([], [], { startDate: '2026-09-10', endDate: '2026-09-11', includeSamples: true });
+    const heartRateServer$ = new Subject<typeof empty>();
+    vi.mocked(TestBed.inject(AppHealthService).watchRange).mockImplementation((_uid, _query, options) =>
+      options?.serverRead ? heartRateServer$ : of(empty));
+    const resolved = vi.fn();
+    const result = firstValueFrom(service.watchForDashboard('user-1', start, end, { serverRead: true }))
+      .then(value => { resolved(); return value; });
+    await vi.waitFor(() => expect(getDocsFromServer).toHaveBeenCalledTimes(3));
+    expect(resolved).not.toHaveBeenCalled();
+    finishHrv();
+    await vi.waitFor(() => expect(startAfter).toHaveBeenCalledWith('2026-09-11', 'a-31'));
+    expect(resolved).not.toHaveBeenCalled();
+    heartRateServer$.next({ ...empty, sampleChunks: [{ userID: 'user-1', schemaVersion: 1, provider: 'GarminAPI', accountKey,
+      metricId: 'heart_rate', valueType: 'number', aggregation: 'representative_sample', semanticVariant: 'daily_15_second',
+      seriesKey: 'heart_rate_15_second_representative', origin: 'recorded', recordingMethod: 'device', normalizationStatus: 'canonical',
+      canonicalUnit: 'bpm', startTimeMs: start + 15_000, endTimeMs: end, offsetMs: Array.from({ length: 1920 }, (_, i) => i * 15_000),
+      canonicalValues: Array(1920).fill(60) } as never] });
+    heartRateServer$.complete();
+    expect((await result)[0].vitals).toMatchObject({ overnightHrvMs: 44, averageHeartRateBpm: 60, minimumHeartRateBpm: 60 });
+    expect(TestBed.inject(AppHealthService).watchRange).toHaveBeenCalledTimes(4);
+    expect(collectionData).not.toHaveBeenCalled();
+    expect(heartRateServer$.observed).toBe(false);
+  });
+
+  it('does not reuse a cache-first live HRV stream for a shared server read', async () => {
+    const history = TestBed.inject(HrvHistoryService);
+    const cached$ = new BehaviorSubject([]);
+    vi.mocked(collectionData).mockReturnValue(cached$);
+    const live = history.watch('owner', '2026-09-01', '2026-09-11').subscribe();
+    const record = { id: 'older-night', calendarDate: '2026-09-01' };
+    vi.mocked(getDocsFromServer).mockResolvedValueOnce({ docs: [{ id: record.id, data: () => record }] } as never);
+    const reads = [0, 1].map(() => firstValueFrom(history.watch('owner', '2026-09-01', '2026-09-11', { serverRead: true })));
+    expect(await Promise.all(reads)).toEqual([[record], [record]]);
+    expect(getDocsFromServer).toHaveBeenCalledOnce();
+    expect(collectionData).toHaveBeenCalledOnce();
+    expect(cached$.observed).toBe(true);
+    live.unsubscribe();
+    expect(cached$.observed).toBe(false);
+  });
+
+  it.each([false, true])('bounds one-shot overnight HR reads and releases pending work (read fails: %s)', async readFails => {
+    const start = Date.parse('2026-09-01T22:00:00Z');
+    const nights = Array.from({ length: 10 }, (_, index) => ({ id: `night-${index}`, userID: 'user-1',
+      source: { provider: 'GarminAPI', providerUserId: 'account' }, sleepDate: `2026-09-${String(index + 2).padStart(2, '0')}`,
+      startTimeMs: start + index * 86_400_000, endTimeMs: start + index * 86_400_000 + 28_800_000,
+      durationSeconds: 28_800, isNap: false, vitals: { averageHrvMs: 44 } }));
+    vi.mocked(getDocsFromServer).mockResolvedValueOnce({ docs: nights.map(night => ({ id: night.id, data: () => night })) } as never);
+    const empty = projectHealthRange([], [], { startDate: '2026-09-01', endDate: '2026-09-01', includeSamples: true });
+    const replies: Subject<typeof empty>[] = [];
+    const health = TestBed.inject(AppHealthService);
+    vi.mocked(health.watchRange).mockImplementation(() => {
+      const reply = new Subject<typeof empty>(); replies.push(reply); return reply;
+    });
+    const resolved = vi.fn();
+    const result = firstValueFrom(service.watchForDashboard('user-1', start, nights.at(-1)!.endTimeMs, { serverRead: true }))
+      .then(value => { resolved(); return value; });
+    await vi.waitFor(() => expect(health.watchRange).toHaveBeenCalled());
+    expect(health.watchRange).toHaveBeenCalledTimes(4);
+    expect(resolved).not.toHaveBeenCalled();
+    if (readFails) {
+      replies[0].error(new Error('offline'));
+      expect(await result).toHaveLength(10);
+      expect(health.watchRange).toHaveBeenCalledTimes(4);
+      expect(replies.every(reply => !reply.observed)).toBe(true);
+      return;
+    }
+    for (let index = 0; index < replies.length; index++) {
+      expect(replies.filter(reply => reply.observed).length).toBeLessThanOrEqual(4);
+      replies[index].next(empty); replies[index].complete();
+    }
+    expect(await result).toHaveLength(10);
+    expect(health.watchRange).toHaveBeenCalledTimes(13);
+    const dates = vi.mocked(health.watchRange).mock.calls.map(([, query]) => query.startDate);
+    expect(new Set(dates).size).toBe(13);
+    expect(dates[0]).toBe('2026-08-31');
+    expect(dates.at(-1)).toBe('2026-09-12');
+    expect(replies.every(reply => !reply.observed)).toBe(true);
+    expect(collectionData).not.toHaveBeenCalled();
+  });
+
   it('matches native Sleep to its Health account for highlights without an extra Health read', async () => {
     const start = Date.parse('2026-09-10T22:00:00Z'), end = start + 28800000;
     const session = { id: 'sleep', userID: 'user-1', source: { provider: 'GarminAPI', providerUserId: 'provider-account' },
@@ -301,6 +400,49 @@ describe('AppSleepService', () => {
     expect(where).toHaveBeenCalledWith('startTimeMs', '<=', end);
     expect(orderBy).toHaveBeenCalledWith('startTimeMs', 'desc');
     expect(limit).not.toHaveBeenCalled();
+    expect(collectionData).toHaveBeenCalledOnce();
+    expect(getDocsFromServer).not.toHaveBeenCalled();
+  });
+
+  it('loads a complete long range with one server query instead of accepting a short cached history', async () => {
+    const start = Date.parse('2025-11-02T00:00:00Z'), end = Date.parse('2026-11-02T00:00:00Z');
+    const nights = Array.from({ length: 344 }, (_, index) => ({ id: `night-${index}`,
+      userID: 'user-1', source: { provider: 'SuuntoApp', providerUserId: 'account', sourceSessionKey: `night-${index}` },
+      sleepDate: new Date(start + index * 86_400_000).toISOString().slice(0, 10),
+      startTimeMs: start + index * 86_400_000, endTimeMs: start + index * 86_400_000 + 28_800_000,
+      durationSeconds: 28_800, isNap: false, stages: [], stageDurationsSeconds: {},
+      vitals: { averageHrvMs: 45 }, createdAtMs: 0, updatedAtMs: 0 }));
+    vi.mocked(collectionData).mockReturnValue(of(nights.slice(-66)));
+    let finish!: () => void;
+    vi.mocked(getDocsFromServer).mockImplementationOnce(() => new Promise(resolve => {
+      finish = () => resolve({ docs: nights.map(night => ({ id: night.id, data: () => night })) } as never);
+    }));
+    const resolved = vi.fn();
+    const result = firstValueFrom(service.watchForDashboard('user-1', start, end, { serverRead: true }));
+    void result.then(resolved);
+    await Promise.resolve(); await Promise.resolve();
+    expect(resolved).not.toHaveBeenCalled();
+    expect(collectionData).not.toHaveBeenCalled();
+    expect(getDocsFromServer).toHaveBeenCalledOnce();
+    finish();
+    const loaded = await result;
+    expect(loaded).toHaveLength(344);
+    expect(loaded[0].sleepDate).toBe('2025-11-02');
+    expect(loaded.at(-1)?.id).toBe('night-343');
+    expect(loaded.every(night => night.vitals?.averageHrvMs === 45)).toBe(true);
+    expect(limit).not.toHaveBeenCalled();
+    expect(where).toHaveBeenCalledWith('startTimeMs', '>=', start - 18 * 3_600_000);
+    expect(where).toHaveBeenCalledWith('startTimeMs', '<=', end);
+    expect(TestBed.inject(AppHealthService).watchRange).not.toHaveBeenCalled();
+  });
+
+  it('propagates a failed server Sleep read without replacing it with cached data', async () => {
+    vi.mocked(collectionData).mockReturnValue(of([]));
+    vi.mocked(getDocsFromServer).mockRejectedValueOnce(new Error('offline'));
+    await expect(firstValueFrom(service.watchForDashboard('user-1', 1, 2, { serverRead: true })))
+      .rejects.toThrow('offline');
+    expect(collectionData).not.toHaveBeenCalled();
+    expect(getDocsFromServer).toHaveBeenCalledOnce();
   });
 
   it('queries all sleep sessions without applying the fallback limit when start is zero', async () => {

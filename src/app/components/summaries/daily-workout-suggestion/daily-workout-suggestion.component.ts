@@ -49,7 +49,8 @@ export class DailyWorkoutSuggestionComponent {
   readonly actionBusy = signal(false);
   readonly actionError = signal<string | null>(null);
   readonly busy = computed(() => this.loading() || this.actionBusy() || this.daily.saving());
-  readonly error = signal(false);
+  // A request failure does not establish that the model failed or spent today's allowance.
+  readonly error = signal<string | null>(null);
   // Reuse Calendar's bounded reader only for the current owner's planned date.
   private readonly plannedScope = computed(() => {
     const preferences = this.preferences(), status = this.status();
@@ -83,7 +84,7 @@ export class DailyWorkoutSuggestionComponent {
     const value = this.status();
     if (value?.state === 'ready' && value.result) {
       const draft = value.result.draft;
-      return draft ? `${draft.title} · ${formatWorkoutPrescriptionSummaryV1(draft.structure, this.users.user()?.settings?.unitSettings, draft.structure.sport)}` : 'A recovery day';
+      return draft ? `${draft.title} · ${formatWorkoutPrescriptionSummaryV1(draft.structure, this.users.user()?.settings?.unitSettings, draft.structure.sport)}` : 'Rest day suggested';
     }
     const planned = this.plannedWorkouts();
     if (planned.length) {
@@ -92,10 +93,11 @@ export class DailyWorkoutSuggestionComponent {
         + (planned.length > 1 ? ` · +${planned.length - 1} more` : '');
     }
     if (this.busy()) return 'Preparing with your latest available context…';
-    if (this.error() || value?.state === 'failed') return 'Today’s suggestion could not finish.';
+    if (this.error()) return this.error();
+    if (value?.state === 'failed') return 'Today’s suggestion could not be generated.';
     if (value?.state === 'planned') return 'Your workout is planned for today.';
     if (value?.state === 'completed') return 'You already recorded a workout today.';
-    if (value?.state === 'rest-day') return 'Today is a planned rest day.';
+    if (value?.state === 'rest-day') return 'Today is a rest day.';
     if (value?.state === 'dismissed') return 'Dismissed for today.';
     if (value?.state === 'preparing') return 'Your suggestion is being prepared.';
     if (value?.state === 'waiting-sleep') return 'Waiting for your latest sleep…';
@@ -106,6 +108,8 @@ export class DailyWorkoutSuggestionComponent {
   private shown = new Set<string>();
   private checkedSleepKey: string | null = null;
   private readScope = '';
+  private readRevision = -1;
+  private needsCheck = false;
   constructor() {
     const visibility = () => this.visible.set(this.document.visibilityState !== 'hidden');
     this.document.addEventListener('visibilitychange', visibility);
@@ -115,19 +119,23 @@ export class DailyWorkoutSuggestionComponent {
       const eligible = this.eligible(), preferences = this.preferences(), saving = this.daily.saving();
       const ready = this.dataReady(), visible = this.visible(), sleepKey = this.evidenceKey();
       if (eligible && preferences.enabled && ready) untracked(() => this.daily.observeSleep(this.ownerUid(), sleepKey));
-      const scope = JSON.stringify([this.ownerUid(), eligible, preferences, this.daily.cacheRevision()]);
+      const scope = JSON.stringify([this.ownerUid(), eligible, preferences]), revision = this.daily.cacheRevision();
       // Hydration is a start barrier, not authority to discard work already running for this same scope.
-      if (scope !== this.readScope) {
-        this.readScope = scope; this.sequence++;
+      if (scope !== this.readScope || revision !== this.readRevision) {
+        const previous = scope === this.readScope ? untracked(() => this.status()) : null;
+        this.readScope = scope; this.readRevision = revision; this.sequence++;
         const cached = eligible && preferences.enabled ? untracked(() => this.daily.cached(this.ownerUid())) : null;
-        this.status.set(cached?.status ?? null); this.checkedSleepKey = cached?.sleepKey ?? null;
-        this.error.set(false); this.loading.set(false);
+        // Retain the recipe for display only. Review still requires fresh coverage authority.
+        this.status.set(cached?.status ?? (previous?.state === 'ready' ? previous : null));
+        this.needsCheck = !cached && previous?.state === 'ready';
+        this.checkedSleepKey = cached?.sleepKey ?? null;
+        this.error.set(null); this.actionError.set(null); this.loading.set(false);
       }
       if (!eligible || !preferences.enabled || saving || !ready || !visible || untracked(() => this.loading() || this.error())) return;
       const status = untracked(() => this.status());
       // Foreground return may start previously deferred work, but never reload an already checked suggestion.
       // Sleep changes have their own revision-bound retry below; other retries remain explicit.
-      if (status && status.state !== 'waiting') return;
+      if (status && status.state !== 'waiting' && !this.needsCheck) return;
       const timer = setTimeout(() => { untracked(() => { void this.load(false, false); }); }, 1500);
       onCleanup(() => clearTimeout(timer));
     });
@@ -168,7 +176,8 @@ export class DailyWorkoutSuggestionComponent {
     if (useAvailableData && this.status()?.state !== 'waiting-sleep') return;
     const sequence = ++this.sequence;
     this.checkedSleepKey = this.evidenceKey();
-    this.loading.set(true); this.error.set(false);
+    this.loading.set(true); this.error.set(null); this.actionError.set(null);
+    let preparing = useAvailableData;
     try {
       let status = useAvailableData
         ? await this.daily.request(uid, 'use-available-data', () => this.current(sequence, uid), this.status()!.localDate)
@@ -176,6 +185,7 @@ export class DailyWorkoutSuggestionComponent {
       if (!this.current(sequence, uid)) return;
       if (!useAvailableData && ['waiting', 'waiting-sleep'].includes(status.state)) {
         if (this.dataReady() && this.visible()) {
+          preparing = true;
           status = await this.daily.request(uid, 'prepare', () => this.current(sequence, uid));
         } else if (status.state === 'waiting-sleep') {
           // A status-only read did not check current Sleep context; resume once the start barriers settle.
@@ -184,7 +194,14 @@ export class DailyWorkoutSuggestionComponent {
       }
       if (!this.current(sequence, uid)) return;
       this.status.set(status);
-    } catch { if (this.current(sequence, uid)) { this.error.set(true); this.daily.event(uid, 'failed'); } }
+      this.needsCheck = false;
+    } catch {
+      if (this.current(sequence, uid)) {
+        this.error.set(preparing ? 'Could not retrieve today’s suggestion. Check again to see whether it finished.'
+          : 'Could not check today’s suggestion. Try again.');
+        this.daily.event(uid, 'failed');
+      }
+    }
     finally { if (this.current(sequence, uid)) this.loading.set(false); }
   }
   async configure(): Promise<void> {
@@ -201,13 +218,14 @@ export class DailyWorkoutSuggestionComponent {
     const uid = this.ownerUid();
     if (this.busy() || this.status()?.state !== 'ready' || !this.preferences().enabled || !this.daily.eligible(uid)) return;
     const sequence = ++this.sequence;
-    this.loading.set(true); this.actionError.set(null);
+    this.loading.set(true); this.error.set(null); this.actionError.set(null);
     let value: DailyWorkoutSuggestionStatus;
     try {
       // An imported activity may cover today since this browser last fetched its daily result.
       value = await this.daily.request(uid, 'status', () => this.current(sequence, uid), undefined, true);
       if (!this.current(sequence, uid)) return;
       this.status.set(value);
+      this.needsCheck = false; this.error.set(null);
     } catch {
       if (this.current(sequence, uid)) {
         this.actionError.set('Today could not be checked. Try Review again.'); this.haptics.error();
@@ -217,10 +235,10 @@ export class DailyWorkoutSuggestionComponent {
     if (value.state !== 'ready' || !value.controls || !value.result) return;
     this.daily.event(uid, 'reviewed', 'ready');
     await this.generation.open(uid, value.localDate, value.controls.sport, { initialControls: value.controls, initialResult: value.result,
-      onAdded: () => {
+      onAdded: kind => {
         if (!this.daily.eligible(uid) || this.daily.preferences().controls.localDate !== value.localDate) return;
-        this.daily.event(uid, 'added', 'ready');
-        const status: DailyWorkoutSuggestionStatus = { localDate: value.localDate, state: 'planned' };
+        this.daily.event(uid, 'added', kind === 'rest' ? 'rest-day' : 'ready');
+        const status: DailyWorkoutSuggestionStatus = { localDate: value.localDate, state: kind === 'rest' ? 'rest-day' : 'planned' };
         this.daily.remember(uid, status);
         if (!this.destroy.destroyed && this.ownerUid() === uid) {
           this.status.set(status);

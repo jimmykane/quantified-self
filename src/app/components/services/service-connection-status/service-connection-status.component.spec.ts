@@ -72,6 +72,25 @@ describe('ServiceConnectionStatusComponent', () => {
         expect(fixture.nativeElement.querySelector('.service-connection-status__state')).toBeTruthy();
     });
 
+    it('describes automatic imports only for a healthy connection with the feature enabled', () => {
+        component.automaticImports = true; component.connected = true; component.providerIcon = 'suunto';
+        fixture.detectChanges();
+        expect(fixture.nativeElement.textContent).toContain('New activities import automatically.');
+        for (const state of [
+            { automaticImports: false, connected: true, loading: false, statusTone: 'default', statusLabelOverride: null },
+            { automaticImports: true, connected: false, loading: false, statusTone: 'default', statusLabelOverride: null },
+            { automaticImports: true, connected: true, loading: true, statusTone: 'default', statusLabelOverride: null },
+            { automaticImports: true, connected: true, loading: false, statusTone: 'attention', statusLabelOverride: 'Reconnect required' },
+        ] as const) {
+            Object.assign(component, state); fixture.detectChanges();
+            expect(fixture.nativeElement.querySelector('.service-connection-status__automatic-imports')).toBeNull();
+        }
+        component.automaticImports = true; component.connected = true; component.loading = false;
+        component.statusTone = 'default'; component.statusLabelOverride = null; component.providerIcon = 'wahoo';
+        fixture.detectChanges();
+        expect(fixture.nativeElement.textContent).toContain('Eligible Wahoo workouts import automatically.');
+    });
+
     it('renders connected and Pro states without a card surface', () => {
         component.serviceLabel = 'Suunto App';
         component.connected = true;

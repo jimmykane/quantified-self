@@ -137,6 +137,61 @@ describe('durable history coordinator', () => {
     await dispatchConnectionHistoryRun(run); expect(mocks.enqueue).toHaveBeenCalledWith(run.id, now, 1, expect.objectContaining({ queueRevision: '0' }));
     mocks.enqueue.mockResolvedValue(false); await expect(dispatchConnectionHistoryRun(run)).rejects.toThrow('not accepted');
   });
+  it('checks pending activity jobs independently and retains a verified failure beside them', async () => {
+    const pending = 'workoutQueue/retrying'; const failed = 'workoutQueue/bad';
+    mocks.rows.set(pending, { connectionHistoryRunId: run.id, processed: false, retryCount: 7, queueRevision: 'original' });
+    mocks.rows.set('workoutQueue/good', { processed: true });
+    mocks.rows.set('failed_jobs/bad', { connectionHistoryRunId: run.id, originalCollection: 'workoutQueue' });
+    const paths = [pending, failed, 'workoutQueue/good'];
+    expect(await observeHistoryChildren(paths, run.id, undefined, true)).toMatchObject({
+      pendingPaths: [pending], failedPaths: [failed], retryingCount: 1 });
+    expect(await observeHistoryChildren(paths, run.id)).toBe('pending');
+    expect(await observeHistoryChildren(paths, 'other-run', undefined, true)).toBe('failed');
+    expect(mocks.rows.get(pending)).toMatchObject({ retryCount: 7, queueRevision: 'original', processed: false });
+  });
+  it('carries a canonical webhook job without resetting it or requiring a history run binding', async () => {
+    const pending = 'wahooAPIWorkoutQueue/webhook';
+    const original = { firebaseUserID: 'owner', processed: false, retryCount: 7, queueRevision: 'webhook-revision' };
+    mocks.rows.set(pending, original);
+    expect(await observeHistoryChildren([pending], run.id, undefined, true)).toEqual({
+      pendingPaths: [pending], failedPaths: [], retryingCount: 1 });
+    expect(mocks.rows.get(pending)).toEqual(original);
+  });
+  it('recovers a persisted page receipt beside an older retry without repeating admission or changing the job', async () => {
+    const step = run.steps[0]; step.count = 10; step.childPaths = ['workoutQueue/retrying'];
+    const pending = { connectionHistoryRunId: run.id, processed: false, retryCount: 7, queueRevision: 'original',
+      dispatchedToCloudTask: now - 1000 };
+    mocks.rows.set(step.childPaths[0], pending);
+    run.lastOperation = { key: historyOperationKey(step), result: { count: 1, nextStartMs: now + 1000,
+      nextPage: 2, childPaths: ['workoutQueue/new'] } };
+    mocks.rows.set('workoutQueue/new', { connectionHistoryRunId: run.id, processed: true });
+    mocks.depth.mockResolvedValue(500);
+    await processConnectionHistoryRun(run.id, '0');
+    expect(saved()).toMatchObject({ processed: false, revision: 1, steps: [{ count: 11,
+      childPaths: ['workoutQueue/retrying', 'workoutQueue/new'], nextStartMs: now + 1000, page: 2 }] });
+    expect(mocks.execute).not.toHaveBeenCalled(); expect(mocks.depth).not.toHaveBeenCalled();
+    expect(mocks.rows.get('workoutQueue/retrying')).toEqual(pending);
+    await processConnectionHistoryRun(run.id, '0'); // Stale delivery cannot count the receipt twice.
+    expect(saved().steps[0].count).toBe(11);
+    vi.spyOn(Date, 'now').mockReturnValue(now + 60000);
+    await processConnectionHistoryRun(run.id, '1');
+    expect(saved().processed).toBe(false); expect(saved().steps[0].childPaths).toEqual(['workoutQueue/retrying']);
+    mocks.rows.set('workoutQueue/retrying', { ...pending, processed: true });
+    vi.spyOn(Date, 'now').mockReturnValue(now + 120000);
+    await processConnectionHistoryRun(run.id, '2');
+    expect(saved()).toMatchObject({ processed: true, steps: [{ status: 'processed', count: 11, childPaths: [] }] });
+    expect(saved().steps[0].message).toBeUndefined(); expect(mocks.execute).not.toHaveBeenCalled();
+  });
+  it.each(['authorization', 'unverified', 'lifecycle'])('does not admit a later page past a %s problem beside a retry', async problem => {
+    run.steps[0].childPaths = ['workoutQueue/retrying', 'workoutQueue/problem'];
+    mocks.rows.set('workoutQueue/retrying', { processed: false, retryCount: 7, connectionHistoryRunId: run.id });
+    if (problem === 'authorization') mocks.rows.set('failed_jobs/problem', {
+      connectionHistoryRunId: run.id, originalCollection: 'workoutQueue', context: 'NO_TOKEN_FOUND' });
+    if (problem === 'lifecycle') mocks.rows.set('workoutQueue/problem', {
+      processed: true, resultStatus: 'skipped', skippedReason: 'connection_history_superseded' });
+    await processConnectionHistoryRun(run.id, '0');
+    expect(mocks.execute).not.toHaveBeenCalled(); expect(saved().steps[0].status).not.toBe('processed');
+  });
   it('never treats a missing, pending or skipped child as successful ingestion', async () => {
     expect(await observeHistoryChildren(['queue/missing'])).toBe('failed');
     mocks.rows.set('queue/item', { processed: false }); expect(await observeHistoryChildren(['queue/item'])).toBe('pending');
