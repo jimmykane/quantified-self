@@ -27,6 +27,7 @@ export class ServiceConnectionStatusComponent {
     @Input() serviceLabel = '';
     @Input() description = '';
     @Input() connected = false;
+    @Input() automaticImports = false;
     @Input() loading = false;
     @Input() compact = false;
     @Input() locked = false;

@@ -48,7 +48,7 @@ function unavailable(serviceName: ServiceNames): HistoryImportProgressItem {
   return {serviceName, name: getProviderDisplayName(serviceName), runId: null, kind: 'unavailable',
     label: labels.unavailable, rangeLabel: null, steps: []};
 }
-function item(source: HistoryImportSource, nowMs: number): HistoryImportProgressItem | null {
+function item(source: HistoryImportSource): HistoryImportProgressItem | null {
   const {serviceName, projection: value} = source;
   const requestOnly = serviceName === ServiceNames.GarminAPI;
   if (source.unavailable) return unavailable(serviceName);
@@ -79,7 +79,6 @@ function item(source: HistoryImportSource, nowMs: number): HistoryImportProgress
   // A submitted provider request is not a live delivery tracker. Keep recent terminal
   // outcomes for context, without an indefinite activity spinner or delivery claim.
   const expiresAtMs = kind === 'requested' || kind === 'processed' ? value.updatedAtMs + HISTORY_IMPORT_RECENT_MS : undefined;
-  if (expiresAtMs !== undefined && expiresAtMs <= nowMs) return null;
   const range = typeof value.rangePreset === 'string' && (value.rangePreset === 'custom'
     || historyRangeOptions(serviceName).some(option => option.value === value.rangePreset))
     ? historyRangeLabel(serviceName, value.rangePreset as Parameters<typeof historyRangeLabel>[1]) : null;
@@ -92,12 +91,17 @@ function item(source: HistoryImportSource, nowMs: number): HistoryImportProgress
     label: (requestOnly ? requestLabels : labels)[kind], requestOnly,
     rangeLabel: range, steps, expiresAtMs, updatedAtMs: value.updatedAtMs, canDismiss: !value.active && kind === 'attention'};
 }
+/** Latest persisted statuses for Connections, independent of notification dismissal and age. */
+export function buildHistoryImportItems(sources: readonly HistoryImportSource[]): HistoryImportProgressItem[] {
+  return sources.map(source => item(source)).filter((entry): entry is HistoryImportProgressItem => !!entry)
+    .sort((a, b) => order[a.kind] - order[b.kind]);
+}
 export function buildHistoryImportProgress(sources: readonly HistoryImportSource[], nowMs: number,
   dismissed: readonly HistoryImportResultDismissal[] = []): HistoryImportProgressView {
-  const items = sources.map(source => item(source, nowMs)).filter((entry): entry is HistoryImportProgressItem => !!entry)
+  const items = buildHistoryImportItems(sources)
+    .filter(entry => entry.expiresAtMs === undefined || entry.expiresAtMs > nowMs)
     .filter(entry => !entry.canDismiss || !dismissed.some(result => result.serviceName === entry.serviceName
-      && result.runId === entry.runId && result.updatedAtMs === entry.updatedAtMs))
-    .sort((a, b) => order[a.kind] - order[b.kind]);
+      && result.runId === entry.runId && result.updatedAtMs === entry.updatedAtMs));
   const active = items.some(entry => entry.kind === 'active' || entry.kind === 'retrying');
   const requestItem = items.length === 1 && items[0].requestOnly ? items[0] : null;
   const label = requestItem?.kind === 'active' ? 'Requesting Garmin history'

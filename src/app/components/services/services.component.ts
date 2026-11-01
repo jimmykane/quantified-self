@@ -21,6 +21,7 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppUserUtilities } from '../../utils/app.user.utilities';
 import { AppPaymentService } from '../../services/app.payment.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { HistoryImportProgressService } from '../../services/history-import-progress.service';
 import { ProMembershipOffer, resolveProMembershipOffer } from '../../helpers/membership-selection.helper';
 import {
   PROVIDER_SECTION_BY_SERVICE,
@@ -207,17 +208,10 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public readonly serviceOverviewCardsBySection: Record<ProviderServiceSectionId, readonly ServiceOverviewCard[]> = {
     garmin: [
       {
-        title: 'Activity sync',
-        description: 'New Garmin activities import automatically while connected. Backfill earlier activities from History import.',
-        icon: 'sync',
-        actionLabel: 'Backfill activities',
-        tool: 'history',
-      },
-      {
-        title: 'Sleep & Health history',
-        description: 'Backfill Garmin sleep and available Health metrics.',
-        icon: 'bedtime',
-        actionLabel: 'Import history',
+        title: 'Import history',
+        description: 'Import past activities, sleep and available Health data.',
+        icon: 'history',
+        actionLabel: 'Choose dates & data',
         tool: 'history',
       },
       {
@@ -231,30 +225,23 @@ export class ServicesComponent implements OnInit, OnDestroy {
         title: 'Send activities to connected services',
         description: 'Automatically send new Garmin activities to Suunto, Wahoo, or COROS.',
         icon: 'published_with_changes',
-        actionLabel: 'Activity sync settings',
+        actionLabel: 'Set up automatic sending',
         tool: 'auto-sync',
       },
     ],
     suunto: [
       {
-        title: 'Activity sync',
-        description: 'New Suunto activities import automatically while connected. Backfill earlier activities from History import.',
-        icon: 'sync',
-        actionLabel: 'Backfill activities',
-        tool: 'history',
-      },
-      {
-        title: 'Sleep & 24/7 Health history',
-        description: 'Backfill Suunto sleep and available 24/7 Health metrics.',
-        icon: 'bedtime',
-        actionLabel: 'Import history',
+        title: 'Import history',
+        description: 'Import past activities, sleep and available 24/7 Health data.',
+        icon: 'history',
+        actionLabel: 'Choose dates & data',
         tool: 'history',
       },
       {
         title: 'Route sync',
         description: 'Import existing Suunto routes and send saved routes to Garmin, Wahoo, or COROS.',
         icon: 'route',
-        actionLabel: 'Route sync settings',
+        actionLabel: 'Set up route sync',
         tool: 'routes',
       },
       {
@@ -275,24 +262,17 @@ export class ServicesComponent implements OnInit, OnDestroy {
         title: 'Send activities to connected services',
         description: 'Automatically send new Suunto activities to Wahoo or COROS.',
         icon: 'published_with_changes',
-        actionLabel: 'Activity sync settings',
+        actionLabel: 'Set up automatic sending',
         tool: 'activity-sync',
       },
       { title: 'Send route files', description: 'Send GPX or FIT route files to Suunto.', icon: 'route', actionLabel: 'Send route files', tool: 'uploads' },
     ],
     coros: [
       {
-        title: 'Activity sync',
-        description: 'New COROS activities import automatically while connected. Backfill earlier activities from History import.',
-        icon: 'sync',
-        actionLabel: 'Backfill activities',
-        tool: 'history',
-      },
-      {
-        title: 'Sleep & daily Health history',
-        description: 'Backfill COROS sleep and available daily Health metrics.',
-        icon: 'bedtime',
-        actionLabel: 'Import history',
+        title: 'Import history',
+        description: 'Import past activities, sleep and available daily Health data.',
+        icon: 'history',
+        actionLabel: 'Choose dates & data',
         tool: 'history',
       },
       {
@@ -313,17 +293,17 @@ export class ServicesComponent implements OnInit, OnDestroy {
         title: 'Send activities to connected services',
         description: 'Automatically send new COROS activities to Suunto or Wahoo.',
         icon: 'published_with_changes',
-        actionLabel: 'Activity sync settings',
+        actionLabel: 'Set up automatic sending',
         tool: 'auto-sync',
       },
       { title: 'Send route files', description: 'Send GPX or FIT route files to COROS.', icon: 'route', actionLabel: 'Send route files', tool: 'uploads' },
     ],
     wahoo: [
       {
-        title: 'Activity sync',
-        description: 'New Wahoo activities import automatically while connected.',
-        icon: 'sync',
-        actionLabel: 'History import',
+        title: 'Import history',
+        description: 'Import past Wahoo-recorded activities.',
+        icon: 'history',
+        actionLabel: 'Choose dates & data',
         tool: 'history',
       },
       {
@@ -344,7 +324,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
         title: 'Send activities to connected services',
         description: 'Automatically send new Wahoo activities to Suunto or COROS.',
         icon: 'published_with_changes',
-        actionLabel: 'Activity sync settings',
+        actionLabel: 'Set up automatic sending',
         tool: 'auto-sync',
       },
       { title: 'Send route files', description: 'Send GPX or FIT route files to Wahoo.', icon: 'route', actionLabel: 'Send route files', tool: 'uploads' },
@@ -375,6 +355,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
   private readonly analyticsService = inject(AppAnalyticsService);
   private readonly paymentService = inject(AppPaymentService);
   private readonly hapticsService = inject(AppHapticsService);
+  readonly historyImportProgress = inject(HistoryImportProgressService);
   readonly proOffer = signal<ProMembershipOffer | null>(null);
   private offerReadKey: string | null = null;
   private offerReadSubscription: Subscription | null = null;

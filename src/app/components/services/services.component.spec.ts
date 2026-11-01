@@ -14,7 +14,7 @@ import { AppFileService } from '../../services/app.file.service';
 import { AppEventService } from '../../services/app.event.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { of, Subject, throwError } from 'rxjs';
-import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
+import { CUSTOM_ELEMENTS_SCHEMA, signal } from '@angular/core';
 import { ServiceNames, User } from '@sports-alliance/sports-lib';
 import { MaterialModule } from '../../modules/material.module';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
@@ -26,6 +26,8 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { ProviderDataFlowMatrixComponent } from '../shared/provider-data-flow-matrix/provider-data-flow-matrix.component';
 import { AppPaymentService, StripeProduct } from '../../services/app.payment.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { HistoryImportProgressService } from '../../services/history-import-progress.service';
+import { buildHistoryImportItems, type HistoryImportProgressItem } from '../../helpers/history-import-progress.helper';
 
 describe('ServicesComponent', () => {
     let component: ServicesComponent;
@@ -40,8 +42,11 @@ describe('ServicesComponent', () => {
     let dialogClosed$: Subject<void>;
     let mockPaymentService: { getProducts: ReturnType<typeof vi.fn>; hasPaidSubscriptionHistory: ReturnType<typeof vi.fn>; appendCheckoutSession: ReturnType<typeof vi.fn> };
     let mockHapticsService: { selection: ReturnType<typeof vi.fn> };
+    const importOwner = signal<{ uid: string } | null>(null);
+    const importItems = signal<HistoryImportProgressItem[]>([]);
 
     beforeEach(async () => {
+        importOwner.set(null); importItems.set([]);
         mockUserService = {
             isPro: vi.fn(async () => false),
             isAdmin: vi.fn(async () => false)
@@ -111,6 +116,7 @@ describe('ServicesComponent', () => {
                 { provide: AppAnalyticsService, useValue: mockAnalyticsService },
                 { provide: AppPaymentService, useValue: mockPaymentService },
                 { provide: AppHapticsService, useValue: mockHapticsService },
+                { provide: HistoryImportProgressService, useValue: { owner: importOwner, latestImports: importItems } },
                 { provide: MatIconRegistry, useValue: mockIconRegistry }
             ],
             schemas: [CUSTOM_ELEMENTS_SCHEMA]
@@ -772,86 +778,62 @@ describe('ServicesComponent', () => {
         expect(workspace.classList.contains('services-workspace-main--mcp')).toBe(true);
     });
 
-    it('opens each overview card at its matching tool', () => {
+    it('opens the three Garmin actions at their matching tools with specific labels', () => {
         fixture.detectChanges();
+        const panel = fixture.nativeElement.querySelector('[aria-label="Garmin Connect"]');
+        const buttons = panel.querySelectorAll('.service-overview-card button') as NodeListOf<HTMLButtonElement>;
+        expect(buttons).toHaveLength(3);
+        expect(panel.textContent).not.toContain('Sleep & Health history');
+        const expected = [
+            { label: 'Choose dates & data', tool: 'history', title: 'Import history' },
+            { label: 'Send route file', tool: 'uploads', title: 'Send route files to Garmin' },
+            { label: 'Set up automatic sending', tool: 'auto-sync', title: 'Send activities to connected services' },
+        ];
+        expected.forEach((action, index) => {
+            expect(buttons[index].textContent).toContain(action.label);
+            expect(buttons[index].getAttribute('aria-label')).toBe(action.label + ' for Garmin');
+            buttons[index].click(); fixture.detectChanges();
+            expect(component.managedService).toBe('garmin');
+            expect(component.managedTool).toBe(action.tool);
+            expect(component.managedToolTitle).toBe(action.title);
+            expect(mockDialog.open.mock.calls[index][1]).toEqual(expect.objectContaining({
+                ariaLabel: 'Garmin ' + action.title + ' tools', autoFocus: 'dialog',
+                maxHeight: 'calc(100dvh - 32px)', maxWidth: 'calc(100vw - 32px)', restoreFocus: true,
+                width: 'min(56rem, calc(100vw - 32px))',
+            }));
+            dialogClosed$.next();
+            expect(component.managedService).toBeNull();
+            expect(component.managedTool).toBe('history');
+            expect(component.managedToolTitle).toBeNull();
+        });
+    });
 
-        const activePanel = fixture.nativeElement.querySelector('[aria-label="Garmin Connect"]');
-        expect(activePanel.querySelectorAll('.service-overview-card')).toHaveLength(4);
-        expect(activePanel.textContent).toContain('Activity sync');
-        expect(activePanel.textContent).toContain('Sleep & Health history');
-
-        const manageButtons = activePanel.querySelectorAll('.service-overview-card button') as NodeListOf<HTMLButtonElement>;
-
-        expect(manageButtons[0].textContent).toContain('Manage');
-        expect(manageButtons[0].getAttribute('aria-label')).toBe('Backfill activities for Garmin');
-        expect(manageButtons[1].textContent).toContain('Manage');
-        expect(manageButtons[1].getAttribute('aria-label')).toBe('Import history for Garmin');
-        expect(manageButtons[2].textContent).toContain('Manage');
-        expect(manageButtons[2].getAttribute('aria-label')).toBe('Send route file for Garmin');
-        expect(manageButtons[3].textContent).toContain('Manage');
-        expect(manageButtons[3].getAttribute('aria-label')).toBe('Activity sync settings for Garmin');
-
-        manageButtons[0].click();
+    it('shows only the current owner and provider history status below the unified action', () => {
+        component.user = { uid: 'owner' } as User;
+        importOwner.set({ uid: 'owner' });
+        const now = Date.now();
+        importItems.set(buildHistoryImportItems([
+            { serviceName: ServiceNames.GarminAPI, projection: { runId: 'garmin-run', active: true, updatedAtMs: now,
+                steps: [{ id: 'activities', resources: ['activities'], status: 'queued', count: 0 }] } },
+            { serviceName: ServiceNames.COROSAPI, unavailable: true },
+        ]));
         fixture.detectChanges();
-
-        expect(component.managedService).toBe('garmin');
-        expect(component.managedTool).toBe('history');
-        expect(component.managedToolTitle).toBe('Activity sync');
-        expect(fixture.nativeElement.querySelector('.service-overview')).toBeTruthy();
-        expect(mockDialog.open.mock.calls[0][1]).toEqual(expect.objectContaining({
-            ariaLabel: 'Garmin Activity sync tools',
-            autoFocus: 'dialog',
-            maxHeight: 'calc(100dvh - 32px)',
-            maxWidth: 'calc(100vw - 32px)',
-            restoreFocus: true,
-            width: 'min(56rem, calc(100vw - 32px))',
-        }));
-
-        dialogClosed$.next();
-        expect(component.managedService).toBeNull();
-        expect(component.managedTool).toBe('history');
-        expect(component.managedToolTitle).toBeNull();
-
-        manageButtons[1].click();
-        fixture.detectChanges();
-
-        expect(component.managedService).toBe('garmin');
-        expect(component.managedTool).toBe('history');
-        expect(component.managedToolTitle).toBe('Sleep & Health history');
-        expect(mockDialog.open.mock.calls[1][1]).toEqual(expect.objectContaining({
-            ariaLabel: 'Garmin Sleep & Health history tools',
-        }));
-
-        dialogClosed$.next();
-        manageButtons[2].click();
-        fixture.detectChanges();
-
-        expect(component.managedService).toBe('garmin');
-        expect(component.managedTool).toBe('uploads');
-        expect(component.managedToolTitle).toBe('Send route files to Garmin');
-        expect(mockDialog.open.mock.calls[2][1]).toEqual(expect.objectContaining({
-            ariaLabel: 'Garmin Send route files to Garmin tools',
-        }));
-
-        dialogClosed$.next();
-        manageButtons[3].click();
-        fixture.detectChanges();
-
-        expect(component.managedService).toBe('garmin');
-        expect(component.managedTool).toBe('auto-sync');
-        expect(component.managedToolTitle).toBe('Send activities to connected services');
-        expect(mockDialog.open.mock.calls[3][1]).toEqual(expect.objectContaining({
-            ariaLabel: 'Garmin Send activities to connected services tools',
-        }));
+        const panel = fixture.nativeElement.querySelector('[aria-label="Garmin Connect"]');
+        expect(panel.querySelectorAll('.service-overview-card__status')).toHaveLength(1);
+        expect(panel.querySelector('.service-overview-card__status').textContent).toContain('Requesting history');
+        expect(panel.querySelector('.service-overview-card__status').textContent).toContain('Updated');
+        expect(panel.querySelector('.service-overview-card__status').textContent).not.toContain('unavailable');
+        importOwner.set({ uid: 'another-owner' }); fixture.detectChanges();
+        expect(panel.querySelector('.service-overview-card__status')).toBeNull();
     });
 
     it('maps provider overview cards to distinct tools', () => {
-        expect(component.serviceOverviewCardsBySection.garmin.map(card => card.tool)).toEqual(['history', 'history', 'uploads', 'auto-sync']);
-        expect(component.serviceOverviewCardsBySection.suunto.map(card => card.tool)).toEqual(['history', 'history', 'routes', 'send-activities', 'historical-send', 'activity-sync', 'uploads']);
-        expect(component.serviceOverviewCardsBySection.suunto[3].description)
+        expect(component.serviceOverviewCardsBySection.garmin.map(card => card.tool)).toEqual(['history', 'uploads', 'auto-sync']);
+        expect(component.serviceOverviewCardsBySection.suunto.map(card => card.tool)).toEqual(['history', 'routes', 'send-activities', 'historical-send', 'activity-sync', 'uploads']);
+        expect(component.serviceOverviewCardsBySection.suunto[2].description)
             .toBe('Review local FIT files or saved activities and send them to Suunto in the background.');
-        expect(component.serviceOverviewCardsBySection.coros.map(card => card.tool)).toEqual(['history', 'history', 'send-activities', 'historical-send', 'auto-sync', 'uploads']);
-        expect(component.serviceOverviewCardsBySection.coros[2].description)
+        expect(component.serviceOverviewCardsBySection.coros.map(card => card.tool)).toEqual(['history', 'send-activities', 'historical-send', 'auto-sync', 'uploads']);
+        expect(component.serviceOverviewCardsBySection.coros[1].description)
             .toBe('Send a FIT activity directly to COROS without adding it to your Quantified Self archive.');
         expect(component.serviceOverviewCardsBySection.wahoo.map(card => card.tool)).toEqual(['history', 'send-activities', 'historical-send', 'auto-sync', 'uploads']);
     });
@@ -1044,67 +1026,66 @@ describe('ServicesComponent', () => {
         const activePanel = fixture.nativeElement.querySelector('[aria-label="Suunto App"]');
         const manageButtons = activePanel.querySelectorAll('.service-overview-card button') as NodeListOf<HTMLButtonElement>;
 
-        expect(manageButtons).toHaveLength(7);
-        expect(activePanel.textContent).toContain('Sleep & 24/7 Health history');
-        expect(activePanel.textContent).toContain('Backfill Suunto sleep and available 24/7 Health metrics.');
+        expect(manageButtons).toHaveLength(6);
+        expect(activePanel.textContent).toContain('Import history');
+        expect(activePanel.textContent).toContain('Import past activities, sleep and available 24/7 Health data.');
         expect(activePanel.querySelector('.service-overview').textContent).not.toContain('cooldown');
-        expect(manageButtons[1].getAttribute('aria-label')).toBe('Import history for Suunto');
-        expect(manageButtons[2].getAttribute('aria-label')).toBe('Route sync settings for Suunto');
-        expect(manageButtons[3].getAttribute('aria-label')).toBe('Send activities for Suunto');
-        expect(manageButtons[4].getAttribute('aria-label')).toBe('Send past activities for Suunto');
-        expect(manageButtons[5].getAttribute('aria-label')).toBe('Activity sync settings for Suunto');
+        expect(manageButtons[0].getAttribute('aria-label')).toBe('Choose dates & data for Suunto');
+        expect(manageButtons[1].getAttribute('aria-label')).toBe('Set up route sync for Suunto');
+        expect(manageButtons[2].getAttribute('aria-label')).toBe('Send activities for Suunto');
+        expect(manageButtons[3].getAttribute('aria-label')).toBe('Send past activities for Suunto');
+        expect(manageButtons[4].getAttribute('aria-label')).toBe('Set up automatic sending for Suunto');
 
-        manageButtons[1].click();
+        manageButtons[0].click();
         expect(component.managedService).toBe('suunto');
         expect(component.managedTool).toBe('history');
-        expect(component.managedToolTitle).toBe('Sleep & 24/7 Health history');
+        expect(component.managedToolTitle).toBe('Import history');
 
         dialogClosed$.next();
-        manageButtons[2].click();
+        manageButtons[1].click();
         expect(component.managedService).toBe('suunto');
         expect(component.managedTool).toBe('routes');
         expect(component.managedToolTitle).toBe('Route sync');
 
         dialogClosed$.next();
-        manageButtons[3].click();
+        manageButtons[2].click();
 
         expect(component.managedService).toBeNull();
         expect(component.managedTool).toBe('history');
         expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(['/send-activities', 'suunto'], { queryParams: { source: 'files' } });
 
         dialogClosed$.next();
-        manageButtons[4].click();
+        manageButtons[3].click();
 
         expect(component.managedService).toBeNull();
         expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(['/send-activities', 'suunto'], { queryParams: { source: 'saved' } });
 
         dialogClosed$.next();
-        manageButtons[5].click();
+        manageButtons[4].click();
 
         expect(component.managedService).toBe('suunto');
         expect(component.managedTool).toBe('activity-sync');
         expect(component.managedToolTitle).toBe('Send activities to connected services');
     });
 
-    it('shows a dedicated COROS Sleep and daily Health history card', () => {
+    it('opens the unified COROS history action including Sleep and daily Health data', () => {
         component.activeSection = 'coros';
         fixture.detectChanges();
 
         const activePanel = fixture.nativeElement.querySelector('.service-detail[aria-label="COROS"]');
         const manageButtons = activePanel.querySelectorAll('.service-overview-card button') as NodeListOf<HTMLButtonElement>;
 
-        expect(manageButtons).toHaveLength(6);
-        expect(activePanel.textContent).toContain('Sleep & daily Health history');
-        expect(activePanel.textContent).toContain('Backfill COROS sleep and available daily Health metrics.');
+        expect(manageButtons).toHaveLength(5);
+        expect(activePanel.textContent).toContain('Import history');
+        expect(activePanel.textContent).toContain('Import past activities, sleep and available daily Health data.');
         expect(activePanel.querySelector('.service-overview').textContent).not.toContain('cooldown');
-        expect(manageButtons[0].getAttribute('aria-label')).toBe('Backfill activities for COROS');
-        expect(manageButtons[1].getAttribute('aria-label')).toBe('Import history for COROS');
+        expect(manageButtons[0].getAttribute('aria-label')).toBe('Choose dates & data for COROS');
 
-        manageButtons[1].click();
+        manageButtons[0].click();
 
         expect(component.managedService).toBe('coros');
         expect(component.managedTool).toBe('history');
-        expect(component.managedToolTitle).toBe('Sleep & daily Health history');
+        expect(component.managedToolTitle).toBe('Import history');
     });
 
     it('gives the service tools dialog an accessible close action', () => {
@@ -1116,7 +1097,7 @@ describe('ServicesComponent', () => {
         expect(template).toContain('aria-label="Close tools dialog"');
     });
 
-    it('uses one compact, consistent manage action for all connection feature dialogs', () => {
+    it('uses specific, consistently styled actions for connection features', () => {
         const template = readFileSync(
             resolve(process.cwd(), 'src/app/components/services/services.component.html'),
             'utf8'
@@ -1128,7 +1109,7 @@ describe('ServicesComponent', () => {
         const actionRule = styles.match(/\.service-overview-card__action\s*\{[^}]*\}/)?.[0] ?? '';
 
         expect(template).toContain('class="service-overview-card__action"');
-        expect(template).toContain("hasProAccess ? 'Manage' : 'Unlock with Pro'");
+        expect(template).toContain("hasProAccess ? card.actionLabel : 'Unlock with Pro'");
         expect(template).toContain("hasProAccess ? 'arrow_forward' : 'workspace_premium'");
         expect(actionRule).toContain('min-width: 104px');
         expect(styles).toContain('border-bottom: 1px solid var(--mat-sys-outline-variant)');

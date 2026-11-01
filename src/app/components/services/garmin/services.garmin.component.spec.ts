@@ -171,6 +171,20 @@ describe('ServicesGarminComponent', () => {
             fixture.detectChanges();
         });
 
+        it.each([
+            { permissions: undefined, expected: false },
+            { permissions: [], expected: false },
+            { permissions: ['HEALTH_EXPORT'], expected: false },
+            { permissions: ['HISTORICAL_DATA_EXPORT'], expected: false },
+            { permissions: ['ACTIVITY_EXPORT'], expected: true },
+        ])('describes automatic imports only with reported Activity Export access: %j', ({ permissions, expected }) => {
+            component.serviceTokens = [{ providerUserId: 'garmin-account', permissions }];
+            fixture.detectChanges();
+            expect(!!fixture.nativeElement.querySelector('.service-connection-status__automatic-imports')).toBe(expected);
+            expect(haptics.selection).not.toHaveBeenCalled();
+            expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        });
+
         it('shows permissions and management without Reconnect for a healthy connection', () => {
             expect(fixture.nativeElement.querySelectorAll('app-compact-row')).toHaveLength(5);
             expect(fixture.nativeElement.querySelector('.qs-mat-primary')).toBeNull();

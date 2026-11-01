@@ -239,6 +239,15 @@
                 <div class="service-overview-card__copy">
                   <h2>{{ card.title }}</h2>
                   <p>{{ card.description }}</p>
+                  @if (card.tool === 'history' && hasProAccess && user?.uid && historyImportProgress.owner()?.uid === user.uid) {
+                    @for (item of historyImportProgress.latestImports(); track item.serviceName) {
+                      @if (item.serviceName === serviceNameByProviderSection[section]) {
+                      <p class="service-overview-card__status" aria-label="Latest history import status">
+                        {{ item.label }}@if (item.updatedAtMs) { · Updated {{ item.updatedAtMs | date:'short' }} }
+                      </p>
+                      }
+                    }
+                  }
                 </div>
                 <button
                   mat-stroked-button
@@ -247,8 +256,8 @@
                   type="button"
                   [attr.aria-label]="(hasProAccess ? card.actionLabel : 'Unlock with Pro') + ' for ' + serviceLabelBySection[section]"
                   (click)="openServiceTools(section, card)">
-                  <span>{{ hasProAccess ? 'Manage' : 'Unlock with Pro' }}</span>
-                  <mat-icon>{{ hasProAccess ? 'arrow_forward' : 'workspace_premium' }}</mat-icon>
+                  <span>{{ hasProAccess ? card.actionLabel : 'Unlock with Pro' }}</span>
+                  <mat-icon iconPositionEnd>{{ hasProAccess ? 'arrow_forward' : 'workspace_premium' }}</mat-icon>
                 </button>
               </article>
             }

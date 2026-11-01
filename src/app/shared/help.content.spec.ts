@@ -2400,7 +2400,7 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Both open Membership to review the selected price and current terms');
     expect(serviceConnectionsSection?.content).toContain('without starting checkout or connecting a provider automatically');
     expect(serviceConnectionsSection?.content).toContain('Existing disconnect, reconnect and recovery controls remain available');
-    expect(serviceConnectionsSection?.content).toContain('Choose an action');
+    expect(serviceConnectionsSection?.content).toContain('specific actions for route uploads and automatic sending');
     expect(serviceConnectionsSection?.content).toContain('provider tool in a dialog');
     expect(serviceConnectionsSection?.content).toContain('unchanged overview');
     expect(serviceConnectionsSection?.content).toContain('**Your data flow**');
@@ -2547,6 +2547,10 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('importing available COROS Sleep and Health history from the last three months');
     expect(serviceConnectionsSection?.content).toContain('COROS does not send sleep stages through this connection');
     expect(serviceConnectionsSection?.content).toContain('14d, 30d, 90d, and 1y range control');
+    expect(serviceConnectionsSection?.content).toContain('single **Import history** card');
+    expect(serviceConnectionsSection?.content).toContain('even after its notification expires or is dismissed');
+    expect(serviceConnectionsSection?.content).toContain('**Choose dates & data**');
+    expect(serviceConnectionsSection?.content).toContain('automatic activity imports beside their connection status');
     expect(serviceConnectionsSection?.content).toContain('independent from dashboard event filters');
     expect(serviceConnectionsSection?.content).toContain('overlays available vitals');
     expect(serviceConnectionsSection?.content).toContain('average sleep heart rate');

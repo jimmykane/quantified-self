@@ -98,6 +98,23 @@ describe('HistoryImportProgressService', () => {
     expect(service.view().items).toHaveLength(1);
     vi.advanceTimersByTime(HISTORY_IMPORT_RECENT_MS); TestBed.flushEffects();
     expect(service.view().items).toEqual([]);
+    expect(service.latestImports()).toMatchObject([{runId: 'run', kind: 'processed', updatedAtMs: now}]);
+    expect(getMeta).toHaveBeenCalledTimes(4);
+  });
+  it('keeps latest Connections status after dismissing a notification and drops it on disconnect or sign-out', () => {
+    const service = TestBed.inject(HistoryImportProgressService); connect('a');
+    stream('a').next({connectionState: 'connected', connectionHistoryImport: failedStatus()});
+    const result = service.view().items[0];
+    expect(service.dismissResult(result, service.owner())).toBe(true);
+    expect(service.view().items).toEqual([]);
+    expect(service.latestImports()).toMatchObject([{runId: 'run', kind: 'attention', updatedAtMs: now}]);
+    expect(getMeta).toHaveBeenCalledTimes(4);
+    stream('a').next({connectionState: 'disconnect_pending', connectionHistoryImport: failedStatus()});
+    expect(service.latestImports()).toEqual([]);
+    stream('a').next({connectionState: 'connected', connectionHistoryImport: failedStatus()});
+    expect(service.latestImports()).toHaveLength(1);
+    auth.currentUser = null; sessions$.next(null);
+    expect(service.latestImports()).toEqual([]);
     expect(getMeta).toHaveBeenCalledTimes(4);
   });
   it('unsubscribes and cancels timers on destruction', () => {
