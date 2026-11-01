@@ -11,6 +11,8 @@ describe('service setup redirects', () => {
     { service: 'Wahoo+API', serviceName: WAHOO_SETUP_QUERY_PARAMS.serviceName },
     { service: 'COROS%20API', serviceName: 'COROS API' },
     { service: 'COROS+API', serviceName: 'COROS API' },
+    { service: 'Suunto%20app', serviceName: 'Suunto app' },
+    { service: 'Suunto+app', serviceName: 'Suunto app' },
   ])('normalizes the curated setup destination: $service', ({ service, serviceName }) => {
     expect(serviceSetupFromReturnUrl(`/services?serviceName=${service}`)).toEqual({
       returnUrl: `/services?serviceName=${encodeURIComponent(serviceName)}`, serviceName,
@@ -19,6 +21,9 @@ describe('service setup redirects', () => {
 
   it.each([
     null, '', '/services?', '/services?serviceName=unknown',
+    '/services?serviceName=Suunto%20app&connect=true',
+    '/services?serviceName=Suunto%20app&serviceName=Suunto%20app',
+    '/services?serviceName=Suunto%20app#connect',
     '/services?serviceName=COROS%20API&serviceName=COROS%20API',
     '/services?serviceName=COROS%20API&connect=true',
     '/services?serviceName=COROS%20API#connect',

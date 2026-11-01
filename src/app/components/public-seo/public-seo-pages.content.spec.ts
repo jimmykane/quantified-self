@@ -11,13 +11,20 @@ import {
 
 describe('public-seo-pages.content', () => {
   it.each([
-    ['importStravaToSuunto', 'suunto', 'Suunto'],
-    ['importStravaToWahoo', 'wahoo', 'Wahoo'],
-    ['importStravaToCoros', 'coros', 'COROS'],
-  ] as const)('explains the supported Strava export paths to %s', (key, provider, destination) => {
+    ['importStravaToSuunto', 'suunto', 'Suunto', 'Suunto app'],
+    ['importStravaToWahoo', 'wahoo', 'Wahoo', 'Wahoo API'],
+    ['importStravaToCoros', 'coros', 'COROS', 'COROS API'],
+  ] as const)('explains the supported Strava export paths to %s', (key, provider, destination, serviceName) => {
     const page = PUBLIC_SEO_PAGES[key];
     const copy = JSON.stringify(page);
     expect(page.h1).toBe(`How to transfer Strava activities to ${destination}`);
+    expect(page.actions[0].queryParams).toEqual({ serviceName });
+    expect(page.closingActions[0].queryParams).toEqual({ serviceName });
+    expect(copy).toContain(`Under ${destination}, choose Send activities`);
+    expect(copy).toContain('Preview sends nothing');
+    expect(copy).toContain('200 MiB');
+    expect(copy).toContain('Check status');
+    expect(copy).toContain('Confirmed sends continue');
     expect(page.accessNote).toContain('require Pro');
     expect(page.freeOfferDescription).toContain('sending activities require Pro');
     expect(copy).toContain('Quantified Self has no Strava connection');
@@ -27,7 +34,8 @@ describe('public-seo-pages.content', () => {
     expect(copy).toContain('not added to your QS activity archive');
     expect(copy).toContain('QS does not convert GPX or TCX uploads to FIT for delivery');
     expect(copy).toContain('Queued and Waiting for provider do not mean Delivered');
-    expect(page.closingActions.some(action => action.routerLink === `/send-activities/${provider}`)).toBe(true);
+    expect(page.closingActions.some(action => action.routerLink === `/integrations/${provider}`)).toBe(true);
+    expect(page.actions.concat(page.closingActions).some(action => action.routerLink.startsWith('/send-activities'))).toBe(false);
     expect(page.howToSteps).toHaveLength(5);
   });
 
@@ -36,6 +44,8 @@ describe('public-seo-pages.content', () => {
     const copy = JSON.stringify(page);
     expect(page.accessNote).toContain('does not send completed activities to Garmin');
     expect(page.accessNote).toContain('do not need QS Pro');
+    expect(copy).toContain('Garmin advises exporting Strava activities individually');
+    expect(page.howToSteps?.[0]).toContain('Export Original');
     expect(copy).toContain('upload icon → Import Data');
     expect(copy).toContain('GPX recordings need timestamps');
     expect(copy).toContain('QS route/course sending is separate');
@@ -51,8 +61,10 @@ describe('public-seo-pages.content', () => {
       const entities = PUBLIC_SEO_ROUTE_DATA[key].jsonLd['mainEntity'] as Record<string, unknown>[];
       const howTo = entities.find(entity => entity['@type'] === 'HowTo');
       expect((howTo?.['step'] as Record<string, unknown>[]).map(step => step['text'])).toEqual(page.howToSteps);
-      expect(page.howToSteps?.[0]).toContain('Download your account');
-      expect(page.howToSteps?.[1]).toContain('unzip');
+      if (key !== 'importStravaToGarmin') {
+        expect(page.howToSteps?.[0]).toContain('Download your account');
+        expect(page.howToSteps?.[1]).toContain('unzip');
+      }
     },
   );
 

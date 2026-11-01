@@ -24,6 +24,9 @@ describe('help.content', () => {
     }
     expect(content).toContain('Quantified Self has no Strava connection');
     expect(content).toContain('Extract the account ZIP');
+    expect(content).toContain('keep the destination tab selected through sign-in and required onboarding');
+    expect(content).toContain('**Connections → your destination → Send past activities**');
+    expect(content).toContain('Garmin advises exporting Strava activities individually');
     expect(content).toContain('GPX and TCX uploads can be analyzed in QS but are not converted to FIT');
     expect(content).toContain('QS does not send completed activities to Garmin');
   });

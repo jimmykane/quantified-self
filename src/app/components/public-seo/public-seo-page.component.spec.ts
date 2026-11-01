@@ -119,6 +119,16 @@ describe('PublicSeoPageComponent', () => {
       if (key === 'importStravaToGarmin') {
         expect(root.querySelector('a[href^="/send-activities"]')).toBeNull();
         expect(root.querySelector('a[href^="https://support.garmin.com/"]')).toBeTruthy();
+        expect(root.textContent).toContain('Garmin advises exporting Strava activities individually');
+      } else {
+        const serviceName = page.actions[0].queryParams!['serviceName'];
+        const setupLinks = Array.from(root.querySelectorAll<HTMLAnchorElement>('a')).filter(link => link.textContent?.includes('Get Started'));
+        expect(setupLinks.map(link => link.getAttribute('href'))).toEqual([
+          `/services?serviceName=${encodeURIComponent(serviceName)}`,
+          `/services?serviceName=${encodeURIComponent(serviceName)}`,
+        ]);
+        expect(root.textContent).toContain('Preview sends nothing');
+        expect(root.textContent).toContain('Check status');
       }
       fixture.destroy();
     },

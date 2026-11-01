@@ -489,6 +489,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-10-23');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/supported-activities`)).toBe('2026-10-17');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-11-01');
+    // Strava guide review clarifies destination-specific setup, local/saved sends and Garmin’s individual-export guidance.
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/strava-to-suunto`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/strava-to-garmin`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/strava-to-wahoo`)).toBe('2026-11-01');
