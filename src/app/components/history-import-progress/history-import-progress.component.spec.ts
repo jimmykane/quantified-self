@@ -73,7 +73,13 @@ describe('shared history import surfaces', () => {
     expect(button.hasAttribute('mat-button')).toBe(false);
     expect(button.getAttribute('aria-label')).toContain('Importing history. View history import status for 1 provider');
     expect(button.querySelector('.cdk-visually-hidden')?.textContent).toContain('Importing history · 1');
-    expect(button.querySelector('mat-progress-spinner')).not.toBeNull();
+    const spinner = fixture.nativeElement.querySelector('mat-progress-spinner') as HTMLElement;
+    expect(spinner).not.toBeNull();
+    expect(spinner.closest('button')).toBeNull();
+    expect(spinner.parentElement).toBe(fixture.nativeElement);
+    expect(spinner.style.width).toBe('32px');
+    expect(spinner.style.height).toBe('32px');
+    expect(spinner.getAttribute('aria-hidden')).toBe('true');
     expect(state.haptics.selection).not.toHaveBeenCalled();
   });
 
