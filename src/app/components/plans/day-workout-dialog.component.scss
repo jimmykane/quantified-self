@@ -23,6 +23,14 @@ ol, ul { padding-inline-start: 24px; }
 ul.sets { padding: 0; }
 li { margin-block: 4px; }
 mat-dialog-actions { gap: 4px; }
+.daily-delivery { margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--mat-sys-outline-variant); }
+.daily-delivery .hint { margin-block: 6px; }
+.daily-delivery .review-destination { justify-content: space-between; }
+.daily-delivery .review-destination mat-checkbox { flex: 1; min-width: 0; }
+#daily-delivery-services { display: grid; gap: 4px; margin-block: 8px; }
+#daily-delivery-services[hidden] { display: none; }
+.daily-delivery-provider { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.daily-delivery-provider small { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
 .allowance { flex: 1 1 180px; margin: 0; text-align: start; }
 @media (max-width: 600px) { .controls-grid { grid-template-columns: minmax(0, 1fr); } mat-dialog-content { max-height: none; } .allowance { flex-basis: 100%; } }
 @media (max-width: 359px) { .context-grid { grid-template-columns: minmax(0, 1fr); } }

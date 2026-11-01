@@ -362,6 +362,22 @@ describe('DailyWorkoutSuggestionService daily browser cache', () => {
     expect(service.cached('owner')?.status?.state).toBe('ready');
     await service.request('owner', 'status', () => true); expect(call).toHaveBeenCalledOnce();
   });
+  it('saves delivery separately without invalidating the generated suggestion or spending another daily request', async () => {
+    const { service, call, user, updateUserProperties } = setup();
+    await service.request('owner', 'status', () => true);
+    const cached = service.cached('owner')?.status;
+    const delivery = { enabled: true, providers: ['garmin' as const] };
+    await service.save('owner', service.preferences(), delivery);
+    expect(updateUserProperties).toHaveBeenLastCalledWith(user(), { settings: { appSettings: {
+      dailyWorkoutSuggestion: service.preferences(), dailyWorkoutDelivery: delivery,
+    } } });
+    user.update(value => ({ ...value, settings: { ...value.settings, appSettings: { ...value.settings.appSettings, dailyWorkoutDelivery: delivery } } }));
+    expect(service.cached('owner')?.status).toEqual(cached);
+    expect(await service.request('owner', 'status', () => true)).toEqual(cached);
+    expect(call).toHaveBeenCalledOnce();
+    expect(() => service.save('owner', service.preferences(), { enabled: true, providers: [] })).toThrow();
+    expect(updateUserProperties).toHaveBeenCalledOnce();
+  });
   it('lets an explicit refresh bypass cached status and shares that refresh', async () => {
     const { service, call, result } = setup(); await service.request('owner', 'status', () => true);
     let finish!: (value: { data: DailyWorkoutSuggestionStatus }) => void;

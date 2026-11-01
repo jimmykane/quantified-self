@@ -1982,6 +1982,12 @@ short-lived, owner-bound Send/sync shortcut that survives editor navigation. Pla
 parent's Plan sync settings explicitly. Opening these surfaces never grants consent or sends a workout. Failed or
 cancelled delivery leaves the authored workout saved, and provider acceptance remains separate from app/watch receipt.
 See [Training planning](training-workspace.md#generate-a-workout-from-a-calendar-day) for the detailed frontend contract.
+Daily suggestions additionally offer default-off **Send after approval** with explicit services. **Add & send**
+acknowledges the Standalone create before reusing the existing revision-bound preview/Send commands. Only clean exact
+mappings proceed automatically; losses, changed consent/connections or uncertain sends return to the shared sync review.
+Rest days send nothing. Remembered destinations are UI preferences, not provider authority or generation context, and
+add no dashboard connection reads or background generation. See
+[Pro daily suggestions](training-workspace.md#pro-daily-workout-suggestion) for approval, recovery and cache invariants.
 Monitoring review: **unchanged**. These entry points use the existing Training Delivery command, queue and status
 projections. Worker/dispatcher behavior, schedules, leases, retries, terminal states, dashboards and alert labels are
 unchanged; no operational resource activation or new provider/MCP permission is part of this UI change.

@@ -18,6 +18,8 @@ import { AppUserService } from '../../../services/app.user.service';
 import { selectCalendarVisibleScheduledWorkouts, TrainingPlansService } from '../../../services/training-plans.service';
 import { TrainingDeliveryButtonComponent } from '../../plans/training-delivery-button.component';
 import { trainingPlansWorkoutRoute } from '../../../helpers/training-plans-navigation.helper';
+import { dailyWorkoutDeliveryPreferences } from '../../../helpers/daily-workout-delivery.helper';
+import { PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1 } from '@shared/planned-workout-providers';
 
 @Component({ selector: 'app-daily-workout-suggestion', standalone: true,
   imports: [CompactRowComponent, MatButtonModule, MatIconModule, MatMenuModule, MatProgressBarModule, AppChartSharedModule,
@@ -40,6 +42,8 @@ export class DailyWorkoutSuggestionComponent {
   private readonly destroy = inject(DestroyRef);
   private readonly document = inject(DOCUMENT);
   readonly eligible = computed(() => this.daily.eligible(this.ownerUid()));
+  readonly deliveryPreferences = computed(() => dailyWorkoutDeliveryPreferences(this.users.user()?.settings?.appSettings?.dailyWorkoutDelivery));
+  readonly deliveryLabel = computed(() => this.deliveryPreferences().providers.map(provider => PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label).join(', '));
   readonly visible = signal(this.document.visibilityState !== 'hidden');
   // Re-evaluate the saved-zone date on foreground return; equal same-day values retain the cache scope.
   readonly preferences = computed(() => { this.localDate(); this.visible(); return this.daily.preferences(); },
@@ -207,9 +211,9 @@ export class DailyWorkoutSuggestionComponent {
   async configure(): Promise<void> {
     const uid = this.ownerUid(), preferences = this.preferences();
     await this.generation.open(uid, preferences.controls.localDate, preferences.controls.sport, {
-      mode: 'preferences', initialControls: preferences.controls, followRoutine: preferences.followRoutine,
-      savePreferences: async (controls, followRoutine) => {
-        await this.daily.save(uid, { enabled: true, controls, followRoutine });
+      mode: 'preferences', initialControls: preferences.controls, followRoutine: preferences.followRoutine, dailyDelivery: this.deliveryPreferences(),
+      savePreferences: async (controls, followRoutine, delivery) => {
+        await this.daily.save(uid, { enabled: true, controls, followRoutine }, delivery ?? this.deliveryPreferences());
         this.daily.event(uid, preferences.enabled ? 'preferences_saved' : 'enabled');
       },
     });
@@ -234,7 +238,7 @@ export class DailyWorkoutSuggestionComponent {
     } finally { if (this.current(sequence, uid)) this.loading.set(false); }
     if (value.state !== 'ready' || !value.controls || !value.result) return;
     this.daily.event(uid, 'reviewed', 'ready');
-    await this.generation.open(uid, value.localDate, value.controls.sport, { initialControls: value.controls, initialResult: value.result,
+    await this.generation.open(uid, value.localDate, value.controls.sport, { initialControls: value.controls, initialResult: value.result, dailyDelivery: this.deliveryPreferences(),
       onAdded: kind => {
         if (!this.daily.eligible(uid) || this.daily.preferences().controls.localDate !== value.localDate) return;
         this.daily.event(uid, 'added', kind === 'rest' ? 'rest-day' : 'ready');

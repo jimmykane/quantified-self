@@ -242,6 +242,7 @@ export interface AppAppSettingsInterface extends UserAppSettingsInterface {
     dashboardActionPrompts?: AppDashboardActionPrompts;
     trainingWorkspace?: TrainingWorkspacePreferences;
     dailyWorkoutSuggestion?: import('@shared/daily-workout-suggestion').DailyWorkoutSuggestionPreferences;
+    dailyWorkoutDelivery?: import('../helpers/daily-workout-delivery.helper').DailyWorkoutDeliveryPreferences;
     healthWorkspace?: AppHealthWorkspaceSettingsInterface;
     timelineNotes?: { showOnCharts?: boolean };
     formatLocale?: AppFormatLocalePreference;

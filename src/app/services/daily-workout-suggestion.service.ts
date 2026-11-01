@@ -13,6 +13,7 @@ import { isStrengthWorkoutSportV1, parseStrengthWorkoutDraftV1, strengthProjecti
 import { DAILY_WORKOUT_SUGGESTION_SESSION_CACHE_KEY as CACHE_KEY } from '../shared/daily-workout-suggestion-cache';
 import { Subscription, firstValueFrom, take } from 'rxjs';
 import { LoggerService } from './logger.service';
+import { parseDailyWorkoutDeliveryPreferences, type DailyWorkoutDeliveryPreferences } from '../helpers/daily-workout-delivery.helper';
 
 const MAX_CACHE_CHARACTERS = 400_000;
 const TRANSIENT_STATUS_CODES = ['internal', 'unavailable', 'deadline-exceeded'];
@@ -280,15 +281,17 @@ export class DailyWorkoutSuggestionService {
       });
     } catch { /* Diagnostics must preserve the original failure. */ }
   }
-  save(uid: string, value: DailyWorkoutSuggestionPreferences): Promise<void> {
+  save(uid: string, value: DailyWorkoutSuggestionPreferences, delivery?: DailyWorkoutDeliveryPreferences): Promise<void> {
     const preferences = parseDailyWorkoutSuggestionPreferences(value);
+    const deliveryPreferences = delivery === undefined ? undefined : parseDailyWorkoutDeliveryPreferences(delivery);
     const write = this.writes.then(async () => {
       if (!this.eligible(uid)) throw Error('The signed-in account changed.');
       const user = this.users.user()!;
       const changed = this.key(uid) !== JSON.stringify([uid, preferences]);
       this.saving.set(true);
       try {
-        await this.users.updateUserProperties(user, { settings: { appSettings: { dailyWorkoutSuggestion: preferences } } });
+        await this.users.updateUserProperties(user, { settings: { appSettings: { dailyWorkoutSuggestion: preferences,
+          ...(deliveryPreferences ? { dailyWorkoutDelivery: deliveryPreferences } : {}) } } });
         if (changed && this.isOwner(uid)) this.clear();
       }
       finally { this.saving.set(false); }

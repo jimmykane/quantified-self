@@ -17,6 +17,14 @@ import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 
 describe('help.content', () => {
+  it('explains explicit daily approval, delivery recovery and the unchanged generation allowance', () => {
+    const help = HELP_SECTIONS.map(section => section.content).join('\n');
+    for (const text of ['**Send after approval**', '**Add & send** saves the reviewed Standalone workout',
+      'Destinations can change without using another AI suggestion', 'Rest days are only marked in Calendar and send nothing',
+      'A sending problem keeps the saved workout', 'Provider acceptance does not confirm arrival on your watch']) {
+      expect(help).toContain(text);
+    }
+  });
   it('documents Strava file transfers and the separate Garmin import path', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'service-connections')?.content;
     for (const provider of ['suunto', 'wahoo', 'coros', 'garmin']) {

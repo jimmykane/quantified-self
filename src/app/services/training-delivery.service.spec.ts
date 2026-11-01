@@ -8,6 +8,8 @@ import { AppFunctionsService } from './app.functions.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
 import { isTrainingDeliverySetupAvailableInApp, TRAINING_DELIVERY_PREVIEW_TIMEOUT_MS, TrainingDeliveryService } from './training-delivery.service';
 import { AppUserService } from './app.user.service';
+import { parseScheduledWorkoutV1 } from '@shared/training-plans';
+import type { TrainingDeliveryPreviewV1 } from '@shared/training-provider-delivery';
 
 vi.mock('app/firebase/firestore', async importOriginal => ({
   ...await importOriginal<typeof import('app/firebase/firestore')>(),
@@ -103,12 +105,68 @@ describe('TrainingDeliveryService boundary', () => {
   function configure() {
     const user = signal<{ uid: string } | null>({ uid: 'owner' });
     const call = vi.fn(async (_name: string, _payload: unknown, _options?: { canExecute: () => boolean }) => ({ data: {} }));
+    let mutationCounter = 0;
     TestBed.configureTestingModule({ providers: [TrainingDeliveryService,
       { provide: Firestore, useValue: { app } }, { provide: AppFunctionsService, useValue: { call } },
-      { provide: BrowserCompatibilityService, useValue: {} }, { provide: AppUserService, useValue: { user } },
+      { provide: BrowserCompatibilityService, useValue: { createRandomUUID: () => `approved-send-${++mutationCounter}` } }, { provide: AppUserService, useValue: { user } },
     ] });
     return { service: TestBed.inject(TrainingDeliveryService), user, call };
   }
+  const approvedPreview: TrainingDeliveryPreviewV1 = { schemaVersion: 1, available: true, hasPro: true,
+    connection: 'connected', timeZone: 'UTC', effect: 'enable', settingsRevision: 0, eligibleCount: 1,
+    warningCount: 0, approvalRequiredCount: 0, issues: [], approvalDigest: null, workoutCompatibility: 'exact' };
+  it('sends only explicitly selected services through the existing revision-bound preview and mutation', async () => {
+    const { service, call } = configure();
+    call.mockImplementation(async (name, request) => ({ data: name === 'previewTrainingProviderDelivery' ? approvedPreview
+      : { ...settings, provider: (request as TrainingDeliveryCommandV1).provider, revision: 1 } }));
+    expect(await service.sendApprovedWorkout('owner', parseScheduledWorkoutV1(workout), 1, ['garmin', 'suunto', 'garmin'], 'UTC', () => true))
+      .toEqual([{ provider: 'garmin', state: 'queued' }, { provider: 'suunto', state: 'queued' }]);
+    const commands = call.mock.calls.filter(([name]) => name === 'mutateTrainingProviderDelivery').map(([, value]) => value);
+    expect(commands).toHaveLength(2);
+    expect(commands).toEqual(['garmin', 'suunto'].map(provider => expect.objectContaining({ provider,
+      action: 'send', scope: 'workout', scopeId: 'workout', timeZone: 'UTC', expectedScheduleRevision: 1,
+      expectedScopeRevision: 1, expectedSettingsRevision: 0 })));
+    expect(new Set(commands.map(value => (value as TrainingDeliveryCommandV1).mutationId)).size).toBe(2);
+    expect(commands.every(value => !('approvalDigest' in (value as object)))).toBe(true);
+  });
+  it.each([
+    { available: false }, { hasPro: false }, { connection: 'reconnect_required' }, { eligibleCount: 0 },
+    { workoutCompatibility: 'unsupported' }, { workoutCompatibility: 'degraded' }, { workoutCompatibility: undefined },
+    { warningCount: 1 }, { approvalRequiredCount: 1 }, { settingsRevision: 1 },
+  ] as const)('requires review rather than granting delivery for %j', async changes => {
+    const { service, call } = configure(); call.mockResolvedValue({ data: { ...approvedPreview, ...changes } });
+    expect(await service.sendApprovedWorkout('owner', parseScheduledWorkoutV1(workout), 1, ['garmin'], 'UTC', () => true))
+      .toEqual([{ provider: 'garmin', state: 'review-required' }]);
+    expect(call.mock.calls.map(([name]) => name)).toEqual(['previewTrainingProviderDelivery']);
+  });
+  it.each([['garmin', 'suunto'], ['suunto', 'garmin']] as const)('isolates a failed send in either selection order: %j', async (...providers) => {
+    const { service, call } = configure();
+    call.mockImplementation(async (name, request) => {
+      const provider = (request as TrainingDeliveryCommandV1).provider;
+      if (provider === 'garmin') throw Error('unavailable');
+      return { data: name === 'previewTrainingProviderDelivery' ? approvedPreview : { ...settings, provider } };
+    });
+    const outcomes = await service.sendApprovedWorkout('owner', parseScheduledWorkoutV1(workout), 1, providers, 'UTC', () => true);
+    expect(outcomes.find(value => value.provider === 'garmin')?.state).toBe('failed');
+    expect(outcomes.find(value => value.provider === 'suunto')?.state).toBe('queued');
+    expect(call.mock.calls.filter(([name]) => name === 'mutateTrainingProviderDelivery').map(([, value]) => (value as TrainingDeliveryCommandV1).provider)).toEqual(['suunto']);
+  });
+  it('stops before consent on account/view changes, existing settings, and stale saved-workout revisions', async () => {
+    const { service, call, user } = configure();
+    call.mockImplementation(async () => { user.set({ uid: 'other' }); return { data: approvedPreview }; });
+    expect(await service.sendApprovedWorkout('owner', parseScheduledWorkoutV1(workout), 1, ['garmin', 'suunto'], 'UTC', () => true)).toEqual([]);
+    expect(call).toHaveBeenCalledOnce();
+    user.set({ uid: 'owner' }); call.mockClear();
+    expect(await service.sendApprovedWorkout('owner', parseScheduledWorkoutV1(workout), 1, ['garmin'], 'UTC', () => false)).toEqual([]);
+    expect(call).not.toHaveBeenCalled();
+    call.mockResolvedValue({ data: approvedPreview });
+    documents.set('users/owner/trainingDeliverySettings/workout_workout_garmin', settings);
+    expect(await service.sendApprovedWorkout('owner', parseScheduledWorkoutV1(workout), 1, ['garmin'], 'UTC', () => true)).toEqual([{ provider: 'garmin', state: 'failed' }]);
+    documents.delete('users/owner/trainingDeliverySettings/workout_workout_garmin');
+    documents.set('users/owner/scheduledWorkouts/workout', { ...workout, revision: 2 });
+    expect(await service.sendApprovedWorkout('owner', parseScheduledWorkoutV1(workout), 1, ['garmin'], 'UTC', () => true)).toEqual([{ provider: 'garmin', state: 'failed' }]);
+    expect(call).not.toHaveBeenCalled();
+  });
   it('refreshes the exact Check revisions without changing consent or provider action', async () => {
     documents.set('users/owner/trainingPlanState/current', { ...state, revision: 20 });
     documents.set('users/owner/scheduledWorkouts/workout', { ...workout, revision: 8 });

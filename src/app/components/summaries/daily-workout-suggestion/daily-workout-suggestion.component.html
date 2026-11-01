@@ -3,6 +3,9 @@
     <app-compact-row [title]="title()" density="compact" layout="columns" [showDivider]="false" [mobileActionFullWidth]="!!plannedWorkout()">
       <p role="status" aria-live="polite">{{ preferences().enabled ? summary() : 'Have a workout ready when you open Today.' }}</p>
       @if (status()?.state === 'ready') { <small>Included with Pro · review before adding</small> }
+      @if (status()?.state === 'ready' && status()?.result?.kind === 'workout' && deliveryPreferences().enabled) {
+        <div class="delivery-preference"><small>After approval · {{ deliveryLabel() }}</small><button mat-button appHapticTap [disabled]="busy()" (click)="configure()">Change</button></div>
+      }
       @if (status()?.state === 'ready' && error()) { <small role="status">Could not check for changes. Showing your saved suggestion.</small> }
       @if (plannedWorkouts().length) { <small>Planned for today</small> }
       @if (status()?.state === 'waiting-sleep') { <small>Using available data uses today’s included suggestion</small> }

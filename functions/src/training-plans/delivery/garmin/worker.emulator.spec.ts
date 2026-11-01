@@ -134,6 +134,42 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     await db.terminate();
   }, 120_000);
 
+  it.each([false, true])('daily Add & send uses the create acknowledgement and preserves the workout after a delivery rejection (%s)', async reject => {
+    const source = (await user().collection('scheduledWorkouts').doc('w').get()).data() as ScheduledWorkoutV1;
+    const saved = await mutateTrainingScheduleForUser(uid, { mutationId: 'daily-approved-create',
+      expectedRevisions: [{ scope: 'state', id: 'current', revision: 1 }], operation: { kind: 'create-workout',
+        workoutId: 'daily-approved', planId: null, title: 'Approved daily run', localDate: source.localDate,
+        structure: source.structure, confirmPlanRangeExtension: false } }, { db, nowMs: now });
+    const workout = saved.workouts.find(workout => workout.id === 'daily-approved')!;
+    expect(workout.revision).toBe(1);
+    const request: TrainingDeliveryCommandV1 = { schemaVersion: 1, mutationId: 'daily-approved-send', provider: 'garmin',
+      scope: 'workout', scopeId: workout.id, action: 'send', timeZone: 'Europe/Helsinki',
+      expectedScheduleRevision: saved.state!.revision, expectedScopeRevision: workout.revision, expectedSettingsRevision: 0 };
+    const preview = await trainingDeliveryCommand(runtime, uid, request, true) as TrainingDeliveryPreviewV1;
+    expect(preview).toMatchObject({ available: true, connection: 'connected', hasPro: true, eligibleCount: 1,
+      effect: 'enable', settingsRevision: 0, workoutCompatibility: 'exact', warningCount: 0, approvalRequiredCount: 0 });
+    expect(server.calls).toHaveLength(0);
+    if (reject) {
+      pro = false;
+      await expect(trainingDeliveryCommand(runtime, uid, request)).rejects.toMatchObject({ code: 'permission-denied' });
+      await drain(); expect(server.calls).toHaveLength(0);
+      expect((await user().collection(DELIVERY_LEDGER).get()).size).toBe(0);
+    } else {
+      const receipt = await trainingDeliveryCommand(runtime, uid, request);
+      expect(await trainingDeliveryCommand(runtime, uid, request)).toEqual(receipt);
+      await drain();
+      const entries = await user().collection(DELIVERY_LEDGER).get();
+      expect(entries.size).toBe(1); expect(entries.docs[0].get('workoutId')).toBe(workout.id);
+      await processTrainingDelivery(runtime, uid, entries.docs[0].id); await drain();
+      expect((await ledger()).status).toBe('delivered');
+      expect(server.calls.filter(request => request.method === 'POST' && request.path.includes('workout'))).toHaveLength(1);
+      expect(server.calls.filter(request => request.method === 'POST' && request.path === '/training-api/schedule/')).toHaveLength(1);
+    }
+    expect((await user().collection('scheduledWorkouts').doc(workout.id).get()).data()).toMatchObject({
+      id: workout.id, lifecycle: 'planned', revision: 1, title: 'Approved daily run' });
+    expect((await user().collection('scheduledWorkouts').get()).size).toBe(2);
+  });
+
   it.each(GARMIN_GENERIC_WORKOUT_SPORTS_V1.flatMap(sport => ['standalone', 'plan'].map(scope => ({ sport, scope }))))(
     'requires current approval for $sport Generic in $scope and retains one Workout/Schedule through edits and Stop', async ({ sport, scope }) => {
     const planId = scope === 'plan' ? 'p' : null;

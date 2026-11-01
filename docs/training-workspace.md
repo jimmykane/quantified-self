@@ -5854,6 +5854,34 @@ provider action changes. No reparse, migration, registered-client refresh or bac
 
 #### Pro daily workout suggestion
 
+Daily delivery is an independent, default-off `appSettings.dailyWorkoutDelivery` preference with an explicit bounded
+provider selection. It is not part of `dailyWorkoutSuggestion`, model context, the daily cache key or the server's
+generation fingerprint: changing destinations neither invalidates a recipe nor spends another AI request. The existing
+preferences dialog exposes Send after approval before its generation options. Only the open preferences/daily-workout
+review observes the existing activity-service connection projection; Today adds no connection listener or polling.
+
+For the original daily Standalone workout, the review can opt out for this approval or choose connected, admitted
+services. **Add & send** first acknowledges the existing idempotent create, then calls
+`TrainingDeliveryService.sendApprovedWorkout` with that saved workout and schedule revision. Each selected service
+uses the existing uncached revision check, delivery preview and Send command, with expected settings revision zero.
+Only an exact, warning-free, connected, Pro-eligible, single-workout preview is admitted automatically. Mapping losses,
+unavailable/reconnected services, stale revisions and pre-existing sync settings require the existing Review sync path;
+this shortcut never supplies a mapping approval digest, changes plan consent, replaces a remote copy or resumes stopped
+sync. Selected services have independent outcomes. An uncertain send is not automatically replayed. The dialog keeps
+its successful workout acknowledgement on any delivery failure and exposes the shared live sync control afterwards.
+An uncertain Add sends nothing until the same create receipt is acknowledged. Rest results, manual replacement
+generations and drafts handed to the full editor keep their existing explicit workflows. Changing a preference alone
+does not save or send a workout. Disabling it affects future approvals; already enabled workout sync is managed through
+each workout's existing Sync controls. Provider acceptance remains distinct from device receipt; preparation still starts
+on a Today visit, with no new background generation or scheduler.
+
+MCP impact: no wire/authority change. Authored recipes, strict planned-workout reads, and existing delivery-status
+projections remain unchanged; private UI preferences are never added to an exposed recipe or proposal. Existing MCP
+create-and-send preview/native-approval contracts retain their own explicit provider selection. Monitoring coverage is
+**unchanged/covered** by the existing Training delivery/verification/queue-health filters in
+`tools/training-monitoring/definitions.mjs`: this UI uses the same commands, workers, provider labels, retry limits and
+terminal outcomes. No Functions, Rules, indexes, monitoring apply, plugin rebuild or registered-client refresh is needed.
+
 The owner-only Today section includes one compact shared `CompactRowComponent` after its existing Training state and
 Readiness details, outside the collapsible region. The greeting, colored assessment sentence, existing detailed state,
 and user-controlled collapse remain intact. There is no additional card, tinted surface or ripple on the assessment.

@@ -43,7 +43,7 @@ export class DayWorkoutService {
     catch { return false; }
   }
   async open(ownerUid: string, localDate: string, sport?: string,
-    options: Partial<Pick<DayWorkoutDialogData, 'initialControls' | 'initialResult' | 'mode' | 'followRoutine' | 'savePreferences' | 'onAdded'>>
+    options: Partial<Pick<DayWorkoutDialogData, 'initialControls' | 'initialResult' | 'mode' | 'followRoutine' | 'savePreferences' | 'onAdded' | 'dailyDelivery'>>
       & { onEditorDraft?: (draft: DayWorkoutEditorDraft) => void; canExecute?: () => boolean } = {}): Promise<void> {
     const { onEditorDraft, canExecute, ...dialogOptions } = options;
     if (!this.isOwner(ownerUid) || canExecute?.() === false
