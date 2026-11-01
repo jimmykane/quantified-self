@@ -58,7 +58,7 @@ export class HealthMetricQueryService {
         return this.read(uid, ['activity', request.metricId, request.startTimeMs, request.endTimeMs], () => this.activities.loadRange(request), priority, signal);
     }
     loadSleepRange(uid: string, startMs: number, endMs: number, priority = 10, signal?: AbortSignal): Promise<HealthWorkspaceSleepSession[]> {
-        return this.read(uid, ['sleep', startMs, endMs], () => firstValueFrom(this.sleep.watchForDashboard(uid, startMs, endMs))
+        return this.read(uid, ['sleep', startMs, endMs], () => firstValueFrom(this.sleep.watchForDashboard(uid, startMs, endMs, { serverRead: true }))
             .then(sessions => withHealthSleepAccountKeys(uid, sessions)), priority, signal);
     }
     loadSleepSummaryRange(uid: string, startMs: number, endMs: number, priority = 10, signal?: AbortSignal): Promise<SleepSummaryRangeLoad> {

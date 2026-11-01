@@ -41,6 +41,9 @@ describe('shared Health request queue', () => {
     ]);
     expect(session).not.toHaveProperty('healthAccountKey');
     expect(sleep.watchForDashboard).toHaveBeenCalledTimes(1);
+    expect(sleep.watchForDashboard).toHaveBeenCalledWith('owner', 1, 2, { serverRead: true });
+    expect(service.loadSleepRange('owner', 1, 2)).toBe(first);
+    expect(sleep.watchForDashboard).toHaveBeenCalledTimes(1);
     expect(health.loadMetricRange).not.toHaveBeenCalled();
   });
   it('coalesces reads, limits concurrency to three, and promotes a selected preview', async () => {
