@@ -197,6 +197,29 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('connection history bounde
     await observe(); expect(sample()).toMatchObject({ unknownSample: 1 }); expect(sample()).not.toHaveProperty('dueSample');
     expect(JSON.stringify(logs())).not.toContain('PRIVATE');
   });
+  it.each([
+    ['full', 'malformed'], ['scanned', 'missing'], ['receipt', 'failed'], ['available', 'failed'],
+    ['scanned', 'skipped'],
+  ])('does not hide a %s wait with a %s child beside pending activities', async (state, outcome) => {
+    const { ref, run } = await seed();
+    const pending = Array.from({ length: state === 'full' ? 101 : 1 }, (_, i) => `workoutQueue/PRIVATE_PENDING_${i}`);
+    const problem = 'workoutQueue/PRIVATE_PROBLEM';
+    run.steps[0].childPaths = [...pending, problem];
+    if (state === 'scanned') run.steps[0].nextStartMs = run.endMs + 1;
+    await ref.update({ steps: run.steps, ...(state === 'receipt' ? { lastOperation: {
+      key: historyOperationKey(run.steps[0]), result: 'PRIVATE_RESULT' } } : {}) });
+    const batch = db.batch();
+    for (const path of pending) batch.set(db.doc(path), { processed: false, retryCount: 7 });
+    if (outcome !== 'missing') batch.set(db.doc(problem), outcome === 'malformed'
+      ? { resultStatus: 'PRIVATE_INVALID' } : { processed: true, resultStatus: outcome });
+    await batch.commit();
+    const before = await ref.get(); const depth = vi.fn(async () => 0);
+    await observe(async () => true, depth);
+    expect(sample()).toMatchObject({ unknownSample: 1 }); expect(sample()).not.toHaveProperty('dueSample');
+    expect(depth).not.toHaveBeenCalled();
+    expect((await ref.get()).updateTime!.isEqual(before.updateTime!)).toBe(true);
+    expect(JSON.stringify(logs())).not.toContain('PRIVATE');
+  });
   it('a same-revision document edit between query and transaction is unknown, not healthy zero', async () => {
     const { ref } = await seed(); const original = db.runTransaction.bind(db);
     vi.spyOn(db, 'runTransaction').mockImplementationOnce(async (callback: any, options: any) => {

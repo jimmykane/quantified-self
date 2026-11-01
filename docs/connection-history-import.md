@@ -326,7 +326,9 @@ Release only `processConnectionHistoryTask` and `recoverConnectionHistoryImports
 must understand admission past pending children and the 200-reference bound. Rolling back restores the batch barrier
 while retaining every outstanding child in the same compatible checkpoint shape. Monitoring is **covered** by #847
 and #829: the bounded probe now counts available activity admission as due even while a child retries, excludes
-capacity/final-drain waits, and keeps real worker/DLQ outcomes separate. It reads at most 200 child rows in total per
+capacity/final-drain waits, and keeps real worker/DLQ outcomes separate. Mixed pending and missing/failed/skipped
+or malformed child outcomes are unknown until the worker resolves them; they cannot imply a healthy wait or proven
+receipt recovery. This uses the existing masked child reads without additional DLQ reads. It reads at most 200 child rows in total per
 quarter-hour observation; masks, the five-second deadline, privacy labels and alert resources are unchanged. No
 monitoring apply, new queue, Function, Rule, index, credential or MCP/Assistant contract is introduced. Reviewed Help's
 background progress/retry guidance remains accurate; the more specific explanation is supplied by the backend.

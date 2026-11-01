@@ -113,6 +113,11 @@ export async function observeConnectionHistory(db: FirebaseFirestore.Firestore, 
               return 'eligible';
             }
             if (!allowsPendingActivityHistory(step)) return 'excluded';
+            // Mixed terminal/pending outcomes need the worker's DLQ and stop checks.
+            // Without those reads, neither a normal wait nor receipt recovery is proven.
+            if (children.some(child => !child.exists || typeof child.get('processed') !== 'boolean'
+              || child.get('processed') === true && (child.get('skippedReason')
+                || child.get('resultStatus') && child.get('resultStatus') !== 'success'))) return 'unknown';
             if (!timestamp(step.nextStartMs) || !timestamp(run.endMs)) return 'unknown';
             if (run.lastOperation?.key === historyOperationKey(step)) return 'eligible';
             const failures = retainedFailureCount(run);
