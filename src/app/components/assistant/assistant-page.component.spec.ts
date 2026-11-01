@@ -747,9 +747,11 @@ describe('AssistantPageComponent', () => {
     expect(sendButton).toBeTruthy();
     expect(sendButton.disabled).toBe(true);
     expect(sendButton.getAttribute('aria-label')).toBe('Sending message');
-    const spinner = sendButton.querySelector('mat-spinner') as HTMLElement;
+    const spinner = sendButton.parentElement!.querySelector('mat-spinner') as HTMLElement;
     expect(spinner).toBeTruthy();
     expect(spinner.getAttribute('diameter')).toBe('20');
+    expect(spinner.closest('button')).toBeNull();
+    expect(spinner.getAttribute('aria-hidden')).toBe('true');
     expect(sendButton.querySelector('mat-icon')).toBeNull();
     expect(composer.classList.contains('composer-sending')).toBe(false);
     expect(styles).toMatch(/\.composer-submit\s*{[^}]*display:\s*grid;/s);
@@ -760,7 +762,31 @@ describe('AssistantPageComponent', () => {
     expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*inset:\s*0;/s);
     expect(styles).toMatch(/\.composer-submit-content\s*{[^}]*place-items:\s*center;/s);
     expect(styles).not.toMatch(/\.composer-sending\s*{/s);
-    expect(styles).toMatch(/\.composer-submit-spinner\s*{[^}]*display:\s*block;/s);
+    expect(styles).toMatch(/\.assistant-icon-action\s*>\s*mat-spinner\s*{[^}]*pointer-events:\s*none;/s);
+  });
+
+  it('keeps the new chat spinner outside the disabled icon button while resetting', () => {
+    const selector = 'button[aria-label="Start a new chat with all optional data access off"]';
+    let button = fixture.nativeElement.querySelector(selector) as HTMLButtonElement;
+    expect(button.querySelector('mat-icon')?.textContent).toContain('add_comment');
+    expect(button.parentElement!.querySelector('mat-spinner')).toBeNull();
+
+    component.resetting.set(true);
+    fixture.detectChanges();
+    button = fixture.nativeElement.querySelector(selector) as HTMLButtonElement;
+    const spinner = button.parentElement!.querySelector('mat-spinner') as HTMLElement;
+    expect(button.disabled).toBe(true);
+    expect(button.querySelector('mat-icon')).toBeNull();
+    expect(spinner).toBeTruthy();
+    expect(spinner.getAttribute('diameter')).toBe('20');
+    expect(spinner.getAttribute('aria-hidden')).toBe('true');
+    expect(spinner.closest('button')).toBeNull();
+
+    component.resetting.set(false);
+    fixture.detectChanges();
+    expect(button.disabled).toBe(false);
+    expect(button.querySelector('mat-icon')?.textContent).toContain('add_comment');
+    expect(button.parentElement!.querySelector('mat-spinner')).toBeNull();
   });
 
   it('uses the full chat region for loading without exposing the composer', () => {

@@ -525,8 +525,19 @@ h1 {
   line-height: 24px;
 }
 
-.composer-submit-spinner {
-  display: block;
+.assistant-icon-action {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+}
+
+// Keep spinners outside icon buttons, whose descendant SVG sizing distorts their rotation.
+.assistant-icon-action > mat-spinner {
+  position: absolute;
+  inset: 10px;
+  pointer-events: none;
 }
 
 .composer-footer {
