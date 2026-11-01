@@ -185,7 +185,7 @@ describe('compact daily workout in Today', () => {
     expect(call).toHaveBeenCalledTimes(2);
     finish({ data: ready }); await vi.advanceTimersByTimeAsync(0); second.detectChanges();
     expect(second.componentInstance.status()).toEqual(ready); second.destroy();
-    const third = mount(); expect(third.nativeElement.textContent).toContain('A recovery day');
+    const third = mount(); expect(third.nativeElement.textContent).toContain('Rest day suggested');
     expect(third.componentInstance.busy()).toBe(false);
     await vi.advanceTimersByTimeAsync(1600); expect(call).toHaveBeenCalledTimes(2);
     // Helsinki rolls over while the parent's browser-local day can still be Oct 30.
@@ -404,7 +404,7 @@ describe('compact daily workout in Today', () => {
     fixture.componentRef.setInput('dataReady', true); fixture.detectChanges();
     await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
     expect(request.mock.calls.map(call => call[1])).toEqual(['status', 'prepare']);
-    expect(fixture.nativeElement.textContent).toContain('A recovery day'); exportQa(fixture.nativeElement, 'daily-rest'); expect(haptics.success).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.textContent).toContain('Rest day suggested'); exportQa(fixture.nativeElement, 'daily-rest'); expect(haptics.success).not.toHaveBeenCalled();
     const value = fixture.componentInstance.status()!;
     fixture.componentInstance.status.set({ ...value, result: { ...value.result!, kind: 'workout', draft: {
       title: 'Easy run', structure: { version: 1, sport: value.controls!.sport, nodes: [{ kind: 'step', id: 'easy', purpose: 'work',
@@ -482,14 +482,14 @@ describe('compact daily workout in Today', () => {
     expect(haptics.success).toHaveBeenCalledOnce(); expect(event).toHaveBeenCalledWith('owner', 'dismissed');
     expect(fixture.componentInstance.actionBusy()).toBe(false);
   });
-  it('remembers a successful Add even when Today was destroyed while the review stayed open', async () => {
+  it.each(['workout', 'rest'] as const)('remembers an accepted %s even when Today was destroyed while the review stayed open', async kind => {
     const { fixture, request, open, remember } = setup();
     await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
     request.mockResolvedValueOnce(fixture.componentInstance.status()!);
     await fixture.componentInstance.review();
     const onAdded = open.mock.calls[0][3].onAdded;
-    fixture.destroy(); onAdded();
-    expect(remember).toHaveBeenCalledExactlyOnceWith('owner', { localDate: '2026-10-30', state: 'planned' });
+    fixture.destroy(); onAdded(kind);
+    expect(remember).toHaveBeenCalledExactlyOnceWith('owner', { localDate: '2026-10-30', state: kind === 'rest' ? 'rest-day' : 'planned' });
   });
   it('drops late replies after account changes and destroy', async () => {
     const { fixture, request, owner } = setup(); let resolve!: (value: any) => void;
@@ -499,22 +499,25 @@ describe('compact daily workout in Today', () => {
     expect(fixture.componentInstance.status()).toBeNull();
     fixture.destroy(); await vi.advanceTimersByTimeAsync(1600); expect(request).toHaveBeenCalledOnce();
   });
-  it.each(['day', 'account'] as const)('shows an added workout and fences its callback after a %s change', async change => {
+  it.each([['day', 'workout'], ['account', 'workout'], ['day', 'rest'], ['account', 'rest']] as const)(
+    'fences acceptance after a %s change (suggestion: %s)', async (change, kind) => {
     const { fixture, open, preferences, owner, event, request, remember } = setup();
     await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
     const ready = fixture.componentInstance.status()!;
-    fixture.componentInstance.status.set({ ...ready, result: { ...ready.result!, kind: 'workout', draft: {
+    if (kind === 'workout') fixture.componentInstance.status.set({ ...ready, result: { ...ready.result!, kind: 'workout', draft: {
       title: 'Easy run', structure: { version: 1, sport: ready.controls!.sport, nodes: [{ kind: 'step', id: 'easy', purpose: 'work',
         ending: { kind: 'time', seconds: 1800 }, targets: [] }] },
     } } });
     request.mockResolvedValueOnce(fixture.componentInstance.status()!);
     await fixture.componentInstance.review();
     const onAdded = open.mock.calls[0][3].onAdded;
-    onAdded();
+    const requestsBeforeAcceptance = request.mock.calls.length;
+    onAdded(kind);
     fixture.detectChanges();
-    expect(fixture.componentInstance.status()).toEqual({ localDate: '2026-10-30', state: 'planned' });
-    expect(fixture.nativeElement.querySelector('.compact-row__title')?.textContent).toContain('Today’s workout');
-    expect(fixture.nativeElement.textContent).toContain('Your workout is planned for today.');
+    expect(fixture.componentInstance.status()).toEqual({ localDate: '2026-10-30', state: kind === 'rest' ? 'rest-day' : 'planned' });
+    expect(fixture.nativeElement.textContent).toContain(kind === 'rest' ? 'Today is a rest day.' : 'Your workout is planned for today.');
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(request).toHaveBeenCalledTimes(requestsBeforeAcceptance);
     const nextDate = change === 'day' ? '2026-10-31' : '2026-10-30';
     if (change === 'day') {
       preferences.update(value => ({ ...value, controls: { ...value.controls, localDate: nextDate } }));
@@ -522,10 +525,10 @@ describe('compact daily workout in Today', () => {
     } else { owner.set('other'); fixture.componentRef.setInput('ownerUid', 'other'); }
     fixture.detectChanges();
     fixture.componentInstance.status.set({ localDate: nextDate, state: 'completed' });
-    onAdded();
+    onAdded(kind);
     expect(fixture.componentInstance.status()).toEqual({ localDate: nextDate, state: 'completed' });
     expect(remember).toHaveBeenCalledOnce();
-    expect(event).toHaveBeenCalledWith('owner', 'added', 'ready');
+    expect(event).toHaveBeenCalledWith('owner', 'added', kind === 'rest' ? 'rest-day' : 'ready');
   });
   it('uses saved source opt-outs in preferences and keeps disable available after dismissal', async () => {
     const { fixture, open, request, save, event } = setup();

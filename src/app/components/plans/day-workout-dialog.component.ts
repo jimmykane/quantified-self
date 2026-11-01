@@ -39,7 +39,7 @@ export interface DayWorkoutDialogData {
   mode?: 'preferences'; initialControls?: DayWorkoutControls; initialResult?: GenerateDayWorkoutResponse;
   followRoutine?: boolean;
   savePreferences?: (controls: DayWorkoutControls, followRoutine: boolean) => Promise<void>;
-  onAdded?: () => void;
+  onAdded?: (kind: GenerateDayWorkoutResponse['kind']) => void;
 }
 type ChoiceKey = 'purpose' | 'destinationPlanId' | 'equipment' | 'timing' | 'target' | 'structure' | 'strengthFocus';
 interface Choice { key: ChoiceKey; label: string; options: { value: string | null; label: string }[] }
@@ -184,9 +184,9 @@ export class DayWorkoutDialogComponent {
   });
   readonly primaryLabel = computed(() => {
     if (this.data.mode === 'preferences') return this.busy() ? 'Saving…' : 'Save preferences';
-    if (this.busy()) return this.busy() === 'save' ? 'Adding…' : 'Generating…';
+    if (this.busy()) return this.busy() === 'save' ? this.result()?.kind === 'rest' ? 'Marking…' : 'Adding…' : 'Generating…';
     if (this.result()?.draft) return this.saveUncertain() ? 'Retry Add' : 'Add workout';
-    if (this.result()) return this.declaredRestDay() ? 'Keep rest day' : 'Try easy session';
+    if (this.result()) return this.declaredRestDay() ? 'Keep rest day' : 'Mark as rest day';
     return this.error() ? 'Retry generation' : 'Generate workout';
   });
   async primaryAction(): Promise<void> {
@@ -207,7 +207,7 @@ export class DayWorkoutDialogComponent {
       this.haptics.selection(); this.ref.close(); return;
     }
     if (this.result()?.draft) return this.add();
-    if (this.result()) return this.easy();
+    if (this.result()?.kind === 'rest') return this.markRestDay();
     return this.generate(!!this.error());
   }
   private request: GenerateDayWorkoutRequest | null = null;
@@ -326,6 +326,24 @@ export class DayWorkoutDialogComponent {
     } }
   }
   async easy(): Promise<void> { this.set('purpose', this.strength() ? 'general-strength' : 'recovery', false); await this.generate(); }
+  private async markRestDay(): Promise<void> {
+    if (this.result()?.kind !== 'rest' || this.busy() || !this.valid() || !this.generation.isOwner(this.data.ownerUid)) return;
+    const sequence = ++this.sequence, localDate = this.controls().localDate, requestId = this.result()!.requestId;
+    const current = () => this.current(sequence) && this.controls().localDate === localDate && this.result()?.requestId === requestId;
+    let accepted = false;
+    this.busy.set('save'); this.ref.disableClose = true; this.error.set(null);
+    try {
+      const marker = await firstValueFrom(this.plansService.watchCalendarRestDay(this.data.ownerUid, localDate).pipe(takeUntilDestroyed(this.destroyRef)));
+      if (!current()) return;
+      await this.plansService.setCalendarRestDay(this.data.ownerUid, localDate, true, marker?.revision ?? 0, current);
+      if (!current()) return;
+      this.haptics.success();
+      if (requestId === this.data.initialResult?.requestId) this.data.onAdded?.('rest');
+      this.ref.close(); accepted = true;
+    } catch {
+      if (current()) { this.error.set('Rest day could not be confirmed. Try Mark as rest day again.'); this.haptics.error(); }
+    } finally { if (!accepted && current()) { this.busy.set(null); this.ref.disableClose = false; } }
+  }
   refreshReview(): void {
     if (this.savedWorkoutId() || !this.schedule() || this.busy() || this.saveUncertain()) return;
     this.reviewedSchedule = this.schedule(); this.command = null; this.staleReview.set(false); this.error.set(null); this.haptics.selection();
@@ -373,7 +391,7 @@ export class DayWorkoutDialogComponent {
         this.ref.updateSize(undefined, 'auto');
         this.syncSubscription?.unsubscribe();
         this.haptics.success();
-        if (this.result()?.requestId === this.data.initialResult?.requestId) this.data.onAdded?.();
+        if (this.result()?.requestId === this.data.initialResult?.requestId) this.data.onAdded?.('workout');
       }
     } catch (error) {
       if (!this.current(sequence)) return;

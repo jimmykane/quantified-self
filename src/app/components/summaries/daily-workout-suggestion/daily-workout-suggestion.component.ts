@@ -83,7 +83,7 @@ export class DailyWorkoutSuggestionComponent {
     const value = this.status();
     if (value?.state === 'ready' && value.result) {
       const draft = value.result.draft;
-      return draft ? `${draft.title} · ${formatWorkoutPrescriptionSummaryV1(draft.structure, this.users.user()?.settings?.unitSettings, draft.structure.sport)}` : 'A recovery day';
+      return draft ? `${draft.title} · ${formatWorkoutPrescriptionSummaryV1(draft.structure, this.users.user()?.settings?.unitSettings, draft.structure.sport)}` : 'Rest day suggested';
     }
     const planned = this.plannedWorkouts();
     if (planned.length) {
@@ -95,7 +95,7 @@ export class DailyWorkoutSuggestionComponent {
     if (this.error() || value?.state === 'failed') return 'Today’s suggestion could not finish.';
     if (value?.state === 'planned') return 'Your workout is planned for today.';
     if (value?.state === 'completed') return 'You already recorded a workout today.';
-    if (value?.state === 'rest-day') return 'Today is a planned rest day.';
+    if (value?.state === 'rest-day') return 'Today is a rest day.';
     if (value?.state === 'dismissed') return 'Dismissed for today.';
     if (value?.state === 'preparing') return 'Your suggestion is being prepared.';
     if (value?.state === 'waiting-sleep') return 'Waiting for your latest sleep…';
@@ -217,10 +217,10 @@ export class DailyWorkoutSuggestionComponent {
     if (value.state !== 'ready' || !value.controls || !value.result) return;
     this.daily.event(uid, 'reviewed', 'ready');
     await this.generation.open(uid, value.localDate, value.controls.sport, { initialControls: value.controls, initialResult: value.result,
-      onAdded: () => {
+      onAdded: kind => {
         if (!this.daily.eligible(uid) || this.daily.preferences().controls.localDate !== value.localDate) return;
-        this.daily.event(uid, 'added', 'ready');
-        const status: DailyWorkoutSuggestionStatus = { localDate: value.localDate, state: 'planned' };
+        this.daily.event(uid, 'added', kind === 'rest' ? 'rest-day' : 'ready');
+        const status: DailyWorkoutSuggestionStatus = { localDate: value.localDate, state: kind === 'rest' ? 'rest-day' : 'planned' };
         this.daily.remember(uid, status);
         if (!this.destroy.destroyed && this.ownerUid() === uid) {
           this.status.set(status);
