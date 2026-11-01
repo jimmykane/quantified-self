@@ -214,6 +214,7 @@
     "src/app/services/history-import-state.service.spec.ts",
     "src/app/shared/adapters/firebase-hosting-redirect.spec.ts",
     "src/app/shared/help.content.spec.ts",
+    "src/app/shared/public-prerender-metadata.spec.ts",
     "src/app/shared/training-disciplines.shared.spec.ts",
     "src/app/utils/app.user.utilities.spec.ts"
   ],
