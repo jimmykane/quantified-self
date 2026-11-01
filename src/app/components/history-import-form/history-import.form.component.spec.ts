@@ -336,12 +336,19 @@ describe('HistoryImportFormComponent', () => {
             fixture.componentRef.setInput('userMetaForService', { didLastHistoryImport: Date.now(),
                 processedActivitiesFromLastHistoryImportCount: 100,
                 connectionHistoryImport: { runId: 'finished-manual', rangePreset: 'custom', active: false,
-                    updatedAtMs: Date.now(), steps: [{ id: 'activities', status: provider === ServiceNames.GarminAPI ? 'requested' : 'processed', count: 100 }] } });
+                    startMs: 1, endMs: 2, canRetry: false, updatedAtMs: Date.now(),
+                    steps: [{ id: 'activities', resources: ['activities'], status: provider === ServiceNames.GarminAPI ? 'requested' : 'processed', count: 100 }] } });
             fixture.detectChanges();
             expect(fixture.nativeElement.querySelector('app-status-info').title).toBe(provider === ServiceNames.GarminAPI ? 'History requested' : 'History import finished');
             expect(fixture.nativeElement.textContent).toContain('New import available on');
             expect(component.nextImportAvailableDate.getTime()).toBeGreaterThan(Date.now());
             expect(component.formGroup.disabled).toBe(true);
+            fixture.componentRef.setInput('showTrackedHistoryStatus', false); fixture.detectChanges();
+            expect(fixture.nativeElement.textContent).toContain('New import available on');
+            expect(fixture.nativeElement.textContent).toContain(formatDate(component.nextImportAvailableDate, 'medium', 'en-US'));
+            expect(fixture.nativeElement.textContent).not.toContain('Your selected history has been processed');
+            expect(component.formGroup.disabled).toBe(true);
+            expect(mockUserService.importServiceHistoryForCurrentUser).not.toHaveBeenCalled();
         });
 
         it.each([ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI])('keeps live %s counts when background acceptance arrives after the metadata update', async provider => {

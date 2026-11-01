@@ -7,6 +7,11 @@
 } @else if (!showTrackedHistoryStatus && backgroundActivityImport()?.runId
   && backgroundActivityImport()?.runId === userMetaForService?.connectionHistoryImport?.runId) {
 <!-- The enclosing history dialog already displays this exact run's shared progress. -->
+@if (!backgroundActivityImport()?.active && !isAllowedToDoHistoryImport && nextImportAvailableDate) {
+<div class="history-import-timing" role="status">
+  <p>New import available on {{ nextImportAvailableDate | date: 'medium' }}.</p>
+</div>
+}
 } @else if (backgroundActivityImport(); as history) {
 @let garminRequests = serviceName === serviceNames.GarminAPI;
 <div class="status-container" role="status" aria-live="polite">

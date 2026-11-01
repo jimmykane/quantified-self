@@ -49,7 +49,8 @@ Existing Help's explicit connection/reconnect and passive progress wording remai
 no provider endpoint, scope, credential, OAuth backend validation, queue or telemetry contract changes.
 The date, stored-history and retry controls stay in management. Stored calendar dates render as UTC dates. A form
 omits its duplicate banner only when the surrounding summary displays the exact same tracked run; a newer optimistic
-acceptance stays visible until metadata catches up. Progress updates do not restart stored-history reads. This is a
+acceptance stays visible until metadata catches up. After completion, the form still shows the next permitted import
+date during cooldown, independently of the shared progress summary. Progress updates do not restart stored-history reads. This is a
 frontend release: no migration, provider call, replay, new backend endpoint, queue or monitoring change is required.
 During that read, the existing cards stay visible and **Checking status** disables repeat refreshes. A provider's fresh
 snapshot updates immediately even if another provider is still loading. Retained results never cross owners or sessions.
