@@ -238,10 +238,16 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
       } finally {
         if (isCurrentView()) {
           this.isLoading = false;
-          this.isConnecting = false;
-          await this.router.navigate(['services'], { queryParams: { serviceName: serviceName }, queryParamsHandling: '' });
-          // Metadata may already have arrived while the OAuth action was locked.
-          if (isCurrentView()) this.onServiceDataChanged();
+          try {
+            // Live metadata must not consume this callback again before its URL is cleared.
+            await this.router.navigate(['services'], { queryParams: { serviceName: serviceName }, queryParamsHandling: '' });
+          } finally {
+            if (isCurrentView()) {
+              this.isConnecting = false;
+              // Metadata may already have arrived while the OAuth action was locked.
+              this.onServiceDataChanged();
+            }
+          }
         }
       }
     });

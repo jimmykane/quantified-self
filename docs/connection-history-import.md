@@ -40,6 +40,8 @@ cannot exchange the same callback again. Callback, connection and reconnect URL 
 `tool=history`, including denied, incomplete and empty callback fields. Pending history opens are cancelled and existing
 dialogs close without consuming or rewriting the auth URL. The main view validates callback returns, displays denied
 or incomplete failures without a token exchange, and uses its existing owner-guarded completion/clean-URL path.
+The callback lock remains held through clean-URL navigation so live metadata cannot exchange the same code again
+while that navigation is pending; late cleanup cannot unlock a different account's connection action.
 Existing Help's explicit connection/reconnect and passive progress wording remains accurate. Monitoring is unchanged:
 no provider endpoint, scope, credential, OAuth backend validation, queue or telemetry contract changes.
 The date, stored-history and retry controls stay in management. Stored calendar dates render as UTC dates. A form

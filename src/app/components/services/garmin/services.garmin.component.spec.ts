@@ -385,6 +385,45 @@ describe('ServicesGarminComponent', () => {
             expect(haptics.error).not.toHaveBeenCalled();
         });
 
+        it('keeps the callback locked until its URL cleanup finishes despite live metadata updates', async () => {
+            const metadata$ = new Subject<{ connectionState: 'connected'; connectedAtMs: number }>();
+            mockUserService.getUserMetaForService.mockReturnValue(metadata$);
+            mockUserService.requestAndSetCurrentUserGarminAPIAccessToken.mockResolvedValue({ connected: true, outcome: 'connected' });
+            let finishNavigation!: (result: boolean) => void;
+            mockRouter.navigate.mockReturnValue(new Promise<boolean>(resolve => { finishNavigation = resolve; }));
+            queryParams = { serviceName: component.serviceName, state: 'test-state', code: 'test-code' };
+            await component.ngOnChanges();
+            try {
+                metadata$.next({ connectionState: 'connected', connectedAtMs: 1 });
+                await vi.waitFor(() => expect(mockRouter.navigate).toHaveBeenCalledOnce());
+                metadata$.next({ connectionState: 'connected', connectedAtMs: 2 });
+                await Promise.resolve(); await Promise.resolve();
+                expect(mockUserService.requestAndSetCurrentUserGarminAPIAccessToken).toHaveBeenCalledOnce();
+                expect(component.isConnecting).toBe(true);
+            } finally {
+                queryParams = { serviceName: component.serviceName };
+                finishNavigation(true);
+            }
+            await vi.waitFor(() => expect(component.isConnecting).toBe(false));
+            expect(mockRouter.navigate).toHaveBeenCalledOnce();
+        });
+
+        it('does not let an earlier account callback cleanup unlock a newer connection action', async () => {
+            mockUserService.requestAndSetCurrentUserGarminAPIAccessToken.mockResolvedValue({ connected: true, outcome: 'connected' });
+            let finishNavigation!: (result: boolean) => void;
+            mockRouter.navigate.mockReturnValue(new Promise<boolean>(resolve => { finishNavigation = resolve; }));
+            queryParams = { serviceName: component.serviceName, state: 'test-state', code: 'test-code' };
+            await component.ngOnChanges();
+            await vi.waitFor(() => expect(mockRouter.navigate).toHaveBeenCalledOnce());
+            queryParams = { serviceName: component.serviceName };
+            fixture.componentRef.setInput('user', { uid: 'next-owner', settings: {} }); fixture.detectChanges();
+            component.isConnecting = true;
+            finishNavigation(true);
+            await Promise.resolve(); await Promise.resolve();
+            expect(component.isConnecting).toBe(true);
+            expect(component.forceConnected).toBe(false);
+        });
+
         it('drops OAuth callback feedback and navigation after the view is destroyed', async () => {
             let resolve!: (value: { connected: true; outcome: 'connected' }) => void;
             mockUserService.requestAndSetCurrentUserGarminAPIAccessToken.mockReturnValue(new Promise(value => { resolve = value; }));
