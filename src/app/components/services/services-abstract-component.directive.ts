@@ -144,18 +144,23 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
       }),
     ).subscribe(async () => {
       if (!isCurrentView()) return;
+      // Only the main connection view owns OAuth completion. A tools dialog is
+      // a second instance of this provider and must only observe its metadata.
+      if (!this.showConnectionSummary) {
+        this.isLoading = false;
+        return;
+      }
       const serviceName = this.route.snapshot.queryParamMap.get('serviceName');
       const shouldConnect = this.route.snapshot.queryParamMap.get('connect');
-      const authorizationCode = this.route.snapshot.queryParamMap.get('code');
-      const authorizationState = this.route.snapshot.queryParamMap.get('state');
-      const hasOAuthCallback = Boolean(authorizationCode && authorizationState);
+      const hasOAuthCallback = ['code', 'state', 'error'].some(key => this.route.snapshot.queryParamMap.get(key) != null);
       if (!serviceName || serviceName !== this.serviceName) {
         this.isLoading = false;
         return;
       }
       // Some providers drop static redirect-uri query parameters after an
       // external identity-provider sign-in. A returned OAuth code and state
-      // are sufficient evidence that this is the connection callback.
+      // identify the callback. Denied/incomplete returns still need the existing
+      // validation and clean-URL failure path without a token exchange.
       if (!shouldConnect && !hasOAuthCallback) {
         this.isLoading = false;
         return;

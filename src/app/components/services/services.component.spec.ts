@@ -169,6 +169,25 @@ describe('ServicesComponent', () => {
         expect(mockDialog.open).not.toHaveBeenCalled();
     });
 
+    it.each([{connect: '1'}, {code: 'synthetic-code'}, {state: 'synthetic-state'}, {error: 'access_denied'},
+        {reconnect: '1'}, {code: ''}])('leaves auth and reconnect navigation %j untouched by a history link', async auth => {
+        const params = convertToParamMap({serviceName: ServiceNames.GarminAPI, tool: 'history', ...auth});
+        mockActivatedRoute.snapshot.queryParamMap = params; mockActivatedRoute.queryParamMap = of(params);
+        mockActivatedRoute.snapshot.data = {userData: {user: {uid: 'owner', stripeRole: 'pro'}, isPro: true}};
+        fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+        expect(mockDialog.open).not.toHaveBeenCalled(); expect(mockRouter.navigate).not.toHaveBeenCalled();
+    });
+
+    it('cancels a pending history open when an OAuth callback arrives before the next render', async () => {
+        const routes = new BehaviorSubject(convertToParamMap({serviceName: ServiceNames.GarminAPI, tool: 'history'}));
+        mockActivatedRoute.queryParamMap = routes;
+        mockActivatedRoute.snapshot.data = {userData: {user: {uid: 'owner', stripeRole: 'pro'}, isPro: true}};
+        fixture.detectChanges();
+        routes.next(convertToParamMap({serviceName: ServiceNames.GarminAPI, tool: 'history', code: 'synthetic-code', state: 'synthetic-state'}));
+        await fixture.whenStable(); fixture.detectChanges();
+        expect(mockDialog.open).not.toHaveBeenCalled(); expect(mockRouter.navigate).not.toHaveBeenCalled();
+    });
+
     it('keeps the details link passive without Pro and closes an open dialog on account change', async () => {
         const params = convertToParamMap({serviceName: ServiceNames.WahooAPI, tool: 'history'});
         mockActivatedRoute.snapshot.queryParamMap = params; mockActivatedRoute.queryParamMap = of(params);
@@ -197,13 +216,17 @@ describe('ServicesComponent', () => {
         view.destroy();
     });
 
-    it('closes history details when reconnect review returns to the main provider controls', async () => {
+    it.each([{reconnect: '1'}, {connect: '1'}, {code: 'synthetic-code', state: 'synthetic-state'},
+        {error: 'access_denied', state: 'synthetic-state'}, {state: 'synthetic-state'}])('closes history details for auth navigation %j without reopening or rewriting it', async auth => {
         const routes = new BehaviorSubject(convertToParamMap({serviceName: ServiceNames.GarminAPI, tool: 'history'}));
         mockActivatedRoute.queryParamMap = routes;
         mockActivatedRoute.snapshot.data = {userData: {user: {uid: 'owner', stripeRole: 'pro'}, isPro: true}};
         fixture.detectChanges(); await fixture.whenStable();
-        routes.next(convertToParamMap({serviceName: ServiceNames.GarminAPI, reconnect: '1'}));
+        mockRouter.navigate.mockClear();
+        routes.next(convertToParamMap({serviceName: ServiceNames.GarminAPI, tool: 'history', ...auth}));
         expect(mockDialog.open.mock.results[0].value.close).toHaveBeenCalledTimes(1);
+        dialogClosed$.next(); fixture.detectChanges(); await fixture.whenStable();
+        expect(mockDialog.open).toHaveBeenCalledTimes(1); expect(mockRouter.navigate).not.toHaveBeenCalled();
     });
 
     function setStarterCatalog() {

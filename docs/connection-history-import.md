@@ -35,6 +35,13 @@ views do not open tools. Account/provider changes and teardown cancel pending op
 keeps only its compact status line and **View import progress** action; the modal displays history inline without a
 nested accordion. The main provider instance owns connection badges; the dialog copy cannot clear them during hydration.
 Reconnect review uses the existing `reconnect=1` navigation to reveal main connection controls without starting OAuth.
+Only the main provider connection view handles OAuth callbacks; its tools-dialog copy keeps observing metadata but
+cannot exchange the same callback again. Callback, connection and reconnect URL parameters take precedence over
+`tool=history`, including denied, incomplete and empty callback fields. Pending history opens are cancelled and existing
+dialogs close without consuming or rewriting the auth URL. The main view validates callback returns, displays denied
+or incomplete failures without a token exchange, and uses its existing owner-guarded completion/clean-URL path.
+Existing Help's explicit connection/reconnect and passive progress wording remains accurate. Monitoring is unchanged:
+no provider endpoint, scope, credential, OAuth backend validation, queue or telemetry contract changes.
 The date, stored-history and retry controls stay in management. Stored calendar dates render as UTC dates. A form
 omits its duplicate banner only when the surrounding summary displays the exact same tracked run; a newer optimistic
 acceptance stays visible until metadata catches up. Progress updates do not restart stored-history reads. This is a

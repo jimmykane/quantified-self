@@ -407,9 +407,12 @@ export class ServicesComponent implements OnInit, OnDestroy {
 
     this.routeSubscription = this.route.queryParamMap.subscribe(params => {
       this.activeSection = this.getSectionFromServiceName(params.get('serviceName'));
-      this.requestedHistoryProvider = params.get('tool') === 'history'
+      // Callback/connection intent wins over a display-only history link, even
+      // for incomplete or denied callbacks. Do not consume or rewrite that URL.
+      const authNavigation = ['connect', 'code', 'state', 'error', 'reconnect'].some(key => params.get(key) != null);
+      this.requestedHistoryProvider = !authNavigation && params.get('tool') === 'history'
         ? this.serviceSectionOptions.find(option => option.serviceName === params.get('serviceName'))?.providerId ?? null : null;
-      if (this.serviceToolsDialogRef && (this.managedService !== this.activeSection || params.get('reconnect') === '1')) this.serviceToolsDialogRef.close();
+      if (this.serviceToolsDialogRef && (this.managedService !== this.activeSection || authNavigation)) this.serviceToolsDialogRef.close();
       this.refreshProOffer();
       this.scheduleHistoryDetails();
     });
