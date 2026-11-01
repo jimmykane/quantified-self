@@ -98,6 +98,42 @@ describe('PublicSeoPageComponent', () => {
     guideFixture.destroy();
   });
 
+  it.each(['importStravaToSuunto', 'importStravaToGarmin', 'importStravaToWahoo', 'importStravaToCoros'] as const)(
+    'renders %s with usable official instructions and its destination boundary', key => {
+      const page = PUBLIC_SEO_PAGES[key];
+      routeStub.snapshot.data.publicSeoPage = page;
+      const fixture = TestBed.createComponent(PublicSeoPageComponent);
+      fixture.detectChanges();
+      const root = fixture.nativeElement as HTMLElement;
+      expect(root.querySelector('h1')?.textContent).toBe(page.h1);
+      expect(root.textContent).toContain(page.accessNote);
+      expect(root.querySelectorAll('.how-to-list li')).toHaveLength(5);
+      const source = root.querySelector<HTMLAnchorElement>('a[href^="https://support.strava.com/"]')!;
+      expect(source.textContent).toContain('Strava: export your data');
+      expect(source.target).toBe('_blank');
+      expect(source.rel).toBe('noopener noreferrer');
+      expect(selection).not.toHaveBeenCalled();
+      source.addEventListener('click', event => event.preventDefault());
+      source.click();
+      expect(selection).toHaveBeenCalledTimes(1);
+      if (key === 'importStravaToGarmin') {
+        expect(root.querySelector('a[href^="/send-activities"]')).toBeNull();
+        expect(root.querySelector('a[href^="https://support.garmin.com/"]')).toBeTruthy();
+        expect(root.textContent).toContain('Garmin advises exporting Strava activities individually');
+      } else {
+        const serviceName = page.actions[0].queryParams!['serviceName'];
+        const setupLinks = Array.from(root.querySelectorAll<HTMLAnchorElement>('a')).filter(link => link.textContent?.includes('Get Started'));
+        expect(setupLinks.map(link => link.getAttribute('href'))).toEqual([
+          `/services?serviceName=${encodeURIComponent(serviceName)}`,
+          `/services?serviceName=${encodeURIComponent(serviceName)}`,
+        ]);
+        expect(root.textContent).toContain('Preview sends nothing');
+        expect(root.textContent).toContain('Check status');
+      }
+      fixture.destroy();
+    },
+  );
+
   it('renders the Garmin-to-Wahoo guide with a paid setup path and visible transfer limits', () => {
     routeStub.snapshot.data.publicSeoPage = PUBLIC_SEO_PAGES.syncGarminToWahoo;
     const guideFixture = TestBed.createComponent(PublicSeoPageComponent);

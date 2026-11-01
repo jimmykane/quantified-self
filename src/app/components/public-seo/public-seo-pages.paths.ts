@@ -11,6 +11,10 @@ export type PublicSeoPageKey =
   | 'fitGpxTcxFileAnalyzer'
   | 'routeFiles'
   | 'guidesHub'
+  | 'importStravaToSuunto'
+  | 'importStravaToGarmin'
+  | 'importStravaToWahoo'
+  | 'importStravaToCoros'
   | 'syncGarminToSuunto'
   | 'syncGarminToWahoo'
   | 'syncCorosToSuunto'
@@ -36,6 +40,10 @@ export const PUBLIC_FEATURE_PATHS = {
 
 export const PUBLIC_GUIDE_PATHS = {
   hub: 'guides',
+  importStravaToSuunto: 'guides/strava-to-suunto',
+  importStravaToGarmin: 'guides/strava-to-garmin',
+  importStravaToWahoo: 'guides/strava-to-wahoo',
+  importStravaToCoros: 'guides/strava-to-coros',
   syncGarminToSuunto: 'guides/sync-garmin-to-suunto',
   syncGarminToWahoo: 'guides/sync-garmin-to-wahoo',
   syncCorosToSuunto: 'guides/sync-coros-to-suunto',
