@@ -127,7 +127,7 @@
   </url>
   <url>
     <loc>https://quantified-self.io/guides</loc>
-    <lastmod>2026-10-24</lastmod>
+    <lastmod>2026-11-01</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -169,5 +169,21 @@
     <loc>https://quantified-self.io/guides/centralize-garmin-suunto-coros-workout-data</loc>
     <lastmod>2026-07-21</lastmod>
     <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://quantified-self.io/guides/strava-to-suunto</loc>
+    <lastmod>2026-11-01</lastmod>
+  </url>
+  <url>
+    <loc>https://quantified-self.io/guides/strava-to-garmin</loc>
+    <lastmod>2026-11-01</lastmod>
+  </url>
+  <url>
+    <loc>https://quantified-self.io/guides/strava-to-wahoo</loc>
+    <lastmod>2026-11-01</lastmod>
+  </url>
+  <url>
+    <loc>https://quantified-self.io/guides/strava-to-coros</loc>
+    <lastmod>2026-11-01</lastmod>
   </url>
 </urlset>
