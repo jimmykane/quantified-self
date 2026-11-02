@@ -254,6 +254,17 @@ export const processActivitySyncTask = onTaskDispatched({
                     outcome = 'provider_pending';
                     break;
                 }
+                case QueueResult.ProviderQuotaDeferred: {
+                    const scheduledAtMs = processingQueueItem.dispatchedToCloudTask;
+                    if (typeof scheduledAtMs !== 'number' || !Number.isSafeInteger(scheduledAtMs)
+                        || scheduledAtMs <= 0 || scheduledAtMs > Date.now() + (WAHOO_RATE_LIMIT_MAX_RESET_SECONDS + 60) * 1000
+                        || processingQueueItem.destinationServiceName !== ServiceNames.WahooAPI) {
+                        throw new Error('Wahoo cooldown deferral is missing a valid delayed-task deadline.');
+                    }
+                    await enqueuePendingProviderStatusPoll(processingQueueItem, queueItemId, { scheduledAtMs, rateLimited: true });
+                    outcome = 'deferred';
+                    break;
+                }
                 case QueueResult.MovedToDLQ:
                     outcome = 'dead_lettered';
                     logger.warn(`[ActivitySyncTaskWorker] Item ${queueItemId} was moved to DLQ.`);

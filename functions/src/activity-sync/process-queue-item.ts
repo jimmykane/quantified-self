@@ -68,7 +68,7 @@ import {
 } from '../../../shared/wahoo-activity-types';
 import { WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME } from '../wahoo/constants';
 import { isWahooReconnectRequiredError } from '../wahoo/refresh-recovery';
-import { WAHOO_RATE_LIMIT_MAX_RESET_SECONDS } from '../wahoo/rate-limit';
+import { getWahooRateLimitCooldownSeconds, WAHOO_RATE_LIMIT_MAX_RESET_SECONDS } from '../wahoo/rate-limit';
 import { getCOROSActivityUploadStatus, uploadActivityFileToCOROS } from '../coros/activities';
 import { prepareCOROSActivityFITUpload, readCOROSActivityFITCategory } from '../coros/activity-fit';
 import { getActiveCOROSTokenSnapshot } from '../coros/account';
@@ -139,6 +139,10 @@ function getWahooRateLimitRetryAtMs(error: unknown): number | null {
     if (errorLike.code !== 'resource-exhausted' && errorLike.statusCode !== 429) return null;
     const details = errorLike.details as { retryAfterSeconds?: unknown } | undefined;
     const delay = Number(isProviderOperationError(error) ? error.retryAfterSeconds : details?.retryAfterSeconds);
+    return getWahooCooldownRetryAtMs(delay);
+}
+
+function getWahooCooldownRetryAtMs(delay: number): number {
     const delaySeconds = Number.isFinite(delay) && delay > 0
         ? Math.min(delay, WAHOO_RATE_LIMIT_MAX_RESET_SECONDS + 5)
         : 300;
@@ -1610,6 +1614,8 @@ export async function processActivitySyncQueueItem(
     };
 
     let duringDestinationUpload = false;
+    let checkingWahooCooldown = false;
+    let sendWindowExpiresAtMs: number | undefined;
     // Observation only: Suunto retains its existing task-retry flow. Only an
     // explicit recognized provider status can suppress a failure observation;
     // unknown/malformed status and transport deadlines remain actual retries.
@@ -1650,6 +1656,7 @@ export async function processActivitySyncQueueItem(
             if (!isSendWindowOpen(operation)) return finalizeActivitySyncQueueItemIfCurrent(queueItem, {
                 resultStatus: 'skipped', skippedReason: operation?.stopped ? 'send_stopped' : 'send_source_expired',
             });
+            sendWindowExpiresAtMs = Number(operation!.expiresAt);
         }
         if (hasPersistedDestinationUpload(queueItem) && isProviderOperationInFlightLeaseActive(queueItem)) {
             throw new ProviderOperationStillInFlightError(
@@ -1697,7 +1704,9 @@ export async function processActivitySyncQueueItem(
             }
         }
 
-        await setActivitySyncProcessingMetadata(routeMeta);
+        if (queueItem.destinationServiceName !== ServiceNames.WahooAPI) {
+            await setActivitySyncProcessingMetadata(routeMeta);
+        }
 
         if (!shouldResumePersistedDestinationUpload && !(await hasProAccess(queueItem.userID))) {
             await setActivitySyncSkippedMetadata({
@@ -1850,6 +1859,46 @@ export async function processActivitySyncQueueItem(
                 queueItem.destinationUploadID || undefined,
                 queueItem.destinationProviderUserID || undefined,
             );
+        }
+
+        if (queueItem.destinationServiceName === ServiceNames.WahooAPI) {
+            // Preserve lifecycle/uncertain-operation decisions above, but avoid
+            // source I/O, fingerprints, processing writes and provider claims
+            // when the shared application quota already prohibits the request.
+            checkingWahooCooldown = true;
+            const cooldownSeconds = await getWahooRateLimitCooldownSeconds();
+            if (cooldownSeconds > 0) {
+                if (!queueItem.ref) throw new Error('Wahoo cooldown deferral requires a queue document reference.');
+                const scheduledAtMs = Math.min(getWahooCooldownRetryAtMs(cooldownSeconds), sendWindowExpiresAtMs ?? Infinity);
+                const result = await updatePreUploadQueueItemIfUserActive(queueItem, {
+                    phase: 'before_activity_sync_wahoo_cooldown_deferral',
+                    updateData: { dispatchedToCloudTask: scheduledAtMs },
+                    actionDescription: 'Wahoo cooldown deferral',
+                });
+                if (result !== QueueItemUserGuardedUpdateResult.Updated) {
+                    if (result === QueueItemUserGuardedUpdateResult.NotCurrent) {
+                        const current = (await queueItem.ref.get()).data();
+                        const savedDeadline = current?.dispatchedToCloudTask;
+                        if (typeof savedDeadline === 'number' && Number.isSafeInteger(savedDeadline)
+                            && savedDeadline > Date.now()
+                            && savedDeadline <= Date.now() + (WAHOO_RATE_LIMIT_MAX_RESET_SECONDS + 60) * 1000
+                            && isSameActivitySyncProviderState({ ...current, dispatchedToCloudTask: queueItem.dispatchedToCloudTask }, queueItem)) {
+                            // A concurrent waiter won. Confirm its exact task
+                            // instead of overwriting the deadline or failing an
+                            // expected duplicate; all other state fences remain.
+                            queueItem.dispatchedToCloudTask = savedDeadline;
+                            return QueueResult.ProviderQuotaDeferred;
+                        }
+                    }
+                    await handlePreUploadGuardFailure(queueItem, result);
+                    return QueueResult.AcknowledgedStale;
+                }
+                queueItem.dispatchedToCloudTask = scheduledAtMs;
+                recordActivityDeliveryCommit(queueItem, 'expected_contention');
+                return QueueResult.ProviderQuotaDeferred;
+            }
+            checkingWahooCooldown = false;
+            await setActivitySyncProcessingMetadata(routeMeta);
         }
 
         const originalFileBuffer = shouldDownloadOriginalFileForDestination(queueItem)
@@ -2011,6 +2060,10 @@ export async function processActivitySyncQueueItem(
         if (error instanceof UnclaimedActivitySyncQueueItemError) {
             throw error;
         }
+
+        // A failed cooldown read/marker write is a task transport failure, not
+        // a failed upload. Leave the business retry budget and receipts intact.
+        if (checkingWahooCooldown) throw error;
 
         if (error instanceof ProviderOperationStillInFlightError) {
             logger.warn('[ActivitySync] Provider operation claim is still active; retrying without changing queue state.', {

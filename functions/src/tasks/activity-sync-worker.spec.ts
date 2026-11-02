@@ -76,6 +76,7 @@ vi.mock('../queue-utils', () => ({
     Skipped: 'SKIPPED',
     Deferred: 'DEFERRED',
     ProviderStatusPending: 'PROVIDER_STATUS_PENDING',
+    ProviderQuotaDeferred: 'PROVIDER_QUOTA_DEFERRED',
     RetryIncremented: 'RETRY_INCREMENTED',
     MovedToDLQ: 'MOVED_TO_DLQ',
     Failed: 'FAILED',
@@ -442,6 +443,47 @@ describe('processActivitySyncTask', () => {
     expect(mockLoggerInfo).toHaveBeenCalledWith('[ActivityDelivery]', expect.objectContaining({ outcome: 'deferred' }));
     expect(mockLoggerWarn).not.toHaveBeenCalled();
     expect(mockLoggerError).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false])('confirms a known cooldown handoff before ACK (new task: %s)', async taskEnqueued => {
+    const scheduledAtMs = Date.now() + 3600_000;
+    mockQueueGet.mockResolvedValueOnce({ exists: true, id: 'queue-item-1',
+      data: () => ({ processed: false, userID: 'user-1', destinationServiceName: 'wahooAPI', retryCount: 19 }) });
+    mockProcessActivitySyncQueueItem.mockImplementationOnce(async item => {
+      item.dispatchedToCloudTask = scheduledAtMs;
+      return 'PROVIDER_QUOTA_DEFERRED';
+    });
+    mockEnqueueActivitySyncTask.mockResolvedValueOnce(taskEnqueued);
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).resolves.toBeUndefined();
+    expect(mockEnqueueActivitySyncTask).toHaveBeenCalledWith('queue-item-1', scheduledAtMs, 3600);
+    expect(mockLoggerInfo).toHaveBeenCalledWith('[ActivityDelivery]', expect.objectContaining({ outcome: 'deferred' }));
+    expect(mockLoggerWarn).not.toHaveBeenCalled();
+  });
+
+  it('recovers a failed known-cooldown handoff using the same durable deadline', async () => {
+    const scheduledAtMs = Date.now() + 3600_000;
+    const item = { processed: false, userID: 'user-1', destinationServiceName: 'wahooAPI', dispatchedToCloudTask: null as number | null };
+    mockQueueGet.mockImplementation(async () => ({ exists: true, id: 'queue-item-1', data: () => ({ ...item }) }));
+    mockProcessActivitySyncQueueItem.mockImplementationOnce(async processingItem => {
+      item.dispatchedToCloudTask = processingItem.dispatchedToCloudTask = scheduledAtMs;
+      return 'PROVIDER_QUOTA_DEFERRED';
+    });
+    mockEnqueueActivitySyncTask.mockRejectedValueOnce(new Error('enqueue unavailable')).mockResolvedValueOnce(false);
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).rejects.toThrow('enqueue unavailable');
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).resolves.toBeUndefined();
+    expect(mockProcessActivitySyncQueueItem).toHaveBeenCalledOnce();
+    expect(mockEnqueueActivitySyncTask).toHaveBeenCalledTimes(2);
+    expect(mockEnqueueActivitySyncTask.mock.calls.every(([, deadline]) => deadline === scheduledAtMs)).toBe(true);
+  });
+
+  it.each([undefined, null, -1, Number.MAX_SAFE_INTEGER - 1])('rejects a cooldown without a valid saved deadline: %s', async deadline => {
+    mockQueueGet.mockResolvedValueOnce({ exists: true, id: 'queue-item-1', data: () => ({ processed: false, destinationServiceName: 'wahooAPI' }) });
+    mockProcessActivitySyncQueueItem.mockImplementationOnce(async item => {
+      item.dispatchedToCloudTask = deadline;
+      return 'PROVIDER_QUOTA_DEFERRED';
+    });
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).rejects.toThrow('valid delayed-task deadline');
+    expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
   });
 
   it.each([false, true])('honors an existing Wahoo daily-quota wait without early processing (accepted: %s)', async accepted => {

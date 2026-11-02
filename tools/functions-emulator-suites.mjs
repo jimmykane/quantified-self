@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 // Exact emulator files only: the ordinary Functions suite already covers mocks.
 export const EMULATOR_SUITES = {
   delivery: [
+    'src/activity-sync/wahoo-cooldown.emulator.spec.ts',
     'src/activity-send/activity-send.emulator.spec.ts',
     'src/training-plans/delivery/monitoring.emulator.spec.ts',
     'src/training-plans/delivery/delivery.emulator.spec.ts',
