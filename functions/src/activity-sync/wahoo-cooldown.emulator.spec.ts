@@ -248,6 +248,34 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo cooldown handoffs i
         expect(state.upload).not.toHaveBeenCalled();
         expect((await queueRef().get()).data()).toMatchObject({ processed: true, resultStatus: 'success', destinationUploadID: 'accepted-upload', destinationExpectedWorkoutTypeID: 9 });
     });
+    it('completes a previously unaccepted upload once its cooldown expires without spending its last retry', async () => {
+        const item = await seed();
+        await invoke(getActivitySyncTaskId(queueId, item.dateCreated));
+        expectNoExpensiveWork();
+        const deadline = (await queueRef().get()).data()!.dispatchedToCloudTask;
+        const taskId = getActivitySyncTaskId(queueId, deadline);
+        const clock = vi.spyOn(Date, 'now').mockReturnValue(deadline + 1);
+        try {
+            await invoke(taskId);
+            const completed = await queueRef().get();
+            expect(completed.data()).toMatchObject({
+                processed: true, resultStatus: 'success', destinationUploadID: 'upload',
+                outboundFingerprintID: 'synthetic-fingerprint', retryCount: PROVIDER_MAX_RETRY_COUNT - 1,
+                totalRetryCount: 29, errors: [{ error: 'previous real failure', date: 1 }],
+            });
+            await invoke(taskId);
+            expect((await queueRef().get()).updateTime!.isEqual(completed.updateTime!)).toBe(true);
+            expect(state.download).toHaveBeenCalledOnce();
+            expect(state.fingerprint).toHaveBeenCalledOnce();
+            expect(state.processing).toHaveBeenCalledOnce();
+            expect(state.upload).toHaveBeenCalledOnce();
+            expect(state.status).not.toHaveBeenCalled();
+            expect(state.enqueue).toHaveBeenCalledOnce();
+            expect((await db.collection('failed_jobs').get()).empty).toBe(true);
+        } finally {
+            clock.mockRestore();
+        }
+    });
     it.each(['replacement', 'receipt', 'claim', 'deleted', 'tombstone', 'missing_user', 'stop', 'expiry'])('cannot defer over a concurrent %s transition', async transition => {
         const workspace = transition === 'stop' || transition === 'expiry';
         const item = await seed(false, workspace ? { sendBatchID: 'batch' } : {});
