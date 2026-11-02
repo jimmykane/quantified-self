@@ -1039,6 +1039,14 @@ Monitoring coverage is **unchanged**: the existing #847 coordinator and #829/#83
 workers, queues, retries, outcomes and unknown observations. No MCP/Assistant, Training, consent, entitlement, backend,
 Rules, index or telemetry contract changes. This presentation change requires only a separately approved frontend release.
 
+
+Daily workout **Add & send** commits standalone creation and eligible delivery settings with the existing Training
+reconciliation marker in one server transaction. Browser closure requires no follow-up Send request. It uses the
+existing delivery queue, workers, authority/deletion fences and monitoring; it adds no provider transport or queue kind.
+See [Pro daily workout suggestion](training-workspace.md#pro-daily-workout-suggestion) for the approval, replay and Skip
+contract. Deploy `mutateTrainingSchedule` before its frontend client; its only added secret binding is the existing
+Suunto Guide owner metadata, not provider credentials.
+
 ## 2. Choose the right architecture
 
 Most activity providers should use the shared asynchronous ingestion pattern:

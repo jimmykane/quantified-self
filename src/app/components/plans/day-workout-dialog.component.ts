@@ -34,6 +34,7 @@ import { SummaryDisclosureComponent } from '../shared/summary-disclosure/summary
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
 import type { AssistantQuotaStatus } from '@shared/assistant.types';
 import { dailyWorkoutDeliveryPreferences, DAILY_WORKOUT_DELIVERY_SERVICES, type DailyWorkoutDeliveryPreferences } from '../../helpers/daily-workout-delivery.helper';
+import type { CreatedWorkoutDeliveryOutcomeV1, TrainingScheduleSaveResponseV1 } from '@shared/training-workout-delivery-save';
 import { PLANNED_WORKOUT_PROVIDER_IDS, PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1, type PlannedWorkoutProviderId } from '@shared/planned-workout-providers';
 import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
 import { buildDestinationProviderPresentation } from '../../helpers/provider-presentation.helper';
@@ -428,7 +429,10 @@ export class DayWorkoutDialogComponent {
         if (!confirmed || !this.current(sequence)) return;
         command = this.command = { ...command, operation: { ...command.operation, confirmPlanRangeExtension: true } };
       }
-      const response = await this.plansService.mutate(command, () => this.current(sequence));
+      const current = () => this.current(sequence);
+      const response: TrainingScheduleSaveResponseV1 = approvedProviders.length
+        ? await this.plansService.mutateWithDelivery(command, { providers: approvedProviders, timeZone: this.controls().timeZone }, current)
+        : await this.plansService.mutate(command, current);
       if (this.current(sequence) && command.operation.kind === 'create-workout') {
         const id = command.operation.workoutId;
         this.savedAcknowledgementRevision = response.state?.revision ?? null;
@@ -439,7 +443,7 @@ export class DayWorkoutDialogComponent {
         this.syncSubscription?.unsubscribe();
         if (this.result()?.requestId === this.data.initialResult?.requestId) this.data.onAdded?.('workout');
         if (approvedProviders.length) {
-          await this.sendSavedWorkout(sequence, response.workouts?.find(workout => workout.id === id), response.state?.revision, approvedProviders);
+          this.showSavedDeliveryOutcome(approvedProviders, response.deliveryOutcomes);
         }
         if (this.current(sequence)) this.haptics.success();
       }
@@ -455,24 +459,12 @@ export class DayWorkoutDialogComponent {
       this.haptics.error();
     } finally { if (this.current(sequence)) { this.busy.set(null); this.ref.disableClose = this.saveUncertain(); } }
   }
-  private async sendSavedWorkout(sequence: number, workout: ScheduledWorkoutV1 | undefined,
-    scheduleRevision: number | undefined, providers: PlannedWorkoutProviderId[]): Promise<void> {
-    if (!workout || scheduleRevision === undefined) {
-      this.deliveryOutcomeText.set('Your workout is saved. Reload its schedule before sending to the selected services.'); return;
-    }
-    this.deliveryOutcomeText.set('Checking compatibility and sending to your selected services…');
-    try {
-      const outcomes = await this.delivery.sendApprovedWorkout(this.data.ownerUid, workout, scheduleRevision,
-        providers, this.controls().timeZone, () => this.current(sequence));
-      if (!this.current(sequence)) return;
-      const queued = outcomes.filter(outcome => outcome.state === 'queued')
-        .map(outcome => PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[outcome.provider].label);
-      const review = providers.filter(provider => !outcomes.some(outcome => outcome.provider === provider && outcome.state === 'queued'))
-        .map(provider => PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label);
-      this.deliveryOutcomeText.set([queued.length ? `Delivery queued for ${queued.join(', ')}. Sync your device after the service accepts it.` : '',
-        review.length ? `Your workout is saved. Review sync for ${review.join(', ')} to check compatibility or an unfinished send.` : ''].filter(Boolean).join(' '));
-    } catch {
-      if (this.current(sequence)) this.deliveryOutcomeText.set('Your workout is saved. Review sync to check an unfinished send before trying again.');
-    }
+  private showSavedDeliveryOutcome(providers: PlannedWorkoutProviderId[], outcomes: readonly CreatedWorkoutDeliveryOutcomeV1[] = []): void {
+    const queued = providers.filter(provider => outcomes.some(outcome => outcome.provider === provider && outcome.state === 'queued'))
+      .map(provider => PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label);
+    const review = providers.filter(provider => !outcomes.some(outcome => outcome.provider === provider && outcome.state === 'queued'))
+      .map(provider => PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label);
+    this.deliveryOutcomeText.set([queued.length ? `Delivery queued for ${queued.join(', ')}. Sync your device after the service accepts it.` : '',
+      review.length ? `Your workout is saved. Review sync for ${review.join(', ')} to check compatibility or an unfinished send.` : ''].filter(Boolean).join(' '));
   }
 }

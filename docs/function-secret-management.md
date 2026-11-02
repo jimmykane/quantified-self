@@ -47,14 +47,14 @@ secret workflow, then Retry; do not ask the user to reconnect to fix an applicat
 `SUUNTOAPP_GUIDE_OWNER` holds the **exact existing OAuth application name** from Suunto API Zone's profile → OAuth
 application settings → App name. It is public application metadata, but is managed through the same Secret Manager
 workflow as the other Suunto settings, not hardcoded. `config.suuntoapp.application_name` reads it lazily. Only
-`previewTrainingProviderDelivery`, `mutateTrainingProviderDelivery`, and `processTrainingDeliveryTask` bind this setting;
+`mutateTrainingSchedule`, `previewTrainingProviderDelivery`, `mutateTrainingProviderDelivery`, and `processTrainingDeliveryTask` bind this setting;
 preview/mutation do not gain access to OAuth credentials or subscription keys. Dispatch and lifecycle triggers do not
-read the owner. A missing or invalid value leaves Suunto unavailable without blocking Garmin.
+read the owner. The schedule save uses it only for pure Add & send admission; it gains no provider HTTP authority. A missing or invalid value leaves Suunto unavailable without blocking Garmin.
 
 For local Functions emulation, add `SUUNTOAPP_GUIDE_OWNER=<exact application name>` to the ignored
 `functions/.secret.local` and restart the Functions emulator. The value-free `.secret.local.example` lists the key.
 For deployment, an authorized operator sets it interactively with
-`npm run firebase -- functions:secrets:set SUUNTOAPP_GUIDE_OWNER --project <firebase-project-id>` and then redeploys those three
+`npm run firebase -- functions:secrets:set SUUNTOAPP_GUIDE_OWNER --project <firebase-project-id>` and then redeploys those four
 Training endpoints together under separate deployment approval. No frontend release, OAuth reconnect or source-code
 change is needed to configure the name. This implementation does not set a local/cloud value, provision a secret,
 deploy, or change existing rollout/consent gates.

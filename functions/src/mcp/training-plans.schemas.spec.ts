@@ -374,6 +374,15 @@ describe('Strict Training write proposal contract', () => {
     }).success).toBe(false);
   });
 
+  it('keeps the first-party atomic delivery envelope out of MCP proposals', () => {
+    const input = { expectedScheduleRevision: 1, localDate: '2026-11-02', title: 'Easy run',
+      structure: recipe({ kind: 'time', seconds: 600 }),
+      deliveryAfterCreate: { providers: ['garmin'], timeZone: 'UTC' } };
+    expect(TRAINING_WRITE_INPUTS.preview_create_planned_workout.safeParse(input).success).toBe(false);
+    expect(TRAINING_WRITE_INPUTS.preview_training_changes.safeParse({ expectedScheduleRevision: 1,
+      changes: [{ kind: 'create-workout', localKey: 'new', plan: null, localDate: input.localDate, title: input.title,
+        structure: input.structure, deliveryAfterCreate: input.deliveryAfterCreate }] }).success).toBe(false);
+  });
   it('adds optional focused delivery without client-owned linking fields', () => {
     const input = {
       expectedScheduleRevision: 1,

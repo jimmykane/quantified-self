@@ -279,7 +279,7 @@ const TRAINING_TARGET_METADATA: Readonly<Record<string, {
   applyAssistantTrainingProposal: { memoryMb: 512, timeoutSeconds: null, trigger: 'callable', secrets: ['SUUNTOAPP_GUIDE_OWNER'] },
   ensureDerivedMetrics: { memoryMb: 512, timeoutSeconds: 120, trigger: 'callable', maxInstances: 100 },
   setTrainingBuildBenchmark: { memoryMb: 512, timeoutSeconds: null, trigger: 'callable' },
-  mutateTrainingSchedule: { memoryMb: 512, timeoutSeconds: 300, trigger: 'callable' },
+  mutateTrainingSchedule: { memoryMb: 512, timeoutSeconds: 300, trigger: 'callable', secrets: ['SUUNTOAPP_GUIDE_OWNER'] },
   mutateWorkoutLibrary: { memoryMb: 512, timeoutSeconds: 120, trigger: 'callable' },
   placeWorkoutLibrary: { memoryMb: 512, timeoutSeconds: 300, trigger: 'callable' },
   getTrainingScheduleHistory: { memoryMb: 512, timeoutSeconds: null, trigger: 'callable' },
