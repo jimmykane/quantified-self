@@ -94,6 +94,77 @@ describe('daily workout preparation', () => {
       inputTokens: 100, outputTokens: 20, thoughtsTokens: 40 }));
     expect(JSON.stringify(deps.log.mock.calls)).not.toMatch(/owner|2026-|Keep today/);
   });
+  it('uses selected provider formats for new suggestions without regenerating a cached day after provider changes', async () => {
+    const deps = dependencies(), originalRead = deps.store.read.getMockImplementation()!;
+    let deliveryPreferences = { enabled: true, providers: ['wahoo' as 'wahoo' | 'garmin'] };
+    deps.store.read.mockImplementation(async () => ({ ...await originalRead(), deliveryPreferences }));
+    const generated = (ending: { kind: 'time'; seconds: number } | { kind: 'distance'; meters: number }) => ({
+      kind: 'workout' as const, title: 'Easy run', rationale: 'Keep it controlled', structure: { version: 1 as const,
+        sport: dailyControls.sport, nodes: [{ kind: 'step' as const, id: 'work', purpose: 'work' as const, ending, targets: [] }] },
+    });
+    deps.generate.mockResolvedValueOnce(generated({ kind: 'distance', meters: 1000 }))
+      .mockResolvedValueOnce(generated({ kind: 'time', seconds: 1200 }));
+    const result = await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, identity, deps);
+    expect(result.result?.draft?.structure.nodes[0]).toMatchObject({ ending: { kind: 'time', seconds: 1200 } });
+    expect(deps.generate).toHaveBeenCalledTimes(2); expect(deps.store.charge).toHaveBeenCalledOnce();
+    expect(deps.generate.mock.calls[0][1].evidence.deliveryProviders).toMatchObject({ providers: [{ provider: 'wahoo' }] });
+    expect(deps.generate.mock.calls[1][2]).toContain('Wahoo: unsupported');
+    expect(result.result?.usedContext.some(value => value.includes('Wahoo'))).toBe(true);
+    deliveryPreferences = { enabled: true, providers: ['garmin'] };
+    expect(await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, identity, deps)).toEqual(result);
+    expect(deps.generate).toHaveBeenCalledTimes(2); expect(deps.store.charge).toHaveBeenCalledOnce();
+  });
+  it('keeps recovery evidence within the existing context limit when optional provider guidance will not fit', async () => {
+    const deps = dependencies(), originalRead = deps.store.read.getMockImplementation()!;
+    deps.store.read.mockImplementation(async () => ({ ...await originalRead(), deliveryPreferences: { enabled: true, providers: ['wahoo'] } }));
+    const context = evidence();
+    context.evidence.padding = '';
+    const paddingLength = 160_000 - JSON.stringify(context.evidence).length;
+    context.evidence.padding = 'x'.repeat(paddingLength);
+    deps.context.mockResolvedValue(context);
+    const result = await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, identity, deps);
+    const generatedContext = deps.generate.mock.calls[0][1];
+    expect(JSON.stringify(generatedContext.evidence).length).toBeLessThanOrEqual(160_000);
+    expect(generatedContext.evidence).not.toHaveProperty('deliveryProviders');
+    expect(String(generatedContext.evidence.padding).length).toBe(paddingLength);
+    expect(result.result?.missingContext.join(' ')).toContain('Local provider formats were omitted');
+    expect(deps.generate).toHaveBeenCalledOnce(); expect(deps.store.charge).toHaveBeenCalledOnce();
+  });
+  it.each(['invalid-output', 'model-error', 'rest', 'still-incompatible'] as const)('keeps a valid prescription if an optional mapping correction fails: %s', async failure => {
+    const deps = dependencies(), originalRead = deps.store.read.getMockImplementation()!;
+    deps.store.read.mockImplementation(async () => ({ ...await originalRead(), deliveryPreferences: { enabled: true, providers: ['wahoo'] } }));
+    deps.generate.mockResolvedValueOnce({ kind: 'workout', title: 'Easy run', rationale: 'Controlled training', structure: {
+      version: 1, sport: dailyControls.sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'distance', meters: 1000 }, targets: [] }],
+    } });
+    if (failure === 'model-error') deps.generate.mockRejectedValueOnce(Error('Provider response unavailable'));
+    else if (failure === 'still-incompatible') deps.generate.mockResolvedValueOnce({ kind: 'workout', title: 'Different run', rationale: 'Another prescription', structure: {
+      version: 1, sport: dailyControls.sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'distance', meters: 2000 }, targets: [] }],
+    } });
+    else deps.generate.mockResolvedValueOnce(failure === 'rest' ? { kind: 'rest', rationale: 'Cannot send to device' } : { invented: true });
+    const result = await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, identity, deps);
+    expect(result.state).toBe('ready'); expect(result.result?.kind).toBe('workout');
+    expect(result.result?.draft?.structure.nodes[0]).toMatchObject({ ending: { kind: 'distance', meters: 1000 } });
+    expect(result.result?.missingContext.join(' ')).toContain('Delivery to Wahoo needs Review sync');
+    expect(deps.generate).toHaveBeenCalledTimes(2); expect(deps.store.charge).toHaveBeenCalledOnce();
+  });
+  it('does not return a mapping fallback after the generation lease is revoked', async () => {
+    const deps = dependencies(), originalRead = deps.store.read.getMockImplementation()!;
+    deps.store.read.mockImplementation(async () => ({ ...await originalRead(), deliveryPreferences: { enabled: true, providers: ['wahoo'] } }));
+    deps.generate.mockResolvedValueOnce({ kind: 'workout', title: 'Easy run', rationale: 'Controlled training', structure: {
+      version: 1, sport: dailyControls.sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'distance', meters: 1000 }, targets: [] }],
+    } }).mockImplementationOnce(async () => {
+      deps.store.assertActive.mockRejectedValueOnce(Error('Generation lease revoked')); throw Error('Model unavailable');
+    });
+    await expect(runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, identity, deps)).rejects.toMatchObject({ code: 'unavailable' });
+    expect(deps.store.finish).not.toHaveBeenCalledWith('owner', expect.any(String), expect.any(String), 'ready', expect.anything(), expect.anything());
+  });
+  it('omits provider context and mapping retries when Send after approval is off', async () => {
+    const deps = dependencies(), originalRead = deps.store.read.getMockImplementation()!;
+    deps.store.read.mockImplementation(async () => ({ ...await originalRead(), deliveryPreferences: { enabled: false, providers: ['wahoo'] } }));
+    await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, identity, deps);
+    expect(deps.generate.mock.calls[0][1].evidence).not.toHaveProperty('deliveryProviders');
+    expect(deps.generate).toHaveBeenCalledOnce();
+  });
   it.each(['planned', 'completed', 'rest-day'] as const)('keeps the allowance unused while today is %s and resumes when coverage is removed', async state => {
     const deps = dependencies(), context = evidence();
     const daily = context.evidence.daily as any;

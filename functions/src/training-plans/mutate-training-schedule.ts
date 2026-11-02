@@ -3,9 +3,11 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { WorkoutStructureValidationError } from '../../../shared/planned-workout';
 import {
     TrainingPlanContractError,
-    parseMutateTrainingScheduleRequestV1,
     type MutateTrainingScheduleResponseV1,
 } from '../../../shared/training-plans';
+import { parseTrainingScheduleSaveRequestV1 } from '../../../shared/training-workout-delivery-save';
+import { TrainingDeliveryContractError } from '../../../shared/training-provider-delivery';
+import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { enforceAppCheck } from '../utils';
 import { TrainingScheduleMutationError } from './mutation';
@@ -30,6 +32,7 @@ function mapMutationError(error: TrainingScheduleMutationError): HttpsError {
 export const mutateTrainingSchedule = onCall({
     region: FUNCTIONS_MANIFEST.mutateTrainingSchedule.region,
     memory: '512MiB',
+    secrets: FUNCTION_SECRET_BINDINGS.mutateTrainingSchedule,
     timeoutSeconds: 300,
 }, async (request): Promise<MutateTrainingScheduleResponseV1> => {
     if (!request.auth) {
@@ -38,13 +41,18 @@ export const mutateTrainingSchedule = onCall({
     enforceAppCheck(request);
 
     try {
-        const parsed = parseMutateTrainingScheduleRequestV1(request.data);
+        const { request: parsed, deliveryAfterCreate } = parseTrainingScheduleSaveRequestV1(request.data);
         if (parsed.operation.kind === 'bulk-create-workouts') {
             throw new HttpsError('invalid-argument', 'Use the workout library placement action.');
         }
+        if (deliveryAfterCreate) {
+            const { createWorkoutWithDeliveryForUser } = await import('./create-workout-with-delivery');
+            const { productionDeliveryRuntime } = await import('./delivery/runtime');
+            return await createWorkoutWithDeliveryForUser(request.auth.uid, parsed, deliveryAfterCreate, productionDeliveryRuntime());
+        }
         return await mutateTrainingScheduleForUser(request.auth.uid, parsed);
     } catch (error) {
-        if (error instanceof TrainingPlanContractError || error instanceof WorkoutStructureValidationError) {
+        if (error instanceof TrainingPlanContractError || error instanceof TrainingDeliveryContractError || error instanceof WorkoutStructureValidationError) {
             throw new HttpsError('invalid-argument', error.message);
         }
         if (error instanceof TrainingScheduleMutationError) {

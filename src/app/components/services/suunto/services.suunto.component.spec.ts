@@ -117,7 +117,7 @@ describe('ServicesSuuntoComponent', () => {
                 { provide: AppAuthService, useValue: { user$: { pipe: () => ({ subscribe: () => { } }) } } },
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: AppWindowService, useValue: { currentDomain: 'http://localhost', windowRef: { location: { href: '' } } } },
-                { provide: LoggerService, useValue: { error: vi.fn(), log: vi.fn() } },
+                { provide: LoggerService, useValue: { error: vi.fn(), log: vi.fn(), captureException: vi.fn() } },
                 { provide: AppAnalyticsService, useValue: mockAnalyticsService },
                 { provide: MatSnackBar, useValue: mockSnackBar },
                 { provide: MatDialog, useValue: mockDialog },
@@ -168,6 +168,40 @@ describe('ServicesSuuntoComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it.each([
+        [ServiceNames.SuuntoApp, 'functions/failed-precondition', 'suunto_oauth_restart_required', true],
+        [ServiceNames.SuuntoApp, 'failed-precondition', 'suunto_oauth_restart_required', true],
+        [ServiceNames.SuuntoApp, 'functions/internal', 'suunto_oauth_restart_required', false],
+        [ServiceNames.SuuntoApp, 'functions/failed-precondition', 'another_failure', false],
+        [ServiceNames.COROSAPI, 'functions/failed-precondition', 'suunto_oauth_restart_required', false],
+    ] as const)('keeps only a confirmed Suunto sign-in restart at WARNING (%s, %s, %s)', async (service, code, reason, warning) => {
+        component.serviceName = service;
+        component.user = { uid: 'user-1', settings: {} } as typeof component.user;
+        const params = { serviceName: service, state: 'synthetic-state', code: 'synthetic-code' };
+        vi.spyOn(TestBed.inject(ActivatedRoute).snapshot.queryParamMap, 'get')
+            .mockImplementation(key => params[key] ?? null);
+        const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+        const error = Object.assign(new Error('Suunto could not complete sign-in. Start the connection again using your Suunto email and password instead of Facebook.'), {
+            code, details: { reason },
+        });
+        vi.spyOn(component, 'requestAndSetToken').mockRejectedValueOnce(error);
+
+        await component.ngOnChanges();
+        await vi.waitFor(() => expect(component.isConnecting).toBe(false));
+
+        const logger = TestBed.inject(LoggerService);
+        if (warning) {
+            expect(logger.captureException).toHaveBeenCalledExactlyOnceWith(error, { level: 'warning' });
+            expect(logger.error).not.toHaveBeenCalled();
+        } else {
+            expect(logger.error).toHaveBeenCalledExactlyOnceWith(error);
+            expect(logger.captureException).not.toHaveBeenCalled();
+        }
+        expect(mockSnackBar.open).toHaveBeenCalledWith(`Could not connect due to ${error.message}`, undefined, { duration: 10000 });
+        expect(navigate).toHaveBeenCalledWith(['services'], { queryParams: { serviceName: service }, queryParamsHandling: '' });
+        expect(component.forceConnected).toBe(false);
     });
 
     it.each([

@@ -39,6 +39,7 @@ import {
   type TrainingScheduleHistoryResponseV1,
   type TrainingScheduleRestorePreviewV1,
 } from '@shared/training-plans';
+import type { CreatedWorkoutDeliveryRequestV1, TrainingScheduleSaveRequestV1, TrainingScheduleSaveResponseV1 } from '@shared/training-workout-delivery-save';
 import { AppFunctionsService } from './app.functions.service';
 import {
   STRENGTH_DETAILS_COLLECTION_ID,
@@ -389,6 +390,14 @@ export class TrainingPlansService {
   async mutate(request: MutateTrainingScheduleRequestV1, canExecute?: () => boolean): Promise<MutateTrainingScheduleResponseV1> {
     return (await this.functions.call<MutateTrainingScheduleRequestV1, MutateTrainingScheduleResponseV1>(
       'mutateTrainingSchedule', request, ...(canExecute ? [{ canExecute }] : []),
+    )).data;
+  }
+
+  /** Explicit Add & send: the server commits the workout and delivery approval together. */
+  async mutateWithDelivery(request: MutateTrainingScheduleRequestV1, deliveryAfterCreate: CreatedWorkoutDeliveryRequestV1,
+    canExecute: () => boolean): Promise<TrainingScheduleSaveResponseV1> {
+    return (await this.functions.call<TrainingScheduleSaveRequestV1, TrainingScheduleSaveResponseV1>(
+      'mutateTrainingSchedule', { ...request, deliveryAfterCreate }, { canExecute },
     )).data;
   }
 

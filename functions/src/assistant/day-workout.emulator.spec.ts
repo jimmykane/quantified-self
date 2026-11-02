@@ -192,6 +192,31 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     await expect(store.read(uid)).rejects.toMatchObject({ code: 'permission-denied' });
     await expect(store.dismiss(uid, '2026-10-30')).rejects.toMatchObject({ code: 'permission-denied' });
   }, 30_000);
+  it('reads provider choices from the existing settings snapshot without changing a charged day or cached recipe', async () => {
+    const uid = `provider-aware-daily-${randomUUID()}`; let now = new Date('2026-11-02T07:00Z');
+    const user = db.doc(`users/${uid}`); await user.set({});
+    const saved = { enabled: true, followRoutine: true, controls: defaultDayWorkoutControls('2026-11-02', 'Europe/Helsinki') };
+    const settings = user.collection('config').doc('settings');
+    await settings.set({ appSettings: { dailyWorkoutSuggestion: saved, dailyWorkoutDelivery: { enabled: true, providers: ['garmin'] } } });
+    const store = createDailyWorkoutSuggestionStore(() => db, () => now), initial = await store.read(uid);
+    expect(initial.deliveryPreferences).toEqual({ enabled: true, providers: ['garmin'] });
+    const token = await store.begin(uid, initial.preferences!); expect(token).toBeTruthy();
+    await store.charge(uid, '2026-11-02', token!);
+    await settings.update({ 'appSettings.dailyWorkoutDelivery': { enabled: true, providers: ['wahoo'] } });
+    await store.assertActive(uid, '2026-11-02', token!);
+    const result = { ...response('daily-suggestion:2026-11-02'), usedContext: ['Garmin local workout formats'] };
+    await store.finish(uid, '2026-11-02', token!, 'ready', initial.preferences!.controls, result);
+    const updated = await store.read(uid);
+    expect(updated.deliveryPreferences).toEqual({ enabled: true, providers: ['wahoo'] });
+    expect(updated.status.result).toEqual(result); expect(updated.status).not.toHaveProperty('deliveryPreferences');
+    expect(await store.begin(uid, updated.preferences!)).toBeNull();
+    now = new Date('2026-11-03T07:00Z');
+    const tomorrow = await store.read(uid); expect(tomorrow.status.state).toBe('waiting');
+    expect(tomorrow.deliveryPreferences).toEqual({ enabled: true, providers: ['wahoo'] });
+    expect(await store.begin(uid, tomorrow.preferences!)).toBeTruthy();
+    await settings.update({ 'appSettings.dailyWorkoutDelivery': { enabled: true, providers: ['garmin'], injectedToken: 'private-canary' } });
+    expect((await store.read(uid)).deliveryPreferences).toEqual({ enabled: false, providers: [] });
+  });
   it('releases uncharged context failures, fences opt-outs and never reclaims an expired model lease', async () => {
     const uid = `daily-suggestion-fences-${randomUUID()}`;
     let now = new Date('2026-10-30T07:00Z');

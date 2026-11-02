@@ -23,7 +23,7 @@ describe('Firebase Admin custom-token signing', () => {
     if (temporaryDirectory) rmSync(temporaryDirectory, { recursive: true, force: true });
   });
 
-  it.each(['explicit', 'repository', 'cli-user-adc'])(
+  it.each(['explicit', 'external', 'cli-user-adc', 'signing-override'])(
     'signs impersonation and restoration tokens locally with %s credentials', async source => {
       const { createFirebaseCustomToken, initializeFirebase } = await import('./bootstrap');
       // Firebase CLI wraps the namespaced initializer and serializes its options
@@ -36,7 +36,7 @@ describe('Firebase Admin custom-token signing', () => {
       });
       const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
       temporaryDirectory = mkdtempSync(resolve(tmpdir(), 'qs-local-signing-'));
-      const credentialPath = resolve(temporaryDirectory, 'quantified-self-io-firebase-adminsdk.json');
+      const credentialPath = resolve(temporaryDirectory, 'firebase-adminsdk.json');
       writeFileSync(credentialPath, JSON.stringify({
         type: 'service_account',
         project_id: 'test-project',
@@ -44,6 +44,8 @@ describe('Firebase Admin custom-token signing', () => {
         private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }),
       }), { mode: 0o600 });
       vi.stubEnv('FUNCTIONS_EMULATOR', 'true');
+      vi.stubEnv('QS_LOCAL_CONFIG_DIR', temporaryDirectory);
+      vi.stubEnv('QS_LOCAL_SIGNING_KEY_FILE', source === 'signing-override' ? credentialPath : '');
       vi.stubEnv('FIREBASE_AUTH_EMULATOR_HOST', '');
       vi.stubEnv('GOOGLE_APPLICATION_CREDENTIALS', source === 'explicit' ? credentialPath : '');
       if (source === 'cli-user-adc') {

@@ -67,6 +67,16 @@ export const importRouteToGarminAPI = onCall({
     return { status: 'success' as const, providerRouteId: result.providerRouteId };
   } catch (error) {
     if (error instanceof HttpsError) {
+      if (error.code === 'invalid-argument') {
+        try {
+          logger.warn('[importRouteToGarminAPI] File rejected.', {
+            reason: error.message === 'This FIT file looks like an activity, not a route/course. Use activity upload for workouts, or export a course/route file.'
+              ? 'fit_not_route_course'
+              : 'invalid_route_upload',
+            httpStatus: 400,
+          });
+        } catch { /* Diagnostics must preserve the original rejection. */ }
+      }
       throw error;
     }
     if (error instanceof GarminRouteSendPermissionRequiredError) {

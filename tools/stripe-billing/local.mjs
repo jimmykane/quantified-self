@@ -4,6 +4,8 @@ import { readFileSync, writeFileSync, mkdirSync, symlinkSync, existsSync, chmodS
 import { dirname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import paths from '../../shared/local-secret-paths.js';
+import { assertExternalPath } from '../local-functions.mjs';
 
 export const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 export const project = 'demo-stripe-billing';
@@ -14,7 +16,8 @@ export function localEnvironment(values, inherited = process.env) {
     throw new Error('Provide only a Stripe test API key and the local listener signing secret.');
   }
   const env = Object.fromEntries(['PATH', 'HOME', 'TMPDIR', 'JAVA_HOME', 'LANG'].filter(k => inherited[k]).map(k => [k, inherited[k]]));
-  return { ...env, GOOGLE_APPLICATION_CREDENTIALS: resolve(root, '.local/stripe-billing/no-cloud-credentials.json'), GCLOUD_PROJECT: project, GOOGLE_CLOUD_PROJECT: project,
+  const localRuntime = resolve(paths.localSecretPaths(inherited).runtime, 'stripe-billing');
+  return { ...env, GOOGLE_APPLICATION_CREDENTIALS: resolve(localRuntime, 'no-cloud-credentials.json'), GCLOUD_PROJECT: project, GOOGLE_CLOUD_PROJECT: project,
     FIREBASE_CONFIG: JSON.stringify({ projectId: project, storageBucket: `${project}.appspot.com` }),
     FIRESTORE_EMULATOR_HOST: '127.0.0.1:8181', FIREBASE_AUTH_EMULATOR_HOST: '127.0.0.1:9191',
     FIREBASE_STORAGE_EMULATOR_HOST: '127.0.0.1:9291', FUNCTIONS_EMULATOR: 'true', QS_BILLING_LOCAL: 'true',
@@ -22,14 +25,16 @@ export function localEnvironment(values, inherited = process.env) {
     STRIPE_SECRET_KEY: values.STRIPE_BILLING_KEY, STRIPE_ADMIN_BILLING_KEY: values.STRIPE_BILLING_KEY,
     STRIPE_BILLING_WEBHOOK_SECRET: values.STRIPE_BILLING_WEBHOOK_SECRET };
 }
-export function readLocalEnvironment() {
-  const text = readFileSync(resolve(root, 'functions/.secret.billing-test.local'), 'utf8');
+export function readLocalEnvironment(environment = process.env) {
+  const file = paths.localSecretPaths(environment).billing;
+  assertExternalPath(file);
+  const text = readFileSync(file, 'utf8');
   const values = Object.fromEntries(text.split(/\r?\n/).filter(l => l.trim() && !l.trim().startsWith('#')).map(line => {
     const match = /^(STRIPE_BILLING_KEY|STRIPE_BILLING_WEBHOOK_SECRET)=(\S+)$/.exec(line.trim());
     if (!match) throw new Error('Unexpected local credential entry.');
     return [match[1], match[2]];
   }));
-  const env = localEnvironment(values);
+  const env = localEnvironment(values, environment);
   mkdirSync(dirname(env.GOOGLE_APPLICATION_CREDENTIALS), { recursive: true, mode: 0o700 });
   // Override well-known user ADC as well as inherited variables. This deliberately
   // invalid local-only credential cannot authenticate to a hosted Google service.
@@ -119,9 +124,9 @@ async function main() {
     if (process.argv.length !== 4) throw new Error('exec requires one quoted local test command.');
     args.push(process.argv[3]);
   }
-  const child = spawn('firebase', args, { env, cwd: root, stdio: 'inherit' });
+  const child = spawn(process.execPath, [resolve(root, 'tools/firebase-cli.mjs'), ...args], { env, cwd: root, stdio: 'inherit' });
   child.on('exit', code => { process.exitCode = code ?? 1; });
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(() => {
-  console.error('Local billing setup failed. Verify Node 22, the compiled backend, and the ignored test credential file.'); process.exitCode = 1;
+  console.error('Local billing setup failed. Verify Node 22, the compiled backend, and the external billing-test profile.'); process.exitCode = 1;
 });

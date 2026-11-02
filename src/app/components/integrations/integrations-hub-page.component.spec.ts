@@ -55,6 +55,14 @@ describe('IntegrationsHubPageComponent', () => {
     expect(providerFlow.hasAttribute('data-nosnippet')).toBe(true);
   });
 
+  it('explains Pro requirements beside the free signup action', () => {
+    const text = fixture.nativeElement.querySelector('.hero-section').textContent as string;
+    expect(text).toContain('activity or route delivery require Pro');
+    expect(text).toContain('start free with manual file uploads and analysis');
+    expect(text).toContain('provider permissions and compatibility still apply');
+    expect(text).toContain('Get Started Free');
+  });
+
   it('should link to each provider integration page', () => {
     const links = Array.from(fixture.nativeElement.querySelectorAll('a')) as HTMLAnchorElement[];
     const hrefs = links.map(link => link.getAttribute('href') ?? '');

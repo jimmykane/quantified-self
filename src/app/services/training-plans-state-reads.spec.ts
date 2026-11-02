@@ -1,3 +1,4 @@
+import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { TrainingRestDaysService } from './training-rest-days.service';
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom, of, Subject } from 'rxjs';
@@ -36,9 +37,21 @@ describe('current Training schedule-state reads', () => {
     vi.mocked(collectionData).mockReturnValue(of([]));
     vi.mocked(getDoc).mockImplementation(async () => ({ data: () => serverState }) as Awaited<ReturnType<typeof getDoc>>);
     TestBed.configureTestingModule({ providers: [TrainingPlansService, { provide: TrainingRestDaysService, useValue: { watchRange: () => of([]), changes$: of() } },
-      { provide: Firestore, useValue: { app } }, { provide: AppFunctionsService, useValue: {} },
+      { provide: Firestore, useValue: { app } }, { provide: AppFunctionsService, useValue: { call: vi.fn().mockResolvedValue({ data: { deliveryOutcomes: [] } }) } },
       { provide: BrowserCompatibilityService, useValue: {} }] });
     service = TestBed.inject(TrainingPlansService);
+  });
+
+  it('sends approved destinations with creation in one existing callable, leaving the base request untouched', async () => {
+    const request = { mutationId: 'approval', expectedRevisions: [{ scope: 'state' as const, id: 'current' as const, revision: 0 }],
+      operation: { kind: 'create-workout' as const, workoutId: 'w', planId: null, localDate: '2026-11-02', title: 'Easy run',
+        confirmPlanRangeExtension: false, structure: { version: 1 as const, sport: ActivityTypes.Running,
+          nodes: [{ kind: 'step' as const, id: 'work', purpose: 'work' as const, ending: { kind: 'time' as const, seconds: 600 }, targets: [] }] } } };
+    const delivery = { providers: ['garmin' as const], timeZone: 'UTC' }, current = () => true;
+    expect(await service.mutateWithDelivery(request, delivery, current)).toEqual({ deliveryOutcomes: [] });
+    expect(TestBed.inject(AppFunctionsService).call).toHaveBeenCalledExactlyOnceWith('mutateTrainingSchedule',
+      { ...request, deliveryAfterCreate: delivery }, { canExecute: current });
+    expect(request).not.toHaveProperty('deliveryAfterCreate');
   });
 
   it('verifies an incorrect missing watch through the same app before publishing any revision', async () => {

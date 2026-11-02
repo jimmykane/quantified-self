@@ -25,6 +25,17 @@ channel, independently of the Firebase mail extension.
 
 ## Outcome semantics and privacy
 
+Suunto, COROS and Wahoo activity-history imports no longer enter automatic outbound delivery. They keep their normal
+inbound import outcome; suppressing fan-out is not a delivery failure or a skipped import. Explicit historical sends
+still use this bundle's existing historical mode. Ordinary feed imports, already queued sends, retries and
+accepted operations are unchanged. Coverage is **covered/unchanged** across #829, #832 and #847: only admission volume
+changes, with no new worker outcome, telemetry label, probe, queue, schedule or alert resource.
+
+Garmin's history-start cutoff likewise changes only new automatic-send eligibility. Earlier recordings still complete
+their normal inbound import, and explicit sending remains available. Suppression is neither a skipped import nor an
+attempted/failed delivery. The callback queue keeps its first admission decision through duplicates/retries, including
+after later history requests advance the cutoff. Existing #829/#832/#847 coverage remains **covered/unchanged**.
+
 The versioned `[ActivityDelivery]` structured events contain fixed source,
 destination, mode and outcome categories only. They never include user/account/event
 IDs, titles, original files, provider upload IDs, signed continuation URLs,
@@ -188,12 +199,18 @@ require renewed new-upload entitlement, new-send allowlisting or the automatic r
 setting. They are observed, never reset or resent. Missing native depth/resume
 information is unknown.
 
-Wahoo application-quota cooldowns are **covered/unchanged**: their guarded retry commits reuse
+Wahoo application-quota cooldowns are **covered/unchanged**: early guarded wait commits and later API-quota retry commits reuse
 `expected_contention`, scheduled workers emit `deferred` (or `provider_pending` for an existing accepted poll), and
 future dispatch markers stay outside actionable backlog samples. The dispatcher pages past these waits even before
 an upload ID exists. Existing failure filters exclude these outcomes; exhausted budgets still commit new-DLQ or
 manual-reconciliation failures, and enqueue/storage failures remain visible. Actual upstream 429s retain numeric-only
 WARNING diagnostics. No metric/filter/label, dashboard, alert threshold or production Monitoring apply changes.
+Early known waits consume no business retry/error entry and perform no processing-metadata, source-file or fingerprint
+work. They still start a worker; its existing latency/attempt signals measure that remaining work. Compare those
+signals, committed retries, actual 429s, native queue depth and confirmed deliveries after deployment, rather than
+treating fewer retries or HTTP acknowledgements as completed sends or a measured euro saving. Cooldown read/marker
+and delayed-handoff failures (including a refused handoff to the current active task) remain failed worker attempts;
+accepted IDs and status-only reconciliation remain intact. No task identity enters metric labels.
 
 Each eligible row is re-read in a read-only transaction with owner, deletion,
 settings and connection snapshots; a changed queue revision is excluded. Token

@@ -373,7 +373,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     chips: ['Training readiness', 'Sport-aware training mix', 'Gravity MTB', 'Context summaries', 'Durability', 'Best build'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
-      routeAction('Training Help', '/help', 'stroked', undefined, 'getting-started'),
+      routeAction('Training Help', '/help', 'stroked', undefined, 'training-analysis'),
     ],
     sections: [
       {
@@ -477,7 +477,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Explore Integrations', '/integrations'),
       routeAction('Plan Future Workouts', '/features/training-plans'),
-      routeAction('Training Help', '/help', 'stroked', undefined, 'getting-started'),
+      routeAction('Training Help', '/help', 'stroked', undefined, 'training-analysis'),
     ],
   },
   trainingPlans: {

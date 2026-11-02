@@ -1,11 +1,9 @@
 import * as admin from 'firebase-admin';
 import Stripe from 'stripe';
-import * as dotenv from 'dotenv';
-import { resolve } from 'path';
+import './register-local-env';
 import { STRIPE_API_VERSION } from '../stripe/client';
 
 // Load environment variables
-dotenv.config({ path: resolve(__dirname, '../../../extensions/firestore-stripe-payments.env') });
 
 const stripeKey = process.env.STRIPE_API_KEY;
 if (!stripeKey) {

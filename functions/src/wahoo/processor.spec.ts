@@ -184,8 +184,9 @@ describe('processWahooWorkoutQueueItem', () => {
       .toBeLessThan(mocks.enqueueActivitySyncAfterEventPersistence.mock.invocationCallOrder[0]);
   });
 
-  it('downloads, parses, rechecks its lease, writes through setEvent, and marks processed', async () => {
-    await expect(processWahooWorkoutQueueItem(queueItem)).resolves.toBe('processed');
+  it.each([undefined, true])('persists and completes the workout while passing history=%s to automatic delivery', async fromHistory => {
+    const item = { ...queueItem, fromHistory, retryCount: fromHistory ? 3 : 0 };
+    await expect(processWahooWorkoutQueueItem(item)).resolves.toBe('processed');
     expect(mocks.retainWahooTrainingCompletion).toHaveBeenCalledWith(
       mocks.firestore, 'firebase-1', 'event-1', expect.any(Object), 'workout-1', undefined, undefined,
       'summary-1', expect.any(Array), undefined, Buffer.from('valid-fit'),
@@ -224,12 +225,13 @@ describe('processWahooWorkoutQueueItem', () => {
         assertWriteAuthorizationInTransaction: expect.any(Function),
       }),
     );
-    expect(mocks.claimedRevisionCurrent).toHaveBeenCalledWith(queueItem, expect.any(String));
+    expect(mocks.claimedRevisionCurrent).toHaveBeenCalledWith(item, expect.any(String));
     expect(mocks.enqueueActivitySyncAfterEventPersistence).toHaveBeenCalledWith({
       userID: 'firebase-1',
       eventID: 'event-1',
       sourceServiceName: ACTIVITY_SYNC_ROUTES[ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_SuuntoApp].sourceServiceName,
       sourceActivityID: 'workout-1',
+      fromHistory: fromHistory === true,
       setEventResult: expect.objectContaining({
         eventID: 'event-1',
         savedOriginalFiles: [expect.objectContaining({
@@ -238,7 +240,7 @@ describe('processWahooWorkoutQueueItem', () => {
       }),
       sourceFileData: Buffer.from('valid-fit'),
     });
-    expect(mocks.completeRevision).toHaveBeenCalledWith(queueItem, expect.any(String), {}, true);
+    expect(mocks.completeRevision).toHaveBeenCalledWith(item, expect.any(String), {}, true);
   });
 
   it('skips an inbound row that belongs to a different retained Wahoo account', async () => {

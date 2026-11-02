@@ -17,9 +17,44 @@ import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 
 describe('help.content', () => {
+  it('explains how to restart a rejected Suunto sign-in without claiming disconnection', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
+    expect(copy).toContain('Suunto email and password instead of Facebook');
+    expect(copy).toContain('does not mean an existing connection was removed');
+  });
+
+  it('separates Suunto, COROS and Wahoo history imports from automatic forwarding', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
+    for (const phrase of ['For **Suunto, COROS and Wahoo**', 'both manual imports and history selected when connecting',
+      'without automatically sending them to other providers', '**Send past activities** under the destination',
+      'including workouts uploaded late', 'there is no recording-age cutoff',
+      'Garmin uses a separate recorded-date cutoff', 'does not cancel deliveries already queued']) {
+      expect(copy).toContain(phrase);
+    }
+  });
+
+  it('explains Garmin history cutoffs, delayed workouts and preserved queued deliveries', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
+    for (const phrase of ['**Garmin activity history**', "fixed cutoff at the import's start time",
+      'recordings at or after it still follow your enabled sending directions', 'A normal workout uploaded late',
+      '**Send past activities** to send it explicitly', 'keep their original sending decision',
+      'Sleep and Health history do not change this cutoff']) expect(copy).toContain(phrase);
+  });
+
+  it('distinguishes the route picker from recorded workout upload and Garmin delivery', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'uploads-and-imports')!.content;
+    expect(copy).toContain('GPX routes/tracks and FIT courses, not recorded workout FITs');
+    expect(copy).toContain('Use activity upload for recorded workouts');
+    expect(copy).toContain('QS does not send completed activities to Garmin');
+  });
+
   it('explains explicit daily approval, delivery recovery and the unchanged generation allowance', () => {
     const help = HELP_SECTIONS.map(section => section.content).join('\n');
     for (const text of ['**Send after approval**', '**Add & send** saves the reviewed Standalone workout',
+      'Provider selection stays in Preferences', '**Skip sending today**',
+      'Standard Suunto strength manual transitions are informational', 'unsupported mappings and adjustments needing extra approval require Review sync',
+      'New daily suggestions consider the selected services', 'Changing providers keeps today’s cached suggestion',
+      'the existing queue continues even if you close the tab or lose the response',
       'Destinations can change without using another AI suggestion', 'Rest days are only marked in Calendar and send nothing',
       'A sending problem keeps the saved workout', 'Provider acceptance does not confirm arrival on your watch']) {
       expect(help).toContain(text);

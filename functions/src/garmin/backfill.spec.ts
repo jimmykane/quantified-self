@@ -7,6 +7,8 @@ import * as logger from 'firebase-functions/logger';
 import { startManualActivityHistory } from '../connection-history/manual-activity';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { HttpsError } from 'firebase-functions/v2/https';
+import type { HistoryExecution } from '../connection-history/execution';
+import { withHistoryExecution } from '../connection-history/context';
 
 vi.mock('../connection-history/manual-activity', () => ({ startManualActivityHistory: vi.fn() }));
 
@@ -292,6 +294,44 @@ describe('Garmin Backfill', () => {
         const execution = { runId: 'run', tokenPath: 'token', providerUserId: 'account', cooldownStartedAtMs: Date.now(), requiredDocumentFieldValues: [], beforeRequest: vi.fn(), inTransaction: vi.fn(), onQueued: vi.fn() };
         await expect(processGarminBackfill('testUserID', new Date('2026-08-01'), new Date('2026-08-12'), execution)).rejects.toBe(error);
         expect(requestHelper.get).not.toHaveBeenCalled();
+    });
+
+    it('saves the automatic-send cutoff before requesting legacy Garmin history', async () => {
+        const startedAt = Date.now();
+        vi.mocked(requestHelper.get).mockImplementationOnce(async () => {
+            expect(metaState.activitySyncCutoffMs).toBe(startedAt);
+            return {};
+        });
+        await processGarminBackfill('testUserID', new Date('2026-08-01'), new Date('2026-08-10'));
+        expect(requestHelper.get).toHaveBeenCalledOnce();
+        expect(metaState.activitySyncCutoffMs).toBe(startedAt);
+    });
+
+    it('keeps one cutoff across coordinator windows and retries', async () => {
+        const startedAt = Date.now() - 3600000;
+        const execution: HistoryExecution = {
+            userID: 'testUserID', serviceName: ServiceNames.GarminAPI, runId: 'run',
+            tokenPath: 'token', providerUserId: 'account', cooldownStartedAtMs: startedAt,
+            requiredDocumentFieldValues: [], beforeRequest: vi.fn(), inTransaction: vi.fn(), onQueued: vi.fn(),
+        };
+        metaState.connectionHistoryReservation = execution.runId;
+        await withHistoryExecution(execution, () => processGarminBackfill('testUserID', new Date('2026-08-01'), new Date('2026-08-05'), execution));
+        vi.setSystemTime(Date.now() + 600000);
+        await withHistoryExecution(execution, () => processGarminBackfill('testUserID', new Date('2026-08-06'), new Date('2026-08-10'), execution));
+        expect(requestHelper.get).toHaveBeenCalledTimes(2);
+        expect(metaState.activitySyncCutoffMs).toBe(startedAt);
+    });
+
+    it('does not move a newer cutoff backwards when an older run resumes', async () => {
+        const latestCutoff = Date.now();
+        metaState.activitySyncCutoffMs = latestCutoff;
+        const execution: HistoryExecution = {
+            userID: 'testUserID', serviceName: ServiceNames.GarminAPI, runId: 'run',
+            tokenPath: 'token', providerUserId: 'account', cooldownStartedAtMs: latestCutoff - 3600000,
+            requiredDocumentFieldValues: [], beforeRequest: vi.fn(), inTransaction: vi.fn(), onQueued: vi.fn(),
+        };
+        await withHistoryExecution(execution, () => processGarminBackfill('testUserID', new Date('2026-08-01'), new Date('2026-08-10'), execution));
+        expect(metaState.activitySyncCutoffMs).toBe(latestCutoff);
     });
 
     it('should throw permission-denied if throttled', async () => {

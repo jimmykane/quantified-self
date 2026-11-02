@@ -4,6 +4,7 @@ import * as admin from 'firebase-admin';
 import { initializeApp as initializeSignerApp, type App } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import * as logger from 'firebase-functions/logger';
+import { localSecretPaths } from '../../shared/local-secret-paths';
 
 // Firebase still advertises the legacy `.appspot.com` default in
 // FIREBASE_CONFIG. Storage writes intentionally use the migrated EU bucket.
@@ -34,20 +35,23 @@ function emulatorHostedAuthSigner(): App | undefined {
   // Only token signing uses this key. The default app retains ADC for Auth
   // lookups, Firestore, Storage, and every other backend operation.
   const configuredPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-  // The Functions emulator runs with functions/ as its working directory.
-  const repositoryKeyPath = resolve('../quantified-self-io-firebase-adminsdk.json');
-  let credentialPath = configuredPath ? resolve(configuredPath) : repositoryKeyPath;
+  const externalKeyPath = localSecretPaths().signing;
+  let credentialPath = configuredPath ? resolve(configuredPath) : externalKeyPath;
   if (!existsSync(credentialPath)) {
     if (configuredPath) throw new Error('The configured GOOGLE_APPLICATION_CREDENTIALS file is unavailable.');
+    if (process.env.QS_LOCAL_SIGNING_KEY_FILE) throw new Error('The configured local signing key is unavailable.');
     return undefined;
   }
 
   let credential = readLocalCredential(credentialPath);
   if (configuredPath && credential.type === 'authorized_user') {
     // Firebase CLI can inject its user ADC here. Keep that identity on the
-    // default app while using the optional repository key solely for signing.
-    credentialPath = repositoryKeyPath;
-    if (!existsSync(credentialPath)) return undefined;
+    // default app while using the optional external key solely for signing.
+    credentialPath = externalKeyPath;
+    if (!existsSync(credentialPath)) {
+      if (process.env.QS_LOCAL_SIGNING_KEY_FILE) throw new Error('The configured local signing key is unavailable.');
+      return undefined;
+    }
     credential = readLocalCredential(credentialPath);
   }
   // Impersonated and external-account ADC keep their normal SDK signer.

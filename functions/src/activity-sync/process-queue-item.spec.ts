@@ -71,6 +71,7 @@ const {
   mockRecordSuccessfulSuuntoActivityUploadForQueueItem,
   mockUploadActivityFileToWahoo,
   mockGetWahooActivityUploadStatus,
+  mockGetWahooRateLimitCooldownSeconds,
   mockUploadActivityFileToCOROS,
   mockGetCOROSActivityUploadStatus,
   mockGetActiveCOROSTokenSnapshot,
@@ -123,6 +124,7 @@ const {
     mockRecordSuccessfulSuuntoActivityUploadForQueueItem: vi.fn(),
     mockUploadActivityFileToWahoo: vi.fn(),
     mockGetWahooActivityUploadStatus: vi.fn(),
+    mockGetWahooRateLimitCooldownSeconds: vi.fn(),
     mockUploadActivityFileToCOROS: vi.fn(),
     mockGetCOROSActivityUploadStatus: vi.fn(),
     mockGetActiveCOROSTokenSnapshot: vi.fn(),
@@ -194,6 +196,7 @@ vi.mock('../queue-utils', () => ({
     Skipped: 'SKIPPED',
     Deferred: 'DEFERRED',
     ProviderStatusPending: 'PROVIDER_STATUS_PENDING',
+    ProviderQuotaDeferred: 'PROVIDER_QUOTA_DEFERRED',
     RetryIncremented: 'RETRY_INCREMENTED',
     MovedToDLQ: 'MOVED_TO_DLQ',
     Failed: 'FAILED',
@@ -303,6 +306,11 @@ vi.mock('../wahoo/refresh-recovery', () => ({
   isWahooReconnectRequiredError: mockIsWahooReconnectRequiredError,
 }));
 
+vi.mock('../wahoo/rate-limit', () => ({
+  WAHOO_RATE_LIMIT_MAX_RESET_SECONDS: 86400,
+  getWahooRateLimitCooldownSeconds: mockGetWahooRateLimitCooldownSeconds,
+}));
+
 vi.mock('../coros/activities', () => ({
   uploadActivityFileToCOROS: mockUploadActivityFileToCOROS,
   getCOROSActivityUploadStatus: mockGetCOROSActivityUploadStatus,
@@ -373,6 +381,7 @@ const baseQueueItem: ActivitySyncQueueItemInterface = {
 describe('activity-sync/process-queue-item', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetWahooRateLimitCooldownSeconds.mockReset().mockResolvedValue(0);
     mockActivitySendGet.mockResolvedValue({ exists: true, data: () => ({ state: 'confirmed', expiresAt: Date.now() + 60_000 }) });
     baseQueueItem.ref = createMockActivitySyncQueueItemRef();
     baseQueueItem.dispatchedToCloudTask = null;
@@ -1479,6 +1488,92 @@ describe('activity-sync/process-queue-item', () => {
       9,
     );
     expect(mockUploadActivityFileToWahoo).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([false, true])('defers a known Wahoo cooldown before expensive work without consuming retries (accepted: %s)', async accepted => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem, routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+      retryCount: PROVIDER_MAX_RETRY_COUNT - 1, totalRetryCount: 34,
+      errors: [{ error: 'previous real failure', date: 1 }],
+      ...(accepted ? { destinationUploadID: 'accepted-1', destinationExpectedWorkoutTypeID: 9 } : {}),
+    };
+    mockGetWahooRateLimitCooldownSeconds.mockResolvedValueOnce(7200);
+    const before = Date.now();
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.ProviderQuotaDeferred);
+    expect(queueItem.dispatchedToCloudTask).toBeGreaterThanOrEqual(before + 7_201_000);
+    expect(queueItem.dispatchedToCloudTask).toBeLessThanOrEqual(Date.now() + 7_230_000);
+    expect(queueItem).toMatchObject({ retryCount: PROVIDER_MAX_RETRY_COUNT - 1, totalRetryCount: 34, errors: [{ error: 'previous real failure', date: 1 }] });
+    expect(queueItem.destinationUploadID).toBe(accepted ? 'accepted-1' : undefined);
+    expect(queueItem.destinationExpectedWorkoutTypeID).toBe(accepted ? 9 : undefined);
+    expect(mockSetActivitySyncProcessingMetadata).not.toHaveBeenCalled();
+    expect(mockDownload).not.toHaveBeenCalled();
+    expect(mockRecordActivitySyncOutboundFingerprint).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToWahoo).not.toHaveBeenCalled();
+    expect(mockGetWahooActivityUploadStatus).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledOnce();
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      updateData: { dispatchedToCloudTask: queueItem.dispatchedToCloudTask },
+    }));
+  });
+
+  it('keeps an unaccepted cooldown wait within its workspace send window', async () => {
+    const expiresAt = Date.now() + 60_000;
+    mockActivitySendGet.mockResolvedValueOnce({ data: () => ({ state: 'confirmed', expiresAt }) });
+    mockGetWahooRateLimitCooldownSeconds.mockResolvedValueOnce(86400);
+    const queueItem = { ...baseQueueItem, routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI, sendBatchID: 'batch' };
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.ProviderQuotaDeferred);
+    expect(queueItem.dispatchedToCloudTask).toBe(expiresAt);
+    const params = mockUpdateQueueItemIfUserActive.mock.calls[0][0];
+    expect(params.isAuthorizedInTransaction).toBeTypeOf('function');
+    expect(await params.isAuthorizedInTransaction({ doc: () => ({}) }, { get: async () => ({ data: () => ({ state: 'confirmed', expiresAt, stopped: true }) }) })).toBe(false);
+  });
+
+  it.each(['read', 'write'])('retries a failed cooldown %s without changing delivery state or business retries', async phase => {
+    const queueItem = { ...baseQueueItem, routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI, destinationUploadID: 'accepted-1' };
+    if (phase === 'read') mockGetWahooRateLimitCooldownSeconds.mockRejectedValueOnce(new Error('synthetic failure'));
+    else {
+      mockGetWahooRateLimitCooldownSeconds.mockResolvedValueOnce(300);
+      mockUpdateQueueItemIfUserActive.mockRejectedValueOnce(new Error('synthetic failure'));
+    }
+    await expect(processActivitySyncQueueItem(queueItem)).rejects.toThrow('synthetic failure');
+    expect(queueItem.destinationUploadID).toBe('accepted-1');
+    expect(queueItem.dispatchedToCloudTask).toBeNull();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+    expect(mockGetWahooActivityUploadStatus).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncFailedMetadata).not.toHaveBeenCalled();
+  });
+
+  it('leaves other destinations independent of the Wahoo cooldown', async () => {
+    mockGetWahooRateLimitCooldownSeconds.mockRejectedValueOnce(new Error('must not read'));
+    expect(await processActivitySyncQueueItem({ ...baseQueueItem })).toBe(QueueResult.Processed);
+    expect(mockGetWahooRateLimitCooldownSeconds).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToSuunto).toHaveBeenCalledOnce();
+  });
+
+  it.each(['disconnect_pending', 'reconnect_required'])('honors Wahoo %s before considering the quota wait', async connectionState => {
+    mockGetServiceConnectionMeta.mockResolvedValue({ connectionState });
+    mockGetWahooRateLimitCooldownSeconds.mockResolvedValue(86400);
+    const queueItem = { ...baseQueueItem, routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI };
+    expect(await processActivitySyncQueueItem(queueItem)).toBe(QueueResult.Deferred);
+    expect(mockGetWahooRateLimitCooldownSeconds).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToWahoo).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('keeps an active Wahoo provider claim ahead of quota waits (accepted: %s)', async accepted => {
+    const queueItem = { ...baseQueueItem, routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI, providerOperationStartedAt: Date.now(),
+      dispatchedToCloudTask: PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER,
+      ...(accepted ? { destinationUploadID: 'accepted-1' } : {}) };
+    await expect(processActivitySyncQueueItem(queueItem)).rejects.toThrow('still in flight');
+    expect(mockGetWahooRateLimitCooldownSeconds).not.toHaveBeenCalled();
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
   });
 
   it.each([false, true])('retains a delayed Wahoo quota retry (already accepted: %s)', async accepted => {

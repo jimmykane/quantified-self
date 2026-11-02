@@ -34,6 +34,7 @@ import { SummaryDisclosureComponent } from '../shared/summary-disclosure/summary
 import { AssistantQuotaService } from '../../services/assistant-quota.service';
 import type { AssistantQuotaStatus } from '@shared/assistant.types';
 import { dailyWorkoutDeliveryPreferences, DAILY_WORKOUT_DELIVERY_SERVICES, type DailyWorkoutDeliveryPreferences } from '../../helpers/daily-workout-delivery.helper';
+import type { CreatedWorkoutDeliveryOutcomeV1, TrainingScheduleSaveResponseV1 } from '@shared/training-workout-delivery-save';
 import { PLANNED_WORKOUT_PROVIDER_IDS, PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1, type PlannedWorkoutProviderId } from '@shared/planned-workout-providers';
 import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
 import { buildDestinationProviderPresentation } from '../../helpers/provider-presentation.helper';
@@ -82,7 +83,7 @@ export class DayWorkoutDialogComponent {
   readonly saveUncertain = signal(false);
   readonly savedWorkoutId = signal<string | null>(null);
   readonly dailyDelivery = signal(dailyWorkoutDeliveryPreferences(this.data.dailyDelivery));
-  readonly showDeliveryOptions = signal(this.data.mode === 'preferences');
+  readonly skipSendingToday = signal(false);
   readonly deliveryOutcomeText = signal<string | null>(null);
   private readonly savedAcknowledgement = signal<ScheduledWorkoutV1 | null>(null);
   private savedAcknowledgementRevision: number | null = null;
@@ -143,13 +144,13 @@ export class DayWorkoutDialogComponent {
     && workout.localDate === this.controls().localDate
     && [null, this.schedule()?.state.activePlanId, this.controls().destinationPlanId].includes(workout.planId)) ?? []);
   readonly user = toSignal(this.users.user$, { initialValue: this.users.user() });
-  // Only an open daily-preferences/review dialog observes connections; Today keeps its existing read footprint.
+  // Only Preferences and delivery-enabled daily reviews observe connections; Today adds no listener.
   private readonly deliveryConnections = toSignal(this.users.user$.pipe(
     distinctUntilChanged((previous, current) => previous?.uid === current?.uid),
     switchMap(user => user?.uid === this.data.ownerUid
-    && (this.data.mode === 'preferences' || this.data.dailyDelivery !== undefined && this.data.initialResult?.kind === 'workout')
+    && (this.data.mode === 'preferences' || this.dailyDelivery().enabled && this.data.initialResult?.kind === 'workout')
     ? this.users.watchActivityServiceConnectionState(user).pipe(catchError(() => of(null))) : of(null))), { initialValue: null });
-  readonly showDailyDelivery = computed(() => this.data.mode === 'preferences' || this.data.dailyDelivery !== undefined
+  readonly showDailyDelivery = computed(() => this.data.mode === 'preferences' || this.dailyDelivery().enabled && this.data.dailyDelivery !== undefined
     && this.result()?.kind === 'workout' && this.result()?.requestId === this.data.initialResult?.requestId
     && this.controls().destinationPlanId === null);
   readonly deliveryRows = computed(() => PLANNED_WORKOUT_PROVIDER_IDS
@@ -159,7 +160,7 @@ export class DayWorkoutDialogComponent {
       connected: this.delivery.isReady(provider) && this.deliveryConnections()?.[DAILY_WORKOUT_DELIVERY_SERVICES[provider]] === true,
       selected: this.dailyDelivery().providers.includes(provider) })));
   readonly deliveryLabel = computed(() => this.dailyDelivery().providers.map(provider => PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label).join(', '));
-  readonly sendAfterApproval = computed(() => this.showDailyDelivery() && this.dailyDelivery().enabled);
+  readonly sendAfterApproval = computed(() => this.showDailyDelivery() && this.dailyDelivery().enabled && !this.skipSendingToday());
   readonly deliveryValid = computed(() => !this.sendAfterApproval() || this.dailyDelivery().providers.length > 0
     && this.dailyDelivery().providers.every(provider => this.deliveryRows().some(row => row.provider === provider && row.connected)));
   readonly review = computed(() => { const draft = this.result()?.draft;
@@ -301,17 +302,21 @@ export class DayWorkoutDialogComponent {
     if (sport) this.set('sport', sport);
   }
   setDeliveryEnabled(enabled: boolean): void {
-    if (this.busy() || this.saveUncertain() || this.dailyDelivery().enabled === enabled) return;
+    if (this.data.mode !== 'preferences' || this.busy() || this.dailyDelivery().enabled === enabled) return;
     this.dailyDelivery.update(value => ({ ...value, enabled }));
-    if (enabled && !this.dailyDelivery().providers.length) this.showDeliveryOptions.set(true);
     this.haptics.selection();
   }
   selectDeliveryProvider(provider: PlannedWorkoutProviderId, selected: boolean): void {
     const row = this.deliveryRows().find(row => row.provider === provider);
-    if (!row || this.busy() || this.saveUncertain() || row.selected === selected || selected && !row.connected) return;
+    if (this.data.mode !== 'preferences' || !row || this.busy() || row.selected === selected || selected && !row.connected) return;
     this.dailyDelivery.update(value => ({ ...value, providers: PLANNED_WORKOUT_PROVIDER_IDS.filter(id =>
       id === provider ? selected : value.providers.includes(id)) }));
     this.haptics.selection();
+  }
+  setSkipSendingToday(skip: boolean): void {
+    if (this.data.mode === 'preferences' || !this.showDailyDelivery() || this.savedWorkoutId()
+      || this.busy() || this.saveUncertain() || this.skipSendingToday() === skip) return;
+    this.skipSendingToday.set(skip); this.haptics.selection();
   }
   set<K extends keyof DayWorkoutControls>(key: K, value: DayWorkoutControls[K], feedback = true): void {
     if (this.savedWorkoutId() || this.busy() || this.saveUncertain() || JSON.stringify(this.controls()[key]) === JSON.stringify(value)) return;
@@ -424,7 +429,10 @@ export class DayWorkoutDialogComponent {
         if (!confirmed || !this.current(sequence)) return;
         command = this.command = { ...command, operation: { ...command.operation, confirmPlanRangeExtension: true } };
       }
-      const response = await this.plansService.mutate(command, () => this.current(sequence));
+      const current = () => this.current(sequence);
+      const response: TrainingScheduleSaveResponseV1 = approvedProviders.length
+        ? await this.plansService.mutateWithDelivery(command, { providers: approvedProviders, timeZone: this.controls().timeZone }, current)
+        : await this.plansService.mutate(command, current);
       if (this.current(sequence) && command.operation.kind === 'create-workout') {
         const id = command.operation.workoutId;
         this.savedAcknowledgementRevision = response.state?.revision ?? null;
@@ -435,7 +443,7 @@ export class DayWorkoutDialogComponent {
         this.syncSubscription?.unsubscribe();
         if (this.result()?.requestId === this.data.initialResult?.requestId) this.data.onAdded?.('workout');
         if (approvedProviders.length) {
-          await this.sendSavedWorkout(sequence, response.workouts?.find(workout => workout.id === id), response.state?.revision, approvedProviders);
+          this.showSavedDeliveryOutcome(approvedProviders, response.deliveryOutcomes);
         }
         if (this.current(sequence)) this.haptics.success();
       }
@@ -451,24 +459,12 @@ export class DayWorkoutDialogComponent {
       this.haptics.error();
     } finally { if (this.current(sequence)) { this.busy.set(null); this.ref.disableClose = this.saveUncertain(); } }
   }
-  private async sendSavedWorkout(sequence: number, workout: ScheduledWorkoutV1 | undefined,
-    scheduleRevision: number | undefined, providers: PlannedWorkoutProviderId[]): Promise<void> {
-    if (!workout || scheduleRevision === undefined) {
-      this.deliveryOutcomeText.set('Your workout is saved. Reload its schedule before sending to the selected services.'); return;
-    }
-    this.deliveryOutcomeText.set('Checking compatibility and sending to your selected services…');
-    try {
-      const outcomes = await this.delivery.sendApprovedWorkout(this.data.ownerUid, workout, scheduleRevision,
-        providers, this.controls().timeZone, () => this.current(sequence));
-      if (!this.current(sequence)) return;
-      const queued = outcomes.filter(outcome => outcome.state === 'queued')
-        .map(outcome => PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[outcome.provider].label);
-      const review = providers.filter(provider => !outcomes.some(outcome => outcome.provider === provider && outcome.state === 'queued'))
-        .map(provider => PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label);
-      this.deliveryOutcomeText.set([queued.length ? `Delivery queued for ${queued.join(', ')}. Sync your device after the service accepts it.` : '',
-        review.length ? `Your workout is saved. Review sync for ${review.join(', ')} to check compatibility or an unfinished send.` : ''].filter(Boolean).join(' '));
-    } catch {
-      if (this.current(sequence)) this.deliveryOutcomeText.set('Your workout is saved. Review sync to check an unfinished send before trying again.');
-    }
+  private showSavedDeliveryOutcome(providers: PlannedWorkoutProviderId[], outcomes: readonly CreatedWorkoutDeliveryOutcomeV1[] = []): void {
+    const queued = providers.filter(provider => outcomes.some(outcome => outcome.provider === provider && outcome.state === 'queued'))
+      .map(provider => PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label);
+    const review = providers.filter(provider => !outcomes.some(outcome => outcome.provider === provider && outcome.state === 'queued'))
+      .map(provider => PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label);
+    this.deliveryOutcomeText.set([queued.length ? `Delivery queued for ${queued.join(', ')}. Sync your device after the service accepts it.` : '',
+      review.length ? `Your workout is saved. Review sync for ${review.join(', ')} to check compatibility or an unfinished send.` : ''].filter(Boolean).join(' '));
   }
 }

@@ -1,32 +1,33 @@
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { config as loadDotenv } from 'dotenv';
-
-export const LOCAL_FUNCTION_ENV_FILES = [
-  '.secret.local',
-  '.env.local',
-  '.env',
-] as const;
+import { localSecretPaths } from '../../../shared/local-secret-paths';
 
 /**
- * Loads local script configuration without overriding a value from a
- * higher-precedence file or the invoking shell. Deployed Functions never use
- * this helper; Secret Manager values are injected by their endpoint bindings.
+ * Loads one external profile for an explicitly invoked operational script.
+ * Imports, ordinary tests, CI and deployed Functions never load local secrets.
  */
 export function loadLocalFunctionEnvironment(
-  baseDirectory = resolve(__dirname, '../..'),
+  file: string | undefined = undefined,
   targetEnvironment: NodeJS.ProcessEnv = process.env,
 ): void {
-  for (const fileName of LOCAL_FUNCTION_ENV_FILES) {
-    const path = resolve(baseDirectory, fileName);
-    if (!existsSync(path)) continue;
-    loadDotenv({
+  if (targetEnvironment.CI === 'true' || targetEnvironment.K_SERVICE
+    || targetEnvironment.FUNCTION_NAME
+    || targetEnvironment.FUNCTION_TARGET && targetEnvironment.FUNCTIONS_EMULATOR !== 'true') return;
+  const configured = file || targetEnvironment.QS_LOCAL_SECRETS_FILE;
+  const path = localSecretPaths({ ...targetEnvironment, ...(file ? { QS_LOCAL_SECRETS_FILE: file } : {}) }).functions;
+  if (!existsSync(path)) {
+    if (configured) throw new Error('The configured external local secrets file is unavailable.');
+    return;
+  }
+  try {
+    const result = loadDotenv({
       path,
       override: false,
       processEnv: targetEnvironment as Record<string, string>,
       quiet: true,
     });
+    if (result.error) throw result.error;
+  } catch {
+    throw new Error('Unable to load the external local secrets file.');
   }
 }
-
-loadLocalFunctionEnvironment();

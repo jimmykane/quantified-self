@@ -8,6 +8,10 @@ import * as logger from 'firebase-functions/logger';
 import { HistoryLifecycleChangedError, type HistoryExecution } from './connection-history/execution';
 
 const mockGetAll = vi.hoisted(() => vi.fn());
+const mockEnqueueActivitySyncJobsForImportedEvent = vi.hoisted(() => vi.fn().mockResolvedValue({ queued: 1, skippedByReason: {} }));
+vi.mock('./activity-sync/enqueue-imported-event', () => ({
+    enqueueActivitySyncJobsForImportedEvent: mockEnqueueActivitySyncJobsForImportedEvent,
+}));
 
 const mockGetServiceConnectionMeta = vi.hoisted(() => vi.fn());
 vi.mock('./service-connection-meta', async importOriginal => ({
@@ -2378,7 +2382,7 @@ describe('queue', () => {
             expect(mockDocRef.update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
 
-        it('addToQueueForSuunto should dispatch duplicate unprocessed queue items that have no dispatch marker', async () => {
+        it.each([undefined, true])('Suunto redispatch preserves duplicate origin (fromHistory=%s)', async fromHistory => {
             const alreadyExistsError: any = new Error('ALREADY_EXISTS');
             alreadyExistsError.code = 6;
             mockDocRef.create.mockRejectedValueOnce(alreadyExistsError);
@@ -2386,6 +2390,7 @@ describe('queue', () => {
                 exists: true,
                 data: () => ({
                     id: 'user1-work1',
+                    fromHistory,
                     dateCreated: 123456,
                     processed: false,
                     retryCount: 0,
@@ -2578,7 +2583,7 @@ describe('queue', () => {
             expect(doc.set).not.toHaveBeenCalled();
         });
 
-        it('addToQueueForGarmin should insert item with activityFileID based ID', async () => {
+        it.each([undefined, true])('Garmin queue creation retains its sending decision (suppressed=%s)', async suppressAutomaticActivitySync => {
             const queueItem = {
                 userID: 'u1',
                 startTimeInSeconds: 123,
@@ -2588,6 +2593,7 @@ describe('queue', () => {
                 token: 't1',
                 userAccessToken: 'ut1',
                 callbackURL: 'cb1',
+                suppressAutomaticActivitySync,
             };
             const result = await addToQueueForGarmin(queueItem);
             expect(result.id).toBe('mock-doc-id');
@@ -2598,6 +2604,7 @@ describe('queue', () => {
                 activityFileID: 'file123',
                 firebaseUserID: 'mock-user-id',
             }));
+            expect(doc.create.mock.calls[0][0].suppressAutomaticActivitySync === true).toBe(suppressAutomaticActivitySync === true);
             expect(doc.set).not.toHaveBeenCalled();
         });
 
@@ -2672,7 +2679,9 @@ describe('queue', () => {
             expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
         });
 
-        it('addToQueueForGarmin should refresh duplicate pending callback fields without resetting lifecycle state', async () => {
+        it.each([
+            { stored: true, incoming: undefined }, { stored: undefined, incoming: true },
+        ])('Garmin duplicate refresh preserves its first sending decision ($stored / $incoming)', async ({ stored, incoming }) => {
             const alreadyExistsError: any = new Error('ALREADY_EXISTS');
             alreadyExistsError.code = 6;
             mockDocRef.create.mockRejectedValueOnce(alreadyExistsError);
@@ -2693,6 +2702,7 @@ describe('queue', () => {
                     userAccessToken: 'old-access-token',
                     activityFileType: 'TCX',
                     startTimeInSeconds: 111,
+                    suppressAutomaticActivitySync: stored,
                 }),
             });
 
@@ -2705,6 +2715,7 @@ describe('queue', () => {
                 token: 'new-token',
                 userAccessToken: 'new-access-token',
                 callbackURL: 'new-callback',
+                suppressAutomaticActivitySync: incoming,
             });
 
             expect(result.id).toBe('mock-doc-id');
@@ -2857,7 +2868,7 @@ describe('queue', () => {
             expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
         });
 
-        it('addToQueueForCOROS should refresh duplicate pending FIT URL without resetting lifecycle state', async () => {
+        it.each([undefined, true])('COROS refresh preserves duplicate lifecycle and origin (fromHistory=%s)', async fromHistory => {
             const alreadyExistsError: any = new Error('ALREADY_EXISTS');
             alreadyExistsError.code = 6;
             mockDocRef.create.mockRejectedValueOnce(alreadyExistsError);
@@ -2865,6 +2876,7 @@ describe('queue', () => {
                 exists: true,
                 data: () => ({
                     id: 'coros1',
+                    fromHistory,
                     dateCreated: 123456,
                     processed: false,
                     retryCount: 2,
@@ -2896,6 +2908,7 @@ describe('queue', () => {
             });
 
             expect(result.id).toBe('mock-doc-id');
+            expect(mockDocRef.set).not.toHaveBeenCalled();
             expect(mockDocRef.update).toHaveBeenCalledWith({
                 FITFileURI: 'https://coros.test/new.fit',
                 mode: 9,
@@ -2977,6 +2990,31 @@ describe('queue', () => {
 
             vi.mocked(getBinaryResponse).mockResolvedValue(createBinaryResponse(createSyntheticFitPayload()));
         });
+
+        it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI].flatMap(serviceName =>
+            [undefined, false, true].map(fromHistory => ({ serviceName, fromHistory }))))(
+            'persists $serviceName imports and only forwards ordinary work (fromHistory=$fromHistory)', async ({ serviceName, fromHistory }) => {
+                const item = { ...suuntoQueueItem, fromHistory, retryCount: 3, openId: 'corosOpenId',
+                    FITFileURI: 'https://oss.coros.com/run.fit' };
+                if (serviceName === ServiceNames.COROSAPI) {
+                    mockRef.parent.id = 'COROSAPIWorkoutQueue';
+                    let live: Record<string, unknown> = { ...item, ref: undefined };
+                    mockRef.get.mockImplementation(async () => ({ exists: true, data: () => ({ ...live }) }));
+                    mockRef.update.mockImplementation(async update => { live = { ...live, ...update }; });
+                    vi.mocked(getTokenData).mockResolvedValue({ accessToken: 'token', openId: 'corosOpenId' } as Awaited<ReturnType<typeof getTokenData>>);
+                }
+                const saved = { eventID: 'canonical-event', savedOriginalFiles: [{ path: 'users/mock-user-id/events/canonical-event/original.fit' }] };
+                vi.mocked(utils.setEvent).mockResolvedValueOnce(saved);
+                await expect(parseWorkoutQueueItemForServiceName(serviceName, item)).resolves.toBe(QueueResult.Processed);
+                expect(utils.setEvent).toHaveBeenCalledOnce();
+                expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({ processed: true }));
+                if (fromHistory) expect(mockEnqueueActivitySyncJobsForImportedEvent).not.toHaveBeenCalled();
+                else expect(mockEnqueueActivitySyncJobsForImportedEvent).toHaveBeenCalledExactlyOnceWith({
+                    userID: 'mock-user-id', eventID: saved.eventID, sourceServiceName: serviceName,
+                    sourceActivityID: item.workoutID, originalFiles: saved.savedOriginalFiles,
+                });
+            },
+        );
 
         it('acknowledges a verified cross-provider duplicate as skipped without retrying or completing another import', async () => {
             vi.mocked(utils.setEvent).mockRejectedValueOnce(new ProviderImportDuplicateError('saved-garmin-event'));

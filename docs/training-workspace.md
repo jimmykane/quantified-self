@@ -5857,34 +5857,95 @@ provider action changes. No reparse, migration, registered-client refresh or bac
 Daily delivery is an independent, default-off `appSettings.dailyWorkoutDelivery` preference with an explicit bounded
 provider selection. It is not part of `dailyWorkoutSuggestion`, model context, the daily cache key or the server's
 generation fingerprint: changing destinations neither invalidates a recipe nor spends another AI request. The existing
-preferences dialog exposes Send after approval before its generation options. Only the open preferences/daily-workout
-review observes the existing activity-service connection projection; Today adds no connection listener or polling.
+preferences dialog exposes Send after approval before its generation options. Only Preferences and delivery-enabled
+daily-workout reviews observe the existing activity-service connection projection. A review with sending off does not
+start provider listeners; Today adds no connection listener or polling.
+New daily generation also projects the validated `dailyWorkoutDelivery` choice from the same settings snapshot
+already read by `createDailyWorkoutSuggestionStore.read`; it adds no connection/token/provider/Firestore request.
+The private read projection never enters `DailyWorkoutSuggestionStatus` or a recipe. Missing, malformed or disabled
+delivery preferences omit provider context. Delivery choices remain outside both client cache identity and the server
+preference fingerprint: changing services during generation does not invalidate its lease or charge, and changing them
+afterward never regenerates today's cached workout. The next unused local day reads the current choices.
+
+`dayWorkoutProviderContext` builds bounded local format guidance from the existing provider catalog and pure delivery
+mapping checks, including Wahoo total-duration rules, real step/target support, and the existing Garmin strength-name
+allowlist. The combined evidence retains the existing 160,000-character context limit. If optional provider guidance
+would exceed it, generation preserves all collected recovery/training evidence, omits that guidance and its correction,
+and discloses the omission in Context. It does not resolve connection authority, read tokens, invoke provider HTTP,
+claim watch receipt or grant consent. Capability probes use public placeholders; final draft assessment uses the
+generated title, validated structure and complete strength prescription, including reused planned loads. This catches
+title-length/character limitations as well as step constraints without rewriting the draft. Identity/owner placeholders
+remain local only; actual Add & send admission still uses the current owner, connection, entitlement and live mapping.
+Recovery, the selected/routine sport, purpose, equipment and explicit controls retain priority over device convenience. The generator never estimates seconds for prescribed repetitions
+or distance, changes a workout to rest for hardware, or rewrites a returned prescription to make it sendable.
+
+The optional provider-format correction shares the existing maximum of two model attempts and one daily charge with
+strict prescription validation. Provider fit may use the spare correction attempt and increase actual tokens within
+that cap; the existing usage counters include it. It runs only when a common exact starting format exists, targets are
+Auto/None, and no previous planned loads would be displaced. Invalid, failed or still-incompatible provider-only
+corrections keep the first valid prescription; authentication/lease/Pro changes still abort. Unavoidable mapping
+limitations appear in the existing Context details as Review sync requirements only for unsupported or approval-gated mappings. Standard informational limitations,
+such as Suunto strength manual transitions (`requiresApproval:false`), remain visible without blocking Add & send
+or triggering a provider-format retry. The private guidance carries this distinction as `requiresReview`; it never
+authorizes a new loss or changes the existing provider policy. No new public output field, provider action, feedback,
+MCP capability or model budget is introduced. The private provider context is not exposed through MCP; existing strict
+recipe/status reads remain valid. Provider transport, workers, retry policies and queue monitoring remain unchanged;
+existing daily usage counters capture attempts and tokens. Deploy the affected `generateDayWorkout` function for
+provider-aware generation; no new secret binding is needed.
+
 The dialog reuses that live connection subscription for the same owner across unrelated profile/settings updates.
 Delivery validation gates preference saving and Add & send, independently of ordinary generation validation: an
 unavailable destination cannot block an explicit manual regeneration. An acknowledged delivery result stays visible
 even when the schedule listener fails; Reload retrieves the schedule without repeating Add, generation or sending.
 
-For the original daily Standalone workout, the review can opt out for this approval or choose connected, admitted
-services. **Add & send** first acknowledges the existing idempotent create, then calls
-`TrainingDeliveryService.sendApprovedWorkout` with that saved workout and schedule revision. Each selected service
-uses the existing uncached revision check, delivery preview and Send command, with expected settings revision zero.
-Only an exact, warning-free, connected, Pro-eligible, single-workout preview is admitted automatically. Mapping losses,
-unavailable/reconnected services, stale revisions and pre-existing sync settings require the existing Review sync path;
-this shortcut never supplies a mapping approval digest, changes plan consent, replaces a remote copy or resumes stopped
-sync. Selected services have independent outcomes. An uncertain send is not automatically replayed. The dialog keeps
-its successful workout acknowledgement on any delivery failure and exposes the shared live sync control afterwards.
-An uncertain Add sends nothing until the same create receipt is acknowledged. Rest results, manual replacement
-generations and drafts handed to the full editor keep their existing explicit workflows. Changing a preference alone
-does not save or send a workout. Disabling it affects future approvals; already enabled workout sync is managed through
-each workout's existing Sync controls. Provider acceptance remains distinct from device receipt; preparation still starts
-on a Today visit, with no new background generation or scheduler.
+Provider selection and the saved Send after approval toggle belong only to Preferences. For the original daily
+Standalone workout, Review shows the saved destinations and **Skip sending today**, without provider setup controls.
+Skipping changes this approval to **Add workout** and leaves saved preferences and future approvals intact; closing
+and reopening an unapproved review starts from the saved preference again. When sending is off in Preferences, Review
+shows only the normal Add workflow. Skip is locked during pending generation, Add or an uncertain Add. The skip flag
+stays in dialog memory: successful, rejected and uncertain Add/retry paths never call the preferences callback or write
+user settings. Saved provider arrays are copied on dialog entry and remain intact for subsequent approvals.
+**Add & send** sends one first-party `mutateTrainingSchedule` request with the strict, optional
+`deliveryAfterCreate` envelope (`providers` and IANA `timeZone`). It is valid only for a new Standalone workout;
+ordinary Add, Skip, rest results, manual replacements and full-editor handoffs omit it. The existing privileged save
+endpoint owns recipe validation, Pro/connection authority reads and the transaction; this cannot safely move into a
+browser write because delivery authority and queue admission are server-only.
+
+`createWorkoutWithDeliveryForUser` uses the existing authoring transaction's pre/postconditions. It reads current
+provider authority, retained settings/identity, scope generation and owner presentation preferences before writes.
+Only supported mappings that need no extra mapping approval, with connected, Pro-eligible, in-horizon destinations
+and no existing settings or retired scope, receive new sync settings. This reuses `requiresDeliveryMappingApproval`:
+exact mappings and explicitly informational degradation may proceed. Degraded mappings with omitted/true approval
+flags and all unsupported mappings still require Review sync; no approved-loss digest is inferred. Unsupported or
+approval-gated mappings and unavailable services return independent Review sync outcomes without preventing the
+workout from being saved; mapping assessment exceptions fail only that provider. No mapping-loss digest,
+plan consent, resumed stopped scope or replacement remote identity is inferred. Creation establishes the first scope
+generation; new settings bind that resulting generation, the current destination and connection epoch.
+
+The workout, its history/idempotency receipt, eligible provider settings and the existing targeted reconciliation
+marker commit atomically. The ordinary `trainingDeliveryQueue` trigger/minute recovery dispatcher and workers continue
+without the browser; there is no second browser Send request, new queue kind, scheduler or global scanner. A tab closed
+before acknowledgement, a lost response or delayed task dispatch cannot leave a committed admitted approval dependent
+on another visit. A request that never reaches the server cannot be recovered automatically. The existing worker still
+rechecks connection, entitlement, lifecycle, completion and mapping before provider HTTP.
+
+A namespaced receipt under the existing private `trainingDeliveryState/current/receipts` binds the full create request,
+provider set and timezone. It commits with the workout, retains independent safe outcomes and uses the existing 30-day
+receipt lifetime and user-root recursive cleanup. Replays return the original result and never rewrite sync settings or
+requeue an old approval after Stop, disconnect, edit or deletion. An earlier plain Add receipt cannot be upgraded to
+provider consent. A pre-commit failure leaves no partial workout/consent/queue writes; Retry Add preserves the exact
+approved request and services. Provider failures after commit retain the saved workout and use existing queue recovery.
+Skipping never persists a delivery envelope or changes default provider preferences. Provider acceptance remains
+distinct from device receipt; preparation still starts on a Today visit and adds no background generation.
 
 MCP impact: no wire/authority change. Authored recipes, strict planned-workout reads, and existing delivery-status
 projections remain unchanged; private UI preferences are never added to an exposed recipe or proposal. Existing MCP
 create-and-send preview/native-approval contracts retain their own explicit provider selection. Monitoring coverage is
 **unchanged/covered** by the existing Training delivery/verification/queue-health filters in
 `tools/training-monitoring/definitions.mjs`: this UI uses the same commands, workers, provider labels, retry limits and
-terminal outcomes. No Functions, Rules, indexes, monitoring apply, plugin rebuild or registered-client refresh is needed.
+terminal outcomes. Deploy the affected `mutateTrainingSchedule` function before the frontend; its new binding uses
+only the existing `SUUNTOAPP_GUIDE_OWNER` application metadata for pure mapping assessment. No provider credentials are
+bound to this save endpoint. Rules, indexes, monitoring apply, plugin rebuild and registered-client refresh are unchanged.
 
 The owner-only Today section includes one compact shared `CompactRowComponent` after its existing Training state and
 Readiness details, outside the collapsible region. The greeting, colored assessment sentence, existing detailed state,

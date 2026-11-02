@@ -61,6 +61,15 @@ finished scan awaiting child outcomes. Garmin submission semantics and Sleep/Hea
 See [independent activity retries](connection-history-import.md#continuing-activity-history-while-workouts-retry)
 for checkpoint recovery, monitoring coverage and the two-function release boundary. No migration or replay is needed.
 
+History child observation also accepts a workout worker's committed `cross_provider_duplicate` or
+`outbound_provider_echo` skip as already handled, restricted to the four recorded-workout queues. A returning QS
+upload must not stop the remaining history scan. Pending jobs, genuine failures and authorization/lifecycle skips
+retain their existing handling; canonical queue rows and saved activity edits are not rewritten. This correction
+requires only `processConnectionHistoryTask` after separate deployment approval. Already stopped runs require a
+separately approved resume. Monitoring is **covered/unchanged** by the existing committed checkpoint, queue-health
+and unknown-observation signals; no resource, label or provider API change is needed. See
+[handled history copies](connection-history-import.md#continuing-activity-history-while-workouts-retry).
+
 ## 1. Define the product contract before writing code
 
 Start with a concise support matrix agreed with product and the provider. Do not infer capability from an OAuth scope alone.
@@ -1030,6 +1039,14 @@ Monitoring coverage is **unchanged**: the existing #847 coordinator and #829/#83
 workers, queues, retries, outcomes and unknown observations. No MCP/Assistant, Training, consent, entitlement, backend,
 Rules, index or telemetry contract changes. This presentation change requires only a separately approved frontend release.
 
+
+Daily workout **Add & send** commits standalone creation and eligible delivery settings with the existing Training
+reconciliation marker in one server transaction. Browser closure requires no follow-up Send request. It uses the
+existing delivery queue, workers, authority/deletion fences and monitoring; it adds no provider transport or queue kind.
+See [Pro daily workout suggestion](training-workspace.md#pro-daily-workout-suggestion) for the approval, replay and Skip
+contract. Deploy `mutateTrainingSchedule` before its frontend client; its only added secret binding is the existing
+Suunto Guide owner metadata, not provider credentials.
+
 ## 2. Choose the right architecture
 
 Most activity providers should use the shared asynchronous ingestion pattern:
@@ -1491,6 +1508,19 @@ page as processing failures. See [Wahoo application cooldown](wahoo-integration.
 fallbacks, privacy, unchanged lifecycle/consent and the monitoring coverage decision. This is a cooldown, not a promise
 of proactive request-count reservation across every Wahoo transport.
 
+Recorded-activity delivery checks that same cooldown after lifecycle/Stop and uncertain-operation checks, before
+processing metadata, downloads, fingerprints and provider claims. A known wait persists only a deletion/current-state/
+send-window-guarded dispatch deadline and uses the existing deterministic delayed task; acknowledge only after
+enqueue confirmation or duplicate. It consumes no business retry count or error entry, retains accepted upload/type/
+account identity and rechecks an extended cooldown on wake-up. The final API guard and actual/late 429 retry policy
+remain. Current task identity distinguishes near-due Wahoo redeliveries from their scheduled task; a self-handoff
+fails for transport recovery rather than acknowledging the only active delivery. Task payloads/names stay unchanged.
+Monitoring is **covered/unchanged** by existing `expected_contention`/`deferred`, native queue/latency and
+failure/DLQ/unknown-observation coverage. Existing Help background/status-only guidance remains accurate; no public,
+MCP/Assistant, Training, consent, provider-matrix capability, queue topology, index or migration change is needed.
+Release only `processActivitySyncTask` after separate approval; no replay or retry reset is included. See the Wahoo
+cooldown runbook above for handoff recovery, expiry bounds and post-release measurement.
+
 ### Queue item design
 
 Queue IDs and imported event IDs must be stable across retries. Prefer provider identity plus stable provider activity/workout ID, with a secondary provider-user identity where collisions are possible.
@@ -1552,6 +1582,30 @@ become terminal on their next failure.
 ### Outbound activity delivery
 
 When a provider accepts activities, use the shared `activity-sync` route model rather than adding a provider-specific fan-out path. Define an explicit `source -> destination` route in `shared/activity-sync-routes.ts`, enable it only from Services, and route historical delivery through the existing date-range backfill callable.
+
+Suunto, COROS and Wahoo activity-history jobs already retain `fromHistory: true`, with or without a coordinator run.
+Their shared post-persistence handoff imports them successfully without automatic outbound admission or delivery-metadata
+writes. Ordinary feed imports, including delayed recordings and legacy rows without the marker, retain opt-in automatic
+delivery; no date cutoff is applied. A retained Wahoo history row keeps its origin across newer webhook revisions so an
+update cannot accidentally enable forwarding. Existing Suunto/COROS duplicate callbacks preserve the original row.
+Do not overwrite an existing live admission just because a history scan encounters it. Identity resolution, canonical
+event/original-file writes, user edits, Training completion and import outcomes are unchanged. Garmin uses the separate
+fixed cutoff described below; its `manual` field is not a history marker. Explicit saved/direct sends
+remain independent, including all six outbound directions from these three sources. Already queued outbound jobs are
+not cancelled or migrated. Release requires separate approval for `processWorkoutTask` and `wahooAPIWebhook`; Help is
+a separate frontend release. No Rules, indexes or data migration are needed. Monitoring is **covered/unchanged**:
+history never enters the delivery queue, while existing #829 import, #832 delivery and #847 history observations keep
+their committed-outcome, backlog/failure and unknown-telemetry meanings. See [activity delivery monitoring](activity-delivery-monitoring.md).
+
+Garmin's existing activity-history lease transaction stores a monotonic `activitySyncCutoffMs` before provider requests.
+Coordinator windows/retries reuse their run's original admission time. Ingress snapshots the policy as a queue-owned
+`suppressAutomaticActivitySync` flag for older recordings; lookup errors remain retryable, and duplicate callbacks do
+not replace existing decisions. This is a recording-date policy because Garmin's callback origin is not identified.
+Older delayed ordinary recordings still import but require explicit sending. Existing outbound work and legacy queue
+rows are unaffected; Sleep/Health history never changes this cutoff. See [Garmin history](garmin-integration.md#availability-and-history)
+for the four-function release boundary. No migration, new scheduler, queue, index, permission, MCP or Training change.
+Monitoring is **covered/unchanged**: normal import commits remain #829, actual explicit/live sends remain #832, and
+history request/retry progress remains #847; no labels, metrics or alert resources change.
 
 The callable also accepts a version 2 `preview` or `send` request with destination, selected sources, inclusive ISO date bounds, and an opaque page cursor. It scans owner events in bounded pages and returns per-source eligible/skipped counts, queued count, skip reasons, failures, and the next cursor. The browser supplies filters only; the server selects event IDs, verifies Pro access, destination connection, route gate, source metadata or trusted manual-upload origin, retained original path/generation/size/FIT format, and existing successful or live queue state. Preview does not write. Send uses the same activity-sync queue, metadata, upload adapters, outbound echo receipts, and asynchronous reconciliation as automatic delivery. An unaccepted automatic queue row for the same route and event can be replaced transactionally with a historical row and a new task generation, so a disconnected source does not park the explicit send. Provider claims, accepted upload state, successful sends, existing historical sends, and manual-reconciliation rows cannot be replaced. Repeated sends skip those pending or completed rows. The older callable request remains available for compatibility.
 
@@ -1822,6 +1876,13 @@ Correlate using the existing request trace; request values, identities, filename
 are never copied into these diagnostics. Original errors, replies, authorization and retry behavior are unchanged.
 Monitoring coverage is unchanged: the activity-delivery bundle selects `[ActivityDelivery]` events, so these
 request diagnostics do not add queue failure counts, metric labels or alerts.
+
+The shared route picker labels routes/courses separately from recorded workouts. Garmin manual route input
+rejections emit `[importRouteToGarminAPI] File rejected.` at WARNING with only HTTP 400 and the fixed reason
+`fit_not_route_course` or `invalid_route_upload`. Correlate by the platform request trace; filenames, identities,
+file contents, raw errors and error details are excluded. Logging is best effort and preserves the original response.
+Validation and provider requests are unchanged. Monitoring coverage is **unchanged**: these direct input rejections
+are outside `[RouteQueue]` worker/outcome metrics and do not add queue retries, failure pages or monitoring resources.
 
 #### Fourteen-day debug-file expiry
 
@@ -2249,6 +2310,12 @@ The Activity Sync queue view also breaks out historical sends (`deliveryMode: hi
 - disconnect-pending age, deauthorization failures, entitlement enforcement, and cleanup/deletion failures.
 
 Use structured logs with safe identifiers and error categories. Do not put token values, authorization codes, signed URLs, file query strings, or full raw partner payloads in logs, analytics, or admin responses.
+
+Browser Sentry capture redacts OAuth `code` and `state` URL parameters at breadcrumb capture and before sending
+error or transaction envelopes, including request/query/referrer, frame and trace/span URL copies. Encoded parameter
+names and duplicates are covered. Ordinary URL parameters, application `code`/`state` fields and actual OAuth
+requests are unchanged; the existing App Check diagnostic allowlist remains in force. This applies to new captures
+after the frontend release and does not modify historical Sentry events.
 
 Outbound semantic FIT fingerprint failures and unexpected manual activity-parser failures use the shared
 `activity-parser-diagnostics` allowlist. It records a diagnostic ID (alongside the platform request trace), Sports Lib
