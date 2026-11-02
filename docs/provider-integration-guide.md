@@ -1832,6 +1832,13 @@ are never copied into these diagnostics. Original errors, replies, authorization
 Monitoring coverage is unchanged: the activity-delivery bundle selects `[ActivityDelivery]` events, so these
 request diagnostics do not add queue failure counts, metric labels or alerts.
 
+The shared route picker labels routes/courses separately from recorded workouts. Garmin manual route input
+rejections emit `[importRouteToGarminAPI] File rejected.` at WARNING with only HTTP 400 and the fixed reason
+`fit_not_route_course` or `invalid_route_upload`. Correlate by the platform request trace; filenames, identities,
+file contents, raw errors and error details are excluded. Logging is best effort and preserves the original response.
+Validation and provider requests are unchanged. Monitoring coverage is **unchanged**: these direct input rejections
+are outside `[RouteQueue]` worker/outcome metrics and do not add queue retries, failure pages or monitoring resources.
+
 #### Fourteen-day debug-file expiry
 
 `storage.debug-lifecycle.json` defines native Cloud Storage deletion eligibility at object age 14 days for the entire

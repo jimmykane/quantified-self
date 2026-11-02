@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { HttpsError } from 'firebase-functions/v2/https';
+import * as logger from 'firebase-functions/logger';
 import { ProviderOperationError } from '../shared/provider-operation-error';
+
+vi.mock('firebase-functions/logger', () => ({ warn: vi.fn(), error: vi.fn() }));
 
 const mocks = vi.hoisted(() => ({
   hasProAccess: vi.fn(),
@@ -86,6 +90,50 @@ describe('importRouteToGarminAPI', () => {
       { name: 'Route file' },
       expect.objectContaining({ beforeProviderRequest: expect.any(Function) }),
     );
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['This FIT file looks like an activity, not a route/course. Use activity upload for workouts, or export a course/route file.', 'fit_not_route_course'],
+    ['private@example.com private.fit https://private.example?token=private-token', 'invalid_route_upload'],
+  ])('logs a fixed parser rejection reason without copying private request/error data (%s)', async (message, reason) => {
+    const error = new HttpsError('invalid-argument', message, { token: 'private-token' });
+    mocks.parseManualRouteUpload.mockRejectedValueOnce(error);
+
+    await expect(importRouteToGarminAPI({
+      auth: { uid: 'private-user' },
+      data: { file: 'private-payload', filename: 'private.fit' },
+    } as never)).rejects.toBe(error);
+
+    expect(logger.warn).toHaveBeenCalledExactlyOnceWith('[importRouteToGarminAPI] File rejected.', {
+      reason, httpStatus: 400,
+    });
+    expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain('private');
+    expect(mocks.uploadManualRouteToGarminConnect).not.toHaveBeenCalled();
+  });
+
+  it('logs malformed file input without parsing it or calling Garmin', async () => {
+    const error = new HttpsError('invalid-argument', 'File content is not valid base64.');
+    mocks.decodeManualRouteUpload.mockImplementationOnce(() => { throw error; });
+
+    await expect(importRouteToGarminAPI(request({ file: 'not base64!', filename: 'route.fit' }) as never))
+      .rejects.toBe(error);
+
+    expect(logger.warn).toHaveBeenCalledExactlyOnceWith('[importRouteToGarminAPI] File rejected.', {
+      reason: 'invalid_route_upload', httpStatus: 400,
+    });
+    expect(mocks.parseManualRouteUpload).not.toHaveBeenCalled();
+    expect(mocks.uploadManualRouteToGarminConnect).not.toHaveBeenCalled();
+  });
+
+  it('preserves the original rejection if diagnostic logging fails', async () => {
+    const error = new HttpsError('invalid-argument', 'Invalid route file.');
+    mocks.parseManualRouteUpload.mockRejectedValueOnce(error);
+    vi.mocked(logger.warn).mockImplementationOnce(() => { throw new Error('Logger unavailable'); });
+
+    await expect(importRouteToGarminAPI(request({ file: 'AQID', filename: 'route.fit' }) as never))
+      .rejects.toBe(error);
+    expect(mocks.uploadManualRouteToGarminConnect).not.toHaveBeenCalled();
   });
 
   it('stops before parsing or calling Garmin while disconnect is pending', async () => {

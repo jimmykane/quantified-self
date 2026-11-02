@@ -236,6 +236,12 @@ unsent work when the account or view changes instead of letting a delayed retry 
 
 ## Refined route sport profiles
 
+The manual route picker accepts GPX routes/tracks and FIT courses; recorded workout FITs belong in activity upload.
+`importRouteToGarminAPI` rejects invalid inputs before delivery and emits the fixed, privacy-safe
+`[importRouteToGarminAPI] File rejected.` diagnostic described in the
+[provider guide](provider-integration-guide.md#failed-file-debug-captures). The existing response and validation
+remain unchanged; no queue, retry, provider request or monitoring configuration changes are introduced.
+
 The course uploader uses existing Garmin profiles for the separately approved expanded sport names: BMX and
 LES MILLS RPM / SPRINT / THE TRIP use `ROAD_CYCLING`; Obstacle Racing uses `RUNNING`; Vertical Running uses
 `TRAIL_RUNNING`. Enduro MTB and E-Enduro MTB retain `MOUNTAIN_BIKING`. These are course metadata aliases, separate

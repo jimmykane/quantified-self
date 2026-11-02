@@ -192,6 +192,24 @@ describe('UploadRoutesToServiceComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it.each([ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.WahooAPI, ServiceNames.COROSAPI])(
+        'explains routes versus recorded workouts before selecting files for %s', (service) => {
+            fixture.componentRef.setInput('user', { uid: 'route-upload-user' });
+            component.serviceName = service;
+            fixture.detectChanges();
+
+            const hint = fixture.nativeElement.querySelector('.upload-routes-to-service__hint');
+            expect(hint.textContent).toBe('Routes/courses only. Use activity upload for recorded workouts.');
+            expect(fixture.nativeElement.querySelector('button').textContent).toContain('Choose GPX or FIT routes');
+            expect(fixture.nativeElement.querySelector('input').accept).toBe('.fit,.gpx');
+
+            component.isUploading = true;
+            fixture.detectChanges();
+            expect(fixture.nativeElement.querySelector('button').textContent).toContain('Uploading route…');
+            expect(hint.textContent).toContain('Use activity upload for recorded workouts.');
+        },
+    );
+
     it('uploads a GPX route to Suunto for server-side delivery', async () => {
         const file = {
             file: new File(['<gpx></gpx>'], 'route.gpx', { type: 'application/gpx+xml' }),
@@ -379,7 +397,7 @@ describe('UploadRoutesToServiceComponent', () => {
         component.serviceName = ServiceNames.WahooAPI;
 
         expect(component.fileAccept).toBe('.fit,.gpx');
-        expect(component.uploadPrompt).toBe('Open or drag and drop GPX or FIT route files');
+        expect(component.uploadPrompt).toBe('Choose GPX or FIT routes');
     });
 
     it('shows Wahoo route rejection details to the user', async () => {

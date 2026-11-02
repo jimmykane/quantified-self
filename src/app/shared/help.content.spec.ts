@@ -17,6 +17,13 @@ import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 
 describe('help.content', () => {
+  it('distinguishes the route picker from recorded workout upload and Garmin delivery', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'uploads-and-imports')!.content;
+    expect(copy).toContain('GPX routes/tracks and FIT courses, not recorded workout FITs');
+    expect(copy).toContain('Use activity upload for recorded workouts');
+    expect(copy).toContain('QS does not send completed activities to Garmin');
+  });
+
   it('explains explicit daily approval, delivery recovery and the unchanged generation allowance', () => {
     const help = HELP_SECTIONS.map(section => section.content).join('\n');
     for (const text of ['**Send after approval**', '**Add & send** saves the reviewed Standalone workout',

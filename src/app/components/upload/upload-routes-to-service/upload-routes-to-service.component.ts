@@ -56,7 +56,7 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
   }
 
   get uploadPrompt(): string {
-    return this.acceptsFitAndGpxRoutes ? 'Open or drag and drop GPX or FIT route files' : 'Open or drag and drop GPX route files';
+    return this.acceptsFitAndGpxRoutes ? 'Choose GPX or FIT routes' : 'Choose GPX routes';
   }
 
   constructor() {

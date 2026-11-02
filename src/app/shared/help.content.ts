@@ -1331,6 +1331,7 @@ When sending routes, provider sport profiles can be broader than your saved QS s
 
 ## Common upload issues
 
+- The route picker in **Connections** accepts GPX routes/tracks and FIT courses, not recorded workout FITs. Use activity upload for recorded workouts. QS does not send completed activities to Garmin.
 - A route/course is not a recorded workout. When activity upload detects one, **Upload as route** appears after active upload batches finish and opens **Routes**; select the original file there. The rejected file is not automatically uploaded or converted.
 - Your session may have expired. Sign in again and retry.
 - You may have reached your current plan's activity or route limit.
