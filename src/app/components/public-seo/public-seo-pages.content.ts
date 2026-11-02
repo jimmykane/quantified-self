@@ -519,7 +519,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'send',
             title: 'Opt in to provider delivery',
-            copy: 'Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members through explicit Send and plan opt-in actions, compatibility checks, and provider-specific scheduling windows. Pool and open-water swimming map to distinct Suunto Guide activities; Garmin supports compatible target-free pool swims, while Garmin open-water and Wahoo swim delivery are unavailable. New COROS plan sync and standalone Send actions are coming soon in the app. Connecting a provider never sends a workout by itself.',
+            copy: 'Workout delivery to Garmin, Suunto, and Wahoo is available to connected Pro members through explicit Send and plan opt-in actions, compatibility checks, and provider-specific scheduling windows. Pool and open-water swimming map to distinct Suunto Guide activities. Garmin supports compatible target-free pool swims; open-water workouts use Garmin Generic after mapping review, not a native swim profile, and work only on some devices. Wahoo supports timed, untargeted pool and open-water workouts but does not send the selected pool length. Cloud acceptance does not prove app or watch receipt. New COROS plan sync and standalone Send actions are coming soon in the app. Connecting a provider never sends a workout by itself.',
           },
         ],
       },
@@ -531,7 +531,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Which sports and workout steps can I create?',
-        answer: 'The interval editor supports Running, Trail Running, Treadmill, Cycling, Mountain Biking, Indoor Cycling, E-Biking, Hand Cycle, Pool Swimming, Open Water Swimming, Walking, Hiking, Rowing, and Indoor Rowing. It supports time, distance, or lap-button-ended steps, fixed repeats, and one absolute heart-rate, power, or pace target per step. Lap-ended steps wait for a button press with no time or distance limit. Garmin and Suunto support this ending; Wahoo delivery is unsupported and COROS delivery remains Coming soon. Swim and rowing distances use metres; rowing pace is a 500 m split. Pool workouts can save an optional pool length; compatible Garmin lap-swim delivery includes it, while Suunto Guides do not. Set the pool length on the device where needed. Open-water workouts have no pool length. The separate Strength Training editor supports named exercises, rep or timed sets, optional kg/lb external load, and rest.',
+        answer: 'The interval editor supports Running, Trail Running, Treadmill, Cycling, Mountain Biking, Indoor Cycling, E-Biking, Hand Cycle, Pool Swimming, Open Water Swimming, Walking, Hiking, Rowing, and Indoor Rowing. It supports time, distance, or lap-button-ended steps, fixed repeats, and up to two different absolute or relative heart-rate, power, speed/pace, or cadence target kinds per step. Relative targets use an explicit saved reference snapshot; provider-specific delivery limits still apply. Lap-ended steps wait for a button press with no time or distance limit. Garmin and Suunto support this ending; Wahoo delivery is unsupported and COROS delivery remains Coming soon. Swim and rowing distances use metres; rowing pace is a 500 m split. Pool workouts can save an optional pool length; compatible Garmin lap-swim delivery includes it, while Suunto Guides do not. Set the pool length on the device where needed. Open-water workouts have no pool length. The separate Strength Training editor supports named exercises, rep or timed sets, optional kg/lb external load, and rest.',
       },
       {
         question: 'Do planned workouts change completed activity totals or Training analysis?',
@@ -735,7 +735,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'lock',
             title: 'Focused, approval-gated writes',
-            copy: 'Separate permissions can replace shared event tags or titles, edit descriptions with an additional description grant, or create, edit, and permanently delete Timeline notes. They cannot change recorded activity data, Health, routes, sleep, measurements, or dashboard settings. Training changes additionally use a bounded preview before a distinct apply call.',
+            copy: 'Separate permissions can replace shared event tags or titles, edit descriptions with an additional description grant, or create, edit, and permanently delete Timeline notes. The independent Manage manual Health measurements permission allows logging, correcting, and permanently deleting manual entries through the client’s approval controls; imported Health readings remain unchanged. These permissions cannot change recorded activity data, routes, sleep records, or dashboard settings. Training changes additionally use a bounded preview before a distinct apply call.',
           },
           {
             icon: 'shield',
@@ -793,7 +793,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Can an MCP client rearrange my dashboard or change my data?',
-        answer: 'It cannot change dashboard settings, recorded activity data, routes, Health, measurements, or sleep records. Separate permissions can replace shared event tags or titles, edit descriptions with additional description access, or create, edit, and permanently delete Timeline notes through the client’s approval controls. It can change Training plans, planned workouts, or their delivery only when you grant the matching child permission and the client permits the separate apply call for a bounded proposal. Plan deletion must be reviewed alone, requires your explicit choice for its workouts, and permanently removes the plan and its revision history.',
+        answer: 'It cannot change dashboard settings, recorded activity data, routes, imported Health readings, or sleep records. With the independent Manage manual Health measurements permission, a client can log, correct, and permanently delete manual Health entries through its approval controls. Existing clients need the released tools, a refreshed tool catalog, and reauthorization for this permission. Separate permissions can replace shared event tags or titles, edit descriptions with additional description access, or create, edit, and permanently delete Timeline notes through the client’s approval controls. It can change Training plans, planned workouts, or their delivery only when you grant the matching child permission and the client permits the separate apply call for a bounded proposal. Plan deletion must be reviewed alone, requires your explicit choice for its workouts, and permanently removes the plan and its revision history.',
       },
       {
         question: 'Does deleting a Training workout also remove service copies?',
