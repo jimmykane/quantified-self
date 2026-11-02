@@ -1486,6 +1486,9 @@ Calendar route and Dashboard grids share the same dotted rest-day marker, includ
 keeps its visible label in dense and phone grids (shortened to **Rest** on phones), with the full rest-day context in
 the accessible date name and selected-day preview. Rest markers remain alongside authored workouts without a second
 overlapping preview label. This presentation fix changes no Training/MCP reads, writes, scopes, contracts or AI allowance.
+Keep the rest label in normal cell flow and boundary-month labels in the date heading, below the date on narrow
+grids so today's corner marker stays clear. Recorded dots, Timeline notes, month names and rest labels must remain
+distinct even on the same date; do not anchor multiple text labels to the bottom of a cell.
 
 Selected-day presentation is shared by the full day page, Dashboard day preview, Calendar day preview, and day
 bottom sheet through `components/calendar/_calendar-day-presentation.scss`. Reuse its navigation, supporting-text,

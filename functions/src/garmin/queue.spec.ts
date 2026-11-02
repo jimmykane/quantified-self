@@ -1166,32 +1166,58 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
         });
 
-        it('should handle 400 download error by increasing retry count by 20', async () => {
-            mockRequestGet.mockRejectedValue({ statusCode: 400 });
+        it.each([400, 429, 500, 502, 503, 504])('consumes one retry for HTTP %i without importing or prematurely dead-lettering', async statusCode => {
+            mockRequestGet.mockRejectedValueOnce({ statusCode });
 
-            const result = await processGarminAPIActivityQueueItem(queueItem);
+            await expect(processGarminAPIActivityQueueItem(queueItem)).resolves.toBe('RETRY_INCREMENTED');
 
-            expect(result).toBe('RETRY_INCREMENTED');
-            expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
-                queueItem,
-                expect.any(Object),
-                20,
-                undefined
+            expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledExactlyOnceWith(
+                queueItem, expect.any(Error), 1, undefined,
             );
+            expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+            expect(mockSetEvent).not.toHaveBeenCalled();
+            expect(mockUpdateToProcessed).not.toHaveBeenCalled();
         });
 
-        it('should handle 500 download error by increasing retry count by 20', async () => {
-            mockRequestGet.mockRejectedValue({ statusCode: 500 });
+        it('imports successfully on redelivery after a transient download failure', async () => {
+            mockRequestGet.mockRejectedValueOnce({ statusCode: 500 });
 
-            const result = await processGarminAPIActivityQueueItem(queueItem);
+            await expect(processGarminAPIActivityQueueItem(queueItem)).resolves.toBe('RETRY_INCREMENTED');
+            await expect(processGarminAPIActivityQueueItem({ ...queueItem, retryCount: 1 })).resolves.toBe('PROCESSED');
 
-            expect(result).toBe('RETRY_INCREMENTED');
-            expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
-                queueItem,
-                expect.any(Object),
-                20,
-                undefined
+            expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledTimes(1);
+            expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+            expect(mockSetEvent).toHaveBeenCalledTimes(1);
+            expect(mockUpdateToProcessed).toHaveBeenCalledTimes(1);
+        });
+
+        it('uses the same one-retry policy for a failed GPX-to-FIT fallback download', async () => {
+            queueItem.activityFileType = 'GPX';
+            vi.mocked(EventImporterGPX.getFromString).mockRejectedValueOnce(new Error('try FIT'));
+            mockRequestGet.mockResolvedValueOnce('initial GPX').mockRejectedValueOnce({ statusCode: 500 });
+
+            await expect(processGarminAPIActivityQueueItem(queueItem)).resolves.toBe('RETRY_INCREMENTED');
+
+            expect(mockRequestGet).toHaveBeenCalledTimes(2);
+            expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledExactlyOnceWith(
+                queueItem, expect.any(Error), 1, undefined,
             );
+            expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+            expect(mockSetEvent).not.toHaveBeenCalled();
+        });
+
+        it.each(['MOVED_TO_DLQ', 'FAILED'])('returns the committed retry transition outcome %s instead of claiming another retry', async outcome => {
+            queueItem.retryCount = 19;
+            mockRequestGet.mockRejectedValueOnce({ statusCode: 500 });
+            mockIncreaseRetryCountForQueueItem.mockResolvedValueOnce(outcome);
+
+            await expect(processGarminAPIActivityQueueItem(queueItem)).resolves.toBe(outcome);
+
+            expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledExactlyOnceWith(
+                queueItem, expect.any(Error), 1, undefined,
+            );
+            expect(mockSetEvent).not.toHaveBeenCalled();
+            expect(mockUpdateToProcessed).not.toHaveBeenCalled();
         });
 
         it('should handle 401 download error by increasing retry count by 1', async () => {

@@ -83,6 +83,13 @@ repeated identical downloads; normal files retain their original bytes. Review a
 changing the limit and worker memory. Fetch failures retain only a fixed error message and status category, never
 provider bodies or signed URL text. Parser work limits are a separate concern.
 
+Activity download failures, including HTTP `400`, `429` and `5xx`, consume one application retry per failed
+attempt through the shared provider budget/backoff. Both initial and GPX-to-FIT fallback downloads return the
+actual guarded retry transition, including exhausted-DLQ or failed writes. HTTP `410`, unsafe callbacks and oversized
+responses retain their explicit terminal handling. Only `processWorkoutTask` needs deployment for this correction;
+existing failed jobs require a separately authorized replay. Monitoring is **covered/unchanged** by the existing
+Garmin retry/failure, committed-DLQ and backlog signals in [recorded-import monitoring](activity-import-monitoring.md).
+
 ### Health worker diagnostics
 
 Daily heart-rate normalization keeps the inclusive sample interval from zero through the declared
