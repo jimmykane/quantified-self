@@ -37,14 +37,21 @@ describe('recording review', () => {
       expect(input).toEqual(original);
     }
   });
-  it.each([[29, 0], [53, 0], [4, 14], [18, 0]])('does not advertise a single-session fallback for multi-session sport %i', async (sport, subSport) => {
+  it.each([false, true])('shows the Ice Skating fallback without changing its source or requiring GPS (GPS=%s)', async withGPS => {
+    const input = createCOROSActivityFITFixture({ sport: 33, withGPS }), original = Buffer.from(input);
+    const summary = await describeFIT(input, 'Activity.fit', 'coros');
+    expect(summary.sport).toBe('Ice Skating');
+    expect(summary.warnings).toEqual(['COROS receives eligible Ice Skating as Generic, with or without GPS.']);
+    expect(input).toEqual(original);
+  });
+  it.each([[29, 0], [53, 0], [4, 14], [18, 0], [33, 0]])('does not advertise a single-session fallback for multi-session sport %i', async (sport, subSport) => {
     const summary = await describeFIT(createCOROSActivityFITFixture({ sport, subSport, withSubSport: true, sessionCount: 2 }), 'Multi.fit', 'coros');
     expect(summary.warnings).toEqual([]);
   });
   it.each(['suunto', 'wahoo'] as const)('keeps %s previews free of COROS-specific notices', async provider => {
-    for (const [sport, subSport] of [[29, 0], [53, 0], [4, 14], [18, 0]]) {
+    for (const [sport, subSport] of [[29, 0], [53, 0], [4, 14], [18, 0], [33, 0]]) {
       const summary = await describeFIT(createCOROSActivityFITFixture({ sport, subSport, withSubSport: true }), 'Activity.fit', provider);
-      const wahooCategory = sport === 4 ? 'FE_ROWER' : sport === 18 ? 'MULTISPORT' : undefined;
+      const wahooCategory = sport === 4 ? 'FE_ROWER' : sport === 18 ? 'MULTISPORT' : sport === 33 ? 'SKATING_ICE' : undefined;
       expect(summary.warnings).toEqual(provider === 'wahoo' && wahooCategory ? [`Wahoo activity category: ${wahooCategory}.`] : []);
     }
   });
@@ -52,7 +59,7 @@ describe('recording review', () => {
     const summary = await describeFIT(createCOROSActivityFITFixture({ sport }), 'Activity.fit', 'coros');
     expect(summary.warnings).toEqual([]);
   });
-  it.each([[4, undefined], [4, 0], [4, 20], [4, 26], [18, 80], [18, 255]])('does not advertise an unverified fitness or Multisport sub-type (%i/%s)', async (sport, subSport) => {
+  it.each([[4, undefined], [4, 0], [4, 20], [4, 26], [18, 80], [18, 255], [33, 80], [33, 255]])('does not advertise an unverified sub-type (%i/%s)', async (sport, subSport) => {
     const summary = await describeFIT(createCOROSActivityFITFixture({ sport, subSport, withSubSport: subSport !== undefined }), 'Activity.fit', 'coros');
     expect(summary.warnings).toEqual([]);
   });

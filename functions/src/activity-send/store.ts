@@ -96,6 +96,7 @@ export async function describeFIT(fit: Buffer, name: string, provider: ActivityS
     if (types.some(type => /sailing/i.test(type))) warnings.push('COROS receives eligible GPS Sailing as GPS Cardio.');
     if (sourceSport === 29) warnings.push('COROS receives eligible GPS Fishing as GPS Cardio.');
     if (sourceSport === 53) warnings.push('COROS receives eligible Diving as Generic, with or without GPS. Depth stays in the FIT, but COROS may not display it or a dive profile.');
+    if (sourceSport === 33 && sourceSubSport === 0) warnings.push('COROS receives eligible Ice Skating as Generic, with or without GPS.');
     if (sourceSport === 4 && sourceSubSport === 14) warnings.push('COROS receives eligible Indoor Rowing as Generic, with or without GPS.');
     if (sourceSport === 18 && sourceSubSport === 0) warnings.push('COROS receives eligible single-session Multisport as Generic, with or without GPS.');
   }

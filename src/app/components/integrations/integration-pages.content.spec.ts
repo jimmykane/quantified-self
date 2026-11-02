@@ -107,6 +107,8 @@ describe('integration-pages.content', () => {
     expect(corosFIT).toContain('Sailing FITs with recorded GPS as GPS Cardio');
     expect(corosFIT).toContain('Fishing FITs with recorded GPS as GPS Cardio');
     expect(corosFIT).toContain('Diving FITs with or without recorded GPS are sent as Generic');
+    expect(corosFIT).toContain('Ice Skating FITs are also sent as Generic, with or without GPS');
+    expect(corosFIT).toContain('when their single session has no sub-type or the Generic sub-type');
     expect(corosFIT).toContain('Indoor Rowing and single-session Multisport FITs are also sent as Generic, with or without GPS');
     expect(corosFIT).toContain('other fitness sub-types and true multi-session recordings are not converted');
     expect(corosFIT).toContain('Recorded depth stays in the file, but COROS may not display it or a dive profile');
