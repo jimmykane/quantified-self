@@ -214,7 +214,7 @@ describe('COROS production FIT preparation', () => {
     expect(session.fields.find(field => field.fieldNumber === 6)!.bytes).toEqual(Buffer.from([0]));
   });
 
-  it.each([[4, 14], [18, 0], [18, undefined]] as const)(
+  it.each([[4, 14], [18, 0], [18, undefined], [33, 0], [33, undefined]] as const)(
     'maps single-session %i/%s to Generic while preserving every other field', (sport, subSport) => {
       for (const withGPS of [false, true]) for (const bigEndian of [false, true]) {
         const input = fixture({ sport, subSport, withSubSport: subSport !== undefined,
@@ -236,7 +236,8 @@ describe('COROS production FIT preparation', () => {
     },
   );
 
-  it.each([[4, 14, 'indoor_rowing_to_generic'], [18, 0, 'single_session_multisport_to_generic']] as const)(
+  it.each([[4, 14, 'indoor_rowing_to_generic'], [18, 0, 'single_session_multisport_to_generic'],
+    [33, 0, 'ice_skating_to_generic']] as const)(
     'logs only the fixed new category label for %i/%i', (sport, subSport, mapping) => {
       vi.mocked(logger.info).mockClear();
       prepareCOROSActivityFITUpload(fixture({ sport, subSport, withSubSport: true, withGPS: false }));
@@ -244,14 +245,15 @@ describe('COROS production FIT preparation', () => {
     },
   );
 
-  it.each([[4, undefined], [4, 0], [4, 20], [4, 26], [15, 14], [18, 80], [18, 126], [18, 255]] as const)(
-    'preserves unverified fitness and multisport subtype %i/%s', (sport, subSport) => {
+  it.each([[4, undefined], [4, 0], [4, 20], [4, 26], [15, 14], [18, 80], [18, 126], [18, 255],
+    [33, 80], [33, 255]] as const)(
+    'preserves unverified source subtype %i/%s', (sport, subSport) => {
       const input = fixture({ sport, subSport, withSubSport: subSport !== undefined });
       expect(prepareCOROSActivityFITUpload(input)).toBe(input);
     },
   );
 
-  it.each([[4, 14], [18, 0]] as const)('preserves multi-session, mixed and malformed %i/%i files', (sport, subSport) => {
+  it.each([[4, 14], [18, 0], [33, 0]] as const)('preserves multi-session, mixed and malformed %i/%i files', (sport, subSport) => {
     const base = { sport, subSport, withSubSport: true };
     const corrupt = fixture(base); corrupt[corrupt.length - 1] ^= 1;
     const conflicting = fixture(base);
@@ -293,7 +295,8 @@ describe('COROS production FIT preparation', () => {
 
   it.each([[82, ActivityTypes.OpenWaterSwimming, true], [82, ActivityTypes.OpenWaterSwimming, false],
     [32, ActivityTypes.Generic, true], [29, ActivityTypes.Generic, true],
-    [53, ActivityTypes.Generic, false], [53, ActivityTypes.Generic, true]] as const)(
+    [53, ActivityTypes.Generic, false], [53, ActivityTypes.Generic, true],
+    [33, ActivityTypes.Generic, false], [33, ActivityTypes.Generic, true]] as const)(
     'sport %i parses as %s with original metrics (GPS=%s)', async (sport, expectedType, withGPS) => {
       const input = fixture({ sport, withGPS });
       const output = prepareCOROSActivityFITUpload(input);
@@ -301,6 +304,7 @@ describe('COROS production FIT preparation', () => {
         file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength) as ArrayBuffer, createParsingOptions(),
       );
       const before = await parse(input), after = await parse(output);
+      if (sport === 33) expect(before.getActivityTypesAsArray()).toEqual([ActivityTypes.IceSkating]);
       expect(after.getActivityTypesAsArray()).toEqual([expectedType]);
       expect(after.startDate).toEqual(before.startDate);
       expect(after.endDate).toEqual(before.endDate);
@@ -403,7 +407,7 @@ describe('COROS production FIT preparation', () => {
     expect(prepareCOROSActivityFITUpload(input)).toBe(input);
   });
 
-  it.each([82, 32, 29, 53])('leaves multisession and malformed sport %i unchanged', sport => {
+  it.each([82, 32, 29, 53, 33])('leaves multisession and malformed sport %i unchanged', sport => {
     const corrupt = fixture({ sport }); corrupt[corrupt.length - 1] ^= 1;
     for (const input of [fixture({ sport, sessionCount: 2 }),
       fixture({ sport, malformedSport: true }), fixture({ sport, fullSessionDefinition: true }), corrupt]) {
@@ -437,7 +441,7 @@ describe('COROS production FIT preparation', () => {
       .toEqual(readFitMessages(input, { messageNumbers: [20] }).messages);
   });
 
-  it.each([82, 32, 29, 53])('leaves sport %i with a conflicting lap on the existing provider path', sport => {
+  it.each([82, 32, 29, 53, 33])('leaves sport %i with a conflicting lap on the existing provider path', sport => {
     const input = fixture({ sport });
     const index = input.indexOf(Buffer.from([0, 0xe8, 3, 0, 0, sport, 7]));
     expect(index).toBeGreaterThan(0);

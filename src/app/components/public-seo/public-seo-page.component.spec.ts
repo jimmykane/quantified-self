@@ -220,7 +220,12 @@ describe('PublicSeoPageComponent', () => {
     expect(text).toContain('Recorded Health metrics');
     expect(text).toContain('separate Health permission');
     expect(text).toContain('Body Battery keeps its Garmin points scale');
-    expect(text).toContain('cannot change recorded activity data, Health, routes, sleep, measurements, or dashboard settings');
+    expect(text).toContain('independent Manage manual Health measurements permission allows logging, correcting, and permanently deleting manual entries through the client’s approval controls');
+    expect(text).toContain('imported Health readings remain unchanged');
+    expect(text).toContain('cannot change recorded activity data, routes, sleep records, or dashboard settings');
+    expect(text).toContain('cannot change dashboard settings, recorded activity data, routes, imported Health readings, or sleep records');
+    expect(text).toContain('a client can log, correct, and permanently delete manual Health entries through its approval controls');
+    expect(text).toContain('released tools, a refreshed tool catalog, and reauthorization for this permission');
     expect(text).toContain('Training changes additionally use a bounded preview before a distinct apply call');
     expect(text).toContain('body-weight history');
     expect(text).toContain('Sleep, readiness, and daily context');

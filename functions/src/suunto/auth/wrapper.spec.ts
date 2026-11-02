@@ -1,6 +1,7 @@
 'use strict';
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { inspect } from 'node:util';
 import * as utils from '../../utils';
 import * as oauth2 from '../../OAuth2';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -224,6 +225,165 @@ describe('Suunto Auth Wrapper', () => {
                 'validCode',
                 'validState',
             );
+        });
+
+        it.each([
+            { status: 400, providerError: 'invalid_grant', callableCode: 'failed-precondition', level: 'warn', outcome: 'restart_oauth' },
+            { status: 502, providerError: 'temporarily_unavailable', callableCode: 'unavailable', level: 'warn', outcome: 'retry_later' },
+            { status: 500, providerError: 'server_error', callableCode: 'internal', level: 'error', outcome: undefined },
+            { status: 403, providerError: 'access_denied', callableCode: 'permission-denied', level: undefined, outcome: undefined },
+        ] as const)('keeps OAuth URL credentials out of all logs for provider status $status', async ({
+            status, providerError, callableCode, level, outcome,
+        }) => {
+            // Synthetic values only. Punctuation makes raw and URL-encoded leaks distinct.
+            const credentials = {
+                code: 'synthetic-code+/=DO-NOT-LOG',
+                state: 'synthetic-state+/=DO-NOT-LOG',
+                access_token: 'synthetic-access+/=DO-NOT-LOG',
+                refresh_token: 'synthetic-refresh+/=DO-NOT-LOG',
+                client_secret: 'synthetic-client-secret+/=DO-NOT-LOG',
+            };
+            const callback = new URL('https://app.example.invalid/callback');
+            const provider = new URL('https://oauth.example.invalid/token');
+            for (const [key, value] of Object.entries(credentials)) {
+                callback.searchParams.set(key, value);
+                provider.searchParams.set(key, value);
+            }
+            provider.hash = new URLSearchParams(credentials).toString();
+            const providerMessage = `OAuth exchange failed: ${provider.href}; redirect_uri=${encodeURIComponent(callback.href)}`;
+            const error = Object.assign(new Error(providerMessage), {
+                statusCode: status,
+                data: { payload: { error: providerError, error_description: providerMessage } },
+                request: { url: provider.href },
+                response: { body: providerMessage },
+            });
+            vi.mocked(oauth2.validateOAuth2State).mockResolvedValueOnce(true);
+            vi.mocked(oauth2.getAndSetServiceOAuth2AccessTokenForUser).mockRejectedValueOnce(error);
+
+            await expect(requestAndSetSuuntoAPIAccessToken(createMockRequest({
+                data: { state: credentials.state, code: credentials.code, redirectUri: callback.href },
+            }) as any)).rejects.toMatchObject({ code: callableCode });
+
+            expect(oauth2.getAndSetServiceOAuth2AccessTokenForUser).toHaveBeenCalledWith(
+                'testUserID', ServiceNames.SuuntoApp, callback.href, credentials.code, credentials.state,
+            );
+            if (level) {
+                expect(hoisted.logger[level]).toHaveBeenCalledTimes(1);
+                expect(hoisted.logger[level]).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+                    serviceName: ServiceNames.SuuntoApp,
+                    phase: 'authorization_code_exchange',
+                    providerStatus: status,
+                    ...(outcome ? { terminal: false, outcome } : { errorName: 'Error' }),
+                }));
+            }
+            for (const [name, logger] of Object.entries(hoisted.logger)) {
+                if (name !== level) {
+                    expect(logger).not.toHaveBeenCalled();
+                }
+            }
+            // inspect includes Error messages and nested properties that JSON.stringify can omit.
+            const capturedLogs = inspect(Object.values(hoisted.logger).map(logger => logger.mock.calls), {
+                depth: null,
+                maxStringLength: null,
+            });
+            expect(capturedLogs).not.toContain(provider.href);
+            expect(capturedLogs).not.toContain(callback.href);
+            for (const value of Object.values(credentials)) {
+                expect(capturedLogs).not.toContain(value);
+                expect(capturedLogs).not.toContain(encodeURIComponent(value));
+                expect(capturedLogs).not.toContain(encodeURIComponent(encodeURIComponent(value)));
+            }
+        });
+
+        it.each(['form', 'lowercase-percent', 'double-encoded'] as const)(
+            'keeps %s credentials out of captured logs', async encoding => {
+                // Spaces, literal plus, percent and Unicode distinguish these encodings.
+                const sentinel = 'synthetic secret+/%=雪';
+                const percentEncoded = encodeURIComponent(sentinel);
+                const formEncoded = new URLSearchParams({ token: sentinel }).toString().slice('token='.length);
+                const encoded = encoding === 'form' ? formEncoded
+                    : encoding === 'lowercase-percent' ? percentEncoded.replace(/%[0-9A-F]{2}/g, part => part.toLowerCase())
+                    : encodeURIComponent(percentEncoded);
+                const providerUrl = `https://oauth.example.invalid/token?access_token=${encoded}#refresh_token=${encoded}`;
+                const error = Object.assign(new Error(`Provider rejected ${providerUrl}`), {
+                    statusCode: 502,
+                    response: { body: { error_description: providerUrl } },
+                });
+                expect(providerUrl).toContain(encoded);
+                expect(providerUrl).not.toContain(sentinel);
+                expect(formEncoded).not.toBe(percentEncoded);
+                vi.mocked(oauth2.validateOAuth2State).mockResolvedValueOnce(true);
+                vi.mocked(oauth2.getAndSetServiceOAuth2AccessTokenForUser).mockRejectedValueOnce(error);
+
+                await expect(requestAndSetSuuntoAPIAccessToken(createMockRequest({
+                    data: { state: 'validState', code: 'validCode', redirectUri: 'https://app.example.invalid/callback' },
+                }) as any)).rejects.toMatchObject({ code: 'unavailable' });
+
+                expect(hoisted.logger.warn).toHaveBeenCalledTimes(1);
+                expect(hoisted.logger.warn).toHaveBeenCalledWith(expect.any(String), {
+                    serviceName: ServiceNames.SuuntoApp,
+                    phase: 'authorization_code_exchange',
+                    providerStatus: 502,
+                    terminal: false,
+                    outcome: 'retry_later',
+                });
+                expect(hoisted.logger.info).not.toHaveBeenCalled();
+                expect(hoisted.logger.error).not.toHaveBeenCalled();
+                const capturedLogs = inspect(Object.values(hoisted.logger).map(logger => logger.mock.calls), {
+                    depth: null, maxStringLength: null, maxArrayLength: null, showHidden: true,
+                });
+                expect(capturedLogs).not.toContain(encoded);
+                expect(capturedLogs).not.toContain(sentinel);
+                expect(capturedLogs).not.toContain(providerUrl);
+            },
+        );
+
+        it.each([
+            { status: 500, callableCode: 'internal', level: 'error' },
+            { status: 502, callableCode: 'unavailable', level: 'warn' },
+        ] as const)('does not serialize nested Error causes for status $status', async ({ status, callableCode, level }) => {
+            const rawSentinel = 'synthetic-nested-secret-DO-NOT-LOG';
+            const encodedSentinel = encodeURIComponent('synthetic nested+/=%雪');
+            const callback = `https://app.example.invalid/callback?code=${encodedSentinel}`;
+            const cause = Object.assign(new Error(`Nested provider failure: ${rawSentinel}`), {
+                request: { options: { url: callback, headers: { authorization: `Bearer ${rawSentinel}` } } },
+                response: { body: { tokens: [{ refresh_token: rawSentinel }] } },
+            });
+            // Non-enumerable Error.cause and stack are lost by JSON.stringify.
+            const error = Object.assign(new Error('Token exchange failed'), {
+                output: { statusCode: status },
+            });
+            Object.defineProperty(error, 'cause', { value: cause, enumerable: false });
+            Object.defineProperty(cause, 'cause', {
+                value: new Error(`Nested redirect: ${callback}`), enumerable: false,
+            });
+            expect(JSON.stringify(error)).not.toContain(rawSentinel);
+            const inspectedFixture = inspect(error, { depth: null, showHidden: true, maxStringLength: null });
+            expect(inspectedFixture).toContain(rawSentinel);
+            expect(inspectedFixture).toContain(encodedSentinel);
+            vi.mocked(oauth2.validateOAuth2State).mockResolvedValueOnce(true);
+            vi.mocked(oauth2.getAndSetServiceOAuth2AccessTokenForUser).mockRejectedValueOnce(error);
+
+            await expect(requestAndSetSuuntoAPIAccessToken(createMockRequest({
+                data: { state: 'validState', code: 'validCode', redirectUri: 'https://app.example.invalid/callback' },
+            }) as any)).rejects.toMatchObject({ code: callableCode });
+
+            expect(hoisted.logger[level]).toHaveBeenCalledTimes(1);
+            expect(hoisted.logger[level]).toHaveBeenCalledWith(expect.any(String), {
+                serviceName: ServiceNames.SuuntoApp,
+                phase: 'authorization_code_exchange',
+                providerStatus: status,
+                ...(level === 'error' ? { errorName: 'Error' } : { terminal: false, outcome: 'retry_later' }),
+            });
+            for (const [name, logger] of Object.entries(hoisted.logger)) {
+                if (name !== level) expect(logger).not.toHaveBeenCalled();
+            }
+            const capturedLogs = inspect(Object.values(hoisted.logger).map(logger => logger.mock.calls), {
+                depth: null, maxStringLength: null, maxArrayLength: null, showHidden: true,
+            });
+            expect(capturedLogs).not.toContain(rawSentinel);
+            expect(capturedLogs).not.toContain(encodedSentinel);
+            expect(capturedLogs).not.toContain(callback);
         });
 
         it('should report Suunto invalid_grant as non-terminal without logging the authorization code', async () => {

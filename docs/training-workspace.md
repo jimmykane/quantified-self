@@ -5879,6 +5879,27 @@ remain local only; actual Add & send admission still uses the current owner, con
 Recovery, the selected/routine sport, purpose, equipment and explicit controls retain priority over device convenience. The generator never estimates seconds for prescribed repetitions
 or distance, changes a workout to rest for hardware, or rewrites a returned prescription to make it sendable.
 
+Daily preparation also checks four existing provider metadata projections (`connectionHistoryImport` and
+`connectionState`) for active queued/requesting/retrying activity, Sleep or Health steps before collecting context.
+The existing allowance transaction repeats that same masked read atomically with the charge; if an import starts in
+between, it persists `waiting-import` without charging or invoking the model. The explicit available-data override
+bypasses this gate deliberately; automatic admission has no standalone final-read/charge gap.
+Disconnected, pending-disconnect and reconnect-required connections cannot hold generation through retained stale
+checkpoints. Legacy projections with omitted connection state retain their active-work check. An active run with
+unreadable steps is held conservatively; routes-only work does not block it.
+The existing private daily receipt retains `waiting-import` with `charged:false`; its ordinary lease can be reclaimed
+when work finishes. No AI request or allowance is spent while deferred. The existing date-bound **Use available data**
+action also accepts this state, bypasses the import gate explicitly and discloses incomplete history in Context.
+The explicit fallback still observes import status when invoked from a sleep deferral; active or unavailable status
+is disclosed without blocking that user-requested fallback.
+Today uses `HistoryImportProgressService`'s existing shared owner subscriptions to recheck a waiting import when data
+work ends; ready results still never refresh on focus or regenerate after later imports. No new listener set, polling,
+queue, scheduler, import lifecycle or provider API is introduced. Garmin's terminal `requested` step is deliberately
+not treated as active processing or proof that callbacks arrived: this minimal blocker covers active request work,
+not end-to-end Garmin delivery tracking. Failed/terminal imports do not remain active blockers. Metadata read failures
+remain retryable without charging. The new status is first-party only: MCP recipe/read/approval contracts, provider
+consent, queue monitoring, Rules and indexes remain unchanged. Deploy `generateDayWorkout` with the frontend.
+
 The optional provider-format correction shares the existing maximum of two model attempts and one daily charge with
 strict prescription validation. Provider fit may use the spare correction attempt and increase actual tokens within
 that cap; the existing usage counters include it. It runs only when a common exact starting format exists, targets are
@@ -5892,6 +5913,11 @@ MCP capability or model budget is introduced. The private provider context is no
 recipe/status reads remain valid. Provider transport, workers, retry policies and queue monitoring remain unchanged;
 existing daily usage counters capture attempts and tokens. Deploy the affected `generateDayWorkout` function for
 provider-aware generation; no new secret binding is needed.
+
+In daily preferences, the shared sport picker is labelled **Fallback sport** while recorded weekday routine selection
+is enabled, and **Sport** when it is disabled. The hint explains the priority and switching modes retains the selected
+sport. Manual generation/review keeps **Sport**. This is presentation only: selection rules, saved controls, quota,
+MCP contracts and provider consent remain unchanged.
 
 The dialog reuses that live connection subscription for the same owner across unrelated profile/settings updates.
 Delivery validation gates preference saving and Add & send, independently of ordinary generation validation: an

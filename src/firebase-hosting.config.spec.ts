@@ -348,7 +348,7 @@ describe('Firebase Hosting configuration', () => {
     // History progress help distinguishes quiet automatic retries and later queued sections (2026-11-01).
     // Provider history details now open directly, share progress with notifications, and expose recovery in the dialog (2026-11-01).
     // Daily suggestions retain saved recipes after check failures and distinguish lost responses (2026-11-01).
-    // Add & send help covers durable queue continuation, provider-aware suggestions and informational Suunto strength limits (2026-11-02).
+    // Daily workout help covers import deferral and clarifies routine selection versus the fallback sport (2026-11-02).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-02');
   });
 
@@ -481,12 +481,12 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-10-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-11-01');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-10-31');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-11-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/suunto`)).toBe('2026-10-13');
-    // COROS and Help describe Diving-to-Generic copies without requiring GPS.
-    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/coros`)).toBe('2026-11-01');
+    // COROS and Help describe eligible Ice Skating-to-Generic copies without requiring GPS.
+    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/coros`)).toBe('2026-11-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/wahoo`)).toBe('2026-10-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-10-23');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/supported-activities`)).toBe('2026-10-17');
@@ -507,7 +507,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-10-25');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/centralize-garmin-suunto-coros-workout-data`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-10-09');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-plans`)).toBe('2026-11-01');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-plans`)).toBe('2026-11-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-dashboard`)).toBe('2026-11-01');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-map`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-tcx-file-analyzer`)).toBe('2026-09-02');

@@ -10,7 +10,7 @@ export type DailyWorkoutSuggestionRequest = { mode: 'daily-suggestion'; action: 
   | { mode: 'daily-suggestion'; action: 'dismiss' | 'use-available-data'; localDate: string };
 export interface DailyWorkoutSuggestionStatus {
   localDate: string;
-  state: 'off' | 'waiting' | 'waiting-sleep' | 'preparing' | 'ready' | 'dismissed' | 'failed' | 'planned' | 'completed' | 'rest-day';
+  state: 'off' | 'waiting' | 'waiting-sleep' | 'waiting-import' | 'preparing' | 'ready' | 'dismissed' | 'failed' | 'planned' | 'completed' | 'rest-day';
   controls?: DayWorkoutControls;
   result?: GenerateDayWorkoutResponse;
 }

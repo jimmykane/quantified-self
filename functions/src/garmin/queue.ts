@@ -427,8 +427,7 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
     if (status === 410) {
       return moveToDeadLetterQueue(queueItem, safeError, bulkWriter, 'RESOURCE_GONE');
     }
-    await increaseRetryCountForQueueItem(queueItem, safeError, status === 400 || status === 500 ? 20 : 1, bulkWriter);
-    return QueueResult.RetryIncremented;
+    return increaseRetryCountForQueueItem(queueItem, safeError, 1, bulkWriter);
   };
 
   try {

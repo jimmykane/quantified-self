@@ -1,3 +1,4 @@
+import { hasActiveDataHistoryImport } from '@shared/connection-history';
 import { isPlatformBrowser } from '@angular/common';
 import { DestroyRef, Injectable, NgZone, PLATFORM_ID, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -71,6 +72,8 @@ export class HistoryImportProgressService {
     }) : [];
     return buildHistoryImportProgress(owner ? this.snapshot().sources : [], Math.max(this.now(), Date.now()), dismissed);
   });
+  readonly dataImportActive = computed(() => !!this.owner() && this.snapshot().sources.some(source =>
+    hasActiveDataHistoryImport(source.projection, source.connectionState)));
   readonly latestImports = computed(() => buildHistoryImportItems(this.owner() ? this.snapshot().sources : []));
   readonly refreshing = computed(() => !!this.owner() && this.snapshot().refreshing);
   readonly dashboardHidden = computed(() => {

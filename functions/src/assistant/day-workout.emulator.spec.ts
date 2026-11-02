@@ -4,7 +4,7 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { defaultDayWorkoutControls, type GenerateDayWorkoutResponse } from '../../../shared/day-workout';
 import { projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
-import { createDailyWorkoutSuggestionStore } from './daily-workout-suggestion-store';
+import { createDailyWorkoutSuggestionStore, readDailyWorkoutHistoryImportActive } from './daily-workout-suggestion-store';
 import { createDayWorkoutStore } from './day-workout-store';
 import { readDayWorkoutTrainingContext } from './day-workout-context';
 import { validateDayWorkoutSuggestion } from './day-workout-validation';
@@ -35,7 +35,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
       ? { scanComplete: true, activities: [] } : await read(name as TrainingReadTool, args) });
     const generate = vi.fn(async () => ({ kind: 'rest' as const, rationale: 'A recovery day.' }));
     const deps: DailyWorkoutSuggestionDependencies = { store: createDailyWorkoutSuggestionStore(() => db, () => now), now: () => now,
-      legal: async () => undefined, pro: async () => true, selectSport: async () => selected,
+      importActive: id => readDailyWorkoutHistoryImportActive(id, db), legal: async () => undefined, pro: async () => true, selectSport: async () => selected,
       coverage: async () => collectDailyWorkoutSuggestionCoverage(selected, { callTool }),
       context: async () => ({ evidence: { daily: { activitiesToday: { scanComplete: true, activities: [] },
         plannedWorkouts: { scanComplete: true, completionChecked: true, workouts: [], restDayContext: { status: 'none' } } } },
@@ -192,6 +192,50 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     await expect(store.read(uid)).rejects.toMatchObject({ code: 'permission-denied' });
     await expect(store.dismiss(uid, '2026-10-30')).rejects.toMatchObject({ code: 'permission-denied' });
   }, 30_000);
+  it.each([false, true])('retains import deferral, fences a late import and preserves one charged result (explicit override: %s)', async useAvailableData => {
+    const uid = `daily-import-${randomUUID()}`, user = db.doc(`users/${uid}`), now = new Date('2026-11-02T08:00Z');
+    const selected = { ...defaultDayWorkoutControls('2026-11-02', 'UTC'), sleepContext: false };
+    await user.set({});
+    await user.collection('config').doc('settings').set({ appSettings: { dailyWorkoutSuggestion: { enabled: true, followRoutine: false, controls: selected } } });
+    const meta = user.collection('meta').doc('Garmin API');
+    await meta.set({ connectionHistoryImport: { active: true, steps: [{ status: 'requesting', resources: ['activities'] }] } });
+    const generate = vi.fn(async () => ({ kind: 'rest' as const, rationale: 'Recovery day.' }));
+    const context = vi.fn(async () => ({ evidence: { daily: { activitiesToday: { scanComplete: true, activities: [] },
+      plannedWorkouts: { scanComplete: true, completionChecked: true, workouts: [], restDayContext: { status: 'none' } } } },
+      usedContext: [], missingContext: [], previousStrength: [], references: [] }));
+    const deps: DailyWorkoutSuggestionDependencies = { store: createDailyWorkoutSuggestionStore(() => db, () => now), now: () => now,
+      legal: async () => undefined, pro: async () => true, selectSport: async () => selected, coverage: async () => null,
+      importActive: id => readDailyWorkoutHistoryImportActive(id, db), context, generate, log: () => undefined };
+    const input = { mode: 'daily-suggestion', action: 'prepare' }, identity = { auth: { uid }, app: {} };
+    try {
+      expect((await runDailyWorkoutSuggestion(input, identity, deps)).state).toBe('waiting-import');
+      expect(context).not.toHaveBeenCalled(); expect(generate).not.toHaveBeenCalled();
+      expect((await user.collection('assistantConversations').doc('daily-workout-suggestion').get()).get('messages.2026-11-02.charged')).toBe(false);
+      await meta.set({ connectionHistoryImport: { active: false, steps: [{ status: 'requested', resources: ['activities'] }] } });
+      const charge = deps.store.charge;
+      let startImportAtCharge = true;
+      deps.store.charge = async (...args) => {
+        if (startImportAtCharge) {
+          startImportAtCharge = false;
+          await meta.set({ connectionHistoryImport: { active: true, steps: [{ status: 'requesting', resources: ['activities'] }] } });
+        }
+        return charge(...args);
+      };
+      // The preflight saw no import, but one begins immediately before the allowance transaction.
+      expect((await runDailyWorkoutSuggestion(input, identity, deps)).state).toBe('waiting-import');
+      expect(generate).not.toHaveBeenCalled();
+      expect((await user.collection('assistantConversations').doc('daily-workout-suggestion').get()).get('messages.2026-11-02.charged')).toBe(false);
+      // Disconnect can retain the old active projection; it must not keep blocking this user.
+      if (!useAvailableData) await meta.set({ connectionState: null, connectionHistoryImport: { active: true, steps: [{ status: 'requesting', resources: ['activities'] }] } });
+      const ready = await runDailyWorkoutSuggestion(useAvailableData
+        ? { mode: 'daily-suggestion', action: 'use-available-data', localDate: selected.localDate } : input, identity, deps);
+      expect(ready.state).toBe('ready');
+      if (useAvailableData) expect(ready.result?.missingContext.join(' ')).toContain('History may still be importing');
+      await meta.set({ connectionHistoryImport: { active: true, steps: [{ status: 'retrying', resources: ['activities'] }] } });
+      expect(await runDailyWorkoutSuggestion(input, identity, deps)).toEqual(ready);
+      expect(generate).toHaveBeenCalledOnce();
+    } finally { await db.recursiveDelete(user); }
+  });
   it('reads provider choices from the existing settings snapshot without changing a charged day or cached recipe', async () => {
     const uid = `provider-aware-daily-${randomUUID()}`; let now = new Date('2026-11-02T07:00Z');
     const user = db.doc(`users/${uid}`); await user.set({});

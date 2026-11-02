@@ -1996,6 +1996,7 @@ describe('activity-sync/process-queue-item', () => {
     [53, false, false, true], [53, false, false, false],
     [4, false, false, true], [4, false, false, false],
     [18, false, false, true], [18, false, false, false],
+    [33, false, false, true], [33, false, false, false],
     [1, true, true, true], [1, true, true, false]] as const)(
     'queued sport %i refreshes the prepared receipt and then only polls (GPS=%s, empty fields=%s, restart=%s)', async (sport, withGPS, emptyFields, restart) => {
       const input = createCOROSActivityFITFixture({ sport, withGPS, subSport: sport === 4 ? 14 : undefined,
@@ -2032,7 +2033,7 @@ describe('activity-sync/process-queue-item', () => {
     },
   );
 
-  it.each([[82, false], [29, false], [53, false], [1, true]] as const)(
+  it.each([[82, false], [29, false], [53, false], [33, false], [1, true]] as const)(
     'does not prepare an accepted COROS sport %i upload while repairing its receipt (empty fields=%s)', async (sport, emptyFields) => {
       const input = createCOROSActivityFITFixture({ sport, emptyNativeFields: emptyFields ? 'zero' : undefined });
       mockDownload.mockResolvedValue([input]);
@@ -2063,8 +2064,9 @@ describe('activity-sync/process-queue-item', () => {
     expect(queueItem.outboundFingerprintID).toBe('exact-v1-existing');
   });
 
-  it.each([ServiceNames.SuuntoApp, ServiceNames.WahooAPI])('leaves snorkeling FIT unchanged for %s', async destinationServiceName => {
-    const input = createCOROSActivityFITFixture({ emptyNativeFields: 'zero' });
+  it.each([[ServiceNames.SuuntoApp, 82], [ServiceNames.WahooAPI, 82],
+    [ServiceNames.SuuntoApp, 33], [ServiceNames.WahooAPI, 33]] as const)('leaves %s FIT sport %i unchanged', async (destinationServiceName, sport) => {
+    const input = createCOROSActivityFITFixture({ sport, emptyNativeFields: 'zero' });
     mockDownload.mockResolvedValue([input]);
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem, destinationServiceName,

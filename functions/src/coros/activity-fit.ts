@@ -9,6 +9,7 @@ const SNORKELING = 82;
 const SAILING = 32;
 const FISHING = 29;
 const DIVING = 53;
+const ICE_SKATING = 33;
 const FITNESS_EQUIPMENT = 4;
 const INDOOR_ROWING = 14;
 const MULTISPORT = 18;
@@ -76,7 +77,7 @@ export function createCOROSSailingFIT(input: Buffer, requireGPS = false): Buffer
 
 /**
  * Recover an evidenced missing Session, repair reproduced empty definitions, then adapt the
- * verified mappings. Snorkeling, diving, indoor rowing and single-session multisport
+ * verified mappings. Snorkeling, diving, ice skating, indoor rowing and single-session multisport
  * need no GPS; sailing and fishing require GPS.
  * No original is mutated or retained. Fingerprint and send the returned buffer.
  */
@@ -116,7 +117,9 @@ export function prepareCOROSActivityFITUpload(input: Buffer): Buffer {
     else if (sourceSport === SAILING) output = createCOROSSailingFIT(prepared, true);
     else if (sourceSport === FISHING) output = createCategoryCopy(prepared, FISHING, 0, 0, 'fishing', true);
     else if (sourceSport === DIVING) output = createCategoryCopy(prepared, DIVING, 0, 0, 'diving', false);
-    else if (sourceSport === FITNESS_EQUIPMENT && sourceSubSport === INDOOR_ROWING) {
+    else if (sourceSport === ICE_SKATING && (!sourceSubSportField || sourceSubSport === 0)) {
+      output = createCategoryCopy(prepared, ICE_SKATING, 0, 0, 'ice_skating', false, 0);
+    } else if (sourceSport === FITNESS_EQUIPMENT && sourceSubSport === INDOOR_ROWING) {
       output = createCategoryCopy(prepared, FITNESS_EQUIPMENT, 0, 0, 'indoor_rowing', false, INDOOR_ROWING);
     } else if (sourceSport === MULTISPORT && (!sourceSubSportField || sourceSubSport === 0)) {
       output = createCategoryCopy(prepared, MULTISPORT, 0, 0, 'single_session_multisport', false, 0);
@@ -130,7 +133,8 @@ export function prepareCOROSActivityFITUpload(input: Buffer): Buffer {
       : sourceSport === SAILING ? 'sailing_to_gps_cardio'
         : sourceSport === FISHING ? 'fishing_to_gps_cardio'
           : sourceSport === DIVING ? 'diving_to_generic'
-            : sourceSport === FITNESS_EQUIPMENT ? 'indoor_rowing_to_generic' : 'single_session_multisport_to_generic',
+            : sourceSport === ICE_SKATING ? 'ice_skating_to_generic'
+              : sourceSport === FITNESS_EQUIPMENT ? 'indoor_rowing_to_generic' : 'single_session_multisport_to_generic',
   });
   return output;
 }

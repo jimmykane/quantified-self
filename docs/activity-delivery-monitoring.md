@@ -77,9 +77,9 @@ at exhaustion. A diagnostic HTTP 200 is neither initialization validity nor deli
 keep their continuation/status-only guards; no monitoring resources, thresholds or labels change.
 
 COROS's #600 upload-copy mappings (Snorkeling → Open Water Swim; Sailing and
-Fishing → GPS Cardio; Diving, Indoor Rowing and single-session Multisport → Generic)
+Fishing → GPS Cardio; Diving, Ice Skating, Indoor Rowing and single-session Multisport → Generic)
 use these same workers, destination labels and committed outcomes.
-Coverage is unchanged when Snorkeling, Diving, Indoor Rowing and single-session Multisport permit
+Coverage is unchanged when Snorkeling, Diving, Ice Skating, Indoor Rowing and single-session Multisport permit
 GPS-less files and Fishing uses the existing GPS Cardio conversion; Sailing and
 Fishing retain their GPS requirement. Other fitness sub-types and true multi-session
 recordings remain outside these fallbacks. A mapping INFO is not provider acceptance or delivery. Confirm
