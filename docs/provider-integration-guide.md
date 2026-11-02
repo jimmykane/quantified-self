@@ -1550,6 +1550,12 @@ Internal derived calculations, normal/heavy/route reparses and date-sensitive Tr
 ten-attempt policy. Training's application ledger limit remains `MAX_RETRY_COUNT = 10`; it does not inherit the
 recorded-provider budget.
 
+Garmin activity downloads use one application retry per failed request, including HTTP `400`, `429` and `5xx`,
+instead of consuming the whole budget for one response. Initial and GPX-to-FIT fallback downloads share this rule
+and propagate the actual queue transition result. Explicit terminal URL/size/HTTP `410` checks remain unchanged;
+see [Garmin download handling](garmin-integration.md#delivery-and-trust-boundary). This backend correction needs
+only `processWorkoutTask`; existing import monitoring covers it without new metrics or alert configuration.
+
 The existing 15-minute, 30-minute, one-hour, two-hour and then four-hour retry delays, concurrency, schedules, leases,
 revision checks, lifecycle/deletion fences and terminal error classifications are unchanged. Twenty task attempts
 include the first delivery and span approximately 64 hours before runtime/throttling delays, rather than approximately
