@@ -178,6 +178,17 @@ describe('DayWorkoutDialogComponent', () => {
   it('requires an explicit connected service in the default-off daily delivery preference', async () => {
     const data = TestBed.inject(MAT_DIALOG_DATA); data.mode = 'preferences'; data.savePreferences = vi.fn().mockResolvedValue(undefined);
     const fixture = await render(), component = fixture.componentInstance;
+    const picker = fixture.debugElement.query(By.directive(ActivityFilterPickerComponent)).componentInstance as ActivityFilterPickerComponent;
+    const selectedSport = picker.selectedValues();
+    expect(picker.label()).toBe('Fallback sport');
+    fixture.debugElement.query(By.css('mat-checkbox')).triggerEventHandler('change', { checked: false }); fixture.detectChanges();
+    expect(picker.label()).toBe('Sport');
+    expect(fixture.nativeElement.textContent).toContain('Use the selected sport every day.');
+    expect(picker.selectedValues()).toEqual(selectedSport);
+    fixture.debugElement.query(By.css('mat-checkbox')).triggerEventHandler('change', { checked: true }); fixture.detectChanges();
+    expect(picker.label()).toBe('Fallback sport');
+    expect(fixture.nativeElement.textContent).toContain('The fallback sport below is used when no clear routine is available.');
+    expect(picker.selectedValues()).toEqual(selectedSport);
     expect(component.dailyDelivery()).toEqual({ enabled: false, providers: [] });
     component.setDeliveryEnabled(true); fixture.detectChanges(); expect(component.approvalValid()).toBe(false);
     expect(component.valid()).toBe(true); await component.primaryAction(); expect(data.savePreferences).not.toHaveBeenCalled();
@@ -854,7 +865,7 @@ describe('DayWorkoutDialogComponent', () => {
   it('uses the shared single-sport picker and preserves draft resets, allowed sports and busy guards', async () => {
     const fixture = await render(); const component = fixture.componentInstance;
     const picker = fixture.debugElement.query(By.directive(ActivityFilterPickerComponent)).componentInstance as ActivityFilterPickerComponent;
-    expect(picker.multiple()).toBe(false);
+    expect(picker.multiple()).toBe(false); expect(picker.label()).toBe('Sport');
     expect(picker.selectedValues()).toEqual([ActivityTypes.StrengthTraining]);
     expect(new Set(picker.options().map(option => option.value))).toEqual(new Set(DAY_WORKOUT_SPORTS));
     expect(picker.options().every(option => option.activityType === option.value)).toBe(true);

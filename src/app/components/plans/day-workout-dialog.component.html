@@ -30,7 +30,7 @@
   @if (data.mode === 'preferences') {
     <p class="hint">One included suggestion per local day, prepared when you open Today in {{ timeZone }}. Review before adding; nothing is saved automatically.</p>
     <mat-checkbox [checked]="followRoutine()" [disabled]="!!busy()" (change)="followRoutine.set($event.checked); haptics.selection()">Choose sport from my recorded weekday routine</mat-checkbox>
-    <p class="hint">The selected sport is used when there is no clear routine. Training plans and Recent activities stay on to check whether today is already covered.</p>
+    <p class="hint">{{ followRoutine() ? 'The fallback sport below is used when no clear routine is available.' : 'Use the selected sport every day.' }} Training plans and Recent activities stay on to check whether today is already covered.</p>
   } @else if (!result()) { <p class="hint">Review before adding. Uses your Assistant allowance.</p> }
   @if (result()?.requestId === data.initialResult?.requestId && result()) { <p class="hint">Included daily suggestion · Assistant allowance unchanged. Additional generation uses your Assistant allowance.</p> }
   @if (showDailyDelivery()) { <ng-container [ngTemplateOutlet]="dailyDeliveryOptions" /> }
@@ -40,7 +40,7 @@
         <input matInput type="number" min="5" max="240" [ngModel]="controls().minutes" (ngModelChange)="set('minutes', $event, false)"><span matTextSuffix>min</span>
         <mat-hint>5–240 whole minutes{{ strength() ? ' · approximate' : '' }}</mat-hint>
       </mat-form-field>
-      <app-activity-filter-picker label="Sport" allLabel="Choose sport" searchLabel="Search sports"
+      <app-activity-filter-picker [label]="data.mode === 'preferences' && followRoutine() ? 'Fallback sport' : 'Sport'" allLabel="Choose sport" searchLabel="Search sports"
         [multiple]="false" [options]="sportOptions" [selectedValues]="selectedSports()"
         [disabled]="!!busy() || saveUncertain()" (selectionChange)="selectSport($event)"></app-activity-filter-picker>
       @for (choice of mainChoices(); track choice.key) {

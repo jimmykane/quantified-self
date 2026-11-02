@@ -5914,6 +5914,11 @@ recipe/status reads remain valid. Provider transport, workers, retry policies an
 existing daily usage counters capture attempts and tokens. Deploy the affected `generateDayWorkout` function for
 provider-aware generation; no new secret binding is needed.
 
+In daily preferences, the shared sport picker is labelled **Fallback sport** while recorded weekday routine selection
+is enabled, and **Sport** when it is disabled. The hint explains the priority and switching modes retains the selected
+sport. Manual generation/review keeps **Sport**. This is presentation only: selection rules, saved controls, quota,
+MCP contracts and provider consent remain unchanged.
+
 The dialog reuses that live connection subscription for the same owner across unrelated profile/settings updates.
 Delivery validation gates preference saving and Add & send, independently of ordinary generation validation: an
 unavailable destination cannot block an explicit manual regeneration. An acknowledged delivery result stays visible

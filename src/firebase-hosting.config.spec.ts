@@ -348,7 +348,7 @@ describe('Firebase Hosting configuration', () => {
     // History progress help distinguishes quiet automatic retries and later queued sections (2026-11-01).
     // Provider history details now open directly, share progress with notifications, and expose recovery in the dialog (2026-11-01).
     // Daily suggestions retain saved recipes after check failures and distinguish lost responses (2026-11-01).
-    // Add & send help covers durable queue continuation, provider-aware suggestions and active-import generation deferral (2026-11-02).
+    // Daily workout help covers import deferral and clarifies routine selection versus the fallback sport (2026-11-02).
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-11-02');
   });
 
