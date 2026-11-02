@@ -15,9 +15,10 @@ import type { ValidatedDaySuggestion } from './day-workout-validation';
 export function dayWorkoutProviderContext(controls: DayWorkoutControls, providers: readonly PlannedWorkoutProviderId[], references: readonly WorkoutTargetV1[]) {
   const strengthSport = isStrengthWorkoutSportV1(controls.sport);
   const needsReview = (assessment: DeliveryAssessment) => assessment.level === 'unsupported' || requiresDeliveryMappingApproval(assessment);
-  const assessRecipe = (provider: PlannedWorkoutProviderId, structure: WorkoutStructureV1, strength: StrengthWorkoutDetailsV1 | null) => {
+  const assessRecipe = (provider: PlannedWorkoutProviderId, structure: WorkoutStructureV1, strength: StrengthWorkoutDetailsV1 | null,
+    title = 'Workout compatibility check') => {
     const workout = { schemaVersion: 1 as const, id: strength?.workoutId ?? 'provider-check', planId: null, localDate: controls.localDate,
-      title: 'Workout compatibility check', structure, lifecycle: 'planned' as const, revision: 1, createdAtMs: 0, updatedAtMs: 0 };
+      title, structure, lifecycle: 'planned' as const, revision: 1, createdAtMs: 0, updatedAtMs: 0 };
     // Public placeholders are sufficient for format guidance; admission still checks the real owner/connection later.
     try {
       return provider === 'wahoo' ? assessWahooDelivery(workout, 'provider-check', controls.timeZone, strength)
@@ -66,7 +67,7 @@ export function dayWorkoutProviderContext(controls: DayWorkoutControls, provider
     const draft = suggestion.draft;
     const strength = draft.strength ? { ...draft.strength, workoutId: 'generated-provider-check', revision: 1 } : null;
     return providers.map(provider => ({ label: PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label,
-      ...assessRecipe(provider, draft.structure, strength) }));
+      ...assessRecipe(provider, draft.structure, strength, draft.title) }));
   };
   return {
     evidence: { kind: 'local-recipe-capabilities', providers: guidance, commonExactEndings,

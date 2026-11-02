@@ -36,6 +36,18 @@ describe('provider-aware daily recipe context', () => {
     expect(names).toContain('Barbell Back Squat'); expect(names.every(name => !!garminStrengthExercise(name))).toBe(true);
     expect(context.evidence.providers[1].endings).toContainEqual(expect.objectContaining({ kind: 'repetitions', level: 'unsupported' }));
   });
+  it('checks the generated title instead of the probe title without rewriting the prescription', () => {
+    const context = dayWorkoutProviderContext(controls, ['suunto'], []);
+    const suggestion = validateDayWorkoutSuggestion({ kind: 'workout', title: 'A'.repeat(80), rationale: 'Easy training', structure: {
+      version: 1, sport: controls.sport, nodes: [{ kind: 'step', id: 'work', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] }],
+    } }, controls);
+    const original = structuredClone(suggestion);
+    expect(context.correction(suggestion)).toContain('Suunto: degraded');
+    expect(context.limitations(suggestion)).toEqual([expect.stringContaining('Suunto Guide name')]);
+    expect(context.limitations(suggestion)[0]).toContain('needs Review sync');
+    expect(context.limitations({ ...suggestion, draft: { ...suggestion.draft!, title: 'Easy run' } })).toEqual([]);
+    expect(suggestion).toEqual(original);
+  });
   it('keeps normal Suunto strength transitions informational without requesting another model attempt', () => {
     const selected = { ...controls, sport: ActivityTypes.StrengthTraining };
     const context = dayWorkoutProviderContext(selected, ['suunto'], []);

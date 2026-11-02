@@ -5872,9 +5872,11 @@ mapping checks, including Wahoo total-duration rules, real step/target support, 
 allowlist. The combined evidence retains the existing 160,000-character context limit. If optional provider guidance
 would exceed it, generation preserves all collected recovery/training evidence, omits that guidance and its correction,
 and discloses the omission in Context. It does not resolve connection authority, read tokens, invoke provider HTTP,
-claim watch receipt or grant consent. Public placeholders suffice for recipe guidance; actual Add & send admission still uses the current owner,
-connection, entitlement and current live mapping. Recovery, the selected/routine sport, purpose, equipment and explicit
-controls retain priority over device convenience. The generator never estimates seconds for prescribed repetitions
+claim watch receipt or grant consent. Capability probes use public placeholders; final draft assessment uses the
+generated title, validated structure and complete strength prescription, including reused planned loads. This catches
+title-length/character limitations as well as step constraints without rewriting the draft. Identity/owner placeholders
+remain local only; actual Add & send admission still uses the current owner, connection, entitlement and live mapping.
+Recovery, the selected/routine sport, purpose, equipment and explicit controls retain priority over device convenience. The generator never estimates seconds for prescribed repetitions
 or distance, changes a workout to rest for hardware, or rewrites a returned prescription to make it sendable.
 
 The optional provider-format correction shares the existing maximum of two model attempts and one daily charge with
