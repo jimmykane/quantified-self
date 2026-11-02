@@ -1,3 +1,4 @@
+import { SERVICE_CONNECTION_STATES } from './service-connection';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
 export type HistoryResource = 'activities' | 'sleep' | 'health' | 'routes';
@@ -127,7 +128,9 @@ export function parseImportRouteHistory(value: unknown, service: ServiceNames): 
 }
 
 /** Active data work only. A submitted Garmin request does not prove either pending delivery or completed ingestion. */
-export function hasActiveDataHistoryImport(value: unknown): boolean {
+export function hasActiveDataHistoryImport(value: unknown, connectionState?: unknown): boolean {
+  if (connectionState === null || connectionState === SERVICE_CONNECTION_STATES.DisconnectPending
+    || connectionState === SERVICE_CONNECTION_STATES.ReconnectRequired) return false;
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const history = value as Record<string, unknown>;
   if (history.active !== true) return false;

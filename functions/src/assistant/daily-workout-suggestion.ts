@@ -1,5 +1,3 @@
-import * as admin from 'firebase-admin';
-import { CONNECTION_HISTORY_CAPABILITIES, hasActiveDataHistoryImport } from '../../../shared/connection-history';
 import { HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import { type DailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionStatus } from '../../../shared/daily-workout-suggestion';
@@ -7,7 +5,7 @@ import { normalizeTrainingLocalDate } from '../../../shared/training-plans';
 import { dayWorkoutDateOffset, dayWorkoutLocalDate, type DayWorkoutControls, type GenerateDayWorkoutRequest } from '../../../shared/day-workout';
 import { enforceAppCheck, getUserRoleAndGracePeriod } from '../utils';
 import { assertAssistantLegalAccess } from './access';
-import { createDailyWorkoutSuggestionStore, type DailyWorkoutSuggestionStore } from './daily-workout-suggestion-store';
+import { createDailyWorkoutSuggestionStore, readDailyWorkoutHistoryImportActive, type DailyWorkoutSuggestionStore } from './daily-workout-suggestion-store';
 import { dayWorkoutDependencies, generateDayWorkoutSuggestion, generateValidatedDayWorkout } from './day-workout-callable';
 import { dayWorkoutProviderContext } from './day-workout-provider-context';
 import { DAY_WORKOUT_CONTEXT_MAX_CHARACTERS, type DayWorkoutContext } from './day-workout-context';
@@ -68,12 +66,6 @@ async function readDailyWorkoutSuggestionCoverage(uid: string, controls: DayWork
   try { return await collectDailyWorkoutSuggestionCoverage(controls, session); }
   catch { throw new HttpsError('unavailable', 'Today’s schedule and recorded workouts could not be checked. Try again.'); }
   finally { await session.close(); }
-}
-/** One bounded owner-scoped metadata read; no provider API, ingestion scan or polling. */
-export async function readDailyWorkoutHistoryImportActive(uid: string, db = admin.firestore()): Promise<boolean> {
-  const snapshots = await db.getAll(...Object.keys(CONNECTION_HISTORY_CAPABILITIES).map(service => db.doc(`users/${uid}/meta/${service}`)),
-    { fieldMask: ['connectionHistoryImport'] });
-  return snapshots.some(snapshot => hasActiveDataHistoryImport(snapshot.get('connectionHistoryImport')));
 }
 export interface DailyWorkoutSuggestionDependencies {
   store: DailyWorkoutSuggestionStore;
@@ -175,11 +167,6 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
     if (useAvailable && (status.state === 'waiting-import' || importing)) {
       evidence.missingContext.push('History may still be importing. You explicitly chose to generate using available data; incomplete history is unknown, not zero.');
     }
-    if (!useAvailable && await dependencies.importActive(uid)) {
-      outcome = 'waiting-import';
-      await dependencies.store.finish(uid, date, token, outcome);
-      return { localDate: date, state: outcome };
-    }
     if (awaitingSleep) {
       evidence.missingContext.push('Today’s completed sleep is not included. Treat older sleep and sleep-dependent readiness as dated history, not today’s recovery. You explicitly chose to use available data.');
     }
@@ -196,7 +183,10 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
       }
     }
     // Separate daily allowance. Never reserve/finalize Assistant billing-period quota.
-    await dependencies.store.charge(uid, date, token);
+    if (!await dependencies.store.charge(uid, date, token, useAvailable)) {
+      outcome = 'waiting-import';
+      return { localDate: date, state: outcome };
+    }
     const suggestion = await generateValidatedDayWorkout(request, evidence, async (request, evidence, correction) => {
       attempts++;
       return dependencies.generate(request, evidence, correction, usage => {

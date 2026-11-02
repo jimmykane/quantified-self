@@ -4,13 +4,13 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { defaultDayWorkoutControls, type GenerateDayWorkoutResponse } from '../../../shared/day-workout';
 import { projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
-import { createDailyWorkoutSuggestionStore } from './daily-workout-suggestion-store';
+import { createDailyWorkoutSuggestionStore, readDailyWorkoutHistoryImportActive } from './daily-workout-suggestion-store';
 import { createDayWorkoutStore } from './day-workout-store';
 import { readDayWorkoutTrainingContext } from './day-workout-context';
 import { validateDayWorkoutSuggestion } from './day-workout-validation';
 import { createFirestoreTrainingReads, readTrainingPlans } from '../mcp/training-plans.service';
 import { TRAINING_READ_OUTPUTS, type TrainingReadTool } from '../mcp/training-plans.schemas';
-import { collectDailyWorkoutSuggestionCoverage, readDailyWorkoutHistoryImportActive, runDailyWorkoutSuggestion, type DailyWorkoutSuggestionDependencies } from './daily-workout-suggestion';
+import { collectDailyWorkoutSuggestionCoverage, runDailyWorkoutSuggestion, type DailyWorkoutSuggestionDependencies } from './daily-workout-suggestion';
 import type { AssistantMcpSession } from './mcp-session';
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation private state and existing MCP read-back', () => {
@@ -192,7 +192,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
     await expect(store.read(uid)).rejects.toMatchObject({ code: 'permission-denied' });
     await expect(store.dismiss(uid, '2026-10-30')).rejects.toMatchObject({ code: 'permission-denied' });
   }, 30_000);
-  it('persists an uncharged import deferral, releases terminal Garmin requests and preserves the charged result', async () => {
+  it.each([false, true])('retains import deferral, fences a late import and preserves one charged result (explicit override: %s)', async useAvailableData => {
     const uid = `daily-import-${randomUUID()}`, user = db.doc(`users/${uid}`), now = new Date('2026-11-02T08:00Z');
     const selected = { ...defaultDayWorkoutControls('2026-11-02', 'UTC'), sleepContext: false };
     await user.set({});
@@ -212,7 +212,25 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Calendar generation priva
       expect(context).not.toHaveBeenCalled(); expect(generate).not.toHaveBeenCalled();
       expect((await user.collection('assistantConversations').doc('daily-workout-suggestion').get()).get('messages.2026-11-02.charged')).toBe(false);
       await meta.set({ connectionHistoryImport: { active: false, steps: [{ status: 'requested', resources: ['activities'] }] } });
-      const ready = await runDailyWorkoutSuggestion(input, identity, deps); expect(ready.state).toBe('ready');
+      const charge = deps.store.charge;
+      let startImportAtCharge = true;
+      deps.store.charge = async (...args) => {
+        if (startImportAtCharge) {
+          startImportAtCharge = false;
+          await meta.set({ connectionHistoryImport: { active: true, steps: [{ status: 'requesting', resources: ['activities'] }] } });
+        }
+        return charge(...args);
+      };
+      // The preflight saw no import, but one begins immediately before the allowance transaction.
+      expect((await runDailyWorkoutSuggestion(input, identity, deps)).state).toBe('waiting-import');
+      expect(generate).not.toHaveBeenCalled();
+      expect((await user.collection('assistantConversations').doc('daily-workout-suggestion').get()).get('messages.2026-11-02.charged')).toBe(false);
+      // Disconnect can retain the old active projection; it must not keep blocking this user.
+      if (!useAvailableData) await meta.set({ connectionState: null, connectionHistoryImport: { active: true, steps: [{ status: 'requesting', resources: ['activities'] }] } });
+      const ready = await runDailyWorkoutSuggestion(useAvailableData
+        ? { mode: 'daily-suggestion', action: 'use-available-data', localDate: selected.localDate } : input, identity, deps);
+      expect(ready.state).toBe('ready');
+      if (useAvailableData) expect(ready.result?.missingContext.join(' ')).toContain('History may still be importing');
       await meta.set({ connectionHistoryImport: { active: true, steps: [{ status: 'retrying', resources: ['activities'] }] } });
       expect(await runDailyWorkoutSuggestion(input, identity, deps)).toEqual(ready);
       expect(generate).toHaveBeenCalledOnce();

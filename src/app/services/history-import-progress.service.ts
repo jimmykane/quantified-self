@@ -73,7 +73,7 @@ export class HistoryImportProgressService {
     return buildHistoryImportProgress(owner ? this.snapshot().sources : [], Math.max(this.now(), Date.now()), dismissed);
   });
   readonly dataImportActive = computed(() => !!this.owner() && this.snapshot().sources.some(source =>
-    source.connectionState !== null && hasActiveDataHistoryImport(source.projection)));
+    hasActiveDataHistoryImport(source.projection, source.connectionState)));
   readonly latestImports = computed(() => buildHistoryImportItems(this.owner() ? this.snapshot().sources : []));
   readonly refreshing = computed(() => !!this.owner() && this.snapshot().refreshing);
   readonly dashboardHidden = computed(() => {

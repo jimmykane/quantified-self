@@ -68,6 +68,13 @@ describe('HistoryImportProgressService', () => {
     expect(service.dataImportActive()).toBe(false); expect(getMeta).toHaveBeenCalledTimes(4);
     sessions$.next(null); auth.currentUser = null; expect(service.dataImportActive()).toBe(false);
   });
+  it.each([null, 'disconnect_pending', 'reconnect_required'])('does not block on retained import metadata from unavailable connection %s', connectionState => {
+    const service = TestBed.inject(HistoryImportProgressService); connect('a');
+    stream('a').next({ connectionState: 'connected', connectionHistoryImport: status() });
+    expect(service.dataImportActive()).toBe(true);
+    stream('a').next({ connectionState, connectionHistoryImport: status() });
+    expect(service.dataImportActive()).toBe(false);
+  });
   it('clears immediately on raw sign-out, before a delayed profile emission', () => {
     const service = TestBed.inject(HistoryImportProgressService); connect('a');
     stream('a').next({connectionState: 'connected', connectionHistoryImport: status()});

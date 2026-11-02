@@ -1,3 +1,4 @@
+import { readDailyWorkoutHistoryImportActive } from './daily-workout-suggestion-store';
 import { CONNECTION_HISTORY_CAPABILITIES as importServices, hasActiveDataHistoryImport } from '../../../shared/connection-history';
 import { readFileSync } from 'node:fs';
 import { defaultDayWorkoutControls } from '../../../shared/day-workout';
@@ -32,7 +33,7 @@ describe('daily workout preferences', () => {
   });
 });
 
-import { readDailyWorkoutHistoryImportActive, collectDailyWorkoutSuggestionCoverage, dailyWorkoutSuggestionAwaitsSleep, dailyWorkoutSuggestionSkip, runDailyWorkoutSuggestion, type DailyWorkoutSuggestionDependencies } from './daily-workout-suggestion';
+import { collectDailyWorkoutSuggestionCoverage, dailyWorkoutSuggestionAwaitsSleep, dailyWorkoutSuggestionSkip, runDailyWorkoutSuggestion, type DailyWorkoutSuggestionDependencies } from './daily-workout-suggestion';
 import { dailyWorkoutSuggestionRoutineSport } from './daily-workout-suggestion-routine';
 import type { DayWorkoutContext } from './day-workout-context';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
@@ -51,7 +52,7 @@ function dependencies() {
   const preferences = { enabled: true, followRoutine: true, controls: dailyControls };
   let status: any = { localDate: '2026-10-30', state: 'waiting' };
   const store = { read: vi.fn(async () => ({ preferences, status })), begin: vi.fn(async () => 'lease'),
-    assertActive: vi.fn(), charge: vi.fn(), finish: vi.fn(async (_uid, _date, _token, state, controls, result) => { status = { localDate: '2026-10-30', state, ...(controls ? { controls } : {}), ...(result ? { result } : {}) }; }),
+    assertActive: vi.fn(), charge: vi.fn(async () => true), finish: vi.fn(async (_uid, _date, _token, state, controls, result) => { status = { localDate: '2026-10-30', state, ...(controls ? { controls } : {}), ...(result ? { result } : {}) }; }),
     dismiss: vi.fn(async () => ({ localDate: '2026-10-30', state: 'dismissed' as const })) };
   return { store, now: () => dailyNow, legal: vi.fn(), pro: vi.fn(async () => true), selectSport: vi.fn(async () => dailyControls),
     importActive: vi.fn(async () => false), coverage: vi.fn(async () => null as 'planned' | 'completed' | 'rest-day' | null), context: vi.fn(async () => evidence()), generate: vi.fn(async (_request, _evidence, _correction, usage) => {
@@ -106,9 +107,9 @@ describe('daily workout preparation', () => {
     expect(deps.store.charge).toHaveBeenCalledOnce(); expect(deps.generate).toHaveBeenCalledOnce();
   });
   it('defers an import that starts while context is collected, before spending the allowance', async () => {
-    const deps = dependencies(); deps.importActive.mockResolvedValueOnce(false).mockResolvedValue(true);
+    const deps = dependencies(); deps.store.charge.mockResolvedValueOnce(false);
     expect((await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, identity, deps)).state).toBe('waiting-import');
-    expect(deps.context).toHaveBeenCalledOnce(); expect(deps.generate).not.toHaveBeenCalled(); expect(deps.store.charge).not.toHaveBeenCalled();
+    expect(deps.context).toHaveBeenCalledOnce(); expect(deps.generate).not.toHaveBeenCalled(); expect(deps.store.charge).toHaveBeenCalledOnce();
   });
   it('reuses the explicit available-data action for import deferral without changing preferences', async () => {
     const deps = dependencies(); deps.importActive.mockResolvedValue(true);
@@ -133,12 +134,19 @@ describe('daily workout preparation', () => {
     await expect(runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, identity, deps)).rejects.toMatchObject({ code: 'unavailable' });
     expect(deps.store.charge).not.toHaveBeenCalled(); expect(deps.generate).not.toHaveBeenCalled();
   });
+  it.each([null, 'disconnect_pending', 'reconnect_required'])('ignores retained import checkpoints for unavailable connection %s', async connectionState => {
+    const snapshot = { get: vi.fn(field => field === 'connectionState' ? connectionState : {
+      active: true, steps: [{ status: 'requesting', resources: ['activities'] }],
+    }) };
+    const db = { doc: vi.fn(path => ({ path })), getAll: vi.fn(async () => [snapshot]) };
+    expect(await readDailyWorkoutHistoryImportActive('owner', db as unknown as FirebaseFirestore.Firestore)).toBe(false);
+  });
   it('reads only the existing owner import projections and recognizes active data steps', async () => {
-    const get = vi.fn(() => ({ active: true, steps: [{ status: 'requesting', resources: ['activities'] }] }));
+    const get = vi.fn(field => field === 'connectionHistoryImport' ? { active: true, steps: [{ status: 'requesting', resources: ['activities'] }] } : 'connected');
     const db = { doc: vi.fn(path => ({ path })), getAll: vi.fn(async () => [{ get }]) };
     expect(await readDailyWorkoutHistoryImportActive('owner', db as unknown as FirebaseFirestore.Firestore)).toBe(true);
     expect(db.doc.mock.calls.map(([path]) => path)).toEqual(Object.keys(importServices).map(service => `users/owner/meta/${service}`));
-    expect(db.getAll).toHaveBeenCalledWith(...db.doc.mock.results.map(item => item.value), { fieldMask: ['connectionHistoryImport'] });
+    expect(db.getAll).toHaveBeenCalledWith(...db.doc.mock.results.map(item => item.value), { fieldMask: ['connectionHistoryImport', 'connectionState'] });
     expect(get).toHaveBeenCalledWith('connectionHistoryImport');
   });
   it('uses selected provider formats for new suggestions without regenerating a cached day after provider changes', async () => {

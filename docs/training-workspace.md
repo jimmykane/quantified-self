@@ -5879,9 +5879,14 @@ remain local only; actual Add & send admission still uses the current owner, con
 Recovery, the selected/routine sport, purpose, equipment and explicit controls retain priority over device convenience. The generator never estimates seconds for prescribed repetitions
 or distance, changes a workout to rest for hardware, or rewrites a returned prescription to make it sendable.
 
-Daily preparation also checks the four existing provider metadata projections (`connectionHistoryImport` only)
-for active queued/requesting/retrying activity, Sleep or Health steps before collecting generation context and again
-before charging. An active run with unreadable steps is held conservatively; routes-only work does not block it.
+Daily preparation also checks four existing provider metadata projections (`connectionHistoryImport` and
+`connectionState`) for active queued/requesting/retrying activity, Sleep or Health steps before collecting context.
+The existing allowance transaction repeats that same masked read atomically with the charge; if an import starts in
+between, it persists `waiting-import` without charging or invoking the model. The explicit available-data override
+bypasses this gate deliberately; automatic admission has no standalone final-read/charge gap.
+Disconnected, pending-disconnect and reconnect-required connections cannot hold generation through retained stale
+checkpoints. Legacy projections with omitted connection state retain their active-work check. An active run with
+unreadable steps is held conservatively; routes-only work does not block it.
 The existing private daily receipt retains `waiting-import` with `charged:false`; its ordinary lease can be reclaimed
 when work finishes. No AI request or allowance is spent while deferred. The existing date-bound **Use available data**
 action also accepts this state, bypasses the import gate explicitly and discloses incomplete history in Context.

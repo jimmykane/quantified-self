@@ -1,3 +1,4 @@
+import { CONNECTION_HISTORY_CAPABILITIES, hasActiveDataHistoryImport } from '../../../shared/connection-history';
 import { randomUUID, createHash } from 'node:crypto';
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
@@ -11,15 +12,23 @@ import { TTL_CONFIG } from '../shared/ttl-config';
 interface Entry extends DailyWorkoutSuggestionStatus { token: string; startedAtMs: number; charged: boolean; preferenceHash: string; awaitingSleep?: true }
 // A date-keyed map under the existing index-exempt messages field; this leaf is not a chat transcript.
 interface State { version: 'daily-workout-suggestion-v1'; messages: Record<string, Entry>; expireAt: Timestamp }
+type TransactionOutcome<T> = { value: T; write?: boolean };
 const fingerprint = (value: DailyWorkoutSuggestionPreferences) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const LEASE_MS = 4 * 60_000;
 const publicEntry = ({ localDate, state, controls, result }: Entry): DailyWorkoutSuggestionStatus => ({ localDate, state,
   ...(controls ? { controls } : {}), ...(result ? { result } : {}) });
 
+/** Four owner-scoped projections; the same masked read is also used inside allowance admission. */
+export async function readDailyWorkoutHistoryImportActive(uid: string, database = admin.firestore(),
+  reader: Pick<FirebaseFirestore.Firestore, 'getAll'> = database): Promise<boolean> {
+  const snapshots = await reader.getAll(...Object.keys(CONNECTION_HISTORY_CAPABILITIES).map(service => database.doc(`users/${uid}/meta/${service}`)),
+    { fieldMask: ['connectionHistoryImport', 'connectionState'] });
+  return snapshots.some(snapshot => hasActiveDataHistoryImport(snapshot.get('connectionHistoryImport'), snapshot.get('connectionState')));
+}
 /** Server-only leaf under the existing conversation Rules, seven-day TTL and recursive account erasure. */
 export function createDailyWorkoutSuggestionStore(db = () => admin.firestore(), clock = () => new Date()) {
-  async function transact<T>(uid: string, action: (preferences: DailyWorkoutSuggestionPreferences | null, state: State, now: Date, deliveryValue: unknown) =>
-    { value: T; write?: boolean }): Promise<T> {
+  async function transact<T>(uid: string, action: (preferences: DailyWorkoutSuggestionPreferences | null, state: State, now: Date, deliveryValue: unknown, tx: FirebaseFirestore.Transaction) =>
+    TransactionOutcome<T> | Promise<TransactionOutcome<T>>): Promise<T> {
     const database = db();
     return database.runTransaction(async tx => {
       const now = clock();
@@ -32,7 +41,7 @@ export function createDailyWorkoutSuggestionStore(db = () => admin.firestore(), 
       const state = snapshot.data() as State | undefined;
       if (state && state.version !== 'daily-workout-suggestion-v1') throw new HttpsError('failed-precondition', 'Daily suggestion state is unavailable.');
       const next: State = state ?? { version: 'daily-workout-suggestion-v1', messages: {}, expireAt: Timestamp.fromMillis(0) };
-      const outcome = action(preferences, next, now, settings.get('appSettings.dailyWorkoutDelivery'));
+      const outcome = await action(preferences, next, now, settings.get('appSettings.dailyWorkoutDelivery'), tx);
       if (outcome.write) {
         next.expireAt = Timestamp.fromMillis(now.getTime() + TTL_CONFIG.ASSISTANT_CONVERSATIONS_IN_DAYS * 86_400_000);
         const days = Object.keys(next.messages).sort().reverse();
@@ -89,8 +98,13 @@ export function createDailyWorkoutSuggestionStore(db = () => admin.firestore(), 
     assertActive: (uid: string, date: string, token: string) => transact(uid, (preferences, state, now) => {
       active(preferences, state, date, token, now); return { value: undefined };
     }),
-    charge: (uid: string, date: string, token: string) => transact(uid, (preferences, state, now) => {
-      active(preferences, state, date, token, now).charged = true; return { value: undefined, write: true };
+    charge: (uid: string, date: string, token: string, useAvailableData = false) => transact(uid, async (preferences, state, now, _delivery, tx) => {
+      const entry = active(preferences, state, date, token, now);
+      if (!useAvailableData && await readDailyWorkoutHistoryImportActive(uid, db(), tx)) {
+        entry.state = 'waiting-import';
+        return { value: false, write: true };
+      }
+      entry.charged = true; return { value: true, write: true };
     }),
     finish: (uid: string, date: string, token: string, outcome: DailyWorkoutSuggestionStatus['state'],
       controls?: DayWorkoutControls, result?: GenerateDayWorkoutResponse) => transact(uid, (preferences, state, now) => {
