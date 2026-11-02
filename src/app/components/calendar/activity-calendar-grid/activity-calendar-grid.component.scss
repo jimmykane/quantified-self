@@ -675,6 +675,14 @@
     font: var(--mat-sys-label-small);
     pointer-events: none;
   }
+  // Rest can share a date with recorded activity and a boundary-month label.
+  // Reserve its own line instead of placing it over the other cell content.
+  .activity-calendar-workout-preview--rest {
+    position: static;
+    flex: 0 0 auto;
+    align-self: stretch;
+    margin-top: auto;
+  }
   .activity-calendar-workout-preview-title {
     min-width: 0;
     overflow: hidden;
@@ -770,9 +778,6 @@
     .activity-calendar-calm-note { position: absolute; right: 2px; bottom: 7px; width: 2px; height: 12px; }
     .activity-calendar-workout-preview:not(.activity-calendar-workout-preview--rest) { display: none; }
     .activity-calendar-workout-preview--rest {
-      right: 2px;
-      bottom: 2px;
-      left: 2px;
       justify-content: center;
     }
     .activity-calendar-rest-day-suffix { display: none; }
@@ -897,15 +902,20 @@
   letter-spacing: 0;
 }
 
-// Keep boundary-month labels clear of today's corner signal on narrow seven-column grids.
+// Keep boundary-month labels in the date heading, clear of activity and rest rows.
 .activity-calendar--calm-month .activity-calendar-day-month {
   flex-shrink: 0;
 }
 @container (max-width: 420px) {
+  .activity-calendar--calm-month .activity-calendar-day .activity-calendar-day-number.activity-calendar-day-number--month-label {
+    width: auto;
+    max-width: 100%;
+    height: auto;
+    min-height: 19px;
+    flex: 0 0 auto;
+    flex-direction: column;
+  }
   .activity-calendar--calm-month .activity-calendar-day-month {
-    position: absolute;
-    right: 4px;
-    bottom: 4px;
     margin: 0;
   }
 }
