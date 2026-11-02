@@ -2311,6 +2311,12 @@ The Activity Sync queue view also breaks out historical sends (`deliveryMode: hi
 
 Use structured logs with safe identifiers and error categories. Do not put token values, authorization codes, signed URLs, file query strings, or full raw partner payloads in logs, analytics, or admin responses.
 
+Browser Sentry capture redacts OAuth `code` and `state` URL parameters at breadcrumb capture and before sending
+error or transaction envelopes, including request/query/referrer, frame and trace/span URL copies. Encoded parameter
+names and duplicates are covered. Ordinary URL parameters, application `code`/`state` fields and actual OAuth
+requests are unchanged; the existing App Check diagnostic allowlist remains in force. This applies to new captures
+after the frontend release and does not modify historical Sentry events.
+
 Outbound semantic FIT fingerprint failures and unexpected manual activity-parser failures use the shared
 `activity-parser-diagnostics` allowlist. It records a diagnostic ID (alongside the platform request trace), Sports Lib
 version, format and payload byte length, known error names/codes/literal messages, a bounded-message hash, and package

@@ -17,6 +17,7 @@ import { hasServiceOAuthConnectAccess } from '../../service-oauth-access';
 import { extractRefreshFailureDetails } from '../../service-auth-lifecycle';
 import { FUNCTION_SECRET_BINDINGS } from '../../secrets';
 import type { ServiceOAuthCompletionResult } from '../../../../shared/service-connection';
+import { SUUNTO_OAUTH_RESTART_REQUIRED_REASON } from '../../../../shared/service-connection';
 import type { ConnectionHistoryRangePreset } from '../../../../shared/connection-history';
 
 const SERVICE_NAME = ServiceNames.SuuntoApp;
@@ -147,7 +148,8 @@ export const requestAndSetSuuntoAPIAccessToken = onCall({
       });
       throw new HttpsError(
         'failed-precondition',
-        'Suunto authorization code expired or was already used. Start the connection again.',
+        'Suunto could not complete sign-in. Start the connection again using your Suunto email and password instead of Facebook.',
+        { reason: SUUNTO_OAUTH_RESTART_REQUIRED_REASON },
       );
     }
     if (status === 502) {

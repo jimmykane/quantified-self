@@ -246,7 +246,8 @@ describe('Suunto Auth Wrapper', () => {
 
             await expect(requestAndSetSuuntoAPIAccessToken(request as any)).rejects.toMatchObject({
                 code: 'failed-precondition',
-                message: 'Suunto authorization code expired or was already used. Start the connection again.',
+                message: 'Suunto could not complete sign-in. Start the connection again using your Suunto email and password instead of Facebook.',
+                details: { reason: 'suunto_oauth_restart_required' },
             });
 
             expect(hoisted.logger.error).not.toHaveBeenCalled();

@@ -17,6 +17,12 @@ import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 
 describe('help.content', () => {
+  it('explains how to restart a rejected Suunto sign-in without claiming disconnection', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
+    expect(copy).toContain('Suunto email and password instead of Facebook');
+    expect(copy).toContain('does not mean an existing connection was removed');
+  });
+
   it('separates Suunto, COROS and Wahoo history imports from automatic forwarding', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
     for (const phrase of ['For **Suunto, COROS and Wahoo**', 'both manual imports and history selected when connecting',

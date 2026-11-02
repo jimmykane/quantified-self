@@ -21,6 +21,13 @@ If a saved activity or original becomes permanently ineligible before Suunto upl
 
 ### Authorization recovery
 
+An initial Suunto authorization-code exchange returning `400 invalid_grant` keeps the existing recoverable
+`failed-precondition` response and adds the fixed `suunto_oauth_restart_required` reason. The message asks the user
+to restart with Suunto email/password rather than claiming the code expired or was reused. The frontend reports
+only this marked Suunto rejection to Sentry at WARNING; unexpected errors keep their existing level. This does
+not refresh, remove or replace credentials. Monitoring coverage is **unchanged**: backend WARNING diagnostics,
+provider requests, queue outcomes and alert filters are unchanged.
+
 Queued workout FIT downloads, activity-history listing, and Health pulls retry a rejected HTTP 401/403 read once after
 forcing refresh through the existing guarded `getTokenData()` coordinator, against the same token document and Suunto
 account identity only. Missing credentials, deletion, pending disconnect, and Health lifecycle changes still stop or

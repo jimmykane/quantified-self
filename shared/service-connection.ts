@@ -14,6 +14,8 @@ export const SERVICE_OAUTH_COMPLETION_OUTCOMES = {
   DisconnectRecoveryPending: 'disconnect_recovery_pending',
 } as const;
 
+export const SUUNTO_OAUTH_RESTART_REQUIRED_REASON = 'suunto_oauth_restart_required' as const;
+
 export type ServiceOAuthCompletionResult =
   | {
     connected: true;

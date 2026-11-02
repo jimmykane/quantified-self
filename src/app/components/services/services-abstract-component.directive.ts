@@ -31,6 +31,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirma
 import equal from 'fast-deep-equal';
 import {
   SERVICE_OAUTH_COMPLETION_OUTCOMES,
+  SUUNTO_OAUTH_RESTART_REQUIRED_REASON,
   ServiceConnectionAccountProjection,
   ServiceOAuthCompletionResult,
 } from '@shared/service-connection';
@@ -214,9 +215,15 @@ export abstract class ServicesAbstractComponentDirective implements OnDestroy, O
         this.hapticsService.success();
       } catch (e: any) {
         if (!isCurrentView()) return;
-        this.logger.error(e);
         const status = e?.status;
         const code = `${e?.code || ''}`;
+        if (this.serviceName === ServiceNames.SuuntoApp
+          && (code === 'functions/failed-precondition' || code === 'failed-precondition')
+          && e?.details?.reason === SUUNTO_OAUTH_RESTART_REQUIRED_REASON) {
+          this.logger.captureException(e, { level: 'warning' });
+        } else {
+          this.logger.error(e);
+        }
         const errorText = [e?.error, e?.message, e?.details]
           .filter(value => typeof value === 'string')
           .join(' ');
