@@ -316,10 +316,10 @@ const topLevelRoutes: Routes = [
       toolsCompareAuth: toolsCompareAuthResolver,
     },
     data: {
-      title: 'FIT, GPX, TCX, JSON & SML Benchmark Tool Trusted by Device Reviewers',
+      title: 'Compare FIT & GPX Files | Workout Data Comparison Tool',
       preload: true,
       animation: 'ToolsCompare',
-      description: 'Compare FIT, GPX, TCX, JSON, and SML recordings side by side with a benchmark tool trusted by device reviewers for repeatable GNSS, heart-rate, altitude, power, and all other device metrics.',
+      description: 'Compare FIT, GPX, TCX, JSON, and SML recordings side by side. Review GNSS, heart-rate, altitude, power, and other recorded metrics. Sign in to compare files.',
       jsonLd: {
         '@context': 'https://schema.org',
         '@type': 'WebApplication',

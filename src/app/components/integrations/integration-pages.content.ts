@@ -401,7 +401,7 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
     slug: 'coros',
     label: 'COROS',
     serviceName: ServiceNames.COROSAPI,
-    h1: 'COROS Training Plans, Activity Sync, and Routes',
+    h1: 'COROS Activity Sync, History Import, and Routes',
     heroCopy: 'Connect COROS to Quantified Self to import recent history, deliver activities and routes, and analyze connected training together. COROS planned-workout delivery is coming soon in the app.',
     providerSources: ALL_PROVIDER_SOURCES,
     summary: 'Use the Pro COROS connection for recent activity, Sleep and Health history, activity and route workflows, and centralized multi-service training analysis. Planned-workout delivery is coming soon in the app.',
@@ -860,7 +860,7 @@ export const PROVIDER_INTEGRATION_ROUTE_DATA: Record<IntegrationProviderKey, Int
     ),
   },
   coros: {
-    title: 'COROS Training Plans, Activity Sync, and Routes',
+    title: 'COROS Activity Sync, History Import, and Routes',
     preload: true,
     animation: 'Integrations',
     description: 'COROS planned-workout delivery is coming soon; use recent history, activity sync, route delivery, and training analysis now.',
