@@ -46,6 +46,7 @@ describe('help.content', () => {
     const help = HELP_SECTIONS.map(section => section.content).join('\n');
     for (const text of ['**Send after approval**', '**Add & send** saves the reviewed Standalone workout',
       'Provider selection stays in Preferences', '**Skip sending today**',
+      'New daily suggestions consider the selected services', 'Changing providers keeps today’s cached suggestion',
       'the existing queue continues even if you close the tab or lose the response',
       'Destinations can change without using another AI suggestion', 'Rest days are only marked in Calendar and send nothing',
       'A sending problem keeps the saved workout', 'Provider acceptance does not confirm arrival on your watch']) {

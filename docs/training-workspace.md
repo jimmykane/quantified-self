@@ -5860,6 +5860,32 @@ generation fingerprint: changing destinations neither invalidates a recipe nor s
 preferences dialog exposes Send after approval before its generation options. Only Preferences and delivery-enabled
 daily-workout reviews observe the existing activity-service connection projection. A review with sending off does not
 start provider listeners; Today adds no connection listener or polling.
+New daily generation also projects the validated `dailyWorkoutDelivery` choice from the same settings snapshot
+already read by `createDailyWorkoutSuggestionStore.read`; it adds no connection/token/provider/Firestore request.
+The private read projection never enters `DailyWorkoutSuggestionStatus` or a recipe. Missing, malformed or disabled
+delivery preferences omit provider context. Delivery choices remain outside both client cache identity and the server
+preference fingerprint: changing services during generation does not invalidate its lease or charge, and changing them
+afterward never regenerates today's cached workout. The next unused local day reads the current choices.
+
+`dayWorkoutProviderContext` builds bounded local format guidance from the existing provider catalog and pure delivery
+mapping checks, including Wahoo total-duration rules, real step/target support, and the existing Garmin strength-name
+allowlist. It does not resolve connection authority, read tokens, invoke provider HTTP, claim watch receipt or grant
+consent. Public placeholders suffice for recipe guidance; actual Add & send admission still uses the current owner,
+connection, entitlement and exact live mapping. Recovery, the selected/routine sport, purpose, equipment and explicit
+controls retain priority over device convenience. The generator never estimates seconds for prescribed repetitions
+or distance, changes a workout to rest for hardware, or rewrites a returned prescription to make it sendable.
+
+The optional provider-format correction shares the existing maximum of two model attempts and one daily charge with
+strict prescription validation. Provider fit may use the spare correction attempt and increase actual tokens within
+that cap; the existing usage counters include it. It runs only when a common exact starting format exists, targets are
+Auto/None, and no previous planned loads would be displaced. Invalid, failed or still-incompatible provider-only corrections keep the first valid prescription;
+authentication/lease/Pro changes still abort. Unavoidable mapping limitations appear in the existing Context details
+as Review sync requirements. No new output field, provider action, feedback, public MCP capability or model budget is
+introduced. The private provider context is not exposed through MCP; existing strict recipe/status reads remain valid.
+Provider transport and queue monitoring remain unchanged: this adds only pure recipe checks before generation;
+existing daily usage counters capture attempts and tokens. Deploy the affected `generateDayWorkout` function for
+provider-aware generation; no new secret binding is needed.
+
 The dialog reuses that live connection subscription for the same owner across unrelated profile/settings updates.
 Delivery validation gates preference saving and Add & send, independently of ordinary generation validation: an
 unavailable destination cannot block an explicit manual regeneration. An acknowledged delivery result stays visible

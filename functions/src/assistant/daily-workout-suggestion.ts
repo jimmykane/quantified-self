@@ -7,6 +7,7 @@ import { enforceAppCheck, getUserRoleAndGracePeriod } from '../utils';
 import { assertAssistantLegalAccess } from './access';
 import { createDailyWorkoutSuggestionStore, type DailyWorkoutSuggestionStore } from './daily-workout-suggestion-store';
 import { dayWorkoutDependencies, generateDayWorkoutSuggestion, generateValidatedDayWorkout } from './day-workout-callable';
+import { dayWorkoutProviderContext } from './day-workout-provider-context';
 import type { DayWorkoutContext } from './day-workout-context';
 import { selectDailyWorkoutSuggestionSport } from './daily-workout-suggestion-routine';
 import { createAssistantMcpSession, type AssistantMcpSession } from './mcp-session';
@@ -119,7 +120,7 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
     catch { throw new HttpsError('invalid-argument', 'Choose the displayed day.'); }
   }
   if (input.action === 'dismiss') return dependencies.store.dismiss(uid, expectedDate!);
-  const { preferences, status } = await currentDailyWorkoutSuggestionStatus(uid, dependencies);
+  const { preferences, status, deliveryPreferences } = await currentDailyWorkoutSuggestionStatus(uid, dependencies);
   if (expectedDate && preferences && expectedDate !== preferences.controls.localDate) {
     throw new HttpsError('aborted', 'The day changed. Review today before generating.');
   }
@@ -158,6 +159,12 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
     if (awaitingSleep) {
       evidence.missingContext.push('Today’s completed sleep is not included. Treat older sleep and sleep-dependent readiness as dated history, not today’s recovery. You explicitly chose to use available data.');
     }
+    const providerContext = deliveryPreferences?.enabled && deliveryPreferences.providers.length
+      ? dayWorkoutProviderContext(controls, deliveryPreferences.providers, evidence.references) : null;
+    if (providerContext) {
+      evidence.evidence.deliveryProviders = providerContext.evidence;
+      evidence.usedContext.push(`Local workout formats for ${providerContext.evidence.providers.map(provider => provider.label).join(', ')}; sending is checked separately.`);
+    }
     // Separate daily allowance. Never reserve/finalize Assistant billing-period quota.
     await dependencies.store.charge(uid, date, token);
     const suggestion = await generateValidatedDayWorkout(request, evidence, async (request, evidence, correction) => {
@@ -165,7 +172,8 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
       return dependencies.generate(request, evidence, correction, usage => {
         if (usage.available) meteredAttempts++; inputTokens += usage.inputTokens; outputTokens += usage.outputTokens; thoughtsTokens += usage.thoughtsTokens;
       });
-    }, assertActive);
+    }, assertActive, providerContext?.correction);
+    if (providerContext) evidence.missingContext.push(...providerContext.limitations(suggestion));
     await assertActive();
     const result = { requestId: request.requestId, observedAt: observedAt.toISOString(), ...suggestion,
       usedContext: evidence.usedContext, missingContext: evidence.missingContext };

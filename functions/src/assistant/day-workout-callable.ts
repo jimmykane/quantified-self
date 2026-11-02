@@ -18,7 +18,7 @@ import { createDayWorkoutStore, type DayWorkoutStore } from './day-workout-store
 import { collectDayWorkoutContext, readDayWorkoutTrainingContext, type DayWorkoutContext } from './day-workout-context';
 import { createAssistantMcpSession } from './mcp-session';
 import { assistantGenkit } from './model';
-import { DayWorkoutSuggestionValidationError, validateDayWorkoutSuggestion } from './day-workout-validation';
+import { DayWorkoutSuggestionValidationError, validateDayWorkoutSuggestion, type ValidatedDaySuggestion } from './day-workout-validation';
 
 export interface DayWorkoutDependencies {
   store: DayWorkoutStore;
@@ -45,6 +45,7 @@ Prefer timed endurance sessions. Strict timing includes ALL warmup, work, repeti
 Targets may use only the explicit relative athlete reference objects in evidence.references, with exactly matching kind, mode:'relative', reference and suitable minimumPercent/maximumPercent. Speed targets also need presentation:'pace' or 'speed'. Follow the target preference; when no suitable reference exists use targets:[] and clear plain effort notes. Never infer a threshold or maximum from age, performance, averages or population defaults.
 For strength return {kind:'workout',title,rationale,strength:{version:1,exercises:[{id,name,sets:[{id,ending:{kind:'repetitions',repetitions:positive integer} or {kind:'time',seconds:positive integer},restAfterSeconds?:positive integer}]}]},estimatedMinutes?:{minimum:number,maximum:number}}. Do not return structure for strength. Keep repetitions and rests, never convert them to guessed seconds. The optional time range is an AI planning estimate only.
 Use only selected equipment, name equipment explicitly where it distinguishes an exercise, and honor strengthFocus. Default bodyweight means no equipment required. Do not invent or progress external loads: the server reuses previous planned weights only for exact exercise/set matches and labels their date. Previous prescriptions do not prove performed weights.
+When evidence.deliveryProviders is present, use its local recipe profiles, checked ending/target formats and Garmin exercise allowlist for the selected services. Prefer commonExactEndings where consistent with the selected controls. This is format guidance only, not proof of a connection, delivery availability or watch receipt. Never change the selected sport, purpose, equipment, recovery decision, explicit available targets or previously prescribed loads merely to fit a device. Never convert prescribed repetitions/distance into guessed seconds. Rest is a training/recovery decision, never a workaround for unsupported hardware. If the requested prescription cannot fit a service faithfully, keep the training goal and explain the limitation rather than silently removing it.
 Keep rationale under 1200 characters and title under 120. Use a short explanation of the choice and its limits, no diagnosis or invented data.`;
 
 export async function generateDayWorkoutSuggestion(request: GenerateDayWorkoutRequest, context: DayWorkoutContext,
@@ -101,19 +102,29 @@ export async function generateDayWorkoutSuggestion(request: GenerateDayWorkoutRe
 
 /** Shared bounded correction/validation path for manual and included daily suggestions. */
 export async function generateValidatedDayWorkout(request: GenerateDayWorkoutRequest, evidence: DayWorkoutContext,
-  generate: DayWorkoutDependencies['generate'], assertActive: () => Promise<void>) {
-  let suggestion;
+  generate: DayWorkoutDependencies['generate'], assertActive: () => Promise<void>,
+  prefer?: (suggestion: ValidatedDaySuggestion) => string | null) {
+  let suggestion: ValidatedDaySuggestion | undefined;
+  let providerFallback: ValidatedDaySuggestion | undefined;
   let correction: string | undefined;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       const generated = await generate(request, evidence, correction);
       await assertActive();
-      suggestion = validateDayWorkoutSuggestion(generated, request.controls, evidence.previousStrength, evidence.references);
-      break;
+      const candidate = validateDayWorkoutSuggestion(generated, request.controls, evidence.previousStrength, evidence.references);
+      if (providerFallback?.kind === 'workout' && candidate.kind === 'rest') {
+        throw new DayWorkoutSuggestionValidationError('Provider formatting cannot replace a valid workout with rest.');
+      }
+      const improvement = prefer?.(candidate);
+      if (improvement && attempt === 0) { providerFallback = candidate; correction = improvement; continue; }
+      suggestion = improvement && providerFallback ? providerFallback : candidate; break;
     } catch (error) {
-      // The generator normalizes SDK output failures. Provider/auth errors and stale requests leave immediately.
+      // A format-only retry may retain a valid draft, but authority must be rechecked before returning it.
       if (!(error instanceof DayWorkoutSuggestionValidationError
-        || error instanceof WorkoutStructureValidationError || error instanceof StrengthWorkoutValidationError)) throw error;
+        || error instanceof WorkoutStructureValidationError || error instanceof StrengthWorkoutValidationError)) {
+        if (providerFallback) { await assertActive(); return providerFallback; }
+        throw error;
+      }
       await assertActive();
       logger.warn('[DayWorkout] Invalid model prescription.', {
         attempt: attempt + 1,
@@ -124,6 +135,7 @@ export async function generateValidatedDayWorkout(request: GenerateDayWorkoutReq
       correction = `${error instanceof DayWorkoutSuggestionValidationError ? error.message : 'Invalid prescription schema.'} The previous response failed strict prescription validation. Return a complete valid JSON prescription matching the schema and every selected constraint; omit targets without available references and omit all external loads.`;
     }
   }
+  suggestion ??= providerFallback;
   if (!suggestion) throw new HttpsError('failed-precondition', 'AI could not produce a valid prescription. Generate again or use the manual editor.');
   return suggestion;
 }

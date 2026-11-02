@@ -5,6 +5,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { dayWorkoutDateOffset, type DayWorkoutControls, type GenerateDayWorkoutResponse } from '../../../shared/day-workout';
 import { parseDailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionStatus } from '../../../shared/daily-workout-suggestion';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
+import { dailyWorkoutDeliveryPreferences, type DailyWorkoutDeliveryPreferences } from '../../../shared/daily-workout-delivery';
 import { TTL_CONFIG } from '../shared/ttl-config';
 
 interface Entry extends DailyWorkoutSuggestionStatus { token: string; startedAtMs: number; charged: boolean; preferenceHash: string; awaitingSleep?: true }
@@ -17,7 +18,7 @@ const publicEntry = ({ localDate, state, controls, result }: Entry): DailyWorkou
 
 /** Server-only leaf under the existing conversation Rules, seven-day TTL and recursive account erasure. */
 export function createDailyWorkoutSuggestionStore(db = () => admin.firestore(), clock = () => new Date()) {
-  async function transact<T>(uid: string, action: (preferences: DailyWorkoutSuggestionPreferences | null, state: State, now: Date) =>
+  async function transact<T>(uid: string, action: (preferences: DailyWorkoutSuggestionPreferences | null, state: State, now: Date, deliveryValue: unknown) =>
     { value: T; write?: boolean }): Promise<T> {
     const database = db();
     return database.runTransaction(async tx => {
@@ -31,7 +32,7 @@ export function createDailyWorkoutSuggestionStore(db = () => admin.firestore(), 
       const state = snapshot.data() as State | undefined;
       if (state && state.version !== 'daily-workout-suggestion-v1') throw new HttpsError('failed-precondition', 'Daily suggestion state is unavailable.');
       const next: State = state ?? { version: 'daily-workout-suggestion-v1', messages: {}, expireAt: Timestamp.fromMillis(0) };
-      const outcome = action(preferences, next, now);
+      const outcome = action(preferences, next, now, settings.get('appSettings.dailyWorkoutDelivery'));
       if (outcome.write) {
         next.expireAt = Timestamp.fromMillis(now.getTime() + TTL_CONFIG.ASSISTANT_CONVERSATIONS_IN_DAYS * 86_400_000);
         const days = Object.keys(next.messages).sort().reverse();
@@ -56,7 +57,7 @@ export function createDailyWorkoutSuggestionStore(db = () => admin.firestore(), 
     return entry;
   }
   return {
-    read: (uid: string) => transact<{ preferences: DailyWorkoutSuggestionPreferences | null; status: DailyWorkoutSuggestionStatus }>(uid, (preferences, state, now) => {
+    read: (uid: string) => transact<{ preferences: DailyWorkoutSuggestionPreferences | null; status: DailyWorkoutSuggestionStatus; deliveryPreferences?: DailyWorkoutDeliveryPreferences }>(uid, (preferences, state, now, deliveryValue) => {
       if (!preferences?.enabled) return { value: { preferences: null, status: { localDate: '', state: 'off' } as DailyWorkoutSuggestionStatus } };
       const date = preferences.controls.localDate;
       const entry = state.messages[date];
@@ -70,7 +71,7 @@ export function createDailyWorkoutSuggestionStore(db = () => admin.firestore(), 
           ? entry.awaitingSleep === true ? 'waiting-sleep' : 'waiting' : 'failed';
       }
       if (status.state === 'ready' && !status.result) status.state = 'failed';
-      return { value: { preferences, status } };
+      return { value: { preferences, status, deliveryPreferences: dailyWorkoutDeliveryPreferences(deliveryValue) } };
     }),
     begin: (uid: string, expected: DailyWorkoutSuggestionPreferences) => transact<string | null>(uid, (preferences, state, now) => {
       if (!preferences?.enabled || fingerprint(preferences) !== fingerprint(expected)) throw new HttpsError('aborted', 'Daily preferences changed.');

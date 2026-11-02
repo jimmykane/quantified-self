@@ -154,7 +154,7 @@
     @if (data.mode === 'preferences') {
       <mat-slide-toggle [checked]="dailyDelivery().enabled" [disabled]="!!busy()" (change)="setDeliveryEnabled($event.checked)">Send after approval</mat-slide-toggle>
       @if (dailyDelivery().enabled) {
-        <p class="hint">Remember these services. You review and add each day’s workout.</p>
+        <p class="hint">New daily suggestions consider these workout formats. Changing services keeps today’s saved suggestion.</p>
         <div id="daily-delivery-services" role="group" aria-label="Daily workout delivery services">
           @for (row of deliveryRows(); track row.provider) {
             <mat-checkbox [checked]="row.selected" [disabled]="!!busy() || (!row.connected && !row.selected)" (change)="selectDeliveryProvider(row.provider, $event.checked)">

@@ -185,6 +185,7 @@ describe('DayWorkoutDialogComponent', () => {
     component.selectDeliveryProvider('garmin', true); fixture.detectChanges(); expect(component.approvalValid()).toBe(true);
     expect(fixture.nativeElement.querySelector('[aria-label="Daily workout delivery services"]')).not.toBeNull();
     expect(fixture.nativeElement.textContent).not.toContain('Skip sending today');
+    expect(fixture.nativeElement.textContent).toContain('Changing services keeps today’s saved suggestion.');
     exportDailySuggestionDialogQa(fixture.nativeElement, 'daily-suggestion-delivery-preferences');
     await component.primaryAction();
     expect(data.savePreferences).toHaveBeenCalledWith(expect.any(Object), true, { enabled: true, providers: ['garmin'] });
