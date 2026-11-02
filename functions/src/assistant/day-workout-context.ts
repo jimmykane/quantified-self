@@ -12,6 +12,7 @@ import { readDayWorkoutRoutine } from './day-workout-routine';
 import type { AssistantMcpSession, AssistantMcpToolName } from './mcp-session';
 import type { PreviousStrengthPrescription } from './day-workout-validation';
 
+export const DAY_WORKOUT_CONTEXT_MAX_CHARACTERS = 160_000;
 type RecordValue = Record<string, unknown>;
 const record = (value: unknown): RecordValue => value && typeof value === 'object' && !Array.isArray(value) ? value as RecordValue : {};
 const records = (value: unknown): RecordValue[] => Array.isArray(value) ? value.map(record) : [];
@@ -277,7 +278,7 @@ export async function collectDayWorkoutContext(controls: DayWorkoutControls, now
   } else missingContext.push('Training routine: turned off (requires Recent activities).');
   const evidence: RecordValue = { daily: selectedDaily, ...(controls.feedbackContext !== false ? { feedback } : {}), nearby: training?.nearby ?? null, phase: training?.phase ?? null,
     previousStrength: training?.previousStrength ?? [], references: training?.references ?? [] };
-  if (JSON.stringify(evidence).length > 160_000) throw new Error('The context exceeds the safe generation limit. Try a simpler selection.');
+  if (JSON.stringify(evidence).length > DAY_WORKOUT_CONTEXT_MAX_CHARACTERS) throw new Error('The context exceeds the safe generation limit. Try a simpler selection.');
   return { evidence, usedContext, missingContext: [...new Set(missingContext)],
     ...(training?.plannedRestDay ? { plannedRestDay: training.plannedRestDay } : {}),
     previousStrength: training?.previousStrength ?? [], references: training?.references ?? [] };

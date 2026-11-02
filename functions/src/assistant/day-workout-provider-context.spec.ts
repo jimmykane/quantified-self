@@ -21,7 +21,7 @@ describe('provider-aware daily recipe context', () => {
       reference: { kind: 'max-heart-rate' as const, bpm: 190 } };
     const context = dayWorkoutProviderContext(controls, [provider], [reference, reference]);
     expect(context.evidence.commonExactEndings).toContain('time');
-    expect(context.evidence.providers[0].targets).toEqual([{ kind: 'heart-rate', level: 'degraded',
+    expect(context.evidence.providers[0].targets).toEqual([{ kind: 'heart-rate', level: 'degraded', requiresReview: true,
       issues: [expect.stringContaining(provider === 'wahoo' ? 'not ELEMNT computers or RIVAL' : 'stored reference snapshot must be frozen to an absolute range')] }]);
     expect(context.evidence).not.toHaveProperty('digest');
   });
@@ -35,6 +35,21 @@ describe('provider-aware daily recipe context', () => {
     const names = context.evidence.providers[0].allowedExerciseNames!;
     expect(names).toContain('Barbell Back Squat'); expect(names.every(name => !!garminStrengthExercise(name))).toBe(true);
     expect(context.evidence.providers[1].endings).toContainEqual(expect.objectContaining({ kind: 'repetitions', level: 'unsupported' }));
+  });
+  it('keeps normal Suunto strength transitions informational without requesting another model attempt', () => {
+    const selected = { ...controls, sport: ActivityTypes.StrengthTraining };
+    const context = dayWorkoutProviderContext(selected, ['suunto'], []);
+    const suggestion = validateDayWorkoutSuggestion({ kind: 'workout', title: 'Strength', rationale: 'Keep the prescribed sets',
+      strength: { version: 1, exercises: [{ id: 'squat', name: 'Squat', sets: [
+        { id: 'one', ending: { kind: 'repetitions', repetitions: 8 }, restAfterSeconds: 60 },
+      ] }] } }, selected);
+    expect(context.evidence.providers[0].endings).toContainEqual(expect.objectContaining({
+      kind: 'repetitions', level: 'degraded', requiresReview: false,
+    }));
+    expect(context.correction(suggestion)).toBeNull();
+    expect(context.limitations(suggestion)).toEqual([expect.stringContaining('Delivery to Suunto:')]);
+    expect(context.limitations(suggestion).join(' ')).toContain('manual transitions');
+    expect(context.limitations(suggestion).join(' ')).not.toContain('needs Review sync');
   });
   it('does not use a mapping correction to relax explicit targets or previously planned loads', () => {
     const target = { ...controls, target: 'power' as const };

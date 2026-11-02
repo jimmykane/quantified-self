@@ -8,7 +8,7 @@ import { assertAssistantLegalAccess } from './access';
 import { createDailyWorkoutSuggestionStore, type DailyWorkoutSuggestionStore } from './daily-workout-suggestion-store';
 import { dayWorkoutDependencies, generateDayWorkoutSuggestion, generateValidatedDayWorkout } from './day-workout-callable';
 import { dayWorkoutProviderContext } from './day-workout-provider-context';
-import type { DayWorkoutContext } from './day-workout-context';
+import { DAY_WORKOUT_CONTEXT_MAX_CHARACTERS, type DayWorkoutContext } from './day-workout-context';
 import { selectDailyWorkoutSuggestionSport } from './daily-workout-suggestion-routine';
 import { createAssistantMcpSession, type AssistantMcpSession } from './mcp-session';
 import { readDailyWorkoutPlanContext } from './daily-workout-context';
@@ -159,11 +159,17 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
     if (awaitingSleep) {
       evidence.missingContext.push('Today’s completed sleep is not included. Treat older sleep and sleep-dependent readiness as dated history, not today’s recovery. You explicitly chose to use available data.');
     }
-    const providerContext = deliveryPreferences?.enabled && deliveryPreferences.providers.length
+    let providerContext = deliveryPreferences?.enabled && deliveryPreferences.providers.length
       ? dayWorkoutProviderContext(controls, deliveryPreferences.providers, evidence.references) : null;
     if (providerContext) {
-      evidence.evidence.deliveryProviders = providerContext.evidence;
-      evidence.usedContext.push(`Local workout formats for ${providerContext.evidence.providers.map(provider => provider.label).join(', ')}; sending is checked separately.`);
+      const combined = { ...evidence.evidence, deliveryProviders: providerContext.evidence };
+      if (JSON.stringify(combined).length <= DAY_WORKOUT_CONTEXT_MAX_CHARACTERS) {
+        evidence.evidence = combined;
+        evidence.usedContext.push(`Local workout formats for ${providerContext.evidence.providers.map(provider => provider.label).join(', ')}; sending is checked separately.`);
+      } else {
+        providerContext = null;
+        evidence.missingContext.push('Local provider formats were omitted to preserve the existing recovery and training context within its size limit. Review sync before sending.');
+      }
     }
     // Separate daily allowance. Never reserve/finalize Assistant billing-period quota.
     await dependencies.store.charge(uid, date, token);

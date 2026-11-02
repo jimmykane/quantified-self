@@ -5869,20 +5869,25 @@ afterward never regenerates today's cached workout. The next unused local day re
 
 `dayWorkoutProviderContext` builds bounded local format guidance from the existing provider catalog and pure delivery
 mapping checks, including Wahoo total-duration rules, real step/target support, and the existing Garmin strength-name
-allowlist. It does not resolve connection authority, read tokens, invoke provider HTTP, claim watch receipt or grant
-consent. Public placeholders suffice for recipe guidance; actual Add & send admission still uses the current owner,
-connection, entitlement and exact live mapping. Recovery, the selected/routine sport, purpose, equipment and explicit
+allowlist. The combined evidence retains the existing 160,000-character context limit. If optional provider guidance
+would exceed it, generation preserves all collected recovery/training evidence, omits that guidance and its correction,
+and discloses the omission in Context. It does not resolve connection authority, read tokens, invoke provider HTTP,
+claim watch receipt or grant consent. Public placeholders suffice for recipe guidance; actual Add & send admission still uses the current owner,
+connection, entitlement and current live mapping. Recovery, the selected/routine sport, purpose, equipment and explicit
 controls retain priority over device convenience. The generator never estimates seconds for prescribed repetitions
 or distance, changes a workout to rest for hardware, or rewrites a returned prescription to make it sendable.
 
 The optional provider-format correction shares the existing maximum of two model attempts and one daily charge with
 strict prescription validation. Provider fit may use the spare correction attempt and increase actual tokens within
 that cap; the existing usage counters include it. It runs only when a common exact starting format exists, targets are
-Auto/None, and no previous planned loads would be displaced. Invalid, failed or still-incompatible provider-only corrections keep the first valid prescription;
-authentication/lease/Pro changes still abort. Unavoidable mapping limitations appear in the existing Context details
-as Review sync requirements. No new output field, provider action, feedback, public MCP capability or model budget is
-introduced. The private provider context is not exposed through MCP; existing strict recipe/status reads remain valid.
-Provider transport and queue monitoring remain unchanged: this adds only pure recipe checks before generation;
+Auto/None, and no previous planned loads would be displaced. Invalid, failed or still-incompatible provider-only
+corrections keep the first valid prescription; authentication/lease/Pro changes still abort. Unavoidable mapping
+limitations appear in the existing Context details as Review sync requirements only for unsupported or approval-gated mappings. Standard informational limitations,
+such as Suunto strength manual transitions (`requiresApproval:false`), remain visible without blocking Add & send
+or triggering a provider-format retry. The private guidance carries this distinction as `requiresReview`; it never
+authorizes a new loss or changes the existing provider policy. No new public output field, provider action, feedback,
+MCP capability or model budget is introduced. The private provider context is not exposed through MCP; existing strict
+recipe/status reads remain valid. Provider transport, workers, retry policies and queue monitoring remain unchanged;
 existing daily usage counters capture attempts and tokens. Deploy the affected `generateDayWorkout` function for
 provider-aware generation; no new secret binding is needed.
 
@@ -5906,9 +5911,12 @@ browser write because delivery authority and queue admission are server-only.
 
 `createWorkoutWithDeliveryForUser` uses the existing authoring transaction's pre/postconditions. It reads current
 provider authority, retained settings/identity, scope generation and owner presentation preferences before writes.
-Only exact, connected, Pro-eligible, in-horizon mappings with no existing settings or retired scope receive new sync
-settings. Unsupported/degraded mappings and unavailable services return independent Review sync outcomes without
-preventing the workout from being saved; mapping assessment exceptions fail only that provider. No mapping-loss digest,
+Only supported mappings that need no extra mapping approval, with connected, Pro-eligible, in-horizon destinations
+and no existing settings or retired scope, receive new sync settings. This reuses `requiresDeliveryMappingApproval`:
+exact mappings and explicitly informational degradation may proceed. Degraded mappings with omitted/true approval
+flags and all unsupported mappings still require Review sync; no approved-loss digest is inferred. Unsupported or
+approval-gated mappings and unavailable services return independent Review sync outcomes without preventing the
+workout from being saved; mapping assessment exceptions fail only that provider. No mapping-loss digest,
 plan consent, resumed stopped scope or replacement remote identity is inferred. Creation establishes the first scope
 generation; new settings bind that resulting generation, the current destination and connection epoch.
 

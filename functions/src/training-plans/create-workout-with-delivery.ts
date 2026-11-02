@@ -7,7 +7,7 @@ import { TRAINING_PLAN_MUTATION_RECEIPTS_COLLECTION_ID, type MutateTrainingSched
 import { parseStrengthWorkoutDetailsV1, projectStrengthWorkoutToV1 } from '../../../shared/strength-workout';
 import { hashTrainingScheduleRequestPayload, mutateTrainingScheduleForUser } from './persistence';
 import { TrainingScheduleMutationError } from './mutation';
-import { DELIVERY_LEDGER, DELIVERY_RECEIPTS, DELIVERY_SCOPES, DELIVERY_STATE,
+import { DELIVERY_LEDGER, DELIVERY_RECEIPTS, DELIVERY_SCOPES, DELIVERY_STATE, requiresDeliveryMappingApproval,
   type DeliveryRuntime } from './delivery/contracts';
 import { deliveryIdentity } from './delivery/intent';
 import { readSuuntoGuideOwnerPreferences } from './delivery/store';
@@ -70,13 +70,13 @@ export async function createWorkoutWithDeliveryForUser(uid: string, raw: MutateT
           && (Date.parse(workout.localDate) - Date.parse(today)) / 86_400_000 <= transport.horizonDays;
         if (!eligible) { outcomes.push({ provider, state: 'review-required' }); continue; }
         const preferences = await readSuuntoGuideOwnerPreferences(tx, user, provider, [workout]);
-        let exact = false;
+        let canSend = false;
         try {
           const assessment = transport.assess(workout, connection.destinationKey, intent.timeZone, strength,
             strength ? preferences.unitSettings?.weightUnits : undefined, preferences.unitSettings, undefined, preferences.swimmingSettings);
-          exact = assessment.level === 'exact';
+          canSend = assessment.level !== 'unsupported' && !requiresDeliveryMappingApproval(assessment);
         } catch { outcomes.push({ provider, state: 'failed' }); continue; }
-        if (!exact) { outcomes.push({ provider, state: 'review-required' }); continue; }
+        if (!canSend) { outcomes.push({ provider, state: 'review-required' }); continue; }
         settings.push({ schemaVersion: 1, scope: 'workout', scopeId: operation.workoutId, provider,
           revision: ++revision, enabled: true, suppressed: false, timeZone: intent.timeZone,
           destinationKey: connection.destinationKey, connectionEpoch: connection.epoch,

@@ -114,6 +114,22 @@ describe('daily workout preparation', () => {
     expect(await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, identity, deps)).toEqual(result);
     expect(deps.generate).toHaveBeenCalledTimes(2); expect(deps.store.charge).toHaveBeenCalledOnce();
   });
+  it('keeps recovery evidence within the existing context limit when optional provider guidance will not fit', async () => {
+    const deps = dependencies(), originalRead = deps.store.read.getMockImplementation()!;
+    deps.store.read.mockImplementation(async () => ({ ...await originalRead(), deliveryPreferences: { enabled: true, providers: ['wahoo'] } }));
+    const context = evidence();
+    context.evidence.padding = '';
+    const paddingLength = 160_000 - JSON.stringify(context.evidence).length;
+    context.evidence.padding = 'x'.repeat(paddingLength);
+    deps.context.mockResolvedValue(context);
+    const result = await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, identity, deps);
+    const generatedContext = deps.generate.mock.calls[0][1];
+    expect(JSON.stringify(generatedContext.evidence).length).toBeLessThanOrEqual(160_000);
+    expect(generatedContext.evidence).not.toHaveProperty('deliveryProviders');
+    expect(String(generatedContext.evidence.padding).length).toBe(paddingLength);
+    expect(result.result?.missingContext.join(' ')).toContain('Local provider formats were omitted');
+    expect(deps.generate).toHaveBeenCalledOnce(); expect(deps.store.charge).toHaveBeenCalledOnce();
+  });
   it.each(['invalid-output', 'model-error', 'rest', 'still-incompatible'] as const)('keeps a valid prescription if an optional mapping correction fails: %s', async failure => {
     const deps = dependencies(), originalRead = deps.store.read.getMockImplementation()!;
     deps.store.read.mockImplementation(async () => ({ ...await originalRead(), deliveryPreferences: { enabled: true, providers: ['wahoo'] } }));

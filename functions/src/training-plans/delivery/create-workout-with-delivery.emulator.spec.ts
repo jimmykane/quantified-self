@@ -15,6 +15,8 @@ import { trainingDeliveryCommand } from './commands';
 import { GarminHttpFixture } from './test-support/garmin-http-fixture';
 import { GarminTrainingTransport } from './garmin/transport';
 import { projectStrengthWorkoutToV1 } from '../../../../shared/strength-workout';
+import { assessSuuntoGuide } from './suunto/mapping';
+import type { StrengthWorkoutDetailsV1 } from '../../../../shared/strength-workout';
 import { FakeTrainingTransport } from './test-support/fake-transport';
 
 const host = process.env.FIRESTORE_EMULATOR_HOST;
@@ -91,6 +93,27 @@ describe.skipIf(!host)('Atomic Add & send with the existing delivery queue', () 
     expect(server.workouts.size).toBe(1); expect(server.schedules.size).toBe(1);
     expect((await rows())[0].status).toBe('delivered');
   });
+  it.each([false, true])('uses the existing Suunto manual-rep policy and preserves extra-loss review (extra loss: %s)', async extraLoss => {
+    // The real mapper distinguishes standard manual transitions from additional loss; HTTP remains synthetic.
+    suunto.assess = (workout, destination, zone, strength?: StrengthWorkoutDetailsV1 | null) =>
+      assessSuuntoGuide(workout, destination, zone, 'Quantified Self', strength);
+    const value = request();
+    if (value.operation.kind !== 'create-workout') throw Error('Expected create');
+    const strength = { version: 1 as const, exercises: [{ id: 'squat', name: extraLoss ? 'A'.repeat(80) : 'Squat', sets: [
+      { id: 'one', ending: { kind: 'repetitions' as const, repetitions: 8 }, restAfterSeconds: 60 },
+    ] }] };
+    value.operation.strength = strength;
+    value.operation.structure = projectStrengthWorkoutToV1({ ...strength, workoutId: 'w', revision: 1 });
+    expect((await approve(value, ['suunto'])).deliveryOutcomes).toEqual([{ provider: 'suunto', state: extraLoss ? 'review-required' : 'queued' }]);
+    expect((await user().collection('scheduledWorkouts').doc('w').get()).exists).toBe(true);
+    expect(suunto.calls).toHaveLength(0);
+    expect((await setting('suunto').get()).get('enabled')).toBe(extraLoss ? undefined : true);
+    if (extraLoss) return;
+    expect((await setting('suunto').get()).get('approvedDigest')).toBeNull();
+    await drain(); for (const row of await rows()) await processTrainingDelivery(runtime, uid, row.id);
+    expect(suunto.calls).toHaveLength(1); expect((await rows())[0].status).toBe('delivered');
+    expect((await setting('suunto').get()).get('approvedDigest')).toBeNull();
+  });
   it('rolls back the workout, consent and queue together if the final receipt cannot commit', async () => {
     const run = db.runTransaction.bind(db);
     const spy = vi.spyOn(db, 'runTransaction').mockImplementation((update, options) => run(tx => update(new Proxy(tx, { get(target, property) {
@@ -154,8 +177,12 @@ describe.skipIf(!host)('Atomic Add & send with the existing delivery queue', () 
     expect((await user().collection('config').doc('settings').get()).get('dailyWorkoutDelivery'))
       .toEqual({ enabled: true, providers: ['garmin', 'suunto'] });
   });
-  it.each(['degraded', 'unsupported', 'disconnected', 'no-pro', 'unavailable', 'prior-settings', 'retired-scope'] as const)('saves the workout without granting unsafe consent: %s', async reason => {
+  it.each(['degraded', 'unsupported', 'unsupported-no-extra-approval', 'disconnected', 'no-pro', 'unavailable', 'prior-settings', 'retired-scope'] as const)('saves the workout without granting unsafe consent: %s', async reason => {
       if (reason === 'degraded' || reason === 'unsupported') garmin.level = reason;
+      if (reason === 'unsupported-no-extra-approval') {
+        const assess = garmin.assess.bind(garmin);
+        garmin.assess = (...args) => ({ ...assess(...args), level: 'unsupported', requiresApproval: false });
+      }
       if (reason === 'disconnected') await user().collection('meta').doc('garmin').set({ state: 'reconnect_required' });
       if (reason === 'no-pro') runtime.hasPro = async () => false;
       if (reason === 'unavailable') runtime.transport = () => null;

@@ -5,6 +5,7 @@ import { PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1,
   type PlannedWorkoutProviderId } from '../../../shared/planned-workout-providers';
 import { GARMIN_STRENGTH_EXERCISE_NAMES_V1 } from '../../../shared/garmin-strength-workout';
 import { isStrengthWorkoutSportV1, projectStrengthWorkoutToV1, type StrengthWorkoutDetailsV1 } from '../../../shared/strength-workout';
+import { requiresDeliveryMappingApproval, type DeliveryAssessment } from '../training-plans/delivery/contracts';
 import { assessTrainingDeliveryMapping } from '../training-plans/delivery/mapping';
 import { assessWahooDelivery } from '../training-plans/delivery/wahoo/mapping';
 import { assessSuuntoGuide } from '../training-plans/delivery/suunto/mapping';
@@ -13,6 +14,7 @@ import type { ValidatedDaySuggestion } from './day-workout-validation';
 /** Pure local recipe guidance. No provider authority, credentials, tokens, remote IDs or API calls. */
 export function dayWorkoutProviderContext(controls: DayWorkoutControls, providers: readonly PlannedWorkoutProviderId[], references: readonly WorkoutTargetV1[]) {
   const strengthSport = isStrengthWorkoutSportV1(controls.sport);
+  const needsReview = (assessment: DeliveryAssessment) => assessment.level === 'unsupported' || requiresDeliveryMappingApproval(assessment);
   const assessRecipe = (provider: PlannedWorkoutProviderId, structure: WorkoutStructureV1, strength: StrengthWorkoutDetailsV1 | null) => {
     const workout = { schemaVersion: 1 as const, id: strength?.workoutId ?? 'provider-check', planId: null, localDate: controls.localDate,
       title: 'Workout compatibility check', structure, lifecycle: 'planned' as const, revision: 1, createdAtMs: 0, updatedAtMs: 0 };
@@ -45,7 +47,7 @@ export function dayWorkoutProviderContext(controls: DayWorkoutControls, provider
     const assess = (ending: WorkoutEndingV1, target?: WorkoutTargetV1) => {
       const value = probe(ending, target);
       const result = assessRecipe(provider, value.structure, value.strength);
-      return { level: result.level, issues: result.issues.slice(0, 3) };
+      return { level: result.level, requiresReview: needsReview(result), issues: result.issues.slice(0, 3) };
     };
     return { provider, label: capability.label,
       sportSupported: capability.profile?.sports?.includes(controls.sport) ?? false,
@@ -68,18 +70,18 @@ export function dayWorkoutProviderContext(controls: DayWorkoutControls, provider
   };
   return {
     evidence: { kind: 'local-recipe-capabilities', providers: guidance, commonExactEndings,
-      notice: 'These are local format checks, not proof of provider availability, connection, successful sending or watch receipt. Keep the selected sport, purpose, equipment, recovery decision and explicit targets.' },
+      notice: 'These are local format checks, not proof of provider availability, connection, successful sending or watch receipt. Keep the selected sport, purpose, equipment, recovery decision and explicit targets. Disclosed limitations with requiresReview:false are informational; do not change the prescription merely to make their level exact.' },
     correction(suggestion: ValidatedDaySuggestion): string | null {
       // A mapping-only retry must not discard an explicit target or chase an impossible native sport/profile.
       if (!commonExactEndings.length || !['auto', 'none'].includes(controls.target) || suggestion.previousLoads.length > 0) return null;
-      const issues = assessments(suggestion).filter(result => result.level !== 'exact');
+      const issues = assessments(suggestion).filter(needsReview);
       return issues.length ? 'Prefer a locally exact recipe for the selected delivery providers, using evidence.deliveryProviders. '
         + issues.map(result => `${result.label}: ${result.level}`).join('; ')
         + ' Keep the same selected sport, equipment, purpose and recovery choice. Do not replace a workout with rest to fit a provider, guess durations for repetitions or invent exercise/load substitutions.' : null;
     },
     limitations(suggestion: ValidatedDaySuggestion): string[] {
       return assessments(suggestion).filter(result => result.level !== 'exact')
-        .map(result => `Delivery to ${result.label} needs Review sync: ${result.issues.slice(0, 2).join(' ')}`);
+        .map(result => `Delivery to ${result.label}${needsReview(result) ? ' needs Review sync' : ''}: ${result.issues.slice(0, 2).join(' ')}`);
     },
   };
 }
