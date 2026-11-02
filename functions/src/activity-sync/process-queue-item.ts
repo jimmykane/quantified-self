@@ -841,6 +841,7 @@ async function handlePreUploadGuardFailure(
 async function updatePreUploadQueueItemIfUserActive(
     queueItem: ActivitySyncQueueItemInterface,
     params: Pick<UpdateQueueItemIfUserActiveParams, 'phase' | 'updateData' | 'actionDescription'>,
+    options: { preserveFutureDispatchMarkers?: boolean } = {},
 ): Promise<QueueItemUserGuardedUpdateResult> {
     const updateIfCurrent = () => {
         const expectedQueueItem = { ...queueItem };
@@ -878,6 +879,10 @@ async function updatePreUploadQueueItemIfUserActive(
         || dispatchedAtMs <= 0
         || dispatchedAtMs < queueItem.dateCreated
         || dispatchedAtMs > Date.now() + 5_000
+        // Cooldown contenders must reuse even very short scheduled waits.
+        // The original task's own timestamp still permits initial dispatch
+        // recovery with the existing bounded clock-skew tolerance.
+        || (options.preserveFutureDispatchMarkers && dispatchedAtMs > Date.now() && dispatchedAtMs !== queueItem.dateCreated)
         || !isSameActivitySyncProviderState(
             { ...currentQueueItem, dispatchedToCloudTask: queueItem.dispatchedToCloudTask },
             queueItem,
@@ -1874,13 +1879,14 @@ export async function processActivitySyncQueueItem(
                     phase: 'before_activity_sync_wahoo_cooldown_deferral',
                     updateData: { dispatchedToCloudTask: scheduledAtMs },
                     actionDescription: 'Wahoo cooldown deferral',
-                });
+                }, { preserveFutureDispatchMarkers: true });
                 if (result !== QueueItemUserGuardedUpdateResult.Updated) {
                     if (result === QueueItemUserGuardedUpdateResult.NotCurrent) {
                         const current = (await queueItem.ref.get()).data();
                         const savedDeadline = current?.dispatchedToCloudTask;
                         if (typeof savedDeadline === 'number' && Number.isSafeInteger(savedDeadline)
                             && savedDeadline > Date.now()
+                            && savedDeadline !== queueItem.dateCreated
                             && savedDeadline <= Date.now() + (WAHOO_RATE_LIMIT_MAX_RESET_SECONDS + 60) * 1000
                             && isSameActivitySyncProviderState({ ...current, dispatchedToCloudTask: queueItem.dispatchedToCloudTask }, queueItem)) {
                             // A concurrent waiter won. Confirm its exact task

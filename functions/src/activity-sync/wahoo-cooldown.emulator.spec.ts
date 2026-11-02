@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import * as logger from 'firebase-functions/logger';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PROVIDER_MAX_RETRY_COUNT } from '../shared/queue-config';
 import type { ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
@@ -120,6 +121,50 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo cooldown handoffs i
         expect((await queueRef().get()).data()).toMatchObject({ retryCount: PROVIDER_MAX_RETRY_COUNT - 1, totalRetryCount: 29, destinationUploadID: 'accepted-upload' });
         expectNoExpensiveWork();
     }, 30_000);
+    it('reuses a short quota deadline when a stale duplicate chooses different jitter', async () => {
+        const item = await seed(true);
+        const now = Date.now();
+        await cooldownRef().update({ notBeforeMs: now + 1000 });
+        const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+        const jitter = vi.spyOn(Math, 'random').mockReturnValue(0);
+        try {
+            // Both deliveries read null; the first commits before the duplicate
+            // enters its marker transaction, inside the five-second grace.
+            const first = { ...item };
+            const duplicate = { ...item };
+            expect(await processActivitySyncQueueItem(first)).toBe(QueueResult.ProviderQuotaDeferred);
+            jitter.mockReturnValue(0.9);
+            expect(await processActivitySyncQueueItem(duplicate)).toBe(QueueResult.ProviderQuotaDeferred);
+            expect(first.dispatchedToCloudTask).toBe(now + 2000);
+            expect(duplicate.dispatchedToCloudTask).toBe(first.dispatchedToCloudTask);
+            const commits = vi.mocked(logger.info).mock.calls.filter(([message, fields]) =>
+                message === '[ActivityDelivery]' && fields?.event === 'committed' && fields?.outcome === 'expected_contention');
+            expect(commits).toHaveLength(1);
+            expect((await queueRef().get()).data()!.dispatchedToCloudTask).toBe(now + 2000);
+            expectNoExpensiveWork();
+        } finally {
+            clock.mockRestore();
+            jitter.mockRestore();
+        }
+    });
+    it.each([0, 1000])('recovers an initial dispatch marker without treating the original task as a delayed handoff (clock skew: %s ms)', async clockSkew => {
+        const now = Date.now();
+        const dateCreated = now + clockSkew;
+        const item = await seed(true, { dateCreated });
+        // The task read null before its producer committed the initial marker.
+        await queueRef().update({ dispatchedToCloudTask: dateCreated });
+        const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+        try {
+            expect(await processActivitySyncQueueItem(item)).toBe(QueueResult.ProviderQuotaDeferred);
+            expect((await queueRef().get()).data()!.dispatchedToCloudTask).toBeGreaterThan(now + 3600_000);
+            const commits = vi.mocked(logger.info).mock.calls.filter(([message, fields]) =>
+                message === '[ActivityDelivery]' && fields?.event === 'committed' && fields?.outcome === 'expected_contention');
+            expect(commits).toHaveLength(1);
+            expectNoExpensiveWork();
+        } finally {
+            clock.mockRestore();
+        }
+    });
     it('recovers an enqueue that may have succeeded using the original deadline and a duplicate confirmation', async () => {
         await seed();
         state.enqueue.mockRejectedValueOnce(new Error('synthetic lost response')).mockResolvedValueOnce(false);

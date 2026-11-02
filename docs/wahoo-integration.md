@@ -191,6 +191,8 @@ one document read; the final API-level check remains in place for concurrent quo
 The due time retains 1–30 seconds of jitter and acknowledgement requires a confirmed delayed-task handoff or duplicate.
 An unaccepted workspace send waits no later than its existing send-window expiry, with Stop/expiry rechecked in the
 marker transaction. Early redeliveries reuse that durable schedule, including after a lost enqueue response.
+Stale contenders also reuse near-term quota deadlines inside the initial dispatch-marker grace, without another
+marker write or new jitter. The original task's own creation timestamp is not evidence of a separate delayed handoff.
 Both unaccepted sends and accepted status/type-correction work wait; accepted upload IDs and the pinned type survive,
 so recovery checks the original upload instead of reposting its FIT. Future Wahoo waits do not consume the dispatcher's
 candidate budget. A later extension is rechecked when the scheduled task becomes due. A real 429 or cooldown that
