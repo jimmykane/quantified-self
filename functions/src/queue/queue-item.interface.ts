@@ -75,6 +75,8 @@ export interface WahooAPIWorkoutQueueItemInterface extends QueueItemInterface {
 }
 
 export interface GarminAPIActivityQueueItemInterface extends QueueItemInterface {
+  /** Admission-time decision; later history requests cannot change queued work. */
+  suppressAutomaticActivitySync?: boolean;
   userID: string
   startTimeInSeconds: number,
   manual: boolean,

@@ -1568,13 +1568,23 @@ writes. Ordinary feed imports, including delayed recordings and legacy rows with
 delivery; no date cutoff is applied. A retained Wahoo history row keeps its origin across newer webhook revisions so an
 update cannot accidentally enable forwarding. Existing Suunto/COROS duplicate callbacks preserve the original row.
 Do not overwrite an existing live admission just because a history scan encounters it. Identity resolution, canonical
-event/original-file writes, user edits, Training completion and import outcomes are unchanged. Garmin's asynchronous
-callback path retains its existing behavior; its `manual` field is not a history marker. Explicit saved/direct sends
+event/original-file writes, user edits, Training completion and import outcomes are unchanged. Garmin uses the separate
+fixed cutoff described below; its `manual` field is not a history marker. Explicit saved/direct sends
 remain independent, including all six outbound directions from these three sources. Already queued outbound jobs are
 not cancelled or migrated. Release requires separate approval for `processWorkoutTask` and `wahooAPIWebhook`; Help is
 a separate frontend release. No Rules, indexes or data migration are needed. Monitoring is **covered/unchanged**:
 history never enters the delivery queue, while existing #829 import, #832 delivery and #847 history observations keep
 their committed-outcome, backlog/failure and unknown-telemetry meanings. See [activity delivery monitoring](activity-delivery-monitoring.md).
+
+Garmin's existing activity-history lease transaction stores a monotonic `activitySyncCutoffMs` before provider requests.
+Coordinator windows/retries reuse their run's original admission time. Ingress snapshots the policy as a queue-owned
+`suppressAutomaticActivitySync` flag for older recordings; lookup errors remain retryable, and duplicate callbacks do
+not replace existing decisions. This is a recording-date policy because Garmin's callback origin is not identified.
+Older delayed ordinary recordings still import but require explicit sending. Existing outbound work and legacy queue
+rows are unaffected; Sleep/Health history never changes this cutoff. See [Garmin history](garmin-integration.md#availability-and-history)
+for the four-function release boundary. No migration, new scheduler, queue, index, permission, MCP or Training change.
+Monitoring is **covered/unchanged**: normal import commits remain #829, actual explicit/live sends remain #832, and
+history request/retry progress remains #847; no labels, metrics or alert resources change.
 
 The callable also accepts a version 2 `preview` or `send` request with destination, selected sources, inclusive ISO date bounds, and an opaque page cursor. It scans owner events in bounded pages and returns per-source eligible/skipped counts, queued count, skip reasons, failures, and the next cursor. The browser supplies filters only; the server selects event IDs, verifies Pro access, destination connection, route gate, source metadata or trusted manual-upload origin, retained original path/generation/size/FIT format, and existing successful or live queue state. Preview does not write. Send uses the same activity-sync queue, metadata, upload adapters, outbound echo receipts, and asynchronous reconciliation as automatic delivery. An unaccepted automatic queue row for the same route and event can be replaced transactionally with a historical row and a new task generation, so a disconnected source does not park the explicit send. Provider claims, accepted upload state, successful sends, existing historical sends, and manual-reconciliation rows cannot be replaced. Repeated sends skip those pending or completed rows. The older callable request remains available for compatibility.
 

@@ -27,9 +27,14 @@ channel, independently of the Firebase mail extension.
 
 Suunto, COROS and Wahoo activity-history imports no longer enter automatic outbound delivery. They keep their normal
 inbound import outcome; suppressing fan-out is not a delivery failure or a skipped import. Explicit historical sends
-still use this bundle's existing historical mode. Ordinary feed imports, Garmin, already queued sends, retries and
+still use this bundle's existing historical mode. Ordinary feed imports, already queued sends, retries and
 accepted operations are unchanged. Coverage is **covered/unchanged** across #829, #832 and #847: only admission volume
 changes, with no new worker outcome, telemetry label, probe, queue, schedule or alert resource.
+
+Garmin's history-start cutoff likewise changes only new automatic-send eligibility. Earlier recordings still complete
+their normal inbound import, and explicit sending remains available. Suppression is neither a skipped import nor an
+attempted/failed delivery. The callback queue keeps its first admission decision through duplicates/retries, including
+after later history requests advance the cutoff. Existing #829/#832/#847 coverage remains **covered/unchanged**.
 
 The versioned `[ActivityDelivery]` structured events contain fixed source,
 destination, mode and outcome categories only. They never include user/account/event

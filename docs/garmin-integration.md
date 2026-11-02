@@ -181,6 +181,20 @@ Stress Details accepts numeric zero samples (the API 1.2.4 table describes rest 
 
 ## Availability and history
 
+Recorded-activity history uses a fixed automatic-send cutoff. Before requesting Garmin, the existing guarded lease
+transaction monotonically advances `users/{uid}/meta/GarminAPI.activitySyncCutoffMs` to the coordinator's original
+admission time, or the legacy request's start time. Later windows/retries cannot move that run's cutoff forward.
+Activity-file ingress reads it once per distinct Garmin user in a callback batch and stamps newly created queue rows
+with `suppressAutomaticActivitySync: true` for earlier recording times, including missing/invalid recording timestamps
+while a cutoff is active. Duplicate callbacks preserve their first queue decision. The workout worker imports normally
+but omits automatic outbound admission for suppressed rows; explicit saved sends remain independent. A delayed ordinary
+workout before the cutoff also needs an explicit send. Existing queue rows, already admitted outbound deliveries and
+retries retain their decisions; Sleep/Health requests do not advance the cutoff. This is a sending policy, not proof of
+provider history origin. No old-request reconstruction or migration is performed. Release needs separate approval for
+`backfillGarminAPIActivities`, `processConnectionHistoryTask`, `insertGarminAPIActivityFileToQueue` and
+`processWorkoutTask`, with Help in a separate frontend release. Monitoring remains **covered/unchanged** under #829,
+#832 and #847: suppressed fan-out is a successful inbound import, not a delivery failure or a skipped import.
+
 Garmin Health is available to every valid connected Garmin account while the independent operational switch in `functions/src/garmin/health-flags.ts` is enabled. There is no Garmin Health UID allowlist. Sleep remains governed by the existing Sleep provider/user controls.
 
 Garmin activity history remains a separate user-selected flow. Its picker defaults to the latest two calendar years through today; users can expand the selection up to the available rolling five-year limit or choose a shorter range before submitting. Updated clients send `background: true` to `backfillGarminAPIActivities`. For a versioned connection, it atomically admits an activity-only coordinator run and returns its safe progress without contacting Garmin. The existing adapter submits one bounded 30-day window per step, respects a stricter provider-reported minimum and resumes a failed window using the existing retry policy. The first successful/already-requested window records the fixed 30-day cooldown anchored to run admission; activity counts never determine Garmin's cooldown. Final **History requested** confirms submission, not that callbacks or activities arrived. The exact selected dates remain in the coordinator projection. Omitted/false `background` and unversioned connections retain the legacy synchronous implementation, 89-day batching and void response.

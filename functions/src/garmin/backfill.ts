@@ -70,6 +70,7 @@ class GarminHistoryImportInProgressError extends Error {
 }
 
 interface GarminHistoryServiceMeta extends UserServiceMetaInterface {
+  activitySyncCutoffMs?: number;
   historyImportLeaseOwner?: string;
   historyImportLeaseExpiresAt?: number;
 }
@@ -269,9 +270,15 @@ async function acquireGarminHistoryImportLease(userID: string, leaseOwner: strin
       throw new GarminHistoryImportInProgressError();
     }
 
+    const previousCutoffMs = meta?.activitySyncCutoffMs;
     transaction.set(metaRef, {
       historyImportLeaseOwner: leaseOwner,
       historyImportLeaseExpiresAt: nowMs + HISTORY_IMPORT_LEASE_MS,
+      // Freeze coordinator retries/windows to their original run start, before any Garmin request.
+      activitySyncCutoffMs: Math.max(
+        typeof previousCutoffMs === 'number' && Number.isFinite(previousCutoffMs) ? previousCutoffMs : 0,
+        execution?.cooldownStartedAtMs ?? nowMs,
+      ),
     }, { merge: true });
   });
 }

@@ -241,7 +241,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
         // Reset call history but keep implementations if needed, OR re-implement
         vi.clearAllMocks();
         mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
-        mockGetServiceConnectionMeta.mockResolvedValue(null);
+        mockGetServiceConnectionMeta.mockReset().mockResolvedValue(null);
         mockUpdateQueueItemIfUserActive.mockResolvedValue('updated');
 
         // Default: Mock Where returning Get
@@ -364,6 +364,25 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             });
             expect(mockResolveFirebaseUserIDForGarminUserID).toHaveBeenCalledWith('garmin-user-id');
             expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        it.each([
+            [999, true], [1000, false], [1001, false], [undefined, true], [null, true], ['1001', true],
+        ])('freezes automatic-send suppression for recording start %s against the saved cutoff', async (startTimeInSeconds, suppressed) => {
+            mockGetServiceConnectionMeta.mockResolvedValue({ activitySyncCutoffMs: 1000000 });
+            req.body.activityFiles[0].startTimeInSeconds = startTimeInSeconds;
+            await insertGarminAPIActivityFileToQueue(req, res);
+            expect(res.status).toHaveBeenCalledWith(200);
+            const queued = vi.mocked(addToQueueForGarmin).mock.calls[0][0];
+            expect(queued.suppressAutomaticActivitySync === true).toBe(suppressed);
+            expect(mockGetServiceConnectionMeta).toHaveBeenCalledExactlyOnceWith('firebase-user-id', ServiceNames.GarminAPI);
+        });
+
+        it('keeps a cutoff lookup failure retryable instead of accepting an unclassified callback', async () => {
+            mockGetServiceConnectionMeta.mockRejectedValueOnce(new Error('Firestore unavailable'));
+            await insertGarminAPIActivityFileToQueue(req, res);
+            expect(res.status).toHaveBeenCalledWith(500);
+            expect(addToQueueForGarmin).not.toHaveBeenCalled();
         });
 
         it('should handle missing token in callbackURL and use "No token" default', async () => {
@@ -537,6 +556,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
 
             expect(mockResolveFirebaseUserIDForGarminUserID).toHaveBeenCalledTimes(1);
             expect(addToQueueForGarmin).toHaveBeenCalledTimes(25);
+            expect(mockGetServiceConnectionMeta).toHaveBeenCalledTimes(1);
             expect(maxActive).toBeLessThanOrEqual(10);
             expect(res.status).toHaveBeenCalledWith(200);
         });
@@ -759,6 +779,17 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
 
             expect(result).toBe('PROCESSED');
             expect(mockEnqueueActivitySyncJobsForImportedEvent).not.toHaveBeenCalled();
+        });
+
+        it.each([undefined, false, true])('preserves the admission decision through retries (suppressed=%s)', async suppressAutomaticActivitySync => {
+            queueItem.suppressAutomaticActivitySync = suppressAutomaticActivitySync;
+            queueItem.retryCount = 4;
+            mockGetServiceConnectionMeta.mockResolvedValue({ activitySyncCutoffMs: Date.now() });
+            await expect(processGarminAPIActivityQueueItem(queueItem)).resolves.toBe('PROCESSED');
+            expect(mockSetEvent).toHaveBeenCalledOnce();
+            expect(updateToProcessed).toHaveBeenCalledWith(queueItem, undefined);
+            if (suppressAutomaticActivitySync) expect(mockEnqueueActivitySyncJobsForImportedEvent).not.toHaveBeenCalled();
+            else expect(mockEnqueueActivitySyncJobsForImportedEvent).toHaveBeenCalledOnce();
         });
 
         it('should successfully process a GPX file', async () => {

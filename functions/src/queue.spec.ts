@@ -2583,7 +2583,7 @@ describe('queue', () => {
             expect(doc.set).not.toHaveBeenCalled();
         });
 
-        it('addToQueueForGarmin should insert item with activityFileID based ID', async () => {
+        it.each([undefined, true])('Garmin queue creation retains its sending decision (suppressed=%s)', async suppressAutomaticActivitySync => {
             const queueItem = {
                 userID: 'u1',
                 startTimeInSeconds: 123,
@@ -2593,6 +2593,7 @@ describe('queue', () => {
                 token: 't1',
                 userAccessToken: 'ut1',
                 callbackURL: 'cb1',
+                suppressAutomaticActivitySync,
             };
             const result = await addToQueueForGarmin(queueItem);
             expect(result.id).toBe('mock-doc-id');
@@ -2603,6 +2604,7 @@ describe('queue', () => {
                 activityFileID: 'file123',
                 firebaseUserID: 'mock-user-id',
             }));
+            expect(doc.create.mock.calls[0][0].suppressAutomaticActivitySync === true).toBe(suppressAutomaticActivitySync === true);
             expect(doc.set).not.toHaveBeenCalled();
         });
 
@@ -2677,7 +2679,9 @@ describe('queue', () => {
             expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
         });
 
-        it('addToQueueForGarmin should refresh duplicate pending callback fields without resetting lifecycle state', async () => {
+        it.each([
+            { stored: true, incoming: undefined }, { stored: undefined, incoming: true },
+        ])('Garmin duplicate refresh preserves its first sending decision ($stored / $incoming)', async ({ stored, incoming }) => {
             const alreadyExistsError: any = new Error('ALREADY_EXISTS');
             alreadyExistsError.code = 6;
             mockDocRef.create.mockRejectedValueOnce(alreadyExistsError);
@@ -2698,6 +2702,7 @@ describe('queue', () => {
                     userAccessToken: 'old-access-token',
                     activityFileType: 'TCX',
                     startTimeInSeconds: 111,
+                    suppressAutomaticActivitySync: stored,
                 }),
             });
 
@@ -2710,6 +2715,7 @@ describe('queue', () => {
                 token: 'new-token',
                 userAccessToken: 'new-access-token',
                 callbackURL: 'new-callback',
+                suppressAutomaticActivitySync: incoming,
             });
 
             expect(result.id).toBe('mock-doc-id');

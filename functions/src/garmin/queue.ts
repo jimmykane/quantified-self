@@ -58,6 +58,7 @@ export const GARMIN_ACTIVITY_MAX_RESPONSE_BYTES = 128 * 1024 * 1024;
 export const GARMIN_ACTIVITY_DOWNLOAD_TIMEOUT_MS = 60_000;
 
 interface GarminActivityQueueInput {
+  suppressAutomaticActivitySync?: boolean,
   userID: string,
   startTimeInSeconds: number,
   manual: boolean,
@@ -240,13 +241,18 @@ export const insertGarminAPIActivityFileToQueue = functions.region('europe-west2
   }
 
   const firebaseUserIDByGarminUserID = new Map<string, string | null>();
+  const activitySyncCutoffByGarminUserID = new Map<string, number>();
   const distinctGarminUserIDs = Array.from(new Set(queueItems.map((queueItem) => queueItem.userID)));
   try {
     await mapWithConcurrency(distinctGarminUserIDs, GARMIN_CALLBACK_QUEUE_CONCURRENCY, async (garminUserID) => {
-      firebaseUserIDByGarminUserID.set(
-        garminUserID,
-        await resolveFirebaseUserIDForGarminUserID(garminUserID),
-      );
+      const firebaseUserID = await resolveFirebaseUserIDForGarminUserID(garminUserID);
+      firebaseUserIDByGarminUserID.set(garminUserID, firebaseUserID);
+      if (firebaseUserID) {
+        const cutoffMs = (await getServiceConnectionMeta(firebaseUserID, ServiceNames.GarminAPI))?.activitySyncCutoffMs;
+        if (typeof cutoffMs === 'number' && Number.isFinite(cutoffMs) && cutoffMs > 0) {
+          activitySyncCutoffByGarminUserID.set(garminUserID, cutoffMs);
+        }
+      }
     });
   } catch (e: unknown) {
     logger.error(e);
@@ -264,9 +270,14 @@ export const insertGarminAPIActivityFileToQueue = functions.region('europe-west2
       });
       return [];
     }
+    const cutoffMs = activitySyncCutoffByGarminUserID.get(queueItem.userID);
+    const recordingStartMs = typeof queueItem.startTimeInSeconds === 'number' ? queueItem.startTimeInSeconds * 1000 : NaN;
+    const suppressAutomaticActivitySync = cutoffMs !== undefined
+      && (!Number.isFinite(recordingStartMs) || recordingStartMs < cutoffMs);
     return [{
       ...queueItem,
       firebaseUserID,
+      ...(suppressAutomaticActivitySync ? { suppressAutomaticActivitySync: true } : {}),
     }];
   });
 
@@ -506,18 +517,20 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
         return markGarminQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
       }
 
-      try {
-        const activitySyncEventID = `${(setEventResult as any)?.eventID || eventID}`;
-        const activitySyncOriginalFiles = Array.isArray((setEventResult as any)?.savedOriginalFiles) ? (setEventResult as any).savedOriginalFiles : [];
-        await enqueueActivitySyncJobsForImportedEvent({
-          userID: firebaseUserID,
-          eventID: activitySyncEventID,
-          sourceServiceName: ServiceNames.GarminAPI,
-          sourceActivityID: queueItem.activityFileID,
-          originalFiles: activitySyncOriginalFiles,
-        });
-      } catch (activitySyncError) {
-        logger.error(`[ActivitySync] Failed to enqueue Garmin->destination sync for event ${eventID} and user ${firebaseUserID}. Import remains successful.`, activitySyncError);
+      if (queueItem.suppressAutomaticActivitySync !== true) {
+        try {
+          const activitySyncEventID = `${(setEventResult as any)?.eventID || eventID}`;
+          const activitySyncOriginalFiles = Array.isArray((setEventResult as any)?.savedOriginalFiles) ? (setEventResult as any).savedOriginalFiles : [];
+          await enqueueActivitySyncJobsForImportedEvent({
+            userID: firebaseUserID,
+            eventID: activitySyncEventID,
+            sourceServiceName: ServiceNames.GarminAPI,
+            sourceActivityID: queueItem.activityFileID,
+            originalFiles: activitySyncOriginalFiles,
+          });
+        } catch (activitySyncError) {
+          logger.error(`[ActivitySync] Failed to enqueue Garmin->destination sync for event ${eventID} and user ${firebaseUserID}. Import remains successful.`, activitySyncError);
+        }
       }
     }
     logger.info(`Created Event ${event.getID()} for ${queueItem.id} user id ${firebaseUserID} and token user ${(serviceToken as any).userID}`);

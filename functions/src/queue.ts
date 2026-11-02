@@ -543,7 +543,7 @@ export async function addToQueueForSuunto(queueItem: {
  * Needed to create and stamp an id
  * @param queueItem
  */
-export async function addToQueueForGarmin(queueItem: { userID: string, startTimeInSeconds: number, manual: boolean, activityFileID: string, activityFileType: 'FIT' | 'TCX' | 'GPX', token: string, userAccessToken: string, callbackURL: string, firebaseUserID?: string }): Promise<admin.firestore.DocumentReference> {
+export async function addToQueueForGarmin(queueItem: { userID: string, startTimeInSeconds: number, manual: boolean, activityFileID: string, activityFileType: 'FIT' | 'TCX' | 'GPX', token: string, userAccessToken: string, callbackURL: string, firebaseUserID?: string, suppressAutomaticActivitySync?: boolean }): Promise<admin.firestore.DocumentReference> {
   const queueID = await generateIDFromParts([queueItem.userID, queueItem.activityFileID]);
   logger.info(`Inserting to queue ${queueID} for ${queueItem.userID} fileID ${queueItem.activityFileID}`);
   return addToWorkoutQueue(await attachFirebaseUserIDToQueueItem({
@@ -560,6 +560,7 @@ export async function addToQueueForGarmin(queueItem: { userID: string, startTime
     processed: false,
     userAccessToken: queueItem.userAccessToken,
     callbackURL: queueItem.callbackURL,
+    ...(queueItem.suppressAutomaticActivitySync === true ? { suppressAutomaticActivitySync: true } : {}),
     dispatchedToCloudTask: null,
   }, ServiceNames.GarminAPI), ServiceNames.GarminAPI, {
     intent: 'provider_webhook',

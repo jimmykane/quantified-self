@@ -59,6 +59,8 @@ export interface ServiceDisconnectRetryDetails {
 }
 
 export interface ServiceConnectionMetaFields {
+  /** Garmin's server-owned lower bound for automatic recorded-activity sending. */
+  activitySyncCutoffMs?: number;
   connectionHistoryImport?: ConnectionHistoryStatusProjection;
   connectionState?: ServiceConnectionState | null;
   /**

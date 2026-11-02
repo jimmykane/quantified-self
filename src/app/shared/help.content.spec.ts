@@ -22,9 +22,17 @@ describe('help.content', () => {
     for (const phrase of ['For **Suunto, COROS and Wahoo**', 'both manual imports and history selected when connecting',
       'without automatically sending them to other providers', '**Send past activities** under the destination',
       'including workouts uploaded late', 'there is no recording-age cutoff',
-      'Garmin history retains its existing automatic-sync behavior', 'does not cancel deliveries already queued']) {
+      'Garmin uses a separate recorded-date cutoff', 'does not cancel deliveries already queued']) {
       expect(copy).toContain(phrase);
     }
+  });
+
+  it('explains Garmin history cutoffs, delayed workouts and preserved queued deliveries', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
+    for (const phrase of ['**Garmin activity history**', "fixed cutoff at the import's start time",
+      'recordings at or after it still follow your enabled sending directions', 'A normal workout uploaded late',
+      '**Send past activities** to send it explicitly', 'keep their original sending decision',
+      'Sleep and Health history do not change this cutoff']) expect(copy).toContain(phrase);
   });
 
   it('distinguishes the route picker from recorded workout upload and Garmin delivery', () => {
