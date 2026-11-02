@@ -10,6 +10,42 @@ import {
 } from './public-seo-pages.content';
 
 describe('public-seo-pages.content', () => {
+  it('keeps Training FAQ target limits and swim delivery consistent with supported recipes', () => {
+    const page = PUBLIC_SEO_PAGES.trainingPlans;
+    const faq = page.faqItems.find(item => item.question === 'Which sports and workout steps can I create?')!.answer;
+    expect(faq).toContain('up to two different absolute or relative');
+    expect(faq).toContain('cadence target kinds per step');
+    expect(faq).toContain('explicit saved reference snapshot');
+    expect(faq).toContain('provider-specific delivery limits still apply');
+    expect(faq).not.toContain('one absolute');
+    const delivery = page.sections.flatMap(section => section.items)
+      .find(item => item.title === 'Opt in to provider delivery')!.copy;
+    expect(delivery).toContain('connected Pro members');
+    expect(delivery).toContain('Garmin Generic after mapping review, not a native swim profile');
+    expect(delivery).toContain('Wahoo supports timed, untargeted pool and open-water');
+    expect(delivery).toContain('does not send the selected pool length');
+    expect(delivery).toContain('Cloud acceptance does not prove app or watch receipt');
+    expect(delivery).toContain('COROS plan sync and standalone Send actions are coming soon');
+    expect(delivery).not.toContain('Wahoo swim delivery are unavailable');
+  });
+
+  it('distinguishes separately approved manual Health changes from immutable imported readings', () => {
+    const page = PUBLIC_SEO_PAGES.mcpServer;
+    const focusedWrites = page.sections.flatMap(section => section.items)
+      .find(item => item.copy.includes('Separate permissions can replace shared event tags'))!.copy;
+    const faq = page.faqItems.find(item => item.question === 'Can an MCP client rearrange my dashboard or change my data?')!.answer;
+    for (const copy of [focusedWrites, faq]) {
+      expect(copy).toContain('independent Manage manual Health measurements permission');
+      expect(copy).toContain('permanently delet');
+      expect(copy).toContain('approval controls');
+      expect(copy).toContain('imported Health readings');
+      expect(copy).toContain('recorded activity data');
+      expect(copy).toContain('dashboard settings');
+      expect(copy).not.toContain('routes, Health, measurements');
+    }
+    expect(faq).toContain('released tools, a refreshed tool catalog, and reauthorization');
+  });
+
   it('links both Training Help actions to the Training Analysis help topic', () => {
     const page = PUBLIC_SEO_PAGES.trainingAnalysis;
     const actions = [...page.actions, ...page.closingActions]
