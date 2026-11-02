@@ -231,6 +231,7 @@ export async function processWahooWorkoutQueueItem(
       eventID,
       sourceServiceName: ACTIVITY_SYNC_ROUTES[ACTIVITY_SYNC_ROUTE_IDS.WahooAPI_to_SuuntoApp].sourceServiceName,
       sourceActivityID: queueItem.workoutID,
+      fromHistory: queueItem.fromHistory === true,
       setEventResult,
       sourceFileData: Buffer.from(fitFile),
     });

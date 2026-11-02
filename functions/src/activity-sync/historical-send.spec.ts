@@ -52,15 +52,16 @@ import { ACTIVITY_SYNC_ROUTES, getHistoricalActivityRouteId } from '../../../sha
 
 const source = ACTIVITY_SYNC_ROUTES.GarminAPI_to_SuuntoApp.sourceServiceName;
 const destination = ACTIVITY_SYNC_ROUTES.GarminAPI_to_SuuntoApp.destinationServiceName;
-const eventRef = {
+const eventRefForSource = (selectedSource = source) => ({
   collection: () => ({
-    doc: (name: string) => ({ path: `users/user-1/events/event-1/metaData/${name}`, get: async () => name === source
-      ? { exists: true, data: () => ({ activityFileID: 'source-1' }) }
+    doc: (name: string) => ({ path: `users/user-1/events/event-1/metaData/${name}`, get: async () => name === selectedSource
+      ? { exists: true, data: () => selectedSource === source ? { activityFileID: 'source-1' } : { workoutID: 'source-1' } }
       : name === 'manualUploadOrigin'
         ? { exists: true, data: () => ({ kind: 'manualUpload', version: 1 }) }
       : { exists: false, data: () => undefined } }),
   }),
-};
+});
+const eventRef = eventRefForSource();
 const eventSnapshot = {
   id: 'event-1',
   data: () => ({ startDate: Date.parse('2026-01-02T00:00:00.000Z'), originalFiles: [{
@@ -103,11 +104,13 @@ describe('historical activity send pages', () => {
     expect(destinationStatus).toHaveBeenCalledWith('user-1', destination);
   });
 
-  it('sends through the existing queue with a historical mode and retained file generation', async () => {
-    const result = await runHistoricalSendPage('user-1', { ...request, action: 'send' });
+  it.each(Object.values(ACTIVITY_SYNC_ROUTES))('explicitly sends saved $sourceServiceName activities to $destinationServiceName', async route => {
+    queryGet.mockResolvedValue({ size: 1, docs: [{ ...eventSnapshot, ref: eventRefForSource(route.sourceServiceName) }] });
+    const result = await runHistoricalSendPage('user-1', { ...request, action: 'send',
+      sources: [route.sourceServiceName], destinationServiceName: route.destinationServiceName });
     expect(result.queued).toBe(1);
     expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
-      sourceServiceName: source, destinationServiceName: destination,
+      sourceServiceName: route.sourceServiceName, destinationServiceName: route.destinationServiceName,
       deliveryMode: 'historical', manual: true,
       originalFile: expect.objectContaining({ generation: '42', extension: 'fit' }),
     }));

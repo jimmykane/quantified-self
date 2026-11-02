@@ -9,6 +9,8 @@ import DocumentReference = admin.firestore.DocumentReference;
 
 export interface QueueItemInterface {
   connectionHistoryRunId?: string;
+  /** History imports do not opt in to automatic recorded-activity delivery. */
+  fromHistory?: boolean;
   id: string,
   ref?: DocumentReference
   dateCreated: number,
@@ -70,7 +72,6 @@ export interface WahooAPIWorkoutQueueItemInterface extends QueueItemInterface {
   manual?: boolean;
   edited?: boolean;
   fitnessAppID?: number;
-  fromHistory?: boolean;
 }
 
 export interface GarminAPIActivityQueueItemInterface extends QueueItemInterface {

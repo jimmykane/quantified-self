@@ -249,6 +249,17 @@ describe('upsertWahooWorkoutQueueItem', () => {
     expect(mocks.enqueueWorkoutTaskWithDispatchRecovery).not.toHaveBeenCalled();
   });
 
+  it.each([false, true])('preserves history origin when a newer webhook replaces processed=%s work', async processed => {
+    mocks.transactionGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ ...input, fromHistory: true, processed, summaryUpdatedAt: '2026-07-18T09:00:00.000Z' }),
+    });
+    await upsertWahooWorkoutQueueItem(input, 'deferred');
+    expect(mocks.transactionSet).toHaveBeenCalledWith(mocks.ref, expect.objectContaining({
+      fromHistory: true, summaryUpdatedAt: input.summaryUpdatedAt, processed: false,
+    }));
+  });
+
   it('treats a different summary ID at the same timestamp as a newer revision', async () => {
     mocks.transactionGet.mockResolvedValue({
       exists: true,
@@ -318,6 +329,7 @@ describe('upsertWahooWorkoutQueueItem', () => {
       exists: true,
       data: () => ({
         processed: false,
+        fromHistory: true,
         dateCreated: 123,
         summaryUpdatedAt: input.summaryUpdatedAt,
         FITFileURI: 'https://cdn.wahooligan.com/expired.fit',
@@ -326,6 +338,7 @@ describe('upsertWahooWorkoutQueueItem', () => {
 
     await expect(upsertWahooWorkoutQueueItem(input, 'immediate')).resolves.toEqual({ ref: mocks.ref, queued: false });
     expect(mocks.transactionUpdate).toHaveBeenCalledWith(mocks.ref, { FITFileURI: input.FITFileURI });
+    expect(mocks.transactionSet).not.toHaveBeenCalled();
     expect(mocks.enqueueWorkoutTaskWithDispatchRecovery).not.toHaveBeenCalled();
   });
 

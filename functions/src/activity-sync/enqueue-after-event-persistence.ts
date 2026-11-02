@@ -10,12 +10,14 @@ export interface EnqueueActivitySyncAfterEventPersistenceParams {
   eventID: string;
   sourceServiceName: ServiceNames;
   sourceActivityID: string;
+  fromHistory?: boolean;
   setEventResult: SetEventResult;
   sourceFileData?: Buffer;
 }
 
 /**
- * Hands a newly persisted provider activity to enabled activity-sync routes.
+ * Hands an ordinary provider import to enabled activity-sync routes.
+ * History remains in QS until the user explicitly sends saved activities.
  *
  * Importing remains successful when a follow-up delivery job cannot be queued;
  * the route can be retried later through its manual date-range backfill.
@@ -31,6 +33,8 @@ export async function enqueueActivitySyncAfterEventPersistence(
   )) {
     return true;
   }
+
+  if (params.fromHistory === true) return false;
 
   try {
     if (params.sourceFileData && await isActivitySyncOutboundEcho({

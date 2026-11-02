@@ -17,6 +17,16 @@ import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 
 
 describe('help.content', () => {
+  it('separates Suunto, COROS and Wahoo history imports from automatic forwarding', () => {
+    const copy = HELP_SECTIONS.find(section => section.id === 'service-connections')!.content;
+    for (const phrase of ['For **Suunto, COROS and Wahoo**', 'both manual imports and history selected when connecting',
+      'without automatically sending them to other providers', '**Send past activities** under the destination',
+      'including workouts uploaded late', 'there is no recording-age cutoff',
+      'Garmin history retains its existing automatic-sync behavior', 'does not cancel deliveries already queued']) {
+      expect(copy).toContain(phrase);
+    }
+  });
+
   it('distinguishes the route picker from recorded workout upload and Garmin delivery', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'uploads-and-imports')!.content;
     expect(copy).toContain('GPX routes/tracks and FIT courses, not recorded workout FITs');

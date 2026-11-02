@@ -1562,6 +1562,20 @@ become terminal on their next failure.
 
 When a provider accepts activities, use the shared `activity-sync` route model rather than adding a provider-specific fan-out path. Define an explicit `source -> destination` route in `shared/activity-sync-routes.ts`, enable it only from Services, and route historical delivery through the existing date-range backfill callable.
 
+Suunto, COROS and Wahoo activity-history jobs already retain `fromHistory: true`, with or without a coordinator run.
+Their shared post-persistence handoff imports them successfully without automatic outbound admission or delivery-metadata
+writes. Ordinary feed imports, including delayed recordings and legacy rows without the marker, retain opt-in automatic
+delivery; no date cutoff is applied. A retained Wahoo history row keeps its origin across newer webhook revisions so an
+update cannot accidentally enable forwarding. Existing Suunto/COROS duplicate callbacks preserve the original row.
+Do not overwrite an existing live admission just because a history scan encounters it. Identity resolution, canonical
+event/original-file writes, user edits, Training completion and import outcomes are unchanged. Garmin's asynchronous
+callback path retains its existing behavior; its `manual` field is not a history marker. Explicit saved/direct sends
+remain independent, including all six outbound directions from these three sources. Already queued outbound jobs are
+not cancelled or migrated. Release requires separate approval for `processWorkoutTask` and `wahooAPIWebhook`; Help is
+a separate frontend release. No Rules, indexes or data migration are needed. Monitoring is **covered/unchanged**:
+history never enters the delivery queue, while existing #829 import, #832 delivery and #847 history observations keep
+their committed-outcome, backlog/failure and unknown-telemetry meanings. See [activity delivery monitoring](activity-delivery-monitoring.md).
+
 The callable also accepts a version 2 `preview` or `send` request with destination, selected sources, inclusive ISO date bounds, and an opaque page cursor. It scans owner events in bounded pages and returns per-source eligible/skipped counts, queued count, skip reasons, failures, and the next cursor. The browser supplies filters only; the server selects event IDs, verifies Pro access, destination connection, route gate, source metadata or trusted manual-upload origin, retained original path/generation/size/FIT format, and existing successful or live queue state. Preview does not write. Send uses the same activity-sync queue, metadata, upload adapters, outbound echo receipts, and asynchronous reconciliation as automatic delivery. An unaccepted automatic queue row for the same route and event can be replaced transactionally with a historical row and a new task generation, so a disconnected source does not park the explicit send. Provider claims, accepted upload state, successful sends, existing historical sends, and manual-reconciliation rows cannot be replaced. Repeated sends skip those pending or completed rows. The older callable request remains available for compatibility.
 
 `manualUpload` is a one-time source for Suunto, Wahoo, and COROS only, with distinct route IDs that have no automatic setting. New manual uploads receive a server-owned `metaData/manualUploadOrigin` marker; older uploads are accepted only if the original FIT bytes reproduce the upload endpoint's deterministic event ID. FIT.gz is decompressed within a 20 MiB output bound before upload. Merged and derived events, non-FIT files, changed generations, and missing originals are excluded. For saved provider imports, source connection state is not required at send time; destination lifecycle, Pro access, account deletion, rollout gate, and provider-side authorization still apply in the worker. A preview is an eligibility snapshot, not a promise of provider acceptance.

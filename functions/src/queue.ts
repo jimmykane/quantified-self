@@ -1439,6 +1439,7 @@ async function parseHistoryGuardedWorkoutQueueItem(
               eventID: deterministicID,
               sourceServiceName: ServiceNames.COROSAPI,
               sourceActivityID: corosWorkoutQueueItem.workoutID,
+              fromHistory: corosWorkoutQueueItem.fromHistory === true,
               setEventResult,
               sourceFileData: Buffer.from(result),
             });
@@ -1481,6 +1482,7 @@ async function parseHistoryGuardedWorkoutQueueItem(
               eventID: deterministicID,
               sourceServiceName: ServiceNames.SuuntoApp,
               sourceActivityID: suuntoWorkoutQueueItem.workoutID,
+              fromHistory: suuntoWorkoutQueueItem.fromHistory === true,
               setEventResult,
               sourceFileData: Buffer.from(result),
             });

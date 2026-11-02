@@ -1398,6 +1398,8 @@ Connection feature cards show what each tool does. In **History import**, the la
 
 Manual **Garmin**, **Suunto**, **COROS** and **Wahoo** activity imports use the same background processing as history selected when connecting. Choose your dates and start the import; you can then close the dialog or leave the app. Check **History import** in Connections for progress and **Retry failed imports** if needed. Acceptance means the request is saved, not that every activity has arrived. This action imports activities only; Sleep, Health and saved routes keep their separate controls. COROS still limits activity history to the latest three months. Wahoo imports eligible FIT-backed workouts one page at a time and skips workouts without a FIT file or originating from third-party fitness apps. Existing connections are verified automatically when you start an import. If the current provider account cannot be verified, reconnect before importing history; no import starts from that request. Large ranges are processed in batches and may take longer when a provider is busy. Scheduled activity counts confirm queued work, not completed imports. Processing time depends on the provider and queued work; QS does not promise a completion time from those counts. The next available import date is a cooldown for starting another request, not an expected finish date.
 
+For **Suunto, COROS and Wahoo**, activity-history imports—both manual imports and history selected when connecting—save activities in QS without automatically sending them to other providers. Use **Send past activities** under the destination to preview and confirm a historical send. Ordinary activity-feed imports still follow your enabled automatic-sync directions, including workouts uploaded late; there is no recording-age cutoff. Garmin history retains its existing automatic-sync behavior. This does not cancel deliveries already queued.
+
 ### Garmin permissions
 
 In **Connections → Garmin**, **Permissions** shows each account's last-reported access for supported permissions, including **Training** and **Course Import**. **Granted** and **Not granted** describe Garmin's saved response. **Not reported** means QS does not yet have permission details for that connection—not that you denied access. A granted permission does not mean every related feature is available in QS.
@@ -1624,7 +1626,7 @@ COROS to Suunto activity sync requires:
 - open **Activity sync settings → To Suunto** under COROS in **Connections** and enable automatic sync,
 - and keep both service connections active.
 
-Automatic sync runs only for newly imported COROS activities and uses the stored original activity file from your event. COROS Services also offers Wahoo as a destination.
+Automatic sync runs only for newly imported COROS activities from its ordinary activity feed and uses the stored original activity file from your event. Activity-history imports are saved in QS without automatic forwarding. COROS Services also offers Wahoo as a destination.
 
 **Send past activities** is available under the Suunto or Wahoo destination card in Services. Choose **Saved activities**, select **COROS API** in **Activity sources** and a date range, then preview and confirm **Send** to send COROS activities already saved in Quantified Self; you can also select supported other imports or manual uploads.
 
@@ -1675,7 +1677,7 @@ Wahoo to Suunto or COROS activity sync requires:
 - keep both service connections active,
 - and use Wahoo activities with a retained original FIT file.
 
-Automatic sync runs only for newly imported eligible Wahoo activities. **Send past activities** under the Suunto or COROS destination card can send retained Wahoo FIT imports from your chosen date range. Select **Wahoo imports** and optionally other supported imports or manual uploads. You can send past activities while automatic activity sync is off; this does not turn on automatic sync for future Wahoo imports.
+Automatic sync runs only for newly imported eligible Wahoo activities from its ordinary activity feed; activity-history imports are saved in QS without automatic forwarding. **Send past activities** under the Suunto or COROS destination card can send retained Wahoo FIT imports from your chosen date range. Select **Wahoo imports** and optionally other supported imports or manual uploads. You can send past activities while automatic activity sync is off; this does not turn on automatic sync for future Wahoo imports.
 
 Disconnecting Wahoo revokes future access and stops new imports and deliveries. It does **not** delete activities already imported into Quantified Self. Delete individual activities yourself, or delete the account to remove all associated data. Wahoo-origin FIT activities can be delivered to Suunto or COROS after explicit opt-in. Suunto-to-Wahoo saved-route delivery is a separate, opt-in route workflow in Suunto Services; direct Wahoo GPX/FIT course/route delivery is a separate, user-selected Wahoo-only upload. Wahoo-owned plans are not imported, and plans or sleep are not forwarded between providers.
 
