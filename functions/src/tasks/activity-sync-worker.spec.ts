@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ActivitySyncQueueItemInterface } from '../queue/queue-item.interface';
 
 interface TaskRequestMock {
+  id?: string;
   data: {
     queueItemId: string;
   };
@@ -57,7 +58,8 @@ vi.mock('../activity-sync/process-queue-item', () => ({
   processActivitySyncQueueItem: mockProcessActivitySyncQueueItem,
 }));
 
-vi.mock('../shared/cloud-tasks', () => ({
+vi.mock('../shared/cloud-tasks', async original => ({
+  getActivitySyncTaskId: (await original<typeof import('../shared/cloud-tasks')>()).getActivitySyncTaskId,
   enqueueActivitySyncTask: mockEnqueueActivitySyncTask,
 }));
 
@@ -97,6 +99,7 @@ const invokeWorker = (request: TaskRequestMock): Promise<void> =>
 describe('processActivitySyncTask', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockEnqueueActivitySyncTask.mockReset();
     mockIsQueueItemDeletedForUserCleanup.mockResolvedValue(false);
     mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
   });
@@ -474,6 +477,39 @@ describe('processActivitySyncTask', () => {
     expect(mockProcessActivitySyncQueueItem).toHaveBeenCalledOnce();
     expect(mockEnqueueActivitySyncTask).toHaveBeenCalledTimes(2);
     expect(mockEnqueueActivitySyncTask.mock.calls.every(([, deadline]) => deadline === scheduledAtMs)).toBe(true);
+  });
+
+  it.each(['PROVIDER_QUOTA_DEFERRED', 'RETRY_INCREMENTED', 'PROVIDER_STATUS_PENDING'])('does not acknowledge %s when the duplicate is the currently running task', async result => {
+    const scheduledAtMs = Date.now() + 2000;
+    mockQueueGet.mockResolvedValueOnce({ exists: true, id: 'queue-item-1',
+      data: () => ({ processed: false, userID: 'user-1', destinationServiceName: 'wahooAPI' }) });
+    mockProcessActivitySyncQueueItem.mockImplementationOnce(async item => {
+      item.dispatchedToCloudTask = scheduledAtMs;
+      return result;
+    });
+    mockEnqueueActivitySyncTask.mockResolvedValueOnce(false);
+    await expect(invokeWorker({ id: `activity-sync-queue-item-1-${scheduledAtMs}`, data: { queueItemId: 'queue-item-1' } }))
+      .rejects.toThrow('own active task');
+    expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
+  });
+
+  it('reuses a near-due Wahoo task for a different delivery without restarting processing', async () => {
+    const scheduledAtMs = Date.now() + 2000;
+    mockQueueGet.mockResolvedValueOnce({ exists: true, id: 'queue-item-1',
+      data: () => ({ processed: false, userID: 'user-1', destinationServiceName: 'wahooAPI', dispatchedToCloudTask: scheduledAtMs }) });
+    await invokeWorker({ id: 'activity-sync-queue-item-1-original', data: { queueItemId: 'queue-item-1' } });
+    expect(mockProcessActivitySyncQueueItem).not.toHaveBeenCalled();
+    expect(mockEnqueueActivitySyncTask).toHaveBeenCalledWith('queue-item-1', scheduledAtMs, expect.any(Number));
+  });
+
+  it('processes its own Wahoo scheduled task despite an early local clock', async () => {
+    const scheduledAtMs = Date.now() + 60_000;
+    mockQueueGet.mockResolvedValueOnce({ exists: true, id: 'queue-item-1',
+      data: () => ({ processed: false, userID: 'user-1', destinationServiceName: 'wahooAPI', dispatchedToCloudTask: scheduledAtMs }) });
+    mockProcessActivitySyncQueueItem.mockResolvedValueOnce('PROCESSED');
+    await invokeWorker({ id: `activity-sync-queue-item-1-${scheduledAtMs}`, data: { queueItemId: 'queue-item-1' } });
+    expect(mockProcessActivitySyncQueueItem).toHaveBeenCalledOnce();
+    expect(mockEnqueueActivitySyncTask).not.toHaveBeenCalled();
   });
 
   it.each([undefined, null, -1, Number.MAX_SAFE_INTEGER - 1])('rejects a cooldown without a valid saved deadline: %s', async deadline => {

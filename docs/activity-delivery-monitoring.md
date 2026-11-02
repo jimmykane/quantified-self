@@ -209,7 +209,8 @@ Early known waits consume no business retry/error entry and perform no processin
 work. They still start a worker; its existing latency/attempt signals measure that remaining work. Compare those
 signals, committed retries, actual 429s, native queue depth and confirmed deliveries after deployment, rather than
 treating fewer retries or HTTP acknowledgements as completed sends or a measured euro saving. Cooldown read/marker
-and delayed-enqueue failures remain failed worker attempts; accepted IDs and status-only reconciliation remain intact.
+and delayed-handoff failures (including a refused handoff to the current active task) remain failed worker attempts;
+accepted IDs and status-only reconciliation remain intact. No task identity enters metric labels.
 
 Each eligible row is re-read in a read-only transaction with owner, deletion,
 settings and connection snapshots; a changed queue revision is excluded. Token

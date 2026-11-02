@@ -19,7 +19,10 @@ vi.mock('firebase-admin', async original => {
 });
 vi.mock('firebase-functions/v2/tasks', () => ({ onTaskDispatched: (_options: unknown, handler: unknown) => handler }));
 vi.mock('firebase-functions/logger', () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
-vi.mock('../shared/cloud-tasks', () => ({ enqueueActivitySyncTask: state.enqueue }));
+vi.mock('../shared/cloud-tasks', async original => ({
+    getActivitySyncTaskId: (await original<typeof import('../shared/cloud-tasks')>()).getActivitySyncTaskId,
+    enqueueActivitySyncTask: state.enqueue,
+}));
 vi.mock('../utils', async original => ({ ...await original<typeof import('../utils')>(), hasProAccess: async () => true }));
 vi.mock('./settings', () => ({ isActivitySyncRouteEnabledForUser: async () => true }));
 vi.mock('./metadata', () => ({
@@ -43,6 +46,7 @@ import { processActivitySyncQueueItem } from './process-queue-item';
 import { processActivitySyncTask } from '../tasks/activity-sync-worker';
 import { QueueResult, PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER } from '../queue-utils';
 import { extendWahooRateLimitCooldown } from '../wahoo/rate-limit';
+import { getActivitySyncTaskId } from '../shared/cloud-tasks';
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo cooldown handoffs in isolated Firestore', () => {
     if (process.env.FIRESTORE_EMULATOR_HOST && !/^(127\.0\.0\.1|localhost):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST)) {
@@ -90,8 +94,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo cooldown handoffs i
         const snapshot = await queueRef().get();
         return { ...snapshot.data(), id: snapshot.id, ref: snapshot.ref } as ActivitySyncQueueItemInterface;
     }
-    async function invoke() {
-        await (processActivitySyncTask as unknown as (request: { data: { queueItemId: string } }) => Promise<void>)({ data: { queueItemId: queueId } });
+    async function invoke(id?: string) {
+        await (processActivitySyncTask as unknown as (request: { id?: string; data: { queueItemId: string } }) => Promise<void>)({ id, data: { queueItemId: queueId } });
     }
     function expectNoExpensiveWork() {
         for (const mock of [state.download, state.fingerprint, state.upload, state.status, state.processing]) expect(mock).not.toHaveBeenCalled();
@@ -115,7 +119,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo cooldown handoffs i
         expect(results.filter(result => result.status === 'fulfilled' && result.value === QueueResult.ProviderQuotaDeferred)).toHaveLength(10);
         expect(results.filter(result => result.status === 'rejected')).toHaveLength(0);
         const saved = (await queueRef().get()).data()!;
-        await Promise.all(Array.from({ length: 10 }, invoke));
+        await Promise.all(Array.from({ length: 10 }, () => invoke()));
         expect(state.enqueue).toHaveBeenCalledTimes(10);
         expect(state.enqueue.mock.calls.every(([id, at]) => id === queueId && at === saved.dispatchedToCloudTask)).toBe(true);
         expect((await queueRef().get()).data()).toMatchObject({ retryCount: PROVIDER_MAX_RETRY_COUNT - 1, totalRetryCount: 29, destinationUploadID: 'accepted-upload' });
@@ -160,6 +164,52 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo cooldown handoffs i
             const commits = vi.mocked(logger.info).mock.calls.filter(([message, fields]) =>
                 message === '[ActivityDelivery]' && fields?.event === 'committed' && fields?.outcome === 'expected_contention');
             expect(commits).toHaveLength(1);
+            expectNoExpensiveWork();
+        } finally {
+            clock.mockRestore();
+        }
+    });
+    it('preserves a near-due quota task when an older delivery reads its freshly saved marker', async () => {
+        const item = await seed(true);
+        const now = Date.now();
+        await cooldownRef().update({ notBeforeMs: now + 1000 });
+        const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+        const jitter = vi.spyOn(Math, 'random').mockReturnValue(0);
+        try {
+            const originalTaskId = getActivitySyncTaskId(queueId, item.dateCreated);
+            await invoke(originalTaskId);
+            const first = await queueRef().get();
+            expect(first.data()!.dispatchedToCloudTask).toBe(now + 2000);
+            jitter.mockReturnValue(0.9);
+            await invoke(originalTaskId);
+            const duplicate = await queueRef().get();
+            expect(duplicate.updateTime!.isEqual(first.updateTime!)).toBe(true);
+            expect(state.enqueue).toHaveBeenCalledTimes(2);
+            expect(state.enqueue.mock.calls.every(([, at]) => at === now + 2000)).toBe(true);
+            expectNoExpensiveWork();
+        } finally {
+            clock.mockRestore();
+            jitter.mockRestore();
+        }
+    });
+    it('retains its own expiry-clamped task for transport recovery instead of acknowledging a self-handoff', async () => {
+        const now = Date.now();
+        const expiresAt = now + 2000;
+        await seed(false, { sendBatchID: 'batch', dispatchedToCloudTask: expiresAt });
+        await db.doc(`users/${uid}/activitySendOperations/batch`).set({ state: 'confirmed', expiresAt });
+        const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+        const taskId = getActivitySyncTaskId(queueId, expiresAt);
+        try {
+            await expect(invoke(taskId)).rejects.toThrow('own active task');
+            expect(state.enqueue).not.toHaveBeenCalled();
+            expect((await queueRef().get()).data()).toMatchObject({
+                processed: false, retryCount: PROVIDER_MAX_RETRY_COUNT - 1, totalRetryCount: 29,
+                errors: [{ error: 'previous real failure', date: 1 }], dispatchedToCloudTask: expiresAt,
+            });
+            clock.mockReturnValue(expiresAt + 1);
+            await invoke(taskId);
+            expect((await queueRef().get()).data()).toMatchObject({ processed: true, skippedReason: 'send_source_expired' });
+            expect(state.enqueue).not.toHaveBeenCalled();
             expectNoExpensiveWork();
         } finally {
             clock.mockRestore();

@@ -1513,7 +1513,9 @@ processing metadata, downloads, fingerprints and provider claims. A known wait p
 send-window-guarded dispatch deadline and uses the existing deterministic delayed task; acknowledge only after
 enqueue confirmation or duplicate. It consumes no business retry count or error entry, retains accepted upload/type/
 account identity and rechecks an extended cooldown on wake-up. The final API guard and actual/late 429 retry policy
-remain. Monitoring is **covered/unchanged** by existing `expected_contention`/`deferred`, native queue/latency and
+remain. Current task identity distinguishes near-due Wahoo redeliveries from their scheduled task; a self-handoff
+fails for transport recovery rather than acknowledging the only active delivery. Task payloads/names stay unchanged.
+Monitoring is **covered/unchanged** by existing `expected_contention`/`deferred`, native queue/latency and
 failure/DLQ/unknown-observation coverage. Existing Help background/status-only guidance remains accurate; no public,
 MCP/Assistant, Training, consent, provider-matrix capability, queue topology, index or migration change is needed.
 Release only `processActivitySyncTask` after separate approval; no replay or retry reset is included. See the Wahoo
