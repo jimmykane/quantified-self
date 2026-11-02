@@ -78,6 +78,15 @@ describe('Cloud Tasks Utils', () => {
         expect(new Set(hoisted.mockTaskQueue.enqueue.mock.calls.map(([, options]) => options.id)).size).toBe(2);
     });
 
+    it('uses the same normalized activity task identity for enqueueing and handoff checks', async () => {
+        const { enqueueActivitySyncTask, getActivitySyncTaskId } = await import('./cloud-tasks');
+        expect(getActivitySyncTaskId('queue/item', 9.9)).toBe('activity-sync-queue-item-9');
+        await enqueueActivitySyncTask('queue/item', 9.9, 2);
+        expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith({ queueItemId: 'queue/item' }, expect.objectContaining({
+            id: getActivitySyncTaskId('queue/item', 9.9), scheduleDelaySeconds: 2,
+        }));
+    });
+
     it('recovers a Training enqueue with a new task name and the same account reservation', async () => {
         const { enqueueTrainingDeliveryTask } = await import('./cloud-tasks');
         await enqueueTrainingDeliveryTask('reconcile_account', 'pending-page', 'dispatch-one');

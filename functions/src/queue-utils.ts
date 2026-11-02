@@ -45,6 +45,8 @@ export enum QueueResult {
     HealthContinuationScheduled = 'HEALTH_CONTINUATION_SCHEDULED',
     TokenRefreshDeferred = 'TOKEN_REFRESH_DEFERRED',
     ProviderStatusPending = 'PROVIDER_STATUS_PENDING',
+    /** Known provider cooldown; a delayed task must be confirmed before ACK. */
+    ProviderQuotaDeferred = 'PROVIDER_QUOTA_DEFERRED',
     MovedToDLQ = 'MOVED_TO_DLQ',
     RetryIncremented = 'RETRY_INCREMENTED',
     Failed = 'FAILED',
