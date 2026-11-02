@@ -1508,6 +1508,19 @@ page as processing failures. See [Wahoo application cooldown](wahoo-integration.
 fallbacks, privacy, unchanged lifecycle/consent and the monitoring coverage decision. This is a cooldown, not a promise
 of proactive request-count reservation across every Wahoo transport.
 
+Recorded-activity delivery checks that same cooldown after lifecycle/Stop and uncertain-operation checks, before
+processing metadata, downloads, fingerprints and provider claims. A known wait persists only a deletion/current-state/
+send-window-guarded dispatch deadline and uses the existing deterministic delayed task; acknowledge only after
+enqueue confirmation or duplicate. It consumes no business retry count or error entry, retains accepted upload/type/
+account identity and rechecks an extended cooldown on wake-up. The final API guard and actual/late 429 retry policy
+remain. Current task identity distinguishes near-due Wahoo redeliveries from their scheduled task; a self-handoff
+fails for transport recovery rather than acknowledging the only active delivery. Task payloads/names stay unchanged.
+Monitoring is **covered/unchanged** by existing `expected_contention`/`deferred`, native queue/latency and
+failure/DLQ/unknown-observation coverage. Existing Help background/status-only guidance remains accurate; no public,
+MCP/Assistant, Training, consent, provider-matrix capability, queue topology, index or migration change is needed.
+Release only `processActivitySyncTask` after separate approval; no replay or retry reset is included. See the Wahoo
+cooldown runbook above for handoff recovery, expiry bounds and post-release measurement.
+
 ### Queue item design
 
 Queue IDs and imported event IDs must be stable across retries. Prefer provider identity plus stable provider activity/workout ID, with a secondary provider-user identity where collisions are possible.

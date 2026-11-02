@@ -472,10 +472,14 @@ export async function markWorkoutTaskDispatchedWithRetry(
     return true;
 }
 
-/**
- * Enqueue an activity sync processing task to Cloud Tasks.
- * Uses deterministic task names for deduplication.
- */
+/** Shared identity for enqueue deduplication and activity-worker handoffs. */
+export function getActivitySyncTaskId(queueItemId: string, dateCreated: number): string {
+    const safeQueueItemId = `${queueItemId}`.replace(/[^a-zA-Z0-9-_]/g, '-');
+    const safeDateCreated = Number.isFinite(dateCreated) ? Math.max(0, Math.floor(dateCreated)) : 0;
+    return `activity-sync-${safeQueueItemId}-${safeDateCreated}`;
+}
+
+/** Enqueue an activity sync processing task with its existing deterministic identity. */
 export async function enqueueActivitySyncTask(
     queueItemId: string,
     dateCreated: number,
@@ -487,9 +491,7 @@ export async function enqueueActivitySyncTask(
         throw new Error('Project ID is not defined in config');
     }
 
-    const safeQueueItemId = `${queueItemId}`.replace(/[^a-zA-Z0-9-_]/g, '-');
-    const safeDateCreated = Number.isFinite(dateCreated) ? Math.max(0, Math.floor(dateCreated)) : 0;
-    const taskId = `activity-sync-${safeQueueItemId}-${safeDateCreated}`;
+    const taskId = getActivitySyncTaskId(queueItemId, dateCreated);
     const payload = { queueItemId };
 
     return enqueueTaskWithRetry({
