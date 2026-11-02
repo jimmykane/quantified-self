@@ -5879,6 +5879,22 @@ remain local only; actual Add & send admission still uses the current owner, con
 Recovery, the selected/routine sport, purpose, equipment and explicit controls retain priority over device convenience. The generator never estimates seconds for prescribed repetitions
 or distance, changes a workout to rest for hardware, or rewrites a returned prescription to make it sendable.
 
+Daily preparation also checks the four existing provider metadata projections (`connectionHistoryImport` only)
+for active queued/requesting/retrying activity, Sleep or Health steps before collecting generation context and again
+before charging. An active run with unreadable steps is held conservatively; routes-only work does not block it.
+The existing private daily receipt retains `waiting-import` with `charged:false`; its ordinary lease can be reclaimed
+when work finishes. No AI request or allowance is spent while deferred. The existing date-bound **Use available data**
+action also accepts this state, bypasses the import gate explicitly and discloses incomplete history in Context.
+The explicit fallback still observes import status when invoked from a sleep deferral; active or unavailable status
+is disclosed without blocking that user-requested fallback.
+Today uses `HistoryImportProgressService`'s existing shared owner subscriptions to recheck a waiting import when data
+work ends; ready results still never refresh on focus or regenerate after later imports. No new listener set, polling,
+queue, scheduler, import lifecycle or provider API is introduced. Garmin's terminal `requested` step is deliberately
+not treated as active processing or proof that callbacks arrived: this minimal blocker covers active request work,
+not end-to-end Garmin delivery tracking. Failed/terminal imports do not remain active blockers. Metadata read failures
+remain retryable without charging. The new status is first-party only: MCP recipe/read/approval contracts, provider
+consent, queue monitoring, Rules and indexes remain unchanged. Deploy `generateDayWorkout` with the frontend.
+
 The optional provider-format correction shares the existing maximum of two model attempts and one daily charge with
 strict prescription validation. Provider fit may use the spare correction attempt and increase actual tokens within
 that cap; the existing usage counters include it. It runs only when a common exact starting format exists, targets are

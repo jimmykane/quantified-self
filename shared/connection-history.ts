@@ -125,3 +125,20 @@ export function parseImportRouteHistory(value: unknown, service: ServiceNames): 
   }
   return value;
 }
+
+/** Active data work only. A submitted Garmin request does not prove either pending delivery or completed ingestion. */
+export function hasActiveDataHistoryImport(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const history = value as Record<string, unknown>;
+  if (history.active !== true) return false;
+  // An active checkpoint with unreadable steps cannot establish that only routes remain.
+  if (!Array.isArray(history.steps) || !history.steps.length) return true;
+  return history.steps.some((value: unknown) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return true;
+    const step = value as Record<string, unknown>;
+    if (typeof step.status !== 'string') return true;
+    if (!['queued', 'requesting', 'retrying'].includes(step.status)) return false;
+    return !Array.isArray(step.resources) || !step.resources.length
+      || step.resources.some(resource => resource !== 'routes');
+  });
+}

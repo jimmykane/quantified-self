@@ -1,3 +1,4 @@
+import { CONNECTION_HISTORY_CAPABILITIES as importServices, hasActiveDataHistoryImport } from '../../../shared/connection-history';
 import { readFileSync } from 'node:fs';
 import { defaultDayWorkoutControls } from '../../../shared/day-workout';
 import { parseDailyWorkoutSuggestionPreferences } from '../../../shared/daily-workout-suggestion';
@@ -31,7 +32,7 @@ describe('daily workout preferences', () => {
   });
 });
 
-import { collectDailyWorkoutSuggestionCoverage, dailyWorkoutSuggestionAwaitsSleep, dailyWorkoutSuggestionSkip, runDailyWorkoutSuggestion, type DailyWorkoutSuggestionDependencies } from './daily-workout-suggestion';
+import { readDailyWorkoutHistoryImportActive, collectDailyWorkoutSuggestionCoverage, dailyWorkoutSuggestionAwaitsSleep, dailyWorkoutSuggestionSkip, runDailyWorkoutSuggestion, type DailyWorkoutSuggestionDependencies } from './daily-workout-suggestion';
 import { dailyWorkoutSuggestionRoutineSport } from './daily-workout-suggestion-routine';
 import type { DayWorkoutContext } from './day-workout-context';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
@@ -53,7 +54,7 @@ function dependencies() {
     assertActive: vi.fn(), charge: vi.fn(), finish: vi.fn(async (_uid, _date, _token, state, controls, result) => { status = { localDate: '2026-10-30', state, ...(controls ? { controls } : {}), ...(result ? { result } : {}) }; }),
     dismiss: vi.fn(async () => ({ localDate: '2026-10-30', state: 'dismissed' as const })) };
   return { store, now: () => dailyNow, legal: vi.fn(), pro: vi.fn(async () => true), selectSport: vi.fn(async () => dailyControls),
-    coverage: vi.fn(async () => null as 'planned' | 'completed' | 'rest-day' | null), context: vi.fn(async () => evidence()), generate: vi.fn(async (_request, _evidence, _correction, usage) => {
+    importActive: vi.fn(async () => false), coverage: vi.fn(async () => null as 'planned' | 'completed' | 'rest-day' | null), context: vi.fn(async () => evidence()), generate: vi.fn(async (_request, _evidence, _correction, usage) => {
       usage?.({ available: true, inputTokens: 100, outputTokens: 20, thoughtsTokens: 40 }); return { kind: 'rest', rationale: 'Keep today easy.' };
     }), log: vi.fn() } satisfies DailyWorkoutSuggestionDependencies;
 }
@@ -93,6 +94,52 @@ describe('daily workout preparation', () => {
     expect(deps.log).toHaveBeenCalledWith(expect.objectContaining({ attempts: 1, meteredAttempts: 1,
       inputTokens: 100, outputTokens: 20, thoughtsTokens: 40 }));
     expect(JSON.stringify(deps.log.mock.calls)).not.toMatch(/owner|2026-|Keep today/);
+  });
+  it('defers active imports without collecting context or charging, then prepares once when finished', async () => {
+    const deps = dependencies(); deps.importActive.mockResolvedValue(true);
+    const input = { mode: 'daily-suggestion', action: 'prepare' };
+    expect((await runDailyWorkoutSuggestion(input, identity, deps)).state).toBe('waiting-import');
+    expect(deps.context).not.toHaveBeenCalled(); expect(deps.generate).not.toHaveBeenCalled(); expect(deps.store.charge).not.toHaveBeenCalled();
+    deps.importActive.mockResolvedValue(false);
+    expect((await runDailyWorkoutSuggestion(input, identity, deps)).state).toBe('ready');
+    await runDailyWorkoutSuggestion(input, identity, deps);
+    expect(deps.store.charge).toHaveBeenCalledOnce(); expect(deps.generate).toHaveBeenCalledOnce();
+  });
+  it('defers an import that starts while context is collected, before spending the allowance', async () => {
+    const deps = dependencies(); deps.importActive.mockResolvedValueOnce(false).mockResolvedValue(true);
+    expect((await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, identity, deps)).state).toBe('waiting-import');
+    expect(deps.context).toHaveBeenCalledOnce(); expect(deps.generate).not.toHaveBeenCalled(); expect(deps.store.charge).not.toHaveBeenCalled();
+  });
+  it('reuses the explicit available-data action for import deferral without changing preferences', async () => {
+    const deps = dependencies(); deps.importActive.mockResolvedValue(true);
+    await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, identity, deps);
+    const result = await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'use-available-data', localDate: dailyControls.localDate }, identity, deps);
+    expect(result.state).toBe('ready'); expect(result.result?.missingContext.join(' ')).toContain('History may still be importing');
+    expect(deps.store.charge).toHaveBeenCalledOnce(); expect(deps.generate).toHaveBeenCalledOnce();
+    expect(deps.importActive).toHaveBeenCalledTimes(2);
+  });
+  it.each(['active', 'unavailable'])('discloses %s import status when available data is requested from sleep deferral', async state => {
+    const deps = dependencies(), read = deps.store.read.getMockImplementation()!;
+    deps.store.read.mockImplementation(async () => ({ ...await read(), status: { localDate: dailyControls.localDate, state: 'waiting-sleep' } }));
+    if (state === 'active') deps.importActive.mockResolvedValue(true);
+    else deps.importActive.mockRejectedValueOnce(Error('Import status unavailable'));
+    await runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'use-available-data', localDate: dailyControls.localDate }, identity, deps);
+    expect(deps.generate.mock.calls[0][1].missingContext.join(' ')).toContain('History may still be importing');
+    expect(deps.generate).toHaveBeenCalledOnce(); expect(deps.store.charge).toHaveBeenCalledOnce();
+    expect(deps.store.finish).toHaveBeenCalledWith('owner', dailyControls.localDate, 'lease', 'ready', expect.anything(), expect.anything());
+  });
+  it('keeps metadata failures retryable without spending the daily allowance', async () => {
+    const deps = dependencies(); deps.importActive.mockRejectedValueOnce(Error('Import read unavailable'));
+    await expect(runDailyWorkoutSuggestion({ mode: 'daily-suggestion', action: 'prepare' }, identity, deps)).rejects.toMatchObject({ code: 'unavailable' });
+    expect(deps.store.charge).not.toHaveBeenCalled(); expect(deps.generate).not.toHaveBeenCalled();
+  });
+  it('reads only the existing owner import projections and recognizes active data steps', async () => {
+    const get = vi.fn(() => ({ active: true, steps: [{ status: 'requesting', resources: ['activities'] }] }));
+    const db = { doc: vi.fn(path => ({ path })), getAll: vi.fn(async () => [{ get }]) };
+    expect(await readDailyWorkoutHistoryImportActive('owner', db as unknown as FirebaseFirestore.Firestore)).toBe(true);
+    expect(db.doc.mock.calls.map(([path]) => path)).toEqual(Object.keys(importServices).map(service => `users/owner/meta/${service}`));
+    expect(db.getAll).toHaveBeenCalledWith(...db.doc.mock.results.map(item => item.value), { fieldMask: ['connectionHistoryImport'] });
+    expect(get).toHaveBeenCalledWith('connectionHistoryImport');
   });
   it('uses selected provider formats for new suggestions without regenerating a cached day after provider changes', async () => {
     const deps = dependencies(), originalRead = deps.store.read.getMockImplementation()!;
@@ -382,5 +429,20 @@ describe('bounded current-day coverage for cached suggestions', () => {
     expect(await collectDailyWorkoutSuggestionCoverage(dailyControls, { callTool })).toBe('completed'); expect(callTool).toHaveBeenCalledOnce();
     callTool.mockResolvedValueOnce({ structuredContent: { activities: [], scanComplete: false } });
     await expect(collectDailyWorkoutSuggestionCoverage(dailyControls, { callTool })).rejects.toThrow('incomplete');
+  });
+});
+
+describe('active data history policy', () => {
+  it.each(['queued', 'requesting', 'retrying'])('blocks active data work: %s', status => {
+    for (const resource of ['activities', 'sleep', 'health']) expect(hasActiveDataHistoryImport({ active: true,
+      steps: [{ status, resources: [resource] }] })).toBe(true);
+  });
+  it.each(['requested', 'processed', 'failed', 'skipped'])('does not invent pending delivery for terminal statuses: %s', status => {
+    expect(hasActiveDataHistoryImport({ active: false, steps: [{ status, resources: ['activities'] }] })).toBe(false);
+    expect(hasActiveDataHistoryImport({ active: true, steps: [{ status, resources: ['activities'] }] })).toBe(false);
+  });
+  it('ignores routes-only work even if the overall run is still active', () => {
+    expect(hasActiveDataHistoryImport({ active: true, steps: [{ status: 'processed', resources: ['activities'] },
+      { status: 'requesting', resources: ['routes'] }] })).toBe(false);
   });
 });

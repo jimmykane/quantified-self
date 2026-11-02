@@ -4,6 +4,7 @@ import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
 import { dayWorkoutLocalDate, defaultDayWorkoutControls } from '@shared/day-workout';
 import type { DailyWorkoutSuggestionStatus } from '@shared/daily-workout-suggestion';
 import { DailyWorkoutSuggestionComponent } from './daily-workout-suggestion.component';
+import { HistoryImportProgressService } from '../../../services/history-import-progress.service';
 import { DailyWorkoutSuggestionService } from '../../../services/daily-workout-suggestion.service';
 import { DayWorkoutService } from '../../../services/day-workout.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
@@ -28,6 +29,9 @@ import { AppEventService } from '../../../services/app.event.service';
 import { createHash, webcrypto } from 'node:crypto';
 import type { ScheduledWorkoutV1 } from '@shared/training-plans';
 
+function importProvider(active = signal(false)) {
+  return { provide: HistoryImportProgressService, useValue: { owner: () => ({ uid: 'owner' }), dataImportActive: active } };
+}
 function deliveryProvider() {
   const empty: TrainingDeliveryView = { settings: [], statuses: [], verifications: [] };
   return { provide: TrainingDeliveryService, useValue: {
@@ -70,7 +74,7 @@ function setup(enabled = true, cachedStatus: DailyWorkoutSuggestionStatus | null
   const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
   restoreVisibility = () => visibility.mockRestore();
   const preferences = signal({ enabled, followRoutine: true, controls: defaultDayWorkoutControls('2026-10-30', 'Europe/Helsinki') });
-  const owner = signal('owner'), pro = signal(true), saving = signal(false);
+  const owner = signal('owner'), pro = signal(true), saving = signal(false), importActive = signal(false);
   const result = { requestId: 'daily-suggestion:2026-10-30', observedAt: '2026-10-30T07:00Z', kind: 'rest', rationale: 'An easy day.', draft: null,
     usedContext: [], missingContext: [], previousLoads: [] };
   const request = vi.fn(async (_uid, action) => action === 'status' ? { localDate: '2026-10-30', state: 'waiting' }
@@ -85,7 +89,7 @@ function setup(enabled = true, cachedStatus: DailyWorkoutSuggestionStatus | null
   const user = signal({ uid: 'owner', settings: { unitSettings: { distanceUnits: DistanceUnits.Kilometers } } });
   const delivery = deliveryProvider(), deliveryOpen = vi.fn();
   TestBed.overrideComponent(TrainingDeliveryButtonComponent, { add: { providers: [{ provide: MatDialog, useValue: { open: deliveryOpen } }] } });
-  TestBed.configureTestingModule({ imports: [DailyWorkoutSuggestionComponent], providers: [
+  TestBed.configureTestingModule({ imports: [DailyWorkoutSuggestionComponent], providers: [importProvider(importActive),
     provideRouter([]), delivery, { provide: AppEventService, useValue: {} },
     { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
     { provide: DailyWorkoutSuggestionService, useValue: { preferences, saving, eligible: (uid: string) => uid === owner() && pro(), isOwner: (uid: string) => uid === owner(), request, event, save, cacheRevision, cached, observeSleep, remember } },
@@ -100,11 +104,43 @@ function setup(enabled = true, cachedStatus: DailyWorkoutSuggestionStatus | null
     visibility.mockReturnValue(visible ? 'visible' : 'hidden');
     document.dispatchEvent(new Event('visibilitychange')); fixture.detectChanges();
   };
-  return { fixture, preferences, owner, pro, saving, request, event, save, open, haptics, setVisible, remember, workouts, watchCalendarSchedule, user,
+  return { fixture, preferences, owner, pro, saving, importActive, request, event, save, open, haptics, setVisible, remember, workouts, watchCalendarSchedule, user,
     delivery: delivery.useValue, deliveryOpen, cached, cacheRevision };
 }
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); restoreVisibility(); });
 describe('compact daily workout in Today', () => {
+  it('shows import deferral and resumes once from shared import completion without refreshing a ready result', async () => {
+    const { fixture, importActive, request, setVisible } = setup(true, { localDate: '2026-10-30', state: 'waiting-import' });
+    importActive.set(true); fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    expect(request).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.textContent).toContain('Waiting for history import');
+    expect(fixture.nativeElement.textContent).toContain('Use available data');
+    request.mockResolvedValueOnce({ localDate: '2026-10-30', state: 'waiting-import' });
+    importActive.set(false); fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    expect(request.mock.calls.map(call => call[1])).toEqual(['status', 'prepare']);
+    const calls = request.mock.calls.length;
+    setVisible(false); fixture.detectChanges(); setVisible(true); fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(request).toHaveBeenCalledTimes(calls);
+  });
+  it('rechecks once when import completion arrives during a deferred request', async () => {
+    const { fixture, importActive, request } = setup();
+    importActive.set(true); fixture.detectChanges();
+    let finish!: (status: DailyWorkoutSuggestionStatus) => void;
+    const original = request.getMockImplementation()!;
+    request.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = fixture.componentInstance.load();
+    fixture.detectChanges(); importActive.set(false); fixture.detectChanges();
+    request.mockImplementation(original);
+    finish({ localDate: '2026-10-30', state: 'waiting-import' }); await pending;
+    await vi.advanceTimersByTimeAsync(1600); fixture.detectChanges();
+    expect(fixture.componentInstance.status()?.state).toBe('ready');
+    const calls = request.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(10_000); fixture.detectChanges();
+    expect(request).toHaveBeenCalledTimes(calls);
+  });
   it('opens the saved workout and shows live shared delivery status without new AI calls or focus reads', async () => {
     vi.stubGlobal('crypto', webcrypto);
     const { fixture, workouts, request, delivery, deliveryOpen } = setup(true, { localDate: '2026-10-30', state: 'planned' });
@@ -157,7 +193,7 @@ describe('compact daily workout in Today', () => {
       ? new Promise<{ data: DailyWorkoutSuggestionStatus }>(resolve => { finish = resolve; })
       : { data: { localDate: dayWorkoutLocalDate(new Date(), controls.timeZone), state: 'waiting-sleep' } as DailyWorkoutSuggestionStatus });
     const values = new Map<string, string>();
-    TestBed.configureTestingModule({ imports: [DailyWorkoutSuggestionComponent], providers: [DailyWorkoutSuggestionService,
+    TestBed.configureTestingModule({ imports: [DailyWorkoutSuggestionComponent], providers: [importProvider(), DailyWorkoutSuggestionService,
       provideRouter([]), deliveryProvider(),
       { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
       { provide: Auth, useValue: { currentUser: { uid: 'owner' } } },
@@ -322,7 +358,7 @@ describe('compact daily workout in Today', () => {
       return { data: generated ? ready : { localDate: controls.localDate, state: 'waiting' } as DailyWorkoutSuggestionStatus };
     });
     const values = new Map<string, string>(), haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
-    TestBed.configureTestingModule({ imports: [DailyWorkoutSuggestionComponent], providers: [DailyWorkoutSuggestionService,
+    TestBed.configureTestingModule({ imports: [DailyWorkoutSuggestionComponent], providers: [importProvider(), DailyWorkoutSuggestionService,
       provideRouter([]), deliveryProvider(),
       { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
       { provide: Auth, useValue: { currentUser: { uid: 'owner' } } },

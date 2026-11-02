@@ -1,3 +1,5 @@
+import * as admin from 'firebase-admin';
+import { CONNECTION_HISTORY_CAPABILITIES, hasActiveDataHistoryImport } from '../../../shared/connection-history';
 import { HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import { type DailyWorkoutSuggestionPreferences, type DailyWorkoutSuggestionStatus } from '../../../shared/daily-workout-suggestion';
@@ -67,6 +69,12 @@ async function readDailyWorkoutSuggestionCoverage(uid: string, controls: DayWork
   catch { throw new HttpsError('unavailable', 'Today’s schedule and recorded workouts could not be checked. Try again.'); }
   finally { await session.close(); }
 }
+/** One bounded owner-scoped metadata read; no provider API, ingestion scan or polling. */
+export async function readDailyWorkoutHistoryImportActive(uid: string, db = admin.firestore()): Promise<boolean> {
+  const snapshots = await db.getAll(...Object.keys(CONNECTION_HISTORY_CAPABILITIES).map(service => db.doc(`users/${uid}/meta/${service}`)),
+    { fieldMask: ['connectionHistoryImport'] });
+  return snapshots.some(snapshot => hasActiveDataHistoryImport(snapshot.get('connectionHistoryImport')));
+}
 export interface DailyWorkoutSuggestionDependencies {
   store: DailyWorkoutSuggestionStore;
   now(): Date;
@@ -75,19 +83,20 @@ export interface DailyWorkoutSuggestionDependencies {
   selectSport(uid: string, preferences: DailyWorkoutSuggestionPreferences, now: Date): Promise<DailyWorkoutSuggestionPreferences['controls']>;
   context: typeof dayWorkoutDependencies.context;
   coverage(uid: string, controls: DayWorkoutControls): Promise<DayCoverage>;
+  importActive(uid: string): Promise<boolean>;
   generate: typeof generateDayWorkoutSuggestion;
   log(fields: RecordValue): void;
 }
 const defaults: DailyWorkoutSuggestionDependencies = {
   store: createDailyWorkoutSuggestionStore(), now: () => new Date(), legal: assertAssistantLegalAccess,
   pro: async uid => (await getUserRoleAndGracePeriod(uid)).role === 'pro',
-  selectSport: selectDailyWorkoutSuggestionSport, coverage: readDailyWorkoutSuggestionCoverage, context: dayWorkoutDependencies.context, generate: generateDayWorkoutSuggestion,
+  importActive: readDailyWorkoutHistoryImportActive, selectSport: selectDailyWorkoutSuggestionSport, coverage: readDailyWorkoutSuggestionCoverage, context: dayWorkoutDependencies.context, generate: generateDayWorkoutSuggestion,
   log: fields => logger.info('[DailyWorkoutSuggestion]', fields),
 };
 const coveredStates = ['planned', 'completed', 'rest-day'];
 async function currentDailyWorkoutSuggestionStatus(uid: string, dependencies: DailyWorkoutSuggestionDependencies) {
   const initial = await dependencies.store.read(uid);
-  if (!initial.preferences || !['waiting', 'waiting-sleep', 'ready', 'failed', ...coveredStates].includes(initial.status.state)) return initial;
+  if (!initial.preferences || !['waiting', 'waiting-sleep', 'waiting-import', 'ready', 'failed', ...coveredStates].includes(initial.status.state)) return initial;
   const coverage = await dependencies.coverage(uid, initial.preferences.controls);
   // Dismissal, disablement, deletion or a day/zone change during the read must supersede its result.
   const latest = await dependencies.store.read(uid);
@@ -124,11 +133,11 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
   if (expectedDate && preferences && expectedDate !== preferences.controls.localDate) {
     throw new HttpsError('aborted', 'The day changed. Review today before generating.');
   }
-  if (input.action === 'status' || !preferences || !['waiting', 'waiting-sleep'].includes(status.state)) return status;
+  if (input.action === 'status' || !preferences || !['waiting', 'waiting-sleep', 'waiting-import'].includes(status.state)) return status;
   const now = dependencies.now();
   const useAvailable = input.action === 'use-available-data';
   // The explicit fallback requires a previously deferred suggestion for this local date.
-  if (useAvailable && status.state !== 'waiting-sleep') return status;
+  if (useAvailable && !['waiting-sleep', 'waiting-import'].includes(status.state)) return status;
   const token = await dependencies.store.begin(uid, preferences);
   if (!token) return (await currentDailyWorkoutSuggestionStatus(uid, dependencies)).status;
   const date = preferences.controls.localDate;
@@ -139,6 +148,13 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
   let attempts = 0, meteredAttempts = 0, inputTokens = 0, outputTokens = 0, thoughtsTokens = 0;
   let outcome: DailyWorkoutSuggestionStatus['state'] = 'failed';
   try {
+    // An explicit fallback may proceed on an unavailable import read, with uncertainty disclosed below.
+    const importing = useAvailable ? await dependencies.importActive(uid).catch(() => true) : await dependencies.importActive(uid);
+    if (!useAvailable && importing) {
+      outcome = 'waiting-import';
+      await dependencies.store.finish(uid, date, token, outcome);
+      return { localDate: date, state: outcome };
+    }
     const controls = await dependencies.selectSport(uid, preferences, now);
     const request: GenerateDayWorkoutRequest = { requestId: `daily-suggestion:${date}`, controls };
     const evidence = await dependencies.context(uid, request, now);
@@ -153,6 +169,14 @@ export async function runDailyWorkoutSuggestion(value: unknown, context: { auth?
     const awaitingSleep = dailyWorkoutSuggestionAwaitsSleep(controls, evidence, observedAt);
     if (awaitingSleep && !useAvailable) {
       outcome = 'waiting-sleep';
+      await dependencies.store.finish(uid, date, token, outcome);
+      return { localDate: date, state: outcome };
+    }
+    if (useAvailable && (status.state === 'waiting-import' || importing)) {
+      evidence.missingContext.push('History may still be importing. You explicitly chose to generate using available data; incomplete history is unknown, not zero.');
+    }
+    if (!useAvailable && await dependencies.importActive(uid)) {
+      outcome = 'waiting-import';
       await dependencies.store.finish(uid, date, token, outcome);
       return { localDate: date, state: outcome };
     }

@@ -9,6 +9,7 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { RouterLink } from '@angular/router';
 import type { DailyWorkoutSuggestionStatus } from '@shared/daily-workout-suggestion';
 import { formatWorkoutPrescriptionSummaryV1 } from '@shared/planned-workout-analysis-display';
+import { HistoryImportProgressService } from '../../../services/history-import-progress.service';
 import { DailyWorkoutSuggestionService } from '../../../services/daily-workout-suggestion.service';
 import { DayWorkoutService } from '../../../services/day-workout.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
@@ -37,6 +38,7 @@ export class DailyWorkoutSuggestionComponent {
   readonly daily = inject(DailyWorkoutSuggestionService);
   private readonly generation = inject(DayWorkoutService);
   private readonly users = inject(AppUserService);
+  private readonly imports = inject(HistoryImportProgressService);
   private readonly plans = inject(TrainingPlansService);
   private readonly haptics = inject(AppHapticsService);
   private readonly destroy = inject(DestroyRef);
@@ -49,6 +51,7 @@ export class DailyWorkoutSuggestionComponent {
   readonly preferences = computed(() => { this.localDate(); this.visible(); return this.daily.preferences(); },
     { equal: (a, b) => JSON.stringify(a) === JSON.stringify(b) });
   readonly status = signal<DailyWorkoutSuggestionStatus | null>(null);
+  readonly waitingForData = computed(() => ['waiting-sleep', 'waiting-import'].includes(this.status()?.state ?? ''));
   private readonly loading = signal(false);
   readonly actionBusy = signal(false);
   readonly actionError = signal<string | null>(null);
@@ -104,6 +107,7 @@ export class DailyWorkoutSuggestionComponent {
     if (value?.state === 'rest-day') return 'Today is a rest day.';
     if (value?.state === 'dismissed') return 'Dismissed for today.';
     if (value?.state === 'preparing') return 'Your suggestion is being prepared.';
+    if (value?.state === 'waiting-import') return 'Waiting for history import. Today’s AI allowance has not been used.';
     if (value?.state === 'waiting-sleep') return 'Waiting for your latest sleep…';
     return 'Prepared on your first visit to Today each day.';
   });
@@ -114,20 +118,25 @@ export class DailyWorkoutSuggestionComponent {
   private readScope = '';
   private readRevision = -1;
   private needsCheck = false;
+  private lastImportActive = false;
+  private importFinishedDuringLoad = false;
   constructor() {
     const visibility = () => this.visible.set(this.document.visibilityState !== 'hidden');
     this.document.addEventListener('visibilitychange', visibility);
     this.destroy.onDestroy(() => { this.sequence++; this.actionSequence++; this.document.removeEventListener('visibilitychange', visibility); });
     effect(onCleanup => {
-      // Track only the owner, day, settled Today data, preferences and foreground state.
+      // Track the owner, day, settled data, preferences, shared import progress and foreground state.
       const eligible = this.eligible(), preferences = this.preferences(), saving = this.daily.saving();
+      const importActive = this.imports.owner()?.uid === this.ownerUid() && this.imports.dataImportActive();
+      if (this.lastImportActive && !importActive && untracked(() => this.loading())) this.importFinishedDuringLoad = true;
+      this.lastImportActive = importActive;
       const ready = this.dataReady(), visible = this.visible(), sleepKey = this.evidenceKey();
       if (eligible && preferences.enabled && ready) untracked(() => this.daily.observeSleep(this.ownerUid(), sleepKey));
       const scope = JSON.stringify([this.ownerUid(), eligible, preferences]), revision = this.daily.cacheRevision();
       // Hydration is a start barrier, not authority to discard work already running for this same scope.
       if (scope !== this.readScope || revision !== this.readRevision) {
         const previous = scope === this.readScope ? untracked(() => this.status()) : null;
-        this.readScope = scope; this.readRevision = revision; this.sequence++;
+        this.readScope = scope; this.readRevision = revision; this.sequence++; this.importFinishedDuringLoad = false;
         const cached = eligible && preferences.enabled ? untracked(() => this.daily.cached(this.ownerUid())) : null;
         // Retain the recipe for display only. Review still requires fresh coverage authority.
         this.status.set(cached?.status ?? (previous?.state === 'ready' ? previous : null));
@@ -138,9 +147,10 @@ export class DailyWorkoutSuggestionComponent {
       if (!eligible || !preferences.enabled || saving || !ready || !visible || untracked(() => this.loading() || this.error())) return;
       const status = untracked(() => this.status());
       // Foreground return may start previously deferred work, but never reload an already checked suggestion.
-      // Sleep changes have their own revision-bound retry below; other retries remain explicit.
-      if (status && status.state !== 'waiting' && !this.needsCheck) return;
-      const timer = setTimeout(() => { untracked(() => { void this.load(false, false); }); }, 1500);
+      // Sleep changes and import completion may resume deferred work; ready results retain their cache.
+      if (status?.state === 'waiting-import' && importActive) return;
+      if (status && !['waiting', 'waiting-import'].includes(status.state) && !this.needsCheck) return;
+      const timer = setTimeout(() => { untracked(() => { void this.load(false, status?.state === 'waiting-import'); }); }, 1500);
       onCleanup(() => clearTimeout(timer));
     });
     effect(() => {
@@ -177,9 +187,9 @@ export class DailyWorkoutSuggestionComponent {
   async load(useAvailableData = false, refresh = true): Promise<void> {
     const uid = this.ownerUid();
     if (this.busy() || !this.daily.eligible(uid) || !this.preferences().enabled || !this.visible() || !this.dataReady()) return;
-    if (useAvailableData && this.status()?.state !== 'waiting-sleep') return;
+    if (useAvailableData && !this.waitingForData()) return;
     const sequence = ++this.sequence;
-    this.checkedSleepKey = this.evidenceKey();
+    this.checkedSleepKey = this.evidenceKey(); this.importFinishedDuringLoad = false;
     this.loading.set(true); this.error.set(null); this.actionError.set(null);
     let preparing = useAvailableData;
     try {
@@ -187,7 +197,7 @@ export class DailyWorkoutSuggestionComponent {
         ? await this.daily.request(uid, 'use-available-data', () => this.current(sequence, uid), this.status()!.localDate)
         : await this.daily.request(uid, 'status', () => this.current(sequence, uid), undefined, refresh);
       if (!this.current(sequence, uid)) return;
-      if (!useAvailableData && ['waiting', 'waiting-sleep'].includes(status.state)) {
+      if (!useAvailableData && ['waiting', 'waiting-sleep', 'waiting-import'].includes(status.state)) {
         if (this.dataReady() && this.visible()) {
           preparing = true;
           status = await this.daily.request(uid, 'prepare', () => this.current(sequence, uid));
@@ -206,7 +216,13 @@ export class DailyWorkoutSuggestionComponent {
         this.daily.event(uid, 'failed');
       }
     }
-    finally { if (this.current(sequence, uid)) this.loading.set(false); }
+    finally { if (this.current(sequence, uid)) {
+      this.loading.set(false);
+      // Consume one observed completion that arrived during the request; never retry on a timer loop.
+      const recheckImport = this.importFinishedDuringLoad;
+      this.importFinishedDuringLoad = false;
+      if (recheckImport && this.status()?.state === 'waiting-import') void this.load(false, true);
+    } }
   }
   async configure(): Promise<void> {
     const uid = this.ownerUid(), preferences = this.preferences();

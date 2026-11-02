@@ -58,6 +58,16 @@ describe('HistoryImportProgressService', () => {
     stream('a').next({connectionState: 'connected', connectionHistoryImport: {...status(), steps: [{id: 'activities', resources: ['activities'], status: 'requesting', count: 12}]}});
     expect(dashboard().items[0].steps[0].count).toBe(12);
   });
+  it('shares the active data blocker without extra reads and excludes routes and terminal Garmin requests', () => {
+    const service = TestBed.inject(HistoryImportProgressService); connect('a');
+    stream('a').next({ connectionState: 'connected', connectionHistoryImport: status() });
+    expect(service.dataImportActive()).toBe(true);
+    stream('a').next({ connectionState: 'connected', connectionHistoryImport: { ...status(), steps: [{ id: 'routes', resources: ['routes'], status: 'requesting' }] } });
+    expect(service.dataImportActive()).toBe(false);
+    stream('a', ServiceNames.GarminAPI).next({ connectionState: 'connected', connectionHistoryImport: { ...status(false), steps: [{ id: 'activities', resources: ['activities'], status: 'requested' }] } });
+    expect(service.dataImportActive()).toBe(false); expect(getMeta).toHaveBeenCalledTimes(4);
+    sessions$.next(null); auth.currentUser = null; expect(service.dataImportActive()).toBe(false);
+  });
   it('clears immediately on raw sign-out, before a delayed profile emission', () => {
     const service = TestBed.inject(HistoryImportProgressService); connect('a');
     stream('a').next({connectionState: 'connected', connectionHistoryImport: status()});

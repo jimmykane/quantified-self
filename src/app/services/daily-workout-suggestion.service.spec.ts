@@ -334,12 +334,18 @@ describe('DailyWorkoutSuggestionService daily browser cache', () => {
     expect(call).toHaveBeenCalledOnce(); finish({ data: { localDate: '2026-10-30', state: 'dismissed' } });
     expect(await status).toBe(await dismissal); expect(service.cached('owner')?.status?.state).toBe('dismissed');
   });
-  it.each(['planned', 'completed', 'rest-day', 'dismissed', 'failed', 'waiting-sleep'] as const)('caches %s without repeated status reads', async state => {
+  it.each(['planned', 'completed', 'rest-day', 'dismissed', 'failed', 'waiting-sleep', 'waiting-import'] as const)('caches %s without repeated status reads', async state => {
     const first = setup(); first.call.mockResolvedValue({ data: { localDate: '2026-10-30', state } });
     await first.service.request('owner', 'status', () => true);
     const next = setup(first.saved);
     expect((await next.service.request('owner', 'status', () => true)).state).toBe(state);
     expect(next.call).not.toHaveBeenCalled();
+  });
+  it('rechecks preparation from a cached import deferral instead of treating it as a spent result', async () => {
+    const { service, call } = setup();
+    service.remember('owner', { localDate: '2026-10-30', state: 'waiting-import' });
+    expect((await service.request('owner', 'prepare', () => true)).state).toBe('ready');
+    expect(call).toHaveBeenCalledOnce();
   });
   it.each([ActivityTypes.Running, ActivityTypes.StrengthTraining])('round-trips the full %s recipe through a reload', async sport => {
     const first = setup(storage(), true, sport);

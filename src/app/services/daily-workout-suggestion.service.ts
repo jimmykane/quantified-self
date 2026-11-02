@@ -17,7 +17,7 @@ import { parseDailyWorkoutDeliveryPreferences, type DailyWorkoutDeliveryPreferen
 
 const MAX_CACHE_CHARACTERS = 400_000;
 const TRANSIENT_STATUS_CODES = ['internal', 'unavailable', 'deadline-exceeded'];
-const states: DailyWorkoutSuggestionStatus['state'][] = ['off', 'waiting', 'waiting-sleep', 'ready', 'dismissed', 'failed', 'planned', 'completed', 'rest-day'];
+const states: DailyWorkoutSuggestionStatus['state'][] = ['off', 'waiting', 'waiting-sleep', 'waiting-import', 'ready', 'dismissed', 'failed', 'planned', 'completed', 'rest-day'];
 interface CachedDailyWorkoutSuggestion {
   key: string; uid: string; status: DailyWorkoutSuggestionStatus | null; sleepKey: string | null;
   scheduleRevision?: number | null;
@@ -226,7 +226,7 @@ export class DailyWorkoutSuggestionService {
       return this.request(uid, action, current, expectedDate, refresh);
     }
     if (action === 'status' && !refresh && entry.status) return entry.status;
-    if (action === 'prepare' && entry.status && !['waiting', 'waiting-sleep'].includes(entry.status.state)) return entry.status;
+    if (action === 'prepare' && entry.status && !['waiting', 'waiting-sleep', 'waiting-import'].includes(entry.status.state)) return entry.status;
     if (action === 'dismiss') this.invalidate();
     const epoch = entry.epoch, sleepKey = entry.observedSleepKey;
     const active = () => this.cache === entry && entry.epoch === epoch && entry.authUser === this.auth.currentUser

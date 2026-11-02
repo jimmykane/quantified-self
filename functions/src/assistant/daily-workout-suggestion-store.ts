@@ -77,7 +77,7 @@ export function createDailyWorkoutSuggestionStore(db = () => admin.firestore(), 
       if (!preferences?.enabled || fingerprint(preferences) !== fingerprint(expected)) throw new HttpsError('aborted', 'Daily preferences changed.');
       const date = preferences.controls.localDate;
       const existing = state.messages[date];
-      const reclaimable = existing && existing.charged === false && (['planned', 'completed', 'rest-day', 'waiting-sleep'].includes(existing.state)
+      const reclaimable = existing && existing.charged === false && (['planned', 'completed', 'rest-day', 'waiting-sleep', 'waiting-import'].includes(existing.state)
         || existing.state === 'preparing' && Number.isFinite(existing.startedAtMs) && now.getTime() - existing.startedAtMs >= LEASE_MS);
       if (existing && !reclaimable) return { value: null };
       for (const day of Object.keys(state.messages)) if (day < dayWorkoutDateOffset(date, -7)) delete state.messages[day];

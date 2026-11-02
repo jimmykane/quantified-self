@@ -53,6 +53,7 @@ describe('help.content', () => {
     for (const text of ['**Send after approval**', '**Add & send** saves the reviewed Standalone workout',
       'Provider selection stays in Preferences', '**Skip sending today**',
       'Standard Suunto strength manual transitions are informational', 'unsupported mappings and adjustments needing extra approval require Review sync',
+      'Active activity, Sleep or Health history imports', 'Routes-only imports do not block it',
       'New daily suggestions consider the selected services', 'Changing providers keeps today’s cached suggestion',
       'the existing queue continues even if you close the tab or lose the response',
       'Destinations can change without using another AI suggestion', 'Rest days are only marked in Calendar and send nothing',
