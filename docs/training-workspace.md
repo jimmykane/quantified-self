@@ -5857,8 +5857,9 @@ provider action changes. No reparse, migration, registered-client refresh or bac
 Daily delivery is an independent, default-off `appSettings.dailyWorkoutDelivery` preference with an explicit bounded
 provider selection. It is not part of `dailyWorkoutSuggestion`, model context, the daily cache key or the server's
 generation fingerprint: changing destinations neither invalidates a recipe nor spends another AI request. The existing
-preferences dialog exposes Send after approval before its generation options. Only the open preferences/daily-workout
-review observes the existing activity-service connection projection; Today adds no connection listener or polling.
+preferences dialog exposes Send after approval before its generation options. Only Preferences and delivery-enabled
+daily-workout reviews observe the existing activity-service connection projection. A review with sending off does not
+start provider listeners; Today adds no connection listener or polling.
 The dialog reuses that live connection subscription for the same owner across unrelated profile/settings updates.
 Delivery validation gates preference saving and Add & send, independently of ordinary generation validation: an
 unavailable destination cannot block an explicit manual regeneration. An acknowledged delivery result stays visible
@@ -5868,7 +5869,9 @@ Provider selection and the saved Send after approval toggle belong only to Prefe
 Standalone workout, Review shows the saved destinations and **Skip sending today**, without provider setup controls.
 Skipping changes this approval to **Add workout** and leaves saved preferences and future approvals intact; closing
 and reopening an unapproved review starts from the saved preference again. When sending is off in Preferences, Review
-shows only the normal Add workflow. Skip is locked during pending generation, Add or an uncertain Add.
+shows only the normal Add workflow. Skip is locked during pending generation, Add or an uncertain Add. The skip flag
+stays in dialog memory: successful, rejected and uncertain Add/retry paths never call the preferences callback or write
+user settings. Saved provider arrays are copied on dialog entry and remain intact for subsequent approvals.
 **Add & send** first acknowledges the existing idempotent create, then calls
 `TrainingDeliveryService.sendApprovedWorkout` with that saved workout and schedule revision. Each selected service
 uses the existing uncached revision check, delivery preview and Send command, with expected settings revision zero.

@@ -143,11 +143,11 @@ export class DayWorkoutDialogComponent {
     && workout.localDate === this.controls().localDate
     && [null, this.schedule()?.state.activePlanId, this.controls().destinationPlanId].includes(workout.planId)) ?? []);
   readonly user = toSignal(this.users.user$, { initialValue: this.users.user() });
-  // Only an open daily-preferences/review dialog observes connections; Today keeps its existing read footprint.
+  // Only Preferences and delivery-enabled daily reviews observe connections; Today adds no listener.
   private readonly deliveryConnections = toSignal(this.users.user$.pipe(
     distinctUntilChanged((previous, current) => previous?.uid === current?.uid),
     switchMap(user => user?.uid === this.data.ownerUid
-    && (this.data.mode === 'preferences' || this.data.dailyDelivery !== undefined && this.data.initialResult?.kind === 'workout')
+    && (this.data.mode === 'preferences' || this.dailyDelivery().enabled && this.data.initialResult?.kind === 'workout')
     ? this.users.watchActivityServiceConnectionState(user).pipe(catchError(() => of(null))) : of(null))), { initialValue: null });
   readonly showDailyDelivery = computed(() => this.data.mode === 'preferences' || this.dailyDelivery().enabled && this.data.dailyDelivery !== undefined
     && this.result()?.kind === 'workout' && this.result()?.requestId === this.data.initialResult?.requestId

@@ -110,7 +110,8 @@ describe('DayWorkoutDialogComponent', () => {
       { provide: MAT_DIALOG_DATA, useValue: { ownerUid: 'owner', localDate: '2026-10-28', sport: ActivityTypes.StrengthTraining } },
       { provide: Auth, useValue: {} },
       { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
-      { provide: AppUserService, useValue: { user: signal(user), user$: profile, watchActivityServiceConnectionState: () => connections } },
+      { provide: AppUserService, useValue: { user: signal(user), user$: profile, updateUserProperties: vi.fn().mockResolvedValue(undefined),
+        watchActivityServiceConnectionState: () => connections } },
       { provide: AppEventService, useValue: {} },
       { provide: AppHapticsService, useValue: haptics },
       { provide: MatDialogRef, useValue: { close, disableClose: false, updateSize: vi.fn() } }, { provide: MatDialog, useValue: { open: dialogOpen } },
@@ -252,10 +253,37 @@ describe('DayWorkoutDialogComponent', () => {
     expect(next.componentInstance.primaryLabel()).toBe('Add & send');
     expect(next.componentInstance.skipSendingToday()).toBe(false);
   });
+  it.each(['success', 'rejected', 'uncertain'] as const)('never persists a skipped approval or changes saved providers across an Add %s', async outcome => {
+    const data = configureDailyDelivery();
+    const saved = Object.freeze({ enabled: true, providers: Object.freeze(['garmin', 'suunto']) });
+    data.dailyDelivery = saved; data.savePreferences = vi.fn().mockResolvedValue(undefined);
+    const writeSettings = vi.mocked(TestBed.inject(AppUserService).updateUserProperties);
+    const fixture = await render(), component = fixture.componentInstance;
+    const skip = fixture.nativeElement.querySelector('.daily-delivery input[type="checkbox"]') as HTMLInputElement;
+    skip.click(); fixture.detectChanges();
+    if (outcome !== 'success') mutate.mockRejectedValueOnce({ code: outcome === 'uncertain' ? 'functions/deadline-exceeded' : 'functions/aborted' });
+    await component.primaryAction();
+    if (outcome !== 'success') {
+      const original = mutate.mock.calls[0][0];
+      if (outcome === 'uncertain') {
+        component.setSkipSendingToday(false); expect(component.skipSendingToday()).toBe(true);
+      } else component.refreshReview();
+      await component.primaryAction();
+      if (outcome === 'uncertain') expect(mutate.mock.calls[1][0]).toEqual(original);
+    }
+    expect(component.savedWorkoutId()).toBeTruthy(); expect(component.error()).toBeNull();
+    expect(component.dailyDelivery()).toEqual(saved); expect(data.dailyDelivery).toBe(saved);
+    expect(data.savePreferences).not.toHaveBeenCalled(); expect(writeSettings).not.toHaveBeenCalled();
+    expect(sendApprovedWorkout).not.toHaveBeenCalled(); expect(generate).not.toHaveBeenCalled();
+    fixture.destroy(); const next = await render();
+    expect(next.componentInstance.primaryLabel()).toBe('Add & send');
+    expect(next.componentInstance.dailyDelivery()).toEqual({ enabled: true, providers: ['garmin', 'suunto'] });
+  });
   it('keeps provider setup out of review when the saved delivery preference is off', async () => {
     const data = configureDailyDelivery(); data.dailyDelivery = { enabled: false, providers: ['garmin'] };
+    const watch = vi.spyOn(TestBed.inject(AppUserService), 'watchActivityServiceConnectionState');
     const fixture = await render(), component = fixture.componentInstance;
-    expect(fixture.nativeElement.querySelector('.daily-delivery')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.daily-delivery')).toBeNull(); expect(watch).not.toHaveBeenCalled();
     component.setDeliveryEnabled(true); component.selectDeliveryProvider('suunto', true); component.setSkipSendingToday(true);
     expect(component.dailyDelivery()).toEqual({ enabled: false, providers: ['garmin'] });
     expect(component.skipSendingToday()).toBe(false); expect(haptics.selection).not.toHaveBeenCalled();
