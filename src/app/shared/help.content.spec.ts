@@ -45,6 +45,7 @@ describe('help.content', () => {
   it('explains explicit daily approval, delivery recovery and the unchanged generation allowance', () => {
     const help = HELP_SECTIONS.map(section => section.content).join('\n');
     for (const text of ['**Send after approval**', '**Add & send** saves the reviewed Standalone workout',
+      'Provider selection stays in Preferences', '**Skip sending today**',
       'Destinations can change without using another AI suggestion', 'Rest days are only marked in Calendar and send nothing',
       'A sending problem keeps the saved workout', 'Provider acceptance does not confirm arrival on your watch']) {
       expect(help).toContain(text);

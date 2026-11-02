@@ -82,7 +82,7 @@ export class DayWorkoutDialogComponent {
   readonly saveUncertain = signal(false);
   readonly savedWorkoutId = signal<string | null>(null);
   readonly dailyDelivery = signal(dailyWorkoutDeliveryPreferences(this.data.dailyDelivery));
-  readonly showDeliveryOptions = signal(this.data.mode === 'preferences');
+  readonly skipSendingToday = signal(false);
   readonly deliveryOutcomeText = signal<string | null>(null);
   private readonly savedAcknowledgement = signal<ScheduledWorkoutV1 | null>(null);
   private savedAcknowledgementRevision: number | null = null;
@@ -149,7 +149,7 @@ export class DayWorkoutDialogComponent {
     switchMap(user => user?.uid === this.data.ownerUid
     && (this.data.mode === 'preferences' || this.data.dailyDelivery !== undefined && this.data.initialResult?.kind === 'workout')
     ? this.users.watchActivityServiceConnectionState(user).pipe(catchError(() => of(null))) : of(null))), { initialValue: null });
-  readonly showDailyDelivery = computed(() => this.data.mode === 'preferences' || this.data.dailyDelivery !== undefined
+  readonly showDailyDelivery = computed(() => this.data.mode === 'preferences' || this.dailyDelivery().enabled && this.data.dailyDelivery !== undefined
     && this.result()?.kind === 'workout' && this.result()?.requestId === this.data.initialResult?.requestId
     && this.controls().destinationPlanId === null);
   readonly deliveryRows = computed(() => PLANNED_WORKOUT_PROVIDER_IDS
@@ -159,7 +159,7 @@ export class DayWorkoutDialogComponent {
       connected: this.delivery.isReady(provider) && this.deliveryConnections()?.[DAILY_WORKOUT_DELIVERY_SERVICES[provider]] === true,
       selected: this.dailyDelivery().providers.includes(provider) })));
   readonly deliveryLabel = computed(() => this.dailyDelivery().providers.map(provider => PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label).join(', '));
-  readonly sendAfterApproval = computed(() => this.showDailyDelivery() && this.dailyDelivery().enabled);
+  readonly sendAfterApproval = computed(() => this.showDailyDelivery() && this.dailyDelivery().enabled && !this.skipSendingToday());
   readonly deliveryValid = computed(() => !this.sendAfterApproval() || this.dailyDelivery().providers.length > 0
     && this.dailyDelivery().providers.every(provider => this.deliveryRows().some(row => row.provider === provider && row.connected)));
   readonly review = computed(() => { const draft = this.result()?.draft;
@@ -301,17 +301,21 @@ export class DayWorkoutDialogComponent {
     if (sport) this.set('sport', sport);
   }
   setDeliveryEnabled(enabled: boolean): void {
-    if (this.busy() || this.saveUncertain() || this.dailyDelivery().enabled === enabled) return;
+    if (this.data.mode !== 'preferences' || this.busy() || this.dailyDelivery().enabled === enabled) return;
     this.dailyDelivery.update(value => ({ ...value, enabled }));
-    if (enabled && !this.dailyDelivery().providers.length) this.showDeliveryOptions.set(true);
     this.haptics.selection();
   }
   selectDeliveryProvider(provider: PlannedWorkoutProviderId, selected: boolean): void {
     const row = this.deliveryRows().find(row => row.provider === provider);
-    if (!row || this.busy() || this.saveUncertain() || row.selected === selected || selected && !row.connected) return;
+    if (this.data.mode !== 'preferences' || !row || this.busy() || row.selected === selected || selected && !row.connected) return;
     this.dailyDelivery.update(value => ({ ...value, providers: PLANNED_WORKOUT_PROVIDER_IDS.filter(id =>
       id === provider ? selected : value.providers.includes(id)) }));
     this.haptics.selection();
+  }
+  setSkipSendingToday(skip: boolean): void {
+    if (this.data.mode === 'preferences' || !this.showDailyDelivery() || this.savedWorkoutId()
+      || this.busy() || this.saveUncertain() || this.skipSendingToday() === skip) return;
+    this.skipSendingToday.set(skip); this.haptics.selection();
   }
   set<K extends keyof DayWorkoutControls>(key: K, value: DayWorkoutControls[K], feedback = true): void {
     if (this.savedWorkoutId() || this.busy() || this.saveUncertain() || JSON.stringify(this.controls()[key]) === JSON.stringify(value)) return;

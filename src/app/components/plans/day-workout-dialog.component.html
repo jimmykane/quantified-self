@@ -84,7 +84,7 @@
     <h3 class="section-title">Already on this day</h3><ul>@for (workout of existing(); track workout.id) { <li>{{ workout.title }} · {{ workout.lifecycle }}</li> }</ul>
     <p class="hint">{{ result()?.kind === 'rest' ? 'Marking rest keeps these workouts.' : 'Adding creates another workout on this day.' }}</p>
   }
-  @if (result()?.kind !== 'rest' && !sendAfterApproval()) { <p class="hint">{{ syncLabel() }}</p> }
+  @if (result()?.kind !== 'rest' && !showDailyDelivery()) { <p class="hint">{{ syncLabel() }}</p> }
   @if (calendarRestDay()) { <p class="hint">Calendar rest day. Remove this marker in Calendar before requesting a workout suggestion for this date.</p> }
   @else if (restDayPlan(); as plan) { <p class="hint">Planned rest day · {{ plan.name }}. Remove this marker in Plans before adding a workout to that plan.</p> }
   @if (selectedPlan()?.lifecycle === 'paused' && result()?.kind !== 'rest') { <p>Paused plan: this workout appears in Calendar after activation.</p> }
@@ -150,32 +150,25 @@
 </ng-template>
 
 <ng-template #dailyDeliveryOptions>
-  @if (showDailyDelivery()) {
-    <section class="daily-delivery" aria-label="Send after approval">
-      <div class="review-destination">
-        @if (data.mode === 'preferences') {
-          <mat-slide-toggle [checked]="dailyDelivery().enabled" [disabled]="!!busy()" (change)="setDeliveryEnabled($event.checked)">Send after approval</mat-slide-toggle>
-        } @else {
-          <mat-checkbox [checked]="dailyDelivery().enabled" [disabled]="!!busy() || saveUncertain()" (change)="setDeliveryEnabled($event.checked)">Send {{ deliveryLabel() ? 'to ' + deliveryLabel() : 'after adding' }}</mat-checkbox>
-        }
-        @if (dailyDelivery().enabled) {
-          <button mat-button appHapticTap [disabled]="!!busy() || saveUncertain()" [attr.aria-expanded]="showDeliveryOptions()" aria-controls="daily-delivery-services"
-            (click)="showDeliveryOptions.set(!showDeliveryOptions())">{{ showDeliveryOptions() ? 'Hide services' : 'Change' }}</button>
-        }
-      </div>
+  <section class="daily-delivery" aria-label="Send after approval">
+    @if (data.mode === 'preferences') {
+      <mat-slide-toggle [checked]="dailyDelivery().enabled" [disabled]="!!busy()" (change)="setDeliveryEnabled($event.checked)">Send after approval</mat-slide-toggle>
       @if (dailyDelivery().enabled) {
-        <p class="hint">{{ data.mode === 'preferences' ? 'Remember these services. You review and add each day’s workout.' : 'Send this workout and keep future edits synced after you add it.' }}</p>
-        <div id="daily-delivery-services" [hidden]="!showDeliveryOptions()" role="group" aria-label="Daily workout delivery services">
+        <p class="hint">Remember these services. You review and add each day’s workout.</p>
+        <div id="daily-delivery-services" role="group" aria-label="Daily workout delivery services">
           @for (row of deliveryRows(); track row.provider) {
-            <mat-checkbox [checked]="row.selected" [disabled]="!!busy() || saveUncertain() || (!row.connected && !row.selected)" (change)="selectDeliveryProvider(row.provider, $event.checked)">
+            <mat-checkbox [checked]="row.selected" [disabled]="!!busy() || (!row.connected && !row.selected)" (change)="selectDeliveryProvider(row.provider, $event.checked)">
               <span class="daily-delivery-provider"><app-service-source-icon [presentation]="row.presentation" [showTooltip]="false" [iconWidth]="36" />{{ row.label }}<small>{{ row.connected ? 'Connected' : 'Unavailable or not connected' }}</small></span>
             </mat-checkbox>
           }
         </div>
-        @if (!deliveryValid()) { <p class="hint" role="status">Choose a connected service, or turn sending off to add workouts without sending.</p> }
+        @if (!deliveryValid()) { <p class="hint" role="status">Choose a connected service, or turn sending off.</p> }
         <p class="hint">Compatibility is checked before sending. Changes may need Review sync; your watch still needs to sync.</p>
       }
-    </section>
-  }
-
+    } @else {
+      <p class="hint">Saved services · {{ deliveryLabel() }}</p>
+      <mat-checkbox [checked]="skipSendingToday()" [disabled]="!!busy() || saveUncertain()" (change)="setSkipSendingToday($event.checked)">Skip sending today</mat-checkbox>
+      @if (!deliveryValid()) { <p class="hint" role="status">A selected service is unavailable. Skip sending today to add the workout.</p> }
+    }
+  </section>
 </ng-template>

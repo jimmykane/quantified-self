@@ -5864,8 +5864,12 @@ Delivery validation gates preference saving and Add & send, independently of ord
 unavailable destination cannot block an explicit manual regeneration. An acknowledged delivery result stays visible
 even when the schedule listener fails; Reload retrieves the schedule without repeating Add, generation or sending.
 
-For the original daily Standalone workout, the review can opt out for this approval or choose connected, admitted
-services. **Add & send** first acknowledges the existing idempotent create, then calls
+Provider selection and the saved Send after approval toggle belong only to Preferences. For the original daily
+Standalone workout, Review shows the saved destinations and **Skip sending today**, without provider setup controls.
+Skipping changes this approval to **Add workout** and leaves saved preferences and future approvals intact; closing
+and reopening an unapproved review starts from the saved preference again. When sending is off in Preferences, Review
+shows only the normal Add workflow. Skip is locked during pending generation, Add or an uncertain Add.
+**Add & send** first acknowledges the existing idempotent create, then calls
 `TrainingDeliveryService.sendApprovedWorkout` with that saved workout and schedule revision. Each selected service
 uses the existing uncached revision check, delivery preview and Send command, with expected settings revision zero.
 Only an exact, warning-free, connected, Pro-eligible, single-workout preview is admitted automatically. Mapping losses,
