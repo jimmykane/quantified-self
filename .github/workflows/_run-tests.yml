@@ -44,6 +44,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Test external local credential paths and launchers
+        run: npm run test:local-secrets
+
       - name: Check stats index allowlist and rollout safety
         run: npm run test:stats-indexes
 

@@ -1,6 +1,6 @@
 import * as admin from 'firebase-admin';
 import * as fs from 'fs';
-import * as path from 'path';
+import { localMailCredentialPath } from '../shared/local-secret-paths';
 
 const MAIL_COLLECTION = 'mail';
 const DEFAULT_FROM = 'Quantified Self <hello@quantified-self.io>';
@@ -31,16 +31,7 @@ function parseDataJson(raw: string | undefined): Record<string, unknown> {
 }
 
 function getServiceAccountPath(): string {
-    const candidates = [
-        path.resolve(__dirname, '../functions/service-account.json'),
-        path.resolve(__dirname, '../quantified-self-io-firebase-adminsdk.json')
-    ];
-
-    const found = candidates.find((candidate) => fs.existsSync(candidate));
-    if (!found) {
-        throw new Error('No service account file found. Expected functions/service-account.json or quantified-self-io-firebase-adminsdk.json');
-    }
-    return found;
+    return localMailCredentialPath();
 }
 
 async function run(): Promise<void> {

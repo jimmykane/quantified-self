@@ -181,9 +181,7 @@
           "builder": "@angular-devkit/build-angular:dev-server",
           "options": {
             "buildTarget": "track-tools:build",
-            "ssl": true,
-            "sslCert": "./certs/localhost.crt",
-            "sslKey": "./certs/localhost.key"
+            "ssl": true
           },
           "configurations": {
             "production": {

@@ -4,10 +4,10 @@
   "license": "AGPL-3.0-only",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve --configuration local --port 4200",
-    "start:functions:emu": "ng serve --configuration local --port 4200",
-    "start:functions:prod": "ng serve --configuration local-prod-functions --port 4200",
-    "start:default": "ng serve --port 4200",
+    "start": "node tools/local-angular.mjs --configuration local --port 4200",
+    "start:functions:emu": "node tools/local-angular.mjs --configuration local --port 4200",
+    "start:functions:prod": "node tools/local-angular.mjs --configuration local-prod-functions --port 4200",
+    "start:default": "node tools/local-angular.mjs --port 4200",
     "clean": "rm -rf dist",
     "build": "ng build --verbose",
     "build-beta": "ng build --configuration beta && npm run verify:service-worker-output",
@@ -62,7 +62,9 @@
     "firebase": "node tools/firebase-cli.mjs",
     "firebase:tools": "node tools/firebase-cli.mjs --install",
     "test:firebase-cli": "node --test tools/firebase-cli.test.mjs",
-    "pretest:functions-emulators": "npm run firebase -- --version"
+    "pretest:functions-emulators": "npm run firebase -- --version",
+    "emulators:local": "node tools/local-functions.mjs",
+    "test:local-secrets": "node --test tools/local-functions.test.mjs tools/local-secrets.test.mjs"
   },
   "private": true,
   "overrides": {

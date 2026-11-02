@@ -12,7 +12,7 @@ From the repository root:
 nvm use 22
 npm run firebase:tools
 npm run firebase -- --version
-npm run firebase -- emulators:start --only auth,functions,firestore,storage
+npm run emulators:local -- emulators:start --only auth,functions,firestore,storage
 ```
 
 NVM keeps global packages per Node installation. After switching Node versions, run `npm run firebase:tools` again

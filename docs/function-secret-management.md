@@ -52,7 +52,7 @@ preview/mutation do not gain access to OAuth credentials or subscription keys. D
 read the owner. The schedule save uses it only for pure Add & send admission; it gains no provider HTTP authority. A missing or invalid value leaves Suunto unavailable without blocking Garmin.
 
 For local Functions emulation, add `SUUNTOAPP_GUIDE_OWNER=<exact application name>` to the ignored
-`functions/.secret.local` and restart the Functions emulator. The value-free `.secret.local.example` lists the key.
+the external local profile and restart the Functions emulator. The value-free `.secret.local.example` lists the key.
 For deployment, an authorized operator sets it interactively with
 `npm run firebase -- functions:secrets:set SUUNTOAPP_GUIDE_OWNER --project <firebase-project-id>` and then redeploys those four
 Training endpoints together under separate deployment approval. No frontend release, OAuth reconnect or source-code
@@ -96,15 +96,46 @@ CI scans the commits introduced by each push or pull request with a pinned Gitle
 
 ## Local emulators and scripts
 
-Copy `functions/.secret.local.example` to `functions/.secret.local` and add development-only values. The destination is ignored by Git and excluded from Function deployment archives.
+Keep local credentials outside every checkout and worktree. `shared/local-secret-paths.js` defines the common
+per-user paths; no personal file is loaded merely by importing this module or the operational environment loader.
+Production continues to use Secret Manager and its existing endpoint bindings.
+
+| Material | Default external path | Explicit absolute-path override |
+| --- | --- | --- |
+| Local provider/script profile | `~/.config/quantified-self/functions.env` | `QS_LOCAL_SECRETS_FILE` |
+| Stripe sandbox profile | `~/.config/quantified-self/billing-test.env` | `QS_BILLING_TEST_SECRETS_FILE` |
+| Hosted-Auth signing key | `~/.config/quantified-self/firebase-adminsdk.json` | `QS_LOCAL_SIGNING_KEY_FILE` |
+| Optional separate mail identity | `~/.config/quantified-self/mail-service-account.json` | `GOOGLE_APPLICATION_CREDENTIALS` |
+| Local HTTPS key/certificate | `~/.config/quantified-self/tls/localhost.key` and `localhost.crt` | `QS_LOCAL_TLS_KEY_FILE`, `QS_LOCAL_TLS_CERT_FILE` |
+
+`QS_LOCAL_CONFIG_DIR` selects a different absolute base directory. Keep directories permission 700 and credential
+files permission 600. Do not put values in shell startup files or create credential symlinks inside a checkout.
+The browser Mapbox token is public client configuration and still uses its existing ignored frontend file.
+
+For a fresh development profile:
 
 ```bash
-cp functions/.secret.local.example functions/.secret.local
+mkdir -p "$HOME/.config/quantified-self"
+chmod 700 "$HOME/.config/quantified-self"
+cp functions/.secret.local.example "$HOME/.config/quantified-self/functions.env"
+chmod 600 "$HOME/.config/quantified-self/functions.env"
+# Fill the external file privately with credentials for the intended development project.
 npm --prefix functions run build
-npm run firebase -- emulators:start --only auth,functions,firestore,storage
+npm run emulators:local -- emulators:start --only auth,functions,firestore,storage
 ```
 
-Firebase's Functions emulator uses `.secret.local` for bound secret parameters. Never copy production credentials into an emulator checkout: provider calls and background workers can still reach real external services.
+The wrapper creates a permission-700 per-session runtime under the external configuration directory, writes its
+Firebase-required `.secret.local` with permission 600, and links compiled `lib` and dependencies so normal rebuilds
+remain visible. It removes the session runtime when the child exits, including failures and handled interrupts.
+An uncatchable process kill can leave a private session directory behind. The wrapper accepts emulator and shell
+commands only; it cannot deploy. Its generated config also retains credential exclusions and a rejecting predeploy
+hook, so selecting that config directly cannot upload a local runtime. Existing deployment preflight rejects credential files and symlinks in Functions
+source, including local secret profiles; the value-free template is the sole exception.
+
+A missing explicit profile fails rather than selecting another file. Firebase's own behavior for secrets absent
+from an emulator override is unchanged: it can attempt Secret Manager access using its credentials. Use explicit
+development projects and values; moving files does not isolate the existing hybrid browser configuration or provider APIs.
+CI uses the dedicated scrubbed demo runners and never invokes a personal-profile launcher.
 
 ### Stripe key separation
 
@@ -123,37 +154,39 @@ The default browser configuration keeps hosted Firebase Auth and sends callable 
 When `FUNCTIONS_EMULATOR=true` and `FIREBASE_AUTH_EMULATOR_HOST` is unset, custom-token creation can sign locally using a service-account JSON file. The default Admin app always retains ADC and explicitly selects the emulator's `GCLOUD_PROJECT`; loading a local signing key never changes the identity used for user lookups, Firestore, Storage, or other backend operations.
 
 1. A service-account key at an explicit `GOOGLE_APPLICATION_CREDENTIALS` path takes precedence. An unavailable or malformed explicit file fails signing without silently switching keys. Impersonated and external-account ADC retain their normal SDK signer.
-2. Without that variable, or when it contains user ADC (`authorized_user`, including credentials injected by Firebase CLI), the signer checks the existing Git-ignored `quantified-self-io-firebase-adminsdk.json` one directory above the emulator's `functions/` working directory. User ADC remains on the default app.
+2. Without that variable, or when it contains user ADC (`authorized_user`, including credentials injected by Firebase CLI), the signer checks the optional `firebase-adminsdk.json` in the external local configuration directory. User ADC remains on the default app.
 3. A local key's `project_id` must match the default Admin app's selected project. A mismatch fails token creation before activating the signing credential or changing the default app. The matching key initializes a separate, cached Admin app used only for token signing.
 4. Without a local key, token creation uses the default Admin SDK signer. Hosted custom-token signing then requires a separately configured signing identity; a user ADC login alone does not provide a local signing key.
 
-From the repository root, an existing root-level key needs only:
+From the repository root, an existing external signing key needs only:
 
 ```bash
 npm --prefix functions run build
-npm run firebase -- emulators:start --only functions
+npm run emulators:local -- emulators:start --only functions
 ```
 
 For a key stored outside the checkout:
 
 ```bash
 GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/development-service-account.json \
-  npm run firebase -- emulators:start --only functions
+  npm run emulators:local -- emulators:start --only functions
 ```
 
 Keep keys outside `functions/`, outside source control, and out of `.secret.local`. This mode accesses the hosted project, so select the intended development project and credentials. The optional key lookup happens only during custom-token creation and is skipped in deployed runtimes and whenever the Auth emulator is configured. Entering impersonation, restoring the original admin, and the existing provider custom-token helper reuse this signer; admin authorization and impersonation claims are unchanged. A wrong or malformed signing key cannot prevent unrelated Functions from starting.
 
 The signing app uses the modular `firebase-admin/app` initializer and `firebase-admin/auth` service accessor. Do not pass its credential to the namespaced `admin.initializeApp`: Firebase CLI's emulator wrapper serializes those options into debug logs, including private key material. The SDK regression tests reproduce that logging wrapper with synthetic credentials and assert that no private key reaches it.
 
-### Local script environment precedence
+### Explicit local script environment
 
-Repository operational scripts load local values in this order without overriding an existing shell variable:
+Operational npm commands preload `src/scripts/register-local-env.ts`, which loads only the selected external
+`functions.env` profile without overriding variables already supplied by the invoking shell. A direct script can
+explicitly import that registration module. There is no repository `.secret.local`, `.env.local` or `.env` fallback.
+Importing `load-local-env.ts` for tests has no side effect; an explicit missing file fails with a value-free error.
+CI and deployed runtime indicators prevent personal profile loading even when an override is present.
 
-1. `functions/.secret.local`
-2. `functions/.env.local`
-3. legacy `functions/.env`
-
-The legacy file remains a local-script compatibility fallback only. Deployed runtime code does not load dotenv, and every local environment or secret file is excluded from upload archives. Deployment preflight deliberately fails while any `.env*`, `.runtimeconfig.json`, or service-account file is present in the Functions source, because Firebase can otherwise convert dotenv files back into ordinary runtime environment variables even when the archive ignore list excludes them.
+The mail operator reads an explicitly configured external Google credential first, then the optional external mail
+identity, then the external signing identity. It never searches the checkout. This changes credential location only;
+it does not authorize running a mail, cleanup, migration, backfill or provider operation.
 
 ## Adding or changing a secret
 

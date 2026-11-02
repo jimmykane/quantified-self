@@ -69,6 +69,8 @@ describe('initializeFirebase', () => {
     vi.stubEnv('FUNCTIONS_EMULATOR', '');
     vi.stubEnv('FIREBASE_AUTH_EMULATOR_HOST', '');
     vi.stubEnv('GOOGLE_APPLICATION_CREDENTIALS', '');
+    vi.stubEnv('QS_LOCAL_CONFIG_DIR', '/external/qs');
+    vi.stubEnv('QS_LOCAL_SIGNING_KEY_FILE', '');
     vi.spyOn(process, 'cwd').mockReturnValue('/repo/functions');
   });
 
@@ -95,9 +97,9 @@ describe('initializeFirebase', () => {
     expect(mocks.cert).not.toHaveBeenCalled();
   });
 
-  it('uses the ignored repository-root key for Functions emulation with hosted Auth', async () => {
+  it('uses the external signing key for Functions emulation with hosted Auth', async () => {
     vi.stubEnv('FUNCTIONS_EMULATOR', 'true');
-    const keyPath = resolve('/repo/quantified-self-io-firebase-adminsdk.json');
+    const keyPath = resolve('/external/qs/firebase-adminsdk.json');
     mocks.existsSync.mockImplementation(candidate => candidate === keyPath);
     const { createFirebaseCustomToken } = await import('./bootstrap');
 
@@ -116,7 +118,7 @@ describe('initializeFirebase', () => {
     expect(mocks.defaultToken).not.toHaveBeenCalled();
   });
 
-  it('prefers an explicitly configured service-account key over the repository fallback', async () => {
+  it('prefers an explicitly configured service-account key over the external fallback', async () => {
     vi.stubEnv('FUNCTIONS_EMULATOR', 'true');
     vi.stubEnv('GOOGLE_APPLICATION_CREDENTIALS', '/external/credentials.json');
     mocks.existsSync.mockReturnValue(true);
@@ -143,7 +145,7 @@ describe('initializeFirebase', () => {
     },
   );
 
-  it('uses ADC signing when the optional repository key is unavailable', async () => {
+  it('uses ADC signing when the optional external key is unavailable', async () => {
     vi.stubEnv('FUNCTIONS_EMULATOR', 'true');
     const { createFirebaseCustomToken } = await import('./bootstrap');
 
@@ -162,6 +164,22 @@ describe('initializeFirebase', () => {
 
     expect(mocks.existsSync).toHaveBeenCalledExactlyOnceWith('/external/missing.json');
     expect(mocks.cert).not.toHaveBeenCalled();
+    expect(mocks.defaultToken).not.toHaveBeenCalled();
+  });
+
+  it('never falls back to a credential stored inside the checkout', async () => {
+    vi.stubEnv('FUNCTIONS_EMULATOR', 'true');
+    mocks.existsSync.mockImplementation(candidate => candidate === '/repo/quantified-self-io-firebase-adminsdk.json');
+    const { createFirebaseCustomToken } = await import('./bootstrap');
+    await expect(createFirebaseCustomToken('target')).resolves.toBe('default-token');
+    expect(mocks.readFileSync).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when an explicit signing key is missing', async () => {
+    vi.stubEnv('FUNCTIONS_EMULATOR', 'true');
+    vi.stubEnv('QS_LOCAL_SIGNING_KEY_FILE', '/external/missing.json');
+    const { createFirebaseCustomToken } = await import('./bootstrap');
+    expect(() => createFirebaseCustomToken('target')).toThrow('configured local signing key is unavailable');
     expect(mocks.defaultToken).not.toHaveBeenCalled();
   });
 

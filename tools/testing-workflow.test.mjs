@@ -39,10 +39,12 @@ test('Firebase CI consumers install the shared pin instead of an unversioned CLI
     assert.match(scripts[name], /^npm run firebase -- /, name);
   }
   const functionsScripts = JSON.parse(readFileSync(resolve(root, 'functions/package.json'), 'utf8')).scripts;
-  for (const name of ['serve', 'shell', 'deploy', 'logs']) {
+  for (const name of ['deploy', 'logs']) {
     assert.match(functionsScripts[name], /node \.\.\/tools\/firebase-cli\.mjs /, name);
     assert.doesNotMatch(functionsScripts[name], /\bfirebase /, name);
   }
+  for (const name of ['serve', 'shell']) assert.match(functionsScripts[name], /node \.\.\/tools\/local-functions\.mjs /);
+  assert.ok(shared.jobs.unit_tests.steps.some(step => step.run === 'npm run test:local-secrets'));
 });
 
 test('every check job uses the declared Functions Node runtime', () => {

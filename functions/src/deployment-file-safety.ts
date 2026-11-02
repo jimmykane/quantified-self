@@ -3,6 +3,7 @@ import { join, relative, sep } from 'node:path';
 
 const FORBIDDEN_FUNCTION_SOURCE_FILE_PATTERNS = [
   /(?:^|\/)\.env(?:\..*)?$/,
+  /(?:^|\/)\.secret(?:\..*)?$/i,
   /(?:^|\/)\.runtimeconfig\.json$/,
   /(?:^|\/)[^/]*service[-_]?account[^/]*\.json$/i,
   /(?:^|\/)[^/]*firebase-adminsdk[^/]*\.json$/i,
@@ -35,7 +36,7 @@ export function listFunctionSourceFiles(rootDirectory: string): string[] {
         }
         continue;
       }
-      if (entry.isFile()) {
+      if (entry.isFile() || entry.isSymbolicLink()) {
         files.push(toPortableRelativePath(rootDirectory, join(directory, entry.name)));
       }
     }
@@ -46,6 +47,7 @@ export function listFunctionSourceFiles(rootDirectory: string): string[] {
 
 export function findForbiddenFunctionSourceFiles(fileNames: readonly string[]): string[] {
   return fileNames
-    .filter(fileName => FORBIDDEN_FUNCTION_SOURCE_FILE_PATTERNS.some(pattern => pattern.test(fileName)))
+    .filter(fileName => fileName !== '.secret.local.example'
+      && FORBIDDEN_FUNCTION_SOURCE_FILE_PATTERNS.some(pattern => pattern.test(fileName)))
     .sort();
 }
