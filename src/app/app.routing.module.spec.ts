@@ -430,10 +430,11 @@ describe('AppRoutingModule routes', () => {
     expect(compareRoute?.canMatch).toBeUndefined();
     expect(compareRoute?.resolve).toEqual({ toolsCompareAuth: toolsCompareAuthResolver });
     expect(compareRoute?.loadComponent).toBeTypeOf('function');
-    expect(compareRoute?.data?.['title']).toBe('FIT, GPX, TCX, JSON & SML Benchmark Tool Trusted by Device Reviewers');
-    expect(compareRoute?.data?.['description']).toContain('trusted by device reviewers');
+    expect(compareRoute?.data?.['title']).toBe('Compare FIT & GPX Files | Workout Data Comparison Tool');
+    expect(compareRoute?.data?.['description']).not.toMatch(/trusted by device reviewers/i);
     expect(compareRoute?.data?.['description']).toContain('GNSS, heart-rate, altitude, power');
-    expect(compareRoute?.data?.['description']).toContain('all other device metrics');
+    expect(compareRoute?.data?.['description']).toContain('other recorded metrics');
+    expect(compareRoute?.data?.['description']).toContain('Sign in to compare files');
     expect(compareRoute?.data?.['jsonLd']).toMatchObject({
       '@type': 'WebApplication',
       name: 'FIT, GPX, TCX, JSON & SML File Comparison & Benchmark Tool',

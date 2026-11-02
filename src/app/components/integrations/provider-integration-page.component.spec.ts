@@ -82,7 +82,8 @@ describe('ProviderIntegrationPageComponent', () => {
     const fixture = renderProvider('coros');
     const text = fixture.nativeElement.textContent as string;
 
-    expect(text).toContain('COROS Training Plans, Activity Sync, and Routes');
+    expect(text).toContain('COROS Activity Sync, History Import, and Routes');
+    expect(text).toContain('COROS planned-workout delivery is coming soon');
     expect(text).toContain('Planned workouts to COROS');
     expect(text).toContain('COROS to Suunto automatic activity sync');
     expect(text).toContain('Send activities to COROS');

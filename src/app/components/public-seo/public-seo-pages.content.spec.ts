@@ -10,6 +10,16 @@ import {
 } from './public-seo-pages.content';
 
 describe('public-seo-pages.content', () => {
+  it('links both Training Help actions to the Training Analysis help topic', () => {
+    const page = PUBLIC_SEO_PAGES.trainingAnalysis;
+    const actions = [...page.actions, ...page.closingActions]
+      .filter(action => action.label === 'Training Help');
+    expect(actions).toHaveLength(2);
+    for (const action of actions) {
+      expect(action).toMatchObject({ routerLink: '/help', fragment: 'training-analysis' });
+    }
+  });
+
   it.each([
     ['importStravaToSuunto', 'suunto', 'Suunto', 'Suunto app'],
     ['importStravaToWahoo', 'wahoo', 'Wahoo', 'Wahoo API'],
