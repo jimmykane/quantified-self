@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import paths from '../shared/local-secret-paths.js';
-import { assertExternalPath, prepareLocalFunctionsRuntime, runLocalFunctions } from './local-functions.mjs';
+import { assertExternalPath, localEmulatorDataArguments, prepareLocalFunctionsRuntime, runLocalFunctions } from './local-functions.mjs';
 
 test('external paths are independent of checkout or working directory and reject relative overrides', () => {
   const config = paths.localSecretPaths({ QS_LOCAL_CONFIG_DIR: '/private/config' });
@@ -49,6 +49,16 @@ test('the emulator profile is restricted to an external runtime while compiled c
 test('the development wrapper cannot deploy or accept another runtime config', async () => {
   await assert.rejects(runLocalFunctions(['deploy']), /Use emulators/);
   await assert.rejects(runLocalFunctions(['emulators:start', '--config=other.json']), /own config/);
+});
+
+test('emulator data paths stay persistent outside the checkout and disposable runtime', () => {
+  const environment = { QS_LOCAL_CONFIG_DIR: '/private/profiles' };
+  const args = localEmulatorDataArguments(['--export-on-exit', '--only', 'firestore'], '/checkout', environment);
+  assert.match(args[0], /^--export-on-exit=\/private\/profiles\/emulator-state\//);
+  assert.deepEqual(args.slice(1), ['--only', 'firestore']);
+  assert.deepEqual(localEmulatorDataArguments(['--import', '../saved'], '/checkout', environment), ['--import=/saved']);
+  assert.throws(() => localEmulatorDataArguments(['--export-on-exit=state'], '/checkout', environment), /outside/);
+  assert.throws(() => localEmulatorDataArguments(['--import'], '/checkout', environment), /required/);
 });
 
 test('the actual pinned launcher preserves failure status and removes its runtime after the child exits', async t => {

@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -58,15 +59,33 @@ export function prepareLocalFunctionsRuntime(root = repositoryRoot, environment 
   }
 }
 
+export function localEmulatorDataArguments(args, root = repositoryRoot, environment = process.env) {
+  const local = paths.localSecretPaths(environment);
+  const defaultExport = resolve(local.directory, 'emulator-state', createHash('sha256').update(root).digest('hex').slice(0, 12));
+  const result = [];
+  for (let i = 0; i < args.length; i++) {
+    const option = args[i].split('=')[0];
+    if (!['--import', '--export-on-exit'].includes(option)) { result.push(args[i]); continue; }
+    let value = args[i].includes('=') ? args[i].slice(args[i].indexOf('=') + 1) : undefined;
+    if (value === undefined && args[i + 1] && !args[i + 1].startsWith('-')) value = args[++i];
+    if (!value && option === '--import') throw new Error('An external emulator import directory is required.');
+    const file = value ? resolve(root, value) : defaultExport;
+    assertExternalPath(file, root);
+    result.push(`${option}=${file}`);
+  }
+  return result;
+}
+
 export async function runLocalFunctions(args, environment = process.env, root = repositoryRoot) {
   const [command = 'emulators:start', ...options] = args;
   if (!['emulators:start', 'emulators:exec', 'functions:shell'].includes(command) || options.some(arg => ['--config', '-c'].includes(arg) || /^(-c|--config)=/.test(arg))) {
     throw new Error('Use emulators:start, emulators:exec or functions:shell; the external runtime manages its own config.');
   }
+  const dataOptions = localEmulatorDataArguments(options, root, environment);
   const runtime = prepareLocalFunctionsRuntime(root, environment);
   try {
     return await new Promise((accept, reject) => {
-      const child = spawn(process.execPath, [resolve(root, 'tools/firebase-cli.mjs'), command, '--config', runtime.configPath, ...options], {
+      const child = spawn(process.execPath, [resolve(root, 'tools/firebase-cli.mjs'), command, '--config', runtime.configPath, ...dataOptions], {
         cwd: root, env: environment, stdio: 'inherit', detached: process.platform !== 'win32',
       });
       const interrupt = signal => {

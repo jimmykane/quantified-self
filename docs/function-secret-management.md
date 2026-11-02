@@ -137,6 +137,11 @@ from an emulator override is unchanged: it can attempt Secret Manager access usi
 development projects and values; moving files does not isolate the existing hybrid browser configuration or provider APIs.
 CI uses the dedicated scrubbed demo runners and never invokes a personal-profile launcher.
 
+Emulator imports/exports use persistent external directories. An argument-free `--export-on-exit` selects
+`~/.config/quantified-self/emulator-state/<checkout-id>`; explicit relative paths resolve against the checkout and
+must point outside it. These exports are outside the disposable session runtime and survive cleanup. Existing
+billing sandbox state retains its separate path and is not migrated or deleted by this change.
+
 ### Stripe key separation
 
 Native billing uses `STRIPE_BILLING_KEY` only on its portal/compatibility portal and private worker; ingress binds only `STRIPE_BILLING_WEBHOOK_SECRET`. These are independent of the installed extension and gift credentials. See [Stripe billing](stripe-billing.md#credentials) for permissions, the two-value local test file, and cutover prerequisites.
