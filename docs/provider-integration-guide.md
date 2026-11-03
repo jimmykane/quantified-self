@@ -1022,6 +1022,8 @@ No deployment, switch activation or test send is authorized by implementation or
 The default-on New activities synced category groups genuinely new, fully persisted workouts from all four activity
 providers. Verified first canonical creation and positive webhook provenance are both required; manual/OAuth history,
 unknown legacy work, corrections, reprocessing, cross-provider duplicates and manual uploads are excluded. Workouts
+recovered by Suunto's outage-backfill script remain silent: its shared enqueue helper does not infer live provenance
+from insertion/dispatch intent, and only the authenticated webhook supplies the notification marker. Eligible workouts
 must finish within 48 hours and start after the current connection. Garmin additionally persists a monotonic requested
 history-end cutoff before requesting files because history shares its live callback. This can conservatively suppress
 genuine workouts through an end-of-day history range. Exact queue revision, account/provider/connection, event dates,

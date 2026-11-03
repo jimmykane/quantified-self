@@ -112,7 +112,8 @@ Eligibility is proven after successful canonical event, child, metadata and orig
   or partial writes produce no alert; a subsequent successful repair of an existing parent conservatively stays silent.
 - Only authenticated provider webhook creation stamps `activityNotificationOrigin: live`. Legacy/unknown queue work,
   `fromHistory`, coordinator run IDs, manual/edited provider entries and suppression markers are excluded. A missing
-  history flag does not establish a live source. Normal queue revisions, leases and retries remain unchanged.
+  history flag does not establish a live source. Suunto's shared enqueue helper requires the webhook to supply this
+  marker explicitly; outage-recovery backfills remain silent. Normal queue revisions, leases and retries remain unchanged.
 - The parsed workout must have finished within 48 hours, not in the future, and begun after the current connection.
   Admission uses token creation time for existing connections; new/reconnected accounts also have the server-owned
   `activityNotificationConnectedAtMs` lifecycle marker. Missing/invalid connection identity or time fails closed.
@@ -152,6 +153,8 @@ ambiguous send failures cannot replay a claimed batch. Preparation failures befo
 sweep. Batches more than ten minutes overdue are discarded. A disabled sender clears due batches without sending;
 leaving it disabled beyond this expiry before re-enabling also expires any retained work after an outage. There is
 no notification dead-letter queue or manual replay feature. Only an expired matching registration is pruned.
+Device preparation or expired-registration cleanup failures do not stop the remaining devices: every wave settles
+before the sweep reports failure. Failed device work is not replayed after the batch has been claimed.
 
 Admission failure logs a fixed error and never fails/retries an otherwise successful activity import. A crash after
 persistence but before admission may miss an alert. This is best-effort delivery, not an exactly-once guarantee.

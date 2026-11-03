@@ -2150,7 +2150,7 @@ describe('queue', () => {
 
     describe('addToQueue functions', () => {
         it('addToQueueForSuunto should insert item with correct ID', async () => {
-            const result = await addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' });
+            const result = await addToQueueForSuunto({ userName: 'user1', workoutID: 'work1', activityNotificationOrigin: 'live' });
             expect(result.id).toBe('mock-doc-id');
             const admin = await import('firebase-admin');
             const doc = admin.firestore().collection('suuntoAppWorkoutQueue').doc('user1-work1');
@@ -2165,6 +2165,13 @@ describe('queue', () => {
             expect(doc.set).not.toHaveBeenCalled();
             expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', expect.any(Number), undefined, { recoveryTaskKey: 0 });
             expect(doc.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+        });
+
+        it('keeps Suunto recovery and unclassified callers silent without changing import dispatch', async () => {
+            await addToQueueForSuunto({ userName: 'user1', workoutID: 'work1' });
+            expect(mockDocRef.create).toHaveBeenCalledOnce();
+            expect(vi.mocked(mockDocRef.create).mock.calls[0][0]).not.toHaveProperty('activityNotificationOrigin');
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', expect.any(Number), undefined, { recoveryTaskKey: 0 });
         });
 
         it('namespaces shared-account Suunto queue items by Firebase owner', async () => {

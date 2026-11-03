@@ -15,7 +15,7 @@ function harness() {
     keys: { p256dh: publicKey, auth: 'A'.repeat(22) },
   }]]);
   let lock = Promise.resolve(); let commits = 0;
-  const hooks: { afterCommit(count: number): void } = { afterCommit: () => {} };
+  const hooks: { afterCommit(count: number): void; beforeRead(path: string): void } = { afterCommit: () => {}, beforeRead: () => {} };
   const snapshot = (path: string) => ({ id: path.split('/').at(-1), exists: rows.has(path), data: () => structuredClone(rows.get(path)) });
   const collection = (path: string) => ({ path, doc: (uid: string) => ({ path: `${path}/${uid}` }),
     where: (_field: string, _op: string, value: string) => ({ limit: (limit: number) => ({ query: path, value, limit }) }) });
@@ -26,6 +26,7 @@ function harness() {
         const tx = {
           get: async (ref: any) => {
             if (writes.length) throw new Error('Read after write');
+            hooks.beforeRead(ref.path ?? ref.query);
             if (ref.query) return { docs: [...rows.keys()].filter(path => path.startsWith(ref.query + '/') && rows.get(path).origin === ref.value)
               .slice(0, ref.limit).map(snapshot) };
             return snapshot(ref.path);
@@ -201,6 +202,39 @@ describe('new activity notifications', () => {
     h.rows.set('users/owner/pushSubscriptions/00000000-0000-4000-8000-000000000099', { ...registration, endpoint: 'https://web.push.apple.com/later' });
     h.advance(); await h.send(); expect(h.deps.send).toHaveBeenCalledTimes(10);
     expect(vi.mocked(h.deps.send).mock.calls.some(([target]) => target.endpoint.endsWith('/later'))).toBe(false);
+  });
+  it.each([
+    { phase: 'preparation', failedDevice: id },
+    { phase: 'preparation', failedDevice: '00000000-0000-4000-8000-000000000006' },
+    { phase: 'cleanup', failedDevice: id },
+    { phase: 'cleanup', failedDevice: '00000000-0000-4000-8000-000000000006' },
+  ])('finishes every device wave despite $phase failure for $failedDevice, without replay', async ({ phase, failedDevice }) => {
+    const h = harness(); const registration = h.rows.get(`users/owner/pushSubscriptions/${id}`);
+    const devices = [id, ...Array.from({ length: 6 }, (_, i) => `00000000-0000-4000-8000-${String(i + 3).padStart(12, '0')}`)];
+    for (const device of devices) h.rows.set(`users/owner/pushSubscriptions/${device}`,
+      { ...registration, endpoint: `https://web.push.apple.com/${device}` });
+    let expired = false;
+    const completed = new Set<string>();
+    vi.mocked(h.deps.send).mockImplementation(async target => {
+      const device = target.endpoint.split('/').at(-1)!;
+      if (phase === 'cleanup' && device === failedDevice) { expired = true; throw { statusCode: 410 }; }
+      await new Promise(resolve => setTimeout(resolve, 0));
+      completed.add(device); return {};
+    });
+    await h.admit(); h.advance();
+    h.hooks.beforeRead = path => {
+      if (path === `users/owner/pushSubscriptions/${failedDevice}` && (phase === 'preparation' || expired)) {
+        throw new Error('private-canary database failure');
+      }
+    };
+    await expect(h.send()).rejects.toThrow('Activity notification device processing failed.');
+    expect(completed).toEqual(new Set(devices.filter(device => device !== failedDevice)));
+    expect(new Set(vi.mocked(h.deps.send).mock.calls.map(([target]) => target.endpoint.split('/').at(-1))))
+      .toEqual(new Set(devices.filter(device => phase === 'cleanup' || device !== failedDevice)));
+    const attempts = vi.mocked(h.deps.send).mock.calls.length;
+    h.hooks.beforeRead = () => {}; await h.send();
+    expect(h.deps.send).toHaveBeenCalledTimes(attempts);
+    expect(h.state().pending).toBeUndefined(); expect(h.state().attempts).toHaveLength(1);
   });
   it('accepts exactly 48-hour-old completed workouts and rejects beta payloads', () => {
     const h = harness(); h.candidate.startMs = now - ACTIVITY_PUSH.recentMs - 1000; h.candidate.endMs = now - ACTIVITY_PUSH.recentMs;

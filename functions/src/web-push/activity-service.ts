@@ -92,6 +92,7 @@ export async function sendActivityNotification(uid: string, deps: ActivityPushDe
     const guard = await getUserDeletionGuardStateInTransaction(db, tx, uid, now);
     const [snapshot, preferenceSnapshot] = await Promise.all([tx.get(ref), tx.get(db.doc(notificationPreferencePath(uid, 'activity_sync')))]);
     const state = readState(snapshot.data() as State | undefined); const batch = state.pending;
+    // This server-owned state is a leaf by design; Rules deny all client writes, including descendants.
     if (guard.shouldSkip) { if (snapshot.exists) tx.delete(ref); return null; }
     if (!batch || batch.dueAt > now) return null;
     const preference = readNotificationCategoryPreference(preferenceSnapshot.data());
@@ -108,8 +109,9 @@ export async function sendActivityNotification(uid: string, deps: ActivityPushDe
   if (!claim) return;
   if (claim.outcome) { deps.outcome(claim.outcome); return; }
   // Bounded device fan-out. A newer registration never inherits a previously queued batch.
+  let failed = false;
   for (let offset = 0; offset < claim.batch.targets.length; offset += 5) {
-    await Promise.all(claim.batch.targets.slice(offset, offset + 5).map(async target => {
+    const results = await Promise.allSettled(claim.batch.targets.slice(offset, offset + 5).map(async target => {
       const registrationRef = db.doc(`users/${uid}/pushSubscriptions/${target.id}`);
       const ready = await db.runTransaction(async tx => {
         const guard = await getUserDeletionGuardStateInTransaction(db, tx, uid, deps.now());
@@ -133,8 +135,13 @@ export async function sendActivityNotification(uid: string, deps: ActivityPushDe
       if (outcome === 'expired') await db.runTransaction(async tx => {
         const guard = await getUserDeletionGuardStateInTransaction(db, tx, uid, deps.now());
         const registration = await tx.get(registrationRef);
+        // Registration records are leaves; Rules prohibit descendants.
         if (!guard.shouldSkip && registration.data()?.generation === target.generation) tx.delete(registrationRef);
       });
     }));
+    if (results.some(result => result.status === 'rejected')) failed = true;
   }
+  // Preparation or expired-registration cleanup must not strand other devices or leave sends unawaited.
+  // Preserve sweep failure monitoring without exposing the underlying database error or replaying the claim.
+  if (failed) throw new Error('Activity notification device processing failed.');
 }
