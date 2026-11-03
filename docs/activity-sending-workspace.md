@@ -22,6 +22,13 @@ changed aggregate counts/state; unchanged delivery events do not rewrite the sha
 retries still perform pending source cleanup even when the display is already current. The shared activity task queue
 has a conservative global cap of ten active tasks across all accounts/providers, not a documented partner quota.
 
+The `projectActivitySendDelivery` trigger checks the event snapshot for `sendBatchID`, `sendRowID` and `userID`
+before reading Firestore. Unlinked queue writes need no workspace projection. Admission commits those links atomically,
+so a later linked replacement has its own retryable event. Linked events still reread current queue state and use
+the existing deletion-guarded transaction and cleanup, including delayed events and repeated terminal results.
+Monitoring is **unchanged**: these skipped reads are not delivery attempts; native trigger errors/latency and the
+existing delivery/cleanup observations retain their meanings. Release only this Function after separate approval.
+
 Typed retryable Suunto initialization failures without an accepted ID or blob continuation use the existing bounded
 task retry/backoff because initialization sends no FIT bytes. Stop/expiry, account pinning and deletion guards still
 apply on the next attempt. Exhaustion retains the existing terminal workspace review; confirmed processing failures

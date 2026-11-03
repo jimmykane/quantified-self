@@ -2463,6 +2463,11 @@ existing native queue charts, committed retry/manual-review observations and tri
 the [delivery runbook](activity-delivery-monitoring.md#workspace-contention-and-initialization-retries) records the
 verification/release boundary. No new queue, lease, scheduler, metric, scope, MCP or Training change is introduced.
 
+Workspace delivery projection also skips unlinked queue events before any Firestore read, using only the event's
+ownership fields. Atomically admitted links produce their own retryable event; linked events retain fresh reads,
+deletion guards, current-state projection and cleanup retries. The same native trigger/cleanup diagnostics cover
+this read reduction, with **unchanged** monitoring. See the workspace contract for the Function-only release boundary.
+
 Queue ownership commits before dispatch so concurrent Stop/admission cannot lose or erase a claim. Local and saved sends recheck the sending window inside provider-claim transactions; reconnect release preserves this authority and the original queue retention. Duplicate temporary sources release quota immediately. Account deletion winning a background transaction is a silent no-op.
 
 Saved-preview criteria are canonical and server-private, allowing the workspace to continue the original paged preview after reload. Deleted selections receive exclusions and empty ranges finish without delivery. Loading/unavailable display reads block replacement drafts and confirmation; aborted transfers have a recoverable result. Stop reconciliation uses the existing retry-enabled operation trigger and a private 50-row cursor, including already admitted unclaimed work. It advances only after source cleanup succeeds and preserves claimed/accepted identifiers. No new worker, scheduler, task queue or external provider action is introduced.
