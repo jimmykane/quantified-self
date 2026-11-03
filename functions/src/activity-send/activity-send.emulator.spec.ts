@@ -4,7 +4,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { createCOROSActivityFITFixture } from '../../test-utils/coros-activity-fit';
 import { runSendCommand } from './commands';
 import { stageSendFile } from './upload';
-import { admitActivitySend, admitSendRows, projectSendDelivery, cleanupSendSources, cleanupExpiredSends, cleanupDeletedSendAccount } from './lifecycle';
+import { admitActivitySend, admitSendRows, projectActivitySendDelivery, projectSendDelivery, cleanupSendSources, cleanupExpiredSends, cleanupDeletedSendAccount } from './lifecycle';
 import { Timestamp } from 'firebase-admin/firestore';
 import { operationRef, batchRef, guardedBackgroundSendTransaction } from './store';
 import { ACTIVITY_SEND_LIMITS } from '../../../shared/activity-send';
@@ -53,6 +53,76 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
     await admitSendRows(uid, id);
     return (await db.collection('activitySyncQueue').get()).docs[0];
   }
+  function projectEvent(after: admin.firestore.DocumentSnapshot) {
+    return projectActivitySendDelivery.run({
+      data: { after }, params: { queueId: 'projection-queue' },
+    } as Parameters<typeof projectActivitySendDelivery.run>[0]);
+  }
+  it.each([
+    undefined, {}, { userID: uid },
+    { userID: uid, sendRowID: 'row-one' },
+    { userID: uid, sendBatchID: id },
+    { sendBatchID: id, sendRowID: 'row-one' },
+    { userID: uid, sendBatchID: '', sendRowID: 'row-one' },
+    { userID: uid, sendBatchID: id, sendRowID: '' },
+    { userID: '', sendBatchID: id, sendRowID: 'row-one' },
+  ])('projection trigger skips unlinked events without a document read: %j', async data => {
+    const get = vi.fn(() => { throw new Error('Unlinked projection must not read Firestore.'); });
+    await projectEvent({ exists: true, data: () => data, ref: { get } } as unknown as admin.firestore.DocumentSnapshot);
+    expect(get).not.toHaveBeenCalled();
+  });
+  it('projection trigger skips deleted documents without reading their contents', async () => {
+    const data = vi.fn(() => { throw new Error('Deleted projection must not read snapshot data.'); });
+    const get = vi.fn();
+    await projectEvent({ exists: false, data, ref: { get } } as unknown as admin.firestore.DocumentSnapshot);
+    expect(data).not.toHaveBeenCalled(); expect(get).not.toHaveBeenCalled();
+  });
+  it('projection trigger retains retryable reads for linked events', async () => {
+    const error = new Error('Synthetic projection read failure');
+    const get = vi.fn().mockRejectedValue(error);
+    await expect(projectEvent({ exists: true, data: () => ({ userID: uid, sendBatchID: id, sendRowID: 'row-one' }), ref: { get } } as unknown as admin.firestore.DocumentSnapshot))
+      .rejects.toBe(error);
+    expect(get).toHaveBeenCalledOnce();
+  });
+  it('projection trigger leaves delayed unlinked events to the linked replacement event and reads current progress', async () => {
+    const queue = await confirm();
+    const linked = queue.data();
+    const unlinked = { ...linked }; delete unlinked.sendBatchID; delete unlinked.sendRowID;
+    await queue.ref.set(unlinked);
+    const oldEvent = await queue.ref.get();
+    await queue.ref.set(linked);
+    const linkedEvent = await queue.ref.get();
+    await queue.ref.update({ processed: true, resultStatus: 'success' });
+    const row = batchRef(uid, id).collection('rows').doc('row-one');
+    const prior = await row.get();
+    const get = vi.spyOn(oldEvent.ref, 'get');
+    try {
+      await projectEvent(oldEvent);
+      expect(get).not.toHaveBeenCalled();
+    } finally { get.mockRestore(); }
+    expect((await row.get()).updateTime!.isEqual(prior.updateTime!)).toBe(true);
+    await projectEvent(linkedEvent);
+    expect((await row.get()).data()).toMatchObject({ status: 'delivered', attempts: 0 });
+    expect((await batchRef(uid, id).get()).data()).toMatchObject({ finished: 1, state: 'complete' });
+    expect(state.files.size).toBe(0);
+  });
+  it.each(['missing user', 'deletion tombstone'])('projection trigger rechecks %s after a linked event was captured', async deletion => {
+    const queue = await confirm();
+    await queue.ref.update({ processed: true, resultStatus: 'success' });
+    const completed = await queue.ref.get();
+    const batch = batchRef(uid, id);
+    const prior = await batch.get();
+    if (deletion === 'missing user') await db.recursiveDelete(db.doc(`users/${uid}`));
+    else await db.doc(`userDeletionTombstones/${uid}`).set({ expireAt: Timestamp.fromMillis(Date.now() + 60_000) });
+    await projectEvent(completed);
+    const current = await batch.get();
+    if (deletion === 'missing user') {
+      expect((await db.doc(`users/${uid}`).get()).exists).toBe(false);
+      expect(current.exists).toBe(false);
+      expect((await operationRef(uid, id).get()).exists).toBe(false);
+    } else expect(current.updateTime!.isEqual(prior.updateTime!)).toBe(true);
+    expect(state.files.size).toBe(1);
+  });
   it('ignores delivery progress events but still admits the original confirmation', async () => {
     const reviewed = await prepare();
     const before = await operationRef(uid, id).get();
@@ -454,13 +524,14 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('durable activity sends in
     expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBeGreaterThan(0);
     state.enqueue.mockClear();
     await queue.ref.update({ processed: true, resultStatus: 'skipped', sendConfirmedFailure: true });
+    const failedEvent = await queue.ref.get();
     if (cleanupFails) {
       state.failDeleteOnce = true;
-      await expect(projectSendDelivery(queue.ref)).rejects.toThrow('Synthetic temporary storage failure');
+      await expect(projectEvent(failedEvent)).rejects.toThrow('Synthetic temporary storage failure');
       expect(state.files.size).toBe(1);
       expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBeGreaterThan(0);
     }
-    await projectSendDelivery(queue.ref); await projectSendDelivery(queue.ref);
+    await projectEvent(failedEvent); await projectEvent(failedEvent);
     expect(state.files.size).toBe(0);
     expect((await db.doc(`users/${uid}/activitySendQuota/current`).get()).data()?.bytes).toBe(0);
     expect((await batchRef(uid, id).get()).data()).toMatchObject({ stopped: true, state: 'complete', total: 1, finished: 1 });
