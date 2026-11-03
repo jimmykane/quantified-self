@@ -19,27 +19,59 @@
         <li><mat-icon aria-hidden="true">verified_user</mat-icon> Your connections</li>
       </ul>
     </div>
-    <div class="hero-visual" aria-label="Supported provider activities flow into Quantified Self">
+    <div class="hero-visual" [class.hero-motion-paused]="heroMotionPaused()" role="group" aria-label="Supported provider activities flow into Quantified Self">
+      <!-- Decorative connection geometry; all data charts remain shared app components. -->
+      <svg class="hero-geometry" viewBox="0 0 760 640" aria-hidden="true" focusable="false">
+        <circle class="hero-geometry-ring" cx="452" cy="320" r="294"></circle>
+        <g class="hero-geometry-orbit">
+          <path d="M 452 18 L 742 320 L 452 622 L 162 320 Z"></path>
+          <path d="M 238 106 H 666 V 534 H 238 Z"></path>
+          <circle cx="452" cy="18" r="4"></circle>
+          <circle cx="162" cy="320" r="3"></circle>
+        </g>
+      </svg>
       <div class="hero-provider-flow">
-        <div class="logos-container hero-providers" aria-label="Supported providers">
-          <mat-card appearance="outlined" class="hero-provider"><mat-icon svgIcon="garmin" class="partner-logo" matTooltip="Garmin Connect" role="img" aria-label="Garmin" aria-hidden="false"></mat-icon></mat-card>
-          <mat-card appearance="outlined" class="hero-provider"><mat-icon svgIcon="suunto" class="partner-logo" matTooltip="Suunto App" role="img" aria-label="Suunto" aria-hidden="false"></mat-icon></mat-card>
-          <mat-card appearance="outlined" class="hero-provider"><mat-icon svgIcon="coros" class="partner-logo wide" matTooltip="COROS" role="img" aria-label="COROS" aria-hidden="false"></mat-icon></mat-card>
-          <mat-card appearance="outlined" class="hero-provider"><mat-icon svgIcon="wahoo" class="partner-logo wide" matTooltip="Wahoo" role="img" aria-label="Wahoo" aria-hidden="false"></mat-icon></mat-card>
+        <div class="logos-container hero-providers" role="group" aria-label="Supported providers">
+          @for (provider of heroProviders; track provider.icon) {
+            <mat-card appearance="outlined" class="hero-provider">
+              <mat-icon [svgIcon]="provider.icon" class="partner-logo" [matTooltip]="provider.tooltip" role="img" [attr.aria-label]="provider.name" aria-hidden="false"></mat-icon>
+            </mat-card>
+          }
         </div>
-        <!-- Decorative layout connectors, not a data chart. Keep direction into QS only. -->
-        <svg class="hero-provider-wires" viewBox="0 0 40 304" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-          <path d="M 0 32 C 24 32 16 114 40 114 M 0 112 C 24 112 16 140 40 140 M 0 192 C 24 192 16 164 40 164 M 0 272 C 24 272 16 190 40 190"></path>
-          <path class="hero-wire-arrows" d="M 35 110 L 39 114 L 35 118 M 35 136 L 39 140 L 35 144 M 35 160 L 39 164 L 35 168 M 35 186 L 39 190 L 35 194"></path>
-          <circle cx="1.5" cy="32" r="2.5"></circle><circle cx="1.5" cy="112" r="2.5"></circle>
-          <circle cx="1.5" cy="192" r="2.5"></circle><circle cx="1.5" cy="272" r="2.5"></circle>
+        <svg class="hero-provider-wires hero-provider-wires--desktop" viewBox="0 0 104 336" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+          @for (provider of heroProviders; track provider.icon) {
+            <g class="hero-connection" [attr.data-provider]="provider.icon">
+              <path class="hero-connection-track" [attr.d]="provider.path"></path>
+              <path class="hero-connection-halo" [attr.d]="provider.path" pathLength="100"></path>
+              <path class="hero-connection-pulse" [attr.d]="provider.path" pathLength="100"></path>
+              <circle class="hero-connection-port" cx="2" [attr.cy]="provider.startY" r="2.5"></circle>
+              <circle class="hero-connection-port" cx="102" [attr.cy]="provider.endY" r="2.5"></circle>
+              <circle class="hero-connection-arrival" cx="102" [attr.cy]="provider.endY" r="3"></circle>
+            </g>
+          }
         </svg>
-        <mat-icon class="hero-provider-mobile-arrow" aria-hidden="true">south</mat-icon>
+        <svg class="hero-provider-wires hero-provider-wires--mobile" viewBox="0 0 400 80" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+          @for (provider of heroProviders; track provider.icon) {
+            <g class="hero-connection" [attr.data-provider]="provider.icon">
+              <path class="hero-connection-track" [attr.d]="provider.mobilePath"></path>
+              <path class="hero-connection-halo" [attr.d]="provider.mobilePath" pathLength="100"></path>
+              <path class="hero-connection-pulse" [attr.d]="provider.mobilePath" pathLength="100"></path>
+              <circle class="hero-connection-arrival" [attr.cx]="provider.mobileEndX" cy="78" r="3"></circle>
+            </g>
+          }
+        </svg>
       </div>
       <mat-card appearance="outlined" class="hero-product" aria-labelledby="hero-preview-title">
         <div class="hero-product-header">
           <div class="hero-product-title"><mat-icon svgIcon="logo" aria-hidden="true"></mat-icon><h2 id="hero-preview-title">Your training, in context</h2></div>
-          <span class="hero-sample-label">Sample data</span>
+          <div class="hero-preview-controls">
+            <span class="hero-sample-label">Sample data</span>
+            <button mat-icon-button class="hero-motion-toggle" (click)="toggleHeroMotion()"
+              [attr.aria-label]="heroMotionPaused() ? 'Play connection animation' : 'Pause connection animation'"
+              [matTooltip]="heroMotionPaused() ? 'Play animation' : 'Pause animation'">
+              <mat-icon aria-hidden="true">{{ heroMotionPaused() ? 'play_arrow' : 'pause' }}</mat-icon>
+            </button>
+          </div>
         </div>
         <app-public-feature-preview [prepareAhead]="true" previewKey="training-hero"></app-public-feature-preview>
         <p class="hero-product-caption">Explore the same charts inside Quantified Self.</p>

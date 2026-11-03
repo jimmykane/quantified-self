@@ -67,6 +67,17 @@ export class HomeComponent implements OnInit {
   private currentFeatureFragment = '';
   private readonly featureScroll = afterEveryRender(() => this.flushFeatureScroll());
   readonly features = HOME_FEATURES;
+  readonly heroMotionPaused = signal(false);
+  readonly heroProviders = [
+    { icon: 'garmin', name: 'Garmin', tooltip: 'Garmin Connect', startY: 36, endY: 64, mobileEndX: 80,
+      path: 'M 2 36 C 48 36 54 64 102 64', mobilePath: 'M 50 0 C 50 42 80 38 80 80' },
+    { icon: 'suunto', name: 'Suunto', tooltip: 'Suunto App', startY: 124, endY: 132, mobileEndX: 160,
+      path: 'M 2 124 C 46 124 58 132 102 132', mobilePath: 'M 150 0 C 150 42 160 38 160 80' },
+    { icon: 'coros', name: 'COROS', tooltip: 'COROS', startY: 212, endY: 204, mobileEndX: 240,
+      path: 'M 2 212 C 46 212 58 204 102 204', mobilePath: 'M 250 0 C 250 42 240 38 240 80' },
+    { icon: 'wahoo', name: 'Wahoo', tooltip: 'Wahoo', startY: 300, endY: 272, mobileEndX: 320,
+      path: 'M 2 300 C 48 300 54 272 102 272', mobilePath: 'M 350 0 C 350 42 320 38 320 80' },
+  ];
   readonly expandedFaq = signal<string | null>(null);
   readonly healthFeature = HEALTH_FEATURE_CONTENT;
   readonly trainingPlansFeature = TRAINING_PLANS_HOME_CONTENT;
@@ -215,6 +226,11 @@ export class HomeComponent implements OnInit {
     if (this.featureScrollFrame === null) return;
     this.document.defaultView?.cancelAnimationFrame(this.featureScrollFrame);
     this.featureScrollFrame = null;
+  }
+
+  toggleHeroMotion(): void {
+    this.heroMotionPaused.update(paused => !paused);
+    this.haptics.selection();
   }
 
   toggleFaq(id: string): void {

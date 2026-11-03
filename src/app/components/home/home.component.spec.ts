@@ -122,7 +122,31 @@ describe('HomeComponent', () => {
     const visual = fixture.nativeElement.querySelector('.hero-visual') as HTMLElement;
     expect(visual.querySelector('.hero-provider-wires')?.getAttribute('aria-hidden')).toBe('true');
     expect(visual.querySelector('app-public-feature-preview')).toBeTruthy();
+    expect(visual.querySelector('.hero-geometry')?.getAttribute('aria-hidden')).toBe('true');
+    for (const svg of visual.querySelectorAll('.hero-provider-wires')) {
+      expect(svg.getAttribute('aria-hidden')).toBe('true');
+      expect(svg.querySelectorAll('.hero-connection')).toHaveLength(4);
+      expect(svg.querySelectorAll('.hero-connection-pulse')).toHaveLength(4);
+    }
     expect(visual.getAttribute('aria-label')).toContain('flow into Quantified Self');
+  });
+
+  it('lets visitors pause and resume decorative motion with one haptic per action', () => {
+    renderHome();
+    const visual = fixture.nativeElement.querySelector('.hero-visual') as HTMLElement;
+    const toggle = visual.querySelector('.hero-motion-toggle') as HTMLButtonElement;
+    expect(toggle.getAttribute('aria-label')).toBe('Pause connection animation');
+    expect(selection).not.toHaveBeenCalled();
+    toggle.click();
+    fixture.detectChanges();
+    expect(visual.classList.contains('hero-motion-paused')).toBe(true);
+    expect(toggle.getAttribute('aria-label')).toBe('Play connection animation');
+    expect(selection).toHaveBeenCalledTimes(1);
+    toggle.click();
+    fixture.detectChanges();
+    expect(visual.classList.contains('hero-motion-paused')).toBe(false);
+    expect(toggle.getAttribute('aria-label')).toBe('Pause connection animation');
+    expect(selection).toHaveBeenCalledTimes(2);
   });
 
   it('leads with signup, keeps Starter access explicit and leaves pricing in membership', () => {

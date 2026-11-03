@@ -139,7 +139,7 @@
 // Local hero concept: the shipped chart components remain responsible for their data and visuals.
 .landing-page { max-width: 1440px; }
 .landing-page > :not(.hero-section) { max-width: 1104px; margin-inline: auto; }
-.hero-section { display: grid; grid-template-columns: minmax(0, .95fr) minmax(0, 1.15fr); align-items: center; gap: 2rem 3rem; padding-block: 3rem 1.5rem; text-align: left; }
+.hero-section { display: grid; grid-template-columns: minmax(0, .95fr) minmax(0, 1.3fr); align-items: center; gap: 2rem 1.5rem; padding-block: 3rem 1.5rem; text-align: left; }
 .hero-content { width: 100%; margin: 0; }
 .brand-badge, .hero-actions, .trust-indicators { justify-content: flex-start; }
 .brand-logo { width: 32px; height: 32px; }
@@ -175,23 +175,73 @@
   .provider-compatibility { margin-top: 0; }
 }
 
-.hero-visual { display: grid; grid-template-columns: 136px minmax(0, 1fr); align-items: center; min-width: 0; }
-.hero-provider-flow { display: grid; grid-template-columns: 96px 40px; align-items: center; min-width: 0; }
-.hero-providers.logos-container { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin: 0; }
-.hero-provider { display: flex; align-items: center; justify-content: center; height: 64px; min-width: 0; background: var(--mat-sys-surface-container-low); }
-.hero-provider .partner-logo { width: 68px; height: 26px; }
-.hero-provider .partner-logo.wide { width: 74px; }
-.hero-provider-wires { display: block; width: 40px; height: 304px; overflow: visible; color: var(--mat-sys-primary); }
-.hero-provider-wires path { fill: none; stroke: currentColor; stroke-width: 1.25; opacity: .65; vector-effect: non-scaling-stroke; }
-.hero-provider-wires .hero-wire-arrows { opacity: 1; }
-.hero-provider-wires circle { fill: currentColor; }
-.hero-provider-mobile-arrow { display: none; }
-@media (max-width: 1240px) {
-  .hero-visual { grid-template-columns: minmax(0, 1fr); }
-  .hero-provider-flow { grid-template-columns: minmax(0, 1fr); justify-items: center; }
-  .hero-providers.logos-container { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .5rem; width: 100%; }
-  .hero-provider { height: 48px; width: 100%; }
-  .hero-provider .partner-logo, .hero-provider .partner-logo.wide { width: 56px; height: 22px; max-width: 85%; }
-  .hero-provider-wires { display: none; }
-  .hero-provider-mobile-arrow { display: block; margin-block: .5rem; color: var(--mat-sys-primary); }
+// The provider paths are a decorative illustration, not a second chart implementation.
+.hero-visual { --hero-flow-color: var(--mat-sys-primary); position: relative; isolation: isolate; display: grid; grid-template-columns: 196px minmax(0, 1fr); align-items: center; min-width: 0; padding-block: 2.5rem; }
+.hero-product { position: relative; --qs-glass-panel-radius: 16px; }
+.hero-provider-flow { position: relative; z-index: 1; display: grid; grid-template-columns: 92px 104px; align-items: center; min-width: 0; }
+.hero-providers.logos-container { display: grid; grid-template-columns: minmax(0, 1fr); gap: 40px; margin: 0; }
+.hero-provider { display: flex; align-items: center; justify-content: center; height: 48px; min-width: 0; --qs-glass-panel-radius: 12px; background: var(--mat-sys-surface-container-lowest); }
+.hero-provider .partner-logo { width: 72px; height: 25px; }
+.hero-provider-wires { display: block; width: 104px; height: 336px; color: var(--hero-flow-color); overflow: visible; pointer-events: none; }
+.hero-provider-wires path { fill: none; stroke: currentColor; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.hero-connection-track { opacity: .35; }
+:host-context(.dark-theme) .hero-visual { --hero-flow-color: var(--qs-theme-accent); }
+.hero-provider-wires .hero-connection-pulse, .hero-provider-wires .hero-connection-halo { opacity: 0; stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 6 94; }
+.hero-provider-wires .hero-connection-halo { stroke-width: 9; stroke: color-mix(in srgb, var(--hero-flow-color) 18%, transparent); }
+.hero-connection-arrival { opacity: 0; fill: none; stroke: currentColor; stroke-width: 1; }
+.hero-connection-port { fill: var(--mat-sys-surface); stroke: currentColor; stroke-width: 1.25; }
+.hero-provider-wires--mobile { display: none; }
+.hero-geometry { position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%; pointer-events: none; color: var(--hero-flow-color); }
+.hero-geometry path, .hero-geometry-ring { fill: none; stroke: currentColor; stroke-width: .75; opacity: .2; }
+.hero-geometry-ring { stroke-dasharray: 2 9; opacity: .25; }
+.hero-geometry-orbit { transform-origin: 452px 320px; }
+.hero-geometry-orbit circle { fill: currentColor; opacity: .45; }
+.hero-preview-controls { display: flex; align-items: center; gap: .5rem; }
+.hero-motion-toggle { display: none; color: var(--mat-sys-on-surface-variant); }
+@keyframes heroConnectionFlow {
+  0% { stroke-dashoffset: 8; opacity: 0; }
+  6% { opacity: 1; }
+  78% { stroke-dashoffset: -100; opacity: 1; }
+  79%, 100% { stroke-dashoffset: -100; opacity: 0; }
+}
+@keyframes heroConnectionArrival {
+  0%, 76% { r: 3px; opacity: 0; }
+  80% { r: 3px; opacity: .8; }
+  100% { r: 13px; opacity: 0; }
+}
+@keyframes heroGeometryOrbit { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: no-preference) {
+  .hero-connection { --hero-flow-delay: 0s; }
+  .hero-connection:nth-child(2) { --hero-flow-delay: -3.6s; }
+  .hero-connection:nth-child(3) { --hero-flow-delay: -2.4s; }
+  .hero-connection:nth-child(4) { --hero-flow-delay: -1.2s; }
+  .hero-connection-pulse, .hero-connection-halo { animation: heroConnectionFlow 4.8s linear var(--hero-flow-delay) infinite; }
+  .hero-connection-arrival { animation: heroConnectionArrival 4.8s linear var(--hero-flow-delay) infinite; }
+  .hero-geometry-orbit { animation: heroGeometryOrbit 90s linear infinite; }
+  .hero-motion-toggle { display: inline-flex; }
+  .hero-motion-paused .hero-connection-pulse, .hero-motion-paused .hero-connection-halo, .hero-motion-paused .hero-connection-arrival, .hero-motion-paused .hero-geometry-orbit { animation-play-state: paused; }
+}
+@media (min-width: 1200px) and (max-width: 1320px) {
+  .hero-visual { grid-template-columns: 160px minmax(0, 1fr); }
+  .hero-provider-flow { grid-template-columns: 80px 80px; }
+  .hero-provider-wires--desktop { width: 80px; }
+  .hero-provider .partner-logo { width: 64px; }
+}
+@media (max-width: 1199.98px) {
+  .hero-section { grid-template-columns: minmax(0, 1fr); }
+  .hero-content { max-width: 40rem; }
+  .hero-actions { flex-direction: row; align-items: center; }
+  .hero-visual { width: 100%; max-width: 54rem; justify-self: center; }
+}
+@media (max-width: 700px) {
+  .hero-visual { grid-template-columns: minmax(0, 1fr); padding-block: 0; }
+  .hero-provider-flow { grid-template-columns: minmax(0, 1fr); }
+  .hero-providers.logos-container { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; width: 100%; }
+  .hero-provider { height: 44px; width: 100%; --qs-glass-panel-radius: 10px; }
+  .hero-provider .partner-logo { width: 64px; height: 22px; max-width: 84%; }
+  .hero-provider-wires--desktop, .hero-geometry { display: none; }
+  .hero-provider-wires--mobile { display: block; width: 100%; height: 64px; }
+  .hero-product { padding: 1rem; }
+  .hero-product-header { gap: .25rem; }
+  .hero-actions { flex-direction: column; align-items: stretch; }
 }
