@@ -35,6 +35,7 @@ const {
     mockGetServiceConnectionMeta,
     mockUpdateQueueItemIfUserActive,
     mockRecordImportCompletion,
+    mockSkipVerifiedProviderFITCopy,
 } = vi.hoisted(() => {
     class MockTerminalServiceAuthError extends Error {
         readonly name = 'TerminalServiceAuthError';
@@ -76,6 +77,7 @@ const {
         mockGetServiceConnectionMeta: vi.fn(),
         mockUpdateQueueItemIfUserActive: vi.fn(),
         mockRecordImportCompletion: vi.fn(),
+        mockSkipVerifiedProviderFITCopy: vi.fn().mockResolvedValue(null),
     };
 });
 
@@ -93,6 +95,8 @@ vi.mock('../queue/import-monitoring', async importOriginal => ({
     ...await importOriginal<typeof import('../queue/import-monitoring')>(),
     recordImportCompletion: mockRecordImportCompletion,
 }));
+
+vi.mock('../shared/provider-fit-copy', () => ({ skipVerifiedProviderFITCopy: mockSkipVerifiedProviderFITCopy }));
 
 vi.mock('../tokens', () => ({
     getTokenData: mockGetTokenData,
@@ -243,6 +247,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
         mockShouldSkipQueueWorkForDeletedUser.mockResolvedValue(false);
         mockGetServiceConnectionMeta.mockReset().mockResolvedValue(null);
         mockUpdateQueueItemIfUserActive.mockResolvedValue('updated');
+        mockSkipVerifiedProviderFITCopy.mockReset().mockResolvedValue(null);
 
         // Default: Mock Where returning Get
         mockWhere.mockReturnValue({ get: mockGet, limit: vi.fn().mockReturnValue({ get: mockGet }) });
@@ -1409,6 +1414,23 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             mockSetEvent.mockRejectedValueOnce(error);
             await expect(processGarminAPIActivityQueueItem(queueItem)).resolves.toBe('MOVED_TO_DLQ');
             expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(queueItem, error, undefined, 'ACTIVITY_IDENTITY_CONFLICT');
+            expect(mockUploadDebugFile).not.toHaveBeenCalled();
+            expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+        });
+
+        it.each(['PROCESSED', 'FAILED'])('uses the guarded FIT-copy outcome %s without a second terminal write', async outcome => {
+            mockSetEvent.mockRejectedValueOnce(new ActivityIdentityConflictError());
+            mockSkipVerifiedProviderFITCopy.mockResolvedValueOnce(outcome);
+
+            await expect(processGarminAPIActivityQueueItem(queueItem)).resolves.toBe(outcome);
+
+            expect(mockSkipVerifiedProviderFITCopy).toHaveBeenCalledExactlyOnceWith(
+                queueItem, firebaseUserID, 'event-id', expect.any(ArrayBuffer),
+            );
+            expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+            expect(mockUpdateToProcessed).not.toHaveBeenCalled();
+            expect(mockRetainGarminFITWorkoutReferences).not.toHaveBeenCalled();
+            expect(mockEnqueueActivitySyncJobsForImportedEvent).not.toHaveBeenCalled();
             expect(mockUploadDebugFile).not.toHaveBeenCalled();
             expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
         });

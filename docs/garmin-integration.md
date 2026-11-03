@@ -90,6 +90,23 @@ responses retain their explicit terminal handling. Only `processWorkoutTask` nee
 existing failed jobs require a separately authorized replay. Monitoring is **covered/unchanged** by the existing
 Garmin retry/failure, committed-DLQ and backlog signals in [recorded-import monitoring](activity-import-monitoring.md).
 
+### Verified re-encoded Suunto hike copies
+
+Only after an activity identity conflict, the shared FIT-copy helper can acknowledge a Garmin FIT as
+`cross_provider_duplicate` of an existing Suunto recording. It supports one or two retained Hiking sessions
+combined into one incoming Trekking session, with the same file identity/start, at most one second of end/timer
+rounding, at most five metres of summary-distance change where declared on both sides, and exact timestamped GPS agreement (at most one
+retained GPS point omitted). Distinct, incomplete, GPS-less or ambiguous recordings remain conflicts.
+
+Verification reads one generation-pinned original from the same bucket and owner/event prefix, bounded to 8 MiB;
+strict `fit-file-parser` decoding verifies both CRCs. No provider request or Storage read occurs on normal matching.
+The final queue-only completion uses the existing deletion guard and atomically rechecks queue identity, parent,
+activities, source/provider metadata and Garmin connection/root versions. Source/account changes remain retryable.
+No saved event, original, activity ID, edit, elevation correction, Training control or outbound delivery is rewritten.
+Only `processWorkoutTask` needs approved deployment; replay/failed-job removal remain separate operational actions.
+Monitoring is **covered/unchanged** by the existing committed skip and worker-attempt signals; no new resource or label.
+The existing Help and already-imported outcome remain applicable; no frontend or MCP contract change is needed.
+
 ### Health worker diagnostics
 
 Daily heart-rate normalization keeps the inclusive sample interval from zero through the declared

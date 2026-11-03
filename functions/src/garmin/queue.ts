@@ -33,6 +33,7 @@ import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 import { resolveProviderImportEventID } from '../queue/provider-event-id';
 import { isActivityIdentityConflict } from '../shared/activity-identity-conflict';
 import { ProviderImportDuplicateError } from '../shared/provider-import-duplicate';
+import { skipVerifiedProviderFITCopy } from '../shared/provider-fit-copy';
 import {
   deferWorkoutQueueItemForTokenRefreshContention,
 } from '../queue/token-refresh-contention';
@@ -441,6 +442,7 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
   }
 
 
+  let importedEventID: string | undefined;
   try {
     logger.info(`File size: ${result.byteLength || result.length} bytes for queue item ${queueItem.id}`);
     let event;
@@ -495,6 +497,7 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
       providerEventSecondaryID: queueItem.activityFileType,
       providerEventSecondaryIDField: 'serviceActivityFileType',
     });
+    importedEventID = eventID;
     if (await shouldSkipQueueWorkForDeletedUser(firebaseUserID, ServiceNames.GarminAPI, queueItem.id, 'before_event_write')) {
       return markGarminQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
     }
@@ -545,6 +548,10 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
       });
     }
     if (isActivityIdentityConflict(e)) {
+      if (importedEventID) {
+        const copy = await skipVerifiedProviderFITCopy(queueItem, firebaseUserID, importedEventID, result);
+        if (copy !== null) return copy;
+      }
       return moveToDeadLetterQueue(queueItem, e, bulkWriter, e.code);
     }
     logger.error(e);

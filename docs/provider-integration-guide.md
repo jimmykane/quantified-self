@@ -1542,6 +1542,14 @@ Keep stable identity separate from transport data. A short-lived signed file URL
 
 ### Provider retry budgets
 
+Garmin re-encoded copies of retained Suunto hikes have a conflict-only, generation-pinned FIT comparison before
+queue completion. Exact source identity and timestamped GPS evidence can recognize one/two Hiking legs returned
+as one Trekking leg without changing the saved workout or its edits. Original/source/account/queue versions are
+rechecked in the completion transaction; no network work runs inside it. The read is bounded, owner-scoped and
+limited to this verified case; normal imports and other provider/type conflict guards are unchanged. See
+[verified hike copies](garmin-integration.md#verified-re-encoded-suunto-hike-copies) for evidence limits and worker-only
+deployment scope. Existing recorded-import monitoring is **covered/unchanged**; no Help, MCP or Training behavior changes.
+
 Recorded activity/route imports and delivery, Sleep/Health ingestion, Garmin Health backfill and connection-history
 recovery use `PROVIDER_MAX_RETRY_COUNT = 20` and the matching `PROVIDER_CLOUD_TASK_RETRY_CONFIG`. The seven task
 workers are `processWorkoutTask`, `processActivitySyncTask`, `processSleepSyncTask`, `processRouteSyncTask`,
