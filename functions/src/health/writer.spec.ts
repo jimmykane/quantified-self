@@ -386,10 +386,15 @@ describe('health writer', () => {
         });
 
         it.each([
-            { first: 'mismatch', second: 'failure', rejects: false },
-            { first: 'failure', second: 'mismatch', rejects: true },
-            { first: 'match', second: 'failure', rejects: true },
-        ])('drains reads and retains ordered $first / $second decisions', async ({ first, second, rejects }) => {
+            { first: 'mismatch', second: 'failure', rejects: false, finishesFirst: 'first' },
+            { first: 'failure', second: 'mismatch', rejects: true, finishesFirst: 'first' },
+            { first: 'match', second: 'failure', rejects: true, finishesFirst: 'first' },
+            { first: 'mismatch', second: 'failure', rejects: false, finishesFirst: 'second' },
+            { first: 'failure', second: 'mismatch', rejects: true, finishesFirst: 'second' },
+            { first: 'match', second: 'failure', rejects: true, finishesFirst: 'second' },
+        ])('retains ordered $first / $second decisions when $finishesFirst settles first', async ({
+            first, second, rejects, finishesFirst,
+        }) => {
             const fake = fakeDatabase();
             const reads = controlledReads(fake);
             const settled = vi.fn();
@@ -397,19 +402,24 @@ describe('health writer', () => {
                 value => ({ value, error: undefined }),
                 error => ({ value: undefined, error }),
             ).finally(settled);
+            const settleFirst = () => first === 'failure'
+                ? reads.first.reject(new Error('private-first-provider-token-path'))
+                : reads.first.resolve(first === 'match' ? reads.current : reads.stale);
+            const settleSecond = () => second === 'failure'
+                ? reads.second.reject(new Error('private-second-provider-token-path'))
+                : reads.second.resolve(reads.stale);
             await reads.started.promise;
             let result: Awaited<typeof write>;
             try {
                 expect(fake.transaction.get.mock.calls.map(([ref]) => ref.path))
                     .toEqual(['guards/first', 'guards/second']);
-                if (first === 'failure') reads.first.reject(new Error('private-first-provider-token-path'));
-                else reads.first.resolve(first === 'match' ? reads.current : reads.stale);
+                if (finishesFirst === 'first') settleFirst();
+                else settleSecond();
                 await new Promise<void>(resolve => setImmediate(resolve));
                 expect(settled).not.toHaveBeenCalled();
             } finally {
-                reads.first.resolve(reads.stale);
-                if (second === 'failure') reads.second.reject(new Error('private-second-provider-token-path'));
-                else reads.second.resolve(reads.stale);
+                settleFirst();
+                settleSecond();
                 result = await write;
             }
             if (rejects) {
