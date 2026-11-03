@@ -112,6 +112,21 @@ describe('device notification lifecycle', () => {
     expect(setDoc).toHaveBeenCalledWith(expect.objectContaining({ path: `users/owner/pushSubscriptions/${id}` }), expect.objectContaining(registration));
     expect(service.state()).toBe('enabled');
   });
+  it.each(['fcm/send', 'wp'])('retains a Chrome subscription with a colon in its %s token', async path => {
+    const endpoint = `https://fcm.googleapis.com/${path}/synthetic-client:synthetic-token`;
+    delete windows.pushManager;
+    subscription.endpoint = endpoint;
+    subscription.toJSON.mockReturnValue({ endpoint, keys: registration.keys });
+    vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => true, data: () => ({ ...registration, endpoint }) } as never);
+    const service = setup('browser', true); await tick();
+    const enabling = service.enable();
+    notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
+    await enabling; await tick();
+    expect(setDoc).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ endpoint }));
+    expect(subscription.unsubscribe).not.toHaveBeenCalled();
+    expect(updateDoc).not.toHaveBeenCalled();
+    expect(service.state()).toBe('enabled');
+  });
   it.each(['flag', 'key', 'origin', 'browser', 'worker'])('does not prompt when %s is unavailable', async missing => {
     if (missing === 'flag') config.webPushEnabled.set(false);
     if (missing === 'key') config.webPushPublicKey.set('');

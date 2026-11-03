@@ -22,6 +22,8 @@ Every startup observer waits for the first authoritative Auth result before touc
 
 Each refresh retains its own browser subscription snapshot across asynchronous reads, so an older lookup cannot replace a newer endpoint. Cleanup captures the account, installation and observation before awaiting browser operations; late completion cannot remove replacement consent or overwrite the new account's state. This includes cleanup still running after the two-second Auth wait. Self-tests reconcile current browser/server state after every outcome. An expired response describes the attempted generation and does not authorize revoking a replacement that the server preserved.
 
+Chrome FCM endpoint tokens may contain a colon in the path, including under `/fcm/send/` and `/wp/`. Preserve the endpoint exactly as returned by the browser; do not strip or encode token characters to bypass validation. Browser, sender and Rules regression tests cover these synthetic token shapes and reject credentials, ports, lookalike hosts and fragments. Validator changes must ship in the frontend, `sendTestPushNotification` and Firestore Rules together; updating only one layer leaves registration or sending blocked.
+
 ## Configuration and release
 
 Defaults are disabled. Provisioning, publishing Remote Config, applying monitoring and deployment each require separate authorization. This PR does not perform them.
@@ -60,7 +62,7 @@ The bundle selects only `sendtestpushnotification` in `europe-west2`, records fi
 
 For a failure, check enabled/default parameters, matching signing keys, runtime permissions and fixed outcomes. Never copy endpoints, payloads, key material, identifiers or raw HTTP responses to incident artifacts. Do not blindly resend or change rate state. Source definitions are prepared; live activation/readback must be tracked separately and is not implied by passing tests.
 
-Review coverage is **unchanged** for the browser lifecycle and WNS compatibility fixes: the same callable, fixed outcomes, request counts, limits and alert thresholds cover all supported browser services. No worker, queue, scheduler or new telemetry label is introduced. Activation and physical-device verification remain tracked in [#1007](https://github.com/jimmykane/quantified-self/issues/1007).
+Review coverage is **unchanged** for the browser lifecycle, WNS and Chrome FCM compatibility fixes: the same callable, fixed outcomes, request counts, limits and alert thresholds cover all supported browser services. No worker, queue, scheduler or new telemetry label is introduced. Activation and physical-device verification remain tracked in [#1007](https://github.com/jimmykane/quantified-self/issues/1007).
 
 ## MCP and Training impact
 

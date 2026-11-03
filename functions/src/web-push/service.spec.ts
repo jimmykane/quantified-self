@@ -39,6 +39,13 @@ describe('Web Push test sender', () => {
     expect(payload.notification.data.onActionClick.default.url).toBe('/settings?section=notifications');
     expect(isAutomaticPushOrigin(origin)).toBe(origin === 'https://quantified-self.io');
   });
+  it.each(['fcm/send', 'wp'])('sends to a Chrome %s token containing a colon without rewriting it', async path => {
+    const h = harness('https://beta.quantified-self.io');
+    const subscription = { ...h.registration, endpoint: `https://fcm.googleapis.com/${path}/synthetic-client:synthetic-token` };
+    h.records.set(`users/owner/pushSubscriptions/${id}`, subscription);
+    expect(await sendPushTest(h.input, h.deps)).toEqual({ status: 'accepted' });
+    expect(h.deps.send).toHaveBeenCalledWith(subscription, JSON.stringify(buildPushTestPayload(h.input.origin)));
+  });
   it.each([{ uid: undefined }, { impersonatedBy: 'admin' }, { origin: 'https://evil.example' },
     { data: { installationId: id, title: 'injected' } }, { data: { installationId: '../other' } }])('rejects admission %j', async override => {
     const h = harness(); await expect(sendPushTest({ ...h.input, ...override }, h.deps)).rejects.toBeDefined();
@@ -101,6 +108,8 @@ describe('Push credentials and destinations', () => {
     expect(() => parseVapidKeyPair('private-canary')).toThrow('Notification signing configuration is unavailable.');
   });
   it.each(['http://web.push.apple.com/a', 'https://web.push.apple.com:443/a', 'https://web.push.apple.com.evil.example/a',
+    'https://fcm.googleapis.com:443/fcm/send/client:token', 'https://user:password@fcm.googleapis.com/fcm/send/client:token',
+    'https://fcm.googleapis.com.evil.example/fcm/send/client:token', 'https://fcm.googleapis.com/fcm/send/client:token#fragment',
     'https://user@web.push.apple.com/a', 'https://127.0.0.1/a', 'https://localhost/a', 'https://web.push.apple.com/a#fragment',
     'https://wns2-test.notify.windows.com.evil.example/w/?token=test', 'https://evil.example/notify.windows.com/w/?token=test',
     'https://nested.wns2-test.notify.windows.com/w/?token=test', 'https://wns2-test.notify.windows.com:443/w/?token=test',

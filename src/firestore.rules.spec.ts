@@ -53,6 +53,10 @@ describe('Firestore Security Rules', () => {
             await assertSucceeds(owner.doc(path).delete());
         });
         it.each([{ origin: 'https://evil.example' }, { origin: 'http://localhost:4200' }, { endpoint: 'https://127.0.0.1/a' },
+            { endpoint: 'https://fcm.googleapis.com:443/fcm/send/client:token' },
+            { endpoint: 'https://user:password@fcm.googleapis.com/fcm/send/client:token' },
+            { endpoint: 'https://fcm.googleapis.com.evil.example/fcm/send/client:token' },
+            { endpoint: 'https://fcm.googleapis.com/fcm/send/client:token#fragment' },
             { endpoint: 'https://web.push.apple.com:443/a' }, { endpoint: 'https://web.push.apple.com.evil.example/a' },
             { endpoint: 'https://wns2-test.notify.windows.com.evil.example/w/?token=synthetic' },
             { endpoint: 'https://nested.wns2-test.notify.windows.com/w/?token=synthetic' },
@@ -66,6 +70,14 @@ describe('Firestore Security Rules', () => {
             const { serverTimestamp } = await import('firebase/firestore');
             await assertSucceeds(testEnv.authenticatedContext('push-owner').firestore().doc(path).set({ ...base,
                 endpoint: 'https://wns2-test.notify.windows.com/w/?token=synthetic%2Btoken', updatedAt: serverTimestamp() }));
+        });
+        it.each(['fcm/send', 'wp'])('allows Chrome %s registration and rotation with colon-containing tokens', async endpointPath => {
+            const { serverTimestamp } = await import('firebase/firestore');
+            const registration = testEnv.authenticatedContext('push-owner').firestore().doc(path);
+            await assertSucceeds(registration.set({ ...base,
+                endpoint: `https://fcm.googleapis.com/${endpointPath}/synthetic-client:synthetic-token`, updatedAt: serverTimestamp() }));
+            await assertSucceeds(registration.update({
+                endpoint: `https://fcm.googleapis.com/${endpointPath}/replacement-client:replacement-token`, updatedAt: serverTimestamp() }));
         });
         it('rejects other accounts, unauthenticated clients, impersonation, and deletion resurrection', async () => {
             const { serverTimestamp } = await import('firebase/firestore');

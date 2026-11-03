@@ -25,7 +25,8 @@ export function isPushEndpoint(value: unknown): value is string {
   if (typeof value !== 'string' || value.length > 4096) return false;
   // Known public services only. WNS assigns one DNS label under notify.windows.com.
   // No credentials, ports, fragments, arbitrary subdomains or redirects.
-  return /^https:\/\/(fcm\.googleapis\.com|updates\.push\.services\.mozilla\.com|web\.push\.apple\.com|[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.notify\.windows\.com)\/[A-Za-z0-9_./~%?=&+-]+$/.test(value);
+  // Chrome FCM tokens contain colons in the path. Keep this grammar in sync with Rules.
+  return /^https:\/\/(fcm\.googleapis\.com|updates\.push\.services\.mozilla\.com|web\.push\.apple\.com|[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.notify\.windows\.com)\/[A-Za-z0-9_./~%?=&+:-]+$/.test(value);
 }
 export function isPushRegistration(value: unknown, emulator = false): value is PushRegistration {
   if (!value || typeof value !== 'object') return false;

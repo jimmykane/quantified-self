@@ -59,7 +59,7 @@ service cloud.firestore {
             && d.origin in ['https://quantified-self.io', 'https://beta.quantified-self.io']
             && d.vapidPublicKey is string && d.vapidPublicKey.matches('^B[A-Za-z0-9_-]{86}$')
             && d.endpoint is string && d.endpoint.size() <= 4096
-            && d.endpoint.matches('^https://(fcm[.]googleapis[.]com|updates[.]push[.]services[.]mozilla[.]com|web[.]push[.]apple[.]com|[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?[.]notify[.]windows[.]com)/[A-Za-z0-9_./~%?=&+-]+$')
+            && d.endpoint.matches('^https://(fcm[.]googleapis[.]com|updates[.]push[.]services[.]mozilla[.]com|web[.]push[.]apple[.]com|[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?[.]notify[.]windows[.]com)/[A-Za-z0-9_./~%?=&+:-]+$')
             && d.keys is map && d.keys.keys().hasOnly(['p256dh', 'auth']) && d.keys.keys().hasAll(['p256dh', 'auth'])
             && d.keys.p256dh is string && d.keys.p256dh.matches('^B[A-Za-z0-9_-]{86}$')
             && d.keys.auth is string && d.keys.auth.matches('^[A-Za-z0-9_-]{22}$')
