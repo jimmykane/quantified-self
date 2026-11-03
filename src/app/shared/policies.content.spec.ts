@@ -22,6 +22,19 @@ describe('Policy consent fields', () => {
 });
 
 describe('Built-in Assistant policy', () => {
+  it('exempts separately authorized manual measurements from the MCP no-write boundary', () => {
+    const content = CONNECTED_SERVICES_POLICY_SECTION.topics
+      .find(candidate => candidate.id === POLICIES_MCP_CLIENTS_FRAGMENT)!.content.join(' ');
+    expect(content).toContain('imported Health or Sleep records');
+    expect(content).toContain('measurements:write');
+    expect(content).toContain('manual entries only');
+    expect(content).toContain('client-approved create/edit/permanent deletion');
+    expect(content).toContain('only the user can Apply in QS');
+    expect(content).toContain('Existing connections must reauthorize');
+    expect(content).toContain('The MCP host controls whether it asks on every call');
+    expect(content).not.toContain('dashboard settings, body measurements, Health, or sleep records');
+  });
+
   it('discloses deletion cleanup as an explicit approved choice under both existing Training grants', () => {
     const external = CONNECTED_SERVICES_POLICY_SECTION.topics
       .find(candidate => candidate.id === POLICIES_MCP_CLIENTS_FRAGMENT)?.content.join(' ') ?? '';
