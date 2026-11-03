@@ -587,6 +587,12 @@ describe('DayWorkoutDialogComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('12.5 kg');
     expect(fixture.nativeElement.textContent).toContain('Previously planned on 2026-10-25');
     expect(fixture.nativeElement.textContent).toContain('AI planning estimate');
+    const reviewParagraphs = [...fixture.nativeElement.querySelectorAll('[aria-label="Workout review"] > p')] as HTMLElement[];
+    expect(reviewParagraphs[1].textContent).toBe('AI planning estimate: 20m 00s–30m 00s');
+    expect(reviewParagraphs[1].classList.contains('hint')).toBe(false);
+    expect(reviewParagraphs[2].textContent).toContain('Timing breakdown: 01m 30s timed subtotal');
+    expect(reviewParagraphs[2].textContent).toContain('Rep-based sets and transitions add time.');
+    expect(reviewParagraphs[2].classList.contains('hint')).toBe(true);
     expect(fixture.nativeElement.textContent).toContain('Inherits plan sync: garmin');
     expect(mutate).not.toHaveBeenCalled();
     if (process.env.DAY_WORKOUT_QA_DIR) {

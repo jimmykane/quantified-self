@@ -95,7 +95,7 @@
     <section class="review" [attr.aria-label]="result.kind === 'rest' ? 'Rest day review' : 'Workout review'" aria-live="polite">
       <h3 #reviewHeading class="section-title" tabindex="-1">{{ result.draft?.title ?? (declaredRestDay() ? 'Rest day' : 'Rest suggestion') }}</h3><p>{{ result.rationale }}</p>
       @if (review(); as review) {
-        <p>{{ review.summary }}</p>@if (review.estimate) { <p class="hint">{{ review.estimate }}</p> }
+        <p>{{ review.summary }}</p>@if (review.timingDetails) { <p class="hint">{{ review.timingDetails }}</p> }
         @for (exercise of review.exercises; track exercise.id) {
           <app-compact-row [title]="exercise.name" [headingLevel]="4" layout="stacked" density="compact"
             [summary]="exercise.previouslyPlannedOn ? 'Previously planned on ' + exercise.previouslyPlannedOn + '; performed weight is unknown.' : null">

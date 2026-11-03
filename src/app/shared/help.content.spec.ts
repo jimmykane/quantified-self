@@ -697,6 +697,7 @@ describe('help.content', () => {
     const copy = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     for (const phrase of ['## Understand workout totals', '**Workout totals** updates', 'before you save',
       'prompt instead of stale totals', 'profile is collapsed', 'repetition duration stays unknown',
+      '**AI planning estimate** first in Today and review', '**Timing breakdown** covers timed steps only',
       '**estimated duration range**', 'threshold-speed reference saved',
       'four steps with unknown duration', 'Missing information never counts as zero', 'HR, power, and cadence targets do not establish speed',
       'exact timed-duration requirement', 'separate **workout prescription analysis**', 'client tool-catalog refresh'])

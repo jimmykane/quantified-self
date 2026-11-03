@@ -2,7 +2,7 @@ import { ActivityTypes, WeightUnits } from '@sports-alliance/sports-lib';
 import { defaultDayWorkoutControls, parseGenerateDayWorkoutRequest } from '@shared/day-workout';
 import { projectStrengthWorkoutToV1 } from '@shared/strength-workout';
 import { analyzeWorkoutStructureV1 } from '@shared/planned-workout-analysis';
-import { dayWorkoutReview } from './day-workout-review.helper';
+import { dayWorkoutReview, dayWorkoutReviewTiming } from './day-workout-review.helper';
 
 describe('Calendar workout draft review', () => {
   it('starts with explicit time and independent enabled context choices across sports', () => {
@@ -34,9 +34,30 @@ describe('Calendar workout draft review', () => {
     expect(metric.exercises[0].sets[1]).toContain('12.5 kg');
     expect(metric.exercises[0].sets[1]).toContain('01m 30s');
     expect(metric.exercises[0].sets[2]).toContain('load unspecified');
-    expect(metric.estimate).toContain('AI planning estimate');
+    expect(metric.summary).toBe('AI planning estimate: 20m 00s–30m 00s');
+    expect(metric.timingDetails).toContain('Timing breakdown: 02m 30s timed subtotal + 3 steps with unknown duration');
     expect(analyzeWorkoutStructureV1(structure).summary.duration.completeExactSeconds).toBeNull();
     expect(dayWorkoutReview(draft, { weightUnits: WeightUnits.Pounds } as never).exercises[0].sets[1]).toContain('27.6 lb');
+  });
+  it.each([undefined, { weightUnits: WeightUnits.Pounds }])('never presents the timed portion as a rep-based session total (%j)', units => {
+    const strength = { version: 1 as const, exercises: [{ id: 'squat', name: 'Squat', sets: Array.from({ length: 6 }, (_, index) => ({
+      id: `set-${index}`, ending: { kind: 'repetitions' as const, repetitions: 8 }, restAfterSeconds: 95,
+    })) }] };
+    const structure = projectStrengthWorkoutToV1({ ...strength, workoutId: 'draft', revision: 1 });
+    const draft = { title: 'Strength', structure, strength };
+    const estimated = dayWorkoutReviewTiming({ ...draft, estimatedMinutes: { minimum: 20, maximum: 30 } }, units);
+    expect(estimated.summary).toBe('AI planning estimate: 20m 00s–30m 00s');
+    expect(estimated.timingDetails).toBe('Timing breakdown: 09m 30s timed subtotal + 6 steps with unknown duration. Rep-based sets and transitions add time.');
+    expect(dayWorkoutReviewTiming(draft, units)).toEqual({ summary: 'Total session duration unknown', timingDetails: estimated.timingDetails });
+    expect(analyzeWorkoutStructureV1(structure).summary.duration.completeExactSeconds).toBeNull();
+  });
+  it('retains exact totals for fully timed strength rather than replacing them with an AI estimate', () => {
+    const strength = { version: 1 as const, exercises: [{ id: 'plank', name: 'Plank', sets: [
+      { id: 'hold', ending: { kind: 'time' as const, seconds: 60 }, restAfterSeconds: 30 },
+    ] }] };
+    const structure = projectStrengthWorkoutToV1({ ...strength, workoutId: 'draft', revision: 1 });
+    expect(dayWorkoutReviewTiming({ title: 'Timed strength', structure, strength, estimatedMinutes: { minimum: 2, maximum: 3 } }))
+      .toEqual({ summary: '01m 30s', timingDetails: 'AI planning estimate: 02m 00s–03m 00s' });
   });
   it('expands every repeat step and total pass count without flattening away recovery', () => {
     const review = dayWorkoutReview({ title: 'Intervals', structure: { version: 1, sport: ActivityTypes.Running, nodes: [
