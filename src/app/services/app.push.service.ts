@@ -1,5 +1,5 @@
 import { isPlatformBrowser } from '@angular/common';
-import { DestroyRef, Injectable, PLATFORM_ID, computed, effect, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, PLATFORM_ID, computed, effect, inject, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { SwPush } from '@angular/service-worker';
 import { Auth, user, type FirebaseUserType } from 'app/firebase/auth';
@@ -44,7 +44,7 @@ export class AppPushService {
 
   constructor() {
     if (!this.browser) { this.state.set('unsupported'); return; }
-    const unregister = this.cleanup.register(() => this.detach());
+    const unregister = this.cleanup.register(async () => { await this.detach(); });
     this.destroy.onDestroy(unregister);
     user(this.auth).pipe(takeUntilDestroyed()).subscribe(owner => {
       this.authObserved = true; this.owner = owner; void this.refresh();
@@ -52,7 +52,7 @@ export class AppPushService {
     effect(() => {
       // Track configuration even when Auth has not emitted yet; authObserved is not a signal.
       const loaded = this.config.configLoaded();
-      if (this.authObserved && loaded) void this.refresh();
+      if (this.authObserved && loaded) untracked(() => void this.refresh());
     });
     // Conventional workers can register after the initial bounded readiness wait.
     if (this.compatibility.checkPushSupport()) {
@@ -68,8 +68,12 @@ export class AppPushService {
     });
   }
 
-  private current(owner: FirebaseUserType, epoch: number): boolean {
+  private current(owner: FirebaseUserType | null, epoch: number): boolean {
     return this.owner === owner && this.auth.currentUser === owner && this.epoch === epoch;
+  }
+  private sameInstallation(expected: LocalInstallation | null): boolean {
+    const current = this.readLocal();
+    return current?.uid === expected?.uid && current?.installationId === expected?.installationId;
   }
   private readLocal(): LocalInstallation | null {
     try {
@@ -103,7 +107,7 @@ export class AppPushService {
           if (this.epoch !== epoch) return;
           if (!manager) throw new Error('Browser cleanup unavailable.');
           this.manager = manager;
-          await this.revokeBrowser();
+          if (!await this.revokeBrowser()) return;
         }
         if (this.epoch === epoch) this.state.set('signed-out');
         return;
@@ -120,49 +124,57 @@ export class AppPushService {
       }
       // iOS browser tabs can hide these APIs until the app is opened from the Home Screen.
       if (!this.compatibility.checkPushSupport()) { this.state.set('unsupported'); return; }
-      this.manager = await this.pushManager();
+      const manager = await this.pushManager();
       if (!this.current(owner, epoch)) return;
-      if (!this.manager) { this.state.set('unavailable'); return; }
-      this.subscription = await this.manager.getSubscription();
+      this.manager = manager;
+      if (!manager) { this.state.set('unavailable'); return; }
+      let subscription = await manager.getSubscription();
       if (!this.current(owner, epoch)) return;
+      this.subscription = subscription;
       const local = this.readLocal();
       if (local && local.uid !== owner.uid) {
-        await this.revokeBrowser(); if (!this.current(owner, epoch)) return;
-        this.subscription = null;
+        if (!await this.revokeBrowser(local, subscription) || !this.current(owner, epoch)) return;
+        subscription = null;
       }
-      this.registered.set(!!this.subscription);
+      this.registered.set(!!subscription);
       if (Notification.permission === 'denied') {
-        if (local?.uid === owner.uid) await this.detach();
-        if (this.owner === owner && this.auth.currentUser === owner) this.state.set('denied');
+        const cleanupEpoch = local?.uid === owner.uid ? await this.detach() : epoch;
+        if (this.current(owner, cleanupEpoch)) this.state.set('denied');
         return;
       }
       if (!this.config.webPushEnabled() || !isVapidPublicKey(this.config.webPushPublicKey())
         || !isPushOrigin(this.origin(), environment.useFunctionsEmulator === true)) { this.state.set('unavailable'); return; }
       if (Notification.permission !== 'granted') { this.state.set('disabled'); return; }
-      if (!this.subscription && local?.uid === owner.uid) {
+      if (!subscription && local?.uid === owner.uid) {
         await this.detach(); return;
       }
-      if (!this.subscription || !local || local.uid !== owner.uid) {
+      if (!subscription || !local || local.uid !== owner.uid) {
         // A browser permission is not account consent. Orphan subscriptions must not cross accounts.
-        if (this.subscription) await this.revokeBrowser();
+        if (subscription && !await this.revokeBrowser(local, subscription)) return;
         if (this.current(owner, epoch)) { this.registered.set(false); this.state.set('disabled'); }
         return;
       }
-      const key = this.subscription.options.applicationServerKey;
+      const key = subscription.options.applicationServerKey;
       const actualKey = key ? this.encodeKey(key) : '';
       if (actualKey !== this.config.webPushPublicKey()) {
-        await this.detach(); this.state.set('disabled'); return;
+        await this.detach(); return;
       }
       const ref = doc(this.firestore, `users/${owner.uid}/pushSubscriptions/${local.installationId}`);
       const snapshot = await getDocFromServer(ref);
       if (!this.current(owner, epoch)) return;
+      if (!this.sameInstallation(local)) { void this.refresh(); return; }
       const saved = snapshot.data();
-      if (!snapshot.exists()) { await this.revokeBrowser(); this.registered.set(false); this.state.set('disabled'); return; }
+      if (!snapshot.exists()) {
+        if (await this.revokeBrowser(local, subscription) && this.current(owner, epoch)) {
+          this.registered.set(false); this.state.set('disabled');
+        }
+        return;
+      }
       if (!isPushRegistration(saved, environment.useFunctionsEmulator === true) || saved.origin !== this.origin()
-        || saved.vapidPublicKey !== actualKey) { await this.detach(); this.state.set('disabled'); return; }
-      const current = this.subscription.toJSON();
+        || saved.vapidPublicKey !== actualKey) { await this.detach(); return; }
+      const current = subscription.toJSON();
       if (saved.endpoint !== current.endpoint || saved.keys.p256dh !== current.keys?.['p256dh'] || saved.keys.auth !== current.keys?.['auth']) {
-        await this.persist(owner, local.installationId, this.subscription, epoch, true);
+        await this.persist(owner, local.installationId, subscription, epoch, true);
       }
       if (this.current(owner, epoch)) this.state.set('enabled');
     } catch { if (this.epoch === epoch) this.state.set('unavailable'); }
@@ -208,8 +220,12 @@ export class AppPushService {
   }
   async disable(): Promise<void> {
     if (!this.canDisable()) return;
+    const owner = this.owner;
     this.operation.set('disable'); this.message.set('');
-    try { await this.detach(); this.message.set('Notifications disabled on this device.'); }
+    try {
+      const epoch = await this.detach();
+      if (this.current(owner, epoch)) this.message.set('Notifications disabled on this device.');
+    }
     catch { this.message.set('Could not finish disabling notifications. Please retry.'); throw new Error('Notification disable failed.'); }
     finally { this.operation.set(null); void this.refresh(); }
   }
@@ -217,13 +233,15 @@ export class AppPushService {
     if (!this.canTest() || !this.owner) return false;
     const owner = this.owner; const local = this.readLocal(); const epoch = this.epoch;
     if (!local || local.uid !== owner.uid) return false;
+    let expired = false;
     this.operation.set('test'); this.message.set('');
     try {
       const response = await this.functions.call<PushTestRequest, PushTestResponse>('sendTestPushNotification', { installationId: local.installationId },
         { canExecute: () => this.current(owner, epoch) });
-      if (!this.current(owner, epoch)) return false;
+      if (!this.current(owner, epoch) || !this.sameInstallation(local)) return false;
       if (response.data.status === 'subscription_expired') {
-        await this.revokeBrowser(); this.registered.set(false); this.state.set('disabled'); this.message.set('This registration expired. Enable notifications again.');
+        // The server may have preserved a newer generation. Reconcile it before revoking anything.
+        expired = true;
         return false;
       } else this.message.set('Test notification sent. If it does not appear, check your device notification settings.');
       return true;
@@ -231,29 +249,52 @@ export class AppPushService {
       if (this.current(owner, epoch)) this.message.set((error as { code?: string })?.code === 'functions/resource-exhausted'
         ? 'Please wait before sending another test. Tests are limited to one per minute and ten per day.' : 'The test could not be sent. Please try again later.');
       throw new Error('Notification test failed.');
-    } finally { this.operation.set(null); if (this.owner !== owner) void this.refresh(); }
+    } finally {
+      this.operation.set(null);
+      await this.refresh();
+      if (expired && this.owner === owner && this.auth.currentUser === owner) {
+        this.message.set(this.state() === 'disabled' ? 'This registration expired. Enable notifications again.'
+          : 'The test used an expired registration. Check notification status and try again.');
+      }
+    }
   }
-  private async revokeBrowser(): Promise<void> {
+  private async revokeBrowser(local = this.readLocal(), observed?: PushSubscription | null): Promise<boolean> {
+    const owner = this.owner; const epoch = this.epoch; const cached = this.subscription;
+    const current = () => this.current(owner, epoch) && this.sameInstallation(local);
+    const superseded = () => {
+      // Another tab can replace consent without changing this tab's Auth or observation epoch.
+      if (this.current(owner, epoch)) void this.refresh();
+      return false;
+    };
     const manager = this.manager ?? await this.pushManager();
-    if (!manager && this.readLocal()) throw new Error('Browser cleanup unavailable.');
-    const subscription = await manager?.getSubscription() ?? this.subscription;
+    if (!current()) return superseded();
+    if (!manager && local) throw new Error('Browser cleanup unavailable.');
+    const subscription = observed === undefined ? await manager?.getSubscription() ?? cached : observed;
+    if (!current()) return superseded();
     if (subscription && !await subscription.unsubscribe()) {
       const remaining = await manager?.getSubscription();
       if (remaining?.endpoint === subscription.endpoint) throw new Error('Unsubscribe failed.');
     }
+    if (!current()) {
+      // A newer observation of the same consent may have completed while revocation was pending.
+      if (this.current(owner, epoch) || this.sameInstallation(local)) void this.refresh();
+      return false;
+    }
     this.subscription = null; this.storage.removeItem(STORAGE_KEY);
+    return true;
   }
-  async detach(): Promise<void> {
-    ++this.epoch;
+  private async detach(): Promise<number> {
+    const epoch = ++this.epoch; const owner = this.owner;
     const local = this.readLocal();
     // Start the owner-authorized delete while Auth is still valid; revoke the browser even if it fails.
     const deletion = local && local.uid === this.auth.currentUser?.uid
       ? deleteDoc(doc(this.firestore, `users/${local.uid}/pushSubscriptions/${local.installationId}`)) : Promise.resolve();
     // Attach a rejection handler immediately, even while browser revocation is pending.
     const deleted = deletion.then(() => true, () => false);
-    const revoked = await this.revokeBrowser().then(() => true, () => false);
-    if (revoked) { this.registered.set(false); this.state.set('disabled'); }
+    const revoked = await this.revokeBrowser(local).catch(() => false);
+    if (revoked && this.current(owner, epoch)) { this.registered.set(false); this.state.set('disabled'); }
     const removed = await deleted;
     if (!revoked || !removed) throw new Error('Registration cleanup failed.');
+    return epoch;
   }
 }

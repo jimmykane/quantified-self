@@ -20,6 +20,8 @@ Explicit sign-out and managed account-token switching run bounded device cleanup
 
 Every startup observer waits for the first authoritative Auth result before touching retained consent. Signed-out cleanup discovers the actual browser manager and keeps the local cleanup marker if revocation fails. On iPhone/iPad browser tabs, Home Screen guidance precedes push API checks because those APIs may be hidden until installation. Background reconciliation updates endpoint/encryption-key changes only for a valid existing registration; it uses an update-only write so removal between read and write cannot recreate consent. A newer same-account refresh does not unsubscribe a valid pending rotation.
 
+Each refresh retains its own browser subscription snapshot across asynchronous reads, so an older lookup cannot replace a newer endpoint. Cleanup captures the account, installation and observation before awaiting browser operations; late completion cannot remove replacement consent or overwrite the new account's state. This includes cleanup still running after the two-second Auth wait. Self-tests reconcile current browser/server state after every outcome. An expired response describes the attempted generation and does not authorize revoking a replacement that the server preserved.
+
 ## Configuration and release
 
 Defaults are disabled. Provisioning, publishing Remote Config, applying monitoring and deployment each require separate authorization. This PR does not perform them.

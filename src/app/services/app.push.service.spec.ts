@@ -194,6 +194,92 @@ describe('device notification lifecycle', () => {
     finish(); await tick();
     expect(subscription.unsubscribe).not.toHaveBeenCalled(); expect(service.state()).toBe('enabled');
   });
+  it('does not let a stale browser read replace the subscription used by a newer refresh', async () => {
+    notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
+    storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
+    const service = setup(); await tick();
+    let finishOldRead!: (value: typeof subscription) => void;
+    manager.getSubscription.mockImplementationOnce(() => new Promise(resolve => { finishOldRead = resolve; }));
+    workerReady.next(null); await tick();
+    const replacement = { ...subscription, endpoint: 'https://web.push.apple.com/replacement',
+      toJSON: vi.fn(() => ({ endpoint: 'https://web.push.apple.com/replacement', keys: registration.keys })) };
+    manager.getSubscription.mockResolvedValue(replacement);
+    let finishServerRead!: (value: unknown) => void;
+    vi.mocked(getDocFromServer).mockImplementationOnce(() => new Promise(resolve => { finishServerRead = resolve; }));
+    rotations.next({}); await tick();
+    finishOldRead(subscription); await tick();
+    finishServerRead({ exists: () => true, data: () => ({ ...registration, endpoint: replacement.endpoint }) }); await tick();
+    expect(updateDoc).not.toHaveBeenCalled(); expect(service.state()).toBe('enabled');
+  });
+  it('does not revoke a replacement subscription when an earlier self-test expires', async () => {
+    notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
+    storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
+    const service = setup(); await tick();
+    let finishTest!: (value: unknown) => void;
+    functions.call.mockImplementationOnce(() => new Promise(resolve => { finishTest = resolve; }));
+    const test = service.sendTest();
+    const replacement = { ...subscription, endpoint: 'https://web.push.apple.com/replacement', unsubscribe: vi.fn().mockResolvedValue(true),
+      toJSON: vi.fn(() => ({ endpoint: 'https://web.push.apple.com/replacement', keys: registration.keys })) };
+    manager.getSubscription.mockResolvedValue(replacement);
+    vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => true,
+      data: () => ({ ...registration, endpoint: replacement.endpoint, generation: '00000000-0000-4000-8000-000000000002' }) } as never);
+    rotations.next({}); // Delivered while the self-test is still pending.
+    finishTest({ data: { status: 'subscription_expired' } }); await test; await tick();
+    expect(replacement.unsubscribe).not.toHaveBeenCalled(); expect(subscription.unsubscribe).not.toHaveBeenCalled();
+    expect(storage.getItem(localKey)).not.toBeNull(); expect(service.state()).toBe('enabled');
+  });
+  it.each([
+    ['lookup', false], ['lookup', true], ['unsubscribe', false], ['unsubscribe', true],
+  ])('preserves replacement consent after late cleanup (%s, account change %s)', async (stage, accountChange) => {
+    vi.useFakeTimers();
+    try {
+      notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
+      storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
+      const service = setup(); await tick();
+      const replacementOwner = accountChange
+        ? { uid: 'replacement-owner', getIdTokenResult: vi.fn().mockResolvedValue({ claims: {} }) } : owner;
+      const replacementId = '00000000-0000-4000-8000-000000000002';
+      const replacement = { ...subscription, endpoint: 'https://web.push.apple.com/replacement', unsubscribe: vi.fn().mockResolvedValue(true),
+        toJSON: vi.fn(() => ({ endpoint: 'https://web.push.apple.com/replacement', keys: registration.keys })) };
+      let finishCleanup!: () => void;
+      if (stage === 'lookup') {
+        manager.getSubscription.mockImplementationOnce(() => new Promise(resolve => { finishCleanup = () => resolve(replacement); }));
+      } else {
+        subscription.unsubscribe.mockImplementationOnce(() => new Promise(resolve => { finishCleanup = () => resolve(true); }));
+      }
+      const cleanup = TestBed.inject(AuthSessionCleanupService).run(); await tick();
+      await vi.advanceTimersByTimeAsync(2000); await cleanup;
+      manager.getSubscription.mockResolvedValue(replacement);
+      storage.setItem(localKey, JSON.stringify({ uid: replacementOwner.uid, installationId: replacementId }));
+      vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => true, data: () => ({ ...registration, endpoint: replacement.endpoint }) } as never);
+      if (accountChange) { auth.currentUser = replacementOwner; owner$.next(replacementOwner); }
+      await tick(); expect(service.state()).toBe('enabled');
+      finishCleanup(); await tick();
+      expect(JSON.parse(storage.getItem(localKey)!)).toEqual({ uid: replacementOwner.uid, installationId: replacementId });
+      expect(service.state()).toBe('enabled'); expect(service.registered()).toBe(true);
+      expect(replacement.unsubscribe).not.toHaveBeenCalled();
+      expect(deleteDoc).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ path: `users/owner/pushSubscriptions/${id}` }));
+    } finally { vi.useRealTimers(); }
+  });
+  it('finishes checking when another tab replaces consent during background revocation', async () => {
+    notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
+    storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
+    const service = setup(); await tick();
+    let finishUnsubscribe!: (value: boolean) => void;
+    subscription.unsubscribe.mockImplementationOnce(() => new Promise(resolve => { finishUnsubscribe = resolve; }));
+    vi.mocked(getDocFromServer).mockResolvedValueOnce({ exists: () => false, data: () => undefined } as never);
+    rotations.next({}); await tick(); expect(service.state()).toBe('loading');
+    const replacementId = '00000000-0000-4000-8000-000000000002';
+    const replacement = { ...subscription, endpoint: 'https://web.push.apple.com/replacement', unsubscribe: vi.fn().mockResolvedValue(true),
+      toJSON: vi.fn(() => ({ endpoint: 'https://web.push.apple.com/replacement', keys: registration.keys })) };
+    manager.getSubscription.mockResolvedValue(replacement);
+    storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: replacementId }));
+    vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => true, data: () => ({ ...registration, endpoint: replacement.endpoint }) } as never);
+    finishUnsubscribe(true); await tick();
+    expect(service.state()).toBe('enabled'); expect(service.registered()).toBe(true);
+    expect(JSON.parse(storage.getItem(localKey)!).installationId).toBe(replacementId);
+    expect(replacement.unsubscribe).not.toHaveBeenCalled();
+  });
   it('revokes permission-denied registrations and deletes them as the owner', async () => {
     notifications.permission = 'denied'; manager.getSubscription.mockResolvedValue(subscription);
     storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
@@ -210,7 +296,11 @@ describe('device notification lifecycle', () => {
     storage.setItem(localKey, JSON.stringify({ uid: 'owner', installationId: id }));
     const service = setup(); await tick(); functions.call.mockRejectedValueOnce({ code: 'functions/resource-exhausted', message: 'private-canary' });
     await expect(service.sendTest()).rejects.toThrow(); expect(service.message()).toContain('one per minute'); expect(service.message()).not.toContain('private-canary');
-    functions.call.mockResolvedValueOnce({ data: { status: 'subscription_expired' } }); await service.sendTest(); expect(service.state()).toBe('disabled'); expect(subscription.unsubscribe).toHaveBeenCalled();
+    functions.call.mockImplementationOnce(async () => {
+      vi.mocked(getDocFromServer).mockResolvedValue({ exists: () => false, data: () => undefined } as never);
+      return { data: { status: 'subscription_expired' } };
+    });
+    await service.sendTest(); await tick(); expect(service.state()).toBe('disabled'); expect(subscription.unsubscribe).toHaveBeenCalled();
   });
   it('detaches before auth cleanup, including browser revocation when deletion fails', async () => {
     notifications.permission = 'granted'; manager.getSubscription.mockResolvedValue(subscription);
